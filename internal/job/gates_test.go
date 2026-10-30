@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // gatesWorkspace is a ci chain of a linter, a test, a build that composes a compile step,
@@ -106,6 +107,63 @@ func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 			}
 		})
 	}
+}
+
+// owningProjectGateSuite pins MGS3045 for a write inside a project of its own.
+type owningProjectGateSuite struct {
+	suite.Suite
+}
+
+func TestOwningProjectGate(t *testing.T) { suite.Run(t, new(owningProjectGateSuite)) }
+
+func (s *owningProjectGateSuite) workspace() []*types.Project {
+	return []*types.Project{
+		{
+			Path:             ".",
+			Sources:          types.MustParseGlobs("**/*.go"),
+			MagusfileTargets: []string{"ci", "test"},
+			TargetChains:     map[string][]types.ChainStep{"ci": {{Target: "test"}}},
+		},
+		{Path: "libs/buzz", Sources: types.MustParseGlobs("**/*.go"), MagusfileTargets: []string{"test"}},
+		{Path: "libs/bare", Sources: types.MustParseGlobs("**/*.go")},
+	}
+}
+
+func (s *owningProjectGateSuite) gates(check *types.LeaseCheck, write ...string) []string {
+	row := types.Job{ID: "j", WritePaths: write, Check: check}
+	return gateTargets(UnrunGates(s.T().TempDir(), row, s.workspace(), nil))
+}
+
+func (s *owningProjectGateSuite) TestGateNamesTheOwningProject() {
+	s.Equal([]string{"libs/buzz:test"}, s.gates(nil, "libs/buzz/lexer.go"))
+}
+
+func (s *owningProjectGateSuite) TestAnAncestorsCheckDoesNotSatisfyIt() {
+	got := s.gates(&types.LeaseCheck{Target: "test", Project: "."}, "libs/buzz/lexer.go")
+
+	s.Equal([]string{"libs/buzz:test"}, got)
+}
+
+func (s *owningProjectGateSuite) TestTheOwningProjectsCheckSatisfiesIt() {
+	s.Empty(s.gates(&types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/lexer.go"))
+}
+
+func (s *owningProjectGateSuite) TestARootFileStaysWithTheRoot() {
+	s.Equal([]string{".:test"}, s.gates(nil, "internal/a.go"))
+}
+
+func (s *owningProjectGateSuite) TestFilesInBothGateBoth() {
+	got := s.gates(&types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/lexer.go", "internal/a.go")
+
+	s.Equal([]string{".:test"}, got)
+}
+
+func (s *owningProjectGateSuite) TestAProjectWithoutTheTargetLeavesItToTheAncestor() {
+	s.Equal([]string{".:test"}, s.gates(nil, "libs/bare/a.go"))
+}
+
+func (s *owningProjectGateSuite) TestASiblingSharingAPrefixIsNotTheOwner() {
+	s.Equal([]string{".:test"}, s.gates(nil, "libs/buzzard/a.go"))
 }
 
 func TestUnrunGatesNeedsACiChain(t *testing.T) {

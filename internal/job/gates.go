@@ -80,6 +80,9 @@ const ciTarget = "ci"
 // target RegeneratedOutside already lists is left out because the root regenerates it. A
 // script check covers nothing: what it runs is not a target.
 //
+// A file in a project with the target of its own gates there, so an
+// ancestor's check does not cover it.
+//
 // Each goal is graded by the installed [CheckGrader] before it is offered: the form a
 // worker may run, else none, with the gate marked IntegratorGates. A workspace with no root
 // project, or one whose root has no ci chain, yields nil.
@@ -108,30 +111,89 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		walked  bool
 		found   []unrunFound
 	)
+	listed := map[string]bool{}
 	_ = types.WalkChain(top, ciTarget, lookup, func(v types.ChainVisit) error {
-		if v.Depth == 0 || run[v.Key()] {
-			return nil
-		}
-		label := fmt.Sprintf("%s:%s", v.Project.Path, v.Target)
-		if slices.ContainsFunc(regenerated, func(o RegeneratedOutput) bool { return o.Target == label }) {
+		if v.Depth == 0 {
 			return nil
 		}
 		if !walked {
 			written, walked = writtenFiles(root, row), true
 		}
 		sources, _ := targetSources(v.Project, v.Target)
-		source, _, ok := sourcedBy(sources, written)
-		if !ok {
-			return nil
+		for _, owned := range byOwningProject(projects, v, sources, written) {
+			key := owned.visit.Key()
+			label := fmt.Sprintf("%s:%s", owned.visit.Project.Path, v.Target)
+			if run[key] || listed[key] || slices.ContainsFunc(regenerated, func(o RegeneratedOutput) bool { return o.Target == label }) {
+				continue
+			}
+			source, _, ok := sourcedBy(sources, owned.files)
+			if !ok {
+				continue
+			}
+			listed[key] = true
+			found = append(found, unrunFound{
+				gate:  UnrunGate{Target: v.Target, Project: owned.visit.Project.Path, Source: source.String()},
+				visit: owned.visit,
+			})
 		}
-		found = append(found, unrunFound{
-			gate:  UnrunGate{Target: v.Target, Project: v.Project.Path, Source: source.String()},
-			visit: v,
-		})
 		return nil
 	})
 
 	return offeredGates(found, row, lookup, grade)
+}
+
+// ownedGate is the gate a target over some written files comes to.
+type ownedGate struct {
+	visit types.ChainVisit
+	files []string
+}
+
+// byOwningProject splits the written files v's sources read by owning project.
+// A project with v's target runs its own tests, and an ancestor runs none.
+// A project without one leaves its files to v.
+func byOwningProject(projects []*types.Project, v types.ChainVisit, sources []types.Glob, written []string) []ownedGate {
+	var out []ownedGate
+	for _, file := range written {
+		if !slices.ContainsFunc(sources, func(g types.Glob) bool { return g.Match(file) }) {
+			continue
+		}
+		gate := v
+		if owner := owningProject(projects, file); owner != nil && runsTarget(owner, v.Target) {
+			gate.Project = owner
+		}
+		i := slices.IndexFunc(out, func(o ownedGate) bool { return o.visit.Project == gate.Project })
+		if i < 0 {
+			out = append(out, ownedGate{visit: gate})
+			i = len(out) - 1
+		}
+		out[i].files = append(out[i].files, file)
+	}
+	return out
+}
+
+// owningProject is the deepest project containing file, nil when none does.
+func owningProject(projects []*types.Project, file string) *types.Project {
+	var owner *types.Project
+	for _, p := range projects {
+		inside := p.Path == "." || strings.HasPrefix(file, p.Path+"/")
+		if inside && (owner == nil || owner.Path == "." || len(p.Path) > len(owner.Path)) {
+			owner = p
+		}
+	}
+	return owner
+}
+
+// runsTarget reports whether p declares target or a spell it binds does.
+func runsTarget(p *types.Project, target string) bool {
+	if slices.Contains(p.MagusfileTargets, target) {
+		return true
+	}
+	for _, s := range p.ResolvedSpells {
+		if slices.ContainsFunc(s.Targets(), func(op string) bool { return types.Normalize(op) == target }) {
+			return true
+		}
+	}
+	return false
 }
 
 // offeredGates drops the found gates another found gate composes, and gives each one left

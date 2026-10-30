@@ -10,3 +10,8 @@
 - **`job apply` takes a record naming the job's own checkout.** Re-applying a fork's record
   no longer fails over `checkout`: the job's own changes nothing, and a different one is
   refused naming both.
+- **MGS3018 reads the branch an integration merges.** A directory here that the branch
+  replaces with a symlink or a file names one file, so the integration can hold it.
+- **MGS3045 names the project that owns the write.** A write under `libs/x` gated on
+  `test .`, which runs none of its tests. The gate is now `test libs/x`, and a check of
+  `test .` does not satisfy it.
