@@ -139,6 +139,8 @@ final goPackage = $"^package [A-Za-z_]";
 // The lines Go tooling reads, which no limit counts.
 final goDirective = $"^//(go:|line |export|extern |nolint)|^// \+build ";
 final tsDirective = $"^(///[ \t]*<|//[ \t]*(eslint-|@ts-|prettier-ignore|biome-ignore))";
+// The markers internal/agent reads off a hook template.
+final buzzDirective = $"^// magus-guard-(template|coverage): ";
 final generatedHeader = $"^// Code generated .* DO NOT EDIT\.$";
 final goLicense = $"(?i)copyright|spdx-license-identifier";
 final goDecl = $"^(func|type|var|const) ";
@@ -200,6 +202,9 @@ fun directive(lang: str, ct: str) > bool {
     }
     if (lang == "ts") {
         return tsDirective.match(ct) != null;
+    }
+    if (lang == "buzz") {
+        return buzzDirective.match(ct) != null;
     }
     return false;
 }
@@ -991,6 +996,13 @@ test "a long Buzz doc comment is refused" {
     std\assert(graded("a.buzz", after: atop).reason.indexOf("file header comment, a sentence of 31 words") != null, message: "a header");
     final quoted = "namespace a;\n\nfun f() > void \{\n    final s = \"a // \" + \"" + words(20) + "\";\n}\n";
     std\assert(graded("a.buzz", after: quoted).decision == magus\GuardDecision.allow, message: "a // inside a string");
+}
+
+test "a Buzz guard template marker meets no limit, and other prose beside it does" {
+    final marker = "// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=model\nimport \"std\";\n";
+    std\assert(graded("a.buzz", after: marker).decision == magus\GuardDecision.allow, message: "a marker");
+    final wide = "// magus-guard-note: " + "x".repeat(70) + "\nimport \"std\";\n";
+    std\assert(graded("a.buzz", after: wide).reason.indexOf("columns wide") != null, message: "not a marker");
 }
 
 test "a long TypeScript JSDoc sentence is refused" {
