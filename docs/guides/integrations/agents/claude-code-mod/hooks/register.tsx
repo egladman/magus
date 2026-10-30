@@ -207,12 +207,17 @@ async function readBudgetOnce($: EngineInterface): Promise<void> {
   const root = await $.session.root()
   if (!(await $.fs.exists(`${root}/magusfile.buzz`))) return
   const r = await run($, [await magusBin($, root), '-s', 'status', '-o', 'json'], root)
-  const parsed = r === null ? { ok: false as const, error: 'magus status -o json did not run' } : parseBudget(r.stdout)
-  if (parsed.ok) {
-    await $.state.set(BUDGET, { budget: parsed.budget, readAt: await $.clock.now() })
-    await $.state.set(BUDGET_ERROR, null)
+  if (r === null) {
+    await $.state.set(BUDGET_ERROR, 'magus status -o json did not run')
+    await refreshStatus($)
+    return
+  }
+  const parsed = parseBudget(r.stdout)
+  if (parsed.error) {
+    await $.state.set(BUDGET_ERROR, r.exitCode !== 0 ? `${parsed.error.message} (exit ${r.exitCode})` : parsed.error.message)
   } else {
-    await $.state.set(BUDGET_ERROR, r !== null && r.exitCode !== 0 ? `${parsed.error} (exit ${r.exitCode})` : parsed.error)
+    await $.state.set(BUDGET, { budget: parsed.value, readAt: await $.clock.now() })
+    await $.state.set(BUDGET_ERROR, null)
   }
   await refreshStatus($)
 }

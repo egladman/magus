@@ -74,19 +74,18 @@ const HOLDER = {
 describe('parseBudget', () => {
   test('reads capacity, every holder with its owner, the waiters and the refusals', async () => {
     const p = parseBudget(STATUS)
-    expect(p.ok).toBe(true)
-    if (!p.ok) return
-    expect(p.budget).toMatchObject({ budgetSlots: 10, heldSlots: 8, budgetMb: 24064, heldMb: 8940 })
-    expect(p.budget?.holders).toEqual([
+    expect(p.error).toBeUndefined()
+    expect(p.value).toMatchObject({ budgetSlots: 10, heldSlots: 8, budgetMb: 24064, heldMb: 8940 })
+    expect(p.value?.holders).toEqual([
       HOLDER,
       { pid: 23224, project: 'console', target: 'test', dir: '', command: '', slots: 1, memoryMb: 512, since: 0, owner: '' },
     ])
-    expect(p.budget?.waiting).toEqual([
+    expect(p.value?.waiting).toEqual([
       { pid: 30001, project: '.', target: 'lint', dir: '/w/magus-a', command: '', slots: 2, memoryMb: 0, owner: 'unleased', reservation: false, tree: '', since: AT },
       { pid: 30002, project: '.', target: 'ci', dir: '', command: '', slots: 0, memoryMb: 0, owner: 'job-b', reservation: true, tree: '', since: AT },
       { pid: 30003, project: 'docs', target: 'ci', dir: '', command: '', slots: 0, memoryMb: 0, owner: 'job-c', reservation: false, tree: 'root-job', since: AT },
     ])
-    expect(p.budget?.refused).toEqual([
+    expect(p.value?.refused).toEqual([
       {
         at: AT,
         pid: 30100,
@@ -104,32 +103,28 @@ describe('parseBudget', () => {
   })
 
   test('no broker is a budget nothing holds, not an error', async () => {
-    expect(parseBudget(JSON.stringify({ pool: { capacity: 10 } }))).toEqual({ ok: true, budget: null })
+    expect(parseBudget(JSON.stringify({ pool: { capacity: 10 } }))).toEqual({ value: null })
   })
 
   test('an idle broker leaves its zero counts and empty lists out, which read as 0 and none', async () => {
     const p = parseBudget(JSON.stringify({ broker: { capacity: { budget_mb: 24064, budget_slots: 10 } } }))
     expect(p).toEqual({
-      ok: true,
-      budget: { budgetSlots: 10, heldSlots: 0, budgetMb: 24064, heldMb: 0, holders: [], waiting: [], refused: [] },
+      value: { budgetSlots: 10, heldSlots: 0, budgetMb: 24064, heldMb: 0, holders: [], waiting: [], refused: [] },
     })
   })
 
   test('output that is not the status record is an error that says so', async () => {
-    const p = parseBudget('[error] the workspace did not load')
-    expect(p.ok).toBe(false)
-    if (p.ok) return
-    expect(p.error).toMatch(/^magus status -o json printed no JSON: \[error\] the workspace did not load$/)
-    expect(parseBudget(JSON.stringify({ broker: { pid: 1 } }))).toEqual({
-      ok: false,
-      error: 'magus status -o json has a broker without broker.capacity',
-    })
+    expect(parseBudget('[error] the workspace did not load').error?.message).toBe(
+      'magus status -o json printed no JSON: [error] the workspace did not load',
+    )
+    expect(parseBudget(JSON.stringify({ broker: { pid: 1 } })).error?.message).toBe(
+      'magus status -o json has a broker without broker.capacity',
+    )
   })
 })
 
 describe('render', () => {
-  const p = parseBudget(STATUS)
-  const budget = p.ok ? p.budget : null
+  const budget = parseBudget(STATUS).value ?? null
 
   test('the status line names slots and memory in GiB', async () => {
     expect(budgetStatus({ budget, readAt: 0 })).toBe('budget 8/10 slots, 8.7/23.5 GiB')
@@ -156,8 +151,7 @@ describe('render', () => {
 })
 
 describe('refusals', () => {
-  const p = parseBudget(STATUS)
-  const budget = p.ok ? p.budget : null
+  const budget = parseBudget(STATUS).value ?? null
 
   test('a magus command is told from one that only mentions it', async () => {
     expect(runsMagus('./magus run go-test .')).toBe(true)
