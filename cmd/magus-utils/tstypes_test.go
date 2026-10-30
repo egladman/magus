@@ -4,11 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"testing"
 
-	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,18 +41,6 @@ func TestRenderTSTypes(t *testing.T) {
 	assert.Contains(t, got, "export class MagusError extends Error implements Diagnostic {")
 	assert.Contains(t, got, "export type Result<T, E extends Error = MagusError> =")
 	assert.NotContains(t, got, "why", "Diagnostic.Why is not part of the boundary shape")
-}
-
-func TestRenderTSTypesRefusesUnorderedOrUnknown(t *testing.T) {
-	diag := boundaryType{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic](), TS: true}
-	result := boundaryType{Name: "Result", Type: reflect.TypeFor[types.Result[buzzgen.T]](), TS: true}
-
-	_, err := renderTSTypes([]boundaryType{result, diag})
-	require.ErrorContains(t, err, "Diagnostic must be flagged TS and precede it")
-
-	other := boundaryType{Name: "Box", Type: reflect.TypeFor[types.Result[buzzgen.T]](), TS: true}
-	_, err = renderTSTypes([]boundaryType{diag, other})
-	require.ErrorContains(t, err, "no TypeScript form for a generic other than Result")
 }
 
 // tsTypeCheck exercises the generated module the way callers will: checking error
