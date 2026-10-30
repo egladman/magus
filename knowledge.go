@@ -607,6 +607,7 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 		in.Diagnostics = append(types.AllDiagnosticCodes(), workspaceDiagnosticCodes(src.root, cfg.Diagnostics)...)
 		in.DiagnosticDocs = cfg.Diagnostics.Resolver()
 		in.Packages = loadKnowledgePackages(ctx, src.projects, src.log)
+		in.ManifestFiles = knowledge.ManifestFiles(src.projects)
 		in.VCSAuthorship = cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship
 		in.DeclaredSpells = declaredSpellSet(src.projects)
 		in.NotesPath = cfg.Knowledge.Notes.Shared
