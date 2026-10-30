@@ -262,11 +262,17 @@ worktree session with no `./magus` is an error, where it used to run open on wha
 PATH held; `SessionStart` says so once per session, naming one command, whenever the
 binary that would judge the session cannot load the tree.
 
-A push at a commit no passing gate covers gets the verdict `ask`, and the command
-template renders it as `permissionDecision: "ask"`: Claude Code shows you the
-reason, which names the commit and the gate state, and approving publishes it. A
-push the gate covers runs without a prompt. A session bound to a job lease is
-denied instead, because workers do not publish.
+A run of a `human_only` target gets the verdict `ask`. Under `permission_mode`
+`default`, `acceptEdits` or `auto`, the command template renders it as
+`permissionDecision: "ask"`: Claude Code shows you the reason, and approving runs it.
+Any other mode, or none, may never prompt, so the template refuses the call with
+`permissionDecision: "deny"`. Its `systemMessage` shows you what happened, why this
+session cannot ask, and the command to run in your own terminal. The model reads the
+same, with word to relay it verbatim if you did not see it.
+
+A push at a commit no passing gate covers is denied, and the reason names the commit
+and the gate state. A push the gate covers runs without a prompt. A session bound to
+a job lease is denied both, because workers do not publish.
 
 ### Maintaining the workspace harness
 
