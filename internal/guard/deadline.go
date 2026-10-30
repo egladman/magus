@@ -21,7 +21,7 @@ import (
 
 // hookBudget bounds one hook judgment, from the moment magus starts judging to its verdict.
 // It answers well inside the ten seconds a shipped wiring waits on a hook: the rest is
-// process start and exit, which a loaded machine stretches too.
+// process start and exit.
 const hookBudget = 7 * time.Second
 
 // inspectBudget bounds the wait for one workspace open, half the hook's budget so the rest
