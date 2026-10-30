@@ -1259,7 +1259,7 @@ func refreshBehindIndexes(ctx context.Context, root, verb string, ans types.Know
 	}
 	if dir, err := knowledgeStoreDir(root); err == nil {
 		if holder, running := maintenance.RunningGraphBuild(dir); running {
-			slog.InfoContext(ctx, fmt.Sprintf("a graph build (pid %d) is refreshing this checkout's indexes, so this answer is drawn from them as they stand", holder.PID), attr.Notice(verb))
+			fmt.Fprintf(os.Stderr, "%s: a graph build (pid %d) is refreshing this checkout's indexes, so this answer is drawn from them as they stand\n", verb, holder.PID)
 			return false
 		}
 	}
@@ -1271,7 +1271,7 @@ func refreshBehindIndexes(ctx context.Context, root, verb string, ans types.Know
 	refresh := m.RefreshSymbolIndexes(ctx, wanted)
 	took := refresh.Took.Round(100 * time.Millisecond)
 	if n := len(refresh.Refreshed); n > 0 {
-		slog.InfoContext(ctx, fmt.Sprintf("refreshed %d symbol index(es) in %s: %s", n, took, strings.Join(refresh.Refreshed, ", ")), attr.Notice(verb))
+		fmt.Fprintf(os.Stderr, "%s: refreshed %d symbol index(es) in %s: %s\n", verb, n, took, strings.Join(refresh.Refreshed, ", "))
 	}
 	if len(refresh.Problems) > 0 {
 		slog.ErrorContext(ctx, fmt.Sprintf("could not refresh every symbol index behind this answer in %s, so it is drawn from them as they stand; `%s` retries: %s",
