@@ -21,6 +21,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
@@ -98,6 +99,21 @@ func jobCommand(ctx context.Context, root string, args []string) error {
 func jobCommandSpec() cmdline.Command {
 	i := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == "job" })
 	return commands.Root.Children[i]
+}
+
+// printJobVerbHelp prints a job verb's help from its registry entry,
+// so -h, the man page and the docs page read the same words.
+func printJobVerbHelp(fs *flag.FlagSet, verb string) {
+	children := jobCommandSpec().Children
+	spec := children[slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == verb })]
+	w := fs.Output()
+	fmt.Fprintf(w, "Usage: %s\n\n%s\n\n", spec.Usage, spec.Long)
+	fmt.Fprintln(w, "Example:")
+	for _, ex := range spec.Examples {
+		fmt.Fprintf(w, "  %s\n", ex.Command)
+	}
+	fmt.Fprintln(w, "\nFlags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
 }
 
 func jobUsage() {
@@ -2799,47 +2815,10 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 // each record is a job's whole spec, upserted in order, and nothing magus records about the
 // job (its state, holder, registration, results) moves. A new id creates the job.
 func jobApply(ctx context.Context, root string, args []string) error {
-	var (
-		file string
-		fix  bool
-	)
+	var flags *flaggen.JobApplyFlags
 	pos, err := commandParse("job apply", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&file, "f", "", "The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line")
-		fs.BoolVar(&fix, "fix", false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
-		cmdline.NegatedBoolVar(fs, &fix, "fix")
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus job apply -f <file|->")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Upsert each record's spec: criteria, write, deny and read paths, check, goals,")
-			fmt.Fprintln(os.Stderr, "model, depends_on, parent and timeout. The record is the whole spec, so a spec")
-			fmt.Fprintln(os.Stderr, "field it leaves out is cleared; an omitted checkpoint or timeout keeps the job's.")
-			fmt.Fprintln(os.Stderr, "Status is never written: the job keeps its state, holder and registration, and a")
-			fmt.Fprintln(os.Stderr, "record carrying state is refused. A new id creates the job in this checkout:")
-			fmt.Fprintln(os.Stderr, "a record naming a checkout or an entry is refused, since only fork makes those.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Every record is checked before any is written, with fork's rules for what it")
-			fmt.Fprintln(os.Stderr, "adds, and every record's problems are listed at once with their codes. It prints")
-			fmt.Fprintln(os.Stderr, "what changed per job; the global --dry-run prints it and writes nothing.")
-			fmt.Fprintln(os.Stderr, "--fix makes the edits a problem names without judgment, as job fork --fix does,")
-			fmt.Fprintln(os.Stderr, "and says each one it made; the problems that need a person are still listed.")
-			fmt.Fprintf(os.Stderr, "`%s` prints the record, deviations included.\n", hint.JobFork.With("--schema"))
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Example:")
-			fmt.Fprintln(os.Stderr, "  magus job apply -f jobs.jsonl --dry-run")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Widening is the orchestrator's: a session holding a lease may apply only a spec")
-			fmt.Fprintln(os.Stderr, "that removes some of its own write paths, which releases them. Ending a job is")
-			fmt.Fprintf(os.Stderr, "`%s`.\n", hint.JobExit)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "The one claim a holder applies is proved: a record carrying only id and")
-			fmt.Fprintln(os.Stderr, "claim, [{\"path\": ..., \"because\": ...}], where because is refs:<symbol>,")
-			fmt.Fprintln(os.Stderr, "test:<file>, output:<project>:<target> or released. magus proves each path")
-			fmt.Fprintln(os.Stderr, "against the job's diff and records the proof on the job; the guard serves the")
-			fmt.Fprintln(os.Stderr, "record when it refuses a write it can prove. It applies alone.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		flags = flaggen.BindJobApply(fs)
+		fs.Usage = func() { printJobVerbHelp(fs, "apply") }
 	})
 	if err != nil {
 		return err
@@ -2848,13 +2827,13 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		return exit.Usagef("magus job apply: the records name their jobs, so %q is one argument too many", pos[0])
 	}
 	var in io.Reader
-	switch file {
+	switch flags.F {
 	case "":
 		return exit.Usagef("magus job apply: name the records with -f <file>, or -f - for stdin")
 	case "-":
 		in = os.Stdin
 	default:
-		f, err := os.Open(file)
+		f, err := os.Open(flags.F)
 		if err != nil {
 			return exit.Usagef("magus job apply: %s", err)
 		}
@@ -2891,7 +2870,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			slog.InfoContext(ctx, fmt.Sprintf("%s: %s", records[i].ID, n), attr.Notice("note"))
 		}
 	}
-	if fix {
+	if flags.Fix {
 		records = fixApply(ctx, store, records, graphSymbolReader(graph.load), checkpoint)
 	}
 	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, graphSymbolReader(graph.load), checkpoint, globalCfg.DryRun)

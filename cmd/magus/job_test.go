@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/queue"
 	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
@@ -1650,6 +1651,19 @@ func TestJobHelpCarriesAPersonRunExample(t *testing.T) {
 		line, _, _ := strings.Cut(example, "\n")
 		assert.True(t, strings.HasPrefix(line, fmt.Sprintf("magus %s ", v.name)), "`magus %s -h` example runs something else: %q", v.name, line)
 	}
+}
+
+func TestJobApplyHelpIsItsRegistryEntry(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+
+	children := jobCommandSpec().Children
+	spec := children[slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == "apply" })]
+	var err error
+	help := captureStderr(t, func() { err = jobApply(t.Context(), "", []string{"-h"}) })
+	require.ErrorIs(t, err, flag.ErrHelp)
+	assert.Contains(t, help, "Usage: "+spec.Usage+"\n\n"+spec.Long+"\n")
+	assert.Contains(t, help, "  -f file\n")
+	assert.Contains(t, help, "  --[no-]fix (default: off)\n")
 }
 
 // guideMarker pins the fenced block on the next line to a section of a job_people script.

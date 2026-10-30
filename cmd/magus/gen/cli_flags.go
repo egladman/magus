@@ -1538,7 +1538,7 @@ type JobApplyFlags struct {
 // BindJobApply registers `magus job apply`'s flags on fs and returns the destination.
 func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
 	var f JobApplyFlags
-	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply: a file, or `-` for stdin; one JSON job, a JSON array, or one job per line")
+	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply: a `file`, or `-` for stdin; one JSON job, a JSON array, or one job per line")
 	fs.BoolVar(&f.Fix, FlagJobApplyFix, false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
 	cmdline.NegatedBoolVar(fs, &f.Fix, FlagJobApplyFix)
 	return &f
