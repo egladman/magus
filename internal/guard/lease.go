@@ -2436,7 +2436,7 @@ func denyLeaseCheckout(ctx context.Context, deps Dependencies, actingLease, comm
 	root := me.Worktree.Root
 	envelope := hookLocation(ctx, deps).workspace
 	for _, c := range calls {
-		if there := cmp.Or(c.root, envelope); there == "" || samePath(there, root) {
+		if there := cmp.Or(c.root, envelope); there == "" || samePath(there, root) || scratchWorkspace(there, root) {
 			continue
 		}
 		args := withoutRelocation(c.inv.Args)

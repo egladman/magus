@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
@@ -284,4 +285,30 @@ func TestSkillsKeyNestsTheAgentUnderItsSession(t *testing.T) {
 	assert.Equal(t, "claude-code/s1/agent/a%2F1", child.skillsKey())
 	assert.NotEqual(t, child.callerKey(), child.skillsKey())
 	assert.Empty(t, hookAttribution{Host: "claude-code", Agent: "a1"}.skillsKey(), "no session keys nothing")
+}
+
+type ArchitectureJobReadSuite struct {
+	suite.Suite
+	session archSession
+}
+
+func TestArchitectureJobReadSuite(t *testing.T) {
+	suite.Run(t, new(ArchitectureJobReadSuite))
+}
+
+func (s *ArchitectureJobReadSuite) SetupTest() {
+	s.session = newArchSession(s.T(), strict(testDependencies()), true)
+	s.session.message("does this respect our current architecture patterns?")
+}
+
+func (s *ArchitectureJobReadSuite) TestDescribeJobIsNotAProbe() {
+	s.NotEqual("deny", s.session.bash("", "./magus describe job scratch-workspace-guard").Decision)
+}
+
+func (s *ArchitectureJobReadSuite) TestDescribeJobInAnotherCheckoutIsNotAProbe() {
+	s.NotEqual("deny", s.session.bash("", "cd internal && ./magus describe job scratch-workspace-guard").Decision)
+}
+
+func (s *ArchitectureJobReadSuite) TestASearchOfTheWorkspaceStillIs() {
+	requireArchitectureDeny(s.T(), s.session.bash("", "grep -rn handler ."))
 }

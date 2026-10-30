@@ -1141,7 +1141,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			v = stronger(v, deps.grade(judgeHeredocWrites(ctx, deps, req, who, callDir, actingLease, input, shellD)))
 		}
 		var unbriefed string
-		if structureProbe(input, location.workspace) {
+		cmds, parsed := ParseCommandsDialect(input, shellD)
+		readsJob := parsed && magusInvokes(cmds, "describe", "job")
+		if !readsJob && structureProbe(input, location.workspace) {
 			unbriefed = denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, "")
 		}
 		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, unbriefed, rankArchitectureUnbriefed); {

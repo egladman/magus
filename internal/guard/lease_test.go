@@ -3325,3 +3325,84 @@ func TestTheEndedBindingRefusalLetsItsOwnFixRun(t *testing.T) {
 		assert.Equal(t, refused, denyUndeclaredLease(ended, "", command).refused(), "%q", command)
 	}
 }
+
+type ScratchWorkspaceSuite struct {
+	suite.Suite
+	held    string
+	scratch string
+	ctx     context.Context
+	deps    Dependencies
+	row     types.Job
+}
+
+func TestScratchWorkspaceSuite(t *testing.T) {
+	suite.Run(t, new(ScratchWorkspaceSuite))
+}
+
+func (s *ScratchWorkspaceSuite) SetupTest() {
+	s.held = markedWorkspace(s.T())
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.held, ".git"), 0o755))
+	s.ctx, s.deps, s.row = heldRowFixture(s.T(), s.held, s.held, "feat")
+	cache := s.T().TempDir()
+	s.T().Setenv("XDG_CACHE_HOME", cache)
+	s.scratch = filepath.Join(cache, "magus", "tmp")
+}
+
+func (s *ScratchWorkspaceSuite) workspace(name string) string {
+	dir := filepath.Join(s.scratch, name)
+	s.Require().NoError(os.MkdirAll(dir, 0o755))
+	return dir
+}
+
+func (s *ScratchWorkspaceSuite) linkSibling(dir, name string) {
+	admin := filepath.Join(s.held, ".git", "worktrees", name)
+	s.Require().NoError(os.MkdirAll(admin, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, ".git"), fmt.Appendf(nil, "gitdir: %s\n", admin), 0o644))
+}
+
+func (s *ScratchWorkspaceSuite) runIn(dir string) denial {
+	return denyLeaseCheckout(s.ctx, s.deps, s.row.ID, fmt.Sprintf("./magus -C %s run go-test .", dir))
+}
+
+func (s *ScratchWorkspaceSuite) TestAnotherRepositoryUnderTheMagusTmpDirPasses() {
+	dir := s.workspace("rake-review-nospell")
+	s.Require().NoError(os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
+	s.Empty(s.runIn(dir))
+}
+
+func (s *ScratchWorkspaceSuite) TestADirectoryInNoRepositoryUnderTheMagusTmpDirPasses() {
+	dir := s.workspace("plain")
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "magus.yaml"), nil, 0o644))
+	s.Empty(s.runIn(dir))
+}
+
+func (s *ScratchWorkspaceSuite) TestAnotherCheckoutOfThisRepositoryUnderTheMagusTmpDirIsRefused() {
+	dir := s.workspace("sibling")
+	s.linkSibling(dir, "sibling")
+	s.True(s.runIn(dir).refused())
+}
+
+func (s *ScratchWorkspaceSuite) TestADirectoryOutsideTheMagusTmpDirIsRefused() {
+	other := markedWorkspace(s.T())
+	s.Require().NoError(os.MkdirAll(filepath.Join(other, ".git"), 0o755))
+	s.True(s.runIn(other).refused())
+}
+
+func (s *ScratchWorkspaceSuite) TestTheMagusTmpDirItselfIsRefused() {
+	s.Require().NoError(os.MkdirAll(s.scratch, 0o755))
+	s.True(s.runIn(s.scratch).refused())
+}
+
+func (s *ScratchWorkspaceSuite) TestAWriteInAnotherRepositoryUnderTheMagusTmpDirPasses() {
+	dir := s.workspace("written")
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+	s.Require().NoError(os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
+	s.Empty(denyOtherCheckout(s.held, s.row.ID, filepath.Join(dir, "main.go")).Decision)
+}
+
+func (s *ScratchWorkspaceSuite) TestAWriteInASiblingCheckoutUnderTheMagusTmpDirIsRefused() {
+	dir := s.workspace("written-sibling")
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+	s.linkSibling(dir, "written-sibling")
+	s.Equal(decisionDeny, denyOtherCheckout(s.held, s.row.ID, filepath.Join(dir, "main.go")).Decision)
+}

@@ -1011,13 +1011,32 @@ func denyOtherCheckout(checkout, lease, writePath string) writeGrade {
 		return writeGrade{}
 	}
 	other := findMagusCheckout(filepath.Dir(writePath))
-	if other == "" || samePath(other, checkout) {
+	if other == "" || samePath(other, checkout) || scratchWorkspace(other, checkout) {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: decisionDeny, Reason: denial{
 		Say: fmt.Sprintf("magus workspace: %s is in another checkout than lease %s's; write %s in %s.", writePath, lease, filepath.Base(writePath), checkout),
 		Why: fmt.Sprintf("%s is in %s, and the lease's write paths name files in the checkout it was taken in.", writePath, other),
 	}.full()}
+}
+
+// scratchWorkspace reports dir under the magus tmp dir in a repository
+// other than checkout's. A sibling checkout there stays refused.
+func scratchWorkspace(dir, checkout string) bool {
+	cache, err := xdg.CacheDir()
+	if err != nil {
+		return false
+	}
+	scratch := filepath.Join(cache, "magus", "tmp")
+	if dir == "" || samePath(dir, scratch) || !within(dir, scratch) {
+		return false
+	}
+	_, mine, ok := gitCheckout(checkout)
+	if !ok {
+		return false
+	}
+	_, there, inRepository := gitCheckout(dir)
+	return !inRepository || there != mine
 }
 
 // denyUnboundJobCheckout refuses a subagent holding no job a write into a
