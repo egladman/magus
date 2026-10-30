@@ -411,6 +411,8 @@ func walkMatrix(t *testing.T, base string, paths []string, bearers map[string]be
 				assert.Equal(t, [2]any{http.StatusUnauthorized, "MGS9001"}, [2]any{status, reason}, cell)
 			case !b.grant.Allows(need):
 				assert.Equal(t, [2]any{http.StatusForbidden, "MGS9015"}, [2]any{status, reason}, cell)
+			case name == "operator" && need.Scope == types.ScopeConsole:
+				assert.Equal(t, [2]any{http.StatusForbidden, "MGS9015"}, [2]any{status, reason}, cell)
 			default:
 				assert.NotEqual(t, http.StatusUnauthorized, status, cell)
 				assert.NotContains(t, []string{"MGS9001", "MGS9011", "MGS9015"}, reason, cell)
