@@ -2332,7 +2332,7 @@ func foreignWaitFires(command string, d Dialect) bool {
 	found := false
 	syntax.Walk(f, func(n syntax.Node) bool {
 		loop, ok := n.(*syntax.WhileClause)
-		if found || !ok || !runsIn(loop.Do, d, "sleep") {
+		if found || !ok || !runsSleeper(loop.Do, d) {
 			return !found
 		}
 		for _, cond := range loop.Cond {

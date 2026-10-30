@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
@@ -558,4 +559,140 @@ func TestRefusedRetryServesTheRootAForkedJob(t *testing.T) {
 	require.True(t, leased.refused())
 	assert.Contains(t, leased.Say, "status --wait | ")
 	assert.NotContains(t, leased.Say, hint.JobFork.String())
+}
+
+// SleepFormSuite pins how long each spelling of a sleep that is not `sleep`
+// waits, and the near misses that are not sleeps at all.
+type SleepFormSuite struct {
+	suite.Suite
+}
+
+func TestSleepFormSuite(t *testing.T) {
+	suite.Run(t, new(SleepFormSuite))
+}
+
+func (s *SleepFormSuite) waits(line string, want time.Duration) {
+	cmds, parsed := ParseCommands(line)
+	s.Require().True(parsed, line)
+	got, ok := sleepDuration(cmds[0])
+	s.True(ok, line)
+	s.Equal(want, got, line)
+}
+
+func (s *SleepFormSuite) isNoSleep(line string) {
+	cmds, parsed := ParseCommands(line)
+	s.Require().True(parsed, line)
+	_, ok := sleepDuration(cmds[0])
+	s.False(ok, line)
+}
+
+func (s *SleepFormSuite) TestSleep() {
+	s.waits("sleep 30", 30*time.Second)
+}
+
+func (s *SleepFormSuite) TestCaffeinateForSeconds() {
+	s.waits("caffeinate -t 90", 90*time.Second)
+}
+
+func (s *SleepFormSuite) TestPerlSelect() {
+	s.waits("perl -e 'select(undef,undef,undef,45)'", 45*time.Second)
+}
+
+func (s *SleepFormSuite) TestPerlSelectForAFraction() {
+	s.waits("perl -e 'select(undef, undef, undef, 0.25)'", 250*time.Millisecond)
+}
+
+func (s *SleepFormSuite) TestPerlSleep() {
+	s.waits("perl -e 'sleep 60'", time.Minute)
+}
+
+func (s *SleepFormSuite) TestPythonTimeSleep() {
+	s.waits("python3 -c 'import time; time.sleep(120)'", 2*time.Minute)
+}
+
+func (s *SleepFormSuite) TestRubySleep() {
+	s.waits("ruby -e 'sleep 15'", 15*time.Second)
+}
+
+func (s *SleepFormSuite) TestNodeSetTimeout() {
+	s.waits("node -e 'setTimeout(()=>{}, 20000)'", 20*time.Second)
+}
+
+func (s *SleepFormSuite) TestReadWithATimeout() {
+	s.waits("read -t 30 line", 30*time.Second)
+}
+
+func (s *SleepFormSuite) TestPerlPrintIsNoSleep() {
+	s.isNoSleep("perl -e 'print 1'")
+}
+
+func (s *SleepFormSuite) TestPythonPrintIsNoSleep() {
+	s.isNoSleep("python3 -c 'print(1)'")
+}
+
+func (s *SleepFormSuite) TestCaffeinateAroundACommandIsNoSleep() {
+	s.isNoSleep("caffeinate -i make")
+}
+
+func (s *SleepFormSuite) TestTailFollowIsNoSleep() {
+	s.isNoSleep("tail -f out.log")
+}
+
+func (s *SleepFormSuite) TestReadWithoutATimeoutIsNoSleep() {
+	s.isNoSleep("read line")
+}
+
+func (s *SleepFormSuite) TestCaffeinateOnAPidIsNoSleep() {
+	s.isNoSleep("caffeinate -w 4242 -t 90")
+}
+
+func (s *SleepFormSuite) TestWaitOnAPidIsNoSleep() {
+	s.isNoSleep("wait 4242")
+}
+
+func (s *SleepFormSuite) TestTailOnAPidIsNoSleep() {
+	s.isNoSleep("tail --pid=4242 -f out.log")
+}
+
+// SleepFormPollSuite pins that each spelling of a sleep before a status read
+// is refused as the poll a plain `sleep` would be.
+type SleepFormPollSuite struct {
+	suite.Suite
+}
+
+func TestSleepFormPollSuite(t *testing.T) {
+	suite.Run(t, new(SleepFormPollSuite))
+}
+
+func (s *SleepFormPollSuite) refusesBeforeAStatusRead(sleeper string) {
+	v := Evaluate(Dependencies{}, sleeper+"; ./magus status")
+	s.Equal(denyRuleSleepPoll, v.Rule.Name, sleeper)
+}
+
+func (s *SleepFormPollSuite) TestCaffeinate() {
+	s.refusesBeforeAStatusRead("caffeinate -t 30")
+}
+
+func (s *SleepFormPollSuite) TestPerlSelect() {
+	s.refusesBeforeAStatusRead("perl -e 'select(undef,undef,undef,30)'")
+}
+
+func (s *SleepFormPollSuite) TestPython() {
+	s.refusesBeforeAStatusRead("python3 -c 'import time; time.sleep(30)'")
+}
+
+func (s *SleepFormPollSuite) TestRuby() {
+	s.refusesBeforeAStatusRead("ruby -e 'sleep 30'")
+}
+
+func (s *SleepFormPollSuite) TestNode() {
+	s.refusesBeforeAStatusRead("node -e 'setTimeout(()=>{}, 30000)'")
+}
+
+func (s *SleepFormPollSuite) TestTimeoutAroundASleep() {
+	s.refusesBeforeAStatusRead("timeout 60 sleep 30")
+}
+
+func (s *SleepFormPollSuite) TestRead() {
+	s.refusesBeforeAStatusRead("read -t 30 line")
 }

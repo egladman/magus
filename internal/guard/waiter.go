@@ -496,7 +496,10 @@ func sleepPollFires(cmds []hint.Invocation) bool {
 // sleepDuration is how long one sleep invocation waits: GNU's suffixed operands summed, a
 // bare number as seconds. false for anything else, including an operand it cannot read.
 func sleepDuration(c hint.Invocation) (time.Duration, bool) {
-	if path.Base(c.Name) != "sleep" || len(c.Args) == 0 {
+	if path.Base(c.Name) != "sleep" {
+		return sleepForm(c)
+	}
+	if len(c.Args) == 0 {
 		return 0, false
 	}
 	var total time.Duration
@@ -519,6 +522,130 @@ func sleepDuration(c hint.Invocation) (time.Duration, bool) {
 		total += time.Duration(n * float64(unit))
 	}
 	return total, true
+}
+
+// isSleeper reports a command whose job is to wait: `sleep`, or any spelling sleepForm
+// reads, whether or not its duration is readable.
+func isSleeper(c hint.Invocation) bool {
+	if path.Base(c.Name) == "sleep" {
+		return true
+	}
+	_, ok := sleepForm(c)
+	return ok
+}
+
+// runsSleeper reports whether body runs a sleeper anywhere, nested commands included.
+func runsSleeper(body []*syntax.Stmt, d Dialect) bool {
+	found := false
+	for _, stmt := range body {
+		syntax.Walk(stmt, func(n syntax.Node) bool {
+			if call, ok := n.(*syntax.CallExpr); ok && slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), isSleeper) {
+				found = true
+			}
+			return !found
+		})
+	}
+	return found
+}
+
+// oneLinerSleep is how one interpreter's inline script sleeps: the flags that carry the
+// script, and each spelling of a sleep in it.
+type oneLinerSleep struct {
+	flags    string
+	patterns []oneLinerPattern
+}
+
+// oneLinerPattern matches a sleep whose first group is a number of unit.
+type oneLinerPattern struct {
+	re   *regexp.Regexp
+	unit time.Duration
+}
+
+var (
+	sleepSeconds = regexp.MustCompile(`\bsleep\s*\(?\s*([0-9.]+)`)
+	sleepCall    = regexp.MustCompile(`\bsleep\s*\(\s*([0-9.]+)`)
+
+	oneLinerSleeps = map[string]oneLinerSleep{
+		"perl": {"eE", []oneLinerPattern{
+			{regexp.MustCompile(`select\s*\(\s*undef\s*,\s*undef\s*,\s*undef\s*,\s*([^)\s]+)\s*\)`), time.Second},
+			{sleepSeconds, time.Second},
+			{regexp.MustCompile(`\busleep\s*\(?\s*([0-9.]+)`), time.Microsecond},
+		}},
+		"ruby":    {"e", []oneLinerPattern{{sleepSeconds, time.Second}}},
+		"python":  {"c", []oneLinerPattern{{sleepCall, time.Second}}},
+		"python3": {"c", []oneLinerPattern{{sleepCall, time.Second}}},
+		"node": {"ep", []oneLinerPattern{
+			{regexp.MustCompile(`setTimeout\s*\([^;]*?,\s*([0-9.]+)\s*\)`), time.Millisecond},
+			{regexp.MustCompile(`Atomics\.wait\s*\([^;]*?,\s*([0-9.]+)\s*\)`), time.Millisecond},
+		}},
+	}
+)
+
+// sleepForm is how long a command that waits without being `sleep` waits. A
+// duration not stated as a number reads as sleepPollFloor. A wait on a pid is
+// not a sleep: it is refused only when a run holding a seat has that pid.
+// `timeout N sleep M` needs no spelling: timeout is peeled to the sleep it runs.
+func sleepForm(c hint.Invocation) (time.Duration, bool) {
+	name := path.Base(c.Name)
+	switch name {
+	case "caffeinate":
+		if hasFlag(c.Args, 'w', "") {
+			return 0, false
+		}
+		return flagSeconds(c.Args, "-t")
+	case "read":
+		return flagSeconds(c.Args, "-t")
+	}
+	spec, ok := oneLinerSleeps[name]
+	if !ok {
+		return 0, false
+	}
+	script, ok := inlineScript(c.Args, spec.flags)
+	if !ok {
+		return 0, false
+	}
+	for _, p := range spec.patterns {
+		if m := p.re.FindStringSubmatch(script); m != nil {
+			n, err := strconv.ParseFloat(m[1], 64)
+			if err != nil || n < 0 {
+				return sleepPollFloor, true
+			}
+			return time.Duration(n * float64(p.unit)), true
+		}
+	}
+	return 0, false
+}
+
+// flagSeconds is the seconds the word after flag carries, sleepPollFloor when that word is
+// not a number, and false when the flag is absent.
+func flagSeconds(args []string, flag string) (time.Duration, bool) {
+	i := slices.Index(args, flag)
+	if i < 0 {
+		return 0, false
+	}
+	if i+1 < len(args) {
+		if n, err := strconv.ParseFloat(args[i+1], 64); err == nil && n >= 0 {
+			return time.Duration(n * float64(time.Second)), true
+		}
+	}
+	return sleepPollFloor, true
+}
+
+// inlineScript is the script an interpreter's argv carries after one of flags (last in a
+// short bundle, as in `-we`) or after `--eval`.
+func inlineScript(args []string, flags string) (string, bool) {
+	for i, a := range args {
+		if a == "--eval" && i+1 < len(args) {
+			return args[i+1], true
+		}
+		if script, ok := strings.CutPrefix(a, "--eval="); ok {
+			return script, true
+		}
+		if len(a) >= 2 && a[0] == '-' && a[1] != '-' && strings.ContainsRune(flags, rune(a[len(a)-1])) && i+1 < len(args) {
+			return args[i+1], true
+		}
+	}
+	return "", false
 }
 
 // statusProbe reports a one-shot read of something running elsewhere: a process, the pool

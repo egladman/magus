@@ -221,7 +221,8 @@ var ruleDocBusyWait = types.RuleDoc{
 		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, `magus status --watch` for the project lock. " +
 		"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
 		"Several have had to be killed by hand. A host's watcher running the same loop is judged the same way, since it is the same poll that also wakes the agent on every line and at expiry. " +
-		"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules.",
+		"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules. " +
+		"A sleep is `sleep`, and also `caffeinate -t`, `read -t`, `timeout N sleep` and a perl, python, ruby or node one-liner that sleeps.",
 }
 
 var ruleDocCacheDirWrite = types.RuleDoc{
@@ -789,7 +790,8 @@ var ruleDocSleepPoll = types.RuleDoc{
 		"A `magus run` or `magus affected` whose argv matches one this checkout's run log recorded refused with MGS3009 in the last 60 seconds is the same poll with no sleep at all: it is refused with `magus status --wait | <the command>` as the next line, which waits for a seat and then runs, or for a worker with the report-and-stop above. " +
 		"A line whose `status --wait` gates the run passes, and only run logs written inside the minute are opened. " +
 		"It compares argv exactly, so the same run with a flag added, removed or reordered is a different command. " +
-		"It cannot tell a one-off settle before a single check from the tenth look of a poll; the served watch answers both.",
+		"It cannot tell a one-off settle before a single check from the tenth look of a poll; the served watch answers both. " +
+		"`caffeinate -t`, `read -t`, `timeout N sleep` and a perl, python, ruby or node one-liner that sleeps count as sleeps.",
 }
 
 var ruleDocReadPaging = types.RuleDoc{
