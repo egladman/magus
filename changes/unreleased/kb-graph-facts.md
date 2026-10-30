@@ -6,8 +6,10 @@
   configurations is rebuilt.
 - **A symbol miss names only the gaps that could explain it.** A project in a language
   nothing indexes no longer turns a miss into `unknown` when the name appears nowhere in
-  that project, and `explain` offers `graph build` only for a gap a build closes.
+  that project.
 - **`explain file:<path>` answers for that path or not at all.** A `file:` or `dir:` id with
   no node used to answer with the closest node of any kind and exit 0. It now reports the
   miss. Each project's manifests and lock files, `go.mod` and `go.sum` among them, are file
   nodes.
+- **`refs` answers for the name asked.** A name only a symbol's doc mentioned used to list
+  that symbol's references and exit 0. It is now a miss.

@@ -1212,7 +1212,11 @@ func (g *Graph) resolveSymbol(ref string) (string, bool) {
 		return id, true
 	}
 	for _, m := range g.Resolve(ref, 0) {
-		if m.Kind == types.KindSymbol {
+		if m.Kind != types.KindSymbol {
+			continue
+		}
+		// Ranking also matches docs. A symbol that only mentions ref is not it.
+		if n, ok := g.node(m.ID); ok && (n.Label == ref || strings.HasSuffix(ref, "."+n.Label)) {
 			return m.ID, true
 		}
 	}

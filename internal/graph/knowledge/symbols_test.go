@@ -196,6 +196,19 @@ func TestGraphRefsPrefersSymbol(t *testing.T) {
 	assert.False(t, ok, "grammar tokens in the ref cannot resolve a non-symbol node")
 }
 
+// A symbol whose doc only mentions the name is not that name's answer.
+func TestGraphRefsRefusesASymbolThatOnlyMentionsTheName(t *testing.T) {
+	g := mergeAll([]Shard{
+		assembleSymbols("pkg/foo", []types.KnowledgeSymbol{{Key: "example.com/foo Bar#", Label: "Bar", Doc: "Bar is reminted, never extended."}}, nil),
+	})
+	_, ok := g.Refs("reminted")
+	assert.False(t, ok)
+
+	out, ok := g.Refs("foo.Bar")
+	require.True(t, ok)
+	assert.Equal(t, "symbol:example.com/foo Bar#", out.Symbol)
+}
+
 func TestGraphHasSymbols(t *testing.T) {
 	// A domain-only graph (a project node, no symbols) reports no index: refs uses
 	// this to tell "no index built" apart from "index built, symbol absent".
