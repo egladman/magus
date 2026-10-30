@@ -41,6 +41,11 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 		slog.WarnContext(ctx, "--open could not derive the viewer origin; continuing without it", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		return nil, func() {}
 	}
+	if err := checkExplorerOrigin(base, globalCfg.MCP.AllowedOrigins); err != nil {
+		slog.WarnContext(ctx, "--open will not stream this run to the log viewer; continuing without it", attr.Notice(""), attr.Component("magus"), attr.Error(err),
+			attr.Why("Add the origin to mcp.allowed_origins in magus.yaml, or set MAGUS_LOG_VIEWER_URL to a loopback mirror."))
+		return nil, func() {}
+	}
 	bc := journal.NewBroadcaster()
 	ls, err := viewer.StartLive(origin, bc)
 	if err != nil {

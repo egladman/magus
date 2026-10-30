@@ -829,6 +829,9 @@ func printIdentifyRefSuggestion(ctx context.Context, m *magus.Magus, ref string)
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
 // URL instead. It warns when the link nears browser URL-length limits.
 func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events []journal.Event, inv magus.Invocation, keyDigests string, o outputRefOpts) error {
+	if err := hostedPageAllowed(ctx, "log viewer", "magus query output --open", o.viewerBase, o.printURL); err != nil {
+		return err
+	}
 	rawInv := journal.Invocation{
 		ID:           inv.ID,
 		Command:      journal.Command{Arguments: inv.Command.Arguments, Cwd: inv.Command.Cwd, Trigger: inv.Command.Trigger},

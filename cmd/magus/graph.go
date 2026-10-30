@@ -910,7 +910,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 				attr.Why("--targets reads the target graph directly from the magusfile; there is no knowledge store to refresh."))
 			return exit.Reported(exit.Usage)
 		}
-		if err := explorerAllowed(ctx, base, printOnly); err != nil {
+		if err := hostedPageAllowed(ctx, "graph explorer", "magus graph export --open", base, printOnly); err != nil {
 			return err
 		}
 		return graphOpenTargets(ctx, root, base, printOnly, pos)
@@ -932,7 +932,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	if follow {
 		return graphOpenFollow(ctx, root, printOnly, useTargets)
 	}
-	if err := explorerAllowed(ctx, base, printOnly); err != nil {
+	if err := hostedPageAllowed(ctx, "graph explorer", "magus graph export --open", base, printOnly); err != nil {
 		return err
 	}
 
@@ -983,10 +983,10 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	return nil
 }
 
-// explorerAllowed refuses to open a page mcp.allowed_origins does not name. The
-// page receives the graph, so opening it is a trust decision. --print opens
-// nothing, so it passes.
-func explorerAllowed(ctx context.Context, base string, printOnly bool) error {
+// hostedPageAllowed refuses to open a page mcp.allowed_origins does not name.
+// The page receives workspace data, so opening it is a trust decision.
+// --print opens nothing, so it passes.
+func hostedPageAllowed(ctx context.Context, page, notice, base string, printOnly bool) error {
 	if printOnly {
 		return nil
 	}
@@ -994,7 +994,7 @@ func explorerAllowed(ctx context.Context, base string, printOnly bool) error {
 	if err == nil {
 		return nil
 	}
-	slog.ErrorContext(ctx, "refused to open the graph explorer", attr.Notice("magus graph export --open"), attr.Error(err),
+	slog.ErrorContext(ctx, "refused to open the "+page, attr.Notice(notice), attr.Error(err),
 		attr.Why("Add the origin to mcp.allowed_origins in magus.yaml, pass --url a loopback mirror, or use --print for the link alone."))
 	return exit.Reported(exit.Failure)
 }
@@ -1008,7 +1008,7 @@ func checkExplorerOrigin(base string, allowed []string) error {
 	if slices.Contains(allowed, origin) || isLoopbackOrigin(origin) {
 		return nil
 	}
-	return fmt.Errorf("the graph explorer at %s is not in mcp.allowed_origins", origin)
+	return fmt.Errorf("the page at %s is not in mcp.allowed_origins", origin)
 }
 
 func isLoopbackOrigin(origin string) bool {
