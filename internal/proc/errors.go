@@ -24,7 +24,7 @@ var (
 // notAdoptedError is a proc sentinel for a forwarded call the server did not adopt:
 // the server is alive and answered, but will not take this call: its subcommand does
 // not adopt a server, or the client's build is incompatible with the
-// server's. The caller runs the command locally, quietly, rather than warning. The
+// server's. The caller runs the command locally; a mismatch warns. The
 // classification lives ON the error (a NotAdopted() bool method, in the spirit of
 // net.Error's Temporary()/Timeout() and Temporal's application errors), so callers ask
 // NotAdopted(err) instead of enumerating sentinels.
@@ -45,13 +45,10 @@ var (
 	ErrVersionMismatch error = &notAdoptedError{"proc: version mismatch between parent and child magus"}
 )
 
-// NotAdopted reports whether err (or any error it wraps) is a call the server did
-// not adopt (a non-adoptable subcommand, or a build mismatch on an otherwise
-// adoptable one): the server answered but will not take the call, so a caller runs it
-// locally and quietly instead of treating it as a failure. Prefer this over matching
-// the individual sentinels: it stays correct as reasons are added and sees through
-// wrapping. Errors that do not implement NotAdopted() (e.g. a transport failure)
-// report false; treat those as genuine forward failures.
+// NotAdopted reports whether err, or an error it wraps, is a call the server
+// did not adopt: a non-adoptable subcommand, or a build mismatch. The server
+// answered, so a caller runs it locally. Prefer this over matching sentinels.
+// An error with no NotAdopted() method is a genuine forward failure.
 func NotAdopted(err error) bool {
 	var e interface{ NotAdopted() bool }
 	return errors.As(err, &e) && e.NotAdopted()
