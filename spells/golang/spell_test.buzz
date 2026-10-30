@@ -182,3 +182,26 @@ test "a quoted module path and an ignore directive are read" {
     std\assert(c.name == "example.com/q", message: "unquoted: {c.name}");
     std\assert(hasGap(c, file: "go.mod", says: "ignore ./node_modules"), message: "ignore reported");
 }
+
+fun command(op: str) > Command {
+    return go\mgs_listTargets()[op]!(Target{});
+}
+
+test "go-build trims paths like the other compiling ops" {
+    foreach (op in ["go-build", "go-test", "go-vet", "go-fuzz"]) {
+        std\assert(command(op).args.indexOf("-trimpath") != null, message: "{op} passes -trimpath");
+    }
+}
+
+test "golangci-lint observes the linter build, not just its version" {
+    final observe = go\mgs_getTools()["golangci-lint"]!.observe;
+    std\assert(observe.bin == "golangci-lint", message: "observes the linter");
+    std\assert(observe.args.join(" ") == "version --debug", message: "build info with checksums");
+}
+
+test "golangci-lint keys on the platform and the Go toolchain selectors" {
+    final keys = command("golangci-lint").envKeys;
+    foreach (name in ["GOOS", "GOARCH", "GOROOT", "GOTOOLCHAIN", "GOEXPERIMENT", "GOFLAGS"]) {
+        std\assert(keys.indexOf(name) != null, message: "{name} keys the lint op");
+    }
+}

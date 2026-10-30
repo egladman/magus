@@ -69,9 +69,10 @@ export fun mgs_listRequiredGlobs() > [Path] {
 //
 // golangci-lint is observed, not probed: a version probe keys every target
 // in the project, so a linter upgrade invalidated every go-test entry, and only the
-// golangci-lint op reads the binary. An observation hashes the whole line, commit and
-// build date included, so two builds of one release key apart; they are rare, and a
-// version probe's cost was every test key.
+// golangci-lint op reads the binary. `version --debug` is observed rather than
+// `--version`: it lists the Go toolchain the linter was built with and the checksum of
+// every linter compiled in, so two builds that print one version still key apart, and
+// a swapped binary never replays the old binary's findings.
 //
 // golangci-lint and govulncheck declare no window. Neither has a version below which
 // the ops are known to break, and inventing one to look thorough would fail builds over
@@ -80,7 +81,7 @@ export fun mgs_getTools() > {str: Tool} {
     return {
         "go": Tool{probe = Command{bin = "go", args = ["version"]}, key = VersionKey{upTo = VersionComponent.patch},
                    supported = VersionBounds{min = "1.21"}, lifecycle = "go"},
-        "golangci-lint": Tool{observe = Command{bin = "golangci-lint", args = ["--version"]}},
+        "golangci-lint": Tool{observe = Command{bin = "golangci-lint", args = ["version", "--debug"]}},
         "govulncheck": Tool{observe = Command{bin = "govulncheck", args = ["-version"]}},
     };
 }
@@ -220,7 +221,12 @@ final GO_MOD_HINTS = [
 // run and not the next would otherwise replay a different platform's result.
 final GO_PLATFORM_ENV = ["GOOS", "GOARCH", "GOARM", "GOAMD64"];
 
-fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV}; }
+// GO_TOOLCHAIN_ENV names the variables that pick which Go toolchain golangci-lint loads
+// packages with. The linter's own build only records the toolchain that compiled it.
+final GO_TOOLCHAIN_ENV = ["GOROOT", "GOTOOLCHAIN", "GOEXPERIMENT", "GOFLAGS"];
+
+// -trimpath is a default: without it each checkout's absolute path is baked into the build ID, so checkouts of one source never share cache entries.
+fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build", "-trimpath"], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV}; }
 // go rejects -cache/-testcache/-modcache/-fuzzcache combined with ANY package
 // pattern ("cannot be used with package arguments"), in any order, so
 // "./..." can only be safe on a fully bare invocation. defaultArgs cannot
@@ -246,7 +252,7 @@ fun goFmt(target: Target) > Command {
 // (mise, asdf, a system package), and the spell's observe probe records which.
 fun golangCILint(target: Target) > Command {
     final args = ["run", "./..."];
-    return Command{bin = "golangci-lint", args = args, envKeys = GO_PLATFORM_ENV, charms = {
+    return Command{bin = "golangci-lint", args = args, envKeys = GO_PLATFORM_ENV + GO_TOOLCHAIN_ENV, charms = {
         "debug": append(["-v"]),
         "rw": after(args, "run", ["--fix"]),
     }};
