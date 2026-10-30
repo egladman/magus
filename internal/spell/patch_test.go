@@ -342,7 +342,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// Observe only, no Probe: a version probe keys every target in the project,
 			// so the database date `-version` prints, or a linter upgrade, reached targets
 			// that never run the tool. See spells/golang/spell.buzz.
-			"golangci-lint": {Observe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}},
+			"golangci-lint": {Observe: spells.Command{Bin: "golangci-lint", Args: []string{"version", "--debug"}}},
 			"govulncheck":   {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
 		},
 		Language:           "go",
@@ -367,7 +367,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Manifests:  goldenGoManifests,
 		Ops: map[string]spells.Op{
 			"go-mod-download": installOp("go", goldenGoInstallManifests, goldenGoInstall),
-			"go-build":        {Command: spells.Command{Bin: "go", Args: []string{"build"}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv}},
+			"go-build":        {Command: spells.Command{Bin: "go", Args: []string{"build", "-trimpath"}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv}},
 			"go-clean":        {Command: spells.Command{Bin: "go", Args: []string{"clean"}, TrailingArgs: []string{"./..."}}},
 			"go-generate":     {Command: spells.Command{Bin: "go", Args: []string{"generate", "./..."}}},
 			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Charms: map[string]spells.Charm{
@@ -381,7 +381,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
 			// `go tool golangci-lint` reported "no such tool" and the op could not run.
 			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.
-			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, EnvKeys: goldenGoPlatformEnv, Charms: map[string]spells.Charm{
+			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, EnvKeys: []string{"GOOS", "GOARCH", "GOARM", "GOAMD64", "GOROOT", "GOTOOLCHAIN", "GOEXPERIMENT", "GOFLAGS"}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
