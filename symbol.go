@@ -697,12 +697,16 @@ func (m *Magus) RefreshSymbolIndexes(ctx context.Context, wanted func(types.Symb
 		},
 		after: func(ctx context.Context) {
 			log := slog.With(attr.Component("magus"))
+			started := time.Now()
 			if err := m.WriteGuardIndex(ctx); err != nil {
 				log.DebugContext(ctx, "guard index not written", attr.Error(err))
 			}
+			log.DebugContext(ctx, "symbol refresh wrote the guard index", slog.Duration("took", time.Since(started)))
+			started = time.Now()
 			if err := m.WriteScriptsIndex(ctx); err != nil {
 				log.DebugContext(ctx, "scripts index not written", attr.Error(err))
 			}
+			log.DebugContext(ctx, "symbol refresh wrote the scripts index", slog.Duration("took", time.Since(started)))
 		},
 	}
 	return r.refresh(ctx)
@@ -770,7 +774,10 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 // and returns whether any landed.
 func (r symbolRefresher) work(ctx context.Context, report func(refreshed, problem string)) bool {
 	refreshed := false
-	for _, s := range r.status(ctx) {
+	swept := r.now()
+	statuses := r.status(ctx)
+	slog.DebugContext(ctx, "symbol refresh swept the indexes", slog.Duration("took", r.now().Sub(swept)))
+	for _, s := range statuses {
 		if len(staleIndexRefs([]types.SymbolIndexStatus{s})) == 0 || !r.wanted(s) {
 			continue
 		}
@@ -784,7 +791,9 @@ func (r symbolRefresher) work(ctx context.Context, report func(refreshed, proble
 			report("", fmt.Sprintf("%s: not reached within the %s budget", name, r.budget))
 			continue
 		}
+		ran := r.now()
 		err := r.run(ctx, s)
+		slog.DebugContext(ctx, "symbol refresh ran an index", slog.String("index", name), slog.Duration("took", r.now().Sub(ran)))
 		switch {
 		case err == nil:
 			_ = os.Remove(index + symbolRefreshFailedSuffix)
