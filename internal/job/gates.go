@@ -88,13 +88,15 @@ const ciTarget = "ci"
 // worker may run, else none, with the gate marked IntegratorGates. A workspace with no root
 // project, or one whose root has no ci chain, yields nil.
 func UnrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput) []UnrunGate {
-	return unrunGates(root, row, projects, regenerated, gradeWith(installedCheckGrader(), root, row))
+	gates, _ := unrunGates(root, row, projects, regenerated, gradeWith(installedCheckGrader(), root, row))
+	return gates
 }
 
-// unrunGates is [UnrunGates] graded by grade.
-func unrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput, grade gradeFunc) []UnrunGate {
+// unrunGates is [UnrunGates] graded by grade. The second result names each
+// gate an ancestor kept because its owner's targets could not be listed.
+func unrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput, grade gradeFunc) ([]UnrunGate, []string) {
 	if row.ReadOnly || len(row.WritePaths) == 0 {
-		return nil
+		return nil, nil
 	}
 	byPath := map[string]*types.Project{}
 	for _, p := range projects {
@@ -103,14 +105,15 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 	lookup := func(path string) *types.Project { return byPath[path] }
 	top := byPath["."]
 	if top == nil {
-		return nil
+		return nil, nil
 	}
 
 	run := runTargets(row, lookup)
 	var (
-		written []string
-		walked  bool
-		found   []unrunFound
+		written   []string
+		walked    bool
+		found     []unrunFound
+		undecided []string
 	)
 	listed := map[string]bool{}
 	_ = types.WalkChain(top, ciTarget, lookup, func(v types.ChainVisit) error {
@@ -119,6 +122,9 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		}
 		if !walked {
 			written, walked = writtenFiles(root, row), true
+		}
+		for _, note := range undecidedOwners(projects, v, written) {
+			undecided = appendUnique(undecided, note)
 		}
 		for _, owned := range byOwningProject(projects, v, written) {
 			key := owned.visit.Key()
@@ -140,7 +146,30 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		return nil
 	})
 
-	return offeredGates(found, row, lookup, grade)
+	return offeredGates(found, row, lookup, grade), undecided
+}
+
+// undecidedOwners names each project owning a file v reads that cannot say
+// whether it runs v's target: its spells are unresolved, so v stands in.
+func undecidedOwners(projects []*types.Project, v types.ChainVisit, written []string) []string {
+	sources, _ := targetSources(v.Project, v.Target)
+	var out []string
+	for _, file := range written {
+		owner := owningProject(projects, file)
+		if owner == nil || owner == v.Project || !spellsUnresolved(owner) || slices.Contains(owner.MagusfileTargets, v.Target) {
+			continue
+		}
+		if slices.ContainsFunc(sources, func(g types.Glob) bool { return g.Match(file) }) {
+			out = appendUnique(out, fmt.Sprintf("whether project %q runs `%s`: it binds spells it carries unresolved, so `%s %s` gates its files",
+				owner.Path, v.Target, v.Target, v.Project.Path))
+		}
+	}
+	return out
+}
+
+// spellsUnresolved reports a project whose spell ops cannot be listed.
+func spellsUnresolved(p *types.Project) bool {
+	return len(p.ResolvedSpells) == 0 && len(p.Spells) > 0
 }
 
 // ownedGate is the gate a target over some written files comes to.

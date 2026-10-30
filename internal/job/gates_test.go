@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -208,6 +210,34 @@ func (s *owningProjectGateSuite) TestEachGateNamesItsOwnSource() {
 	s.Equal("libs/**/*.go", gates[1].Source)
 }
 
+// unresolvedStore validates against a libs/spelled whose spells are unresolved.
+func (s *owningProjectGateSuite) unresolvedStore() *Store {
+	projects := s.workspace()
+	projects = append(projects, &types.Project{Path: "libs/spelled", Sources: types.MustParseGlobs("**/*.go"), Spells: []string{"go"}})
+	root := testkit.NewRepository(s.T(), map[string]string{"a.go": "package a\n"}).Root()
+	return NewStore(tempLocation(s.T(), root)).InWorkspace(Workspace{Projects: projects})
+}
+
+func (s *owningProjectGateSuite) validated(store *Store, check *types.LeaseCheck, write string) types.JobValidation {
+	v, err := ValidateFork(s.T().Context(), store, "j", func(u *types.Job) {
+		u.WritePaths, u.Check, u.Criteria = []string{write}, check, "c"
+	}, config.Jobs{}, nil)
+	s.Require().NoError(err)
+	return v
+}
+
+func (s *owningProjectGateSuite) TestAnOwnerWithUnresolvedSpellsIsNamedUnchecked() {
+	v := s.validated(s.unresolvedStore(), &types.LeaseCheck{Target: "test", Project: "."}, "libs/spelled/a.go")
+
+	s.Contains(v.Unchecked, "whether project \"libs/spelled\" runs `test`: it binds spells it carries unresolved, so `test .` gates its files")
+}
+
+func (s *owningProjectGateSuite) TestAnOwnerWithResolvedTargetsIsNotNamed() {
+	v := s.validated(s.unresolvedStore(), &types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/a.go")
+
+	s.Empty(v.Unchecked)
+}
+
 func TestUnrunGatesNeedsACiChain(t *testing.T) {
 	t.Parallel()
 
@@ -268,7 +298,7 @@ func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
 
 	row := types.Job{ID: "j", WritePaths: []string{"internal/job/gates.go"}, Check: &types.LeaseCheck{Target: "compile", Project: "."}}
 
-	got := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, workerGrade)
+	got, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, workerGrade)
 
 	byTarget := map[string]UnrunGate{}
 	for _, g := range got {
@@ -284,7 +314,7 @@ func TestUnrunGatesOfferOnlyGoalsAWorkerMayRun(t *testing.T) {
 	assert.Contains(t, lines, "build . (reads **/*.go): the integrator gates it; no worker may run it")
 	assert.NotContains(t, lines[len(lines)-1], `"id":"build"`)
 
-	ungraded := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, nil)
+	ungraded, _ := unrunGates(t.TempDir(), row, gatesWorkspace(), nil, nil)
 	for _, g := range ungraded {
 		assert.False(t, g.IntegratorGates, "with no grader every goal is offered as it is")
 	}

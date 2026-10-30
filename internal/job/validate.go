@@ -358,7 +358,9 @@ func workspaceProblems(ctx context.Context, store *Store, merged, judged types.J
 		})
 	}
 	ps = append(ps, regeneratedProblems(regenerated, merged.DenyPaths)...)
-	ps = append(ps, unrunGateProblems(unrunGates(store.root, gated, ws.Projects, regenerated, gradeWith(store.checkGrader(), store.root, merged)))...)
+	gates, undecided := unrunGates(store.root, gated, ws.Projects, regenerated, gradeWith(store.checkGrader(), store.root, merged))
+	ps = append(ps, unrunGateProblems(gates)...)
+	unchecked = append(unchecked, undecided...)
 	ps = append(ps, onRow(broadClaimProblems(ctx, store.root, judged, ws, read), judged, merged)...)
 	return ps, unchecked
 }
@@ -402,7 +404,7 @@ func checkTargetProblems(ws Workspace, row types.Job) (types.JobProblems, []stri
 		if spell == "" && slices.Contains(p.MagusfileTargets, name) {
 			continue
 		}
-		if len(p.ResolvedSpells) == 0 && len(p.Spells) > 0 {
+		if spellsUnresolved(p) {
 			unchecked = append(unchecked, fmt.Sprintf("the target of `%s`: project %q binds spells it carries unresolved, so their ops cannot be listed", g.Check.String(), project))
 			continue
 		}
