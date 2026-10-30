@@ -351,7 +351,7 @@ func TestHookRowsRecordTheJudgingBinaryAndCwd(t *testing.T) {
 		Binary:        "/work/tree/magus",
 		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
 		Cwd:           cwd,
-		Phases:        []trail.Phase{{Name: phaseJudge}},
+		Phases:        []trail.Phase{{Name: phaseBuiltinRules}, {Name: phaseNotices}, {Name: phaseJudge}},
 	}, clearVolatile(commands[0]))
 
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
@@ -405,12 +405,14 @@ func TestHookRowsRecordEachPhase(t *testing.T) {
 	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
 	require.Len(t, commands, 1)
 	phases := commands[0].Phases
-	require.Len(t, phases, 3)
+	require.Len(t, phases, 5)
 	assert.Equal(t, trail.Phase{Name: phaseLoadRules, ElapsedMs: 812, BudgetMs: 6500}, phases[0])
 	assert.Equal(t, phaseWorktreeRule, phases[1].Name)
 	assert.Positive(t, phases[1].BudgetMs)
 	assert.False(t, phases[1].Lapsed)
-	assert.Equal(t, phaseJudge, phases[2].Name)
+	assert.Equal(t, phaseBuiltinRules, phases[2].Name)
+	assert.Equal(t, phaseNotices, phases[3].Name)
+	assert.Equal(t, phaseJudge, phases[4].Name)
 }
 
 // clearVolatile zeroes what the clock, the OS account and the content-addressed blobs decide,

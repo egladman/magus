@@ -378,12 +378,14 @@ func TestHookCmd_RecordsEachPhase(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	phases := events[0].Phases
-	require.Len(t, phases, 2)
+	require.Len(t, phases, 4)
 	assert.Equal(t, "load_rules", phases[0].Name)
 	assert.Positive(t, phases[0].BudgetMs)
 	assert.Less(t, phases[0].BudgetMs, (10 * time.Second).Milliseconds(), "inside the host's kill line")
 	assert.False(t, phases[0].Lapsed)
-	assert.Equal(t, "judge", phases[1].Name)
+	assert.Equal(t, "builtin_rules", phases[1].Name)
+	assert.Equal(t, "notices", phases[2].Name)
+	assert.Equal(t, "judge", phases[3].Name)
 }
 
 // assertJudgedBy pins the judging magus a hook row records, the running binary and its
@@ -397,7 +399,7 @@ func assertJudgedBy(t *testing.T, got *trail.Event) {
 	for i, p := range got.Phases {
 		names[i] = p.Name
 	}
-	assert.Equal(t, []string{"load_rules", "judge"}, names)
+	assert.Equal(t, []string{"load_rules", "builtin_rules", "notices", "judge"}, names)
 	got.Binary, got.BinaryVersion, got.Phases = "", "", nil
 }
 
