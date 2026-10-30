@@ -1954,4 +1954,3 @@ fun pair::<A, B>(a: A, b: B) > R::<B> { return R::<B>{ v = b }; }
 	checkErr(t, decls+`final r: R::<str> = mk::<int>(1);`, "cannot assign")
 	checkErr(t, decls+`final r = mk::<int, str>(1);`, "wrong type argument count: got 2, want 1")
 }
-
