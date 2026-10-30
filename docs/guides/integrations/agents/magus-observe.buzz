@@ -129,7 +129,7 @@ fun main(args: [str]) > void {
     // state worth knowing about once, but not once per read, so it is reported through
     // the trail's own absence rather than through the session: if reads are missing from
     // `magus session`, the binary is too old.
-    proc\exec(bin, args: [
+    _ = proc\exec(bin, args: [
         "shell", "--observe",
         "--agent-name", agentName,
         "--session", field(event, dotPath: sessionPath),

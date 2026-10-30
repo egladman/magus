@@ -189,7 +189,7 @@ export fun designIndex(pages: [DesignPage]) > str {
         foreach (p in pages) {
             if (p.group == group) { members.append(p); }
         }
-        members.sort(fun (a: DesignPage, b: DesignPage) > bool => a.order < b.order or (a.order == b.order and a.file < b.file));
+        _ = members.sort(fun (a: DesignPage, b: DesignPage) > bool => a.order < b.order or (a.order == b.order and a.file < b.file));
         rows.append("");
         rows.append("### {GROUP_TITLES[group] ?? group}");
         rows.append("");

@@ -142,7 +142,7 @@ export fun goInputsDigest(root: str) > str !> any {
             files.append(name);
         }
     }
-    files.sort(fun (left: str, right: str) > bool => left < right);
+    _ = files.sort(fun (left: str, right: str) > bool => left < right);
     final lines = mut [<str>];
     foreach (rel in files) {
         lines.append("{rel} {crypto\sha256File("{base}/{rel}")}");

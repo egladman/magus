@@ -190,7 +190,7 @@ export fun gather(sh: Shell, branches: [str], base: str) > [Step] !> any {
             fetch.append(b);
         }
     }
-    must(sh.git("", args: fetch), what: "git {fetch.join(" ")}");
+    _ = must(sh.git("", args: fetch), what: "git {fetch.join(" ")}");
     final heads = mut {<str: str>};
     foreach (b in branches) {
         final ref = if (remotes[b] ?? false) "origin/{b}" else "refs/heads/{b}";
@@ -230,7 +230,7 @@ fun settle(sh: Shell, checkout: str, s: Step, started: Ran) > void !> any {
         if (unmerged.len() == 0) {
             // A commit the base already holds resolves to nothing, and git stops on it.
             if ("{res.stdout}{res.stderr}".indexOf("No changes") == null) {
-                sh.git(checkout, args: ["rebase", "--abort"]);
+                _ = sh.git(checkout, args: ["rebase", "--abort"]);
                 throw "rebase-branches-onto-base: git rebase stopped on {s.branch} with no conflicted file: {res.stderr}{res.stdout}";
             }
             res = sh.git(checkout, args: ["rebase", "--skip"]);
@@ -239,13 +239,13 @@ fun settle(sh: Shell, checkout: str, s: Step, started: Ran) > void !> any {
         final generated = sh.generated(unmerged);
         final sources = unmerged.filter(fun (index: int, p: str) > bool => generated.indexOf(p) == null);
         if (sources.len() > 0) {
-            sh.git(checkout, args: ["rebase", "--abort"]);
+            _ = sh.git(checkout, args: ["rebase", "--abort"]);
             throw conflictRefusal(s, checkout: checkout, sources: sources);
         }
         foreach (p in unmerged) {
             // A side that deleted the file has no version to check out; add records the deletion.
-            sh.git(checkout, args: ["checkout", "--theirs", "--", p]);
-            must(sh.git(checkout, args: ["add", "-A", "--", p]), what: "git add {p}");
+            _ = sh.git(checkout, args: ["checkout", "--theirs", "--", p]);
+            _ = must(sh.git(checkout, args: ["add", "-A", "--", p]), what: "git add {p}");
         }
         res = sh.git(checkout, args: ["-c", "core.editor=true", "rebase", "--continue"]);
     }
@@ -262,10 +262,10 @@ export fun rebase(sh: Shell, checkout: str, s: Step, onto: str, base: str) > str
         throw "rebase-branches-onto-base: `magus affected ci` failed on the rebased {s.branch}; {checkout} keeps it, nothing was pushed:\n{gate.stdout}{gate.stderr}";
     }
     if (lines(must(sh.git(checkout, args: ["status", "--porcelain"]), what: "git status")).len() > 0) {
-        must(sh.git(checkout, args: ["add", "-A"]), what: "git add -A");
-        must(sh.git(checkout, args: ["commit", "-m", regenerateMessage(base)]), what: "git commit");
+        _ = must(sh.git(checkout, args: ["add", "-A"]), what: "git add -A");
+        _ = must(sh.git(checkout, args: ["commit", "-m", regenerateMessage(base)]), what: "git commit");
     }
-    must(sh.git(checkout, args: pushArgv(s)), what: "git push {s.branch}");
+    _ = must(sh.git(checkout, args: pushArgv(s)), what: "git push {s.branch}");
     std\print("rebased {s.branch} onto {onto} and pushed it");
     return must(sh.git(checkout, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
 }
@@ -280,13 +280,13 @@ export fun forkArgs(id: str, checkout: str, paths: [str], base: str) > [str] {
 export fun execute(sh: Shell, stack: [Step], base: str, checkout: str) > void !> any {
     final id = jobId(stack.map(fun (index: int, s: Step) > str => s.branch));
     final paths = writePaths(sh, stack: stack);
-    must(sh.run("", sub: "job", args: forkArgs(id, checkout: checkout, paths: paths, base: base)), what: "magus job fork {id}");
-    must(sh.run(checkout, sub: "job", args: ["exec", id]), what: "magus job exec {id}");
+    _ = must(sh.run("", sub: "job", args: forkArgs(id, checkout: checkout, paths: paths, base: base)), what: "magus job fork {id}");
+    _ = must(sh.run(checkout, sub: "job", args: ["exec", id]), what: "magus job exec {id}");
     var onto = base;
     foreach (s in stack) {
         onto = rebase(sh, checkout: checkout, s: s, onto: onto, base: base);
     }
-    must(sh.run(checkout, sub: "job", args: ["exit", id]), what: "magus job exit {id}");
+    _ = must(sh.run(checkout, sub: "job", args: ["exit", id]), what: "magus job exit {id}");
 }
 
 // findGenerated keeps the paths this workspace declares as outputs or that magus maintains.
@@ -434,7 +434,7 @@ test "a failed git call raises with its stderr, naming the call" {
     final sh = fake({ "git ls-remote --heads origin b": Ran{ code = 128, stderr = "fatal: unable to access" } }, gh: MERGED, generated: [<str>], calls: mut [<str>]);
     var why = "";
     try {
-        gather(sh, branches: ["b"], base: "origin/main");
+        _ = gather(sh, branches: ["b"], base: "origin/main");
     } catch (e: str) {
         why = e;
     }
@@ -449,7 +449,7 @@ test "a branch on no squashed head is refused, naming merge-base-into-branches" 
     }, gh: MERGED, generated: [<str>], calls: mut [<str>]);
     var why = "";
     try {
-        gather(sh, branches: ["b"], base: "origin/main");
+        _ = gather(sh, branches: ["b"], base: "origin/main");
     } catch (e: str) {
         why = e;
     }
@@ -500,7 +500,7 @@ test "a source conflict aborts the rebase and lists the files, pushing nothing" 
     }, gh: "", generated: ["MAGUS.md"], calls: calls);
     var why = "";
     try {
-        rebase(sh, checkout: "/c", s: s, onto: "origin/main", base: "origin/main");
+        _ = rebase(sh, checkout: "/c", s: s, onto: "origin/main", base: "origin/main");
     } catch (e: str) {
         why = e;
     }
@@ -514,7 +514,7 @@ test "a failed gate keeps the checkout and pushes nothing" {
     final sh = fake({ "magus affected ci": Ran{ code = 1, stdout = "lint failed" } }, gh: "", generated: [<str>], calls: calls);
     var why = "";
     try {
-        rebase(sh, checkout: "/c", s: s, onto: "origin/main", base: "origin/main");
+        _ = rebase(sh, checkout: "/c", s: s, onto: "origin/main", base: "origin/main");
     } catch (e: str) {
         why = e;
     }

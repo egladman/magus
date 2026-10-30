@@ -155,7 +155,7 @@ fun termUsage(title: str) > str !> any {
         if (m.label.lower().indexOf(title.lower()) == null) { continue; }
         candidates.append(dictionary\docFromID(m.id, label: m.label));
     }
-    candidates.sort(fun (a: dictionary\UsageDoc, b: dictionary\UsageDoc) > bool => a.file < b.file or (a.file == b.file and a.anchor < b.anchor));
+    _ = candidates.sort(fun (a: dictionary\UsageDoc, b: dictionary\UsageDoc) > bool => a.file < b.file or (a.file == b.file and a.anchor < b.anchor));
     final docs = mut [<dictionary\UsageDoc>];
     final pages = mut {<str: bool>};
     final dirs = mut {<str: int>};
@@ -175,7 +175,7 @@ fun termUsage(title: str) > str !> any {
     }
     final ids = mut [<str>];
     foreach (m in found.matches) { ids.append(m.id); }
-    ids.sort(fun (a: str, b: str) > bool => a < b);
+    _ = ids.sort(fun (a: str, b: str) > bool => a < b);
     foreach (id in ids) {
         if (symbols.len() >= 5) { break; }
         final s = dictionary\symbolFromID(id, term: title);
@@ -381,7 +381,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["../types/*.go", "../cmd/magus-utils/*.go"]);
     ctx.writesFiles(["src/gen/magus/types.ts"]);
-    proc\exec("go", ["run", "../cmd/magus-utils", "tstypes", "-out", "src/gen/magus/types.ts"]);
+    _ = proc\exec("go", ["run", "../cmd/magus-utils", "tstypes", "-out", "src/gen/magus/types.ts"]);
 }
 
 // generate regenerates the committed derived files and fails on drift. The ignored gen/
@@ -452,7 +452,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(workspace\lint_rules);
     markdown.typos(ctx);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
-    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
+    _ = proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
 }
 // build renders the site cd.yaml publishes. It is uncommitted, so no drift gate applies.
 export fun build(ctx: magus\Context, args: [str]) > void {
@@ -464,16 +464,16 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // --embedded because render is written for the magusfile engine. Each module is then
 // checked alone: a check of render reports only render's own warnings.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
-    magus\cmd("buzz", args: ["-t", "--embedded", "render.buzz"]);
+    _ = magus\cmd("buzz", args: ["-t", "--embedded", "render.buzz"]);
     // The magusfile, not render, imports lib/dictionary, so render's tests never reach it.
-    magus\cmd("buzz", args: ["-t", "--embedded", "lib/dictionary.buzz"]);
+    _ = magus\cmd("buzz", args: ["-t", "--embedded", "lib/dictionary.buzz"]);
     final modules = mut ["--check", "--embedded"];
     foreach (dir in ["lib", "engine", "site"]) {
         foreach (mod in fs\glob(dir + "/*.buzz")) {
             modules.append(mod.value);
         }
     }
-    magus\cmd("buzz", args: modules);
+    _ = magus\cmd("buzz", args: modules);
 }
 
 export fun test(ctx: magus\Context, args: [str]) > void {
@@ -505,7 +505,7 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("gen/playground");
     // From the module root so go finds go.mod; -trimpath keeps the output reproducible.
     os\withEnv({"GOOS": "js", "GOARCH": "wasm"}, fun () > void !> any {
-        proc\exec("go",
+        _ = proc\exec("go",
             ["build", "-trimpath", "-ldflags=-s -w",
              "-o", "docs/gen/playground/buzz.wasm", "./cmd/buzz-playground"],
             "..");
@@ -583,6 +583,6 @@ export fun render(ctx: magus\Context, args: [str]) > void !> any {
     // The asset integrity gate fails on any bundle a page references, and a fresh checkout
     // has none; the changelog page is uncommitted for the same reason.
     ctx.needs(build_hljs, build_playground_editor, build_playground, changelog_page);
-    renderer\site_render(ROOT, DOCS, BLOG, OUT,
+    _ = renderer\site_render(ROOT, DOCS, BLOG, OUT,
         magus\describe.graph(), magus\projectGraph());
 }

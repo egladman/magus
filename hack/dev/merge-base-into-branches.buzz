@@ -147,7 +147,7 @@ export fun locate(sh: Shell, branch: str, here: str) > str !> any {
 
 export fun update(sh: Shell, s: Step, dir: str) > void !> any {
     if (dir == "") {
-        must(sh.git("", args: ["switch", s.branch]), what: "git switch {s.branch}");
+        _ = must(sh.git("", args: ["switch", s.branch]), what: "git switch {s.branch}");
     } else {
         std\print("{s.branch} is checked out in {dir}; merging there");
     }
@@ -168,9 +168,9 @@ export fun update(sh: Shell, s: Step, dir: str) > void !> any {
 
 fun finish(sh: Shell, s: Step, dir: str) > void !> any {
     if (sh.git(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"]).code == 0) {
-        must(sh.git(dir, args: ["commit", "--no-edit"]), what: "git commit --no-edit");
+        _ = must(sh.git(dir, args: ["commit", "--no-edit"]), what: "git commit --no-edit");
     }
-    must(sh.git(dir, args: ["push", "origin", s.branch]), what: "git push origin {s.branch}");
+    _ = must(sh.git(dir, args: ["push", "origin", s.branch]), what: "git push origin {s.branch}");
     std\print("updated {s.branch} against {s.against}");
 }
 

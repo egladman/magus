@@ -10,7 +10,7 @@ magus\project({
 // test runs the in-file test blocks upstream-strict.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["figure.buzz"]);
-    magus\cmd("buzz", args: ["-t", "figure.buzz"]);
+    _ = magus\cmd("buzz", args: ["-t", "figure.buzz"]);
 }
 
 // lint type-checks the module upstream-strict and fails on any BZZ diagnostic.

@@ -355,7 +355,7 @@ fun podman(args: [str]) > ExecResult !> any {
 // command that fixes it. A stopped machine is not a refusal: hold starts it.
 fun reach(hostOS: str) > str !> any {
     try {
-        proc\which("podman");
+        _ = proc\which("podman");
     } catch (e) {
         if (hostOS == "darwin") { return "podman is not installed; run `brew install podman`"; }
         return "podman is not installed; install it from your distribution (https://podman.io/docs/installation)";
@@ -514,7 +514,7 @@ export fun main(args: [str]) > void !> any {
         var unreachable = reach(host[0]);
         if (unreachable == "") {
             try {
-                hold(host[0]);
+                _ = hold(host[0]);
             } catch (e: {str: str}) {
                 unreachable = "the podman machine did not come up: {e["message"] ?? ""}";
             }

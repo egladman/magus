@@ -299,7 +299,7 @@ export fun main(args: [str]) > void !> any {
 // refusal is the message parse throws for args, or "" when it accepts them.
 fun refusal(args: [str]) > str {
     try {
-        parse(args);
+        _ = parse(args);
     } catch (e) {
         return "{e}";
     }

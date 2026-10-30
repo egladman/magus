@@ -912,7 +912,7 @@ export fun figureOf(objects: [Resource], id: str, title: str, eyebrow: str = "",
     }
     final workloads = objects.filter(fun (i: int, r: Resource) > bool => POD_TEMPLATES[r.kind()] != null);
     foreach (w in workloads) {
-        actor(d, f: f, r: w, look: figure\Look.focal);
+        _ = actor(d, f: f, r: w, look: figure\Look.focal);
     }
     foreach (svc in objects.filter(fun (i: int, r: Resource) > bool => r.kind() == "Service")) {
         final selector = (dig(svc.doc, path: ["spec", "selector"]) as? {str: any}) ?? {<str: any>};
@@ -968,7 +968,7 @@ export fun figureOf(objects: [Resource], id: str, title: str, eyebrow: str = "",
     };
     foreach (look in [figure\Look.focal, figure\Look.plain, figure\Look.store, figure\Look.input, figure\Look.optional, figure\Look.external]) {
         if (d.looks[look.value] ?? false) {
-            f.legend(look, label: legend[look.value]!);
+            _ = f.legend(look, label: legend[look.value]!);
         }
     }
     return f;
@@ -1097,7 +1097,7 @@ fun actor(d: Drawing, f: mut figure\Figure, r: Resource, look: figure\Look) > fi
     d.actors[name] = a;
     d.order.append(name);
     d.looks[look.value] = true;
-    f.actor(a);
+    _ = f.actor(a);
     return a;
 }
 
@@ -1131,7 +1131,7 @@ fun flow(d: Drawing, f: mut figure\Figure, src: figure\Actor, dst: figure\Actor,
         return;
     }
     d.edges.append(key);
-    f.flowAcross(src, dst: dst, label: label);
+    _ = f.flowAcross(src, dst: dst, label: label);
 }
 
 // ---- plain-data helpers ----
@@ -1228,7 +1228,7 @@ fun named(objects: [Resource], kind: str) > Resource !> any {
 
 fun buildError(kustomization: str) > str {
     try {
-        build(staged(kustomization, files: ["app.yaml"]));
+        _ = build(staged(kustomization, files: ["app.yaml"]));
     } catch (e: str) {
         return e;
     }
@@ -1287,7 +1287,7 @@ fun edgeLabels(f: figure\Figure) > [str] !> any {
     foreach (e in f.diagram().edges) {
         labels.append(e.label);
     }
-    labels.sort(fun (a: str, b: str) > bool => a < b);
+    _ = labels.sort(fun (a: str, b: str) > bool => a < b);
     return labels;
 }
 

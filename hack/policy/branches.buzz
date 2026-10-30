@@ -549,7 +549,7 @@ fun leading(topic: Topic, n: int) > [str] {
     foreach (w in topic.words) {
         ranked.append(w);
     }
-    ranked.sort(fun (a: str, b: str) > bool {
+    _ = ranked.sort(fun (a: str, b: str) > bool {
         final ca = topic.counts[a]!;
         final cb = topic.counts[b]!;
         return ca > cb or (ca == cb and (topic.depths[a] ?? 0) > (topic.depths[b] ?? 0));

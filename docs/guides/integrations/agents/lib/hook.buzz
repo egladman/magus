@@ -357,15 +357,15 @@ test "a ./magus that cannot run is said once per session, and only then" {
     fs\writeFile("{bare}/magus.yaml", content: "");
     fs\writeFile("{root}/magus", content: "#!/bin/sh\n");
 
-    resolveBin(cwd: root, session: session, file: "test.buzz");
+    _ = resolveBin(cwd: root, session: session, file: "test.buzz");
     std\assert(noticeOnce(session, family: "bin-not-executable", file: "test.buzz") == false, message: "the first call said it");
 
     final quiet = "{session}-quiet";
-    resolveBin(cwd: bare, session: quiet, file: "test.buzz");
+    _ = resolveBin(cwd: bare, session: quiet, file: "test.buzz");
     std\assert(noticeOnce(quiet, family: "bin-not-executable", file: "test.buzz"), message: "no ./magus at all is not this notice");
 
     final named = "{session}-named";
-    resolveBin(cwd: root, session: named);
+    _ = resolveBin(cwd: root, session: named);
     std\assert(noticeOnce(named, family: "bin-not-executable", file: "test.buzz"), message: "a caller that names no file stays silent");
     fs\removeAll(root);
     fs\removeAll(bare);

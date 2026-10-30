@@ -765,7 +765,7 @@ export fun decideComments(path: str, before: str, after: str, once: fun (key: st
 
 fun spent() > fun (key: str) > bool {
     final once = helpers\counter();
-    once("code-comments");
+    _ = once("code-comments");
     return once;
 }
 

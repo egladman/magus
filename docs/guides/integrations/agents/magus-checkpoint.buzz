@@ -99,7 +99,7 @@ fun main(args: [str]) > void {
     // prints its usage, and that would otherwise reach the host as this hook's response
     // every time a session ends. The absence shows up where it is actionable instead -
     // as an empty checkpoint list in `magus session`.
-    proc\exec(bin, args: [
+    _ = proc\exec(bin, args: [
         "session", "checkpoint",
         "--agent-name", agentName,
     ], dir: cwd, opts: proc\ExecOptions{quiet = true, allowFailure = true, stdin = event}) catch void;

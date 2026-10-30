@@ -77,7 +77,7 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
 // log magus persists.
 fun from_security(ref: str) > Secret !> any {
     try {
-        proc\which("security");
+        _ = proc\which("security");
     } catch (e) {
         throw "system-keychain: the `security` CLI is not on PATH";
     }
@@ -113,7 +113,7 @@ fun from_security(ref: str) > Secret !> any {
 // and not exercised by this repository's own checks, which run on macOS.
 fun from_secret_tool(ref: str) > Secret !> any {
     try {
-        proc\which("secret-tool");
+        _ = proc\which("secret-tool");
     } catch (e) {
         throw "system-keychain: the `secret-tool` CLI is not on PATH; it ships as libsecret-tools (Debian, Ubuntu) or libsecret (Fedora, Arch)";
     }

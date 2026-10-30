@@ -43,7 +43,7 @@ export fun image_dependencies(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(image_base, dependencies);
     ctx.readsFiles(["package.json", "pnpm-lock.yaml"]);
     ctx.writesFiles(["out/image/dependencies/**"]);
-    image\assemble(image\Spec{
+    _ = image\assemble(image\Spec{
         base = "out/image/base",
         platform = PLATFORM,
         trees = [image\Tree{

@@ -160,7 +160,7 @@ test "invalid TOML is a gap, not a failure" {
 test "a pyproject.toml without content is a contract violation" {
     var threw = false;
     try {
-        discover([source("pyproject.toml")]);
+        _ = discover([source("pyproject.toml")]);
     } catch (err: any) {
         threw = true;
     }

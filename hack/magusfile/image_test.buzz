@@ -69,7 +69,7 @@ test "attest attaches an SBOM and provenance beside the index" {
         platform = AMD64,
         files = [image\File{ source = bin, path = "/magus", mode = 493 }],
     }, layout: dir + "/linux-amd64");
-    image\assembleIndex([one.path], layout: dir + "/index");
+    _ = image\assembleIndex([one.path], layout: dir + "/index");
     final a = images\attest(images\Assembled{ layouts = [one], index = dir + "/index" },
         build: images\Build{ ldflags = "", revision = "abc", builder = "https://example.test/ci" });
     assert\equal(a.error, want: "", message: "no error");

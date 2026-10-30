@@ -1962,7 +1962,7 @@ test "only whole output refs outside fenced code are looked up, each once" {
     final body = "Ran it twice (out1a2b3c4d5e6f), then again (out1a2b3c4d5e6f) beside outface and out12345.\n"
         + "A guard verdict grd1a2b3c4d5e6f is not a run, and xout1a2b3c4d5e6f is not a ref.\n\n"
         + "```\nout999999999999\n```\n\nLast: out0a0b0c0d0e0f.";
-    citing(body, cited: holding({<str: magus\OutputRecord>}, asked: asked));
+    _ = citing(body, cited: holding({<str: magus\OutputRecord>}, asked: asked));
     std\assert(asked.len() == 2 and asked[0] == "out1a2b3c4d5e6f" and asked[1] == "out0a0b0c0d0e0f", message: "{asked}");
 }
 
@@ -1972,7 +1972,7 @@ test "a description is looked up for at most ten distinct refs" {
     for (var i = 0; i < 14; i = i + 1) {
         refs.append("out0000{i + 100}");
     }
-    citing("Cites " + refs.join(" ") + ".", cited: holding({<str: magus\OutputRecord>}, asked: asked));
+    _ = citing("Cites " + refs.join(" ") + ".", cited: holding({<str: magus\OutputRecord>}, asked: asked));
     std\assert(asked.len() == 10, message: "{asked.len()}");
 }
 
@@ -1990,12 +1990,12 @@ test "proofread reads the title and the description as one pull request" {
         seen.append(Call{ text = text, kind = kind });
         return [<Judged>];
     };
-    decided(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
+    _ = decided(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 1 and seen[0].text == goodTitle + "\nPins the key." and seen[0].kind == "change-description",
         message: "{seen.len()}");
     final unread = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body", ""]]);
-    decided(unread, line: "gh pr create --body \"$BODY\"", files: {<str: str>},
+    _ = decided(unread, line: "gh pr create --body \"$BODY\"", files: {<str: str>},
         diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2 and seen[1].text == "gh pr create --body $BODY", message: "an unreadable description is judged as its line");
 }
@@ -2027,7 +2027,7 @@ test "each forge command is judged as the kind it writes" {
             seen.append(Call{ text = text, kind = kind });
             return [<Judged>];
         };
-        decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: {"reply.md": "From a file."},
+        _ = decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: {"reply.md": "From a file."},
             diff: facts(readable()), judge: recording, once: helpers\counter());
         final got = if (seen.len() > 0) seen[0].kind + "|" + seen[0].text else "not judged";
         std\assert(seen.len() == 1 and got == want, message: "{argv.join(" ")}: {got}");
@@ -2060,7 +2060,7 @@ fun judgedCalls(argv: [str], files: {str: str}) > [str] {
         seen.append(kind + "|" + text);
         return [<Judged>];
     };
-    decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: files, diff: facts(readable()),
+    _ = decidePullRequest(helpers\request([argv]), line: argv.join(" "), files: files, diff: facts(readable()),
         judge: recording, once: helpers\counter());
     return seen;
 }
@@ -2101,14 +2101,14 @@ test "a commit message is judged as a commit message, its subject on line 1" {
         seen.append(Call{ text = text, kind = kind });
         return [<Judged>];
     };
-    decidePullRequest(commit("trim a fragment"), line: "", files: {<str: str>},
+    _ = decidePullRequest(commit("trim a fragment"), line: "", files: {<str: str>},
         diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 1 and seen[0].kind == "commit-message" and seen[0].text == "trim a fragment", message: "{seen.len()}");
-    decidePullRequest(helpers\vcsRequest([["git", "commit", "-m", "trim a fragment", "-m", "why"]]), line: "",
+    _ = decidePullRequest(helpers\vcsRequest([["git", "commit", "-m", "trim a fragment", "-m", "why"]]), line: "",
         files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2 and seen[1].text == "trim a fragment\n\nwhy", message: "each -m is a paragraph");
-    decidePullRequest(commit(""), line: "", files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
-    decidePullRequest(helpers\vcsRequest([["git", "status"]]), line: "", files: {<str: str>},
+    _ = decidePullRequest(commit(""), line: "", files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
+    _ = decidePullRequest(helpers\vcsRequest([["git", "status"]]), line: "", files: {<str: str>},
         diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2, message: "a message known only at run time, and another subcommand, go unjudged");
 }
@@ -2318,15 +2318,15 @@ test "the diff is read once per description, for the head and base the call name
         reads.append("{head}|{base}|{number}");
         return shipping(1, lines: 40);
     };
-    decided(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
+    _ = decided(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads.join(",") == "|main|", message: "the checkout's branch, against the pull request's base: {reads}");
     final headed = helpers\request([["gh", "pr", "create", "--head", "other", "--title", goodTitle, "--body", sized(100)]]);
-    decided(headed, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
+    _ = decided(headed, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads[1] == "other||", message: "another branch is read by name: {reads}");
     final edit = helpers\request([["gh", "pr", "edit", "412", "--title", goodTitle, "--body", "Pins the key."]]);
-    decided(edit, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
+    _ = decided(edit, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads[2] == "||412", message: "an edit names its pull request: {reads}");
-    decidePullRequest(helpers\request([["gh", "pr", "comment", "--body", "Done."]]), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
+    _ = decidePullRequest(helpers\request([["gh", "pr", "comment", "--body", "Done."]]), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads.len() == 3, message: "a reply reads no diff");
 }
 
@@ -2393,7 +2393,7 @@ test "gh pr edit <n> reads its head and base from gh and counts the lines betwee
     std\assert(read.paths.join(",") == "internal/cache/key.go,changes/unreleased/key.md", message: "paths {read.paths}");
     std\assert(read.changed.len() == 3 and read.added.join(",") == "changes/unreleased/key.md", message: "changed {read.changed}, added {read.added}");
 
-    diffReader(".", view: view, stat: stat, fragmentText: text)("", base: "main", number: "12");
+    _ = diffReader(".", view: view, stat: stat, fragmentText: text)("", base: "main", number: "12");
     std\assert(asked[asked.len() - 2] == "0123abc...origin/main", message: "a --base wins over the pull request's: {asked}");
     final unseen = fun (number: str) > PullRef? {
         return null;
@@ -2565,12 +2565,12 @@ test "a description read from a heredoc or a body file is judged" {
         seen.append(text);
         return [<Judged>];
     };
-    decided(filled, line: line, files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
+    _ = decided(filled, line: line, files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 1 and seen[0] == "fix: pin the key\nClaude pinned the key.", message: "{seen}");
 
     final fromFile = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body-file", "pr.md"]]);
     std\assert(bodyFiles(fromFile)[0] == "pr.md", message: "the file to read");
-    decided(fromFile, line: "", files: {"pr.md": "Claude wanted this."}, diff: facts(readable()), judge: recording, once: helpers\counter());
+    _ = decided(fromFile, line: "", files: {"pr.md": "Claude wanted this."}, diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2 and seen[1] == goodTitle + "\nClaude wanted this.", message: "{seen}");
 }
 
@@ -2596,7 +2596,7 @@ test "an unreadable description reaches proofread without its shell quotes" {
     };
     final programs = helpers\request([["gh", "pr", "create", "--title", "feat: add a Claude Code mod", "--body-file", "/elsewhere/pr.md"]]);
     final line = "gh pr create --title \"feat: add a Claude Code mod\" --body 'written by Claude'";
-    decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
+    _ = decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(readable()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 1 and seen[0] == "gh pr create --title feat: add a Claude Code mod --body written by Claude", message: "{seen}");
 }
 
@@ -3044,12 +3044,12 @@ test "only a git commit is read, and -a reads the tracked changes too" {
         asked.append(all);
         return CommitRead{ files = [<Committed>] };
     };
-    decideCommitComments(helpers\vcsRequest([["git", "status"], ["hg", "commit", "-m", "x"], ["git", "commit", "--help"]]), read: read);
+    _ = decideCommitComments(helpers\vcsRequest([["git", "status"], ["hg", "commit", "-m", "x"], ["git", "commit", "--help"]]), read: read);
     std\assert(asked.len() == 0, message: "read {asked.len()} times");
-    decideCommitComments(helpers\vcsRequest([["git", "commit", "-am", "trim the key"]]), read: read);
-    decideCommitComments(helpers\vcsRequest([["git", "commit", "-m", "-a is no flag here"]]), read: read);
-    decideCommitComments(helpers\vcsRequest([["git", "commit", "--all", "-m", "x"]]), read: read);
-    decideCommitComments(helpers\vcsRequest([["git", "commit", "-qm", "-a"]]), read: read);
+    _ = decideCommitComments(helpers\vcsRequest([["git", "commit", "-am", "trim the key"]]), read: read);
+    _ = decideCommitComments(helpers\vcsRequest([["git", "commit", "-m", "-a is no flag here"]]), read: read);
+    _ = decideCommitComments(helpers\vcsRequest([["git", "commit", "--all", "-m", "x"]]), read: read);
+    _ = decideCommitComments(helpers\vcsRequest([["git", "commit", "-qm", "-a"]]), read: read);
     std\assert(asked.len() == 4 and asked[0] and !asked[1] and asked[2] and !asked[3], message: "{asked}");
 }
 
@@ -3057,7 +3057,7 @@ test "committedReader reads the staged text and the text at HEAD" {
     final dir = fs\tempDir("committed-reader") catch "";
     std\assert(dir != "", message: "a temp dir");
     final git = fun (args: [str]) > void {
-        vcs\cmd(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"] + args,
+        _ = vcs\cmd(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"] + args,
             opts: vcs\CommandOptions{ dir = dir, quiet = true }) catch null;
     };
     git(["init", "-q"]);

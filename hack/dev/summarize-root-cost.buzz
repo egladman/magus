@@ -121,7 +121,7 @@ export fun fold(shows: [str]) > Rollup !> any {
         }
     }
 
-    peaks.sort(fun (a: int, b: int) > bool => a < b);
+    _ = peaks.sort(fun (a: int, b: int) > bool => a < b);
     var maxPeak = 0;
     var medianPeak = 0;
     if (peaks.len() > 0) {

@@ -69,7 +69,7 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
     }
 
     try {
-        proc\which("op");
+        _ = proc\which("op");
     } catch (e) {
         throw "onepassword: the `op` CLI is not on PATH.\n"
             + "  mise:     mise use -g op\n"

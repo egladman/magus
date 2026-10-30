@@ -189,14 +189,14 @@ fun plan(depth: str) > void !> any {
     final dir = queueDir();
     final changes = capture("magus", args: ["queue", "ls", "--provider", "github", "--base", "main"]);
     fs\writeFile(dir + "/changes.json", content: changes + "\n");
-    proc\exec("magus", args: planArgs(dir, depth: depth), opts: proc\ExecOptions{});
+    _ = proc\exec("magus", args: planArgs(dir, depth: depth), opts: proc\ExecOptions{});
     final ids = validatedIDs(fs\readFile(dir + "/plan.json"));
     fs\appendFile(need("GITHUB_OUTPUT"), content: outputs(ids));
 }
 
 fun validate(change: str) > void !> any {
     final dir = queueDir();
-    proc\exec("magus", args: validateArgs(dir, change: change), opts: proc\ExecOptions{ stdin = fs\readFile(dir + "/plan.json") });
+    _ = proc\exec("magus", args: validateArgs(dir, change: change), opts: proc\ExecOptions{ stdin = fs\readFile(dir + "/plan.json") });
 }
 
 // awaitJob polls every 10s, one API request each, until run says whether job runs; a
@@ -345,7 +345,7 @@ fun start(base: str, intentAt: str) > void !> any {
     final d = decide(runs, intentAt: intentAt);
     std\print("::notice title={d.notice}::{d.message}");
     if (d.start) {
-        proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", repo, "--ref", base], opts: proc\ExecOptions{});
+        _ = proc\exec("gh", args: ["workflow", "run", "queue.yaml", "--repo", repo, "--ref", base], opts: proc\ExecOptions{});
     }
 }
 
@@ -407,7 +407,7 @@ fun ciQueued(run: str, base: str) > void !> any {
 
 fun apply(run: str, base: str, app: str, committer: str) > void !> any {
     final args = applyArgs(run, repo: need("GITHUB_REPOSITORY"), base: base, committer: committer, app: app);
-    proc\exec("magus", args: args, opts: proc\ExecOptions{});
+    _ = proc\exec("magus", args: args, opts: proc\ExecOptions{});
 }
 
 // reviewsArgs classifies with main's own workspace, as plan does, so the approvals a
@@ -457,7 +457,7 @@ fun reviews(pr: str, head: str, base: str, owner: str, branch: str) > void !> an
         }
     }
     foreach (n in prs) {
-        proc\exec("magus", args: reviewsArgs(n, head: head, base: base), opts: proc\ExecOptions{});
+        _ = proc\exec("magus", args: reviewsArgs(n, head: head, base: base), opts: proc\ExecOptions{});
     }
 }
 
@@ -620,7 +620,7 @@ test "apply refuses to run without the queue app's slug and committer" {
         ["--run", "7", "--base", "main", "--committer", "c"], ["--run", "7", "--base", "main", "--app", "", "--committer", ""]]) {
         var refused = false;
         try {
-            options("apply", argv: argv, required: APPLY_FLAGS, optional: [<str>]);
+            _ = options("apply", argv: argv, required: APPLY_FLAGS, optional: [<str>]);
         } catch (e) {
             refused = true;
         }
@@ -636,7 +636,7 @@ test "each step takes the flags it declares and refuses the rest" {
     foreach (argv in [["--depth"], ["--depth", ""], ["3"], ["--depth", "3", "--extra", "x"]]) {
         var refused = false;
         try {
-            options("plan", argv: argv, required: ["--depth"], optional: [<str>]);
+            _ = options("plan", argv: argv, required: ["--depth"], optional: [<str>]);
         } catch (e) {
             refused = true;
         }
@@ -684,7 +684,7 @@ test "dispatch fails on an API error rather than reading it as no runs" {
     foreach (body in [`{"message": "Bad credentials", "status": "401"}`, `{"workflow_runs": null}`]) {
         var failed = false;
         try {
-            unfinishedIDs(body, repo: "o/r");
+            _ = unfinishedIDs(body, repo: "o/r");
         } catch (e) {
             failed = true;
         }
@@ -692,7 +692,7 @@ test "dispatch fails on an API error rather than reading it as no runs" {
     }
     var failed = false;
     try {
-        validation("1", jobs: `{"message": "Not Found"}`);
+        _ = validation("1", jobs: `{"message": "Not Found"}`);
     } catch (e) {
         failed = true;
     }
@@ -743,9 +743,9 @@ test "start and dispatch refuse to run without the moment the change became read
         var refused = false;
         try {
             if (c[0] == "start") {
-                options(c[0], argv: c.sub(1), required: START_FLAGS, optional: [<str>]);
+                _ = options(c[0], argv: c.sub(1), required: START_FLAGS, optional: [<str>]);
             } else {
-                options(c[0], argv: c.sub(1), required: DISPATCH_FLAGS, optional: [<str>]);
+                _ = options(c[0], argv: c.sub(1), required: DISPATCH_FLAGS, optional: [<str>]);
             }
         } catch (e) {
             refused = true;
@@ -782,7 +782,7 @@ test "reviews dismisses through the queue's own classifier, pinned to the push i
     foreach (argv in [["--pr", "482", "--base", "main"], ["--pr", "482", "--head", "", "--base", "main"], ["--pr", "482", "--head", "abc"]]) {
         var refused = false;
         try {
-            options("reviews", argv: argv, required: REVIEWS_FLAGS, optional: REVIEWS_FORK_FLAGS);
+            _ = options("reviews", argv: argv, required: REVIEWS_FLAGS, optional: REVIEWS_FORK_FLAGS);
         } catch (e) {
             refused = true;
         }
@@ -799,7 +799,7 @@ test "a fork's pull request is the open one from its branch still at the head th
     assert\equal(pullsAt(listing, head: "new").len(), want: 0, message: "pushed again since");
     var failed = false;
     try {
-        pullsAt(`{"message": "Bad credentials"}`, head: "abc");
+        _ = pullsAt(`{"message": "Bad credentials"}`, head: "abc");
     } catch (e) {
         failed = true;
     }

@@ -105,7 +105,7 @@ fun trackedPaths() > [str] !> any {
             keep.append(p);
         }
     }
-    keep.sort(fun (a: str, b: str) > bool => a < b);
+    _ = keep.sort(fun (a: str, b: str) > bool => a < b);
     return keep;
 }
 
@@ -122,7 +122,7 @@ export fun nodes(kind: str) > [magus\KnowledgeNode] !> any {
             found.append(n);
         }
     }
-    found.sort(fun (a: magus\KnowledgeNode, b: magus\KnowledgeNode) > bool => a.id < b.id);
+    _ = found.sort(fun (a: magus\KnowledgeNode, b: magus\KnowledgeNode) > bool => a.id < b.id);
     return found;
 }
 
@@ -132,7 +132,7 @@ export fun figureSvgs(root: str) > [str] !> any {
     foreach (p in fs\glob(fs\join(root, name: "docs/assets/gen/diagram-*-light.svg"))) {
         paths.append(p.value);
     }
-    paths.sort(fun (a: str, b: str) > bool => a < b);
+    _ = paths.sort(fun (a: str, b: str) > bool => a < b);
     return paths;
 }
 
@@ -164,7 +164,7 @@ fun outputLinks(generated: {str: bool}, kept: {str: bool}) > [[str]] !> any {
             links.append([page, source]);
         }
     }
-    links.sort(fun (a: [str], b: [str]) > bool => if (a[0] == b[0]) a[1] < b[1] else a[0] < b[0]);
+    _ = links.sort(fun (a: [str], b: [str]) > bool => if (a[0] == b[0]) a[1] < b[1] else a[0] < b[0]);
     return links;
 }
 
@@ -233,14 +233,14 @@ export fun load() > Snapshot !> any {
         }
         byFile[path]!.append(n);
     }
-    symbols.sort(fun (a: magus\KnowledgeNode, b: magus\KnowledgeNode) > bool => a.id < b.id);
+    _ = symbols.sort(fun (a: magus\KnowledgeNode, b: magus\KnowledgeNode) > bool => a.id < b.id);
     final refLinks: mut [magus\KnowledgeEdge] = mut [];
     foreach (e in q.links) {
         if (e.relation == magus\RelationID.references and e.source.startsWith("file:") and e.target.startsWith("symbol:")) {
             refLinks.append(e);
         }
     }
-    refLinks.sort(fun (a: magus\KnowledgeEdge, b: magus\KnowledgeEdge) > bool => if (a.target == b.target) a.source < b.source else a.target < b.target);
+    _ = refLinks.sort(fun (a: magus\KnowledgeEdge, b: magus\KnowledgeEdge) > bool => if (a.target == b.target) a.source < b.source else a.target < b.target);
     final frozen: mut {str: [magus\KnowledgeNode]} = mut {};
     foreach (k, v in byFile) {
         frozen[k] = v;
@@ -467,7 +467,7 @@ export fun uniqueSorted(xs: [str]) > [str] {
             keep.append(x);
         }
     }
-    keep.sort(fun (a: str, b: str) > bool => a < b);
+    _ = keep.sort(fun (a: str, b: str) > bool => a < b);
     return keep;
 }
 

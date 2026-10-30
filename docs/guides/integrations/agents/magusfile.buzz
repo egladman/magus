@@ -107,7 +107,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.writesFiles(["../../../../testdata/hosts/cursor/gen/*.schema.json"]);
-    proc\exec("node", ["cursor-schemas.ts"], ".");
+    _ = proc\exec("node", ["cursor-schemas.ts"], ".");
 }
 
 
@@ -126,13 +126,13 @@ fun checkBuzz() > void !> any {
     foreach (script in fs\glob("magus-*.buzz")) {
         strict.append(script.value);
     }
-    magus\cmd("buzz", args: strict);
+    _ = magus\cmd("buzz", args: strict);
 
     var embedded = mut ["--check", "--embedded"];
     foreach (script in fs\glob("lib/*.buzz")) {
         embedded.append(script.value);
     }
-    magus\cmd("buzz", args: embedded);
+    _ = magus\cmd("buzz", args: embedded);
 }
 
 // test runs the OpenCode plugin's transport cases under node; the test supplies Bun.spawn.
@@ -140,7 +140,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     final run = mut ["--test"];
     foreach (t in fs\glob("*.test.ts")) { run.append(t.value); }
-    proc\exec("node", run, ".");
+    _ = proc\exec("node", run, ".");
 }
 
 // The anchor `magus affected ci` keys off.

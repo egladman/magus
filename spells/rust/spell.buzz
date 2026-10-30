@@ -434,7 +434,7 @@ fun virtualClaim(crate: Crate, own: CargoWorkspace?, crates: {str: bool}, gaps: 
                 members.append(dir);
             }
         }
-        members.sort(fun (left: str, right: str) > bool => left < right);
+        _ = members.sort(fun (left: str, right: str) > bool => left < right);
         return DiscoveredProject{path = crate.dir, role = DiscoveryRole.project, dependsOn = members, notInferred = gaps};
     }
     return DiscoveredProject{path = crate.dir, role = DiscoveryRole.project,
@@ -458,7 +458,7 @@ fun crateDeps(crate: Crate, own: CargoWorkspace?, crates: {str: bool}, gaps: mut
             }
         }
     }
-    deps.sort(fun (left: str, right: str) > bool => left < right);
+    _ = deps.sort(fun (left: str, right: str) > bool => left < right);
     return deps;
 }
 
@@ -488,7 +488,7 @@ fun crateClaim(crate: Crate, scan: CargoScan, workspaces: [CargoWorkspace]) > Di
         gaps.append(gap);
     }
     final deps = crateDeps(crate, own: at.own, crates: scan.crates, gaps: gaps);
-    spans.sort(fun (left: str, right: str) > bool => left < right);
+    _ = spans.sort(fun (left: str, right: str) > bool => left < right);
     return claim(crate.dir, name: (pkg!["name"] as? str) ?? "", dependsOn: deps, spans: spans, gaps: gaps);
 }
 
@@ -503,6 +503,6 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
     foreach (crate in scan.parsed) {
         scan.claims.append(crateClaim(crate, scan: scan, workspaces: workspaces));
     }
-    scan.claims.sort(fun (left: DiscoveredProject, right: DiscoveredProject) > bool => left.path < right.path);
+    _ = scan.claims.sort(fun (left: DiscoveredProject, right: DiscoveredProject) > bool => left.path < right.path);
     return scan.claims;
 }

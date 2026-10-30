@@ -228,7 +228,7 @@ export fun select(all: [Candidate], budget: int) > Selection {
     foreach (c in all) {
         ranked.append(c);
     }
-    ranked.sort(fun (a: Candidate, b: Candidate) > bool => before(a, b: b));
+    _ = ranked.sort(fun (a: Candidate, b: Candidate) > bool => before(a, b: b));
     final carded = mut [<Candidate>];
     final omitted = mut [<Candidate>];
     foreach (i, c in ranked) {
@@ -1097,7 +1097,7 @@ test "-o json keeps its shape" {
     foreach (k, v in shape) {
         keys.append("{k}");
     }
-    keys.sort(fun (a: str, b: str) > bool => a < b);
+    _ = keys.sort(fun (a: str, b: str) > bool => a < b);
     assert\equal(keys, want: ["architecture", "base", "cards", "files", "lens", "omitted", "rev", "schema", "unknowns", "vocabulary"], message: "keys");
     assert\equal(shape["schema"], want: 1, message: "schema");
     assert\equal(shape["omitted"][0]["label"], want: "parse_widget_name", message: "omitted");

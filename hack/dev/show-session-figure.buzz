@@ -167,13 +167,13 @@ export fun drawJobTree(tr: JobTree) > figure\Figure !> any {
         .unscoped("a session's jobs are units of work, not directories")
         .actor(root);
     foreach (n in tr.nodes) {
-        f.actor(actors[n.id]!);
+        _ = f.actor(actors[n.id]!);
     }
     foreach (e in tr.spawns) {
-        f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, stroke: figure\Stroke.plain);
+        _ = f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, stroke: figure\Stroke.plain);
     }
     foreach (e in tr.depends) {
-        f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, label: "after", stroke: figure\Stroke.optional);
+        _ = f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, label: "after", stroke: figure\Stroke.optional);
     }
     foreach (z in STATES) {
         final members = mut [<figure\Actor>];
@@ -183,7 +183,7 @@ export fun drawJobTree(tr: JobTree) > figure\Figure !> any {
             }
         }
         if (members.len() > 0) {
-            f.zone(z[0], actors: members);
+            _ = f.zone(z[0], actors: members);
         }
     }
     return f.legend(figure\Look.focal, label: "the orchestrating session")

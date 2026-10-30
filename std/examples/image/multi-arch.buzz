@@ -100,7 +100,7 @@ export fun image_push(ctx: magus\Context, args: [str]) > void !> any {
         builderID = args[1],
         sourceRevision = vcs\commit().id,
     }, path: "out/image/provenance.intoto.json");
-    image\attachReferrers(INDEX, documents: [sbom, provenance], layout: "out/image/attested");
+    _ = image\attachReferrers(INDEX, documents: [sbom, provenance], layout: "out/image/attested");
     final pushed = image\push("out/image/attested", repository: REPOSITORY, tags: [args[0]],
         auth: image\RegistryAuth{ username = "acme-ci", password = image\Secret{ value = magus\secret.read("ghcr-token") } });
     std\print(pushed.reference);

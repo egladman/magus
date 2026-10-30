@@ -776,13 +776,13 @@ test "a running row lets the root stop, and so do rows paused, blocked or waitin
 test "every denial carries the verdict shape" {
     final none = fun (key: str) > int => 1;
     final skip = fun (rows: [str]) > void {};
-    verdict\checked(decideCommand(magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "issue"]), line: "", m: null, jobs: store, now: 0, assess: fullTier), label: "issue");
-    verdict\checked(decideCommand(magusLine(["job", "fork", "new-idea"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "new scope");
-    verdict\checked(decideCommand(magusLine(["job", "apply", "plan.jsonl"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "apply");
-    verdict\checked(decideCommand(magusLine(["job", "rm", "landing"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "rm");
-    verdict\checked(decideHold("late", m: issued, jobs: store, assess: fullTier), label: "held for review");
-    verdict\checked(decideWrite("/w/docs/design/x.md", workspace: "/w", m: issued, now: 2000), label: "write");
-    verdict\checked(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: Queue{ jobs = store }, m: null, now: 2000, count: none, file: skip), label: "stop");
+    _ = verdict\checked(decideCommand(magusLine(["buzz", "hack/dev/issue-mandate.buzz", "--", "issue"]), line: "", m: null, jobs: store, now: 0, assess: fullTier), label: "issue");
+    _ = verdict\checked(decideCommand(magusLine(["job", "fork", "new-idea"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "new scope");
+    _ = verdict\checked(decideCommand(magusLine(["job", "apply", "plan.jsonl"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "apply");
+    _ = verdict\checked(decideCommand(magusLine(["job", "rm", "landing"]), line: "", m: issued, jobs: store, now: 2000, assess: fullTier), label: "rm");
+    _ = verdict\checked(decideHold("late", m: issued, jobs: store, assess: fullTier), label: "held for review");
+    _ = verdict\checked(decideWrite("/w/docs/design/x.md", workspace: "/w", m: issued, now: 2000), label: "write");
+    _ = verdict\checked(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: Queue{ jobs = store }, m: null, now: 2000, count: none, file: skip), label: "stop");
 }
 
 test "the third refusal over the same rows lets the turn end and files them" {

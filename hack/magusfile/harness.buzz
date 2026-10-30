@@ -24,7 +24,7 @@ export fun stale(plans: [magus\HarnessPlan]) > Drift {
         final paths = mut [<str>];
         foreach (path in plan.files.keys()) { paths.append(path); }
         if (paths.len() == 0) { continue; }
-        paths.sort(fun (a: str, b: str) > bool => strings\compare(a, b: b) < 0);
+        _ = paths.sort(fun (a: str, b: str) > bool => strings\compare(a, b: b) < 0);
         foreach (path in paths) { files.append("{path} ({plan.id})"); }
         merges.append("merge {plan.id} with:\n  {plan.merge}");
     }

@@ -426,7 +426,7 @@ fun goSelect(scan: mut GoScan) > void !> any {
             scan.selected.append(dir);
         }
     }
-    scan.selected.sort(fun (a: str, b: str) > bool => a < b);
+    _ = scan.selected.sort(fun (a: str, b: str) > bool => a < b);
     if (scan.workspaceMode) {
         foreach (r in goReplaces(goDirectives(scan.work!.content!))) {
             if (goIsLocal(r.to)) {
@@ -725,7 +725,7 @@ fun goClaim(dir: str, module: GoModule, scan: GoScan) > DiscoveredProject !> any
     }
     goReplaceDeps(dir, module: module, scan: scan, deps: deps, gaps: gaps);
     goRequireDeps(dir, module: module, scan: scan, deps: deps, gaps: gaps);
-    deps.sort(fun (a: str, b: str) > bool => a < b);
+    _ = deps.sort(fun (a: str, b: str) > bool => a < b);
     foreach (ignored in module.ignores) {
         gaps.append(DiscoveryGap{file = module.file, why = "ignore {ignored}: ./... skips it, and spans do not apply it"});
     }

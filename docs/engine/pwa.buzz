@@ -84,7 +84,7 @@ export fun buildServiceWorker(site: Site) > void !> any {
         }
     }
     final version = site.config.title + "-" + crypto\hash(crypto\HashAlgorithm.Sha256, manifest.join("")).hex().sub(0, 12);
-    os\execute(["esbuild", "src/site/service-worker.ts", "--bundle", "--minify", "--format=iife",
+    _ = os\execute(["esbuild", "src/site/service-worker.ts", "--bundle", "--minify", "--format=iife",
         "--define:SERVICE_WORKER_VERSION=\"" + version + "\"",
         "--define:SERVICE_WORKER_PRECACHE=" + serialize\jsonEncode(site.config.precacheAssets),
         "--outfile=" + site.outDir + "/service-worker.js"]);

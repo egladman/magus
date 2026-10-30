@@ -154,7 +154,7 @@ export fun input(name: str) > str !> any {
 export fun fetchBase(base: str, refspec: bool) > void !> str {
     if (collecting()) { return; }
     if (!refspec) {
-        vcs\cmd(["fetch", "--no-tags", "origin", base], opts: vcs\CommandOptions{ dir = "." });
+        _ = vcs\cmd(["fetch", "--no-tags", "origin", base], opts: vcs\CommandOptions{ dir = "." });
         return;
     }
     final fetched = vcs\cmd(["fetch", "--no-tags", "origin",
@@ -761,11 +761,11 @@ export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void 
     final payload = fs\tempFile("magus-advice-payload");
     fs\writeFile(payload, content: serialize\jsonEncode({"body": composed}));
     if (id == "") {
-        proc\exec("gh", args: ["api", "--method", "POST",
+        _ = proc\exec("gh", args: ["api", "--method", "POST",
             "repos/" + repo + "/issues/" + pr + "/comments", "--input", payload], dir: ".", opts: proc\ExecOptions{});
         return;
     }
-    proc\exec("gh", args: ["api", "--method", "PATCH",
+    _ = proc\exec("gh", args: ["api", "--method", "PATCH",
         "repos/" + repo + "/issues/comments/" + id, "--input", payload], dir: ".", opts: proc\ExecOptions{});
 }
 

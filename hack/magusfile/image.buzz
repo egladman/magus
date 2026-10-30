@@ -211,10 +211,10 @@ export fun assemble(p: Plan, compile: fun (env: {str: str}, args: [str]) > void 
         fs\removeAll(root(p.variant));
         foreach (step in p.steps) {
             compile(step.env, args: step.buildArgs);
-            image\pull(p.variant.base, platform: step.platform, layout: step.base);
+            _ = image\pull(p.variant.base, platform: step.platform, layout: step.base);
             layouts.append(image\assemble(spec(p.variant, step: step, mode: mode), layout: step.layout));
         }
-        image\assembleIndex(layouts.map(fun (i: int, l: image\Layout) > str => l.path), layout: p.index);
+        _ = image\assembleIndex(layouts.map(fun (i: int, l: image\Layout) > str => l.path), layout: p.index);
     } catch (e) {
         return Assembled{ error = "image assemble {p.variant.name}: {e}" };
     }
@@ -232,7 +232,7 @@ export fun attest(a: Assembled, build: Build) > Attested {
             builderID = build.builder,
             sourceRevision = build.revision,
         }, path: dir + "/provenance.intoto.json");
-        image\attachReferrers(a.index, documents: [sbom, provenance], layout: layout);
+        _ = image\attachReferrers(a.index, documents: [sbom, provenance], layout: layout);
     } catch (e) {
         return Attested{ error = "image attest {a.index}: {e}" };
     }

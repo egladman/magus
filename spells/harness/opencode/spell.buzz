@@ -106,7 +106,7 @@ export fun mgs_getMcp() > McpServer {
 fun opencode_prompts(humanOnly: [str]) > [Prompt] {
     final verbs = mut ["git push", "hg push", "sl push", "jj git push"];
     final names = humanOnly.cloneMutable();
-    names.sort(fun (left: str, right: str) > bool => left < right);
+    _ = names.sort(fun (left: str, right: str) > bool => left < right);
     foreach (name in names) {
         foreach (bin in ["magus", "./magus"]) {
             verbs.append("{bin} run {name}");

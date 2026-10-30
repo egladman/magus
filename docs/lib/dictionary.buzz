@@ -220,7 +220,7 @@ export fun glossaryIndex(pages: [TermPage]) > str {
             if (p.group == group) { members.append(p); }
         }
         if (members.len() == 0) { continue; }
-        members.sort(fun (a: TermPage, b: TermPage) > bool => a.order < b.order or (a.order == b.order and a.slug < b.slug));
+        _ = members.sort(fun (a: TermPage, b: TermPage) > bool => a.order < b.order or (a.order == b.order and a.slug < b.slug));
         rows.append("");
         rows.append("## {GROUP_TITLES[group] ?? group}");
         foreach (p in members) {

@@ -97,7 +97,7 @@ fun sample(bin: str, cwd: str, store: str, now: double) > str? !> any {
     diskwatch\append(store, s: cur);
     var started = false;
     if (d.reclaim and !diskwatch\chunkRunning(samples, now: now)) {
-        proc\exec(bin, args: ["buzz", "-C", cwd, "-s", "-e", chunkSnippet(now + 300000.0)], opts: proc\ExecOptions{ detach = true });
+        _ = proc\exec(bin, args: ["buzz", "-C", cwd, "-s", "-e", chunkSnippet(now + 300000.0)], opts: proc\ExecOptions{ detach = true });
         diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = du.path, action = "started", detail = d.why });
         started = true;
     }

@@ -148,7 +148,7 @@ export fun main(args: [str]) > void !> any {
         return;
     }
     final dir = fs\tempDir("show-failures-");
-    capture("gh", args: ["run", "download", run, "--pattern", "{ARTIFACT_PREFIX}*", "--dir", dir]);
+    _ = capture("gh", args: ["run", "download", run, "--pattern", "{ARTIFACT_PREFIX}*", "--dir", dir]);
     var found = 0;
     foreach (f in fs\glob(dir + "/*/" + RECORDS)) {
         io\stdout.write(fs\readFile(f.value)) catch void;

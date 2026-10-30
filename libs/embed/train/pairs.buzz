@@ -624,7 +624,7 @@ export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > {str: i
     figureApi(m);
     figurePairs(m, figs: figs);
     final sorted = m.pairs.cloneMutable();
-    sorted.sort(fun (a: Pair, b: Pair) > bool {
+    _ = sorted.sort(fun (a: Pair, b: Pair) > bool {
         if (a.source != b.source) {
             return a.source < b.source;
         }

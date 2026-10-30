@@ -277,7 +277,7 @@ fun claimLooseModules(claims: mut {str: mut BufClaim}, files: [DiscoveryFile]) >
         if (!listed) {
             final claim = rootAt(claims, dir: dir, marker: file.path);
             claim.modules.append(dir);
-            parseMarker(file, gaps: claim.gaps);
+            _ = parseMarker(file, gaps: claim.gaps);
         }
     }
 }
@@ -387,7 +387,7 @@ fun bufAnswer(claims: {str: mut BufClaim}) > [DiscoveredProject] {
                 spans.append(module);
             }
         }
-        spans.sort(fun (left: str, right: str) > bool => left < right);
+        _ = spans.sort(fun (left: str, right: str) > bool => left < right);
         var targets: {str: [str]} = {};
         if (claim.role == DiscoveryRole.project) {
             targets = {"build": ["buf-build"], "lint": ["buf-lint"], "format": ["buf-format"]};

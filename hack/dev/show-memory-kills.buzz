@@ -357,7 +357,7 @@ test "flags: defaults, --help, and a duration --since refused beside --until" {
     assert\isTrue(HELP.startsWith("cost: "), message: "the first help line is the cost");
     var refused = "";
     try {
-        parse(["--since", "2h", "--until", "2026-09-30 15:00:00"]);
+        _ = parse(["--since", "2h", "--until", "2026-09-30 15:00:00"]);
     } catch (e) {
         refused = "{e}";
     }

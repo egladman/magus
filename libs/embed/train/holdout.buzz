@@ -135,7 +135,7 @@ export fun write(paths: [str], target: str) > int !> any {
             kept.append(p);
         }
     }
-    kept.sort(fun (a: str, b: str) > bool => a < b);
+    _ = kept.sort(fun (a: str, b: str) > bool => a < b);
     final lines: mut [str] = mut [];
     foreach (p in kept) {
         lines.append(json\stringify({"path": p, "group": dealt[p] ?? ""}));

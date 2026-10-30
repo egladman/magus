@@ -111,8 +111,8 @@ fun commitsOf(source: str) > [str] !> any {
 }
 
 fun land(l: Landing) > void !> any {
-    git(["fetch", "origin", "main"]);
-    git(["switch", "-c", l.branch, "origin/main"]);
+    _ = git(["fetch", "origin", "main"]);
+    _ = git(["switch", "-c", l.branch, "origin/main"]);
     final picked = vcs\cmd(["cherry-pick"] + l.commits, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
     if (!picked.ok) {
         throw "land-commits: the cherry-pick of {l.commits.join(" ")} conflicted on {l.branch}: settle it with `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path>`, then `git cherry-pick --continue`";
@@ -126,7 +126,7 @@ fun land(l: Landing) > void !> any {
             throw "land-commits: `magus {argv[1]}` failed on {l.branch}: fix it and amend before pushing; nothing was pushed\n{check.stdout}{check.stderr}";
         }
     }
-    git(pushArgv(l.branch));
+    _ = git(pushArgv(l.branch));
     std\print(proc\exec("gh", args: createArgv(l.branch, title: l.title, bodyFile: l.bodyFile), opts: proc\ExecOptions{ quiet = true }).stdout.trim());
 }
 

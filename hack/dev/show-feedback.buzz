@@ -168,19 +168,19 @@ export fun rows(t: Trail, marks: [TrailMark]) > [Row] {
                 }
             }
         } else if (o.decision == "advise") {
-            bump(bySection[1], key: o.rule, rule: o.rule, shape: "", agent: observationAgent(o), example: clip(what));
+            _ = bump(bySection[1], key: o.rule, rule: o.rule, shape: "", agent: observationAgent(o), example: clip(what));
         } else if (o.decision == "pass" and o.tool == "shell.command" and o.rule == "" and o.preauthorizedBy == "") {
             final seen = mut [<str>];
             foreach (shape in o.shapes) {
                 if (seen.indexOf(shape) == null) {
                     seen.append(shape);
-                    bump(bySection[2], key: shape, rule: "", shape: shape, agent: observationAgent(o), example: clip(o.command));
+                    _ = bump(bySection[2], key: shape, rule: "", shape: shape, agent: observationAgent(o), example: clip(o.command));
                 }
             }
         }
         if (o.nexts.len() > 0 and !nextRun(obs, i: i)) {
             final shape = magus\trail.shape(o.nexts[0]);
-            bump(bySection[3], key: "{o.rule} -> {shape}", rule: o.rule, shape: shape, agent: observationAgent(o),
+            _ = bump(bySection[3], key: "{o.rule} -> {shape}", rule: o.rule, shape: shape, agent: observationAgent(o),
                 example: clip("served `{o.nexts[0]}` after `{what}`"));
         }
     }
@@ -441,7 +441,7 @@ test "every page but the last ends with the command for the next one" {
     assert\equal(second[second.len() - 1].startsWith("figure: "), want: true, message: "last page names the figure");
     var refused = "";
     try {
-        page(r, n: 3, size: 4);
+        _ = page(r, n: 3, size: 4);
     } catch (e: str) {
         refused = e;
     }

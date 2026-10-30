@@ -1541,7 +1541,7 @@ fun selectPulls(sel: Selector, open: [Pull]) > [Pull] !> any {
             }
         }
     }
-    chosen.sort(fun (a: Pull, b: Pull) > bool => a.number < b.number);
+    _ = chosen.sort(fun (a: Pull, b: Pull) > bool => a.number < b.number);
     return chosen;
 }
 
@@ -1640,7 +1640,7 @@ fun status(sel: Selector) > void !> any {
 fun apply(sel: Selector) > void !> any {
     foreach (r in records(sel)) {
         foreach (cmd in applyCommands(r, method: sel.method)) {
-            capture(cmd[0], args: cmd.sub(1));
+            _ = capture(cmd[0], args: cmd.sub(1));
             std\print(encode({"pr": r.pr, "action": r.action, "command": cmd}));
         }
         foreach (cmd in personCommands(r, method: sel.method)) {
@@ -2815,7 +2815,7 @@ fun dashboard(sel: Selector) > void !> any {
         std\print("pull-requests: wrote the dashboard to {sel.file}; --preview, so no issue was edited");
         return;
     }
-    capture("gh", args: ["issue", "edit", sel.issue, "--body-file", sel.file]);
+    _ = capture("gh", args: ["issue", "edit", sel.issue, "--body-file", sel.file]);
     std\print("pull-requests: wrote the dashboard to {sel.file} and to issue #{sel.issue}");
 }
 
@@ -3290,7 +3290,7 @@ test "selectors take a repeated --pr, and apply alone takes --method" {
     foreach (argv in [["--pr"], ["--pr", "x"], ["--pr", "0"], ["--pr", "3a"], ["--author", ""], ["--method", "squash"], ["316"], ["--extra"]]) {
         var refused = false;
         try {
-            parseSelector("status", argv: argv);
+            _ = parseSelector("status", argv: argv);
         } catch (e) {
             refused = true;
         }
@@ -3313,7 +3313,7 @@ test "selectors take a repeated --pr, and apply alone takes --method" {
     ]) {
         var refused = false;
         try {
-            parseSelector(c[0], argv: c.sub(1));
+            _ = parseSelector(c[0], argv: c.sub(1));
         } catch (e) {
             refused = true;
         }
@@ -3384,10 +3384,10 @@ test "the checks on the head decide running, green, red-inherited and red" {
         assert\equal(v.state, want: want, message: want);
         return v;
     };
-    expect([<Check>], facts: Facts{}, want: "running");
-    expect([green("t"), Check{ name = "u", conclusion = "PENDING" }], facts: Facts{ baseline = MAIN }, want: "running");
-    expect([failed("magus shard 0: ."), Check{ name = "u", conclusion = "PENDING" }], facts: Facts{ baseline = MAIN }, want: "running");
-    expect([green("t"), Check{ name = "u", conclusion = "SKIPPED" }], facts: Facts{}, want: "green");
+    _ = expect([<Check>], facts: Facts{}, want: "running");
+    _ = expect([green("t"), Check{ name = "u", conclusion = "PENDING" }], facts: Facts{ baseline = MAIN }, want: "running");
+    _ = expect([failed("magus shard 0: ."), Check{ name = "u", conclusion = "PENDING" }], facts: Facts{ baseline = MAIN }, want: "running");
+    _ = expect([green("t"), Check{ name = "u", conclusion = "SKIPPED" }], facts: Facts{}, want: "green");
     final gateSkipped = expect([green("magus plan"), Check{ name = "ci gate", conclusion = "SKIPPED", run = "11" }], facts: Facts{}, want: "red");
     assert\equal(gateSkipped.newChecks, want: ["ci gate"], message: "a required check skipped judged nothing");
     final allSkipped = expect([Check{ name = "magus shard 0: .", conclusion = "SKIPPED" }, Check{ name = "docs figures", conclusion = "SKIPPED" }],
@@ -3407,13 +3407,13 @@ test "the checks on the head decide running, green, red-inherited and red" {
     final newCheck = expect([failed("magus shard 0: ."), failed(HYGIENE)], facts: Facts{ baseline = MAIN }, want: "red");
     assert\equal(newCheck.newChecks, want: [HYGIENE], message: "the check main passes");
 
-    expect([failed("magus shard 1: ."), failed("ci gate")],
+    _ = expect([failed("magus shard 1: ."), failed("ci gate")],
         facts: Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] }, want: "red-inherited");
     assert\equal([checkKey("magus shard 0: docs"), checkKey("magus shard 2: docs"), checkKey("ci gate")],
         want: ["magus shard : docs", "magus shard : docs", "ci gate"], message: "a shard is matched by its project");
     final cancelled = expect([Check{ name = "magus shard 0: .", conclusion = "CANCELLED", run = "11" }], facts: Facts{ baseline = MAIN }, want: "red");
     assert\equal(cancelled.newChecks, want: ["magus shard 0: ."], message: "a run that never judged the change is not main's failure");
-    expect([failed("magus shard 0: .")], facts: Facts{}, want: "red");
+    _ = expect([failed("magus shard 0: .")], facts: Facts{}, want: "red");
 }
 
 test "only a green or red-inherited pull request on a merge-ready stage carries a merge command" {
@@ -3429,20 +3429,20 @@ test "only a green or red-inherited pull request on a merge-ready stage carries 
     };
     final lone = expect(Pull{ number = 1, checks = [green("t")] }, facts: Facts{}, state: "green", merge: true);
     assert\equal(lone.action, want: "queue", message: "apply still queues green");
-    expect(Pull{ number = 2, checks = [green("t")], mergeState = "BEHIND" }, facts: Facts{}, state: "green", merge: true);
-    expect(Pull{ number = 3, checks = [green("t")], autoMerge = true }, facts: Facts{}, state: "green", merge: true);
+    _ = expect(Pull{ number = 2, checks = [green("t")], mergeState = "BEHIND" }, facts: Facts{}, state: "green", merge: true);
+    _ = expect(Pull{ number = 3, checks = [green("t")], autoMerge = true }, facts: Facts{}, state: "green", merge: true);
 
     final inherited = expect(Pull{ number = 4, checks = [failed("magus shard 0: .")] }, facts: inheritedFacts, state: "red-inherited", merge: true);
     assert\equal([inherited.action, inherited.model], want: ["none", "none"], message: "nothing for an agent to fix");
     assert\equal(applyCommands(inherited, method: "squash").len(), want: 0, message: "apply neither queues nor reruns it");
 
-    expect(Pull{ number = 5, checks = [failed("magus shard 0: .")] }, facts: Facts{}, state: "red", merge: false);
-    expect(Pull{ number = 6, checks = [green("t"), Check{ name = "u", conclusion = "PENDING" }] }, facts: Facts{}, state: "running", merge: false);
-    expect(Pull{ number = 7, checks = [green("t")], draft = true }, facts: Facts{}, state: "green", merge: false);
-    expect(Pull{ number = 8, checks = [green("t")], mergeable = "CONFLICTING" }, facts: Facts{}, state: "green", merge: false);
-    expect(Pull{ number = 9, checks = [green("t")], labels = [KICKED] }, facts: Facts{}, state: "green", merge: false);
-    expect(Pull{ number = 10, checks = [green("t")], state = "MERGED" }, facts: Facts{}, state: "green", merge: false);
-    expect(Pull{ number = 11, checks = [green("t")], mergeable = "UNKNOWN" }, facts: Facts{}, state: "green", merge: false);
+    _ = expect(Pull{ number = 5, checks = [failed("magus shard 0: .")] }, facts: Facts{}, state: "red", merge: false);
+    _ = expect(Pull{ number = 6, checks = [green("t"), Check{ name = "u", conclusion = "PENDING" }] }, facts: Facts{}, state: "running", merge: false);
+    _ = expect(Pull{ number = 7, checks = [green("t")], draft = true }, facts: Facts{}, state: "green", merge: false);
+    _ = expect(Pull{ number = 8, checks = [green("t")], mergeable = "CONFLICTING" }, facts: Facts{}, state: "green", merge: false);
+    _ = expect(Pull{ number = 9, checks = [green("t")], labels = [KICKED] }, facts: Facts{}, state: "green", merge: false);
+    _ = expect(Pull{ number = 10, checks = [green("t")], state = "MERGED" }, facts: Facts{}, state: "green", merge: false);
+    _ = expect(Pull{ number = 11, checks = [green("t")], mergeable = "UNKNOWN" }, facts: Facts{}, state: "green", merge: false);
 }
 
 test "a red-inherited line names both runs, a red one the failures main does not have" {
@@ -3768,8 +3768,8 @@ test "each box offered is drawn unchecked, and reads back as the box it is" {
     foreach (k in markKeys(parseMarks(renderDashboard(b)))) {
         drawn.append(k);
     }
-    drawn.sort(fun (a: str, c: str) > bool => a < c);
-    want.sort(fun (a: str, c: str) > bool => a < c);
+    _ = drawn.sort(fun (a: str, c: str) > bool => a < c);
+    _ = want.sort(fun (a: str, c: str) > bool => a < c);
     assert\equal(drawn, want: want, message: "drawn unchecked, once each");
     foreach (x in offered) {
         if (x.action == "requeue") {
@@ -3882,7 +3882,7 @@ test "a box's commands are auto-merge and reruns; the plan carries them to act" 
     ], message: "the commands");
     var refused = false;
     try {
-        boxesFromPlan(`[{"action": "queue", "pr": 8, "method": "squash --admin", "runs": []}]`);
+        _ = boxesFromPlan(`[{"action": "queue", "pr": 8, "method": "squash --admin", "runs": []}]`);
     } catch (e) {
         refused = true;
     }
@@ -3908,7 +3908,7 @@ test "boxes and act take their flags, and refuse what is missing" {
             ["boxes", "--issue", "5", "--plan", "p", "--out", "s"], ["act"], ["act", "--plan", "p", "--issue", "5"]]) {
         var refused = false;
         try {
-            parseBoxFlags(c[0], argv: c.sub(1));
+            _ = parseBoxFlags(c[0], argv: c.sub(1));
         } catch (e) {
             refused = true;
         }

@@ -134,7 +134,7 @@ export fun symbolPatch(lines: {str: [Line]}) > str {
     foreach (path in sort\strings(lines.keys())) {
         final ls = mut [<Line>];
         foreach (l in lines[path]!) { ls.append(l); }
-        ls.sort(fun (a: Line, b: Line) > bool => a.line < b.line);
+        _ = ls.sort(fun (a: Line, b: Line) > bool => a.line < b.line);
         patch.append("diff --git a/{path} b/{path}");
         patch.append("--- a/{path}");
         patch.append("+++ b/{path}");
@@ -305,7 +305,7 @@ export fun plan(fragments: [Fragment], commits: [Commit], outputs: {str: bool}, 
     final live = mut [<Fragment>];
     final sorted = mut [<Fragment>];
     foreach (f in fragments) { sorted.append(f); }
-    sorted.sort(fun (a: Fragment, b: Fragment) > bool => a.path < b.path);
+    _ = sorted.sort(fun (a: Fragment, b: Fragment) > bool => a.path < b.path);
 
     foreach (f in sorted) {
         final c = adder[f.path];
@@ -446,7 +446,7 @@ fun merge(same: [Fragment], adder: {str: Commit}, index: {str: int}, verdicts: m
     final ordered = mut [<Fragment>];
     foreach (f in same) { ordered.append(f); }
     // Oldest first: a larger history index is an older commit.
-    ordered.sort(fun (a: Fragment, b: Fragment) > bool => index[adder[a.path]!.id]! > index[adder[b.path]!.id]!);
+    _ = ordered.sort(fun (a: Fragment, b: Fragment) > bool => index[adder[a.path]!.id]! > index[adder[b.path]!.id]!);
     final later = ordered[ordered.len() - 1];
     var merged = later.text;
     if (later.entry.trim() == "") {
@@ -538,7 +538,7 @@ fun apply(verdicts: [Verdict]) > void !> any {
             if (vcs\name() == "jj") {
                 fs\remove(v.fragment);
             } else {
-                vcs\cmd(["rm", "--", v.fragment], opts: vcs\CommandOptions{ quiet = true, dir = root });
+                _ = vcs\cmd(["rm", "--", v.fragment], opts: vcs\CommandOptions{ quiet = true, dir = root });
             }
         } else if (v.action == "rewrite") {
             fs\writeFile(v.fragment, content: v.merged);
@@ -808,7 +808,7 @@ test "what cannot be proven is kept, with the reason" {
 
 test "the symbol index is asked only about commits in a candidate group" {
     final fx = fixture();
-    plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe);
+    _ = plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe);
     assert\equal(sort\strings(fx.asked), want: ["c04", "c07", "c08", "c14"], message: "symbols asked");
 }
 

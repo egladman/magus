@@ -261,7 +261,7 @@ fun buildFrom(source: str, root: str) > void !> any {
             throw refused;
         }
     }
-    proc\exec(bin, args: buildArgs(source));
+    _ = proc\exec(bin, args: buildArgs(source));
 }
 
 // bootstrap places ./magus in root, refreshes harness skills, takes job, checks the row fits, builds the graph, and
@@ -298,7 +298,7 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
         main: main,
         trackedClean: fun () > bool !> any => (vcs\cmd(["diff", "HEAD", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true, allowFailure = true }).code) == 0,
         detach: fun (checkpoint: str) > void !> any {
-            vcs\cmd(["switch", "--detach", checkpoint], opts: vcs\CommandOptions{ dir = root, quiet = true });
+            _ = vcs\cmd(["switch", "--detach", checkpoint], opts: vcs\CommandOptions{ dir = root, quiet = true });
         },
     );
 }
@@ -310,7 +310,7 @@ export fun refreshSkills(run: fun (args: [str]) > str !> any, lease: str) > str 
     if (lease != "") {
         return "skipped the harness skill install; this session holds the lease `{lease}`, and a bound job cannot change a harness skill tree";
     }
-    run(["agent", "harness", "install"]);
+    _ = run(["agent", "harness", "install"]);
     return "refreshed the wired harness skills";
 }
 
@@ -343,7 +343,7 @@ export fun claimThenIndex(run: fun (args: [str]) > str !> any, root: str, job: s
     if (needsDetach(row, trackedClean: trackedClean())) {
         detach(row.checkpoint);
         std\print("detached onto the checkpoint {row.checkpoint}; the base had diverged and the tracked files were clean");
-        run(["job", "exec", job]);
+        _ = run(["job", "exec", job]);
         row = parseRow(run(["describe", "job", job, "-o", "json"]));
     }
     try {
@@ -352,7 +352,7 @@ export fun claimThenIndex(run: fun (args: [str]) > str !> any, root: str, job: s
         throw "bootstrap-worktree: REFUSED, job {job} is not fit to work here:\n  {e}";
     }
     try {
-        run(["graph", "build", "--silent"]);
+        _ = run(["graph", "build", "--silent"]);
         std\print("built the graph");
     } catch (e: str) {
         std\print(graphBuildFailed(e));
@@ -505,7 +505,7 @@ test "the harness skill install is skipped under a lease and run without one" {
         ran.append(args.join(" "));
         return "";
     };
-    refreshSkills(run, lease: "policy-bootstrap");
+    _ = refreshSkills(run, lease: "policy-bootstrap");
     assert\equal(ran.len(), want: 0, message: "no install under a lease");
     assert\equal(refreshSkills(run, lease: ""), want: "refreshed the wired harness skills", message: "line without a lease");
     assert\equal(ran.join("|"), want: "agent harness install", message: "install without a lease");
@@ -526,7 +526,7 @@ test "the harness config sync is skipped under a lease and run without one" {
 test "the lease is taken before the graph is built" {
     final described = fs\readFile("hack/testdata/bootstrap-match.json");
     final ran = mut [<str>];
-    claimThenIndex(
+    _ = claimThenIndex(
         fun (args: [str]) > str !> any {
             ran.append(args.join(" "));
             return if (args[0] == "describe") described else "";
@@ -573,7 +573,7 @@ test "a diverged worktree with tracked edits is still refused and not detached" 
     final ran = mut [<str>];
     var said = "";
     try {
-        claimThenIndex(
+        _ = claimThenIndex(
             fun (args: [str]) > str !> any {
                 ran.append(args.join(" "));
                 return if (args[0] == "describe") diverged else "";
@@ -633,7 +633,7 @@ test "--build-from builds in the source checkout and is refused under a lease, n
 test "a command killed by a signal names the signal, not exit -1" {
     var said = "";
     try {
-        magusAt("/bin/sh", root: ".", args: ["-c", "kill -9 $$"]);
+        _ = magusAt("/bin/sh", root: ".", args: ["-c", "kill -9 $$"]);
     } catch (e: str) {
         said = e;
     }

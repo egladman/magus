@@ -488,7 +488,7 @@ fun proofreadTable(heading: str, rules: [ProofreadRule]) > str {
 // renderProofreadIndex is the whole catalog as one table per PRF family, in code order.
 export fun renderProofreadIndex(rules: [ProofreadRule]) > str {
     final ordered = rules.cloneMutable();
-    ordered.sort(fun (left: ProofreadRule, right: ProofreadRule) > bool => left.code < right.code);
+    _ = ordered.sort(fun (left: ProofreadRule, right: ProofreadRule) > bool => left.code < right.code);
     final head = "---\ntitle: \"Proofread rules\"\n"
         + "description: \"Every rule proofread applies to written text: what each one catches, the decision it takes by default on each kind of text, and its code.\"\n"
         + "tags: [proofread, rules, reference]\n"
@@ -716,7 +716,7 @@ test "a proofread rule with no known dimension raises" {
     foreach (raw in [unknown, missing]) {
         var message = "";
         try {
-            proofreadRules(raw);
+            _ = proofreadRules(raw);
         } catch (err: str) {
             message = err;
         }
@@ -760,7 +760,7 @@ test "the proofread index groups rules by family and pads the tables" {
 test "an empty proofread catalog raises" {
     var raised = false;
     try {
-        proofreadRules("[]");
+        _ = proofreadRules("[]");
     } catch (err: str) {
         raised = true;
     }

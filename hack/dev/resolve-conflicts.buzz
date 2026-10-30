@@ -368,7 +368,7 @@ final DIFF3 = "a\n<<<<<<< HEAD\nmine\n||||||| merged common ancestors\nold\n====
 
 fun raised(text: str, choices: {int: Choice}) > str {
     try {
-        settle(parse(text), choices: choices);
+        _ = settle(parse(text), choices: choices);
     } catch (e: str) {
         return e;
     }
@@ -377,7 +377,7 @@ fun raised(text: str, choices: {int: Choice}) > str {
 
 fun parseRaised(text: str) > str {
     try {
-        parse(text);
+        _ = parse(text);
     } catch (e: str) {
         return e;
     }

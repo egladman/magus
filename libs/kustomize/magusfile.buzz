@@ -54,8 +54,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     final scratch = fs\tempDir("kubeconform-");
     foreach (i, dir in KUSTOMIZATIONS) {
         final manifest = fs\join(scratch, name: "build-{i}.yaml");
-        magus\cmd("buzz", args: ["manifests.buzz", dir, manifest], opts: magus\CommandOptions{quiet = true});
-        proc\exec("kubeconform", args: ["-strict", "-summary", "-schema-location", SCHEMAS, manifest]);
+        _ = magus\cmd("buzz", args: ["manifests.buzz", dir, manifest], opts: magus\CommandOptions{quiet = true});
+        _ = proc\exec("kubeconform", args: ["-strict", "-summary", "-schema-location", SCHEMAS, manifest]);
     }
     fs\removeAll(scratch);
 }
@@ -65,7 +65,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(lint);
     ctx.readsFiles(["kustomize.buzz", "testdata/*.yaml", "../../deploy/kustomize/**/*.yaml"]);
-    magus\cmd("buzz", args: ["-t", "kustomize.buzz"]);
+    _ = magus\cmd("buzz", args: ["-t", "kustomize.buzz"]);
 }
 
 // ci regenerates MAGUS.md, then runs lint and test.

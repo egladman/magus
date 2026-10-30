@@ -28,7 +28,7 @@ export fun binary() > str !> any {
 export fun linkOnce() > void !> any {
     final root = magus\describe.project().workspace;
     if (!fs\exists(root + "/.magus/custom-gcl")) {
-        proc\exec("golangci-lint", args: ["custom"], dir: root + "/libs/testlayout");
+        _ = proc\exec("golangci-lint", args: ["custom"], dir: root + "/libs/testlayout");
     }
 }
 
@@ -48,7 +48,7 @@ export fun run(dir: str, args: [str]) > void !> any {
     // An in-checkout cache: golangci-lint keys findings by absolute path, so sibling
     // worktrees would replay each other's. The go spell's sandbox entry reaches only its ops.
     os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, callback: fun () > void !> any {
-        proc\exec(bin, args: ["run", "--config", root + "/.golangci.yml"] + args, dir: root + "/" + dir);
+        _ = proc\exec(bin, args: ["run", "--config", root + "/.golangci.yml"] + args, dir: root + "/" + dir);
     });
 }
 

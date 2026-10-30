@@ -367,7 +367,7 @@ export fun matches(terms: str, opts: Options) > mut Result !> any {
     foreach (q in queries) {
         gather(pool, q: q, alone: queries.len() == 1, fetch: if (filtered or opts.limit < RANK_FLOOR) FETCH_CAP else cap(opts.limit), wanted: words(terms));
     }
-    pool.hits.sort(fun (a: Hit, b: Hit) > bool => a.exact > b.exact or (a.exact == b.exact and a.score > b.score));
+    _ = pool.hits.sort(fun (a: Hit, b: Hit) > bool => a.exact > b.exact or (a.exact == b.exact and a.score > b.score));
     final r = mut Result{ query = terms, matchCount = pool.total, dropped = pool.duplicates,
         answer = mut Answer{ verdict = ABSENT, staleIndexes = pool.stale } };
     final files = newFiles();
@@ -539,7 +539,7 @@ export fun site(h: mut Hit, opts: Options, files: Files) > Excerpt {
         return Excerpt{ path = h.path, status = "unreadable: {h.path}" };
     }
     final lines = read!;
-    region(h, files: files);
+    _ = region(h, files: files);
     var center = if (h.line > 0) h.line else 1;
     if (opts.grep != "") {
         final g = grepLine(h, opts: opts, files: files);

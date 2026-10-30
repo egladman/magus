@@ -71,7 +71,7 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
             dirs.append(dir);
         }
     }
-    dirs.sort(fun (left: str, right: str) > bool => left < right);
+    _ = dirs.sort(fun (left: str, right: str) > bool => left < right);
 
     final claims = mut [<DiscoveredProject>];
     foreach (dir in dirs) {

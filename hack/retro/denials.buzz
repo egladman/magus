@@ -440,7 +440,7 @@ export fun faults(denials: [Denial]) > [Fault] {
 // distinct trail firings.
 export fun worklist(denials: [Denial], perRule: int) > [Denial] {
     final newest = denials.cloneMutable();
-    newest.sort(fun (a: Denial, b: Denial) > bool => a.at > b.at);
+    _ = newest.sort(fun (a: Denial, b: Denial) > bool => a.at > b.at);
     final kept = mut {<str: int>};
     final found = mut [<Denial>];
     foreach (d in newest) {

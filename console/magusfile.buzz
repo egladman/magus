@@ -56,7 +56,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["../types/*.go", "../cmd/magus-utils/*.go"]);
     ctx.writesFiles(["src/gen/magus/types.ts"]);
-    proc\exec("go", ["run", "../cmd/magus-utils", "tstypes", "-out", "src/gen/magus/types.ts"]);
+    _ = proc\exec("go", ["run", "../cmd/magus-utils", "tstypes", "-out", "src/gen/magus/types.ts"]);
 }
 
 // Renders MAGUS.md, this project's target catalog.
@@ -102,7 +102,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 
     final scripts = mut ["--test"];
     foreach (s in fs\glob("scripts/*.test.mjs")) { scripts.append(s.value); }
-    proc\exec("node", scripts, ".");
+    _ = proc\exec("node", scripts, ".");
 
     // Both projects name their files src/..., so textsearch's paths get a prefix before the merge.
     final textsearch_report = fs\readFile(fs\join("..", "libs", "textsearch", "coverage.lcov"))
@@ -122,7 +122,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // has no server to parse it. It lives here because the root writing into a descendant is MGS3001.
 export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["src/apps/diff/gen/*.ts"]);
-    proc\exec("go", ["run", "../cmd/magus-utils", "diffdemo",
+    _ = proc\exec("go", ["run", "../cmd/magus-utils", "diffdemo",
                      "-patch", "src/apps/diff/demo.patch",
                      "-out", "src/apps/diff/gen/demo.ts"], ".");
 }
@@ -201,9 +201,9 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
               fs\join("..", "docs", "gen", "playground", "wasm_exec.js")],
              dir: fs\join("gen", "wasm"));
 
-    proc\exec("node", ["scripts/app-stubs.mjs"], ".");
+    _ = proc\exec("node", ["scripts/app-stubs.mjs"], ".");
     // Last: it hashes every file above into sw.js's precache stamp.
-    proc\exec("node", ["scripts/stamp-build.mjs"], ".");
+    _ = proc\exec("node", ["scripts/stamp-build.mjs"], ".");
 }
 
 // lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.
@@ -220,10 +220,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                     "../libs/proofread/gen/proofread.inputs", "../hack/policy/gen/proofread-decisions.json"]);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.test.json"]});
-    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
-    proc\exec("pnpm", ["exec", "stylelint", "src/**/*.css"], ".");
+    _ = proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
+    _ = proc\exec("pnpm", ["exec", "stylelint", "src/**/*.css"], ".");
     judgeCssComments();
-    proc\exec("node", ["scripts/lint-catch.mjs", "src"], ".");
+    _ = proc\exec("node", ["scripts/lint-catch.mjs", "src"], ".");
 }
 
 // judgeCssComments holds the comments of every stylesheet to proofread's stylesheet rules

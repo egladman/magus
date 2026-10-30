@@ -627,7 +627,7 @@ fun toolPath(event: any?) > str {
 }
 
 fun checkpoint(bin: str, agent: str, session: str, transcript: str) > void {
-    proc\exec(bin, args: ["session", "checkpoint", AGENT_NAME, agent, "--session", session, "--transcript", transcript], opts: proc\ExecOptions{
+    _ = proc\exec(bin, args: ["session", "checkpoint", AGENT_NAME, agent, "--session", session, "--transcript", transcript], opts: proc\ExecOptions{
         quiet = true,
         allowFailure = true,
     }) catch void;
@@ -645,7 +645,7 @@ fun recordSpawn(bin: str, agent: str, event: any?) > void {
             "subagent_type": hook\field(event, dotPath: "subagent_type"),
         },
     };
-    proc\exec(bin, args: ["shell", AGENT_NAME, agent], opts: proc\ExecOptions{
+    _ = proc\exec(bin, args: ["shell", AGENT_NAME, agent], opts: proc\ExecOptions{
         quiet = true,
         allowFailure = true,
         stdin = json\stringify(body) catch "",
@@ -657,7 +657,7 @@ fun recordSpawn(bin: str, agent: str, event: any?) > void {
 fun recordMessage(scope: Scope, event: any?) > void {
     final message = hook\field(event, dotPath: "prompt");
     if (message == "") { return; }
-    proc\exec(scope.bin, args: [
+    _ = proc\exec(scope.bin, args: [
         "shell", "--message", AGENT_NAME, scope.agent, "--transport", "buzz",
         "--session", scope.session, "--transcript", scope.transcript,
         "--event", "beforeSubmitPrompt",
@@ -708,7 +708,7 @@ fun readSession(event: any?) > str {
 // observe records the path a Read reached and reads nothing back. It judges
 // nothing, so a binary too old for --observe costs the record, never the read.
 fun observe(scope: Scope, path: str) > void {
-    proc\exec(scope.bin, args: [
+    _ = proc\exec(scope.bin, args: [
         "shell", "--observe", AGENT_NAME, scope.agent,
         "--session", scope.session, "--transcript", scope.transcript,
         "--event", "preToolUse",

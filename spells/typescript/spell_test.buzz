@@ -189,7 +189,7 @@ test "a workspace glob that matches nothing is reported on the workspace root" {
 test "a marker without content fails the answer" {
     var failed = false;
     try {
-        discover([source("package.json")]);
+        _ = discover([source("package.json")]);
     } catch {
         failed = true;
     }

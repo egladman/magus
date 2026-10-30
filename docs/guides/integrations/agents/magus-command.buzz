@@ -367,7 +367,7 @@ fun recordMessage(bin: str, message: str, dir: str, attribution: [str]) > void {
     if (bin == "") { return; }
     final args = mut ["shell", "--message"];
     foreach (word in attribution) { args.append(word); }
-    proc\exec(bin, args: args, dir: dir, opts: proc\ExecOptions{
+    _ = proc\exec(bin, args: args, dir: dir, opts: proc\ExecOptions{
         quiet = true,
         allowFailure = true,
         stdin = message,

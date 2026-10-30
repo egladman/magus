@@ -848,6 +848,6 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
     foreach (pkg in scan.packages) {
         claims.append(nodeClaim(pkg, scan: scan, owned: owned[pkg.dir] ?? [<str>]));
     }
-    claims.sort(fun (left: DiscoveredProject, right: DiscoveredProject) > bool => left.path < right.path);
+    _ = claims.sort(fun (left: DiscoveredProject, right: DiscoveredProject) > bool => left.path < right.path);
     return claims;
 }

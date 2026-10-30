@@ -258,7 +258,7 @@ export fun plan(changes: [Change], deps: {str: [str]}, minFiles: int, prefix: st
 
     final live = mut [<str>];
     foreach (k in count.keys()) { live.append(k); }
-    live.sort(fun (a: str, b: str) > bool => below(a, b: b));
+    _ = live.sort(fun (a: str, b: str) > bool => below(a, b: b));
 
     final into = mut {<str: str>};
     var i = 0;
@@ -308,7 +308,7 @@ export fun plan(changes: [Change], deps: {str: [str]}, minFiles: int, prefix: st
             final h = landed(home[s]!);
             if (holders.indexOf(h) == null) { holders.append(h); }
         }
-        holders.sort(fun (a: str, b: str) > bool => below(a, b: b));
+        _ = holders.sort(fun (a: str, b: str) > bool => below(a, b: b));
         final key = holders[holders.len() - 1];
         home[c.path] = key;
         var verb = "are";
@@ -440,7 +440,7 @@ fun gitIn(root: str, args: [str]) > str !> any {
 // a stack that does not add up to the change is refused before any branch exists.
 export fun writeLayers(root: str, mergeBase: str, layers: [LayerWrite], changed: [str]) > [str] !> any {
     foreach (l in layers) {
-        gitIn(root, args: ["check-ref-format", "--branch", l.branch]);
+        _ = gitIn(root, args: ["check-ref-format", "--branch", l.branch]);
         final taken = vcs\cmd(["show-ref", "--verify", "--quiet", "refs/heads/{l.branch}"],
             opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
         if (taken.code == 0) {
@@ -455,13 +455,13 @@ export fun writeLayers(root: str, mergeBase: str, layers: [LayerWrite], changed:
     try {
         os\withEnv({"GIT_INDEX_FILE": scratch + "/index"}, callback: fun () > void !> any {
             foreach (n, l in layers) {
-                gitIn(root, args: ["read-tree", parent]);
+                _ = gitIn(root, args: ["read-tree", parent]);
                 if (l.whole.len() > 0) {
                     // update-index reads each path from the working tree, and --remove drops the
                     // ones the change deleted.
                     final args = mut ["update-index", "--add", "--remove", "--"];
                     foreach (f in l.whole) { args.append(f); }
-                    gitIn(root, args: args);
+                    _ = gitIn(root, args: args);
                 }
                 foreach (p in sort\strings(l.partial.keys())) {
                     final tmp = "{scratch}/blob";
@@ -470,17 +470,17 @@ export fun writeLayers(root: str, mergeBase: str, layers: [LayerWrite], changed:
                     final listed = gitIn(root, args: ["ls-tree", mergeBase, "--", p]);
                     var mode = "100644";
                     if (listed != "") { mode = listed.split(" ")[0]; }
-                    gitIn(root, args: ["update-index", "--add", "--cacheinfo", "{mode},{blob},{p}"]);
+                    _ = gitIn(root, args: ["update-index", "--add", "--cacheinfo", "{mode},{blob},{p}"]);
                 }
                 final tree = gitIn(root, args: ["write-tree"]);
                 top = tree;
                 parent = gitIn(root, args: ["commit-tree", tree, "-p", parent, "-m", l.subject]);
                 commits.append(parent);
             }
-            gitIn(root, args: ["read-tree", mergeBase]);
+            _ = gitIn(root, args: ["read-tree", mergeBase]);
             final args = mut ["update-index", "--add", "--remove", "--"];
             foreach (f in changed) { args.append(f); }
-            gitIn(root, args: args);
+            _ = gitIn(root, args: args);
             whole = gitIn(root, args: ["write-tree"]);
         });
     } catch (e) {
@@ -492,7 +492,7 @@ export fun writeLayers(root: str, mergeBase: str, layers: [LayerWrite], changed:
         throw "split-into-branches: the top layer's tree {top} is not the whole change's tree {whole}; nothing was created";
     }
     foreach (n, l in layers) {
-        gitIn(root, args: ["branch", l.branch, commits[n]]);
+        _ = gitIn(root, args: ["branch", l.branch, commits[n]]);
     }
     return commits;
 }
@@ -708,8 +708,8 @@ fun rebuildHunks(path: str, regions: [Region]) > [Hunk] {
     foreach (r in regions) {
         if (r.side == "old") { olds.append(r); } else { news.append(r); }
     }
-    olds.sort(fun (a: Region, b: Region) > bool => a.lo < b.lo);
-    news.sort(fun (a: Region, b: Region) > bool => a.lo < b.lo);
+    _ = olds.sort(fun (a: Region, b: Region) > bool => a.lo < b.lo);
+    _ = news.sort(fun (a: Region, b: Region) > bool => a.lo < b.lo);
     final hunks = mut [<Hunk>];
     var i = 1;
     var j = 1;
@@ -1278,7 +1278,7 @@ fun groupUnits(u: Units, change: SymbolChange, budget: int) > Groups {
                 if (comp.indexOf(findIn(g, k: k)) != null) { members.append(k); }
             }
             if (groupLines(members, units: units) <= budget) { continue; }
-            members.sort(fun (a: str, b: str) > bool => units[a]!.id < units[b]!.id);
+            _ = members.sort(fun (a: str, b: str) > bool => units[a]!.id < units[b]!.id);
             foreach (b in members) {
                 if (cutting or g.stubbable[b] == null) { continue; }
                 final callers = mut [<str>];
@@ -1555,7 +1555,7 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
         klassOf[r] = klass(r);
         dirOfGroup[r] = dominant(r);
     }
-    todo.sort(fun (a: str, b: str) > bool => first[a]! < first[b]!);
+    _ = todo.sort(fun (a: str, b: str) > bool => first[a]! < first[b]!);
     var lastDir = "";
     while (order.len() < todo.len()) {
         var pick = "";
@@ -1637,7 +1637,7 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
         foreach (r in groups) {
             foreach (k in members[r]!) { lu.append(units[k]!); }
         }
-        lu.sort(fun (a: Unit, b: Unit) > bool => a.id < b.id);
+        _ = lu.sort(fun (a: Unit, b: Unit) > bool => a.id < b.id);
         layerUnits.append(lu);
         branches.append("{stem}-{n + 1}-{layerTitle(lu)}");
     }
@@ -2078,7 +2078,7 @@ export fun main(args: [str]) > void !> any {
         final groups = plan(changes, deps: projectDeps(), minFiles: minFiles!, prefix: prefix, base: prBase(base));
         var status = "planned";
         if (apply) {
-            applyProjects(groups, base: base, prefix: prefix, changed: changed);
+            _ = applyProjects(groups, base: base, prefix: prefix, changed: changed);
             status = "created";
         }
         final stack = projectStack(groups, base: prBase(base), status: status);
@@ -2120,7 +2120,7 @@ export fun main(args: [str]) > void !> any {
     }
     var stack = symbolStack(p, base: prBase(base));
     if (apply) {
-        writeLayers(root, mergeBase: mergeBase, layers: layerWrites(p, change: change, stem: stem), changed: changed);
+        _ = writeLayers(root, mergeBase: mergeBase, layers: layerWrites(p, change: change, stem: stem), changed: changed);
         final created = mut [<branchstack\StackLayer>];
         foreach (l in stack.layers) {
             var status = l.status;
@@ -2308,12 +2308,12 @@ fun symbolRepo() > Repo !> any {
     var texts = {<str: FileText>};
     var regions = [<Region>];
     os\withEnv(TEST_ENV, callback: fun () > void !> any {
-        gitIn(root, args: ["init", "-q", "-b", "main"]);
+        _ = gitIn(root, args: ["init", "-q", "-b", "main"]);
         // Repository config, not `-c`: a leased worker's guard refuses inline config,
         // which could move the work tree.
-        gitIn(root, args: ["config", "core.hooksPath", "/dev/null"]);
-        gitIn(root, args: ["add", "."]);
-        gitIn(root, args: ["commit", "-qm", "base"]);
+        _ = gitIn(root, args: ["config", "core.hooksPath", "/dev/null"]);
+        _ = gitIn(root, args: ["add", "."]);
+        _ = gitIn(root, args: ["commit", "-qm", "base"]);
         writeTree(root, files: doc.q("head").mapValue());
         texts = readTexts(root, mergeBase: "main", paths: paths);
         regions = settledRegions(root, base: "main", texts: texts);
@@ -2419,7 +2419,7 @@ test "--apply writes each layer's part of a file through a temporary index, and 
     final writes = layerWrites(p, change: repo.change, stem: "topic");
     assert\equal(writes[0].partial.keys(), want: ["calc/calc.go"], message: "calc.go is split across layers 1 and 2");
     os\withEnv(TEST_ENV, callback: fun () > void !> any {
-        writeLayers(repo.root, mergeBase: gitIn(repo.root, args: ["rev-parse", "main"]), layers: writes, changed: repo.paths);
+        _ = writeLayers(repo.root, mergeBase: gitIn(repo.root, args: ["rev-parse", "main"]), layers: writes, changed: repo.paths);
         final first = gitIn(repo.root, args: ["show", "topic-1-calc-base:calc/calc.go"]);
         assert\equal(first, want: "package calc\n\nimport \"strings\"\n\nfunc Old(s string) string \{\n\treturn strings.ToUpper(s)\n\}\n\nfunc Keep() int \{\n\treturn len(Base())\n\}",
             message: "layer 1 has Keep's new body and still the old name");

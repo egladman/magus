@@ -16,7 +16,7 @@ final BASE = "gcr.io/distroless/static-debian12@sha256:0123456789abcdef012345678
 
 export fun image_base(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["out/image/base/**"]);
-    image\pull(BASE, platform: PLATFORM, layout: "out/image/base");
+    _ = image\pull(BASE, platform: PLATFORM, layout: "out/image/base");
 }
 
 export fun build(ctx: magus\Context, args: [str]) > void !> any {

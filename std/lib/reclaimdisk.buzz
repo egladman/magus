@@ -267,7 +267,7 @@ fun classRank(c: str) > int {
 /// rank orders the plan largest reclaim first; unmeasured rows follow, removable before kept.
 export fun rank(items: [Item]) > [Item] {
     final ranked = items.cloneMutable();
-    ranked.sort(fun (a: Item, b: Item) > bool {
+    _ = ranked.sort(fun (a: Item, b: Item) > bool {
         if (a.kib != b.kib) { return a.kib > b.kib; }
         if (a.class != b.class) { return classRank(a.class) < classRank(b.class); }
         return a.name < b.name;
@@ -279,7 +279,7 @@ export fun rank(items: [Item]) > [Item] {
 /// branches they hold, and every branch no worktree holds. A kept row is never in it.
 export fun pickChunk(items: [Item], n: int) > [Item] {
     final worktrees = items.filter(fun (i: int, it: Item) > bool => it.kind == "worktree" and it.class == "removable").cloneMutable();
-    worktrees.sort(fun (a: Item, b: Item) > bool => a.touched < b.touched);
+    _ = worktrees.sort(fun (a: Item, b: Item) > bool => a.touched < b.touched);
     final picked = mut [<Item>];
     final paths = mut [<str>];
     foreach (it in worktrees) {
@@ -462,13 +462,13 @@ fun caches(path: str, deadline: double) > [Cache] !> any {
         }
         if (kind != "") { found.append(Cache{ path = entry, kind = kind, kib = duKiB(path + "/" + entry, deadline: deadline) }); }
     }
-    found.sort(fun (a: Cache, b: Cache) > bool => a.kib > b.kib);
+    _ = found.sort(fun (a: Cache, b: Cache) > bool => a.kib > b.kib);
     return found;
 }
 
 fun processCwds(deadline: double) > [Cwd] !> any {
     try {
-        proc\which("lsof");
+        _ = proc\which("lsof");
     } catch (e) {
         throw "reclaimdisk: lsof is not on PATH, so which processes work inside a worktree cannot be read; install it rather than plan blind";
     }
@@ -560,12 +560,12 @@ fun removeWorktree(it: Item, root: str, deadline: double) > str {
     final line = guardLine(root, path: it.path);
     if (line == null) { return "skipped: its path needs shell quoting, which the guard check does not cover"; }
     try {
-        proc\exec(magusBin(), args: ["shell", line!], dir: root, opts: proc\ExecOptions{ quiet = true, timeoutMs = bound(deadline) });
+        _ = proc\exec(magusBin(), args: ["shell", line!], dir: root, opts: proc\ExecOptions{ quiet = true, timeoutMs = bound(deadline) });
     } catch (e) {
         return "refused by the guard: {e}";
     }
     try {
-        vcs\cmd(["worktree", "remove", it.path], opts: vcs\CommandOptions{ dir = root, quiet = true, timeoutMs = bound(deadline) });
+        _ = vcs\cmd(["worktree", "remove", it.path], opts: vcs\CommandOptions{ dir = root, quiet = true, timeoutMs = bound(deadline) });
     } catch (e) {
         return "failed: {e}";
     }
@@ -593,7 +593,7 @@ export fun apply(items: [Item], root: str, deadline: double) > [Item] {
             result = "skipped: its worktree was not removed";
         } else {
             try {
-                vcs\cmd(["update-ref", "-d", "refs/heads/{it.branch}", it.tip], opts: vcs\CommandOptions{ dir = root, quiet = true, timeoutMs = bound(deadline) });
+                _ = vcs\cmd(["update-ref", "-d", "refs/heads/{it.branch}", it.tip], opts: vcs\CommandOptions{ dir = root, quiet = true, timeoutMs = bound(deadline) });
             } catch (e) {
                 result = "failed: {e}";
             }
