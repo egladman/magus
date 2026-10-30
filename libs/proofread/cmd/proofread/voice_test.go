@@ -159,6 +159,38 @@ func TestVoiceBuildWritesTheDefaultPathOutsideAWorkTree(t *testing.T) {
 	readVoice(t, filepath.Join(config, "proofread", "voice.json"))
 }
 
+// drafted is a reply far from the voice synthReplies builds.
+var drafted = strings.Repeat("The change updates the cache layer (the part that keys every target) so that each key is "+
+	"computed from the sorted inputs, and the test suite covers the path: the handler reads all of the inputs, "+
+	"sorts them, and hashes the result; the ordering no longer affects the outcome, and the docs say so. ", 4)
+
+func TestVoiceDefaultJudgesWithTheDefaultFileOrSaysThereIsNone(t *testing.T) {
+	config := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", config)
+
+	path := filepath.Join(config, "proofread", "voice.json")
+
+	code, stdout, stderr := runVoiceArgs(t, drafted, "review-reply", "--stdin", "-voice", "default", "-only", "voice-drift")
+	if want := "proofread: no voice file at " + path + ", so this text is judged with no voice; " +
+		"proofread voice build writes one\n"; code != exitOK || stdout != "[]\n" || stderr != want {
+		t.Errorf("-voice default with no file: code %d stdout %s stderr %q, want no finding and %q", code, stdout, stderr, want)
+	}
+
+	v, err := proofread.BuildVoice(map[proofread.Kind][]string{proofread.KindReviewReply: synthReplies(120)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writeVoice(path, v); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr = runVoiceArgs(t, drafted, "review-reply", "--stdin", "-voice", "default", "-only", "voice-drift")
+	if code != exitOK || stderr != "" || !strings.Contains(stdout, `"rule":"voice-drift"`) {
+		t.Errorf("-voice default with a file: code %d stdout %s stderr %q, want a voice-drift finding", code, stdout, stderr)
+	}
+}
+
 func TestVoiceBuildExitsTwoOnInputItCannotUse(t *testing.T) {
 	cases := []struct {
 		name, stdin string
@@ -346,10 +378,6 @@ func TestRunJudgesWithAVoiceFile(t *testing.T) {
 	if err := writeVoice(path, v); err != nil {
 		t.Fatal(err)
 	}
-
-	drafted := strings.Repeat("The change updates the cache layer (the part that keys every target) so that each key is "+
-		"computed from the sorted inputs, and the test suite covers the path: the handler reads all of the inputs, "+
-		"sorts them, and hashes the result; the ordering no longer affects the outcome, and the docs say so. ", 4)
 
 	code, stdout, stderr := runVoiceArgs(t, drafted, "review-reply", "--stdin", "-voice", path, "-only", "voice-drift")
 	if code != exitOK || !strings.Contains(stdout, `"rule":"voice-drift"`) || !strings.Contains(stdout, `"decision":"advise"`) {

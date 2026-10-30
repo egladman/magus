@@ -42,6 +42,7 @@ import "std";
 import "magus";
 import "vcs";
 import "proc";
+import "os";
 import "fs";
 import "path";
 import "encoding/json";
@@ -842,7 +843,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         final bin = "{dir}/{proofread\binary}";
         final found = mut [<Judged>];
         final words = kind.split(" ");
-        final run = proc\exec(bin, args: words + ["--stdin", "--decisions", table],
+        final run = proc\exec(bin, args: words + voiceArgs(words[0]) + ["--stdin", "--decisions", table],
             opts: proc\ExecOptions{stdin = text, quiet = true, allowFailure = true}) catch null;
         fs\remove(table) catch void;
         // proofread exits 1 when it writes a deny finding, a grade under its kind's minimum among them.
@@ -855,7 +856,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
                 message = "proofread did not run ({why}); run {proofread\home}/{proofread\binary} {kind} "
                     + "--stdin with the text on stdin, and read why" });
         } else {
-            foreach (f in parseJudged(run!.stdout)) {
+            foreach (f in parseJudged(run!.stdout) + notices(run!.stderr)) {
                 found.append(f);
             }
         }
@@ -868,6 +869,26 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         }
         return found;
     };
+}
+
+// voiceArgs judges pull request text and reviews with the author's voice.
+fun voiceArgs(kind: str) > [str] {
+    if (kind == descriptionKind or isReview(kind)) {
+        return ["--voice", "default"];
+    }
+    return [<str>];
+}
+
+// notices are what proofread printed on stderr, such as that there is no
+// voice file. Each is advice.
+fun notices(stderr: str) > [Judged] {
+    final found = mut [<Judged>];
+    foreach (notice in stderr.trim().split("\n")) {
+        if (notice != "") {
+            found.append(Judged{ rule = "judge", line = 0, message = notice, decision = "advise" });
+        }
+    }
+    return found;
 }
 
 // outsideFindings runs one outside judge over text. Its findings take this repository's
@@ -2217,7 +2238,9 @@ test "a judge that failed is named by its stderr, else by whether its binary exi
 
 // The pr-description target passes the workspace as ".", the guard as an absolute path;
 // both must reach the one built judge, and neither may pass without it.
-test "proofread runs from a relative workspace and its absence is a finding" {
+// proofreadSources writes the sources of a proofread checkout into a temp workspace and
+// returns it.
+fun proofreadSources() > str {
     final ws = fs\tempDir("judge-runner") catch "";
     std\assert(ws != "", message: "a temp dir");
     final dir = "{ws}/{proofread\home}";
@@ -2227,6 +2250,20 @@ test "proofread runs from a relative workspace and its absence is a finding" {
     fs\writeFile("{dir}/go.sum", content: "") catch void;
     fs\writeFile("{dir}/proofread.go", content: "package proofread\n") catch void;
     fs\writeFile("{dir}/cmd/proofread/main.go", content: "package main\n") catch void;
+    return ws;
+}
+
+// fakeProofread builds ws's proofread as a shell script, fresh against its sources.
+fun fakeProofread(ws: str, script: str) > void {
+    final dir = "{ws}/{proofread\home}";
+    final bin = "{dir}/{proofread\binary}";
+    fs\writeFile(bin, content: "#!/bin/sh\ncat >/dev/null\n" + script) catch void;
+    fs\chmod(bin, mode: 0b111101101) catch void;
+    fs\writeFile("{dir}/{proofread\inputsFile}", content: (proofread\inputs(dir) catch "") + "\n") catch void;
+}
+
+test "proofread runs from a relative workspace and its absence is a finding" {
+    final ws = proofreadSources();
     final relative = path\rel(path\abs(".") catch ".", target: ws) catch ws;
     std\assert(!path\isAbs(relative), message: relative);
 
@@ -2234,14 +2271,32 @@ test "proofread runs from a relative workspace and its absence is a finding" {
     std\assert(missing.len() == 1 and missing[0].rule == "judge" and missing[0].message.indexOf("is not built") != null,
         message: if (missing.len() > 0) missing[0].message else "no finding");
 
-    final bin = "{dir}/{proofread\binary}";
-    fs\writeFile(bin, content: "#!/bin/sh\ncat >/dev/null\n"
-        + "echo '[\{\"source\":\"change-description:2\",\"rule\":\"hedge\",\"decision\":\"advise\",\"message\":\"Drop it.\",\"match\":\"might\"}]'\n") catch void;
-    fs\chmod(bin, mode: 0b111101101) catch void;
-    fs\writeFile("{dir}/{proofread\inputsFile}", content: (proofread\inputs(dir) catch "") + "\n") catch void;
+    fakeProofread(ws, script: "echo '[\{\"source\":\"change-description:2\",\"rule\":\"hedge\",\"decision\":\"advise\",\"message\":\"Drop it.\",\"match\":\"might\"}]'\n");
     final ran = judgeRunner(relative)("docs: a title\nA body.", kind: "change-description");
     std\assert(ran.len() == 1 and ran[0].rule == "hedge" and ran[0].line == 2 and ran[0].decision == "advise",
         message: if (ran.len() > 0) ran[0].message else "no finding");
+    fs\removeAll(ws) catch void;
+}
+
+test "pull request text is judged with the author's voice, and a notice proofread prints is advice" {
+    final ws = proofreadSources();
+    final calls = "{ws}/calls";
+    fakeProofread(ws, script: "echo \"$*\" >>'{calls}'\necho 'proofread: no voice file at /c/proofread/voice.json' >&2\necho '[]'\n");
+
+    final described = judgeRunner(ws)("docs: a title\nA body.", kind: "change-description");
+    std\assert(described.len() == 1 and described[0].rule == "judge" and described[0].decision == "advise"
+        and described[0].message == "proofread: no voice file at /c/proofread/voice.json",
+        message: if (described.len() > 0) described[0].message else "no finding");
+    final replied = judgeRunner(ws)("A reply.", kind: "review-reply");
+    std\assert(replied.len() == 1, message: "{replied.len()} findings on a reply");
+    final committed = judgeRunner(ws)("fix a key", kind: "commit-message");
+    std\assert(committed.len() == 1, message: "{committed.len()} findings on a commit message");
+
+    final argv = fs\readLines(calls) catch [<str>];
+    std\assert(argv.len() == 3, message: "{argv.len()} calls");
+    std\assert(argv[0].startsWith("change-description --voice default --stdin"), message: argv[0]);
+    std\assert(argv[1].startsWith("review-reply --voice default --stdin"), message: argv[1]);
+    std\assert(argv[2].indexOf("--voice") == null, message: argv[2]);
     fs\removeAll(ws) catch void;
 }
 
@@ -2644,9 +2699,17 @@ test "the example a denial teaches passes proofread and this rule" {
             body.append(if (l.startsWith("    ")) l.sub(4) else l);
         }
     }
-    final found = judgeText(Text{ kind = "change-description", title = lines[0].trim(), body = body.join("\n") },
-        facts: fun () > Facts => shipping(1, lines: 40), judge: judgeRunner("."), cited: skipCited);
-    std\assert(found.denies.len() == 0 and found.advice.len() == 0, message: "{found.denies} {found.advice}");
+    // An empty config dir holds no voice file, so the example is judged the same on every machine.
+    final config = fs\tempDir("no-voice") catch "";
+    final judged = mut [<Findings>];
+    os\withEnv({"XDG_CONFIG_HOME": config}, callback: fun () > void {
+        judged.append(judgeText(Text{ kind = "change-description", title = lines[0].trim(), body = body.join("\n") },
+            facts: fun () > Facts => shipping(1, lines: 40), judge: judgeRunner("."), cited: skipCited));
+    }) catch void;
+    fs\removeAll(config) catch void;
+    final found = judged[0];
+    std\assert(found.denies.len() == 0 and found.advice.len() == 1 and found.advice[0].indexOf("no voice file at {config}/") != null,
+        message: "{found.denies} {found.advice}");
 }
 
 // Fixture is a merged or closed pull request's title and description, the Facts its diff

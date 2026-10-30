@@ -235,7 +235,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
 	event := fs.String("event", "", "the `verdict` a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT")
 	anchored := fs.Bool("anchored", false, "with review-reply, judge as review-inline")
-	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote")
+	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote, or default for the one it writes with no --out")
 	format := fs.String("o", "json", "write findings as `json`, sarif, rdjson or text")
 
 	var minimum *int
@@ -298,12 +298,12 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	}
 
 	if *voicePath != "" {
-		v, err := readVoiceFile(*voicePath)
+		voice, err := voiceOptions(*voicePath, stderr)
 		if err != nil {
 			return failure(stderr, err)
 		}
 
-		opts = append(opts, proofread.WithVoice(v))
+		opts = append(opts, voice...)
 	}
 
 	set, fromTable := t.minimums[kind]
