@@ -62,6 +62,7 @@
 {"group":"file:changes/unreleased/broker-reply-before-close-kept.md","path":"changes/unreleased/broker-reply-before-close-kept.md"}
 {"group":"file:changes/unreleased/broker-step-groups-survive-restart.md","path":"changes/unreleased/broker-step-groups-survive-restart.md"}
 {"group":"file:changes/unreleased/buf-provided-outputs.md","path":"changes/unreleased/buf-provided-outputs.md"}
+{"group":"file:changes/unreleased/buzz-parse.md","path":"changes/unreleased/buzz-parse.md"}
 {"group":"file:changes/unreleased/buzz-test-runs-are-recorded.md","path":"changes/unreleased/buzz-test-runs-are-recorded.md"}
 {"group":"file:changes/unreleased/buzz-untyped-member-call-position.md","path":"changes/unreleased/buzz-untyped-member-call-position.md"}
 {"group":"file:changes/unreleased/cache-backend-reads-its-own-credentials.md","path":"changes/unreleased/cache-backend-reads-its-own-credentials.md"}
@@ -956,6 +957,7 @@
 {"group":"dir:hack/lint","path":"hack/lint/magusfiles-hold-no-tests.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/markdown-carries-no-mermaid.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/markdown-proofread.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/no-throw.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/package-install-targets-never-replay.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/package-manifests-carry-no-scripts.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/proofread-case-moves-name-their-origin.buzz"}
