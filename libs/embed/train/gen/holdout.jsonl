@@ -986,6 +986,8 @@
 {"group":"dir:hack/magusfile","path":"hack/magusfile/coverage.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/drift.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/harness.buzz"}
+{"group":"dir:hack/magusfile","path":"hack/magusfile/image.buzz"}
+{"group":"dir:hack/magusfile","path":"hack/magusfile/image_test.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/index.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/mockassert.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/model-tiers.buzz"}
