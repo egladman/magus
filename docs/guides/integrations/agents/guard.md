@@ -838,9 +838,10 @@ caller that passes `--renders-ask`, the claim that its reply puts the call in fr
 the person or refuses it. Every other caller gets `deny` with a reason saying the hook
 predates approval prompts, because a glue older than the decision renders an ask as
 nothing and its host reads nothing as allow. The shipped templates and the OpenCode
-plugin pass the flag; a `HOST_RESPONSE` you wrote yourself does not. Today the push gate
-is its one source: a push at a commit no passing gate covers, from a session no job
-lease binds, gets `ask`, and the reason names the commit and the gate state. The gate
+plugin pass the flag; a `HOST_RESPONSE` you wrote yourself does not. It has two sources.
+A run of a `human_only` target, from a session no job lease binds, gets `ask`. So does a
+push at a commit no passing gate covers, from such a session, and the reason names the
+commit and the gate state. The gate
 covers every backend magus drives: `git push`, `hg push`, `sl push` (with or without
 `--to`) and `jj git push`, relocated with `git -C`, `hg -R`, `sl -R` or `jj -R` too. It
 matches the gate to the revision by content hash (git and Mercurial nodes, jj commit

@@ -34,8 +34,10 @@ anyone.
 
 ## Enforced by
 
-- `AGENTS.md`: pre-1.0, breaking is fine, and a compat shim, dual reader,
-  fallback or `Deprecated:` alias needs Eli's yes first.
+- `AGENTS.md`: pre-1.0, a break may be made, deliberately, and a compat shim,
+  dual reader, fallback or `Deprecated:` alias needs Eli's yes first.
+- [A deliberate break never merges red](a-deliberate-break-never-merges-red.md):
+  the change that makes a break carries its own way to green.
 - An approved shim carries `compat(until: <condition>):`.
 - [Compatibility](../../concepts/compatibility.md) states what holds after 1.0.
 
