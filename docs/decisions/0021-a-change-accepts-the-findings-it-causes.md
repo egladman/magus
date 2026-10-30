@@ -542,9 +542,11 @@ shipped Go stays language-agnostic and repo policy lives in repo Buzz.
 | `bufBreaking` captures, `gha` dropped, `proto` `ci` uses the ledger | built |
 | `deviation-author` guard rule and its catalog row | built |
 | a `permitted` result on the journal, `run.target.result` and the event stream; never cached | built |
-| the call that lets a target record a permit, so `proto` `ci` reports `permitted` | not built |
-| `permitted` in `run.summary` | not built; a permitted target counts as a miss there |
-| a `permitted` state on the wire and in the console | built in `types` and the run state; the wire has no value, so it reads as unspecified, never as passed |
+| `ctx.permitted`, which `proto` `ci` calls | built |
+| `permitted` in `run.summary`, apart from misses | built |
+| `permitted` in the `-o json` run document | not built; that document carries no per-target status at all |
+| `permitted` on both wire enums | built |
+| the console showing `permitted` | not built; the dashboard shows unspecified and the logs view no tag, never passed |
 | `permitted` in session history | built |
 | deleting `Tool.Diagnostics` and `DiagnosticFormat` | built |
 | scan acceptance, CI annotation on a line | not built, by decision |
