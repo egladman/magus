@@ -2192,3 +2192,52 @@ func (s *forkDeliverySuite) TestAnUnstackedForkReadsNoBranch() {
 	s.Require().NoError(err)
 	s.Empty(row.ParentHead)
 }
+
+// GradeCheckLapseSuite pins that a guard which ran out of time reached no verdict on
+// the check, so the grade defers where a real deny refuses.
+type GradeCheckLapseSuite struct {
+	suite.Suite
+}
+
+func TestGradeCheckLapseSuite(t *testing.T) {
+	suite.Run(t, new(GradeCheckLapseSuite))
+}
+
+func (s *GradeCheckLapseSuite) TestALapseDefersTheGrade() {
+	s.T().Cleanup(snapshotGlobals())
+	testkit.Isolate(s.T())
+	global = globalFlags{}
+	root := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
+	resetWorkspaceMemo(s.T())
+	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	ctx, cancel := context.WithTimeout(s.T().Context(), time.Second)
+	defer cancel()
+	release := make(chan struct{})
+	defer close(release)
+	deps := guardDependencies(ctx, root)
+	deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
+		<-release
+		return nil, errors.New("released")
+	}
+
+	verdict := gradeCheck(ctx, deps, root, row)
+
+	s.False(verdict.Denied, verdict.Reason)
+	s.Contains(verdict.Deferred, "the guard ran out of time grading it")
+}
+
+func (s *GradeCheckLapseSuite) TestARealDenyStillRefuses() {
+	testkit.Isolate(s.T())
+	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	denies := func(_ context.Context, req types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		if strings.Contains(req.Command, "go-build") {
+			return types.GuardVerdict{Decision: types.GuardDeny, Reason: "no builds"}, nil
+		}
+		return types.GuardVerdict{}, nil
+	}
+
+	verdict := gradeCheck(s.T().Context(), guard.Dependencies{CommandRule: denies}, s.T().TempDir(), row)
+
+	s.True(verdict.Denied)
+	s.Empty(verdict.Deferred)
+}

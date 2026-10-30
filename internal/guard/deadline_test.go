@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
@@ -300,7 +301,9 @@ func TestJudgeWithinDegradesACommandAfterConsecutiveLapses(t *testing.T) {
 	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(degraded))
 	assert.Contains(t, degraded.Context, "on 3 judgments in a row in this session, so this command ran with no rule judging it")
 	assert.Contains(t, degraded.Context, "This one stalled in its load_rules phase")
-	assert.Contains(t, degraded.Context, "`magus server status`")
+	assert.Contains(t, degraded.Context, "Nothing measured why")
+	assert.NotContains(t, degraded.Context, "loaded machine")
+	assert.NotContains(t, degraded.Context, "magus server status")
 	again := lapse()
 	wantAgain := again
 	wantAgain.Decision = decisionAdvise
@@ -499,4 +502,101 @@ func BenchmarkPlainWriteWithAPendingPolicy(b *testing.B) {
 			b.Fatalf("a plain write was denied: %+v", v)
 		}
 	}
+}
+
+// JudgeBudgetSuite pins what bounds a dry run's workspace open and what a lapse's
+// trail row says.
+type JudgeBudgetSuite struct {
+	suite.Suite
+}
+
+func TestJudgeBudgetSuite(t *testing.T) {
+	suite.Run(t, new(JudgeBudgetSuite))
+}
+
+func (s *JudgeBudgetSuite) inspectBudgetUnder(ctx context.Context) int64 {
+	ctx = withPhaseLog(ctx, trail.Phase{})
+	_, err := boundedPhase(ctx, phaseInspect, func(context.Context) (string, error) { return "ws", nil })
+	s.Require().NoError(err)
+	phases := judgmentPhases(ctx).finished()
+	s.Require().Len(phases, 1)
+	return phases[0].BudgetMs
+}
+
+func (s *JudgeBudgetSuite) TestDryRunOpenIsNotCappedAtTheHooksShare() {
+	ctx, cancel := withDryRunDeadline(s.T().Context())
+	defer cancel()
+	s.Greater(s.inspectBudgetUnder(ctx), hookBudget.Milliseconds())
+}
+
+func (s *JudgeBudgetSuite) TestHookOpenKeepsTheCap() {
+	ctx, cancel := WithHookDeadline(s.T().Context())
+	defer cancel()
+	s.Equal(inspectBudget.Milliseconds(), s.inspectBudgetUnder(ctx))
+}
+
+func (s *JudgeBudgetSuite) TestDryRunNestedInAHookKeepsTheCap() {
+	hook, cancelHook := WithHookDeadline(s.T().Context())
+	defer cancelHook()
+	ctx, cancel := withDryRunDeadline(hook)
+	defer cancel()
+	s.Equal(inspectBudget.Milliseconds(), s.inspectBudgetUnder(ctx))
+}
+
+func (s *JudgeBudgetSuite) TestJudgeLapsedReportsARuleThatRanOut() {
+	ctx, root, _ := writeFixture(s.T())
+	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		<-ctx.Done()
+		return types.GuardVerdict{}, ctx.Err()
+	}
+	v, lapsed := JudgeLapsed(ctx, Dependencies{WriteRule: loops}, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, DryRun: true})
+	s.Equal(decisionDeny, v.Decision)
+	s.True(lapsed)
+}
+
+func (s *JudgeBudgetSuite) TestJudgeLapsedLeavesARealDenyAlone() {
+	ctx, _, _ := writeFixture(s.T())
+	v, lapsed := JudgeLapsed(ctx, Dependencies{}, Request{Input: "git reset --hard origin/main", DryRun: true})
+	s.Equal(decisionDeny, v.Decision)
+	s.False(lapsed)
+}
+
+func (s *JudgeBudgetSuite) TestTrailNamesBuiltinRulesAndNotices() {
+	ctx, cacheDir := spawnFixture(s.T())
+	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+	rows := trailEvents(s.T(), cacheDir, trail.KindAgentCommand)
+	s.Require().NotEmpty(rows)
+	names := make([]string, len(rows[0].Phases))
+	for i, p := range rows[0].Phases {
+		names[i] = p.Name
+	}
+	s.Contains(names, phaseBuiltinRules)
+	s.Contains(names, phaseNotices)
+}
+
+func (s *JudgeBudgetSuite) TestStallBetweenPhasesNamesTheSpan() {
+	log := &phaseLog{start: time.Now()}
+	log.enclose(phaseBuiltinRules)
+	log.begin(phaseInspect)
+	log.record(timedPhase(phaseInspect, time.Millisecond, time.Second, false))
+	stalled, ok := log.stalled()
+	s.True(ok)
+	s.Equal(phaseBuiltinRules, stalled.Name)
+}
+
+func (s *JudgeBudgetSuite) TestLapsedRowKeepsABoundLease() {
+	row := types.Job{ID: "bound-job", Criteria: "hold a lease", State: types.StateRunning, WritePaths: []string{"internal/held/**"}}
+	ctx, _ := fleetFixture(s.T(), row)
+	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+	bindCaller(s.T(), ctx, who, row.ID)
+	req := Request{Input: bashCall(s.T(), who.Session, who.Agent, "ls"), Host: who.Host}
+
+	v := lapseNow(ctx, s.T(), Dependencies{}, req, func(context.Context) {})
+
+	s.Equal(row.ID, v.Lease)
+	rows := trailEvents(s.T(), hookLocation(ctx, Dependencies{}).cacheDir, trail.KindAgentCommand)
+	s.Require().NotEmpty(rows)
+	s.Equal(row.ID, rows[len(rows)-1].Lease)
 }

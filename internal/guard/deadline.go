@@ -43,6 +43,9 @@ const (
 	phaseJobRows         = "job_rows"
 	phaseJudge           = "judge"
 	phaseAnswer          = "answer"
+	// Spans that enclose the shorter phases above, so they overlap them.
+	phaseBuiltinRules = "builtin_rules"
+	phaseNotices      = "notices"
 )
 
 // WithHookDeadline bounds ctx to the hook's budget from now, seven seconds against the
@@ -160,7 +163,13 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 	log.begin(phase)
 	budget := inspectBudget
 	if deadline, ok := ctx.Deadline(); ok {
-		budget = min(budget, max(time.Until(deadline)-judgeReserve, 0))
+		remaining := max(time.Until(deadline)-judgeReserve, 0)
+		// A dry run nested in a hook still has a host waiting.
+		if isDryRun(ctx) && remaining > hookBudget {
+			budget = remaining
+		} else {
+			budget = min(budget, remaining)
+		}
 	}
 	wait, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
@@ -169,6 +178,14 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 	v, err := awaitDeadline(wait, func() (T, error) { return call(detached) })
 	log.record(timedPhase(phase, time.Since(start), budget, err != nil && wait.Err() != nil))
 	return v, err
+}
+
+// JudgeLapsed is [Judge], and whether a phase of the judgment ran out of time.
+// A deny from a lapsed judgment may describe the clock and not the call.
+func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (types.GuardJudgment, bool) {
+	log := &phaseLog{start: time.Now()}
+	v := Judge(context.WithValue(ctx, phaseLogKey{}, log), deps, req)
+	return v, log.anyLapsed()
 }
 
 // JudgeWithin runs judge, a hook judgment for req, and answers by the hook's deadline on
@@ -216,9 +233,8 @@ func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func
 }
 
 // lapsesBeforeDegrade is how many judgments in a row a session's calls that change state are
-// denied for lapsing. Past it they pass with a notice until one judgment answers in time: a
-// guard slower than its budget on every call, on a loaded machine or against a daemon from
-// another build, otherwise denies every edit and spawn the session makes.
+// denied for lapsing. Past it they pass with a notice until one answers in time.
+// A guard always late would otherwise deny every edit and spawn.
 const lapsesBeforeDegrade = 2
 
 // lapseStage is where a session stands after some judgments in a row ran out of time.
@@ -378,14 +394,18 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	}
 	stalled, isStalled := log.stalled()
 	finished := log.finished()
+	// A hook carries no flag: a worker's lease is its binding, which a lapse
+	// may have beaten Judge to reading.
+	lease, leaseFrom := resolveLease(who, req.Lease, boundJob(who, hookLocation(ctx, base)).Job)
+	call.lease = lease
 	tool := hookToolCommand
 	pushes, writesOutside := false, false
 	switch {
 	case isPath:
 		tool = hookToolWrite
-		call = judgedCall{seam: seamWrite, changes: true, what: "this file write", lease: req.Lease}
+		call = judgedCall{seam: seamWrite, changes: true, what: "this file write", lease: lease}
 	case env.IsSpawn || env.IsContinue:
-		call = judgedCall{seam: seamSpawn, changes: true, what: "a subagent spawn", lease: req.Lease}
+		call = judgedCall{seam: seamSpawn, changes: true, what: "a subagent spawn", lease: lease}
 	default:
 		d := effectiveDialect(base.ShellDialect)
 		call.changes = !readOnly && !readOnlyLine(input, d) && !recoveryLine(input, d, req.Lease, req.Lease == "", hookLocation(ctx, base))
@@ -394,7 +414,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		writesOutside = call.changes && !pushes && writesOnlyOutside(input, d, callDir, hookLocation(ctx, base).workspace, userHome())
 	}
 	verdict := pass
-	verdict.Lease = req.Lease
+	verdict.Lease, verdict.LeaseFrom = lease, leaseFrom
 	inARow := mark.recordLapse()
 	builtins := lapsedRules(ctx, base, log, req, env, who, input, isPath, hookLocation(ctx, base).cacheDir)
 	switch {
@@ -419,7 +439,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	}
 	row.done = append(row.done, timedPhase(phaseAnswer, elapsed, hookBudget, true))
 	ctx = context.WithValue(ctx, phaseLogKey{}, row)
-	appendHookActivity(ctx, hookLocation(ctx, base), input, who, tool, req.Lease, "", "", "", verdict, workspaceRuleRecord{}, base.judging(callDir))
+	appendHookActivity(ctx, hookLocation(ctx, base), input, who, tool, lease, "", "", "", verdict, workspaceRuleRecord{}, base.judging(callDir))
 	return verdict
 }
 
@@ -452,15 +472,15 @@ func stallSite(stalled trail.Phase, isStalled bool, finished []trail.Phase) stri
 
 // degradedNote tells a session that a call that changes state went through unjudged, the
 // inARow-th judgment in a row to run out of time, which stopped where. Only the first past
-// lapsesBeforeDegrade names the cause and what to check; the session has it from then on.
+// lapsesBeforeDegrade says where to look.
+// It names no cause: nothing on this path measured one.
 func degradedNote(call judgedCall, where string, inARow int) string {
 	if stageAtLapses(inARow) == lapseStillDegraded {
 		return fmt.Sprintf("The guard is still not finishing in time (%d judgments in a row), so %s ran unjudged, as the notice before said.", inARow, call.what)
 	}
 	return fmt.Sprintf("The guard has run out of its %s budget on %d judgments in a row in this session, so %s ran with no rule judging it, and so will every call "+
-		"until a judgment finishes in time. This one stalled %s. A judgment this slow is a loaded machine or a "+
-		"magus built from another commit than the daemon it talks to: compare `magus version` with `magus server status`, "+
-		"and check `magus status` for what is running.", hookBudget, inARow, call.what, where)
+		"until a judgment finishes in time. This one stalled %s. Nothing measured why: this call's trail row "+
+		"times each phase, and `magus status` shows what is running.", hookBudget, inARow, call.what, where)
 }
 
 // phaseLog collects the phases of one judgment for its trail row, the one underway, and the
@@ -474,6 +494,9 @@ type phaseLog struct {
 	done    []trail.Phase
 	running string
 	since   time.Time
+	// span is the open enclosing phase, named by a lapse between shorter ones.
+	span      string
+	spanSince time.Time
 	// deps is what the judgment loaded, nil until it has.
 	deps *Dependencies
 }
@@ -509,6 +532,19 @@ func (l *phaseLog) begin(phase string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.running, l.since = phase, time.Now()
+}
+
+// enclose closes any open span and opens phase, recording the closed one.
+func (l *phaseLog) enclose(phase string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.span != "" {
+		l.done = append(l.done, timedPhase(l.span, time.Since(l.spanSince), 0, false))
+	}
+	l.span, l.spanSince = phase, time.Now()
 }
 
 // idle notes that no phase is running.
@@ -548,6 +584,11 @@ func (l *phaseLog) finished() []trail.Phase {
 func (l *phaseLog) lapsed(name string) bool {
 	_, ok := l.lapsedPhase(name)
 	return ok
+}
+
+// anyLapsed reports whether any recorded phase ran out of time.
+func (l *phaseLog) anyLapsed() bool {
+	return slices.ContainsFunc(l.finished(), func(p trail.Phase) bool { return p.Lapsed })
 }
 
 // lapsedPhase is the first recorded phase named name that ran out of time.
@@ -594,10 +635,13 @@ func (l *phaseLog) stalled() (trail.Phase, bool) {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.running == "" {
-		return trail.Phase{}, false
+	switch {
+	case l.running != "":
+		return trail.Phase{Name: l.running, ElapsedMs: time.Since(l.since).Milliseconds(), Lapsed: true}, true
+	case l.span != "":
+		return trail.Phase{Name: l.span, ElapsedMs: time.Since(l.spanSince).Milliseconds(), Lapsed: true}, true
 	}
-	return trail.Phase{Name: l.running, ElapsedMs: time.Since(l.since).Milliseconds(), Lapsed: true}, true
+	return trail.Phase{}, false
 }
 
 // phases is every recorded phase, then the whole judgment so far.

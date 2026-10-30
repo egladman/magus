@@ -858,6 +858,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// nothing graded the call at all.
 	//
 	// --observe is exempt, as it is from every other verdict: it carries none.
+	judgmentPhases(ctx).enclose(phaseBuiltinRules)
 	standing := actingLeaseStanding(ctx, deps, actingLease)
 	if binding.Gone {
 		standing.endedBinding = binding.Job
@@ -1407,6 +1408,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// which explains itself and was reached by a rule that did not need the row. Graded
 	// before the gate, so one the workspace raised refuses every call. A release request
 	// for the lease is the third: it reads the attention queue, so only until it has fired.
+	judgmentPhases(ctx).enclose(phaseNotices)
 	var release advice
 	if !req.Observe && verdict.Decision != decisionDeny && verdict.Decision != decisionAsk && !markers.AlreadyFired(advisoryReleaseRequested) {
 		release = adviseReleaseRequested(location, actingLease)
@@ -1492,6 +1494,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	if req.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
+	judgmentPhases(ctx).enclose("")
 	if !req.DryRun {
 		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord, deps.judging(callDir))
 	}

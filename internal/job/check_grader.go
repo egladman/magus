@@ -26,6 +26,7 @@ type CheckVerdict struct {
 	// Deferred says why the grade waits for the checkout, empty when it does not: the
 	// forking binary could not load the workspace's rules, which a binary built at the
 	// checkout may. The fork stores the row, and the grader has already said so on stderr.
+	// A guard that ran out of time grading the check defers it too.
 	Deferred string
 }
 

@@ -322,6 +322,7 @@ const ownBinaryPrefix = "./"
 // command, so it is not graded and the verdict's NotGraded says why: a refusal has to
 // come from a verdict on the check. Rules that would not load defer the grade instead
 // (Deferred): a binary built at the checkout may load them, so the fork keeps its row.
+// A deny from a judgment that ran out of time defers too.
 func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row types.Job) job.CheckVerdict {
 	if deps.LoadFailure != nil {
 		why := fmt.Sprintf("the workspace's rules did not load: %s", deps.LoadFailure)
@@ -339,8 +340,8 @@ func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row t
 		}
 		row.CheckoutRoot = dir
 	}
-	judge := func(pending types.Job) types.GuardJudgment {
-		return guard.Judge(ctx, deps, guard.Request{
+	judge := func(pending types.Job) (types.GuardJudgment, bool) {
+		return guard.JudgeLapsed(ctx, deps, guard.Request{
 			Input:      ownBinaryPrefix + pending.Check.String(),
 			DryRun:     true,
 			Lease:      pending.ID,
@@ -348,14 +349,27 @@ func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row t
 			Dir:        dir,
 		})
 	}
-	declared := judge(row)
+	deferLapse := func(v types.GuardJudgment) job.CheckVerdict {
+		first, _, _ := strings.Cut(strings.TrimSpace(v.Reason), "\n")
+		why := fmt.Sprintf("the guard ran out of time grading it: %s", first)
+		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it: %s", row.Check, why), attr.Unchecked())
+		return job.CheckVerdict{Deferred: why}
+	}
+	declared, lapsed := judge(row)
 	if declared.Decision != string(types.GuardDeny) {
 		return job.CheckVerdict{}
+	}
+	if lapsed {
+		return deferLapse(declared)
 	}
 	baseline := row
 	compiling := job.CompilingCheck()
 	baseline.Check = &compiling
-	if baselineVerdict := judge(baseline); baselineVerdict.Decision == string(types.GuardDeny) {
+	baselineVerdict, lapsed := judge(baseline)
+	if baselineVerdict.Decision == string(types.GuardDeny) && lapsed {
+		return deferLapse(baselineVerdict)
+	}
+	if baselineVerdict.Decision == string(types.GuardDeny) {
 		first, _, _ := strings.Cut(strings.TrimSpace(baselineVerdict.Reason), "\n")
 		return job.CheckVerdict{NotGraded: fmt.Sprintf("the guard denies this worker `%s` as well, so the deny describes the binary or the workspace and not the check: %s", compiling, first)}
 	}
