@@ -66,6 +66,8 @@ func claudeDriver() *hostDriver {
 	h.askCases = []askCase{
 		{name: "default", want: askPrompts, args: []string{"--permission-mode", "default"}},
 		{name: "accept-edits", want: askPrompts, args: []string{"--permission-mode", "acceptEdits"}},
+		{name: "auto", want: askPrompts, args: []string{"--permission-mode", "auto"}},
+		{name: "plan", want: askRefuses, args: []string{"--permission-mode", "plan"}},
 		{name: "allow-rule", want: askPrompts, args: []string{"--permission-mode", "default"},
 			setup: func(t *testing.T, w *workspace) { w.allowInSettings(t, "Bash(./magus run:*)") }},
 		{name: "dont-ask", want: askRefuses, args: []string{"--permission-mode", "dontAsk"}},

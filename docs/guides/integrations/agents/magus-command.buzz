@@ -264,12 +264,21 @@ fun codexRuleMissing(event: any?, rule: str) > str {
     return "no .codex/rules/magus.rules carries the prompt rule for this call, which magus describe harness codex prints";
 }
 
+// An allowlist: a mode not seen to prompt must not read as one that does.
+final PROMPTING_MODES = ["default", "acceptEdits", "auto"];
+
 // promptBlocker states why the host will not put this call in front of
 // the person, and "" when its own approval prompt will.
 fun promptBlocker(event: any?, codex: bool, rule: str?) > str {
     final mode = hook\field(event, dotPath: "permission_mode");
+    if (mode == "") {
+        return "this session reports no permission_mode, so a prompt cannot be assumed";
+    }
     if (mode == "bypassPermissions" or mode == "dontAsk") {
         return "this session runs in permission_mode {mode}, which never prompts";
+    }
+    if (PROMPTING_MODES.indexOf(mode) == null) {
+        return "this session runs in permission_mode {mode}, which is not known to prompt";
     }
     if (!codex) { return ""; }
     if (rule == null) {

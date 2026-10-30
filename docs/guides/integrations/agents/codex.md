@@ -295,8 +295,8 @@ same command template answers it: allow for a push a gate covers, so nobody is
 asked, no decision for an ungated push, so the person decides, and deny for a
 session bound to a job lease, because workers do not publish. Project rules load
 only when the project's `.codex` layer is trusted, the same trust that loads its
-hooks. Where no prompt can happen (no rules file, `permission_mode` of
-`bypassPermissions` or `dontAsk`, or a push written as anything but a plain
+hooks. Where no prompt can happen (no rules file, a `permission_mode` other than
+`default`, `acceptEdits` or `auto`, or a push written as anything but a plain
 `git push`, `hg push`, `sl push` or `jj git push` command), the guard refuses the push and names the person's own
 terminal. `systemMessage` carries that to the person, and the deny reason tells the agent
 to relay it verbatim if they saw nothing. Not verified against a client: what a prompt rule

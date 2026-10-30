@@ -1145,6 +1145,32 @@ stdout 'permission_mode dontAsk, which never prompts'
 ! stdout '"permissionDecision":"ask"'
 
 # case: command/ask
+# The modes that may ask are an allowlist: no mode, an unknown one and plan all deny, with
+# the same text for the person.
+stdin $WORK/bench-command-no-mode.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'It needs your approval, and this session reports no permission_mode'
+stdout 'Run it from your own terminal: magus run bench \.'
+! stdout '"permissionDecision":"ask"'
+stdin $WORK/bench-command-new-mode.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'It needs your approval, and this session runs in permission_mode someNewMode, which is not known to prompt'
+stdout 'Run it from your own terminal: magus run bench \.'
+! stdout '"permissionDecision":"ask"'
+stdin $WORK/bench-command-plan.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'permission_mode plan, which is not known to prompt'
+
+# case: command/ask
+# auto is on the list: its docs say a hook ask goes to the permission prompt.
+stdin $WORK/bench-command-auto.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"ask"'
+
+# case: command/ask
 # A command with quotes in it stays one JSON string in both texts.
 stdin $WORK/bench-command-quoted.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
@@ -1485,6 +1511,14 @@ magus run bench .
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "acceptEdits", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
 -- bench-command-dont-ask.json --
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "dontAsk", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-no-mode.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-new-mode.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "someNewMode", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-plan.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "plan", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-auto.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "auto", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
 -- bench-command-quoted.json --
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "bypassPermissions", "tool_name": "Bash", "tool_input": {"command": "magus run bench . -- \"a b\""}}
 -- cursor-pre-bench.json --
