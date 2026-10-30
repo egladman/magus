@@ -994,7 +994,7 @@ func explorerAllowed(ctx context.Context, base string, printOnly bool) error {
 	if err == nil {
 		return nil
 	}
-	slog.ErrorContext(ctx, err.Error(), attr.Notice("magus graph export --open"),
+	slog.ErrorContext(ctx, "refused to open the graph explorer", attr.Notice("magus graph export --open"), attr.Error(err),
 		attr.Why("Add the origin to mcp.allowed_origins in magus.yaml, pass --url a loopback mirror, or use --print for the link alone."))
 	return exit.Reported(exit.Failure)
 }

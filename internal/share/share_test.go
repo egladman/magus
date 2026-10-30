@@ -193,13 +193,13 @@ func statusRoutes(h http.Handler) map[string]Route {
 	}}
 }
 
-type SharePlaintextSuite struct{ suite.Suite }
+type PlaintextWarningSuite struct{ suite.Suite }
 
-func TestSharePlaintextSuite(t *testing.T) {
-	suite.Run(t, new(SharePlaintextSuite))
+func TestPlaintextWarningSuite(t *testing.T) {
+	suite.Run(t, new(PlaintextWarningSuite))
 }
 
-func (s *SharePlaintextSuite) TestOpeningALinkWarnsItIsPlaintext() {
+func (s *PlaintextWarningSuite) TestOpeningALinkWarnsItIsPlaintext() {
 	testkit.Isolate(s.T())
 	var logged bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn}))

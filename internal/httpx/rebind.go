@@ -79,7 +79,7 @@ func (a AllowedSet) AllowOrigin(origin string) (AllowedSet, error) {
 // browser can send would trust nothing while reading as if it did.
 func exactOrigin(s string) (string, error) {
 	u, err := url.Parse(s)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || s != strings.ToLower(u.Scheme+"://"+u.Host) {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || s != strings.ToLower(fmt.Sprintf("%s://%s", u.Scheme, u.Host)) {
 		return "", fmt.Errorf("httpx: origin: %q is not an exact http or https scheme://host origin", s)
 	}
 	return s, nil
