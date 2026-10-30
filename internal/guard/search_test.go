@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -790,4 +791,176 @@ func indexReads(deps Dependencies) Dependencies {
 		return err == nil && has
 	}
 	return deps
+}
+
+// ProgramSearchSuite pins awk, sed, perl, ag and ack read as grep. A program
+// that prints the lines a regex matches over files is a search. A filter of
+// piped output, a substitution or a field split is not.
+type ProgramSearchSuite struct {
+	suite.Suite
+	deps Dependencies
+}
+
+func TestProgramSearchSuite(t *testing.T) {
+	suite.Run(t, new(ProgramSearchSuite))
+}
+
+func (s *ProgramSearchSuite) SetupTest() {
+	indexed := map[string]bool{"HandleRequest": true, "Judge": true, "ParseConfig": true}
+	s.deps = Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return indexed[name], true },
+		GraphIDs:      diagnosticGraph,
+		Spells:        spellCatalog,
+	}
+}
+
+func (s *ProgramSearchSuite) deniesFor(command string, names ...string) {
+	v := Evaluate(strict(s.deps), command)
+	s.Equal(denyRule{Name: denyRuleSymbolSearch, Arg: strings.Join(names, ",")}, v.Rule)
+	for _, name := range names {
+		s.Contains(denial{Say: v.Deny, Why: v.Why}.full(), "refs "+name)
+	}
+}
+
+// deniesPerlFor sets interpreter-script off, since by default it refuses
+// every perl program before a search rule reads it.
+func (s *ProgramSearchSuite) deniesPerlFor(command string, names ...string) {
+	deps := strict(s.deps)
+	deps.Builtins[string(denyRuleInterpreterScript)] = builtin.Setting{Decision: builtin.Off}
+	v := Evaluate(deps, command)
+	s.Equal(denyRule{Name: denyRuleSymbolSearch, Arg: strings.Join(names, ",")}, v.Rule)
+	for _, name := range names {
+		s.Contains(denial{Say: v.Deny, Why: v.Why}.full(), "refs "+name)
+	}
+}
+
+func (s *ProgramSearchSuite) TestPerlSearchIsAnInterpreterScriptByDefault() {
+	v := Evaluate(strict(s.deps), `perl -ne 'print if /HandleRequest/' internal/*.go`)
+	s.Equal(denyRuleInterpreterScript, v.Rule.Name)
+}
+
+func (s *ProgramSearchSuite) passes(command string) {
+	v := Evaluate(strict(s.deps), command)
+	s.NotEqual(denyRuleSymbolSearch, v.Rule.Name)
+	s.NotEqual(denyRuleSearchTranslation, v.Rule.Name)
+}
+
+func (s *ProgramSearchSuite) TestAwkAddress() {
+	s.deniesFor(`awk '/func Judge/' internal/guard/*.go`, "Judge")
+}
+
+func (s *ProgramSearchSuite) TestAwkAddressWithAPrintAction() {
+	s.deniesFor(`awk '/HandleRequest/ {print FILENAME": "$0}' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestAwkWithAFieldSeparator() {
+	s.deniesFor(`awk -F, '/HandleRequest/{print $1}' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestAwkAlternationWithAVariable() {
+	s.deniesFor(`awk -F: -v x=1 '/HandleRequest|ParseConfig/' internal/*.go`, "HandleRequest", "ParseConfig")
+}
+
+func (s *ProgramSearchSuite) TestGawk() {
+	s.deniesFor(`gawk '/HandleRequest/' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestMawk() {
+	s.deniesFor(`mawk '/HandleRequest/' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestSedQuietPrint() {
+	s.deniesFor(`sed -n '/func Judge/p' internal/guard/*.go`, "Judge")
+}
+
+func (s *ProgramSearchSuite) TestSedQuietPrintAsAnExpression() {
+	s.deniesFor(`sed -n -e '/HandleRequest/p' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestSedExtendedAlternation() {
+	s.deniesFor(`sed -n -E '/HandleRequest|ParseConfig/p' internal/*.go`, "HandleRequest", "ParseConfig")
+}
+
+func (s *ProgramSearchSuite) TestPerlPrintIf() {
+	s.deniesPerlFor(`perl -ne 'print if /HandleRequest/' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestPerlPrintIfAnExplicitMatch() {
+	s.deniesPerlFor(`perl -ane 'print if m/func Judge/' internal/*.go`, "Judge")
+}
+
+func (s *ProgramSearchSuite) TestPerlPrintIfTheTopicMatches() {
+	s.deniesPerlFor(`perl -lne 'print $_ if $_ =~ /HandleRequest/' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestPerlMatchAndPrint() {
+	s.deniesPerlFor(`perl -nle '/HandleRequest/ and print' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestPerlWithASeparateProgramFlag() {
+	s.deniesPerlFor(`perl -n -e 'print if /HandleRequest/' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestAg() {
+	s.deniesFor(`ag 'HandleRequest|ParseConfig' internal`, "HandleRequest", "ParseConfig")
+}
+
+func (s *ProgramSearchSuite) TestAck() {
+	s.deniesFor(`ack HandleRequest internal`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestAwkFilteringAPipeIsNotASearch() {
+	s.passes(`go list ./... | awk '/HandleRequest/'`)
+}
+
+func (s *ProgramSearchSuite) TestSedFilteringAPipeIsNotASearch() {
+	s.passes(`git log --oneline | sed -n '/Judge/p'`)
+}
+
+func (s *ProgramSearchSuite) TestAwkFieldPrintIsNotASearch() {
+	s.passes(`awk '{print $1}' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestAwkFieldSplitIsNotASearch() {
+	s.passes(`awk -F, '{print $1}' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestAwkNegationIsNotASearch() {
+	s.passes(`awk '!/HandleRequest/' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestAwkRangeIsNotASearch() {
+	s.passes(`awk '/Judge/,/HandleRequest/' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestAwkProgramFileIsNotASearch() {
+	s.passes(`awk -f prog.awk internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestSedSubstitutionIsNotASearch() {
+	s.passes(`sed 's/HandleRequest/Serve/' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestSedInPlaceEditIsNotASearch() {
+	s.passes(`sed -i 's/HandleRequest/Serve/' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestSedPrintWithoutQuietIsNotASearch() {
+	s.passes(`sed '/HandleRequest/p' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestSedLineRangeIsNotASearch() {
+	s.passes(`sed -n '1,5p' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestPerlSubstitutionIsNotASearch() {
+	s.passes(`perl -pe 's/HandleRequest/Serve/' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestPerlOverStdinIsNotASearch() {
+	s.passes(`perl -ne 'print if /HandleRequest/'`)
+}
+
+func (s *ProgramSearchSuite) TestPerlExtendedRegexIsNotASearch() {
+	s.passes(`perl -ne 'print if /HandleRequest/x' internal/*.go`)
 }
