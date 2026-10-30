@@ -8,7 +8,7 @@ import (
 
 func TestResultConstructors(t *testing.T) {
 	ok := Ok(42)
-	if !ok.IsOk() || ok.Value != 42 || ok.Error != nil {
+	if !ok.IsOk() || ok != (Result[int]{Value: 42}) {
 		t.Errorf("Ok(42) = %+v", ok)
 	}
 

@@ -204,8 +204,9 @@ func (s *stdSuite) TestReferrersReadsTheAttachedDocumentWithoutARegistry() {
 	docs, err := ImageReferrers(s.T().Context(), attached.Path, "")
 	s.Require().NoError(err)
 	s.Require().Len(docs, 1)
-	s.Equal(sbom.Descriptor.Digest, docs[0].Descriptor.Digest)
-	s.Equal(sbom.Descriptor.MediaType, docs[0].Descriptor.ArtifactType)
+	wantDescriptor := sbom.Descriptor
+	wantDescriptor.ArtifactType = sbom.Descriptor.MediaType
+	s.Equal(wantDescriptor, docs[0].Descriptor)
 
 	want, err := os.ReadFile(sbom.Path)
 	s.Require().NoError(err)
