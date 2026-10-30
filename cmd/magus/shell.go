@@ -247,10 +247,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// A misnamed host is refused, never judged as another.
 	// --observe and --message carry no verdict, so they log it.
 	if refusal := applyHostFacts(ctx, &req); refusal != nil {
-		if sf.Observe || sf.Message {
-			slog.WarnContext(ctx, "the hook entry names the wrong harness",
-				attr.Error(refusal.err), attr.Notice(""), attr.Component("magus shell"))
-		} else {
+		if !sf.Observe && !sf.Message {
 			verdict := types.GuardJudgment{
 				SchemaVersion: agent.GuardSchemaVersion,
 				Decision:      "deny",
@@ -263,6 +260,8 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 			}
 			return verdictExit(errOut, opts, verdict)
 		}
+		slog.WarnContext(ctx, "the hook entry names the wrong harness",
+			attr.Error(refusal.err), attr.Notice(""), attr.Component("magus shell"))
 	}
 	// Marked before the rules load, so a hook its host kills while loading them is still
 	// reported to the session's next judgment.
@@ -557,7 +556,7 @@ func applyHostFacts(ctx context.Context, req *guard.Request) *hostRefusal {
 		argv := []string{"magus", "agent", "harness", "install", "--id", req.Host}
 		return &hostRefusal{err: err, next: types.NextStep{
 			ID: "harness-install", Run: strings.Join(argv, " "), Argv: argv,
-			Why: "installs the tool rows of " + req.Host + ", when the workspace loads that harness",
+			Why: fmt.Sprintf("installs the tool rows of %s, when the workspace loads that harness", req.Host),
 		}}
 	}
 	if err := agent.CheckHostPayload(installed, req.Host, req.Input); err != nil {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -23,7 +22,7 @@ func TestSourceIsTheFigureModule(t *testing.T) {
 }
 
 func TestStandaloneMatchesTheModule(t *testing.T) {
-	assert.Contains(t, Source, "export final XmlDeclaration = "+strconv.Quote(xmlDeclaration)+";")
+	assert.Contains(t, Source, fmt.Sprintf("export final XmlDeclaration = %q;", xmlDeclaration))
 	assert.Equal(t, xmlDeclaration+"<svg/>", Standalone("<svg/>"))
 	assert.False(t, strings.HasPrefix("<svg/>", "<?xml"), "Draw's inline form carries no declaration")
 }

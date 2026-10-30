@@ -106,7 +106,7 @@ func tsType(t reflect.Type, declared map[string]bool, name func(reflect.Type) st
 		if err != nil {
 			return "", err
 		}
-		return "Record<string, " + val + ">", nil
+		return fmt.Sprintf("Record<string, %s>", val), nil
 	case reflect.Struct:
 		n := name(t)
 		if !declared[n] {

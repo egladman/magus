@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,10 +102,10 @@ func TestTSTypesTypeCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "types.ts"), src, 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "check.ts"), []byte(tsTypeCheck), 0o600))
-	config := `{"compilerOptions": {"target": "ES2022", "module": "ESNext", "moduleResolution": "bundler",
+	config := fmt.Sprintf(`{"compilerOptions": {"target": "ES2022", "module": "ESNext", "moduleResolution": "bundler",
   "lib": ["ES2022"], "strict": true, "noEmit": true, "skipLibCheck": true, "types": [],
-  "paths": {"@connectrpc/connect": ["` + filepath.ToSlash(filepath.Join(console, "node_modules", "@connectrpc", "connect")) + `"]}},
-  "files": ["types.ts", "check.ts"]}`
+  "paths": {"@connectrpc/connect": [%q]}},
+  "files": ["types.ts", "check.ts"]}`, filepath.ToSlash(filepath.Join(console, "node_modules", "@connectrpc", "connect")))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(config), 0o600))
 
 	out, err := exec.CommandContext(t.Context(), tsc, "-p", dir).CombinedOutput()

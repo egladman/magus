@@ -103,7 +103,7 @@ func (t Tree) walk(ctx context.Context, origin string) ([]entry, int, error) {
 		if err != nil {
 			return fmt.Errorf("%s: %w", rel, err)
 		}
-		e.origin = origin + " " + rel
+		e.origin = fmt.Sprintf("%s %s", origin, rel)
 		out = append(out, e)
 		return nil
 	})
