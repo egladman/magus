@@ -176,6 +176,117 @@ func coveredRow() types.Job {
 	return row
 }
 
+// exitEvidenceSuite pins the evidence `job exit` files and refuses.
+type exitEvidenceSuite struct {
+	suite.Suite
+}
+
+func TestExitEvidence(t *testing.T) { suite.Run(t, new(exitEvidenceSuite)) }
+
+func (s *exitEvidenceSuite) row() types.Job {
+	row := acceptRow()
+	row.Check = &types.LeaseCheck{Target: "go::go-test", Project: "."}
+	row.Validation = row.Check.String()
+	row.Goals = []types.Goal{types.Goal{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
+	return row
+}
+
+func (s *exitEvidenceSuite) exit(row types.Job, result types.JobResult, attempt types.JobAttempt) (types.Job, error) {
+	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+		attempt.Found, attempt.Ref, attempt.Project = true, ref, "."
+		attempt.TimestampMs = 9_999_999_999_999
+		return attempt, nil
+	}
+	return Exit(s.T().Context(), boundStore(declared(s.T(), row), row.ID), row.ID, &result, resolve)
+}
+
+func (s *exitEvidenceSuite) TestOwedGoalNeedsNoRef() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+
+	exited, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.Require().NoError(err)
+	s.Equal(types.StateExited, exited.State)
+	s.Empty(exited.GateAttempts)
+}
+
+func (s *exitEvidenceSuite) TestOwedGoalCitingARefIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat, OutputRef: "out9"}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "lint"})
+
+	s.ErrorContains(err, `goal "lint" is filed as owed and cites output ref "out9"`)
+}
+
+func (s *exitEvidenceSuite) TestOwedCheckCitingARefIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat, OutputRef: "out9"}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `files its check as owed and cites output ref "out9"`)
+}
+
+func (s *exitEvidenceSuite) TestGoalWithNeitherRefNorOwedIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint"}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `goal "lint" names neither output_ref nor owed`)
+}
+
+func (s *exitEvidenceSuite) TestGoalRefNamingAnotherCommandIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", OutputRef: "out9"}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "build"})
+
+	s.ErrorContains(err, `goal "lint" cites output ref "out9"`)
+	s.ErrorContains(err, "cite a run of that check, or file it as owed")
+}
+
+func (s *exitEvidenceSuite) TestCheckRefNamingAnotherCommandIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out9"}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "build"})
+
+	s.ErrorContains(err, `goal "check" cites output ref "out9"`)
+}
+
+func (s *exitEvidenceSuite) TestRunUnderDefaultCharmsIsTheSameCommand() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test:rw"})
+
+	s.NoError(err)
+}
+
+func (s *exitEvidenceSuite) TestTestFilterStaysTheSameCommand() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test", ExtraArgs: []string{"-run", "TestX"}})
+
+	s.NoError(err)
+}
+
 // rowKeepsItsPathsSuite pins a row's write paths through exit and re-take.
 type rowKeepsItsPathsSuite struct {
 	suite.Suite
@@ -194,6 +305,19 @@ func (s *rowKeepsItsPathsSuite) resolver(result types.JobResult) AttemptResolver
 func (s *rowKeepsItsPathsSuite) exit(loc Location, id string, result types.JobResult) types.Job {
 	s.T().Helper()
 	exited, err := Exit(s.T().Context(), boundStore(loc, id), id, &result, s.resolver(result))
+	s.Require().NoError(err)
+	return exited
+}
+
+// exitApplied files a result for appliedRow's job, whose check is `test .`.
+func (s *rowKeepsItsPathsSuite) exitApplied(loc Location) types.Job {
+	s.T().Helper()
+	result := passingResult()
+	result.Job, result.ChangedPaths = "w", []string{"a.go"}
+	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+		return types.JobAttempt{Found: true, Ref: ref, Target: "test", Project: ".", TimestampMs: 9_999_999_999_999}, nil
+	}
+	exited, err := Exit(s.T().Context(), boundStore(loc, "w"), "w", &result, resolve)
 	s.Require().NoError(err)
 	return exited
 }
@@ -219,9 +343,7 @@ func (s *rowKeepsItsPathsSuite) TestWideningAppliedWhileRunningSurvivesExitAndRe
 	s.Require().NoError(err)
 	s.Require().Equal([]string{"a.go", "b.go", "c.go"}, applied[0].Next.WritePaths)
 
-	result := passingResult()
-	result.Job, result.ChangedPaths = "w", []string{"a.go"}
-	exited := s.exit(loc, "w", result)
+	exited := s.exitApplied(loc)
 	s.Equal([]string{"a.go", "b.go", "c.go"}, exited.WritePaths)
 
 	retaken, err := NewStore(loc).Exec(s.T().Context(), "w")
@@ -232,9 +354,7 @@ func (s *rowKeepsItsPathsSuite) TestWideningAppliedWhileRunningSurvivesExitAndRe
 
 func (s *rowKeepsItsPathsSuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
 	store, loc := appliedRow(s.T(), "a.go")
-	result := passingResult()
-	result.Job, result.ChangedPaths = "w", []string{"a.go"}
-	s.exit(loc, "w", result)
+	s.exitApplied(loc)
 
 	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)

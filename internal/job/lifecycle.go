@@ -109,6 +109,9 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	if err != nil {
 		return types.Job{}, err
 	}
+	if err := refuseWrongRun(rows[i], attempt, gateAttempts); err != nil {
+		return types.Job{}, err
+	}
 	return update(func(row *types.Job) {
 		prev := row.Clone()
 		generation := max(row.Generation, 1)
@@ -130,6 +133,48 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 			row.State = types.StatePass
 		}
 	})
+}
+
+// refuseWrongRun refuses evidence of another command than its goal's check.
+// A goal the row does not declare is left for the wait to name.
+func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGateAttempt) error {
+	goals := row.EffectiveGoals()
+	check := func(id string, attempt types.JobAttempt) error {
+		i := slices.IndexFunc(goals, func(g types.Goal) bool { return g.ID == id && g.Kind == types.GoalKindCheck })
+		if i < 0 || sameCommand(goals[i].Check, attempt) {
+			return nil
+		}
+		return fmt.Errorf("job: goal %q cites output ref %q, which records `%s`, and its check runs `%s`: cite a run of that check, or file it as owed with no output_ref",
+			id, attempt.Ref, attempt, goals[i].Check)
+	}
+	if primary.Found {
+		if err := check(types.PrimaryGoalID, primary); err != nil {
+			return err
+		}
+	}
+	for _, gate := range gates {
+		if err := check(gate.GateID, gate.Attempt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// sameCommand is [ranCheck] with the charm sets left out. Filing has no
+// default_charms to resolve them with, so the wait compares those.
+func sameCommand(c types.LeaseCheck, a types.JobAttempt) bool {
+	if c.Script == "" {
+		spell, target, filtered := strings.Cut(c.Target, "::")
+		if !filtered {
+			spell, target = "", spell
+		}
+		c.Target, _ = splitCharms(target)
+		if filtered {
+			c.Target = fmt.Sprintf("%s::%s", spell, c.Target)
+		}
+		a.Target, _ = splitCharms(a.Target)
+	}
+	return ranCheck(c, a, nil)
 }
 
 // alreadyEndedError is [Exit]'s failure for a row that ended before: a second end would
@@ -763,6 +808,9 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 	}
 	var primary types.JobAttempt
 	if ref := result.Validation.OutputRef; ref != "" {
+		if result.Validation.Owed != "" {
+			return types.JobAttempt{}, nil, fmt.Errorf("job: the result files its check as owed and cites output ref %q; an owed run has no ref, so name one or the other", ref)
+		}
 		attempt, err := resolve(ctx, ref)
 		if err != nil {
 			return types.JobAttempt{}, nil, err
@@ -775,13 +823,21 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 	seen := map[string]bool{}
 	gates := make([]types.JobGateAttempt, 0, len(result.GateEvidence))
 	for _, evidence := range result.GateEvidence {
-		if evidence.GateID == "" || evidence.OutputRef == "" {
-			return types.JobAttempt{}, nil, errors.New("job: each gate_evidence entry requires gate_id and output_ref")
+		switch {
+		case evidence.GateID == "":
+			return types.JobAttempt{}, nil, errors.New("job: each gate_evidence entry requires gate_id")
+		case evidence.Owed != "" && evidence.OutputRef != "":
+			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q is filed as owed and cites output ref %q; an owed run has no ref, so name one or the other", evidence.GateID, evidence.OutputRef)
+		case evidence.Owed == "" && evidence.OutputRef == "":
+			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q names neither output_ref nor owed, so it files nothing", evidence.GateID)
 		}
 		if seen[evidence.GateID] {
 			return types.JobAttempt{}, nil, fmt.Errorf("job: the result carries duplicate evidence for goal %q", evidence.GateID)
 		}
 		seen[evidence.GateID] = true
+		if evidence.Owed != "" {
+			continue
+		}
 		attempt, err := resolve(ctx, evidence.OutputRef)
 		if err != nil {
 			return types.JobAttempt{}, nil, err
