@@ -14,8 +14,8 @@ func (s *layerSuite) mixedSpec() Spec {
 	root := s.T().TempDir()
 	app := write(s.T(), filepath.Join(root, "app"), "binary", 0o755)
 	return Spec{Scratch: true, Platform: amd64,
-		Files: []File{{Source: app, Path: "/usr/local/bin/app", Mode: ModeExecutable}},
-		Trees: []Tree{{Source: s.hostTree(), Path: "/", Exclude: []string{"bin"}, ModePolicy: ModePolicyFixed, Symlinks: SymlinkPolicyRefuse, UID: 7, GID: 8}},
+		Files:       []File{{Source: app, Path: "/usr/local/bin/app", Mode: ModeExecutable}},
+		Trees:       []Tree{{Source: s.hostTree(), Path: "/", Exclude: []string{"bin"}, ModePolicy: ModePolicyFixed, Symlinks: SymlinkPolicyRefuse, UID: 7, GID: 8}},
 		Symlinks:    []Symlink{{Path: "/bin/app", Target: "../usr/local/bin/app"}},
 		Directories: []Directory{{Path: "/tmp", Mode: ModeSticky}},
 	}
