@@ -163,7 +163,7 @@ func Execs(ctx context.Context, src string) (execs []Op, diag *Diag) {
 	return execs, nil
 }
 
-// diagnostics type-checks src as a magusfile and returns every diagnostic to
+// Diagnostics type-checks src as a magusfile and returns every diagnostic to
 // surface in the editor: a single parse error, or otherwise every type error the
 // checker found, sorted by position. It reuses LoadMagusfile's browser-safe host
 // setup so a magusfile's spell and module imports resolve and don't read as
@@ -171,7 +171,7 @@ func Execs(ctx context.Context, src string) (execs []Op, diag *Diag) {
 // top-level code (so their globals and types reach the checker); a fresh session is
 // created per call, so that execution never leaks across keystrokes. This is the
 // live-linting counterpart to LoadMagusfile's structural load.
-func diagnostics(ctx context.Context, src string) []Diag {
+func Diagnostics(ctx context.Context, src string) []Diag {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	if err := installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps()); err != nil {
