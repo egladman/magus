@@ -68,8 +68,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         + [listed("claudeCode", id: "claude-code"), row("claudeCodeMod", id: "claude-code-mod", hooks: "[<HookCommand>]"),
            listed("codex", id: "codex"), listed("cursor", id: "cursor"), listed("opencode", id: "opencode")].join(", ")
         + "])); \}";
+    // magus\cmd trims its stdout, and a Markdown file ends on a newline.
     final matrix = magus\cmd("buzz", args: ["-e", script],
-        opts: magus\CommandOptions{dir = "../../../..", quiet = true}).stdout;
+        opts: magus\CommandOptions{dir = "../../../..", quiet = true}).stdout + "\n";
 
     if (ctx.hasCharm("rw")) {
         fs\writeFile("guard-templates.md", content: rendered);

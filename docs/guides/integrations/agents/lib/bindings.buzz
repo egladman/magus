@@ -4,6 +4,7 @@
 //
 // Pure on purpose: the magusfile imports the spells and hands their lists in.
 import "magus/spell";
+import "std";
 
 // Harness is one harness's two lists, as its spell returns them.
 export object Harness {
@@ -70,17 +71,42 @@ export fun table(harnesses: [Harness]) > str !> str {
     return lines.join("\n");
 }
 
+// linked wraps each https URL in reason in angle brackets, Markdown's form of
+// a URL as a link. Trailing punctuation belongs to the sentence.
+fun linked(reason: str) > str {
+    final words = mut [<str>];
+    foreach (word in reason.split(" ")) {
+        final found = word.indexOf("https://");
+        if (found -> start) {
+            var end = word.len();
+            while (end > start and [")", ";", ",", ".", ":"].indexOf(word.sub(end - 1, len: 1)) != null) {
+                end = end - 1;
+            }
+            words.append(word.sub(0, len: start) + "<" + word.sub(start, len: end - start) + ">" + word.sub(end, len: word.len() - end));
+        } else {
+            words.append(word);
+        }
+    }
+    return words.join(" ");
+}
+
 // reasons lists each unsupported point with why, harness by harness.
 export fun reasons(harnesses: [Harness]) > str {
     final lines = mut [<str>];
     foreach (h in harnesses) {
         foreach (point in POINTS) {
             foreach (row in h.unsupported) {
-                if (row.point == point) { lines.append("- {h.id}, `{point.value}`: {row.reason}"); }
+                if (row.point == point) { lines.append("- {h.id}, `{point.value}`: {linked(row.reason)}"); }
             }
         }
     }
     return lines.join("\n");
+}
+
+test "a URL in a reason is linked; its sentence punctuation stays outside" {
+    std\assert(linked("settings only (https://a.example/b); more") == "settings only (<https://a.example/b>); more", message: "parenthesized");
+    std\assert(linked("not verified: https://a.example/b.d.ts 2026-10-29: x") == "not verified: <https://a.example/b.d.ts> 2026-10-29: x", message: "bare");
+    std\assert(linked("no url") == "no url", message: "nothing to link");
 }
 
 // page is the whole README.md.
