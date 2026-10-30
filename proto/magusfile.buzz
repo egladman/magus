@@ -93,6 +93,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
         throw "ci: buf-breaking: {verdict.failure}";
     }
     if (verdict.permitted > 0) {
+        ctx.permitted(verdict.permitted);
         magus\log.warn("proto ci: permitted {verdict.permitted} findings ({shown})");
     }
 }

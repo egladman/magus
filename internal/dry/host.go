@@ -740,6 +740,7 @@ func buildContext(tr *Tracer) vm.Value {
 	c.MapSet("readsFiles", function("ctx.readsFiles", retNull))
 	c.MapSet("writesFiles", function("ctx.writesFiles", retNull))
 	c.MapSet("observes", function("ctx.observes", retNull))
+	c.MapSet("permitted", function("ctx.permitted", retNull))
 	// Inert, like the file declarations above: a dry run holds nothing, and driving
 	// the resource fiber would run its acquire and release halves for real, which is
 	// exactly what a dry run promises not to do.

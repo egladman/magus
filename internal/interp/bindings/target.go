@@ -859,7 +859,7 @@ const ctxMarker = "__magus_context"
 // MEMBERS, not decls: `uses` runs a body rather than declaring anything, and it is
 // refused here for the same reason the declarations are. An Exec carries execution
 // overrides, so a region scoped to one would hold a resource for a run it does not own.
-var execRefusedMembers = []string{"needs", "glob", "readsFiles", "writesFiles", "envInputs", "observes", "hasCharm", "narrowed", "uses"}
+var execRefusedMembers = []string{"needs", "glob", "readsFiles", "writesFiles", "envInputs", "observes", "hasCharm", "narrowed", "uses", "permitted"}
 
 // removedFootprintMembers maps each removed ctx member to the call that replaces it. They
 // stay bound so a call raises that name rather than "null is not callable".
@@ -1007,6 +1007,16 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 	// like hasCharm, since this value is shared by every target and holds no run state.
 	c.MapSet("narrowed", directVal(obs, "ctx.narrowed", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.BoolValue(project.Narrowed(ctx)), nil
+	}))
+	// A count, not a flag: the run result and summary report how many.
+	c.MapSet("permitted", directVal(obs, "ctx.permitted", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsInt() || args[0].AsInt() < 1 {
+			return vm.Null, fmt.Errorf("ctx.permitted: requires a count of at least 1")
+		}
+		if !journal.RecordPermits(ctx, int(args[0].AsInt())) {
+			return vm.Null, fmt.Errorf("ctx.permitted: no target is running to record it on")
+		}
+		return vm.Null, nil
 	}))
 	return c
 }

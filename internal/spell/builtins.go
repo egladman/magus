@@ -274,6 +274,9 @@ export object Context {
     extern fun uses(resource: any, body: fun () > void) > void;
     extern fun hasCharm(name: str) > bool;
     extern fun narrowed() > bool;
+    // A deviation ledger let this target pass with count findings. The run
+    // result reads permitted rather than pass, and it is never cached.
+    extern fun permitted(count: int) > void;
     extern fun withEnv(env: {str: str}) > Exec;
     extern fun withCwd(dir: str) > Exec;
 }
