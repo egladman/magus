@@ -582,6 +582,24 @@ func (s *JudgeBudgetSuite) TestJudgeLapsedKeepsARuleDenyPastALapsedPhase() {
 	s.False(lapsed)
 }
 
+// A rule free to word its deny like a lapse must not read as one.
+func (s *JudgeBudgetSuite) TestJudgeLapsedIgnoresARuleQuotingTheLapseWords() {
+	ctx, root, _ := writeFixture(s.T())
+	quotes := func(context.Context, types.WriteRequest, hint.Gate) (types.GuardVerdict, error) {
+		return types.GuardVerdict{Decision: types.GuardDeny, Reason: "magus did not finish grading this"}, nil
+	}
+	v, lapsed := JudgeLapsed(ctx, Dependencies{WriteRule: quotes}, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, DryRun: true})
+	s.Equal(decisionDeny, v.Decision)
+	s.False(lapsed)
+}
+
+func (s *JudgeBudgetSuite) TestJudgeLapsedReportsNoLapseOnAPass() {
+	ctx, _, _ := writeFixture(s.T())
+	v, lapsed := JudgeLapsed(ctx, Dependencies{}, Request{Input: "ls", DryRun: true})
+	s.NotEqual(decisionDeny, v.Decision)
+	s.False(lapsed)
+}
+
 func (s *JudgeBudgetSuite) TestTrailNamesBuiltinRulesAndNotices() {
 	ctx, cacheDir := spawnFixture(s.T())
 	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "s1"})

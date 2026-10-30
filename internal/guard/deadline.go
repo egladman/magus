@@ -185,7 +185,7 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (types.GuardJudgment, bool) {
 	log := &phaseLog{start: time.Now()}
 	v := Judge(context.WithValue(ctx, phaseLogKey{}, log), deps, req)
-	return v, v.Decision == decisionDeny && strings.Contains(v.Reason, lapseGradingLead)
+	return v, v.Decision == decisionDeny && log.lapseDenied()
 }
 
 // JudgeWithin runs judge, a hook judgment for req, and answers by the hook's deadline on
@@ -538,6 +538,8 @@ type phaseLog struct {
 	spanSince time.Time
 	// deps is what the judgment loaded, nil until it has.
 	deps *Dependencies
+	// denied is whether denyLapse refused the call for the clock.
+	denied bool
 }
 
 type phaseLogKey struct{}
@@ -639,6 +641,26 @@ func (l *phaseLog) lapsedPhase(name string) (trail.Phase, bool) {
 	return l.done[i], true
 }
 
+// markLapseDenied records that the judgment's deny describes the clock.
+func (l *phaseLog) markLapseDenied() {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.denied = true
+}
+
+// lapseDenied reports what markLapseDenied recorded.
+func (l *phaseLog) lapseDenied() bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.denied
+}
+
 // settle records the dependencies the judgment loaded, for a lapse to grade the call by.
 func (l *phaseLog) settle(deps Dependencies) {
 	if l == nil {
@@ -730,17 +752,13 @@ func roundBudget(d time.Duration) time.Duration {
 	return d.Round(time.Millisecond)
 }
 
-// lapseGradingLead opens the only deny a dry run reaches for lack of time.
-// JudgeLapsed reads it to tell that deny from a rule's.
-const lapseGradingLead = "magus did not finish grading"
-
 // lapseReason is the deny for a call that changes state when a phase of its judgment ran out
 // of time. dryRun words it for a person grading the call ahead of time: not graded.
 func lapseReason(call judgedCall, l ruleLapse, dryRun bool) string {
 	if dryRun {
-		return fmt.Sprintf("%s %s: %s, so it is not graded. "+
+		return fmt.Sprintf("magus did not finish grading %s: %s, so it is not graded. "+
 			"A dry run is bounded at %s and a hook at %s, so a hook would deny the call as well.",
-			lapseGradingLead, call.what, l.what(), dryRunBudget, hookBudget)
+			call.what, l.what(), dryRunBudget, hookBudget)
 	}
 	return fmt.Sprintf("magus ran out of time judging %s: %s. "+
 		"A call that changes state is denied rather than let through unjudged; retry it. "+

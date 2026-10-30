@@ -88,6 +88,8 @@ type rulesAnswer struct {
 	rule denyRuleName
 	// next is the command denyUnloaded's deny serves, nil for none.
 	next []types.NextStep
+	// log is the judgment's phase log, where denyLapse records its deny.
+	log *phaseLog
 }
 
 // resolveShares is the approved resolve's weight against a rule call's one. Resolving runs a
@@ -112,8 +114,8 @@ const resolveShares = 2
 // nothing and is reported: the built-ins still apply and the agent is not bricked by a typo
 // in the magusfile. No side loading at all is reported as unloaded, for denyUnloaded.
 func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies, resolveApproved func(context.Context) (ruleCall, error), worktree ruleCall) rulesAnswer {
-	out := rulesAnswer{loadFailure: deps.LoadFailure, dryRun: isDryRun(ctx)}
 	log := judgmentPhases(ctx)
+	out := rulesAnswer{loadFailure: deps.LoadFailure, dryRun: isDryRun(ctx), log: log}
 	lapsed := func(l ruleLapse) {
 		out.failures = append(out.failures, trail.RuleFailure{Side: l.side, Error: l.failure()})
 		if out.lapse == nil {
@@ -317,6 +319,7 @@ func denyLapse(asked *rulesAnswer, call judgedCall) bool {
 	}
 	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: lapseReason(call, *asked.lapse, asked.dryRun)}
 	asked.by = asked.lapse.side
+	asked.log.markLapseDenied()
 	return true
 }
 
