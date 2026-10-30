@@ -363,7 +363,8 @@ func stripOutsideWrites(command string, s *syntax.Stmt, outside func(*syntax.Wor
 // says why and what to check, the rest say only that the guard is still not judging. The
 // trail row records log's finished phases, the one underway, and the bound.
 //
-// A subagent's write or command in a live job's checkout is never degraded.
+// A bound worker's command, and a subagent's write or command reaching a live
+// job's checkout, are never degraded.
 func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) types.GuardJudgment {
 	elapsed := time.Since(log.start)
 	pass := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
@@ -422,7 +423,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, builtins.Deny, builtins.RuleName()
 	case writesOutside:
 		verdict = applyRuleFailureNote(verdict, unjudgedOutsideNote(), advisoryUnfinished)
-	case call.changes && (stageAtLapses(inARow) == lapseDenies || pushes || lapsedInJobCheckout(ctx, base, who, isPath, input, callDir)):
+	case call.changes && (stageAtLapses(inARow) == lapseDenies || pushes || lapsedInJobCheckout(ctx, base, who, lease, isPath, input, callDir, effectiveDialect(base.ShellDialect))):
 		// A push is never degraded: the gate it needs proven is in the run log, which only
 		// a judgment that finishes reads.
 		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}}
@@ -443,19 +444,55 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	return verdict
 }
 
-// lapsedInJobCheckout reports a subagent's file write, or a command run from
-// callDir, landing in a checkout a live job's fork made. A lapse never
-// degrades it: a lease boundary exists to grade exactly that call.
-func lapsedInJobCheckout(ctx context.Context, base Dependencies, who hookAttribution, isPath bool, input, callDir string) bool {
+// lapsedInJobCheckout reports a call a lease boundary exists to grade: a bound
+// worker's command, or a subagent reaching a live job's checkout. A subagent's
+// host cwd stays the session's, so the line's own cds and paths decide.
+func lapsedInJobCheckout(ctx context.Context, base Dependencies, who hookAttribution, lease string, isPath bool, input, callDir string, d Dialect) bool {
 	if who.Agent == "" {
 		return false
 	}
-	where := callDir
-	if isPath {
-		where = input
+	rows, err := leaseRows(ctx, hookLocation(ctx, base))
+	if err != nil {
+		return false
 	}
-	row, ok := jobCheckoutHolding(ctx, hookLocation(ctx, base), where)
-	return ok && row.State.Live()
+	live := slices.DeleteFunc(slices.Clone(rows), func(row types.Job) bool { return !row.State.Live() })
+	if !isPath && slices.ContainsFunc(live, func(row types.Job) bool { return row.ID == lease }) {
+		return true
+	}
+	wheres := []string{input}
+	if !isPath {
+		wheres = lineReach(input, d, callDir)
+	}
+	return slices.ContainsFunc(live, func(row types.Job) bool {
+		root := row.CheckoutRoot
+		if row.Worktree.Standing() {
+			root = row.Worktree.Root
+		}
+		return root != "" && slices.ContainsFunc(wheres, func(where string) bool {
+			_, in := workspaceRelative(root, where)
+			return in
+		})
+	})
+}
+
+// lineReach is where a line acts: start, each directory its cds reach, and each
+// path it may write.
+func lineReach(line string, d Dialect, start string) []string {
+	out := []string{start}
+	f, err := parseFile(line, d)
+	if err != nil {
+		return out
+	}
+	home := userHome()
+	for _, dir := range stmtDirs(f, line, start, home) {
+		out = append(out, dir)
+	}
+	for _, w := range placedWriteCandidates(line, d, start, home) {
+		if p, ok := w.place(home); ok {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // stallSite words where a lapsed judgment stopped: in the phase underway, else after the

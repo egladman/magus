@@ -198,6 +198,64 @@ func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesACommandInALeasedCheckou
 	}
 }
 
+// A subagent's host cwd stays the session's checkout; its line moves it.
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesALineThatCdsIntoALeasedCheckout() {
+	line := fmt.Sprintf("cd %s && make build", s.own)
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedCommand("a1b2c3", s.session, line)
+		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAnAbsoluteWriteIntoALeasedCheckout() {
+	line := fmt.Sprintf("touch %s", filepath.Join(s.own, "std", "module.go"))
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedCommand("a1b2c3", s.session, line)
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesABoundWorkerFromTheSessionCheckout() {
+	env := map[string]any{"session_id": "s1", "cwd": s.session, "hook_event_name": "PreToolUse",
+		"agent_id": "a1b2c3", "agent_type": "general-purpose",
+		"tool_name": "Bash", "tool_input": map[string]any{"command": "make build"}}
+	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1", Lease: "w"}
+	for i := range lapsesBeforeDegrade + 2 {
+		v := lapseNow(s.ctx, s.T(), Dependencies{}, req, func(context.Context) {})
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+// A checkout `job exec` took is the job's as much as one its fork made.
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAWriteInAnAdoptedCheckout() {
+	adopted := s.T().TempDir()
+	row := types.Job{ID: "a", WritePaths: []string{"std/*.go"}, State: types.StateRunning, Registered: 1, CheckoutRoot: adopted}
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedWrite("a1b2c3", filepath.Join(adopted, "std", "module.go"))
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesACommandInAnAdoptedCheckout() {
+	adopted := s.T().TempDir()
+	row := types.Job{ID: "a", WritePaths: []string{"std/*.go"}, State: types.StateRunning, Registered: 1, CheckoutRoot: adopted}
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedCommand("a1b2c3", adopted, "make build")
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapsePassesACheckoutWhoseJobEnded() {
+	row := types.Job{ID: "a", WritePaths: []string{"std/*.go"}, State: types.StatePass, Registered: 1, CheckoutRoot: s.own}
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+	for range lapsesBeforeDegrade {
+		s.Equal(decisionDeny, s.lapsedCommand("a1b2c3", s.own, "make build").Decision)
+	}
+	s.Equal(decisionAdvise, s.lapsedCommand("a1b2c3", s.own, "make build").Decision)
+}
+
 func (s *LapseDegradeSuite) TestDegradedLapsePassesACommandOutsideEveryCheckout() {
 	scratch := s.T().TempDir()
 	for range lapsesBeforeDegrade {
