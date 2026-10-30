@@ -1,20 +1,3 @@
-// Package auth holds the server's bearer credentials and decides which credential a
-// presented token is. It authenticates; it never authorizes a route. Whether a credential may
-// use a route is its [types.Grant] against the route's [types.Need], decided in one place
-// (internal/httpx's bearer guard). It does decide what may be minted: a token never holds more
-// than its minter's grant.
-//
-// Four kinds, told apart by the token's prefix (see format.go):
-//
-//	mgo_ operator  one retrievable file per user, every route on loopback, never expires
-//	mgs_ stored    stored hashed in tokens.d, a grant within its minter's, always expires
-//	mgl_ share     server memory only, console=read, the share link's LAN listener only
-//	mgx_ exchange  stored hashed in tokens.d for a minute, traded once for an mgs_ token
-//
-// The files are protected by their mode and by the guard, which keeps agent sessions away
-// from them. Neither is a boundary against a process running as the same user: that process
-// can read the files. What magus enforces is every layer it can prove, see
-// docs/concepts/tokens.md.
 package auth
 
 import (

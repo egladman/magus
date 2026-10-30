@@ -61,9 +61,8 @@ test("an outage keeps being retried", async () => {
   );
 });
 
-// The shell trades the operator token for a console-scoped one un-awaited, and this poll can run
-// before that lands. Latching on the 401 would blank the rail for the life of the page even once the
-// credential works - a silent permanent failure with nothing to report it.
+// A link's code is traded for a token un-awaited, so this poll can run first.
+// Latching on the 401 would blank the rail with nothing to report it.
 test("an auth failure keeps being retried", async () => {
   let calls = 0;
   const unauthorized = async (): Promise<never> => {
