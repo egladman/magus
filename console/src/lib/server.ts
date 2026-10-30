@@ -467,10 +467,10 @@ export function consumeLiveToken(params: HashParams): void {
     (remembered ? sessionStorage : localStorage).removeItem(TOKEN_KEY);
   } catch (e) {
     reportFailure(
-      "Sign-in",
+      "Console token",
       "This browser refused to store the token from your link (" +
         errMessage(e) +
-        "), so the console cannot sign in. Allow site data for this address and open the link again.",
+        "), so the console cannot keep it. Allow site data for this address and open the link again.",
       "token:storage",
     );
   }
@@ -844,10 +844,10 @@ export function signalAuthLost(host: string): void {
   if (typeof document !== "undefined")
     document.dispatchEvent(new CustomEvent(AUTH_LOST_EVENT, { detail: { host } }));
   reportFailure(
-    "Sign-in",
+    "Console token",
     "The server at " +
       host +
-      " refused this console's token: it expired or was revoked. Sign in again.",
+      " refused this console's token: it expired or was revoked. Open it again with a new token.",
     "auth:lost:" + host,
   );
 }

@@ -222,7 +222,7 @@ describe("the shell sign-in gate", () => {
     assert.equal(stub.activations, 0, "an unauthenticated app must not activate");
     const page = pane().querySelector<HTMLElement>("[data-connect-page]");
     assert.ok(page);
-    assert.match(page.textContent ?? "", /Sign in to this server/);
+    assert.match(page.textContent ?? "", /This server needs a console token/);
     const cmd = page.querySelector("[data-sign-in-command]")?.textContent ?? "";
     assert.match(
       cmd,
@@ -254,7 +254,7 @@ describe("the shell sign-in gate", () => {
     assert.equal(stub.deactivations, 1, "the app is torn down");
     assert.equal(sessionStorage.getItem(TOKEN_KEY), null, "the refused token is forgotten");
     const text = pane().querySelector("[data-connect-page]")?.textContent ?? "";
-    assert.match(text, /Sign in to this server/);
+    assert.match(text, /This server needs a console token/);
     assert.match(text, /expired or was revoked/);
   });
 });

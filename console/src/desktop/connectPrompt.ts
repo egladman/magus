@@ -125,9 +125,7 @@ function startWay(hint: string, controls: HTMLElement[]): HTMLElement {
   way.dataset.emptyWay = "";
   const label = h("span", undefined, "Start a server");
   label.dataset.emptyWayLabel = "";
-  const command = h("pre");
-  command.dataset.emptyCmd = "";
-  command.append(h("code", undefined, "magus server start"));
+  const command = commandBox("magus server start");
   const note = h("span", undefined, hint);
   note.dataset.emptyHint = "";
   const row = h("div");
@@ -135,6 +133,13 @@ function startWay(hint: string, controls: HTMLElement[]): HTMLElement {
   row.append(...controls);
   way.append(label, command, note, row);
   return way;
+}
+
+// PF's Clipboard copy text breaks anywhere, so a long command wraps.
+function commandBox(command: string): HTMLElement {
+  const box = h("div", "pf-v6-c-clipboard-copy pf-m-inline pf-m-block pf-m-readonly");
+  box.append(h("code", "pf-v6-c-clipboard-copy__text pf-m-code", command));
+  return box;
 }
 
 function demoWay(): HTMLElement {
@@ -231,19 +236,17 @@ function gatePage(id: string): { page: HTMLElement; slots: EmptyStateSlots } {
 // that fixes it. notice says why a signed-in page came back here (a refused token).
 export function renderSignIn(slots: EmptyStateSlots, app: string, notice?: string): void {
   delete slots.actions.dataset.connectPrompt;
-  slots.title.textContent = "Sign in to this server";
+  slots.title.textContent = "This server needs a console token";
   slots.message.textContent =
     (notice ? notice + " " : "") +
-    "Every console route needs a token, and this page has none, so it cannot show anything true yet. Run this; it opens this page signed in. The token is read by your shell, never shown here.";
+    "Every console route needs a token, and this page has none, so it cannot show anything true yet. Run this; it opens this page with a token. The token is read by your shell, never shown here.";
   const way = h("div");
   way.dataset.emptyWay = "";
-  const label = h("span", undefined, "Open it signed in");
+  const label = h("span", undefined, "Open it with a token");
   label.dataset.emptyWayLabel = "";
   const cmd = signInCommand(appURL(app));
-  const command = h("pre");
-  command.dataset.emptyCmd = "";
-  command.dataset.signInCommand = "";
-  command.append(h("code", undefined, cmd));
+  const command = commandBox(cmd);
+  command.querySelector<HTMLElement>("code")!.dataset.signInCommand = "";
   const row = h("div");
   row.dataset.emptyWayActions = "";
   const copy = wayButton("pf-m-primary", "Copy command", () => {
@@ -253,7 +256,7 @@ export function renderSignIn(slots: EmptyStateSlots, app: string, notice?: strin
       },
       (e: unknown) =>
         reportFailure(
-          "Sign-in",
+          "Console token",
           "Could not copy the command (" + String(e) + "). Select it and copy it by hand.",
           "signin:copy",
         ),

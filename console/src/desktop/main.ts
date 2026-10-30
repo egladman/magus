@@ -558,8 +558,8 @@ export function startConsole(
       void exchangeOperatorToken(serverHost).then((outcome) => {
         if (outcome !== "failed") return;
         reportFailure(
-          "Sign-in",
-          "Could not trade the operator token for a console token, so this browser still holds the operator token, which also reaches /mcp and token management. Reload to retry, or sign in with a console token: magus config console token create",
+          "Console token",
+          "Could not trade the operator token for a console token, so this browser still holds the operator token, which also reaches /mcp and token management. Reload to retry, or open it with a console token: magus config console token create",
           "token-exchange:failed",
         );
       });
@@ -2034,8 +2034,8 @@ async function signInThenStart(
   const code = consumeLinkCode();
   if (code && (await redeemLinkCode(location.host, code)) === "failed")
     reportFailure(
-      "Sign-in",
-      "This sign-in link was already used, has expired (a link signs in once, within a minute), or the server could not be reached. Open a fresh one: magus graph export --open --follow, or the open line magus prints.",
+      "Console token",
+      "This link was already used, has expired (a link works once, within a minute), or the server could not be reached. Open a fresh one: magus graph export --open --follow, or the open line magus prints.",
       "link-code:failed",
     );
   startConsole(tabBarHost, outlet, statusHost);

@@ -240,3 +240,14 @@ describe("Activity", () => {
     assert.ok(!(host.textContent ?? "").includes(HOST + " "), "the older address never painted");
   });
 });
+
+describe("the command a way shows", () => {
+  test("is PF Clipboard copy text, never a bare pre that stretches the empty state", () => {
+    const slots = newSlots();
+    renderConnectPrompt(slots, { connection: "none" });
+    const code = slots.actions.querySelector("code");
+    assert.ok(code?.classList.contains("pf-v6-c-clipboard-copy__text"));
+    assert.ok(code?.parentElement?.classList.contains("pf-v6-c-clipboard-copy"));
+    assert.equal(slots.actions.querySelector("pre"), null);
+  });
+});
