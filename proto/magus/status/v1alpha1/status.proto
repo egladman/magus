@@ -147,6 +147,7 @@ message TargetRun {
     STATE_PASSED = 3; // finished successfully
     STATE_FAILED = 4; // finished with an error
     STATE_CACHED = 5; // satisfied from cache (no work run)
+    STATE_PERMITTED = 6; // passed only because a deviation ledger permitted its findings
   }
   string project = 1; // repo-relative project path
   string target = 2; // target name (as the CLI spells it)

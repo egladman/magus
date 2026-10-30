@@ -153,6 +153,10 @@ func TestEncodeStatusEventRoundTrip(t *testing.T) {
 	assert.Equal(t, statusv1.Health_HEALTH_HEALTHY, got.GetHealth())
 }
 
+func TestTargetStateToProtoKeepsAPermitDistinct(t *testing.T) {
+	assert.Equal(t, statusv1.TargetRun_STATE_PERMITTED, targetStateToProto(types.TargetRunPermitted))
+}
+
 // TestStatusProtoMapsRuns maps the server's live runs and their per-target execution
 // state onto the wire message's runs, the same status frame that carries the pool.
 func TestStatusProtoMapsRuns(t *testing.T) {

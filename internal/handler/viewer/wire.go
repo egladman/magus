@@ -147,6 +147,8 @@ func statusToProto(s string) viewerv1.Status {
 		return viewerv1.Status_STATUS_FAIL
 	case journal.StatusCached:
 		return viewerv1.Status_STATUS_CACHED
+	case journal.StatusPermitted:
+		return viewerv1.Status_STATUS_PERMITTED
 	default:
 		return viewerv1.Status_STATUS_UNSPECIFIED
 	}

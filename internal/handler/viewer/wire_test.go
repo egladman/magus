@@ -123,6 +123,8 @@ func TestEnumMappingsExhaustive(t *testing.T) {
 		journal.StatusPass:   viewerv1.Status_STATUS_PASS,
 		journal.StatusFail:   viewerv1.Status_STATUS_FAIL,
 		journal.StatusCached: viewerv1.Status_STATUS_CACHED,
+
+		journal.StatusPermitted: viewerv1.Status_STATUS_PERMITTED,
 		"bogus":              viewerv1.Status_STATUS_UNSPECIFIED,
 	}
 	for in, want := range statuses {
