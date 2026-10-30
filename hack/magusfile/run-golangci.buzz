@@ -115,11 +115,12 @@ export fun issuesIn(report: str, root: str, files: [str]) > [str] !> any {
     return kept;
 }
 
-// reportArgs is the argument list issuesAt runs. The default text writer also
-// prints to stdout, so it goes to stderr and stdout stays the JSON report.
+// reportArgs is the argument list issuesAt runs. The default text writer and
+// the stats also print to stdout, so the writer goes to stderr and the stats
+// go off: stdout stays the JSON report.
 export fun reportArgs(root: str, dir: str, packages: [str]) > [str] {
     return ["run", "--config", root + "/.golangci.yml", "--output.json.path", "stdout",
-        "--output.text.path", "stderr", "--path-mode", "abs", "--issues-exit-code", "0"]
+        "--output.text.path", "stderr", "--show-stats=false", "--path-mode", "abs", "--issues-exit-code", "0"]
         + (if (dir != ".") libArgs(dir) else [<str>]) + packages;
 }
 
@@ -161,6 +162,7 @@ test "the text report goes to stderr so stdout stays JSON" {
     assert\equal(args[(at ?? 0) + 1], want: "stderr", message: "the text writer prints to stderr");
     final json = args.indexOf("--output.json.path");
     assert\equal(args[(json ?? 0) + 1], want: "stdout", message: "the JSON report owns stdout");
+    assert\equal(args.indexOf("--show-stats=false") != null, want: true, message: "the stats summary stays off stdout");
 }
 
 test "a report followed by the text writer's line is refused as invalid JSON" {
