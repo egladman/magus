@@ -42,6 +42,8 @@ import "magus/spell/markdown";
 import "magus/spell/bash";
 import "magus/spell/buzz";
 
+import "image";
+import "./hack/magusfile/image" as images;
 import "./hack/magusfile/badges" as badges;
 import "./hack/magusfile/coverage" as cov;
 import "lcov";
@@ -147,8 +149,6 @@ magus\project({
         "dprint-base.json",     // dprint.json extends it; the markdown spell declares only dprint.json
         "mise.toml",
         "magus.yaml",
-        "Dockerfile",
-        "Dockerfile.static",
         "hack/docs/screenshot.mjs",
         ".*/hooks.json",
         ".codex/rules/*.rules",
@@ -422,12 +422,6 @@ final REGISTRIES = [GHCR];
 
 fun image_tag() > str !> any { return "magus:" + commit(); }
 
-fun image_stamps() > [str] !> any {
-    return ["--build-arg", "VERSION=" + version(),
-        "--build-arg", "COMMIT=" + commit(),
-        "--build-arg", "DATE=" + build_date()];
-}
-
 // unpublished narrows registries to the ones a release image is pushed to: all of them
 // under the mutable charm, otherwise those not yet carrying tag. A release's version tag is
 // write-once, and the floating tags beside it (latest) move only when it is pushed.
@@ -443,30 +437,30 @@ fun unpublished(ctx: magus\Context, registries: [Registry], tag: str) > [Registr
     return targets;
 }
 
-// --sbom and --provenance make the result an index even for one platform.
-// cosign runs per registry: a signature is stored beside the image in each repository.
-fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registries: [Registry], tags: [str], meta: str) > [str] !> any {
-    if (registries.len() == 0) { return []; }
-    var args = mut ["-f", dockerfile];
-    foreach (a in image_stamps()) { args.append(a); }
-    foreach (reg in registries) {
-        foreach (t in tags) { args.append("-t"); args.append(reg.repository + ":" + t); }
+// The index is assembled once and pushed to each registry, so each
+// serves one digest. cosign signs it beside the image in each.
+fun publish_variant(ctx: magus\Context, variant: images\ImageVariant, build: images\Build, registries: [Registry], tags: [str]) > images\Published {
+    if (registries.len() == 0) { return images\Published{}; }
+    final built = images\assemble(images\plan(variant, ldflags: build.ldflags),
+        compile: fun (env: {str: str}, args: [str]) > void !> any => go["go-build"](ctx.withEnv(env), {"args": args}));
+    if (built.error != "") { return images\Published{ error = built.error }; }
+    final attested = images\attest(built, build: build);
+    if (attested.error != "") { return images\Published{ error = attested.error }; }
+    final refs = mut [<str>];
+    try {
+        foreach (reg in registries) {
+            final pushed = image\push(attested.index, repository: reg.repository, tags: tags,
+                auth: image\RegistryAuth{
+                    username = magus\secret.read(reg.user_ref),
+                    password = image\Secret{ value = magus\secret.read(reg.token_ref) },
+                });
+            cosign["cosign-sign"](ctx, {"args": [reg.repository + "@" + pushed.digest.string()]});
+            foreach (t in tags) { refs.append(reg.repository + ":" + t); }
+        }
+    } catch (e) {
+        return images\Published{ refs = refs, error = "image-build: publish {variant.name}: {e}" };
     }
-    args.append("--platform"); args.append(platforms);
-    args.append("--sbom=true");
-    args.append("--provenance=mode=max");
-    args.append("--metadata-file"); args.append(meta);
-    args.append("--push");
-    args.append(".");
-    docker["docker-buildx"](ctx.withCwd("."), {"args": args});
-
-    final digest = serialize\jsonDecode(fs\readFile(meta)).q("containerimage.digest").stringValue();
-    var pushed = mut [<str>];
-    foreach (reg in registries) {
-        cosign["cosign-sign"](ctx, {"args": [reg.repository + "@" + digest]});
-        foreach (t in tags) { pushed.append(reg.repository + ":" + t); }
-    }
-    return pushed;
+    return images\Published{ refs = refs };
 }
 
 fun write_image_summary(ctx: magus\Context, refs: [str]) > void !> any {
@@ -509,45 +503,69 @@ fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: st
     }
 }
 
-fun load_variant(ctx: magus\Context, dockerfile: str) > void !> any {
-    var args = mut ["-f", dockerfile];
-    foreach (a in image_stamps()) { args.append(a); }
-    args.append("-t"); args.append(image_tag());
-    args.append("--platform"); args.append(load_platform(ctx));
-    args.append("--load");
-    args.append(".");
-    docker["docker-buildx"](ctx.withCwd("."), {"args": args});
+// docker load reads an OCI layout from a tar, and names nothing it loads,
+// so the tag follows by the image ID load prints.
+fun load_variant(ctx: magus\Context, variant: images\ImageVariant, platform: str, ldflags: str, tag: str) > images\Loaded {
+    final one = images\only(variant, platform: platform);
+    if (one.error != "") { return images\Loaded{ error = one.error }; }
+    final built = images\assemble(images\plan(one.variant, ldflags: ldflags),
+        compile: fun (env: {str: str}, args: [str]) > void !> any => go["go-build"](ctx.withEnv(env), {"args": args}));
+    if (built.error != "") { return images\Loaded{ error = built.error }; }
+    final layout = built.layouts[0].path;
+    try {
+        final tarball = layout + ".tar";
+        archive\compress(layout, dest: tarball);
+        final said = proc\exec("docker", args: ["load", "--input", tarball]).stdout;
+        final id = images\loadedID(said);
+        if (id.error != "") { return images\Loaded{ error = id.error }; }
+        proc\exec("docker", args: ["tag", id.id, tag]);
+        // A binary that cannot exec on its base fails here, not later.
+        docker["docker-run"](ctx, {"args": [tag, "version"]});
+        return images\Loaded{ tag = tag, id = id.id, layout = layout };
+    } catch (e) {
+        return images\Loaded{ error = "image-build: load {variant.name}: {e}" };
+    }
 }
 
 // Builds the image locally, or with `cd` pushes and signs it; `stable` and `unstable`
 // pick the channel. A commit-channel signature carries cd.yaml's identity, so the
 // release verify command rejects it.
 export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
-    final registries = publish_registries(ctx);
-    var pushed = mut [<str>];
-    if (ctx.hasCharm("cd")) {
-        final ch = channel(ctx);
-        if (ch == "commit") {
-            foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
-                registries, [commit()], "commit-meta.json")) { pushed.append(r); }
-        } else {
-            var staticTags = [version()];
-            var dynamicTags = [version() + "-dynamic"];
-            if (ch == "stable") {
-                staticTags = [version(), "latest"];
-                dynamicTags = [version() + "-dynamic", "latest-dynamic"];
-            }
-            foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
-                unpublished(ctx, registries: registries, tag: staticTags[0]), staticTags, "static-meta.json")) { pushed.append(r); }
-            foreach (r in publish_variant(ctx, "Dockerfile", "linux/amd64",
-                unpublished(ctx, registries: registries, tag: dynamicTags[0]), dynamicTags, "dynamic-meta.json")) { pushed.append(r); }
-        }
-        write_image_summary(ctx, refs: pushed);
-    } else if (ctx.hasCharm("dynamic")) {
-        load_variant(ctx, "Dockerfile");
-    } else {
-        load_variant(ctx, "Dockerfile.static");
+    ctx.writesFiles(["dist/image/**"]);
+    final ldflags = ld_flags();
+    if (!ctx.hasCharm("cd")) {
+        var variant = images\STATIC;
+        if (ctx.hasCharm("dynamic")) { variant = images\DYNAMIC; }
+        final loaded = load_variant(ctx, variant: variant, platform: load_platform(ctx), ldflags: ldflags, tag: image_tag());
+        if (loaded.error != "") { throw loaded.error; }
+        magus\log.info("image-build: loaded {loaded.tag} ({loaded.id}) from {loaded.layout}");
+        return;
     }
+    // The SLSA builder is the workflow that ran, which only Actions names.
+    final server = os\env("GITHUB_SERVER_URL") ?? "";
+    final workflow = os\env("GITHUB_WORKFLOW_REF") ?? "";
+    if (server == "" or workflow == "") {
+        throw "image-build: the cd charm records the workflow as the provenance builder, and "
+            + "$GITHUB_SERVER_URL or $GITHUB_WORKFLOW_REF is unset; run it inside GitHub Actions";
+    }
+    final build = images\Build{ ldflags = ldflags, revision = commit(), builder = server + "/" + workflow };
+    final registries = publish_registries(ctx);
+    final pushed = mut [<str>];
+    final ch = channel(ctx);
+    if (ch == "commit") {
+        final run = publish_variant(ctx, variant: images\STATIC, build: build, registries: registries, tags: [commit()]);
+        if (run.error != "") { throw run.error; }
+        foreach (r in run.refs) { pushed.append(r); }
+    } else {
+        foreach (variant in [images\STATIC, images\DYNAMIC]) {
+            final tags = images\releaseTags(variant, version: version(), stable: ch == "stable");
+            final run = publish_variant(ctx, variant: variant, build: build,
+                registries: unpublished(ctx, registries: registries, tag: tags[0]), tags: tags);
+            if (run.error != "") { throw run.error; }
+            foreach (r in run.refs) { pushed.append(r); }
+        }
+    }
+    write_image_summary(ctx, refs: pushed);
 }
 
 fun publish_registries(ctx: magus\Context) > [Registry] !> any {
@@ -2417,7 +2435,6 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".markdownlint.json",
                     ".gitattributes", "dprint-base.json",
                     "mise.toml", "magus.yaml", "hack/lint/sdk-exports.jsonl", "hack/lint/no-throw.jsonl",
-                    "Dockerfile", "Dockerfile.static",
                     "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                     ".claude/skills/magus-skill-authoring/SKILL.md",
                     ".claude/skills/magus-local-development/SKILL.md",

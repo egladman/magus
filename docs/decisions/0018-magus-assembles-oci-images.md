@@ -2,7 +2,7 @@
 title: "ADR 0018: magus assembles OCI images from built files"
 order: 18
 description: >-
-  Whether magus should produce the container images a Dockerfile builds today. This record has magus assemble an OCI image layout from files a target already built, in Go, exposed to Buzz as the generated std module image with Specs written in Buzz. It is not Dockerfile support: no parser, no RUN, no container execution, no package installation, no runtime detection. It fixes the scope limits, the determinism rules, the timestamp policy at Unix 0, the loud-failure rules and a registry transport that extends internal/oci, and leaves SBOM and provenance and the dynamic image open.
+  Whether magus should produce the container images a Dockerfile builds today. This record has magus assemble an OCI image layout from files a target already built, in Go, exposed to Buzz as the generated std module image with Specs written in Buzz. It is not Dockerfile support: no parser, no RUN, no container execution, no package installation, no runtime detection. It fixes the scope limits, the determinism rules, the timestamp policy at Unix 0, the loud-failure rules and a registry transport that extends internal/oci. Amendments settle SBOM, provenance and the dynamic image, which is built here too.
 tags: [adr, decision, images, oci, containers, buzz, std, release, determinism]
 status: proposed
 date: 2026-10-23
@@ -46,11 +46,11 @@ layout to a registry. `Index` joins single-platform layouts into one image index
 
 | Item                                                                                         | State    |
 | -------------------------------------------------------------------------------------------- | -------- |
-| `internal/image`: layer writer, config and manifest rewrite, layout read and write, `Index`  | proposed |
-| The std `image` module, trampolines generated like `archive`                                 | proposed |
-| Our own static image Spec, a Buzz file under `hack/magusfile/` that `magusfile.buzz` imports | proposed |
-| Registry `Pull` and `Publish` over `internal/oci`, no go-containerregistry                   | proposed |
-| The release path publishes the layout instead of running `docker buildx`                     | proposed |
+| `internal/image`: layer writer, config and manifest rewrite, layout read and write, `Index`  | done     |
+| The std `image` module, trampolines generated like `archive`                                 | done     |
+| Our own static image Spec, a Buzz file under `hack/magusfile/` that `magusfile.buzz` imports | done     |
+| Registry `Pull` and `Publish` over `internal/oci`, no go-containerregistry                   | done     |
+| The release path publishes the layout instead of running `docker buildx`                     | done     |
 
 <!--diagram:oci-assembly-->
 
@@ -87,7 +87,7 @@ a user needing one keeps the container engine:
 
 - An image that needs a command run at build time: compiling inside the image,
   `ldconfig`, `update-ca-certificates`.
-- An image that installs distro packages, such as the dynamic variant's `inotify-tools`.
+- An image that installs distro packages.
 - An image that removes or replaces content of a base layer.
 - A multi-stage image whose stages execute. Our stages are magus targets.
 
@@ -168,8 +168,7 @@ files and settings while Go owns the bytes.
 ## Consequences
 
 - The release image stops depending on a Docker daemon and on a second compile of the
-  binary, once the release path moves to the layout publish step. Until then the
-  Dockerfiles stay.
+  binary: the release path publishes the layout, and both Dockerfiles are deleted.
 - The `image` module adds a documented Buzz API and generated files under
   `internal/interp/bindings/gen/`, `std/gen/std-api.lock` and the reference docs, which are
   regenerated, not hand-edited.
@@ -183,10 +182,15 @@ files and settings while Go owns the bytes.
 1. **SBOM and provenance without buildx (D4).** Decided 2026-10-26 under Amendments: the
    `image` library owns `sbom`, `provenance` and `attach`/`attest`; cosign **sign** stays
    the existing spell. See that amendment.
-2. **The dynamic image (D5).** The cgo variant with `inotify-tools` cannot be assembled
-   without a package artifact or a runtime. Options: drop it, ship a statically linked
-   watcher instead, or keep its Dockerfile until a design exists. Recommended: decide after
-   the static cutover, with download numbers. Not decided.
+2. **The dynamic image (D5).** Decided 2026-10-29 by Eli: both images stay, and the image
+   module builds them. Neither Dockerfile need held. `inotify-tools` was installed in
+   the builder stage only, so the image never shipped it, and nothing runs `inotifywait`:
+   `magus watch` reads inotify through `golang.org/x/sys/unix`. The cgo build compiled no C
+   either, since the cgo codecs need the `liblzma` and `libzstd` tags it never passed.
+   What the dynamic image gives is Buzz FFI on glibc: purego's dynamic import needs the
+   loader `distroless/cc` carries. So it is built `CGO_ENABLED=0` without `noffi`, on
+   `distroless/cc:nonroot` pinned by digest, and no package layer is needed. Both specs
+   live in `hack/magusfile/image.buzz`, and both Dockerfiles are deleted.
 3. **Assemble debugging and output verbs (D6).** Receipt/trace, size inventory, and Layout
    as the primary artifact are the stance (see the 2026-10-26 amendment). Open: whether a
    first-class `magus image inspect` / layout-to-tar / debugger-style step flags are needed

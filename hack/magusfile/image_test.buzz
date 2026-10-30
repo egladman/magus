@@ -1,0 +1,81 @@
+import "assert";
+import "fs";
+import "image";
+import "./image" as images;
+
+final AMD64 = image\Platform{ os = image\OS.linux, architecture = image\Architecture.amd64 };
+
+test "static builds without FFI, dynamic keeps it" {
+    final s = images\buildArgs(images\STATIC, ldflags: "-s", output: "out/magus");
+    assert\equal(s.join(" "), want: "-trimpath -tags noffi -ldflags -s -o out/magus ./cmd/magus", message: "static");
+    final d = images\buildArgs(images\DYNAMIC, ldflags: "-s", output: "out/magus");
+    assert\equal(d.join(" "), want: "-trimpath -ldflags -s -o out/magus ./cmd/magus", message: "dynamic");
+}
+
+test "plan builds each platform without cgo" {
+    final p = images\plan(images\STATIC, ldflags: "-s");
+    assert\equal(p.error, want: "", message: "no error");
+    assert\equal(p.steps.len(), want: 2, message: "amd64 and arm64");
+    assert\equal(p.steps[0].env["CGO_ENABLED"], want: "0", message: "cgo off");
+    assert\equal(p.steps[1].layout, want: "dist/image/static/linux-arm64/layout", message: "layout path");
+    assert\equal(p.index, want: "dist/image/static/index", message: "index path");
+}
+
+test "plan returns a bad platform as its error" {
+    final v = images\only(images\STATIC, platform: "linux/amd64").variant;
+    final bad = images\ImageVariant{
+        name = "bad", base = v.base, platforms = ["windows/amd64"], tags = [], description = "", tagSuffix = "",
+    };
+    assert\isTrue(images\plan(bad, ldflags: "").error.startsWith("image plan bad: "), message: "error names the variant");
+}
+
+test "only narrows to one platform and refuses one the variant lacks" {
+    final one = images\only(images\STATIC, platform: "linux/arm64");
+    assert\equal(one.error, want: "", message: "arm64 is static's");
+    assert\equal(one.variant.platforms.join(","), want: "linux/arm64", message: "narrowed");
+    final miss = images\only(images\DYNAMIC, platform: "linux/arm64");
+    assert\contains(miss.error, item: "built for linux/amd64, not linux/arm64", message: "names both");
+}
+
+test "releaseTags adds latest only on stable" {
+    assert\equal(images\releaseTags(images\DYNAMIC, version: "v1.0.0", stable: true).join(","),
+        want: "v1.0.0-dynamic,latest-dynamic", message: "stable dynamic");
+    assert\equal(images\releaseTags(images\STATIC, version: "v1.0.0-rc.1", stable: false).join(","),
+        want: "v1.0.0-rc.1", message: "unstable static");
+}
+
+test "loadedID reads docker load's line and reports its absence" {
+    final id = images\loadedID("noise\nLoaded image ID: sha256:abc\n");
+    assert\equal(id.id, want: "sha256:abc", message: "id");
+    assert\contains(images\loadedID("Loaded image: x:y\n").error, item: "printed no image ID", message: "absent");
+}
+
+test "spec places the binary and keeps the Dockerfile's config" {
+    final step = images\plan(images\STATIC, ldflags: "").steps[0];
+    final s = images\spec(images\STATIC, step: step, mode: 493);
+    assert\equal(s.files[0].path, want: "/magus", message: "binary path");
+    assert\equal(s.config.entrypoint!.join(" "), want: "/magus", message: "entrypoint");
+    assert\equal(s.config.cmd!.join(" "), want: "ls", message: "cmd");
+    assert\equal(s.config.user!, want: "nonroot:nonroot", message: "user");
+    assert\equal(s.config.workingDir!, want: "/workspace", message: "workdir");
+}
+
+test "attest attaches an SBOM and provenance beside the index" {
+    final dir = fs\tempDir("image-test");
+    final bin = dir + "/magus";
+    fs\writeFile(bin, content: "#!/bin/true\n");
+    final one = image\assemble(image\Spec{
+        scratch = true,
+        platform = AMD64,
+        files = [image\File{ source = bin, path = "/magus", mode = 493 }],
+    }, layout: dir + "/linux-amd64");
+    image\assembleIndex([one.path], layout: dir + "/index");
+    final a = images\attest(images\Assembled{ layouts = [one], index = dir + "/index" },
+        build: images\Build{ ldflags = "", revision = "abc", builder = "https://example.test/ci" });
+    assert\equal(a.error, want: "", message: "no error");
+    assert\equal(image\open(a.index).referrers.len(), want: 2, message: "sbom and provenance");
+    final bad = images\attest(images\Assembled{ index = dir + "/missing" },
+        build: images\Build{ ldflags = "", revision = "", builder = "" });
+    assert\isTrue(bad.error.startsWith("image attest "), message: "error, not a raise");
+    fs\removeAll(dir);
+}
