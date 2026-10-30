@@ -330,6 +330,7 @@ var defaults = map[string]decision{
 	"conflict-rewrite":      Deny,
 	"merge-side-checkout":   Deny,
 	"notes-author":          Deny,
+	"deviation-author":      Deny,
 	"policy-unloaded":       Deny,
 	"process-poll":          Deny,
 	"process-signal":        Deny,

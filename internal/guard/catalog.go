@@ -68,6 +68,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocMagusTimeout},
 	{doc: ruleDocMergeSideCheckout},
 	{doc: ruleDocNotesAuthor},
+	{doc: ruleDocDeviationAuthor},
 	{doc: ruleDocCredentialVerb},
 	{doc: ruleDocTokenState},
 	{doc: ruleDocOutputPipe},
@@ -399,6 +400,15 @@ var ruleDocNotesAuthor = types.RuleDoc{
 	Why: "A note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. " +
 		"That is why it is refused however the write is spelled: `capture` files a review transcript as a note, where the commit puts a person's name on prose they never read. " +
 		"Read the store instead, and say what belongs in it so the person can write it.",
+}
+
+var ruleDocDeviationAuthor = types.RuleDoc{
+	Name:    string(denyRuleDeviationAuthor),
+	Catches: "an agent adding a line to a `*.deviations.jsonl` ledger, in any spelling and any role",
+	Why: "A line says a person decided a break is worth shipping, and no checker can judge that from its bytes. The failing gate prints the line, and a person fills in the reason and adds it. " +
+		"It is refused whoever asks, the root included. Name the line in your result, and a person adds it. " +
+		"Deleting an unused line is not refused, since the gate asks for it and it permits nothing. " +
+		"This is a seatbelt for a harness that opted in, not a boundary, and a person's merge is the check. The gate's verdict reads only the file's contents, so CI sees the same bytes whoever wrote them.",
 }
 
 var ruleDocCredentialVerb = types.RuleDoc{

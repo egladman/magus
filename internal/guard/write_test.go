@@ -138,8 +138,8 @@ func (s *deviationAuthorSuite) TestAnEditReachesTheRuleWithNoLease() {
 }
 
 func (s *deviationAuthorSuite) TestTheRuleSaysItIsASeatbelt() {
-	s.Contains(deviationAuthorWhy, "seatbelt")
-	s.Contains(deviationAuthorWhy, "the root included")
+	s.Contains(ruleDocDeviationAuthor.Why, "seatbelt")
+	s.Contains(ruleDocDeviationAuthor.Why, "the root included")
 }
 
 // TestAdviseInstalledSkillWrite pins the discriminator: the STAMP decides, not

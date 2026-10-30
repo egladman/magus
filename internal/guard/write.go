@@ -193,19 +193,14 @@ const denyRuleDeviationAuthor denyRuleName = "deviation-author"
 // deviationLedgerSuffix names a gate's ledger of permitted findings.
 const deviationLedgerSuffix = ".deviations.jsonl"
 
-const deviationAuthorWhy = "A line says a person decided a break is worth shipping, and no checker can judge that from its bytes. The failing gate prints the line, and a person fills in the reason and adds it. " +
-	"It is refused whoever asks, the root included, through an edit tool, a shell redirect or a Buzz fs write. A shell or Buzz write is refused whole, because the line does not show what it adds. " +
-	"Deleting an unused line passes, since the gate asks for it and it permits nothing. A merge, a revert and a checkout pass too: they replay lines a commit already holds. " +
-	"This is a seatbelt for a harness that opted in, not a boundary: a computed path, a patch or a process no hook sees gets past it, and nothing records who wrote a line. The gate's verdict reads only the file's contents, so CI sees the same bytes whoever wrote them."
-
 func isDeviationLedger(path string) bool {
 	return strings.HasSuffix(strings.TrimSpace(path), deviationLedgerSuffix)
 }
 
 func deviationDenial(path string) string {
 	return denial{
-		Say: fmt.Sprintf("magus workspace: only a person adds a line to %s; name the line in your result so they can. Deleting an unused line passes through an edit tool.", strings.TrimSpace(path)),
-		Why: deviationAuthorWhy,
+		Say: fmt.Sprintf("magus workspace: only a person adds a line to %s; name the line in your result so they can.", strings.TrimSpace(path)),
+		Why: ruleDocDeviationAuthor.Why,
 	}.full()
 }
 
@@ -331,7 +326,7 @@ func deviationWriteTarget(line string, d Dialect) string {
 var buzzDeviationCallRe = regexp.MustCompile(`\bfs\\(?:(writeFileAtomic|writeFile|writeLines|appendFile)|(copyFile|copyDir|rename|symlink))\s*\(`)
 
 // buzzDeviationWrite is the first ledger a Buzz program writes at a destination
-// its text spells. A name built at run time is not read: this is a seatbelt.
+// its text spells.
 func buzzDeviationWrite(program string) string {
 	for _, m := range buzzDeviationCallRe.FindAllStringSubmatchIndex(program, -1) {
 		args, ok := callArguments(program, m[1]-1)
