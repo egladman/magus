@@ -696,3 +696,133 @@ func (s *SleepFormPollSuite) TestTimeoutAroundASleep() {
 func (s *SleepFormPollSuite) TestRead() {
 	s.refusesBeforeAStatusRead("read -t 30 line")
 }
+
+// WaitRemedySuite pins the fix a waiting line is served: its own target run,
+// backgrounded under its measured bound. Unmeasured, the ceiling is named.
+type WaitRemedySuite struct {
+	suite.Suite
+	root string
+}
+
+func TestWaitRemedySuite(t *testing.T) {
+	suite.Run(t, new(WaitRemedySuite))
+}
+
+func (s *WaitRemedySuite) SetupTest() {
+	s.root = s.T().TempDir()
+}
+
+func (s *WaitRemedySuite) evaluate(line string) ShellVerdict {
+	return Evaluate(Dependencies{scope: workspaceScope{root: s.root}}, line)
+}
+
+func (s *WaitRemedySuite) TestBoundIsTheMeasuredRunWithHalfAgain() {
+	bound, note := waitBound("test", 80*time.Second, true, 30*time.Minute)
+	s.Equal(2*time.Minute, bound, "80s and half again is 2m, already on the minute")
+	s.Contains(note, "`test` last ran 1m20s here, and 2m leaves half again")
+}
+
+func (s *WaitRemedySuite) TestBoundRoundsUpToTheMinute() {
+	bound, _ := waitBound("test", 5*time.Minute, true, 30*time.Minute)
+	s.Equal(8*time.Minute, bound, "7m30s rounds up")
+}
+
+func (s *WaitRemedySuite) TestUnmeasuredBoundIsTheCeilingAndSaysSo() {
+	bound, note := waitBound("test", 0, false, 30*time.Minute)
+	s.Equal(30*time.Minute, bound)
+	s.Contains(note, "nothing recorded here measures `test`")
+	s.Contains(note, "background-unbounded's 30m ceiling, not a measurement")
+}
+
+func (s *WaitRemedySuite) TestOneUnmeasuredProjectLeavesTheLineUnmeasured() {
+	recordRun(s.T(), s.root, "docs", "test", 5*time.Minute)
+	v := s.evaluate("until ./magus run test docs console; do sleep 30; done")
+	s.Require().Len(v.Next, 1)
+	s.Contains(v.Next[0].Run, "--timeout 30m")
+	s.Contains(v.Lead, "not a measurement")
+}
+
+func (s *WaitRemedySuite) TestAffectedIsNeverPricedByTheRootsRun() {
+	recordRun(s.T(), s.root, ".", "ci", 5*time.Minute)
+	v := s.evaluate("until ./magus affected ci; do sleep 30; done")
+	s.Require().Len(v.Next, 1)
+	s.Equal("./magus job exec --timeout 30m -- ./magus affected ci", v.Next[0].Run)
+	s.Contains(v.Lead, "not a measurement")
+}
+
+func (s *WaitRemedySuite) TestComputedWordServesNothing() {
+	v := s.evaluate(`until ./magus run test "$project"; do sleep 30; done`)
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Empty(v.Next, "the served line would drop the project")
+}
+
+func (s *WaitRemedySuite) TestAssignedEnvironmentServesNothing() {
+	v := s.evaluate("until GOFLAGS=-race ./magus run test .; do sleep 30; done")
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Empty(v.Next, "job exec would run it without GOFLAGS")
+}
+
+func (s *WaitRemedySuite) TestFilterAfterTheSeparatorStaysQuoted() {
+	v := s.evaluate("until ./magus run test . -- -run 'TestA|TestB'; do sleep 30; done")
+	s.Require().Len(v.Next, 1)
+	s.Equal(`./magus job exec --timeout 30m -- ./magus run test . -- -run "TestA|TestB"`, v.Next[0].Run)
+}
+
+func (s *WaitRemedySuite) TestServedLineIsNotRefused() {
+	v := s.evaluate("until ./magus run test .; do sleep 30; done")
+	s.Require().Len(v.Next, 1)
+	s.Empty(s.evaluate(v.Next[0].Run).Deny)
+}
+
+func (s *WaitRemedySuite) TestBusyWaitOnAMeasuredRunServesItBounded() {
+	recordRun(s.T(), s.root, ".", "test", 5*time.Minute)
+	v := s.evaluate("until ./magus run test .; do sleep 30; done")
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Require().Len(v.Next, 1)
+	s.Equal([]string{"./magus", "job", "exec", "--timeout", "8m", "--", "./magus", "run", "test", "."}, v.Next[0].Argv)
+	s.Equal("./magus job exec --timeout 8m -- ./magus run test .", v.Next[0].Run)
+	s.Contains(v.Lead, "`test` last ran 5m0s here, and 8m leaves half again")
+	s.Contains(v.Deny, "<command>", "the deny stays whole for a reader the remedy is dropped for")
+}
+
+func (s *WaitRemedySuite) TestBusyWaitOnAnUnmeasuredRunNamesTheCeiling() {
+	v := s.evaluate("while ! ./magus run lint libs/xdg -- --fix; do sleep 10; done")
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Require().Len(v.Next, 1)
+	s.Equal("./magus job exec --timeout 30m -- ./magus run lint libs/xdg -- --fix", v.Next[0].Run)
+	s.Contains(v.Lead, "nothing recorded here measures `lint` on these projects, so the bound is background-unbounded's 30m ceiling, not a measurement")
+}
+
+func (s *WaitRemedySuite) TestMeasuredOnAnotherProjectIsUnmeasuredHere() {
+	recordRun(s.T(), s.root, "docs", "test", 5*time.Minute)
+	v := s.evaluate("until ./magus run test .; do sleep 30; done")
+	s.Require().Len(v.Next, 1)
+	s.Contains(v.Next[0].Run, "--timeout 30m")
+}
+
+func (s *WaitRemedySuite) TestBusyWaitWithNoTargetRunServesNothing() {
+	v := s.evaluate("until test -f out.log; do sleep 5; done")
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Empty(v.Next)
+	s.Empty(v.Lead)
+}
+
+func (s *WaitRemedySuite) TestBusyWaitOnTwoRunsServesNothing() {
+	v := s.evaluate("until ./magus run test . && ./magus run lint .; do sleep 30; done")
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Empty(v.Next)
+}
+
+func (s *WaitRemedySuite) TestSleepPollOnAStatusReadServesNothing() {
+	v := s.evaluate("sleep 30; ./magus status")
+	s.Equal(denyRuleSleepPoll, v.Rule.Name)
+	s.Empty(v.Next, "the work it polls is not on the line")
+}
+
+func (s *WaitRemedySuite) TestSleepPollBesideARunServesThatRun() {
+	recordRun(s.T(), s.root, ".", "test", 80*time.Second)
+	v := s.evaluate("sleep 30; ./magus status; ./magus run test .")
+	s.Equal(denyRuleSleepPoll, v.Rule.Name)
+	s.Require().Len(v.Next, 1)
+	s.Equal("./magus job exec --timeout 2m -- ./magus run test .", v.Next[0].Run)
+}

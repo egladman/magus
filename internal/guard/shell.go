@@ -2736,6 +2736,8 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 		wait := ShellVerdict{Deny: denyBusyWait, Why: denyBusyWaitWhy, Rule: denyRule{Name: denyRuleBusyWait}}
 		if foreignWaitFires(command, d) {
 			wait.Deny, wait.Why = denyBusyWaitForeign, denyBusyWaitForeignWhy
+		} else {
+			wait = wait.withRemedy(waitRemedy(deps, denyRuleBusyWait, command, d))
 		}
 		if v, ok := held.ends(deps, wait); ok {
 			return v
@@ -2756,7 +2758,8 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	}
 	// The same poll with the loop left to the caller's next call.
 	if parsed && sleepPollFires(work) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: denySleepPoll, Why: denySleepPollWhy, Rule: denyRule{Name: denyRuleSleepPoll}}); ok {
+		poll := ShellVerdict{Deny: denySleepPoll, Why: denySleepPollWhy, Rule: denyRule{Name: denyRuleSleepPoll}}
+		if v, ok := held.ends(deps, poll.withRemedy(waitRemedy(deps, denyRuleSleepPoll, command, d))); ok {
 			return v
 		}
 	}

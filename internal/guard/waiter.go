@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
 
@@ -491,6 +492,90 @@ func sleepPollFires(cmds []hint.Invocation) bool {
 		}
 	}
 	return false
+}
+
+// waitBound is the --timeout for a backgrounded run of target. Measured, it is
+// took plus half again, rounded up to a minute: check-timeout's margin.
+// Unmeasured, it is ceiling, and note says it is no measurement.
+func waitBound(target string, took time.Duration, measured bool, ceiling time.Duration) (bound time.Duration, note string) {
+	if !measured {
+		return ceiling, fmt.Sprintf("nothing recorded here measures `%s` on these projects, so the bound is background-unbounded's %s ceiling, not a measurement", target, formatLimit(ceiling))
+	}
+	bound = (took*3/2 + time.Minute - time.Nanosecond).Truncate(time.Minute)
+	return bound, fmt.Sprintf("`%s` last ran %s here, and %s leaves half again for a cold cache or a loaded machine", target, took.Round(time.Second), formatLimit(bound))
+}
+
+// lastRunHere is the newest real run of r's target in root's session store,
+// the longest over several projects. One project with no run leaves the line
+// unmeasured. So does `affected`: no one project's run prices the diff's set.
+func lastRunHere(root string, r targetRun) (time.Duration, bool) {
+	if root == "" || r.verb != "run" {
+		return 0, false
+	}
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return 0, false
+	}
+	projects := r.projects
+	if len(projects) == 0 {
+		projects = []string{"."}
+	}
+	var last time.Duration
+	for _, p := range projects {
+		d, ok := sessions.LastRunDuration(dir, p, r.target)
+		if !ok {
+			return 0, false
+		}
+		last = max(last, d)
+	}
+	return last, true
+}
+
+// waitedRun is the one target run a line makes, spelled as written. False for
+// none, for several, and for a run the served line could not repeat. That is
+// a word the shell computes, or an environment assigned beside it.
+func waitedRun(command string, d Dialect) ([]string, targetRun, bool) {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return nil, targetRun{}, false
+	}
+	var argv []string
+	var r targetRun
+	found, repeatable := 0, false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		call, ok := n.(*syntax.CallExpr)
+		if !ok {
+			return true
+		}
+		words, ok := magusUnder(literalWords(call.Args), d)
+		if !ok {
+			return true
+		}
+		tr, ok := parseTargetRun(hint.Invocation{Name: words[0], Args: words[1:]})
+		if !ok {
+			return true
+		}
+		argv, r = words, tr
+		found++
+		repeatable = len(call.Assigns) == 0 && !slices.ContainsFunc(call.Args, func(w *syntax.Word) bool { return !readsAsWritten(w.Parts) })
+		return true
+	})
+	return argv, r, found == 1 && repeatable
+}
+
+// waitRemedy backgrounds a waiting line's target run under job exec. A line
+// waitedRun declines gets an empty lead, which withRemedy reads as no remedy.
+func waitRemedy(deps Dependencies, rule denyRuleName, command string, d Dialect) (string, types.NextStep) {
+	run, r, ok := waitedRun(command, d)
+	if !ok {
+		return "", types.NextStep{}
+	}
+	took, measured := lastRunHere(deps.scope.root, r)
+	bound, note := waitBound(r.target, took, measured, configuredBackgroundLimits(deps).ceiling)
+	argv := append([]string{run[0], "job", "exec", "--timeout", formatLimit(bound), "--"}, run...)
+	next := hint.NextForDenyRemedy(string(rule), argv,
+		"run it in the background: the host announces it when it ends, and job exec stops it at the bound.")
+	return fmt.Sprintf("this line polls for a run the host announces when it ends; run it in the background and wait for its notice: %s.", note), next
 }
 
 // sleepDuration is how long one sleep invocation waits: GNU's suffixed operands summed, a
