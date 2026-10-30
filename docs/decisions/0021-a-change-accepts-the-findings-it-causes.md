@@ -515,7 +515,10 @@ shipped Go stays language-agnostic and repo policy lives in repo Buzz.
 - **A permitted gate gets its own run result**, Eli's ruling, so `-o json` does not read
   `pass`. It stays green on the session axis: the push gate and a job's owed check compare
   against the pass outcome, and a permit that read as red there would recreate the failure
-  this record removes.
+  this record removes. Session history stores `pass` with a `permitted` flag, as it does
+  `replayed`.
+- **A line has no expiry date**, Eli's ruling. It stops counting once the base holds the
+  break, so nothing needs to age it out.
 - **The allowlist statement reversed.** The breaking-changes guide no longer says there is
   no allowlist file to maintain.
 - **A guard rule was added**, `deviation-author`, reversing the alternative above. It binds
@@ -540,7 +543,8 @@ shipped Go stays language-agnostic and repo policy lives in repo Buzz.
 | `deviation-author` guard rule and its catalog row | built |
 | a `permitted` result on the journal, `run.target.result` and the event stream; never cached | built |
 | the call that lets a target record a permit, so `proto` `ci` reports `permitted` | not built |
-| a distinct `permitted` state on the wire and in the console | not built; both read as unspecified, never as passed |
-| `permitted` in session history | not built; a permit is green there, as a replay is |
-| deleting `Tool.Diagnostics` and `DiagnosticFormat` | not built |
+| `permitted` in `run.summary` | not built; a permitted target counts as a miss there |
+| a `permitted` state on the wire and in the console | built in `types` and the run state; the wire has no value, so it reads as unspecified, never as passed |
+| `permitted` in session history | built |
+| deleting `Tool.Diagnostics` and `DiagnosticFormat` | built |
 | scan acceptance, CI annotation on a line | not built, by decision |

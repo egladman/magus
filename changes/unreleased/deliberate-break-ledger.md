@@ -10,3 +10,7 @@
 
 - **`buf-breaking` captures and has no `gha` charm.** A caller reads its report from the
   record the op returns.
+- **Breaking: `Tool.diagnostics` and `DiagnosticFormat` are gone.** Nothing read them. Drop
+  `diagnostics = ...` from a spell's `mgs_getTools`.
+- **`proto` `ci` fails on an unreadable base.** It used to skip `buf-breaking` with an info
+  line, so an unfetched base passed.
