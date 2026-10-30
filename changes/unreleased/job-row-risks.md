@@ -7,3 +7,5 @@
 - **MGS3045 says when it cannot place a gate.** A project binding spells it carries
   unresolved cannot say whether it runs a target, so the gate stays on the ancestor. The
   fork and apply now name that project among the checks they did not run.
+- **`job apply` names a state it moved.** A record that hands an exited row back printed
+  `still declared`. It now prints `exited to declared` and the `job exec` that takes it.

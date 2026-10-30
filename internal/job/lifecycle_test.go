@@ -363,6 +363,34 @@ func (s *rowKeepsItsPathsSuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowB
 	s.Equal(types.StateDeclared, applied[0].Next.State)
 }
 
+// narrowedAt plants w as an exit that cut b.go used to leave it.
+func (s *rowKeepsItsPathsSuite) narrowedAt(state types.JobState) *Store {
+	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
+	plant(s.T(), store, types.Job{
+		ID: "w", Criteria: "goal", WritePaths: []string{"a.go"}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
+		Releases: []types.JobRelease{{Path: "b.go", Digest: types.DigestAbsent, ReleasedAt: 1}},
+	})
+	return store
+}
+
+func (s *rowKeepsItsPathsSuite) TestReapplyRestoresAPathAnExitCutFromAnExitedRow() {
+	applied, err := Apply(s.T().Context(), s.narrowedAt(types.StateExited), []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+
+	s.Require().NoError(err)
+	s.Equal([]string{"a.go", "b.go"}, applied[0].Next.WritePaths)
+	s.Equal(types.StateDeclared, applied[0].Next.State)
+	s.Empty(applied[0].Next.Releases)
+}
+
+func (s *rowKeepsItsPathsSuite) TestReapplyRestoresAPathAnExitCutFromARunningRow() {
+	applied, err := Apply(s.T().Context(), s.narrowedAt(types.StateRunning), []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+
+	s.Require().NoError(err)
+	s.Equal([]string{"a.go", "b.go"}, applied[0].Next.WritePaths)
+	s.Equal(types.StateRunning, applied[0].Next.State)
+	s.Empty(applied[0].Next.Releases)
+}
+
 func (s *rowKeepsItsPathsSuite) TestAbandonmentKeepsEveryPath() {
 	kept := acceptRow()
 	loc := declared(s.T(), kept)

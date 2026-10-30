@@ -1104,6 +1104,35 @@ func TestJobExitTellsTheHolderItStaysBound(t *testing.T) {
 	assert.Contains(t, stderr, exitedBindingNote)
 }
 
+// jobApplyStateSuite pins what `job apply` says of a state it moved.
+type jobApplyStateSuite struct {
+	suite.Suite
+}
+
+func TestJobApplyState(t *testing.T) { suite.Run(t, new(jobApplyStateSuite)) }
+
+func (s *jobApplyStateSuite) printed(from, to types.JobState, dryRun bool) string {
+	var out bytes.Buffer
+	printJobApply(&out, []job.Applied{{
+		Prev:    types.Job{ID: "w", State: from, WritePaths: []string{"a.go"}},
+		Next:    types.Job{ID: "w", State: to, WritePaths: []string{"a.go", "b.go"}},
+		Changed: []string{"write_paths"},
+	}}, nil, dryRun)
+	return out.String()
+}
+
+func (s *jobApplyStateSuite) TestAKeptStateReadsStill() {
+	s.Contains(s.printed(types.StateRunning, types.StateRunning, false), "updated w, still running:\n  write_paths +b.go\n")
+}
+
+func (s *jobApplyStateSuite) TestAMovedStateNamesBoth() {
+	s.Contains(s.printed(types.StateExited, types.StateDeclared, false), "updated w, exited to declared, so its holder takes it with `magus job exec w`:\n  write_paths +b.go\n")
+}
+
+func (s *jobApplyStateSuite) TestADryRunNamesTheMoveItWouldMake() {
+	s.Contains(s.printed(types.StateExited, types.StateDeclared, true), "would update w, exited to declared, so its holder takes it with `magus job exec w`:\n")
+}
+
 // Apply prints the spec diff, writes nothing under --dry-run, and keeps the job's state
 // either way.
 func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {

@@ -3000,7 +3000,11 @@ func printJobApply(out io.Writer, applied []job.Applied, claims map[string][]str
 			if dryRun {
 				verb = "would update"
 			}
-			fmt.Fprintf(out, "%s %s, still %s:\n", verb, a.Next.ID, a.Next.State)
+			if a.Prev.State == a.Next.State {
+				fmt.Fprintf(out, "%s %s, still %s:\n", verb, a.Next.ID, a.Next.State)
+			} else {
+				fmt.Fprintf(out, "%s %s, %s to %s, so its holder takes it with `%s`:\n", verb, a.Next.ID, a.Prev.State, a.Next.State, hint.JobExec.With(a.Next.ID))
+			}
 			for _, field := range a.Changed {
 				fmt.Fprintf(out, "  %s\n", specChange(field, a.Prev, a.Next))
 			}
