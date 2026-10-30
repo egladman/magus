@@ -78,7 +78,9 @@ func MissText(query string, ans types.KnowledgeAnswer) string {
 	}
 	if len(ans.Gaps) > 0 {
 		fmt.Fprintf(&b, "outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
-		fmt.Fprintf(&b, "build the missing index from a shell with `%s`.\n", hint.GraphBuild)
+		if slices.ContainsFunc(ans.Gaps, types.KnowledgeSymbolGap.Buildable) {
+			fmt.Fprintf(&b, "build the missing index from a shell with `%s`.\n", hint.GraphBuild)
+		}
 	}
 	return b.String()
 }

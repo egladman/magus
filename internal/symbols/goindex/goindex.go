@@ -48,6 +48,7 @@ const loadMode = packages.NeedName | packages.NeedFiles | packages.NeedCompiledG
 // go/packages and go/types in this process; dependencies come from export data. Builds
 // are the configurations besides the host's the index covers ({"GOOS": "windows"}): each
 // loads only the units with a file its constraints select and the host's exclude.
+// A package the host excludes whole counts.
 // Index takes units from the same Indexer's last Units call. Not safe for concurrent use.
 type Indexer struct {
 	Dir      string
@@ -67,7 +68,16 @@ type listedUnit struct {
 
 // Version is formatVersion and the toolchain's version, which names standard library
 // symbols.
+// It holds Builds too: a shard kept across a new build lacks its files.
 func (ix *Indexer) Version() string {
+	builds := make([]string, 0, len(ix.Builds))
+	for _, overlay := range ix.Builds {
+		builds = append(builds, formatOverlay(overlay))
+	}
+	return strings.TrimSpace(fmt.Sprintf("%s %s %s", formatVersion, ix.toolchain(), strings.Join(builds, ",")))
+}
+
+func (ix *Indexer) toolchain() string {
 	if ix.goVersion == "" {
 		cmd := exec.Command("go", "env", "GOVERSION")
 		cmd.Dir, cmd.Env = ix.Dir, ix.env(nil)
@@ -77,7 +87,7 @@ func (ix *Indexer) Version() string {
 			ix.goVersion = "unknown"
 		}
 	}
-	return fmt.Sprintf("%s %s", formatVersion, ix.goVersion)
+	return ix.goVersion
 }
 
 func (ix *Indexer) env(overlay map[string]string) []string {
@@ -103,31 +113,52 @@ func (ix *Indexer) patterns() []string {
 // as a unit of its own. A unit's digest covers its files' paths and bytes, the files the
 // host's build constraints exclude included, so an edit to a _windows.go file on a Mac
 // moves it too.
+// `./...` skips a package the host excludes whole, so each of Builds lists too.
 func (ix *Indexer) Units(ctx context.Context) ([]symbols.Unit, error) {
-	cfg := &packages.Config{
-		Context: ctx, Dir: ix.Dir, Env: ix.env(nil), Tests: true,
-		Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports,
+	overlays := slices.Concat([]map[string]string{nil}, ix.Builds)
+	listings := make([][]*packages.Package, len(overlays))
+	g, gctx := errgroup.WithContext(ctx)
+	for i, overlay := range overlays {
+		g.Go(func() error {
+			cfg := &packages.Config{
+				Context: gctx, Dir: ix.Dir, Env: ix.env(overlay), Tests: true,
+				Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports,
+			}
+			pkgs, err := packages.Load(cfg, ix.patterns()...)
+			if err != nil {
+				return fmt.Errorf("go list in %s: %w", ix.Dir, err)
+			}
+			listings[i] = pkgs
+			return nil
+		})
 	}
-	pkgs, err := packages.Load(cfg, ix.patterns()...)
-	if err != nil {
-		return nil, fmt.Errorf("go list in %s: %w", ix.Dir, err)
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
-	chosen := chooseVariants(pkgs)
-	ix.listed = make(map[string]listedUnit, len(chosen))
-	units := make([]symbols.Unit, 0, len(chosen))
-	for _, p := range chosen {
-		files := slices.Concat(p.GoFiles, goOnly(p.IgnoredFiles))
-		digest, err := ix.digest(files)
-		if err != nil {
-			return nil, err
+	ix.listed = map[string]listedUnit{}
+	var units []symbols.Unit
+	for i, overlay := range overlays {
+		for _, p := range chooseVariants(listings[i]) {
+			if _, ok := ix.listed[p.PkgPath]; ok {
+				continue
+			}
+			files := slices.Concat(p.GoFiles, goOnly(p.IgnoredFiles))
+			digest, err := ix.digest(files)
+			if err != nil {
+				return nil, err
+			}
+			var deps []string
+			for _, imp := range p.Imports {
+				deps = append(deps, importPath(imp.ID))
+			}
+			slices.Sort(deps)
+			units = append(units, symbols.Unit{ID: p.PkgPath, Digest: digest, Deps: slices.Compact(deps)})
+			ignored := goOnly(p.IgnoredFiles)
+			if overlay != nil {
+				ignored = files
+			}
+			ix.listed[p.PkgPath] = listedUnit{load: loadPath(p), ignored: ignored, dir: packageDir(p)}
 		}
-		var deps []string
-		for _, imp := range p.Imports {
-			deps = append(deps, importPath(imp.ID))
-		}
-		slices.Sort(deps)
-		units = append(units, symbols.Unit{ID: p.PkgPath, Digest: digest, Deps: slices.Compact(deps)})
-		ix.listed[p.PkgPath] = listedUnit{load: loadPath(p), ignored: goOnly(p.IgnoredFiles), dir: packageDir(p)}
 	}
 	slices.SortFunc(units, func(a, b symbols.Unit) int { return strings.Compare(a.ID, b.ID) })
 	return units, nil
@@ -216,9 +247,9 @@ func (ix *Indexer) Index(ctx context.Context, units []symbols.Unit) ([]symbols.S
 	if err != nil {
 		return nil, err
 	}
-	byUnit := make(map[string]*symbols.Shard, len(shards))
+	byUnit := make(map[string]int, len(shards))
 	for i := range shards {
-		byUnit[shards[i].Unit] = &shards[i]
+		byUnit[shards[i].Unit] = i
 	}
 	for _, overlay := range ix.Builds {
 		tagged := map[string]bool{}
@@ -235,9 +266,12 @@ func (ix *Indexer) Index(ctx context.Context, units []symbols.Unit) ([]symbols.S
 			return nil, fmt.Errorf("under %s: %w", formatOverlay(overlay), err)
 		}
 		for _, s := range extra {
-			if host := byUnit[s.Unit]; host != nil {
-				mergeShard(host, s)
+			if i, ok := byUnit[s.Unit]; ok {
+				mergeShard(&shards[i], s)
+				continue
 			}
+			byUnit[s.Unit] = len(shards)
+			shards = append(shards, s)
 		}
 	}
 	return shards, nil
@@ -353,8 +387,7 @@ type moduleTable struct {
 
 func (ix *Indexer) modules(pkgs []*packages.Package) *moduleTable {
 	t := &moduleTable{versions: map[string]string{}, workspace: map[string]bool{}}
-	version := strings.TrimPrefix(ix.Version(), formatVersion+" ")
-	t.goVersion = version
+	t.goVersion = ix.toolchain()
 	seenGoMod := map[string]bool{}
 	for _, p := range pkgs {
 		m := p.Module

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -134,6 +135,9 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 				presence := missPresence(searchRoot, matches)
 				ans.Text = &presence
 			}
+			if textErr == nil && !noGenerated {
+				ans = withoutUnheldGaps(ans, searchRoot, matches)
+			}
 		}
 		miss := refsMiss{name: pos[0], answer: withIndexCause(ctx, root, ans), searched: searched}
 		if ans.Text != nil {
@@ -219,6 +223,28 @@ func writeRefsText(w io.Writer, out types.KnowledgeRefsOutput) error {
 	// Under the rows, never instead of them. A found answer from a stale index is the
 	// dangerous one: it looks complete, and nothing else on this path would say otherwise.
 	return reportIndexStaleness(w, out.Answer)
+}
+
+// withoutUnheldGaps drops a gap no build can close from a miss
+// when its project holds no text match of the name.
+// The name is not there, so that gap cannot explain the miss.
+func withoutUnheldGaps(ans types.KnowledgeAnswer, root string, matches []textindex.Match) types.KnowledgeAnswer {
+	holds := func(project string) bool {
+		return project == "." || slices.ContainsFunc(matches, func(m textindex.Match) bool {
+			rel := m.Path
+			if r, err := filepath.Rel(root, m.Path); err == nil && filepath.IsAbs(m.Path) {
+				rel = r
+			}
+			return strings.HasPrefix(filepath.ToSlash(rel), project+"/")
+		})
+	}
+	ans.Gaps = slices.DeleteFunc(slices.Clone(ans.Gaps), func(g types.KnowledgeSymbolGap) bool {
+		return g.Unindexable && !holds(g.Project.Path)
+	})
+	if len(ans.Gaps) == 0 && ans.Reason == types.ReasonSymbolIndexMissing {
+		ans.Verdict, ans.Reason = types.VerdictAbsent, ""
+	}
+	return ans
 }
 
 // missPresence reduces matches to the counts and the capped site list a symbol miss reports.

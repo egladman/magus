@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // A bare name two workspace definitions carry must not quietly answer for one of them: refs
@@ -454,6 +455,49 @@ func TestRefsTextExitsTwoOnScanError(t *testing.T) {
 	})
 	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.NotEmpty(t, errOut)
+}
+
+type refsGapsSuite struct {
+	suite.Suite
+	proto types.KnowledgeAnswer
+}
+
+func TestRefsGapsSuite(t *testing.T) { suite.Run(t, new(refsGapsSuite)) }
+
+func (s *refsGapsSuite) SetupTest() {
+	s.proto = types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{
+		Project: types.NewProjectRef("proto", ""), Language: "protobuf", State: types.SymbolIndexNotBuilt, Unindexable: true,
+	}})
+}
+
+// A name only in Go files is not explained by a project holding only protobuf.
+func (s *refsGapsSuite) TestAProjectWithNoMatchCannotExplainTheMiss() {
+	got := withoutUnheldGaps(s.proto, "/w", []textindex.Match{{Path: "cmd/buzz-playground/main.go", Line: 1}})
+	s.Equal(types.VerdictAbsent, got.Verdict)
+	s.Empty(got.Gaps)
+}
+
+func (s *refsGapsSuite) TestAnAbsoluteMatchInTheProjectKeepsItsGap() {
+	got := withoutUnheldGaps(s.proto, "/w", []textindex.Match{{Path: "/w/proto/magus/a.proto", Line: 1}})
+	s.Equal(types.VerdictUnknown, got.Verdict)
+	s.Len(got.Gaps, 1)
+}
+
+func (s *refsGapsSuite) TestAProjectSharingAPrefixHoldsNoMatch() {
+	got := withoutUnheldGaps(s.proto, "/w", []textindex.Match{{Path: "protobuf/a.proto", Line: 1}})
+	s.Equal(types.VerdictAbsent, got.Verdict)
+}
+
+func (s *refsGapsSuite) TestTheRootProjectHoldsEveryMatch() {
+	root := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef(".", ""), Unindexable: true}})
+	s.Equal(types.VerdictUnknown, withoutUnheldGaps(root, "/w", nil).Verdict)
+}
+
+func (s *refsGapsSuite) TestAGapABuildClosesStays() {
+	unbuilt := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("libs/api", ""), State: types.SymbolIndexNotBuilt}})
+	got := withoutUnheldGaps(unbuilt, "/w", nil)
+	s.Equal(types.VerdictUnknown, got.Verdict)
+	s.Len(got.Gaps, 1)
 }
 
 // A name refs cannot resolve, from a workspace with an unbuilt index: -o json prints the

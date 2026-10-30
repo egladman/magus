@@ -77,6 +77,10 @@ func (s *goindexSuite) indexer() *Indexer {
 	return &Indexer{Dir: s.dir, Builds: []map[string]string{{"GOOS": otherOS()}}}
 }
 
+func (s *goindexSuite) wasmIndexer() *Indexer {
+	return &Indexer{Dir: s.dir, Builds: []map[string]string{{"GOOS": "js", "GOARCH": "wasm"}}}
+}
+
 func (s *goindexSuite) update(ix *Indexer) (symbols.UpdateResult, string) {
 	pack := filepath.Join(s.T().TempDir(), "scip.pack")
 	res, err := symbols.UpdatePack(s.T().Context(), pack, ix)
@@ -88,6 +92,16 @@ func (s *goindexSuite) index(pack string) *scip.Index {
 	idx, err := symbols.ReadIndex(pack, true)
 	s.Require().NoError(err)
 	return idx
+}
+
+func countOf(items []string, want string) int {
+	n := 0
+	for _, item := range items {
+		if item == want {
+			n++
+		}
+	}
+	return n
 }
 
 func sym(pkg, desc string) string {
@@ -241,6 +255,51 @@ func (s *goindexSuite) builtPack() string {
 func (s *goindexSuite) TestOtherBuildCoversItsTaggedFile() {
 	keys := s.parsed(s.builtPack())
 	s.True(keys["gomod example.com/m `example.com/m/a`/OnlyElsewhere()."])
+}
+
+// `./...` skips a package the host excludes whole, so only a build can find it.
+func (s *goindexSuite) TestOtherBuildFindsAPackageTheHostExcludesWhole() {
+	s.write("w/w.go", "//go:build js && wasm\n\npackage w\n\nimport \"example.com/m/c\"\n\nfunc OnlyInWasm() { c.C() }\n")
+	_, pack := s.update(s.wasmIndexer())
+
+	keys := s.parsed(pack)
+	s.True(keys["gomod example.com/m `example.com/m/w`/OnlyInWasm()."])
+	var paths []string
+	for _, d := range s.index(pack).Documents {
+		paths = append(paths, d.RelativePath)
+	}
+	s.Contains(paths, "w/w.go")
+	s.Equal(1, countOf(paths, "c/c.go"), "c keeps the host's one document")
+}
+
+func (s *goindexSuite) TestAPackageTheHostExcludesWholeStaysOutWithoutABuild() {
+	s.write("w/w.go", "//go:build js && wasm\n\npackage w\n\nfunc OnlyInWasm() {}\n")
+	_, pack := s.update(&Indexer{Dir: s.dir})
+	s.False(s.parsed(pack)["gomod example.com/m `example.com/m/w`/OnlyInWasm()."])
+}
+
+func (s *goindexSuite) TestEditToAPackageTheHostExcludesWholeMovesItsUnit() {
+	s.write("w/w.go", "//go:build js && wasm\n\npackage w\n\nfunc OnlyInWasm() {}\n")
+	ix := s.wasmIndexer()
+	digest := func() string {
+		units, err := ix.Units(s.T().Context())
+		s.Require().NoError(err)
+		for _, u := range units {
+			if u.ID == "example.com/m/w" {
+				return u.Digest
+			}
+		}
+		s.FailNow("no unit for example.com/m/w")
+		return ""
+	}
+	before := digest()
+	s.write("w/w.go", "//go:build js && wasm\n\npackage w\n\nfunc OnlyInWasm() { _ = 1 }\n")
+	s.NotEqual(before, digest())
+}
+
+// A pack written without a build holds shards that lack that build's files.
+func (s *goindexSuite) TestAddingABuildMovesTheVersion() {
+	s.NotEqual((&Indexer{Dir: s.dir}).Version(), s.wasmIndexer().Version())
 }
 
 func (s *goindexSuite) TestHostOnlyIndexMissesTheTaggedFile() {
