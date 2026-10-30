@@ -15,7 +15,69 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// applyCheckoutSuite pins a record that names a checkout.
+type applyCheckoutSuite struct {
+	suite.Suite
+}
+
+func TestApplyCheckout(t *testing.T) { suite.Run(t, new(applyCheckoutSuite)) }
+
+func (s *applyCheckoutSuite) record(checkout string, write ...string) []types.Declaration {
+	rec := spec(write...)
+	rec.Checkout = checkout
+	return []types.Declaration{rec}
+}
+
+func (s *applyCheckoutSuite) TestOwnCheckoutIsANoOp() {
+	store, loc := appliedRow(s.T(), "a.go")
+
+	applied, err := Apply(s.T().Context(), store, s.record(loc.Root, "a.go"), config.Jobs{}, nil, nil, false)
+
+	s.Require().NoError(err)
+	s.Empty(applied[0].Changed)
+	s.Equal(applied[0].Prev.CheckoutRoot, applied[0].Next.CheckoutRoot)
+}
+
+func (s *applyCheckoutSuite) TestOwnCheckoutStillAppliesTheRestOfTheRecord() {
+	store, loc := appliedRow(s.T(), "a.go")
+
+	applied, err := Apply(s.T().Context(), store, s.record(loc.Root, "a.go", "b.go"), config.Jobs{}, nil, nil, false)
+
+	s.Require().NoError(err)
+	s.Equal([]string{"a.go", "b.go"}, applied[0].Next.WritePaths)
+}
+
+func (s *applyCheckoutSuite) TestAnotherCheckoutIsRefusedNamingBoth() {
+	store, loc := appliedRow(s.T(), "a.go")
+	other := s.T().TempDir()
+
+	_, err := Apply(s.T().Context(), store, s.record(other, "a.go"), config.Jobs{}, nil, nil, false)
+
+	s.Require().Error(err)
+	s.ErrorContains(err, other)
+	s.ErrorContains(err, loc.Root)
+}
+
+func (s *applyCheckoutSuite) TestABoundWorktreeIsTheRowsCheckout() {
+	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
+	own := s.T().TempDir()
+	plant(s.T(), store, types.Job{ID: "w", Criteria: "goal", WritePaths: []string{"a.go"}, Check: forkCheck(), State: types.StateDeclared, Updated: time.Now().Unix(), Worktree: &types.JobWorktree{Root: own}})
+
+	_, err := Apply(s.T().Context(), store, s.record(own, "a.go"), config.Jobs{}, nil, nil, false)
+
+	s.NoError(err)
+}
+
+func (s *applyCheckoutSuite) TestANewJobNamingACheckoutIsLeftToAFork() {
+	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
+
+	_, err := Apply(s.T().Context(), store, s.record(s.T().TempDir(), "a.go"), config.Jobs{}, nil, nil, false)
+
+	s.ErrorContains(err, "which only a fork makes")
+}
 
 func TestDeclareStampsTheDeadlineFromTheTimeout(t *testing.T) {
 	t.Parallel()

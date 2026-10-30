@@ -130,9 +130,11 @@ type Applied struct {
 // before it leave it, and the error joins every record's problems, each message prefixed by
 // its record id, so a stream with problems in its first and third records writes nothing
 // and names both. Each record is held to [validateMerge], with its checkpoint settled in the
-// same pass. A record carrying state, enter or checkout is a JobRecordInvalid problem: state
-// is status, and an entry and a checkout are `magus job fork`'s. So is one naming a job that
-// already ended without widening it, and one dropping every write path a live job holds. Who may write a record
+// same pass. A record carrying state or enter is a JobRecordInvalid problem:
+// state is status, and an entry is `magus job fork`'s.
+// So is a checkout other than the row's, and naming the row's changes nothing.
+// So is one naming a job that ended without widening it.
+// So is one dropping every write path a live job holds. Who may write a record
 // is judged first: the store's authorization refuses at once, as it did before the pass.
 // dryRun returns what would be written and writes nothing, a refusal's release request
 // included.
@@ -159,14 +161,16 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 			invalid("state", fmt.Sprintf("the record for %s carries state %q, which is status: apply writes the spec and never moves a job", rec.ID, rec.State),
 				fmt.Sprintf("drop state; a holder moves its own job with `%s` and `%s`", hint.JobExec.With(rec.ID), hint.JobExit.With(rec.ID)))
 		}
-		if rec.Checkout != "" {
-			invalid("checkout", fmt.Sprintf("the record for %s names checkout %s, which only a fork makes", rec.ID, rec.Checkout),
-				fmt.Sprintf("drop checkout, or feed this record to `%s`", hint.JobFork.With("--stdin")))
-		}
 		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
 		var prev types.Job
 		if i >= 0 {
 			prev = rows[i]
+		}
+		if rec.Checkout != "" {
+			if bound := boundCheckout(prev); !samePath(rec.Checkout, bound) {
+				message, fix := differentCheckout(rec, bound)
+				invalid("checkout", message, fix)
+			}
 		}
 		ended := i >= 0 && prev.State.Terminal()
 		redeclares := i >= 0 && (ended || prev.State == types.StateExited) && widensWritePaths(prev, rec)
@@ -247,6 +251,24 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		plan[k].Next = stored
 	}
 	return plan, nil
+}
+
+// boundCheckout is the checkout row is bound to or held in, "" when neither.
+func boundCheckout(row types.Job) string {
+	if row.Worktree.Standing() {
+		return row.Worktree.Root
+	}
+	return row.CheckoutRoot
+}
+
+// differentCheckout is the problem of rec naming a checkout its row lacks.
+func differentCheckout(rec types.Declaration, bound string) (message, fix string) {
+	if bound == "" {
+		return fmt.Sprintf("the record for %s names checkout %s, and no checkout is bound to that job, which only a fork makes", rec.ID, rec.Checkout),
+			fmt.Sprintf("drop checkout, or feed this record to `%s`", hint.JobFork.With("--stdin"))
+	}
+	return fmt.Sprintf("the record for %s names checkout %s, and that job is bound to %s", rec.ID, rec.Checkout, bound),
+		fmt.Sprintf("drop checkout, or fork a new job for %s with `%s`", rec.Checkout, hint.JobFork.With("--stdin"))
 }
 
 // widensWritePaths reports whether rec names a write path prev's do not cover.
