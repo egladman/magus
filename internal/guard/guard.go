@@ -1533,6 +1533,7 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	v = deps.rankGraded(v, denyRuleInterpreterRewrite, denyInterpreterRewrite(at, line, d), rankInterpreterRewrite)
 	v = deps.rankGraded(v, denyRuleConflictRewrite, denyConflictRewrite(at, line, d), rankConflictRewrite)
 	v = deps.rankGraded(v, denyRuleUnreadCommand, denyUnreadCommand(line, d), rankUnreadCommand)
+	v = deps.rankGraded(v, denyRuleCacheClear, denyCacheClear(line, d), rankCacheClear)
 	v = deps.rankGraded(v, denyRuleCacheDirWrite, denyCacheDirCommand(at, line, d), rankCacheDirWrite)
 	v = deps.rankGraded(v, denyRuleDeviationAuthor, denyDeviationCommand(callDir, line, d), rankDeviationWrite)
 	v = deps.rankGraded(v, denyRuleStaleBinary, denyContractPick(ctx, deps, at, line, d), rankContractPick)

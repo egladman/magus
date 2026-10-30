@@ -306,6 +306,7 @@ var defaults = map[string]decision{
 	backgroundUnbounded:     Deny,
 	"backtick-substitution": Deny,
 	"busy-wait":             Deny,
+	"cache-clear":           Deny,
 	"cache-dir-write":       Deny,
 	"claimed-declaration":   Deny,
 	"credential-verb":       Deny,

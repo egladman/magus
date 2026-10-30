@@ -137,6 +137,7 @@ const (
 	denyRuleInlineAlias       denyRuleName = "inline-alias"
 	denyRuleStageAll          denyRuleName = "stage-all"
 	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
+	denyRuleCacheClear        denyRuleName = "cache-clear"
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 	denyRuleSearchTranslation denyRuleName = "search-translation"
 	denyRuleReadNavigation    denyRuleName = "read-navigation"

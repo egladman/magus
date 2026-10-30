@@ -49,6 +49,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocBackgroundUnbounded},
 	{doc: ruleDocBacktickSubstitution},
 	{doc: ruleDocBusyWait},
+	{doc: ruleDocCacheClear},
 	{doc: ruleDocCacheDirWrite},
 	{doc: ruleDocChainedRun},
 	{doc: ruleDocClaimedDeclaration},
@@ -225,6 +226,12 @@ var ruleDocBusyWait = types.RuleDoc{
 		"Several have had to be killed by hand. A host's watcher running the same loop is judged the same way, since it is the same poll that also wakes the agent on every line and at expiry. " +
 		"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules. " +
 		"A sleep is `sleep`, and also `caffeinate -t`, `read -t`, `timeout N sleep` and a perl, python, ruby or node one-liner that sleeps.",
+}
+
+var ruleDocCacheClear = types.RuleDoc{
+	Name:    string(denyRuleCacheClear),
+	Catches: "clearing a build cache by hand, which a trim to its declared budget does and keeps what is in use",
+	Why:     "A raw clear throws away what the next build wants, and it frees nothing a trim would not. The trim keeps files inside a fence, and it says what it did, so a person learns why the disk filled.",
 }
 
 var ruleDocCacheDirWrite = types.RuleDoc{
