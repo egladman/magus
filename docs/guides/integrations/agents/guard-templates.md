@@ -488,7 +488,7 @@ fun recordMessage(bin: str, message: str, dir: str, attribution: [str]) > void {
     if (bin == "") { return; }
     final args = mut ["shell", "--message"];
     foreach (word in attribution) { args.append(word); }
-    proc\exec(bin, args: args, dir: dir, opts: proc\ExecOptions{
+    _ = proc\exec(bin, args: args, dir: dir, opts: proc\ExecOptions{
         quiet = true,
         allowFailure = true,
         stdin = message,
@@ -1144,7 +1144,7 @@ fun main(args: [str]) > void {
     // state worth knowing about once, but not once per read, so it is reported through
     // the trail's own absence rather than through the session: if reads are missing from
     // `magus session`, the binary is too old.
-    proc\exec(bin, args: [
+    _ = proc\exec(bin, args: [
         "shell", "--observe",
         "--agent-name", agentName,
         "--session", field(event, dotPath: sessionPath),
@@ -1314,7 +1314,7 @@ fun main(args: [str]) > void {
     // prints its usage, and that would otherwise reach the host as this hook's response
     // every time a session ends. The absence shows up where it is actionable instead -
     // as an empty checkpoint list in `magus session`.
-    proc\exec(bin, args: [
+    _ = proc\exec(bin, args: [
         "session", "checkpoint",
         "--agent-name", agentName,
     ], dir: cwd, opts: proc\ExecOptions{quiet = true, allowFailure = true, stdin = event}) catch void;
@@ -2485,7 +2485,7 @@ fun sample(bin: str, cwd: str, store: str, now: double) > str? !> any {
     diskwatch\append(store, s: cur);
     var started = false;
     if (d.reclaim and !diskwatch\chunkRunning(samples, now: now)) {
-        proc\exec(bin, args: ["buzz", "-C", cwd, "-s", "-e", chunkSnippet(now + 300000.0)], opts: proc\ExecOptions{ detach = true });
+        _ = proc\exec(bin, args: ["buzz", "-C", cwd, "-s", "-e", chunkSnippet(now + 300000.0)], opts: proc\ExecOptions{ detach = true });
         diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = du.path, action = "started", detail = d.why });
         started = true;
     }

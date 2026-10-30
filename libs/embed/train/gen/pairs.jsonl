@@ -26986,6 +26986,7 @@
 {"doc_ref":"std/encoding/hex/hex.go:51-57","query_ref":"docs/reference/buzz/hex.md:29-39","source":"host-module","split":"holdout"}
 {"doc_ref":"std/image.go:308-331","query_ref":"docs/reference/buzz/image.md:112-124","source":"host-module","split":"train"}
 {"doc_ref":"std/image.go:334-357","query_ref":"docs/reference/buzz/image.md:126-137","source":"host-module","split":"train"}
+{"doc_ref":"std/image.go:361-395","query_ref":"docs/reference/buzz/image.md:139-150","source":"host-module","split":"train"}
 {"doc_ref":"std/image.go:402-408","query_ref":"docs/reference/buzz/image.md:152-162","source":"host-module","split":"train"}
 {"doc_ref":"std/image.go:411-421","query_ref":"docs/reference/buzz/image.md:164-174","source":"host-module","split":"train"}
 {"doc_ref":"std/image.go:151-168","query_ref":"docs/reference/buzz/image.md:17-28","source":"host-module","split":"train"}
