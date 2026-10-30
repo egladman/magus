@@ -646,6 +646,7 @@ export object Diagnostic {
     code: str = "",
     message: str = "",
     url: str = "",
+    fix: str = "",
 }
 
 export object DiffUncovered {

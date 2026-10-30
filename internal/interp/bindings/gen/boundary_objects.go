@@ -1791,6 +1791,7 @@ func ObjectDiagnostic(v types.Diagnostic) vm.Value {
 	out.MapSet("code", vm.StringValue(v.Code))
 	out.MapSet("message", vm.StringValue(v.Message))
 	out.MapSet("url", vm.StringValue(v.URL))
+	out.MapSet("fix", vm.StringValue(v.Fix))
 	return out
 }
 
