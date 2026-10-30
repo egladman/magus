@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
@@ -36,6 +37,43 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
+
+type indexesBehindSuite struct{ suite.Suite }
+
+func TestIndexesBehindSuite(t *testing.T) { suite.Run(t, new(indexesBehindSuite)) }
+
+func goStatus(project string) types.SymbolIndexStatus {
+	return types.SymbolIndexStatus{Project: types.NewProjectRef(project, "/ws/"+project), Op: "scip", Language: "go"}
+}
+
+func (s *indexesBehindSuite) TestACurrentAnswerNamesNone() {
+	s.Nil(indexesBehind(types.ClassifyAnswer(true, "", nil)))
+}
+
+func (s *indexesBehindSuite) TestAGapNoBuildClosesNamesNone() {
+	s.Nil(indexesBehind(types.KnowledgeAnswer{Gaps: []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("proto", "/ws/proto"), Language: "protobuf", Unindexable: true},
+		{Project: types.NewProjectRef("web", "/ws/web"), Language: "typescript", Hint: "install scip-typescript"},
+	}}))
+}
+
+func (s *indexesBehindSuite) TestAGapSelectsItsLanguageOfItsProject() {
+	wanted := indexesBehind(types.KnowledgeAnswer{Gaps: []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("libs/a", "/ws/libs/a"), Language: "go"},
+	}})
+	s.True(wanted(goStatus("libs/a")))
+	s.False(wanted(goStatus("libs/b")))
+	s.False(wanted(types.SymbolIndexStatus{Project: types.NewProjectRef("libs/a", "/ws/libs/a"), Op: "scip-buzz", Language: "buzz"}))
+}
+
+func (s *indexesBehindSuite) TestAStaleIndexSelectsItself() {
+	wanted := indexesBehind(types.KnowledgeAnswer{
+		StaleIndexes:      []string{"libs/a"},
+		StaleIndexDetails: []types.KnowledgeStaleIndex{{Project: "libs/a", Language: "go", Op: "scip"}},
+	})
+	s.True(wanted(goStatus("libs/a")))
+	s.False(wanted(goStatus("libs/b")))
+}
 
 // captureStdout is testkit.CaptureStdout. showOutputIdentity prints straight to
 // os.Stdout (matching the rest of `magus query`'s text-format rendering), so swapping

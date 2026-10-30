@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -29,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
@@ -263,6 +265,15 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		if res, err = searchGraph(ctx, ws, globalCfg, read, qf.Refresh, qf.Global); err != nil {
+			return err
+		}
+	}
+	if !qf.Global && refreshBehindIndexes(ctx, root, "magus query", res.Out.Answer) {
+		ws, err := openForRead(ctx, root)
+		if err != nil {
+			return err
+		}
+		if res, err = searchGraph(ctx, ws, globalCfg, read, false, false); err != nil {
 			return err
 		}
 	}
@@ -1236,6 +1247,54 @@ func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepos
 		return w.Magus(ctx)
 	}
 	return nil, fmt.Errorf("%T is not a workspace", ws)
+}
+
+// refreshBehindIndexes brings the indexes behind ans up to the tree and
+// says on stderr what it did and how long it took. True means read again.
+// What stays behind it names at error level. A running graph build wins.
+func refreshBehindIndexes(ctx context.Context, root, verb string, ans types.KnowledgeAnswer) bool {
+	wanted := indexesBehind(ans)
+	if wanted == nil || globalCfg.DryRun {
+		return false
+	}
+	if dir, err := knowledgeStoreDir(root); err == nil {
+		if holder, running := maintenance.RunningGraphBuild(dir); running {
+			slog.InfoContext(ctx, fmt.Sprintf("a graph build (pid %d) is refreshing this checkout's indexes, so this answer is drawn from them as they stand", holder.PID), attr.Notice(verb))
+			return false
+		}
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		slog.ErrorContext(ctx, fmt.Sprintf("could not refresh the symbol indexes behind this answer; `%s` retries", hint.GraphBuild), attr.Notice(verb), attr.Error(err))
+		return false
+	}
+	refresh := m.RefreshSymbolIndexes(ctx, wanted)
+	took := refresh.Took.Round(100 * time.Millisecond)
+	if n := len(refresh.Refreshed); n > 0 {
+		slog.InfoContext(ctx, fmt.Sprintf("refreshed %d symbol index(es) in %s: %s", n, took, strings.Join(refresh.Refreshed, ", ")), attr.Notice(verb))
+	}
+	if len(refresh.Problems) > 0 {
+		slog.ErrorContext(ctx, fmt.Sprintf("could not refresh every symbol index behind this answer in %s, so it is drawn from them as they stand; `%s` retries: %s",
+			took, hint.GraphBuild, strings.Join(refresh.Problems, "; ")), attr.Notice(verb))
+	}
+	return len(refresh.Refreshed) > 0
+}
+
+// indexesBehind selects the indexes behind ans a run could bring current,
+// nil when none. An index with no indexer to run would only fail.
+func indexesBehind(ans types.KnowledgeAnswer) func(types.SymbolIndexStatus) bool {
+	gaps := slices.DeleteFunc(slices.Clone(ans.Gaps), func(g types.KnowledgeSymbolGap) bool { return !g.Buildable() })
+	stale := ans.StaleIndexDetails
+	if len(gaps) == 0 && len(stale) == 0 {
+		return nil
+	}
+	return func(s types.SymbolIndexStatus) bool {
+		return slices.ContainsFunc(gaps, func(g types.KnowledgeSymbolGap) bool {
+			return g.Project.Path == s.Project.Path && g.CouldHold(s.Language)
+		}) || slices.ContainsFunc(stale, func(i types.KnowledgeStaleIndex) bool {
+			return i.Project == cmp.Or(s.Project.Path, ".") && i.CouldHold(s.Language)
+		})
+	}
 }
 
 // askServer has a running server answer verb into reply and reports whether it did. A

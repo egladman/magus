@@ -105,6 +105,16 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 		}
 		res = lookupRefs(ctx, ws, globalCfg, g, read, measuredCoverage(ctx, ws, globalCfg))
 	}
+	if refreshBehindIndexes(ctx, root, "magus refs", res.answer()) {
+		ws, err := openWorkspaceForRead(ctx, root)
+		if err != nil {
+			return err
+		}
+		if g, err = loadRefsGraph(ctx, ws, globalCfg, false, pos[0]); err != nil {
+			return err
+		}
+		res = lookupRefs(ctx, ws, globalCfg, g, read, measuredCoverage(ctx, ws, globalCfg))
+	}
 	if len(res.Ambiguous) > 0 {
 		return refuseAmbiguous(noticeLines{ctx: ctx, level: slog.LevelError}, pos[0], res.Ambiguous)
 	}
@@ -359,6 +369,14 @@ type refsResult struct {
 	Occurrences *magus.SymbolOccurrenceRead `json:"occurrences,omitempty"`
 	// coverage is what the verdicts were judged from, for the local-only --definition read.
 	coverage knowledge.Coverage
+}
+
+// answer is the verdict on the lookup, a hit's or a miss's.
+func (r refsResult) answer() types.KnowledgeAnswer {
+	if r.Found {
+		return r.Out.Answer
+	}
+	return r.Answer
 }
 
 // lookupRefs looks ref up in g, a graph with ref's symbol shards merged, under cfg,

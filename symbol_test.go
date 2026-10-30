@@ -728,6 +728,137 @@ func TestSymbolGapNamesTheMissingIndexerOfASingleIndex(t *testing.T) {
 	}, probeSymbolIndexes(decls, installed))
 }
 
+func refreshAnyIndex(types.SymbolIndexStatus) bool { return true }
+
+func (s *magusSuite) TestRefreshBringsAStaleIndexCurrentAndNamesIt() {
+	m, src := newIndexedWorkspace(s.T())
+	s.Require().NoError(os.WriteFile(src, []byte("package main\n\nfunc added() {}\n"), 0o644))
+	s.Require().Equal(types.SymbolIndexStale, freshness(s.T(), m))
+
+	got := m.RefreshSymbolIndexes(s.T().Context(), refreshAnyIndex)
+
+	s.Equal([]string{"."}, got.Refreshed, "the fixture spell declares no language")
+	s.Empty(got.Problems)
+	s.Positive(got.Took)
+	s.Equal(types.SymbolIndexFresh, freshness(s.T(), m))
+}
+
+func (s *magusSuite) TestRefreshLeavesACurrentIndexAlone() {
+	m, _ := newIndexedWorkspace(s.T())
+
+	got := m.RefreshSymbolIndexes(s.T().Context(), refreshAnyIndex)
+
+	s.Empty(got.Refreshed)
+	s.Empty(got.Problems)
+}
+
+func (s *magusSuite) TestRefreshSkipsAnIndexWantedExcludes() {
+	m, src := newIndexedWorkspace(s.T())
+	s.Require().NoError(os.WriteFile(src, []byte("package main\n\nfunc added() {}\n"), 0o644))
+
+	got := m.RefreshSymbolIndexes(s.T().Context(), func(types.SymbolIndexStatus) bool { return false })
+
+	s.Empty(got.Refreshed)
+	s.Equal(types.SymbolIndexStale, freshness(s.T(), m))
+}
+
+// staleRefresher is a symbolRefresher over one stale Go index under dir,
+// running run.
+func staleRefresher(dir string, run func(context.Context, types.SymbolIndexStatus) error) symbolRefresher {
+	return symbolRefresher{
+		budget: time.Minute, abandon: time.Millisecond, now: time.Now, wanted: refreshAnyIndex,
+		status: func(context.Context) []types.SymbolIndexStatus {
+			return []types.SymbolIndexStatus{{Project: types.NewProjectRef("libs/a", dir), Op: "scip", Language: "go", Freshness: types.SymbolIndexStale}}
+		},
+		indexPath: func(types.SymbolIndexStatus) string { return filepath.Join(dir, "symbols", "scip.pack") },
+		run:       run,
+	}
+}
+
+func (s *magusSuite) TestRefreshReturnsWithinTheBudgetWhenARunIgnoresCancellation() {
+	release := make(chan struct{})
+	s.T().Cleanup(func() { close(release) })
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error {
+		<-release
+		return nil
+	})
+	r.budget = 10 * time.Millisecond
+
+	got := r.refresh(s.T().Context())
+
+	s.Empty(got.Refreshed)
+	s.Require().Len(got.Problems, 1)
+	s.Contains(got.Problems[0], "outlived the 10ms budget")
+}
+
+func (s *magusSuite) TestRefreshNamesARunThatFailsAndBacksOffTheNextRead() {
+	runs := 0
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error {
+		runs++
+		return errors.New("scip-go exploded")
+	})
+
+	first := r.refresh(s.T().Context())
+	second := r.refresh(s.T().Context())
+
+	s.Equal([]string{"scip-go exploded"}, first.Problems)
+	s.Require().Len(second.Problems, 1)
+	s.Contains(second.Problems[0], "libs/a (go index): its last refresh failed")
+	s.Contains(second.Problems[0], "scip-go exploded")
+	s.Equal(1, runs, "the backoff spares the second read the run")
+}
+
+func (s *magusSuite) TestRefreshRetriesOnceTheBackoffHasPassed() {
+	runs := 0
+	now := time.Now()
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error {
+		runs++
+		if runs == 1 {
+			return errors.New("flaked")
+		}
+		return nil
+	})
+	r.now = func() time.Time { return now }
+	_ = r.refresh(s.T().Context())
+
+	now = now.Add(symbolIndexBackoffBase + time.Minute)
+	got := r.refresh(s.T().Context())
+
+	s.Equal([]string{"libs/a (go index)"}, got.Refreshed)
+	s.NoFileExists(r.indexPath(types.SymbolIndexStatus{}) + symbolRefreshFailedSuffix)
+}
+
+func (s *magusSuite) TestRefreshSetsNoBackoffWhenAnotherMagusHoldsTheLock() {
+	dir := s.T().TempDir()
+	r := staleRefresher(dir, func(context.Context, types.SymbolIndexStatus) error {
+		return exitCodeError(lockContendedExit)
+	})
+
+	got := r.refresh(s.T().Context())
+
+	s.Len(got.Problems, 1)
+	s.NoFileExists(r.indexPath(types.SymbolIndexStatus{}) + symbolRefreshFailedSuffix)
+}
+
+func (s *magusSuite) TestRefreshRunsTheGuardIndexesOnlyAfterARefresh() {
+	after := 0
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error { return errors.New("no") })
+	r.after = func(context.Context) { after++ }
+	_ = r.refresh(s.T().Context())
+	s.Zero(after)
+
+	r = staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error { return nil })
+	r.after = func(context.Context) { after++ }
+	_ = r.refresh(s.T().Context())
+	s.Equal(1, after)
+}
+
+// exitCodeError is a run error carrying a process exit status.
+type exitCodeError int
+
+func (e exitCodeError) Error() string { return fmt.Sprintf("exit %d", int(e)) }
+func (e exitCodeError) ExitCode() int { return int(e) }
+
 func (s *magusSuite) TestALanguageNothingIndexesIsAnUnindexableGap() {
 	decls := []knowledge.SymbolIndexDeclaration{{Project: "web", Dir: "/ws/web", Language: "typescript"}}
 	gaps := probeSymbolIndexes(decls, func(string) bool { return true })
