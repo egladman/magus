@@ -131,6 +131,7 @@ concepts/spells/rs/
 concepts/spells/rust/
 concepts/spells/ts/
 concepts/spells/typescript/
+concepts/state/
 concepts/targets/
 concepts/targets/ci/
 concepts/telemetry/
@@ -168,6 +169,9 @@ decisions/0016-vcs-lists-the-person-stages/
 decisions/0017-a-cache-hit-stays-in-its-checkout/
 decisions/0017-a-change-accepts-the-findings-it-causes/
 decisions/0018-magus-assembles-oci-images/
+decisions/0019-a-mandate-carries-out-decisions-already-made/
+decisions/0020-the-person-directs-sessions-report/
+decisions/0021-a-change-accepts-the-findings-it-causes/
 dependencies/
 design/
 design/judgment/
@@ -198,6 +202,7 @@ design/principles/delete-before-you-add/
 design/principles/enforcement-not-pinky-promises/
 design/principles/every-answer-has-an-address/
 design/principles/everything-is-a-file/
+design/principles/flags-config-help-one-source/
 design/principles/friction-that-carries-meaning/
 design/principles/human-first-is-the-ai-integration/
 design/principles/human-in-the-loop/
@@ -238,6 +243,7 @@ development/libs-embed-train/
 development/libs-embed/
 development/libs-figure/
 development/libs-gopherbuzz/
+development/libs-kustomize/
 development/libs-mergequeue/
 development/libs-orphanator/
 development/libs-pricing/
@@ -388,6 +394,7 @@ guides/integrations/server/
 guides/jobs/
 guides/jobs/model-tiers/
 guides/jobs/other-work/
+guides/kustomize-diagram/
 guides/mcp/
 guides/migrating/
 guides/migrating/breaking-changes/
@@ -410,6 +417,7 @@ guides/setup/shell-setup/
 guides/setup/uninstall/
 guides/setup/verify/
 guides/setup/windows/
+guides/symbol-indexes/
 guides/testing/
 guides/tips/
 index.html
@@ -510,10 +518,12 @@ reference/api/viewer/v1alpha1/viewer/
 reference/buzz/
 reference/buzz/archive/
 reference/buzz/base64/
+reference/buzz/buzz/
 reference/buzz/charm/
 reference/buzz/crypto/
 reference/buzz/csv/
 reference/buzz/diff/
+reference/buzz/diskwatch/
 reference/buzz/encoding/
 reference/buzz/env/
 reference/buzz/figure/
@@ -538,6 +548,7 @@ reference/buzz/path/
 reference/buzz/pipe/
 reference/buzz/platform/
 reference/buzz/proc/
+reference/buzz/reclaimdisk/
 reference/buzz/semver/
 reference/buzz/sort/
 reference/buzz/strings/
@@ -730,6 +741,10 @@ reference/codes/sandbox/MGS3043/
 reference/codes/sandbox/MGS3044/
 reference/codes/sandbox/MGS3045/
 reference/codes/sandbox/MGS3046/
+reference/codes/sandbox/MGS3047/
+reference/codes/sandbox/MGS3048/
+reference/codes/sandbox/MGS3049/
+reference/codes/sandbox/MGS3050/
 reference/codes/sandbox/MGS3051/
 reference/codes/services/
 reference/codes/services/MGS5001/
@@ -928,6 +943,7 @@ reference/rules/dependency-install/
 reference/rules/dependency-update/
 reference/rules/doc-search/
 reference/rules/echo-on-success/
+reference/rules/edit-ungraded/
 reference/rules/exit-status-echo/
 reference/rules/filter-without-input/
 reference/rules/focus-read/
@@ -1187,6 +1203,7 @@ tags/debugging/
 tags/decision/
 tags/decisions/
 tags/declarations/
+tags/degraded/
 tags/deny/
 tags/dependencies/
 tags/dependency-graph/
@@ -1249,6 +1266,7 @@ tags/glossary/
 tags/go/
 tags/goals/
 tags/grant/
+tags/graph-build/
 tags/graph/
 tags/graphml/
 tags/grpc/
@@ -1273,6 +1291,7 @@ tags/install/
 tags/integration/
 tags/interactive/
 tags/interpreter/
+tags/job-store/
 tags/jobs/
 tags/jobserver/
 tags/journal/
@@ -1284,6 +1303,7 @@ tags/keep-warm/
 tags/kernel/
 tags/knowledge-graph/
 tags/knowledge/
+tags/kubernetes/
 tags/landlock/
 tags/layers/
 tags/leases/
@@ -1348,6 +1368,7 @@ tags/onboarding/
 tags/opencode/
 tags/operations/
 tags/operator/
+tags/orchestration/
 tags/orchestrator/
 tags/ordering/
 tags/os/
@@ -1381,6 +1402,7 @@ tags/projects/
 tags/proofread/
 tags/proto/
 tags/protobuf/
+tags/protocol/
 tags/provenance/
 tags/provider/
 tags/providers/
@@ -1408,9 +1430,11 @@ tags/replace/
 tags/replay/
 tags/reproduce/
 tags/required/
+tags/restart/
 tags/retry/
 tags/review/
 tags/rfc-6902/
+tags/risk/
 tags/ruff/
 tags/rules/
 tags/run/
@@ -1445,6 +1469,7 @@ tags/shell/
 tags/shorthand/
 tags/signature/
 tags/signing/
+tags/skew/
 tags/skills/
 tags/skip-cache/
 tags/slots/
@@ -1467,6 +1492,7 @@ tags/strengthen-only/
 tags/subscribe/
 tags/supply-chain/
 tags/supported/
+tags/symbol-index/
 tags/symbols/
 tags/target-timeout/
 tags/target/

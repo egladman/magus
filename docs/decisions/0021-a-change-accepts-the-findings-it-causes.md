@@ -5,6 +5,7 @@ description: A deliberate protobuf rename fails buf-breaking and has no sanction
 tags: [adr, decision, ci, gates, compatibility, buf, breaking-changes]
 status: proposed (reopened 2026-10-24 to reuse what exists)
 date: 2026-10-24
+aliases: [decisions/0017-a-change-accepts-the-findings-it-causes]
 ---
 
 # ADR 0021: a change accepts the findings it causes
