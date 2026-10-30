@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -19,6 +20,12 @@ func TestSourceIsTheFigureModule(t *testing.T) {
 	assert.True(t, strings.Contains(Source, "\nnamespace figure;\n"), "figure.buzz declares the figure namespace")
 	assert.True(t, strings.Contains(Source, "\nexport fun of(id: str,"), "of() is the module's entry point")
 	assert.True(t, strings.Contains(Source, "\nexport fun draw(f: Figure, theme: Theme,"), "draw() paints a Figure")
+}
+
+func TestStandaloneMatchesTheModule(t *testing.T) {
+	assert.Contains(t, Source, "export final XmlDeclaration = "+strconv.Quote(xmlDeclaration)+";")
+	assert.Equal(t, xmlDeclaration+"<svg/>", Standalone("<svg/>"))
+	assert.False(t, strings.HasPrefix("<svg/>", "<?xml"), "Draw's inline form carries no declaration")
 }
 
 func TestSourceSHA256IsTheFileOnDisk(t *testing.T) {

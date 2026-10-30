@@ -337,6 +337,14 @@ func Draw(ctx context.Context, sess *buzz.Session, fig Figure, anchorHref string
 	return items[0].AsString(), nil
 }
 
+// xmlDeclaration is XmlDeclaration in figure.buzz.
+const xmlDeclaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+
+// Standalone is svg as a file of its own. Draw returns the inline form.
+func Standalone(svg string) string {
+	return xmlDeclaration + svg
+}
+
 // field is one key of a record as a host hands it to Buzz: a map read through the record's
 // declared type.
 type field struct {

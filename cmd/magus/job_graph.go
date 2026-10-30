@@ -902,7 +902,11 @@ func drawPlanFigure(ctx context.Context, rec figure.Figure) (string, error) {
 	buzzstd.RegisterWithOutput(sess, io.Discard)
 	bindings.RegisterMagusRecordTypes(sess)
 	sess.SetModuleDecls("magus/figure", figure.Source)
-	return figure.Draw(ctx, sess, rec, "")
+	svg, err := figure.Draw(ctx, sess, rec, "")
+	if err != nil {
+		return "", err
+	}
+	return figure.Standalone(svg), nil
 }
 
 // writePlanSVGs writes each figure to dir as <id>.svg. It draws every

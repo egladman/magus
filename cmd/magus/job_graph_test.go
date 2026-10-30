@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -175,7 +176,7 @@ func TestPlanSVGsDrawWithoutARefusalAndRepeatByteForByte(t *testing.T) {
 		require.NoError(t, err)
 		b, err := os.ReadFile(again[i])
 		require.NoError(t, err)
-		assert.Contains(t, string(a), "<svg")
+		assert.True(t, strings.HasPrefix(string(a), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg"), paths[i])
 		assert.Equal(t, string(a), string(b), paths[i])
 	}
 }

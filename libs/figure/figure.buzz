@@ -6852,6 +6852,10 @@ object DrawnFlow {
     call: str = "",
 }
 
+// XmlDeclaration opens a standalone SVG, as XML 1.0 section 2.8 advises.
+// Theme.page has none: an HTML page inlines it.
+export final XmlDeclaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+
 object DrawnBand {
     verb: str = "",
     label: str = "",
@@ -6871,7 +6875,9 @@ export fun draw(f: Figure, theme: Theme, anchorHref: str = "") > str !> str {
     var p = pagePalette();
     if (theme == Theme.light) { p = lightPalette(); }
     if (theme == Theme.dark) { p = darkPalette(); }
-    return renderSvg(d, p: p, s: Style{ anchorHref = anchorHref });
+    final svg = renderSvg(d, p: p, s: Style{ anchorHref = anchorHref });
+    if (theme == Theme.page) { return svg; }
+    return XmlDeclaration + svg;
 }
 
 // nodeFact is the line a figure's stamp records for n. A box anchoring a symbol records the
@@ -7758,7 +7764,8 @@ test "draw paints each theme" {
         message: "page follows the site's variables");
     std\assert(page.indexOf("class=\"magus-fill-ink magus-sans\"") != null, message: "page tags each role");
     std\assert(page.indexOf("var(--magus-diagram-ink,#f5f5f5)") != null, message: "page falls back to dark under a dark scheme");
-    std\assert(dark.indexOf("<style>") == null and dark.indexOf("magus-fill-") == null and dark.startsWith("<svg"),
+    std\assert(dark.indexOf("<style>") == null and dark.indexOf("magus-fill-") == null and dark.startsWith(XmlDeclaration + "<svg") and page.startsWith("<svg")
+        and (draw(f, theme: Theme.light) catch "threw").startsWith(XmlDeclaration + "<svg"),
         message: "dark bakes hex");
 }
 
@@ -7789,7 +7796,8 @@ test "every theme writes no var() in an attribute" {
     foreach (f in figures) {
         foreach (theme in [Theme.page, Theme.light, Theme.dark]) {
             final svg = draw(f, theme: theme) catch "threw";
-            std\assert(svg.startsWith("<svg"), message: "{f.id} {theme.value}: {svg}");
+            final head = if (theme == Theme.page) "<svg" else XmlDeclaration + "<svg";
+            std\assert(svg.startsWith(head), message: "{f.id} {theme.value}: {svg}");
             assert\equal(varAttrs(svg).join(", "), want: "", message: "{f.id} {theme.value}: var() in an attribute");
         }
     }

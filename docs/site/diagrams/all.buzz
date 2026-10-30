@@ -125,10 +125,19 @@ fun runFigure(f: figure\Figure) > FigureRun {
 // stamped puts the stamp in the SVG's metadata, so a reader of the file and a later run
 // compare the same fact.
 fun stamped(svg: str, id: str, stamp: str) > str {
-    final open = svg.indexOf(">");
+    final root = svg.indexOf("<svg");
+    if (root == null) { return svg; }
+    final open = svg.sub(root!).indexOf(">");
     if (open == null) { return svg; }
+    final end = root! + open!;
     final meta = "<metadata>\{\"figure\":\"{id}\",\"stamp\":\"{stamp}\"}</metadata>";
-    return svg.sub(0, len: open! + 1) + meta + svg.sub(open! + 1);
+    return svg.sub(0, len: end + 1) + meta + svg.sub(end + 1);
+}
+
+test "the stamp skips an XML declaration" {
+    assert\equal(stamped("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg a=\"1\"><g/></svg>", id: "x", stamp: "s"),
+        want: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg a=\"1\"><metadata>\{\"figure\":\"x\",\"stamp\":\"s\"}</metadata><g/></svg>",
+        message: "after the root tag");
 }
 
 test "the stamp lands inside the svg element" {
