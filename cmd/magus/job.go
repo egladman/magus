@@ -1452,7 +1452,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if stored.Worktree == nil {
 			printLandingBootstrap(ctx, os.Stdout, store, stored)
 		}
-		printClaimNotes(os.Stdout, append(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored)...))
+		printClaimNotes(os.Stdout, slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)))
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
 			for _, claim := range derived {
@@ -1480,7 +1480,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				ReferencedOutside:    referenced,
 				ReferencedOutsideGap: referencedGap,
 				ForegroundOverrun:    overrun,
-				ClaimNotes:           append(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored)...),
+				ClaimNotes:           slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)),
 			},
 			derived,
 		})
@@ -2957,7 +2957,8 @@ func applyClaimNotes(ctx context.Context, store *job.Store, applied []job.Applie
 	}
 	out := map[string][]string{}
 	for _, a := range applied {
-		if notes := job.ForkNotes(ctx, store, rows, a.Next); len(notes) > 0 {
+		notes := job.ForkNotes(ctx, store, rows, a.Next)
+		if notes = append(notes, job.ReleasedUnderPattern(a.Next)...); len(notes) > 0 {
 			out[a.Next.ID] = notes
 		}
 	}

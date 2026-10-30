@@ -9,3 +9,6 @@
   fork and apply now name that project among the checks they did not run.
 - **`job apply` names a state it moved.** A record that hands an exited row back printed
   `still declared`. It now prints `exited to declared` and the `job exec` that takes it.
+- **A released file under a named pattern is said out loud.** A record naming the glob a
+  narrowing took a file out of leaves the file released, and dropping its claims leaves it
+  held by nothing. `job fork` and `job apply` now note which it is.

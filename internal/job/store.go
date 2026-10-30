@@ -1028,6 +1028,24 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, r
 	return out
 }
 
+// ReleasedUnderPattern says of each file row released that a pattern of its
+// write paths still names: the release stands, so the pattern does not hold it.
+func ReleasedUnderPattern(row types.Job) []string {
+	var notes []string
+	for _, r := range row.Releases {
+		file, decl := types.SplitClaim(r.Path)
+		if decl != "" || !heldByPattern(row, file) {
+			continue
+		}
+		if claims := claimsOnFile(row, file); len(claims) > 0 {
+			notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it: only its claims do (%s)", file, strings.Join(claims, ", ")))
+			continue
+		}
+		notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until write_paths name `%s#<declaration>`", file, file))
+	}
+	return notes
+}
+
 // digest identifies the content at a released path, resolved inside the workspace.
 // Computed here rather than passed in: a worker announcing a release should not have to
 // hash anything, and a digest the releaser supplied would describe the tree it believed

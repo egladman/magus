@@ -155,6 +155,45 @@ func TestNarrowConfigHold(t *testing.T) {
 	}
 }
 
+// releaseUnderPatternSuite pins a record naming again the glob a narrowing took
+// a file out of.
+type releaseUnderPatternSuite struct {
+	suite.Suite
+}
+
+func TestReleaseUnderPattern(t *testing.T) { suite.Run(t, new(releaseUnderPatternSuite)) }
+
+func (s *releaseUnderPatternSuite) applied(write ...string) types.Job {
+	loc := tempLocation(s.T(), testkit.NewRepository(s.T(), configFiles).Root())
+	store := NewStore(loc)
+	seed(s.T(), store, types.Job{ID: "cfg", Criteria: "goal", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Check: forkCheck()})
+	_, err := NarrowConfigHold(s.T().Context(), boundStore(loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test"})
+	s.Require().NoError(err)
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{{ID: "cfg", Criteria: "goal", WritePaths: write, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+	s.Require().NoError(err)
+	return applied[0].Next
+}
+
+func (s *releaseUnderPatternSuite) TestAPatternAloneLeavesTheFileHeldByNothing() {
+	row := s.applied("**/*.buzz")
+
+	s.True(releasedFile(row, "magusfile.buzz"), "a record naming the glob does not take the file back")
+	s.Empty(claimsOnFile(row, "magusfile.buzz"))
+	s.Equal([]string{"magusfile.buzz stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until write_paths name `magusfile.buzz#<declaration>`"},
+		ReleasedUnderPattern(row))
+}
+
+func (s *releaseUnderPatternSuite) TestAKeptClaimIsNamedAsTheHold() {
+	row := s.applied("**/*.buzz", "magusfile.buzz#project.targets.test")
+
+	s.Equal([]string{"magusfile.buzz stays released, so the pattern naming it does not hold it: only its claims do (project.targets.test)"},
+		ReleasedUnderPattern(row))
+}
+
+func (s *releaseUnderPatternSuite) TestAReleasedFileNoPatternNamesIsNotNoted() {
+	s.Empty(ReleasedUnderPattern(types.Job{WritePaths: []string{"a.go"}, Releases: []types.JobRelease{{Path: "b.go"}}}))
+}
+
 // A fork refused over a magusfile another live job holds files one release request per
 // holder and file, however often it is refused; a dry run files none.
 func TestConfigRefusalRequestsOneRelease(t *testing.T) {

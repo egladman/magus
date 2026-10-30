@@ -1133,6 +1133,19 @@ func (s *jobApplyStateSuite) TestADryRunNamesTheMoveItWouldMake() {
 	s.Contains(s.printed(types.StateExited, types.StateDeclared, true), "would update w, exited to declared, so its holder takes it with `magus job exec w`:\n")
 }
 
+func (s *jobApplyStateSuite) TestAReleaseAPatternStillNamesIsNoted() {
+	row := leaseRow("w", "")
+	row.State, row.WritePaths = types.StateRunning, []string{"src/*.go"}
+	row.Releases = []types.JobRelease{{Path: "src/a.go", Digest: types.DigestAbsent, ReleasedAt: 1}}
+	root, cacheDir := execFixture(s.T(), row)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
+
+	notes := applyClaimNotes(s.T().Context(), store, []job.Applied{{Prev: row, Next: row}})
+
+	s.Require().Len(notes["w"], 1)
+	s.Contains(notes["w"][0], "src/a.go stays released, so the pattern naming it does not hold it")
+}
+
 // Apply prints the spec diff, writes nothing under --dry-run, and keeps the job's state
 // either way.
 func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
