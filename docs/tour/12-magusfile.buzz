@@ -76,7 +76,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 
 // Format every language. These ops CHECK by default; run `magus run format:rw`
-// to APPLY the fixes: the rw charm flips gofmt -l to -w, prettier --check to
+// to APPLY the fixes: the rw charm flips gofmt -d to -w, prettier --check to
 // --write, buf format to -w. The charm rides down from the run, so no branch is
 // needed here. (Try `run format` then `run format:rw` in the console to compare.)
 export fun format(ctx: magus\Context, args: [str]) > void {

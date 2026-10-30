@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
@@ -912,6 +913,51 @@ func (s *bindingsSuite) symbolIndexWorld() (context.Context, *cache.Cache, strin
 	s.Require().NoError(err)
 	projDir := s.T().TempDir()
 	return types.WithWorkspace(cache.NewContext(s.T().Context(), c), rootOnlyWS{root: projDir}), c, projDir
+}
+
+// goFmtRun runs the shipped go-fmt op over a directory holding files.
+func (s *bindingsSuite) goFmtRun(files map[string]string, charms ...string) (string, error) {
+	_, err := exec.LookPath("gofmt")
+	s.Require().NoError(err, "the exit status under test belongs to a real gofmt")
+	dir := s.T().TempDir()
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+		s.Require().NoError(os.WriteFile(path, []byte(content), 0o644))
+	}
+	op, ok := spell.Builtins()["go"].Ops["go-fmt"]
+	s.Require().True(ok, "the go spell declares go-fmt")
+	ctx := types.WithCharms(std.WithCurrentWorkingDirectory(s.T().Context(), dir), charms)
+	_, err = runCommand(ctx, op, commandOpts{op: "go-fmt"})
+	return dir, err
+}
+
+const (
+	goFmtClean = "package p\n\nfunc F() {}\n"
+	goFmtDrift = "package p\nfunc   F( ){ }\n"
+)
+
+func (s *bindingsSuite) TestGoFmtPassesOnFormattedFiles() {
+	_, err := s.goFmtRun(map[string]string{"a.go": goFmtClean})
+	s.NoError(err)
+}
+
+func (s *bindingsSuite) TestGoFmtFailsOnAnUnformattedFile() {
+	_, err := s.goFmtRun(map[string]string{"a.go": goFmtClean, "b.go": goFmtDrift})
+	s.Error(err)
+}
+
+func (s *bindingsSuite) TestGoFmtRwRewritesTheFileAndPasses() {
+	dir, err := s.goFmtRun(map[string]string{"b.go": goFmtDrift}, "rw")
+	s.NoError(err)
+	got, readErr := os.ReadFile(filepath.Join(dir, "b.go"))
+	s.Require().NoError(readErr)
+	s.Equal(goFmtClean, string(got))
+}
+
+func (s *bindingsSuite) TestGoFmtSkipsDotDirectories() {
+	_, err := s.goFmtRun(map[string]string{"a.go": goFmtClean, ".claude/w/b.go": goFmtDrift})
+	s.NoError(err)
 }
 
 // A command indexer's SCIP output is stored as a pack, one shard per directory, and the

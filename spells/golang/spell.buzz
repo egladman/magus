@@ -59,8 +59,8 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // trivy gets is not available here.
 //
 // `supported` on go is a MINIMUM ONLY, and deliberately has no ceiling. It says what
-// these ops need to function - 1.21 is where the toolchain line in go.mod became
-// something the module ops rely on - not which Go a repo has qualified. A ceiling here
+// these ops need to function, not which Go a repo has
+// qualified. 1.26 is where gofmt -d began to exit 1 on drift. A ceiling here
 // would be this spell deciding that nobody may run a newer Go, which is a workspace's
 // call: the `tools` key on magus\project is where that goes, and the two are intersected.
 // On the project and NOT in magus.yaml, deliberately, because config merges a user-global
@@ -80,7 +80,7 @@ export fun mgs_listRequiredGlobs() > [Path] {
 export fun mgs_getTools() > {str: Tool} {
     return {
         "go": Tool{probe = Command{bin = "go", args = ["version"]}, key = VersionKey{upTo = VersionComponent.patch},
-                   supported = VersionBounds{min = "1.21"}, lifecycle = "go"},
+                   supported = VersionBounds{min = "1.26"}, lifecycle = "go"},
         "golangci-lint": Tool{observe = Command{bin = "golangci-lint", args = ["version", "--debug"]}},
         "govulncheck": Tool{observe = Command{bin = "govulncheck", args = ["-version"]}},
     };
@@ -239,9 +239,9 @@ fun goGenerate(target: Target) > Command { return Command{bin = "go", args = ["g
 fun goRun(target: Target) > Command { return Command{bin = "go", args = ["run"], hints = GO_MOD_HINTS}; }
 
 fun goFmt(target: Target) > Command {
-    final args = ["-l", "."];
-    return Command{bin = "gofmt", args = args, charms = {
-        "rw": set(args, "-l", "-w"),
+    final args = ["-d"];
+    return Command{bin = "gofmt", args = args, sources = ["**/*.go"], charms = {
+        "rw": set(args, "-d", "-w"),
     }};
 }
 // Invoked directly rather than through `go tool`: golangci-lint generates no code,

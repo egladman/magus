@@ -138,7 +138,8 @@ $ echo $?
 ```
 
 `gofmt -l` reports on **stdout** and exits 0. magus reads an op's verdict from its
-exit code, so an unformatted file prints its own name and the run passes green. Most
+exit code, so an unformatted file prints its own name and the run passes green. The
+`go-fmt` op runs `gofmt -d` instead, which exits 1 on drift from Go 1.26. Most
 modern check tools (`prettier --check`, `biome check`, `markdownlint`,
 `ruff format --check`) signal through the exit code; older ones often do not.
 

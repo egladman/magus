@@ -384,10 +384,10 @@ race = charm\after(["test", "./..."], "test", ["-race"]);
 // {"ops":[{"op":"add","path":"/1","value":"-race"}]}
 ```
 
-**Swap a flag** (e.g. `gofmt -l .` → `-w .`):
+**Swap a flag** (e.g. `gofmt -d` → `-w`):
 
 ```buzz
-rw = charm\set(["-l", "."], "-l", "-w");
+rw = charm\set(["-d"], "-d", "-w");
 // {"ops":[{"op":"replace","path":"/0","value":"-w"}]}
 ```
 

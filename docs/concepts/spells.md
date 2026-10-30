@@ -116,8 +116,8 @@ You author an op as a function (the usual form) or a bare record; the kind is in
 ```buzz
 // command op: derive the `rw` charm from the arg list
 fun goFmt(target: Target) > Command {
-    final args = ["-l", "."];
-    return Command{bin = "gofmt", args = args, charms = { "rw": set(args, "-l", "-w") }};
+    final args = ["-d"];
+    return Command{bin = "gofmt", args = args, sources = ["**/*.go"], charms = { "rw": set(args, "-d", "-w") }};
 }
 // service op: a long-running dev server `magus run` blocks on
 // (command is required; readiness and stop are optional)
@@ -220,7 +220,7 @@ An op's public name is the **map key** in `mgs_listTargets` (or the `ops` table)
 | `go build`      | `go-build`      | `goBuild`      |
 | `go vet`        | `go-vet`        | `goVet`        |
 | `go test`       | `go-test`       | `goTest`       |
-| `gofmt -l`      | `go-fmt`        | `goFmt`        |
+| `gofmt -d`      | `go-fmt`        | `goFmt`        |
 | `go mod tidy`   | `go-mod-tidy`   | `goModTidy`    |
 | `golangci-lint` | `golangci-lint` | `golangCILint` |
 

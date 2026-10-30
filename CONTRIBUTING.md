@@ -549,13 +549,8 @@ than a hand-maintained ignore list. What follows is how that lands here.
 | TypeScript | Biome, via `biome-format` | excluded (`!src/gen/**`) | bundler and protobuf output is not Biome-normal and never will be       |
 | Markdown   | dprint                    | excluded (`dprint.json`) | generators do not emit dprint-normal output yet; see below              |
 
-Two things worth knowing before you change any of it:
+One thing worth knowing before you change any of it:
 
-- **Go formatting is gated by golangci-lint, not by the `format` target.** `gofmt -l`
-  lists unformatted files on stdout and exits 0, and magus reads an op's verdict from
-  the exit code alone, so unformatted Go used to pass green. `.golangci.yml` enables
-  `gofmt` under `formatters:`, which reports the same finding and exits 1. The `format`
-  target keeps `gofmt -l` as the local reporter, and `format:rw` flips it to `-w`.
 - **Markdown formatting is dprint, and generated Markdown is excluded from it.** That
   exclusion is the documented fallback, not the goal: it stays until each Markdown
   generator emits dprint-normal output, at which point its entry comes out of
