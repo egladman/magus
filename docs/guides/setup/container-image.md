@@ -54,14 +54,17 @@ test.
 
 ## Variants
 
-| Image                                   | Base                  | Platforms                | Notes                                                                                              |
-| --------------------------------------- | --------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
-| `ghcr.io/egladman/magus:latest`         | distroless/static     | linux/amd64, linux/arm64 | Fully static, no libc. The default; use this unless you need something below.                      |
-| `ghcr.io/egladman/magus:latest-dynamic` | distroless/cc (glibc) | linux/amd64              | glibc build that bundles `inotify-tools`, so `magus watch` / `fs\watch` work inside the container. |
+| Image                                   | Base                  | Platforms                | Notes                                                                         |
+| --------------------------------------- | --------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| `ghcr.io/egladman/magus:latest`         | distroless/static     | linux/amd64, linux/arm64 | Fully static, no libc. The default; use this unless you need something below. |
+| `ghcr.io/egladman/magus:latest-dynamic` | distroless/cc (glibc) | linux/amd64              | Runs on glibc, so Buzz FFI works: a script can load a shared library.         |
 
-Use `latest` unless you know you need the other one. The difference that matters follows
-from the static image carrying no shared libraries at all: **`magus watch` / `fs\watch`**
-need `inotify-tools`, which only the dynamic image ships.
+Use `latest` unless you know you need the other one. The difference is Buzz's FFI. It
+loads shared libraries through the system's dynamic loader, and distroless/static has
+none, so the static binary is built without FFI and a script that calls it fails with
+BZZ2003. The dynamic image keeps FFI on the glibc distroless/cc carries. Everything else
+works the same in both, `magus watch` and `fs\watch` included: they read inotify through
+system calls and need no extra package.
 
 ## Tags
 
@@ -101,30 +104,31 @@ one. Neither word is decoration: `cd` is what makes a build publish at all, and
 magus run image-build
 ```
 
-A local build loads a **single architecture** into your docker image store, and says
-which one in the build log. That is a constraint rather than a preference: `docker
-buildx build --load` cannot load a multi-platform result into the image store, so a
-local build has exactly one architecture no matter what. It defaults to your host's,
-so an Apple Silicon machine builds and runs `linux/arm64` natively.
+No Dockerfile and no `docker build` is involved. magus cross-compiles the binary, pulls
+the digest-pinned distroless base, and assembles an OCI image layout with its `image`
+module; the recipe is `hack/magusfile/image.buzz`. A local build then loads that one
+platform into your docker image store with `docker load`, tags it `magus:<commit>`, and
+runs `magus version` inside it, so an image that cannot start fails the build. It
+defaults to your host's architecture, so an Apple Silicon machine builds `linux/arm64`.
 
-| Command                         | Builds                                          |
-| ------------------------------- | ----------------------------------------------- |
-| `magus run image-build`         | cgo variant, host architecture                  |
-| `magus run image-build`         | static variant (the default), host architecture |
-| `magus run image-build:arm64`   | static variant, forced `linux/arm64`            |
-| `magus run image-build:dynamic` | dynamic (glibc) variant, host architecture      |
-| `magus run image-build:amd64`   | cgo variant, forced `linux/amd64`               |
+| Command                               | Builds                                          |
+| ------------------------------------- | ----------------------------------------------- |
+| `magus run image-build`               | static variant (the default), host architecture |
+| `magus run image-build:arm64`         | static variant, forced `linux/arm64`            |
+| `magus run image-build:amd64`         | static variant, forced `linux/amd64`            |
+| `magus run image-build:dynamic,amd64` | dynamic (glibc) variant, `linux/amd64`          |
 
-The `amd64` and `arm64` charms exist for reproducing a failure that only happens on
-the other architecture. They go through QEMU emulation, so expect them to be slow:
-they are a debugging tool, not a second default.
+The dynamic image is built for `linux/amd64` only, so on an arm64 host it needs the
+`amd64` charm; without it the build stops and names the platform. A forced architecture
+compiles as fast as the host's, since Go cross-compiles, but running a foreign one
+goes through your runtime's emulation and is slow.
 
 Multi-architecture images are built only when publishing, where the result is pushed
 to a registry rather than loaded locally.
 
 ## Install the binary without running a container
 
-The static image is a single static binary on an empty base, so the image doubles as
+The static image is a single static binary on distroless/static, so the image doubles as
 a distribution channel: copy the binary out and run it on the host, no container
 runtime involved at run time. This is handy on a machine that already has a runtime
 but no install script, and it is how several projects distribute cross-platform
@@ -180,40 +184,45 @@ cosign verify ghcr.io/egladman/magus:a1b2c3d \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-## Read the SBOM
+## Read the SBOM and provenance
 
-Every published image carries an [SPDX](https://spdx.dev/) software bill of
-materials and a max-detail [SLSA](https://slsa.dev/) provenance statement, both
-attached as in-toto attestations inside the image index. They are generated by
-BuildKit during the build itself, one per platform, so what they describe is the
-filesystem that shipped rather than a later re-scan of it.
+Every published image index carries two OCI 1.1 referrers: an [SPDX](https://spdx.dev/)
+2.3 SBOM and an in-toto statement with [SLSA](https://slsa.dev/) v1 provenance. magus
+writes both when it assembles the image, names the index by digest in each, and pushes
+them after it. They are separate manifests whose `subject` is the index, not
+attestations inside it, so `docker buildx imagetools inspect` does not show them.
 
-Because they are part of the index, no extra registry lookup is needed:
+| Document   | Artifact type                  | File                     |
+| ---------- | ------------------------------ | ------------------------ |
+| SBOM       | `application/spdx+json`        | `sbom.spdx.json`         |
+| Provenance | `application/vnd.in-toto+json` | `provenance.intoto.json` |
 
-```sh
-docker buildx imagetools inspect ghcr.io/egladman/magus:latest --format '{{ json .SBOM }}'
-docker buildx imagetools inspect ghcr.io/egladman/magus:latest --format '{{ json .Provenance }}'
-```
-
-On a multi-platform tag, pick a platform to avoid dumping every architecture at once:
-
-```sh
-docker buildx imagetools inspect ghcr.io/egladman/magus:latest \
-  --format '{{ json (index .SBOM "linux/arm64").SPDX }}'
-```
-
-The SPDX document is ordinary JSON, so any SBOM tool reads it. To feed it to a
-vulnerability scanner:
+Any client that reads the OCI Referrers API finds them. GHCR serves that API; on a
+registry without it, magus also lists them in the `sha256-<hex>` tag the distribution
+spec defines as the fallback, which the same clients read. With
+[ORAS](https://oras.land/):
 
 ```sh
-docker buildx imagetools inspect ghcr.io/egladman/magus:latest \
-  --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > magus.spdx.json
-grype sbom:magus.spdx.json
+oras discover ghcr.io/egladman/magus:__MAGUS_VERSION__
+oras discover --artifact-type application/spdx+json ghcr.io/egladman/magus:__MAGUS_VERSION__
 ```
 
-The static image is a single Go binary on an empty base, so expect its SBOM to be
-short: the Go module graph and nothing else. The `-dynamic` image also lists
-its distroless/cc glibc layer and `inotify-tools`.
+`discover` prints each referrer's digest. Pull one to read it:
+
+```sh
+oras pull ghcr.io/egladman/magus@sha256:<referrer digest>
+```
+
+That writes `sbom.spdx.json` or `provenance.intoto.json` to the current directory.
+
+The provenance names the workflow that built the image as its builder, the commit as
+its source, and the distroless base's digest as a dependency. The SBOM names the image
+by digest and carries no file or package inventory. For the Go modules and the base's
+packages, scan the image itself:
+
+```sh
+trivy image ghcr.io/egladman/magus:__MAGUS_VERSION__
+```
 
 ## Next steps
 
