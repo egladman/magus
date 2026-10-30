@@ -232,8 +232,11 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 		}
 		return EvalResult{OK: true, Output: tr.out.String(), Trace: trace}
 	}
+	return evalPlain(ctx, src)
+}
 
-	// Plain mode: evaluate the Buzz snippet once and return its trailing value + output.
+// evalPlain evaluates src once for its trailing value and output.
+func evalPlain(ctx context.Context, src string) EvalResult {
 	var out bytes.Buffer
 	sess, err := plainSession(ctx, &out)
 	if err != nil {
