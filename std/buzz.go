@@ -43,10 +43,16 @@ func BuzzParse(ctx context.Context, path string, embedded bool) (types.BuzzFile,
 		Statements: []types.BuzzStatement{},
 		Tests:      []types.BuzzTest{},
 	}
-	src, err := readBuzzSource(ctx, path)
-	if err != nil {
+	if err := fillBuzzFile(ctx, &file, embedded); err != nil {
 		file.Error = err.Error()
-		return file, nil
+	}
+	return file, nil
+}
+
+func fillBuzzFile(ctx context.Context, file *types.BuzzFile, embedded bool) error {
+	src, err := readBuzzSource(ctx, file.Path)
+	if err != nil {
+		return err
 	}
 	parse := buzz.Parse
 	if embedded {
@@ -54,12 +60,11 @@ func BuzzParse(ctx context.Context, path string, embedded bool) (types.BuzzFile,
 	}
 	prog, err := parse(src)
 	if err != nil {
-		file.Error = err.Error()
-		return file, nil
+		return err
 	}
 	// The parser accepted src, so tokenizing it again cannot fail.
 	toks, _ := token.Tokenize(src)
-	w := buzzWalker{file: &file, closers: braceClosers(toks)}
+	w := buzzWalker{file: file, closers: braceClosers(toks)}
 	for i, stmt := range prog.Stmts {
 		file.Statements = append(file.Statements, types.BuzzStatement{
 			Kind:    statementKind(stmt),
@@ -69,7 +74,7 @@ func BuzzParse(ctx context.Context, path string, embedded bool) (types.BuzzFile,
 		})
 		w.scan(stmt, nil)
 	}
-	return file, nil
+	return nil
 }
 
 func readBuzzSource(ctx context.Context, path string) (string, error) {
