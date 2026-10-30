@@ -41,6 +41,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [credential-verb](credential-verb.md)                 | an agent minting, printing, rotating or revoking a credential through the CLI                       |
 | [dependency-install](dependency-install.md)           | a raw package install that the cached install target already runs                                   |
 | [dependency-update](dependency-update.md)             | a raw dependency update outside a target's update charm                                             |
+| [deviation-author](deviation-author.md)               | an agent adding a line to a `*.deviations.jsonl` ledger, in any spelling and any role               |
 | [edit-ungraded](edit-ungraded.md)                     | a rewrite a magus process makes itself, as `refs --rename` or a Buzz fs write, that no lease grades |
 | [exit-status-echo](exit-status-echo.md)               | a line ending by printing an exit status, which the harness already reports                         |
 | [filter-without-input](filter-without-input.md)       | a filter or interpreter with no file, script, pipe or redirect, which reads a stdin nothing feeds   |

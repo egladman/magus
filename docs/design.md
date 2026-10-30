@@ -69,7 +69,6 @@ automates a decision and when it hands the decision to you.
 - [The Go proverbs, beyond Go](design/principles/the-go-proverbs.md): Rob Pike's Go proverbs hold in every language here; where one has an enforcement point the page names it, and where it has none that is a debt.
 - [Delete before you add](design/principles/delete-before-you-add.md): The best code is still no code; before adding code to keep something working, check whether removing the old path reaches the goal.
 - [Break now, hold still later](design/principles/break-now-hold-still-later.md): Before 1.0 a wrong name or format is fixed without a migration path; after it, the tool that works the way it worked last year is the product.
-- [A deliberate break never merges red](design/principles/a-deliberate-break-never-merges-red.md): A person making a deliberate break is never put in the position of merging a red pull request; the change carries its own recorded way to green.
 - [Sit next to the tools, never in front of them](design/principles/sit-next-to-the-tools.md): A build tool runs other tools; it stays thin enough that you can always see which command ran and reach the tool directly.
 - [No generated code in the build path](design/principles/no-generated-code-in-the-build-path.md): Scaffolding hands you a file and leaves; a generator that must run for the tool to work never leaves, so magus has none.
 - [Inform people, contain the engine](design/principles/inform-people-contain-the-engine.md): Guardrails live in the engine (the sandbox and the cache), not in a schema that predicts you; magus is strict about what it tells a person and permissive about what it lets them do.
@@ -84,6 +83,7 @@ automates a decision and when it hands the decision to you.
 - [The harness belongs in the task runner](design/principles/the-harness-sits-on-the-tool-layer.md): Loosen the reins at the right layers; magus builds the harness on the task runner's record of declared inputs and outputs, and the CLI, the harness and the Go SDK all read that one record.
 - [The checker catches it; the runtime is the backstop](design/principles/the-checker-catches-it.md): A mistake the Buzz checker, the spell contract, a generated decoder or a Go analyzer can find is refused at check time; a runtime refusal is for input the checker cannot see, and it names the typed fix.
 - [Flags, config and help from one source](design/principles/flags-config-help-one-source.md): Each flag is declared once, by its positive name. Parsing, help, the man page, the completions and the config vocabulary read that declaration.
+- [A deliberate break never merges red](design/principles/a-deliberate-break-never-merges-red.md): A person making a deliberate break is never put in the position of merging a red pull request; the change carries its own recorded way to green.
 
 ### Judgment
 

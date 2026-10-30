@@ -9,6 +9,7 @@ github.com/egladman/magus.CacheStats type struct
 github.com/egladman/magus.CacheStats.Error field int
 github.com/egladman/magus.CacheStats.Hit field int
 github.com/egladman/magus.CacheStats.Miss field int
+github.com/egladman/magus.CacheStats.Permitted field int
 github.com/egladman/magus.CacheStats.SavedMs field int64
 github.com/egladman/magus.CatalogFingerprint func() string
 github.com/egladman/magus.CharmsForCI func(charms []string) []string
@@ -2846,6 +2847,7 @@ github.com/egladman/magus/types.Job.ReadPaths field []string "json:\"read_paths,
 github.com/egladman/magus/types.Job.Registered field int64 "json:\"registered,omitempty\" yaml:\"registered,omitempty\""
 github.com/egladman/magus/types.Job.RegisteredBy field Origin "json:\"registered_by,omitempty\" yaml:\"registered_by,omitempty\""
 github.com/egladman/magus/types.Job.Rejection field *JobRejection "json:\"rejection,omitempty\" yaml:\"rejection,omitempty\""
+github.com/egladman/magus/types.Job.ReleaseRequests field []JobReleaseRequest "json:\"release_requests,omitempty\" yaml:\"release_requests,omitempty\" buzz:\"-\""
 github.com/egladman/magus/types.Job.Releases field []JobRelease "json:\"releases,omitempty\" yaml:\"releases,omitempty\""
 github.com/egladman/magus/types.Job.ReportedBase field string "json:\"reported_base,omitempty\" yaml:\"reported_base,omitempty\""
 github.com/egladman/magus/types.Job.Result field *JobResult "json:\"result,omitempty\"  yaml:\"result,omitempty\""
@@ -3069,6 +3071,13 @@ github.com/egladman/magus/types.JobRelease.Path field string "json:\"path\"   ya
 github.com/egladman/magus/types.JobRelease.ReleasedAt field int64 "json:\"released_at\" yaml:\"released_at\""
 github.com/egladman/magus/types.JobRelease.Revoked field bool "json:\"revoked,omitempty\" yaml:\"revoked,omitempty\""
 github.com/egladman/magus/types.JobRelease.TakenBy field string "json:\"taken_by,omitempty\"     yaml:\"taken_by,omitempty\""
+github.com/egladman/magus/types.JobReleaseRequest type struct
+github.com/egladman/magus/types.JobReleaseRequest.At field int64 "json:\"at\" yaml:\"at\""
+github.com/egladman/magus/types.JobReleaseRequest.By field string "json:\"by,omitempty\" yaml:\"by,omitempty\""
+github.com/egladman/magus/types.JobReleaseRequest.File field string "json:\"file\" yaml:\"file\""
+github.com/egladman/magus/types.JobReleaseRequest.ID field string "json:\"id\" yaml:\"id\""
+github.com/egladman/magus/types.JobReleaseRequest.Message field string "json:\"message\" yaml:\"message\""
+github.com/egladman/magus/types.JobReleaseRequest.Wanted field []string "json:\"wanted,omitempty\" yaml:\"wanted,omitempty\""
 github.com/egladman/magus/types.JobResult type struct
 github.com/egladman/magus/types.JobResult.ChangedPaths field []string "json:\"changed_paths\" yaml:\"changed_paths\""
 github.com/egladman/magus/types.JobResult.Descendants field []string "json:\"descendants,omitempty\" yaml:\"descendants,omitempty\""
@@ -5270,6 +5279,7 @@ github.com/egladman/magus/types.TargetReport.Targets field []TargetEntry "json:\
 github.com/egladman/magus/types.TargetRunCached const TargetRunState = "cached"
 github.com/egladman/magus/types.TargetRunFailed const TargetRunState = "failed"
 github.com/egladman/magus/types.TargetRunPassed const TargetRunState = "passed"
+github.com/egladman/magus/types.TargetRunPermitted const TargetRunState = "permitted"
 github.com/egladman/magus/types.TargetRunQueued const TargetRunState = "queued"
 github.com/egladman/magus/types.TargetRunRunning const TargetRunState = "running"
 github.com/egladman/magus/types.TargetRunState type string
