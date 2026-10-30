@@ -81,12 +81,11 @@ fun bufFormat(target: Target) > Command {
 // `{"args": ["--against", <input>]}`: the op assumes neither a default branch nor a
 // module at the git root, so a git input carries the caller's ref and, for a nested
 // module, `subdir=`. This is the protobuf analogue of an API-contract gate: compose it
-// into `ci` so a breaking .proto change fails alongside the other checks. The gha
-// charm swaps buf's reporter to GitHub Actions annotations.
+// into `ci` so a breaking .proto change fails alongside the other checks.
+// It captures so a gate can read buf's report: findings exit 100, a tool
+// failure exits 1.
 fun bufBreaking(target: Target) > Command {
-    return Command{bin = "buf", args = ["breaking"], charms = {
-        "gha": append(["--error-format=github-actions"]),
-    }};
+    return Command{bin = "buf", args = ["breaking"], capture = true};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

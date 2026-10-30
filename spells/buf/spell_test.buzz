@@ -145,6 +145,12 @@ test "unreadable markers and escaping modules are gaps, never dropped" {
     std\assert(claims[2].path == "broken" and hasGap(claims[2], file: "broken/buf.yaml", part: "not valid YAML"), message: "bad YAML reported");
 }
 
+test "buf-breaking captures, so a gate can read its report" {
+    final breaking = buf\mgs_listTargets()["buf-breaking"]!(Target{});
+    std\assert(breaking.capture, message: "a gate reads the record");
+    std\assert(breaking.charms["gha"] == null, message: "no charm swaps the reporter a gate reads");
+}
+
 test "every target names an op the spell declares" {
     final ops = buf\mgs_listTargets();
     final claims = discover([marker("buf.yaml", content: "version: v1\n")]) catch [];
