@@ -79,6 +79,56 @@ func (s *applyCheckoutSuite) TestANewJobNamingACheckoutIsLeftToAFork() {
 	s.ErrorContains(err, "which only a fork makes")
 }
 
+// ancestorDeviationSuite pins a row that permitted `test .` over a sub-project
+// write before MGS3045 named the owner.
+type ancestorDeviationSuite struct {
+	suite.Suite
+}
+
+func TestAncestorDeviation(t *testing.T) { suite.Run(t, new(ancestorDeviationSuite)) }
+
+func (s *ancestorDeviationSuite) deviation() []types.Deviation {
+	return []types.Deviation{{Code: types.GateNotRun, Subject: "test .", Reason: "the root runs it"}}
+}
+
+func (s *ancestorDeviationSuite) store() *Store {
+	projects := []*types.Project{
+		{
+			Path:             ".",
+			Sources:          types.MustParseGlobs("**/*.go"),
+			MagusfileTargets: []string{"ci", "test", "go-test"},
+			TargetChains:     map[string][]types.ChainStep{"ci": {{Target: "test"}}},
+		},
+		{Path: "libs/buzz", Sources: types.MustParseGlobs("**/*.go"), MagusfileTargets: []string{"test"}},
+	}
+	store := NewStore(tempLocation(s.T(), loadableRepository(s.T()))).InWorkspace(Workspace{Projects: projects})
+	plant(s.T(), store, types.Job{
+		ID: "w", Criteria: "goal", WritePaths: []string{"libs/buzz/a.go"}, Check: forkCheck(), Deviations: s.deviation(),
+		State: types.StateRunning, Updated: time.Now().Unix(),
+	})
+	return store
+}
+
+func (s *ancestorDeviationSuite) record(write ...string) []types.Declaration {
+	rec := spec(write...)
+	rec.Deviations = s.deviation()
+	return []types.Declaration{rec}
+}
+
+func (s *ancestorDeviationSuite) TestAReapplyAddingNoPathIsNotAsked() {
+	applied, err := Apply(s.T().Context(), s.store(), s.record("libs/buzz/a.go"), config.Jobs{}, nil, nil, false)
+
+	s.Require().NoError(err)
+	s.Equal(types.StateRunning, applied[0].Next.State)
+}
+
+func (s *ancestorDeviationSuite) TestAWideningIsAskedForTheOwnersGate() {
+	_, err := Apply(s.T().Context(), s.store(), s.record("libs/buzz/a.go", "libs/buzz/b.go"), config.Jobs{}, nil, nil, false)
+
+	s.Require().ErrorIs(err, types.GateNotRun)
+	s.ErrorContains(err, "test libs/buzz")
+}
+
 func TestDeclareStampsTheDeadlineFromTheTimeout(t *testing.T) {
 	t.Parallel()
 
