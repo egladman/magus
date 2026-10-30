@@ -13,7 +13,7 @@ import {
   WORKSPACE_ROOT as DEMO_WORKSPACE_ROOT,
   WORKSPACE_ROOTS as DEMO_WORKSPACES,
 } from "./demo-scenario";
-import { exchangeOperatorToken, redeemLinkCode } from "../lib/token-exchange";
+import { redeemLinkCode } from "../lib/token-exchange";
 import {
   openTab,
   closeTab,
@@ -544,27 +544,6 @@ export function startConsole(
   adoptServerOrigin();
   const readOnly = isReadOnly();
   document.documentElement.toggleAttribute("data-read-only", readOnly);
-
-  // Trade an operator token for a console token. The prefix decides: only an mgo_ token is
-  // sent, and nothing waits on it, since the console works either way. Every failure is
-  // surfaced, a refusal included, because each leaves the operator credential in the browser;
-  // the next load retries. Skipped for a read-only share session, which holds a share token.
-  //
-  // Here in the SHELL rather than in an app because each app is its own bundle: one
-  // exchange in the composition root covers every tab, and the storage it writes is what
-  // the other bundles read.
-  if (!readOnly) {
-    const serverHost = resolveServerHost();
-    if (serverHost)
-      void exchangeOperatorToken(serverHost).then((outcome) => {
-        if (outcome !== "failed") return;
-        reportFailure(
-          "Console token",
-          "Could not trade the operator token for a console token, so this browser still holds the operator token, which also reaches /mcp and token management. Reload to retry, or open it with a console token: magus config console token create",
-          "token-exchange:failed",
-        );
-      });
-  }
 
   loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
   applyFocusRing(getFocusRing()); // apply the persisted focus-ring preference before anything renders

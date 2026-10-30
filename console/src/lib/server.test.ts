@@ -6,11 +6,15 @@ import {
   serverAttach,
   adoptServerOrigin,
   consumeLinkCode,
+  consumeLiveToken,
   getLiveToken,
   isReadOnly,
   mayLoadBundledDemo,
+  OPERATOR_TOKEN_REFUSED,
+  parseHash,
   parseRefusal,
   readRefusal,
+  setLiveToken,
   signInCommand,
 } from "./server";
 
@@ -134,6 +138,51 @@ test("consumeLinkCode takes the code out of the fragment and stores nothing", ()
   withBrowserGlobals({ hash: "#job=a" }, () => {
     assert.equal(consumeLinkCode(), null);
   });
+});
+
+test("an operator token in the fragment is refused, stripped and not stored", () => {
+  withBrowserGlobals({ hash: "#job=a&token=mgo_operator" }, () => {
+    const g = globalThis as unknown as { history: { replaceState: (...a: unknown[]) => void } };
+    let rewritten = "";
+    g.history.replaceState = (_s: unknown, _t: unknown, url: unknown) => {
+      rewritten = String(url);
+    };
+    const params = parseHash();
+    consumeLiveToken(params);
+    assert.equal(rewritten, "/console/dashboard/#job=a");
+    assert.equal(params.token, undefined);
+    assert.equal(getLiveToken(), null);
+  });
+});
+
+test("an operator token adopts no origin", () => {
+  withBrowserGlobals(
+    { host: "192.168.1.42:8787", hostname: "192.168.1.42", hash: "#token=mgo_operator" },
+    () => {
+      assert.equal(adoptServerOrigin(), false);
+      assert.equal(getLiveToken(), null);
+    },
+  );
+});
+
+test("an operator token a browser stored earlier is forgotten", () => {
+  withBrowserGlobals({}, () => {
+    sessionStorage.setItem("magus-live-token", "mgo_operator");
+    assert.equal(getLiveToken(), null);
+    assert.equal(sessionStorage.getItem("magus-live-token"), null);
+  });
+});
+
+test("setLiveToken refuses an operator token and keeps what it held", () => {
+  withBrowserGlobals({}, () => {
+    assert.equal(setLiveToken("mgs_console"), true);
+    assert.equal(setLiveToken("mgo_operator"), false);
+    assert.equal(getLiveToken(), "mgs_console");
+  });
+});
+
+test("the refusal names how to get a console token", () => {
+  assert.match(OPERATOR_TOKEN_REFUSED, /magus config console token create/);
 });
 
 // Kept LAST: adoptServerOrigin only ever sets the module read-only/own-origin flags to

@@ -75,9 +75,7 @@ function rememberPick(root: string): void {
 function tokenEvidence(token: string | null): string {
   if (!token) return "None. Nothing here came from an authenticated server.";
   const tail = token.length > 4 ? token.slice(-4) : token;
-  return (
-    "From your link, ending " + tail + (token.startsWith("mgo_") ? " (the operator token)" : "")
-  );
+  return "From your link, ending " + tail;
 }
 
 let asking = false;

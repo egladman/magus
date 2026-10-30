@@ -261,6 +261,8 @@ export function adoptServerOrigin(): boolean {
     consumeLiveToken(params);
     return false;
   }
+  // Refused before the adoption below, so an operator token adopts nothing.
+  if (isOperatorToken(params.token ?? "")) consumeLiveToken(params);
   const carriesToken =
     params.token !== undefined || params.code !== undefined || getLiveToken() !== null;
   if (!carriesToken && !isDaemonConsolePage()) return false;
@@ -474,6 +476,12 @@ function stripFragmentKey(params: HashParams, key: string): void {
 // the URL bar, history, or a copied link.
 export function consumeLiveToken(params: HashParams): void {
   if (!params.token) return;
+  if (isOperatorToken(params.token)) {
+    stripFragmentKey(params, "token");
+    delete params.token;
+    reportOperatorTokenRefused();
+    return;
+  }
   const remembered = isRemembered();
   try {
     // Write one store and CLEAR the other. getLiveToken reads sessionStorage first, so a
@@ -495,20 +503,45 @@ export function consumeLiveToken(params: HashParams): void {
 }
 
 export function getLiveToken(): string | null {
+  let held: string | null;
   try {
-    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || null;
+    held = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || null;
   } catch {
     // reported: consumeLiveToken reports a store that refused the token; reading one finds nothing
     return null;
   }
+  // A browser that stored one before the console refused them forgets it here.
+  if (held !== null && isOperatorToken(held)) {
+    clearLiveToken();
+    reportOperatorTokenRefused();
+    return null;
+  }
+  return held;
+}
+
+// isOperatorToken: the operator token also reaches /mcp and token management,
+// so a browser never holds one. The prefix is its class (auth/format.go).
+export function isOperatorToken(token: string): boolean {
+  return token.startsWith("mgo_");
+}
+
+export const OPERATOR_TOKEN_REFUSED =
+  "This is the operator token, which also reaches /mcp and token management, so the console refused it and did not store it. Open the console with a console token: magus config console token create";
+
+function reportOperatorTokenRefused(): void {
+  reportFailure("Console token", OPERATOR_TOKEN_REFUSED, "token:operator-refused");
 }
 
 // setLiveToken replaces the stored bearer. It writes the store isRemembered() selects and
 // clears the other, for the same reason consumeLiveToken does: getLiveToken reads
 // sessionStorage first, so a stale copy left there would outrank the token just written.
-// Returns false when storage is unavailable, which the caller must treat as "not stored"
-// rather than assuming the swap happened.
+// Returns false when storage is unavailable or the token is the operator's.
+// The caller treats false as "not stored".
 export function setLiveToken(token: string): boolean {
+  if (isOperatorToken(token)) {
+    reportOperatorTokenRefused();
+    return false;
+  }
   try {
     const remembered = isRemembered();
     (remembered ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
