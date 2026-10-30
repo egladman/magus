@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // newMutableCache opens a mutable cache at <tmp>/.magus and
@@ -403,54 +404,47 @@ func TestStats(t *testing.T) {
 	assert.Equal(t, want, c.Stats())
 }
 
-func TestRunRecordsItsInputFileCount(t *testing.T) {
-	root, _, c := newMutableCache(t)
-	writeMain(t, root, "package main")
-	out := touchOut(t, root)
-	step := makeStep(root)
-	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
-
-	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
-		return os.WriteFile(out, []byte("out"), 0o644)
-	})
-	require.NoError(t, err)
-	assert.Positive(t, r.Files, "the step hashes main.go")
-	assert.Equal(t, r.Files, c.Stats().Files)
+type RunCountsSuite struct {
+	suite.Suite
+	c    *Cache
+	step Step
+	out  string
 }
 
-func TestStatsSumsInputFilesOverAHitToo(t *testing.T) {
-	root, _, c := newMutableCache(t)
-	writeMain(t, root, "package main")
-	out := touchOut(t, root)
-	step := makeStep(root)
-	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
-	run := func() Result {
-		r, err := c.Run(context.Background(), step, func(_ context.Context) error {
-			return os.WriteFile(out, []byte("out"), 0o644)
-		})
-		require.NoError(t, err)
-		return r
-	}
+func TestRunCountsSuite(t *testing.T) { suite.Run(t, new(RunCountsSuite)) }
 
-	miss := run()
-	hit := run()
-	require.True(t, hit.Hit)
-	assert.Equal(t, miss.Files, hit.Files)
-	assert.Equal(t, miss.Files+hit.Files, c.Stats().Files)
+func (s *RunCountsSuite) SetupTest() {
+	root, _, c := newMutableCache(s.T())
+	writeMain(s.T(), root, "package main")
+	s.c, s.out, s.step = c, touchOut(s.T(), root), makeStep(root)
+	s.step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 }
 
-func TestStatsSlotsIsZeroWithoutAGrant(t *testing.T) {
-	root, _, c := newMutableCache(t)
-	writeMain(t, root, "package main")
-	out := touchOut(t, root)
-	step := makeStep(root)
-	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
-
-	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
-		return os.WriteFile(out, []byte("out"), 0o644)
+func (s *RunCountsSuite) run() Result {
+	r, err := s.c.Run(context.Background(), s.step, func(_ context.Context) error {
+		return os.WriteFile(s.out, []byte("out"), 0o644)
 	})
-	require.NoError(t, err)
-	assert.Zero(t, c.Stats().Slots, "a bare Run took no grant, so none is reported")
+	s.Require().NoError(err)
+	return r
+}
+
+func (s *RunCountsSuite) TestRunRecordsItsInputFileCount() {
+	r := s.run()
+	s.Positive(r.Files, "the step hashes main.go")
+	s.Equal(r.Files, s.c.Stats().Files)
+}
+
+func (s *RunCountsSuite) TestStatsSumsInputFilesOverAHitToo() {
+	miss := s.run()
+	hit := s.run()
+	s.Require().True(hit.Hit)
+	s.Equal(miss.Files, hit.Files)
+	s.Equal(miss.Files+hit.Files, s.c.Stats().Files)
+}
+
+func (s *RunCountsSuite) TestStatsSlotsIsZeroWithoutAGrant() {
+	s.run()
+	s.Zero(s.c.Stats().Slots, "a bare Run took no grant, so none is reported")
 }
 
 // TestCacheSizeCapAccepted exercises MAGUS_CACHE_SIZE parsing: any

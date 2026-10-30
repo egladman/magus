@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // sinkEvents is one sample of every event an invocation emits through its sink.
@@ -226,38 +227,41 @@ func TestTextSinkProse(t *testing.T) {
 	}
 }
 
-func renderSummary(t *testing.T, e report.RunSummary) string {
-	t.Helper()
+type TextSinkSummarySuite struct{ suite.Suite }
+
+func TestTextSinkSummarySuite(t *testing.T) { suite.Run(t, new(TextSinkSummarySuite)) }
+
+func (s *TextSinkSummarySuite) render(e report.RunSummary) string {
 	var out bytes.Buffer
-	s, err := NewSink(output.Text, io.Discard, &out)
-	require.NoError(t, err)
-	s.emit(t.Context(), e)
+	sink, err := NewSink(output.Text, io.Discard, &out)
+	s.Require().NoError(err)
+	sink.emit(s.T().Context(), e)
 	return out.String()
 }
 
-func TestTextSinkSummaryNamesFilesAndSlots(t *testing.T) {
-	got := renderSummary(t, report.RunSummary{Hits: 3, Misses: 1, Files: 771, Slots: 12, DurationMs: 160})
-	assert.Equal(t, "summary: 3 cached, 1 ran, 0 failed (160ms on 771 files using 12 slots)\n", got)
+func (s *TextSinkSummarySuite) TestNamesFilesAndSlots() {
+	got := s.render(report.RunSummary{Hits: 3, Misses: 1, Files: 771, Slots: 12, DurationMs: 160})
+	s.Equal("summary: 3 cached, 1 ran, 0 failed (160ms on 771 files using 12 slots)\n", got)
 }
 
-func TestTextSinkSummarySingularFileAndSlot(t *testing.T) {
-	got := renderSummary(t, report.RunSummary{Hits: 1, Misses: 1, Files: 1, Slots: 1, DurationMs: 20})
-	assert.Equal(t, "summary: 1 cached, 1 ran, 0 failed (20ms on 1 file using 1 slot)\n", got)
+func (s *TextSinkSummarySuite) TestSingularFileAndSlot() {
+	got := s.render(report.RunSummary{Hits: 1, Misses: 1, Files: 1, Slots: 1, DurationMs: 20})
+	s.Equal("summary: 1 cached, 1 ran, 0 failed (20ms on 1 file using 1 slot)\n", got)
 }
 
-func TestTextSinkSummaryOfAFullyCachedRunHasNoSlots(t *testing.T) {
-	got := renderSummary(t, report.RunSummary{Hits: 4, Files: 90, DurationMs: 300})
-	assert.Equal(t, "summary: 4 cached, 0 ran, 0 failed (300ms on 90 files)\n", got)
+func (s *TextSinkSummarySuite) TestFullyCachedRunHasNoSlots() {
+	got := s.render(report.RunSummary{Hits: 4, Files: 90, DurationMs: 300})
+	s.Equal("summary: 4 cached, 0 ran, 0 failed (300ms on 90 files)\n", got)
 }
 
-func TestTextSinkSummaryLeavesOutFilesNobodyRecorded(t *testing.T) {
-	got := renderSummary(t, report.RunSummary{Misses: 2, Slots: 4, DurationMs: 300})
-	assert.Equal(t, "summary: 0 cached, 2 ran, 0 failed (300ms using 4 slots)\n", got)
+func (s *TextSinkSummarySuite) TestLeavesOutFilesNobodyRecorded() {
+	got := s.render(report.RunSummary{Misses: 2, Slots: 4, DurationMs: 300})
+	s.Equal("summary: 0 cached, 2 ran, 0 failed (300ms using 4 slots)\n", got)
 }
 
-func TestTextSinkDryRunSummaryIgnoresCounts(t *testing.T) {
-	got := renderSummary(t, report.RunSummary{Dry: true, Planned: 2, Files: 9, Slots: 3, DurationMs: 2})
-	assert.Equal(t, "summary: dry run, 2 targets would run (2ms)\n", got)
+func (s *TextSinkSummarySuite) TestDryRunIgnoresCounts() {
+	got := s.render(report.RunSummary{Dry: true, Planned: 2, Files: 9, Slots: 3, DurationMs: 2})
+	s.Equal("summary: dry run, 2 targets would run (2ms)\n", got)
 }
 
 // -q and -s raise the level past progress, never past what explains a failure: notices,

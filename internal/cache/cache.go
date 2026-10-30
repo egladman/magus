@@ -784,6 +784,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 
 	result.HintID = c.emitUnchangedFailureHint(ctx, hash)
 	result.Claim = rc.claim
+	c.files.Add(int64(rc.files))
 	for w := int64(rc.claim.Slots); ; {
 		cur := c.slots.Load()
 		if w <= cur || c.slots.CompareAndSwap(cur, w) {

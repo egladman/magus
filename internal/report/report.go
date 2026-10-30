@@ -258,8 +258,8 @@ type RunSummary struct {
 	Hits       int   `json:"hits,omitempty"`
 	Misses     int   `json:"misses,omitempty"`
 	Errors     int   `json:"errors,omitempty"`
-	Files      int   `json:"files,omitempty"` // input files hashed, absent when unrecorded
-	Slots      int   `json:"slots,omitempty"` // widest grant any step took
+	Files      int   `json:"files,omitempty"` // input files hashed, 0 when unrecorded
+	Slots      int   `json:"slots,omitempty"` // widest grant any step took, 0 when none did
 	DurationMs int64 `json:"duration_ms"`
 }
 

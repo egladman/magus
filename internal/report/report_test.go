@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // openFileWriter opens path in append+create mode and wraps it in a Writer, the
@@ -555,28 +556,38 @@ func TestStructuredRunEventTypes(t *testing.T) {
 	}
 }
 
-func TestRunSummaryRecordsFilesAndSlots(t *testing.T) {
-	var buf bytes.Buffer
-	w := NewWriter(&buf, WithBlockOnFull())
-	want := RunSummary{Hits: 2, Misses: 1, Files: 771, Slots: 12, DurationMs: 160}
-	require.NoError(t, recordAny(w, want))
-	require.NoError(t, w.Close())
-
-	var got RunSummary
-	require.NoError(t, json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &got))
-	assert.Equal(t, want, got)
-	assert.Contains(t, buf.String(), `"files":771`)
-	assert.Contains(t, buf.String(), `"slots":12`)
+type RunSummaryRecordSuite struct {
+	suite.Suite
+	buf bytes.Buffer
+	w   *Writer
 }
 
-func TestRunSummaryOmitsCountsNobodyRecorded(t *testing.T) {
-	var buf bytes.Buffer
-	w := NewWriter(&buf, WithBlockOnFull())
-	require.NoError(t, recordAny(w, RunSummary{Hits: 2, DurationMs: 160}))
-	require.NoError(t, w.Close())
+func TestRunSummaryRecordSuite(t *testing.T) { suite.Run(t, new(RunSummaryRecordSuite)) }
 
-	assert.NotContains(t, buf.String(), `"files"`)
-	assert.NotContains(t, buf.String(), `"slots"`)
+func (s *RunSummaryRecordSuite) SetupTest() {
+	s.buf.Reset()
+	s.w = NewWriter(&s.buf, WithBlockOnFull())
+}
+
+func (s *RunSummaryRecordSuite) TestRecordsFilesAndSlots() {
+	want := RunSummary{Hits: 2, Misses: 1, Files: 771, Slots: 12, DurationMs: 160}
+	s.Require().NoError(recordAny(s.w, want))
+	s.Require().NoError(s.w.Close())
+
+	var got RunSummary
+	s.Require().NoError(json.Unmarshal(bytes.TrimSpace(s.buf.Bytes()), &got))
+	s.Equal(want, got)
+	s.Contains(s.buf.String(), `"files":771`)
+	s.Contains(s.buf.String(), `"slots":12`)
+}
+
+// The record states every count, so zero is what an unrecorded one reads as.
+func (s *RunSummaryRecordSuite) TestRecordsAnUnrecordedCountAsZero() {
+	s.Require().NoError(recordAny(s.w, RunSummary{Hits: 2, DurationMs: 160}))
+	s.Require().NoError(s.w.Close())
+
+	s.Contains(s.buf.String(), `"files":0`)
+	s.Contains(s.buf.String(), `"slots":0`)
 }
 
 // devNullWriter discards every write but counts bytes so the
