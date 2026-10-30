@@ -240,7 +240,8 @@ fun goRun(target: Target) > Command { return Command{bin = "go", args = ["run"],
 
 fun goFmt(target: Target) > Command {
     final args = ["-d"];
-    return Command{bin = "gofmt", args = args, sources = ["**/*.go"], charms = {
+    // The walk keeps dot dirs, and .claude/worktrees holds other checkouts.
+    return Command{bin = "gofmt", args = args, sources = ["**/*.go", "!**/.*/**"], charms = {
         "rw": set(args, "-d", "-w"),
     }};
 }
