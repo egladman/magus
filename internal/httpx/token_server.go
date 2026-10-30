@@ -15,7 +15,8 @@ import (
 // TokenServer is a running loopback server on an ephemeral 127.0.0.1 port for one browser
 // page. Every route admits only a loopback peer, CORS-locked to the page's origin, that
 // presents the per-run token the server minted, as a bearer header or a `?token=` query
-// param (a browser EventSource cannot set headers).
+// param (a browser EventSource cannot set headers). A forged Host or any Origin
+// but the page's is refused first: DNS rebinding reaches loopback too.
 //
 // The guard stack is assembled here once, so a server handing data to a page cannot be
 // built with a guard missing.
@@ -29,6 +30,10 @@ type TokenServer struct {
 // StartTokenServer binds the port, mints the token, registers routes (pattern to handler)
 // behind the guards, and serves in the background until Close.
 func StartTokenServer(origin string, routes map[string]http.Handler) (*TokenServer, error) {
+	allowed, err := AllowedHosts(netip.AddrPort{}).AllowOrigin(origin)
+	if err != nil {
+		return nil, err
+	}
 	s, err := NewServer(netip.AddrPort{})
 	if err != nil {
 		return nil, err
@@ -46,7 +51,7 @@ func StartTokenServer(origin string, routes map[string]http.Handler) (*TokenServ
 		if err != nil {
 			return nil, err
 		}
-		s.Handle(pattern, RequireLoopbackPeer(CORS(origin)(guarded)))
+		s.Handle(pattern, RequireLoopbackPeer(GuardRebind(rpcerr.FormatJSON, allowed, CORS(origin)(guarded))))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.cancel = cancel
