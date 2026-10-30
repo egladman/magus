@@ -335,7 +335,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Needs: []string{"**/*.go", "**/*.txtar", "**/*.s", "**/*.S", "**/*.c", "**/*.h", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		Tools: map[string]spells.Tool{
 			"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch},
-				Supported: spells.VersionBounds{Min: "1.21"}, Lifecycle: "go"},
+				Supported: spells.VersionBounds{Min: "1.26"}, Lifecycle: "go"},
 			// Observe only, no Probe: a version probe keys every target in the project,
 			// so the database date `-version` prints, or a linter upgrade, reached targets
 			// that never run the tool. See spells/golang/spell.buzz.
@@ -372,7 +372,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			}}},
 			"go-mod-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true, Quiet: true}},
 			"go-run":      {Command: spells.Command{Bin: "go", Args: []string{"run"}, Hints: goldenGoModHints}},
-			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
+			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-d"}, Sources: []string{"**/*.go", "!**/.*/**"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
