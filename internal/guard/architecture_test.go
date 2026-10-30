@@ -309,6 +309,10 @@ func (s *ArchitectureJobReadSuite) TestDescribeJobInAnotherCheckoutIsNotAProbe()
 	s.NotEqual("deny", s.session.bash("", "cd internal && ./magus describe job scratch-workspace-guard").Decision)
 }
 
+func (s *ArchitectureJobReadSuite) TestDescribeJobBesideASourceListingStillIs() {
+	requireArchitectureDeny(s.T(), s.session.bash("", "./magus describe job scratch-workspace-guard; ls internal"))
+}
+
 func (s *ArchitectureJobReadSuite) TestASearchOfTheWorkspaceStillIs() {
 	requireArchitectureDeny(s.T(), s.session.bash("", "grep -rn handler ."))
 }
