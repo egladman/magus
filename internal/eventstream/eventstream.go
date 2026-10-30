@@ -86,6 +86,8 @@ func targetStatus(journalStatus string) (status string, cacheHit bool) {
 		return "ok", false
 	case journal.StatusCached:
 		return "ok", true
+	case journal.StatusPermitted:
+		return journal.StatusPermitted, false
 	default:
 		return "failed", false
 	}

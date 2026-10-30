@@ -338,6 +338,8 @@ type Result struct {
 	// types.WithExecCost. Zero on a replay.
 	MaxRSSBytes int64
 	CPUMs       int64
+	// Permitted is how many findings a deviation ledger let this step pass.
+	Permitted int
 }
 
 // sizing names where c's memory came from, as a journal result spells it.
@@ -921,11 +923,12 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	}
 
 	lp := c.logPath(s.ProjectPath, hash)
-	ctx = types.WithExecCost(ctx)
+	ctx = journal.WithPermits(types.WithExecCost(ctx))
 	watchOverrun(ctx)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
 	rawOutput, runErr := c.captureRun(NewContext(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
 	result.MaxRSSBytes, result.CPUMs = types.PeakRSS(ctx), types.CPUMs(ctx)
+	result.Permitted = journal.Permits(ctx)
 
 	// fail is every way this step can end badly after fn was invoked: the run itself, a
 	// source the run mutated, a snapshot that would not write. All three record the same
@@ -989,7 +992,10 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	// an entry mapping the OLD key to output built from the NEW bytes, and the remote tier
 	// handed that to every other machine. A failing stat was the lucky outcome; this is
 	// the one that was silent.
-	storable := c.local.writes() && !s.NoCache
+	//
+	// A permit is never stored: a replay would say cached, and the verdict
+	// depends on a base the key does not hold.
+	storable := c.local.writes() && !s.NoCache && result.Permitted == 0
 	if storable {
 		if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
 			storable = false
@@ -1198,6 +1204,9 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 	}
 	if cacheHit {
 		result.Status = journal.StatusCached
+	}
+	if r.Permitted > 0 {
+		result.Status = journal.StatusPermitted
 	}
 	if runErr != nil {
 		result.Status = journal.StatusFail

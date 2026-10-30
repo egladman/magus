@@ -13,6 +13,7 @@
 package journal
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"sync/atomic"
@@ -62,7 +63,37 @@ const (
 	StatusPass   = "pass"
 	StatusFail   = "fail"
 	StatusCached = "cached"
+	// StatusPermitted is a step that passed only because a deviation ledger
+	// permitted its findings. It is green, and never reads as a plain pass.
+	StatusPermitted = "permitted"
 )
+
+// permitKey carries the step's permit count on a context.
+type permitKey struct{}
+
+// WithPermits gives a step a place to record what it permitted.
+func WithPermits(ctx context.Context) context.Context {
+	return context.WithValue(ctx, permitKey{}, new(atomic.Int64))
+}
+
+// RecordPermits adds n permitted findings to the running step, and reports
+// false when ctx carries no step to record them on.
+func RecordPermits(ctx context.Context, n int) bool {
+	count, ok := ctx.Value(permitKey{}).(*atomic.Int64)
+	if ok {
+		count.Add(int64(n))
+	}
+	return ok
+}
+
+// Permits is how many findings the running step has permitted.
+func Permits(ctx context.Context) int {
+	count, ok := ctx.Value(permitKey{}).(*atomic.Int64)
+	if !ok {
+		return 0
+	}
+	return int(count.Load())
+}
 
 // Event is one line of a structured invocation log, the atom of the stream. It serializes
 // to a single compact JSON object (one JSONL line); empty fields are omitted so output

@@ -231,6 +231,23 @@ func (b *blockingWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// successStatusSuite pins that a permitted target never records as ok.
+type successStatusSuite struct {
+	suite.Suite
+}
+
+func TestSuccessStatus(t *testing.T) {
+	suite.Run(t, new(successStatusSuite))
+}
+
+func (s *successStatusSuite) TestAPermitIsNotOK() {
+	s.Equal(StatusPermitted, successStatus(&cache.Result{Permitted: 2}))
+}
+
+func (s *successStatusSuite) TestNoPermitIsOK() {
+	s.Equal("ok", successStatus(&cache.Result{}))
+}
+
 // TestFilterIncludeOnly admits only listed types.
 func TestFilterIncludeOnly(t *testing.T) {
 	t.Parallel()

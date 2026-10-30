@@ -159,7 +159,8 @@ func (f factWithAttrs) WithGroup(string) slog.Handler { return f }
 // factOutcome maps the execution journal's three statuses onto the session store's
 // pass/fail axis. A cache hit is a PASS that was replayed, not a third outcome: "did
 // this target end up green" and "did work run" are different questions, and
-// [TargetResult.Replayed] answers the second.
+// [TargetResult.Replayed] answers the second. A permitted result is green on
+// the same axis, so a push gate and a job's owed check read it as covered.
 func factOutcome(status string) string {
 	if status == journal.StatusFail {
 		return OutcomeFail

@@ -312,7 +312,8 @@ func readMisses(ctx context.Context, path string) ([]missBuild, error) {
 			continue
 		}
 		// A "miss" is a fresh, successful run (not a cache replay) with a real duration.
-		if ev.CacheHit || ev.Status != "ok" || ev.DurationMs <= 0 {
+		ran := ev.Status == "ok" || ev.Status == report.StatusPermitted
+		if ev.CacheHit || !ran || ev.DurationMs <= 0 {
 			continue
 		}
 		out = append(out, missBuild{

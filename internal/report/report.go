@@ -58,9 +58,14 @@ const (
 	TypeNotice                = "run.notice"
 )
 
+// StatusPermitted is a [TargetResult] that passed only because a deviation
+// ledger permitted its findings.
+const StatusPermitted = "permitted"
+
 // TargetResult reports the outcome of one target run — the single per-target event
 // (replacing the former cache.hit / cache.miss / cache.error). Status is "ok" (ran
-// or replayed successfully) or "failed"; CacheHit distinguishes a cache replay from
+// or replayed successfully), [StatusPermitted] or "failed".
+// CacheHit distinguishes a cache replay from
 // a fresh run. It is emitted once per target by the dispatcher (cache OnResult), so
 // it fires for cached targets too.
 type TargetResult struct {
@@ -437,6 +442,14 @@ func ServedIn(loc job.Location) NextServer {
 	}
 }
 
+// successStatus is a target's status when it did not fail.
+func successStatus(r *cache.Result) string {
+	if r.Permitted > 0 {
+		return StatusPermitted
+	}
+	return "ok"
+}
+
 // RunOptions returns a cache.RunOption that records hit/miss/error events into w per spec.
 func RunOptions(w *Writer, served NextServer) []cache.RunOption {
 	return []cache.RunOption{
@@ -444,7 +457,7 @@ func RunOptions(w *Writer, served NextServer) []cache.RunOption {
 			tr := TargetResult{
 				Project:    s.ProjectPath,
 				Target:     s.Target,
-				Status:     "ok",
+				Status:     successStatus(r),
 				CacheHit:   r.Hit,
 				Hash:       r.Hash,
 				DurationMs: r.Duration.Milliseconds(),
