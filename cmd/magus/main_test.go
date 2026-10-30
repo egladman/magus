@@ -33,6 +33,7 @@ import (
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // Every catalog the binary ships registers without a clash, so two built-in prefixes that
@@ -1331,4 +1332,49 @@ func notices(t *testing.T, fn func()) string {
 	defer slog.SetDefault(prev)
 	fn()
 	return buf.String()
+}
+
+type ForwardFallbackSuite struct {
+	suite.Suite
+	buf bytes.Buffer
+	log *slog.Logger
+}
+
+func TestForwardFallbackSuite(t *testing.T) { suite.Run(t, new(ForwardFallbackSuite)) }
+
+func (s *ForwardFallbackSuite) SetupTest() {
+	s.buf.Reset()
+	s.log = slog.New(slog.NewTextHandler(&s.buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+func (s *ForwardFallbackSuite) lines() []string {
+	return strings.Split(strings.TrimSpace(s.buf.String()), "\n")
+}
+
+func (s *ForwardFallbackSuite) TestVersionMismatchWarnsOnceWithMGS3048() {
+	logForwardFallback(context.Background(), s.log, proc.ErrVersionMismatch)
+	lines := s.lines()
+	s.Require().Len(lines, 1, "one record, so the run says it once")
+	s.Contains(lines[0], "level=WARN")
+	s.Contains(lines[0], string(types.PeerFromAnotherBuild))
+}
+
+func (s *ForwardFallbackSuite) TestWrappedVersionMismatchStillWarns() {
+	logForwardFallback(context.Background(), s.log, fmt.Errorf("forward: %w", proc.ErrVersionMismatch))
+	s.Contains(s.buf.String(), "level=WARN")
+	s.Contains(s.buf.String(), string(types.PeerFromAnotherBuild))
+}
+
+func (s *ForwardFallbackSuite) TestNotAdoptableSubcommandStaysAtDebug() {
+	logForwardFallback(context.Background(), s.log, fmt.Errorf("%w: doctor", proc.ErrNotAdoptable))
+	lines := s.lines()
+	s.Require().Len(lines, 1)
+	s.Contains(lines[0], "level=DEBUG")
+	s.NotContains(lines[0], string(types.PeerFromAnotherBuild))
+}
+
+func (s *ForwardFallbackSuite) TestTransportFailureWarnsWithoutMGS3048() {
+	logForwardFallback(context.Background(), s.log, errors.New("dial unix: connection refused"))
+	s.Contains(s.buf.String(), "level=WARN")
+	s.NotContains(s.buf.String(), string(types.PeerFromAnotherBuild))
 }

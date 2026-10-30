@@ -860,21 +860,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			if fwdErr == nil {
 				return startupResult{cleanup: cleanup}, code
 			}
-			// A call the server did not adopt is the normal path here: run locally
-			// without alarming the user. The server does not adopt a subcommand that
-			// never adopts (only run/affected do), nor a client whose build or protocol
-			// differs from its own (version/protocol mismatch); in every case the server
-			// is alive and answered, it just will not take THIS call, and retrying it
-			// will not help. A version mismatch is common when multiple worktrees run
-			// different builds against one shared per-user server; it is not a failure,
-			// so it must not warn. Reserve warn for a genuine forward failure (transport
-			// error, dead server). proc.NotAdopted owns the classification: the errors
-			// carry it (a NotAdopted() method).
-			if proc.NotAdopted(fwdErr) {
-				slog.Debug("proc forward not adopted; running locally", attr.Error(fwdErr))
-			} else {
-				slog.Warn("proc forward failed; running locally", attr.Error(fwdErr))
-			}
+			logForwardFallback(rootCtx, slog.Default(), fwdErr)
 			// parentLive is a narrower question than "not adopted": keep MAGUS_PROC_SOCKET
 			// pointed at the parent only when it is a usable pool for deeper adoptable
 			// calls. A not-adoptable subcommand leaves a live, same-version server worth
@@ -882,6 +868,8 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			// like doctor's server check see the real server). A version/protocol mismatch
 			// (like a transport failure) leaves a server we cannot use: clear the
 			// pointer so nothing keeps dialing it, and fall through to hosting our own pool.
+			// Clearing it keeps MGS3048 to once per run: no process
+			// below this one reaches the other build to warn again.
 			parentLive = errors.Is(fwdErr, proc.ErrNotAdoptable)
 			if !parentLive {
 				_ = os.Unsetenv(proc.SocketEnv)
@@ -1065,6 +1053,23 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		trace:   trace,
 		cleanup: finalCleanup,
 	}, -1
+}
+
+// logForwardFallback says why a forwarded call runs locally instead.
+// A subcommand that never adopts is routine, so it stays at debug.
+// A server from another build warns with MGS3048, or it hides a stale
+// daemon. Anything else failed the forward.
+func logForwardFallback(ctx context.Context, log *slog.Logger, err error) {
+	switch {
+	case errors.Is(err, proc.ErrNotAdoptable):
+		log.DebugContext(ctx, "proc forward not adopted; running locally", attr.Error(err))
+	case proc.NotAdopted(err):
+		log.WarnContext(ctx, types.FormatDiagnostic(types.PeerFromAnotherBuild,
+			"a magus server or pool parent from another build did not adopt this call; running locally. Restart it so it runs this build"),
+			attr.Error(err))
+	default:
+		log.WarnContext(ctx, "proc forward failed; running locally", attr.Error(err))
+	}
 }
 
 func usage() {
