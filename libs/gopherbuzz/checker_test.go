@@ -1951,6 +1951,6 @@ fun pair::<A, B>(a: A, b: B) > R::<B> { return R::<B>{ v = b }; }
 	checkOK(t, decls+`fun f() > R::<int> { return mk::<int>(1); }`)
 	checkOK(t, decls+`final r: R::<int> = mk::<int>(1); final n: int = id::<int>(2);`)
 	checkOK(t, decls+`final r: R::<str> = pair::<int, str>(1, b: "b");`)
-	checkErr(t, decls+`final r: R::<str> = mk::<int>(1);`, "cannot assign")
-	checkErr(t, decls+`final r = mk::<int, str>(1);`, "wrong type argument count: got 2, want 1")
+	checkError(t, decls+`final r: R::<str> = mk::<int>(1);`, "cannot assign")
+	checkError(t, decls+`final r = mk::<int, str>(1);`, "wrong type argument count: got 2, want 1")
 }
