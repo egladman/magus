@@ -16,11 +16,14 @@ because good software is the only defensible standard at the tool layer, and
 a bar that moves with the byline is theater in both directions: extra
 suspicion for one author, unearned trust for another.
 
-Disposition is the opposite case. Accepting a proposal, sending a review,
-landing a change: these are accountability, and accountability needs a true
-name. That is why authorship is stamped from the transport a write arrived
-on, never from what the writer claims about itself (the mechanism described
-under [Agents propose, humans dispose](../judgment/agents-propose-humans-dispose.md)).
+Disposition is the opposite case. Accepting a proposal, permitting a finding,
+sending a review, landing a change: these are accountability, and
+accountability needs a true name. That is why a store magus keeps stamps
+authorship from the transport a write arrived on, never from what the writer
+claims about itself (the mechanism described under
+[Agents propose, humans dispose](../judgment/agents-propose-humans-dispose.md)).
+A commit's author is the checkout's configured name: it says who answers for
+the commit, not what typed it.
 The blindness half is structural today and stated here so that a proposal to
 break it, a gate keyed on how code was written, has to argue with this page
 first.
@@ -29,17 +32,17 @@ first.
 
 - Cache keys hash content, the drift gate compares bytes, and diagnostics read
   the tree; none of them takes an author as input.
-- Exactly one code path grades a write by who is acting, and naming it keeps
-  the rule checkable. `gradeLeasedWrite` reads the lease ledger to decide
-  whether a worker is editing outside the paths its lease declared. That is a
-  concurrency-ownership question in the guard (who owns this file right now)
-  rather than a judgment about the work, and it reaches no cache key, no drift
-  comparison, and no diagnostic. Its uncertainties (no ledger, no live lease, a
-  file that will not parse) fail open with at most an advisory.
+- The guard grades calls by who is acting, because every call it judges is an
+  agent's. That decides who may act, never whether the work is good, and it
+  reaches no cache key, no drift comparison and no diagnostic. A rule may key on
+  the actor when no checker could judge the thing without knowing who made it:
+  code can be judged by its bytes, while a note, a read receipt or a permitted
+  finding says only that somebody decided. These rules are a seatbelt for a
+  harness that opted in: CI sees the same bytes whoever wrote them.
 
 ## Good
 
-The gate reads the bytes; the record of who landed them reads the transport.
+The gate reads the bytes; the commit names who answers for them.
 
 ```sh
 magus affected ci
@@ -56,6 +59,15 @@ rules:
 
 The bar moves with the byline. A trailer is whatever the writer typed, so the
 rule both insults honest work and waves through anything that leaves it out.
+
+```yaml
+rules:
+  - if: session.agent != ""
+    then: deny_write("**/*.go")
+```
+
+Code has a checker, so this judges the author in place of the work. "It is a
+person's decision" does not stretch to cover it.
 
 ## See also
 
