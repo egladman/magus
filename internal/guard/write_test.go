@@ -124,6 +124,19 @@ func (s *deviationAuthorSuite) TestAScriptIsJudgedByItsContent() {
 	s.NotEmpty(denyDeviationCommand(dir, `magus buzz add.buzz`, DialectBash))
 }
 
+func (s *deviationAuthorSuite) TestAShellLineReachesTheRuleWithNoLease() {
+	v := judgeShellLine(s.T().Context(), Dependencies{}, location{}, "", `echo x >> a.deviations.jsonl`, DialectBash)
+	s.Equal(denyRuleDeviationAuthor, v.Rule.Name)
+	s.Contains(v.Deny, "only a person adds a line")
+}
+
+func (s *deviationAuthorSuite) TestAnEditReachesTheRuleWithNoLease() {
+	payload := `{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"a.deviations.jsonl","old_string":"","new_string":"x"}}`
+	got := Judge(s.T().Context(), testDependencies(), Request{Input: payload})
+	s.Equal(decisionDeny, got.Decision)
+	s.Equal(string(denyRuleDeviationAuthor), got.Rule)
+}
+
 func (s *deviationAuthorSuite) TestTheRuleSaysItIsASeatbelt() {
 	s.Contains(deviationAuthorWhy, "seatbelt")
 	s.Contains(deviationAuthorWhy, "the root included")
