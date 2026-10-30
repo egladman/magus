@@ -486,6 +486,7 @@ github.com/egladman/magus/std.ImageParsePlatform func(_ context.Context, spec st
 github.com/egladman/magus/std.ImageParsePlatforms func(_ context.Context, specs []string) ([]github.com/egladman/magus/types.ImagePlatform, error)
 github.com/egladman/magus/std.ImagePull func(ctx context.Context, reference string, platform github.com/egladman/magus/types.ImagePlatform, dest string, auth *github.com/egladman/magus/types.ImageRegistryAuth) (github.com/egladman/magus/types.ImageLayout, error)
 github.com/egladman/magus/std.ImagePush func(ctx context.Context, layout string, repository string, tags []string, auth *github.com/egladman/magus/types.ImageRegistryAuth) (github.com/egladman/magus/types.ImagePushed, error)
+github.com/egladman/magus/std.ImageReferrers func(ctx context.Context, path string, name string) ([]github.com/egladman/magus/types.ImageDocument, error)
 github.com/egladman/magus/std.ImageWriteProvenance func(ctx context.Context, layout string, p github.com/egladman/magus/types.ImageProvenance, path string) (github.com/egladman/magus/types.ImageDocument, error)
 github.com/egladman/magus/std.ImageWriteSBOM func(ctx context.Context, layout string, path string) (github.com/egladman/magus/types.ImageDocument, error)
 github.com/egladman/magus/std.Log var Module
@@ -1557,6 +1558,7 @@ github.com/egladman/magus/types.Deviation.Reason field string "json:\"reason\" s
 github.com/egladman/magus/types.Deviation.Subject field string "json:\"subject\""
 github.com/egladman/magus/types.Diagnostic type struct
 github.com/egladman/magus/types.Diagnostic.Code field string "json:\"code\" yaml:\"code\""
+github.com/egladman/magus/types.Diagnostic.Fix field string "json:\"fix,omitempty\" yaml:\"fix,omitempty\" buzz:\"fix\""
 github.com/egladman/magus/types.Diagnostic.Message field string "json:\"message\" yaml:\"message\""
 github.com/egladman/magus/types.Diagnostic.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\" buzz:\"url\""
 github.com/egladman/magus/types.Diagnostic.Why field string "json:\"why,omitempty\" yaml:\"why,omitempty\" buzz:\"-\""
@@ -1573,11 +1575,13 @@ github.com/egladman/magus/types.DiagnosticError type = github.com/egladman/magus
 github.com/egladman/magus/types.DiagnosticError.BuzzError method(ptr) func() map[string]string
 github.com/egladman/magus/types.DiagnosticError.Code field github.com/egladman/magus/libs/diagnostics.Code
 github.com/egladman/magus/types.DiagnosticError.Error method(ptr) func() string
+github.com/egladman/magus/types.DiagnosticError.Fix field string
 github.com/egladman/magus/types.DiagnosticError.Is method(ptr) func(target error) bool
 github.com/egladman/magus/types.DiagnosticError.Msg field string
 github.com/egladman/magus/types.DiagnosticError.URL method(ptr) func() string
 github.com/egladman/magus/types.DiagnosticError.Unwrap method(ptr) func() error
 github.com/egladman/magus/types.DiagnosticError.Why field string
+github.com/egladman/magus/types.DiagnosticError.WithFix method(ptr) func(fix string) *github.com/egladman/magus/libs/diagnostics.Error
 github.com/egladman/magus/types.DiagnosticError.WithWhy method(ptr) func(why string) *github.com/egladman/magus/libs/diagnostics.Error
 github.com/egladman/magus/types.DiagnosticErrorf func(c DiagnosticCode, format string, args ...any) *DiagnosticError
 github.com/egladman/magus/types.DiagnosticEvent type = github.com/egladman/magus/libs/diagnostics.Event
@@ -2122,6 +2126,7 @@ github.com/egladman/magus/types.ExpectPassed const GoalExpect = "passed"
 github.com/egladman/magus/types.ExpectPresent const GoalExpect = "present"
 github.com/egladman/magus/types.ExpectSignature const GoalExpect = "signature"
 github.com/egladman/magus/types.ExpectUnreferenced const GoalExpect = "unreferenced"
+github.com/egladman/magus/types.Fail func[T any](d Diagnostic) Result[T]
 github.com/egladman/magus/types.FanOut func(obs ...Observer) Observer
 github.com/egladman/magus/types.FileChange type struct
 github.com/egladman/magus/types.FileChange.Location method func() Location
@@ -3586,6 +3591,7 @@ github.com/egladman/magus/types.LeaseSourceContested const LeaseSource = "contes
 github.com/egladman/magus/types.LeaseSourceEnv const LeaseSource = "env"
 github.com/egladman/magus/types.LeaseSourceFlag const LeaseSource = "flag"
 github.com/egladman/magus/types.LeaseSourceMarker const LeaseSource = "marker"
+github.com/egladman/magus/types.LegacyStorePresent const DiagnosticCode = "MGS3049"
 github.com/egladman/magus/types.Level type uint8
 github.com/egladman/magus/types.Level.MarshalText method func() ([]byte, error)
 github.com/egladman/magus/types.Level.String method func() string
@@ -4052,6 +4058,7 @@ github.com/egladman/magus/types.NotableRankCutoff const untyped int = 50
 github.com/egladman/magus/types.ObservationKeyedAsVersion const DiagnosticCode = "MGS1037"
 github.com/egladman/magus/types.Observer type interface
 github.com/egladman/magus/types.Observer.Observe imethod func(GraphEvent)
+github.com/egladman/magus/types.Ok func[T any](v T) Result[T]
 github.com/egladman/magus/types.OnRSSSample func(ctx context.Context, fn func(at time.Duration, bytes int64))
 github.com/egladman/magus/types.OperationCherryPick const untyped string = "cherry-pick"
 github.com/egladman/magus/types.OperationMerge const untyped string = "merge"
@@ -4186,6 +4193,7 @@ github.com/egladman/magus/types.PatternType.String method func() string
 github.com/egladman/magus/types.PatternType.Valid method func() bool
 github.com/egladman/magus/types.PatternType.Values method func() []string
 github.com/egladman/magus/types.PeakRSS func(ctx context.Context) int64
+github.com/egladman/magus/types.PeerFromAnotherBuild const DiagnosticCode = "MGS3048"
 github.com/egladman/magus/types.Permissible func(c DiagnosticCode) bool
 github.com/egladman/magus/types.Person type struct
 github.com/egladman/magus/types.Person.Email field string
@@ -4511,6 +4519,10 @@ github.com/egladman/magus/types.ResolvedFuzzy const KnowledgeResolution = "fuzzy
 github.com/egladman/magus/types.ResolvedID const KnowledgeResolution = "id"
 github.com/egladman/magus/types.ResolvedPath const KnowledgeResolution = "path"
 github.com/egladman/magus/types.ResourceNotFound const DiagnosticCode = "MGS9024"
+github.com/egladman/magus/types.Result type[T any] struct
+github.com/egladman/magus/types.Result.Error field *Diagnostic "json:\"error,omitempty\" buzz:\"error\""
+github.com/egladman/magus/types.Result.IsOk method func() bool
+github.com/egladman/magus/types.Result.Value field T "json:\"value\""
 github.com/egladman/magus/types.RetryAfterConfig const RetryChange = "config"
 github.com/egladman/magus/types.RetryAfterPerson const RetryChange = "person"
 github.com/egladman/magus/types.RetryAfterUpgrade const RetryChange = "upgrade"
@@ -5031,6 +5043,8 @@ github.com/egladman/magus/types.StopRequest.ThreadFrom field ThreadSource
 github.com/egladman/magus/types.StopRequest.Transcript field string
 github.com/egladman/magus/types.StopRequest.Window field *ContextWindow
 github.com/egladman/magus/types.StopRequest.Workspace field string
+github.com/egladman/magus/types.StoreLineUndecodable const DiagnosticCode = "MGS3050"
+github.com/egladman/magus/types.StoreRecordsNewer const DiagnosticCode = "MGS3047"
 github.com/egladman/magus/types.StoredOutput type struct
 github.com/egladman/magus/types.StoredOutput.Bytes method func() []byte
 github.com/egladman/magus/types.StoredOutput.ClassDigests field []ClassDigest "json:\"class_digests,omitempty\""

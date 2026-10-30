@@ -79,8 +79,8 @@ magus graph export -o json  # the whole graph
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                                   |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------------------- |
 | [.](MAGUS.md)                                                               |      65 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                             |
-| [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `lint`                                    |
-| [docs](docs/MAGUS.md)                                                       |      27 | `magus query project=docs`                            | `site-generate`, `catalog-docs-generate`, `diagrams-generate` |
+| [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `build`, `install`, `lint`                                    |
+| [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `site-generate`, `catalog-docs-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                               |
 | [libs/cmdline](libs/cmdline/MAGUS.md)                                       |       8 | `magus query project=libs/cmdline`                    | `format`, `ci`, `test`                                        |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `ci`, `test`                                        |

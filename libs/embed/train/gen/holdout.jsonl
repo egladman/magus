@@ -139,6 +139,7 @@
 {"group":"file:changes/unreleased/guard-stale-binary.md","path":"changes/unreleased/guard-stale-binary.md"}
 {"group":"file:changes/unreleased/guard-unread-command.md","path":"changes/unreleased/guard-unread-command.md"}
 {"group":"file:changes/unreleased/hack-script-names.md","path":"changes/unreleased/hack-script-names.md"}
+{"group":"file:changes/unreleased/harness-doctor-hook-bindings.md","path":"changes/unreleased/harness-doctor-hook-bindings.md"}
 {"group":"file:changes/unreleased/harness-hook-bindings.md","path":"changes/unreleased/harness-hook-bindings.md"}
 {"group":"file:changes/unreleased/harness-merge-command-reruns.md","path":"changes/unreleased/harness-merge-command-reruns.md"}
 {"group":"file:changes/unreleased/harness-render-prompts.md","path":"changes/unreleased/harness-render-prompts.md"}
@@ -233,6 +234,7 @@
 {"group":"file:changes/unreleased/renames.md","path":"changes/unreleased/renames.md"}
 {"group":"file:changes/unreleased/renderedskills-takes-form-not-variant.md","path":"changes/unreleased/renderedskills-takes-form-not-variant.md"}
 {"group":"file:changes/unreleased/repeated-guard-deny-one-line-ref.md","path":"changes/unreleased/repeated-guard-deny-one-line-ref.md"}
+{"group":"file:changes/unreleased/result-type.md","path":"changes/unreleased/result-type.md"}
 {"group":"file:changes/unreleased/review-merged-while-reading.md","path":"changes/unreleased/review-merged-while-reading.md"}
 {"group":"file:changes/unreleased/review-reading-mark.md","path":"changes/unreleased/review-reading-mark.md"}
 {"group":"file:changes/unreleased/review-thread.md","path":"changes/unreleased/review-thread.md"}

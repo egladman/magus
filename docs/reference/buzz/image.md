@@ -136,6 +136,19 @@ Read the layout at layout back: the image whose org.opencontainers.image.ref.nam
 
 **Returns:** map[string]any
 
+### referrers
+
+Read the documents attached beside the image at layout (the SBOM and provenance referrers) without a registry: one Document per referrer layer, its Path the blob in the layout so fs\read reads it, its Descriptor the layer's with the referrer's artifactType. name picks the image as open does.
+
+**Signature:** `image\referrers(layout, [name]) -> [Document]` - [source](https://github.com/egladman/magus/blob/main/std/image.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `layout`  | `string` |          |             |
+| `name`    | `string` | yes      |             |
+
+**Returns:** any
+
 ### parsePlatform
 
 Parse "linux/amd64", "linux/amd64/v3" or "linux/arm64/v8" into a Platform.
