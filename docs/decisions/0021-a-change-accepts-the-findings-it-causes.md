@@ -3,7 +3,7 @@ title: "ADR 0021: a change accepts the findings it causes"
 order: 21
 description: A deliberate protobuf rename fails buf-breaking and has no sanctioned way through the gate. This record proposes a per-project ledger of accepted findings, read by the target runner, in which an entry counts only while the change that adds it is not yet in the base. It names one target, one op and each finding it accepts, carries a reason, passes the gate green with the acceptance printed, and needs no cleanup after merge.
 tags: [adr, decision, ci, gates, compatibility, buf, breaking-changes]
-status: proposed (reopened 2026-10-24 to reuse what exists)
+status: accepted (amended 2026-10-30; the last amendment's table holds the State)
 date: 2026-10-24
 aliases: [decisions/0017-a-change-accepts-the-findings-it-causes]
 ---
@@ -282,8 +282,8 @@ The cantrip pull request lands after this one and adds `proto/accepted.jsonl`.
   relied on. The gate reads the ledger's bytes and the base, never who wrote the line.
 - [Human in the loop](../design/principles/human-in-the-loop.md) and
   [Agents propose, humans dispose](../design/judgment/agents-propose-humans-dispose.md):
-  relied on. An agent may propose a line; it lands only through the review that lands
-  the rename. No new point is added.
+  relied on. An agent names the line in its result and a person writes it, and it lands
+  through the review that lands the rename.
 - [Manual on purpose](../design/judgment/manual-on-purpose.md): relied on. magus prints
   the line and never writes it.
 - [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. `accepted`
@@ -410,11 +410,17 @@ Lost before 1.0. It duplicates every service for a field rename, which
 exists to avoid. It is the right route after 1.0, and the ledger does not replace it
 there: an accepted line still ships a break.
 
-### A guard rule that denies an agent writing the ledger
+### Leaving who writes the ledger to review alone
 
-Lost. The guard grades a write by who acts only for lease ownership, and a leased
-worker already cannot write a path its lease does not name. A rule keyed on an agent
-writing a ledger line would move the bar with the byline. The person decides at review.
+Lost; `deviation-author` denies an agent adding a line. The test is whether a checker
+could judge the thing without knowing who made it. Code passes or fails on its bytes.
+A deviation line says only that somebody decided, and the gate cannot check the
+decision, so the rule says who may make it, as `notes-author` does for a note. The bar
+is the gate, and the gate is unchanged: it reads the bytes and the base, and CI sees the
+same line whoever wrote it. The rule does control who may add an input the gate reads,
+which is a disposition, as a person's `job grant --commit` waiver is. It is a seatbelt
+for a harness that opted in. Whether it changes outcomes is unmeasured, since a person
+can paste a printed line unread too.
 
 ## Consequences
 
@@ -491,3 +497,38 @@ became `deviations`, with `waivers` reserved in the job and declaration schema l
 A validation lists `permitted` problems where it listed `waived`. A job row stored with
 `waivers` no longer reads as carrying deviations; magus is below 1.0 and ships no reader
 for the old key. "Waiver" in the text above is the draft's word.
+
+### 2026-10-30: the comparison half is built in repo Buzz
+
+Eli's ruling: "I should never be put in a scenario where I am expected to merge something
+that is red." One past occurrence settled the need, so firing rates were not measured
+first. This supersedes the Decision above where they differ, following the rulings that
+shipped Go stays language-agnostic and repo policy lives in repo Buzz.
+
+- **The ledger** is `<project>/<gate>.deviations.jsonl`, one Deviation per line, so the
+  draft's `accepted.jsonl`, `target`, `op` and `findings` fields are gone.
+- **The judgment** is `hack/magusfile/deviations.buzz`. `permitAdded` counts the lines the
+  tree holds more copies of than the base, which also covers uncommitted work. Go adds
+  one generic op option, `allowFailure`, and no `compares-base` or parser.
+- **Scans are not built.** `advisories.buzz` keeps its policy and "no allowlist to rot"
+  still describes it. Only `readBase` moved.
+- **The allowlist statement reversed.** The breaking-changes guide no longer says there is
+  no allowlist file to maintain.
+- **A guard rule was added**, `deviation-author`, reversing the alternative above. It binds
+  a root session too. It covers adding a line, not deleting one, since the gate asks for
+  that. A merge, a revert and a checkout pass, because they replay lines a commit already
+  holds. It is a seatbelt: a computed path, a patch or an unhooked process gets past it.
+- **Provenance:** this was checked against
+  [Verdicts are provenance-blind](../design/principles/verdicts-are-provenance-blind.md).
+  The conflict was not real, since a permitted finding is disposition, and that page's
+  "exactly one code path" sentence was false. The page changed.
+
+| what | State |
+| ---- | ----- |
+| `allowFailure` on a captured op | built |
+| ledger module, `permitAdded`, two-way check, blank reason and malformed line errors | built |
+| `bufBreaking` captures, `gha` dropped, `proto` `ci` uses the ledger | built |
+| `deviation-author` guard rule | built, not yet a catalog row |
+| a `permitted` run result in `-o json`, the console and history | not built |
+| deleting `Tool.Diagnostics` and `DiagnosticFormat` | not built |
+| scan acceptance, CI annotation on a line | not built, by decision |
