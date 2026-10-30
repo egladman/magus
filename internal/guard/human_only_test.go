@@ -134,7 +134,7 @@ func TestHumanOnlyVerdicts(t *testing.T) {
 		contains   []string
 	}{
 		{"an unbound session through a hook that prompts", "magus run agent-bench-run .", false, true, "ask",
-			[]string{"`magus run agent-bench-run .` is run by a person: " + benchReason, "never cached (skip_cache)", "Approving runs it once. To run it yourself: magus run agent-bench-run ."}},
+			[]string{"`magus run agent-bench-run .` is run by a person: " + benchReason, "never cached (skip_cache)", "To run it yourself: magus run agent-bench-run ."}},
 		{"affected naming it", "magus affected agent-bench-run", false, true, "ask",
 			[]string{"`magus affected agent-bench-run` is run by a person"}},
 		{"an unbound session through a hook that cannot prompt", "magus run agent-bench-run .", false, false, "deny",

@@ -112,7 +112,7 @@ func gradeHumanOnlyPairs(ctx context.Context, deps Dependencies, actingLease, co
 	if me, ok := actingLiveLease(ctx, deps, actingLease); actingLease != "" && (!ok || workerRole(me, deps.caller) != "") {
 		return decisionDeny, fmt.Sprintf("`%s` runs a target a person runs (%s), and this session is bound to job %s; name the run in your result's unresolved risks.\nWorkers do not spend for the orchestrator.\n%s", line, strings.Join(reasons, "; "), actingLease, facts.String())
 	}
-	return decisionAsk, fmt.Sprintf("%sApproving runs it once. To run it yourself: %s", facts.String(), line)
+	return decisionAsk, fmt.Sprintf("%sTo run it yourself: %s", facts.String(), line)
 }
 
 // humanOnlyRun renders the run that names p, for the line the reason opens with.

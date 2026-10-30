@@ -1117,7 +1117,7 @@ stdout 'no passing gate covers'
 stdin $WORK/bench-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"ask"'
-stdout 'Approving runs it once'
+stdout 'To run it yourself'
 
 # case: command/ask
 # acceptEdits still prompts: only a mode that never prompts turns the ask into a deny.
@@ -1136,6 +1136,7 @@ stdout 'It needs your approval, and this session runs in permission_mode bypassP
 stdout 'Run it from your own terminal: magus run bench \.'
 stdout 'relay this one to them verbatim'
 ! stdout '"permissionDecision":"ask"'
+! stdout 'Approving'
 
 # case: command/ask
 stdin $WORK/bench-command-dont-ask.json
@@ -1377,7 +1378,7 @@ stdout 'no passing gate covers'
 stdin $WORK/cursor-bench.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"ask"'
-stdout 'Approving runs it once'
+stdout 'To run it yourself'
 
 # case: command/ask
 # preToolUse cannot render an ask, so it hands the shell's over: it allows, and the very
@@ -1393,7 +1394,7 @@ stdin $WORK/cursor-bench-after-pre.json
 env __MAGUS_BIN=$WORK/refusing-magus
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"ask"'
-stdout 'Approving runs it once'
+stdout 'To run it yourself'
 env __MAGUS_BIN=
 
 # case: command/ask
