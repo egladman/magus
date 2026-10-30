@@ -595,11 +595,11 @@ export function activate(host: HTMLElement): AppInstance {
       focus: refs.focus.value,
       depth: refs.depth.value,
     });
-    if (!parsed.ok) {
-      showNotice("warning", "The lens is not complete", parsed.error);
+    if (parsed.error) {
+      showNotice("warning", "The lens is not complete", parsed.error.message);
       return;
     }
-    if (refs.picker.value) show(refs.picker.value, parsed.lens);
+    if (refs.picker.value) show(refs.picker.value, parsed.value);
   });
   refs.fit.addEventListener("click", () => controller?.fit());
   refs.zoomIn.addEventListener("click", () => controller?.zoom(1.25));
