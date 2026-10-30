@@ -115,9 +115,7 @@ type Command struct {
 	// (the default) batches every matched file across as few invocations as fit
 	// under the runner's ARG_MAX-safe limit. Meaningless without Sources.
 	SourcesEach bool `json:"sources_each,omitempty"`
-	// Capture makes this command's spell method return its exec record. The field
-	// belongs on Command because it is declared by a Command-returning handler;
-	// Op carries the resolved copy that dispatch reads.
+	// Capture makes this command's spell method return its exec record.
 	Capture bool `json:"capture,omitempty"`
 	// Quiet keeps a captured command's output out of the step's log: it reaches the
 	// caller as the return value and nowhere else. It is for an op whose output exists
@@ -312,16 +310,12 @@ func (s Service) Validate() error {
 // In-VM spell logic is not an op kind: a remote cache provider is a separate contract
 // magus invokes by name, and other custom logic belongs in a magusfile target body.
 //
-// Op.Capture repeats Command.Capture, the field a spell declares and Buzz sees.
-// Decoding copies it here, and dispatch reads this copy.
 type Op struct {
 	// Kind is the op's lifecycle kind (OpKind*); empty means OpKindCommand.
 	Kind string `json:"kind,omitempty"`
 	Command
 	// Service is set only for a service op (Kind == OpKindService); nil otherwise.
 	Service *Service `json:"service,omitempty"`
-	// Capture shadows Command.Capture; keep the two equal (see [Op]).
-	Capture bool `json:"capture,omitempty"`
 	// Install is set only for an install op (Kind == OpKindInstall). The embedded
 	// Command is the first declared install's, for describe and charm discovery; the
 	// runner resolves the real one against the project's lockfile.

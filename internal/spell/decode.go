@@ -197,7 +197,7 @@ func targetOp(spellName, canonical string, cmd spells.Command, doc string) (spel
 	if err := validateCommand(spellName, canonical, cmd); err != nil {
 		return spells.Op{}, err
 	}
-	t := spells.Op{Command: cmd, Capture: cmd.Capture, Doc: doc}
+	t := spells.Op{Command: cmd, Doc: doc}
 	if diags := ward.Check(canonical, t); len(diags) > 0 {
 		return spells.Op{}, diags[0]
 	}

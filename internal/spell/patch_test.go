@@ -372,8 +372,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-generate":     {Command: spells.Command{Bin: "go", Args: []string{"generate", "./..."}}},
 			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
-			}}, Capture: true},
-			"go-mod-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true, Quiet: true}, Capture: true},
+			}}},
+			"go-mod-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true, Quiet: true}},
 			"go-run":      {Command: spells.Command{Bin: "go", Args: []string{"run"}, Hints: goldenGoModHints}},
 			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
@@ -400,7 +400,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
 			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "-trimpath", "./..."}, EnvKeys: goldenGoPlatformEnv}},
-			"govulncheck": {Command: spells.Command{Bin: "govulncheck", DefaultArgs: []string{"./..."}, Capture: true, External: spells.ExternalReads}, Capture: true},
+			"govulncheck": {Command: spells.Command{Bin: "govulncheck", DefaultArgs: []string{"./..."}, Capture: true, External: spells.ExternalReads}},
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "go", Args: []string{"./..."}, Capture: true, Quiet: true}},

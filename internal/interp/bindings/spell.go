@@ -383,8 +383,8 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 	// docker daemon running?": it names the socket and asks the right question,
 	// which is strictly better than anything magus can say about a tool it does not
 	// own. Paraphrasing it was throwing away the most actionable line available.
-	probeOp := spells.Op{Command: probe, Capture: true}
-	probeOp.Command.Capture = true
+	probe.Capture = true
+	probeOp := spells.Op{Command: probe}
 
 	notReady := func(res spawn.ExecResult, cause error) error {
 		msg := strings.TrimSpace(res.Stderr)
