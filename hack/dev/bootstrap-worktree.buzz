@@ -10,6 +10,7 @@ import "proc";
 import "std";
 import "vcs";
 import "./hack/policy/stale" as stale;
+import "./hack/dev/bootstrap-checkout" as checkout;
 
 import "assert";
 
@@ -19,7 +20,7 @@ final SERVES = ["rule:stale-binary"];
 final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout> | --build-from <checkout>] | --check --from <checkout>)";
 final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this script compiles magus only under --build-from\n{USAGE}\n\n"
     + "Makes a fresh worktree of this repository usable for the worker holding <id>: places the root checkout's ./magus\n"
-    + "(the main checkout, or the one --from names), refreshes the wired harness skills, takes the job's lease, refuses\n"
+    + "(the main checkout, or the one --from names), seeds its symbol index from there, refreshes the wired harness skills, takes the job's lease, refuses\n"
     + "unless the row names this worktree as its checkout and the base it recorded matches the row's checkpoint, and builds\n"
     + "the graph last. The lease comes first so an edit made while the graph builds lands after the base is recorded. A\n"
     + "graph build that fails prints a line naming `./magus graph build` and does not fail the bootstrap. The last line\n"
@@ -82,17 +83,6 @@ export fun checkReusable(stamped: str, digest: str) > void !> str {
 // reads the Go input digest the binary was built with.
 final stampProbe = `import "std"; import "magus"; std\print(magus\guard.binary().stamp);`;
 
-// mainWorktree is the first stanza of `git worktree list --porcelain`, the checkout every
-// other worktree hangs off.
-export fun mainWorktree(porcelain: str) > str {
-    foreach (line in porcelain.split("\n")) {
-        if (line.startsWith("worktree ")) {
-            return line.sub(9);
-        }
-    }
-    return "";
-}
-
 // needsDetach is whether the recorded base diverged from the checkpoint on a tree with no
 // tracked edits, where moving onto the checkpoint loses nothing.
 export fun needsDetach(row: Row, trackedClean: bool) > bool {
@@ -133,7 +123,7 @@ fun checkRepository(root: str) > str !> any {
     if (!gomod.startsWith(MODULE + "\n")) {
         throw "bootstrap-worktree: {root} is not a checkout of magus ({MODULE}); this script places magus's own binary";
     }
-    final main = mainWorktree(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
+    final main = checkout\mainWorktree(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
     if (path\clean(main) == path\clean(root)) {
         throw "bootstrap-worktree: {root} is the main checkout; a worker gets its own worktree, and placing here replaces "
             + "the ./magus every other session in this checkout runs";
@@ -287,6 +277,7 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     fs\chmod("{local}.bootstrap", mode: 493);
     fs\rename("{local}.bootstrap", dst: local);
     std\print("placed " + placed(v.bin, digest: v.digest));
+    std\print(checkout\seedLine([origin, main], dir: root));
     final lease = leaseOf(env\getOr("BAGGAGE", def: "") catch "");
     final runLocal = fun (args: [str]) > str !> any => magusAt(local, root: root, args: args);
     std\print(refreshSkills(runLocal, lease: lease));
@@ -644,6 +635,6 @@ test "a command killed by a signal names the signal, not exit -1" {
 }
 
 test "the main worktree is the porcelain's first stanza" {
-    assert\equal(mainWorktree("worktree /work/magus\nHEAD 1\nbranch refs/heads/main\n\nworktree /work/magus/.claude/worktrees/w1\nHEAD 2\ndetached\n"),
+    assert\equal(checkout\mainWorktree("worktree /work/magus\nHEAD 1\nbranch refs/heads/main\n\nworktree /work/magus/.claude/worktrees/w1\nHEAD 2\ndetached\n"),
         want: "/work/magus", message: "main");
 }
