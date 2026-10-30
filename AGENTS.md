@@ -113,6 +113,15 @@ saying it, delete it here.
 - Before fixing behavior that looks wrong, find the test that pins it.
 - The docs site is classless Pico: semantic HTML, few custom classes, no inline
   styles.
+- CLI flags, config keys, help, completions and man pages are generated from one
+  source: the command tree (`internal/commands`) plus `internal/config/config.go`.
+  Never bind a flag by hand, write a second parser or hand-print help.
+- TypeScript and Buzz return errors as values: a function returns one Result
+  `{value, error}` (`types.Result` and its generated mirrors). Only the
+  top-level entry throws, plus TypeScript's `unreachable(x: never)`; no
+  `Promise.reject`, no `!>` below a Buzz `main`, no throwing helper. Catch a
+  throwing boundary (`fetch`, `JSON.parse`, `fs\`, `proc\`, a library) where it
+  is called and return it as the error.
 - A convention that matters gets an enforcement point;
   [CONTRIBUTING.md](CONTRIBUTING.md#where-a-rule-lives) says which. A
   convention kept only in prose holds about half the time.
