@@ -92,6 +92,7 @@ func Validate(cfg Config) error {
 	failures = append(failures, mcpHTTPFailures(cfg.MCP)...)
 	failures = append(failures, conformanceFailures(cfg.Knowledge.Conformance)...)
 	failures = append(failures, diagnosticsFailures(cfg.Diagnostics)...)
+	failures = append(failures, sourceFailures(cfg.Sources)...)
 	if !cfg.Broker.Valid() {
 		failures = append(failures, FieldFailure{Field: "broker", Tag: "oneof",
 			Param: strings.Join(cfg.Broker.Values(), " "), Value: string(cfg.Broker)})
@@ -179,6 +180,23 @@ func diagnosticsFailures(d Diagnostics) []FieldFailure {
 	}
 	if d.Docs != "" && d.Prefix == "" {
 		out = append(out, FieldFailure{Field: "diagnostics.docs", Tag: "diagnostic_docs_prefix", Value: d.Docs})
+	}
+	return out
+}
+
+// sourceFailures refuses an entry with no url or an unknown verdict.
+// Param carries the url so the error names the entry.
+func sourceFailures(sources []Source) []FieldFailure {
+	var out []FieldFailure
+	for i, s := range sources {
+		field := fmt.Sprintf("sources[%d]", i)
+		if s.URL == "" {
+			out = append(out, FieldFailure{Field: field + ".url", Tag: "required"})
+		}
+		if !s.Verdict.Valid() {
+			out = append(out, FieldFailure{Field: field + ".verdict", Tag: "source_verdict",
+				Param: s.URL, Value: string(s.Verdict)})
+		}
 	}
 	return out
 }
@@ -376,6 +394,9 @@ func humanReason(f FieldFailure) string {
 		return fmt.Sprintf("must hold {code}, which stands for the code being documented (got %q)", f.Value)
 	case "diagnostic_docs_prefix":
 		return "documents codes, but diagnostics.prefix declares none for the workspace to mint"
+	case "source_verdict":
+		return fmt.Sprintf("entry %s must be one of: %s (got %q)", f.Param,
+			strings.Join(SourceVerdict("").Values(), ", "), f.Value)
 	case "spell_path_nested":
 		return fmt.Sprintf("nests inside spells.%s; each remote spell is laid out as a directory named by its path, so one cannot hold another", f.Param)
 	default:

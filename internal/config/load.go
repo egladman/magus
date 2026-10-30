@@ -98,7 +98,7 @@ func LoadWithRoot(explicitPath, knownRoot string) (Config, error) {
 		wsRoot = findWorkspaceRoot()
 	}
 	if wsRoot != "" {
-		loaded, err := loadDirInto(cfg, wsRoot)
+		loaded, err := loadRepoDirInto(cfg, wsRoot)
 		if err != nil {
 			return Config{}, err
 		}
@@ -109,7 +109,7 @@ func LoadWithRoot(explicitPath, knownRoot string) (Config, error) {
 	// another tree, such as the checkout a `--root` run was started from.
 	cwd, err := os.Getwd()
 	if err == nil && (wsRoot == "" || below(wsRoot, cwd)) {
-		loaded, err := loadDirInto(cfg, cwd)
+		loaded, err := loadRepoDirInto(cfg, cwd)
 		if err != nil {
 			return Config{}, err
 		}
@@ -169,13 +169,55 @@ func LoadWorkspaceOnly(root string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return loadDirInto(cfg, root)
+	return loadRepoDirInto(cfg, root)
 }
 
 // loadDirInto looks for magus.yaml or .magus.yaml in dir and, if found,
 // merges it on top of cfg. Returns cfg unchanged when neither file exists.
 // Returns an error when both files exist in the same directory.
 func loadDirInto(cfg Config, dir string) (Config, error) {
+	path, err := configFileIn(dir)
+	if err != nil || path == "" {
+		return cfg, err
+	}
+	return loadFileInto(cfg, path)
+}
+
+// loadRepoDirInto is [loadDirInto] for a tier a repository can carry.
+// It refuses sources: committed, they rank every contributor's searches.
+// The user directory is exempt: a cwd inside it reads it as this tier.
+func loadRepoDirInto(cfg Config, dir string) (Config, error) {
+	path, err := configFileIn(dir)
+	if err != nil || path == "" {
+		return cfg, err
+	}
+	data, overlay, err := decodeFile(path)
+	if err != nil {
+		return Config{}, err
+	}
+	if overlay.Sources != nil && !isUserConfigDir(dir) {
+		return Config{}, fmt.Errorf("config: %s sets sources, a personal reading list: move it to the user-level %s under $XDG_CONFIG_HOME/magus", path, Filename)
+	}
+	return mergeOverlay(cfg, overlay, data), nil
+}
+
+// isUserConfigDir compares by file so a symlinked config dir still matches.
+func isUserConfigDir(dir string) bool {
+	base, err := xdg.ConfigDir()
+	if err != nil {
+		return false
+	}
+	user, err := os.Stat(filepath.Join(base, "magus"))
+	if err != nil {
+		return false
+	}
+	here, err := os.Stat(dir)
+	return err == nil && os.SameFile(user, here)
+}
+
+// configFileIn names the config file in dir, "" when there is none.
+// Both spellings in one directory is an error.
+func configFileIn(dir string) (string, error) {
 	plain := filepath.Join(dir, Filename)
 	dotted := filepath.Join(dir, DottedFilename)
 
@@ -186,17 +228,15 @@ func loadDirInto(cfg Config, dir string) (Config, error) {
 	dottedExists := dottedErr == nil
 
 	if plainExists && dottedExists {
-		return Config{}, fmt.Errorf("config: %s contains both magus.yaml and .magus.yaml, pick one", dir)
+		return "", fmt.Errorf("config: %s contains both magus.yaml and .magus.yaml, pick one", dir)
 	}
-	if !plainExists && !dottedExists {
-		return cfg, nil
-	}
-
-	path := plain
 	if dottedExists {
-		path = dotted
+		return dotted, nil
 	}
-	return loadFileInto(cfg, path)
+	if plainExists {
+		return plain, nil
+	}
+	return "", nil
 }
 
 // loadFileInto parses the YAML at path and merges its values on top of cfg.

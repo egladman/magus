@@ -102,6 +102,77 @@ func TestLoadWithRootLayersOnlyAWorkingDirectoryInsideTheWorkspace(t *testing.T)
 	assert.Equal(t, 5, cfg.Concurrency, "a project inside the workspace")
 }
 
+func (s *configSuite) TestLoadReadsSourcesFromTheUserConfig() {
+	home := s.T().TempDir()
+	s.T().Setenv("XDG_CONFIG_HOME", home)
+	s.Require().NoError(os.Mkdir(filepath.Join(home, "magus"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(home, "magus", Filename), []byte(`sources:
+  - url: https://go.dev/doc/
+    topic: go modules
+    verdict: follow
+    why: upstream
+    contradicts: https://blog.example/go
+`), 0o644))
+	cfg, err := LoadWithRoot("", s.T().TempDir())
+	s.Require().NoError(err)
+	s.Equal([]Source{{URL: "https://go.dev/doc/", Topic: "go modules", Verdict: SourceFollow,
+		Why: "upstream", Contradicts: "https://blog.example/go"}}, cfg.Sources)
+}
+
+func (s *configSuite) TestLoadRefusesABadVerdictInTheUserConfig() {
+	home := s.T().TempDir()
+	s.T().Setenv("XDG_CONFIG_HOME", home)
+	s.Require().NoError(os.Mkdir(filepath.Join(home, "magus"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(home, "magus", Filename),
+		[]byte("sources:\n  - url: https://blog.example/go\n    verdict: trust\n"), 0o644))
+	_, err := LoadWithRoot("", s.T().TempDir())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "entry https://blog.example/go must be one of")
+}
+
+func (s *configSuite) repoWithSources() string {
+	repo := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(repo, Filename),
+		[]byte("sources:\n  - url: https://go.dev/doc/\n    verdict: follow\n"), 0o644))
+	return repo
+}
+
+func (s *configSuite) TestLoadRefusesSourcesInTheWorkspaceConfig() {
+	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
+	_, err := LoadWithRoot("", s.repoWithSources())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "sets sources")
+	s.Contains(err.Error(), "$XDG_CONFIG_HOME/magus")
+}
+
+func (s *configSuite) TestLoadRefusesSourcesInACwdConfig() {
+	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
+	s.T().Chdir(s.repoWithSources())
+	_, err := LoadWithRoot("", "")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "sets sources")
+}
+
+func (s *configSuite) TestLoadWorkspaceOnlyRefusesSources() {
+	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
+	_, err := LoadWorkspaceOnly(s.repoWithSources())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "sets sources")
+}
+
+func (s *configSuite) TestLoadAcceptsSourcesWhenTheCwdIsTheUserConfigDir() {
+	home := s.T().TempDir()
+	s.T().Setenv("XDG_CONFIG_HOME", home)
+	dir := filepath.Join(home, "magus")
+	s.Require().NoError(os.Mkdir(dir, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, Filename),
+		[]byte("sources:\n  - url: https://go.dev/doc/\n    verdict: follow\n"), 0o644))
+	s.T().Chdir(dir)
+	cfg, err := LoadWithRoot("", "")
+	s.Require().NoError(err)
+	s.Len(cfg.Sources, 1)
+}
+
 func TestLoadDirIntoDotted(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

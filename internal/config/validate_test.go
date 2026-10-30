@@ -65,6 +65,50 @@ func (s *configSuite) TestDiagnosticsRefusesDocsWithNoPrefix() {
 	s.Contains(s.diagnosticsFailure(Diagnostics{Docs: "docs/codes/{code}.md"}).String(), "declares none")
 }
 
+func (s *configSuite) sourcesFailures(sources ...Source) []FieldFailure {
+	cfg := Defaults()
+	cfg.CI.MaxShards = -1
+	cfg.Sources = sources
+	var ve *ValidationError
+	s.Require().ErrorAs(Validate(cfg), &ve)
+	return ve.Failures
+}
+
+func (s *configSuite) TestSourcesAcceptsEveryVerdict() {
+	cfg := Defaults()
+	cfg.CI.MaxShards = -1
+	cfg.Sources = []Source{
+		{URL: "https://go.dev/doc/", Verdict: SourceFollow},
+		{URL: "https://blog.example/go", Verdict: SourceCaveat, Why: "dated"},
+		{URL: "https://spam.example/", Verdict: SourceSkip},
+	}
+	s.NoError(Validate(cfg))
+}
+
+func (s *configSuite) TestSourcesRefusesAnUnknownVerdictNamingTheEntry() {
+	failures := s.sourcesFailures(
+		Source{URL: "https://go.dev/doc/", Verdict: SourceFollow},
+		Source{URL: "https://blog.example/go", Verdict: "trust"},
+	)
+	s.Require().Len(failures, 1)
+	s.Equal("sources[1].verdict", failures[0].Field)
+	s.Equal(`sources[1].verdict: entry https://blog.example/go must be one of: follow, caveat, skip (got "trust")`,
+		failures[0].String())
+}
+
+func (s *configSuite) TestSourcesRefusesAMissingVerdict() {
+	failures := s.sourcesFailures(Source{URL: "https://go.dev/doc/"})
+	s.Require().Len(failures, 1)
+	s.Equal("source_verdict", failures[0].Tag)
+}
+
+func (s *configSuite) TestSourcesRefusesAnEntryWithNoURL() {
+	failures := s.sourcesFailures(Source{Topic: "go", Verdict: SourceFollow})
+	s.Require().Len(failures, 1)
+	s.Equal("sources[0].url", failures[0].Field)
+	s.Equal("required", failures[0].Tag)
+}
+
 func TestValidate_ValidMinimal(t *testing.T) {
 	// ci.max_shards must be -1 (unlimited) or in [1,256]; use -1 for a minimal valid config.
 	// The duplication and conformance thresholds have no valid zero, so they carry their defaults.

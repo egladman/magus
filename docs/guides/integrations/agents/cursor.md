@@ -225,8 +225,22 @@ still carries the advise for a search the graph answers better. WebSearch and
 WebFetch ride `postToolUse`: when
 `kind=link` has citations matching the query, the script injects those URLs as
 `additional_context` so the next open-web look prefers package/docs hosts this
-tree already depends on. Cursor Agent tools spell the path field `path`; the
-script also accepts `file_path`.
+tree already depends on. Your reading list ranks ahead of them: the `sources`
+key of your user-level `magus.yaml`, read through `magus config view -o json`.
+An entry the query names shows `follow` first, then `caveat` with its `why`.
+A `skip` entry never shows, and neither does a citation under its URL.
+Cursor Agent tools spell the path field `path`; the script also accepts
+`file_path`.
+
+```yaml
+# $XDG_CONFIG_HOME/magus/magus.yaml, never a repository's
+sources:
+  - url: https://go.dev/ref/mod
+    topic: go modules
+    verdict: follow
+    why: the reference
+    contradicts: ""
+```
 
 ```buzz
 // magus guard for Cursor. One file, every event.
@@ -262,7 +276,8 @@ script also accepts `file_path`.
 //
 // Grep, Glob, and Read never reach beforeShellExecution. They are restated as
 // the shell commands the guard already judges, and gated on preToolUse, because
-// a deny has to land before the tool runs.
+// a deny has to land before the tool runs. A Read is also recorded as the
+// path it reached, as magus-observe.buzz records one on the other hosts.
 //
 // A Task call reaches preToolUse like any other tool, and is gated there as the spawn it
 // is: the brief and the subagent type go to `magus shell` in the envelope it recognizes a
@@ -287,7 +302,7 @@ script also accepts `file_path`.
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 34
+// magus-guard-template: 35
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human
@@ -523,27 +538,117 @@ fun linkTerms(event: any?) > str {
     return "";
 }
 
-fun citations(stdout: str) > [str] {
+// Source is one reading-list entry as `magus config view -o json` prints it.
+object Source {
+    url: str,
+    topic: str,
+    verdict: str,
+    why: str,
+}
+
+// Sources is the reading list, or why it could not be read.
+object Sources {
+    value: [Source] = [<Source>],
+    error: str = "",
+}
+
+// readSources reads the person's reading list, the sources key of the
+// user-level magus.yaml, through config view.
+fun readSources(bin: str) > Sources {
+    final result = proc\exec(bin, args: ["config", "view", "-o", "json"], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+    }) catch null;
+    if (result == null) { return Sources{ error = "magus config view did not start" }; }
+    if (result!.code != 0) { return Sources{ error = "magus config view exited {result!.code}" }; }
+    final doc = json\parse(result!.stdout) catch null;
+    if (doc == null) { return Sources{ error = "magus config view printed no JSON" }; }
+    final list = hook\dig(doc, dotPath: "sources");
+    final rows = mut [<Source>];
+    if (list is [any]) {
+        foreach (row in list as [any]) {
+            rows.append(Source{
+                url = hook\field(row, dotPath: "url"),
+                topic = hook\field(row, dotPath: "topic"),
+                verdict = hook\field(row, dotPath: "verdict"),
+                why = hook\field(row, dotPath: "why"),
+            });
+        }
+    }
+    return Sources{ value = rows };
+}
+
+// names reports whether a search names an entry: it is a URL under the
+// entry, or it holds every word of the entry's topic.
+fun names(source: Source, terms: str) > bool {
+    if (source.url != "" and terms.startsWith(source.url)) { return true; }
+    final searched = terms.lower().split(" ");
+    var words = 0;
+    foreach (word in source.topic.lower().split(" ")) {
+        if (word == "") { continue; }
+        if (searched.indexOf(word) == null) { return false; }
+        words = words + 1;
+    }
+    return words > 0;
+}
+
+// rankSources keeps the entries a search names, follow before caveat. A skip
+// entry never shows.
+fun rankSources(sources: [Source], terms: str) > [Source] {
+    final ranked = mut [<Source>];
+    foreach (verdict in ["follow", "caveat"]) {
+        foreach (source in sources) {
+            if (source.verdict == verdict and names(source, terms: terms)) { ranked.append(source); }
+        }
+    }
+    return ranked;
+}
+
+fun skipped(url: str, sources: [Source]) > bool {
+    foreach (source in sources) {
+        if (source.verdict == "skip" and source.url != "" and url.startsWith(source.url)) { return true; }
+    }
+    return false;
+}
+
+fun readingList(sources: Sources, terms: str) > str {
+    if (sources.error != "") {
+        return "Your reading list (sources in the user magus.yaml) was not applied: {sources.error}.";
+    }
+    final ranked = rankSources(sources.value, terms: terms);
+    if (ranked.len() == 0) { return ""; }
+    final rows = mut [<str>];
+    foreach (source in ranked) {
+        if (source.verdict == "caveat" and source.why != "") {
+            rows.append("  - caveat {source.url}: {source.why}");
+        } else {
+            rows.append("  - {source.verdict} {source.url}");
+        }
+    }
+    return "Your reading list (sources in the user magus.yaml) covers this search. Prefer follow; read a caveat with its why in mind:\n"
+        + rows.join("\n");
+}
+
+fun citations(stdout: str, sources: [Source]) > [str] {
     final urls = mut [<str>];
     foreach (line in stdout.split("\n")) {
         if (line == "" or urls.len() >= 8) { continue; }
         var url = line;
         if (url.startsWith("link:")) { url = url.sub(5, len: url.len() - 5); }
-        if (url != "") { urls.append(url); }
+        if (url != "" and !skipped(url, sources: sources)) { urls.append(url); }
     }
     return urls;
 }
 
-// linkBias names kind=link citations this workspace already depends on, so the
-// next open-web look prefers those hosts. Empty when nothing matches.
-fun linkBias(bin: str, terms: str) > str {
-    if (terms == "") { return ""; }
-    final result = proc\exec(bin, args: ["query", "kind=link", terms, "-o", "name"], opts: {
-        "quiet": true,
-        "allow_failure": true,
+// cited names kind=link citations this workspace already depends on, minus
+// any the reading list skips. Empty when nothing matches.
+fun cited(bin: str, terms: str, sources: [Source]) > str {
+    final result = proc\exec(bin, args: ["query", "kind=link", terms, "-o", "name"], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null or result!.code != 0) { return ""; }
-    final urls = citations(result!.stdout);
+    final urls = citations(result!.stdout, sources: sources);
     if (urls.len() == 0) { return ""; }
     final rows = mut [<str>];
     foreach (url in urls) { rows.append("  - {url}"); }
@@ -553,19 +658,31 @@ fun linkBias(bin: str, terms: str) > str {
         + quote(terms) + " -o name";
 }
 
+// linkBias points the next open-web look at the reading list first, then at
+// the hosts this workspace already cites.
+fun linkBias(bin: str, terms: str) > str {
+    if (terms == "") { return ""; }
+    final sources = readSources(bin);
+    final parts = mut [<str>];
+    foreach (part in [readingList(sources, terms: terms), cited(bin, terms: terms, sources: sources.value)]) {
+        if (part != "") { parts.append(part); }
+    }
+    return parts.join("\n\n");
+}
+
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult? {
     final args = mut ["shell"];
     foreach (arg in extra) { args.append(arg); }
-    return proc\exec(guard.bin, args: args, opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": guard.payload,
+    return proc\exec(guard.bin, args: args, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = guard.payload,
     }) catch null;
 }
 
 fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     var version = "";
-    final probe = proc\exec(guard.bin, args: ["version"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    final probe = proc\exec(guard.bin, args: ["version"], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
     if (probe != null) { version = hook\firstLine(probe!.stdout); }
     if (version == "") { version = "version unreadable"; }
     var why = "";
@@ -762,9 +879,9 @@ fun gateMcp(scope: Scope, event: any?) > str {
 // answers nothing. Profile a suspect run with MAGUS_PPROF=mem:/tmp/s.mem (and buzz
 // --profile on the outer hook).
 fun brief(bin: str, root: str) > str {
-    final result = proc\exec(bin, args: ["session", "--brief"], opts: {
-        "quiet": true,
-        "allow_failure": true,
+    final result = proc\exec(bin, args: ["session", "--brief"], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null) { return ""; }
     var context = hook\trimTrailingNewlines(result!.stdout);
@@ -857,9 +974,9 @@ fun toolPath(event: any?) > str {
 }
 
 fun checkpoint(bin: str, agent: str, session: str, transcript: str) > void {
-    proc\exec(bin, args: ["session", "checkpoint", AGENT_NAME, agent, "--session", session, "--transcript", transcript], opts: {
-        "quiet": true,
-        "allow_failure": true,
+    _ = proc\exec(bin, args: ["session", "checkpoint", AGENT_NAME, agent, "--session", session, "--transcript", transcript], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch void;
 }
 
@@ -875,10 +992,10 @@ fun recordSpawn(bin: str, agent: str, event: any?) > void {
             "subagent_type": hook\field(event, dotPath: "subagent_type"),
         },
     };
-    proc\exec(bin, args: ["shell", AGENT_NAME, agent], opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": json\stringify(body) catch "",
+    _ = proc\exec(bin, args: ["shell", AGENT_NAME, agent], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = json\stringify(body) catch "",
     }) catch void;
 }
 
@@ -887,14 +1004,14 @@ fun recordSpawn(bin: str, agent: str, event: any?) > void {
 fun recordMessage(scope: Scope, event: any?) > void {
     final message = hook\field(event, dotPath: "prompt");
     if (message == "") { return; }
-    proc\exec(scope.bin, args: [
+    _ = proc\exec(scope.bin, args: [
         "shell", "--message", AGENT_NAME, scope.agent, "--transport", "buzz",
         "--session", scope.session, "--transcript", scope.transcript,
         "--event", "beforeSubmitPrompt",
-    ], opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": message,
+    ], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = message,
     }) catch void;
 }
 
@@ -935,6 +1052,20 @@ fun readSession(event: any?) > str {
     return firstField(event, keys: ["session_id", "conversation_id"]);
 }
 
+// observe records the path a Read reached and reads nothing back. It judges
+// nothing, so a binary too old for --observe costs the record, never the read.
+fun observe(scope: Scope, path: str) > void {
+    _ = proc\exec(scope.bin, args: [
+        "shell", "--observe", AGENT_NAME, scope.agent,
+        "--session", scope.session, "--transcript", scope.transcript,
+        "--event", "preToolUse",
+    ], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = path,
+    }) catch void;
+}
+
 fun gateTool(scope: Scope, event: any?) > str {
     final tool = hook\field(event, dotPath: "tool_name");
     if (tool == "Task") {
@@ -944,6 +1075,7 @@ fun gateTool(scope: Scope, event: any?) > str {
     }
     if (tool == "Shell") { return gateShell(scope, event: event); }
     final path = toolPath(event);
+    if (tool == "Read" and path != "") { observe(scope, path: path); }
     if (tool == "Read" and skillRead(path)) {
         final load = envelope(scope, event: event, tool: "Read", input: {"file_path": path});
         return gateCall(scope, event: event, payload: load, asPath: false, family: "failed-skill");
@@ -960,7 +1092,38 @@ fun gateTool(scope: Scope, event: any?) > str {
     return gateCall(scope, event: event, payload: call, asPath: false, family: "failed-call");
 }
 
+// stopPayload restates a stop in the envelope magus reads a stop by. Cursor
+// counts the follow-ups it already sent in loop_count, so a nonzero one is a
+// stop the guard sent back before.
+fun stopPayload(scope: Scope, event: any?, eventName: str) > str {
+    final body = mut {<str: any>};
+    body["hook_event_name"] = if (eventName == "stop") "Stop" else "SubagentStop";
+    body["session_id"] = scope.session;
+    body["transcript_path"] = scope.transcript;
+    body["stop_hook_active"] = count(event, key: "loop_count") > 0.0;
+    body["cwd"] = firstField(event, keys: ["cwd"]);
+    final child = hook\field(event, dotPath: "agent_transcript_path");
+    if (child != "") { body["agent_transcript_path"] = child; }
+    return json\stringify(body) catch "";
+}
+
+// gateStop answers stop and subagentStop. A deny is the follow-up Cursor sends
+// as the next message. An advise has no field on a stop reply, so it goes to
+// stderr, which Cursor's hook log shows.
+fun gateStop(scope: Scope, event: any?, eventName: str) > str {
+    // Cursor resumes a subagent on a follow-up only when it completed.
+    if (eventName == "subagentStop" and hook\field(event, dotPath: "status") != "completed") { return EMPTY; }
+    final payload = stopPayload(scope, event: event, eventName: eventName);
+    if (payload == "") { return EMPTY; }
+    final v = verdict(scope, payload: payload, asPath: false, ask: false, family: "failed-stop");
+    if (v == null) { return EMPTY; }
+    if (v!.decision == "advise") { warn(v!.context); }
+    if (v!.decision != "deny") { return EMPTY; }
+    return json\stringify({"followup_message": "[magus guard] {v!.reason}"}) catch EMPTY;
+}
+
 fun dispatch(event: any?, eventName: str, scope: Scope) > str {
+    if (eventName == "stop" or eventName == "subagentStop") { return gateStop(scope, event: event, eventName: eventName); }
     if (eventName == "sessionStart") {
         prune();
         return sessionStartReply(scope.bin);

@@ -26,6 +26,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean drives the actual `magus buzz`
@@ -1093,6 +1094,75 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 			}
 		})
 	}
+}
+
+// cursorReadingListSuite runs cursor-hook.buzz on a WebSearch with a stand-in
+// magus that answers config view with a reading list and the link query with
+// citations.
+type cursorReadingListSuite struct {
+	suite.Suite
+}
+
+func TestCursorReadingListSuite(t *testing.T) {
+	suite.Run(t, new(cursorReadingListSuite))
+}
+
+const cursorReadingListStub = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\n" +
+	"case \"$1\" in\n  config) [ -n \"$CONFIG_FAILS\" ] && exit 2; printf '%s' \"$SOURCES_JSON\" ;;\n" +
+	"  query) printf '%s' \"$LINKS\" ;;\nesac\n"
+
+// hint is the additional_context the hook returns for a search of terms.
+func (s *cursorReadingListSuite) hint(terms string, env map[string]string) string {
+	event, err := json.Marshal(map[string]any{
+		"hook_event_name": "postToolUse", "conversation_id": "c",
+		"tool_name": "WebSearch", "tool_input": map[string]any{"search_term": terms},
+	})
+	s.Require().NoError(err)
+	env["CURSOR_HOOK_STATE_DIR"] = s.T().TempDir()
+	out, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{
+		label: terms, host: "cursor", event: string(event), stub: cursorReadingListStub, env: env,
+	})
+	var reply struct {
+		Context string `json:"additional_context"`
+	}
+	s.Require().NoError(json.Unmarshal([]byte(out), &reply), out)
+	return reply.Context
+}
+
+const cursorReadingList = `{"sources":[
+{"url":"https://blog.example/go","topic":"go modules","verdict":"caveat","why":"predates workspaces"},
+{"url":"https://spam.example/","topic":"go modules","verdict":"skip","why":"SEO"},
+{"url":"https://go.dev/ref/mod","topic":"go modules","verdict":"follow","why":"the reference"},
+{"url":"https://react.dev/","topic":"react hooks","verdict":"follow","why":""}]}`
+
+func (s *cursorReadingListSuite) TestRanksFollowBeforeCaveatAndDropsSkip() {
+	got := s.hint("go modules vendoring", map[string]string{"SOURCES_JSON": cursorReadingList})
+	s.Equal("Your reading list (sources in the user magus.yaml) covers this search. "+
+		"Prefer follow; read a caveat with its why in mind:\n"+
+		"  - follow https://go.dev/ref/mod\n"+
+		"  - caveat https://blog.example/go: predates workspaces", got)
+}
+
+func (s *cursorReadingListSuite) TestDropsACitationUnderASkipEntry() {
+	got := s.hint("go modules", map[string]string{
+		"SOURCES_JSON": cursorReadingList,
+		"LINKS":        "link:https://spam.example/go-modules\nlink:https://pkg.go.dev/cmd/go\n",
+	})
+	s.Contains(got, "  - https://pkg.go.dev/cmd/go")
+	s.NotContains(got, "spam.example")
+}
+
+func (s *cursorReadingListSuite) TestNamesNothingForAnUnrelatedSearch() {
+	s.Empty(s.hint("rust lifetimes", map[string]string{"SOURCES_JSON": cursorReadingList}))
+}
+
+func (s *cursorReadingListSuite) TestAWordInsideALongerWordNamesNothing() {
+	s.Empty(s.hint("mongo modules", map[string]string{"SOURCES_JSON": cursorReadingList}))
+}
+
+func (s *cursorReadingListSuite) TestSaysSoWhenConfigViewFails() {
+	got := s.hint("go modules", map[string]string{"CONFIG_FAILS": "1"})
+	s.Equal("Your reading list (sources in the user magus.yaml) was not applied: magus config view exited 2.", got)
 }
 
 // TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem grades what cursor-hook.buzz

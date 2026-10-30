@@ -11,9 +11,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
@@ -25,6 +27,30 @@ func TestRunConfigView_Text(t *testing.T) {
 func TestRunConfigView_JSON(t *testing.T) {
 	cfg := config.Defaults()
 	require.NoError(t, runConfigView(cfg, []string{"-o", "json"}))
+}
+
+type configViewSuite struct {
+	suite.Suite
+}
+
+func TestConfigViewSuite(t *testing.T) {
+	suite.Run(t, new(configViewSuite))
+}
+
+// The Cursor hook reads the reading list here; these keys are its contract.
+func (s *configViewSuite) TestJSONCarriesTheReadingList() {
+	cfg := config.Defaults()
+	cfg.Sources = []config.Source{{URL: "https://go.dev/ref/mod", Topic: "go modules",
+		Verdict: config.SourceFollow, Why: "the reference", Contradicts: "https://blog.example/go"}}
+	out := captureStdout(s.T(), func() {
+		s.Require().NoError(runConfigView(cfg, []string{"-o", "json"}))
+	})
+	var view struct {
+		Sources []map[string]string `json:"sources"`
+	}
+	s.Require().NoError(json.Unmarshal([]byte(out), &view), out)
+	s.Equal([]map[string]string{{"url": "https://go.dev/ref/mod", "topic": "go modules",
+		"verdict": "follow", "why": "the reference", "contradicts": "https://blog.example/go"}}, view.Sources)
 }
 
 func TestRunConfigView_YAML(t *testing.T) {

@@ -145,7 +145,41 @@ type Config struct {
 	// Diagnostics declares this workspace's own codes. cli:"-": a flag changing the prefix
 	// would make one raise valid in one shell and refused in another.
 	Diagnostics Diagnostics `json:"diagnostics" yaml:"diagnostics" cli:"-"`
+
+	// Sources is a person's reading list, read by the Cursor web hint.
+	// User-level only: committed, it would rank every contributor's searches.
+	Sources []Source `json:"sources" yaml:"sources" cli:"-"`
 }
+
+// Source is one reading-list entry. URL matches as a prefix of a cited URL.
+// Topic holds the words a search shares with it. Why shows beside a caveat.
+// Contradicts names the claim or source it disputes.
+type Source struct {
+	URL         string        `json:"url" yaml:"url"`
+	Topic       string        `json:"topic" yaml:"topic"`
+	Verdict     SourceVerdict `json:"verdict" yaml:"verdict"`
+	Why         string        `json:"why" yaml:"why"`
+	Contradicts string        `json:"contradicts" yaml:"contradicts"`
+}
+
+// SourceVerdict ranks a reading-list entry in the web hint. Follow ranks
+// first, caveat is named with its why, skip is dropped.
+type SourceVerdict string
+
+// The verdicts a [Source] may carry.
+const (
+	SourceFollow SourceVerdict = "follow"
+	SourceCaveat SourceVerdict = "caveat"
+	SourceSkip   SourceVerdict = "skip"
+)
+
+// Values lists every verdict in rank order.
+func (SourceVerdict) Values() []string {
+	return []string{string(SourceFollow), string(SourceCaveat), string(SourceSkip)}
+}
+
+// Valid reports whether v is one of [SourceVerdict.Values].
+func (v SourceVerdict) Valid() bool { return slices.Contains(v.Values(), string(v)) }
 
 // Diagnostics is the namespace of the codes a workspace mints with magus\diagnosticCode and
 // attaches to its guard rules: one prefix per workspace, numbers within it.

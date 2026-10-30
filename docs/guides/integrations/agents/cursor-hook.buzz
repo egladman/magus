@@ -57,7 +57,7 @@
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 34
+// magus-guard-template: 35
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human
@@ -293,27 +293,117 @@ fun linkTerms(event: any?) > str {
     return "";
 }
 
-fun citations(stdout: str) > [str] {
+// Source is one reading-list entry as `magus config view -o json` prints it.
+object Source {
+    url: str,
+    topic: str,
+    verdict: str,
+    why: str,
+}
+
+// Sources is the reading list, or why it could not be read.
+object Sources {
+    value: [Source] = [<Source>],
+    error: str = "",
+}
+
+// readSources reads the person's reading list, the sources key of the
+// user-level magus.yaml, through config view.
+fun readSources(bin: str) > Sources {
+    final result = proc\exec(bin, args: ["config", "view", "-o", "json"], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+    }) catch null;
+    if (result == null) { return Sources{ error = "magus config view did not start" }; }
+    if (result!.code != 0) { return Sources{ error = "magus config view exited {result!.code}" }; }
+    final doc = json\parse(result!.stdout) catch null;
+    if (doc == null) { return Sources{ error = "magus config view printed no JSON" }; }
+    final list = hook\dig(doc, dotPath: "sources");
+    final rows = mut [<Source>];
+    if (list is [any]) {
+        foreach (row in list as [any]) {
+            rows.append(Source{
+                url = hook\field(row, dotPath: "url"),
+                topic = hook\field(row, dotPath: "topic"),
+                verdict = hook\field(row, dotPath: "verdict"),
+                why = hook\field(row, dotPath: "why"),
+            });
+        }
+    }
+    return Sources{ value = rows };
+}
+
+// names reports whether a search names an entry: it is a URL under the
+// entry, or it holds every word of the entry's topic.
+fun names(source: Source, terms: str) > bool {
+    if (source.url != "" and terms.startsWith(source.url)) { return true; }
+    final searched = terms.lower().split(" ");
+    var words = 0;
+    foreach (word in source.topic.lower().split(" ")) {
+        if (word == "") { continue; }
+        if (searched.indexOf(word) == null) { return false; }
+        words = words + 1;
+    }
+    return words > 0;
+}
+
+// rankSources keeps the entries a search names, follow before caveat. A skip
+// entry never shows.
+fun rankSources(sources: [Source], terms: str) > [Source] {
+    final ranked = mut [<Source>];
+    foreach (verdict in ["follow", "caveat"]) {
+        foreach (source in sources) {
+            if (source.verdict == verdict and names(source, terms: terms)) { ranked.append(source); }
+        }
+    }
+    return ranked;
+}
+
+fun skipped(url: str, sources: [Source]) > bool {
+    foreach (source in sources) {
+        if (source.verdict == "skip" and source.url != "" and url.startsWith(source.url)) { return true; }
+    }
+    return false;
+}
+
+fun readingList(sources: Sources, terms: str) > str {
+    if (sources.error != "") {
+        return "Your reading list (sources in the user magus.yaml) was not applied: {sources.error}.";
+    }
+    final ranked = rankSources(sources.value, terms: terms);
+    if (ranked.len() == 0) { return ""; }
+    final rows = mut [<str>];
+    foreach (source in ranked) {
+        if (source.verdict == "caveat" and source.why != "") {
+            rows.append("  - caveat {source.url}: {source.why}");
+        } else {
+            rows.append("  - {source.verdict} {source.url}");
+        }
+    }
+    return "Your reading list (sources in the user magus.yaml) covers this search. Prefer follow; read a caveat with its why in mind:\n"
+        + rows.join("\n");
+}
+
+fun citations(stdout: str, sources: [Source]) > [str] {
     final urls = mut [<str>];
     foreach (line in stdout.split("\n")) {
         if (line == "" or urls.len() >= 8) { continue; }
         var url = line;
         if (url.startsWith("link:")) { url = url.sub(5, len: url.len() - 5); }
-        if (url != "") { urls.append(url); }
+        if (url != "" and !skipped(url, sources: sources)) { urls.append(url); }
     }
     return urls;
 }
 
-// linkBias names kind=link citations this workspace already depends on, so the
-// next open-web look prefers those hosts. Empty when nothing matches.
-fun linkBias(bin: str, terms: str) > str {
-    if (terms == "") { return ""; }
+// cited names kind=link citations this workspace already depends on, minus
+// any the reading list skips. Empty when nothing matches.
+fun cited(bin: str, terms: str, sources: [Source]) > str {
     final result = proc\exec(bin, args: ["query", "kind=link", terms, "-o", "name"], opts: proc\ExecOptions{
         quiet = true,
         allowFailure = true,
     }) catch null;
     if (result == null or result!.code != 0) { return ""; }
-    final urls = citations(result!.stdout);
+    final urls = citations(result!.stdout, sources: sources);
     if (urls.len() == 0) { return ""; }
     final rows = mut [<str>];
     foreach (url in urls) { rows.append("  - {url}"); }
@@ -321,6 +411,18 @@ fun linkBias(bin: str, terms: str) > str {
         + rows.join("\n") + "\n"
         + "Refine the next search with site:<host> from those URLs, or WebFetch one directly. List them again: ./magus query kind=link "
         + quote(terms) + " -o name";
+}
+
+// linkBias points the next open-web look at the reading list first, then at
+// the hosts this workspace already cites.
+fun linkBias(bin: str, terms: str) > str {
+    if (terms == "") { return ""; }
+    final sources = readSources(bin);
+    final parts = mut [<str>];
+    foreach (part in [readingList(sources, terms: terms), cited(bin, terms: terms, sources: sources.value)]) {
+        if (part != "") { parts.append(part); }
+    }
+    return parts.join("\n\n");
 }
 
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult? {
