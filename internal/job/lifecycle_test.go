@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestEndedReasonSaysWhichEnd: a read-only scout its holder finished, and a row the root
@@ -141,7 +142,6 @@ func TestWaitIgnoresASoftPathNobodyWrote(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Empty(t, rows[0].Releases, "and the exit gave up no path it held")
-	assert.Empty(t, rows[0].SoftPaths)
 }
 
 func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
@@ -176,72 +176,101 @@ func coveredRow() types.Job {
 	return row
 }
 
-// An exited job awaiting its wait holds only what its result changed, so a fork over a
-// file it never touched is not refused on its account; what it dropped is a release, and
-// the wait still grades the result clean. An abandonment keeps every path.
-func TestExitNarrowsToWhatTheResultChanged(t *testing.T) {
-	t.Parallel()
+// rowKeepsItsPathsSuite pins a row's write paths through exit and re-take.
+type rowKeepsItsPathsSuite struct {
+	suite.Suite
+}
 
-	row := acceptRow()
-	loc := declared(t, row)
-	result := passingResult()
-	resolver := func(context.Context, string) (types.JobAttempt, error) {
+func TestRowKeepsItsPaths(t *testing.T) { suite.Run(t, new(rowKeepsItsPathsSuite)) }
+
+func (s *rowKeepsItsPathsSuite) resolver(result types.JobResult) AttemptResolver {
+	return func(context.Context, string) (types.JobAttempt, error) {
 		attempt := passingRun
 		attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
 		return attempt, nil
 	}
+}
 
-	exited, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, resolver)
-	require.NoError(t, err)
-	require.Len(t, exited.Releases, 1)
-	assert.False(t, exited.Releases[0].Revoked, "the holder gave it up")
-	assert.Equal(t, 2, exited.Result.ObservedGeneration, "the evidence proved the wider spec, so it grades the narrowed one")
-	want := row
-	want.Version = types.JobSchemaVersion
-	want.WritePaths = []string{"internal/ledger", "cmd/magus/ledger.go"} // a directory covers what is under it
-	want.Releases = []types.JobRelease{{Path: "docs/reference/*.md", Digest: "absent", ReleasedAt: exited.Releases[0].ReleasedAt}}
-	want.Generation = 2 // narrowing is a spec change
-	want.Attempts, want.State = 1, types.StateExited
-	want.RegisteredBy, want.Created, want.Updated = exited.RegisteredBy, exited.Created, exited.Updated
-	want.Result, want.Attempt, want.GateAttempts = exited.Result, exited.Attempt, exited.GateAttempts
-	assert.Equal(t, want, exited)
+func (s *rowKeepsItsPathsSuite) exit(loc Location, id string, result types.JobResult) types.Job {
+	s.T().Helper()
+	exited, err := Exit(s.T().Context(), boundStore(loc, id), id, &result, s.resolver(result))
+	s.Require().NoError(err)
+	return exited
+}
 
-	status, err := Wait(t.Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
-	require.NoError(t, err)
-	assert.True(t, status.Verified, status.Violations)
+func (s *rowKeepsItsPathsSuite) TestExitKeepsAPathTheResultDoesNotName() {
+	row := acceptRow()
+	loc := declared(s.T(), row)
+	result := passingResult()
 
-	t.Run("a claim covers its file", func(t *testing.T) {
-		t.Parallel()
-		claims := acceptRow()
-		claims.WritePaths = []string{"run.go#A", "run.go#B", "other.go#C"}
-		loc := declared(t, claims)
-		changed := passingResult()
-		changed.ChangedPaths = []string{"run.go"}
-		exited, err := Exit(t.Context(), boundStore(loc, claims.ID), claims.ID, &changed, resolver)
-		require.NoError(t, err)
-		assert.Equal(t, []string{"run.go#A", "run.go#B"}, exited.WritePaths)
-	})
+	exited := s.exit(loc, row.ID, result)
 
-	t.Run("a result covering none of the paths keeps them for the grade to name", func(t *testing.T) {
-		t.Parallel()
-		stray := acceptRow()
-		loc := declared(t, stray)
-		off := passingResult()
-		off.ChangedPaths = []string{"elsewhere.go"}
-		exited, err := Exit(t.Context(), boundStore(loc, stray.ID), stray.ID, &off, resolver)
-		require.NoError(t, err)
-		assert.Equal(t, stray.WritePaths, exited.WritePaths)
-		assert.Empty(t, exited.Releases)
-	})
+	s.Equal(row.WritePaths, exited.WritePaths)
+	s.Empty(exited.Releases)
 
-	t.Run("an abandonment keeps every path", func(t *testing.T) {
-		t.Parallel()
-		kept := acceptRow()
-		loc := declared(t, kept)
-		stored, err := Exit(t.Context(), boundStore(loc, kept.ID), kept.ID, nil, nil)
-		require.NoError(t, err)
-		assert.Equal(t, kept.WritePaths, stored.WritePaths)
-	})
+	status, err := Wait(s.T().Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
+	s.Require().NoError(err)
+	s.True(status.Verified, status.Violations)
+}
+
+func (s *rowKeepsItsPathsSuite) TestWideningAppliedWhileRunningSurvivesExitAndRetake() {
+	store, loc := appliedRow(s.T(), "a.go", "b.go")
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go", "c.go")}, config.Jobs{}, nil, nil, false)
+	s.Require().NoError(err)
+	s.Require().Equal([]string{"a.go", "b.go", "c.go"}, applied[0].Next.WritePaths)
+
+	result := passingResult()
+	result.Job, result.ChangedPaths = "w", []string{"a.go"}
+	exited := s.exit(loc, "w", result)
+	s.Equal([]string{"a.go", "b.go", "c.go"}, exited.WritePaths)
+
+	retaken, err := NewStore(loc).Exec(s.T().Context(), "w")
+	s.Require().NoError(err)
+	s.Equal(types.StateRunning, retaken.State)
+	s.Equal([]string{"a.go", "b.go", "c.go"}, retaken.WritePaths)
+}
+
+func (s *rowKeepsItsPathsSuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
+	store, loc := appliedRow(s.T(), "a.go")
+	result := passingResult()
+	result.Job, result.ChangedPaths = "w", []string{"a.go"}
+	s.exit(loc, "w", result)
+
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+	s.Require().NoError(err)
+
+	s.Equal([]string{"a.go", "b.go"}, applied[0].Next.WritePaths)
+	s.Equal(types.StateDeclared, applied[0].Next.State)
+}
+
+func (s *rowKeepsItsPathsSuite) TestAbandonmentKeepsEveryPath() {
+	kept := acceptRow()
+	loc := declared(s.T(), kept)
+	stored, err := Exit(s.T().Context(), boundStore(loc, kept.ID), kept.ID, nil, nil)
+	s.Require().NoError(err)
+	s.Equal(kept.WritePaths, stored.WritePaths)
+}
+
+func (s *rowKeepsItsPathsSuite) TestRejectionGivesUpOnlyAnUntouchedPathAnotherJobTook() {
+	taker := types.Job{ID: "taker", Criteria: "c", WritePaths: []string{"docs/reference/*.md"}, State: types.StateRunning}
+	row := acceptRow()
+	loc := declared(s.T(), row, taker)
+	result := passingResult()
+	s.exit(loc, row.ID, result)
+
+	empty := result
+	empty.ChangedPaths = nil
+	status, err := Wait(s.T().Context(), NewStore(loc), row.ID, &empty, s.resolver(result), nil, nil)
+	s.Require().NoError(err)
+	s.False(status.Verified)
+	s.Contains(strings.Join(status.Notes, "\n"), "gave up what it never touched")
+	s.Contains(strings.Join(status.Notes, "\n"), "docs/reference/*.md")
+
+	rows, err := NewStore(loc).List()
+	s.Require().NoError(err)
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
+	s.Equal(types.StateRunning, rows[i].State)
+	s.Equal([]string{"internal/ledger", "cmd/magus/ledger.go"}, rows[i].WritePaths)
 }
 
 func TestWaitKeepsARejectedJobOpen(t *testing.T) {

@@ -59,8 +59,8 @@ func endedReason(prev types.Job, byHolder bool) string {
 // Exit records how a worker ended one job. A nil result is an abandonment, distinct from
 // a failed verification: nobody returned evidence at all. A non-nil result is filed with
 // the output attempt resolved in the worker's checkout, so a verifier in another
-// worktree does not need that checkout's cache to reopen the evidence, and the row's write
-// paths narrow to the entries covering a path the result names. An abandonment keeps them.
+// worktree does not need that checkout's cache to reopen the evidence.
+// Either way the row keeps every write path: its holder may be sent back.
 // A result on a row [gradedByHolder] records pass when it names no unresolved risk,
 // since no wait could grade it; one that names a risk leaves the row exited for the root to read.
 //
@@ -111,20 +111,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	}
 	return update(func(row *types.Job) {
 		prev := row.Clone()
-		// A row awaiting `magus job wait` keeps only the entries covering a path the result
-		// names (a claim `F#d` covers F), so it stops holding files it never touched; Update
-		// records each dropped entry as a release with its digest. With no entry covering
-		// any, the grade rejects the result and the paths stay for it to name.
-		kept := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
-			file, _ := types.SplitClaim(entry)
-			return !slices.ContainsFunc(result.ChangedPaths, func(p string) bool { return types.PathWithin(p, file) })
-		})
-		if len(kept) > 0 {
-			row.WritePaths = kept
-		}
-		// Stamped with the generation the write keeps. Narrowing is a spec change, so the
-		// evidence is stamped with the narrowed spec's generation: it proved the wider one.
-		generation := nextGeneration(prev, *row, true, asDeclaration)
+		generation := max(row.Generation, 1)
 		filed := *result
 		filed.ObservedGeneration = generation
 		row.Result = &filed
@@ -271,22 +258,34 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 }
 
 // reclaimForRework sends a rejected exited row back to running, re-claiming each write path
-// under the rule a claim meets ([checkClaimPath]). Filing released them, so another job may
-// have taken one meanwhile: then the row stays exited and the note names that job. A row in
-// any other state gets no note.
+// under the rule a claim meets ([checkClaimPath]).
+// Another job may have taken a path. One the result changed keeps the row
+// exited. One it never touched goes to that job. The note says which.
 func reclaimForRework(row *types.Job, rows []types.Job) string {
 	if row.State != types.StateExited {
 		return ""
 	}
+	kept := make([]string, 0, len(row.WritePaths))
+	var gaveUp []string
 	for _, entry := range row.WritePaths {
 		file, _ := types.SplitClaim(entry)
-		if err := checkClaimPath(types.Job{ID: row.ID}, file, rows); err != nil {
+		err := checkClaimPath(types.Job{ID: row.ID}, file, rows)
+		switch {
+		case err == nil:
+			kept = append(kept, entry)
+		case row.Result != nil && slices.ContainsFunc(row.Result.ChangedPaths, func(p string) bool { return types.PathWithin(p, file) }):
 			return fmt.Sprintf("%s stays exited and holds nothing, since its rework could not re-claim its write paths: %v; it reworks once that job ends, or `magus job fork` declares it again",
 				row.ID, err)
+		default:
+			gaveUp = append(gaveUp, fmt.Sprintf("%s (%v)", entry, err))
 		}
 	}
 	row.State = types.StateRunning
-	return fmt.Sprintf("%s is running again and holds its write paths again for its rework", row.ID)
+	if len(gaveUp) == 0 {
+		return fmt.Sprintf("%s is running again and holds its write paths again for its rework", row.ID)
+	}
+	row.WritePaths = kept
+	return fmt.Sprintf("%s is running again for its rework and gave up what it never touched and another job took: %s", row.ID, strings.Join(gaveUp, "; "))
 }
 
 // Verifies reports whether this actor may verify row id: an unbound actor verifies any
