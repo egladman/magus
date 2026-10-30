@@ -162,7 +162,7 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", "QR code for the share link");
     const drawn = encodeToCanvas(canvas, url, 240);
-    if (!drawn.ok) {
+    if (drawn.error) {
       // A failed QR never hides the URL: the copy line below still works.
       qrFrame.dataset.failed = "";
       showToast(

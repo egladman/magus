@@ -4,7 +4,7 @@
 
 import { reportFailure } from "../lib/notifications";
 import { showToast } from "../lib/refresh-toast";
-import { asError, type Result } from "../lib/result";
+import { MagusError, fail, fromPromise, ok, type Result } from "../gen/magus/types";
 
 const LABEL = ".console-render-btn__label, .pf-v6-c-menu__item-text";
 const FLASH_MS = 1500;
@@ -37,7 +37,7 @@ export interface CopyOptions {
 // toast. It resolves to whether the write happened.
 export async function copyText(text: string, opts: CopyOptions): Promise<boolean> {
   const written = await writeClipboard(text);
-  if (written.ok) {
+  if (!written.error) {
     flashLabel(opts.button ?? null, "Copied");
     if (opts.confirm) showToast(opts.source, opts.confirm, "ok", { ms: 2500 });
     return true;
@@ -57,12 +57,10 @@ export async function copyText(text: string, opts: CopyOptions): Promise<boolean
 
 async function writeClipboard(text: string): Promise<Result<null>> {
   if (!navigator.clipboard || !navigator.clipboard.writeText) {
-    return { ok: false, error: new Error("the browser does not offer clipboard access here") };
+    return fail(
+      new MagusError({ code: "", message: "the browser does not offer clipboard access here" }),
+    );
   }
-  try {
-    await navigator.clipboard.writeText(text);
-    return { ok: true, value: null };
-  } catch (e) {
-    return { ok: false, error: asError(e) };
-  }
+  const written = await fromPromise(navigator.clipboard.writeText(text));
+  return written.error ? written : ok(null);
 }

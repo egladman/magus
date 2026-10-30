@@ -11,7 +11,7 @@ import {
   readFailure,
   renderDiagram,
 } from "./api";
-import { succeed } from "../../../lib/result";
+import { ok } from "../../../gen/magus/types";
 
 const HOST = "127.0.0.1:7391";
 
@@ -116,14 +116,14 @@ test("the listing decodes its optional fields only when present", () => {
         { id: "imports", kind: "imports", title: "Package imports", indexed: false },
       ],
     }),
-    succeed([
+    ok([
       { id: "projects", kind: "projects", title: "Workspace projects" },
       { id: "targets:app", kind: "targets", title: "Targets in app", project: "app" },
       { id: "imports", kind: "imports", title: "Package imports", indexed: false },
     ]),
   );
   const bad = parseListing({ diagrams: [{ id: 1 }] });
-  assert.ok(!bad.ok);
+  assert.ok(bad.error);
   assert.match(bad.error.message, /id is not a string/);
 });
 
@@ -136,7 +136,7 @@ test("a rendered figure decodes source_url and tolerates missing node fields", (
       nodes: [{ id: "app", anchor: "app", label: "app" }, { id: "x" }],
       source_url: "https://github.com/acme/widgets/blob/abc/{path}#L{line}",
     }),
-    succeed({
+    ok({
       id: "projects",
       title: "Workspace projects",
       svg: "<svg/>",
@@ -148,6 +148,6 @@ test("a rendered figure decodes source_url and tolerates missing node fields", (
     }),
   );
   const bad = parseRendered({ id: "p", title: "t", nodes: [] });
-  assert.ok(!bad.ok);
+  assert.ok(bad.error);
   assert.match(bad.error.message, /svg is not a string/);
 });

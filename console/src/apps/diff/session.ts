@@ -12,7 +12,7 @@
 
 import { authHeaders, readRefusal, reportFetchFailure, reportHttpStatus } from "../../lib/server";
 import { reportFailure } from "../../lib/notifications";
-import { failFrom, succeed, type Result } from "../../lib/result";
+import { MagusError, fail, fromPromise, ok, type Result } from "../../gen/magus/types";
 
 // The wire shapes, mirroring types.Review and types.DiffReview. Hand-written rather than
 // generated because these ride the plain JSON /api routes rather than a Connect service, the
@@ -397,14 +397,10 @@ export interface DiffContext {
 // connection, an abort or a body that is not JSON. A refused status fails as an HttpError, so
 // callers can tell it apart.
 async function getJSON<T>(url: string, signal: AbortSignal): Promise<Result<T>> {
-  try {
-    const res = await fetch(url, { headers: authHeaders(), signal });
-    if (!res.ok) return failFrom(new HttpError(res.status));
-    const value: T = await res.json();
-    return succeed(value);
-  } catch (e) {
-    return failFrom(e);
-  }
+  const res = await fromPromise(fetch(url, { headers: authHeaders(), signal }));
+  if (res.error) return res;
+  if (!res.value.ok) return fail(new HttpError(res.value.status));
+  return fromPromise<T>(res.value.json());
 }
 
 // postSessionOp sends one op to the session route. A refusal carries the server's own words,
@@ -414,21 +410,22 @@ async function postSessionOp(
   op: Record<string, string>,
   signal: AbortSignal,
 ): Promise<Result<Response>> {
-  try {
-    const res = await fetch(`http://${host}/api/v1/diff/session`, {
+  const res = await fromPromise(
+    fetch(`http://${host}/api/v1/diff/session`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify(op),
       signal,
-    });
-    if (!res.ok) {
-      const refusal = await readRefusal(res);
-      return failFrom(new Error(refusal?.message ?? `server answered ${res.status}`));
-    }
-    return succeed(res);
-  } catch (e) {
-    return failFrom(e);
-  }
+    }),
+  );
+  if (res.error || res.value.ok) return res;
+  const refusal = await readRefusal(res.value);
+  return fail(
+    new MagusError({
+      code: "",
+      message: refusal?.message ?? `server answered ${res.value.status}`,
+    }),
+  );
 }
 
 // Fetches user-requested working-tree context for one hunk.
@@ -569,13 +566,8 @@ export async function publish(
   signal: AbortSignal,
 ): Promise<Result<DiffReview>> {
   const posted = await postSessionOp(host, { op: "publish", summary, verdict }, signal);
-  if (!posted.ok) return posted;
-  try {
-    const value: DiffReview = await posted.value.json();
-    return succeed(value);
-  } catch (e) {
-    return failFrom(e);
-  }
+  if (posted.error) return posted;
+  return fromPromise<DiffReview>(posted.value.json());
 }
 
 // reply answers one conversation on the host's review.
@@ -597,7 +589,7 @@ export async function reply(
   signal: AbortSignal,
 ): Promise<Result<null>> {
   const posted = await postSessionOp(host, { op: "reply", root, body }, signal);
-  return posted.ok ? succeed(null) : posted;
+  return posted.error ? posted : ok(null);
 }
 
 // fetchThreadText reads one conversation as `magus diff --thread` prints it: the comments, the
@@ -786,10 +778,10 @@ export async function fetchBranches(
 
 // HttpError carries the status so a caller can tell "no workspace yet" (503) from a real
 // failure and render the right empty state.
-export class HttpError extends Error {
+export class HttpError extends MagusError {
   readonly status: number;
   constructor(status: number) {
-    super(`server answered ${status}`);
+    super({ code: "", message: `server answered ${status}` });
     this.status = status;
   }
 }

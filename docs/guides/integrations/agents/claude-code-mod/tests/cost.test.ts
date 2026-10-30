@@ -202,16 +202,16 @@ describe('session spend', () => {
 describe('parseRates', () => {
   test('reads the default shape', async () => {
     const rates = parseRates(JSON.stringify(DEFAULT_RATES))
-    expect(rates.ok ? rates.value.models : []).toHaveLength(4)
+    expect(rates.value?.models ?? []).toHaveLength(4)
   })
   test('names the field it could not use', async () => {
     const bad = { ...DEFAULT_RATES, models: [{ match: 'claude-x', input: 'four', output: 20 }] }
     const model = parseRates(JSON.stringify(bad))
-    expect(model.ok ? '' : model.error.message).toBe('rates: models[0] (claude-x) needs numeric input and output')
+    expect(model.error?.message ?? '').toBe('rates: models[0] (claude-x) needs numeric input and output')
     const multiplier = parseRates('{"models":[]}')
-    expect(multiplier.ok ? '' : multiplier.error.message).toContain('cacheWriteMultiplier')
+    expect(multiplier.error?.message ?? '').toContain('cacheWriteMultiplier')
     const garbled = parseRates('{')
-    expect(garbled.ok ? '' : garbled.error.message).toContain('rates: ')
+    expect(garbled.error?.message ?? '').toContain('rates: ')
   })
 })
 

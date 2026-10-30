@@ -9,7 +9,7 @@
 // only hit the real shared keymap cell on Save or Save & Apply.
 
 import type { PageController, PageModule, SearchProvider } from "../../desktop/page";
-import { succeed, type Result } from "../../lib/result";
+import { ok, type Result } from "../../gen/magus/types";
 import { createKeybindingsEditor, type KeybindingsDeps } from "../../desktop/keybindings";
 import { formatChord, isMac, mergeKeymap, type Keymap } from "../../desktop/commands";
 import {
@@ -569,7 +569,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       testBtn.disabled = false;
       // "Answered", not "connected" or "200": the response is opaque cross-origin, so the status code
       // and body are unreadable - this proves a server answered at that address, nothing more.
-      if (res.ok) {
+      if (!res.error) {
         hostTest.set(
           "A server answered at " + res.value + ". Save & Apply to connect the console to it.",
           "success",
@@ -850,12 +850,13 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // Import stages onto the draft (merged over the current draft), so the operator reviews the pending diff
   // and then Saves or Applies - import never commits on its own.
   const applyImport = (text: string): void => {
-    const res = importSettings(text, draftPrefs(), readLayout());
-    if (!res.ok) {
-      setStatus(res.error, "error"); // aria-live anchor keeps the terse reason
-      showToast("Settings", importFailureToast(res.error), "error");
+    const imported = importSettings(text, draftPrefs(), readLayout());
+    if (imported.error) {
+      setStatus(imported.error.message, "error"); // aria-live anchor keeps the terse reason
+      showToast("Settings", importFailureToast(imported.error.message), "error");
       return;
     }
+    const res = imported.value;
     loadDraft(res.next);
     // The layout section is applied immediately rather than staged. It has no form on this
     // app, so there is nothing to review it against and nothing that would ever commit it -
@@ -1075,7 +1076,7 @@ export function settingsApp(deps: SettingsDeps): PageModule<null, null> {
     async activate(host: HTMLElement): Promise<Result<PageController<null, null>>> {
       ensureStylesheet(cssId, new URL("./" + cssFile, import.meta.url).href);
       const teardown = buildSettings(host, deps);
-      return succeed({
+      return ok({
         search: noSearch,
         // The console's app contract (page.ts). Settings is a form over persisted cells: no
         // timer, no stream, and no slice of the shared status bar, so there is nothing to go quiet

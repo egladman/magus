@@ -8,7 +8,7 @@
 import type { Declaration, DeclaredNode, Lens } from "./lens";
 import { cutDeclaration, describeLens } from "./lens";
 import type { LinkedFigure } from "./figure-link";
-import { fail, failFrom, succeed, type Result } from "../../../lib/result";
+import { MagusError, attempt, fail, fromPromise, ok, type Result } from "../../../gen/magus/types";
 
 export interface BuzzDiag {
   readonly msg: string;
@@ -219,46 +219,58 @@ export interface LoadOptions {
 // forgotten so the next click retries; the caller reports the failure.
 export function ensureBuzz(opts: LoadOptions = {}): Promise<Result<BuzzRuntime>> {
   const ready = runtimeFrom(globalThis);
-  if (ready) return Promise.resolve(succeed(ready));
+  if (ready) return Promise.resolve(ok(ready));
   if (loading) return loading;
   const root = opts.root ?? wasmRoot();
   const readyMs = opts.readyMs ?? 5000;
-  const attempt = new Promise<Result<BuzzRuntime>>((resolve) => {
+  const load = new Promise<Result<BuzzRuntime>>((resolve) => {
     const script = document.createElement("script");
     script.src = root + "wasm_exec.js";
     script.onerror = () =>
       resolve(
         fail(
-          "could not load " +
-            script.src +
-            "; the console build ships it only when docs' build_playground ran first",
+          new MagusError({
+            code: "",
+            message:
+              "could not load " +
+              script.src +
+              "; the console build ships it only when docs' build_playground ran first",
+          }),
         ),
       );
     script.onload = () => {
       const Go = (globalThis as { Go?: unknown }).Go;
       if (typeof Go !== "function") {
-        resolve(fail("wasm_exec.js loaded but defined no Go runtime"));
+        resolve(
+          fail(
+            new MagusError({ code: "", message: "wasm_exec.js loaded but defined no Go runtime" }),
+          ),
+        );
         return;
       }
       const url = root + "buzz.wasm";
       const bytes = async (): Promise<Result<ArrayBuffer>> => {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) return fail("could not load " + url + ": HTTP " + res.status);
-          return succeed(await res.arrayBuffer());
-        } catch (e) {
-          return failFrom(e);
+        const res = await fromPromise(fetch(url));
+        if (res.error) return res;
+        if (!res.value.ok) {
+          return fail(
+            new MagusError({
+              code: "",
+              message: "could not load " + url + ": HTTP " + res.value.status,
+            }),
+          );
         }
+        return fromPromise(res.value.arrayBuffer());
       };
       void startGo(Go as GoConstructor, bytes, readyMs).then(resolve);
     };
     document.head.append(script);
   });
-  loading = attempt;
-  void attempt.then((r) => {
-    if (!r.ok) loading = null;
+  loading = load;
+  void load.then((r) => {
+    if (r.error) loading = null;
   });
-  return attempt;
+  return load;
 }
 
 // startGo instantiates the wasm under Go and waits for main() to install globalThis.buzz,
@@ -269,19 +281,23 @@ export async function startGo(
   readyMs: number,
 ): Promise<Result<BuzzRuntime>> {
   const wasm = await bytes();
-  if (!wasm.ok) return wasm;
-  try {
-    const go = new Go();
-    const mod = await WebAssembly.instantiate(wasm.value, go.importObject);
-    void go.run(mod.instance);
-  } catch (e) {
-    return failFrom(e);
-  }
+  if (wasm.error) return wasm;
+  const go = attempt(() => new Go());
+  if (go.error) return go;
+  const mod = await fromPromise(WebAssembly.instantiate(wasm.value, go.value.importObject));
+  if (mod.error) return mod;
+  void go.value.run(mod.value.instance);
   const deadline = Date.now() + readyMs;
   for (;;) {
     const rt = runtimeFrom(globalThis);
-    if (rt) return succeed(rt);
-    if (Date.now() > deadline) return fail("the Buzz runtime started but never exposed drawFigure");
+    if (rt) return ok(rt);
+    if (Date.now() > deadline)
+      return fail(
+        new MagusError({
+          code: "",
+          message: "the Buzz runtime started but never exposed drawFigure",
+        }),
+      );
     await new Promise((r) => setTimeout(r, 30));
   }
 }
@@ -399,7 +415,7 @@ export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): 
         },
       }),
     );
-    return succeed({ ...base, graphEdges: true, boxes });
+    return ok({ ...base, graphEdges: true, boxes });
   }
   const actors = new Map<string, Actor>();
   for (const { node: n, name } of nameActors(decl.nodes)) {
@@ -415,7 +431,13 @@ export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): 
   for (const [src, dst] of decl.edges) {
     const a = actors.get(src);
     const b = actors.get(dst);
-    if (!a || !b) return fail("the declaration has an edge " + src + "->" + dst + " to no node");
+    if (!a || !b)
+      return fail(
+        new MagusError({
+          code: "",
+          message: "the declaration has an edge " + src + "->" + dst + " to no node",
+        }),
+      );
     flows.push({
       src: { dir: null, actor: a },
       dst: { dir: null, actor: b },
@@ -423,7 +445,7 @@ export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): 
       stroke: null,
     });
   }
-  return succeed({
+  return ok({
     ...base,
     unscopedWhy: "served from the workspace graph: " + desc,
     boxes: [...actors.values()].map((actor): Box => ({ ...EMPTY_BOX, actor })),
@@ -463,7 +485,13 @@ export function figureForLink(linked: LinkedFigure): Result<Figure> {
   for (const e of linked.edges) {
     const a = actors.get(e.from);
     const b = actors.get(e.to);
-    if (!a || !b) return fail("the link has an edge " + e.from + "->" + e.to + " to no node");
+    if (!a || !b)
+      return fail(
+        new MagusError({
+          code: "",
+          message: "the link has an edge " + e.from + "->" + e.to + " to no node",
+        }),
+      );
     flows.push({
       src: { dir: null, actor: a },
       dst: { dir: null, actor: b },
@@ -471,7 +499,7 @@ export function figureForLink(linked: LinkedFigure): Result<Figure> {
       stroke: e.stroke,
     });
   }
-  return succeed({
+  return ok({
     ...EMPTY_FIGURE,
     id: figureId("link"),
     title: linked.title,
@@ -510,6 +538,6 @@ export function relayout(input: RelayoutInput): Relayout {
   const cut = cutDeclaration(input.decl, input.lens);
   if (!cut.ok) return { kind: "bad-lens", detail: cut.error };
   const figure = buildFigure(cut.decl, input.meta, describeLens(input.lens));
-  if (!figure.ok) return { kind: "failed", detail: figure.error.message };
+  if (figure.error) return { kind: "failed", detail: figure.error.message };
   return toRelayout(input.runtime.drawFigure(figure.value, input.meta.anchorHref));
 }

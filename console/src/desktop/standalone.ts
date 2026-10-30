@@ -14,7 +14,7 @@
 // console drives activate() itself. The log viewer and dashboard satisfy this; the graph explorer
 // does not yet.
 
-import { fail, failFrom, succeed, type Result } from "../lib/result";
+import { MagusError, fail, fromPromise, ok, type Result } from "../gen/magus/types";
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 
 export interface StandaloneApp {
@@ -95,19 +95,19 @@ export function moduleApp(s: ModuleApp): PageModule<null, null> {
         link.href = url(s.css);
         document.head.append(link);
       }
-      let mod: unknown;
-      try {
-        mod = await import(url(s.bundle));
-      } catch (e) {
-        return failFrom(e);
-      }
-      if (!isHostModule(mod)) return fail(s.bundle + " does not export activate(host)");
+      const loaded = await fromPromise<unknown>(import(url(s.bundle)));
+      if (loaded.error) return loaded;
+      const mod = loaded.value;
+      if (!isHostModule(mod))
+        return fail(
+          new MagusError({ code: "", message: s.bundle + " does not export activate(host)" }),
+        );
       // Normalized here so the console below has ONE shape to drive, whichever of the three a
       // app hands back.
       const boot = mod.activate(host);
       const instance: AppInstance | null =
         typeof boot === "function" ? { deactivate: boot } : (boot ?? null);
-      return succeed({
+      return ok({
         search: noSearch,
         // PageController's lifecycle is mandatory even when an app is static. The normalizer
         // makes that contract true for dynamically loaded modules while preserving their simple
@@ -147,25 +147,34 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
       // Import the bundle BEFORE the scaffold exists so the app's standalone auto-boot (guarded on a
       // scaffold id) no-ops; we drive activate() ourselves once the scaffold is mounted. On reopen the
       // module is cached (no re-eval), so activate() simply re-binds to the fresh scaffold.
-      let mod: unknown;
-      let scaffoldText: string;
-      try {
-        mod = await import(artUrl(s.bundle));
-        scaffoldText = await (await fetch(artUrl(scaffold))).text();
-      } catch (e) {
-        return failFrom(e);
-      }
-      if (!isBootModule(mod)) return fail(s.bundle + " does not export activate()");
+      const loaded = await fromPromise<unknown>(import(artUrl(s.bundle)));
+      if (loaded.error) return loaded;
+      const mod = loaded.value;
+      const fetched = await fromPromise(fetch(artUrl(scaffold)));
+      if (fetched.error) return fetched;
+      const read = await fromPromise(fetched.value.text());
+      if (read.error) return read;
+      const scaffoldText = read.value;
+      if (!isBootModule(mod))
+        return fail(
+          new MagusError({ code: "", message: s.bundle + " does not export activate()" }),
+        );
       // Fetch the app's co-located scaffold - a `<main>` fragment (gen/<id>/scaffold.html) that
       // this console project owns, no longer a full standalone page (the decoupled console has none).
       // The console frame provides the outer chrome (title bar, status bar); the fragment is the
       // app's own body, appended into the pane host.
       const doc = new DOMParser().parseFromString(scaffoldText, "text/html");
       const main = doc.querySelector("main");
-      if (!main) return fail("scaffold.html missing its <main> (built to gen/" + scaffold + ")");
+      if (!main)
+        return fail(
+          new MagusError({
+            code: "",
+            message: "scaffold.html missing its <main> (built to gen/" + scaffold + ")",
+          }),
+        );
       host.append(document.importNode(main, true));
       mod.activate();
-      return succeed({
+      return ok({
         search: noSearch,
         // An app that writes the shared status bar exports setVisible so it can go quiet while
         // backgrounded - the dashboard (connection pill, observing-since) and the log viewer (a live

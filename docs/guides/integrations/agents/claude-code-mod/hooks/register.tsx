@@ -38,6 +38,7 @@ import type { RateTable, Usage } from './cost'
 import { assess, signature, statusText } from './health'
 import type { BinaryInfo, Probe, ServerInfo } from './health'
 import { DEFAULT_RATES } from './rates'
+import { MagusError, fail, fromPromise, ok, type Result } from './result'
 import { readSettings } from './settings'
 import type { Gate, Settings } from './settings'
 import { age, COLOR, GLYPH, leaf, treeLines } from './tree'
@@ -244,9 +245,9 @@ async function loadRates($: EngineInterface): Promise<void> {
     await $.state.set(RATES_ERROR, null)
     return
   }
-  const read = await $.fs.read(settings.ratesFile).then(succeed, failFrom)
-  const parsed = read.ok ? parseRates(read.value) : read
-  if (parsed.ok) {
+  const read = await fromPromise($.fs.read(settings.ratesFile))
+  const parsed = read.error ? read : parseRates(read.value)
+  if (!parsed.error) {
     rates = parsed.value
     await $.state.set(RATES_ERROR, null)
     return
@@ -369,25 +370,27 @@ async function discover($: EngineInterface): Promise<string | null> {
 // failure forgets the socket, so the next call discovers the server again.
 async function rpc($: EngineInterface, procedure: string, body: unknown): Promise<Result<string>> {
   socket ??= await discover($)
-  if (socket === null) return fail('No magus server is running. Start one with `magus server start`.')
-  const answered = await $.http
-    .fetch(`http://magus${procedure}`, {
+  if (socket === null) {
+    return fail(new MagusError({ code: '', message: 'No magus server is running. Start one with `magus server start`.' }))
+  }
+  const answered = await fromPromise(
+    $.http.fetch(`http://magus${procedure}`, {
       method: 'POST',
       socketPath: socket,
       headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
       body: JSON.stringify(body),
-    })
-    .then(succeed, failFrom)
-  if (!answered.ok) {
+    }),
+  )
+  if (answered.error) {
     socket = null
     return answered
   }
   const r = answered.value
   if (!r.ok) {
     socket = null
-    return fail(connectError(r.status, r.text))
+    return fail(new MagusError({ code: '', message: connectError(r.status, r.text) }))
   }
-  return succeed(r.text)
+  return ok(r.text)
 }
 
 async function isPaneOpen($: EngineInterface): Promise<boolean> {
@@ -396,8 +399,8 @@ async function isPaneOpen($: EngineInterface): Promise<boolean> {
 
 async function loadJobs($: EngineInterface): Promise<void> {
   const text = await rpc($, LIST_JOBS, {})
-  const listing = text.ok ? parseJobs(text.value, await $.clock.now()) : text
-  if (!listing.ok) {
+  const listing = text.error ? text : parseJobs(text.value, await $.clock.now())
+  if (listing.error) {
     await $.state.set(ERROR, listing.error.message)
     return
   }
@@ -407,8 +410,8 @@ async function loadJobs($: EngineInterface): Promise<void> {
 
 async function loadRuns($: EngineInterface): Promise<void> {
   const text = await rpc($, LIST_INVOCATIONS, { pageSize: 25 })
-  const runs = text.ok ? parseRuns(text.value) : text
-  if (!runs.ok) {
+  const runs = text.error ? text : parseRuns(text.value)
+  if (runs.error) {
     await $.state.set(ERROR, runs.error.message)
     return
   }
@@ -420,8 +423,8 @@ async function loadWatch($: EngineInterface): Promise<void> {
   const { value: id = null } = await $.state.get(WATCHING)
   if (id === null) return
   const text = await rpc($, LIST_ACTIVITY, { pageSize: 40, filter: { units: [id] } })
-  const lines = text.ok ? parseActivity(text.value) : text
-  if (!lines.ok) {
+  const lines = text.error ? text : parseActivity(text.value)
+  if (lines.error) {
     await $.state.set(ERROR, lines.error.message)
     return
   }

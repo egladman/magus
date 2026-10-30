@@ -9,7 +9,7 @@
 // PageModule<LogState, ParsedQuery>, etc. - so each app keeps its state and its
 // query grammar strongly typed instead of collapsing to `any` at the console boundary.
 
-import type { Result } from "../lib/result";
+import type { Result } from "../gen/magus/types";
 
 export interface PageModule<S, Q> {
   readonly id: string; // "dashboard" | "graph" | "logs"

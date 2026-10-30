@@ -15,7 +15,7 @@ import { formatChord, type Command, type Keymap } from "../../desktop/commands";
 import { displayToken } from "../../desktop/commandBar";
 import { h } from "../../desktop/view";
 import type { PageController, PageModule, SearchProvider } from "../../desktop/page";
-import { succeed, type Result } from "../../lib/result";
+import { ok, type Result } from "../../gen/magus/types";
 
 // What the console injects: the live command list and the effective (merged default+user) keymap, both
 // read fresh on each activation, plus the platform so keys label correctly (Cmd vs Ctrl); run
@@ -167,7 +167,7 @@ export function createShortcutsApp(deps: ShortcutsAppDeps): PageModule<null, nul
       }
 
       host.append(root);
-      return succeed({
+      return ok({
         search: noSearch,
         // Static, but still part of the shell lifecycle: this keeps the app contract
         // exhaustive when panes are focused, tiled, or backgrounded.

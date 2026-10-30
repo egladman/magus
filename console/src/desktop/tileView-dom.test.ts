@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { createTileView, type TileDeps } from "./tileView";
 import { signal } from "./view";
 import type { PageController } from "./page";
-import { succeed, type Result } from "../lib/result";
+import { ok, type Result } from "../gen/magus/types";
 
 // Mounts are async (the real ones are a lazy import()), so every assertion about a mounted app
 // has to come after one turn of the event loop.
@@ -25,7 +25,7 @@ function stubDeps(titles: Record<string, ReturnType<typeof signal<string | null>
       { id: "graph", label: "Graph Explorer", hint: "" },
     ],
     async mountApp(pageId): Promise<Result<PageController<unknown, unknown>>> {
-      return succeed({
+      return ok({
         search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
         docTitle: titles[pageId],
         setVisible() {},
@@ -147,7 +147,7 @@ test("only the focused pane owns visibility while a tiled tab is shown", async (
   const calls: [string, boolean][] = [];
   const { deps } = stubDeps(titles);
   deps.mountApp = async (pageId) =>
-    succeed({
+    ok({
       search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
       docTitle: titles[pageId],
       setVisible(visible: boolean) {

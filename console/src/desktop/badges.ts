@@ -8,7 +8,7 @@
 //
 // Same contract as pulse.ts, for the same reasons: best-effort, hidden rather than zeroed when there
 // is no answer, and latched off per host once the server says it does not serve the route.
-import { fail, failFrom, succeed, type Result } from "../lib/result";
+import { MagusError, fail, fromPromise, ok, type Result } from "../gen/magus/types";
 import { authHeaders, validateLoopbackHost } from "../lib/server";
 
 // Hosts whose server has no diff route. A plain fetch 404 is NOT a ConnectError, so server.ts's
@@ -46,17 +46,21 @@ export async function fetchDiffCount(
 ): Promise<number | null> {
   if (!host || routeless.has(host)) return null;
   const answer = await call(host);
-  if (answer.ok) return answer.value;
+  if (!answer.error) return answer.value;
   if (answer.error instanceof RoutelessError) routeless.add(host);
   return null;
 }
 
 // The error carried when the server answers "no such route", so fetchDiffCount can tell a permanent absence from
 // a passing outage without the transport leaking into it.
-export class RoutelessError extends Error {
+export class RoutelessError extends MagusError {
   // Without this every stack trace and console line reads "Error", which is the one thing the class
   // exists to distinguish.
   override name = "RoutelessError";
+
+  constructor(status: string) {
+    super({ code: "", message: status });
+  }
 }
 
 // How long to wait before giving up on one read. Matches lib/server.ts's readiness probe, which rides
@@ -71,19 +75,20 @@ async function getDiffCount(host: string): Promise<Result<number | null>> {
   const safe =
     validateLoopbackHost(host) ??
     (typeof location !== "undefined" && host === location.host ? host : null);
-  if (!safe) return succeed(null);
-  try {
-    const res = await fetch(`http://${safe}/api/v1/diff/session`, {
+  if (!safe) return ok(null);
+  const res = await fromPromise(
+    fetch(`http://${safe}/api/v1/diff/session`, {
       headers: authHeaders(),
       signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (res.status === 404 || res.status === 501)
-      return failFrom(new RoutelessError(String(res.status)));
-    if (!res.ok) return fail(String(res.status));
-    return succeed(diffFileCount(await res.json()));
-  } catch (e) {
-    return failFrom(e);
-  }
+    }),
+  );
+  if (res.error) return res;
+  const { status } = res.value;
+  if (status === 404 || status === 501) return fail(new RoutelessError(String(status)));
+  if (!res.value.ok) return fail(new MagusError({ code: "", message: String(status) }));
+  const body = await fromPromise<unknown>(res.value.json());
+  if (body.error) return body;
+  return ok(diffFileCount(body.value));
 }
 
 // A shape change upstream must read as "no answer" rather than as a count: the alternative is a

@@ -1,30 +1,61 @@
-// A copy of console/src/lib/result.ts: Claude Code's engine loads the mod from its own directory,
-// so it cannot import the console's source.
+// A copy of docs/src/gen/magus/types.ts's Result, less ConnectError.
+// Claude Code loads the mod from its own directory, so it cannot import it.
 
-// Result is how a fallible call reports failure: the caller either reads the value or handles
-// the error, and nothing unwinds past it.
-export type Result<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: Error }
-
-export function succeed<T>(value: T): Result<T> {
-  return { ok: true, value }
+export interface Diagnostic {
+  code: string
+  message: string
+  url?: string
+  fix?: string
 }
 
-export function fail<T = never>(message: string): Result<T> {
-  return { ok: false, error: new Error(message) }
-}
+export class MagusError extends Error implements Diagnostic {
+  readonly code: string
+  readonly url?: string
+  readonly fix?: string
 
-// failFrom carries an existing error, or whatever a boundary caught, keeping an Error as it is.
-export function failFrom<T = never>(error: unknown): Result<T> {
-  return { ok: false, error: error instanceof Error ? error : new Error(String(error)) }
-}
-
-// parseJson is JSON.parse with its SyntaxError as a failed Result.
-export function parseJson(text: string): Result<unknown> {
-  try {
-    return succeed(JSON.parse(text))
-  } catch (e) {
-    return failFrom(e)
+  constructor(d: Diagnostic, options?: ErrorOptions) {
+    super(d.message, options)
+    this.name = 'MagusError'
+    this.code = d.code
+    if (d.url !== undefined) this.url = d.url
+    if (d.fix !== undefined) this.fix = d.fix
   }
+}
+
+export type Result<T, E extends Error = MagusError> = { value: T; error?: undefined } | { value?: undefined; error: E }
+
+export function ok<T>(value: T): Result<T, never> {
+  return { value }
+}
+
+export function fail<E extends Error>(error: E): Result<never, E> {
+  return { error }
+}
+
+export function attempt<T>(fn: () => T): Result<T> {
+  try {
+    return ok(fn())
+  } catch (e) {
+    return fail(toMagusError(e))
+  }
+}
+
+export async function fromPromise<T>(p: Promise<T>): Promise<Result<T>> {
+  try {
+    return ok(await p)
+  } catch (e) {
+    return fail(toMagusError(e))
+  }
+}
+
+export function parseJSON(text: string): Result<unknown> {
+  return attempt((): unknown => JSON.parse(text))
+}
+
+function toMagusError(e: unknown): MagusError {
+  if (e instanceof MagusError) return e
+  const message = e instanceof Error ? e.message : String(e)
+  return new MagusError({ code: '', message }, { cause: e })
 }
 
 // isRecord narrows a parsed JSON value to an object whose fields can be read.

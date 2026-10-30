@@ -653,7 +653,7 @@ test("the actor record carries every value as data, however it is spelled", () =
     { id: "targets:app", title: "T", claim: "flow", anchorHref: "" },
     "scope x",
   );
-  assert.ok(built.ok);
+  assert.ok(!built.error);
   const f = built.value;
   assert.equal(f.id, "targets-app");
   assert.equal(f.desc, "scope x");
@@ -668,7 +668,7 @@ test("the actor record carries every value as data, however it is spelled", () =
     { id: "projects", title: "P", claim: "flow", anchorHref: "" },
     "",
   );
-  assert.ok(!dangling.ok);
+  assert.ok(dangling.error);
   assert.match(dangling.error.message, /edge external:a->gone to no node/);
 });
 
@@ -702,7 +702,7 @@ test("the runtime is globalThis.buzz with drawFigure, and the record crosses as 
   assert.ok(rt);
   const meta = { id: "p", title: "P", claim: "flow", anchorHref: "" };
   const built = buildFigure({ nodes: [], edges: [] }, meta, "");
-  assert.ok(built.ok);
+  assert.ok(!built.error);
   const f = built.value;
   assert.deepEqual(rt.drawFigure(f, ""), drew("<svg/>"));
   assert.deepEqual(JSON.parse(sent), f);

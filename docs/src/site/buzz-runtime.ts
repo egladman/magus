@@ -8,6 +8,8 @@
 // The module-level promise is the whole point - whoever calls ensureBuzz() first
 // pays for the load, everyone after that awaits the same promise.
 
+import { MagusError, fail, ok, type Result } from "../gen/magus/types.js";
+
 // The playground WASM exposes window.buzz.* inside its Go main(), and wasm_exec.js
 // defines window.Go; declare just the members these modules touch.
 export interface BuzzOp {
@@ -50,15 +52,14 @@ declare global {
 // /magus/ subpath and local preview alike.
 export const ROOT = import.meta.url.replace(/main\.js(\?.*)?$/, "");
 
-// BuzzLoad is how a load reports: the runtime is usable, or the reason it is not. The promise
-// never rejects.
-export type BuzzLoad = { ok: true } | { ok: false; error: string };
+const loaded: Result<null> = ok(null);
 
-function loadFailed(cause: unknown): BuzzLoad {
-  return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
+function loadFailed(cause: unknown): Result<null> {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return fail(new MagusError({ code: "", message }, { cause }));
 }
 
-let wasmPromise: Promise<BuzzLoad> | null = null;
+let wasmPromise: Promise<Result<null>> | null = null;
 
 // buzzReady reports whether the runtime is already usable, so a caller can take a
 // synchronous path instead of awaiting a promise that would resolve immediately.
@@ -67,11 +68,11 @@ export function buzzReady(): boolean {
 }
 
 // ensureBuzz resolves once window.buzz is ready, or with the reason the load failed. Safe to call repeatedly and from
-// several modules; the first call does the work.
-export function ensureBuzz(): Promise<BuzzLoad> {
-  if (buzzReady()) return Promise.resolve({ ok: true });
+// several modules; the first call does the work. The promise never rejects.
+export function ensureBuzz(): Promise<Result<null>> {
+  if (buzzReady()) return Promise.resolve(loaded);
   if (wasmPromise) return wasmPromise;
-  const load = new Promise<BuzzLoad>(function (resolve) {
+  const load = new Promise<Result<null>>(function (resolve) {
     // wasm_exec.js is a classic script that defines globalThis.Go; append it,
     // wait for load, then instantiate buzz.wasm exactly like playground.html.
     const s = document.createElement("script");
@@ -86,7 +87,7 @@ export function ensureBuzz(): Promise<BuzzLoad> {
           // for it to appear before resolving (Go's main is async under asyncify).
           const deadline = Date.now() + 5000;
           (function wait() {
-            if (buzzReady()) return resolve({ ok: true });
+            if (buzzReady()) return resolve(loaded);
             if (Date.now() > deadline) return resolve(loadFailed("buzz.evalBuzz not ready"));
             setTimeout(wait, 30);
           })();
@@ -116,7 +117,7 @@ export function ensureBuzz(): Promise<BuzzLoad> {
   // A transient load failure must not poison every later attempt; drop the cache so
   // the next call retries. The caller still sees this attempt's failure.
   wasmPromise = load.then((result) => {
-    if (!result.ok) wasmPromise = null;
+    if (result.error) wasmPromise = null;
     return result;
   });
   return wasmPromise;

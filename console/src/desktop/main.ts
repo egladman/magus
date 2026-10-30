@@ -102,7 +102,7 @@ import { browserInstallHost, createInstallStore } from "../lib/install";
 import { registerServiceWorker, watchServedBuild } from "../lib/sw";
 import { showRefreshToast } from "../lib/refresh-toast";
 import type { PageController, PageModule } from "./page";
-import { fail, type Result } from "../lib/result";
+import { MagusError, fail, ok, type Result } from "../gen/magus/types";
 
 // The console's default tab keybindings. Flat commandId -> chord, layered over the user's persisted
 // "keymap" overrides (the same cell the apps read). mod = Cmd on macOS, Ctrl elsewhere. Cmd+Opt
@@ -612,7 +612,7 @@ export function startConsole(
     host: HTMLElement,
   ): Promise<Result<PageController<unknown, unknown>>> {
     const m = registry.get(pageId);
-    if (!m) return fail("no app is registered as " + pageId);
+    if (!m) return fail(new MagusError({ code: "", message: "no app is registered as " + pageId }));
     return await m.activate(host);
   }
 

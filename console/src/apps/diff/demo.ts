@@ -20,7 +20,7 @@
 // The fixture is a plain-data module by design (no DOM, no fetch, no protobuf), so
 // demo.test.ts can assert the patch and the annotations agree without mounting anything.
 
-import { fail, succeed, type Result } from "../../lib/result";
+import { MagusError, fail, ok, type Result } from "../../gen/magus/types";
 import type {
   DiffGroup,
   DiffOrder,
@@ -238,8 +238,11 @@ function demoOrder(): Result<DiffOrder> {
       ],
     },
   ];
-  if (missing.length > 0) return fail("the demo fixture lacks " + missing.join(", "));
-  return succeed({ groups, count: { hunk_count: 14, placed: 14, complete: true } });
+  if (missing.length > 0)
+    return fail(
+      new MagusError({ code: "", message: "the demo fixture lacks " + missing.join(", ") }),
+    );
+  return ok({ groups, count: { hunk_count: 14, placed: 14, complete: true } });
 }
 
 // demoSession returns the annotated changeset and the paired-review state.
@@ -250,8 +253,8 @@ function demoOrder(): Result<DiffOrder> {
 // generated three sort out of the reading order entirely by role.
 export function demoSession(): Result<DiffReview> {
   const order = demoOrder();
-  if (!order.ok) return order;
-  return succeed({
+  if (order.error) return order;
+  return ok({
     id: "rev-3f1c8a2e",
     base: "working",
     cursor: { path: "libs/authkit/claims.go", hunk: 0 },

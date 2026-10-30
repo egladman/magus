@@ -28,7 +28,7 @@ import {
   type Declaration,
   type Lens,
 } from "./lens";
-import { succeed, type Result } from "../../../lib/result";
+import { ok, type Result } from "../../../gen/magus/types";
 import { markListFocus, notice, prepareSvg, renderNodeList, type NoticeTone } from "./view";
 import {
   anchorTemplate,
@@ -383,7 +383,7 @@ export function activate(host: HTMLElement): AppInstance {
       nodes: rendered.nodes,
       sourceUrl: rendered.sourceUrl,
     });
-    if (!prepared.ok) return prepared;
+    if (prepared.error) return prepared;
     const svg = prepared.value;
     showState(null);
     const old = refs.frame.querySelector("svg");
@@ -410,7 +410,7 @@ export function activate(host: HTMLElement): AppInstance {
     });
     onFocusChange(controller?.focused() ?? null);
     syncControls();
-    return succeed(undefined);
+    return ok(undefined);
   };
 
   const clearFigure = (): void => {
@@ -457,7 +457,7 @@ export function activate(host: HTMLElement): AppInstance {
       nodes: drawnNodes(read.value.nodes, claim),
     };
     const mounted = mount(rendered, sameFigure);
-    if (!mounted.ok) {
+    if (mounted.error) {
       const detail = mounted.error.message;
       reportFailure(SOURCE, "Could not show figure " + id + ": " + detail, "diagrams:mount:" + id);
       showNotice("danger", "Could not show the figure", detail);
@@ -516,7 +516,7 @@ export function activate(host: HTMLElement): AppInstance {
     };
     clearNotices();
     const mounted = mount(rendered, controller !== null);
-    if (!mounted.ok) {
+    if (mounted.error) {
       reportFailure(
         SOURCE,
         "The runtime's figure would not display: " + mounted.error.message,
@@ -620,7 +620,7 @@ export function activate(host: HTMLElement): AppInstance {
     syncRuntime();
     void (async () => {
       const loaded = await ensureBuzz();
-      if (loaded.ok) runtimeState = { kind: "ready", runtime: loaded.value };
+      if (!loaded.error) runtimeState = { kind: "ready", runtime: loaded.value };
       else {
         const detail = loaded.error.message;
         reportFailure(SOURCE, "The Buzz runtime did not load: " + detail, "diagrams:runtime");
@@ -656,8 +656,8 @@ export function activate(host: HTMLElement): AppInstance {
       refusedState();
     };
     const read = decodeFigureLink(payload);
-    if (!read.ok) {
-      refuse("This figure link could not be read", read.error);
+    if (read.error) {
+      refuse("This figure link could not be read", read.error.message);
       return;
     }
     figure = { kind: "loading", id: LINK_ID, lens: EMPTY_LENS };
@@ -668,16 +668,16 @@ export function activate(host: HTMLElement): AppInstance {
     const loaded = await ensureBuzz();
     if (stale || current !== ac) return;
     refs.frame.removeAttribute("aria-busy");
-    runtimeState = loaded.ok
-      ? { kind: "ready", runtime: loaded.value }
-      : { kind: "failed", detail: loaded.error.message };
+    runtimeState = loaded.error
+      ? { kind: "failed", detail: loaded.error.message }
+      : { kind: "ready", runtime: loaded.value };
     syncRuntime();
-    if (!loaded.ok) {
+    if (loaded.error) {
       refuse("The runtime that draws this figure did not load", loaded.error.message);
       return;
     }
-    const linkFigure = figureForLink(read.figure);
-    if (!linkFigure.ok) {
+    const linkFigure = figureForLink(read.value);
+    if (linkFigure.error) {
       refuse("This figure could not be drawn", linkFigure.error.message);
       return;
     }
@@ -688,13 +688,13 @@ export function activate(host: HTMLElement): AppInstance {
     }
     const rendered: RenderedDiagram = {
       id: LINK_ID,
-      title: read.figure.title,
+      title: read.value.title,
       svg: out.svg,
-      nodes: linkedRows(read.figure),
+      nodes: linkedRows(read.value),
       sourceUrl: "",
     };
     const mounted = mount(rendered, false);
-    if (!mounted.ok) {
+    if (mounted.error) {
       refuse("Could not show the figure", mounted.error.message);
       return;
     }

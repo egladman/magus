@@ -1,4 +1,4 @@
-import { fail, succeed, type Result } from "../../lib/result";
+import { MagusError, fail, ok, type Result } from "../../gen/magus/types";
 // demo.ts - the server-free showcase (#demo). Replay the shared scenario (demo-scenario.ts) as two
 // magus.viewer.v1alpha1 Journals and REVEAL the primary one incrementally so the page feels like a live run
 // streaming in. The primary (streamed) invocation is the failing services/identity:test run an agent
@@ -164,8 +164,11 @@ function buildJournal(
 function brokenTestJournal(): Result<Journal> {
   const runs = scenarioRuns(Date.now());
   const test = runs.find((r) => r.inv === INV_TEST_BREAK);
-  if (!test) return fail("the demo scenario has no run " + INV_TEST_BREAK);
-  return succeed(
+  if (!test)
+    return fail(
+      new MagusError({ code: "", message: "the demo scenario has no run " + INV_TEST_BREAK }),
+    );
+  return ok(
     buildJournal(
       [{ run: test, start: 0 }],
       INV_TEST_BREAK,
@@ -232,7 +235,7 @@ const TRIGGERS: Record<string, Trigger> = {
 // renders the completed CI sweep as its own group on the shared axis.
 export function startDemo(): Result<void> {
   const broken = brokenTestJournal();
-  if (!broken.ok) return broken;
+  if (broken.error) return broken;
   const journal = broken.value;
   const ordered = journal.events;
   const sibling = ciSweepJournal();
@@ -277,7 +280,7 @@ export function startDemo(): Result<void> {
 
   // Clear the reveal if the page is being torn down, so no timer fires after navigation.
   window.addEventListener("pagehide", stopDemo, { once: true });
-  return succeed(undefined);
+  return ok(undefined);
 }
 
 export function stopDemo(): void {

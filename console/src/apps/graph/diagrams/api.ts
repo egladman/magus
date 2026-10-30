@@ -9,7 +9,7 @@ import {
   reportHttpStatus,
 } from "../../../lib/server";
 import { errMessage, errName } from "../../../lib/guards";
-import { fail, succeed, type Result } from "../../../lib/result";
+import { MagusError, fail, ok, type Result } from "../../../gen/magus/types";
 import { lensQuery, type Lens } from "./lens";
 
 export interface DiagramEntry {
@@ -141,7 +141,7 @@ async function read<T>(
     return unreadableBody(url, "Could not read " + what + ": " + errMessage(e));
   }
   const parsed = parse(body);
-  if (!parsed.ok)
+  if (parsed.error)
     return unreadableBody(url, "Could not read " + what + ": " + parsed.error.message);
   return { kind: "ok", value: parsed.value };
 }
@@ -153,30 +153,32 @@ function unreadableBody(url: string, detail: string): DiagramFailure {
 
 function record(v: unknown, what: string): Result<Record<string, unknown>> {
   if (typeof v !== "object" || v === null || Array.isArray(v))
-    return fail(what + " is not an object");
-  return succeed(Object.fromEntries(Object.entries(v)));
+    return fail(new MagusError({ code: "", message: what + " is not an object" }));
+  return ok(Object.fromEntries(Object.entries(v)));
 }
 
 function str(v: unknown, what: string): Result<string> {
-  if (typeof v !== "string") return fail(what + " is not a string");
-  return succeed(v);
+  if (typeof v !== "string")
+    return fail(new MagusError({ code: "", message: what + " is not a string" }));
+  return ok(v);
 }
 
 export function parseListing(body: unknown): Result<DiagramEntry[]> {
   const top = record(body, "the listing");
-  if (!top.ok) return top;
+  if (top.error) return top;
   const list = top.value.diagrams;
-  if (!Array.isArray(list)) return fail("the listing has no diagrams array");
+  if (!Array.isArray(list))
+    return fail(new MagusError({ code: "", message: "the listing has no diagrams array" }));
   const entries: DiagramEntry[] = [];
   for (const [i, raw] of list.entries()) {
     const e = record(raw, "diagram " + i);
-    if (!e.ok) return e;
+    if (e.error) return e;
     const id = str(e.value.id, "diagram " + i + " id");
-    if (!id.ok) return id;
+    if (id.error) return id;
     const kind = str(e.value.kind, "diagram " + i + " kind");
-    if (!kind.ok) return kind;
+    if (kind.error) return kind;
     const title = str(e.value.title, "diagram " + i + " title");
-    if (!title.ok) return title;
+    if (title.error) return title;
     const project = e.value.project;
     const indexed = e.value.indexed;
     entries.push({
@@ -187,25 +189,25 @@ export function parseListing(body: unknown): Result<DiagramEntry[]> {
       ...(typeof indexed === "boolean" ? { indexed } : {}),
     });
   }
-  return succeed(entries);
+  return ok(entries);
 }
 
 export function parseRendered(body: unknown): Result<RenderedDiagram> {
   const top = record(body, "the figure");
-  if (!top.ok) return top;
+  if (top.error) return top;
   const r = top.value;
   const id = str(r.id, "the figure id");
-  if (!id.ok) return id;
+  if (id.error) return id;
   const title = str(r.title, "the figure title");
-  if (!title.ok) return title;
+  if (title.error) return title;
   const svg = str(r.svg, "the figure svg");
-  if (!svg.ok) return svg;
+  if (svg.error) return svg;
   const nodes: DiagramNode[] = [];
   for (const [i, raw] of (Array.isArray(r.nodes) ? r.nodes : []).entries()) {
     const n = record(raw, "node " + i);
-    if (!n.ok) return n;
+    if (n.error) return n;
     const nodeId = str(n.value.id, "node " + i + " id");
-    if (!nodeId.ok) return nodeId;
+    if (nodeId.error) return nodeId;
     const anchor = n.value.anchor;
     const label = n.value.label;
     nodes.push({
@@ -214,7 +216,7 @@ export function parseRendered(body: unknown): Result<RenderedDiagram> {
       label: typeof label === "string" ? label : nodeId.value,
     });
   }
-  return succeed({
+  return ok({
     id: id.value,
     title: title.value,
     svg: svg.value,

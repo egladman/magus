@@ -5,7 +5,7 @@ import { encodeMatrix } from "./qr";
 // matrixOf encodes text and fails the test when the encoder returns an error.
 function matrixOf(text: string): number[][] {
   const result = encodeMatrix(text);
-  assert.ok(result.ok, result.ok ? "" : result.error.message);
+  assert.ok(!result.error, !result.error ? "" : result.error.message);
   return result.value;
 }
 
@@ -28,18 +28,18 @@ test("qr fills the largest version and rejects input past it", () => {
   assert.equal(full.length, 57, "213 bytes should be version 10 (57x57)");
 
   const tooLong = encodeMatrix("a".repeat(214));
-  assert.equal(tooLong.ok, false);
+  assert.equal(!tooLong.error, false);
   assert.ok(
-    !tooLong.ok && tooLong.error.message.includes("214 bytes"),
+    tooLong.error && tooLong.error.message.includes("214 bytes"),
     "error names the input size",
   );
-  assert.ok(!tooLong.ok && tooLong.error.message.includes("213 bytes"), "error names the limit");
+  assert.ok(tooLong.error && tooLong.error.message.includes("213 bytes"), "error names the limit");
 });
 
 // Multi-byte characters count by their UTF-8 length, not by character.
 test("qr counts bytes, not characters, against the limit", () => {
   const result = encodeMatrix("é".repeat(107));
-  assert.equal(result.ok, false, "107 two-byte characters are 214 bytes");
+  assert.equal(!result.error, false, "107 two-byte characters are 214 bytes");
 });
 
 // Finder patterns: the three 7x7 corners must be present, each a solid ring with

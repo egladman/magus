@@ -1,5 +1,5 @@
 import type { ActivityLine, AgentRow, JobBlock, JobRow, JobState, Listing, RunRow } from '../types'
-import { fail, isRecord, parseJson, succeed, type Result } from './result'
+import { MagusError, fail, isRecord, ok, parseJSON, type Result } from './result'
 
 export type { ActivityLine, AgentRow, JobBlock, JobRow, Listing, RunRow }
 
@@ -11,8 +11,8 @@ export const LIST_ACTIVITY = '/magus.activity.v1alpha1.ActivityService/ListActiv
 // The server's socket from `magus server status -o json`: pool.socket with its unix://
 // scheme dropped, or null when no server answered.
 export function socketFromStatus(stdout: string): string | null {
-  const s = parseJson(stdout)
-  if (!s.ok || !isRecord(s.value) || s.value.server == null) return null
+  const s = parseJSON(stdout)
+  if (s.error || !isRecord(s.value) || s.value.server == null) return null
   const pool = s.value.pool
   const socket = isRecord(pool) ? str(pool.socket) : ''
   return socket ? socket.replace(/^unix:\/\//, '') : null
@@ -20,8 +20,8 @@ export function socketFromStatus(stdout: string): string | null {
 
 // A Connect error body ({ code, message }) as one line; the raw text when it is not one.
 export function connectError(status: number, text: string): string {
-  const e = parseJson(text)
-  if (e.ok && isRecord(e.value) && (e.value.code || e.value.message)) {
+  const e = parseJSON(text)
+  if (!e.error && isRecord(e.value) && (e.value.code || e.value.message)) {
     return `${str(e.value.code) || status}: ${str(e.value.message)}`.trim()
   }
   return `HTTP ${status}${text ? `: ${text.slice(0, 200)}` : ''}`
@@ -42,23 +42,23 @@ const JOB_STATES: readonly JobState[] = ['declared', 'running', 'exited', 'pass'
 function jobState(v: unknown): Result<JobState> {
   const word = str(v) || 'declared'
   const state = JOB_STATES.find(s => s === word)
-  return state ? succeed(state) : fail(`ListJobs answered an unknown job state ${word}`)
+  return state ? ok(state) : fail(new MagusError({ code: '', message: `ListJobs answered an unknown job state ${word}` }))
 }
 
 // answer parses one Connect response body, which is a JSON object for every procedure here.
 function answer(text: string, procedure: string): Result<Record<string, unknown>> {
-  const doc = parseJson(text)
-  if (!doc.ok) return fail(`${procedure} answered a body that is not JSON: ${doc.error.message}`)
-  return isRecord(doc.value) ? succeed(doc.value) : fail(`${procedure} answered JSON that is not an object`)
+  const doc = parseJSON(text)
+  if (doc.error) return fail(new MagusError({ code: '', message: `${procedure} answered a body that is not JSON: ${doc.error.message}` }))
+  return isRecord(doc.value) ? ok(doc.value) : fail(new MagusError({ code: '', message: `${procedure} answered JSON that is not an object` }))
 }
 
 export function parseJobs(text: string, fetchedAt: number): Result<Listing> {
   const doc = answer(text, 'ListJobs')
-  if (!doc.ok) return doc
+  if (doc.error) return doc
   const rows: JobRow[] = []
   for (const j of records(doc.value.jobs)) {
     const state = jobState(j.state)
-    if (!state.ok) return state
+    if (state.error) return state
     const holder = enumWord(j.holder, 'JOB_HOLDER_')
     rows.push({
       id: str(j.id),
@@ -81,7 +81,7 @@ export function parseJobs(text: string, fetchedAt: number): Result<Listing> {
     on: str(b.on),
     state: str(b.state),
   }))
-  return succeed({
+  return ok({
     rows,
     overdue: strs(doc.value.overdue),
     orphans: strs(doc.value.orphans),
@@ -93,8 +93,8 @@ export function parseJobs(text: string, fetchedAt: number): Result<Listing> {
 
 export function parseRuns(text: string): Result<RunRow[]> {
   const doc = answer(text, 'ListInvocations')
-  if (!doc.ok) return doc
-  return succeed(
+  if (doc.error) return doc
+  return ok(
     records(doc.value.invocations).map(i => ({
       id: str(i.id),
       command: strs(isRecord(i.command) ? i.command.arguments : undefined).join(' '),
@@ -107,8 +107,8 @@ export function parseRuns(text: string): Result<RunRow[]> {
 
 export function parseActivity(text: string): Result<ActivityLine[]> {
   const doc = answer(text, 'ListActivityEvents')
-  if (!doc.ok) return doc
-  return succeed(
+  if (doc.error) return doc
+  return ok(
     records(doc.value.events).map(e => ({
       at: time(e.time),
       kind: enumWord(e.kind, 'KIND_'),

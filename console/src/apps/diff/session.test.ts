@@ -28,7 +28,7 @@ test("context requests carry the reviewed patch identity", async () => {
       3,
       new AbortController().signal,
     );
-    assert.equal(got.ok, true);
+    assert.equal(!got.error, true);
     const query = new URL(url).searchParams;
     assert.equal(query.get("path"), "a.go");
     assert.equal(query.get("as_of"), "snapshot-a");
@@ -55,10 +55,7 @@ test("publish fails with the envelope's message, not the raw JSON", async () => 
   const got = await withResponse(new Response(noPullRequest, { status: 409 }), () =>
     publish("127.0.0.1:7391", "", "comment", new AbortController().signal),
   );
-  assert.deepEqual(got, {
-    ok: false,
-    error: new Error("MGS9012: no pull request for this branch"),
-  });
+  assert.equal(got.error?.message, "MGS9012: no pull request for this branch");
 });
 
 test("reply fails with the envelope's message, and a plain body or none still shows", async () => {
@@ -72,7 +69,7 @@ test("reply fails with the envelope's message, and a plain body or none still sh
     const got = await withResponse(new Response(body, { status }), () =>
       reply("127.0.0.1:7391", "t1", "hi", signal),
     );
-    assert.deepEqual(got, { ok: false, error: new Error(message) });
+    assert.equal(got.error?.message, message);
   }
 });
 

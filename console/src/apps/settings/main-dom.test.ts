@@ -71,7 +71,7 @@ function deps(): SettingsDeps {
 
 async function mount(): Promise<void> {
   const activated = await settingsApp(deps()).activate(host);
-  assert.ok(activated.ok);
+  assert.ok(!activated.error);
   page = activated.value;
   await settle();
 }

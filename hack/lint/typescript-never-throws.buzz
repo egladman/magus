@@ -1,5 +1,5 @@
 // typescript-never-throws refuses a `throw`, a `Promise.reject` or a `new Promise` whose
-// executor takes a reject, in every hand-written TypeScript file in the repository. A fallible call there returns a Result (console/src/lib/result.ts), so its caller has
+// executor takes a reject, in every hand-written TypeScript file in the repository. A fallible call there returns a Result (gen/magus/types.ts), so its caller has
 // to read the failure; an exception unwinds past every caller that forgot to catch it. Code
 // that cannot be reached ends `const exhausted: never = value; return exhausted;`, which the
 // compiler checks and nothing throws.
@@ -135,7 +135,7 @@ fun judge(path: str, src: str, found: mut [Finding]) > void {
             } else if (!inTest) {
                 found.append(Finding{ path = path, line = n,
                     message = "{k} in hand-written TypeScript; a fallible call here returns a Result",
-                    fix = "Return fail(...) or failFrom(...) from lib/result, and let the caller read it. An unreachable branch ends `const exhausted: never = value; return exhausted;`." });
+                    fix = "Return fail(new MagusError(...)) from gen/magus/types, or wrap the call in attempt or fromPromise, and let the caller read it. An unreachable branch ends `const exhausted: never = value; return exhausted;`." });
             } else if (named(prev) == null) {
                 found.append(Finding{ path = path, line = n,
                     message = "{k} in a test with no platform double named above it",

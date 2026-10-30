@@ -41,7 +41,7 @@ const TEMPLATE = "https://github.com/acme/widgets/blob/abc/{path}#L{line}";
 
 function prepared(text: string, opts: PrepareOptions): SVGSVGElement {
   const result = prepareSvg(text, opts);
-  assert.ok(result.ok);
+  assert.ok(!result.error);
   return result.value;
 }
 

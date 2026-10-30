@@ -61,14 +61,18 @@ test("setFlowLinks: null, empty and over-cap leave flow off", () => {
   assert.equal(setFlowLinks([]), false);
   const over = Array.from({ length: EDGE_CAP + 1 }, (_, i) => link("n" + i, "n" + (i + 1)));
   assert.equal(setFlowLinks(over), false);
-  assert.equal(flows(over[0], null, 0), false);
+  const first = over[0];
+  assert.ok(first);
+  assert.equal(flows(first, null, 0), false);
 });
 
 test("setFlowLinks: exactly EDGE_CAP links turns flow on", () => {
   resetMotion();
   const at = Array.from({ length: EDGE_CAP }, (_, i) => link("n" + i, "n" + (i + 1)));
   assert.equal(setFlowLinks(at), true);
-  assert.equal(flows(at[EDGE_CAP - 1], null, 0), true);
+  const last = at[EDGE_CAP - 1];
+  assert.ok(last);
+  assert.equal(flows(last, null, 0), true);
 });
 
 test("flows: the view's set, by identity, not by endpoints", () => {

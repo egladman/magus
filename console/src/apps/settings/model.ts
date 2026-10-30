@@ -24,6 +24,7 @@
 // other machine.
 
 import type { Keymap } from "../../desktop/commands";
+import { MagusError, fail, ok, parseJSON, type Result } from "../../gen/magus/types";
 import type { Persisted } from "../../lib/persist";
 import type { MotionPref } from "../../lib/settings";
 
@@ -91,20 +92,17 @@ export function buildSettingsEnvelope(p: Settings, layout: LayoutSettings): Sett
 // settings object that magus does not know, `skipped` = known keys present but rejected by the type check
 // (a wrong-typed value, or a malformed keymap). `newerSchema` carries the file's schemaVersion when it is
 // ahead of this console's, so the app can say the file came from a newer build.
-export type ImportResult =
-  | {
-      ok: true;
-      next: Settings;
-      // The merged layout snapshot. Separate from `next` because the app applies it directly
-      // rather than staging it: there is no form to stage it against.
-      nextLayout: LayoutSettings;
-      applied: (keyof Settings)[];
-      appliedLayout: (keyof LayoutSettings)[];
-      unknown: string[];
-      skipped: string[];
-      newerSchema?: number | undefined;
-    }
-  | { ok: false; error: string };
+export interface ImportResult {
+  next: Settings;
+  // The merged layout snapshot. Separate from `next` because the app applies it directly
+  // rather than staging it: there is no form to stage it against.
+  nextLayout: LayoutSettings;
+  applied: (keyof Settings)[];
+  appliedLayout: (keyof LayoutSettings)[];
+  unknown: string[];
+  skipped: string[];
+  newerSchema?: number | undefined;
+}
 
 // The canonical set of keys importSettings understands. Kept in sync with the Settings interface so a
 // settings-object key outside this set is reported as unknown rather than silently dropped.
@@ -155,16 +153,17 @@ export function importSettings(
   raw: string,
   current: Settings,
   currentLayout: LayoutSettings,
-): ImportResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    // reported: the ImportResult carries this error to the Settings import form
-    return { ok: false, error: "The text is not valid JSON." };
-  }
+): Result<ImportResult> {
+  const doc = parseJSON(raw);
+  if (doc.error) return fail(new MagusError({ code: "", message: "The text is not valid JSON." }));
+  const parsed = doc.value;
   if (!isRecord(parsed) || !isRecord(parsed.settings)) {
-    return { ok: false, error: "Not a magus console settings file (no settings object)." };
+    return fail(
+      new MagusError({
+        code: "",
+        message: "Not a magus console settings file (no settings object).",
+      }),
+    );
   }
 
   const settings = parsed.settings;
@@ -237,7 +236,7 @@ export function importSettings(
   } else skipLayout("sidebarExpanded");
 
   if (applied.length === 0 && appliedLayout.length === 0) {
-    return { ok: false, error: "No recognizable settings to import." };
+    return fail(new MagusError({ code: "", message: "No recognizable settings to import." }));
   }
 
   const unknown = [
@@ -249,7 +248,7 @@ export function importSettings(
   const version = parsed.schemaVersion;
   const newerSchema =
     typeof version === "number" && version > SETTINGS_SCHEMA_VERSION ? version : undefined;
-  return { ok: true, next, nextLayout, applied, appliedLayout, unknown, skipped, newerSchema };
+  return ok({ next, nextLayout, applied, appliedLayout, unknown, skipped, newerSchema });
 }
 
 // --- Pending diff (the transactional model) --------------------------------------------------------

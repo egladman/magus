@@ -247,7 +247,7 @@ export function initHeroTerminal(): void {
     // faster than the idle-time warm, so no spinner - a progress indicator here
     // would advertise a wait that is almost always already over.
     ensureBuzz().then(function (load) {
-      if (load.ok) run(cmd);
+      if (!load.error) run(cmd);
       else write("the interpreter did not load; try the playground instead", "term-err");
     });
   }

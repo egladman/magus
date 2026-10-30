@@ -212,7 +212,7 @@ export function activate(host: HTMLElement): AppInstance {
         fetchRunLogs(host_, token),
       ]);
       if (nextRuns.length === 0 && nextLogs.length === 0) {
-        nextUnreachable = !(await probeServer(host_)).ok;
+        nextUnreachable = (await probeServer(host_)).error !== undefined;
       }
     }
     // The tab closed, or a newer load (another address, a Retry) owns the page now.

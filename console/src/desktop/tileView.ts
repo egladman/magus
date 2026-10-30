@@ -32,7 +32,7 @@ import {
   type Direction,
 } from "./tiling";
 import type { PageController, SearchProvider } from "./page";
-import type { Result } from "../lib/result";
+import type { Result } from "../gen/magus/types";
 import { appLoadFailure } from "../ui/alert";
 import { h } from "./view";
 
@@ -272,7 +272,7 @@ export function createTileView(deps: TileDeps): TileView {
     p.host.replaceChildren();
     const mounted = await deps.mountApp(p.pageId, p.host);
     mounting.delete(leafId);
-    const controller = mounted.ok ? mounted.value : failedPane(p.host, p.pageId, mounted.error);
+    const controller = mounted.error ? failedPane(p.host, p.pageId, mounted.error) : mounted.value;
     if (!panes.has(leafId)) {
       controller.deactivate();
       return;

@@ -15,13 +15,13 @@
 //
 // Failures are values, never exceptions: both entry points return a Result.
 
-import { fail, succeed, type Result } from "./result";
+import { MagusError, fail, ok, type Result } from "../gen/magus/types";
 
-const done: Result<void> = succeed(undefined);
+const done: Result<void> = ok(undefined);
 
 // firstFailure returns the first failed step, or done when every step passed.
 function firstFailure(steps: Result<void>[]): Result<void> {
-  for (const step of steps) if (!step.ok) return step;
+  for (const step of steps) if (step.error) return step;
   return done;
 }
 
@@ -166,12 +166,15 @@ function chooseVersion(byteLen: number): Result<ChosenVersion> {
   for (const [i, spec] of SPECS.entries()) {
     const version = i + 1;
     if (headerBits(version) + byteLen * 8 <= dataCapacity(spec) * 8) {
-      return { ok: true, value: { version, spec } };
+      return ok({ version, spec });
     }
     largest = maxPayloadBytes(version, spec);
   }
   return fail(
-    `The text is ${byteLen} bytes, more than the ${largest} bytes the largest supported QR code (version ${SPECS.length}, level M) holds.`,
+    new MagusError({
+      code: "",
+      message: `The text is ${byteLen} bytes, more than the ${largest} bytes the largest supported QR code (version ${SPECS.length}, level M) holds.`,
+    }),
   );
 }
 
@@ -257,16 +260,26 @@ function newGrid(size: number): Grid {
 function readModule(grid: Grid, r: number, c: number): Result<number> {
   const value = grid[r]?.[c];
   if (value === undefined) {
-    return fail(`QR module (${r}, ${c}) is outside the ${grid.length}x${grid.length} grid.`);
+    return fail(
+      new MagusError({
+        code: "",
+        message: `QR module (${r}, ${c}) is outside the ${grid.length}x${grid.length} grid.`,
+      }),
+    );
   }
-  return { ok: true, value };
+  return ok(value);
 }
 
 function writeModules(grid: Grid, cells: readonly ModuleWrite[]): Result<void> {
   for (const [r, c, value] of cells) {
     const row = grid[r];
     if (row === undefined || c < 0 || c >= row.length) {
-      return fail(`QR module (${r}, ${c}) is outside the ${grid.length}x${grid.length} grid.`);
+      return fail(
+        new MagusError({
+          code: "",
+          message: `QR module (${r}, ${c}) is outside the ${grid.length}x${grid.length} grid.`,
+        }),
+      );
     }
     row[c] = value;
   }
@@ -295,11 +308,11 @@ function touchesPattern(grid: Grid, r: number, c: number): Result<boolean> {
   for (let dr = -2; dr <= 2; dr++) {
     for (let dc = -2; dc <= 2; dc++) {
       const cell = readModule(grid, r + dr, c + dc);
-      if (!cell.ok) return cell;
-      if (cell.value !== -1) return { ok: true, value: true };
+      if (cell.error) return cell;
+      if (cell.value !== -1) return ok(true);
     }
   }
-  return { ok: true, value: false };
+  return ok(false);
 }
 
 function placeAlignment(grid: Grid, centers: number[]): Result<void> {
@@ -309,7 +322,7 @@ function placeAlignment(grid: Grid, centers: number[]): Result<void> {
       // Alignment patterns that would overlap a finder (the three corners) are
       // skipped; the claimed-cell check catches every such collision.
       const overlaps = touchesPattern(grid, r, c);
-      if (!overlaps.ok) return overlaps;
+      if (overlaps.error) return overlaps;
       if (overlaps.value) continue;
       for (let dr = -2; dr <= 2; dr++) {
         for (let dc = -2; dc <= 2; dc++) {
@@ -327,10 +340,10 @@ function placeTiming(grid: Grid): Result<void> {
   for (let i = 8; i < grid.length - 8; i++) {
     const v = i % 2 === 0 ? 1 : 0;
     const horizontal = readModule(grid, 6, i);
-    if (!horizontal.ok) return horizontal;
+    if (horizontal.error) return horizontal;
     if (horizontal.value === -1) cells.push([6, i, v]);
     const vertical = readModule(grid, i, 6);
-    if (!vertical.ok) return vertical;
+    if (vertical.error) return vertical;
     if (vertical.value === -1) cells.push([i, 6, v]);
   }
   return writeModules(grid, cells);
@@ -356,7 +369,7 @@ function reserveFormatAreas(grid: Grid): Result<void> {
   const cells: ModuleWrite[] = [];
   for (const [r, c] of positions) {
     const cell = readModule(grid, r, c);
-    if (!cell.ok) return cell;
+    if (cell.error) return cell;
     if (cell.value === -1) cells.push([r, c, 0]);
   }
   return writeModules(grid, cells);
@@ -377,13 +390,13 @@ function placeData(grid: Grid, codewords: number[], mask: number): Result<void> 
       for (let c = 0; c < 2; c++) {
         const cc = col - c;
         const cell = readModule(grid, row, cc);
-        if (!cell.ok) return cell;
+        if (cell.error) return cell;
         if (cell.value !== -1) continue;
         // The remainder modules past the last codeword are zero.
         const bit = bits[bi] ?? 0;
         bi++;
         const written = writeModules(grid, [[row, cc, maskFn(mask, row, cc) ? bit ^ 1 : bit]]);
-        if (!written.ok) return written;
+        if (written.error) return written;
       }
     }
     upward = !upward;
@@ -510,7 +523,7 @@ function penalty(grid: Grid): number {
 export function encodeMatrix(text: string): Result<number[][]> {
   const bytes = Array.from(new TextEncoder().encode(text));
   const chosen = chooseVersion(bytes.length);
-  if (!chosen.ok) return chosen;
+  if (chosen.error) return chosen;
   const { version, spec } = chosen.value;
   const codewords = encodeCodewords(bytes, version, spec);
   const size = version * 4 + 17;
@@ -525,22 +538,23 @@ export function encodeMatrix(text: string): Result<number[][]> {
     placeTiming(base),
     reserveFormatAreas(base),
   ]);
-  if (!patterns.ok) return patterns;
+  if (patterns.error) return patterns;
 
   let best: Grid | null = null;
   let bestScore = Infinity;
   for (let mask = 0; mask < 8; mask++) {
     const grid = base.map((row) => Int8Array.from(row));
     const laid = firstFailure([placeData(grid, codewords, mask), placeFormat(grid, mask)]);
-    if (!laid.ok) return laid;
+    if (laid.error) return laid;
     const sc = penalty(grid);
     if (sc < bestScore) {
       bestScore = sc;
       best = grid;
     }
   }
-  if (best === null) return fail("No QR mask candidate was scored.");
-  return { ok: true, value: best.map((row) => Array.from(row)) };
+  if (best === null)
+    return fail(new MagusError({ code: "", message: "No QR mask candidate was scored." }));
+  return ok(best.map((row) => Array.from(row)));
 }
 
 // encodeToCanvas draws text as a QR code into canvas, sized to fit `pixels` with
@@ -556,7 +570,7 @@ export function encodeToCanvas(
   bg = "#ffffff",
 ): Result<number> {
   const encoded = encodeMatrix(text);
-  if (!encoded.ok) return encoded;
+  if (encoded.error) return encoded;
   const matrix = encoded.value;
   const modules = matrix.length;
   const quiet = 4;
@@ -566,7 +580,8 @@ export function encodeToCanvas(
   canvas.width = dim;
   canvas.height = dim;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return fail("The canvas has no 2d drawing context.");
+  if (!ctx)
+    return fail(new MagusError({ code: "", message: "The canvas has no 2d drawing context." }));
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, dim, dim);
   ctx.fillStyle = fg;
@@ -575,5 +590,5 @@ export function encodeToCanvas(
       if (v === 1) ctx.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
     }
   }
-  return { ok: true, value: modules };
+  return ok(modules);
 }

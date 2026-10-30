@@ -1,6 +1,6 @@
 import { errMessage, errName } from "./guards";
 import { reportFailure, type NotifyLink } from "./notifications";
-import { fail, succeed, type Result } from "./result";
+import { MagusError, fail, ok, type Result } from "../gen/magus/types";
 // server.ts - the ONE audited module for addressing and talking to a magus server.
 //
 // Every app (dashboard, graph explorer, log viewer, activity, the shell) imports
@@ -327,7 +327,11 @@ export async function probeServer(hostPort: string, timeoutMs = 3000): Promise<R
   const host = normalizeServerHost(hostPort);
   if (!host) {
     return fail(
-      "Not a loopback address. Use a port (for example 8787) or 127.0.0.1 or [::1] with a port. Hostnames, localhost included, are not accepted.",
+      new MagusError({
+        code: "",
+        message:
+          "Not a loopback address. Use a port (for example 8787) or 127.0.0.1 or [::1] with a port. Hostnames, localhost included, are not accepted.",
+      }),
     );
   }
   const url = "http://" + host + "/livez";
@@ -337,22 +341,30 @@ export async function probeServer(hostPort: string, timeoutMs = 3000): Promise<R
       cache: "no-store",
       signal: AbortSignal.timeout(timeoutMs),
     });
-    return succeed(url);
+    return ok(url);
   } catch (e) {
     if (errName(e) === "TimeoutError" || errName(e) === "AbortError") {
       return fail(
-        "No response from " +
-          url +
-          " within " +
-          Math.round(timeoutMs / 1000) +
-          "s. Check the port, or something is dropping the connection.",
+        new MagusError({
+          code: "",
+          message:
+            "No response from " +
+            url +
+            " within " +
+            Math.round(timeoutMs / 1000) +
+            "s. Check the port, or something is dropping the connection.",
+        }),
       );
     }
     // Deliberately no status code or errno: an opaque request surfaces one bare TypeError for every
     // network-layer failure (refused, CORS-blocked, mixed content). The browser withholds the detail, so
     // naming a cause here would be a guess.
     return fail(
-      "Could not reach " + url + ". Is the server running? Start it with: magus server start",
+      new MagusError({
+        code: "",
+        message:
+          "Could not reach " + url + ". Is the server running? Start it with: magus server start",
+      }),
     );
   }
 }
@@ -568,7 +580,7 @@ export async function fetchSSE(
   signal: AbortSignal,
   onOpen?: () => void,
 ): Promise<void> {
-  const fail = (e: Error): void => {
+  const lost = (e: Error): void => {
     reportFailure(
       "Server",
       "Lost the live feed from " + url + " (" + e.message + "); retrying.",
@@ -581,7 +593,7 @@ export async function fetchSSE(
     response = await fetch(url, { headers, signal });
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") return;
-    fail(e instanceof Error ? e : new Error(String(e)));
+    lost(e instanceof Error ? e : new Error(String(e)));
     return;
   }
   if (response.status === 401) {
@@ -590,12 +602,12 @@ export async function fetchSSE(
     return;
   }
   if (!response.ok) {
-    fail(new Error("HTTP " + response.status));
+    lost(new Error("HTTP " + response.status));
     return;
   }
   if (onOpen) onOpen();
   if (!response.body) {
-    fail(new Error("no stream body"));
+    lost(new Error("no stream body"));
     return;
   }
   const deliver = (type: string, data: string): void => {
@@ -615,7 +627,7 @@ export async function fetchSSE(
     while (true) {
       const { value, done } = await reader.read();
       if (done) {
-        fail(new Error("stream ended"));
+        lost(new Error("stream ended"));
         return;
       }
       buf += value;
@@ -652,7 +664,7 @@ export async function fetchSSE(
     }
   } catch (e) {
     if (!(e instanceof Error) || e.name !== "AbortError")
-      fail(e instanceof Error ? e : new Error(String(e)));
+      lost(e instanceof Error ? e : new Error(String(e)));
   }
 }
 

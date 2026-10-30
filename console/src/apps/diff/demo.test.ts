@@ -17,7 +17,7 @@ import { buildRows, byHunk } from "./rows";
 
 const files = fromWire(DEMO_FILES);
 const loaded = demoSession();
-assert.ok(loaded.ok, loaded.ok ? "" : loaded.error.message);
+assert.ok(!loaded.error, !loaded.error ? "" : loaded.error.message);
 const session = loaded.value;
 
 test("the generated changeset holds the files the showcase claims", () => {

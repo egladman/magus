@@ -16,7 +16,7 @@ import {
 } from "../lib/server";
 import { reportFailure } from "../lib/notifications";
 import { subscribeDefaultHost } from "../lib/settings";
-import { succeed } from "../lib/result";
+import { ok } from "../gen/magus/types";
 import { appLoadFailure } from "../ui/alert";
 import { emptyStateShell } from "../ui/empty-state";
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
@@ -189,7 +189,7 @@ export function requireServer<S, Q>(
   return {
     id: module.id,
     title: module.title,
-    activate: async (host) => succeed(gatedPage(module, host, need, ready())),
+    activate: async (host) => ok(gatedPage(module, host, need, ready())),
   };
 }
 
@@ -248,7 +248,8 @@ export function renderSignIn(slots: EmptyStateSlots, app: string, notice?: strin
   label.dataset.emptyWayLabel = "";
   const cmd = signInCommand(appURL(app));
   const command = commandBox(cmd);
-  command.querySelector<HTMLElement>("code")!.dataset.signInCommand = "";
+  const code = command.querySelector<HTMLElement>("code");
+  if (code) code.dataset.signInCommand = "";
   const row = h("div");
   row.dataset.emptyWayActions = "";
   const copy = wayButton("pf-m-primary", "Copy command", () => {
@@ -296,7 +297,7 @@ function gatedPage<S, Q>(
     host.replaceChildren();
     void module.activate(host).then((activated) => {
       opening = false;
-      if (!activated.ok) {
+      if (activated.error) {
         if (!closed) host.replaceChildren(appLoadFailure(module.id, activated.error));
         return;
       }

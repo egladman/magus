@@ -196,9 +196,9 @@ export function initRunExample(): void {
         .then((load) => {
           const pnl = panel();
           const buzz = window.buzz;
-          if (!load.ok || !buzz) {
+          if (load.error || !buzz) {
             pnl.textContent =
-              "Failed to load the Buzz runtime: " + (load.ok ? "buzz.evalBuzz not ready" : load.error);
+              "Failed to load the Buzz runtime: " + (load.error ? load.error.message : "buzz.evalBuzz not ready");
             pnl.classList.add("failed");
             return;
           }

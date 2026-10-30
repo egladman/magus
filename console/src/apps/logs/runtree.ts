@@ -1034,7 +1034,7 @@ export function initRunBrowser(deps: RunBrowserDeps): RunBrowserHandle {
       // The feeds read a refused connection as an empty list, so nothing answering at the address
       // is asked separately: "nothing kept yet" would send the reader to run a target.
       if (nextRuns.length === 0 && nextLogs.length === 0) {
-        nextUnreachable = !(await probeServer(deps.host)).ok;
+        nextUnreachable = (await probeServer(deps.host)).error !== undefined;
       }
     }
     // A newer load, or a closed panel, owns the answer now.

@@ -1,5 +1,5 @@
 import { errMessage } from "../../lib/guards";
-import { fail, failFrom, succeed, type Result } from "../../lib/result";
+import { MagusError, attempt, fail, fromPromise, ok, type Result } from "../../gen/magus/types";
 import { onModeRequest, openApp, takeModeIntent } from "../../desktop/app-navigation";
 import type { AppInstance } from "../../desktop/standalone";
 import { activate as activateFigures } from "./diagrams/main";
@@ -502,19 +502,16 @@ function readTheme(): Theme {
 // browser's DecompressionStream (widely supported); the whole path is local, so
 // nothing is fetched and nothing is sent.
 async function decodeFragment(b64url: string): Promise<Result<GraphPayload>> {
-  try {
-    const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const body = new Response(bytes).body;
-    if (!body) return fail("no response body to decode");
-    const stream = body.pipeThrough(new DecompressionStream("gzip"));
-    const text = await new Response(stream).text();
-    return succeed(JSON.parse(text));
-  } catch (e) {
-    return failFrom(e);
-  }
+  const bin = attempt(() => atob(b64url.replace(/-/g, "+").replace(/_/g, "/")));
+  if (bin.error) return bin;
+  const bytes = new Uint8Array(bin.value.length);
+  for (let i = 0; i < bin.value.length; i++) bytes[i] = bin.value.charCodeAt(i);
+  const body = new Response(bytes).body;
+  if (!body) return fail(new MagusError({ code: "", message: "no response body to decode" }));
+  const stream = body.pipeThrough(new DecompressionStream("gzip"));
+  const text = await fromPromise(new Response(stream).text());
+  if (text.error) return text;
+  return attempt((): GraphPayload => JSON.parse(text.value));
 }
 
 // fetchGraphJson is the one place a graph address is fetched and decoded: a refused status or an
@@ -523,13 +520,10 @@ async function fetchGraphJson(
   url: string | URL,
   init?: RequestInit,
 ): Promise<Result<GraphPayload>> {
-  try {
-    const r = await fetch(url, init);
-    if (!r.ok) return fail("HTTP " + r.status);
-    return succeed(await r.json());
-  } catch (e) {
-    return failFrom(e);
-  }
+  const r = await fromPromise(fetch(url, init));
+  if (r.error) return r;
+  if (!r.value.ok) return fail(new MagusError({ code: "", message: "HTTP " + r.value.status }));
+  return fromPromise<GraphPayload>(r.value.json());
 }
 
 // hashParams is lib/server's parseHash. It used to be a second implementation here, and the
@@ -544,7 +538,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   if (params.data) {
     setStatus("Decoding local graph...");
     const decoded = await decodeFragment(params.data);
-    if (decoded.ok) return { data: decoded.value, source: "local" };
+    if (!decoded.error) return { data: decoded.value, source: "local" };
     setStatus("Could not decode the graph in the link (" + decoded.error.message + ").", "danger");
   }
   // #src= fetches the JSON from an address: a loopback server (`magus graph export --open
@@ -561,7 +555,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
     const localhostHost = /^https?:\/\/localhost(:|\/)/.test(params.src);
     setStatus("Fetching the graph...");
     const fetched = await fetchGraphJson(params.src, { headers: { Accept: "application/json" } });
-    if (fetched.ok) return { data: fetched.value, source: loopback ? "loopback" : "remote" };
+    if (!fetched.error) return { data: fetched.value, source: loopback ? "loopback" : "remote" };
     let hint = "";
     if (loopback) hint = " Is `magus graph export --open --serve` still running?";
     else if (localhostHost)
@@ -594,7 +588,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
     const demo = await fetchGraphJson(
       new URL(wantsTargets ? "./target-graph.json" : "./knowledge-graph.json", import.meta.url),
     );
-    if (demo.ok) return { data: demo.value, source: "demo" };
+    if (!demo.error) return { data: demo.value, source: "demo" };
     setStatus("Could not load the demo graph (" + demo.error.message + ").", "danger");
   }
   // No usable fragment: DON'T auto-fetch the demo (that download is wasted on a cold visit).
@@ -615,7 +609,7 @@ function setStatus(msg: string, level: StatusLevel = "info", action?: StatusActi
 // will replace link.source/target with the node objects in place.
 function prepareGraph(raw: GraphPayload): Result<Graph> {
   const rawNodes = raw.nodes;
-  if (!rawNodes) return fail("graph payload has no nodes");
+  if (!rawNodes) return fail(new MagusError({ code: "", message: "graph payload has no nodes" }));
   // x/y/fx/fy land on each node from d3-force (or the layered layout) before any read; the
   // cast asserts that prepared invariant here so the copies satisfy GNode without a per-field seed.
   const nodes: GNode[] = rawNodes.map((n) => ({ ...n }) as GNode);
@@ -639,7 +633,7 @@ function prepareGraph(raw: GraphPayload): Result<Graph> {
   // node's relative `source` into a link to the RIGHT repo. Absent -> no link (a
   // hardcoded base would point every workspace's graph at the magus repo).
   const sourceBase = (raw.source_base || "").replace(/\/$/, "");
-  return succeed({ nodes, links, byId, sourceBase });
+  return ok({ nodes, links, byId, sourceBase });
 }
 
 // A row in the explain card's incident-edge list: the relation, the other endpoint id,
@@ -3814,7 +3808,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
     raw = data;
   }
   const prepared = prepareGraph(raw);
-  if (!prepared.ok) return prepared;
+  if (prepared.error) return prepared;
   graph = prepared.value;
   // Clear any layout-reversed flags (and stale edge routes) from a previous layered pass.
   for (const e of graph.links) {
@@ -3907,7 +3901,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   draw();
   revealWholeGraph();
   syncGraphKindToggle();
-  return succeed(undefined);
+  return ok(undefined);
 }
 
 // syncLayoutToggle updates the layout toggle group's selected state, each mode
@@ -4079,7 +4073,7 @@ async function readGraphFile(file: File | undefined) {
     data,
     "Loaded " + file.name + " (local file; it stays on your machine).",
   );
-  if (!replaced.ok)
+  if (replaced.error)
     setStatus("Could not read " + file.name + ": " + replaced.error.message, "danger");
 }
 
@@ -5238,7 +5232,7 @@ function liveApplyGraphUpdate(data: GraphPayload) {
   }
   const prevPos = capturePositions();
   const prepared = prepareGraph(raw);
-  if (!prepared.ok) {
+  if (prepared.error) {
     setStatus("Could not apply the live graph: " + prepared.error.message, "danger");
     return;
   }
@@ -5608,7 +5602,7 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): Resu
     cycleWarnings = nl.cycleWarnings;
   }
   const prepared = prepareGraph(rawForPrepare);
-  if (!prepared.ok) return prepared;
+  if (prepared.error) return prepared;
   graph = prepared.value;
 
   // #data=/#src= (and #view/#q/#node) mean a specific graph or view was requested: show its full detail,
@@ -5664,7 +5658,7 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): Resu
   hideNonProjects();
 
   syncGraphKindToggle();
-  return succeed(undefined);
+  return ok(undefined);
 }
 
 // activate boots the graph explorer against the scaffold already in the document. el() resolves DOM
@@ -5742,7 +5736,7 @@ export async function activate() {
   // Run boot's data-to-view pipeline, then the one-time interaction wiring. Splitting the two lets the
   // demo button re-run just the render (renderLoadedGraph) in place, without re-wiring listeners.
   const rendered = renderLoadedGraph(loaded);
-  if (!rendered.ok) {
+  if (rendered.error) {
     setStatus("Could not show the graph: " + rendered.error.message, "danger");
     document.body.classList.add("graph-empty");
     return;
@@ -6293,7 +6287,7 @@ async function bootLive(lifecycleSignal: AbortSignal) {
       rawForPrepare = { nodes: nl.nodes, links: nl.links };
     }
     const skeleton = prepareGraph(rawForPrepare);
-    if (!skeleton.ok) return connectFailed(skeleton.error.message);
+    if (skeleton.error) return connectFailed(skeleton.error.message);
     graph = skeleton.value;
 
     // Check node_count: full-fetch when skeleton is small enough to be manageable.
@@ -6314,7 +6308,7 @@ async function bootLive(lifecycleSignal: AbortSignal) {
           rr = { nodes: nl.nodes, links: nl.links };
         }
         const full = prepareGraph(rr);
-        if (!full.ok) return connectFailed(full.error.message);
+        if (full.error) return connectFailed(full.error.message);
         graph = full.value;
       }
     }

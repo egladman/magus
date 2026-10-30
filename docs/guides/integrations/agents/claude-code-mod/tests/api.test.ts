@@ -47,7 +47,7 @@ describe('parseJobs', () => {
       }),
       42,
     )
-    if (!parsed.ok) return expect(parsed.error.message).toBe('')
+    if (parsed.error) return expect(parsed.error.message).toBe('')
     const listing = parsed.value
     expect(listing.fetchedAt).toBe(42)
     expect(listing.overdue).toEqual(['api/store'])
@@ -81,7 +81,7 @@ test('parseRuns reads invocations; a running one has no end', async () => {
       ],
     }),
   )
-  if (!parsed.ok) return expect(parsed.error.message).toBe('')
+  if (parsed.error) return expect(parsed.error.message).toBe('')
   const runs = parsed.value
   expect(runs[0]).toEqual({ id: 'inv1', command: 'run go-build .', startedAt: Date.parse('2026-10-09T23:56:00Z'), endedAt: Date.parse('2026-10-09T23:56:33Z'), status: 'pass' })
   expect(runs[1]?.endedAt).toBe(0)
@@ -94,7 +94,7 @@ test('parseActivity reads events with their kind and outcome words', async () =>
       events: [{ time: '2026-10-09T23:56:00Z', kind: 'KIND_FILE_CHANGE', action: 'write', outcome: 'OUTCOME_ERROR', actor: 'eli', preview: 'api/store.go' }],
     }),
   )
-  if (!parsed.ok) return expect(parsed.error.message).toBe('')
+  if (parsed.error) return expect(parsed.error.message).toBe('')
   const lines = parsed.value
   expect(lines).toEqual([
     { at: Date.parse('2026-10-09T23:56:00Z'), kind: 'file_change', action: 'write', outcome: 'error', actor: 'eli', preview: 'api/store.go' },
@@ -103,11 +103,11 @@ test('parseActivity reads events with their kind and outcome words', async () =>
 
 test('a body that is not JSON, or a state the pane has no word for, fails with what was wrong', async () => {
   const garbled = parseJobs('<html>', 0)
-  expect(garbled.ok ? '' : garbled.error.message).toContain('ListJobs answered a body that is not JSON')
+  expect(garbled.error?.message ?? '').toContain('ListJobs answered a body that is not JSON')
   const unknown = parseJobs(JSON.stringify({ jobs: [{ id: 'a', state: 'paused' }] }), 0)
-  expect(unknown.ok ? '' : unknown.error.message).toBe('ListJobs answered an unknown job state paused')
+  expect(unknown.error?.message ?? '').toBe('ListJobs answered an unknown job state paused')
   const runs = parseRuns('[]')
-  expect(runs.ok ? '' : runs.error.message).toBe('ListInvocations answered JSON that is not an object')
+  expect(runs.error?.message ?? '').toBe('ListInvocations answered JSON that is not an object')
 })
 
 test('candidateJobs names the bare job, then the one under the parent, as the guard resolves them', async () => {

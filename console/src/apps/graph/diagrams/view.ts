@@ -3,7 +3,7 @@
 
 import { h } from "../../../desktop/view";
 import { inlineAlert } from "../../../ui/alert";
-import { fail, succeed, type Result } from "../../../lib/result";
+import { MagusError, fail, ok, type Result } from "../../../gen/magus/types";
 import type { DiagramNode } from "./api";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -43,9 +43,10 @@ export function prepareSvg(text: string, opts: PrepareOptions): Result<SVGSVGEle
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const parsed = doc.documentElement;
   if (!isSvg(parsed) || doc.querySelector("parsererror"))
-    return fail("the figure is not an SVG document");
+    return fail(new MagusError({ code: "", message: "the figure is not an SVG document" }));
   const svg = document.importNode(parsed, true);
-  if (!isSvg(svg)) return fail("the figure is not an SVG document");
+  if (!isSvg(svg))
+    return fail(new MagusError({ code: "", message: "the figure is not an SVG document" }));
   sanitize(svg);
 
   // role="img" would make every node presentational, and the nodes are the point.
@@ -86,7 +87,7 @@ export function prepareSvg(text: string, opts: PrepareOptions): Result<SVGSVGEle
     }
     node.setAttribute("tabindex", "-1");
   }
-  return succeed(svg);
+  return ok(svg);
 }
 
 export interface NodeListOptions {

@@ -12,7 +12,7 @@
 // is a no-op if the scaffold is absent.
 
 import { fromBinary } from "@bufbuild/protobuf";
-import { asError, type Result } from "../../lib/result";
+import { MagusError, attempt, fail, fromPromise, type Result } from "../../gen/magus/types";
 import { JournalSchema } from "@wire/viewer/v1alpha1/viewer_pb";
 import type { Journal } from "@wire/viewer/v1alpha1/viewer_pb";
 import {
@@ -520,7 +520,7 @@ async function loadFromURL(): Promise<void> {
   const demo = wantsDemo(parseHash());
   if (demo && !params.inv && !params.ref) {
     const started = startDemo();
-    if (!started.ok) setStatus("The demo could not start: " + started.error.message, true);
+    if (started.error) setStatus("The demo could not start: " + started.error.message, true);
     return;
   }
   if (params.data) {
@@ -547,7 +547,7 @@ async function loadFromURL(): Promise<void> {
   if (params.src) {
     setStatus("Fetching the log...");
     const fetched = await fetchLogText(params.src);
-    if (fetched.ok) loadText(fetched.value, ref);
+    if (!fetched.error) loadText(fetched.value, ref);
     else setStatus("Could not fetch the log: " + fetched.error.message + ".", true);
     return;
   }
@@ -583,19 +583,21 @@ async function loadFromURL(): Promise<void> {
 }
 
 async function fetchLogText(src: string): Promise<Result<string>> {
-  try {
-    const u = new URL(src, location.href);
-    if (u.protocol !== "https:" && u.protocol !== "http:") {
-      return { ok: false, error: new Error("only http and https addresses are read") };
-    }
-    const r = await fetch(src, { headers: { Accept: "text/plain" } });
-    // An arbitrary address, not the magus server, so a 401 here must not sign the console out;
-    // setStatus raises the failure toast itself.
-    if (!r.ok) return { ok: false, error: new Error("the address answered HTTP " + r.status) };
-    return { ok: true, value: await r.text() };
-  } catch (e) {
-    return { ok: false, error: asError(e) };
+  const u = attempt(() => new URL(src, location.href));
+  if (u.error) return u;
+  if (u.value.protocol !== "https:" && u.value.protocol !== "http:") {
+    return fail(new MagusError({ code: "", message: "only http and https addresses are read" }));
   }
+  const r = await fromPromise(fetch(src, { headers: { Accept: "text/plain" } }));
+  if (r.error) return r;
+  // An arbitrary address, not the magus server, so a 401 here must not sign the console out;
+  // setStatus raises the failure toast itself.
+  if (!r.value.ok) {
+    return fail(
+      new MagusError({ code: "", message: "the address answered HTTP " + r.value.status }),
+    );
+  }
+  return fromPromise(r.value.text());
 }
 
 function loadText(text: string, ref: string): void {

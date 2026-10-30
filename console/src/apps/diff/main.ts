@@ -1640,7 +1640,7 @@ export function activate(host: HTMLElement): AppInstance {
     const end = hunk.newStart + Math.max(1, hunk.newCount) - 1;
     const fetched = await fetchContext(hp, file.path, asOf, hunk.newStart, end, request.signal);
     if (disposed || requestID !== contextRequestID) return;
-    if (!fetched.ok) {
+    if (fetched.error) {
       if (request.signal.aborted) return;
       const error = fetched.error;
       const why =
@@ -1769,7 +1769,7 @@ export function activate(host: HTMLElement): AppInstance {
     const next = await fetchReviewSession(hp, controller.signal);
     polling = false;
     if (!disposed) {
-      if (next.ok) applySession(next.value);
+      if (!next.error) applySession(next.value);
       else {
         setCollaboration("degraded");
         reportSessionFailure(hp, "the review session", next.error);
@@ -3282,7 +3282,7 @@ export function activate(host: HTMLElement): AppInstance {
     const hp = host_();
     if (!hp) return "Connect a server to publish.";
     const published = await publish(hp, summary, verdict, controller.signal);
-    if (!published.ok) return published.error.message;
+    if (published.error) return published.error.message;
     if (disposed) return "";
     applySession(published.value);
     // Re-read the review, so what just left comes back as a thread beside the code it is
@@ -3419,7 +3419,7 @@ export function activate(host: HTMLElement): AppInstance {
     const hp = host_();
     if (!hp) return "Connect a server to reply.";
     const replied = await reply(hp, threadId, body, controller.signal);
-    if (!replied.ok) return replied.error.message;
+    if (replied.error) return replied.error.message;
     if (disposed) return "";
     // Re-read rather than appending locally: the thread belongs to the host, and this is
     // also how the reader finds out what else was said while they were typing.
@@ -3780,7 +3780,7 @@ export function activate(host: HTMLElement): AppInstance {
     // which is what makes /console/diff/#demo work with no server, no workspace and offline.
     if (demo) {
       const loaded = demoSession();
-      if (!loaded.ok) {
+      if (loaded.error) {
         showEmpty("The demo could not start", loaded.error.message);
         return;
       }
@@ -3804,7 +3804,7 @@ export function activate(host: HTMLElement): AppInstance {
     }
     const fetched = await fetchPatch(hp, controller.signal);
     if (superseded()) return;
-    if (!fetched.ok) {
+    if (fetched.error) {
       const e = fetched.error;
       if (isUnreachable(e)) {
         showConnectPrompt({ connection: "disconnected", host: hp, reason: e.message });
@@ -3860,7 +3860,7 @@ export function activate(host: HTMLElement): AppInstance {
       controller.signal,
     );
     if (superseded()) return;
-    if (!fetchedSession.ok) {
+    if (fetchedSession.error) {
       // Keep the reader available, but never imply that comments, read marks, or suggestions are
       // synchronized when the pairing step did not complete.
       setCollaboration("degraded");

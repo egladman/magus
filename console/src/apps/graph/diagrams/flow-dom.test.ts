@@ -40,7 +40,7 @@ describe("figure edge flow", () => {
       assert.equal(o.getAttribute("aria-hidden"), "true");
       assert.ok(o.getAttribute("stroke-dasharray"));
     }
-    assert.equal(overlays[0].getAttribute("d"), "M 0 0 L 10 0");
+    assert.equal(overlays[0]?.getAttribute("d"), "M 0 0 L 10 0");
     assert.equal(flowRunning(), true);
   });
 

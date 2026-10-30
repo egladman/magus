@@ -8,7 +8,7 @@
 // display, with no browser chrome. window.open elsewhere. Both are same-origin, so both can adopt the
 // node; only the chrome differs.
 
-import { fail, failFrom, succeed, type Result } from "./result";
+import { MagusError, fail, fromPromise, ok, type Result } from "../gen/magus/types";
 
 export interface DetachHandle {
   close(): void;
@@ -93,13 +93,9 @@ async function openWindow(opts: DetachOptions): Promise<Result<Window>> {
   const pip = window.documentPictureInPicture;
   if (!pip) {
     const popup = window.open("", "", `popup=yes,width=${w},height=${h}`);
-    return popup ? succeed(popup) : fail("the popup was blocked");
+    return popup ? ok(popup) : fail(new MagusError({ code: "", message: "the popup was blocked" }));
   }
-  try {
-    return succeed(await pip.requestWindow({ width: w, height: h }));
-  } catch (e) {
-    return e instanceof Error ? failFrom(e) : fail("the browser refused a second window");
-  }
+  return fromPromise(pip.requestWindow({ width: w, height: h }));
 }
 
 // Document Picture-in-Picture is Chromium-only, and the DOM types do not declare it.
@@ -118,10 +114,11 @@ export async function detachPanel(
 ): Promise<Result<DetachHandle>> {
   // Nothing to put back into: a panel with no parent could be moved out but never returned.
   const parent = el.parentElement;
-  if (!parent) return fail("the panel is not attached to anything");
+  if (!parent)
+    return fail(new MagusError({ code: "", message: "the panel is not attached to anything" }));
 
   const opened = await openWindow(opts);
-  if (!opened.ok) return opened;
+  if (opened.error) return opened;
   const win = opened.value;
 
   // Marks the gap AND the way back: without it the host column silently collapses and the panel
@@ -160,7 +157,7 @@ export async function detachPanel(
   // holding a closed Window.
   window.addEventListener("pagehide", closeWin);
 
-  return succeed({
+  return ok({
     close: () => {
       win.close();
       restore(); // close() does not always fire pagehide in time; restore is idempotent

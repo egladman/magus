@@ -366,7 +366,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       },
     }).then((res) => {
       opening = false;
-      if (res.ok) {
+      if (!res.error) {
         detached = res.value;
         detachBtn.removeAttribute("data-detach-failed");
         detachBtn.title = "Put it back";

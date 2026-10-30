@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { runInThisContext } from "node:vm";
-import { succeed } from "../../../lib/result";
+import { ok } from "../../../gen/magus/types";
 import {
   buildFigure,
   figureForLink,
@@ -39,10 +39,10 @@ async function relay(): Promise<void> {
     runInThisContext(readFileSync(EXEC, "utf8"), { filename: EXEC });
     const started = await startGo(
       g.Go as GoConstructor,
-      async () => succeed(readFileSync(WASM)),
+      async () => ok(readFileSync(WASM)),
       60_000,
     );
-    assert.ok(started.ok, started.ok ? "" : started.error.message);
+    assert.ok(!started.error, !started.error ? "" : started.error.message);
     const rt = started.value;
 
     // The runtime resolves magus/figure as a module, not as source handed to it.
@@ -63,7 +63,7 @@ async function relay(): Promise<void> {
       meta,
       "",
     );
-    assert.ok(built.ok, built.ok ? "" : built.error.message);
+    assert.ok(!built.error, !built.error ? "" : built.error.message);
     const actors = built.value;
     const drawn = toRelayout(rt.drawFigure(actors, meta.anchorHref));
     assert.equal(drawn.kind, "ok", JSON.stringify(drawn));
@@ -88,7 +88,7 @@ async function relay(): Promise<void> {
         { from: "app", to: "tool", stroke: "optional", label: "after" },
       ],
     });
-    assert.ok(linkFigure.ok, linkFigure.ok ? "" : linkFigure.error.message);
+    assert.ok(!linkFigure.error, !linkFigure.error ? "" : linkFigure.error.message);
     const linkDrawn = toRelayout(rt.drawFigure(linkFigure.value, ""));
     assert.equal(linkDrawn.kind, "ok", JSON.stringify(linkDrawn));
     const linkSvg = linkDrawn.kind === "ok" ? linkDrawn.svg : "";
@@ -111,7 +111,7 @@ async function relay(): Promise<void> {
       importsMeta,
       "",
     );
-    assert.ok(imports.ok, imports.ok ? "" : imports.error.message);
+    assert.ok(!imports.error, !imports.error ? "" : imports.error.message);
     const graphed = toRelayout(rt.drawFigure(imports.value, ""));
     assert.equal(graphed.kind, "ok", JSON.stringify(graphed));
     assert.match(graphed.kind === "ok" ? graphed.svg : "", /data-edge="internal\/a->internal\/b"/);
