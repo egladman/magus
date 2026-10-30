@@ -3613,6 +3613,9 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	if !enrolled || len(me.WritePaths) == 0 {
 		return ""
 	}
+	if reason := denyPatchOutsideLease(ctx, deps, me, command, dialect, start, home); reason != "" {
+		return reason
+	}
 	// A file the holder made since its checkpoint stays its own to remove after a narrowing
 	// drops it from the write paths. Ignored files are excluded: a fresh checkout never made one.
 	madeByHolder := func(rel string) bool {
@@ -3658,6 +3661,30 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 					"`%s` shows what the job holds.\n"+leaseActorWhy,
 					me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID)),
 			}.full()
+		}
+	}
+	return ""
+}
+
+// denyPatchOutsideLease grades each file the line's git apply and patch calls
+// write. An unreadable patch is refused: it could write anything. Applying a
+// patch file instead costs one call.
+func denyPatchOutsideLease(ctx context.Context, deps Dependencies, me types.Job, command string, d Dialect, start, home string) string {
+	writes, unread := patchWrites(command, 0, d, start, home)
+	if len(unread) > 0 {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: this line applies a patch from %s, which the guard cannot read, so nothing shows it stays inside lease %s's write paths; write the patch to a file, then apply that file in a call of its own.",
+				strings.Join(unread, ", "), me.ID),
+			Why: fmt.Sprintf("The files a patch writes are named only inside it, so lease-write reads it. A pipe from another command, a word the shell expands, and a file the line itself creates cannot be read before the line runs. `%s` shows what the job holds.", hint.DescribeJob.With(me.ID)),
+		}.full()
+	}
+	for _, w := range writes {
+		target, placed := w.place(home)
+		if !placed {
+			continue
+		}
+		if g := gradeLeasedWrite(ctx, deps, me.ID, target); g.Decision == decisionDeny {
+			return g.Reason
 		}
 	}
 	return ""

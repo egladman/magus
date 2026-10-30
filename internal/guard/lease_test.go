@@ -3112,6 +3112,164 @@ func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
 		"an expansion places the word nowhere rather than dropping the parameter")
 }
 
+// PatchWriteSuite pins lease-write on git apply and patch: a host reports no
+// path for a shell line, and only the patch names what one of these writes.
+type PatchWriteSuite struct {
+	suite.Suite
+	ctx  context.Context
+	root string
+	deps Dependencies
+}
+
+func TestPatchWriteSuite(t *testing.T) {
+	suite.Run(t, new(PatchWriteSuite))
+}
+
+func (s *PatchWriteSuite) SetupTest() {
+	s.ctx, s.root = fleetFixture(s.T(), writePathFleet()...)
+	s.deps = Dependencies{callDir: s.root}
+}
+
+func (s *PatchWriteSuite) patchFile(body string) string {
+	p := filepath.Join(s.T().TempDir(), "change.diff")
+	s.Require().NoError(os.WriteFile(p, []byte(body), 0o644))
+	return p
+}
+
+func gitDiffOf(file string) string {
+	return fmt.Sprintf("diff --git a/%[1]s b/%[1]s\n--- a/%[1]s\n+++ b/%[1]s\n@@ -1 +1 @@\n-old\n+new\n", file)
+}
+
+func (s *PatchWriteSuite) deny(command string) string {
+	return denyWriteOutsideLease(s.ctx, s.deps, "lease-b", command)
+}
+
+func (s *PatchWriteSuite) TestGitApplyOfARevokedPathIsRefused() {
+	s.Contains(s.deny("git apply "+s.patchFile(gitDiffOf("internal/ledger/store.go"))), "lease-a")
+}
+
+func (s *PatchWriteSuite) TestGitApplyOfAnUndeclaredPathIsRefused() {
+	s.Contains(s.deny("git apply "+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestGitApplyInsideTheWritePathsPasses() {
+	s.Empty(s.deny("git apply " + s.patchFile(gitDiffOf("cmd/magus/a.go"))))
+}
+
+func (s *PatchWriteSuite) TestOneFileOutsideRefusesTheWholePatch() {
+	body := gitDiffOf("cmd/magus/a.go") + gitDiffOf("docs/notes.md")
+	s.Contains(s.deny("git apply "+s.patchFile(body)), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestGitApplyCheckOnlyReads() {
+	p := s.patchFile(gitDiffOf("docs/notes.md"))
+	s.Empty(s.deny("git apply --check " + p))
+	s.Empty(s.deny("git apply --stat " + p))
+}
+
+func (s *PatchWriteSuite) TestGitApplyCheckWithApplyWrites() {
+	s.Contains(s.deny("git apply --check --apply "+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestGitApplyDirectoryIsPrepended() {
+	s.Contains(s.deny("git apply --directory=docs "+s.patchFile(gitDiffOf("notes.md"))), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestGitApplyStripCountIsRead() {
+	body := "--- x/y/docs/notes.md\n+++ x/y/docs/notes.md\n@@ -1 +1 @@\n-old\n+new\n"
+	s.Contains(s.deny("git apply -p2 "+s.patchFile(body)), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestARenameIsGradedAtItsDestination() {
+	body := "diff --git a/cmd/magus/a.go b/cmd/magus/b.go\nsimilarity index 100%\nrename from cmd/magus/a.go\nrename to docs/notes.md\n"
+	s.Contains(s.deny("git apply "+s.patchFile(body)), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestABinaryPatchIsGradedByItsGitHeader() {
+	body := "diff --git a/docs/logo.png b/docs/logo.png\nGIT binary patch\nliteral 3\nKcmV\n"
+	s.Contains(s.deny("git apply "+s.patchFile(body)), "docs/logo.png")
+}
+
+func (s *PatchWriteSuite) TestHunkLinesSpelledLikeHeadersAreNotPaths() {
+	body := "--- a/cmd/magus/a.go\n+++ b/cmd/magus/a.go\n@@ -1,2 +1,2 @@\n--- docs/notes.md\n ctx\n+++ docs/notes.md\n"
+	s.Empty(s.deny("git apply " + s.patchFile(body)))
+}
+
+func (s *PatchWriteSuite) TestGitDashCPlacesTheRepository() {
+	p := s.patchFile(gitDiffOf("internal/ledger/store.go"))
+	s.deps.callDir = s.T().TempDir()
+	s.Contains(s.deny(fmt.Sprintf("git -C %s apply %s", s.root, p)), "lease-a")
+}
+
+func (s *PatchWriteSuite) TestACdPlacesARelativePatchFile() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "change.diff"), []byte(gitDiffOf("docs/notes.md")), 0o644))
+	s.deps.callDir = s.T().TempDir()
+	s.Contains(s.deny(fmt.Sprintf("cd %s && git apply change.diff", s.root)), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestANestedShellIsRead() {
+	s.Contains(s.deny(fmt.Sprintf("sh -c 'git apply %s'", s.patchFile(gitDiffOf("docs/notes.md")))), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestAHeredocPatchIsRead() {
+	s.Contains(s.deny("git apply <<'EOF'\n"+gitDiffOf("docs/notes.md")+"EOF"), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestARedirectedPatchIsRead() {
+	s.Contains(s.deny("git apply < "+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestACatPipedPatchIsRead() {
+	s.Contains(s.deny("cat "+s.patchFile(gitDiffOf("docs/notes.md"))+" | git apply"), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestAPatchFromACommandIsRefusedAsUnread() {
+	s.Contains(s.deny("git diff abc123 def456 | git apply -3"), "cannot read")
+}
+
+func (s *PatchWriteSuite) TestAnExpandedPatchFileIsRefusedAsUnread() {
+	s.Contains(s.deny("git apply $PATCH"), "cannot read")
+}
+
+func (s *PatchWriteSuite) TestAPatchFileThatIsNotThereIsRefusedAsUnread() {
+	s.Contains(s.deny("git diff > "+filepath.Join(s.T().TempDir(), "p.diff")+" && git apply p.diff"), "cannot read")
+}
+
+func (s *PatchWriteSuite) TestPatchInputFlagIsRead() {
+	s.Contains(s.deny("patch -p1 -i "+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestPatchBundledFlagsAreRead() {
+	s.Contains(s.deny("patch -Np1 --input="+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestPatchFromStdinIsRead() {
+	s.Contains(s.deny("patch -p1 < "+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestPatchDirectoryPlacesThePaths() {
+	s.Contains(s.deny("patch -p1 -d docs -i "+s.patchFile(gitDiffOf("notes.md"))), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestPatchNamedOriginalIsTheWrittenFile() {
+	p := s.patchFile(gitDiffOf("cmd/magus/a.go"))
+	s.Contains(s.deny("patch docs/notes.md "+p), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestPatchOutputFlagIsTheWrittenFile() {
+	p := s.patchFile(gitDiffOf("cmd/magus/a.go"))
+	s.Contains(s.deny("patch -p1 -o docs/notes.md -i "+p), "docs/notes.md")
+}
+
+func (s *PatchWriteSuite) TestPatchDryRunOnlyReads() {
+	s.Empty(s.deny("patch --dry-run -p1 -i " + s.patchFile(gitDiffOf("docs/notes.md"))))
+}
+
+func (s *PatchWriteSuite) TestAnUnleasedSessionIsNotGraded() {
+	p := s.patchFile(gitDiffOf("docs/notes.md"))
+	s.Empty(denyWriteOutsideLease(s.ctx, s.deps, "", "git apply "+p))
+}
+
 func regeneratingLease(id string) types.Job {
 	return types.Job{
 		ID: id, Criteria: "add a flag", WritePaths: []string{"cli/registry.go"},
