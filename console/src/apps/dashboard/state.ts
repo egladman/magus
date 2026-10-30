@@ -225,7 +225,14 @@ export type BrokerPolicy = "required" | "best-effort" | "off";
 // tile's CSS class suffixes (.gantt-bar.running, .gantt-bar.passed, ...). Kept in
 // lockstep with magus.status.v1alpha1.TargetRun.State but stringly-typed so tiles never
 // import the proto enum.
-export type TargetState = "unspecified" | "queued" | "running" | "passed" | "failed" | "cached";
+export type TargetState =
+  | "unspecified"
+  | "queued"
+  | "running"
+  | "passed"
+  | "failed"
+  | "cached"
+  | "permitted";
 
 // TargetRunView is one target's execution within a run: its state, its wall-clock
 // window (startMs unset while QUEUED, endMs unset while active), and, once finished,
@@ -294,6 +301,7 @@ const TARGET_STATE: Record<number, TargetState> = {
   [TargetRun_State.PASSED]: "passed",
   [TargetRun_State.FAILED]: "failed",
   [TargetRun_State.CACHED]: "cached",
+  [TargetRun_State.PERMITTED]: "permitted",
 };
 
 function mapTargetRun(t: TargetRun): TargetRunView {
@@ -303,7 +311,8 @@ function mapTargetRun(t: TargetRun): TargetRunView {
     target: t.target || "",
     label: t.project ? t.project + ":" + t.target : t.target || "",
     state,
-    terminal: state === "passed" || state === "failed" || state === "cached",
+    terminal:
+      state === "passed" || state === "failed" || state === "cached" || state === "permitted",
     startMs: t.startTime ? tsMillisOrNow(t.startTime) : null,
     endMs: t.endTime ? tsMillisOrNow(t.endTime) : null,
     outputRef: t.outputRef || "",

@@ -128,6 +128,7 @@ export function statusName(s: Status): string {
   if (s === Status.PASS) return "pass";
   if (s === Status.FAIL) return "fail";
   if (s === Status.CACHED) return "cached";
+  if (s === Status.PERMITTED) return "permitted";
   return "";
 }
 

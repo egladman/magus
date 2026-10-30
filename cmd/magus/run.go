@@ -1011,6 +1011,8 @@ type runOutput struct {
 	DryRun   bool         `json:"dry_run"          yaml:"dry_run"`
 	Count    int          `json:"count"            yaml:"count"`
 	Projects []runProject `json:"projects"         yaml:"projects"`
+	// Permitted counts targets that passed only by a deviation ledger.
+	Permitted int `json:"permitted,omitempty" yaml:"permitted,omitempty"`
 	// UndeclaredSeeds names the projects an affected run selected ONLY through changed
 	// files no project declares (MGS1028): targets whose answer could not have moved.
 	// Absent rather than empty when there are none, so a consumer counting the debt can
@@ -1028,7 +1030,7 @@ type runOutput struct {
 // target body under a tracing context: the value is real, and omitting it made
 // `-o json` claim "no return value" for a target that had just produced one.
 func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, target string, charms []string, selection []types.Target, returns types.Returns, undeclaredSeeds []string) error {
-	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, UndeclaredSeeds: undeclaredSeeds}
+	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, Permitted: m.CacheStats().Permitted, UndeclaredSeeds: undeclaredSeeds}
 	projects := m.ResolveProjects(selection)
 	out.Count = len(projects)
 

@@ -594,6 +594,7 @@ body[data-dash-native] { margin: 0; }
 .console-dashboard-gantt__bar[data-state="passed"] { fill: var(--console-status-ok); }
 .console-dashboard-gantt__bar[data-state="failed"] { fill: var(--console-status-danger); }
 .console-dashboard-gantt__bar[data-state="cached"] { fill: var(--console-status-running); fill-opacity: 0.35; }
+.console-dashboard-gantt__bar[data-state="permitted"] { fill: var(--console-status-warn); }
 .console-dashboard-gantt__bar[data-state="unspecified"] { fill: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-gantt__link { cursor: pointer; }
 .console-dashboard-gantt__link:hover .console-dashboard-gantt__bar { stroke: var(--console-status-running); stroke-width: 1.5; }

@@ -344,7 +344,7 @@ const (
 	TargetRunFailed  TargetRunState = "failed"
 	TargetRunCached  TargetRunState = "cached"
 	// TargetRunPermitted passed only because a deviation ledger permitted its
-	// findings. The wire has no such state yet, so it arrives unspecified.
+	// findings.
 	TargetRunPermitted TargetRunState = "permitted"
 )
 
