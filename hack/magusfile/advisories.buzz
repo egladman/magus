@@ -40,12 +40,12 @@
 import "std";
 import "proc";
 import "fs";
-import "vcs";
 import "encoding/json";
 import "encoding/yaml";
 import "semver";
 import "time";
 import "flags";
+import "hack/magusfile/deviations" as deviations;
 // Used by the test blocks, which run under buzz_test now that it globs hack/.
 import "assert";
 
@@ -281,55 +281,6 @@ test "inherited is fatal only where the base IS the head" {
     assert\isTrue(isFatal("unknown", changed: true), message: "no base keeps the strict behavior");
 }
 
-// showArgs is each backend's spelling of "print path as of rev", path relative to the
-// working directory.
-fun showArgs(rev: str, path: str) > [str] {
-    final backend = vcs\name();
-    if (backend == "git") {
-        return ["show", rev + ":./" + path];
-    }
-    if (backend == "jj") {
-        return ["file", "show", "-r", rev, path];
-    }
-    return ["cat", "-r", rev, path];
-}
-
-// BaseFile is path as the base ref has it; text is null when it cannot be read, missing
-// says why.
-object BaseFile {
-    text: str?,
-    changed: bool = false,
-    missing: str = "",
-}
-
-fun readBase(path: str) > BaseFile {
-    if (vcs\name() == "") {
-        return BaseFile{ text = null, missing = "no VCS" };
-    }
-    final resolved = vcs\base() catch null;
-    if (resolved == null) {
-        return BaseFile{ text = null, missing = "the base ref cannot be resolved here" };
-    }
-    final rev = resolved!;
-    if (rev == "") {
-        return BaseFile{ text = null, missing = "vcs.base_ref is empty" };
-    }
-    var changed = false;
-    try {
-        changed = vcs\commit(rev).id != vcs\commit().id;
-    } catch (e) {
-        // A shallow CI clone often lacks the base.
-        return BaseFile{ text = null, missing = "base ref {rev} does not resolve here; fetch it" };
-    }
-    // A failed read is no base, never an empty one: a blobless clone fetches the blob on
-    // demand, and a sandbox without network must not turn every finding introduced.
-    final res = vcs\cmd(showArgs(rev, path: path), opts: vcs\CommandOptions{quiet = true, allowFailure = true}) catch null;
-    if (res == null or !res!.ok) {
-        return BaseFile{ text = null, missing = "{path} is unreadable at {rev}" };
-    }
-    return BaseFile{ text = res!.stdout, changed = changed };
-}
-
 // anyActionable gates the base read: provenance only decides actionable findings, so a
 // run with none skips the VCS and manifest reads.
 fun anyActionable(findings: [Finding]) > bool {
@@ -493,7 +444,7 @@ export fun audit(inheritedFatal: bool = false) > void !> any {
 
     var base = Base{ inventory = {<str: bool>} };
     if (anyActionable(findings)) {
-        final lock = readBase("pnpm-lock.yaml");
+        final lock = deviations\readBase("pnpm-lock.yaml");
         var inventory: {str: bool}? = null;
         if (lock.text != null) {
             inventory = pnpmInventory(lock.text!);
@@ -573,7 +524,7 @@ fun goFindings(stream: str) > [Finding] !> any {
     if (body == "") {
         return findings;
     }
-    final messages = json\parse("[" + body.replace("\n}\n\{", "\n},\n\{") + "]");
+    final messages = json\parse("[" + body.replace("\n}\n\{", with: "\n},\n\{") + "]");
     var summaries = mut {<str: str>};
     var order = mut [<str>];
     var copies = mut {<str: str>};
@@ -710,7 +661,7 @@ export fun govulncheck(run: any, go: any, inheritedFatal: bool) > void !> any {
 
     var base = Base{ inventory = {<str: bool>} };
     if (anyActionable(findings)) {
-        final mod = readBase("go.mod");
+        final mod = deviations\readBase("go.mod");
         var inventory: {str: bool}? = null;
         if (mod.text != null) {
             var parsed = "";

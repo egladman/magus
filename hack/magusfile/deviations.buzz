@@ -1,0 +1,460 @@
+// deviations.buzz - a gate's ledger of the findings a person permitted.
+//
+// One file per gate, one types.Deviation per line, written by people. The gate
+// names its own file, so a line reaches no other gate. Only the tree and the
+// base decide: nothing here reads who wrote a line.
+namespace deviations;
+
+import "std";
+import "fs";
+import "vcs";
+import "encoding/json";
+import "magus/lint";
+import "assert";
+
+// showArgs is each backend's spelling of "print path as of rev", path relative
+// to the working directory.
+fun showArgs(rev: str, path: str) > [str] {
+    final backend = vcs\name();
+    if (backend == "git") {
+        return ["show", rev + ":./" + path];
+    }
+    if (backend == "jj") {
+        return ["file", "show", "-r", rev, path];
+    }
+    return ["cat", "-r", rev, path];
+}
+
+// listArgs is each backend's spelling of "name path if rev holds it".
+fun listArgs(rev: str, path: str) > [str] {
+    final backend = vcs\name();
+    if (backend == "git") {
+        return ["ls-tree", "--name-only", rev, path];
+    }
+    if (backend == "jj") {
+        return ["file", "list", "-r", rev, path];
+    }
+    return ["files", "-r", rev, path];
+}
+
+// BaseFile is path as the base ref has it; text is null when it cannot be read,
+// missing says why.
+export object BaseFile {
+    text: str?,
+    changed: bool = false,
+    missing: str = "",
+}
+
+// readAt reads path at rev. A failed read is no base, never an empty one. A
+// blobless clone fetches on demand, and a sandbox without network must not
+// turn every finding introduced.
+fun readAt(rev: str, path: str) > BaseFile {
+    var changed = false;
+    try {
+        changed = vcs\commit(rev).id != vcs\commit().id;
+    } catch (e) {
+        // A shallow CI clone often lacks the base.
+        return BaseFile{ text = null, missing = "base ref {rev} does not resolve here; fetch it" };
+    }
+    final res = vcs\cmd(showArgs(rev, path: path), opts: vcs\CommandOptions{quiet = true, allowFailure = true}) catch null;
+    if (res == null or !res!.ok) {
+        return BaseFile{ text = null, missing = "{path} is unreadable at {rev}" };
+    }
+    return BaseFile{ text = res!.stdout, changed = changed };
+}
+
+// readBase is path as the workspace's base ref has it.
+export fun readBase(path: str) > BaseFile {
+    if (vcs\name() == "") {
+        return BaseFile{ text = null, missing = "no VCS" };
+    }
+    final resolved = vcs\base() catch null;
+    if (resolved == null) {
+        return BaseFile{ text = null, missing = "the base ref cannot be resolved here" };
+    }
+    if (resolved! == "") {
+        return BaseFile{ text = null, missing = "vcs.base_ref is empty" };
+    }
+    return readAt(resolved!, path: path);
+}
+
+// readLedgerAt reads a ledger at rev, where a ledger rev does not hold yet is
+// empty rather than unreadable.
+fun readLedgerAt(rev: str, path: str) > BaseFile {
+    if (rev == "") {
+        return BaseFile{ text = null, missing = "no base ref to compare {path} against" };
+    }
+    final listed = vcs\cmd(listArgs(rev, path: path), opts: vcs\CommandOptions{quiet = true, allowFailure = true}) catch null;
+    if (listed == null) {
+        return BaseFile{ text = null, missing = "{path} cannot be listed at {rev}" };
+    }
+    if (listed!.ok and listed!.stdout.trim() == "") {
+        return BaseFile{ text = "" };
+    }
+    return readAt(rev, path: path);
+}
+
+// Deviation is types.Deviation's three fields. magus\Deviation is declared for
+// type checking only, so a module cannot construct one.
+export object Deviation {
+    code: str,
+    subject: str,
+    reason: str,
+}
+
+// Parsed is a ledger's text as records, in file order.
+object Parsed {
+    lines: [Deviation] = [],
+    error: str = "",
+}
+
+fun isBlank(text: str) > bool {
+    return text.trim() == "";
+}
+
+fun parseLine(text: str, where: str) > Parsed {
+    final doc = (json\parse(text) catch null) as? {str: any};
+    if (doc == null) {
+        return Parsed{ error = "{where}: not a JSON object" };
+    }
+    foreach (key in doc!.keys()) {
+        if (key != "code" and key != "subject" and key != "reason") {
+            return Parsed{ error = "{where}: unknown key {key}" };
+        }
+    }
+    final code = (doc!["code"] as? str) ?? "";
+    final subject = (doc!["subject"] as? str) ?? "";
+    final reason = (doc!["reason"] as? str) ?? "";
+    if (isBlank(code) or isBlank(subject)) {
+        return Parsed{ error = "{where}: a line needs a code and a subject" };
+    }
+    if (isBlank(reason)) {
+        return Parsed{ error = "{where}: a line needs a reason" };
+    }
+    return Parsed{ lines = [Deviation{ code = code, subject = subject, reason = reason }] };
+}
+
+// parse reads one JSON object per line. Blank lines are not entries.
+export fun parse(text: str, path: str) > Parsed {
+    final lines = mut [<Deviation>];
+    foreach (i, line in text.split("\n")) {
+        if (isBlank(line)) {
+            continue;
+        }
+        final one = parseLine(line, where: "{path}:{i + 1}");
+        if (one.error != "") {
+            return one;
+        }
+        lines.append(one.lines[0]);
+    }
+    return Parsed{ lines = lines };
+}
+
+// addedLines are the lines tree holds more copies of than base. It compares
+// counts, so re-adding a byte-identical old line after a revert still counts.
+export fun addedLines(tree: str, base: str) > str {
+    final seen = mut {<str: int>};
+    foreach (line in base.split("\n")) {
+        seen[line] = (seen[line] ?? 0) + 1;
+    }
+    final added = mut [<str>];
+    foreach (line in tree.split("\n")) {
+        final left = seen[line] ?? 0;
+        if (left > 0) {
+            seen[line] = left - 1;
+        } else {
+            added.append(line);
+        }
+    }
+    return added.join("\n");
+}
+
+// Permit mirrors JobProblems.Permit: kept and permitted, plus the counted lines
+// that matched nothing.
+export object Permit {
+    kept: [lint\Finding] = [],
+    permitted: [lint\Finding] = [],
+    unused: [Deviation] = [],
+    error: str = "",
+}
+
+fun lineKey(code: str, subject: str) > str {
+    return code + "\n" + subject;
+}
+
+// permit matches exact code and subject. A deliberate copy of
+// Deviation.Permits: a job's deviation takes a glob, and a gate's never does,
+// since a glob permits findings nobody read.
+export fun permit(found: [lint\Finding], counted: [Deviation], subject: fun (f: lint\Finding) > str) > Permit {
+    final hits = mut {<str: bool>};
+    foreach (d in counted) {
+        hits[lineKey(d.code, subject: d.subject)] = false;
+    }
+    final kept = mut [<lint\Finding>];
+    final permitted = mut [<lint\Finding>];
+    foreach (f in found) {
+        final key = lineKey(f.rule, subject: subject(f));
+        if (hits[key] != null) {
+            hits[key] = true;
+            permitted.append(f);
+        } else {
+            kept.append(f);
+        }
+    }
+    final unused = mut [<Deviation>];
+    foreach (d in counted) {
+        final key = lineKey(d.code, subject: d.subject);
+        if (hits[key] == false) {
+            hits[key] = true;
+            unused.append(d);
+        }
+    }
+    return Permit{ kept = kept, permitted = permitted, unused = unused };
+}
+
+// permitAdded counts only the lines this change added, the lifetime of a
+// comparison gate: once the break is in the base, the next change answers only
+// for what it did. It covers uncommitted work, since it reads the tree.
+export fun permitAdded(found: [lint\Finding], ledger: str, base: str, subject: fun (f: lint\Finding) > str) > Permit {
+    var tree = "";
+    try {
+        if (fs\exists(ledger)) {
+            tree = fs\readFile(ledger);
+        }
+    } catch (e) {
+        return Permit{ error = "{ledger} is unreadable: {e}" };
+    }
+    final before = readLedgerAt(base, path: ledger);
+    if (before.text == null) {
+        return Permit{ error = before.missing };
+    }
+    return permitLines(found, tree: tree, base: before.text!, ledger: ledger, subject: subject);
+}
+
+// permitLines is permitAdded's decision, from the two texts alone.
+export fun permitLines(found: [lint\Finding], tree: str, base: str, ledger: str, subject: fun (f: lint\Finding) > str) > Permit {
+    final whole = parse(tree, path: ledger);
+    if (whole.error != "") {
+        return Permit{ error = whole.error };
+    }
+    final counted = parse(addedLines(tree, base: base), path: ledger);
+    if (counted.error != "") {
+        return Permit{ error = counted.error };
+    }
+    return permit(found, counted: counted.lines, subject: subject);
+}
+
+// comparisonSubject leaves out the line: an edit above a field moves every
+// position and changes no description.
+export fun comparisonSubject(f: lint\Finding) > str {
+    return "{f.path}: {f.message}";
+}
+
+// Findings is a tool's report as records.
+export object Findings {
+    findings: [lint\Finding] = [],
+    error: str = "",
+}
+
+// codeClimate reads the Code Climate JSON record buf, golangci-lint and ESLint
+// formatters emit.
+export fun codeClimate(text: str) > Findings {
+    if (isBlank(text)) {
+        return Findings{};
+    }
+    final rows = (json\parse(text) catch null) as? [any];
+    if (rows == null) {
+        return Findings{ error = "not a Code Climate JSON array" };
+    }
+    final found = mut [<lint\Finding>];
+    foreach (row in rows!) {
+        final doc = row as? {str: any};
+        final location = doc?["location"] as? {str: any};
+        final rule = (doc?["check_name"] as? str) ?? "";
+        final path = (location?["path"] as? str) ?? "";
+        if (rule == "" or path == "") {
+            return Findings{ error = "a Code Climate record without check_name or location.path" };
+        }
+        final lines = location?["lines"] as? {str: any};
+        found.append(lint\Finding{
+            path = path,
+            line = std\toInt(lines?["begin"] ?? 0),
+            rule = rule,
+            message = (doc?["description"] as? str) ?? "",
+        });
+    }
+    return Findings{ findings = found };
+}
+
+// lineToAdd is the line a person fills in the reason of and adds.
+export fun lineToAdd(f: lint\Finding, subject: fun (f: lint\Finding) > str) > str {
+    final line = {"code": f.rule, "subject": subject(f), "reason": ""};
+    return json\stringify(line) catch "{f.rule} {subject(f)}";
+}
+
+// failure is what the gate says when a finding has no line or a line has no
+// finding, "" when neither holds.
+export fun failure(p: Permit, ledger: str, subject: fun (f: lint\Finding) > str) > str {
+    if (p.error != "") {
+        return p.error;
+    }
+    final said = mut [<str>];
+    if (p.kept.len() > 0) {
+        said.append("{p.kept.len()} finding(s) no line in {ledger} permits. If this break is deliberate, a person fills in each reason and adds the line:");
+        foreach (f in p.kept) {
+            said.append(lineToAdd(f, subject: subject));
+        }
+    }
+    foreach (d in p.unused) {
+        said.append("{ledger}: nothing reports this line, so delete it: {d.code} {d.subject}");
+    }
+    return said.join("\n");
+}
+
+// Verdict is one comparison gate's answer. Its failure is the text to raise,
+// "" on a pass; permitted says how many findings passed by a line.
+export object Verdict {
+    permitted: int = 0,
+    failure: str = "",
+}
+
+// judge decides from a captured op's record. findingsExit is the status the
+// tool reports findings with. Any other failure stands, as does one that
+// parses to nothing, since a crash is never permitted.
+export fun judge(run: any, findingsExit: int, ledger: str, shown: str, base: str) > Verdict {
+    final rec = run as? {str: any};
+    final code = (rec?["code"] as? int) ?? -1;
+    final stdout = (rec?["stdout"] as? str) ?? "";
+    if (code != 0 and code != findingsExit) {
+        final stderr = (rec?["stderr"] as? str) ?? "";
+        return Verdict{ failure = "the tool exited {code}: {stderr}" };
+    }
+    final parsed = codeClimate(stdout);
+    if (parsed.error != "") {
+        return Verdict{ failure = "{parsed.error}: {stdout}" };
+    }
+    if (code == findingsExit and parsed.findings.len() == 0) {
+        return Verdict{ failure = "the tool exited {code} and reported no findings" };
+    }
+    final p = permitAdded(parsed.findings, ledger: ledger, base: base, subject: comparisonSubject);
+    return Verdict{ permitted = p.permitted.len(), failure = failure(p, ledger: shown, subject: comparisonSubject) };
+}
+
+fun finding(rule: str, path: str, message: str) > lint\Finding {
+    return lint\Finding{ rule = rule, path = path, message = message };
+}
+
+final LINE = `\{"code":"R","subject":"a.proto: gone","reason":"renamed on purpose"\}`;
+
+test "a blank reason is a ledger error naming the line" {
+    final p = parse(`\{"code":"R","subject":"s","reason":" "\}`, path: "l.jsonl");
+    assert\equal(p.error, want: "l.jsonl:1: a line needs a reason", message: "reason");
+}
+
+test "a malformed line is a ledger error" {
+    assert\equal(parse("nope", path: "l.jsonl").error, want: "l.jsonl:1: not a JSON object", message: "json");
+}
+
+test "an unknown key is a ledger error, since a line is exactly a Deviation" {
+    final p = parse(`\{"code":"R","subject":"s","reason":"r","target":"ci"\}`, path: "l.jsonl");
+    assert\equal(p.error, want: "l.jsonl:1: unknown key target", message: "key");
+}
+
+test "parse skips blank lines and keeps the number of the bad one" {
+    assert\equal(parse("{LINE}\n\nnope", path: "l.jsonl").error, want: "l.jsonl:3: not a JSON object", message: "line 3");
+    assert\equal(parse("{LINE}\n", path: "l.jsonl").lines.len(), want: 1, message: "one entry");
+}
+
+test "addedLines counts copies, so a re-added old line counts" {
+    assert\equal(addedLines("a\nb", base: "a"), want: "b", message: "the new line");
+    assert\equal(addedLines("a\na", base: "a"), want: "a", message: "a second copy");
+    assert\equal(addedLines("a", base: "a\nb"), want: "", message: "a deleted line adds nothing");
+}
+
+test "a finding no line permits is kept" {
+    final p = permit([finding("R", path: "a.proto", message: "gone")], counted: [], subject: comparisonSubject);
+    assert\equal(p.kept.len(), want: 1, message: "kept");
+    assert\equal(p.permitted.len(), want: 0, message: "none permitted");
+}
+
+test "a matching line permits its finding and only that one" {
+    final counted = parse(LINE, path: "l").lines;
+    final p = permit([
+        finding("R", path: "a.proto", message: "gone"),
+        finding("R", path: "a.proto", message: "other"),
+    ], counted: counted, subject: comparisonSubject);
+    assert\equal(p.permitted.len(), want: 1, message: "the named finding");
+    assert\equal(p.kept[0].message, want: "other", message: "the same rule elsewhere stays");
+    assert\equal(p.unused.len(), want: 0, message: "the line was used");
+}
+
+test "a counted line that matches nothing is unused" {
+    final p = permit([], counted: parse(LINE, path: "l").lines, subject: comparisonSubject);
+    assert\equal(p.unused.len(), want: 1, message: "unused");
+}
+
+test "a removed field with no line fails, and prints the line to add" {
+    final found = [finding("R", path: "a.proto", message: "gone")];
+    final p = permitLines(found, tree: "", base: "", ledger: "l", subject: comparisonSubject);
+    assert\isTrue(failure(p, ledger: "l", subject: comparisonSubject) != "", message: "red");
+}
+
+test "the same finding with an added line passes as permitted" {
+    final found = [finding("R", path: "a.proto", message: "gone")];
+    final p = permitLines(found, tree: LINE, base: "", ledger: "l", subject: comparisonSubject);
+    assert\equal(failure(p, ledger: "l", subject: comparisonSubject), want: "", message: "green");
+    assert\equal(p.permitted.len(), want: 1, message: "permitted");
+}
+
+test "an added line with no finding fails as unused" {
+    final p = permitLines([], tree: LINE, base: "", ledger: "l", subject: comparisonSubject);
+    assert\isTrue(failure(p, ledger: "l", subject: comparisonSubject).indexOf("delete it") != null, message: "red");
+}
+
+test "a line the base already holds permits nothing and is not unused" {
+    final found = [finding("R", path: "a.proto", message: "gone")];
+    final kept = permitLines(found, tree: LINE, base: LINE, ledger: "l", subject: comparisonSubject);
+    assert\equal(kept.kept.len(), want: 1, message: "an old line never permits a new break");
+    final quiet = permitLines([], tree: LINE, base: LINE, ledger: "l", subject: comparisonSubject);
+    assert\equal(quiet.unused.len(), want: 0, message: "the next change owes nothing");
+}
+
+test "a subject is matched exactly, never as a glob" {
+    final counted = [Deviation{ code = "R", subject = "*", reason = "r" }];
+    final p = permit([finding("R", path: "a.proto", message: "gone")], counted: counted, subject: comparisonSubject);
+    assert\equal(p.kept.len(), want: 1, message: "a star is a star");
+}
+
+test "codeClimate reads buf's record" {
+    final got = codeClimate(`[\{"description":"gone","check_name":"FIELD_NO_DELETE","fingerprint":"x","severity":"minor","location":\{"path":"a.proto","lines":\{"begin":3\}\}\}]`);
+    assert\equal(got.error, want: "", message: "no error");
+    assert\equal(got.findings[0].rule, want: "FIELD_NO_DELETE", message: "rule");
+    assert\equal(got.findings[0].path, want: "a.proto", message: "path");
+    assert\equal(got.findings[0].line, want: 3, message: "line");
+    assert\equal(got.findings[0].message, want: "gone", message: "message");
+}
+
+test "codeClimate reports what it cannot read" {
+    assert\isTrue(codeClimate("nope").error != "", message: "not JSON");
+    assert\isTrue(codeClimate(`[\{"description":"d"\}]`).error != "", message: "no rule");
+    assert\equal(codeClimate("").findings.len(), want: 0, message: "empty is no findings");
+}
+
+test "the failure prints the line to add with a blank reason" {
+    final p = Permit{ kept = [finding("R", path: "a.proto", message: "gone")] };
+    final text = failure(p, ledger: "proto/x.deviations.jsonl", subject: comparisonSubject);
+    assert\isTrue(text.indexOf(`\{"code":"R","reason":"","subject":"a.proto: gone"\}`) != null, message: text);
+}
+
+test "the failure names an unused line to delete" {
+    final p = Permit{ unused = parse(LINE, path: "l").lines };
+    final text = failure(p, ledger: "proto/x.deviations.jsonl", subject: comparisonSubject);
+    assert\isTrue(text.indexOf("delete it") != null, message: text);
+}
+
+test "judge lets a tool failure stand, and a crash that parses to nothing" {
+    final crash = judge({"code": 1, "stdout": "", "stderr": "boom"}, findingsExit: 100, ledger: "l", shown: "l", base: "HEAD");
+    assert\equal(crash.failure, want: "the tool exited 1: boom", message: "tool failure");
+    final empty = judge({"code": 100, "stdout": "", "stderr": ""}, findingsExit: 100, ledger: "l", shown: "l", base: "HEAD");
+    assert\equal(empty.failure, want: "the tool exited 100 and reported no findings", message: "nothing parsed");
+}
