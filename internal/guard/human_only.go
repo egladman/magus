@@ -54,6 +54,12 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 	at := hookLocation(ctx, deps)
 	pairs, note := humanOnlyReach(ctx, deps, at.workspace, lazyWorkspace(ctx, deps, at.workspace), runs)
 	if len(pairs) == 0 {
+		// Reaching nothing is not an answer when the read ran out of time.
+		if log := judgmentPhases(ctx); note == policyUnreadNote && (log.lapsed(phaseTargetPolicies) || log.lapsed(phaseInspect)) {
+			call := judgedCall{what: fmt.Sprintf("`%s`", elideCommand(command))}
+			lapse := ruleLapse{budget: inspectBudget, said: lapseWording{"reading this workspace's target policies", "finish"}}
+			return decisionDeny, lapseReason(call, lapse, isDryRun(ctx))
+		}
 		return "", ""
 	}
 	decision, reason = gradeHumanOnlyPairs(ctx, deps, actingLease, command, at.workspace, runs, pairs)

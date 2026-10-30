@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/gen/typestest"
@@ -227,6 +228,32 @@ func TestHumanOnlyLeavesOtherRunsAlone(t *testing.T) {
 			assert.Empty(t, decision, "%s, %q: %s", src.name, command, reason)
 		}
 	}
+}
+
+// A run the guard ran out of time reading is refused, not passed for naming
+// nothing it could read.
+func TestHumanOnlyRefusesARunWhosePoliciesLapsed(t *testing.T) {
+	ctx, _ := fleetFixture(t)
+	ctx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
+	defer cancel()
+	ctx = context.WithValue(ctx, phaseLogKey{}, &phaseLog{start: time.Now()})
+	release := make(chan struct{})
+	defer close(release)
+	deps := Dependencies{TargetPolicies: func(context.Context, string) (types.TargetPolicyIndex, bool) {
+		<-release
+		return types.TargetPolicyIndex{}, false
+	}}
+	decision, reason := gradeHumanOnly(ctx, deps, "", "magus run agent-bench-run .")
+	assert.Equal(t, decisionDeny, decision)
+	assert.Contains(t, reason, "reading this workspace's target policies")
+}
+
+// A workspace that cannot be read for any other reason stays as it was.
+func TestHumanOnlyPassesAWorkspaceThatDidNotOpen(t *testing.T) {
+	ctx, _ := fleetFixture(t)
+	ctx = context.WithValue(ctx, phaseLogKey{}, &phaseLog{start: time.Now()})
+	decision, _ := gradeHumanOnly(ctx, Dependencies{}, "", "magus run agent-bench-run .")
+	assert.Empty(t, decision)
 }
 
 // humanOnlyLines are run lines across the rule's cases: named, composed, across projects,

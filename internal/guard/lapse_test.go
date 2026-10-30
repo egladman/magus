@@ -146,6 +146,99 @@ func TestOldSettingsJSONIsNotRead(t *testing.T) {
 	assert.Nil(t, recalledSettings(dir))
 }
 
+// LapsePersonOnlySuite pins decision 182: what only a person may do never
+// degrades into running on a lapse.
+type LapsePersonOnlySuite struct {
+	suite.Suite
+	ctx context.Context
+}
+
+func TestLapsePersonOnlySuite(t *testing.T) {
+	suite.Run(t, new(LapsePersonOnlySuite))
+}
+
+func (s *LapsePersonOnlySuite) SetupTest() {
+	s.ctx, _ = spawnFixture(s.T())
+}
+
+// lapses judges line past the degrade, once per stage, returning each verdict.
+func (s *LapsePersonOnlySuite) lapses(req Request, setup func(context.Context)) []types.GuardJudgment {
+	var out []types.GuardJudgment
+	for range lapsesBeforeDegrade + 2 {
+		out = append(out, lapseNow(s.ctx, s.T(), Dependencies{}, req, setup))
+	}
+	return out
+}
+
+func (s *LapsePersonOnlySuite) commandReq(line string) Request {
+	return Request{Input: line, Host: "claude-code", Session: "s1"}
+}
+
+// loaded settles deps holding the bench workspace's record before the stall.
+func loaded(ctx context.Context) {
+	judgmentPhases(ctx).settle(Dependencies{TargetPolicies: func(context.Context, string) (types.TargetPolicyIndex, bool) {
+		return benchRecord(), true
+	}})
+}
+
+func (s *LapsePersonOnlySuite) TestAShellWriteToALedgerIsRefusedByItsRule() {
+	for i, v := range s.lapses(s.commandReq("echo x >> proto/buf-breaking.deviations.jsonl"), func(context.Context) {}) {
+		s.Equal(verdictWithRule(decisionDeny, string(denyRuleDeviationAuthor)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestAnEditAddingALedgerLineIsRefusedByItsRule() {
+	env := map[string]any{"session_id": "s1", "cwd": s.T().TempDir(), "hook_event_name": "PreToolUse",
+		"tool_name": "Edit", "tool_input": map[string]any{"file_path": "x.deviations.jsonl", "old_string": deviationLine, "new_string": deviationLine + "\nadded"}}
+	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
+	for i, v := range s.lapses(req, func(context.Context) {}) {
+		s.Equal(verdictWithRule(decisionDeny, string(denyRuleDeviationAuthor)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestAnEditDeletingALedgerLineDegrades() {
+	env := map[string]any{"session_id": "s1", "cwd": s.T().TempDir(), "hook_event_name": "PreToolUse",
+		"tool_name": "Edit", "tool_input": map[string]any{"file_path": "x.deviations.jsonl", "old_string": deviationLine + "\n", "new_string": ""}}
+	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
+	got := s.lapses(req, func(context.Context) {})
+	s.Equal(string(advisoryUnfinished), got[len(got)-1].Rule)
+}
+
+func (s *LapsePersonOnlySuite) TestAnAgentGrantIsRefusedByItsRule() {
+	for i, v := range s.lapses(s.commandReq("magus job grant w --rule lease-write"), func(context.Context) {}) {
+		s.Equal(verdictWithRule(decisionDeny, string(denyRuleGrantIsAPersons)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestAHumanOnlyRunIsNeverDegraded() {
+	for i, v := range s.lapses(s.commandReq("magus run agent-bench-run ."), loaded) {
+		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestARunReachingAHumanOnlyTargetIsNeverDegraded() {
+	for i, v := range s.lapses(s.commandReq("magus run bench-all ."), loaded) {
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestARunWithPoliciesUnreadIsNeverDegraded() {
+	for i, v := range s.lapses(s.commandReq("magus run test ."), func(context.Context) {}) {
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestARunTheRecordClearsDegrades() {
+	got := s.lapses(s.commandReq("magus run test ."), loaded)
+	s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(got[0]))
+	s.Equal(decisionAdvise, got[len(got)-1].Decision)
+}
+
+func (s *LapsePersonOnlySuite) TestAnOrdinaryCommandStillDegrades() {
+	got := s.lapses(s.commandReq("touch notes.txt"), func(context.Context) {})
+	s.Equal(decisionAdvise, got[len(got)-1].Decision)
+}
+
 // LapseDegradeSuite pins decision 127: past lapsesBeforeDegrade a subagent's
 // write or command in a live job's checkout stays denied, and others degrade.
 type LapseDegradeSuite struct {

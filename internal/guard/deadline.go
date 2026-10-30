@@ -417,13 +417,15 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	verdict := pass
 	verdict.Lease, verdict.LeaseFrom = lease, leaseFrom
 	inARow := mark.recordLapse()
-	builtins := lapsedRules(ctx, base, log, req, env, who, input, isPath, hookLocation(ctx, base).cacheDir)
+	builtins := lapsedRules(ctx, base, log, req, env, who, input, isPath, hookLocation(ctx, base).cacheDir, callDir)
 	switch {
 	case builtins.Deny != "":
 		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, builtins.Deny, builtins.RuleName()
 	case writesOutside:
 		verdict = applyRuleFailureNote(verdict, unjudgedOutsideNote(), advisoryUnfinished)
-	case call.changes && (stageAtLapses(inARow) == lapseDenies || pushes || lapsedInJobCheckout(ctx, base, who, lease, isPath, input, callDir, effectiveDialect(base.ShellDialect))):
+	case call.changes && (stageAtLapses(inARow) == lapseDenies || pushes ||
+		!isPath && lapsedPersonOnly(ctx, base, log, hookLocation(ctx, base).workspace, input) ||
+		lapsedInJobCheckout(ctx, base, who, lease, isPath, input, callDir, effectiveDialect(base.ShellDialect))):
 		// A push is never degraded: the gate it needs proven is in the run log, which only
 		// a judgment that finishes reads.
 		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}}
