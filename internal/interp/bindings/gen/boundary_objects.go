@@ -5617,6 +5617,11 @@ func ObjectLimits(v types.Limits) vm.Value {
 		itemsPayloadFields[indexPayloadFields] = vm.StringValue(v.PayloadFields[indexPayloadFields])
 	}
 	out.MapSet("payloadFields", vm.ListValue(itemsPayloadFields))
+	itemsChannels := make([]vm.Value, len(v.Channels))
+	for indexChannels := range v.Channels {
+		itemsChannels[indexChannels] = vm.StringValue(v.Channels[indexChannels])
+	}
+	out.MapSet("channels", vm.ListValue(itemsChannels))
 	return out
 }
 

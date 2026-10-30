@@ -12,4 +12,5 @@ export object Limits {
     resumesOnBackgroundFrom: str = "",
     observesSkillLoads: bool = false,
     payloadFields: [str] = [],
+    channels: [str] = [],
 }
