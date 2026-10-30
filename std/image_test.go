@@ -206,6 +206,7 @@ func (s *stdSuite) TestReferrersReadsTheAttachedDocumentWithoutARegistry() {
 	s.Require().Len(docs, 1)
 	wantDescriptor := sbom.Descriptor
 	wantDescriptor.ArtifactType = sbom.Descriptor.MediaType
+	wantDescriptor.Annotations = map[string]string{"org.opencontainers.image.title": filepath.Base(sbom.Path)}
 	s.Equal(wantDescriptor, docs[0].Descriptor)
 
 	want, err := os.ReadFile(sbom.Path)

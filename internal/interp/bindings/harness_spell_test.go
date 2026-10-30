@@ -569,10 +569,12 @@ func (s *HookBindingCompletenessSuite) TestTheGuideShowsTheTable() {
 		}
 	}
 	s.Equal(len(types.HookPoints()), seen, "one row per hook point")
+	// The page links each URL in a reason; the spell states it bare.
+	bareGuide := strings.NewReplacer("<https://", "https://", ">", "").Replace(guide)
 	for id, table := range s.tables {
 		for _, b := range table {
 			if b.Status == types.Unsupported {
-				s.Contains(guide, b.Reason, "%s %s's reason", id, b.Point)
+				s.Contains(bareGuide, b.Reason, "%s %s's reason", id, b.Point)
 			}
 		}
 	}
