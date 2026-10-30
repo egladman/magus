@@ -219,5 +219,6 @@ export extern fun parsePlatform(spec: str) > Platform !> any;
 export extern fun parsePlatforms(specs: [str]) > [Platform] !> any;
 export extern fun pull(reference: str, platform: Platform, layout: str, auth: RegistryAuth? = null) > Layout !> any;
 export extern fun push(layout: str, repository: str, tags: [str], auth: RegistryAuth? = null) > Pushed !> any;
+export extern fun referrers(layout: str, name: str = "") > [Document] !> any;
 export extern fun writeSBOM(layout: str, path: str) > Document !> any;
 export extern fun writeProvenance(layout: str, provenance: Provenance, path: str) > Document !> any;

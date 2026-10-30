@@ -187,6 +187,62 @@ func (s *stdSuite) TestAssembleUnderADryRunNamesAMissingTreeSource() {
 	s.Require().ErrorContains(err, "trees[0] "+missing)
 }
 
+func (s *stdSuite) attachedLayout() (types.ImageLayout, types.ImageDocument) {
+	ctx, root := s.T().Context(), s.T().TempDir()
+	built, err := ImageAssemble(ctx, types.ImageSpec{Scratch: true, Platform: linuxAMD64}, filepath.Join(root, "image"))
+	s.Require().NoError(err)
+	sbom, err := ImageWriteSBOM(ctx, built.Path, filepath.Join(root, "sbom.spdx.json"))
+	s.Require().NoError(err)
+	attached, err := ImageAttachReferrers(ctx, built.Path, []types.ImageDocument{sbom}, filepath.Join(root, "attached"))
+	s.Require().NoError(err)
+	return attached, sbom
+}
+
+func (s *stdSuite) TestReferrersReadsTheAttachedDocumentWithoutARegistry() {
+	attached, sbom := s.attachedLayout()
+
+	docs, err := ImageReferrers(s.T().Context(), attached.Path, "")
+	s.Require().NoError(err)
+	s.Require().Len(docs, 1)
+	s.Equal(sbom.Descriptor.Digest, docs[0].Descriptor.Digest)
+	s.Equal(sbom.Descriptor.MediaType, docs[0].Descriptor.ArtifactType)
+
+	want, err := os.ReadFile(sbom.Path)
+	s.Require().NoError(err)
+	got, err := os.ReadFile(docs[0].Path)
+	s.Require().NoError(err)
+	s.Equal(want, got)
+}
+
+func (s *stdSuite) TestReferrersIsEmptyForALayoutWithNone() {
+	built, err := ImageAssemble(s.T().Context(), types.ImageSpec{Scratch: true, Platform: linuxAMD64}, filepath.Join(s.T().TempDir(), "image"))
+	s.Require().NoError(err)
+
+	docs, err := ImageReferrers(s.T().Context(), built.Path, "")
+	s.Require().NoError(err)
+	s.Empty(docs)
+}
+
+func (s *stdSuite) TestReferrersRefusesAMissingLayout() {
+	_, err := ImageReferrers(s.T().Context(), filepath.Join(s.T().TempDir(), "absent"), "")
+	s.Require().Error(err)
+}
+
+func (s *stdSuite) TestReferrersRefusesAReferrerBlobChangedOnDisk() {
+	attached, _ := s.attachedLayout()
+	opened, err := ImageOpen(s.T().Context(), attached.Path, "")
+	s.Require().NoError(err)
+	s.Require().Len(opened.Referrers, 1)
+	d, err := digestFromTypes(opened.Referrers[0].Digest)
+	s.Require().NoError(err)
+	blob := layoutBlobPath(attached.Path, d)
+	s.Require().NoError(os.Chmod(blob, 0o644))
+	s.Require().NoError(os.WriteFile(blob, []byte("{}"), 0o644))
+
+	_, err = ImageReferrers(s.T().Context(), attached.Path, "")
+	s.Require().Error(err)
+}
+
 func TestFsModeParsesOctalAndRwx(t *testing.T) {
 	got, err := FsMode(t.Context(), "rwxr-xr-x")
 	require.NoError(t, err)

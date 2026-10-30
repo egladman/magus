@@ -106,6 +106,7 @@ image.parsePlatform
 image.parsePlatforms
 image.pull
 image.push
+image.referrers
 image.writeProvenance
 image.writeSBOM
 log.at

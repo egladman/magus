@@ -137,6 +137,15 @@ func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectImageLayout(ret0, enums), nil
 	}))
+	m.MapSet("referrers", vm.DirectValue("image.referrers", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		layout := ffi.String(bzArgs, 0)
+		name := ffi.String(bzArgs, 1)
+		ret0, err := std.ImageReferrers(ctx, layout, name)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.ObjectSlice(ret0, func(v types.ImageDocument) vm.Value { return ObjectImageDocument(v, enums) }), nil
+	}))
 	m.MapSet("parsePlatform", vm.DirectValue("image.parsePlatform", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		spec := ffi.String(bzArgs, 0)
 		ret0, err := std.ImageParsePlatform(ctx, spec)

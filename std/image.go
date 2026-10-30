@@ -3,8 +3,12 @@
 package std
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -106,6 +110,14 @@ var Image = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Layout"}},
 			Raises:  true,
 			Impl:    ImageOpen,
+		},
+		{
+			Name:    "referrers",
+			Doc:     "Read the documents attached beside the image at layout (the SBOM and provenance referrers) without a registry: one Document per referrer layer, its Path the blob in the layout so fs\\read reads it, its Descriptor the layer's with the referrer's artifactType. name picks the image as open does.",
+			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "name", Type: TypeString, Optional: true}},
+			Returns: []Ret{{Type: TypeAny, Object: "[Document]"}},
+			Raises:  true,
+			Impl:    ImageReferrers,
 		},
 		{
 			Name:    "parsePlatform",
@@ -342,6 +354,48 @@ func ImageOpen(ctx context.Context, path, name string) (types.ImageLayout, error
 		return types.ImageLayout{}, fmt.Errorf("image.open: %w", err)
 	}
 	return manifestToTypes(m), nil
+}
+
+// ImageReferrers reads the documents attached beside the image at path.
+// It needs no registry, which oci.Client.Referrers does.
+func ImageReferrers(ctx context.Context, path, name string) ([]types.ImageDocument, error) {
+	if types.Tracing(ctx) {
+		return nil, nil
+	}
+	path = resolvePath(ctx, path)
+	if err := imageCheck(ctx, []string{path}, nil); err != nil {
+		return nil, fmt.Errorf("image.referrers: %w", err)
+	}
+	l, err := image.OpenLayout(ctx, path, name)
+	if err != nil {
+		return nil, err
+	}
+	docs := []types.ImageDocument{}
+	for _, r := range l.Referrers {
+		data, err := os.ReadFile(layoutBlobPath(l.Path, r.Digest))
+		if err != nil {
+			return nil, fmt.Errorf("image.referrers: %w", err)
+		}
+		if err := oci.VerifyBlob(ctx, bytes.NewReader(data), r); err != nil {
+			return nil, fmt.Errorf("image.referrers: referrer %s: %w", r.Digest, err)
+		}
+		var m ocispec.Manifest
+		if err := json.Unmarshal(data, &m); err != nil {
+			return nil, fmt.Errorf("image.referrers: referrer %s: %w", r.Digest, err)
+		}
+		if len(m.Layers) == 0 {
+			return nil, fmt.Errorf("image.referrers: referrer %s (%s) has no layer holding a document", r.Digest, m.ArtifactType)
+		}
+		for _, layer := range m.Layers {
+			layer.ArtifactType = m.ArtifactType
+			docs = append(docs, types.ImageDocument{Path: layoutBlobPath(l.Path, layer.Digest), Descriptor: descriptorToTypes(layer)})
+		}
+	}
+	return docs, nil
+}
+
+func layoutBlobPath(layout string, d digest.Digest) string {
+	return filepath.Join(layout, "blobs", d.Algorithm().String(), d.Encoded())
 }
 
 // ImageParsePlatform parses "os/architecture[/variant]".
