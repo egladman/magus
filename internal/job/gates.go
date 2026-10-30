@@ -80,8 +80,9 @@ const ciTarget = "ci"
 // target RegeneratedOutside already lists is left out because the root regenerates it. A
 // script check covers nothing: what it runs is not a target.
 //
-// A file in a project with the target of its own gates there, so an
-// ancestor's check does not cover it.
+// A file in a project whose own target reads it gates there, so an
+// ancestor's check does not cover it. The ancestor's target gates it too
+// when it spells the path out.
 //
 // Each goal is graded by the installed [CheckGrader] before it is offered: the form a
 // worker may run, else none, with the gate marked IntegratorGates. A workspace with no root
@@ -119,13 +120,13 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		if !walked {
 			written, walked = writtenFiles(root, row), true
 		}
-		sources, _ := targetSources(v.Project, v.Target)
-		for _, owned := range byOwningProject(projects, v, sources, written) {
+		for _, owned := range byOwningProject(projects, v, written) {
 			key := owned.visit.Key()
 			label := fmt.Sprintf("%s:%s", owned.visit.Project.Path, v.Target)
 			if run[key] || listed[key] || slices.ContainsFunc(regenerated, func(o RegeneratedOutput) bool { return o.Target == label }) {
 				continue
 			}
+			sources, _ := targetSources(owned.visit.Project, v.Target)
 			source, _, ok := sourcedBy(sources, owned.files)
 			if !ok {
 				continue
@@ -148,19 +149,13 @@ type ownedGate struct {
 	files []string
 }
 
-// byOwningProject splits the written files v's sources read by owning project.
-// A project with v's target runs its own tests, and an ancestor runs none.
-// A project without one leaves its files to v.
-func byOwningProject(projects []*types.Project, v types.ChainVisit, sources []types.Glob, written []string) []ownedGate {
+// byOwningProject splits the files v reads by the project gating each.
+// A project whose own target reads a file gates it.
+// v keeps a gate as well when it spells the path out ([spellsOutPath]).
+func byOwningProject(projects []*types.Project, v types.ChainVisit, written []string) []ownedGate {
+	sources, _ := targetSources(v.Project, v.Target)
 	var out []ownedGate
-	for _, file := range written {
-		if !slices.ContainsFunc(sources, func(g types.Glob) bool { return g.Match(file) }) {
-			continue
-		}
-		gate := v
-		if owner := owningProject(projects, file); owner != nil && runsTarget(owner, v.Target) {
-			gate.Project = owner
-		}
+	add := func(gate types.ChainVisit, file string) {
 		i := slices.IndexFunc(out, func(o ownedGate) bool { return o.visit.Project == gate.Project })
 		if i < 0 {
 			out = append(out, ownedGate{visit: gate})
@@ -168,7 +163,45 @@ func byOwningProject(projects []*types.Project, v types.ChainVisit, sources []ty
 		}
 		out[i].files = append(out[i].files, file)
 	}
+	for _, file := range written {
+		if !slices.ContainsFunc(sources, func(g types.Glob) bool { return g.Match(file) }) {
+			continue
+		}
+		owner := owningProject(projects, file)
+		if owner == nil || owner == v.Project || !gatesFile(owner, v.Target, file) {
+			add(v, file)
+			continue
+		}
+		gate := v
+		gate.Project = owner
+		add(gate, file)
+		if spellsOutPath(v.Project, sources, file) {
+			add(v, file)
+		}
+	}
 	return out
+}
+
+// spellsOutPath reports whether a source of p reading file names a path
+// below p's root, as `libs/**/*.go` does. `**/*.go` is a language default
+// that a nested module's files happen to match.
+func spellsOutPath(p *types.Project, sources []types.Glob, file string) bool {
+	root := 0
+	if p.Path != "." {
+		root = len(p.Path)
+	}
+	return slices.ContainsFunc(sources, func(g types.Glob) bool {
+		return g.Match(file) && len(types.LiteralPrefix(g.Pattern)) > root
+	})
+}
+
+// gatesFile reports whether p runs target over file.
+func gatesFile(p *types.Project, target, file string) bool {
+	if !runsTarget(p, target) {
+		return false
+	}
+	sources, _ := targetSources(p, target)
+	return slices.ContainsFunc(sources, func(g types.Glob) bool { return g.Match(file) })
 }
 
 // owningProject is the deepest project containing file, nil when none does.

@@ -166,6 +166,48 @@ func (s *owningProjectGateSuite) TestASiblingSharingAPrefixIsNotTheOwner() {
 	s.Equal([]string{".:test"}, s.gates(nil, "libs/buzzard/a.go"))
 }
 
+// reachingWorkspace has a root lint naming libs/ in its inputs, as this
+// repo's does. Its root test reaches a nested module by language default.
+func (s *owningProjectGateSuite) reachingWorkspace() []*types.Project {
+	return []*types.Project{
+		{
+			Path:             ".",
+			Sources:          types.MustParseGlobs("**/*.go"),
+			MagusfileTargets: []string{"ci", "lint", "test"},
+			TargetChains:     map[string][]types.ChainStep{"ci": {{Target: "lint"}, {Target: "test"}}},
+			TargetInputs:     map[string][]types.InputRef{"lint": {{Glob: "**/*.go"}, {Glob: "libs/**/*.go"}}},
+		},
+		{Path: "libs/buzz", Sources: types.MustParseGlobs("**/*.go"), MagusfileTargets: []string{"lint", "test"}},
+		{
+			Path:             "libs/digest",
+			Sources:          types.MustParseGlobs("**/*.go"),
+			MagusfileTargets: []string{"lint"},
+			TargetInputs:     map[string][]types.InputRef{"lint": {{Glob: "gen/table.digest"}}},
+		},
+	}
+}
+
+func (s *owningProjectGateSuite) reaching(write ...string) []UnrunGate {
+	row := types.Job{ID: "j", WritePaths: write, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	return UnrunGates(s.T().TempDir(), row, s.reachingWorkspace(), nil)
+}
+
+func (s *owningProjectGateSuite) TestARootTargetSpellingOutThePathKeepsItsGate() {
+	s.Equal([]string{"libs/buzz:lint", ".:lint", "libs/buzz:test"}, gateTargets(s.reaching("libs/buzz/lexer.go")))
+}
+
+func (s *owningProjectGateSuite) TestAnOwnersTargetNotReadingTheFileLeavesItToTheAncestor() {
+	s.Equal([]string{".:lint", ".:test"}, gateTargets(s.reaching("libs/digest/a.go")))
+}
+
+func (s *owningProjectGateSuite) TestEachGateNamesItsOwnSource() {
+	gates := s.reaching("libs/buzz/lexer.go")
+
+	s.Require().Len(gates, 3)
+	s.Equal("libs/buzz/**/*.go", gates[0].Source)
+	s.Equal("libs/**/*.go", gates[1].Source)
+}
+
 func TestUnrunGatesNeedsACiChain(t *testing.T) {
 	t.Parallel()
 
