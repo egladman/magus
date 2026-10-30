@@ -261,7 +261,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"buf-format": {Command: spells.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 			}}},
-			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking"}, Capture: true}, Capture: true},
+			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking"}, Capture: true}},
 		},
 	},
 	"buzz": {

@@ -136,8 +136,7 @@ func (s *allowFailureSuite) quietFailure(allow bool) string {
 	var stdout, stderr bytes.Buffer
 	ctx := spawn.WithOutputWriters(s.T().Context(), &stdout, &stderr)
 	op := spells.Op{
-		Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo boom >&2; exit 100"}, Quiet: true},
-		Capture: true,
+		Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo boom >&2; exit 100"}, Capture: true, Quiet: true},
 	}
 	_, _ = runCommand(ctx, op, commandOpts{cwd: s.T().TempDir(), allowFailure: allow})
 	return stderr.String()
