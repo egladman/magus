@@ -626,8 +626,11 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 		citing := func(ref string) string {
 			return fmt.Sprintf("gh pr edit 9 --title \"fix(cache): pin the key\" --body \"Warm builds hit the cache again because the key now sorts its inputs; TestKey passed (%s).\"", ref)
 		}
+		// No voice file here: proofread's notice is the only advice.
 		v = run(citing(passed.Ref))
-		assert.Equal(t, decisionPass, v.Decision, fmt.Sprintf("a passing run this checkout holds: %s%s", v.Reason, v.Context))
+		assert.Equal(t, decisionAdvise, v.Decision, fmt.Sprintf("a passing run this checkout holds: %s%s", v.Reason, v.Context))
+		assert.Contains(t, v.Reason+v.Context, "proofread: no voice file at")
+		assert.NotContains(t, v.Reason+v.Context, "cites")
 		v = run(citing(failed.Ref))
 		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, fmt.Sprintf("`%s` cites a failed run (libs/conventions:go-test)", failed.Ref))
