@@ -197,7 +197,14 @@ func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted,
 	if err != nil {
 		return
 	}
-	_, _, _ = sessions.OpenRequest(dir, holder, open, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root})
+	// Not OpenRequest: its dedupe folds the whole store, and the row just
+	// answered that this request is new. A repeat collapses in the fold anyway.
+	open.Request = sessions.RequestID(holder, open)
+	w, err := sessions.Open(dir, sessions.NewID(), sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root, Command: "session notify"})
+	if err != nil {
+		return
+	}
+	_ = w.Append(sessions.KindAttentionOpen, open)
 }
 
 // FileReleaseRequest puts req on holder's row and stamps its time. It answers

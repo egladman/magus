@@ -263,6 +263,25 @@ func (s *ReleaseRequestRowSuite) requests() []types.JobReleaseRequest {
 	return storedRows(s.T(), s.store)["h"].ReleaseRequests
 }
 
+// Filing appends without reading the store: a second open of an id shows the
+// fold was not asked, and the queue still holds one row.
+func (s *ReleaseRequestRowSuite) TestAttentionIsFiledWithoutReadingTheStore() {
+	ctx := s.T().Context()
+	s.store.requestRelease(ctx, "h", "b.go", []string{"b.go"}, nil)
+	queue := releaseRequests(s.T(), s.store.root)
+	s.Require().Len(queue, 1)
+	s.Require().NoError(s.store.CloseReleaseRequest(ctx, queue[0].ID))
+	s.store.requestRelease(ctx, "h", "b.go", []string{"b.go"}, nil)
+
+	dir, err := sessions.Dir(s.store.root)
+	s.Require().NoError(err)
+	fold, err := sessions.ReadAll(dir)
+	s.Require().NoError(err)
+	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r sessions.Record) bool { return r.Kind != sessions.KindAttentionOpen })
+	s.Len(opens, 2)
+	s.Len(releaseRequests(s.T(), s.store.root), 1)
+}
+
 func (s *ReleaseRequestRowSuite) TestTheStoreStampsTheTime() {
 	s.Positive(s.requests()[0].At)
 }
