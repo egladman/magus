@@ -83,7 +83,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 			return slices.ContainsFunc(prev.WritePaths, func(held string) bool { return types.PathWithin(p, held) })
 		})
 		addedRow := types.Job{ID: id, WritePaths: added, SoftPaths: merged.SoftPaths, Parent: merged.Parent, DependsOn: merged.DependsOn}
-		ps = append(ps, onRow(addedWritePathProblems(ctx, store, addedRow), addedRow, merged)...)
+		ps = append(ps, onRow(addedWritePathProblems(ctx, store, addedRow, merged.Integrates), addedRow, merged)...)
 		addedDenies := types.Job{ID: id, DenyPaths: slices.DeleteFunc(slices.Clone(merged.DenyPaths), func(p string) bool { return slices.Contains(prev.DenyPaths, p) })}
 		ps = append(ps, onRow(ungradableClaimProblems(ctx, store, addedDenies), addedDenies, merged)...)
 		ps = append(ps, onRow(unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(addedRow)), addedRow, merged)...)
@@ -113,7 +113,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		ps = append(ps, forkLimitProblems(rows, id, merged.Parent, limits)...)
 		ps = append(ps, claimCeilingProblems(merged, limits)...)
 		ps = append(ps, ambiguousSymbolProblems(ctx, merged.Goals, read)...)
-		ps = append(ps, directoryWritePathProblems(store, merged)...)
+		ps = append(ps, mergedDirectoryProblems(ctx, store, merged, merged.Integrates)...)
 		ps = append(ps, ungradableClaimProblems(ctx, store, merged)...)
 		ps = append(ps, wholeFileConfigClaimProblems(ctx, store, merged)...)
 		ps = append(ps, sharedCheckoutProblems(store, rows, merged)...)
@@ -613,13 +613,57 @@ func resolveProblem(err error) types.JobProblem {
 // configuration held whole. A rule that held only at creation would depend on which call
 // wrote the path. added is the job's row carrying only the write paths the write adds, so a
 // path the row already held never blocks an unrelated write.
-func addedWritePathProblems(ctx context.Context, store *Store, added types.Job) types.JobProblems {
+func addedWritePathProblems(ctx context.Context, store *Store, added types.Job, integrates []string) types.JobProblems {
 	if len(added.WritePaths) == 0 {
 		return nil
 	}
-	ps := directoryWritePathProblems(store, added)
+	ps := mergedDirectoryProblems(ctx, store, added, integrates)
 	ps = append(ps, ungradableClaimProblems(ctx, store, added)...)
 	return append(ps, wholeFileConfigClaimProblems(ctx, store, added)...)
+}
+
+// mergedDirectoryProblems is [directoryWritePathProblems] for the tree that
+// merging integrates leaves. A directory here that a branch replaces with a
+// file or a symlink names one file. A branch the VCS cannot compare keeps the
+// refusal.
+func mergedDirectoryProblems(ctx context.Context, store *Store, row types.Job, integrates []string) types.JobProblems {
+	ps := directoryWritePathProblems(store, row)
+	if len(ps) == 0 || len(integrates) == 0 {
+		return ps
+	}
+	leaves := branchLeaves(ctx, store.root, integrates)
+	row.WritePaths = slices.Clone(row.WritePaths)
+	for i, decl := range row.WritePaths {
+		if p, _ := types.SplitClaim(decl); leaves[path.Clean(strings.TrimSpace(p))] {
+			// Blank, not removed: a problem's field is the entry's index.
+			row.WritePaths[i] = ""
+		}
+	}
+	return directoryWritePathProblems(store, row)
+}
+
+// branchLeaves is every path integrates change against the current revision.
+// Such a path is no directory there: a diff lists no trees.
+func branchLeaves(ctx context.Context, root string, integrates []string) map[string]bool {
+	driver, _ := resolveDriver(ctx, root)
+	if driver == nil {
+		return nil
+	}
+	head, err := driver.FindCommit(ctx, root, "")
+	if err != nil {
+		return nil
+	}
+	leaves := map[string]bool{}
+	for _, branch := range integrates {
+		changed, err := driver.DiffTrees(ctx, root, head.ID, branch)
+		if err != nil {
+			continue
+		}
+		for _, p := range changed {
+			leaves[p] = true
+		}
+	}
+	return leaves
 }
 
 // ungradedProblems finds a writing job that declares neither a check nor a goal, as

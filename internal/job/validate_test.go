@@ -10,10 +10,69 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+// integratedDirectorySuite pins MGS3018 against a branch replacing a directory.
+type integratedDirectorySuite struct {
+	suite.Suite
+	repo  *testkit.Repo
+	store *Store
+}
+
+func TestIntegratedDirectory(t *testing.T) { suite.Run(t, new(integratedDirectorySuite)) }
+
+func (s *integratedDirectorySuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{
+		"skills/a/SKILL.md": "a\n",
+		"skills/keep.md":    "keep\n",
+		"shared/a/SKILL.md": "a\n",
+	})
+	s.store = NewStore(tempLocation(s.T(), s.repo.Root()))
+
+	s.repo.Git("checkout", "-q", "-b", "replaces-dir")
+	s.repo.Git("rm", "-q", "-r", "skills/a")
+	s.Require().NoError(os.Symlink("../shared/a", filepath.Join(s.repo.Root(), "skills", "a")))
+	s.repo.Git("add", "skills/a")
+	s.repo.Git("commit", "-q", "-m", "replace the directory with a symlink")
+	s.repo.Git("checkout", "-q", "-")
+}
+
+func (s *integratedDirectorySuite) row(write ...string) types.Job {
+	return types.Job{ID: "integrate", WritePaths: write}
+}
+
+func (s *integratedDirectorySuite) TestDirectoryABranchReplacesWithASymlinkPasses() {
+	ps := mergedDirectoryProblems(s.T().Context(), s.store, s.row("skills/a"), []string{"replaces-dir"})
+
+	s.Empty(ps)
+}
+
+func (s *integratedDirectorySuite) TestDirectoryTheBranchKeepsIsRefused() {
+	ps := mergedDirectoryProblems(s.T().Context(), s.store, s.row("skills/a", "shared/a"), []string{"replaces-dir"})
+
+	s.Require().Len(ps, 1)
+	s.Equal(types.WritePathIsDirectory, ps[0].Code)
+	s.Equal("write_paths[1]", ps[0].Field, "the index of the entry as the record wrote it")
+}
+
+func (s *integratedDirectorySuite) TestWithoutIntegratesTheDirectoryIsRefused() {
+	ps := mergedDirectoryProblems(s.T().Context(), s.store, s.row("skills/a"), nil)
+
+	s.Require().Len(ps, 1)
+	s.Equal(types.WritePathIsDirectory, ps[0].Code)
+}
+
+func (s *integratedDirectorySuite) TestBranchTheVCSCannotReadKeepsTheRefusal() {
+	ps := mergedDirectoryProblems(s.T().Context(), s.store, s.row("skills/a"), []string{"no-such-branch"})
+
+	s.Require().Len(ps, 1)
+	s.Equal(types.WritePathIsDirectory, ps[0].Code)
+}
 
 // validateWorkspace is regeneratedWorkspace with the targets its root project exports and a
 // ci chain that lints and tests, so every workspace check has something to read.
