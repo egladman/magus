@@ -814,7 +814,7 @@ func (s *ProgramSearchSuite) SetupTest() {
 	}
 }
 
-func (s *ProgramSearchSuite) deniesFor(command string, names ...string) {
+func (s *ProgramSearchSuite) deniesNames(command string, names ...string) {
 	v := Evaluate(strict(s.deps), command)
 	s.Equal(denyRule{Name: denyRuleSymbolSearch, Arg: strings.Join(names, ",")}, v.Rule)
 	for _, name := range names {
@@ -822,9 +822,9 @@ func (s *ProgramSearchSuite) deniesFor(command string, names ...string) {
 	}
 }
 
-// deniesPerlFor sets interpreter-script off, since by default it refuses
+// deniesPerlNames sets interpreter-script off, since by default it refuses
 // every perl program before a search rule reads it.
-func (s *ProgramSearchSuite) deniesPerlFor(command string, names ...string) {
+func (s *ProgramSearchSuite) deniesPerlNames(command string, names ...string) {
 	deps := strict(s.deps)
 	deps.Builtins[string(denyRuleInterpreterScript)] = builtin.Setting{Decision: builtin.Off}
 	v := Evaluate(deps, command)
@@ -846,67 +846,67 @@ func (s *ProgramSearchSuite) passes(command string) {
 }
 
 func (s *ProgramSearchSuite) TestAwkAddress() {
-	s.deniesFor(`awk '/func Judge/' internal/guard/*.go`, "Judge")
+	s.deniesNames(`awk '/func Judge/' internal/guard/*.go`, "Judge")
 }
 
 func (s *ProgramSearchSuite) TestAwkAddressWithAPrintAction() {
-	s.deniesFor(`awk '/HandleRequest/ {print FILENAME": "$0}' internal/*.go`, "HandleRequest")
+	s.deniesNames(`awk '/HandleRequest/ {print FILENAME": "$0}' internal/*.go`, "HandleRequest")
 }
 
 func (s *ProgramSearchSuite) TestAwkWithAFieldSeparator() {
-	s.deniesFor(`awk -F, '/HandleRequest/{print $1}' internal/*.go`, "HandleRequest")
+	s.deniesNames(`awk -F, '/HandleRequest/{print $1}' internal/*.go`, "HandleRequest")
 }
 
 func (s *ProgramSearchSuite) TestAwkAlternationWithAVariable() {
-	s.deniesFor(`awk -F: -v x=1 '/HandleRequest|ParseConfig/' internal/*.go`, "HandleRequest", "ParseConfig")
+	s.deniesNames(`awk -F: -v x=1 '/HandleRequest|ParseConfig/' internal/*.go`, "HandleRequest", "ParseConfig")
 }
 
 func (s *ProgramSearchSuite) TestGawk() {
-	s.deniesFor(`gawk '/HandleRequest/' internal/*.go`, "HandleRequest")
+	s.deniesNames(`gawk '/HandleRequest/' internal/*.go`, "HandleRequest")
 }
 
 func (s *ProgramSearchSuite) TestMawk() {
-	s.deniesFor(`mawk '/HandleRequest/' internal/*.go`, "HandleRequest")
+	s.deniesNames(`mawk '/HandleRequest/' internal/*.go`, "HandleRequest")
 }
 
 func (s *ProgramSearchSuite) TestSedQuietPrint() {
-	s.deniesFor(`sed -n '/func Judge/p' internal/guard/*.go`, "Judge")
+	s.deniesNames(`sed -n '/func Judge/p' internal/guard/*.go`, "Judge")
 }
 
 func (s *ProgramSearchSuite) TestSedQuietPrintAsAnExpression() {
-	s.deniesFor(`sed -n -e '/HandleRequest/p' internal/*.go`, "HandleRequest")
+	s.deniesNames(`sed -n -e '/HandleRequest/p' internal/*.go`, "HandleRequest")
 }
 
 func (s *ProgramSearchSuite) TestSedExtendedAlternation() {
-	s.deniesFor(`sed -n -E '/HandleRequest|ParseConfig/p' internal/*.go`, "HandleRequest", "ParseConfig")
+	s.deniesNames(`sed -n -E '/HandleRequest|ParseConfig/p' internal/*.go`, "HandleRequest", "ParseConfig")
 }
 
 func (s *ProgramSearchSuite) TestPerlPrintIf() {
-	s.deniesPerlFor(`perl -ne 'print if /HandleRequest/' internal/*.go`, "HandleRequest")
+	s.deniesPerlNames(`perl -ne 'print if /HandleRequest/' internal/*.go`, "HandleRequest")
 }
 
 func (s *ProgramSearchSuite) TestPerlPrintIfAnExplicitMatch() {
-	s.deniesPerlFor(`perl -ane 'print if m/func Judge/' internal/*.go`, "Judge")
+	s.deniesPerlNames(`perl -ane 'print if m/func Judge/' internal/*.go`, "Judge")
 }
 
 func (s *ProgramSearchSuite) TestPerlPrintIfTheTopicMatches() {
-	s.deniesPerlFor(`perl -lne 'print $_ if $_ =~ /HandleRequest/' internal/*.go`, "HandleRequest")
+	s.deniesPerlNames(`perl -lne 'print $_ if $_ =~ /HandleRequest/' internal/*.go`, "HandleRequest")
 }
 
 func (s *ProgramSearchSuite) TestPerlMatchAndPrint() {
-	s.deniesPerlFor(`perl -nle '/HandleRequest/ and print' internal/*.go`, "HandleRequest")
+	s.deniesPerlNames(`perl -nle '/HandleRequest/ and print' internal/*.go`, "HandleRequest")
 }
 
 func (s *ProgramSearchSuite) TestPerlWithASeparateProgramFlag() {
-	s.deniesPerlFor(`perl -n -e 'print if /HandleRequest/' internal/*.go`, "HandleRequest")
+	s.deniesPerlNames(`perl -n -e 'print if /HandleRequest/' internal/*.go`, "HandleRequest")
 }
 
 func (s *ProgramSearchSuite) TestAg() {
-	s.deniesFor(`ag 'HandleRequest|ParseConfig' internal`, "HandleRequest", "ParseConfig")
+	s.deniesNames(`ag 'HandleRequest|ParseConfig' internal`, "HandleRequest", "ParseConfig")
 }
 
 func (s *ProgramSearchSuite) TestAck() {
-	s.deniesFor(`ack HandleRequest internal`, "HandleRequest")
+	s.deniesNames(`ack HandleRequest internal`, "HandleRequest")
 }
 
 func (s *ProgramSearchSuite) TestAwkFilteringAPipeIsNotASearch() {

@@ -829,7 +829,6 @@ func pipeNote(piped bool) string {
 	return "\nThe pipe after the search is not reproduced: run it over the command's output."
 }
 
-
 // provableRoutes answers every alternative of c's patterns with a graph command, or
 // reports false when any one of them has none. A case-insensitive search is never
 // provable: the graph matches case exactly, so it would answer a narrower question.

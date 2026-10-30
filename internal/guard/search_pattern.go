@@ -53,8 +53,8 @@ func programSearch(c hint.Invocation) (hint.Invocation, bool) {
 	return hint.Invocation{}, false
 }
 
-// grepOf is the grep for pattern, written as a delimited regex, in files.
-func grepOf(flags []string, pattern string, files []string) hint.Invocation {
+// delimitedGrep is the grep for pattern, a delimited regex, in files.
+func delimitedGrep(flags []string, pattern string, files []string) hint.Invocation {
 	args := append(slices.Clone(flags), "-e", strings.ReplaceAll(pattern, `\/`, "/"))
 	return hint.Invocation{Name: "grep", Args: append(args, files...)}
 }
@@ -83,7 +83,7 @@ func awkSearch(args []string) (hint.Invocation, bool) {
 	if m == nil || slices.ContainsFunc(operands[1:], awkVarOperandRe.MatchString) {
 		return hint.Invocation{}, false
 	}
-	return grepOf([]string{"-E"}, m[1], operands[1:]), true
+	return delimitedGrep([]string{"-E"}, m[1], operands[1:]), true
 }
 
 func sedSearch(args []string) (hint.Invocation, bool) {
@@ -119,7 +119,7 @@ func sedSearch(args []string) (hint.Invocation, bool) {
 	if !quiet || m == nil {
 		return hint.Invocation{}, false
 	}
-	return grepOf(flags, m[1], operands), true
+	return delimitedGrep(flags, m[1], operands), true
 }
 
 func perlSearch(args []string) (hint.Invocation, bool) {
@@ -164,7 +164,7 @@ func perlSearch(args []string) (hint.Invocation, bool) {
 	if m[2] == "i" {
 		flags = append(flags, "-i")
 	}
-	return grepOf(flags, m[1], operands), true
+	return delimitedGrep(flags, m[1], operands), true
 }
 
 // regexMode is how a search tool reads its pattern, which decides what separates two
