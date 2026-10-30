@@ -106,7 +106,7 @@ magus run image-build
 
 No Dockerfile and no `docker build` is involved. magus cross-compiles the binary, pulls
 the digest-pinned distroless base, and assembles an OCI image layout with its `image`
-module; the recipe is `hack/magusfile/image.buzz`. A local build then loads that one
+module; the steps are in `hack/magusfile/image.buzz`. A local build then loads that one
 platform into your docker image store with `docker load`, tags it `magus:<commit>`, and
 runs `magus version` inside it, so an image that cannot start fails the build. It
 defaults to your host's architecture, so an Apple Silicon machine builds `linux/arm64`.

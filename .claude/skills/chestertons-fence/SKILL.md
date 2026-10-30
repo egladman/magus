@@ -1,6 +1,6 @@
 ---
 name: chestertons-fence
-description: "Ask why a convention exists, and whether that reason holds here, before copying it, keeping it or removing it; then record the verdict as an ADR or a refusals row. Use when a design, brief, review or PR cites prior art (another tool, language or framework does X, it is standard practice, best practice, the usual way, we have always done it this way). Use when borrowing a pattern from TypeScript, Go, Rust, Nx, Bazel or any other tool. Use when someone asks why we do X, questions the status quo or an inherited practice, or proposes deleting something nobody can explain. Repo-only; never shipped."
+description: "Ask why a convention exists, and whether that reason holds here, before copying, keeping or removing it. Record the verdict as an ADR or refusals row. Use when a design, review or PR cites prior art. Use when borrowing a pattern from another tool. Use when someone asks why we do X or proposes deleting it. Repo-only; never shipped."
 metadata:
   source: workspace
 ---
