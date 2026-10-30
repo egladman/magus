@@ -1163,7 +1163,6 @@
 {"group":"dir:internal/guard","path":"internal/guard/script_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/search.go"}
 {"group":"dir:internal/guard","path":"internal/guard/search_pattern.go"}
-{"group":"dir:internal/guard","path":"internal/guard/search_program.go"}
 {"group":"dir:internal/guard","path":"internal/guard/search_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/shell.go"}
 {"group":"dir:internal/guard","path":"internal/guard/shell_test.go"}

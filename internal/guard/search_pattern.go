@@ -1,15 +1,171 @@
 package guard
 
 import (
-	"fmt"
 	"path"
 	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
 )
+
+// asSearch reads `git grep` and programSearch's tools as grep. It leaves a git
+// grep relocated by -C, --git-dir or --work-tree, which searches another tree.
+// It leaves one carrying -c, which can change the pattern dialect.
+func asSearch(c hint.Invocation) hint.Invocation {
+	if g, ok := programSearch(c); ok {
+		return g
+	}
+	if path.Base(c.Name) != "git" {
+		return c
+	}
+	g := parseGit(c.Args)
+	if g.sub != "grep" || len(g.dirs) > 0 || g.opaque || g.configured {
+		return c
+	}
+	return hint.Invocation{Name: "grep", Args: append([]string{"-r"}, g.rest...)}
+}
+
+var (
+	// awkAddressRe selects lines by one regex address and one plain action.
+	// A range, a negation or a BEGIN block is another question.
+	awkAddressRe     = regexp.MustCompile(`^\s*/((?:\\.|[^/\\])+)/\s*(?:\{[^{}]*\})?\s*$`)
+	sedPrintRe       = regexp.MustCompile(`^\s*/((?:\\.|[^/\\])+)/p\s*$`)
+	perlPrintIfRe    = regexp.MustCompile(`^\s*print(?:\s+\$_)?\s+if\s+(?:\$_\s*=~\s*)?m?/((?:\\.|[^/\\])+)/(i?);?\s*$`)
+	perlMatchPrintRe = regexp.MustCompile(`^\s*m?/((?:\\.|[^/\\])+)/(i?)\s*(?:and|&&)\s*print;?\s*$`)
+	awkVarOperandRe  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+)
+
+// programSearch reads ack, and an awk, sed or perl program printing the lines
+// a regex matches, as grep. Any other program reports false. A search with no
+// file operand reads stdin, so placeSearch leaves its grep alone.
+func programSearch(c hint.Invocation) (hint.Invocation, bool) {
+	switch path.Base(c.Name) {
+	case "awk", "gawk", "mawk":
+		return awkSearch(c.Args)
+	case "sed":
+		return sedSearch(c.Args)
+	case "perl":
+		return perlSearch(c.Args)
+	case "ack":
+		return hint.Invocation{Name: "grep", Args: append([]string{"-r"}, c.Args...)}, true
+	}
+	return hint.Invocation{}, false
+}
+
+// grepOf is the grep for pattern, written as a delimited regex, in files.
+func grepOf(flags []string, pattern string, files []string) hint.Invocation {
+	args := append(slices.Clone(flags), "-e", strings.ReplaceAll(pattern, `\/`, "/"))
+	return hint.Invocation{Name: "grep", Args: append(args, files...)}
+}
+
+func awkSearch(args []string) (hint.Invocation, bool) {
+	var operands []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			operands = append(operands, args[i+1:]...)
+			i = len(args)
+		case a == "-f" || a == "--file" || strings.HasPrefix(a, "-f") || strings.HasPrefix(a, "--file="):
+			return hint.Invocation{}, false
+		case a == "-F" || a == "-v":
+			i++
+		case strings.HasPrefix(a, "-") && len(a) > 1:
+		default:
+			operands = append(operands, a)
+		}
+	}
+	if len(operands) < 2 {
+		return hint.Invocation{}, false
+	}
+	m := awkAddressRe.FindStringSubmatch(operands[0])
+	if m == nil || slices.ContainsFunc(operands[1:], awkVarOperandRe.MatchString) {
+		return hint.Invocation{}, false
+	}
+	return grepOf([]string{"-E"}, m[1], operands[1:]), true
+}
+
+func sedSearch(args []string) (hint.Invocation, bool) {
+	var operands, flags []string
+	quiet := false
+	script := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			operands = append(operands, args[i+1:]...)
+			i = len(args)
+		case a == "-e" || a == "--expression":
+			if i+1 >= len(args) || script != "" {
+				return hint.Invocation{}, false
+			}
+			i++
+			script = args[i]
+		case a == "-n" || a == "--quiet" || a == "--silent":
+			quiet = true
+		case a == "-E" || a == "-r" || a == "--regexp-extended":
+			flags = append(flags, "-E")
+		case strings.HasPrefix(a, "-") && len(a) > 1:
+			return hint.Invocation{}, false
+		default:
+			operands = append(operands, a)
+		}
+	}
+	if script == "" && len(operands) > 0 {
+		script, operands = operands[0], operands[1:]
+	}
+	m := sedPrintRe.FindStringSubmatch(script)
+	if !quiet || m == nil {
+		return hint.Invocation{}, false
+	}
+	return grepOf(flags, m[1], operands), true
+}
+
+func perlSearch(args []string) (hint.Invocation, bool) {
+	var operands []string
+	program, numbered := "", false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !strings.HasPrefix(a, "-") || a == "-" || program != "" {
+			operands = append(operands, a)
+			continue
+		}
+		cluster := a[1:]
+		for j := 0; j < len(cluster); j++ {
+			switch cluster[j] {
+			case 'n':
+				numbered = true
+			case 'l', 'a':
+			case 'e':
+				if rest := cluster[j+1:]; rest != "" {
+					program = rest
+				} else if i+1 < len(args) {
+					i++
+					program = args[i]
+				}
+				j = len(cluster)
+			default:
+				return hint.Invocation{}, false
+			}
+		}
+	}
+	if !numbered || program == "" {
+		return hint.Invocation{}, false
+	}
+	m := perlPrintIfRe.FindStringSubmatch(program)
+	if m == nil {
+		m = perlMatchPrintRe.FindStringSubmatch(program)
+	}
+	if m == nil {
+		return hint.Invocation{}, false
+	}
+	flags := []string{"-P"}
+	if m[2] == "i" {
+		flags = append(flags, "-i")
+	}
+	return grepOf(flags, m[1], operands), true
+}
 
 // regexMode is how a search tool reads its pattern, which decides what separates two
 // alternatives.
@@ -164,101 +320,6 @@ func groupsBalanced(alt string, mode regexMode) bool {
 		}
 	}
 	return depth == 0
-}
-
-// classifyAlternative reads one alternative as a declaration lookup, a diagnostic code, a
-// name, or text, and says which syntax decided it.
-func classifyAlternative(raw string, mode regexMode, word bool) searchAlt {
-	a := searchAlt{raw: raw, kind: altText}
-	norm := normalizeAlternative(raw)
-	if mode == regexFixed {
-		norm = strings.TrimSpace(raw)
-	}
-	if types.IsDiagnosticCode(norm) {
-		a.kind, a.ident, a.how = altDiagnostic, norm, "a diagnostic code"
-		return a
-	}
-	if m := declLookupRe.FindStringSubmatch(norm); len(m) > 1 && hint.IsIdentifier(m[1]) {
-		a.ident = m[1]
-		// `func main`, `function field`: a lowercase word names so many declarations that
-		// refs, which resolves one, would answer a narrower question.
-		if lowerWordRe.MatchString(a.ident) {
-			a.how = "a declaration lookup of a lowercase word many declarations share"
-			return a
-		}
-		a.kind, a.strong, a.explicit, a.how = altDefinition, true, true, "a declaration lookup"
-		return a
-	}
-	core, how := strings.TrimSpace(raw), ""
-	if word {
-		how = "a word search (-w)"
-	}
-	if mode != regexFixed {
-		core = strings.TrimPrefix(strings.TrimSpace(whitespaceClassRe.ReplaceAllString(core, " ")), "^")
-		for _, b := range []string{`\b`, `\<`} {
-			if strings.HasPrefix(core, b) {
-				core, how = strings.TrimPrefix(core, b), "a word search"
-			}
-		}
-		for _, b := range []string{`\b`, `\>`, "$"} {
-			if strings.HasSuffix(core, b) {
-				core = strings.TrimSuffix(core, b)
-				if b != "$" {
-					how = "a word search"
-				}
-			}
-		}
-	}
-	call := false
-	for _, paren := range []string{`\(`, "("} {
-		if strings.HasSuffix(core, paren) {
-			core, how, call = strings.TrimSuffix(core, paren), "a call", true
-			break
-		}
-	}
-	for _, assign := range []string{" :=", " =", ":=", "="} {
-		if strings.HasSuffix(core, assign) {
-			core, how = strings.TrimSpace(strings.TrimSuffix(core, assign)), "an assignment"
-			break
-		}
-	}
-	qualifier, member, qualified := memberName(core)
-	if qualified {
-		core = member
-		if !call {
-			how = "a member access"
-		}
-	}
-	if !hint.IsIdentifier(core) {
-		a.how = "a regular expression or text, not a name"
-		return a
-	}
-	a.ident = core
-	// CamelCase only: in this tree's languages a snake_case word is a config key, a JSON tag
-	// or a Buzz function, none of which a symbol index holds.
-	a.strong = len(core) >= precedentIdentMin && camelIdentRe.MatchString(core)
-	exported := core[0] >= 'A' && core[0] <= 'Z'
-	switch {
-	case qualified && stdlibQualifiers[qualifier]:
-		a.how = fmt.Sprintf("a member of the standard library (%s), which this workspace's index does not define", qualifier)
-		return a
-	case a.strong:
-		a.explicit = call
-		if how == "" {
-			how = "an identifier's shape"
-		}
-	case how == "":
-		a.how = "a plain word, as likely prose as a name"
-		return a
-	case call || !exported:
-		// `Mkdir(` is os.Mkdir as often as a local function, and `ctx.glob(` a host method:
-		// a short or lowercase name is a symbol only when its shape says so.
-		a.how = how + " of a name too common to pin to one symbol"
-		return a
-	}
-	a.how = how
-	a.kind = altName
-	return a
 }
 
 // lowerWordRe is a single lowercase word, the declaration names refs cannot pin to one.

@@ -1165,3 +1165,98 @@ func denySymbolSearch(routes []searchRoute, js searchJudgment) denial {
 		Why: "The graph checks every site against the tree rather than matching it. Every name searched for is indexed here, so the graph knows every definition, reference and document, including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it.",
 	}
 }
+
+// classifyAlternative reads one alternative as a declaration lookup, a diagnostic code, a
+// name, or text, and says which syntax decided it.
+func classifyAlternative(raw string, mode regexMode, word bool) searchAlt {
+	a := searchAlt{raw: raw, kind: altText}
+	norm := normalizeAlternative(raw)
+	if mode == regexFixed {
+		norm = strings.TrimSpace(raw)
+	}
+	if types.IsDiagnosticCode(norm) {
+		a.kind, a.ident, a.how = altDiagnostic, norm, "a diagnostic code"
+		return a
+	}
+	if m := declLookupRe.FindStringSubmatch(norm); len(m) > 1 && hint.IsIdentifier(m[1]) {
+		a.ident = m[1]
+		// `func main`, `function field`: a lowercase word names so many declarations that
+		// refs, which resolves one, would answer a narrower question.
+		if lowerWordRe.MatchString(a.ident) {
+			a.how = "a declaration lookup of a lowercase word many declarations share"
+			return a
+		}
+		a.kind, a.strong, a.explicit, a.how = altDefinition, true, true, "a declaration lookup"
+		return a
+	}
+	core, how := strings.TrimSpace(raw), ""
+	if word {
+		how = "a word search (-w)"
+	}
+	if mode != regexFixed {
+		core = strings.TrimPrefix(strings.TrimSpace(whitespaceClassRe.ReplaceAllString(core, " ")), "^")
+		for _, b := range []string{`\b`, `\<`} {
+			if strings.HasPrefix(core, b) {
+				core, how = strings.TrimPrefix(core, b), "a word search"
+			}
+		}
+		for _, b := range []string{`\b`, `\>`, "$"} {
+			if strings.HasSuffix(core, b) {
+				core = strings.TrimSuffix(core, b)
+				if b != "$" {
+					how = "a word search"
+				}
+			}
+		}
+	}
+	call := false
+	for _, paren := range []string{`\(`, "("} {
+		if strings.HasSuffix(core, paren) {
+			core, how, call = strings.TrimSuffix(core, paren), "a call", true
+			break
+		}
+	}
+	for _, assign := range []string{" :=", " =", ":=", "="} {
+		if strings.HasSuffix(core, assign) {
+			core, how = strings.TrimSpace(strings.TrimSuffix(core, assign)), "an assignment"
+			break
+		}
+	}
+	qualifier, member, qualified := memberName(core)
+	if qualified {
+		core = member
+		if !call {
+			how = "a member access"
+		}
+	}
+	if !hint.IsIdentifier(core) {
+		a.how = "a regular expression or text, not a name"
+		return a
+	}
+	a.ident = core
+	// CamelCase only: in this tree's languages a snake_case word is a config key, a JSON tag
+	// or a Buzz function, none of which a symbol index holds.
+	a.strong = len(core) >= precedentIdentMin && camelIdentRe.MatchString(core)
+	exported := core[0] >= 'A' && core[0] <= 'Z'
+	switch {
+	case qualified && stdlibQualifiers[qualifier]:
+		a.how = fmt.Sprintf("a member of the standard library (%s), which this workspace's index does not define", qualifier)
+		return a
+	case a.strong:
+		a.explicit = call
+		if how == "" {
+			how = "an identifier's shape"
+		}
+	case how == "":
+		a.how = "a plain word, as likely prose as a name"
+		return a
+	case call || !exported:
+		// `Mkdir(` is os.Mkdir as often as a local function, and `ctx.glob(` a host method:
+		// a short or lowercase name is a symbol only when its shape says so.
+		a.how = how + " of a name too common to pin to one symbol"
+		return a
+	}
+	a.how = how
+	a.kind = altName
+	return a
+}
