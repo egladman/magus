@@ -55,7 +55,7 @@ func (s *hookBindingsSuite) TestAPointWithNoRowIsAGap() {
 	d.UnsupportedHooks = nil
 	table, err := HookBindings(d)
 	s.Require().Error(err)
-	s.Equal("host: no hook binds attach and mgs_listUnsupportedHooks gives no reason; "+
+	s.Equal("host: no hook binds attach and mgs_listUnsupportedHooks gives no reason: "+
 		"list attach in a hook's points, or add an Unsupported row citing the host's docs", err.Error())
 	s.Equal(types.HookBinding{Harness: "host", Point: types.HookPointAttach}, table[len(table)-1],
 		"the table still comes back, the gap's status empty")
@@ -67,7 +67,7 @@ func (s *hookBindingsSuite) TestAnUnsupportedRowAHookBindsIsStale() {
 		Status: types.Unsupported, Reason: attachUnchecked})
 	table, err := HookBindings(d)
 	s.Require().Error(err)
-	s.Equal("host: mgs_listUnsupportedHooks says shell is unsupported, but magus-command binds it; drop the row",
+	s.Equal("host: mgs_listUnsupportedHooks says shell is unsupported, but magus-command binds it: drop the row",
 		err.Error())
 	s.Equal(types.Bound, table[0].Status, "the hook wins over the stale row")
 }
@@ -85,29 +85,29 @@ func (s *hookBindingsSuite) TestAReasonCitingADocURLLoads() {
 func (s *hookBindingsSuite) TestAReasonCitingAVendoredFileIsRefused() {
 	d := bindsEveryPoint()
 	d.UnsupportedHooks[0].Reason = "the host has no such event (testdata/hosts/codex/hooks.schema.json)"
-	s.ErrorContains(validateHookBindings(d), "which cites no https URL")
+	s.ErrorContains(validateHookBindings(d), "cites no https URL")
 }
 
 func (s *hookBindingsSuite) TestAReasonCitingNothingIsRefused() {
 	d := bindsEveryPoint()
 	d.UnsupportedHooks[0].Reason = "the host cannot"
-	s.EqualError(validateHookBindings(d), `unsupported_hooks[0]: attach gives the reason "the host cannot", `+
-		`which cites no https URL; cite the host's docs page, or say `+
+	s.EqualError(validateHookBindings(d), `unsupported_hooks[0]: attach gives the reason "the host cannot": `+
+		`cites no https URL: cite the host's docs page, or say `+
 		`"not verified: <url checked> <YYYY-MM-DD> <what is unsettled>"`)
 }
 
 func (s *hookBindingsSuite) TestANotVerifiedReasonMustNameTheURLChecked() {
 	d := bindsEveryPoint()
 	d.UnsupportedHooks[0].Reason = "not verified: 2026-10-29 inline SVG"
-	s.ErrorContains(validateHookBindings(d), "which cites no https URL")
+	s.ErrorContains(validateHookBindings(d), "cites no https URL")
 }
 
 func (s *hookBindingsSuite) TestANotVerifiedReasonMustNameTheDateRead() {
 	d := bindsEveryPoint()
 	d.UnsupportedHooks[0].Reason = "not verified: https://host.example/docs/hooks inline SVG"
 	s.EqualError(validateHookBindings(d), `unsupported_hooks[0]: attach gives the reason `+
-		`"not verified: https://host.example/docs/hooks inline SVG", `+
-		`which names no date; say when the URL was read, as YYYY-MM-DD`)
+		`"not verified: https://host.example/docs/hooks inline SVG": `+
+		`names no date: say when the URL was read, as YYYY-MM-DD`)
 }
 
 func (s *hookBindingsSuite) TestABoundRowInTheUnsupportedListIsRefused() {
@@ -145,7 +145,7 @@ func (s *hookBindingsSuite) TestARowNamingAnAdapterIsRefused() {
 func (s *hookBindingsSuite) TestAnUnknownPointOnAHookIsRefused() {
 	d := bindsEveryPoint()
 	d.Hooks[1].Points = []types.HookPoint{"read"}
-	s.ErrorContains(validateHookBindings(d), `hooks[1]: unknown hook point "read"; one of shell, edit, stop`)
+	s.ErrorContains(validateHookBindings(d), `hooks[1]: unknown hook point "read": one of shell, edit, stop`)
 }
 
 func (s *hookBindingsSuite) installHost(root, dir, host, limits string) {
@@ -183,7 +183,7 @@ func (s *hookBindingsSuite) TestAnInstalledHostPasses() {
 
 func (s *hookBindingsSuite) TestAHostNoInstalledHarnessNamesIsRefusedListingTheInstalled() {
 	s.EqualError(CheckHostInstalled(twoHosts(), "bet"),
-		`--agent-name "bet" names no harness installed here; installed: alpha, beta. `+
+		`--agent-name "bet" names no harness installed here, installed: alpha, beta. `+
 			"Fix the hook entry's --agent-name, or install that harness's tool rows")
 }
 
@@ -193,7 +193,7 @@ func (s *hookBindingsSuite) TestWithNothingInstalledNoHostIsRefused() {
 
 func (s *hookBindingsSuite) TestAPayloadCarryingOnlyAnotherHostsFieldIsRefusedNamingBoth() {
 	s.EqualError(CheckHostPayload(twoHosts(), "alpha", `{"beta_turn":"t1","session_id":"s1"}`),
-		"--agent-name names alpha, but the payload carries beta_turn, a field only beta sends; "+
+		"--agent-name names alpha, but the payload carries beta_turn, a field only beta sends: "+
 			"fix the hook entry's --agent-name to beta")
 }
 

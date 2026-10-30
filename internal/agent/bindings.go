@@ -48,14 +48,14 @@ func HookBindings(d HarnessDescriptor) ([]types.HookBinding, error) {
 			row.Status, row.Adapter = types.Bound, strings.Join(scripts, ", ")
 			if said {
 				errs = append(errs, fmt.Errorf(
-					"%s: mgs_listUnsupportedHooks says %s is unsupported, but %s binds it; drop the row",
+					"%s: mgs_listUnsupportedHooks says %s is unsupported, but %s binds it: drop the row",
 					d.ID, point, row.Adapter))
 			}
 		case said:
 			row.Status, row.Reason = types.Unsupported, reason.Reason
 		default:
 			errs = append(errs, fmt.Errorf(
-				"%s: no hook binds %s and mgs_listUnsupportedHooks gives no reason; "+
+				"%s: no hook binds %s and mgs_listUnsupportedHooks gives no reason: "+
 					"list %s in a hook's points, or add an Unsupported row citing the host's docs",
 				d.ID, point, point))
 		}
@@ -83,7 +83,7 @@ func validateHookBindings(d HarnessDescriptor) error {
 	for i, h := range d.Hooks {
 		for _, point := range h.Points {
 			if !point.Valid() {
-				return fmt.Errorf("hooks[%d]: unknown hook point %q; one of %s",
+				return fmt.Errorf("hooks[%d]: unknown hook point %q: one of %s",
 					i, point, strings.Join(point.Values(), ", "))
 			}
 		}
@@ -100,7 +100,7 @@ func validateHookBindings(d HarnessDescriptor) error {
 func validateUnsupportedRow(id string, row types.HookBinding, seen map[types.HookPoint]bool) error {
 	switch {
 	case !row.Point.Valid():
-		return fmt.Errorf("unknown hook point %q; one of %s",
+		return fmt.Errorf("unknown hook point %q: one of %s",
 			row.Point, strings.Join(row.Point.Values(), ", "))
 	case seen[row.Point]:
 		return fmt.Errorf("a second row for %s", row.Point)
@@ -114,7 +114,7 @@ func validateUnsupportedRow(id string, row types.HookBinding, seen map[types.Hoo
 			row.Point, row.Adapter)
 	}
 	if err := citesSource(row.Reason); err != nil {
-		return fmt.Errorf("%s gives the reason %q, %w", row.Point, row.Reason, err)
+		return fmt.Errorf("%s gives the reason %q: %w", row.Point, row.Reason, err)
 	}
 	seen[row.Point] = true
 	return nil
@@ -150,7 +150,7 @@ func CheckHostInstalled(installed map[string]types.Limits, host string) error {
 	if _, ok := installed[host]; ok || len(installed) == 0 {
 		return nil
 	}
-	return fmt.Errorf("--agent-name %q names no harness installed here; installed: %s. "+
+	return fmt.Errorf("--agent-name %q names no harness installed here, installed: %s. "+
 		"Fix the hook entry's --agent-name, or install that harness's tool rows",
 		host, strings.Join(slices.Sorted(maps.Keys(installed)), ", "))
 }
@@ -170,7 +170,7 @@ func CheckHostPayload(installed map[string]types.Limits, host, payload string) e
 		for _, f := range installed[other].PayloadFields {
 			if fields[f] {
 				return fmt.Errorf("--agent-name names %s, but the payload carries %s, "+
-					"a field only %s sends; fix the hook entry's --agent-name to %s",
+					"a field only %s sends: fix the hook entry's --agent-name to %s",
 					host, f, other, other)
 			}
 		}
@@ -213,11 +213,11 @@ func validatePayloadFields(fields []string) error {
 // also owes the date its URL was read.
 func citesSource(reason string) error {
 	if !docURL.MatchString(reason) {
-		return fmt.Errorf("which cites no https URL; cite the host's docs page, or say %q",
+		return fmt.Errorf("cites no https URL: cite the host's docs page, or say %q",
 			notVerified+"<url checked> <YYYY-MM-DD> <what is unsettled>")
 	}
 	if strings.HasPrefix(reason, notVerified) && !checkedOn.MatchString(reason) {
-		return errors.New("which names no date; say when the URL was read, as YYYY-MM-DD")
+		return errors.New("names no date: say when the URL was read, as YYYY-MM-DD")
 	}
 	return nil
 }
