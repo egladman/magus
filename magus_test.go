@@ -39,6 +39,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
@@ -1685,6 +1686,47 @@ func runRecorded(ctx context.Context, m *Magus, targets []types.Target) ([]targe
 		}
 	}
 	return results, errors.Join(runErr, lines.Err())
+}
+
+// permitRecordsSuite runs a real magusfile through a real sink.
+type permitRecordsSuite struct {
+	suite.Suite
+}
+
+func TestPermitRecords(t *testing.T) {
+	suite.Run(t, new(permitRecordsSuite))
+}
+
+func (s *permitRecordsSuite) TestAPermitReachesTheRecordsAndTheSummary() {
+	root, cleanup := newGuideWorkspace(map[string]string{
+		"magusfile.buzz": `import "magus";
+
+export fun plain(ctx: magus\Context, args: [str]) > void {
+}
+
+export fun gate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.permitted(2);
+}
+`,
+	})
+	defer cleanup()
+	ctx := s.T().Context()
+	m, err := Open(ctx, root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	defer m.Close()
+
+	var records bytes.Buffer
+	sink, err := NewSink(output.JSONL, &records, io.Discard)
+	s.Require().NoError(err)
+	targets := []types.Target{{Path: ".", Name: "gate"}, {Path: ".", Name: "plain"}}
+	s.Require().NoError(m.Run(ctx, targets, WithSink(sink)))
+	s.Require().NoError(sink.Close())
+
+	s.T().Logf("records:\n%s", records.String())
+	s.Contains(records.String(), `"target":"gate","status":"permitted"`)
+	s.Contains(records.String(), `"target":"plain","status":"ok"`)
+	s.Contains(records.String(), `"permitted":1`)
+	s.Equal(1, m.CacheStats().Permitted)
 }
 
 // Example_openAWorkspace opens a workspace read-only and lists its projects. A

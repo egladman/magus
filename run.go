@@ -2382,9 +2382,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	// Footer summary for a fan-out: a single line tallying the per-project results.
 	// Skipped for a single project, where the per-project status line already says it all.
-	if s := m.cache.Stats(); s.Hit+s.Miss+s.Error > 1 {
+	if s := m.cache.Stats(); s.Hit+s.Miss+s.Permitted+s.Error > 1 {
 		out.emit(ctx, report.RunSummary{
-			Hits: s.Hit, Misses: s.Miss, Errors: s.Error, Files: s.Files, Slots: s.Slots,
+			Hits: s.Hit, Misses: s.Miss, Permitted: s.Permitted, Errors: s.Error, Files: s.Files, Slots: s.Slots,
 			DurationMs: time.Since(start).Milliseconds(),
 		})
 	}

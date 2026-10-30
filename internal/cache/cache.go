@@ -75,6 +75,7 @@ type Cache struct {
 	recordsOnly    bool       // -o jsonl: no free text on the terminal; see WithRecordOnlyOutput
 	hits           atomic.Int64
 	misses         atomic.Int64
+	permitted      atomic.Int64
 	errs           atomic.Int64
 	savedMs        atomic.Int64 // summed Manifest.DurationMs over hits: work replayed instead of run
 	files          atomic.Int64 // summed Result.Files over every step that reached a result
@@ -120,6 +121,9 @@ type Stats struct {
 	Hit   int
 	Miss  int
 	Error int
+	// Permitted counts targets that ran and passed by a deviation ledger. They
+	// are not in Miss: a reader of `ran` must not take them for a plain pass.
+	Permitted int
 	// SavedMs is the summed recorded duration of the runs those hits replayed. Measured, not
 	// modeled: each figure is how long that exact target took on this machine when it last ran.
 	// Understates when entries predate Manifest.DurationMs, and never overstates.
@@ -567,12 +571,13 @@ func (c *Cache) sizeCap() int64 {
 // Stats returns a snapshot of the per-cache counters.
 func (c *Cache) Stats() Stats {
 	return Stats{
-		Hit:     int(c.hits.Load()),
-		Miss:    int(c.misses.Load()),
-		Error:   int(c.errs.Load()),
-		SavedMs: c.savedMs.Load(),
-		Files:   int(c.files.Load()),
-		Slots:   int(c.slots.Load()),
+		Hit:       int(c.hits.Load()),
+		Miss:      int(c.misses.Load()),
+		Error:     int(c.errs.Load()),
+		Permitted: int(c.permitted.Load()),
+		SavedMs:   c.savedMs.Load(),
+		Files:     int(c.files.Load()),
+		Slots:     int(c.slots.Load()),
 	}
 }
 
@@ -1019,7 +1024,11 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	}
 
 	result.Duration = time.Since(start)
-	c.misses.Add(1)
+	if result.Permitted > 0 {
+		c.permitted.Add(1)
+	} else {
+		c.misses.Add(1)
+	}
 	ref := c.recordOutput(ctx, s, hash, rawOutput, result, nil, false)
 	result.Ref = ref
 

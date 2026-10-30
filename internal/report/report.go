@@ -262,6 +262,7 @@ type RunSummary struct {
 	Planned    int   `json:"planned,omitempty"`
 	Hits       int   `json:"hits,omitempty"`
 	Misses     int   `json:"misses,omitempty"`
+	Permitted  int   `json:"permitted,omitempty"`
 	Errors     int   `json:"errors,omitempty"`
 	Files      int   `json:"files,omitempty"` // input files hashed, 0 when unrecorded
 	Slots      int   `json:"slots,omitempty"` // widest grant any step took, 0 when none did

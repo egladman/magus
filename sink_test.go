@@ -212,6 +212,7 @@ func TestTextSinkProse(t *testing.T) {
 		// An advisory member's failure is not the composite's.
 		{report.RunStep{Label: "magus", Target: "security", Status: "advisory", DurationMs: 5000}, "  [advisory] magus security (5.0s)\n"},
 		{report.RunSummary{Hits: 3, Misses: 1, DurationMs: 2000}, "summary: 3 cached, 1 ran, 0 failed (2.0s)\n"},
+		{report.RunSummary{Hits: 3, Misses: 1, Permitted: 1, DurationMs: 2000}, "summary: 3 cached, 1 ran, 1 permitted, 0 failed (2.0s)\n"},
 		// Nothing executed, so the dry footer says what would run; the plural is real.
 		{report.RunSummary{Dry: true, Planned: 3, DurationMs: 2}, "summary: dry run, 3 targets would run (2ms)\n"},
 		{report.RunSummary{Dry: true, Planned: 1, DurationMs: 1}, "summary: dry run, 1 target would run (1ms)\n"},

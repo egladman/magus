@@ -534,6 +534,9 @@ func (t textEncoder) summary(ctx context.Context, e report.RunSummary) {
 		elapsed += " using " + plural(e.Slots, "slot")
 	}
 	footer := fmt.Sprintf("%s%d cached, %d ran, %d failed (%s)\n", lead, e.Hits, e.Misses, e.Errors, elapsed)
+	if e.Permitted > 0 {
+		footer = fmt.Sprintf("%s%d cached, %d ran, %d permitted, %d failed (%s)\n", lead, e.Hits, e.Misses, e.Permitted, e.Errors, elapsed)
+	}
 	_ = t.term.EndRun(ctx, footer)
 }
 

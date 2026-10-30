@@ -232,6 +232,8 @@ type CacheStats struct {
 	Hit   int
 	Miss  int
 	Error int
+	// Permitted counts targets that passed by a deviation ledger, apart from Miss.
+	Permitted int
 	// SavedMs is the summed recorded duration of the runs those hits replayed: work the cache
 	// avoided, measured per entry rather than averaged. Understates when an entry predates the
 	// recorded duration; never overstates.
@@ -247,7 +249,7 @@ func (m *Magus) CacheStats() CacheStats {
 		return CacheStats{}
 	}
 	s := m.cache.Stats()
-	return CacheStats{Hit: s.Hit, Miss: s.Miss, Error: s.Error, SavedMs: s.SavedMs}
+	return CacheStats{Hit: s.Hit, Miss: s.Miss, Error: s.Error, SavedMs: s.SavedMs, Permitted: s.Permitted}
 }
 
 // CacheDiskBytes returns the approximate on-disk size of this workspace's cache in bytes

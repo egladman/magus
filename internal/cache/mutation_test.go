@@ -82,6 +82,15 @@ func (s *permitsSuite) TestAPermitReachesTheResult() {
 	s.Equal(1, res.Permitted)
 }
 
+func (s *permitsSuite) TestAPermitIsCountedApartFromAMiss() {
+	root, _, c := newMutableCache(s.T())
+	writeMain(s.T(), root, "package main")
+	_, err := c.Run(s.T().Context(), makeStep(root), permitOne)
+	s.Require().NoError(err)
+	s.Equal(1, c.Stats().Permitted)
+	s.Zero(c.Stats().Miss)
+}
+
 func (s *permitsSuite) TestAPermitIsNeverReplayed() {
 	root, _, c := newMutableCache(s.T())
 	writeMain(s.T(), root, "package main")
