@@ -79,12 +79,11 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     if (vcs\name() != "git") { return; }
     // One read, so buf and the ledger cannot compare against different bases.
     final base = vcs\base();
-    // A ref from before the module existed has no schema to break.
     final schema = vcs\cmd(["cat-file", "-e", base + ":proto/buf.yaml"],
                            opts: vcs\CommandOptions{allowFailure = true, quiet = true});
     if (base == "" or !schema["ok"]) {
-        magus\log.info("ci: no proto/buf.yaml at `{base}`; skipping buf-breaking");
-        return;
+        throw "ci: cannot read proto/buf.yaml at `{base}`, so buf-breaking has nothing to compare; "
+            + "fetch that ref, or set vcs.base_ref to one holding the schema";
     }
     final run = buf["buf-breaking"](ctx, {"allowFailure": true, "args": ["--against",
         vcs\root() + "/.git#ref={base},subdir=proto", "--error-format=gitlab-code-quality"]});
