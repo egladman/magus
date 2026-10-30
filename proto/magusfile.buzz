@@ -5,6 +5,7 @@ import "project/../docs";
 import "project/../console";
 import "../hack/magusfile/drift" as drift;
 import "../hack/magusfile/index" as index;
+import "../hack/magusfile/deviations" as deviations;
 import "fs";
 import "vcs";
 
@@ -72,8 +73,11 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate, lint);
+    ctx.readsFiles(["buf-breaking.deviations.jsonl"]);
+    final ledger = "buf-breaking.deviations.jsonl";
     // buf reads the baseline from git only.
     if (vcs\name() != "git") { return; }
+    // One read, so buf and the ledger cannot compare against different bases.
     final base = vcs\base();
     // A ref from before the module existed has no schema to break.
     final schema = vcs\cmd(["cat-file", "-e", base + ":proto/buf.yaml"],
@@ -82,6 +86,14 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.info("ci: no proto/buf.yaml at `{base}`; skipping buf-breaking");
         return;
     }
-    buf["buf-breaking"](ctx, {"args": ["--against",
-        vcs\root() + "/.git#ref={base},subdir=proto"]});
+    final run = buf["buf-breaking"](ctx, {"allowFailure": true, "args": ["--against",
+        vcs\root() + "/.git#ref={base},subdir=proto", "--error-format=gitlab-code-quality"]});
+    final shown = "proto/{ledger}";
+    final verdict = deviations\judge(run, findingsExit: 100, ledger: ledger, shown: shown, base: base);
+    if (verdict.failure != "") {
+        throw "ci: buf-breaking: {verdict.failure}";
+    }
+    if (verdict.permitted > 0) {
+        magus\log.warn("proto ci: permitted {verdict.permitted} findings ({shown})");
+    }
 }
