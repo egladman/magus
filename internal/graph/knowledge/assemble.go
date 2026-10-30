@@ -3,6 +3,7 @@ package knowledge
 import (
 	"fmt"
 	"maps"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -81,6 +82,9 @@ type Inputs struct {
 	// between the projects that require it; see packagesShardName. Deterministic, so
 	// remote-shareable like the other extracted shards.
 	Packages map[string][]types.KnowledgePackage
+	// ManifestFiles are the workspace-relative manifests and lock files
+	// ManifestFiles names, each a file node.
+	ManifestFiles []string
 	// VCS carries per-file git history metadata (empty unless knowledge.vcs.enabled and
 	// the workspace is a git repo). It folds onto existing file nodes in the @vcs shard
 	// as attrs: deterministic per commit, so remote-shareable.
@@ -325,6 +329,16 @@ func assembleDomain(in Inputs) []Shard {
 			}
 			shards = append(shards, b)
 		}
+		if m := assembleManifestFiles(in.Root, in.ManifestFiles, in.Graph.Projects); len(m.Nodes) > 0 {
+			for _, n := range m.Nodes {
+				if n.Kind == types.KindFile {
+					owned = append(owned, ownedNode{ID: n.ID, Path: n.Source})
+					fileNodePaths[n.Source] = true
+					pathToNode[n.Source] = n.ID
+				}
+			}
+			shards = append(shards, m)
+		}
 		// Citations run after both prose and buzz sources are known: the resolver needs the
 		// doc and section nodes to cross-link against, and it mints its own file and dir
 		// nodes for the paths neither shard covers (Go sources have none in the default
@@ -414,6 +428,44 @@ func assembleDomain(in Inputs) []Shard {
 	annotateProseStaleness(shards, vcsByPath(in.VCS))
 
 	return shards
+}
+
+const manifestsShardName = "@manifests"
+
+// ManifestFiles is every project's manifests and lock files, workspace-relative
+// and sorted. The spells name them, so no language is known here.
+func ManifestFiles(projects types.ProjectsOutput) []string {
+	seen := map[string]bool{}
+	for _, p := range projects.Projects {
+		for _, m := range p.Manifests {
+			seen[path.Join(p.Path, m)] = true
+		}
+		for _, l := range p.Lockfiles {
+			seen[path.Clean(l)] = true
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
+}
+
+// assembleManifestFiles makes a file node for each path, contained by its
+// owning project. A path that cannot be read gets none.
+func assembleManifestFiles(root string, files []string, projects []types.TargetGraphProject) Shard {
+	s := Shard{Name: manifestsShardName}
+	for _, rel := range files {
+		src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			continue
+		}
+		id := fileID(rel)
+		attrs := fileSizeAttrs(nil, types.CountLines(src), len(src))
+		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: id, Kind: types.KindFile, Label: rel, Source: rel, Attrs: attrs})
+		if owner, ok := owningProjectPath(rel, projects); ok {
+			dirs, edges := containsChain(owner, rel, id)
+			s.Nodes = append(s.Nodes, dirs...)
+			s.Edges = append(s.Edges, edges...)
+		}
+	}
+	return s
 }
 
 // containsChain builds the directory containment tree from a project down to a

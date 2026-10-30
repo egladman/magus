@@ -3,6 +3,8 @@ package knowledge
 import (
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -11,7 +13,65 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type manifestFilesSuite struct {
+	suite.Suite
+	root     string
+	projects []types.TargetGraphProject
+}
+
+func TestManifestFilesSuite(t *testing.T) { suite.Run(t, new(manifestFilesSuite)) }
+
+func (s *manifestFilesSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.projects = []types.TargetGraphProject{{Path: "."}, {Path: "libs/a"}}
+	s.write("go.mod", "module m\n")
+	s.write("libs/a/package.json", "{}\n")
+}
+
+func (s *manifestFilesSuite) write(rel, content string) {
+	p := filepath.Join(s.root, rel)
+	s.Require().NoError(os.MkdirAll(filepath.Dir(p), 0o755))
+	s.Require().NoError(os.WriteFile(p, []byte(content), 0o644))
+}
+
+func (s *manifestFilesSuite) TestManifestsJoinTheirProjectAndLocksStayWorkspaceRelative() {
+	got := ManifestFiles(types.ProjectsOutput{Projects: []types.ProjectEntry{
+		{Path: ".", Manifests: []string{"go.mod"}, Lockfiles: []string{"go.sum"}},
+		{Path: "libs/a", Manifests: []string{"package.json"}, Lockfiles: []string{"pnpm-lock.yaml"}},
+		{Path: "libs/b", Manifests: []string{"package.json"}, Lockfiles: []string{"pnpm-lock.yaml"}},
+	}})
+	s.Equal([]string{"go.mod", "go.sum", "libs/a/package.json", "libs/b/package.json", "pnpm-lock.yaml"}, got)
+}
+
+func (s *manifestFilesSuite) TestEachIsAFileNodeItsProjectContains() {
+	got := assembleManifestFiles(s.root, []string{"go.mod", "libs/a/package.json"}, s.projects)
+	ids := map[string]types.KnowledgeNode{}
+	for _, n := range got.Nodes {
+		ids[n.ID] = n
+	}
+	s.Equal(types.KindFile, ids["file:go.mod"].Kind)
+	s.Equal("1", ids["file:go.mod"].Attrs[AttrLines])
+	s.Equal(types.KindFile, ids["file:libs/a/package.json"].Kind)
+	s.Contains(got.Edges, extractedEdge(projectID("."), "file:go.mod", types.RelationContains, "go.mod"))
+	s.Contains(got.Edges, extractedEdge(projectID("libs/a"), "file:libs/a/package.json", types.RelationContains, "libs/a/package.json"))
+}
+
+func (s *manifestFilesSuite) TestAnUnreadablePathGetsNoNode() {
+	s.Empty(assembleManifestFiles(s.root, []string{"nosuch.lock"}, s.projects).Nodes)
+}
+
+func (s *manifestFilesSuite) TestTheDomainClassHoldsThem() {
+	in := sampleInputs()
+	in.Root, in.ManifestFiles = s.root, []string{"go.mod"}
+	var found bool
+	for _, sh := range assembleDomain(in) {
+		found = found || sh.Name == manifestsShardName
+	}
+	s.True(found)
+}
 
 // sampleInputs is a small but edge-covering fixture: two projects with a
 // project-level dependency, an intra-project target dep, a cross-project target

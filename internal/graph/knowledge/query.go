@@ -727,6 +727,11 @@ func (g *Graph) resolve(ref string) (string, types.KnowledgeResolution, bool) {
 	if id, ok := g.pathNode(ref); ok {
 		return id, types.ResolvedPath, true
 	}
+	// A file: or dir: id names one node. The closest node of another kind
+	// would be a wrong answer that looks right.
+	if kind, _, ok := strings.Cut(ref, ":"); ok && (kind == types.KindFile || kind == types.KindDir) {
+		return "", "", false
+	}
 	matches := g.Resolve(ref, 1)
 	if len(matches) == 0 {
 		return "", "", false

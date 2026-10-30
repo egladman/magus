@@ -610,6 +610,18 @@ func TestResolveLabelsAFuzzyAnswerForAPath(t *testing.T) {
 	assert.Equal(t, types.ResolvedFuzzy, out.Resolution)
 }
 
+// A file: or dir: id with no node is a miss, never the closest node.
+func TestResolveNeverCrossesAKindFromAFileOrDirID(t *testing.T) {
+	g := dirFixture()
+	for _, ref := range []string{"file:internal/httpx/nosuch.go", "file:go.mod", "dir:internal/handler/mc"} {
+		_, ok := g.Explain(ref)
+		assert.Falsef(t, ok, "%q", ref)
+	}
+	out, ok := g.Explain("file:internal/httpx/a.go")
+	require.True(t, ok)
+	assert.Equal(t, types.ResolvedID, out.Resolution)
+}
+
 func TestPathShaped(t *testing.T) {
 	for _, in := range []string{"internal/httpx", "./a/b", "a\\b", "/abs/p", "C:\\x\\y"} {
 		assert.Truef(t, pathShaped(in), "%q", in)

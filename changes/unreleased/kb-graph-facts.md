@@ -7,10 +7,7 @@
 - **A symbol miss names only the gaps that could explain it.** A project in a language
   nothing indexes no longer turns a miss into `unknown` when the name appears nowhere in
   that project, and `explain` offers `graph build` only for a gap a build closes.
-
-### Added
-
-- **A package card says how to read past it.** `explain` on a Go package prints `go doc`,
-  and where `hack/dev/show-dependency.buzz` exists, that script: docs ranked and the local
-  source at the locked version, with `--fetch` for an absent one and a check against the
-  lock. Nothing is built, run or indexed.
+- **`explain file:<path>` answers for that path or not at all.** A `file:` or `dir:` id with
+  no node used to answer with the closest node of any kind and exit 0. It now reports the
+  miss. Each project's manifests and lock files, `go.mod` and `go.sum` among them, are file
+  nodes.
