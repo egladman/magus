@@ -5,7 +5,6 @@ package std
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/libs/image"
 	"github.com/egladman/magus/libs/oci"
