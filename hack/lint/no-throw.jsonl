@@ -6,10 +6,7 @@
 {"path":"console/src/apps/diff/outline-dom.test.ts","construct":"throw","count":3}
 {"path":"console/src/apps/diff/reading-dom.test.ts","construct":"throw","count":1}
 {"path":"console/src/apps/diff/review-dom.test.ts","construct":"throw","count":1}
-{"path":"console/src/apps/diff/rows.test.ts","construct":"throw","count":1}
-{"path":"console/src/apps/graph/main.ts","construct":"throw","count":5}
 {"path":"console/src/desktop/pulse.test.ts","construct":"throw","count":7}
-{"path":"console/src/lib/server.ts","construct":"throw","count":2}
 {"path":"console/src/lib/token-exchange.test.ts","construct":"throw","count":2}
 {"path":"docs/guides/integrations/agents/opencode-plugin.test.ts","construct":"throw","count":1}
 {"path":"hack/docs/screenshot.mjs","construct":"throw","count":1}
