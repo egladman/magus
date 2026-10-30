@@ -501,7 +501,7 @@ func waitBound(target string, took time.Duration, measured bool, ceiling time.Du
 	if !measured {
 		return ceiling, fmt.Sprintf("nothing recorded here measures `%s` on these projects, so the bound is background-unbounded's %s ceiling, not a measurement", target, formatLimit(ceiling))
 	}
-	bound = (took*3/2 + time.Minute - time.Nanosecond).Truncate(time.Minute)
+	_, bound = checkMargin(took)
 	return bound, fmt.Sprintf("`%s` last ran %s here, and %s leaves half again for a cold cache or a loaded machine", target, took.Round(time.Second), formatLimit(bound))
 }
 

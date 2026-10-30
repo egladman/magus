@@ -115,6 +115,13 @@ The console never holds an operator token. It refuses an `mgo_` token in a link'
 fragment, forgets one a browser stored earlier, and names
 `magus config console token create`, which mints the token to use instead.
 
+The daemon refuses an `mgo_` token on every console route as well, with the same
+pointer. A credential that reaches `/mcp` and token management has no business in a
+browser. The CLI is held to the same rule: `magus diff` and `magus notes` mint a
+console token for their calls to the review routes and revoke it when they finish,
+so the operator token stays out of those requests. With no daemon listening they
+mint nothing.
+
 A share link travels over plaintext HTTP on the LAN, so anyone on that network can
 read its token until it expires.
 

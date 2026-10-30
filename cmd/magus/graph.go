@@ -990,7 +990,7 @@ func hostedPageAllowed(ctx context.Context, page, notice, base string, printOnly
 	if printOnly {
 		return nil
 	}
-	err := checkExplorerOrigin(base, globalCfg.MCP.AllowedOrigins)
+	err := checkHostedPageOrigin(base, globalCfg.MCP.AllowedOrigins)
 	if err == nil {
 		return nil
 	}
@@ -999,8 +999,8 @@ func hostedPageAllowed(ctx context.Context, page, notice, base string, printOnly
 	return exit.Reported(exit.Failure)
 }
 
-// checkExplorerOrigin passes a loopback base and an origin named in allowed.
-func checkExplorerOrigin(base string, allowed []string) error {
+// checkHostedPageOrigin passes a loopback base and an origin named in allowed.
+func checkHostedPageOrigin(base string, allowed []string) error {
 	origin, err := httpx.ParseOrigin(base)
 	if err != nil {
 		return err
