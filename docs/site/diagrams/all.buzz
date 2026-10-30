@@ -36,6 +36,7 @@ import "site/diagrams/agent-orchestration" as _;
 import "site/diagrams/harness-layer" as _;
 import "site/diagrams/kustomize-architecture" as _;
 import "site/diagrams/mandate" as _;
+import "site/diagrams/harness-pyramid" as _;
 
 // The committed files, relative to the docs project. The site render inlines their page
 // copies, so rendering a page never needs the symbol index.
@@ -76,6 +77,8 @@ export fun allFigures() > [figure\Figure] !> any {
         kustomizeArchitectureFigure(),
         mandateRolesFigure(),
         mandateBarFigure(),
+        harnessPyramidFigure(),
+        harnessStackFigure(),
     ];
 }
 

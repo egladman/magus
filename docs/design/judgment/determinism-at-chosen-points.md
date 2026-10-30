@@ -37,19 +37,12 @@ overfits to it and has to be tuned again for the next model or the next host.
 magus steers away from that on purpose. One guard, one lease store and one
 graph serve every host magus wires.
 
-The layers, from the inside out:
-
-1. The model, which proposes the next action.
-2. The host's agent loop (Claude Code, Codex, Cursor, OpenCode), which sends
-   context to the model and runs the tool calls it returns.
-3. The harness magus supplies: guard hooks, skills, MCP tools and job leases,
-   attached at the host's hook points.
-4. magus's deterministic workspace model: the project graph, each target's
-   inputs and outputs, the cache and the job store, which the harness reads.
-
-Layers 2 and 3 are the ones most often merged under one name. magus keeps them
-apart: the host owns the loop, and magus owns what the loop can ask and what it
-is refused.
+The layers are the model, the host's agent loop (the inner harness), the
+harness magus supplies (the outer harness) and the person on top
+([The model proposes, the harness executes](../principles/the-model-proposes-the-harness-executes.md#the-layers)).
+The two harnesses are the layers most often merged under one name. magus keeps
+them apart: the host owns the loop, and magus owns what the loop can ask and
+what it is refused.
 
 ## Enforced by
 

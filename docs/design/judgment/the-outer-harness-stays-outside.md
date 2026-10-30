@@ -59,3 +59,4 @@ person reviews no longer says what happened.
 
 - [Determinism at chosen points](determinism-at-chosen-points.md)
 - [The host wiring is yours](the-host-wiring-is-yours.md)
+- [The model proposes, the harness executes](../principles/the-model-proposes-the-harness-executes.md)
