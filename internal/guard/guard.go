@@ -1406,17 +1406,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// magus cannot parse both leave every lease-scoped rule inert while the verdicts look
 	// identical to a session nobody leased. Once per session each, and never on a deny,
 	// which explains itself and was reached by a rule that did not need the row. Graded
-	// before the gate, so one the workspace raised refuses every call. A release request
-	// for the lease is the third: it reads the attention queue, so only until it has fired.
+	// before the gate, so one the workspace raised refuses every call.
+	// A release request is the third, told once per lease.
 	judgmentPhases(ctx).enclose(phaseNotices)
-	var release advice
-	if !req.Observe && verdict.Decision != decisionDeny && verdict.Decision != decisionAsk && !markers.AlreadyFired(advisoryReleaseRequested) {
-		release = adviseReleaseRequested(location, actingLease)
-	}
 	for kind, notice := range map[hint.MarkerKind]advice{
 		advisoryLeaseTerminal:    adviseTerminalLease(standing, actingLease),
 		advisoryLeaseInvalid:     adviseInvalidLease(actingLease),
-		advisoryReleaseRequested: release,
+		advisoryReleaseRequested: adviseReleaseRequested(standing.row),
 	} {
 		if notice.Say == "" || req.Observe || verdict.Decision == decisionDeny || verdict.Decision == decisionAsk {
 			continue
@@ -1429,7 +1425,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		case g.Context == "":
 			continue
 		}
-		held := markers.Once(kind, notice.Say)
+		gate := markers
+		if kind == advisoryReleaseRequested {
+			gate = stallGate(stateAt.cacheDir, actingLease)
+		}
+		held := gate.Once(kind, notice.Say)
 		if held == "" {
 			continue
 		}

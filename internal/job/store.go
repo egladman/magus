@@ -708,7 +708,10 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 				row.ReportedBase, row.BaseVerdict, row.Registered, row.CheckoutRoot = "", "", 0, ""
 			}
 			if kind != asObservation {
-				row.Unattributed = prev.Unattributed
+				row.Unattributed, row.ReleaseRequests = prev.Unattributed, prev.ReleaseRequests
+			}
+			if refork {
+				row.ReleaseRequests = nil
 			}
 			if kind != asObservation && !entering {
 				row.Entries = prev.Entries
@@ -718,8 +721,9 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.CheckoutRoot = ""
 		}
 		if i < 0 {
-			row.Entries = nil
+			row.Entries, row.ReleaseRequests = nil, nil
 		}
+		row.ReleaseRequests = heldRequests(row)
 		if kind == asDeclaration && i >= 0 {
 			keepDerived(&row, prev)
 		}

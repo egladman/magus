@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/sessions"
@@ -142,6 +143,9 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.recordDisposition(r.Context(), req)
+	if err := job.ReleaseRequestDisposed(r.Context(), h.root, req); err != nil {
+		slog.WarnContext(r.Context(), "a disposed release request stays on its holder's row", "request", req.ID, "error", err)
+	}
 	// The disposed request as the store now reads it, matching what `magus session dispose
 	// -o json` prints. The caller re-reads the queue on its next poll; answering with the row
 	// that closed lets it say WHICH one closed without waiting for that.

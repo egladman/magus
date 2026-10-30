@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -164,28 +165,18 @@ func (s *Store) dry() *Store {
 	return v
 }
 
-// requestRelease files one attention request (outcome waiting) asking holder to release
-// what it does not edit of file, which a refused fork wanted as the claims in wanted. unused
-// are the holder's write paths its footprint has not touched, nil when it could not be read
-// (see [unusedWritePaths]); the message lists them. The request is keyed on holder, file and
-// that message (see [sessions.RequestID]), so every refusal over the pair lands on one row
-// until the holder's footprint grows or someone disposes of it; the claims ride along as its
-// files, and a reader holding the holder's id finds its requests by that key. A dry-run store
-// files nothing, and neither does one that will not take the request: the refusal is the
-// answer either way.
+// requestRelease asks holder to release what a refused fork wanted of file.
+// It lands on the holder's row, which the guard reads without a store fold,
+// and in the attention queue for a person. A dry-run store files nothing.
 func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted, unused []string) {
 	if s.dryRun {
-		return
-	}
-	dir, err := sessions.Dir(s.root)
-	if err != nil {
 		return
 	}
 	files := make([]types.FileRef, len(wanted))
 	for i, w := range wanted {
 		files[i] = types.FileRef{Value: w}
 	}
-	_, _, _ = sessions.OpenRequest(dir, holder, sessions.AttentionOpen{
+	open := sessions.AttentionOpen{
 		Outcome:  string(types.OutcomeWaiting),
 		Severity: string(types.SeverityWarning),
 		Source:   ReleaseRequestSource,
@@ -195,5 +186,80 @@ func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted,
 		Message: fmt.Sprintf("job %s holds %s, and a fork that needs part of it was refused (its claims are this request's files)."+
 			" %s. %s narrows to what it edits (`%s#<declaration>`, or `%s` without the unused paths) or exits; then `%s` closes this request",
 			holder, file, describeUnused(holder, unused), holder, file, hint.JobApply.With("-f", "<record>"), hint.SessionDispose.With("<request>")),
-	}, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root})
+	}
+	filed, err := s.FileReleaseRequest(ctx, holder, types.JobReleaseRequest{
+		ID: sessions.RequestID(holder, open), File: file, Wanted: wanted, By: open.Lease, Message: open.Message,
+	})
+	if err != nil || !filed {
+		return
+	}
+	dir, err := sessions.Dir(s.root)
+	if err != nil {
+		return
+	}
+	_, _, _ = sessions.OpenRequest(dir, holder, open, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: s.root})
+}
+
+// FileReleaseRequest puts req on holder's row and stamps its time. It answers
+// false when the row already carries req.ID, which leaves the row unchanged.
+func (s *Store) FileReleaseRequest(ctx context.Context, holder string, req types.JobReleaseRequest) (bool, error) {
+	filed := false
+	_, err := s.mutate(ctx, holder, asObservation, func(cur *types.Job, exists bool, now int64) error {
+		if !exists {
+			return fmt.Errorf("%q: %w", holder, ErrUnknownJob)
+		}
+		if slices.ContainsFunc(cur.ReleaseRequests, func(r types.JobReleaseRequest) bool { return r.ID == req.ID }) {
+			return nil
+		}
+		req.At = now
+		cur.ReleaseRequests = append(cur.ReleaseRequests, req)
+		filed = true
+		return nil
+	})
+	return filed, err
+}
+
+// CloseReleaseRequest drops request id from the row carrying it, if any does.
+func (s *Store) CloseReleaseRequest(ctx context.Context, id string) error {
+	f, err := s.read()
+	if err != nil {
+		return err
+	}
+	matches := func(r types.JobReleaseRequest) bool { return r.ID == id }
+	for _, row := range f.Jobs {
+		if !slices.ContainsFunc(row.ReleaseRequests, matches) {
+			continue
+		}
+		_, err := s.mutate(ctx, row.ID, asObservation, func(cur *types.Job, _ bool, _ int64) error {
+			cur.ReleaseRequests = slices.DeleteFunc(cur.ReleaseRequests, matches)
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ReleaseRequestDisposed clears req off its holder's row in the repository at
+// root once a person disposed it. Any other kind of request is left alone.
+func ReleaseRequestDisposed(ctx context.Context, root string, req sessions.AttentionRequest) error {
+	if req.Source != ReleaseRequestSource {
+		return nil
+	}
+	base, err := xdg.StateDir()
+	if err != nil {
+		return fmt.Errorf("job: resolve the user state dir: %w", err)
+	}
+	return NewStore(Location{Root: root, StateBase: base}).CloseReleaseRequest(ctx, req.ID)
+}
+
+// heldRequests are row's release requests for files it still holds. Narrowing
+// past a file answers the request for it.
+func heldRequests(row types.Job) []types.JobReleaseRequest {
+	return slices.DeleteFunc(row.ReleaseRequests, func(r types.JobReleaseRequest) bool {
+		return !slices.ContainsFunc(row.HardPaths(), func(entry string) bool {
+			return covers(entry, r.File) && !releasedReach(row, entry, r.File)
+		})
+	})
 }

@@ -900,6 +900,9 @@ type Job struct {
 	// Entries are the acknowledged writes into this row's write paths by somebody other
 	// than its holder, oldest first, at most two per job. Store-computed like Releases.
 	Entries []JobEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
+	// ReleaseRequests are refused forks asking the holder to release write
+	// paths. Store-computed, and here so a hook reads them without a fold.
+	ReleaseRequests []JobReleaseRequest `json:"release_requests,omitempty" yaml:"release_requests,omitempty" buzz:"-"`
 	// WriteProof is what the fork could prove about this job's write paths against the
 	// other live jobs bound to the checkout it was declared in. Store-computed and
 	// output-only like Releases: it is a fact about the plan at one instant, and a caller
@@ -1994,6 +1997,20 @@ type JobEntry struct {
 	Consumed int64 `json:"consumed,omitempty" yaml:"consumed,omitempty"`
 }
 
+// JobReleaseRequest is a refused fork asking a row's holder to release File.
+type JobReleaseRequest struct {
+	// ID is the attention request filed beside it (see sessions.RequestID).
+	ID   string `json:"id" yaml:"id"`
+	File string `json:"file" yaml:"file"`
+	// Wanted are the fork's claims on File.
+	Wanted []string `json:"wanted,omitempty" yaml:"wanted,omitempty"`
+	// By is the lease the fork was made under, empty for an unbound fork.
+	By      string `json:"by,omitempty" yaml:"by,omitempty"`
+	Message string `json:"message" yaml:"message"`
+	// At is unix seconds, stamped by the store.
+	At int64 `json:"at" yaml:"at"`
+}
+
 // JobOverlap is two leases whose declared WritePaths intersect. A FACT the
 // reader is handed, never a verdict: two leases may share a path because their author
 // meant them to run in sequence, or because nobody noticed. Nothing here blocks,
@@ -2623,6 +2640,10 @@ func (u Job) Clone() Job {
 	c.Claims = slices.Clone(u.Claims)
 	c.Unattributed = slices.Clone(u.Unattributed)
 	c.Entries = slices.Clone(u.Entries)
+	c.ReleaseRequests = slices.Clone(u.ReleaseRequests)
+	for i, r := range c.ReleaseRequests {
+		c.ReleaseRequests[i].Wanted = slices.Clone(r.Wanted)
+	}
 	c.Deviations = slices.Clone(u.Deviations)
 	if u.ModelTier != nil {
 		tier := *u.ModelTier

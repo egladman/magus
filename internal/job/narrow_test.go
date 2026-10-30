@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 const configMagusfile = `import "magus";
@@ -197,6 +198,69 @@ func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 	assert.Equal(t, []types.FileRef{{Value: "magusfile.buzz#project.name"}}, requests[i].Files)
 	assert.Contains(t, requests[i].Message, "job keys holds magusfile.buzz")
 	assert.Contains(t, requests[i].Message, "keys has changed nothing under magusfile.buzz#project.name")
+	assert.Len(t, storedRows(t, s)["keys"].ReleaseRequests, 1, "the row carries what the guard reads")
+	require.ErrorIs(t, fork("name", "magusfile.buzz#project.name"), types.WritePathFileShared)
+	assert.Len(t, storedRows(t, s)["keys"].ReleaseRequests, 1, "a repeat files nothing")
+}
+
+// ReleaseRequestRowSuite pins what keeps and clears a request on a row.
+type ReleaseRequestRowSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestReleaseRequestRowSuite(t *testing.T) {
+	suite.Run(t, new(ReleaseRequestRowSuite))
+}
+
+func (s *ReleaseRequestRowSuite) SetupTest() {
+	s.store = NewStore(declared(s.T(), types.Job{ID: "h", State: types.StateRunning, WritePaths: []string{"a.go", "b.go"}}))
+	filed, err := s.store.FileReleaseRequest(s.T().Context(), "h", types.JobReleaseRequest{ID: "att-1", File: "a.go", Wanted: []string{"a.go"}, Message: "wanted"})
+	s.Require().NoError(err)
+	s.Require().True(filed)
+}
+
+func (s *ReleaseRequestRowSuite) requests() []types.JobReleaseRequest {
+	return storedRows(s.T(), s.store)["h"].ReleaseRequests
+}
+
+func (s *ReleaseRequestRowSuite) TestTheStoreStampsTheTime() {
+	s.Positive(s.requests()[0].At)
+}
+
+func (s *ReleaseRequestRowSuite) TestTheSameIDIsNotFiledTwice() {
+	filed, err := s.store.FileReleaseRequest(s.T().Context(), "h", types.JobReleaseRequest{ID: "att-1", File: "a.go"})
+	s.Require().NoError(err)
+	s.False(filed)
+	s.Len(s.requests(), 1)
+}
+
+func (s *ReleaseRequestRowSuite) TestAnUnknownHolderIsAnError() {
+	_, err := s.store.FileReleaseRequest(s.T().Context(), "nobody", types.JobReleaseRequest{ID: "att-2", File: "a.go"})
+	s.ErrorIs(err, ErrUnknownJob)
+}
+
+func (s *ReleaseRequestRowSuite) TestAWriteToTheRowKeepsIt() {
+	_, err := s.store.Update(s.T().Context(), "h", func(cur *types.Job) { cur.Criteria = "changed" })
+	s.Require().NoError(err)
+	s.Len(s.requests(), 1)
+}
+
+func (s *ReleaseRequestRowSuite) TestNarrowingPastTheFileClearsIt() {
+	_, err := s.store.Update(s.T().Context(), "h", func(cur *types.Job) { cur.WritePaths = []string{"b.go"} })
+	s.Require().NoError(err)
+	s.Empty(s.requests())
+}
+
+func (s *ReleaseRequestRowSuite) TestClosingDropsIt() {
+	s.Require().NoError(s.store.CloseReleaseRequest(s.T().Context(), "att-1"))
+	s.Empty(s.requests())
+}
+
+func (s *ReleaseRequestRowSuite) TestDisposingAnotherSourceLeavesIt() {
+	req := sessions.AttentionRequest{ID: "att-1", Source: "another/source"}
+	s.Require().NoError(ReleaseRequestDisposed(s.T().Context(), s.T().TempDir(), req))
+	s.Len(s.requests(), 1)
 }
 
 // releaseRequests are the open release requests filed for the repository at root.
