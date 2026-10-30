@@ -69,15 +69,15 @@ func bindBuzzCommandMethod(h vm.Value, spellName, target string, tgt spells.Op) 
 			}
 			return vm.Null, runInstall(ctx, tgt, opts)
 		}
-		allowFailure, err := allowFailureFromBuzz(args, consumed)
+		opts.allowFailure, err = allowFailureFromBuzz(args, consumed)
 		if err != nil {
 			return vm.Null, fmt.Errorf("%s: %w", target, err)
 		}
-		if allowFailure && !tgt.Capture {
+		if opts.allowFailure && !tgt.Capture {
 			return vm.Null, fmt.Errorf("%s: allowFailure needs an op with capture = true: its record carries the exit status", target)
 		}
 		res, err := runBuzzCommand(ctx, tgt, opts)
-		if err != nil && (!allowFailure || !res.Started || ctx.Err() != nil) {
+		if err != nil && (!opts.allowFailure || !res.Started || ctx.Err() != nil) {
 			return vm.Null, err
 		}
 		if tgt.Capture {

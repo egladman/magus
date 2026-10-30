@@ -1,10 +1,12 @@
 package bindings
 
 import (
+	"bytes"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
@@ -127,6 +129,26 @@ func (s *allowFailureSuite) TestABinaryThatNeverStartedStaysAnError() {
 func (s *allowFailureSuite) TestAnOpThatDoesNotCaptureIsRefused() {
 	err := s.call(exit100(false), allowFailureOption(vm.BoolValue(true)))
 	s.Require().ErrorContains(err, "capture = true")
+}
+
+// quietFailure exits 100 on a quiet op and returns the run's stderr.
+func (s *allowFailureSuite) quietFailure(allow bool) string {
+	var stdout, stderr bytes.Buffer
+	ctx := spawn.WithOutputWriters(s.T().Context(), &stdout, &stderr)
+	op := spells.Op{
+		Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo boom >&2; exit 100"}, Quiet: true},
+		Capture: true,
+	}
+	_, _ = runCommand(ctx, op, commandOpts{cwd: s.T().TempDir(), allowFailure: allow})
+	return stderr.String()
+}
+
+func (s *allowFailureSuite) TestAnAllowedExitWritesNoFailureToTheLog() {
+	s.Empty(s.quietFailure(true))
+}
+
+func (s *allowFailureSuite) TestAnExitNotAllowedStillWritesItsStderr() {
+	s.Contains(s.quietFailure(false), "boom")
 }
 
 func (s *allowFailureSuite) TestANonBoolIsRefused() {
