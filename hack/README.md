@@ -165,6 +165,8 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
 | `hack/magusfile/harness.buzz` | which committed host config files lack what their wired harness spell renders, and the merge command for each |
+| `hack/magusfile/image.buzz` | magus's own container images: the static and dynamic variants, their pinned distroless bases, and the OCI layout image-build assembles |
+| `hack/magusfile/image_test.buzz` | the image variants' platforms, tags and layout, checked by `buzz-test` without docker |
 | `hack/magusfile/index.buzz` | each project's MAGUS.md routing index, which the root index links |
 | `hack/magusfile/mockassert.buzz` | the compile-time assertions that each published mock still satisfies its interface, derived from `.mockery.yaml` |
 | `hack/magusfile/model-tiers.buzz` | the model IDs each wired harness spawns for a job tier; pure lookup |
