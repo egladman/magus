@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
@@ -47,7 +48,7 @@ func TestSupersetModules(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	registerMagusModules(ctx, sess)
+	require.NoError(t, registerMagusModules(ctx, sess))
 
 	hasKey := func(t *testing.T, module, key string) {
 		t.Helper()
@@ -240,7 +241,7 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	registerMagusModules(ctx, sess)
+	require.NoError(t, registerMagusModules(ctx, sess))
 
 	for _, m := range hostmodules.All() {
 		// "magus" is not a bare import; it is wired as the magus.* namespace in
@@ -1525,6 +1526,7 @@ func assertMirrorConstructs(t *testing.T, object string) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
+	buzzstd.Register(s)
 	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
 	require.NoError(t, s.Exec(ctx, fmt.Sprintf(`import "%s"; final __r = %s{};`, testBoundaryTypesPath, object)),
 		"%s{} must construct: the mirror is missing from the bundle, ordered after a type it references, or emitted with a field name that does not parse", object)
@@ -1573,6 +1575,7 @@ func assertMirrorReadsField(t *testing.T, object, field string) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
+	buzzstd.Register(s)
 	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
 	err := s.Exec(ctx, fmt.Sprintf(`import "%s"; final __r = %s{}.%s;`, testBoundaryTypesPath, object, field))
 	require.NoError(t, err, "%s has no field %q, but %s's BuzzObject emits that key: the mirror and the boundary map disagree", object, field, object)
@@ -1800,7 +1803,7 @@ func BenchmarkBindingsDeclareMagusTypes(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		sess := buzz.NewSession(b.Context(), buzz.WithEmbedded())
-		DeclareMagusTypes(sess)
+		require.NoError(b, DeclareMagusTypes(sess))
 		sess.Close()
 	}
 }

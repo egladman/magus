@@ -2943,7 +2943,9 @@ func runAdvisor(ctx context.Context, dir, file string) (string, []string, error)
 	var out bytes.Buffer
 	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(&out))
 	bindings.RegisterMagusNamespace(ctx, sess)
-	bindings.RegisterSpellSourceModules(sess)
+	if err := bindings.RegisterSpellSourceModules(sess); err != nil {
+		return "", nil, err
+	}
 
 	if err := sess.Exec(ctx, string(src)); err != nil {
 		return out.String(), nil, err

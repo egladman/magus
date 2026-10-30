@@ -116,7 +116,9 @@ func resolveWithModules(ctx context.Context, src, dir string) (spell.Resolved, e
 	// workspace on its context, so it must reach for the forking members (cmd, describe).
 	// It registers before the modules, which set the magus enums on this namespace.
 	RegisterMagusNamespace(ctx, sess)
-	registerMagusModules(ctx, sess)
+	if err := registerMagusModules(ctx, sess); err != nil {
+		return spell.Resolved{}, err
+	}
 	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
 		return spell.Resolved{}, err
 	}

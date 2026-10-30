@@ -352,7 +352,10 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	}
 	tr := traceFromContext(ctx)
 	addProfileObserver(ctx, sess)
-	installBuzzHost(ctx, sess, code, scriptOut, tr)
+	lateErr, err := installBuzzHost(ctx, sess, code, scriptOut, tr)
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
 	var cov *buzz.LineCoverage
 	if bf.Coverprofile != "" {
 		if path := buzzCoverPath(name); path != "" {
@@ -364,6 +367,9 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	stopExec := tr.phase("buzz.exec")
 	if err := sess.Exec(ctx, code); err != nil {
 		stopExec()
+		if declErr := lateErr(); declErr != nil {
+			return fmt.Errorf("%s: %w", name, declErr)
+		}
 		// Strict mode refuses both a raising call and a try at the top level, so the
 		// fix is the one place a raise may go, which -e can hold as well as a file.
 		if d := (*diagnostics.Error)(nil); errors.As(err, &d) && d.Code == buzz.UnhandledRaise {
@@ -681,7 +687,10 @@ func buzzFindImport(p, dir string, includeDirs []string) string {
 // A script whose import closure reaches magus gets the mirrors up front, so a later
 // file's type of the same name still wins and an aliased import sees them. The
 // resolver below covers an import the closure scan could not follow.
-func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scriptOut io.Writer, tr *startupTracer) {
+//
+// The eager path returns a declaration failure at once. The lazy resolver
+// cannot return one, so lateErr reports it once the script has run.
+func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scriptOut io.Writer, tr *startupTracer) (lateErr func() error, err error) {
 	stop := tr.phase("buzz.register_modules")
 	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(scriptOut))
 	stop()
@@ -690,12 +699,15 @@ func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scrip
 	stop()
 	if buzzReachesMagus(sess, code) {
 		stop = tr.phase("buzz.register_namespace")
+		defer stop()
 		bindings.RegisterMagusNamespace(ctx, sess)
-		bindings.DeclareMagusTypes(sess)
-		stop()
-		return
+		if err := bindings.DeclareMagusTypes(sess); err != nil {
+			return nil, err
+		}
+		return func() error { return nil }, nil
 	}
 	var once sync.Once
+	var declErr error
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
 		if importPath != "magus" {
 			var zero vm.Value
@@ -704,12 +716,17 @@ func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scrip
 		once.Do(func() {
 			stop := tr.phase("buzz.register_namespace")
 			bindings.RegisterMagusNamespace(ctx, sess)
-			bindings.DeclareMagusTypes(sess)
+			declErr = bindings.DeclareMagusTypes(sess)
 			stop()
 		})
+		if declErr != nil {
+			var zero vm.Value
+			return zero, false
+		}
 		v, ok := sess.NativeModule("magus")
 		return v, ok
 	})
+	return func() error { return declErr }, nil
 }
 
 // scriptImportDir is the directory a file script's imports resolve against.
@@ -969,9 +986,15 @@ func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diag
 	// imported module's top level, which Diagnostics executes; that is incidental to
 	// the answer and must not be mixed into stdout with it.
 	addProfileObserver(ctx, sess)
-	installBuzzHost(ctx, sess, string(data), os.Stderr, traceFromContext(ctx))
+	lateErr, err := installBuzzHost(ctx, sess, string(data), os.Stderr, traceFromContext(ctx))
+	if err != nil {
+		return nil, err
+	}
 
 	diags := sess.Diagnostics(string(data))
+	if err := lateErr(); err != nil {
+		return nil, err
+	}
 	wd, _ := os.Getwd()
 	for i := range diags {
 		switch f := diags[i].File; {

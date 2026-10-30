@@ -33,7 +33,7 @@ import (
 // spells is the set of spells to register as tracing `magus/spell/<name>` modules,
 // keyed by import name with its op names. Callers pass the built-in registry (the
 // SpellCatalog's BuiltinOps).
-func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map[string][]string) {
+func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map[string][]string) error {
 	buzzstd.RegisterWithOutput(sess, &tr.out)
 	registerWASMCompatibleMagusModules(ctx, sess)
 	// An IO module gets the engine's declarations over a value that performs nothing (os
@@ -64,7 +64,9 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// snippet could read a field no return carries and the dry run would say nothing,
 	// which is the opposite of what a dry run is for. The stubs above are shaped to
 	// match, and TestMagusAPIMatchesBindings holds the member set in sync.
-	spell.DeclareMagusTypes(sess, nil)
+	if err := spell.DeclareMagusTypes(sess, nil); err != nil {
+		return err
+	}
 	for name, ops := range spells {
 		sess.SetNativeModule("magus/spell/"+name, buildSpell(name, ops, tr))
 	}
@@ -88,6 +90,7 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 		m.MapSet("name", vm.StringValue(importPath))
 		return m, true
 	})
+	return nil
 }
 
 // function is a small constructor alias matching the std package's helper.

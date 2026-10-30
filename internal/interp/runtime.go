@@ -768,7 +768,8 @@ func Parse(ctx context.Context, src *Source) ([]Target, error) {
 // canonical target key to the exported function value itself, so ctx.needs
 // can verify a passed function IS the exported target (nil when the session
 // has no export discovery, e.g. the REPL). parseMode=true collects names only.
-type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool)
+// An error means the magus declarations could not be installed.
+type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) error
 
 var buzzHostBindingsFn BuzzHostBindingsFn
 
@@ -1196,7 +1197,10 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 	// populated registry by the time any target body runs.
 	exportVals := map[string]vm.Value{}
 	if buzzHostBindingsFn != nil {
-		buzzHostBindingsFn(ctx, buzzSess, targetMap, exportVals, parseMode)
+		if err := buzzHostBindingsFn(ctx, buzzSess, targetMap, exportVals, parseMode); err != nil {
+			_ = buzzSess.Close()
+			return nil, err
+		}
 	}
 
 	// Import names across all the project's magusfiles, to catch a target that shadows one.
@@ -1395,7 +1399,10 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 	if buzzHostBindingsFn != nil {
 		// nil exports: the REPL has no export-discovery pass, so ctx.needs
 		// falls back to name-only resolution there.
-		buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), nil, false)
+		if err := buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), nil, false); err != nil {
+			_ = buzzSess.Close()
+			return nil, err
+		}
 	}
 
 	if autoload {

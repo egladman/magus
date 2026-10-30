@@ -26,7 +26,7 @@ func TestBuildHarness(t *testing.T) {
 		ctx := workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry())
 		sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 		t.Cleanup(func() { _ = sess.Close() })
-		registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+		require.NoError(t, registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true))
 		id, err := sess.Eval(ctx, `import "magus"; return magus\harness.provider({"name": "cursor"});`)
 		require.NoError(t, err)
 		assert.Equal(t, "cursor", id.AsString())

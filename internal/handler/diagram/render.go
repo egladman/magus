@@ -437,7 +437,9 @@ func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, erro
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	buzzstd.RegisterWithOutput(sess, io.Discard)
-	bindings.RegisterMagusRecordTypes(sess)
+	if err := bindings.RegisterMagusRecordTypes(sess); err != nil {
+		return Figure{}, err
+	}
 	sess.SetModuleDecls("magus/figure", figure.Source)
 
 	svg, err := figure.Draw(ctx, sess, buildFigure(g, desc, anchorHref), anchorHref)

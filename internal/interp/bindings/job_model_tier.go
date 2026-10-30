@@ -358,7 +358,9 @@ func defaultModelTierSet(ctx context.Context, wired []string) (*types.ModelTierS
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()))
 	defer sess.Close()
 	RegisterMagusNamespace(ctx, sess)
-	registerMagusModules(ctx, sess)
+	if err := registerMagusModules(ctx, sess); err != nil {
+		return nil, err
+	}
 
 	var (
 		decl     types.ModelTierDeclaration

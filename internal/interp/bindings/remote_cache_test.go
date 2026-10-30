@@ -362,7 +362,7 @@ func TestCanonicalSpellModule(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	registerMagusModules(ctx, sess)
+	require.NoError(t, registerMagusModules(ctx, sess))
 
 	src := `
 import "magus/spell";

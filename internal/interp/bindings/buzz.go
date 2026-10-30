@@ -44,7 +44,7 @@ func init() { //nolint:gochecknoinits // internal/interp cannot link the Buzz VM
 // ctx.needs/glob dependency primitives, plus cross-project handles),
 // spell_object.go (imported spell handles), modules.go (the host modules),
 // imports.go (project/spell import resolution), and pry.go (magus.pry).
-func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) {
+func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) error {
 	// One host-call observer for this registration, timing every magus.* native
 	// callable into magus.buzz.host.call. nil (a pure pass-through) when telemetry
 	// is disabled, so the VM's hot native-dispatch arm is untouched on one-shot runs.
@@ -71,7 +71,9 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// registerMagusModules layers the magus host methods onto Buzz's stdlib modules (a
 	// superset of them) and is shared with spell-loading, so a magusfile and a handler
 	// op spell see the same modules.
-	registerMagusModules(ctx, sess)
+	if err := registerMagusModules(ctx, sess); err != nil {
+		return err
+	}
 	// Built-in spells follow the same import idiom as std modules: each spell is
 	// reachable as `import "magus/spell/<name>"`, binding the spell handle under
 	// its basename.
@@ -116,6 +118,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		}
 		return resolveLocalSpellImport(ctx, imports, importPath)
 	})
+	return nil
 }
 
 // magusMode names where the magus.* namespace is installed. A magusfile and a

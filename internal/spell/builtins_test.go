@@ -564,7 +564,7 @@ func TestMagusDeclSourceNamesDeclaredTypes(t *testing.T) {
 	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
 	sess.SetNativeModule("magus", vm.NewMap())
-	DeclareMagusTypes(sess, nil)
+	require.NoError(t, DeclareMagusTypes(sess, nil))
 	require.NoError(t, sess.Exec(t.Context(), `import "magus";
 fun f(ctx: magus\Context, run: magus\Run) > magus\Exec { return ctx.withEnv({"k": run.trigger}); }`))
 }
@@ -573,7 +573,7 @@ func TestDeclareMagusTypesDropsUnimplementedExterns(t *testing.T) {
 	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
 	sess.SetNativeModule("magus", vm.NewMap())
-	DeclareMagusTypes(sess, func(member string) bool { return member != "affected" })
+	require.NoError(t, DeclareMagusTypes(sess, func(member string) bool { return member != "affected" }))
 	require.NoError(t, sess.Exec(t.Context(), `import "magus";
 fun kept(opts: magus\DirsOptions) > str { return opts.language; }`))
 	err := sess.Exec(t.Context(), `fun dropped() > any { return magus\affected(); }`)
@@ -602,4 +602,16 @@ func (s *discoveredSuite) TestDiscoverySpellsAreBuiltins() {
 		_, ok := Builtins()[name]
 		s.Truef(ok, "%s is a built-in", name)
 	}
+}
+
+func TestDefineRecordsNamesTheRecordThatCannotRun(t *testing.T) {
+	_, err := defineRecords("export object Fine { n: int = 0, }\nexport object Broken { e: missing\\Thing? = null, }\n")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "magus record Broken cannot be defined")
+	assert.Contains(t, err.Error(), "BZZ")
+}
+
+func TestMagusRecordsDefine(t *testing.T) {
+	_, err := magusRecords()
+	require.NoError(t, err)
 }

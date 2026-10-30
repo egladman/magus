@@ -202,8 +202,7 @@ func InstallClient(ctx context.Context, sess *buzz.Session, out io.Writer) error
 		return err
 	}
 	sess.SetNativeModule("magus", assembleMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptMode, clientWithheld...))
-	spell.DeclareMagusTypes(sess, func(member string) bool { return !slices.Contains(clientWithheld, member) })
-	return nil
+	return spell.DeclareMagusTypes(sess, func(member string) bool { return !slices.Contains(clientWithheld, member) })
 }
 
 // mergeModuleMapMissing copies into dst every key of src that dst lacks, so dst
@@ -285,9 +284,9 @@ func RegisterModules(ctx context.Context, sess *buzz.Session, opts ...ModuleOpti
 // bare imports. The result is one superset, no separate `magus/extra`
 // aggregate. Shared by the magusfile binding path (registerAllBuzz) and the spell
 // function path (execSpellSource), so both paths stay in lock-step.
-func registerMagusModules(ctx context.Context, sess *buzz.Session) {
+func registerMagusModules(ctx context.Context, sess *buzz.Session) error {
 	RegisterModules(ctx, sess)
-	RegisterSpellSourceModules(sess)
+	return RegisterSpellSourceModules(sess)
 }
 
 // RegisterSpellSourceModules installs every source-only Buzz module a spell (or
@@ -307,9 +306,9 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 // It is layered on top of RegisterModules by the magusfile runtime and,
 // deliberately, by `magus buzz` so a spell file and its `test "..." {}` blocks run
 // under `magus buzz -t` with the same modules the engine loads them with.
-func RegisterSpellSourceModules(sess *buzz.Session) {
+func RegisterSpellSourceModules(sess *buzz.Session) error {
 	RegisterSpellDecls(sess)
-	DeclareMagusTypes(sess)
+	return DeclareMagusTypes(sess)
 }
 
 // RegisterSpellDecls stores the spell, charm, harness and lint declaration source.
@@ -340,7 +339,9 @@ func buzzLogFunction(level slog.Level) func(context.Context, []vm.Value) (vm.Val
 // the two host implementations must not silently drift.
 func MagusModuleKeys() []string {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
-	registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+	if err := registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true); err != nil {
+		panic("bindings: " + err.Error())
+	}
 	return slices.DeleteFunc(magusNativeModule(sess).MapKeys(), spell.IsMagusEnum)
 }
 
@@ -364,7 +365,9 @@ func magusNativeModule(sess *buzz.Session) vm.Value {
 // that declaration to the map buildMagus actually assembles.
 func MagusNamespaceKeys(name string) []string {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
-	registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+	if err := registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true); err != nil {
+		panic("bindings: " + err.Error())
+	}
 	nested, ok := magusNativeModule(sess).MapGet(name)
 	if !ok || !nested.IsMap() {
 		return nil

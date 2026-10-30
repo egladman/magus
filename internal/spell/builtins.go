@@ -301,7 +301,10 @@ func MagusDeclSource() string {
 // The declarations are eager rather than collected at `import "magus"`: collection
 // order is precedence order, and mirrors with generic names (Node, Path, Graph) must
 // stay beneath a program's own type of the same name.
-func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) {
+//
+// A record that cannot be defined is an error naming the record and
+// its BZZ code, never a silent fall back to annotate-only records.
+func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) error {
 	decls := MagusDeclSource()
 	if implements != nil {
 		var b strings.Builder
@@ -317,7 +320,7 @@ func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) 
 		decls = b.String()
 	}
 	sess.DeclareModuleTypes("magus", decls)
-	defineMagusRecords(sess)
+	return defineMagusRecords(sess)
 }
 
 // IsMagusEnum reports whether name is an enum the magus declarations define.
@@ -331,6 +334,7 @@ type magusRecord struct {
 	name  string
 	value vm.Value
 	enum  bool
+	src   string // the declaration's own text
 }
 
 // magusRecords holds a runtime definition for every plain record and enum the magus
@@ -338,7 +342,11 @@ type magusRecord struct {
 // `magus\DirsOptions{...}` would otherwise type-check and then fail with "unknown object
 // type". A record has no methods or static state, so every session shares one set.
 var magusRecords = sync.OnceValues(func() ([]magusRecord, error) {
-	body, out, err := recordDecls(MagusDeclSource())
+	return defineRecords(MagusDeclSource())
+})
+
+func defineRecords(decls string) ([]magusRecord, error) {
+	body, out, err := recordDecls(decls)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +354,7 @@ var magusRecords = sync.OnceValues(func() ([]magusRecord, error) {
 	// release their heap slots out from under it.
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	if err := sess.Exec(context.Background(), body); err != nil {
-		return nil, err
+		return nil, failingRecord(out, err)
 	}
 	for i := range out {
 		out[i].value = sess.GetGlobal(out[i].name)
@@ -355,7 +363,23 @@ var magusRecords = sync.OnceValues(func() ([]magusRecord, error) {
 		}
 	}
 	return out, nil
-})
+}
+
+// failingRecord names the first record that does not run, adding one at a
+// time. It costs a session per record, so only a failure pays it.
+func failingRecord(records []magusRecord, whole error) error {
+	var src string
+	for _, r := range records {
+		src += r.src
+		sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+		err := sess.Exec(context.Background(), src)
+		_ = sess.Close()
+		if err != nil {
+			return fmt.Errorf("magus record %s cannot be defined: %w", r.name, err)
+		}
+	}
+	return fmt.Errorf("magus records cannot be defined: %w", whole)
+}
 
 // RecordSource returns the part of a declaration source a session can run: its
 // exported plain records and enums, keeping the first declaration of each name, so
@@ -399,8 +423,8 @@ func recordDecls(src string) (string, []magusRecord, error) {
 		if i+1 < len(prog.Stmts) {
 			end = ast.NodePos(prog.Stmts[i+1]).Line - 1
 		}
-		body.WriteString(strings.Join(lines[ast.NodePos(stmt).Line-1:end], "\n"))
-		body.WriteByte('\n')
+		r.src = strings.Join(lines[ast.NodePos(stmt).Line-1:end], "\n") + "\n"
+		body.WriteString(r.src)
 		out = append(out, r)
 	}
 	return body.String(), out, nil
@@ -411,12 +435,12 @@ func recordDecls(src string) (string, []magusRecord, error) {
 // `magus\E.case` and an inferred `.case` argument resolve. A name the session already
 // binds keeps its binding, as a program's own type outranks a mirror in the checker.
 //
-// Declarations that do not run leave the records annotate-only rather than panic, since
-// the binary that regenerates them loads this code; TestMagusDeclarationsRun fails instead.
-func defineMagusRecords(sess *buzz.Session) {
+// A declaration that does not run is an error. Annotate-only records
+// surfaced later as "has no definition to construct".
+func defineMagusRecords(sess *buzz.Session) error {
 	records, err := magusRecords()
 	if err != nil {
-		return
+		return err
 	}
 	globals := sess.Globals()
 	mod, hasModule := sess.NativeModule("magus")
@@ -433,4 +457,5 @@ func defineMagusRecords(sess *buzz.Session) {
 			}
 		}
 	}
+	return nil
 }

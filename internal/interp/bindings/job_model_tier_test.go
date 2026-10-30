@@ -33,7 +33,7 @@ func loadModelTiers(t *testing.T, src string, harnesses ...string) (*workspace.W
 func execModelTiers(t *testing.T, ctx context.Context, src string) error {
 	t.Helper()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
-	registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+	require.NoError(t, registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true))
 	err := sess.Exec(ctx, src)
 	_ = sess.Close()
 	return err

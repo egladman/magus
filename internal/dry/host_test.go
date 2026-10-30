@@ -54,7 +54,7 @@ func TestDryCheckParityWithEngine(t *testing.T) {
 
 			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 			t.Cleanup(func() { _ = sess.Close() })
-			installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps())
+			require.NoError(t, installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps()))
 			_, dryErr := sess.Compile(string(src))
 
 			assert.Equal(t, verdict(engineErr), verdict(dryErr))

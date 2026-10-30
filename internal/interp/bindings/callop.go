@@ -68,7 +68,10 @@ func execSpellSource(ctx context.Context, src, fn string) (*buzz.Session, error)
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()))
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	RegisterMagusNamespace(ctx, sess)
-	registerMagusModules(ctx, sess)
+	if err := registerMagusModules(ctx, sess); err != nil {
+		_ = sess.Close()
+		return nil, fmt.Errorf("%s: %w", fn, err)
+	}
 	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
 		_ = sess.Close()
 		return nil, fmt.Errorf("%s: exec: %w", fn, err)

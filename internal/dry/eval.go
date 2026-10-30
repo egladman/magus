@@ -235,7 +235,10 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 
 	// Plain mode: evaluate the Buzz snippet once and return its trailing value + output.
 	var out bytes.Buffer
-	sess := plainSession(ctx, &out)
+	sess, err := plainSession(ctx, &out)
+	if err != nil {
+		return EvalResult{Diag: toDiag(err)}
+	}
 	defer sess.Close()
 
 	v, err := sess.Eval(ctx, src)
@@ -247,7 +250,7 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 
 // plainSession is the language playground's session: Buzz stdlib, the WASM-compatible host
 // modules, the pure magus API and the vetted Buzz-implemented modules. The caller closes it.
-func plainSession(ctx context.Context, out io.Writer) *buzz.Session {
+func plainSession(ctx context.Context, out io.Writer) (*buzz.Session, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, out)
 	registerWASMCompatibleMagusModules(ctx, sess)
@@ -260,10 +263,12 @@ func plainSession(ctx context.Context, out io.Writer) *buzz.Session {
 	sess.SetNativeModule("magus", magus)
 	// Only the externs pureMagus implements: any other would type-check a call that
 	// then fails at run time.
-	spell.DeclareMagusTypes(sess, func(member string) bool {
+	if err := spell.DeclareMagusTypes(sess, func(member string) bool {
 		_, ok := magus.MapGet(member)
 		return ok
-	})
+	}); err != nil {
+		return nil, err
+	}
 	for _, name := range playgroundSourceModules {
 		sm, ok := std.GetSource(name)
 		if !ok {
@@ -271,7 +276,7 @@ func plainSession(ctx context.Context, out io.Writer) *buzz.Session {
 		}
 		sess.SetModuleDecls(sm.ImportPath(), sm.Source)
 	}
-	return sess
+	return sess, nil
 }
 
 // playgroundSourceModules are the Buzz-implemented std modules the playground resolves,
@@ -300,7 +305,10 @@ func DrawFigure(ctx context.Context, figJSON, anchorHref string) DrawResult {
 		return DrawResult{Diag: &Diag{Msg: "figure record: " + err.Error()}}
 	}
 	var out bytes.Buffer
-	sess := plainSession(ctx, &out)
+	sess, err := plainSession(ctx, &out)
+	if err != nil {
+		return DrawResult{Diag: toDiag(err)}
+	}
 	defer sess.Close()
 	svg, err := figure.Draw(ctx, sess, fig, anchorHref)
 	var refused *figure.Findings
@@ -324,7 +332,9 @@ func EvalInContext(ctx context.Context, magusfileSrc, expr string) EvalResult {
 	tr := newTracer()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	installHost(ctx, sess, tr, builtinCatalog{}.BuiltinOps())
+	if err := installHost(ctx, sess, tr, builtinCatalog{}.BuiltinOps()); err != nil {
+		return EvalResult{Diag: toDiag(err)}
+	}
 
 	_ = sess.Exec(ctx, magusfileSrc) // best effort: bind whatever compiles
 

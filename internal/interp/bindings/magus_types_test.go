@@ -64,7 +64,7 @@ func TestMagusRecordsAreConstructible(t *testing.T) {
 	t.Cleanup(func() { _ = sess.Close() })
 	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
-	DeclareMagusTypes(sess)
+	require.NoError(t, DeclareMagusTypes(sess))
 	require.NoError(t, sess.Exec(ctx, `
 import "magus";
 import "magus" as m;
@@ -90,7 +90,7 @@ func TestMagusRecordsYieldToAProgramsOwnType(t *testing.T) {
 	t.Cleanup(func() { _ = sess.Close() })
 	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
-	DeclareMagusTypes(sess)
+	require.NoError(t, DeclareMagusTypes(sess))
 	require.NoError(t, sess.Exec(ctx, `
 object Path { label: str = "mine" }
 

@@ -54,7 +54,9 @@ func evalAndProbe(ctx context.Context, src string, charms []string, spells map[s
 	tr.charms = charms
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	installHost(ctx, sess, tr, spells)
+	if err := installHost(ctx, sess, tr, spells); err != nil {
+		return tr, nil, nil, false, toDiag(err)
+	}
 
 	if err := sess.Exec(ctx, src); err != nil {
 		return tr, nil, nil, false, toDiag(err)
@@ -172,7 +174,9 @@ func Execs(ctx context.Context, src string) (execs []Op, diag *Diag) {
 func Diagnostics(ctx context.Context, src string) []Diag {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps())
+	if err := installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps()); err != nil {
+		return []Diag{*toDiag(err)}
+	}
 
 	ds := sess.Diagnostics(src)
 	out := make([]Diag, len(ds))

@@ -279,9 +279,9 @@ func TestReportImportError(t *testing.T) {
 // grant, as the root magusfile's test declares /proc.
 func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	prev := buzzHostBindingsFn
-	buzzHostBindingsFn = func(_ context.Context, sess *buzz.Session, _ map[string]vm.Callable, _ map[string]vm.Value, _ bool) {
+	buzzHostBindingsFn = func(_ context.Context, sess *buzz.Session, _ map[string]vm.Callable, _ map[string]vm.Value, _ bool) error {
 		sess.SetNativeModule("magus", vm.NewMap())
-		spell.DeclareMagusTypes(sess, nil)
+		return spell.DeclareMagusTypes(sess, nil)
 	}
 	t.Cleanup(func() { buzzHostBindingsFn = prev })
 	w := testkit.NewWorkspace(t)
