@@ -3616,6 +3616,9 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	if reason := denyPatchOutsideLease(ctx, deps, me, command, dialect, start, home); reason != "" {
 		return reason
 	}
+	if reason := denyPickOutsideLease(ctx, deps, me, command, dialect, start, home); reason != "" {
+		return reason
+	}
 	// A file the holder made since its checkpoint stays its own to remove after a narrowing
 	// drops it from the write paths. Ignored files are excluded: a fresh checkout never made one.
 	madeByHolder := func(rel string) bool {
@@ -3676,6 +3679,30 @@ func denyPatchOutsideLease(ctx context.Context, deps Dependencies, me types.Job,
 			Say: fmt.Sprintf("magus workspace: this line applies a patch from %s, which the guard cannot read, so nothing shows it stays inside lease %s's write paths; write the patch to a file, then apply that file in a call of its own.",
 				strings.Join(unread, ", "), me.ID),
 			Why: fmt.Sprintf("The files a patch writes are named only inside it, so lease-write reads it. A pipe from another command, a word the shell expands, and a file the line itself creates cannot be read before the line runs. `%s` shows what the job holds.", hint.DescribeJob.With(me.ID)),
+		}.full()
+	}
+	for _, w := range writes {
+		target, placed := w.place(home)
+		if !placed {
+			continue
+		}
+		if g := gradeLeasedWrite(ctx, deps, me.ID, target); g.Decision == decisionDeny {
+			return g.Reason
+		}
+	}
+	return ""
+}
+
+// denyPickOutsideLease grades each file the line's git cherry-pick calls write,
+// so a pick cannot land what the same edit would be refused. A pick it cannot
+// list is refused: it could write anything.
+func denyPickOutsideLease(ctx context.Context, deps Dependencies, me types.Job, command string, d Dialect, start, home string) string {
+	writes, unread := pickWrites(ctx, command, d, start, home)
+	if len(unread) > 0 {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: this line cherry-picks from %s, which the guard cannot list, so nothing shows it stays inside lease %s's write paths; make the commit exist first, then pick it by name in a call of its own.",
+				strings.Join(unread, ", "), me.ID),
+			Why: fmt.Sprintf("The files a commit writes are named only by the commit, so lease-write asks git for them before the line runs. A word the shell expands, a commit the line itself makes, and a revision git cannot read cannot be listed then. `%s` shows what the job holds.", hint.DescribeJob.With(me.ID)),
 		}.full()
 	}
 	for _, w := range writes {

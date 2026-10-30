@@ -1,8 +1,10 @@
 package guard
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -743,12 +745,34 @@ func patchStrip(value string, otherwise int) int {
 // holds each patch it could not read: a pipe from another command, a word
 // the shell expands, a file not on disk yet.
 func patchWrites(command string, depth int, d Dialect, start, home string) (writes []placedWord, unread []string) {
+	eachLineCall(command, depth, d, start, home, func(at lineCall) {
+		call, ok := parsePatchCall(at.call)
+		if !ok || call.readOnly {
+			return
+		}
+		w, u := call.writes(at.command, at.stmt, at.source, at.dir, home)
+		writes = append(writes, w...)
+		unread = append(unread, u...)
+	})
+	return writes, unread
+}
+
+// lineCall is one command of a line, where it runs and what pipes into it.
+type lineCall struct {
+	command      string
+	call         hint.Invocation
+	stmt, source *syntax.Stmt
+	dir          string
+}
+
+// eachLineCall visits every command of the line and of the shells it nests.
+func eachLineCall(command string, depth int, d Dialect, start, home string, visit func(lineCall)) {
 	if depth > writeScanDepth {
-		return nil, nil
+		return
 	}
 	f, err := parseFile(command, d)
 	if err != nil {
-		return nil, nil
+		return
 	}
 	dirs := stmtDirs(f, command, start, home)
 	piped := pipeSources(f)
@@ -765,22 +789,86 @@ func patchWrites(command string, depth int, d Dialect, start, home string) (writ
 			}
 		}
 		for _, c := range shellCommands(command, stmt, d, placeableWord) {
-			call, ok := parsePatchCall(c)
-			if !ok || call.readOnly {
-				continue
-			}
-			w, u := call.writes(command, stmt, piped[stmt], dirs[stmt], home)
-			writes = append(writes, w...)
-			unread = append(unread, u...)
+			visit(lineCall{command: command, call: c, stmt: stmt, source: piped[stmt], dir: dirs[stmt]})
 		}
 		return true
 	})
 	for _, s := range scripts {
-		w, u := patchWrites(s.text, depth+1, d, s.dir, home)
-		writes = append(writes, w...)
-		unread = append(unread, u...)
+		eachLineCall(s.text, depth+1, d, s.dir, home, visit)
 	}
+}
+
+// cherryPickLongValued are the long cherry-pick flags that take a value.
+var cherryPickLongValued = map[string]bool{
+	"--mainline": true, "--strategy": true, "--strategy-option": true, "--cleanup": true,
+}
+
+// pickWrites names the files the line's `git cherry-pick` calls write. unread
+// holds each pick it could not list: a commit the line makes first, a word the
+// shell expands. A `--continue` names no revision and writes nothing new.
+func pickWrites(ctx context.Context, command string, d Dialect, start, home string) (writes []placedWord, unread []string) {
+	eachLineCall(command, 0, d, start, home, func(at lineCall) {
+		if path.Base(at.call.Name) != "git" {
+			return
+		}
+		g := parseGit(at.call.Args)
+		if g.sub != "cherry-pick" {
+			return
+		}
+		fromStdin := false
+		revs := patchFlags(g.rest, "mX", cherryPickLongValued, func(string, string) {}, func(name string) {
+			fromStdin = fromStdin || name == "--stdin"
+		})
+		dir := at.dir
+		for _, step := range g.dirs {
+			next, ok := placePath(step, dir, home)
+			if !ok {
+				unread = append(unread, "a directory the line does not determine")
+				return
+			}
+			dir = next
+		}
+		switch {
+		case g.opaque:
+			unread = append(unread, "a repository named by --git-dir or --work-tree")
+			return
+		case fromStdin:
+			unread = append(unread, "standard input")
+		}
+		if len(revs) == 0 {
+			return
+		}
+		names, err := pickedPaths(ctx, dir, revs)
+		if err != nil {
+			unread = append(unread, strings.Join(revs, " "))
+			return
+		}
+		base := repositoryBase(dir)
+		for _, name := range names {
+			writes = append(writes, placedWord{word: name, dir: base})
+		}
+	})
 	return writes, unread
+}
+
+// pickedPaths lists every file the commits revs select write, as cherry-pick
+// selects them: a range walks, a lone commit does not. Each commit counts, so a
+// file a range writes and reverts is still named, and renames name both sides.
+func pickedPaths(ctx context.Context, dir string, revs []string) ([]string, error) {
+	args := []string{"-C", dir, "log", "--format=", "--name-only", "-z", "--no-renames", "--diff-merges=separate", "--no-walk=unsorted"}
+	cmd := exec.CommandContext(ctx, "git", append(append(args, revs...), "--")...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git log %s: %w", strings.Join(revs, " "), err)
+	}
+	var names []string
+	for name := range strings.SplitSeq(string(out), "\x00") {
+		if name = strings.TrimSpace(name); name != "" {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names), nil
 }
 
 // pipeSources maps each statement a pipe feeds to the statement feeding it.

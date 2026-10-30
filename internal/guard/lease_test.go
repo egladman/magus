@@ -3270,6 +3270,128 @@ func (s *PatchWriteSuite) TestAnUnleasedSessionIsNotGraded() {
 	s.Empty(denyWriteOutsideLease(s.ctx, s.deps, "", "git apply "+p))
 }
 
+// CherryPickWriteSuite pins lease-write on git cherry-pick: only the commit
+// names what a pick writes.
+type CherryPickWriteSuite struct {
+	suite.Suite
+	ctx  context.Context
+	root string
+	deps Dependencies
+	base string
+}
+
+func TestCherryPickWriteSuite(t *testing.T) {
+	suite.Run(t, new(CherryPickWriteSuite))
+}
+
+func (s *CherryPickWriteSuite) SetupTest() {
+	s.ctx, s.root = fleetFixture(s.T(), writePathFleet()...)
+	s.deps = Dependencies{callDir: s.root}
+	s.git("init", "-q")
+	s.git("commit", "-q", "--allow-empty", "-m", "base")
+	s.base = s.git("rev-parse", "HEAD")
+}
+
+func (s *CherryPickWriteSuite) git(args ...string) string {
+	cmd := exec.Command("git", append([]string{"-C", s.root, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"}, args...)...)
+	out, err := cmd.CombinedOutput()
+	s.Require().NoError(err, string(out))
+	return strings.TrimSpace(string(out))
+}
+
+func (s *CherryPickWriteSuite) commit(file string) string {
+	p := filepath.Join(s.root, filepath.FromSlash(file))
+	s.Require().NoError(os.MkdirAll(filepath.Dir(p), 0o755))
+	s.Require().NoError(os.WriteFile(p, []byte("x\n"), 0o644))
+	s.git("add", "--", file)
+	s.git("commit", "-q", "-m", "write "+file)
+	return s.git("rev-parse", "HEAD")
+}
+
+func (s *CherryPickWriteSuite) deny(command string) string {
+	return denyWriteOutsideLease(s.ctx, s.deps, "lease-b", command)
+}
+
+func (s *CherryPickWriteSuite) TestAPickOfAnUndeclaredPathIsRefused() {
+	s.Contains(s.deny("git cherry-pick "+s.commit("docs/notes.md")), "docs/notes.md")
+}
+
+func (s *CherryPickWriteSuite) TestAPickOfARevokedPathIsRefused() {
+	s.Contains(s.deny("git cherry-pick "+s.commit("internal/ledger/store.go")), "lease-a")
+}
+
+func (s *CherryPickWriteSuite) TestAPickInsideTheWritePathsPasses() {
+	s.Empty(s.deny("git cherry-pick " + s.commit("cmd/magus/a.go")))
+}
+
+func (s *CherryPickWriteSuite) TestARangeCountsEveryCommit() {
+	s.commit("docs/notes.md")
+	last := s.commit("cmd/magus/a.go")
+	s.Contains(s.deny(fmt.Sprintf("git cherry-pick -x %s..%s", s.base, last)), "docs/notes.md")
+}
+
+func (s *CherryPickWriteSuite) TestALoneCommitDoesNotWalkItsAncestors() {
+	s.commit("docs/notes.md")
+	s.Empty(s.deny("git cherry-pick " + s.commit("cmd/magus/a.go")))
+}
+
+func (s *CherryPickWriteSuite) TestAFileARangeWritesAndRemovesIsStillGraded() {
+	s.commit("docs/notes.md")
+	s.git("rm", "-q", "docs/notes.md")
+	s.git("commit", "-q", "-m", "remove it")
+	s.Contains(s.deny(fmt.Sprintf("git cherry-pick %s..HEAD", s.base)), "docs/notes.md")
+}
+
+func (s *CherryPickWriteSuite) TestARenameIsGradedOnBothSides() {
+	s.commit("docs/notes.md")
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.root, "cmd", "magus"), 0o755))
+	s.git("mv", "docs/notes.md", "cmd/magus/notes.md")
+	s.git("commit", "-q", "-m", "move it")
+	s.Contains(s.deny("git cherry-pick HEAD"), "docs/notes.md")
+}
+
+func (s *CherryPickWriteSuite) TestAMainlineValueIsNotARevision() {
+	s.Empty(s.deny("git cherry-pick -m 1 " + s.commit("cmd/magus/a.go")))
+}
+
+func (s *CherryPickWriteSuite) TestGitDashCPlacesTheRepository() {
+	head := s.commit("docs/notes.md")
+	s.deps.callDir = s.T().TempDir()
+	s.Contains(s.deny(fmt.Sprintf("git -C %s cherry-pick %s", s.root, head)), "docs/notes.md")
+}
+
+func (s *CherryPickWriteSuite) TestACdPlacesTheRepository() {
+	head := s.commit("docs/notes.md")
+	s.deps.callDir = s.T().TempDir()
+	s.Contains(s.deny(fmt.Sprintf("cd %s && git cherry-pick %s", s.root, head)), "docs/notes.md")
+}
+
+func (s *CherryPickWriteSuite) TestANestedShellIsGraded() {
+	s.Contains(s.deny("sh -c 'git cherry-pick "+s.commit("docs/notes.md")+"'"), "docs/notes.md")
+}
+
+func (s *CherryPickWriteSuite) TestAnExpandedRevisionIsRefusedAsUnread() {
+	s.Contains(s.deny("git cherry-pick $REV"), "cannot list")
+}
+
+func (s *CherryPickWriteSuite) TestARevisionGitCannotReadIsRefusedAsUnread() {
+	s.Contains(s.deny("git cherry-pick no-such-rev"), "cannot list")
+}
+
+func (s *CherryPickWriteSuite) TestRevisionsFromStandardInputAreRefusedAsUnread() {
+	s.Contains(s.deny("git rev-list main | git cherry-pick --stdin"), "cannot list")
+}
+
+func (s *CherryPickWriteSuite) TestContinuingAPickNamesNothing() {
+	for _, line := range []string{"git cherry-pick --continue", "git cherry-pick --abort", "git cherry-pick --skip", "git cherry-pick --quit"} {
+		s.Empty(s.deny(line), line)
+	}
+}
+
+func (s *CherryPickWriteSuite) TestAnUnleasedSessionIsNotGraded() {
+	s.Empty(denyWriteOutsideLease(s.ctx, s.deps, "", "git cherry-pick "+s.commit("docs/notes.md")))
+}
+
 func regeneratingLease(id string) types.Job {
 	return types.Job{
 		ID: id, Criteria: "add a flag", WritePaths: []string{"cli/registry.go"},
