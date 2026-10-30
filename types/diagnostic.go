@@ -804,6 +804,11 @@ const StoreLineUndecodable DiagnosticCode = "MGS3050"
 // JobStoreWriterOlder is a job store whose header requires a schema feature this magus
 // lacks: nothing is read or written until a magus that implements it runs.
 const JobStoreWriterOlder DiagnosticCode = "MGS3051"
+
+// DiskFull is a failure saying the disk is out of space while the filesystem
+// it ran on is below the critical floor, or a fork refused for that. Text alone
+// cannot tell a fixture printing it from a full disk.
+const DiskFull DiagnosticCode = "MGS3052"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1139,6 +1144,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	LegacyStorePresent,
 	StoreLineUndecodable,
 	JobStoreWriterOlder,
+	DiskFull,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,

@@ -35,6 +35,22 @@ type MachineAdmitter interface {
 	Overrun(ctx context.Context, id string)
 }
 
+// KickingAdmitter is admit with kick called once, on the first claim. No claim
+// waits for it: a held step may be the one that would free space.
+func KickingAdmitter(admit MachineAdmitter, kick func()) MachineAdmitter {
+	return &kickingAdmitter{MachineAdmitter: admit, kick: sync.OnceFunc(kick)}
+}
+
+type kickingAdmitter struct {
+	MachineAdmitter
+	kick func()
+}
+
+func (k *kickingAdmitter) Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+	k.kick()
+	return k.MachineAdmitter.Claim(ctx, c)
+}
+
 // machineReleaseTimeout bounds handing a claim back. The release runs in the defer
 // that still holds this step's local limiter slot, so it must never outlast a sick
 // broker.

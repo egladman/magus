@@ -1,6 +1,6 @@
 //go:build unix
 
-package std
+package cache
 
 import (
 	"fmt"
@@ -8,9 +8,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// statDisk reads the filesystem holding path. Bavail, not Bfree: the blocks reserved for
-// root are free to the kernel and not to the process asking.
-func statDisk(path string) (total, free int64, err error) {
+// StatDisk reads the filesystem holding path. Bavail, not Bfree: the blocks
+// reserved for root are free to the kernel and not to the process asking.
+func StatDisk(path string) (total, free int64, err error) {
 	var st unix.Statfs_t
 	if err := unix.Statfs(path, &st); err != nil {
 		return 0, 0, fmt.Errorf("statfs %q: %w", path, err)

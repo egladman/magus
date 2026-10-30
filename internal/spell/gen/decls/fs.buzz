@@ -65,7 +65,7 @@ export extern fun stateDir(purpose: str) > str !> any;
 export extern fun symlink(target: str, link: str) > void !> any;
 export extern fun tempDir(prefix: str = "") > str !> any;
 export extern fun tempFile(prefix: str = "") > str !> any;
-export extern fun trimOldest(dir: str, maxBytes: int, timeoutMs: int = 0) > TrimReport !> any;
+export extern fun trimOldest(dir: str, maxBytes: int, keepWithinMs: int, timeoutMs: int = 0) > TrimReport !> any;
 export extern fun walk(root: str, callback: fun (path: str, isDir: bool) > bool !> any) > void !> any;
 export extern fun watch(paths: [str], callback: fun (paths: [str]) > bool !> any) > void !> any;
 export extern fun writeFile(path: str, content: str) > void !> any;

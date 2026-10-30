@@ -135,7 +135,7 @@ func diskTrend(samples []types.DiskSample, cfg config.Disk) types.Check {
 		}
 	}
 	if last == nil {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no disk samples yet: the reclaim hook a harness spell wires records them; " + thresholds}
+		return types.Check{Name: name, Status: types.CheckAdvice, Message: "no disk samples: nothing has run the reclaim tick on this machine, so nothing would notice a filling disk; a prompt hook, `magus job fork` and `magus run` each start it; " + thresholds}
 	}
 	for i := range samples {
 		if s := &samples[i]; s.TotalBytes > 0 && s.Path == last.Path && last.At-s.At <= float64(24*time.Hour/time.Millisecond) {

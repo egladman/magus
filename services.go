@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
@@ -48,7 +49,11 @@ func (m *Magus) wireBroker() ([]cache.Option, error) {
 		m.broker = broker.NewClient(broker.DefaultAddr(), broker.WithIdentity(m.commandLine, m.version), broker.WithLease(lease))
 		m.ownsBroker = true
 	}
-	opts := []cache.Option{cache.WithMachineAdmission(m.broker)}
+	kick := func() {
+		exe, _ := os.Executable()
+		cache.KickDiskTick(exe, m.ws.Root, m.cfg.Disk.SampleEvery)
+	}
+	opts := []cache.Option{cache.WithMachineAdmission(cache.KickingAdmitter(m.broker, kick))}
 	if policy.Resolved() == types.BrokerRequired {
 		opts = append(opts, cache.WithMachineAdmissionRequired())
 	}

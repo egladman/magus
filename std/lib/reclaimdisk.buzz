@@ -1,10 +1,9 @@
 /// reclaimdisk plans and takes back the disk a repository's git worktrees and merged agent
 /// branches hold. It never removes a worktree holding uncommitted files, a commit no remote
-/// or base has, a live job, a working process or a lock. It knows no toolchain: a spell's
-/// cache is the spell's to trim.
+/// or base has, a live job, a working process or a lock.
 ///
-/// chunk is what the reclaim hook starts in the background: a few of the oldest removable
-/// worktrees, every subprocess bounded by what is left of its deadline.
+/// It knows no toolchain: it trims only what a spell gives a budget. tick is
+/// the one decider every trigger calls, and chunk is its worktree half.
 namespace reclaimdisk;
 
 import "std";
@@ -23,8 +22,11 @@ final AGENT_BRANCHES = ["refs/heads/worktree-agent-*", "refs/heads/agent-*"];
 /// well inside its deadline, so space comes back in steps rather than all at once.
 export final CHUNK_WORKTREES = 2;
 
-/// CHUNK_MS is a chunk's deadline from its start, inside diskwatch's CHUNK_WINDOW_MS.
-export final CHUNK_MS = 300000.0;
+/// CHUNK_MS is a tick's deadline from its start, inside CHUNK_WINDOW_MS.
+export final CHUNK_MS = 540000.0;
+
+/// TRIM_MS bounds the cache half of a tick, so the worktree half gets its turn.
+final TRIM_MS = 240000.0;
 
 export object Worktree {
     path: str,
@@ -603,36 +605,184 @@ export fun apply(items: [Item], root: str, deadline: double) > [Item] {
     return done;
 }
 
-/// trimCache trims the cache named name at dir to trimMb MiB through fs\trimOldest, which
-/// never removes a file modified within the last day, and returns the line headline appends.
-/// A trimMb below 1 raises: a cache declared with no budget is not one to trim.
-export fun trimCache(name: str, dir: str, trimMb: int, deadline: double) > str !> any {
-    if (trimMb < 1) { throw "reclaimdisk\\trimCache: {name} has no trim budget ({trimMb} MiB)"; }
-    final r = fs\trimOldest(dir, maxBytes: trimMb * 1048576, timeoutMs: std\toInt(bound(deadline)));
-    final stopped = if (r.stopped == "") "" else "; {r.stopped}";
-    if (r.removedFiles == 0) {
-        return "{name} holds {size(std\toInt(r.afterBytes / 1024))}, within its {trimMb} MiB budget{stopped}";
-    }
-    return "trimmed {size(std\toInt(r.removedBytes / 1024))} of {name} by age, {size(std\toInt(r.afterBytes / 1024))} left{stopped}";
+/// CacheTrim is what one cache trim really did. error is why it did not finish.
+export object CacheTrim {
+    name: str,
+    trimMb: int,
+    removedFiles: int = 0,
+    removedBytes: int = 0,
+    afterBytes: int = 0,
+    stopped: str = "",
+    error: str = "",
 }
 
-/// chunk is one bounded reclaim pass, the one the reclaim hook starts in the background: the
-/// CHUNK_WORKTREES removable worktrees untouched longest and the agent branches they and no
-/// worktree hold, all done by deadline (Unix millis). It records what it did in the
-/// diskwatch store, and records a failure there too.
-export fun chunk(deadline: double) > void !> any {
-    final store = diskwatch\storePath();
-    final root = vcs\root();
-    var detail = "";
+/// trimCache trims one cache to its budget, keeping files inside fence.
+export fun trimCache(name: str, dir: str, trimMb: int, fence: double, deadline: double) > CacheTrim {
     try {
-        final s = survey(vcs\base(), now: os\time(), keepRecent: 7200000.0, measure: false, deadline: deadline);
-        final done = apply(pickChunk(s.items, n: CHUNK_WORKTREES), root: root, deadline: deadline);
-        detail = headline(done, applied: true, trimmed: "");
+        final r = fs\trimOldest(dir, maxBytes: trimMb * 1048576, keepWithinMs: std\toInt(fence), timeoutMs: std\toInt(bound(deadline)));
+        return CacheTrim{ name = name, trimMb = trimMb, removedFiles = r.removedFiles, removedBytes = r.removedBytes, afterBytes = r.afterBytes, stopped = r.stopped };
     } catch (e) {
-        detail = "stopped: {e}";
+        return CacheTrim{ name = name, trimMb = trimMb, error = "{e}" };
     }
-    final du = fs\diskUsage(root);
-    diskwatch\append(store, s: diskwatch\DiskSample{ at = os\time(), path = du.path, totalBytes = du.totalBytes, freeBytes = du.freeBytes, action = "reclaimed", detail = detail });
+}
+
+fun fenceLabel(fence: double) > str {
+    return "{std\toInt(fence / 3600000.0)}h";
+}
+
+/// trimLine says what one trim really did, null when it did nothing to say.
+export fun trimLine(t: CacheTrim, fence: double) > str? {
+    final left = size(std\toInt(t.afterBytes / 1024));
+    if (t.error != "") { return "could not trim {t.name}: {t.error}"; }
+    if (t.removedFiles == 0 and t.stopped == "") { return null; }
+    var tail = "{left} left";
+    if (t.afterBytes > t.trimMb * 1048576) { tail = "{left} left, past its {t.trimMb} MiB budget and all newer than the {fenceLabel(fence)} fence"; }
+    if (t.stopped.indexOf("timeout") != null) { tail = "{left} left, {t.stopped}"; }
+    return "trimmed {size(std\toInt(t.removedBytes / 1024))} of {t.name}; {tail}";
+}
+
+/// trimDeclared trims every cache a spell gives a budget and returns each
+/// result. A cache that fails names itself, and the others still run.
+export fun trimDeclared(fence: double, deadline: double) > [CacheTrim] !> any {
+    final plan: magus\DiskReclaim = magus\diskReclaim();
+    final done = mut [<CacheTrim>];
+    foreach (c in plan.caches) {
+        done.append(trimCache("the {c.spell} spell's {c.env}", dir: c.dir, trimMb: c.trimMb, fence: fence, deadline: deadline));
+    }
+    return done;
+}
+
+/// chunk is the worktree half of a reclaim: the CHUNK_WORKTREES removable
+/// worktrees untouched longest and the agent branches they and none hold.
+/// It returns the whole plan with each row's result, and raises past deadline.
+export fun chunk(deadline: double) > [Item] !> any {
+    final s = survey(vcs\base(), now: os\time(), keepRecent: 7200000.0, measure: false, deadline: deadline);
+    final done = apply(pickChunk(s.items, n: CHUNK_WORKTREES), root: vcs\root(), deadline: deadline);
+    final byName = mut {<str: Item>};
+    foreach (it in done) { byName[it.name] = it; }
+    return s.items.map(fun (i: int, it: Item) > Item => byName[it.name] ?? it);
+}
+
+/// keptLine counts what a reclaim leaves for a person, "" when it leaves none.
+export fun keptLine(items: [Item]) > str {
+    final t = totals(items);
+    if (t.kept == 0) { return ""; }
+    final parts = mut [<str>];
+    if (t.keptBy["dirty"] -> n) { parts.append("{n} uncommitted"); }
+    if (t.keptBy["unique"] -> n) { parts.append("{n} unpushed"); }
+    if (t.keptBy["locked"] -> n) { parts.append("{n} locked"); }
+    return "{plural(t.kept, word: "worktree")} ({parts.join(", ")})";
+}
+
+/// TickReport is what one tick did. ran is false when it was not due or nothing
+/// asked for a reclaim. line is what a person reads, "" when nothing is new.
+export object TickReport {
+    ran: bool,
+    line: str = "",
+}
+
+/// TickResult is a tick's value or the error that stopped it.
+export object TickResult {
+    value: TickReport? = null,
+    error: str = "",
+}
+
+fun readConfig(cwd: str) > diskwatch\Thresholds !> any {
+    final config = proc\exec(magusBin(), args: ["config", "view", "-o", "json"], dir: cwd, opts: proc\ExecOptions{ quiet = true, timeoutMs = 5000.0 });
+    return diskwatch\thresholds(config.stdout);
+}
+
+fun lastWrite(store: str) > double? {
+    final info = fs\stat(store) catch null;
+    if (info == null) { return null; }
+    return info!.mtime;
+}
+
+fun waitingLine(listCommand: str) > str {
+    if (listCommand != "") { return "{listCommand} lists them"; }
+    return "`git worktree list` names them";
+}
+
+fun runTick(cwd: str, deadline: double, force: bool) > TickReport !> any {
+    final store = diskwatch\storePath();
+    final now = os\time();
+    final t = readConfig(cwd);
+    if (!force and !diskwatch\due(lastWrite(store), now: now, everyMs: t.everyMs)) { return TickReport{ ran = false }; }
+    final samples = diskwatch\read(store);
+    final du = fs\diskUsage(cwd);
+    final cur = diskwatch\DiskSample{ at = now, path = du.path, totalBytes = du.totalBytes, freeBytes = du.freeBytes };
+    final d = diskwatch\decide(diskwatch\lastOf(samples, path: du.path), cur: cur, t: t);
+    diskwatch\append(store, s: cur);
+    if (!d.reclaim and !d.critical and !force) { return TickReport{ ran = false }; }
+    if (diskwatch\chunkRunning(samples, now: now)) { return TickReport{ ran = false }; }
+    if (!d.reclaim and !force) {
+        final critical = diskwatch\criticalLine(cur);
+        diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = du.path, totalBytes = du.totalBytes, freeBytes = du.freeBytes, action = "reclaimed", detail = critical });
+        return TickReport{ ran = false, line = critical };
+    }
+    diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = du.path, action = "started", detail = if (d.why == "") "asked directly" else d.why });
+
+    final did = mut [<str>];
+    var freed = false;
+    final fence = diskwatch\fenceMs(cur, t: t);
+    if (fence > 0.0) {
+        final cacheDeadline = if (deadline - now > TRIM_MS * 1.25) now + TRIM_MS else now + (deadline - now) * 0.8;
+        foreach (trim in trimDeclared(fence, deadline: cacheDeadline)) {
+            if (trim.removedBytes > 0) { freed = true; }
+            if (trimLine(trim, fence: fence) -> text) { did.append(text); }
+        }
+    }
+    var kept = "";
+    try {
+        final items = chunk(deadline);
+        kept = keptLine(items);
+        final removed = items.filter(fun (i: int, it: Item) > bool => it.kind == "worktree" and it.result == "removed").len();
+        if (removed > 0) {
+            freed = true;
+            did.append("removed {plural(removed, word: "worktree")}");
+        }
+    } catch (e) {
+        did.append("stopped before the worktrees: {e}");
+    }
+    final after = fs\diskUsage(cwd);
+    final plan: magus\DiskReclaim = magus\diskReclaim();
+    final waiting = if (kept == "") "" else waitingLine(plan.listCommand);
+    final said = diskwatch\personLine(diskwatch\Report{ freeBytes = after.freeBytes, totalBytes = after.totalBytes, path = after.path, did = did, kept = kept, waiting = waiting });
+    diskwatch\append(store, s: diskwatch\DiskSample{ at = os\time(), path = after.path, totalBytes = after.totalBytes, freeBytes = after.freeBytes, action = "reclaimed", detail = said });
+    if (!freed and !d.critical and !force) {
+        diskwatch\append(store, s: diskwatch\DiskSample{ at = os\time(), path = after.path, action = "said", detail = "nothing freed" });
+        return TickReport{ ran = true };
+    }
+    magus\fileDiskAttention(said);
+    return TickReport{ ran = true, line = said };
+}
+
+/// tick is the one decider every trigger calls. It samples, decides, trims and
+/// removes, then writes the person's line from what really happened. force
+/// skips the rate limit, for a caller about to refuse work. It never raises.
+export fun tick(cwd: str, deadline: double, force: bool = false) > TickResult {
+    try {
+        return TickResult{ value = runTick(cwd, deadline: deadline, force: force) };
+    } catch (e) {
+        final failure = "{e}";
+        try {
+            diskwatch\append(diskwatch\storePath(), s: diskwatch\DiskSample{ at = os\time(), path = cwd, action = "reclaimed", detail = "magus: a disk reclaim stopped: {failure}" });
+        } catch (ignored) {
+            return TickResult{ error = failure };
+        }
+        return TickResult{ error = failure };
+    }
+}
+
+/// reclaimNow runs a tick in the foreground and prints what really happened. It
+/// is the sanctioned way to clear a cache by hand.
+export fun reclaimNow() > void {
+    final result = tick(".", deadline: os\time() + CHUNK_MS, force: true);
+    if (result.error != "") {
+        std\print("magus: the reclaim stopped: {result.error}");
+    } else if (result.value -> report) {
+        std\print(if (report.line == "") "magus: disk reclaim had nothing to do." else report.line);
+    }
 }
 
 fun keepOnly(it: Item) > bool {
@@ -705,13 +855,39 @@ test "the guard judges the same words git receives, or nothing" {
     assert\equal(guardLine("/work/repo", path: "/work/my repo/wt"), want: null, message: "a space");
 }
 
-test "a cache trim refuses a missing budget and leaves a cache within its budget alone" {
-    assert\equal(trimCache("a cache", dir: "/nowhere", trimMb: 0, deadline: 0.0) catch "raised", want: "raised", message: "no budget");
+test "a cache within its budget stays, and a trim says nothing it did not do" {
     final dir = fs\tempDir("trimcache");
     fs\writeFile(fs\join(dir, name: "entry"), content: "x");
-    assert\equal(trimCache("a cache", dir: dir, trimMb: 1, deadline: 0.0) catch "raised", want: "a cache holds 0 KiB, within its 1 MiB budget", message: "within");
+    final within = trimCache("a cache", dir: dir, trimMb: 1, fence: 21600000.0, deadline: 0.0);
+    assert\equal(within.removedFiles, want: 0, message: "nothing removed");
+    assert\equal(trimLine(within, fence: 21600000.0), want: null, message: "nothing said");
     assert\isTrue(fs\exists(fs\join(dir, name: "entry")), message: "kept");
     fs\removeAll(dir);
+}
+
+test "a trim line reports the real numbers, the fence and a failure" {
+    final g = 1073741824;
+    final fence = 21600000.0;
+    final past = CacheTrim{ name = "c", trimMb = 20480, removedFiles = 9, removedBytes = 162 * g, afterBytes = 167 * g, stopped = "files modified within 6h hold them" };
+    assert\equal(trimLine(past, fence: fence), want: "trimmed 162.0 GiB of c; 167.0 GiB left, past its 20480 MiB budget and all newer than the 6h fence", message: "past budget");
+    final fits = CacheTrim{ name = "c", trimMb = 20480, removedFiles = 9, removedBytes = g, afterBytes = 2 * g };
+    assert\equal(trimLine(fits, fence: fence), want: "trimmed 1.0 GiB of c; 2.0 GiB left", message: "within budget");
+    final failed = CacheTrim{ name = "c", trimMb = 1, error = "denied" };
+    assert\equal(trimLine(failed, fence: fence), want: "could not trim c: denied", message: "a failure");
+}
+
+test "what a person reads counts kept worktrees by reason" {
+    final items = [
+        Item{ kind = "worktree", name = "a", class = "keep", reasons = ["x"], keys = ["dirty", "locked"] },
+        Item{ kind = "worktree", name = "b", class = "keep", reasons = ["x"], keys = ["unique"] },
+        Item{ kind = "worktree", name = "c", class = "removable", reasons = ["x"] },
+    ];
+    final line = keptLine(items);
+    assert\isTrue(line.startsWith("2 worktrees ("), message: line);
+    foreach (word in ["1 uncommitted", "1 unpushed", "1 locked"]) {
+        assert\isTrue(line.indexOf(word) != null, message: word);
+    }
+    assert\equal(keptLine([<Item>]), want: "", message: "none kept");
 }
 
 test "the headline says what ran" {

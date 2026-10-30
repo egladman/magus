@@ -1,24 +1,17 @@
 // Cost: grows with the number of worktrees: a git status and rev-list per worktree, one
 // lsof, and a du per removable worktree.
 //
-// Plans what this repository's git worktrees, merged agent branches and the Go build cache
-// can give back, largest first, and takes it only with --apply. The rules are
-// magus/reclaimdisk's, the module the reclaim hook runs a chunk of in the background: a
-// worktree holding uncommitted files, a commit no remote or base has, a live job, a working
-// process or a lock is kept, with every reason that holds.
+// Plans what this repository's worktrees, agent branches and spell caches can
+// give back, largest first, and takes it only with --apply. The rules are
+// magus/reclaimdisk's. USAGE names the flags.
 //
-//	magus buzz hack/dev/reclaim-disk-space.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]
-//
-// --apply runs `git worktree remove`, never with --force, on each removable worktree after
-// the guard (`magus shell`) passes that exact line, then deletes each agent branch nothing
-// needs; with --go-cache it also trims the Go build cache to GO_CACHE_TRIM_MB by entry
-// age, never emptying it.
+// --caches trims each cache to the budget its spell declares. --keep-within is
+// the fence, 24h by default.
 namespace reclaimdiskspace;
 
 import "flags";
 import "fs";
 import "os";
-import "proc";
 import "std";
 import "time";
 import "vcs";
@@ -27,26 +20,19 @@ import "magus/reclaimdisk" as reclaim;
 
 import "assert";
 
-// A copy of the go spell's GOCACHE trimMb: a script cannot read a spell's sandbox
-// declaration, and only a magusfile can import a spell.
-final GO_CACHE_TRIM_MB = 20480;
-
-// trimGoCache is this repository's choice to reclaim the Go build cache too, where `go env`
-// says it is.
-fun trimGoCache() > str !> any {
-    final res = proc\exec("go", args: ["env", "GOCACHE"], opts: proc\ExecOptions{ quiet = true, allowFailure = true });
-    final dir = res.stdout.trim();
-    if (!res.ok or dir == "" or dir == "off") {
-        throw "reclaim-disk-space: --go-cache needs `go env GOCACHE` to name a directory, and it printed \"{dir}\"";
+fun trimCaches(fence: double) > str !> any {
+    final said = mut [<str>];
+    foreach (t in reclaim\trimDeclared(fence, deadline: 0.0)) {
+        said.append(reclaim\trimLine(t, fence: fence) ?? "{t.name} holds {reclaim\size(std\toInt(t.afterBytes / 1024))}, within its {t.trimMb} MiB budget");
     }
-    return reclaim\trimCache("the Go build cache", dir: dir, trimMb: GO_CACHE_TRIM_MB, deadline: 0.0);
+    return said.join("; ");
 }
 
-final SUMMARY = "free disk by removing finished worktrees and trimming the Go build cache";
-final SERVES = ["rule:worktree-remove -- --go-cache", "event:disk-low -- --go-cache"];
+final SUMMARY = "free disk by removing finished worktrees and trimming spell caches to their budgets";
+final SERVES = ["rule:worktree-remove -- --caches", "rule:cache-clear -- --caches --apply", "event:disk-low"];
 
-final USAGE = "usage: magus buzz hack/dev/reclaim-disk-space.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]";
-final HELP = "cost: a git status and rev-list per worktree, one lsof and a du per removable worktree; --apply removes worktrees and merged agent branches, --go-cache also trims the shared Go build cache by entry age\n{USAGE}";
+final USAGE = "usage: magus buzz hack/dev/reclaim-disk-space.buzz -- [--keep-recent <duration>] [--base <rev>] [--caches] [--keep-within <hours>] [-o json] [--apply]";
+final HELP = "cost: a git status and rev-list per worktree, one lsof and a du per removable worktree; --apply removes worktrees and merged agent branches, --caches also trims each cache to the budget its spell declares\n{USAGE}";
 
 fun encode(s: reclaim\Survey, items: [reclaim\Item], applied: bool, keepRecent: str, trimmed: str) > str !> any {
     final rows = items.map(fun (i: int, it: reclaim\Item) > {str: any} => {
@@ -57,13 +43,13 @@ fun encode(s: reclaim\Survey, items: [reclaim\Item], applied: bool, keepRecent: 
     final t = reclaim\totals(items);
     final by = mut {<str: any>};
     foreach (k, v in t.keptBy) { by[k] = v; }
-    return serialize\jsonEncode(serialize\Boxed.init({"root": s.root, "base": s.base, "keep_recent": keepRecent, "applied": applied, "go_cache": trimmed,
+    return serialize\jsonEncode(serialize\Boxed.init({"root": s.root, "base": s.base, "keep_recent": keepRecent, "applied": applied, "caches": trimmed,
         "items": rows, "totals": {"worktrees": t.worktrees, "removable_worktrees": t.removableWorktrees, "removable_kib": t.removableKiB,
             "branches": t.branches, "kept": t.kept, "kept_by": by}}));
 }
 
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--apply", "--go-cache", "--help"], valued: ["--keep-recent", "--base", "-o"]);
+    final parsed = flags\parse(args, switches: ["--apply", "--caches", "--help"], valued: ["--keep-recent", "--keep-within", "--base", "-o"]);
     if (parsed.values["--help"] != null) {
         std\print(HELP);
         return;
@@ -84,16 +70,21 @@ export fun main(args: [str]) > void !> any {
         throw "reclaim-disk-space: --keep-recent takes a duration such as 2h or 30m\n{USAGE}";
     }
     final applied = parsed.values["--apply"] != null;
-    final goCache = parsed.values["--go-cache"] != null;
+    final caches = parsed.values["--caches"] != null;
+    final keepWithin = parsed.values["--keep-within"] ?? "24h";
+    final fence = time\parseDuration(keepWithin) catch -1.0;
+    if (fence < 3600000.0) {
+        throw "reclaim-disk-space: --keep-within takes whole hours, at least 1h\n{USAGE}";
+    }
 
     final s = reclaim\survey(parsed.values["--base"] ?? vcs\base(), now: os\time(), keepRecent: keepMs, measure: true, deadline: 0.0);
     final planned = reclaim\rank(s.items);
     final items = if (applied) reclaim\apply(planned, root: s.root, deadline: 0.0) else planned;
     var trimmed = "";
-    if (goCache and applied) {
-        trimmed = trimGoCache();
-    } else if (goCache) {
-        trimmed = "--apply trims the Go build cache to {GO_CACHE_TRIM_MB} MiB by entry age";
+    if (caches and applied) {
+        trimmed = trimCaches(fence);
+    } else if (caches) {
+        trimmed = "--apply trims each cache to the budget its spell declares, keeping files inside {keepWithin}";
     }
     // -o json prints the plan document alone, so a reader can parse the whole of stdout.
     if (format == "json") {

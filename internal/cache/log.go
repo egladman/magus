@@ -1150,6 +1150,9 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		}
 	}
 	h.printWhy(colorize, causeIndent, f.why)
+	if full := DiskFullCause(tailOf(logPath, failureLogTail), ".", DiskFullFloorBytes); full != "" {
+		h.printf("  %s\n", full)
+	}
 	if ref != "" {
 		h.printf("  output: %s\n", ref)
 		// The inspect hint prints EVERYWHERE, CI included. It used to be

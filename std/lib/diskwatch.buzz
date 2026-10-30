@@ -1,8 +1,7 @@
-/// diskwatch is the cheap half of disk reclaiming, the part a hook runs on every turn: it
-/// samples the free space of the filesystem holding a workspace into a per-user store, at
-/// most once per disk.sample_every, and decides from the last two samples whether to start
-/// a reclaim chunk. It imports no magus module, so a hook that uses it never opens the
-/// workspace; the chunk itself lives in magus/reclaimdisk.
+/// diskwatch is the cheap half of disk reclaiming: the store of free-space
+/// samples, what a sample asks for, and the lines a person reads. It imports no
+/// magus module, so a hook using it never opens the workspace. The tick that
+/// acts on a decision lives in magus/reclaimdisk.
 ///
 /// The store is $XDG_STATE_HOME/magus/disk/samples.jsonl, one DiskSample a line, and
 /// `magus doctor`'s disk-trend check reads it.
@@ -28,11 +27,18 @@ export final FLOOR_MS = 60000.0;
 /// next sample may start another.
 export final CHUNK_WINDOW_MS = 600000.0;
 
+/// The fences a cache trim keeps: a day below disk.min_free_mb, 6 hours below
+/// disk.critical_free_mb. Go re-dates a used entry only hourly, so one in use
+/// sits inside either.
+export final LOW_FENCE_MS = 86400000.0;
+export final CRITICAL_FENCE_MS = 21600000.0;
+
 /// keepLines is how many samples compaction leaves: a day of samples at the one-minute floor.
 final keepLines = 1440;
 
-/// DiskSample is one line of the store, spelled as types.DiskSample is: at in Unix
-/// millis, action one of sample, started and reclaimed.
+/// DiskSample is one line of the store, spelled as types.DiskSample is. at is
+/// Unix millis. action is sample, started, reclaimed or said, and said marks
+/// every earlier line as already told to a person.
 export object DiskSample {
     at: double,
     path: str,
@@ -50,11 +56,21 @@ export object Thresholds {
     everyMs: double,
 }
 
-/// Decision is what one sample asks for: start a chunk, say a line, both or neither.
+/// Decision is what one sample asks for: a reclaim, a line, both or neither.
 export object Decision {
     reclaim: bool,
     critical: bool,
     why: str,
+}
+
+/// Report is what one tick really did, the only source of a person's line.
+export object Report {
+    freeBytes: int,
+    totalBytes: int,
+    path: str,
+    did: [str],
+    kept: str,
+    waiting: str,
 }
 
 /// storePath is the store's path, creating its directory.
@@ -114,6 +130,15 @@ export fun decide(prev: DiskSample?, cur: DiskSample, t: Thresholds) > Decision 
     return Decision{ reclaim = why.len() > 0, critical = critical, why = why.join("; ") };
 }
 
+/// fenceMs is the fence a cache trim keeps for a sample, 0 when no cache may be
+/// trimmed. Fast loss alone never trims one: a healthy fan-out looks the same,
+/// and guessing wrong costs a rebuild storm.
+export fun fenceMs(cur: DiskSample, t: Thresholds) > double {
+    if (t.criticalFreeBytes > 0 and cur.freeBytes < t.criticalFreeBytes) { return CRITICAL_FENCE_MS; }
+    if (t.minFreeBytes > 0 and cur.freeBytes < t.minFreeBytes) { return LOW_FENCE_MS; }
+    return 0.0;
+}
+
 /// chunkRunning reports whether a chunk started within CHUNK_WINDOW_MS has not yet finished,
 /// so a sample never starts a second one beside it.
 export fun chunkRunning(samples: [DiskSample], now: double) > bool {
@@ -134,23 +159,41 @@ export fun lastOf(samples: [DiskSample], path: str) > DiskSample? {
     return found;
 }
 
-/// line is what a hook prints for one sample: one line when it started a chunk or space is
-/// critical, null otherwise, so a quiet disk costs the session nothing to read.
-export fun line(d: Decision, cur: DiskSample, started: bool) > str? {
-    final free = "{gib(cur.freeBytes)} free of {gib(cur.totalBytes)} on {cur.path}";
-    if (d.critical) {
-        var doing = "nothing is reclaiming it, since disk.min_free_mb does not ask for it";
-        if (started) {
-            doing = "reclaiming a chunk in the background";
-        } else if (d.reclaim) {
-            doing = "a reclaim chunk is already running";
+/// personLine is what a person reads after a tick: what happened, what it did
+/// and what it waits on, each only from the report.
+export fun personLine(r: Report) > str {
+    final lines = mut ["magus: disk {gib(r.freeBytes)} free of {gib(r.totalBytes)} on {r.path}."];
+    if (r.did.len() > 0) {
+        lines.append("Did: {r.did.join("; ")}.");
+    } else {
+        lines.append("Did: nothing could be freed.");
+    }
+    if (r.kept != "") { lines.append("Kept: {r.kept}."); }
+    if (r.waiting != "") { lines.append("Waiting on you: {r.waiting}."); }
+    return lines.join("\n");
+}
+
+/// criticalLine is the line for space below disk.critical_free_mb when
+/// disk.min_free_mb asks for no reclaim, so nothing is under way.
+export fun criticalLine(cur: DiskSample) > str {
+    return "magus: disk space is critical, {gib(cur.freeBytes)} free of {gib(cur.totalBytes)} on {cur.path}; nothing is reclaiming it, since disk.min_free_mb does not ask for it. Before more work, remove worktrees and builds you no longer need.";
+}
+
+/// pendingLine is what the store has that no person was told: a tick's result,
+/// or that a tick is running, on what and for how long. Null when none is new.
+export fun pendingLine(samples: [DiskSample], now: double) > str? {
+    var said: str? = null;
+    foreach (s in samples) {
+        if (s.action == "said") {
+            said = null;
+        } else if (s.action == "reclaimed" and s.detail != "") {
+            said = s.detail;
+        } else if (s.action == "started" and now - s.at < CHUNK_WINDOW_MS) {
+            final left = std\toInt((CHUNK_WINDOW_MS - (now - s.at)) / 60000.0);
+            said = "magus: a disk reclaim is running on {s.path} ({s.detail}); it ends within {left}m and has freed nothing it can report yet.";
         }
-        return "magus: disk space is critical, {free}; {doing}. Before more work, remove worktrees and builds you no longer need.";
     }
-    if (started) {
-        return "magus: {free} ({d.why}); reclaiming one chunk in the background.";
-    }
-    return null;
+    return said;
 }
 
 export fun encode(s: DiskSample) > str !> any {
@@ -219,15 +262,35 @@ test "one chunk at a time, and a chunk that died stops blocking the next" {
     assert\isFalse(chunkRunning([s(0.0, action: "started")], now: CHUNK_WINDOW_MS), message: "died");
 }
 
-test "a quiet disk prints nothing; acting or critical prints one line" {
-    final cur = DiskSample{ at = 0.0, path = "/w", totalBytes = 500 * GIB, freeBytes = 40 * GIB };
-    assert\equal(line(Decision{ reclaim = false, critical = false, why = "" }, cur: cur, started: false), want: null, message: "quiet");
-    assert\equal(line(Decision{ reclaim = true, critical = false, why = "x" }, cur: cur, started: true),
-        want: "magus: 40.0 GiB free of 500.0 GiB on /w (x); reclaiming one chunk in the background.", message: "started");
-    final critical = line(Decision{ reclaim = false, critical = true, why = "" }, cur: cur, started: false) ?? "";
-    assert\isTrue(critical.indexOf("nothing is reclaiming it") != null, message: "critical with reclaiming off says so, not that a chunk runs");
-    final running = line(Decision{ reclaim = true, critical = true, why = "x" }, cur: cur, started: false) ?? "";
-    assert\isTrue(running.indexOf("already running") != null, message: "critical while a chunk runs");
+test "the fence is 6 hours below critical, a day below the floor, and no trim on fast loss alone" {
+    final t = thresholdsOf(50, growthGiB: 20);
+    final at = fun (free: int) > DiskSample => DiskSample{ at = 0.0, path = "/w", freeBytes = free * GIB };
+    assert\equal(fenceMs(at(5), t: t), want: CRITICAL_FENCE_MS, message: "critical");
+    assert\equal(fenceMs(at(40), t: t), want: LOW_FENCE_MS, message: "low");
+    assert\equal(fenceMs(at(400), t: t), want: 0.0, message: "plenty free, whatever the rate");
+}
+
+test "the person line says only what the report holds" {
+    final full = personLine(Report{ freeBytes = 6 * GIB, totalBytes = 926 * GIB, path = "/w",
+        did = ["trimmed 162.9 GiB of the go spell's GOCACHE; 167.8 GiB left, all newer than the 6h fence"],
+        kept = "328 worktrees (233 uncommitted)", waiting = "magus buzz list.buzz lists them" });
+    assert\equal(full.split("\n"), want: ["magus: disk 6.0 GiB free of 926.0 GiB on /w.",
+        "Did: trimmed 162.9 GiB of the go spell's GOCACHE; 167.8 GiB left, all newer than the 6h fence.",
+        "Kept: 328 worktrees (233 uncommitted).", "Waiting on you: magus buzz list.buzz lists them."], message: "full");
+    final none = personLine(Report{ freeBytes = 0, totalBytes = GIB, path = "/w", did = [<str>], kept = "", waiting = "" });
+    assert\isTrue(none.indexOf("nothing could be freed") != null, message: "freed nothing and says so");
+    assert\isTrue(criticalLine(DiskSample{ at = 0.0, path = "/w" }).indexOf("nothing is reclaiming it") != null, message: "critical, reclaiming off");
+}
+
+test "a running tick says it is running, a result is told once, and a dead tick says nothing" {
+    final s = fun (at: double, action: str, detail: str) > DiskSample => DiskSample{ at = at, path = "/w", action = action, detail = detail };
+    final started = s(0.0, action: "started", detail: "low");
+    final running = pendingLine([started], now: 60000.0) ?? "";
+    assert\isTrue(running.indexOf("is running on /w (low)") != null, message: "what it runs on");
+    assert\isTrue(running.indexOf("freed nothing it can report") != null, message: "claims nothing yet");
+    assert\equal(pendingLine([started, s(1.0, action: "reclaimed", detail: "done")], now: 60000.0), want: "done", message: "the result");
+    assert\equal(pendingLine([started, s(1.0, action: "reclaimed", detail: "done"), s(2.0, action: "said", detail: "")], now: 60000.0), want: null, message: "told once");
+    assert\equal(pendingLine([started], now: CHUNK_WINDOW_MS), want: null, message: "died");
 }
 
 test "a sample round-trips through its line" {

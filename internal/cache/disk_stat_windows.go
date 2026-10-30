@@ -1,6 +1,6 @@
 //go:build windows
 
-package std
+package cache
 
 import (
 	"fmt"
@@ -8,9 +8,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// statDisk reads the volume holding path. The free figure is the one available to the
-// caller, which honors per-user quotas the volume's own free count does not.
-func statDisk(path string) (total, free int64, err error) {
+// StatDisk reads the volume holding path. The free figure is the caller's,
+// which honors per-user quotas the volume's own free count does not.
+func StatDisk(path string) (total, free int64, err error) {
 	p, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return 0, 0, fmt.Errorf("GetDiskFreeSpaceEx %q: %w", path, err)

@@ -1900,6 +1900,26 @@ func ObjectCleanReport(v types.CleanReport) vm.Value {
 	return out
 }
 
+func ObjectSpellCache(v types.SpellCache) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("spell", vm.StringValue(v.Spell))
+	out.MapSet("env", vm.StringValue(v.Env))
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	out.MapSet("trimMb", vm.IntValue(int64(v.TrimMB)))
+	return out
+}
+
+func ObjectDiskReclaim(v types.DiskReclaim) vm.Value {
+	out := vm.NewMap()
+	itemsCaches := make([]vm.Value, len(v.Caches))
+	for indexCaches := range v.Caches {
+		itemsCaches[indexCaches] = ObjectSpellCache(v.Caches[indexCaches])
+	}
+	out.MapSet("caches", vm.ListValue(itemsCaches))
+	out.MapSet("listCommand", vm.StringValue(v.ListCommand))
+	return out
+}
+
 func ObjectDriftResult(v types.DriftResult) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("drifted", vm.BoolValue(v.Drifted))

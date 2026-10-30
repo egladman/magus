@@ -292,8 +292,9 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("trimOldest", vm.DirectValue("fs.trimOldest", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		dir := ffi.String(bzArgs, 0)
 		maxBytes := ffi.Int(bzArgs, 1, 0)
-		timeoutMs := ffi.Int(bzArgs, 2, 0)
-		ret0, err := std.FsTrimOldest(ctx, dir, maxBytes, timeoutMs)
+		keepWithinMs := ffi.Int(bzArgs, 2, 0)
+		timeoutMs := ffi.Int(bzArgs, 3, 0)
+		ret0, err := std.FsTrimOldest(ctx, dir, maxBytes, keepWithinMs, timeoutMs)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

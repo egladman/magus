@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -67,10 +68,14 @@ func sampleAt(hoursAgo float64, freeGiB int64, action string) types.DiskSample {
 	return types.DiskSample{At: float64(at.UnixMilli()), Path: "/w", TotalBytes: 500 * gib, FreeBytes: freeGiB * gib, Action: action}
 }
 
-func TestDiskTrendWithNoSamplesSaysWhereTheyComeFrom(t *testing.T) {
+func TestDiskFullFloorMatchesTheCriticalDefault(t *testing.T) {
+	assert.Equal(t, int64(config.Defaults().Disk.CriticalFreeMB)<<20, cache.DiskFullFloorBytes)
+}
+
+func TestDiskTrendWithNoSamplesIsAdviceSinceNothingWouldNotice(t *testing.T) {
 	got := diskTrend(nil, config.Defaults().Disk)
-	assert.Equal(t, types.CheckOK, got.Status)
-	assert.Contains(t, got.Message, "no disk samples yet")
+	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Contains(t, got.Message, "nothing would notice a filling disk")
 	assert.Contains(t, got.Message, "disk.min_free_mb 51200 (the default)")
 }
 

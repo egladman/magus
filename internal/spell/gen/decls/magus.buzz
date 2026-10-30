@@ -702,6 +702,18 @@ export object DirsOptions {
     depth: int = 0,
 }
 
+export object SpellCache {
+    spell: str = "",
+    env: str = "",
+    dir: str = "",
+    trimMb: int = 0,
+}
+
+export object DiskReclaim {
+    caches: [SpellCache] = [],
+    listCommand: str = "",
+}
+
 export object DoctorSummary {
     ok: int = 0,
     fail: int = 0,
@@ -2376,9 +2388,11 @@ export extern fun diagnosticCode(text: str) > DiagnosticCode !> any;
 export extern fun diff(opts: DiffOptions? = null) > Diff !> any;
 export extern fun dir(path: str) > Dir !> any;
 export extern fun dirs(glob: str, opts: DirsOptions? = null) > [Dir] !> any;
+export extern fun diskReclaim() > DiskReclaim !> any;
 export extern fun doctor(args: [str], opts: CommandOptions? = null) > DoctorReport !> any;
 export extern fun explain(node: str) > ExplainResult !> any;
 export extern fun fatal(msg: str = "") > void;
+export extern fun fileDiskAttention(message: str) > void !> any;
 export extern fun hasCharm(name: str) > bool;
 export extern fun impact(base: str = "", opts: CommandOptions? = null) > Impact !> any;
 export extern fun importGraph() > ImportGraph !> any;

@@ -373,6 +373,21 @@ var Magus = Module{
 			Impl:    MagusAttention,
 		},
 		{
+			Name:    "disk_reclaim",
+			Doc:     "What a disk reclaim reads off this workspace: {caches, listCommand}, caches each {spell, env, dir, trimMb} for a cache a resolved spell gives a trim budget, and listCommand the script serving event:disk-low, empty when none does. Annotate the result `> DiskReclaim`. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises when a budgeted cache locates no directory.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap, Object: "DiskReclaim"}},
+			Raises:  true,
+			Impl:    MagusDiskReclaim,
+		},
+		{
+			Name:    "file_disk_attention",
+			Doc:     "Open the attention request a disk reclaim files for a person, with message as its text. It keeps one id, so a request still open is not filed again. Disposing it stays a person's act. Raises MGS1022 outside a workspace.",
+			Args:    []Arg{{Name: "message", Type: TypeString}},
+			Raises:  true,
+			Impl:    MagusFileDiskAttention,
+		},
+		{
 			Name: "diagnose_drift",
 			Doc:  "Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug). files are the drifted outputs as Paths based at the repository root. drifted is false with every field zero when the outputs are clean. It lives here rather than on vcs because choosing between those codes is magus policy; vcs only supplies the probe. Composes vcs\\status; does not replace it.",
 			Args: []Arg{
@@ -1692,6 +1707,43 @@ func asksForFormat(args []string) bool {
 // MagusRun runs `magus run <args>` recursively; see runMagus.
 func MagusRun(ctx context.Context, args []string, opts types.MagusCommandOptions) (types.ExecResult, error) {
 	return runMagusSub(ctx, "run", args, opts)
+}
+
+// diskReclaimer is the slice of the workspace a disk reclaim reads, recovered
+// by assertion since std cannot import root magus.
+type diskReclaimer interface {
+	DiskReclaim() (types.DiskReclaim, error)
+	FileDiskAttention(ctx context.Context, message string) error
+}
+
+func diskReclaimerFromContext(ctx context.Context, member string) (diskReclaimer, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return nil, errorNoWorkspace(member)
+	}
+	r, ok := ws.(diskReclaimer)
+	if !ok {
+		return nil, fmt.Errorf("magus\\%s: this workspace declares no caches to reclaim", member)
+	}
+	return r, nil
+}
+
+// MagusDiskReclaim backs magus\diskReclaim.
+func MagusDiskReclaim(ctx context.Context) (types.DiskReclaim, error) {
+	r, err := diskReclaimerFromContext(ctx, "diskReclaim")
+	if err != nil {
+		return types.DiskReclaim{}, err
+	}
+	return r.DiskReclaim()
+}
+
+// MagusFileDiskAttention backs magus\fileDiskAttention.
+func MagusFileDiskAttention(ctx context.Context, message string) error {
+	r, err := diskReclaimerFromContext(ctx, "fileDiskAttention")
+	if err != nil {
+		return err
+	}
+	return r.FileDiskAttention(ctx, message)
 }
 
 // MagusAttention lists the open attention requests through a nested magus. Listing only:

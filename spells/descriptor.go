@@ -194,9 +194,8 @@ type SandboxCache struct {
 	// Skip are slash globs, relative to the cache, of files a warm run never reads.
 	// They stay out of a bundle.
 	Skip []string `json:"skip,omitempty" yaml:"skip,omitempty"`
-	// TrimMB is the size in MiB that reclaiming disk trims the cache back to, least
-	// recently modified files first and never a file modified within the last day. Zero
-	// leaves the cache alone.
+	// TrimMB is the size in MiB a reclaim trims the cache back to, oldest
+	// files first and never one inside its fence. Zero leaves it alone.
 	TrimMB int `json:"trim_mb,omitempty" yaml:"trim_mb,omitempty" buzz:"trimMb"`
 }
 

@@ -17,8 +17,11 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -308,6 +311,65 @@ func (m *Magus) MetricsCollector() (*MetricsCollector, bool) {
 	}
 	return &MetricsCollector{c: c}, true
 }
+
+// DiskReclaim is what a reclaim reads off this workspace: every cache a
+// resolved spell gives a trim budget, located under this process's environment,
+// and the script serving event:disk-low. A budgeted cache that locates nowhere
+// is an error.
+func (m *Magus) DiskReclaim() (types.DiskReclaim, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return types.DiskReclaim{}, fmt.Errorf("locate spell caches: %w", err)
+	}
+	found := types.DiskReclaim{Caches: []types.SpellCache{}}
+	seen := map[string]bool{}
+	for _, p := range m.All() {
+		for _, s := range p.ResolvedSpells {
+			sb := s.Sandbox()
+			if sb == nil || seen[s.Name()] {
+				continue
+			}
+			seen[s.Name()] = true
+			located := sandbox.CacheDirs(*sb, os.Environ(), home)
+			for _, c := range sb.Caches {
+				if c.TrimMB < 1 {
+					continue
+				}
+				if located[c.Env] == "" {
+					return found, fmt.Errorf("magus: spell %s gives the cache %s a trim budget, and it locates no directory here", s.Name(), c.Env)
+				}
+				found.Caches = append(found.Caches, types.SpellCache{Spell: s.Name(), Env: c.Env, Dir: located[c.Env], TrimMB: c.TrimMB})
+			}
+		}
+	}
+	slices.SortFunc(found.Caches, func(a, b types.SpellCache) int { return strings.Compare(a.Spell+a.Env, b.Spell+b.Env) })
+	next, err := hint.MatchScripts(m.CacheDir(), hint.EventDiskLow, nil)
+	if err != nil {
+		return found, err
+	}
+	if len(next) > 0 {
+		found.ListCommand = next[0].Run
+	}
+	return found, nil
+}
+
+// FileDiskAttention opens the attention request a reclaim files for a person.
+// It keeps one id, so a request still open is not filed again.
+func (m *Magus) FileDiskAttention(ctx context.Context, message string) error {
+	dir, err := sessions.Dir(m.ws.Root)
+	if err != nil {
+		return err
+	}
+	_, _, err = sessions.OpenRequest(dir, diskAttentionSource, sessions.AttentionOpen{
+		Outcome:  string(types.OutcomeDiagnostic),
+		Severity: string(types.SeverityWarning),
+		Source:   diskAttentionSource,
+		Message:  message,
+	}, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: m.ws.Root})
+	return err
+}
+
+const diskAttentionSource = "magus/disk-reclaim"
 
 // CacheDir returns the resolved workspace cache directory: the same location the
 // journal run logs and per-ref output store live under. Callers that persist their own

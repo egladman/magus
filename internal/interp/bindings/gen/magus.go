@@ -369,6 +369,20 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.AnyMapVal(ret0), nil
 	}))
+	m.MapSet("diskReclaim", vm.DirectValue("magus.diskReclaim", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusDiskReclaim(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectDiskReclaim(ret0), nil
+	}))
+	m.MapSet("fileDiskAttention", vm.DirectValue("magus.fileDiskAttention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		message := ffi.String(bzArgs, 0)
+		if err := std.MagusFileDiskAttention(ctx, message); err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return vm.Null, nil
+	}))
 	m.MapSet("diagnoseDrift", vm.DirectValue("magus.diagnoseDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		outputs := ffi.StringSlice(bzArgs, 0)
 		inputs := ffi.StringSlice(bzArgs, 1)

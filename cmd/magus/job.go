@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -1393,6 +1394,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	made, built := false, false
 	if row.Checkout != "" {
 		exe, _ := os.Executable()
+		cache.KickDiskTick(exe, root, globalCfg.Disk.SampleEvery)
+		if err := refuseForkOnFullDisk(ctx, exe, root, row.Checkout, int64(globalCfg.Disk.CriticalFreeMB)<<20); err != nil {
+			return err
+		}
 		mirrored := job.MirroredBinary(exe, root)
 		if worktree, made, err = store.ForkWorktree(ctx, row.ID, row.Checkout, row.Checkpoint, mirrored); err != nil {
 			return err
@@ -2177,12 +2182,49 @@ func printJobWorktree(out io.Writer, row types.Job, built bool) {
 // script's progress goes to stderr, since the fork's stdout is its record.
 func bootstrapCheckout(ctx context.Context, exe, forker, dir string) error {
 	cmd := exec.CommandContext(ctx, exe, "buzz", job.CheckoutBootstrapScript, "--", "--checkout", dir)
-	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, os.Stderr, os.Stderr
+	var output bytes.Buffer
+	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, os.Stderr, io.MultiWriter(os.Stderr, &output)
 	if err := cmd.Run(); err != nil {
+		if full := cache.DiskFullCause(output.String(), forker, cache.DiskFullFloorBytes); full != "" {
+			return fmt.Errorf("magus job fork: building ./magus in %s failed, so the checkout is removed: %s: %w", dir, full, err)
+		}
 		return fmt.Errorf("magus job fork: building ./magus in %s from its own sources failed, so the checkout is removed: `%s` from %s says why: %w",
 			dir, job.CheckoutBootstrap(dir), forker, err)
 	}
 	return nil
+}
+
+// reclaimOnForkTimeout bounds the reclaim a fork waits for below the floor.
+const reclaimOnForkTimeout = 5 * time.Minute
+
+// refuseForkOnFullDisk reclaims in the foreground when a fork making a new
+// checkout finds the disk below floorBytes, says so, and refuses if it stays
+// below. An adopted checkout already exists and writes nothing new.
+func refuseForkOnFullDisk(ctx context.Context, exe, root, checkout string, floorBytes int64) error {
+	if _, err := os.Stat(checkout); err == nil {
+		return nil
+	}
+	free, below := cache.DiskBelow(root, floorBytes)
+	if !below {
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "magus job fork: %d MiB free is below disk.critical_free_mb; reclaiming first, for at most %s\n", free>>20, reclaimOnForkTimeout)
+	if err := reclaimNow(ctx, exe, root); err != nil {
+		fmt.Fprintf(os.Stderr, "magus job fork: the reclaim stopped: %v\n", err)
+	}
+	free, below = cache.DiskBelow(root, floorBytes)
+	if !below {
+		return nil
+	}
+	return types.DiagnosticErrorf(types.DiskFull, "magus job fork: %d MiB free is still below disk.critical_free_mb after a reclaim, and a new checkout would fill it. `%s` lists what it left for you", free>>20, types.ReclaimDiskCommand)
+}
+
+func reclaimNow(ctx context.Context, exe, root string) error {
+	ctx, cancel := context.WithTimeout(ctx, reclaimOnForkTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe, "buzz", "-C", root, "-e", cache.ReclaimNowSnippet)
+	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
+	return cmd.Run()
 }
 
 // printLandingBootstrap names the build a fork with no checkout of its own needs when the

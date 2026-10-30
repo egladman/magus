@@ -325,10 +325,11 @@ var Fs = Module{
 		},
 		{
 			Name: "trim_oldest",
-			Doc:  "Remove the least recently modified files under dir, whole days of age at a time, until what is left fits in maxBytes, and return a TrimReport {dir, beforeBytes, afterBytes, removedFiles, removedBytes, cutoffMs, stopped}. Files modified within the last day are never removed, so the directory is never emptied; stopped says when they alone pass the budget. Two walks with one counter per day of age, so it suits a cache of millions of files. timeoutMs bounds the trim, which then stops between files and says so in stopped. Directories stay.",
+			Doc:  "Remove the least recently modified files under dir, whole hours of age at a time, until what is left fits in maxBytes, and return a TrimReport {dir, beforeBytes, afterBytes, removedFiles, removedBytes, cutoffMs, stopped}. Files modified within keepWithinMs, a whole number of hours and at least one, are never removed; stopped says when they alone pass the budget. Two walks with one counter per hour of age, so it suits a cache of millions of files. timeoutMs bounds the trim, which then stops between files and says so in stopped. Directories stay.",
 			Args: []Arg{
 				{Name: "dir", Type: TypeString},
 				{Name: "maxBytes", Type: TypeInt},
+				{Name: "keepWithinMs", Type: TypeInt},
 				{Name: "timeoutMs", Type: TypeInt, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "TrimReport"}},
@@ -1187,7 +1188,7 @@ func FsDiskUsage(ctx context.Context, path string) (types.DiskUsage, error) {
 	if err != nil {
 		return types.DiskUsage{}, fmt.Errorf("fs.disk_usage: %w", err)
 	}
-	total, free, err := statDisk(abs)
+	total, free, err := cache.StatDisk(abs)
 	if err != nil {
 		return types.DiskUsage{}, fmt.Errorf("fs.disk_usage: %w", err)
 	}
@@ -1215,7 +1216,7 @@ func FsStateDir(ctx context.Context, purpose string) (string, error) {
 }
 
 // FsTrimOldest is TrimOldest subject to the sandbox write policy.
-func FsTrimOldest(ctx context.Context, dir string, maxBytes int, timeoutMs int) (types.TrimReport, error) {
+func FsTrimOldest(ctx context.Context, dir string, maxBytes int, keepWithinMs int, timeoutMs int) (types.TrimReport, error) {
 	dir = resolvePath(ctx, dir)
 	if err := checkWrite(ctx, dir); err != nil {
 		return types.TrimReport{}, err
@@ -1223,33 +1224,31 @@ func FsTrimOldest(ctx context.Context, dir string, maxBytes int, timeoutMs int) 
 	if timeoutMs < 0 {
 		return types.TrimReport{}, fmt.Errorf("fs.trim_oldest: timeoutMs is %d, and it takes a positive bound or 0 for none", timeoutMs)
 	}
-	return TrimOldest(ctx, dir, int64(maxBytes), time.Duration(timeoutMs)*time.Millisecond, time.Now())
+	return TrimOldest(ctx, dir, int64(maxBytes), time.Duration(keepWithinMs)*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, time.Now())
 }
 
-// trimDay is one day of file age: the files under a trimmed directory, bucketed by how
-// many whole days before now they were last modified.
-const trimDay = 24 * time.Hour
-
-// TrimOldest removes the least recently modified regular files under dir, whole days of
-// age at a time, until what is left fits in maxBytes. Files modified within a day of now
-// are never removed, so the directory is never emptied: when they alone pass the budget,
-// the report's Stopped says so. It walks dir twice and holds one counter per day of age,
-// never a list of files. timeout bounds both walks (zero is none); past it the trim stops
-// between files. Directories are left in place, and a file that vanishes mid-walk is the
-// directory's owner at work, not an error. A missing dir reports zero.
-func TrimOldest(ctx context.Context, dir string, maxBytes int64, timeout time.Duration, now time.Time) (types.TrimReport, error) {
+// TrimOldest removes the least recently modified files under dir, whole
+// hours of age at a time, until the rest fits in maxBytes. Files modified
+// within keepWithin stay, and Stopped says when they alone pass the budget.
+// keepWithin is whole hours, at least one: Go re-dates a used entry only
+// hourly. timeout bounds both walks; zero is none.
+func TrimOldest(ctx context.Context, dir string, maxBytes int64, keepWithin, timeout time.Duration, now time.Time) (types.TrimReport, error) {
 	report := types.TrimReport{Dir: dir}
 	if maxBytes < 0 {
 		return report, fmt.Errorf("trim %s: maxBytes is %d, and it takes 0 or more", dir, maxBytes)
+	}
+	if keepWithin < time.Hour || keepWithin%time.Hour != 0 {
+		return report, fmt.Errorf("trim %s: keepWithin is %s, and it takes a whole number of hours, at least one", dir, keepWithin)
 	}
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	byDay := map[int]int64{}
+	keepHours := int(keepWithin / time.Hour)
+	byHour := map[int]int64{}
 	err := walkFiles(ctx, dir, func(_ string, info fs.FileInfo) error {
-		byDay[ageInDays(now, info.ModTime())] += info.Size()
+		byHour[ageInHours(now, info.ModTime())] += info.Size()
 		report.BeforeBytes += info.Size()
 		return nil
 	})
@@ -1261,13 +1260,13 @@ func TrimOldest(ctx context.Context, dir string, maxBytes int64, timeout time.Du
 	if report.BeforeBytes <= maxBytes {
 		return report, nil
 	}
-	cutoff, floor := trimCutoff(byDay, maxBytes)
-	if floor {
-		report.Stopped = fmt.Sprintf("files modified within a day hold %d bytes, past the %d byte budget, and a trim never removes them", byDay[0], maxBytes)
+	cutoff, fenced := trimCutoff(byHour, keepHours, maxBytes)
+	if fenced > maxBytes {
+		report.Stopped = fmt.Sprintf("files modified within %dh hold %d bytes, past the %d byte budget, and a trim never removes them", keepHours, fenced, maxBytes)
 	}
-	report.CutoffMs = float64(now.Add(-time.Duration(cutoff) * trimDay).UnixMilli())
+	report.CutoffMs = float64(now.Add(-time.Duration(cutoff) * time.Hour).UnixMilli())
 	err = walkFiles(ctx, dir, func(path string, info fs.FileInfo) error {
-		if ageInDays(now, info.ModTime()) < cutoff {
+		if ageInHours(now, info.ModTime()) < cutoff {
 			return nil
 		}
 		if err := os.Remove(path); errors.Is(err, fs.ErrNotExist) {
@@ -1287,26 +1286,30 @@ func TrimOldest(ctx context.Context, dir string, maxBytes int64, timeout time.Du
 	return report, err
 }
 
-// trimCutoff is the youngest age in days whose files go: every day younger is kept while
-// the running total fits the budget. Day 0 is always kept; floor reports that it alone
-// does not fit.
-func trimCutoff(byDay map[int]int64, maxBytes int64) (cutoff int, floor bool) {
-	floor = byDay[0] > maxBytes
-	kept := byDay[0]
-	for _, day := range slices.Sorted(maps.Keys(byDay)) {
-		if day == 0 {
+// trimCutoff is the youngest age in hours whose files go. Every hour inside
+// the fence is kept, and so is each younger hour that still fits the budget.
+// fenced is what the fence alone holds.
+func trimCutoff(byHour map[int]int64, keepHours int, maxBytes int64) (cutoff int, fenced int64) {
+	for hour, size := range byHour {
+		if hour < keepHours {
+			fenced += size
+		}
+	}
+	kept := fenced
+	for _, hour := range slices.Sorted(maps.Keys(byHour)) {
+		if hour < keepHours {
 			continue
 		}
-		if kept+byDay[day] > maxBytes {
-			return day, floor
+		if kept+byHour[hour] > maxBytes {
+			return hour, fenced
 		}
-		kept += byDay[day]
+		kept += byHour[hour]
 	}
-	return 1, floor
+	return keepHours, fenced
 }
 
-func ageInDays(now, modified time.Time) int {
-	return max(0, int(now.Sub(modified)/trimDay))
+func ageInHours(now, modified time.Time) int {
+	return max(0, int(now.Sub(modified)/time.Hour))
 }
 
 // trimStopped turns a walk's end into the report's Stopped line: the timeout is a reason

@@ -152,6 +152,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "FileInfo", Type: reflect.TypeFor[types.FileInfo](), RuntimeObject: true},
 	{Name: "DiskUsage", Type: reflect.TypeFor[types.DiskUsage](), RuntimeObject: true},
 	{Name: "TrimReport", Type: reflect.TypeFor[types.TrimReport](), RuntimeObject: true},
+	{Name: "SpellCache", Type: reflect.TypeFor[types.SpellCache](), RuntimeObject: true},
+	{Name: "DiskReclaim", Type: reflect.TypeFor[types.DiskReclaim](), RuntimeObject: true},
 	{Name: "UncompressResult", Type: reflect.TypeFor[types.UncompressResult](), RuntimeObject: true},
 	{Name: "ArchiveEntry", Type: reflect.TypeFor[types.ArchiveEntry](), RuntimeObject: true},
 	{Name: "MarkdownSection", Type: reflect.TypeFor[types.MarkdownSection](), RuntimeObject: true},
