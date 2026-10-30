@@ -2384,7 +2384,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Skipped for a single project, where the per-project status line already says it all.
 	if s := m.cache.Stats(); s.Hit+s.Miss+s.Error > 1 {
 		out.emit(ctx, report.RunSummary{
-			Hits: s.Hit, Misses: s.Miss, Errors: s.Error, DurationMs: time.Since(start).Milliseconds(),
+			Hits: s.Hit, Misses: s.Miss, Errors: s.Error, Files: s.Files, Slots: s.Slots,
+			DurationMs: time.Since(start).Milliseconds(),
 		})
 	}
 	// Beside the footer, not deferred by the caller: every path that runs targets

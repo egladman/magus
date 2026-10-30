@@ -38,6 +38,12 @@ const KeyVersion = 7
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
 func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
+	key, _, err := c.hashStepInputsMemo(ctx, s, nil, nil)
+	return key, err
+}
+
+// hashStepFiles is hashStep plus the count of input files hashed.
+func (c *Cache) hashStepFiles(ctx context.Context, s *Step) (string, int, error) {
 	return c.hashStepInputsMemo(ctx, s, nil, nil)
 }
 
@@ -48,7 +54,8 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 // byte-identical to what the hash consumed; collecting inside the same writeLine keeps
 // that true by construction. The nil path adds no allocations to the hot path.
 func (c *Cache) hashStepInputs(ctx context.Context, s *Step, lines *[]string) (string, error) {
-	return c.hashStepInputsMemo(ctx, s, lines, nil)
+	key, _, err := c.hashStepInputsMemo(ctx, s, lines, nil)
+	return key, err
 }
 
 // hashStepInputsMemo is hashStepInputs with an optional SourceMemo covering the
@@ -56,7 +63,9 @@ func (c *Cache) hashStepInputs(ctx context.Context, s *Step, lines *[]string) (s
 // stay nil on every path that executes a target (hashStep, hashStepInputs, and the
 // post-run key-inputs recompute in Run all pass nil); only a read-only prediction
 // sweep (ComputeTargetKey via IdentifyRef) constructs and threads a real one.
-func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string, memo *SourceMemo) (string, error) {
+//
+// The int is the number of input files hashed: one src: line each.
+func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string, memo *SourceMemo) (string, int, error) {
 	h := sha256.New()
 
 	// Build each key input in a reused scratch buffer and write it straight to the
@@ -138,7 +147,7 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 
 	files, hashes, modes, err := c.expandAndHashSources(ctx, s, memo)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	for i, f := range files {
 		// Fold the executable bit (not full perms — that would miss across
@@ -202,7 +211,7 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 
 	result := hex.EncodeToString(h.Sum(nil))
 
-	return result, nil
+	return result, len(files), nil
 }
 
 // StepKey computes s's cache key plus the pre-hash key inputs behind it, without
@@ -226,7 +235,7 @@ func (c *Cache) StepKey(ctx context.Context, s *Step) (key string, lines []strin
 // StepKey's own doc describes, calls StepKeyMemo directly rather than through StepKey;
 // only tests exercise StepKey itself.
 func (c *Cache) StepKeyMemo(ctx context.Context, s *Step, memo *SourceMemo) (key string, lines []string, err error) {
-	key, err = c.hashStepInputsMemo(ctx, s, &lines, memo)
+	key, _, err = c.hashStepInputsMemo(ctx, s, &lines, memo)
 	return key, lines, err
 }
 

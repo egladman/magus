@@ -77,6 +77,8 @@ type Cache struct {
 	misses         atomic.Int64
 	errs           atomic.Int64
 	savedMs        atomic.Int64 // summed Manifest.DurationMs over hits: work replayed instead of run
+	files          atomic.Int64 // summed Result.Files over every step that reached a result
+	slots          atomic.Int64 // widest Claim.Slots any step ran under
 	diskMu         sync.Mutex   // guards the memoized on-disk size below
 	diskBytes      int64        // last computed cache size in bytes
 	diskAt         time.Time    // when diskBytes was computed (zero = never)
@@ -122,6 +124,10 @@ type Stats struct {
 	// modeled: each figure is how long that exact target took on this machine when it last ran.
 	// Understates when entries predate Manifest.DurationMs, and never overstates.
 	SavedMs int64
+	// Files sums the input files the steps' keys hashed. A hit counts too.
+	Files int
+	// Slots is the widest grant any step ran under. Zero when none ran.
+	Slots int
 }
 
 // Step is the hashable description of a cached build step.
@@ -326,6 +332,8 @@ type Result struct {
 	// Claim is the admission the step ran under. A replay runs nothing, so it carries
 	// none, even when a remote hit took a machine claim before it found the entry.
 	Claim stepClaim
+	// Files is the input file count the step's key hashed.
+	Files int
 	// MaxRSSBytes and CPUMs are what the processes the step ran cost; see
 	// types.WithExecCost. Zero on a replay.
 	MaxRSSBytes int64
@@ -364,6 +372,8 @@ type runCtx struct {
 	auditReplay func(ctx context.Context, s Step, written []string) error
 	// localHit is the step's key when it was admitted as a local hit; see replayLocal.
 	localHit string
+	// files is the input file count behind the key.
+	files int
 	// onResults all fire after each Run (in registration order); multiple
 	// observers (report, telemetry, diagnostic capture) coexist without clobbering.
 	onResults []func(*Step, *Result, error)
@@ -559,6 +569,8 @@ func (c *Cache) Stats() Stats {
 		Miss:    int(c.misses.Load()),
 		Error:   int(c.errs.Load()),
 		SavedMs: c.savedMs.Load(),
+		Files:   int(c.files.Load()),
+		Slots:   int(c.slots.Load()),
 	}
 }
 
@@ -597,18 +609,19 @@ func (c *Cache) RunningTargets() []string {
 // reporting whether a project's symbol index reflects current sources). A missing
 // manifest is "not fresh", not an error; only a hashing failure returns one.
 func (c *Cache) IsCached(ctx context.Context, s Step) (bool, error) {
-	_, hit, err := c.probeLocal(ctx, &s)
+	_, _, hit, err := c.probeLocal(ctx, &s)
 	return hit, err
 }
 
-// probeLocal hashes s and reports whether the local store holds an entry for that key.
-func (c *Cache) probeLocal(ctx context.Context, s *Step) (string, bool, error) {
-	hash, err := c.hashStep(ctx, s)
+// probeLocal hashes s and reports whether the local store holds its key.
+// The int is the input file count.
+func (c *Cache) probeLocal(ctx context.Context, s *Step) (string, int, bool, error) {
+	hash, files, err := c.hashStepFiles(ctx, s)
 	if err != nil {
-		return "", false, err
+		return "", 0, false, err
 	}
 	manifest, mErr := c.readManifest(s.ProjectPath, hash)
-	return hash, mErr == nil && !c.treeMoved(ctx, s, manifest), nil
+	return hash, files, mErr == nil && !c.treeMoved(ctx, s, manifest), nil
 }
 
 // errLocalEntryGone is what Run returns under replayLocal when the entry the probe found
@@ -623,8 +636,8 @@ var errLocalEntryGone = errors.New("magus/cache: the probed local entry is gone"
 // replayLocal tells Run the step's key and that the local tier held it at admission, so
 // Run neither hashes again nor falls through to another tier or to fn: the caller took no
 // machine claim on the strength of that hit.
-func replayLocal(hash string) RunOption {
-	return func(rc *runCtx) { rc.localHit = hash }
+func replayLocal(hash string, files int) RunOption {
+	return func(rc *runCtx) { rc.localHit, rc.files = hash, files }
 }
 
 // localHitKey returns s's key when its entry is in the local store and a machine claim
@@ -634,17 +647,17 @@ func replayLocal(hash string) RunOption {
 // No claim is at stake when there is no admitter or an ancestor's claim already covers
 // this step, and a NoCache or SkipReplay step never replays, so none of those hash here.
 // A hashing error answers "" and leaves Run to hash again and report it.
-func (c *Cache) localHitKey(ctx context.Context, s *Step) string {
+func (c *Cache) localHitKey(ctx context.Context, s *Step) (string, int) {
 	if c.machine == nil || admissionFromContext(ctx).machineClaim || s.NoCache || s.SkipReplay {
-		return ""
+		return "", 0
 	}
 	hashCtx, endHash := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.hash")
-	hash, hit, err := c.probeLocal(hashCtx, s)
+	hash, files, hit, err := c.probeLocal(hashCtx, s)
 	endHash(err)
 	if err != nil || !hit {
-		return ""
+		return "", 0
 	}
-	return hash
+	return hash, files
 }
 
 // Run executes fn under the cache. On a hash match it replays recorded outputs;
@@ -671,13 +684,14 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	if hash == "" {
 		hashCtx, endHash := tracer.StartSpan(ctx, "magus.cache.hash")
 		var err error
-		hash, err = c.hashStep(hashCtx, rc.step)
+		hash, rc.files, err = c.hashStepFiles(hashCtx, rc.step)
 		endHash(err)
 		if err != nil {
 			return result, fmt.Errorf("magus/cache: hash %q: %w", s.ProjectPath, err)
 		}
 	}
 	result.Hash = hash
+	result.Files = rc.files
 
 	// The inputs that produced the cache key, summarized: the starting point for
 	// "why did this rebuild?". Counts (not per-file hashes) keep it cheap and off
@@ -770,6 +784,12 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 
 	result.HintID = c.emitUnchangedFailureHint(ctx, hash)
 	result.Claim = rc.claim
+	for w := int64(rc.claim.Slots); ; {
+		cur := c.slots.Load()
+		if w <= cur || c.slots.CompareAndSwap(cur, w) {
+			break
+		}
+	}
 	return c.runMiss(ctx, rc, s, hash, fn, start, netRec, result)
 }
 
@@ -777,7 +797,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 // not and returns false so Run tries the next tier. A remote entry counts as a remote
 // hit only here, once its outputs are restored.
 func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, e *entry, start time.Time, netRec *httpx.Recorder) (Result, bool) {
-	result := Result{ProjectPath: s.ProjectPath, Hash: hash}
+	result := Result{ProjectPath: s.ProjectPath, Hash: hash, Files: rc.files}
 	replayCtx, endReplay := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.replay")
 	var paths []string
 	owned, err := ownedOutputs(e.manifest, s.withoutForeignOutputs())
@@ -812,6 +832,7 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	// on the second.
 	types.RecordReturn(ctx, s.ProjectPath, s.Target, e.manifest.Return)
 	c.hits.Add(1)
+	c.files.Add(int64(rc.files))
 	// The work this hit avoided, as measured when the entry was written. Entries from
 	// before the field existed carry zero and add nothing, so the total understates.
 	c.savedMs.Add(e.manifest.DurationMs)
@@ -1438,8 +1459,8 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	if lim == nil {
 		lim = NewLimiter(DefaultConcurrency())
 	}
-	if key := c.localHitKey(ctx, &s); key != "" {
-		r, err := c.runAsideAdmitted(ctx, s, lim, fn, slices.Concat(opts, []RunOption{replayLocal(key)}))
+	if key, files := c.localHitKey(ctx, &s); key != "" {
+		r, err := c.runAsideAdmitted(ctx, s, lim, fn, slices.Concat(opts, []RunOption{replayLocal(key, files)}))
 		if !errors.Is(err, errLocalEntryGone) {
 			return r, err
 		}
@@ -1671,9 +1692,9 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 
 			var r Result
 			var err error
-			key := c.localHitKey(gctx, &s)
+			key, files := c.localHitKey(gctx, &s)
 			if key != "" {
-				r, err = admitAndRun(gctx, stepClaim{}, slices.Concat(opts, []RunOption{replayLocal(key)}))
+				r, err = admitAndRun(gctx, stepClaim{}, slices.Concat(opts, []RunOption{replayLocal(key, files)}))
 			}
 			if key == "" || errors.Is(err, errLocalEntryGone) {
 				ran = false

@@ -555,6 +555,30 @@ func TestStructuredRunEventTypes(t *testing.T) {
 	}
 }
 
+func TestRunSummaryRecordsFilesAndSlots(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf, WithBlockOnFull())
+	want := RunSummary{Hits: 2, Misses: 1, Files: 771, Slots: 12, DurationMs: 160}
+	require.NoError(t, recordAny(w, want))
+	require.NoError(t, w.Close())
+
+	var got RunSummary
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &got))
+	assert.Equal(t, want, got)
+	assert.Contains(t, buf.String(), `"files":771`)
+	assert.Contains(t, buf.String(), `"slots":12`)
+}
+
+func TestRunSummaryOmitsCountsNobodyRecorded(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf, WithBlockOnFull())
+	require.NoError(t, recordAny(w, RunSummary{Hits: 2, DurationMs: 160}))
+	require.NoError(t, w.Close())
+
+	assert.NotContains(t, buf.String(), `"files"`)
+	assert.NotContains(t, buf.String(), `"slots"`)
+}
+
 // devNullWriter discards every write but counts bytes so the
 // benchmark exercises the bufio path. Avoids the per-process file
 // open required by /dev/null on some sandboxes.

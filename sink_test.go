@@ -226,6 +226,40 @@ func TestTextSinkProse(t *testing.T) {
 	}
 }
 
+func renderSummary(t *testing.T, e report.RunSummary) string {
+	t.Helper()
+	var out bytes.Buffer
+	s, err := NewSink(output.Text, io.Discard, &out)
+	require.NoError(t, err)
+	s.emit(t.Context(), e)
+	return out.String()
+}
+
+func TestTextSinkSummaryNamesFilesAndSlots(t *testing.T) {
+	got := renderSummary(t, report.RunSummary{Hits: 3, Misses: 1, Files: 771, Slots: 12, DurationMs: 160})
+	assert.Equal(t, "summary: 3 cached, 1 ran, 0 failed (160ms on 771 files using 12 slots)\n", got)
+}
+
+func TestTextSinkSummarySingularFileAndSlot(t *testing.T) {
+	got := renderSummary(t, report.RunSummary{Hits: 1, Misses: 1, Files: 1, Slots: 1, DurationMs: 20})
+	assert.Equal(t, "summary: 1 cached, 1 ran, 0 failed (20ms on 1 file using 1 slot)\n", got)
+}
+
+func TestTextSinkSummaryOfAFullyCachedRunHasNoSlots(t *testing.T) {
+	got := renderSummary(t, report.RunSummary{Hits: 4, Files: 90, DurationMs: 300})
+	assert.Equal(t, "summary: 4 cached, 0 ran, 0 failed (300ms on 90 files)\n", got)
+}
+
+func TestTextSinkSummaryLeavesOutFilesNobodyRecorded(t *testing.T) {
+	got := renderSummary(t, report.RunSummary{Misses: 2, Slots: 4, DurationMs: 300})
+	assert.Equal(t, "summary: 0 cached, 2 ran, 0 failed (300ms using 4 slots)\n", got)
+}
+
+func TestTextSinkDryRunSummaryIgnoresCounts(t *testing.T) {
+	got := renderSummary(t, report.RunSummary{Dry: true, Planned: 2, Files: 9, Slots: 3, DurationMs: 2})
+	assert.Equal(t, "summary: dry run, 2 targets would run (2ms)\n", got)
+}
+
 // -q and -s raise the level past progress, never past what explains a failure: notices,
 // diagnostics and where a detached run went still print.
 func TestTextSinkSilentKeepsWhatExplainsAFailure(t *testing.T) {

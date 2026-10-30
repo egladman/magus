@@ -42,8 +42,12 @@ Without flags you get the result of each target and little else:
 [pass] docs (ran, 1m36s)
   magus run generate:rw docs
 out3a777178
-[summary] 2 cached, 5 ran, 0 failed (1m44s)
+[summary] 2 cached, 5 ran, 0 failed (1m44s on 771 files using 12 slots)
 ```
+
+The files are the inputs the run's cache keys hashed. The slots are the most
+any one target was granted (see [Slot](../glossary/slot.md)); a run that only
+replayed from cache shows none. A count magus did not record is left out.
 
 Each result carries an [output reference](../concepts/cache/output-refs.md): the short
 `out...` id addressing the exact bytes that run produced. `magus query output

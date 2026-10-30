@@ -395,12 +395,62 @@ func TestStats(t *testing.T) {
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
+	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
+		return os.WriteFile(out, []byte("out"), 0o644)
+	})
+	require.NoError(t, err)
+	want := Stats{Hit: 0, Miss: 1, Error: 0, Files: r.Files}
+	assert.Equal(t, want, c.Stats())
+}
+
+func TestRunRecordsItsInputFileCount(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+	step := makeStep(root)
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
+
+	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
+		return os.WriteFile(out, []byte("out"), 0o644)
+	})
+	require.NoError(t, err)
+	assert.Positive(t, r.Files, "the step hashes main.go")
+	assert.Equal(t, r.Files, c.Stats().Files)
+}
+
+func TestStatsSumsInputFilesOverAHitToo(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+	step := makeStep(root)
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
+	run := func() Result {
+		r, err := c.Run(context.Background(), step, func(_ context.Context) error {
+			return os.WriteFile(out, []byte("out"), 0o644)
+		})
+		require.NoError(t, err)
+		return r
+	}
+
+	miss := run()
+	hit := run()
+	require.True(t, hit.Hit)
+	assert.Equal(t, miss.Files, hit.Files)
+	assert.Equal(t, miss.Files+hit.Files, c.Stats().Files)
+}
+
+func TestStatsSlotsIsZeroWithoutAGrant(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+	step := makeStep(root)
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
+
 	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("out"), 0o644)
 	})
 	require.NoError(t, err)
-	want := Stats{Hit: 0, Miss: 1, Error: 0}
-	assert.Equal(t, want, c.Stats())
+	assert.Zero(t, c.Stats().Slots, "a bare Run took no grant, so none is reported")
 }
 
 // TestCacheSizeCapAccepted exercises MAGUS_CACHE_SIZE parsing: any

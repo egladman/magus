@@ -127,8 +127,13 @@ Every run prints an output reference, on success and failure alike:
 [pass] docs (ran, 1m36s)
   magus run generate:rw docs
 out3a777178
-summary: 2 cached, 5 ran, 0 failed (1m46s)
+summary: 2 cached, 5 ran, 0 failed (1m46s on 771 files using 12 slots)
 ```
+
+The footer counts the input files the run's cache keys covered. It also
+counts the most [slots](../glossary/slot.md) any one target was granted. A
+slot is magus's claim on the pool, not a thread count, so a run that only
+replayed from cache shows no slots.
 
 `magus query output out3a777178` replays exactly what that run printed. A
 failure adds the reproduce command and an inspect hint:

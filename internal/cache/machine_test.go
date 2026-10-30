@@ -828,7 +828,7 @@ func TestRunRefusesToExecuteAGoneLocalHit(t *testing.T) {
 	_, err = c.Run(t.Context(), Step{ProjectPath: ".", Target: "test"}, func(context.Context) error {
 		t.Error("a step admitted as a local hit must not execute")
 		return nil
-	}, replayLocal(strings.Repeat("0", 64)))
+	}, replayLocal(strings.Repeat("0", 64), 0))
 	require.ErrorIs(t, err, errLocalEntryGone)
 }
 
