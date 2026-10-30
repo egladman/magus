@@ -26,7 +26,8 @@ import (
 // Stored (mgs_) tokens are named, hashed at rest, and always expire. Each carries a grant no
 // wider than its minter's, checked in Mint, and a record that could not have come from Mint is
 // skipped at load whatever wrote it. The secret is shown once, at mint; only its SHA-256 is
-// kept. A console link's one-time exchange code (mgx_) lives in the same store for a minute.
+// kept. A console link's one-time exchange code (mgx_) shares the store,
+// for seconds.
 
 const (
 	// DefaultTokenTTL is a stored token's lifetime when the minter names none.
@@ -35,7 +36,8 @@ const (
 	// fine-grained personal access token. A longer request is an error, never clamped.
 	MaxTokenTTL = 366 * 24 * time.Hour
 	// ExchangeCodeTTL is how long a console link's code stays redeemable.
-	ExchangeCodeTTL = time.Minute
+	// Short because the link sits in the opener's argv.
+	ExchangeCodeTTL = 10 * time.Second
 )
 
 // storeVersion 2 is the first version with grants. Version 1 records (connectors.d) name a

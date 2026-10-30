@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
@@ -466,8 +467,8 @@ func TestAWorldReadableRecordIsSkippedNotFatal(t *testing.T) {
 	assert.ErrorIs(t, skipped[0], types.InsecureTokenPermissions)
 }
 
-// A console link's code is not a token: it lives a minute, is refused as a bearer everywhere,
-// and is traded once for the stored token it stands for.
+// A console link's code is not a token: it lives seconds, is refused as a
+// bearer everywhere, and is traded once for the stored token it stands for.
 func TestAnExchangeCodeRedeemsOnceForItsToken(t *testing.T) {
 	store := isolatedStore(t)
 	code, rec, err := store.MintCode(types.GrantOperator, MintRequest{Grant: types.GrantConsole, TTL: 12 * time.Hour})
@@ -502,7 +503,20 @@ func TestAnExchangeCodeRedeemsOnceForItsToken(t *testing.T) {
 	assert.Equal(t, []string{tok.Name}, names(list(t, store)), "the code's record is gone")
 }
 
-func TestAnExchangeCodeDiesAfterAMinute(t *testing.T) {
+type ExchangeCodeLifetimeSuite struct{ suite.Suite }
+
+func TestExchangeCodeLifetimeSuite(t *testing.T) {
+	suite.Run(t, new(ExchangeCodeLifetimeSuite))
+}
+
+func (s *ExchangeCodeLifetimeSuite) TestAMintedCodeLivesTenSeconds() {
+	store := isolatedStore(s.T())
+	_, rec, err := store.MintCode(types.GrantOperator, MintRequest{Grant: types.GrantViewer, TTL: time.Hour})
+	s.Require().NoError(err)
+	s.WithinDuration(time.Now().Add(10*time.Second), rec.Expires, time.Second)
+}
+
+func TestAnExchangeCodeDiesAfterItsLifetime(t *testing.T) {
 	store := isolatedStore(t)
 	code, rec, err := store.MintCode(types.GrantOperator, MintRequest{Grant: types.GrantViewer, TTL: time.Hour})
 	require.NoError(t, err)
