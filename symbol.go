@@ -727,10 +727,10 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 
 	var mu sync.Mutex
 	var out SymbolRefresh
-	done := make(chan struct{})
+	indexed, done := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(done)
-		r.work(ctx, func(refreshed, problem string) {
+		refreshed := r.work(ctx, func(refreshed, problem string) {
 			mu.Lock()
 			defer mu.Unlock()
 			if refreshed != "" {
@@ -740,6 +740,12 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 				out.Problems = append(out.Problems, problem)
 			}
 		})
+		close(indexed)
+		if refreshed && r.after != nil {
+			// Past the budget this is left to finish or die with the process.
+			// Cancelling it would record its tool probes as failed.
+			r.after(context.WithoutCancel(ctx))
+		}
 	}()
 
 	finished := true
@@ -747,7 +753,7 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 	case <-done:
 	case <-ctx.Done():
 		select {
-		case <-done:
+		case <-indexed:
 		case <-time.After(r.abandon):
 			finished = false
 		}
@@ -760,8 +766,9 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 	return SymbolRefresh{Refreshed: slices.Clone(out.Refreshed), Problems: slices.Clone(out.Problems), Took: r.now().Sub(started)}
 }
 
-// work refreshes each wanted index behind the tree, reporting each outcome.
-func (r symbolRefresher) work(ctx context.Context, report func(refreshed, problem string)) {
+// work refreshes each wanted index behind the tree, reporting each outcome,
+// and returns whether any landed.
+func (r symbolRefresher) work(ctx context.Context, report func(refreshed, problem string)) bool {
 	refreshed := false
 	for _, s := range r.status(ctx) {
 		if len(staleIndexRefs([]types.SymbolIndexStatus{s})) == 0 || !r.wanted(s) {
@@ -794,9 +801,7 @@ func (r symbolRefresher) work(ctx context.Context, report func(refreshed, proble
 			report("", why)
 		}
 	}
-	if refreshed && r.after != nil {
-		r.after(ctx)
-	}
+	return refreshed
 }
 
 // lostTheLock reports a run refused for another magus holding the project

@@ -840,6 +840,25 @@ func (s *magusSuite) TestRefreshSetsNoBackoffWhenAnotherMagusHoldsTheLock() {
 	s.NoFileExists(r.indexPath(types.SymbolIndexStatus{}) + symbolRefreshFailedSuffix)
 }
 
+func (s *magusSuite) TestRefreshReturnsWhenTheGuardIndexesOutliveTheBudget() {
+	release := make(chan struct{})
+	s.T().Cleanup(func() { close(release) })
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error { return nil })
+	r.budget = 10 * time.Millisecond
+	r.abandon = time.Minute
+	cancelled := make(chan error, 1)
+	r.after = func(ctx context.Context) {
+		cancelled <- ctx.Err()
+		<-release
+	}
+
+	got := r.refresh(s.T().Context())
+
+	s.Equal([]string{"libs/a (go index)"}, got.Refreshed)
+	s.Empty(got.Problems)
+	s.NoError(<-cancelled, "the deadline does not cancel them")
+}
+
 func (s *magusSuite) TestRefreshRunsTheGuardIndexesOnlyAfterARefresh() {
 	after := 0
 	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error { return errors.New("no") })
