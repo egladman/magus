@@ -29,7 +29,9 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 ## go-build
 
-**Command:** `go build`
+-trimpath is a default: without it each checkout's absolute path is baked into the build ID, so checkouts of one source never share cache entries.
+
+**Command:** `go build -trimpath`
 
 ### Example
 
