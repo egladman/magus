@@ -59,10 +59,10 @@ var hostNotAllowed = rpcerr.Error{
 }
 
 // AllowOrigin returns a copy of a that also accepts origin in the Origin
-// header, or the error [ExactOrigin] gives. The receiver is not mutated, so
+// header, or an error when origin is inexact. The receiver is not mutated, so
 // widening one route never leaks into the set other routes share.
 func (a AllowedSet) AllowOrigin(origin string) (AllowedSet, error) {
-	exact, err := ExactOrigin(origin)
+	exact, err := exactOrigin(origin)
 	if err != nil {
 		return AllowedSet{}, err
 	}
@@ -74,10 +74,10 @@ func (a AllowedSet) AllowOrigin(origin string) (AllowedSet, error) {
 	return AllowedSet{extra: a.extra, names: a.names, origins: origins}, nil
 }
 
-// ExactOrigin returns s when it is what a browser sends as an Origin: a
+// exactOrigin returns s when it is what a browser sends as an Origin: a
 // lowercase http or https scheme://host[:port] and nothing more. An entry no
 // browser can send would trust nothing while reading as if it did.
-func ExactOrigin(s string) (string, error) {
+func exactOrigin(s string) (string, error) {
 	u, err := url.Parse(s)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || s != strings.ToLower(u.Scheme+"://"+u.Host) {
 		return "", fmt.Errorf("httpx: origin: %q is not an exact http or https scheme://host origin", s)
