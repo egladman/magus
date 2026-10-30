@@ -81,8 +81,10 @@ saying it, delete it here.
   (`types/enums.go`).
 - A type a magusfile or script reads lives in `types/`, not behind an alias.
 - Language changes in `libs/gopherbuzz/` match upstream Buzz.
-- magus is pre-1.0, so breaking is fine: rename, remove or change a name, flag or
-  format without a migration path. Add no compat shim, dual reader, fallback for
+- magus is pre-1.0, so a break may be made, deliberately: rename, remove or change a
+  name, flag or format without a migration path, and record the break
+  ([A deliberate break never merges red](docs/design/principles/a-deliberate-break-never-merges-red.md)).
+  Add no compat shim, dual reader, fallback for
   older callers or `Deprecated:` alias without asking Eli first.
 - Deleting is an option. Before adding code to keep something working, check
   whether removing the old path, flag, fallback, test or doc section reaches the
