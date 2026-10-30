@@ -120,7 +120,7 @@ export fun kindOf(rel: str) > str !> any {
     if (path\matchesAny(["internal/agent/skills/*/SKILL.md"], path: rel)) {
         return "skill-template";
     }
-    if (path\matchesAny([".claude/skills/*/SKILL.md", "AGENTS.md", "**/AGENTS.md", "internal/agent/agents-section.md"], path: rel)) {
+    if (path\matchesAny([".agents/skills/*/SKILL.md", ".claude/skills/*/SKILL.md", "AGENTS.md", "**/AGENTS.md", "internal/agent/agents-section.md"], path: rel)) {
         return "agent-brief";
     }
     if (path\matchesAny(GUIDES, path: rel)) {
