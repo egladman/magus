@@ -292,6 +292,35 @@ func TestValidate_CacheTierWrites(t *testing.T) {
 	}
 }
 
+type AllowedOriginsSuite struct{ suite.Suite }
+
+func TestAllowedOriginsSuite(t *testing.T) { suite.Run(t, new(AllowedOriginsSuite)) }
+
+func (s *AllowedOriginsSuite) validate(origins ...string) error {
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
+	cfg.MCP.AllowedOrigins = origins
+	return Validate(cfg)
+}
+
+func (s *AllowedOriginsSuite) TestEmptyIsValid() {
+	s.NoError(s.validate())
+}
+
+func (s *AllowedOriginsSuite) TestExactOriginIsValid() {
+	s.NoError(s.validate("https://example.com", "http://localhost:8080"))
+}
+
+func (s *AllowedOriginsSuite) TestAPathIsNamed() {
+	var ve *ValidationError
+	s.Require().ErrorAs(s.validate("https://example.com/console"), &ve)
+	s.Equal([]FieldFailure{{Field: "mcp.allowed_origins", Tag: "exact_origin", Value: "https://example.com/console"}}, ve.Failures)
+	s.Contains(ve.Error(), "exact http or https scheme://host origin")
+}
+
+func (s *AllowedOriginsSuite) TestABareHostIsRefused() {
+	s.Error(s.validate("example.com"))
+}
+
 // mcp.http is honored only while the server serves MCP at all; an explicit true beside
 // mcp.enabled false is refused rather than ignored.
 func TestValidate_MCPHTTP(t *testing.T) {

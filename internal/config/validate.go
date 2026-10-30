@@ -15,6 +15,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/spells"
@@ -90,6 +91,7 @@ func Validate(cfg Config) error {
 	failures = append(failures, spellImportFailures(cfg.Spells.Imports)...)
 	failures = append(failures, cacheWriteFailures(cfg.Cache)...)
 	failures = append(failures, mcpHTTPFailures(cfg.MCP)...)
+	failures = append(failures, allowedOriginFailures(cfg.MCP.AllowedOrigins)...)
 	failures = append(failures, conformanceFailures(cfg.Knowledge.Conformance)...)
 	failures = append(failures, diagnosticsFailures(cfg.Diagnostics)...)
 	failures = append(failures, sourceFailures(cfg.Sources)...)
@@ -217,6 +219,17 @@ func mcpHTTPFailures(m MCP) []FieldFailure {
 		return nil
 	}
 	return []FieldFailure{{Field: "mcp.http", Tag: "mcp_enabled_required", Value: "true"}}
+}
+
+// allowedOriginFailures names each entry the server would refuse to start on.
+func allowedOriginFailures(origins []string) []FieldFailure {
+	var failures []FieldFailure
+	for _, origin := range origins {
+		if _, err := (httpx.AllowedSet{}).AllowOrigin(origin); err != nil {
+			failures = append(failures, FieldFailure{Field: "mcp.allowed_origins", Tag: "exact_origin", Value: origin})
+		}
+	}
+	return failures
 }
 
 // conformanceFailures checks what no tag can: the exclusions, and the metric, population and
@@ -388,6 +401,8 @@ func humanReason(f FieldFailure) string {
 		return "cannot be true while cache.write.enabled is false: the remote cache tier is written from the local tier, so there would be nothing to write; enable cache.write.enabled or set this false"
 	case "mcp_enabled_required":
 		return "cannot be true while mcp.enabled is false: the server serves no MCP at all then, so there is no HTTP endpoint to mount; enable mcp.enabled or drop this key"
+	case "exact_origin":
+		return fmt.Sprintf("must be an exact http or https scheme://host origin, as a browser sends it (got %q)", f.Value)
 	case "diagnostic_prefix":
 		return f.Param
 	case "diagnostic_docs":
