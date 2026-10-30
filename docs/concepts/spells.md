@@ -271,7 +271,7 @@ unlike the magusfile that binds it, which should stay thin enough that the
 question never arises. See [Testing](../guides/testing.md) for where that line
 sits and how to write in-file `test "..." {}` blocks.
 
-`mgs_listIgnoreDirs` names the non-source directories your ecosystem generates (a Rust spell returns `[Path{value = "target", isDir = true}]`; a Node spell, `[Path{value = "node_modules", isDir = true}]`). magus prunes them from the input-hashing walk of any project this spell resolves, so a build tree never counts toward the cache key. Dot-directories are always skipped, so only non-dot names belong here.
+`mgs_listIgnoreDirs` names the non-source directories your ecosystem generates (a Rust spell returns `[Path{value = "target", isDir = true}]`; a Node spell, `[Path{value = "node_modules", isDir = true}]`). magus prunes them from the input-hashing walk of any project this spell resolves, so a build tree never counts toward the cache key. The walk already skips `.git`, `.hg`, `.jj`, `.magus` and `.build`. It reads every other dot-directory, because a source glob may mean `.github`, so an op that must not reach them excludes them in its own `sources`.
 
 Buzz (a `ruby.buzz` spell source):
 
