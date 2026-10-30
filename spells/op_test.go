@@ -68,6 +68,14 @@ func TestCommandValidateQuiet(t *testing.T) {
 	require.ErrorContains(t, Command{Bin: "go", Quiet: true}.Validate(), "quiet without capture")
 }
 
+func TestCommandValidateSourcesEachWithoutSourcesRefused(t *testing.T) {
+	require.ErrorContains(t, Command{Bin: "gofmt", SourcesEach: true}.Validate(), "sources_each without sources")
+}
+
+func TestCommandValidateSourcesEachWithSourcesAccepted(t *testing.T) {
+	require.NoError(t, Command{Bin: "gofmt", Sources: []string{"**/*.go"}, SourcesEach: true}.Validate())
+}
+
 // TestServiceValidate pins the shape rules a Service is resolved against: exactly one
 // of Command or Start, and a Start service declares both how to tell it is up and how
 // to stop it, since the supervisor holds none of its processes.

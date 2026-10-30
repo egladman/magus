@@ -167,6 +167,9 @@ func (c Command) Validate() error {
 	if c.Quiet && !c.Capture {
 		return errors.New("quiet without capture discards the output, set capture = true or drop quiet")
 	}
+	if c.SourcesEach && len(c.Sources) == 0 {
+		return errors.New("sources_each without sources has no files to run per, set sources or drop sources_each")
+	}
 	return nil
 }
 
@@ -309,16 +312,16 @@ func (s Service) Validate() error {
 // In-VM spell logic is not an op kind: a remote cache provider is a separate contract
 // magus invokes by name, and other custom logic belongs in a magusfile target body.
 //
-// Capture makes the op's magusfile method return the {stdout, stderr, code, ok} record
-// instead of void, for ops whose output is the point rather than the exit code. It is
-// Go-internal, not mirrored to Buzz.
+// Op.Capture repeats Command.Capture, the field a spell declares and Buzz sees.
+// Decoding copies it here, and dispatch reads this copy.
 type Op struct {
 	// Kind is the op's lifecycle kind (OpKind*); empty means OpKindCommand.
 	Kind string `json:"kind,omitempty"`
 	Command
 	// Service is set only for a service op (Kind == OpKindService); nil otherwise.
 	Service *Service `json:"service,omitempty"`
-	Capture bool     `json:"capture,omitempty"`
+	// Capture shadows Command.Capture; keep the two equal (see [Op]).
+	Capture bool `json:"capture,omitempty"`
 	// Install is set only for an install op (Kind == OpKindInstall). The embedded
 	// Command is the first declared install's, for describe and charm discovery; the
 	// runner resolves the real one against the project's lockfile.
