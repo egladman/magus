@@ -5,6 +5,7 @@ package hoste2e
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -62,7 +63,39 @@ func claudeDriver() *hostDriver {
 		return run.stdout, run
 	}
 	h.skips = map[string]string{}
+	h.askCases = []askCase{
+		{name: "default", want: askPrompts, args: []string{"--permission-mode", "default"}},
+		{name: "accept-edits", want: askPrompts, args: []string{"--permission-mode", "acceptEdits"}},
+		{name: "allow-rule", want: askPrompts, args: []string{"--permission-mode", "default"},
+			setup: func(t *testing.T, w *workspace) { w.allowInSettings(t, "Bash(./magus run:*)") }},
+		{name: "dont-ask", want: askRefuses, args: []string{"--permission-mode", "dontAsk"}},
+		{name: "bypass", want: askRefuses, args: bypassArgs},
+		// The hook's bare ask under bypass: what the refusal exists to prevent.
+		{name: "bypass-bare-hook-ask", want: askObserves, args: bypassArgs, env: []string{"HOST_ASK_BRANCH=" + bareHookAsk}},
+	}
+	h.askTurn = func(t *testing.T, w *workspace, c askCase) askRun {
+		args := append([]string{"-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+			"--include-hook-events", "--model", h.model, "--setting-sources", "project",
+			"--mcp-config", filepath.Join(w.dir, ".mcp.json"), "--strict-mcp-config",
+			"--permission-prompt-tool", "stdio"}, c.args...)
+		return w.answerPrompts(t, c.name, h.path, args, c.env, askPrompt)
+	}
 	return h
+}
+
+var bypassArgs = []string{"--permission-mode", "bypassPermissions", "--allow-dangerously-skip-permissions"}
+
+// bareHookAsk is magus-command.buzz's Claude Code ask arm, with no mode check.
+const bareHookAsk = `{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":{{toJson .reason}}}}`
+
+// askHeadless runs a host that takes the prompt as an argument. Nothing shows
+// a prompt there, so a case proves only that the command did not run.
+func askHeadless(t *testing.T, w *workspace, c askCase, bin string, args []string) askRun {
+	t.Helper()
+	cmdEnv := w.env
+	w.env = append(slices.Clone(cmdEnv), c.env...)
+	defer func() { w.env = cmdEnv }()
+	return askRun{hostRun: w.runHost(t, c.name, bin, args)}
 }
 
 func codexDriver() *hostDriver {
@@ -96,6 +129,15 @@ func codexDriver() *hostDriver {
 	}
 	h.skips = map[string]string{
 		"brief-delivered": "Codex wires the brief to SessionStart(compact) alone, and codex exec has no way to ask for a compaction",
+	}
+	h.askCases = []askCase{
+		{name: "approval-never", want: askHolds, args: []string{"-c", `approval_policy="never"`}},
+		{name: "approval-on-request", want: askHolds, args: []string{"-c", `approval_policy="on-request"`}},
+		{name: "bypass", want: askHolds, args: []string{"--dangerously-bypass-approvals-and-sandbox"}},
+	}
+	h.askTurn = func(t *testing.T, w *workspace, c askCase) askRun {
+		args := append([]string{"exec", "--json", "--dangerously-bypass-hook-trust", "--cd", w.dir, "-m", h.model}, c.args...)
+		return askHeadless(t, w, c, h.path, append(args, askPrompt))
 	}
 	return h
 }
@@ -154,7 +196,29 @@ func cursorDriver() *hostDriver {
 	}
 	const noPTY = "cursor-agent -p fires neither beforeSubmitPrompt nor stop (probed on 2026.10.01); proving it needs an interactive pty driver this suite does not have"
 	h.skips = map[string]string{"prompt-recorded": noPTY, "reply-check": noPTY}
+	h.askCases = []askCase{
+		{name: "no-force", want: askHolds, check: askReachedShellEvent},
+		{name: "force", want: askHolds, args: []string{"--force"}, check: askReachedShellEvent},
+	}
+	h.askTurn = func(t *testing.T, w *workspace, c askCase) askRun {
+		args := append([]string{"-p", "--output-format", "json", "--trust", "--approve-mcps",
+			"--workspace", w.dir, "--model", h.model}, c.args...)
+		return askHeadless(t, w, c, h.path, append(args, askPrompt))
+	}
 	return h
+}
+
+// askReachedShellEvent proves beforeShellExecution consumed what preToolUse
+// filed: that event is the gate behind preToolUse's allow.
+func askReachedShellEvent(t *testing.T, w *workspace) {
+	t.Helper()
+	held, err := filepath.Glob(filepath.Join(w.root, "state", "magus", "cursor-hook", "ask-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(held) > 0 {
+		t.Errorf("beforeShellExecution never read the filed ask: %v", held)
+	}
 }
 
 func opencodeDriver() *hostDriver {
@@ -189,6 +253,14 @@ func opencodeDriver() *hostDriver {
 	}
 	h.skips = map[string]string{
 		"brief-delivered": "OpenCode offers no context channel after a compaction; its guide documents that the plugin hands a compacted session nothing",
+	}
+	h.askCases = []askCase{
+		{name: "default", want: askHolds},
+		{name: "auto", want: askHolds, args: []string{"--auto"}},
+	}
+	h.askTurn = func(t *testing.T, w *workspace, c askCase) askRun {
+		args := append([]string{"run", "--format", "json", "--dir", w.dir, "-m", h.model}, c.args...)
+		return askHeadless(t, w, c, h.path, append(args, askPrompt))
 	}
 	return h
 }

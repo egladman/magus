@@ -3,6 +3,7 @@
 package hoste2e
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -26,6 +28,14 @@ import (
 // jobID is the live job row each workspace declares, so a spawn title and a lease
 // marker name a job the guard can bind, and the brief lists it.
 const jobID = "e2e-job"
+
+const (
+	// askTarget is human_only, the one thing a guard answers with an ask.
+	askTarget  = "ask-probe"
+	askCommand = "./magus run " + askTarget + " asks"
+	// askPersonText opens the text a refusal shows the person.
+	askPersonText = "magus stopped this call"
+)
 
 // workspace is one throwaway magus workspace wired for one host, plus the private
 // directories that keep the host and magus away from the user's own config and state.
@@ -176,6 +186,21 @@ func (w *workspace) writeFixture(t *testing.T, spell string) {
 	for _, f := range archive.Files {
 		writeFile(t, filepath.Join(w.dir, f.Name), fill.Replace(string(f.Data)))
 	}
+	writeFile(t, filepath.Join(w.dir, "asks", "magusfile.buzz"), `import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "host e2e fixture",
+    "targets": {
+        "`+askTarget+`": {
+            "skip_cache": "a run is the evidence",
+            "human_only": "this harness test wants a person. Code word: `+w.code("ASK")+`",
+        },
+    },
+});
+
+export fun ask_probe(ctx: magus\Context, _a: [str]) > void {}
+`)
 
 	copyFile(t, repoPath(t, filepath.Join("spells", "harness", spell, "spell.buzz")),
 		filepath.Join(w.dir, "spells", "harness", spell, "spell.buzz"), 0o644)
@@ -264,6 +289,106 @@ func (w *workspace) probeRules(t *testing.T) {
 			t.Fatalf("magus %s: want a deny (exit 2) from the fixture rule, got %v\n%s", strings.Join(args, " "), err, out)
 		}
 	}
+	out, _ := w.exec(context.Background(), "magus", "shell", "--agent-name", "e2e-setup", "--renders-ask", "-o", "json", askCommand)
+	var verdict hookResponse
+	if err := json.Unmarshal([]byte(out), &verdict); err != nil || verdict.Decision != "ask" {
+		t.Fatalf("magus shell %q: want an ask from the human_only target, got %v\n%s", askCommand, err, out)
+	}
+}
+
+// allowInSettings adds a permissions.allow rule to the workspace's Claude Code
+// settings: the rule whose match must not turn a hook's ask into a run.
+func (w *workspace) allowInSettings(t *testing.T, rule string) {
+	t.Helper()
+	path := filepath.Join(w.dir, ".claude", "settings.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(body, &doc); err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	permissions, _ := doc["permissions"].(map[string]any)
+	if permissions == nil {
+		permissions = map[string]any{}
+		doc["permissions"] = permissions
+	}
+	allow, _ := permissions["allow"].([]any)
+	permissions["allow"] = append(allow, rule)
+	writeJSON(t, path, doc)
+}
+
+// answerPrompts drives a host over its stream-json control protocol, where
+// SDK clients answer permission prompts, and declines each one. stdin stays
+// open until the result, because the host reads the answers from it.
+func (w *workspace) answerPrompts(t *testing.T, label, bin string, args, extraEnv []string, prompt string) askRun {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), hostTimeout())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Dir = w.dir
+	cmd.Env = append(slices.Clone(w.env), extraEnv...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 10 * time.Second
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	send := func(v any) {
+		line, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := stdin.Write(append(line, '\n')); err != nil {
+			t.Logf("%s: stdin closed: %v", label, err)
+		}
+	}
+	send(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": prompt}})
+
+	var run askRun
+	var seen strings.Builder
+	lines := bufio.NewScanner(stdout)
+	lines.Buffer(make([]byte, 0, 1<<20), 1<<26)
+	for lines.Scan() {
+		seen.WriteString(lines.Text() + "\n")
+		var event struct {
+			Type      string `json:"type"`
+			RequestID string `json:"request_id"`
+			Request   struct {
+				Subtype string `json:"subtype"`
+			} `json:"request"`
+		}
+		if json.Unmarshal(lines.Bytes(), &event) != nil {
+			continue
+		}
+		if event.Type == "result" {
+			_ = stdin.Close()
+		}
+		if event.Type == "control_request" && event.Request.Subtype == "can_use_tool" {
+			run.prompted = true
+			send(map[string]any{"type": "control_response", "response": map[string]any{
+				"subtype":    "success",
+				"request_id": event.RequestID,
+				"response":   map[string]any{"behavior": "deny", "message": "declined by the host e2e suite"},
+			}})
+		}
+	}
+	run.err = cmd.Wait()
+	run.stdout, run.stderr = seen.String(), stderr.String()
+	writeFile(t, filepath.Join(w.logs, label+".stdout"), run.stdout)
+	writeFile(t, filepath.Join(w.logs, label+".stderr"), run.stderr)
+	return run
 }
 
 func (w *workspace) magus(t *testing.T, args ...string) string {

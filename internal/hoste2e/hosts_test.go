@@ -31,6 +31,10 @@ type hostSpec struct {
 	turn func(t *testing.T, w *workspace, conv *conversation, prompt string) (string, hostRun)
 	// skips names the scenarios this suite cannot drive on this host, with the reason.
 	skips map[string]string
+	// askCases are the modes TestHostsAsk runs a person-only command under.
+	askCases []askCase
+	// askTurn sends askPrompt under one of those modes.
+	askTurn func(t *testing.T, w *workspace, c askCase) askRun
 }
 
 // hostInstall is what the run finds out about a host on this machine.

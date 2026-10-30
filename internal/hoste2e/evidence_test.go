@@ -152,6 +152,26 @@ func (w *workspace) proofreadReplies(t *testing.T) []string {
 	return out
 }
 
+// askProbeRan reports whether a run log records the person-only target. Setup
+// judges the command and never runs it.
+func (w *workspace) askProbeRan(t *testing.T) bool {
+	t.Helper()
+	logs, err := filepath.Glob(filepath.Join(w.cacheDir(), "runs", "*.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range logs {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(strings.ReplaceAll(string(body), " ", ""), `"run","`+askTarget+`"`) {
+			return true
+		}
+	}
+	return false
+}
+
 func clip(s string) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	if len(s) > 80 {
