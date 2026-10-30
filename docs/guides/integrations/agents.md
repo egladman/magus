@@ -121,8 +121,9 @@ each host's vendored schema.
 | [`AGENTS.md`](https://github.com/egladman/magus/blob/main/AGENTS.md)                         | the managed skills block between its `magus:skills` markers    |
 
 Installed skills are not committed, because `magus agent install` regenerates
-them from the binary. The two under `.claude/skills/` that are committed are
-written by hand for working on magus itself.
+them from the binary. The ones under `.agents/skills/` that are committed are
+written by hand for working on magus itself, and `.claude/skills/` links to each
+because Claude Code reads only that directory.
 
 The shared reference pages sit behind those: [Skills](agents/skills.md) for the
 install, [The guard](agents/guard.md) for what is denied and why,
