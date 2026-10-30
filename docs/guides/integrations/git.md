@@ -99,9 +99,8 @@ Delete the section to remove the integration; the next `magus server start` puts
 
 `post-commit` and `pre-push` carry a second managed section, `magus-drift`, in the same
 shape: post a `check-drift` job that names the hook, return. The server compares the
-commit's changed sources against the outputs they produce and runs `gofmt -l` over its
-changed, format-governed files, then prints the fix and the command that folds it into the
-offending commit (MGS4006 stale output, MGS4009 stale formatting).
+commit's changed sources against the outputs they produce, then prints the fix and the
+command that folds it into the offending commit (MGS4006 stale output).
 
 What fires when:
 

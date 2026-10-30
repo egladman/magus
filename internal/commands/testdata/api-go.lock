@@ -5493,7 +5493,6 @@ github.com/egladman/magus/types.UncompressResult.Bytes field int
 github.com/egladman/magus/types.UncompressResult.Files field []Path
 github.com/egladman/magus/types.UndeclaredSeedingFile const DiagnosticCode = "MGS1028"
 github.com/egladman/magus/types.UndeclaredSourceModified const DiagnosticCode = "MGS4007"
-github.com/egladman/magus/types.UnformattedCommit const DiagnosticCode = "MGS4009"
 github.com/egladman/magus/types.UnknownConfigKey const DiagnosticCode = "MGS1040"
 github.com/egladman/magus/types.UnknownMarkerFamily const DiagnosticCode = "MGS7004"
 github.com/egladman/magus/types.UnknownTarget const DiagnosticCode = "MGS1006"

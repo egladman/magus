@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/egladman/magus/internal/changeset"
@@ -21,30 +20,8 @@ import (
 )
 
 // serverCheckDrift is the worker for the check-drift job: it notices, without blocking
-// anything, that HEAD left something stale (generated output, formatting, or both) and
-// hands over the commands that fix it in place. Normally reached via `magus job run
-// check-drift`, which is all the post-commit and pre-push hooks installed by
-// installVCSHook ever call; see that function and types.DriftHookInstaller for why
-// the hook itself does none of this work.
-//
-// Two classes, two different cheapness stories:
-//
-//   - generated output: the same rule this repo already states as policy (regenerate in
-//     the same commit as the source change that invalidated the output), read back as a
-//     question: did HEAD change a declared SOURCE without also changing that project's
-//     declared OUTPUT. Pure glob/diff comparison, no execution. Reuses MGS4006
-//     (types.StaleGeneratedOutput), the code this exact condition means everywhere else
-//     it fires.
-//   - formatting: charmless `format` was checked first and does not answer this: its
-//     ctx.writesFiles(..., editsExistingSource: true) globs are deliberately excluded from the drift-gate's
-//     declared-output hash (see MGS4007's docs on why: "so nothing snapshots, replays, or
-//     cleans them"), so nothing there ever compares pre/post bytes for them. This class
-//     runs `gofmt -l`, read-only, scoped to exactly the commit's changed Go files that
-//     format's own declaration governs (types.ChainUpdates, itself read-time, no
-//     execution, narrows the file list before gofmt ever runs). Reuses MGS4009
-//     (types.UnformattedCommit): a sibling of MGS4006, not a duplicate of lint's own
-//     formatting check: lint answers "is this file formatted, right now, anywhere in
-//     the tree"; this answers "did this commit leave a file it touched unformatted".
+// anything, that HEAD left generated output stale (MGS4006).
+// The hooks call it through `magus job run check-drift`.
 //
 // Run for pre-push, it also counts the hunks of the pushed ranges that no read mark covers
 // (pushedUnread), the same count `magus diff --unread` filters to, and raises the desktop
@@ -66,16 +43,7 @@ func serverCheckDrift(ctx context.Context, root string, args []string) error {
 	if res.VCS == nil || res.Source == types.VCSSourceDefault {
 		return nil // unversioned tree: nothing to notice
 	}
-	// The root project's OWN format target, read-time only: its ctx.writesFiles(..., editsExistingSource: true)
-	// declaration walked through ctx.needs (types.ChainUpdates), same as the runner folds
-	// it into a real run's Step.Updates. A workspace with no "format" target (or none at
-	// root) yields an empty set, and the formatting class simply never fires: no error,
-	// no gofmt call.
-	var formatGlobs []types.Glob
-	if p := m.Get("."); p != nil {
-		formatGlobs = types.ChainUpdates(p, "format", m.Get)
-	}
-	notice, ok, err := checkDriftForCommit(ctx, m.Root(), res.VCS, m.ClassifyFiles, formatGlobs, realGofmtList)
+	notice, ok, err := checkDriftForCommit(ctx, m.Root(), res.VCS, m.ClassifyFiles)
 	if err != nil {
 		slog.With(attr.Component("check-drift")).WarnContext(ctx, "could not check HEAD for stale output", attr.Error(err))
 		// Best-effort: a broken check must not be mistaken for a failed commit or push.
@@ -125,7 +93,7 @@ func parseCheckDriftArgs(args []string) (job.DriftHook, error) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server check-drift [--hook <name>] [--remote <name>] [--push <remote>:<local>]...")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Notice when HEAD left generated output or formatting stale, and for a push, count")
+			fmt.Fprintln(os.Stderr, "Notice when HEAD left generated output stale, and for a push, count")
 			fmt.Fprintln(os.Stderr, "the unread hunks of each pushed range. This is the worker for")
 			fmt.Fprintf(os.Stderr, "`%s`; prefer that form.\n", hint.JobRun.With(job.NameCheckDrift))
 		}
@@ -246,20 +214,15 @@ func unreadRangeNotice(rangeLabel, patch string, viewed []string, loadErr error)
 
 // checkDriftForCommit is the VCS-facing half of serverCheckDrift, kept separate so it can
 // be exercised against a real repository without needing a full magus workspace.
-// classify and gofmtList are the two things that need one: turning changed paths into
-// their declared source/output role, and asking a real gofmt binary about a file. A
-// test supplies its own instead of loading a workspace or shelling a real tool.
+// classify turns changed paths into their declared source/output role.
+// A test supplies its own instead of loading a workspace.
 //
-// It returns ok=false, with no error, for every ordinary reason there is nothing to say:
-// no parent commit (the repository's first commit), nothing changed, or nothing that
-// changed lands in either class.
+// It returns ok=false with no error when there is nothing to say.
 func checkDriftForCommit(
 	ctx context.Context,
 	root string,
 	driver types.VCSDriver,
 	classify func(context.Context, []string) ([]types.FileEntry, error),
-	formatGlobs []types.Glob,
-	gofmtList func(ctx context.Context, root string, files []string) ([]string, error),
 ) (notice string, ok bool, err error) {
 	before, err := driver.Metadata(ctx, root)
 	if err != nil {
@@ -284,19 +247,6 @@ func checkDriftForCommit(
 	}
 	finding := driftFinding{staleProjects: types.StaleSourceProjects(files)}
 
-	if goFiles := formatGovernedGoFiles(paths, formatGlobs); len(goFiles) > 0 {
-		unformatted, gerr := gofmtList(ctx, root, goFiles)
-		if gerr != nil {
-			// Best-effort, same posture as the desktop notification: a broken gofmt
-			// probe must not hide a real generated-output finding and must not fail
-			// the job. It is logged by the caller if this bubbles up, but here it just
-			// means the formatting class stays silent for this run.
-			slog.With(attr.Component("check-drift")).WarnContext(ctx, "gofmt probe failed", attr.Error(gerr))
-		} else {
-			finding.unformatted = unformatted
-		}
-	}
-
 	if finding.empty() {
 		return "", false, nil
 	}
@@ -316,42 +266,6 @@ func checkDriftForCommit(
 	// documents.
 
 	return buildDriftNotice(commitID, finding, kase), true, nil
-}
-
-// formatGovernedGoFiles narrows paths to the commit's changed Go files that the format
-// target's own ctx.writesFiles(..., editsExistingSource: true) declares governed (updateGlobs, from
-// types.ChainUpdates). Go only: dprint/Markdown formatting is a real gap this pass does
-// not close (see the report), and narrowing first is what keeps gofmt -l from ever
-// running when nothing changed calls for it.
-func formatGovernedGoFiles(paths []string, updateGlobs []types.Glob) []string {
-	if len(updateGlobs) == 0 {
-		return nil
-	}
-	var out []string
-	for _, p := range paths {
-		if strings.HasSuffix(p, ".go") && types.MatchGlobs(updateGlobs, p) {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-// realGofmtList runs `gofmt -l`, read-only (no -w), against exactly the given files:
-// never the whole tree, and never a write, so it cannot race a concurrent agent's edits
-// the way a formatting write could. It is the one live check checkDriftForCommit
-// performs; everything else is decided from a diff and a glob comparison.
-func realGofmtList(ctx context.Context, root string, files []string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "gofmt", append([]string{"-l"}, files...)...)
-	cmd.Dir = root
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("gofmt -l: %w", err)
-	}
-	trimmed := strings.TrimSpace(string(out))
-	if trimmed == "" {
-		return nil, nil
-	}
-	return strings.Split(trimmed, "\n"), nil
 }
 
 // noteJobDesktop raises a best-effort desktop notification from the server job
@@ -394,32 +308,19 @@ const (
 	driftPushed
 )
 
-// driftFinding is everything checkDriftForCommit learned about one commit, in the two
-// classes the notice distinguishes. Either may be empty; buildDriftNotice omits an empty
-// class's paragraph rather than printing it hollow.
+// driftFinding is everything checkDriftForCommit learned about one commit.
 type driftFinding struct {
 	// staleProjects: MGS4006 (types.StaleGeneratedOutput): a declared source changed
 	// with no matching declared-output change in the same commit.
 	staleProjects []string
-	// unformatted: files gofmt -l reported, scoped to the commit's changed Go files
-	// that the format target's own ctx.writesFiles(..., editsExistingSource: true) declares governed (see
-	// checkDriftForCommit). MGS4009 (types.UnformattedCommit): a sibling of MGS4006,
-	// not a duplicate of lint's own formatting check: this asks whether THIS COMMIT
-	// left a file it touched unformatted, not whether a file is formatted right now.
-	unformatted []string
 }
 
-func (f driftFinding) empty() bool { return len(f.staleProjects) == 0 && len(f.unformatted) == 0 }
+func (f driftFinding) empty() bool { return len(f.staleProjects) == 0 }
 
-// buildDriftNotice renders the notice for a commit that left something stale: one
-// paragraph per class that actually fired (generated output, formatting), each with its
-// own remedy command, followed by the ONE VCS command (if any) that folds a fix into
-// hash, the commit that caused it. The amend-safety decision is per COMMIT, not per
-// class, so it appears once regardless of how many classes fired.
+// buildDriftNotice renders the notice for a commit that left generated output
+// stale. It ends with the one VCS command that folds a fix into hash, if any.
 //
-// Pure: no VCS or filesystem call happens here, so both the findings and the
-// amend-safety case must already be decided by the caller. This keeps the exact
-// wordings testable without a real repository or a real gofmt.
+// Pure: the caller has already decided the finding and the amend-safety case.
 func buildDriftNotice(hash string, f driftFinding, kase driftNoticeCase) string {
 	var b strings.Builder
 	if len(f.staleProjects) > 0 {
@@ -427,14 +328,6 @@ func buildDriftNotice(hash string, f driftFinding, kase driftNoticeCase) string 
 		fmt.Fprintf(&b, "[%s] commit %s left generated output stale (%s changed with no matching regeneration).\n",
 			types.StaleGeneratedOutput, hash, projects)
 		fmt.Fprintf(&b, "Regenerate: magus run generate:rw %s\n", projects)
-	}
-	if len(f.unformatted) > 0 {
-		lead := "[%s] commit %s left formatting stale (gofmt would reformat): %s\n"
-		if len(f.staleProjects) > 0 {
-			lead = "[%s] commit %s also left formatting stale (gofmt would reformat): %s\n"
-		}
-		fmt.Fprintf(&b, lead, types.UnformattedCommit, hash, strings.Join(f.unformatted, ", "))
-		fmt.Fprintln(&b, "Reformat: magus run format:rw .")
 	}
 	switch kase {
 	case driftUnpushedHead:

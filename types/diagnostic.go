@@ -838,16 +838,6 @@ const UndeclaredSourceModified DiagnosticCode = "MGS4007"
 // is the composing body's own, and only ctx.needs can express it.
 const UnorderedSameStepWrite DiagnosticCode = "MGS4008"
 
-// UnformattedCommit is a commit that changed a Go file without leaving it correctly
-// formatted (gofmt -l still names it). A COMMIT-TIME question, not "is this file
-// formatted right now": golangci-lint's formatters already answer that one, against
-// the whole tree, on demand. This fires once per commit, scoped to the files that
-// commit touched, from the drift-notice hooks (post-commit, pre-push); see
-// checkDriftForCommit in cmd/magus. Sibling of MGS4006 (generated-output drift, the
-// other class the same notice carries) and distinct from MGS4007 (a target rewriting
-// an undeclared source, checked after a target runs, not after a commit is made).
-const UnformattedCommit DiagnosticCode = "MGS4009"
-
 // SelfInvalidatingKey is a target whose key reads a file its own run generates after the
 // key is taken, so every run succeeds and none is cached. A moved input no target
 // declares as an output is a concurrent writer instead, and stays an uncoded notice.
@@ -1157,7 +1147,6 @@ var allDiagnosticCodes = []DiagnosticCode{
 	StaleGeneratedOutput,
 	UndeclaredSourceModified,
 	UnorderedSameStepWrite,
-	UnformattedCommit,
 	SelfInvalidatingKey,
 	NearDuplicateServices,
 	ServiceOpDetached,
