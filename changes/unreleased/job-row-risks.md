@@ -12,3 +12,6 @@
 - **A released file under a named pattern is said out loud.** A record naming the glob a
   narrowing took a file out of leaves the file released, and dropping its claims leaves it
   held by nothing. `job fork` and `job apply` now note which it is.
+- **`job exit` compares charm sets.** A ref recording a run under another charm than the
+  check resolves to is refused when filed rather than at `job wait`. Exit reads
+  `default_charms` from the job's checkout, workspace config only, as the wait does.

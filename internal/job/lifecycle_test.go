@@ -267,14 +267,60 @@ func (s *exitEvidenceSuite) TestCheckRefNamingAnotherCommandIsRefused() {
 	s.ErrorContains(err, `goal "check" cites output ref "out9"`)
 }
 
-func (s *exitEvidenceSuite) TestRunUnderDefaultCharmsIsTheSameCommand() {
+// exitUnderDefaults is exit in a workspace setting default_charms: [rw].
+func (s *exitEvidenceSuite) exitUnderDefaults(row types.Job, attempt types.JobAttempt) (types.Job, error) {
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+	loc := declared(s.T(), row)
+	s.Require().NoError(os.WriteFile(filepath.Join(loc.Root, "magus.yaml"), []byte("default_charms: [rw]\n"), 0o644))
+	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+		attempt.Found, attempt.Ref, attempt.Project = true, ref, "."
+		attempt.TimestampMs = 9_999_999_999_999
+		return attempt, nil
+	}
+	return Exit(s.T().Context(), boundStore(loc, row.ID), row.ID, &result, resolve)
+}
+
+func (s *exitEvidenceSuite) TestRunUnderTheDefaultCharmsIsTheCheck() {
+	_, err := s.exitUnderDefaults(s.row(), types.JobAttempt{Target: "go-test:rw"})
+
+	s.NoError(err)
+}
+
+func (s *exitEvidenceSuite) TestRunSkippingTheDefaultCharmsIsRefused() {
+	_, err := s.exitUnderDefaults(s.row(), types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
+	s.ErrorContains(err, "go-test:rw")
+}
+
+func (s *exitEvidenceSuite) TestRunUnderDefaultsOfACheckOptingOutIsRefused() {
+	row := s.row()
+	row.Check.NoDefaultCharms = true
+
+	_, err := s.exitUnderDefaults(row, types.JobAttempt{Target: "go-test:rw"})
+
+	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
+}
+
+func (s *exitEvidenceSuite) TestRunOfACheckOptingOutOfDefaultsIsTheCheck() {
+	row := s.row()
+	row.Check.NoDefaultCharms = true
+
+	_, err := s.exitUnderDefaults(row, types.JobAttempt{Target: "go-test"})
+
+	s.NoError(err)
+}
+
+func (s *exitEvidenceSuite) TestACharmWithNoDefaultsIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
 
 	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test:rw"})
 
-	s.NoError(err)
+	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
 }
 
 func (s *exitEvidenceSuite) TestTestFilterStaysTheSameCommand() {
@@ -370,6 +416,9 @@ func (s *rowKeepsItsPathsSuite) narrowedAt(state types.JobState) *Store {
 		ID: "w", Criteria: "goal", WritePaths: []string{"a.go"}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
 		Releases: []types.JobRelease{{Path: "b.go", Digest: types.DigestAbsent, ReleasedAt: 1}},
 	})
+	rows, err := store.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows[0].Releases, 1)
 	return store
 }
 

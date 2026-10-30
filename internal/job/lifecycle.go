@@ -109,7 +109,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	if err != nil {
 		return types.Job{}, err
 	}
-	if err := refuseWrongRun(rows[i], attempt, gateAttempts); err != nil {
+	if err := refuseWrongRun(rows[i], attempt, gateAttempts, workspaceDefaultCharms(WorkTree(store.root, rows[i]))); err != nil {
 		return types.Job{}, err
 	}
 	return update(func(row *types.Job) {
@@ -135,17 +135,27 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	})
 }
 
-// refuseWrongRun refuses evidence of another command than its goal's check.
-// A goal the row does not declare is left for the wait to name.
-func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGateAttempt) error {
+// workspaceDefaultCharms are the defaults a wait grades tree's runs under.
+// One person's global config must not change what exit accepts.
+func workspaceDefaultCharms(tree string) []string {
+	cfg, err := config.LoadWorkspaceOnly(tree)
+	if err != nil {
+		return nil
+	}
+	return cfg.DefaultCharms
+}
+
+// refuseWrongRun refuses evidence of another command than its goal's check,
+// charm set included. A goal the row does not declare is left for the wait.
+func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGateAttempt, defaults []string) error {
 	goals := row.EffectiveGoals()
 	check := func(id string, attempt types.JobAttempt) error {
 		i := slices.IndexFunc(goals, func(g types.Goal) bool { return g.ID == id && g.Kind == types.GoalKindCheck })
-		if i < 0 || sameCommand(goals[i].Check, attempt) {
+		if i < 0 || ranCheck(goals[i].Check, attempt, defaults) {
 			return nil
 		}
 		return fmt.Errorf("job: goal %q cites output ref %q, which records `%s`, and its check runs `%s`: cite a run of that check, or file it as owed with no output_ref",
-			id, attempt.Ref, attempt, goals[i].Check)
+			id, attempt.Ref, attempt, resolveCheck(goals[i].Check, defaults))
 	}
 	if primary.Found {
 		if err := check(types.PrimaryGoalID, primary); err != nil {
@@ -158,23 +168,6 @@ func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGa
 		}
 	}
 	return nil
-}
-
-// sameCommand is [ranCheck] with the charm sets left out. Filing has no
-// default_charms to resolve them with, so the wait compares those.
-func sameCommand(c types.LeaseCheck, a types.JobAttempt) bool {
-	if c.Script == "" {
-		spell, target, filtered := strings.Cut(c.Target, "::")
-		if !filtered {
-			spell, target = "", spell
-		}
-		c.Target, _ = splitCharms(target)
-		if filtered {
-			c.Target = fmt.Sprintf("%s::%s", spell, c.Target)
-		}
-		a.Target, _ = splitCharms(a.Target)
-	}
-	return ranCheck(c, a, nil)
 }
 
 // alreadyEndedError is [Exit]'s failure for a row that ended before: a second end would
