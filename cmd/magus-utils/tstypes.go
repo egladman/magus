@@ -147,7 +147,7 @@ func tsType(t reflect.Type, declared map[string]bool) (string, error) {
 // tsResult is Result's TypeScript form. It is written out rather than derived: the
 // union, the Error subclass and the helpers holding the only try/catch are the TS idiom,
 // and none of them is a shape a Go struct carries.
-const tsResult = `export class MagusError extends Error {
+const tsResult = `export class MagusError extends Error implements Diagnostic {
   readonly code: string;
   readonly url?: string;
   readonly fix?: string;

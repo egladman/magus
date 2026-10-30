@@ -12,7 +12,7 @@ export interface Diagnostic {
   fix?: string;
 }
 
-export class MagusError extends Error {
+export class MagusError extends Error implements Diagnostic {
   readonly code: string;
   readonly url?: string;
   readonly fix?: string;
