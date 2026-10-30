@@ -541,14 +541,14 @@ export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.info("image-build: loaded {loaded.tag} ({loaded.id}) from {loaded.layout}");
         return;
     }
-    // The SLSA builder is the workflow that ran, which only Actions names.
-    final server = os\env("GITHUB_SERVER_URL") ?? "";
-    final workflow = os\env("GITHUB_WORKFLOW_REF") ?? "";
-    if (server == "" or workflow == "") {
-        throw "image-build: the cd charm records the workflow as the provenance builder, and "
-            + "$GITHUB_SERVER_URL or $GITHUB_WORKFLOW_REF is unset; run it inside GitHub Actions";
+    // The SLSA builder is the workflow that ran, so the workflow names itself.
+    var builder = "";
+    if (args.len() == 2 and args[0] == "--builder") { builder = args[1].trim(); }
+    if (builder == "") {
+        throw "image-build: the cd charm records the provenance builder and needs "
+            + "`-- --builder <server url>/<workflow ref>`; got {args}";
     }
-    final build = images\Build{ ldflags = ldflags, revision = commit(), builder = server + "/" + workflow };
+    final build = images\Build{ ldflags = ldflags, revision = commit(), builder = builder };
     final registries = publish_registries(ctx);
     final pushed = mut [<str>];
     final ch = channel(ctx);

@@ -616,4 +616,5 @@ jobs:
           GHCR_USERNAME: *release_ghcr_username
           GHCR_TOKEN: *release_ghcr_token
           CHARMS: ${{ needs.preflight.outputs.charms }}
-        run: magus run "image-build:$CHARMS,tagged,gha" --no-default-charms --concurrency-profile aggressive
+          BUILDER: ${{ github.server_url }}/${{ github.workflow_ref }}
+        run: magus run "image-build:$CHARMS,tagged,gha" --no-default-charms --concurrency-profile aggressive -- --builder "$BUILDER"

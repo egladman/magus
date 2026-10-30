@@ -196,7 +196,8 @@ jobs:
         env:
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: magus run image-build:cd,gha --no-default-charms --concurrency-profile aggressive
+          BUILDER: ${{ github.server_url }}/${{ github.workflow_ref }}
+        run: magus run image-build:cd,gha --no-default-charms --concurrency-profile aggressive -- --builder "$BUILDER"
 
       # The knowledge graph of the same commit, as an OCI artifact under the same account
       # and the same short-commit tag, so one string addresses both. It carries the SCIP
