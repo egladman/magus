@@ -154,6 +154,18 @@ func TestPrintJobTreeMarksJobsNobodyIsWaitingOn(t *testing.T) {
 	assert.Contains(t, text, hint.JobExit.With("root/orphan"))
 }
 
+func TestPrintJobTreeCodesTheReadOnlyRows(t *testing.T) {
+	t.Parallel()
+
+	var out strings.Builder
+	list := types.NewJobList([]types.Job{{ID: "newer", State: types.StateDeclared}})
+	list.ReadOnly = []types.JobReadOnly{{Job: "newer", Lacks: []string{"leases-v9"}}}
+	printJobTree(&out, list)
+	got := out.String()
+	assert.Contains(t, got, "["+string(types.StoreRecordsNewer)+"] read-only:")
+	assert.Contains(t, got, "  newer: requires leases-v9")
+}
+
 // HOLDER says who took each job: the checkout it was taken in, the server for its own,
 // and nobody for one still waiting to be taken.
 func TestPrintJobTreeNamesWhoHoldsEachJob(t *testing.T) {

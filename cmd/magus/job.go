@@ -762,7 +762,8 @@ func printJobTree(out io.Writer, report types.JobList) {
 		}
 	}
 	if len(report.ReadOnly) > 0 {
-		fmt.Fprintln(out, "\nread-only: require what this magus lacks, so it will not write them; update magus")
+		fmt.Fprintln(out, "\n"+types.FormatDiagnostic(types.StoreRecordsNewer,
+			"read-only: require what this magus lacks, so it will not write them; update magus"))
 		for _, r := range report.ReadOnly {
 			fmt.Fprintf(out, "  %s: requires %s\n", r.Job, strings.Join(r.Lacks, ", "))
 		}
