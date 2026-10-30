@@ -13,7 +13,52 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type ScriptEvidenceSuite struct {
+	suite.Suite
+	row  types.Job
+	gate types.Goal
+}
+
+func TestScriptEvidenceSuite(t *testing.T) { suite.Run(t, new(ScriptEvidenceSuite)) }
+
+func (s *ScriptEvidenceSuite) SetupTest() {
+	s.row = types.Job{ID: "job-a"}
+	s.gate = types.Goal{ID: "g", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Script: "p.buzz", Args: []string{"x"}}}
+}
+
+func (s *ScriptEvidenceSuite) attempt(lease string, args []string) types.JobAttempt {
+	return types.JobAttempt{Found: true, Project: ".", Target: "buzz p.buzz", Lease: lease, ExtraArgs: args}
+}
+
+func (s *ScriptEvidenceSuite) TestRunOfThisJobWithTheCheckArgsVerifies() {
+	got := verifyGate(s.row, s.gate, "ref", s.attempt("job-a", []string{"x"}), Observed{})
+	s.True(got.Verified, "%v", got.Violations)
+}
+
+func (s *ScriptEvidenceSuite) TestRunWithOtherArgsDoesNotVerify() {
+	got := verifyGate(s.row, s.gate, "ref", s.attempt("job-a", []string{"y"}), Observed{})
+	s.False(got.Verified)
+}
+
+func (s *ScriptEvidenceSuite) TestRunWithNoArgsDoesNotSatisfyACheckWithArgs() {
+	got := verifyGate(s.row, s.gate, "ref", s.attempt("job-a", nil), Observed{})
+	s.False(got.Verified)
+}
+
+func (s *ScriptEvidenceSuite) TestRunUnderAnotherLeaseNamesThatJob() {
+	got := verifyGate(s.row, s.gate, "ref", s.attempt("job-b", []string{"x"}), Observed{})
+	s.False(got.Verified)
+	s.Contains(strings.Join(got.Violations, "\n"), "another job's evidence")
+}
+
+func (s *ScriptEvidenceSuite) TestRunUnderNoLeaseSaysSo() {
+	got := verifyGate(s.row, s.gate, "ref", s.attempt("", []string{"x"}), Observed{})
+	s.False(got.Verified)
+	s.Contains(strings.Join(got.Violations, "\n"), "acted under no lease")
+}
 
 func acceptRow() types.Job {
 	check := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}

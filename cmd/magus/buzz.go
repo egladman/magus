@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -327,7 +328,11 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 		scriptOut = io.MultiWriter(scriptOut, &recorded)
 		records = io.MultiWriter(records, &recorded)
 		started := time.Now()
-		defer func() { recordBuzzRun(ctx, root, name, code, scriptArgs, bf.Test, recorded.Bytes(), started, retErr) }()
+		defer func() {
+			if err := recordBuzzRun(ctx, root, name, code, scriptArgs, bf.Test, recorded.Bytes(), started, retErr); err != nil {
+				retErr = errors.Join(retErr, err)
+			}
+		}()
 	}
 	in, _ := pipeRecordsIn(ctx)
 	ctx = report.WithStage(ctx, report.Stage{In: in, Out: records, Prose: scriptOut})
@@ -425,27 +430,31 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 // buzzRunKey is the output-store key of a --record run: the script's source and its
 // arguments, so rerunning one probe adds an attempt under the same ref and a changed probe
 // gets a new one.
-func buzzRunKey(name, code string, args []string) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("buzz\x00%s\x00%s\x00%s", name, code, strings.Join(args, "\x00"))))
+func buzzRunKey(name, code, lease string, args []string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("buzz\x00%s\x00%s\x00%s\x00%s", name, code, lease, strings.Join(args, "\x00"))))
 	return hex.EncodeToString(sum[:])
 }
 
 // recordBuzzRun keeps what a recorded run printed in the output store and prints its ref
 // on stderr, so a plan, a review or a job's notes can cite the run instead of describing it.
-// A test run is stored as `buzz -t <script>`, apart from the script's main. A store it
-// cannot reach is reported and leaves the run's own outcome alone.
-func recordBuzzRun(ctx context.Context, root, name, code string, args []string, test bool, out []byte, started time.Time, runErr error) {
+// A test run is stored as `buzz -t <script>`, apart from the script's main.
+// The record holds the args and the lease, so a check binds to both.
+// A failure to record is returned. The ref skips slog, which silent mode drops.
+func recordBuzzRun(ctx context.Context, root, name, code string, args []string, test bool, out []byte, started time.Time, runErr error) error {
 	if root == "" {
 		root = "."
 	}
 	dir, err := magus.ResolveCacheDir(root, cliOptions()...)
 	if err != nil {
-		slog.WarnContext(ctx, "--record: no output store here", attr.Notice(""), attr.Component("magus buzz"), attr.Error(err))
-		return
+		return fmt.Errorf("magus buzz: --record: no output store here: %w", err)
 	}
-	target, key := "buzz "+name, buzzRunKey(name, code, args)
+	lease, _, err := checkoutLease(ctx, root)
+	if err != nil {
+		return fmt.Errorf("magus buzz: --record: %w", err)
+	}
+	target, key := "buzz "+name, buzzRunKey(name, code, lease, args)
 	if test {
-		target, key = "buzz -t "+name, buzzRunKey(name, code, append([]string{"-t"}, args...))
+		target, key = "buzz -t "+name, buzzRunKey(name, code, lease, append([]string{"-t"}, args...))
 	}
 	d := cache.OutputDescriptor{
 		Project:     ".",
@@ -453,16 +462,18 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 		Failed:      runErr != nil,
 		TimestampMs: started.UnixMilli(),
 		DurationMs:  time.Since(started).Milliseconds(),
+		ExtraArgs:   slices.Clone(args),
+		Lease:       lease,
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
 	}
 	stored, err := cache.NewOutputStore(dir).Persist(ctx, key, out, d)
 	if err != nil {
-		slog.WarnContext(ctx, "--record", attr.Notice(""), attr.Component("magus buzz"), attr.Error(err))
-		return
+		return fmt.Errorf("magus buzz: --record: store the run: %w", err)
 	}
-	slog.InfoContext(ctx, "ref  "+stored.Ref, attr.Notice(""))
+	_, err = fmt.Fprintln(os.Stderr, "ref  "+stored.Ref)
+	return err
 }
 
 // buzzCoverPath returns a stable, slash-separated path for LCOV SF: records.

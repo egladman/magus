@@ -704,6 +704,11 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 	if why, ok := seen.Stale[attemptKey(attempt)]; ok {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q predates the job's last write: it proves the work only if %s", status.OutputRef, why))
 	}
+	// A script check needs this job's own lease.
+	if gate.Check.Script != "" && !seen.anyLease && attempt.Lease == "" {
+		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under no lease, so it is not this job's evidence: record the script under lease %q",
+			status.OutputRef, row.ID))
+	}
 	// An unleased run is accepted: the orchestrator runs a check under no lease.
 	if !seen.anyLease && attempt.Lease != "" && attempt.Lease != row.ID {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under lease %q, not this job's lease %q, so it is another job's evidence",
@@ -740,10 +745,11 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 // the run forwarded none, or its record predates the field, and either way it narrowed
 // nothing it can show.
 func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
-	if a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && !scopedRun(c, a) {
-		return false
-	}
 	if c.Script != "" {
+		// A recorded script stores its argv, so absent means empty.
+		if len(a.ExtraArgs) != len(c.Args) || (len(c.Args) > 0 && !slices.Equal(a.ExtraArgs, c.Args)) {
+			return false
+		}
 		// `magus buzz --record` stores its run under `buzz <script>` and `magus buzz -t`
 		// under `buzz -t <script>`, in the workspace project, with no charms.
 		prefix := "buzz "
@@ -752,6 +758,9 @@ func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 		}
 		script, ran := strings.CutPrefix(a.Target, prefix)
 		return ran && path.Clean(script) == path.Clean(c.Script) && path.Clean(a.Project) == "."
+	}
+	if a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && !scopedRun(c, a) {
+		return false
 	}
 	spell, target, _ := strings.Cut(resolveCheck(c, defaults).Target, "::")
 	if target == "" {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -1251,20 +1252,73 @@ func TestBuzzHookProfilesEachMagusApart(t *testing.T) {
 
 func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 	root := t.TempDir()
-	recordBuzzRun(t.Context(), root, "probe.buzz", "code", []string{"--x"}, false, []byte("hello\n"), time.Now(), nil)
+	require.NoError(t, recordBuzzRun(t.Context(), root, "probe.buzz", "code", []string{"--x"}, false, []byte("hello\n"), time.Now(), nil))
 
 	dir, err := magus.ResolveCacheDir(root)
 	require.NoError(t, err)
 	store := cache.NewOutputStore(dir)
-	ref := cache.PortableRef(buzzRunKey("probe.buzz", "code", []string{"--x"}))
+	lease, _, err := checkoutLease(t.Context(), root)
+	require.NoError(t, err)
+	ref := cache.PortableRef(buzzRunKey("probe.buzz", "code", lease, []string{"--x"}))
 	out, d, err := store.ByRef(ref)
 	require.NoError(t, err)
 	assert.Equal(t, "hello\n", string(out))
 	assert.Equal(t, "buzz probe.buzz", d.Target)
 	assert.False(t, d.Failed)
 
-	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", nil), buzzRunKey("probe.buzz", "code", []string{"--x"}),
+	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", lease, nil), buzzRunKey("probe.buzz", "code", lease, []string{"--x"}),
 		"different arguments are a different probe")
+	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", "job-a", nil), buzzRunKey("probe.buzz", "code", "job-b", nil),
+		"another job's run is another ref")
+}
+
+type BuzzRecordSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestBuzzRecordSuite(t *testing.T) { suite.Run(t, new(BuzzRecordSuite)) }
+
+func (s *BuzzRecordSuite) SetupTest() { s.root = s.T().TempDir() }
+
+func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
+	args := []string{"a", "b"}
+	s.Require().NoError(recordBuzzRun(s.T().Context(), s.root, "p.buzz", "code", args, false, nil, time.Now(), nil))
+
+	dir, err := magus.ResolveCacheDir(s.root)
+	s.Require().NoError(err)
+	lease, _, err := checkoutLease(s.T().Context(), s.root)
+	s.Require().NoError(err)
+	_, d, err := cache.NewOutputStore(dir).ByRef(cache.PortableRef(buzzRunKey("p.buzz", "code", lease, args)))
+	s.Require().NoError(err)
+	s.Equal(args, d.ExtraArgs)
+	s.Equal(lease, d.Lease)
+}
+
+func (s *BuzzRecordSuite) TestRecordPrintsItsRefOnStderrWhateverTheLogLevel() {
+	s.T().Setenv("MAGUS_LOG_SILENT", "true")
+	r, w, err := os.Pipe()
+	s.Require().NoError(err)
+	saved := os.Stderr
+	os.Stderr = w
+	recErr := recordBuzzRun(s.T().Context(), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil)
+	os.Stderr = saved
+	s.Require().NoError(w.Close())
+	printed, err := io.ReadAll(r)
+	s.Require().NoError(err)
+	s.Require().NoError(recErr)
+	s.Regexp(`^ref  \S+\n$`, string(printed))
+}
+
+func (s *BuzzRecordSuite) TestRecordReturnsTheReasonWhenTheStoreCannotWrite() {
+	dir, err := magus.ResolveCacheDir(s.root)
+	s.Require().NoError(err)
+	s.Require().NoError(os.MkdirAll(dir, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "outputs"), []byte("x"), 0o644))
+
+	err = recordBuzzRun(s.T().Context(), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "--record: store the run")
 }
 
 // A -t run is evidence a script check cites, so it is recorded like --record, under its
@@ -1291,7 +1345,9 @@ func TestBuzzTestRunIsRecordedWithItsTestLines(t *testing.T) {
 			captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-t", script}) })
 			assert.Equal(t, tc.failed, runErr != nil, "%v", runErr)
 
-			out, d, err := store.ByRef(cache.PortableRef(buzzRunKey(script, code, []string{"-t"})))
+			lease, _, err := checkoutLease(t.Context(), root)
+			require.NoError(t, err)
+			out, d, err := store.ByRef(cache.PortableRef(buzzRunKey(script, code, lease, []string{"-t"})))
 			require.NoError(t, err)
 			assert.Equal(t, cache.OutputDescriptor{Target: "buzz -t " + script, Failed: tc.failed}, cache.OutputDescriptor{Target: d.Target, Failed: d.Failed})
 			for _, line := range tc.lines {
