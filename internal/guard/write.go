@@ -5,10 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -182,6 +185,187 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 		Why: fmt.Sprintf("A note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n"+
 			"Read the store with `%s` and `%s`.", hint.NotesLs.String(), hint.NotesGet.With("<name>")),
 	}.full()
+}
+
+// denyRuleDeviationAuthor refuses an agent adding a line to a gate's ledger.
+const denyRuleDeviationAuthor denyRuleName = "deviation-author"
+
+// deviationLedgerSuffix names a gate's ledger of permitted findings.
+const deviationLedgerSuffix = ".deviations.jsonl"
+
+const deviationAuthorWhy = "A line says a person decided a break is worth shipping, and no checker can judge that from its bytes. The failing gate prints the line, and a person fills in the reason and adds it. " +
+	"It is refused whoever asks, the root included, through an edit tool, a shell redirect or a Buzz fs write. A shell or Buzz write is refused whole, because the line does not show what it adds. " +
+	"Deleting an unused line passes, since the gate asks for it and it permits nothing. A merge, a revert and a checkout pass too: they replay lines a commit already holds. " +
+	"This is a seatbelt for a harness that opted in, not a boundary: a computed path, a patch or a process no hook sees gets past it, and nothing records who wrote a line. The gate's verdict reads only the file's contents, so CI sees the same bytes whoever wrote them."
+
+func isDeviationLedger(path string) bool {
+	return strings.HasSuffix(strings.TrimSpace(path), deviationLedgerSuffix)
+}
+
+func deviationDenial(path string) string {
+	return denial{
+		Say: fmt.Sprintf("magus workspace: only a person adds a line to %s; name the line in your result so they can. Deleting an unused line passes through an edit tool.", strings.TrimSpace(path)),
+		Why: deviationAuthorWhy,
+	}.full()
+}
+
+// denyDeviationWrite is the file-write door: the reason a write adds a ledger
+// line, or "". It keys on no lease, so a root session is refused too.
+func denyDeviationWrite(path string, f writeFields) string {
+	if !isDeviationLedger(path) || !addsDeviationLine(path, f) {
+		return ""
+	}
+	return deviationDenial(path)
+}
+
+// addsDeviationLine reports a line the write leaves more copies of than it
+// found. A write it cannot read counts as adding.
+func addsDeviationLine(path string, f writeFields) bool {
+	added := append(make([]string, 0, 2+len(f.Edits)), f.Content, f.NewText)
+	removed := append(make([]string, 0, 1+len(f.Edits)), f.OldText)
+	for _, e := range f.Edits {
+		added, removed = append(added, e.NewText), append(removed, e.OldText)
+	}
+	newText, oldText := strings.Join(added, "\n"), strings.Join(removed, "\n")
+	if strings.TrimSpace(newText) == "" && strings.TrimSpace(oldText) == "" {
+		return true
+	}
+	if f.Content != "" {
+		old, err := os.ReadFile(strings.TrimSpace(path))
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return true
+		}
+		oldText = string(old)
+	}
+	seen := map[string]int{}
+	for line := range strings.Lines(oldText) {
+		seen[strings.TrimSpace(line)]++
+	}
+	for line := range strings.Lines(newText) {
+		text := strings.TrimSpace(line)
+		if text == "" {
+			continue
+		}
+		if seen[text] == 0 {
+			return true
+		}
+		seen[text]--
+	}
+	return false
+}
+
+// denyDeviationCommand is the shell door. A line does not show what it writes,
+// so any write to a ledger counts as adding, except a remove. A merge or a
+// revert names no target: it replays lines a commit holds.
+func denyDeviationCommand(callDir, line string, d Dialect) string {
+	if target := deviationWriteTarget(line, d); target != "" {
+		return deviationDenial(target)
+	}
+	for _, program := range inlineBuzzPrograms(line, d) {
+		if target := buzzDeviationWrite(program); target != "" {
+			return deviationDenial(target)
+		}
+	}
+	for _, run := range scriptRuns(line, d) {
+		file := run.path
+		if !filepath.IsAbs(file) {
+			if callDir == "" {
+				continue
+			}
+			file = filepath.Join(callDir, file)
+		}
+		body, ok := readScript(file)
+		if !ok {
+			continue
+		}
+		lang := run.lang
+		if lang == scriptNone {
+			lang = detectScriptLang(file, body)
+		}
+		target := ""
+		switch lang {
+		case scriptBuzz:
+			target = buzzDeviationWrite(body)
+		case scriptShell:
+			target = deviationWriteTarget(body, DialectBash)
+		}
+		if target != "" {
+			return deviationDenial(target)
+		}
+	}
+	return ""
+}
+
+// deviationWriteTarget is the first ledger the line writes and does not remove.
+func deviationWriteTarget(line string, d Dialect) string {
+	removed := map[string]int{}
+	cmds, _ := ParseCommandsDialect(line, d)
+	for _, c := range cmds {
+		name := path.Base(c.Name)
+		isRemove := name == "rm" || name == "rmdir"
+		if !isRemove {
+			_, isVCS := vcsPathOperands(name, c.Args)
+			isRemove = isVCS && (slices.Contains(c.Args, "rm") || slices.Contains(c.Args, "remove"))
+		}
+		if isRemove {
+			for _, op := range operands(c.Args, "") {
+				removed[op]++
+			}
+		}
+	}
+	for _, target := range writeTargetCandidates(line, 0, d) {
+		if !isDeviationLedger(target) {
+			continue
+		}
+		if removed[target] > 0 {
+			removed[target]--
+			continue
+		}
+		return target
+	}
+	return ""
+}
+
+// buzzDeviationCallRe finds the fs members that can put text at a path. The
+// group is the argument the destination is: a copy names its source first.
+var buzzDeviationCallRe = regexp.MustCompile(`\bfs\\(?:(writeFileAtomic|writeFile|writeLines|appendFile)|(copyFile|copyDir|rename|symlink))\s*\(`)
+
+// buzzDeviationWrite is the first ledger a Buzz program writes at a destination
+// its text spells. A name built at run time is not read: this is a seatbelt.
+func buzzDeviationWrite(program string) string {
+	for _, m := range buzzDeviationCallRe.FindAllStringSubmatchIndex(program, -1) {
+		args, ok := callArguments(program, m[1]-1)
+		if !ok {
+			continue
+		}
+		parts := splitArguments(args)
+		at := 0
+		if m[4] >= 0 {
+			at = 1
+		}
+		if at >= len(parts) {
+			continue
+		}
+		dest := parts[at]
+		if label := buzzLabelRe.FindString(dest); label != "" {
+			dest = dest[len(label):]
+		}
+		for _, literal := range destinationLiterals(program, dest) {
+			if isDeviationLedger(literal) {
+				return literal
+			}
+		}
+	}
+	return ""
+}
+
+// rankDeviationWrite outranks another deny, which would send the reader to a
+// spelling this rule refuses too.
+func rankDeviationWrite(v ShellVerdict, reason string) ShellVerdict {
+	if reason == "" {
+		return v
+	}
+	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleDeviationAuthor}}
 }
 
 // Where the acting lease's identity comes from. Both spellings name the same thing so a

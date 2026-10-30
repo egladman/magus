@@ -974,6 +974,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 		}
 		if verdict.Decision != decisionDeny {
+			if reason := denyDeviationWrite(input, write); reason != "" {
+				refuse(denyRuleDeviationAuthor, reason)
+			}
+		}
+		if verdict.Decision != decisionDeny {
 			switch g := gradeHookWiringWrite(location.workspace, actingLease, who.Agent != "", input); g.Decision {
 			case decisionDeny:
 				refuse(denyRuleHookWiringWrite, g.Reason)
@@ -1534,6 +1539,7 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	v = deps.rankGraded(v, denyRuleConflictRewrite, denyConflictRewrite(at, line, d), rankConflictRewrite)
 	v = deps.rankGraded(v, denyRuleUnreadCommand, denyUnreadCommand(line, d), rankUnreadCommand)
 	v = deps.rankGraded(v, denyRuleCacheDirWrite, denyCacheDirCommand(at, line, d), rankCacheDirWrite)
+	v = deps.rankGraded(v, denyRuleDeviationAuthor, denyDeviationCommand(callDir, line, d), rankDeviationWrite)
 	v = deps.rankGraded(v, denyRuleStaleBinary, denyContractPick(ctx, deps, at, line, d), rankContractPick)
 	v = deps.rankGraded(v, denyRuleStaleBinary, denyContractSkew(ctx, deps, at, line, d), rankContractPick)
 	return deps.rankGraded(v, denyRuleTokenState, denyTokenStateCommand(at, line, d), rankTokenState)
