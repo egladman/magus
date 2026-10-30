@@ -347,7 +347,7 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	if superseded {
 		m.log.With(attr.Component("share")).InfoContext(ctx, "superseded previous share", slog.String("addr", fmt.Sprintf("%s:%d", addr, port)))
 	}
-	m.log.With(attr.Component("share")).InfoContext(ctx, "LAN share opened",
+	m.log.With(attr.Component("share")).WarnContext(ctx, "LAN share opened over plaintext HTTP: anyone on this network can read the link's token and traffic until it expires",
 		slog.String("addr", fmt.Sprintf("%s:%d", addr, port)),
 		slog.Time("expires", tok.Expires),
 	)

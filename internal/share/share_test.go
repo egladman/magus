@@ -1,9 +1,11 @@
 package share
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/json"
@@ -188,6 +191,27 @@ func statusRoutes(h http.Handler) map[string]Route {
 		Format:  rpcerr.FormatJSON,
 		Needs:   map[string]types.Need{"/api/v1/status": {Scope: types.ScopeConsole, Level: types.LevelRead}},
 	}}
+}
+
+type SharePlaintextSuite struct{ suite.Suite }
+
+func TestSharePlaintextSuite(t *testing.T) {
+	suite.Run(t, new(SharePlaintextSuite))
+}
+
+func (s *SharePlaintextSuite) TestOpeningALinkWarnsItIsPlaintext() {
+	testkit.Isolate(s.T())
+	var logged bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	m := NewManager(s.T().Context(), log)
+	m.selectAddr = func() (netip.Addr, error) { return addr("127.0.0.1"), nil }
+	s.T().Cleanup(m.Close)
+	dir := s.T().TempDir()
+
+	_, err := m.Start(types.GrantConsole, dir, statusRoutes(http.NotFoundHandler()), 0)
+
+	s.Require().NoError(err)
+	s.Contains(logged.String(), "plaintext HTTP")
 }
 
 // A route with no Needs would be guarded by nothing, so Start refuses it before opening a

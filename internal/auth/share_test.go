@@ -10,6 +10,12 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// The console's share picker opens on this lifetime too (desktop/share.ts).
+func TestDefaultShareLifetimeIsFifteenMinutes(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 15*time.Minute, DefaultShareTTL)
+}
+
 func TestMintShareVerifiesOnlyItsOwnSecret(t *testing.T) {
 	t.Parallel()
 	secret, tok, err := MintShare(types.GrantConsole, 10*time.Minute)

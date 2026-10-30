@@ -46,7 +46,10 @@ import { buildPanel, panelBehavior } from "./panel";
 // Each option is a different intent: show someone now, leave it up for a sitting, leave it up
 // today.
 const HOUR = 60 * 60;
+// auth.DefaultShareTTL, so the picker's default is the server's.
+const DEFAULT_SECONDS = 15 * 60;
 const DURATIONS: readonly { label: string; seconds: number }[] = [
+  { label: "15 minutes", seconds: DEFAULT_SECONDS },
   { label: "1 hour", seconds: HOUR },
   { label: "8 hours", seconds: 8 * HOUR },
   { label: "1 day", seconds: 24 * HOUR },
@@ -76,7 +79,7 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
   const body = shell.body;
   document.body.append(shell.el);
 
-  let selectedSeconds = HOUR; // the first entry of DURATIONS
+  let selectedSeconds = DEFAULT_SECONDS; // the first entry of DURATIONS
 
   // Dismissed by Escape, the close button, or an outside click. Sharing is a task with a half-made
   // choice in it, so focus moves in on open and back to the share button on close. The picker is
@@ -132,7 +135,7 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
     const note = document.createElement("p");
     note.className = "console-shell-share__note";
     note.textContent =
-      "Any device on the same network can open the link. It is read-only, and expires on its own.";
+      "Any device on the same network can open the link. It is read-only, and expires on its own. It travels over plaintext HTTP, so anyone on this network can read it.";
     body.append(note);
 
     const gen = document.createElement("button");
