@@ -391,6 +391,9 @@ func summarizeTargets(targets []sessions.TargetResult) string {
 		if t.Replayed {
 			label += ", cached"
 		}
+		if t.Permitted {
+			label += ", permitted"
+		}
 		label += ")"
 		if seen[label] {
 			continue

@@ -343,6 +343,9 @@ const (
 	TargetRunPassed  TargetRunState = "passed"
 	TargetRunFailed  TargetRunState = "failed"
 	TargetRunCached  TargetRunState = "cached"
+	// TargetRunPermitted passed only because a deviation ledger permitted its
+	// findings. The wire has no such state yet, so it arrives unspecified.
+	TargetRunPermitted TargetRunState = "permitted"
 )
 
 // StatusRun is one in-flight invocation the server has adopted, keyed by its invocation id,

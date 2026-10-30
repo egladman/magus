@@ -84,6 +84,7 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 		Outcome:        factOutcome(e.Status),
 		DurationMs:     e.DurationMs,
 		Replayed:       e.Status == journal.StatusCached,
+		Permitted:      e.Status == journal.StatusPermitted,
 		Ref:            e.Ref,
 		DiagnosticCode: e.DiagnosticCode,
 		Lease:          h.start.Lease,
