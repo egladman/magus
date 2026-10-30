@@ -127,7 +127,6 @@ var inboundTypes = []inboundType{
 var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.ImageArchitecture]():  {"", "amd64", "arm64"},
 	reflect.TypeFor[types.BindingStatus]():      {"", "bound", "unsupported"},
-	reflect.TypeFor[spells.DiagnosticFormat]():  {"", "gnu"},
 	reflect.TypeFor[types.DiagnosticOrigin]():   {"", "builtin", "workspace"},
 	reflect.TypeFor[spells.DiscoveryRole]():     {"", "project", "member"},
 	reflect.TypeFor[types.EdgeDirection]():      {"", "out", "in"},

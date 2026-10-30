@@ -261,9 +261,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"buf-format": {Command: spells.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 			}}},
-			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking"}, Charms: map[string]spells.Charm{
-				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
-			}}},
+			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking"}, Capture: true}, Capture: true},
 		},
 	},
 	"buzz": {
@@ -310,8 +308,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// needs its own probe: upgrading it changes lint verdicts with nothing in any
 			// cache key to notice. It gets no readiness probe: a lint talks to no daemon.
 			"hadolint": {
-				Probe:       spells.Command{Bin: "hadolint", Args: []string{"--version"}},
-				Diagnostics: spells.DiagnosticGNU,
+				Probe: spells.Command{Bin: "hadolint", Args: []string{"--version"}},
 			},
 			// Both probes, because a release and a vulnerability database move on
 			// different clocks: the version keys which build of the scanner ran, the

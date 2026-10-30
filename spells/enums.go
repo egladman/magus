@@ -18,12 +18,6 @@ func (v VersionComponent) Values() []string { return versionComponents.Strings()
 func (v VersionComponent) Valid() bool      { return versionComponents.Valid(v) }
 func (v VersionComponent) String() string   { return enum.String(v) }
 
-var diagnosticFormats = enum.Set[DiagnosticFormat]{"gnu"}
-
-func (v DiagnosticFormat) Values() []string { return diagnosticFormats.Strings() }
-func (v DiagnosticFormat) Valid() bool      { return diagnosticFormats.Valid(v) }
-func (v DiagnosticFormat) String() string   { return enum.String(v) }
-
 var symbolFormats = enum.Set[SymbolFormat]{"scip", "go-packages", "buzz-module", "shell-script"}
 
 func (v SymbolFormat) Values() []string { return symbolFormats.Strings() }

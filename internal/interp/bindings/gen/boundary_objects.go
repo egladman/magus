@@ -4960,7 +4960,6 @@ func ObjectTool(v spells.Tool, enums ffi.EnumCases) vm.Value {
 	out.MapSet("observe", ObjectCommand(v.Observe, enums))
 	out.MapSet("ready", ObjectCommand(v.Ready, enums))
 	out.MapSet("supported", ObjectVersionBounds(v.Supported))
-	out.MapSet("diagnostics", enums.Case("DiagnosticFormat", string(v.Diagnostics)))
 	out.MapSet("lifecycle", vm.StringValue(v.Lifecycle))
 	return out
 }

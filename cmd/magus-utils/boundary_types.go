@@ -626,11 +626,6 @@ var boundaryEnums = []boundaryEnum{
 		Cases: []enumCase{{"none", ""}, {"major", "major"}, {"minor", "minor"}, {"patch", "patch"}},
 	},
 	{
-		Name:  "DiagnosticFormat",
-		Type:  reflect.TypeFor[spells.DiagnosticFormat](),
-		Cases: []enumCase{{"none", ""}, {"gnu", "gnu"}},
-	},
-	{
 		Name:  "SymbolFormat",
 		Type:  reflect.TypeFor[spells.SymbolFormat](),
 		Cases: []enumCase{{"none", ""}, {"scip", "scip"}, {"goPackages", "go-packages"}, {"buzzModule", "buzz-module"}, {"shellScript", "shell-script"}},

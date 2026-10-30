@@ -402,10 +402,6 @@ type Tool struct {
 	// work below 1.21" belongs here, "we have not moved to node 25 yet" belongs in the
 	// workspace's own bounds, which are intersected with this one.
 	Supported VersionBounds `json:"supported,omitempty"`
-	// Diagnostics names the convention this binary prints findings in; empty means
-	// prose. On the tool rather than the op because the format is the binary's:
-	// hadolint reports the same way whichever op invokes it.
-	Diagnostics DiagnosticFormat `json:"diagnostics,omitempty"`
 	// Lifecycle names the endoflife.date product that publishes this binary's release
 	// cycles and their end-of-life dates ("go", "nodejs"). Empty means none is known.
 	//

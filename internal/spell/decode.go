@@ -418,10 +418,6 @@ func validateTools(m spells.Descriptor) error {
 			return fmt.Errorf("spell %q: tools[%q].key.upTo is %s, want one of %s",
 				m.Name, tool, c, strings.Join(c.Values(), ", "))
 		}
-		if d := m.Tools[tool].Diagnostics; !d.Valid() {
-			return fmt.Errorf("spell %q: tools[%q].diagnostics is %s, want one of %s",
-				m.Name, tool, d, strings.Join(d.Values(), ", "))
-		}
 	}
 	return nil
 }
@@ -580,7 +576,7 @@ func validateToolDecls(tools map[string]spells.Tool) (map[string]spells.Tool, er
 			}
 		}
 		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Supported.IsZero() &&
-			t.Observe.Bin == "" && t.Diagnostics == spells.DiagnosticNone && t.Lifecycle == "" {
+			t.Observe.Bin == "" && t.Lifecycle == "" {
 			continue
 		}
 		if out == nil {

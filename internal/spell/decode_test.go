@@ -551,27 +551,6 @@ func TestDescriptorToolsDropsEmptyEntries(t *testing.T) {
 	assert.Empty(t, m.Tools)
 }
 
-// A tool declaring only a diagnostics format is kept: the entry says something magus
-// acts on, so the drop-empty-entries rule must not treat it as saying nothing.
-func TestDescriptorToolsCarriesDiagnosticsFormat(t *testing.T) {
-	m, err := describe(Contract{Name: "docker", Tools: map[string]spells.Tool{
-		"hadolint": {Diagnostics: spells.DiagnosticGNU},
-	}})
-	require.NoError(t, err)
-	assert.Equal(t, spells.DiagnosticGNU, m.Tools["hadolint"].Diagnostics)
-}
-
-// An unrecognized format is a spell-authoring bug caught at load, the same place a bad
-// key.upTo lands, not a silent fall back to scraping prose.
-func TestDescriptorToolsRejectsUnknownDiagnosticsFormat(t *testing.T) {
-	_, err := describe(Contract{Name: "docker", Tools: map[string]spells.Tool{
-		"hadolint": {Diagnostics: "sarif"},
-	}})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "diagnostics is sarif")
-	assert.Contains(t, err.Error(), "gnu", "the message names the formats magus accepts")
-}
-
 // A half-written hint is refused rather than dropped: one with no contains would fire on
 // every failure of the command, and one with no advise would consume the match and
 // print nothing, reading as "magus had no idea".

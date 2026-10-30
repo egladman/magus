@@ -673,12 +673,6 @@ func decodeTool(v vm.Value, path string) (spells.Tool, error) {
 				return out, err
 			}
 			out.Supported = xSupported
-		case "diagnostics":
-			sDiagnostics, err := decodeEnum(item, path+".diagnostics", "DiagnosticFormat", enumDiagnosticFormatValues)
-			if err != nil {
-				return out, err
-			}
-			out.Diagnostics = spells.DiagnosticFormat(sDiagnostics)
 		case "lifecycle":
 			sLifecycle, err := decodeString(item, path+".lifecycle")
 			if err != nil {
@@ -6149,7 +6143,6 @@ func decodeProviderQueueDismissReview(v vm.Value) (types.Ack, error) {
 
 var enumArchitectureValues = []string{"", "amd64", "arm64"}
 var enumBindingStatusValues = []string{"", "bound", "unsupported"}
-var enumDiagnosticFormatValues = []string{"", "gnu"}
 var enumDiagnosticOriginValues = []string{"", "builtin", "workspace"}
 var enumDiscoveryRoleValues = []string{"", "project", "member"}
 var enumEdgeDirectionValues = []string{"", "out", "in"}
