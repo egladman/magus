@@ -2117,6 +2117,7 @@ func TestRun_UnreadableHistoryIsSaid(t *testing.T) {
 	assert.Contains(t, got, "sizes claims from declarations and records no history")
 	assert.Contains(t, got, "preserve it")
 	assert.Contains(t, got, old)
+	assert.Contains(t, got, string(types.LegacyStorePresent))
 }
 
 // TestRun_NonRetryableFailureRecordsNotRetried pins the record a target opted into
@@ -2773,9 +2774,11 @@ func TestLoadHistorySaysAnUnsupportedVersionOnce(t *testing.T) {
 		_, err := m.loadHistory(t.Context())()
 		var skew *forecast.UnsupportedVersionError
 		require.ErrorAs(t, err, &skew)
+		require.ErrorIs(t, err, types.StoreRecordsNewer)
 		assert.Equal(t, 99, skew.Have)
 	}
 	assert.Equal(t, 1, strings.Count(logs.String(), "run history is unreadable"))
+	assert.Contains(t, logs.String(), string(types.StoreRecordsNewer))
 	assert.Contains(t, logs.String(), "version 99")
 	assert.Contains(t, logs.String(), "left alone")
 }

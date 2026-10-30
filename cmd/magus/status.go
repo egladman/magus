@@ -859,8 +859,8 @@ func serverVersionSkew(pool *types.StatusOutput) string {
 		noun = "pool parent"
 	}
 	var s strings.Builder
-	fmt.Fprintf(&s, "version skew: this magus is %s and the %s serving it is %s (pid %d).\n",
-		version, noun, pool.Version, pool.ParentPID)
+	fmt.Fprintf(&s, "[%s] version skew: this magus is %s and the %s serving it is %s (pid %d).\n",
+		types.PeerFromAnotherBuild, version, noun, pool.Version, pool.ParentPID)
 	fmt.Fprintf(&s, "  every call through that %s is answered by the older build, which decodes what it knows and writes back the rest without it.\n", noun)
 	if len(pool.Workspaces) > 0 {
 		roots := make([]string, 0, len(pool.Workspaces))

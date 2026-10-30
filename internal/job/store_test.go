@@ -690,9 +690,9 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 		types.NewJobList(rows).ReadOnly, "every listing names it")
 
 	_, err = s.Update(t.Context(), "future", func(u *types.Job) { u.State = types.StatePass })
-	require.Error(t, err)
-	assert.Equal(t, fmt.Sprintf(`job: future requires "never-implemented", which this magus (schema %d) lacks,`+
-		` so it will not write that row: update magus, or run the command with the magus that wrote it`, types.JobSchemaVersion), err.Error())
+	require.ErrorIs(t, err, types.StoreRecordsNewer)
+	assert.ErrorContains(t, err, fmt.Sprintf(`job: future requires "never-implemented", which this magus (schema %d) lacks,`+
+		` so it will not write that row: update magus, or run the command with the magus that wrote it`, types.JobSchemaVersion))
 	_, err = s.Delete(t.Context(), "future", true)
 	assert.ErrorContains(t, err, `requires "never-implemented"`, "a delete is a write to the row")
 
@@ -845,6 +845,7 @@ func TestStoreRefusesTheOneDocumentPlan(t *testing.T) {
 
 	_, err = s.List()
 	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorIs(t, err, types.LegacyStorePresent)
 	require.ErrorContains(t, err, "preserve it")
 	require.ErrorContains(t, err, fmt.Sprintf("set it aside with `mv %s %s.old`", old, old), "the refusal names the move made below")
 	_, err = s.Update(t.Context(), "a", func(*types.Job) {})
@@ -1005,6 +1006,7 @@ func TestStoreReportsAnUnreadableFile(t *testing.T) {
 
 	_, err = s.List()
 	assert.ErrorContains(t, err, path+":1: ", "a corrupt job store is reported, never silently read as empty")
+	assert.ErrorIs(t, err, types.StoreLineUndecodable)
 }
 
 func TestRecordUnattributedWrite(t *testing.T) {

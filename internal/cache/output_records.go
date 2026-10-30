@@ -52,9 +52,9 @@ func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
 	case rec.Version == 0:
 		return types.StoredOutput{}, errors.New("not an output record: it has no schema_version, `magus query output <ref> -o jsonl` writes one per line")
 	case rec.Version > types.StoredOutputSchemaVersion:
-		return types.StoredOutput{}, fmt.Errorf("output record schema_version %d is newer than this magus reads (%d), read it with a newer magus", rec.Version, types.StoredOutputSchemaVersion)
+		return types.StoredOutput{}, types.DiagnosticErrorf(types.StoreRecordsNewer, "output record schema_version %d is newer than this magus reads (%d), read it with a newer magus", rec.Version, types.StoredOutputSchemaVersion)
 	case len(rec.Unmet(nil)) > 0:
-		return types.StoredOutput{}, fmt.Errorf("output record requires %v, which this magus does not implement", rec.Unmet(nil))
+		return types.StoredOutput{}, types.DiagnosticErrorf(types.StoreRecordsNewer, "output record requires %v, which this magus does not implement", rec.Unmet(nil))
 	case rec.Output != "" && rec.OutputBase64 != nil:
 		return types.StoredOutput{}, errors.New("output record carries both output and output_base64")
 	}

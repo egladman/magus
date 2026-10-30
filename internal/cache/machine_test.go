@@ -919,6 +919,35 @@ func TestMachineGateRequiredRefusesWhenTheArbiterIsGone(t *testing.T) {
 	assert.Contains(t, err.Error(), "connection refused", "the cause stays on the error")
 }
 
+// A broker from another build is not reported as no broker.
+func TestMachineGateNamesABrokerFromAnotherBuild(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	g, adm := testGate(t, b)
+	var logged bytes.Buffer
+	g.log = slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	adm.fail = types.WrapDiagnostic(types.PeerFromAnotherBuild, errors.New("broker: expected a hello speaking protocol 2"), "hello")
+
+	release, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.NoError(t, err, "best-effort runs on without the broker")
+	release()
+	assert.Contains(t, logged.String(), string(types.PeerFromAnotherBuild))
+	assert.Contains(t, logged.String(), "a broker from another magus build answered")
+	assert.NotContains(t, logged.String(), "no broker answered")
+}
+
+func TestMachineGateRequiredRefusesABrokerFromAnotherBuild(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	g, adm := testGate(t, b)
+	g.required = true
+	adm.fail = types.WrapDiagnostic(types.PeerFromAnotherBuild, errors.New("broker: expected a hello speaking protocol 2"), "hello")
+
+	_, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.ErrorIs(t, err, types.PeerFromAnotherBuild)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeBrokerUnavailable, stated.ExitCode())
+}
+
 func TestMachineGateIsInertWithoutAnAdmitter(t *testing.T) {
 	var g *machineGate
 	release, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000})

@@ -134,7 +134,8 @@ func (i servedInfo) skewLine() string {
 			parts = append(parts, fmt.Sprintf("this server serves %s and your session is in %s; register `./magus mcp` per checkout (magus describe harness)",
 				i.Root, strings.Join(k.Caller, ", ")))
 		case "build":
-			parts = append(parts, fmt.Sprintf("%s was rebuilt after this server started at %s; restart the MCP server", k.Executable, i.Version))
+			parts = append(parts, fmt.Sprintf("[%s] %s was rebuilt after this server started at %s; restart the MCP server",
+				types.PeerFromAnotherBuild, k.Executable, i.Version))
 		}
 	}
 	if len(parts) == 0 {

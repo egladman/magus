@@ -524,6 +524,11 @@ func (c *Client) sayHello(ctx context.Context, cn *conn, sock string) error {
 		if errors.As(err, &refusal) && refusal.Code == CodeHandshake {
 			return refused(err)
 		}
+		if refusal != nil && refusal.Code == CodeProtocol {
+			return types.WrapDiagnostic(types.PeerFromAnotherBuild, err,
+				"hello: the broker at %s is from another magus build (%v; this magus speaks protocol %d): stop it with `magus broker stop` or SIGTERM, and the next run starts one from this build",
+				sock, err, ProtocolVersion)
+		}
 		return fmt.Errorf("hello: %w", err)
 	}
 	return nil

@@ -457,6 +457,12 @@ func holdStepGroup(ctx context.Context, holder GroupHolder, claim string, pgid i
 // reader to scroll past the line.
 func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 	g.lost.Do(func() {
+		if errors.Is(err, types.PeerFromAnotherBuild) {
+			g.log.WarnContext(ctx, types.FormatDiagnostic(types.PeerFromAnotherBuild,
+				"host capacity is not arbitrated for this run: a broker from another magus build answered (broker: best-effort)"),
+				attr.Error(err))
+			return
+		}
 		g.log.WarnContext(ctx, "host capacity is not arbitrated for this run: no broker answered (broker: best-effort)",
 			attr.Error(err))
 	})
@@ -465,7 +471,13 @@ func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 
 // brokerUnavailableError is the refusal under `broker: required`: nothing answered for
 // the host's capacity, and the setting says a step must not start unarbitrated.
+// A broker from another build counts as none.
 func brokerUnavailableError(c types.MachineClaim, err error) error {
+	if errors.Is(err, types.PeerFromAnotherBuild) {
+		return types.ExitError{Code: ExitCodeBrokerUnavailable, Err: types.WrapDiagnostic(types.PeerFromAnotherBuild, err,
+			"not starting %s %s: a broker from another magus build answered for this host's capacity (%v), and broker: required refuses to run unarbitrated",
+			displayProject(c.Project), c.Target, err)}
+	}
 	return types.ExitError{Code: ExitCodeBrokerUnavailable, Err: types.WrapDiagnostic(types.BrokerUnavailable, err,
 		"not starting %s %s: no broker answered for this host's capacity (%v), and broker: required refuses to run unarbitrated. `magus broker status` says whether one is up and where it logs",
 		displayProject(c.Project), c.Target, err)}

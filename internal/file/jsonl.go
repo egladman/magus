@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/types"
 )
 
 // A store is JSON Lines: one object per line, appended when an entry changes, the last line
@@ -117,6 +118,7 @@ var ErrLegacyStore = errors.New("store version conflict")
 
 // RefuseOld preserves a store this build cannot read. Moving it aside while an older
 // checkout still writes it would create two independent accounts of the same state.
+// The error is MGS3049 and matches [ErrLegacyStore].
 func RefuseOld(old string) error {
 	_, err := os.Lstat(old)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -125,7 +127,7 @@ func RefuseOld(old string) error {
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("%w: %s was written by an older magus: preserve it and use a compatible binary until its active writers stop, then reconcile its records before switching stores", ErrLegacyStore, old)
+	return types.WrapDiagnostic(types.LegacyStorePresent, ErrLegacyStore, "%s: %s was written by an older magus: preserve it and use a compatible binary until its active writers stop, then reconcile its records before switching stores", ErrLegacyStore, old)
 }
 
 // JSONL is an append-only JSON Lines file of T. Key names an entry, and the last line for a
@@ -198,7 +200,7 @@ func (l JSONL[T]) read() ([]T, bool, error) {
 	for _, line := range read.Lines {
 		var v T
 		if err := json.Unmarshal(line.Text, &v); err != nil {
-			return nil, false, fmt.Errorf("%s:%d: %w", l.Path, line.N, err)
+			return nil, false, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", l.Path, line.N, err)
 		}
 		all = append(all, v)
 	}
