@@ -144,6 +144,7 @@
 {"group":"file:changes/unreleased/harness-merge-command-reruns.md","path":"changes/unreleased/harness-merge-command-reruns.md"}
 {"group":"file:changes/unreleased/harness-render-prompts.md","path":"changes/unreleased/harness-render-prompts.md"}
 {"group":"file:changes/unreleased/hook-glue-binary-from-event-cwd.md","path":"changes/unreleased/hook-glue-binary-from-event-cwd.md"}
+{"group":"file:changes/unreleased/image-tree-directory-pattern.md","path":"changes/unreleased/image-tree-directory-pattern.md"}
 {"group":"file:changes/unreleased/integration-defers-the-settle.md","path":"changes/unreleased/integration-defers-the-settle.md"}
 {"group":"file:changes/unreleased/job-edit.md","path":"changes/unreleased/job-edit.md"}
 {"group":"file:changes/unreleased/job-end-two-person-rule.md","path":"changes/unreleased/job-end-two-person-rule.md"}
@@ -1161,6 +1162,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/script.go"}
 {"group":"dir:internal/guard","path":"internal/guard/script_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/search.go"}
+{"group":"dir:internal/guard","path":"internal/guard/search_pattern.go"}
+{"group":"dir:internal/guard","path":"internal/guard/search_program.go"}
 {"group":"dir:internal/guard","path":"internal/guard/search_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/shell.go"}
 {"group":"dir:internal/guard","path":"internal/guard/shell_test.go"}
