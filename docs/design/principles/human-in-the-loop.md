@@ -28,10 +28,11 @@ closes it.
 
 A person's approval means something only while it stays rare; past that it
 becomes the approval fatigue the loop page describes. So a point asks once per
-decision, not once per line. It asks only when the answer can change something.
-It shows the reason and the blast radius beside the question. Approvals and
-refusals get counted, so a point that only ever hears yes can be seen and
-questioned.
+decision, not once per line. A
+[deviation ledger](a-deliberate-break-never-merges-red.md) stays one line per
+finding, and the one approval is the reviewed diff that carries them. A point
+asks only when the answer can change something, and it shows the reason and the
+blast radius beside the question.
 
 ## Enforced by
 
