@@ -2456,14 +2456,67 @@ func TestDialDiffBridgeSaysWhyItDidNotJoin(t *testing.T) {
 	})
 }
 
-func TestDialDiffBridgeWarnsOnATokenThatDoesNotLoad(t *testing.T) {
+func TestDialDiffBridgeWarnsOnATokenThatCannotBeMinted(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
 	require.NoError(t, os.MkdirAll(filepath.Join(state, "magus"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(state, "magus", "mcp_token"), []byte("junk\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(state, "magus", "tokens.d"), []byte("a file\n"), 0o600))
+	srv := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(srv.Close)
+	prevAddr := globalCfg.MCP.Address
+	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
+	globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
 	var got *diffBridge
 	logged := captureWarnings(t, func() { got = dialDiffBridge(context.Background(), nil, "digest") })
 
 	assert.Nil(t, got)
-	assert.Contains(t, logged, "operator token did not load")
+	assert.Contains(t, logged, "could not be minted")
+}
+
+func TestDialDiffBridgeCarriesAConsoleTokenAndRevokesIt(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	var presented string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		presented = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		_, _ = w.Write([]byte(`{"as_of":"digest"}`))
+	}))
+	t.Cleanup(srv.Close)
+	prevAddr := globalCfg.MCP.Address
+	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
+	globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
+
+	b := dialDiffBridge(context.Background(), nil, "digest")
+	require.NotNil(t, b)
+	cred, ok := auth.Verify(presented)
+	require.True(t, ok, "the token is live while the bridge is open")
+	assert.Equal(t, types.KindStored, cred.Kind)
+	assert.Equal(t, types.GrantConsole, cred.Grant)
+
+	b.close()
+	_, ok = auth.Verify(presented)
+	assert.False(t, ok, "close revokes it")
+}
+
+func TestServerReviewCommentsRevokesItsToken(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	var presented string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		presented = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		cred, ok := auth.Verify(presented)
+		if !ok || cred.Kind != types.KindStored {
+			http.Error(w, "no", http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	prevAddr := globalCfg.MCP.Address
+	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
+	globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
+
+	_, _, served := serverReviewComments(context.Background())
+
+	assert.True(t, served)
+	_, ok := auth.Verify(presented)
+	assert.False(t, ok)
 }

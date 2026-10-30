@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net"
 	"net/url"
 	"os"
 	"os/signal"
@@ -1113,6 +1114,7 @@ func (diffStoreSync) close() {}
 type diffBridge struct {
 	addr    string
 	token   types.Secret
+	tokenID string // revoked at close; empty when the bridge minted no record
 	session *types.DiffReview
 
 	cursors chan diffSessionOp
@@ -1125,7 +1127,7 @@ type diffBridge struct {
 	cancel context.CancelFunc
 }
 
-// setBearer is where the operator token leaves this process for the server's API.
+// setBearer is where a review's console token leaves for the server's API.
 func setBearer(req *http.Request, token types.Secret) {
 	req.Header.Set("Authorization", "Bearer "+token.Reveal())
 }
@@ -1156,10 +1158,8 @@ const diffBridgeMarks = 64
 const diffBridgeClose = 3 * time.Second
 
 // dialDiffBridge attaches to the server's session, or returns nil when there is nothing to
-// join. No token file and a refused connection are ordinary (no server was ever set up or
-// started) and stay silent; a token that cannot load, a non-200 answer, an undecodable
-// session and a declined as-of each log a warning naming the cause, so a server that is up
-// but not joined is never mistaken for one that is absent.
+// join. A refused connection stays silent: no server was started.
+// Every other miss warns, so a server that is up is never read as absent.
 //
 // asOf is the digest of the patch about to be rendered, and the session is DECLINED unless
 // the server computed its changeset from the same bytes. Without that check a server serving
@@ -1170,19 +1170,22 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 	warn := func(msg string, why ...any) {
 		slog.WarnContext(ctx, msg, append([]any{attr.Notice(""), attr.Component("magus")}, why...)...)
 	}
-	token, err := auth.LoadOperator()
-	if errors.Is(err, auth.ErrNoToken) {
+	addr := mcpAddrString()
+	token, tokenID, ok := mintReviewToken(ctx, addr, reviewBridgeTokenTTL)
+	if !ok {
 		return nil
 	}
-	if err != nil {
-		warn("the review is not shared with the server: the operator token did not load", attr.Error(err))
-		return nil
-	}
+	joined := false
+	defer func() {
+		if !joined {
+			revokeReviewToken(ctx, tokenID)
+		}
+	}()
 	q := url.Values{}
 	for _, p := range paths {
 		q.Add("path", p)
 	}
-	b := &diffBridge{addr: mcpAddrString(), token: token}
+	b := &diffBridge{addr: addr, token: token, tokenID: tokenID}
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff?%s", b.addr, q.Encode()), nil)
@@ -1213,7 +1216,53 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 	}
 	b.session = &sess
 	b.start()
+	joined = true
 	return b
+}
+
+// reviewBridgeTokenTTL covers a reader who leaves a review open. A crash
+// leaves the record until then, and its secret died with the process.
+const reviewBridgeTokenTTL = 7 * 24 * time.Hour
+
+// reviewCallTokenTTL covers one request to a review route.
+const reviewCallTokenTTL = time.Minute
+
+// mintReviewToken mints the console token a CLI call to the review routes
+// carries: they refuse the operator token. ok is false with no server at
+// addr, which writes no record, or on a failed mint.
+// The caller revokes tokenID.
+func mintReviewToken(ctx context.Context, addr string, ttl time.Duration) (token types.Secret, tokenID string, ok bool) {
+	warn := func(msg string, why ...any) {
+		slog.WarnContext(ctx, msg, append([]any{attr.Notice(""), attr.Component("magus")}, why...)...)
+	}
+	probe := net.Dialer{Timeout: diffBridgeWrite}
+	conn, err := probe.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		if !errors.Is(err, syscall.ECONNREFUSED) {
+			warn("the review is not shared with the server: it did not answer", attr.Error(err))
+		}
+		return types.Secret{}, "", false
+	}
+	_ = conn.Close()
+	secret, rec, err := mintToken(auth.MintRequest{Grant: types.GrantConsole, TTL: ttl}, false)
+	if err != nil {
+		warn("the review is not shared with the server: its console token could not be minted", attr.Error(err))
+		return types.Secret{}, "", false
+	}
+	return types.NewSecret(secret), rec.ID, true
+}
+
+// revokeReviewToken deletes the record mintReviewToken wrote.
+// A record already gone, expired or revoked by hand, is what it wanted.
+func revokeReviewToken(ctx context.Context, tokenID string) {
+	store, err := openTokenStore()
+	if err == nil {
+		_, err = store.Revoke(types.GrantOperator, tokenID)
+	}
+	if err != nil && !errors.Is(err, auth.ErrTokenNotFound) {
+		slog.WarnContext(ctx, "a review's console token was not revoked; it expires on its own",
+			attr.Notice(""), attr.Component("magus"), attr.Why(tokenID), attr.Error(err))
+	}
 }
 
 // start wires the sender. Split from dialDiffBridge so the queue can be driven against a stub
@@ -1361,6 +1410,11 @@ func (b *diffBridge) drain(ctx context.Context) {
 // the post already on the wire. Left uncancelled, the goroutine went on talking to the server
 // about a session the reader had walked away from, with nothing left to receive the answer.
 func (b *diffBridge) close() {
+	defer func() {
+		if b.tokenID != "" {
+			revokeReviewToken(context.Background(), b.tokenID)
+		}
+	}()
 	defer b.cancel() // the drain finished inside its budget; nothing is on the wire to abort
 	close(b.stop)
 	select {

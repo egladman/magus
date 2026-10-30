@@ -734,19 +734,7 @@ func (f *frame) api(path string, h http.Handler) {
 		f.errs = append(f.errs, err)
 		return
 	}
-	var opts []httpx.GuardOption
-	if !operatorAPIs[path] {
-		opts = append(opts, httpx.WithoutOperator())
-	}
-	f.guard(path, rpcerr.FormatJSON, needs, f.consoleWrap(rpcerr.FormatJSON), h, opts...)
-}
-
-// operatorAPIs are the console routes the CLI calls over TCP with the operator
-// token: the review bridge in cmd/magus/diff.go and cmd/magus/notes.go.
-var operatorAPIs = map[string]bool{
-	"/api/v1/diff":         true,
-	"/api/v1/diff/session": true,
-	"/api/v1/diff/review":  true,
+	f.guard(path, rpcerr.FormatJSON, needs, f.consoleWrap(rpcerr.FormatJSON), h, httpx.WithoutOperator())
 }
 
 // service mounts a Connect service at its path ("/<package>.<Service>/") behind the Need of

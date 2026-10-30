@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -397,8 +399,32 @@ func mintConsoleToken(t *testing.T) types.Secret {
 	return secret
 }
 
-// The daemon refuses the operator token on console routes, and keeps taking it
-// where the CLI calls over TCP and where no other token reaches.
+// The parent names its state directory as an argument: testkit.Main scrubs the
+// child's environment. The child mints as the CLI does beside a running daemon.
+func TestMintConsoleTokenInChildProcess(t *testing.T) {
+	if flag.NArg() != 1 {
+		t.Skip("runs only as the child of TestServeConsoleRoutesRefuseTheOperatorToken")
+	}
+	t.Setenv("XDG_STATE_HOME", flag.Arg(0))
+	fmt.Println("secret=" + mintConsoleToken(t).Reveal())
+}
+
+func mintConsoleTokenInChild(t *testing.T) string {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestMintConsoleTokenInChildProcess$", "-test.v", "--", os.Getenv("XDG_STATE_HOME"))
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+	for line := range strings.Lines(string(out)) {
+		if secret, ok := strings.CutPrefix(strings.TrimSpace(line), "secret="); ok {
+			return secret
+		}
+	}
+	t.Fatalf("the child printed no secret: %s", out)
+	return ""
+}
+
+// The daemon refuses the operator token on every console route. A console
+// token minted by another process reaches the routes the CLI calls.
 func TestServeConsoleRoutesRefuseTheOperatorToken(t *testing.T) {
 	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
@@ -417,20 +443,25 @@ func TestServeConsoleRoutesRefuseTheOperatorToken(t *testing.T) {
 	waitReady(t, base+"/readyz")
 	operator, err := auth.LoadOperator()
 	require.NoError(t, err)
-	status := func(path string) int {
+	status := func(token, path string) int {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
 		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer "+operator.Reveal())
+		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode
 	}
 
-	assert.Equal(t, http.StatusForbidden, status("/api/v1/graph"))
-	assert.Equal(t, http.StatusForbidden, status("/api/v1/diff/thread"))
-	for path := range operatorAPIs {
-		assert.NotEqual(t, http.StatusForbidden, status(path), path)
+	cliRoutes := []string{"/api/v1/diff/session", "/api/v1/diff/review", "/api/v1/diff"}
+	for _, path := range append([]string{"/api/v1/graph", "/api/v1/diff/thread"}, cliRoutes...) {
+		assert.Equal(t, http.StatusForbidden, status(operator.Reveal(), path), path)
+	}
+	console := mintConsoleTokenInChild(t)
+	for _, path := range cliRoutes {
+		got := status(console, path)
+		assert.NotEqual(t, http.StatusUnauthorized, got, path)
+		assert.NotEqual(t, http.StatusForbidden, got, path)
 	}
 
 	cancel()

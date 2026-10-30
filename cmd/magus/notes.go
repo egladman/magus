@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
@@ -1155,13 +1154,15 @@ func storedDiffReview(cacheDir, patch string) (*types.DiffReview, error) {
 // hands back the attached session as it stands, which is all a transcript needs, and answers
 // 409 when nothing is attached.
 func serverDiffReview(ctx context.Context) *types.DiffReview {
-	token, err := auth.LoadOperator()
-	if err != nil {
+	addr := mcpAddrString()
+	token, tokenID, ok := mintReviewToken(ctx, addr, reviewCallTokenTTL)
+	if !ok {
 		return nil
 	}
+	defer revokeReviewToken(ctx, tokenID)
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/session", mcpAddrString()), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/session", addr), nil)
 	if err != nil {
 		return nil
 	}
@@ -1203,13 +1204,15 @@ func reviewComments(ctx context.Context, m *magus.Magus) ([]types.ReviewComment,
 // could not understand part of it. That is the one case a caller must not pass over quietly: a
 // transcript silently missing a colleague's remark is worse than no transcript.
 func serverReviewComments(ctx context.Context) (comments []types.ReviewComment, reason string, served bool) {
-	token, err := auth.LoadOperator()
-	if err != nil {
+	addr := mcpAddrString()
+	token, tokenID, ok := mintReviewToken(ctx, addr, reviewCallTokenTTL)
+	if !ok {
 		return nil, "", false
 	}
+	defer revokeReviewToken(ctx, tokenID)
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/review", mcpAddrString()), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/review", addr), nil)
 	if err != nil {
 		return nil, "", false
 	}
