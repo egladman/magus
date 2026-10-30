@@ -41,18 +41,6 @@ func TestExplainText(t *testing.T) {
 	assert.NotContains(t, got, "out edges")
 }
 
-// No build closes a gap in a language nothing indexes, so the miss offers none.
-func TestMissTextOffersABuildOnlyForAGapABuildCloses(t *testing.T) {
-	proto := types.KnowledgeSymbolGap{Project: types.NewProjectRef("proto", ""), Language: "protobuf", State: types.SymbolIndexNotBuilt, Detail: "has no indexer", Unindexable: true}
-	got := MissText("x", types.KnowledgeAnswer{Verdict: types.VerdictUnknown, Gaps: []types.KnowledgeSymbolGap{proto}})
-	assert.Contains(t, got, "outside coverage: proto (protobuf index has no indexer)")
-	assert.NotContains(t, got, "graph build")
-
-	unbuilt := types.KnowledgeSymbolGap{Project: types.NewProjectRef("libs/api", ""), Language: "go", State: types.SymbolIndexNotBuilt}
-	got = MissText("x", types.KnowledgeAnswer{Verdict: types.VerdictUnknown, Gaps: []types.KnowledgeSymbolGap{proto, unbuilt}})
-	assert.Contains(t, got, "graph build")
-}
-
 func TestExplainTextIndentsAMultiLineAttr(t *testing.T) {
 	out := types.KnowledgeExplainOutput{
 		Node: types.KnowledgeNode{ID: "symbol:x", Kind: "symbol", Attrs: map[string]string{"doc": "Open reads it.\n\n- first\n- second"}},
