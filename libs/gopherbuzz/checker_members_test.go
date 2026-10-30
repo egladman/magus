@@ -7,6 +7,7 @@ import (
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // checkStrict type-checks src as an upstream-strict session would.
@@ -176,4 +177,24 @@ func TestForeignMethodNamesResolve(t *testing.T) {
 			assert.Falsef(t, vmpackage.HasBuiltinMethod(kind, from), "%q is a builtin of kind %d, so it needs no suggestion", from, kind)
 		}
 	}
+}
+
+type UndefinedNameSuite struct {
+	suite.Suite
+}
+
+func TestUndefinedNameSuite(t *testing.T) {
+	suite.Run(t, new(UndefinedNameSuite))
+}
+
+func (s *UndefinedNameSuite) TestMemberAccessReportsOnlyTheUndefinedName() {
+	errs := checkStrict(s.T(), "fun main() > void {\n    nope.field;\n}\n")
+	s.Require().Len(errs, 1, fmtErrors(errs))
+	s.Equal("undefined: nope", errs[0].Msg)
+}
+
+func (s *UndefinedNameSuite) TestChainedMemberAccessReportsOnlyTheUndefinedName() {
+	errs := checkStrict(s.T(), "fun main() > void {\n    nope.a.b;\n}\n")
+	s.Require().Len(errs, 1, fmtErrors(errs))
+	s.Equal("undefined: nope", errs[0].Msg)
 }

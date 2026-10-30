@@ -1861,7 +1861,8 @@ func (c *checker) inferIdent(v *ast.IdentExpr) types.Type {
 	} else {
 		c.errorfc(v.Pos, UndefinedName, "undefined: %s", v.Name)
 	}
-	return types.Any
+	// Any would add a second error at the next member access.
+	return types.Unknown
 }
 
 func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
