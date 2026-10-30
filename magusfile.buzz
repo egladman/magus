@@ -2839,6 +2839,7 @@ export fun agent_eval(ctx: magus\Context, args: [str]) > void !> any {
 // the cache and those three variables, and so cannot share test's cache entry.
 export fun retrieval_eval_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["testdata/retrieval/*"]);
+    ctx.writesFiles(["testdata/retrieval/baseline.jsonl"], editsExistingSource: true);
     final env = mut {"GOEXPERIMENT": "jsonv2"};
     foreach (name in ["MAGUS_EVAL_CANDIDATE", "MAGUS_EVAL_REPORT_ONLY", "MAGUS_RETRIEVAL_EVAL_BASELINE"]) {
         env[name] = os\env(name) ?? "";
