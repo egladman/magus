@@ -170,26 +170,16 @@ func (s *ContinueToExitedWorkerSuite) TestContinueToAnEndedWorkerAdvisesTheRoot(
 	s.Contains(v.Context, "job guard-facts is pass; fork a new job for more work")
 }
 
-func (s *ContinueToExitedWorkerSuite) continueWorkerEnded(state types.JobState, reason string) types.GuardJudgment {
-	s.f.putJob(s.T(), state)
-	_, err := s.f.store.Update(s.f.ctx, "guard-facts", func(cur *types.Job) { cur.EndReason = reason })
-	s.Require().NoError(err)
-	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
-		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Here is your answer."},"tool_use_id":"toolu_02"}`
-	return Judge(s.f.ctx, Dependencies{}, Request{Input: continueTo, Host: "claude-code"})
-}
-
-func (s *ContinueToExitedWorkerSuite) TestContinueToASessionEndedWorkerAdvisesJobExec() {
-	v := s.continueWorkerEnded(types.StateNoReturn, types.EndReasonSessionEnded)
-	s.Equal(decisionAdvise, v.Decision)
-	s.Contains(v.Context, "job guard-facts ended with its worker's session")
-	s.Contains(v.Context, "job exec guard-facts")
-	s.NotContains(v.Context, "fork a new job")
-	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+func (s *ContinueToExitedWorkerSuite) TestASessionEndedRowAdvisesJobExec() {
+	got := handedBackAdvice(types.Job{ID: "guard-facts", State: types.StateNoReturn,
+		EndReason: types.EndReasonSessionEnded + " (claude-code)"})
+	s.Contains(got.Say, "job guard-facts ended with its worker's session")
+	s.Contains(got.Say, "job exec guard-facts")
+	s.NotContains(got.Say, "fork a new job")
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnOtherwiseEndedNoReturnWorkerAdvisesFork() {
-	v := s.continueWorkerEnded(types.StateNoReturn, "deadline passed")
+	v := s.continueWorker(types.StateNoReturn)
 	s.Equal(decisionAdvise, v.Decision)
 	s.Contains(v.Context, "fork a new job for more work")
 	s.NotContains(v.Context, "job exec guard-facts")

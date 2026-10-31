@@ -3475,6 +3475,7 @@ func regeneratingWorkspace(t *testing.T) Dependencies {
 	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
 	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	ws.EXPECT().All().Return(nil).Maybe()
 	ws.EXPECT().Get(".").Return(&types.Project{
 		Path: ".", Sources: types.MustParseGlobs("**/*.go"),
 		MagusfileTargets: []string{"test", "lint", "api-generate", "docs-generate"},

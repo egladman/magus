@@ -53,6 +53,10 @@ func adviseContinueHandedBack(ctx context.Context, at location, facts hint.Gate,
 	if !ok {
 		return advice{}
 	}
+	return handedBackAdvice(row)
+}
+
+func handedBackAdvice(row types.Job) advice {
 	if row.EndedWithSession() {
 		return advice{
 			Say: fmt.Sprintf("magus workspace: job %s ended with its worker's session; the resumed worker runs `%s` to take it back. No re-fork and no new row.",
