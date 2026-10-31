@@ -109,6 +109,32 @@ func TestAcquireGraphBuildStopsWaitingWhenCancelled(t *testing.T) {
 	assert.Contains(t, err.Error(), "stopped waiting for `magus graph build`")
 }
 
+func TestTryGraphBuildNamesTheHolderAndTakesNothing(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "knowledge")
+	first := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the first"}
+	held, busy, err := TryGraphBuild(dir, first, &bytes.Buffer{})
+	require.NoError(t, err)
+	require.NotNil(t, held)
+	assert.Nil(t, busy)
+
+	var notices bytes.Buffer
+	lock, busy, err := TryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &notices)
+	require.NoError(t, err)
+	assert.Nil(t, lock)
+	require.NotNil(t, busy)
+	assert.Equal(t, "the first", busy.By)
+	assert.Empty(t, notices.String(), "stopping is the caller's to say")
+	running, ok := RunningGraphBuild(dir)
+	require.True(t, ok)
+	assert.Equal(t, "the first", running.By, "a refused try leaves the holder's record")
+
+	require.NoError(t, held.Release())
+	lock, busy, err = TryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &notices)
+	require.NoError(t, err)
+	assert.Nil(t, busy)
+	require.NoError(t, lock.Release())
+}
+
 // deadPID returns the pid of a process that has exited and been reaped.
 func deadPID(t *testing.T) int {
 	t.Helper()

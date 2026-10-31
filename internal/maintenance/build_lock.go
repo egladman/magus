@@ -59,6 +59,25 @@ type GraphBuildLock struct {
 //
 // It returns ctx's error when ctx ends first; the other build carries on.
 func AcquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w io.Writer, every time.Duration) (_ *GraphBuildLock, waitedOn *GraphBuildHolder, err error) {
+	lock, h, err := TryGraphBuild(dir, me, w)
+	if err != nil || h == nil {
+		return lock, nil, err
+	}
+	fmt.Fprintf(w, "magus graph build: waiting for %s; interrupting stops the wait, not that work\n", h)
+	fl := flock.New(filepath.Join(dir, graphBuildLockFile))
+	if got, err := fl.TryLockContext(ctx, every); err != nil || !got {
+		if ctx.Err() != nil {
+			return nil, nil, fmt.Errorf("maintenance: stopped waiting for %s: %w", h, ctx.Err())
+		}
+		return nil, nil, fmt.Errorf("maintenance: graph build lock %s: %w", fl.Path(), err)
+	}
+	lock, err = recordGraphBuild(fl, filepath.Join(dir, graphBuildHolderFile), me, w)
+	return lock, h, err
+}
+
+// TryGraphBuild is AcquireGraphBuild without the wait: when another holds
+// the lock it returns that holder and no lock.
+func TryGraphBuild(dir string, me GraphBuildHolder, w io.Writer) (_ *GraphBuildLock, holder *GraphBuildHolder, err error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("maintenance: graph build lock: %w", err)
 	}
@@ -74,19 +93,18 @@ func AcquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w i
 			return nil, nil, err
 		}
 		if !pid.Alive(h.PID) {
-			h = GraphBuildHolder{} // a dead build's record, which the live holder has yet to replace
+			h = GraphBuildHolder{} // a dead build's record, not yet replaced
 		}
-		waitedOn = &h
-		fmt.Fprintf(w, "magus graph build: waiting for %s, which is building this workspace's graph; interrupting stops the wait, not that build\n", h)
-		if got, err = fl.TryLockContext(ctx, every); err != nil || !got {
-			if ctx.Err() != nil {
-				return nil, nil, fmt.Errorf("maintenance: stopped waiting for %s: %w", h, ctx.Err())
-			}
-			return nil, nil, fmt.Errorf("maintenance: graph build lock %s: %w", fl.Path(), err)
-		}
+		return nil, &h, nil
 	}
+	lock, err := recordGraphBuild(fl, holderPath, me, w)
+	return lock, nil, err
+}
+
+// recordGraphBuild writes me as the holder of the lock fl holds.
+func recordGraphBuild(fl *flock.Flock, holderPath string, me GraphBuildHolder, w io.Writer) (*GraphBuildLock, error) {
 	if prev, ok, err := readGraphBuildHolder(holderPath); err != nil {
-		return nil, nil, errors.Join(err, fl.Unlock())
+		return nil, errors.Join(err, fl.Unlock())
 	} else if ok {
 		fmt.Fprintf(w, "magus graph build: took over the build lock from %s, which ended without releasing it\n", prev)
 	}
@@ -95,9 +113,9 @@ func AcquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w i
 		err = file.ReplaceFile(holderPath, data, 0o600)
 	}
 	if err != nil {
-		return nil, nil, errors.Join(fmt.Errorf("maintenance: record graph build holder: %w", err), fl.Unlock())
+		return nil, errors.Join(fmt.Errorf("maintenance: record graph build holder: %w", err), fl.Unlock())
 	}
-	return &GraphBuildLock{fl: fl, holderPath: holderPath}, waitedOn, nil
+	return &GraphBuildLock{fl: fl, holderPath: holderPath}, nil
 }
 
 // Release clears the holder record and drops the lock, in that order, so a waiter that

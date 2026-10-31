@@ -40,6 +40,7 @@ import (
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/embed"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -259,8 +260,8 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 	}
 
 	read := graphRead{Input: input, Budget: qf.Budget, Nearest: opts.Format == outputText}
-	if qf.Refresh && !qf.Global {
-		refreshIndexesNow(ctx, root, "magus query")
+	if qf.Refresh && !qf.Global && refreshIndexesNow(ctx, root, "magus query") {
+		return nil
 	}
 	var res queryResult
 	if qf.Refresh || qf.Global || !askServer(ctx, root, readQuery, &read, &res) {
@@ -907,8 +908,8 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 	}
 
 	read := graphRead{Input: pos[0]}
-	if xf.Refresh && !xf.Global {
-		refreshIndexesNow(ctx, root, "magus explain")
+	if xf.Refresh && !xf.Global && refreshIndexesNow(ctx, root, "magus explain") {
+		return nil
 	}
 	var res explainResult
 	if xf.Refresh || xf.Global || !askServer(ctx, root, readExplain, &read, &res) {
@@ -1315,23 +1316,81 @@ func searchStoredIfStale(ctx context.Context, ws graphWorkspace, cfg config.Conf
 	return searchLoaded(ctx, g, read, embedtable.Cached, knownStaleCoverage(ctx, ws, cfg, stale)), true
 }
 
+// detachedRefreshEnv marks the process startRefresh detached.
+const detachedRefreshEnv = "MAGUS_DETACHED_REFRESH"
+
+// machineRefreshDir holds the graph build lock of the one symbol refresh
+// this machine runs, whichever checkout it serves.
+func machineRefreshDir() (string, error) {
+	state, err := xdg.StateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(state, "magus", "symbol-refresh"), nil
+}
+
+// takeRefreshLock takes the graph build lock in dir for a refresh. A
+// detached refresh never queues: a nil lock and nil error mean it should stop.
+func takeRefreshLock(ctx context.Context, dir string, me maintenance.GraphBuildHolder, verb string, detached bool) (*maintenance.GraphBuildLock, error) {
+	notices := noticeLines{ctx: ctx, level: slog.LevelInfo, label: verb, prefix: "magus graph build: "}
+	if !detached {
+		lock, _, err := maintenance.AcquireGraphBuild(ctx, dir, me, notices, graphBuildPoll)
+		return lock, err
+	}
+	lock, holder, err := maintenance.TryGraphBuild(dir, me, notices)
+	if holder != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s holds the refresh lock, so this refresh stops\n", verb, holder)
+	}
+	return lock, err
+}
+
 // refreshIndexesNow is `--refresh`: it waits for a refresh already running,
 // brings the stale indexes up to the tree, and says on stderr what that cost.
 // What stays behind it names at error level, and the read still answers.
-func refreshIndexesNow(ctx context.Context, root, verb string) {
+// It returns true when the command should exit instead: a detached refresh
+// has no reader, and its read would hold a graph outside these locks.
+func refreshIndexesNow(ctx context.Context, root, verb string) bool {
+	detached := os.Getenv(detachedRefreshEnv) != ""
+	_ = os.Unsetenv(detachedRefreshEnv)
 	ctx, cancel := context.WithTimeout(ctx, magus.SymbolRefreshBudget)
 	defer cancel()
 	retry := fmt.Sprintf("`%s` retries", hint.GraphBuild)
-	lock, _, err := acquireGraphBuild(ctx, root)
-	if err != nil {
+	failed := func(err error) bool {
 		slog.ErrorContext(ctx, "could not refresh the symbol indexes; "+retry, attr.Notice(verb), attr.Error(err))
-		return
+		return detached
 	}
-	defer func() { _ = lock.Release() }()
+	wsRoot := resolveRootOrEmpty(root)
+	if wsRoot == "" {
+		return failed(errors.New("no workspace root here, so no knowledge store to refresh"))
+	}
+	storeDir, err := knowledgeStoreDir(wsRoot)
+	if err != nil {
+		return failed(err)
+	}
+	machineDir, err := machineRefreshDir()
+	if err != nil {
+		return failed(err)
+	}
+	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of " + wsRoot}
+	machine, err := takeRefreshLock(ctx, machineDir, me, verb, detached)
+	if err != nil {
+		return failed(err)
+	}
+	if machine == nil {
+		return true
+	}
+	defer func() { _ = machine.Release() }()
+	store, err := takeRefreshLock(ctx, storeDir, me, verb, detached)
+	if err != nil {
+		return failed(err)
+	}
+	if store == nil {
+		return true
+	}
+	defer func() { _ = store.Release() }()
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		slog.ErrorContext(ctx, "could not refresh the symbol indexes; "+retry, attr.Notice(verb), attr.Error(err))
-		return
+		return failed(err)
 	}
 	refresh := m.RefreshSymbolIndexes(ctx)
 	spent := func(d time.Duration) time.Duration { return d.Round(100 * time.Millisecond) }
@@ -1343,6 +1402,7 @@ func refreshIndexesNow(ctx context.Context, root, verb string) {
 		slog.ErrorContext(ctx, fmt.Sprintf("could not refresh every symbol index in %s, so this answer is drawn from them as they stand; %s: %s",
 			spent(refresh.Took), retry, strings.Join(refresh.Problems, "; ")), attr.Notice(verb))
 	}
+	return detached
 }
 
 // refreshInBackground starts a refresh of the indexes behind ans and answers
@@ -1364,6 +1424,14 @@ func refreshInBackground(ctx context.Context, root string, ans types.KnowledgeAn
 		why := "its last refresh failed: " + strings.Join(failed, "; ")
 		slog.ErrorContext(ctx, why, attr.Notice("magus"))
 		return &types.KnowledgeIndexCause{Why: why, Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
+	}
+	machineDir, err := machineRefreshDir()
+	if err != nil {
+		slog.ErrorContext(ctx, "could not start a background refresh", attr.Notice("magus"), attr.Error(err))
+		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
+	}
+	if holder, running := maintenance.RunningGraphBuild(machineDir); running {
+		return &types.KnowledgeIndexCause{Why: fmt.Sprintf("this answer comes from the index as it stands, and this read started no refresh: a machine runs one at a time, and %s is running", holder), Fix: fix}
 	}
 	started, err := startRefresh(dir)
 	switch {
@@ -1396,6 +1464,7 @@ func startRefresh(dir string) (bool, error) {
 	defer logFile.Close()
 	cmd := exec.Command(exe, append(slices.Clone(os.Args[1:]), "--refresh")...)
 	cmd.Stdout, cmd.Stderr = logFile, logFile
+	cmd.Env = append(os.Environ(), detachedRefreshEnv+"=1")
 	cmd.SysProcAttr = detachedSysProcAttr()
 	if err := cmd.Start(); err != nil {
 		return false, err

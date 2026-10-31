@@ -88,8 +88,8 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 	// --rename edits files and --definition/--source read them, so those stay local; the
 	// plain lookup and --occurrences are what a server answers.
 	read := graphRead{Input: pos[0], Occurrences: rf.Occurrences}
-	if rf.Refresh && rf.Rename == "" {
-		refreshIndexesNow(ctx, root, "magus refs")
+	if rf.Refresh && rf.Rename == "" && refreshIndexesNow(ctx, root, "magus refs") {
+		return nil
 	}
 	routable :=!rf.Refresh && rf.Rename == "" && !rf.Definition && !rf.Source
 	var res refsResult

@@ -821,12 +821,70 @@ func (s *magusSuite) TestRecentRefreshFailuresHoldForTheBackoff() {
 func staleRefresher(dir string, run func(context.Context, types.SymbolIndexStatus) error) symbolRefresher {
 	return symbolRefresher{
 		budget: time.Minute, abandon: time.Millisecond, now: time.Now,
+		admit: func(context.Context) (func(), error) { return func() {}, nil },
 		status: func(context.Context) []types.SymbolIndexStatus {
 			return []types.SymbolIndexStatus{{Project: types.NewProjectRef("libs/a", dir), Op: "scip", Language: "go", Freshness: types.SymbolIndexStale}}
 		},
 		indexPath: func(types.SymbolIndexStatus) string { return filepath.Join(dir, "symbols", "scip.pack") },
 		run:       run,
 	}
+}
+
+func (s *magusSuite) TestRefreshHoldsItsMachineClaimExceptAcrossAnIndexer() {
+	var events []string
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error {
+		events = append(events, "run")
+		return nil
+	})
+	r.admit = func(context.Context) (func(), error) {
+		events = append(events, "claim")
+		return func() { events = append(events, "release") }, nil
+	}
+	status := r.status
+	r.status = func(ctx context.Context) []types.SymbolIndexStatus {
+		events = append(events, "status")
+		return status(ctx)
+	}
+	r.after = func(context.Context) { events = append(events, "after") }
+
+	got := r.refresh(s.T().Context())
+
+	s.Empty(got.Problems)
+	s.Equal([]string{"claim", "status", "release", "run", "claim", "after", "release"}, events)
+}
+
+func (s *magusSuite) TestRefreshRefusedByTheMachineStartsNothing() {
+	runs := 0
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error {
+		runs++
+		return nil
+	})
+	r.admit = func(context.Context) (func(), error) { return nil, errors.New("the machine is full") }
+
+	got := r.refresh(s.T().Context())
+
+	s.Zero(runs)
+	s.Empty(got.Refreshed)
+	s.Equal([]string{"the machine is full"}, got.Problems)
+	s.NoFileExists(r.indexPath(types.SymbolIndexStatus{})+symbolRefreshFailedSuffix, "a full machine says nothing about the indexer")
+}
+
+func (s *magusSuite) TestRefreshRefusedAfterItsIndexerNamesTheGuardIndexes() {
+	claims := 0
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error { return nil })
+	r.admit = func(context.Context) (func(), error) {
+		claims++
+		if claims > 1 {
+			return nil, errors.New("the machine is full")
+		}
+		return func() {}, nil
+	}
+	r.after = func(context.Context) { s.Fail("wrote the guard indexes without a claim") }
+
+	got := r.refresh(s.T().Context())
+
+	s.Len(got.Refreshed, 1)
+	s.Equal([]string{"guard and scripts indexes not written: the machine is full"}, got.Problems)
 }
 
 func (s *magusSuite) TestRefreshReturnsWithinTheBudgetWhenARunIgnoresCancellation() {

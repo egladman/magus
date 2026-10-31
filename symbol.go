@@ -668,6 +668,9 @@ const (
 	// Beside an index, the record that its last refresh failed. A CLI
 	// has no loop to hold a backoff in, and every read would pay again.
 	symbolRefreshFailedSuffix = ".refresh-failed"
+	// The machine claim of a refresh's own process. Measured 2026-10-31
+	// on this repository: 1.74 GiB footprint. An indexer claims for itself.
+	symbolRefreshMemoryMB = 2048
 )
 
 // SymbolRefresh is what [Magus.RefreshSymbolIndexes] did.
@@ -683,13 +686,14 @@ type SymbolRefresh struct {
 // tree, through the cache, so a current one replays. It returns within
 // SymbolRefreshBudget plus symbolRefreshAbandon and never fails a read:
 // what stayed behind is in Problems. A failed index waits
-// symbolIndexBackoffBase; a lost lock waits for nothing.
+// symbolIndexBackoffBase; a lost lock or a full machine waits for nothing.
 func (m *Magus) RefreshSymbolIndexes(ctx context.Context) SymbolRefresh {
 	cacheDir := resolveCacheDir(m.Root(), m.cfg)
 	r := symbolRefresher{
 		budget:  SymbolRefreshBudget,
 		abandon: symbolRefreshAbandon,
 		now:     time.Now,
+		admit:   m.admitSymbolRefresh,
 		status:  m.SymbolIndexStatusByStamp,
 		indexPath: func(s types.SymbolIndexStatus) string {
 			return symbols.IndexPath(cacheDir, cmp.Or(s.Project.Path, "."), s.Op)
@@ -714,11 +718,27 @@ func (m *Magus) RefreshSymbolIndexes(ctx context.Context) SymbolRefresh {
 	return r.refresh(ctx)
 }
 
+// admitSymbolRefresh claims the machine budget for the refresh's own work.
+// A nil broker is `broker: off`, which arbitrates nothing.
+func (m *Magus) admitSymbolRefresh(ctx context.Context) (func(), error) {
+	if m.broker == nil {
+		return func() {}, nil
+	}
+	policy := cmp.Or(m.brokerPolicy, m.cfg.Broker)
+	return cache.AdmitMachine(ctx, m.broker, types.MachineClaim{
+		Project:  ".",
+		Target:   "symbol-refresh",
+		MemoryMB: symbolRefreshMemoryMB,
+		Dir:      m.Root(),
+	}, policy.Resolved() == types.BrokerRequired)
+}
+
 // symbolRefresher is RefreshSymbolIndexes' policy, its collaborators
 // injected so a run that hangs or fails is testable without a workspace.
 type symbolRefresher struct {
 	budget, abandon time.Duration
 	now             func() time.Time
+	admit           func(context.Context) (func(), error)
 	status          func(context.Context) []types.SymbolIndexStatus
 	indexPath       func(types.SymbolIndexStatus) string
 	run             func(context.Context, types.SymbolIndexStatus) error
@@ -735,7 +755,7 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 	indexed, done := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(done)
-		refreshed := r.work(ctx, func(refreshed, problem string, swept, indexed time.Duration) {
+		report := func(refreshed, problem string, swept, indexed time.Duration) {
 			mu.Lock()
 			defer mu.Unlock()
 			if refreshed != "" {
@@ -746,12 +766,20 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 			}
 			out.Swept += swept
 			out.Indexed += indexed
-		})
+		}
+		refreshed := r.work(ctx, report)
 		close(indexed)
 		if refreshed && r.after != nil {
 			// Past the budget this is left to finish or die with the process.
 			// Cancelling it would record its tool probes as failed.
-			r.after(context.WithoutCancel(ctx))
+			afterCtx := context.WithoutCancel(ctx)
+			release, err := r.admit(afterCtx)
+			if err != nil {
+				report("", "guard and scripts indexes not written: "+types.InlineDiagnostic(err), 0, 0)
+				return
+			}
+			defer release()
+			r.after(afterCtx)
 		}
 	}()
 
@@ -778,7 +806,14 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 func (r symbolRefresher) work(ctx context.Context, report func(refreshed, problem string, swept, indexed time.Duration)) bool {
 	refreshed := false
 	started := r.now()
+	release, err := r.admit(ctx)
+	if err != nil {
+		report("", types.InlineDiagnostic(err), 0, 0)
+		return false
+	}
 	statuses := r.status(ctx)
+	// Handed back first: a step behind its own process's claim may never seat.
+	release()
 	report("", "", r.now().Sub(started), 0)
 	for _, s := range statuses {
 		if len(staleIndexRefs([]types.SymbolIndexStatus{s})) == 0 {
