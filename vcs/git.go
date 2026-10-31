@@ -1807,10 +1807,14 @@ func gitAttrsBody(globs types.MergeDriverGlobs) string {
 // anchorAttrPattern anchors a slashless pattern at the root: git matches one at every
 // depth, and magus's globs are rooted.
 func anchorAttrPattern(pattern string) string {
-	if strings.Contains(pattern, "/") {
+	if !strings.Contains(pattern, "/") {
+		pattern = "/" + pattern
+	}
+	if !strings.ContainsAny(pattern, " \t\"") {
 		return pattern
 	}
-	return "/" + pattern
+	// gitattributes splits a line on blanks; a quoted pattern is read C-style.
+	return strconv.Quote(pattern)
 }
 
 // gitDiffDriver routes paths matching glob to a git diff driver. The driver's hunk-header
@@ -2175,7 +2179,12 @@ func installGitHookSections(ctx context.Context, root string, names []string, m 
 	j := WriteJudge(ctx, root)
 	err = withRepositoryLock(ctx, paths.commonDir, func() error {
 		for _, name := range names {
-			changed, err := writeManagedSection(root, filepath.Join(paths.hooksDir, name), m, body(name), hookFile, j)
+			hook := filepath.Join(paths.hooksDir, name)
+			if clean, ok := dirtyReplacement(hook, m, body(name), j); ok {
+				slog.WarnContext(ctx, "replacing a section a clean build wrote with one from a dirty build",
+					slog.String("hook", name), slog.String("clean_writer", clean.String()), slog.String("dirty_writer", j.Self.String()))
+			}
+			changed, err := writeManagedSection(root, hook, m, body(name), hookFile, j)
 			if err != nil {
 				return err
 			}
