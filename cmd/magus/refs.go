@@ -98,7 +98,7 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 	if rf.Refresh && rf.Rename == "" && refreshIndexesNow(ctx, root, "magus refs") {
 		return nil
 	}
-	routable :=!rf.Refresh && rf.Rename == "" && !rf.Definition && !rf.Source
+	routable := !rf.Refresh && rf.Rename == "" && !rf.Definition && !rf.Source
 	var res refsResult
 	var g *knowledge.Graph
 	if !routable || !askServer(ctx, root, readRefs, &read, &res) {
