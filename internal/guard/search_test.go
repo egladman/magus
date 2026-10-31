@@ -63,7 +63,7 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 		{`grep -rni 'HandleRequest\|ParseConfig' .`, "HandleRequest,ParseConfig"},
 		{`grep -rni '\bJudge\b' .`, ""},
 		{`grep -rn 'func Unknown' .`, ""},
-		// A stale index still knows the name, and the deny serves the rebuild first.
+		// A stale index still knows the name, and the deny says refs refreshes it.
 		{`grep -rn 'func Judge' internal/`, "stale"},
 		// Another tree is not this workspace's graph.
 		{`grep -rn 'func Judge' /tmp/other-repo`, ""},
@@ -81,7 +81,7 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: want}, v.Rule, tt.command)
-		assert.Equal(t, tt.arg == "stale", strings.Contains(v.Deny, "graph build --silent"), "%q: only a stale index serves the rebuild", tt.command)
+		assert.Equal(t, tt.arg == "stale", strings.Contains(v.Deny, "refs refreshes it as it answers"), "%q: only a stale index says refs refreshes it", tt.command)
 		for _, name := range strings.Split(want, ",") {
 			assert.Contains(t, denial{Say: v.Deny, Why: v.Why}.full(), name, "%q: one command per name", tt.command)
 		}
