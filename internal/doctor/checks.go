@@ -2089,6 +2089,7 @@ var guardTemplateBasenames = []string{
 	"magus-command.buzz",
 	"magus-path.buzz",
 	"magus-observe.buzz",
+	"magus-tool-time.buzz",
 	"cursor-hook.buzz",
 	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
 	// the observe template's did: silently, as a store that looks like a repository

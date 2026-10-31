@@ -196,6 +196,7 @@ var vocabulary = []concept{
 	{Flag: "timeout"},
 	{Flag: "title"},
 	{Flag: "to"},
+	{Flag: "tool-ms"},
 	{Flag: "transcript"},
 	{Flag: "transport"},
 	{Flag: "type"},
