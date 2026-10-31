@@ -1492,7 +1492,7 @@ func bodyOnlySleeps(body []*syntax.Stmt, d Dialect) bool {
 
 // processPollFires reports a command that hunts processes instead of asking magus
 // about the work it already tracks. Agents reach for pgrep/ps when a run is slow;
-// the lock message and status --watch already name the holder.
+// the lock message and status already name the holder.
 func processPollFires(cmds []hint.Invocation) bool {
 	for _, c := range cmds {
 		switch path.Base(c.Name) {

@@ -329,7 +329,7 @@ const (
 
 // monitorPileText words the pile verdict for an agent already holding live waiters.
 func monitorPileText(live int, refuse bool) string {
-	remedy := fmt.Sprintf("wait on the work's own completion notice, `%s` for another agent's job, or `%s`", hint.JobWait.With("<job>"), hint.Status.With("--watch=15s"))
+	remedy := fmt.Sprintf("wait on the work's own completion notice, or `%s` for another agent's job", hint.JobWait.With("<job>"))
 	if refuse {
 		return fmt.Sprintf("%s waiters are already live for you; arm no more: %s.", strconv.Itoa(live), remedy)
 	}

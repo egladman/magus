@@ -294,12 +294,13 @@ at once, naming the holder.
 {{else}}Run whose project lock or machine budget another magus invocation holds: exits 75 at once, naming holder.{{end}}
 {{if .Full}}- Never write `sleep`/`ps`/`pgrep` polling loops. The guard denies `pgrep`,
   `pidof`, and `ps` for this reason.{{else}}- Never write `sleep`/`ps`/`pgrep` polling loops; guard denies `pgrep`, `pidof`, `ps`.{{end}}
-{{if .Full}}- `{{cmd "status"}} --watch=15s` reads that lock state continuously: holder PID,
-  command, directory, and age. Re-run once the lock releases.{{else}}- `{{cmd "status"}} --watch=15s`: reads lock state continuously: holder PID, command, directory, age. Re-run once lock releases.{{end}}
+{{if .Full}}- `{{cmd "status"}}` reads that lock state once: holder PID, command, directory,
+  and age. To wait, background your run as `{{cmd "job exec"}} --timeout <d> -- <command>`
+  and wait for its completion notice.{{else}}- `{{cmd "status"}}`: reads lock state once: holder PID, command, directory, age. To wait: background run as `{{cmd "job exec"}} --timeout <d> -- <command>`, wait for its completion notice.{{end}}
 {{if .Full}}- A long-running holder is not, by itself, evidence of a hang.{{else}}- Long-running holder alone: not evidence of hang.{{end}}
 
 ```sh
-magus status --watch=15s
+magus status
 ```
 
 {{if .Full}}If the lock has crossed its stale warning threshold, report the exact holder and
