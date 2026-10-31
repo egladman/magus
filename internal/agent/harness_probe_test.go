@@ -14,7 +14,40 @@ import (
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type probeEnvironmentSuite struct{ suite.Suite }
+
+func TestProbeEnvironmentSuite(t *testing.T) { suite.Run(t, new(probeEnvironmentSuite)) }
+
+// A mise shim on PATH exits "not trusted" when its config directory moves.
+func (s *probeEnvironmentSuite) TestTheConfigDirStaysForAShim() {
+	s.T().Setenv("XDG_CONFIG_HOME", "/real/config")
+	w := testkit.NewWorkspace(s.T())
+	root := w.Root()
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\ncase \"$XDG_CONFIG_HOME\" in\n/real/config) printf 'deny' ;;\n*) printf 'not trusted' ;;\nesac\n")
+	writeProbeableHarness(s.T(), root, "shim", probeCommand)
+
+	result, err := VerifyHarness(untimedProbes(), root, "shim")
+	s.Require().NoError(err)
+	s.Equal(HarnessVerified, result.Status, result.Reason)
+}
+
+// Recorded state lands in the throwaway directory, never the caller's.
+func (s *probeEnvironmentSuite) TestStateLandsInTheScratchDir() {
+	caller := s.T().TempDir()
+	s.T().Setenv("XDG_STATE_HOME", caller)
+	w := testkit.NewWorkspace(s.T())
+	root := w.Root()
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\nmkdir -p \"$XDG_STATE_HOME\"\ntouch \"$XDG_STATE_HOME/recorded\"\nprintf 'deny'\n")
+	writeProbeableHarness(s.T(), root, "scratch", probeCommand)
+
+	result, err := VerifyHarness(untimedProbes(), root, "scratch")
+	s.Require().NoError(err)
+	s.Equal(HarnessVerified, result.Status, result.Reason)
+	s.NoFileExists(filepath.Join(caller, "recorded"))
+}
 
 // untimedProbes lifts the probe deadline: the stand-ins these tests wire answer or
 // exit at once, so the shipped 10s measures only how loaded the machine is, and go
