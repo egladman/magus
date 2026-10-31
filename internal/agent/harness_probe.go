@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/egladman/magus/types"
 )
 
 // probeTimeout bounds one guard-command probe. Matches the shipped hook templates'
@@ -82,6 +84,23 @@ func probeable(root, command string) bool {
 	default:
 		return runnableAsProbe(root, command)
 	}
+}
+
+// declaredSilent reports whether the harness declares command a recorder.
+// Every hook that runs it binds no hook point, so no verdict is expected.
+// A command a point-binding hook also runs stays probed.
+func declaredSilent(command string, hooks []types.HookCommand) bool {
+	declared := false
+	for _, h := range hooks {
+		if !strings.HasSuffix(command, hookInvocation(h)) {
+			continue
+		}
+		if len(h.Points) > 0 {
+			return false
+		}
+		declared = true
+	}
+	return declared
 }
 
 // namesTemplate reports whether command invokes the shipped Buzz template called stem.
@@ -222,14 +241,14 @@ func probeEvent(command string) (event string, wantDecisions []string) {
 // this; this is what makes the difference between a config that WOULD have been
 // reported "verified" while its guard command was silently broken, and one that
 // genuinely answers.
-func probeHarnessCommands(ctx context.Context, root string, config map[string]any) (HarnessStatus, string) {
+func probeHarnessCommands(ctx context.Context, root string, config map[string]any, hooks []types.HookCommand) (HarnessStatus, string) {
 	var all []string
 	collectCommands(config, &all)
 
 	seen := make(map[string]bool, len(all))
 	var commands []string
 	for _, c := range all {
-		if seen[c] || !probeable(root, c) {
+		if seen[c] || !probeable(root, c) || declaredSilent(c, hooks) {
 			continue
 		}
 		seen[c] = true

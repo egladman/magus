@@ -737,11 +737,17 @@ func verifyHarnessHooks(d HarnessDescriptor) HarnessCheck {
 	return HarnessCheck{Status: HarnessVerified}
 }
 
-func entriesRunHook(groups []types.ManagedEntries, h types.HookCommand) bool {
+// hookInvocation is the tail of the command line that runs h.
+func hookInvocation(h types.HookCommand) string {
 	invocation := fmt.Sprintf("/%s.buzz", h.Script)
 	if len(h.Flags) > 0 {
 		invocation += " -- " + strings.Join(h.Flags, " ")
 	}
+	return invocation
+}
+
+func entriesRunHook(groups []types.ManagedEntries, h types.HookCommand) bool {
+	invocation := hookInvocation(h)
 	for _, group := range groups {
 		if len(group.Path) == 0 || group.Path[len(group.Path)-1] != h.Event {
 			continue
@@ -936,7 +942,7 @@ func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, 
 	// Presence is not proof: a config that carries the declared fragments verbatim
 	// still needs the wired command to actually answer. probeHarnessCommands runs it
 	// for real, against a synthetic event, and only THAT earns HarnessVerified.
-	result.Status, result.Reason = probeHarnessCommands(ctx, root, config)
+	result.Status, result.Reason = probeHarnessCommands(ctx, root, config, d.Hooks)
 	result.Guarded = result.Status == HarnessVerified
 	verifyHarnessMCP(d, &result)
 	return result, nil
