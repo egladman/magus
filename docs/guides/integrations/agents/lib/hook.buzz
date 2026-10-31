@@ -218,37 +218,49 @@ export fun workspaceRootAt(dir: str) > str {
 // subagent's hooks from the session's directory while the subagent works in its own
 // worktree, whose binary is the one that tree builds.
 //
-// A workspace with no runnable ./magus falls through to PATH, and the PATH copy may
-// predate the checkout's rules. A caller that passes file (and the session, when the
-// host reports one) has that said once per session on stderr: for a ./magus that cannot
-// run, and for a checkout of magus itself with none, naming the PATH copy and where its
-// link points. Anywhere else PATH is where magus is meant to come from. The version is
-// left to the trail row: asking costs a process on the hook that says it.
-export fun resolveBin(cwd: str = "", session: str = "", file: str = "") > str {
+// A workspace with no runnable ./magus falls through to PATH, and the PATH
+// copy may predate the checkout's rules. fallbackNote says so.
+export fun resolveBin(cwd: str = "") > str {
     final declared = env\get("__MAGUS_BIN") catch "";
     if (declared != "") { return declared; }
-    var root = "";
-    if (cwd != "") { root = workspaceRootAt(cwd); }
-    if (root == "") { root = workspaceRoot(); }
+    final root = binRoot(cwd);
     if (root == "") { return proc\which("magus") catch ""; }
     final candidate = "{root}/magus";
     if (isExecutable(candidate)) { return candidate; }
     // The root was found and the binary beside it cannot be run. Falling through to
     // PATH here is the same answer the walk's `break` gave: do not keep climbing into
     // a parent checkout.
+    return proc\which("magus") catch "";
+}
+
+// binRoot is the workspace root a hook judges in: above cwd, else above
+// the hook's own directory.
+export fun binRoot(cwd: str) > str {
+    var root = "";
+    if (cwd != "") { root = workspaceRootAt(cwd); }
+    if (root == "") { root = workspaceRoot(); }
+    return root;
+}
+
+// fallbackNote says why resolveBin fell back from the checkout's ./magus, or
+// "" when it did not. It names a ./magus that cannot run, and a checkout of
+// magus with none. Anywhere else PATH is where magus is meant to come from.
+export fun fallbackNote(cwd: str = "") > str {
+    if ((env\get("__MAGUS_BIN") catch "") != "") { return ""; }
+    final root = binRoot(cwd);
+    if (root == "") { return ""; }
+    final candidate = "{root}/magus";
+    if (isExecutable(candidate)) { return ""; }
     final onPath = proc\which("magus") catch "";
-    if (file != "") {
-        final present = (fs\stat(candidate) catch null) != null;
-        if (present and noticeOnce(session, family: "bin-not-executable", file: file)) {
-            io\stderr.write("{file}: {candidate} exists but is not executable, so this hook judges with the magus on PATH, "
-                + "which may predate this checkout's rules; run `chmod +x {candidate}`\n") catch void;
-        }
-        if (!present and onPath != "" and buildsMagus(root) and noticeOnce(session, family: "bin-absent", file: file)) {
-            io\stderr.write("{file}: {root} has no ./magus, so this hook judges with the magus on PATH, "
-                + "{describeBin(onPath)}, which may predate this checkout's rules\n") catch void;
-        }
+    if ((fs\stat(candidate) catch null) != null) {
+        return "{candidate} exists but is not executable, so the magus on PATH judges, "
+            + "which may predate this checkout's rules; run `chmod +x {candidate}`";
     }
-    return onPath;
+    if (onPath != "" and buildsMagus(root)) {
+        return "{root} has no ./magus, so the magus on PATH judges, "
+            + "{describeBin(onPath)}, which may predate this checkout's rules";
+    }
+    return "";
 }
 
 // buildsMagus reports whether root is a checkout of magus, which judges with the ./magus it
@@ -297,6 +309,22 @@ export fun unrecordedNotice(bin: str, session: str, host: str, file: str, root: 
     }
     io\stderr.write("{text}\n") catch void;
     return "";
+}
+
+// withNotice adds text to a JSON reply's systemMessage, the notice the person
+// reads. An empty reply becomes one; a reply that is not a JSON object is
+// left whole, since a host would reject the merge.
+export fun withNotice(reply: str, text: str) > str {
+    if (text == "") { return reply; }
+    if (reply.trim() == "") { return json\stringify({"systemMessage": text}) catch reply; }
+    final parsed = json\parse(reply) catch null;
+    final doc = parsed as? {str: any};
+    if (doc == null) { return reply; }
+    final merged = mut {<str: any>};
+    foreach (key, value in doc!) { merged[key] = value; }
+    final held = (doc!["systemMessage"] as? str) ?? "";
+    merged["systemMessage"] = if (held == "") text else "{text}\n{held}";
+    return json\stringify(merged) catch reply;
 }
 
 // describeBin names bin and, when it is a link, where the link points.
@@ -390,24 +418,16 @@ test "a call from a nested project resolves the workspace root's binary" {
     fs\removeAll(root);
 }
 
-test "a ./magus that cannot run is said once per session, and only then" {
+test "a fallback from the checkout's ./magus is named, and only then" {
     final root = fs\tempDir("hook-unrunnable-");
-    final session = fileSafe(root);
     final bare = fs\tempDir("hook-no-binary-");
     fs\writeFile("{root}/magus.yaml", content: "");
     fs\writeFile("{bare}/magus.yaml", content: "");
     fs\writeFile("{root}/magus", content: "#!/bin/sh\n");
-
-    _ = resolveBin(cwd: root, session: session, file: "test.buzz");
-    std\assert(noticeOnce(session, family: "bin-not-executable", file: "test.buzz") == false, message: "the first call said it");
-
-    final quiet = "{session}-quiet";
-    _ = resolveBin(cwd: bare, session: quiet, file: "test.buzz");
-    std\assert(noticeOnce(quiet, family: "bin-not-executable", file: "test.buzz"), message: "no ./magus at all is not this notice");
-
-    final named = "{session}-named";
-    _ = resolveBin(cwd: root, session: named);
-    std\assert(noticeOnce(named, family: "bin-not-executable", file: "test.buzz"), message: "a caller that names no file stays silent");
+    std\assert(fallbackNote(root).indexOf("chmod +x {root}/magus") != null, message: fallbackNote(root));
+    std\assert(fallbackNote(bare) == "", message: "a checkout that does not build magus expects PATH's");
+    plantBinary(root);
+    std\assert(fallbackNote(root) == "", message: "a runnable ./magus is no fallback");
     fs\removeAll(root);
     fs\removeAll(bare);
 }
@@ -420,6 +440,15 @@ test "the fix for a missing magus is the bootstrap in a checkout of magus, else 
     std\assert(magusFix(root).indexOf(SETUP_URL) != null, message: magusFix(root));
     std\assert(magusFix("").indexOf(SETUP_URL) != null, message: "no root");
     fs\removeAll(root);
+}
+
+test "a notice joins the reply the person reads" {
+    std\assert(withNotice("", text: "n") == `{"systemMessage":"n"}`, message: withNotice("", text: "n"));
+    final denied = json\parse(withNotice(`{"decision":"block","systemMessage":"m"}`, text: "n")) catch null;
+    std\assert(dig(denied, dotPath: "decision") == "block", message: "the verdict stays");
+    std\assert(dig(denied, dotPath: "systemMessage") == "n\nm", message: "the notice leads");
+    std\assert(withNotice("plain", text: "n") == "plain", message: "a reply that is not JSON is left whole");
+    std\assert(withNotice(`{"a":1}`, text: "") == `{"a":1}`, message: "no notice, no change");
 }
 
 test "a worktree under another checkout never climbs into it" {

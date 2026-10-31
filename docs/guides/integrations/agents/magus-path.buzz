@@ -165,8 +165,10 @@ fun main(args: [str]) > void {
     final event = json\parse(raw ?? "") catch null;
 
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
-    final bin = hook\resolveBin(cwd: cwd, session: hook\field(event, dotPath: sessionPath), file: "magus-path.buzz");
-    final fix = hook\magusFix(hook\workspaceRootAt(cwd));
+    final bin = hook\resolveBin(cwd: cwd);
+    final note = hook\fallbackNote(cwd);
+    var fix = hook\magusFix(hook\workspaceRootAt(cwd));
+    if (note != "") { fix = note + ". " + fix; }
     if (bin == "" or !hook\isExecutable(bin)) {
         io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: hook\refusal(
             "magus guard could not judge this write: no magus binary was found", fix: fix))) catch void;
@@ -236,5 +238,9 @@ fun main(args: [str]) > void {
             fix: "Rebuild or update {bin}. {fix}"))) catch void;
         return;
     }
-    io\stdout.write(hook\trimTrailingNewlines(result!.stdout)) catch void;
+    var reply = hook\trimTrailingNewlines(result!.stdout);
+    if (note != "" and hook\noticeOnce(session, family: "bin-fallback", file: "magus-path.buzz")) {
+        reply = hook\withNotice(reply, text: "magus-path.buzz: " + note);
+    }
+    io\stdout.write(reply) catch void;
 }

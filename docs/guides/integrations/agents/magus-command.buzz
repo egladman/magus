@@ -559,7 +559,7 @@ fun main(args: [str]) > void {
     final cwd = hook\commandDir(event,
         cwd: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")),
         commandPath: commandPath, toolPath: toolPath);
-    final bin = hook\resolveBin(cwd: cwd, session: session, file: "magus-command.buzz");
+    final bin = hook\resolveBin(cwd: cwd);
 
     // A message, by its shape: no tool, and text where HOST_MESSAGE_PATH points. Ahead of the
     // availability notice, which a message hook would hand the model as context.
@@ -572,7 +572,10 @@ fun main(args: [str]) > void {
         return;
     }
 
-    final fix = hook\magusFix(hook\workspaceRootAt(cwd));
+    // Every unjudged call names a fallback from ./magus; a judged one, once.
+    final note = hook\fallbackNote(cwd);
+    var fix = hook\magusFix(hook\workspaceRootAt(cwd));
+    if (note != "") { fix = note + ". " + fix; }
     if (bin == "" or !hook\isExecutable(bin)) {
         final verdict = "magus guard could not judge this call: no magus binary was found";
         io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE",
@@ -635,17 +638,16 @@ fun main(args: [str]) > void {
     // workspace, half-written by a concurrent build, exits non-zero with empty output, and
     // printing that as a pass silently disables every rule with nothing anywhere saying so.
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-        final chosen = env\get("__MAGUS_FAILED_RESPONSE") catch "";
-        if (chosen != "") {
-            io\stdout.write(chosen) catch void;
-            return;
-        }
-        final verdict = failureNotice(guard, failed: result);
-        io\stdout.write(unjudgedReply(eventName, toolName: toolName, verdict: verdict,
-            fix: "Rebuild or update {bin}. {fix}") + "\n") catch void;
+        final refused = unjudgedReply(eventName, toolName: toolName,
+            verdict: failureNotice(guard, failed: result), fix: "Rebuild or update {bin}. {fix}");
+        io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: refused)) catch void;
         return;
     }
-    io\stdout.write(hook\trimTrailingNewlines(result!.stdout)) catch void;
+    var reply = hook\trimTrailingNewlines(result!.stdout);
+    if (note != "" and hook\noticeOnce(session, family: "bin-fallback", file: "magus-command.buzz")) {
+        reply = hook\withNotice(reply, text: "magus-command.buzz: " + note);
+    }
+    io\stdout.write(reply) catch void;
 }
 
 fun replyOf(text: str) > {str: any} {

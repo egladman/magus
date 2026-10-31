@@ -108,6 +108,8 @@ final STATE_MAX_AGE_MS = 86400000.0;
 object Guard {
     bin: str,
     payload: str,
+    // fix says how to get a magus that judges here.
+    fix: str = "",
 }
 
 // Verdict is the part of `magus shell -o json` this file renders.
@@ -123,6 +125,7 @@ object Scope {
     agent: str,
     session: str,
     transcript: str,
+    fix: str = "",
 }
 
 fun firstField(node: any?, keys: [str]) > str {
@@ -479,7 +482,7 @@ fun judged(guard: Guard, attempts: [[str]]) > Verdict {
         result = judge(guard, extra: extra);
         if (!rejectedFlag(result)) { break; }
     }
-    final fix = "Rebuild or update {guard.bin}. {hook\magusFix(hook\workspaceRoot())}";
+    final fix = "Rebuild or update {guard.bin}. {guard.fix}";
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         return unjudged(failureNotice(guard, failed: result), fix: fix);
     }
@@ -514,7 +517,7 @@ fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
 // verdict asks magus about one call. ask is whether the reply can put an ask
 // in front of the person, which only a gating event can.
 fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool) > Verdict {
-    final guard = Guard{ bin = scope.bin, payload = payload };
+    final guard = Guard{ bin = scope.bin, payload = payload, fix = scope.fix };
     final attributed = shellArgs(scope, asPath: asPath, ask: ask);
     final bare = mut ["-o", "json"];
     if (asPath) { bare.append("--path"); }
@@ -970,9 +973,13 @@ fun main(args: [str]) > void {
         unnamed(eventName);
         return;
     }
-    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: "cwd"), session: readSession(event), file: "cursor-hook.buzz");
+    final cwd = hook\field(event, dotPath: "cwd");
+    final bin = hook\resolveBin(cwd: cwd);
+    final note = hook\fallbackNote(cwd);
+    var fix = hook\magusFix(hook\binRoot(cwd));
+    if (note != "") { fix = note + ". " + fix; }
     if (bin == "" or !hook\isExecutable(bin)) {
-        final text = "{UNAVAILABLE_TEXT}\n{hook\magusFix(hook\workspaceRoot())}";
+        final text = UNAVAILABLE_TEXT + "\n" + fix;
         if (gates(eventName)) {
             io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: denyBoth(text))) catch void;
             return;
@@ -988,7 +995,13 @@ fun main(args: [str]) > void {
         agent = entry.agent,
         session = readSession(event),
         transcript = hook\field(event, dotPath: "transcript_path"),
+        fix = fix,
     };
+    // Cursor shows the person a message only with a refusal, so a judged call's
+    // fallback is said once on stderr.
+    if (note != "" and hook\noticeOnce(scope.session, family: "bin-fallback", file: "cursor-hook.buzz")) {
+        io\stderr.write("cursor-hook.buzz: " + note + "\n") catch void;
+    }
     io\stdout.write(dispatch(event, eventName: eventName, scope: scope)) catch void;
 }
 
