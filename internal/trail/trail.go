@@ -277,6 +277,9 @@ type AgentCommand struct {
 	BinaryVersion string
 	Cwd           string
 	Phases        []Phase
+	// DurationMs is how long the guard took to judge the call. A pre-call hook
+	// never sees the call's own run time, so this is not tool time.
+	DurationMs int64
 	// AgentFacts are the caller's cost facts, recorded in the request blob.
 	types.AgentFacts
 }
@@ -394,6 +397,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Lease:         lease,
 		LeaseFrom:     leaseFrom,
 		Outcome:       OutcomeOK,
+		DurationMs:    command.DurationMs,
 		RequestRef:    reqRef,
 		RequestBytes:  reqBytes,
 		ResponseRef:   respRef,

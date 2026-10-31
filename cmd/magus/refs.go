@@ -87,7 +87,10 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 	// --rename edits files and --definition/--source read them, so those stay local; the
 	// plain lookup and --occurrences are what a server answers.
 	read := graphRead{Input: pos[0], Occurrences: rf.Occurrences}
-	routable := !rf.Refresh && rf.Rename == "" && !rf.Definition && !rf.Source
+	if rf.Refresh && rf.Rename == "" {
+		refreshIndexesNow(ctx, root, "magus refs")
+	}
+	routable :=!rf.Refresh && rf.Rename == "" && !rf.Definition && !rf.Source
 	var res refsResult
 	var g *knowledge.Graph
 	if !routable || !askServer(ctx, root, readRefs, &read, &res) {
@@ -105,15 +108,8 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 		}
 		res = lookupRefs(ctx, ws, globalCfg, g, read, measuredCoverage(ctx, ws, globalCfg))
 	}
-	if refreshBehindIndexes(ctx, root, "magus refs", res.answer()) {
-		ws, err := openWorkspaceForRead(ctx, root)
-		if err != nil {
-			return err
-		}
-		if g, err = loadRefsGraph(ctx, ws, globalCfg, false, pos[0]); err != nil {
-			return err
-		}
-		res = lookupRefs(ctx, ws, globalCfg, g, read, measuredCoverage(ctx, ws, globalCfg))
+	if !rf.Refresh {
+		res.noteRefresh(refreshInBackground(ctx, root, res.answer(), hint.Refs.With(pos[0], "--refresh")))
 	}
 	if len(res.Ambiguous) > 0 {
 		return refuseAmbiguous(noticeLines{ctx: ctx, level: slog.LevelError}, pos[0], res.Ambiguous)
@@ -377,6 +373,17 @@ func (r refsResult) answer() types.KnowledgeAnswer {
 		return r.Out.Answer
 	}
 	return r.Answer
+}
+
+// noteRefresh files what a background refresh said on the lookup's verdict.
+func (r *refsResult) noteRefresh(cause *types.KnowledgeIndexCause) {
+	switch {
+	case cause == nil:
+	case r.Found:
+		r.Out.Answer.IndexCause = cause
+	default:
+		r.Answer.IndexCause = cause
+	}
 }
 
 // lookupRefs looks ref up in g, a graph with ref's symbol shards merged, under cfg,

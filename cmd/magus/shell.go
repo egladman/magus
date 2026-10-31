@@ -375,7 +375,6 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	deps.GraphStaleAdvice = index.staleGraphAdvice
 	deps.SymbolDefined = index.symbolDefined
 	deps.SymbolIDs = index.symbolIDs
-	deps.IndexCause = index.indexCause
 	deps.SymbolSites = index.symbolSites
 	deps.GraphIDs = index.graphIDs
 	deps.IndexedIDs = index.indexedIDs

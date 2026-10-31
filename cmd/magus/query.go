@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -13,6 +12,8 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -258,6 +259,9 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 	}
 
 	read := graphRead{Input: input, Budget: qf.Budget, Nearest: opts.Format == outputText}
+	if qf.Refresh && !qf.Global {
+		refreshIndexesNow(ctx, root, "magus query")
+	}
 	var res queryResult
 	if qf.Refresh || qf.Global || !askServer(ctx, root, readQuery, &read, &res) {
 		ws, err := openForRead(ctx, root)
@@ -268,16 +272,12 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 			return err
 		}
 	}
-	if !qf.Global && refreshBehindIndexes(ctx, root, "magus query", res.Out.Answer) {
-		ws, err := openForRead(ctx, root)
-		if err != nil {
-			return err
-		}
-		if res, err = searchGraph(ctx, ws, globalCfg, read, false, false); err != nil {
-			return err
+	out := res.Out
+	if !qf.Refresh && !qf.Global {
+		if cause := refreshInBackground(ctx, root, out.Answer, fmt.Sprintf("%s %s --refresh", hint.BinaryName(), "query '"+input+"'")); cause != nil {
+			out.Answer.IndexCause = cause
 		}
 	}
-	out := res.Out
 
 	stop := traceFromContext(ctx).phase("query.next")
 	nx := newNextGate(root)
@@ -1249,52 +1249,98 @@ func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepos
 	return nil, fmt.Errorf("%T is not a workspace", ws)
 }
 
-// refreshBehindIndexes brings the indexes behind ans up to the tree and
-// says on stderr what it did and how long it took. True means read again.
-// What stays behind it names at error level. A running graph build wins.
-func refreshBehindIndexes(ctx context.Context, root, verb string, ans types.KnowledgeAnswer) bool {
-	wanted := indexesBehind(ans)
-	if wanted == nil || globalCfg.DryRun {
-		return false
+// refreshIndexesNow is `--refresh`: it waits for a refresh already running,
+// brings the stale indexes up to the tree, and says on stderr what that cost.
+// What stays behind it names at error level, and the read still answers.
+func refreshIndexesNow(ctx context.Context, root, verb string) {
+	ctx, cancel := context.WithTimeout(ctx, magus.SymbolRefreshBudget)
+	defer cancel()
+	retry := fmt.Sprintf("`%s` retries", hint.GraphBuild)
+	lock, _, err := acquireGraphBuild(ctx, root)
+	if err != nil {
+		slog.ErrorContext(ctx, "could not refresh the symbol indexes; "+retry, attr.Notice(verb), attr.Error(err))
+		return
 	}
-	if dir, err := knowledgeStoreDir(root); err == nil {
-		if holder, running := maintenance.RunningGraphBuild(dir); running {
-			fmt.Fprintf(os.Stderr, "%s: a graph build (pid %d) is refreshing this checkout's indexes, so this answer is drawn from them as they stand\n", verb, holder.PID)
-			return false
-		}
-	}
+	defer func() { _ = lock.Release() }()
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("could not refresh the symbol indexes behind this answer; `%s` retries", hint.GraphBuild), attr.Notice(verb), attr.Error(err))
-		return false
+		slog.ErrorContext(ctx, "could not refresh the symbol indexes; "+retry, attr.Notice(verb), attr.Error(err))
+		return
 	}
-	refresh := m.RefreshSymbolIndexes(ctx, wanted)
-	took := refresh.Took.Round(100 * time.Millisecond)
+	refresh := m.RefreshSymbolIndexes(ctx)
+	spent := func(d time.Duration) time.Duration { return d.Round(100 * time.Millisecond) }
 	if n := len(refresh.Refreshed); n > 0 {
-		fmt.Fprintf(os.Stderr, "%s: refreshed %d symbol index(es) in %s: %s\n", verb, n, took, strings.Join(refresh.Refreshed, ", "))
+		fmt.Fprintf(os.Stderr, "%s: refreshed %d symbol index(es) in %s (finding them %s, indexers %s, guard indexes %s): %s\n", verb, n, spent(refresh.Took),
+			spent(refresh.Swept), spent(refresh.Indexed), spent(refresh.Took-refresh.Swept-refresh.Indexed), strings.Join(refresh.Refreshed, ", "))
 	}
 	if len(refresh.Problems) > 0 {
-		slog.ErrorContext(ctx, fmt.Sprintf("could not refresh every symbol index behind this answer in %s, so it is drawn from them as they stand; `%s` retries: %s",
-			took, hint.GraphBuild, strings.Join(refresh.Problems, "; ")), attr.Notice(verb))
+		slog.ErrorContext(ctx, fmt.Sprintf("could not refresh every symbol index in %s, so this answer is drawn from them as they stand; %s: %s",
+			spent(refresh.Took), retry, strings.Join(refresh.Problems, "; ")), attr.Notice(verb))
 	}
-	return len(refresh.Refreshed) > 0
 }
 
-// indexesBehind selects the indexes behind ans a run could bring current,
-// nil when none. An index with no indexer to run would only fail.
-func indexesBehind(ans types.KnowledgeAnswer) func(types.SymbolIndexStatus) bool {
-	gaps := slices.DeleteFunc(slices.Clone(ans.Gaps), func(g types.KnowledgeSymbolGap) bool { return !g.Buildable() })
-	stale := ans.StaleIndexDetails
-	if len(gaps) == 0 && len(stale) == 0 {
+// refreshInBackground starts a refresh of the indexes behind ans and answers
+// what the read should say about it, nil when it has nothing to say. A plain
+// read never waits on an indexer. wait is the command that does.
+func refreshInBackground(ctx context.Context, root string, ans types.KnowledgeAnswer, wait string) *types.KnowledgeIndexCause {
+	if !indexesBehind(ans) || globalCfg.DryRun || globalCfg.Knowledge.SymbolIndexing.Disabled {
 		return nil
 	}
-	return func(s types.SymbolIndexStatus) bool {
-		return slices.ContainsFunc(gaps, func(g types.KnowledgeSymbolGap) bool {
-			return g.Project.Path == s.Project.Path && g.CouldHold(s.Language)
-		}) || slices.ContainsFunc(stale, func(i types.KnowledgeStaleIndex) bool {
-			return i.Project == cmp.Or(s.Project.Path, ".") && i.CouldHold(s.Language)
-		})
+	dir, err := knowledgeStoreDir(root)
+	if err != nil {
+		return nil
 	}
+	fix := fmt.Sprintf("ask again once it lands, or wait for it: `%s`", wait)
+	if holder, running := maintenance.RunningGraphBuild(dir); running {
+		return &types.KnowledgeIndexCause{Why: fmt.Sprintf("this answer comes from the index as it stands, while pid %d refreshes it", holder.PID), Fix: fix}
+	}
+	if failed := magus.RecentSymbolRefreshFailures(filepath.Dir(dir), time.Now()); len(failed) > 0 {
+		why := "its last refresh failed: " + strings.Join(failed, "; ")
+		slog.ErrorContext(ctx, why, attr.Notice("magus"))
+		return &types.KnowledgeIndexCause{Why: why, Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
+	}
+	started, err := startRefresh(dir)
+	switch {
+	case err != nil:
+		slog.ErrorContext(ctx, "could not start a background refresh", attr.Notice("magus"), attr.Error(err))
+		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
+	case !started:
+		return nil
+	}
+	return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a refresh started in the background", Fix: fix}
+}
+
+// indexesBehind reports whether ans was drawn from an index a run could
+// bring current. An index with no indexer to run would only fail.
+func indexesBehind(ans types.KnowledgeAnswer) bool {
+	return len(ans.StaleIndexDetails) > 0 || slices.ContainsFunc(ans.Gaps, types.KnowledgeSymbolGap.Buildable)
+}
+
+// startRefresh runs this command again with --refresh, detached, logging to
+// a file in dir. A test binary starts nothing: it would rerun its tests.
+func startRefresh(dir string) (bool, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return false, err
+	}
+	if strings.HasSuffix(exe, ".test") {
+		return false, nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return false, err
+	}
+	logFile, err := os.Create(filepath.Join(dir, "symbol-refresh.log"))
+	if err != nil {
+		return false, err
+	}
+	defer logFile.Close()
+	cmd := exec.Command(exe, append(slices.Clone(os.Args[1:]), "--refresh")...)
+	cmd.Stdout, cmd.Stderr = logFile, logFile
+	cmd.SysProcAttr = detachedSysProcAttr()
+	if err := cmd.Start(); err != nil {
+		return false, err
+	}
+	return true, cmd.Process.Release()
 }
 
 // askServer has a running server answer verb into reply and reports whether it did. A

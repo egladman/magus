@@ -77,7 +77,8 @@ func TestStaleGraphAdviceLeadsWithWhy(t *testing.T) {
 	assert.Contains(t, both, "One project changed since magus graph build last indexed it: libs/api.")
 
 	projects := renderStaleGraphAdvice("", api)
-	assert.True(t, strings.HasPrefix(projects, "magus workspace: run `magus graph build` first, then ask again."), projects)
+	assert.True(t, strings.HasPrefix(projects, "magus workspace: the answer you are about to get is drawn from an index built before the current sources."), projects)
+	assert.NotContains(t, projects, "graph build` first", "nobody is sent away to rebuild")
 
 	root := renderStaleGraphAdvice("", []types.KnowledgeStaleIndex{{Project: ".", Language: "buzz"}, {Project: ".", Language: "go"}})
 	assert.Contains(t, root, "One project changed since magus graph build last indexed it: . (buzz index), . (go index).", root)

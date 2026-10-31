@@ -91,6 +91,9 @@ func staleIndexNotice(ans types.KnowledgeAnswer) string {
 	if files := describeChangedFiles(ans.StaleIndexDetails); files != "" {
 		notice += fmt.Sprintf("  changed since: %s; deletions are not listed\n", files)
 	}
+	if c := ans.IndexCause; c != nil {
+		return notice + fmt.Sprintf("  %s\n  %s\n", c.Why, c.Fix)
+	}
 	return notice + fmt.Sprintf("  refresh and ask again: %s\n", hint.GraphBuild)
 }
 
@@ -226,7 +229,7 @@ func renderStaleGraphAdvice(reason string, stale []types.KnowledgeStaleIndex) st
 	case reason != "":
 		fmt.Fprintf(&b, "magus workspace: the graph is stale, %s. Run `%s` once any merge or rebase is finished, then ask again. The answer you are about to get describes another tree than the checkout's.\n", reason, hint.GraphBuild)
 	case len(stale) > 0:
-		fmt.Fprintf(&b, "magus workspace: run `%s` first, then ask again. The answer you are about to get is drawn from an index built before the current sources.\n", hint.GraphBuild)
+		b.WriteString("magus workspace: the answer you are about to get is drawn from an index built before the current sources. refs and query refresh it in the background.\n")
 	default:
 		return ""
 	}
@@ -298,9 +301,10 @@ func observeSync(ctx context.Context, root string) maintenance.SyncObservation {
 }
 
 // withIndexCause returns ans carrying indexCause when it was drawn from an index that is
-// missing or behind, and unchanged otherwise.
+// missing or behind, and unchanged otherwise. A cause already there is what
+// the read itself did about that, which outranks a diagnosis.
 func withIndexCause(ctx context.Context, root string, ans types.KnowledgeAnswer) types.KnowledgeAnswer {
-	if ans.IndexBehind() {
+	if ans.IndexBehind() && ans.IndexCause == nil {
 		c := indexCause(ctx, root)
 		ans.IndexCause = &c
 	}

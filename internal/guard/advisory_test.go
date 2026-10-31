@@ -1,7 +1,6 @@
 package guard
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,11 +10,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// TestSymbolSearchRefusesWhateverTheIndexState pins the condition the deny rests on. A
-// current index that defines the name refuses with refs. A stale one refuses too, serving
-// the rebuild first: the fail-open advice it used to give is what let every symbol search
-// through, since an index goes stale on the first edit. A current index that holds no such
-// name lets the search run, and only a workspace with no index at all is advised.
+// TestSymbolSearchRefusesWhateverTheIndexState pins the condition the deny
+// rests on. A current index that defines the name refuses with refs. A stale
+// one does too: an index goes stale on the first edit, and refs refreshes it.
+// A current index that holds no such name lets the search run, and only a
+// workspace with no index at all is advised.
 func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 	verdict := func(defined, definitive bool) ShellVerdict {
 		return Evaluate(strict(Dependencies{
@@ -32,10 +31,10 @@ func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 
 	stale := verdict(true, false)
 	assert.Equal(t, denyRuleSymbolSearch, stale.Rule.Name, "a stale index still knows the name, so the search is refused")
-	assert.Contains(t, stale.Deny, fmt.Sprintf("the symbol index is older than the sources it covers; rebuild it: `%s`.", hint.GraphBuild.With("--silent")))
-	assert.Contains(t, stale.Why, fmt.Sprintf("Then `%s` answers this exactly.", hint.Refs.With("HandleRequest", "--occurrences")))
-	require.Len(t, stale.Next, 2, "the rebuild, then refs")
-	assert.Equal(t, hint.GraphBuild.With("--silent"), stale.Next[0].Run)
+	assert.Contains(t, stale.Deny, "The symbol index is older than the sources it covers; refs refreshes it as it answers.")
+	assert.NotContains(t, stale.Deny, "graph build", "refs refreshes it, so nobody is sent away to rebuild")
+	require.Len(t, stale.Next, 1, "refs alone")
+	assert.Equal(t, hint.Refs.With("HandleRequest", "--occurrences"), stale.Next[0].Run)
 	assert.Contains(t, stale.Lead, "Classified:", "the lead replaces the deny, so it carries the classification")
 
 	absent := verdict(false, true)

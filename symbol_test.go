@@ -728,14 +728,12 @@ func TestSymbolGapNamesTheMissingIndexerOfASingleIndex(t *testing.T) {
 	}, probeSymbolIndexes(decls, installed))
 }
 
-func refreshAnyIndex(types.SymbolIndexStatus) bool { return true }
-
 func (s *magusSuite) TestRefreshBringsAStaleIndexCurrentAndNamesIt() {
 	m, src := newIndexedWorkspace(s.T())
 	s.Require().NoError(os.WriteFile(src, []byte("package main\n\nfunc added() {}\n"), 0o644))
 	s.Require().Equal(types.SymbolIndexStale, freshness(s.T(), m))
 
-	got := m.RefreshSymbolIndexes(s.T().Context(), refreshAnyIndex)
+	got := m.RefreshSymbolIndexes(s.T().Context())
 
 	s.Equal([]string{"."}, got.Refreshed, "the fixture spell declares no language")
 	s.Empty(got.Problems)
@@ -746,27 +744,26 @@ func (s *magusSuite) TestRefreshBringsAStaleIndexCurrentAndNamesIt() {
 func (s *magusSuite) TestRefreshLeavesACurrentIndexAlone() {
 	m, _ := newIndexedWorkspace(s.T())
 
-	got := m.RefreshSymbolIndexes(s.T().Context(), refreshAnyIndex)
+	got := m.RefreshSymbolIndexes(s.T().Context())
 
 	s.Empty(got.Refreshed)
 	s.Empty(got.Problems)
 }
 
-func (s *magusSuite) TestRefreshSkipsAnIndexWantedExcludes() {
-	m, src := newIndexedWorkspace(s.T())
-	s.Require().NoError(os.WriteFile(src, []byte("package main\n\nfunc added() {}\n"), 0o644))
+func (s *magusSuite) TestRecentRefreshFailuresHoldForTheBackoff() {
+	cacheDir := s.T().TempDir()
+	index := symbols.IndexPath(cacheDir, "libs/a", "scip")
+	recordRefreshFailure(index, "scip-go exploded")
 
-	got := m.RefreshSymbolIndexes(s.T().Context(), func(types.SymbolIndexStatus) bool { return false })
-
-	s.Empty(got.Refreshed)
-	s.Equal(types.SymbolIndexStale, freshness(s.T(), m))
+	s.Equal([]string{"scip-go exploded"}, RecentSymbolRefreshFailures(cacheDir, time.Now()))
+	s.Empty(RecentSymbolRefreshFailures(cacheDir, time.Now().Add(symbolIndexBackoffBase+time.Minute)))
 }
 
 // staleRefresher is a symbolRefresher over one stale Go index under dir,
 // running run.
 func staleRefresher(dir string, run func(context.Context, types.SymbolIndexStatus) error) symbolRefresher {
 	return symbolRefresher{
-		budget: time.Minute, abandon: time.Millisecond, now: time.Now, wanted: refreshAnyIndex,
+		budget: time.Minute, abandon: time.Millisecond, now: time.Now,
 		status: func(context.Context) []types.SymbolIndexStatus {
 			return []types.SymbolIndexStatus{{Project: types.NewProjectRef("libs/a", dir), Op: "scip", Language: "go", Freshness: types.SymbolIndexStale}}
 		},

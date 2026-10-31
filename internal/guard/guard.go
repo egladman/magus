@@ -138,11 +138,6 @@ type Dependencies struct {
 	// SymbolIDs lists the ids of the indexed symbols named ident. More than one makes the
 	// name ambiguous: refs wants an id to pick a definition. Nil leaves every name unambiguous.
 	SymbolIDs func(ident string) []string
-	// IndexCause names the observed reason the symbol index is missing or behind (no
-	// server, so the VCS refresh hook's sync did nothing; a hook whose binary is absent; a
-	// sync running now) and the command that clears it, as advisory sentences. "" when it
-	// could not tell within the guard's budget.
-	IndexCause func() string
 	// SymbolSites lists each file defining or referencing ident, with its count and first
 	// lines, from SymbolDefined's index and definitive on the same terms.
 	SymbolSites func(ident string) (sites []types.KnowledgeRefSite, definitive bool)
@@ -2478,6 +2473,11 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	}
 	stampHeartbeat(ctx, location.workspace, heartbeat{Session: who.Session, Lease: lease, Transcript: who.Transcript, At: time.Now()})
 	cost := observeCall(ctx, location, input, who, tool, lease, verdict)
+	phases := judgmentPhases(ctx).phases()
+	var judged int64
+	if len(phases) > 0 {
+		judged = phases[len(phases)-1].ElapsedMs
+	}
 	command := trail.AgentCommand{
 		PolicyDigest: policyDigest,
 		DecidedBy:    cmp.Or(rule.decidedBy, decidedBy(verdict)),
@@ -2502,7 +2502,8 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Binary:          by.binary,
 		BinaryVersion:   by.version,
 		Cwd:             by.cwd,
-		Phases:          judgmentPhases(ctx).phases(),
+		Phases:          phases,
+		DurationMs:      judged,
 		AgentFacts:      cost,
 	}
 	if tool == hookToolCommand {

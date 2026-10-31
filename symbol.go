@@ -654,10 +654,10 @@ func (m *Magus) ReindexSymbols(ctx context.Context) (int, error) {
 }
 
 const (
-	// A seeded index updates in seconds. A cold Go index can outlast
-	// this, and that read answers from what is there and says so.
-	symbolRefreshBudget = 60 * time.Second
-	// How long past the budget a read waits for a run to honor
+	// Covers a cold index of a large repository, which a plain read
+	// never waits on: it answers now and refreshes in the background.
+	SymbolRefreshBudget = 3 * time.Minute
+	// How long past the budget `--refresh` waits for a run to honor
 	// cancellation before it answers anyway.
 	symbolRefreshAbandon = 2 * time.Second
 	// Beside an index, the record that its last refresh failed. A CLI
@@ -670,20 +670,21 @@ type SymbolRefresh struct {
 	Refreshed []string      // indexes brought current: "libs/api (go index)"
 	Problems  []string      // indexes that stayed behind, and why
 	Took      time.Duration // wall time
+	Swept     time.Duration // of Took, finding what is behind
+	Indexed   time.Duration // of Took, running the indexers
 }
 
-// RefreshSymbolIndexes brings the stale and never-built indexes wanted
-// accepts up to the tree, through the cache, so a current one replays.
-// It returns within symbolRefreshBudget plus symbolRefreshAbandon and
-// never fails a read: what stayed behind is in Problems. A failed index
-// waits symbolIndexBackoffBase; a lost lock waits for nothing.
-func (m *Magus) RefreshSymbolIndexes(ctx context.Context, wanted func(types.SymbolIndexStatus) bool) SymbolRefresh {
+// RefreshSymbolIndexes brings the stale and never-built indexes up to the
+// tree, through the cache, so a current one replays. It returns within
+// SymbolRefreshBudget plus symbolRefreshAbandon and never fails a read:
+// what stayed behind is in Problems. A failed index waits
+// symbolIndexBackoffBase; a lost lock waits for nothing.
+func (m *Magus) RefreshSymbolIndexes(ctx context.Context) SymbolRefresh {
 	cacheDir := resolveCacheDir(m.Root(), m.cfg)
 	r := symbolRefresher{
-		budget:  symbolRefreshBudget,
+		budget:  SymbolRefreshBudget,
 		abandon: symbolRefreshAbandon,
 		now:     time.Now,
-		wanted:  wanted,
 		status:  m.SymbolIndexStatusByStamp,
 		indexPath: func(s types.SymbolIndexStatus) string {
 			return symbols.IndexPath(cacheDir, cmp.Or(s.Project.Path, "."), s.Op)
@@ -697,16 +698,12 @@ func (m *Magus) RefreshSymbolIndexes(ctx context.Context, wanted func(types.Symb
 		},
 		after: func(ctx context.Context) {
 			log := slog.With(attr.Component("magus"))
-			started := time.Now()
 			if err := m.WriteGuardIndex(ctx); err != nil {
 				log.DebugContext(ctx, "guard index not written", attr.Error(err))
 			}
-			log.DebugContext(ctx, "symbol refresh wrote the guard index", slog.Duration("took", time.Since(started)))
-			started = time.Now()
 			if err := m.WriteScriptsIndex(ctx); err != nil {
 				log.DebugContext(ctx, "scripts index not written", attr.Error(err))
 			}
-			log.DebugContext(ctx, "symbol refresh wrote the scripts index", slog.Duration("took", time.Since(started)))
 		},
 	}
 	return r.refresh(ctx)
@@ -717,7 +714,6 @@ func (m *Magus) RefreshSymbolIndexes(ctx context.Context, wanted func(types.Symb
 type symbolRefresher struct {
 	budget, abandon time.Duration
 	now             func() time.Time
-	wanted          func(types.SymbolIndexStatus) bool
 	status          func(context.Context) []types.SymbolIndexStatus
 	indexPath       func(types.SymbolIndexStatus) string
 	run             func(context.Context, types.SymbolIndexStatus) error
@@ -734,7 +730,7 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 	indexed, done := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(done)
-		refreshed := r.work(ctx, func(refreshed, problem string) {
+		refreshed := r.work(ctx, func(refreshed, problem string, swept, indexed time.Duration) {
 			mu.Lock()
 			defer mu.Unlock()
 			if refreshed != "" {
@@ -743,6 +739,8 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 			if problem != "" {
 				out.Problems = append(out.Problems, problem)
 			}
+			out.Swept += swept
+			out.Indexed += indexed
 		})
 		close(indexed)
 		if refreshed && r.after != nil {
@@ -767,47 +765,47 @@ func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
 	if !finished {
 		out.Problems = append(out.Problems, fmt.Sprintf("a run outlived the %s budget by %s, so this read stopped waiting for it", r.budget, r.abandon))
 	}
-	return SymbolRefresh{Refreshed: slices.Clone(out.Refreshed), Problems: slices.Clone(out.Problems), Took: r.now().Sub(started)}
+	return SymbolRefresh{Refreshed: slices.Clone(out.Refreshed), Problems: slices.Clone(out.Problems), Took: r.now().Sub(started), Swept: out.Swept, Indexed: out.Indexed}
 }
 
 // work refreshes each wanted index behind the tree, reporting each outcome,
 // and returns whether any landed.
-func (r symbolRefresher) work(ctx context.Context, report func(refreshed, problem string)) bool {
+func (r symbolRefresher) work(ctx context.Context, report func(refreshed, problem string, swept, indexed time.Duration)) bool {
 	refreshed := false
-	swept := r.now()
+	started := r.now()
 	statuses := r.status(ctx)
-	slog.DebugContext(ctx, "symbol refresh swept the indexes", slog.Duration("took", r.now().Sub(swept)))
+	report("", "", r.now().Sub(started), 0)
 	for _, s := range statuses {
-		if len(staleIndexRefs([]types.SymbolIndexStatus{s})) == 0 || !r.wanted(s) {
+		if len(staleIndexRefs([]types.SymbolIndexStatus{s})) == 0 {
 			continue
 		}
 		name := types.KnowledgeStaleIndex{Project: cmp.Or(s.Project.Path, "."), Language: s.Language}.Describe()
 		index := r.indexPath(s)
 		if why := r.backedOff(index); why != "" {
-			report("", fmt.Sprintf("%s: %s", name, why))
+			report("", fmt.Sprintf("%s: %s", name, why), 0, 0)
 			continue
 		}
 		if ctx.Err() != nil {
-			report("", fmt.Sprintf("%s: not reached within the %s budget", name, r.budget))
+			report("", fmt.Sprintf("%s: not reached within the %s budget", name, r.budget), 0, 0)
 			continue
 		}
 		ran := r.now()
 		err := r.run(ctx, s)
-		slog.DebugContext(ctx, "symbol refresh ran an index", slog.String("index", name), slog.Duration("took", r.now().Sub(ran)))
+		took := r.now().Sub(ran)
 		switch {
 		case err == nil:
 			_ = os.Remove(index + symbolRefreshFailedSuffix)
 			refreshed = true
-			report(name, "")
+			report(name, "", 0, took)
 		case lostTheLock(err):
-			report("", types.InlineDiagnostic(err))
+			report("", types.InlineDiagnostic(err), 0, took)
 		default:
 			why := types.InlineDiagnostic(err)
 			if ctx.Err() != nil {
 				why = fmt.Sprintf("%s: did not finish within the %s budget", name, r.budget)
 			}
 			recordRefreshFailure(index, why)
-			report("", why)
+			report("", why, 0, took)
 		}
 	}
 	return refreshed
@@ -847,6 +845,27 @@ func recordRefreshFailure(index, why string) {
 		return
 	}
 	_ = file.WriteFileAtomic(path, []byte(why), 0o644)
+}
+
+// RecentSymbolRefreshFailures is why each index under cacheDir last failed
+// to refresh, while its backoff holds. A read names them rather than
+// starting a refresh that would only back off.
+func RecentSymbolRefreshFailures(cacheDir string, now time.Time) []string {
+	records, err := filepath.Glob(filepath.Join(cacheDir, "symbols", "*", "*"+symbolRefreshFailedSuffix))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, record := range records {
+		info, err := os.Stat(record)
+		if err != nil || now.Sub(info.ModTime()) >= symbolIndexBackoffBase {
+			continue
+		}
+		if why, err := os.ReadFile(record); err == nil {
+			out = append(out, string(why))
+		}
+	}
+	return out
 }
 
 // symbolCapableIn is the symbol-capable projects among paths, by path.

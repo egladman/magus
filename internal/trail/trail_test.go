@@ -168,6 +168,16 @@ func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 	require.Empty(t, events)
 }
 
+func TestAppendAgentCommand_RecordsHowLongTheGuardJudged(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: "pass", DurationMs: 278})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, int64(278), events[0].DurationMs)
+}
+
 // A hook row names the magus that judged the call and the directory the host reported, and
 // leaves both off when the producer did not know them.
 func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {

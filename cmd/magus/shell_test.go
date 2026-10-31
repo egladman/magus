@@ -1735,8 +1735,8 @@ func TestIndexCauseNamesTheLoadedRoot(t *testing.T) {
 		At: time.Now(), Outcome: maintenance.SyncRefused, Detail: "refused in the loaded checkout",
 	}))
 
-	deps := guardDependencies(t.Context(), loaded)
-	assert.Eventually(t, func() bool { return strings.Contains(deps.IndexCause(), "refused in the loaded checkout") },
+	lookups := newGuardLookups(loaded)
+	assert.Eventually(t, func() bool { return strings.Contains(lookups.indexCause(), "refused in the loaded checkout") },
 		5*time.Second, 50*time.Millisecond)
 }
 

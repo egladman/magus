@@ -456,7 +456,7 @@ func TestGraphBackedDeniesAdviseOnAnIndexBuiltMidRebase(t *testing.T) {
 	for _, tt := range staleGraphCommands {
 		v := Evaluate(strict(deps), tt.command)
 		if tt.rule == denyRuleSymbolSearch {
-			assert.Contains(t, v.Deny, "the symbol index describes another tree (the index was built during a rebase)", tt.command)
+			assert.Contains(t, v.Deny, "The symbol index describes another tree (the index was built during a rebase)", tt.command)
 			continue
 		}
 		assert.Empty(t, v.Deny, tt.command)
@@ -739,26 +739,6 @@ func TestMixedSearchServesTheTextOnItsOwn(t *testing.T) {
 	}
 	assert.Contains(t, runs, hint.Refs.With("WritePaths", "--occurrences"))
 	assert.Contains(t, runs, hint.BinaryName()+" refs --text Heartbeat internal/job")
-}
-
-// A stale-index deny carries what was observed about why the index fell behind, so the
-// person learns what keeps it current rather than only that it is old; a cause the
-// lookup could not name in budget leaves the deny as it was.
-func TestStaleSymbolDenyCarriesTheIndexCause(t *testing.T) {
-	stale := func(cause string) ShellVerdict {
-		return Evaluate(strict(Dependencies{
-			SymbolDefined: func(string) (bool, bool) { return true, false },
-			IndexCause:    func() string { return cause },
-		}), "grep -r HandleRequest internal/")
-	}
-	const cause = "Why: no server is running, so the refresh hook synced nothing. Fix: `magus server start`."
-	named := stale(cause)
-	require.Equal(t, denyRuleSymbolSearch, named.Rule.Name)
-	assert.Contains(t, named.Why, "pattern misses included.\n"+cause)
-
-	unnamed := stale("")
-	assert.NotContains(t, unnamed.Why, "Why:")
-	assert.Contains(t, unnamed.Deny, "the symbol index is older than the sources it covers")
 }
 
 // indexReads wires the guard-index reads cmd/magus/shell.go supplies, over deps.CacheDir as

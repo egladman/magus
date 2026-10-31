@@ -136,19 +136,16 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 	return ShellVerdict{}, false
 }
 
-// symbolSearchVerdict refuses a search the judgment routed, serving the rebuild first when
-// the index is behind or was built during a history rewrite. A rebase still underway advises
-// instead: a rebuild then would describe a tree about to move again.
+// symbolSearchVerdict refuses a search the judgment routed. An index behind
+// the tree still routes to refs, which refreshes it as it answers. A rebase
+// underway advises: the tree is about to move again.
 func symbolSearchVerdict(deps Dependencies, dir string, c hint.Invocation, js searchJudgment, piped bool) ShellVerdict {
 	moved := graphMoved(deps)
-	switch {
-	case moved.underway:
+	if moved.underway {
 		return moved.verdict()
-	case js.stale || moved.reason != "":
-		js.stale = true
-		return staleSymbolVerdict(deps, c, js, moved, piped)
 	}
-	return treeSymbolVerdict(deps, dir, c, js, piped)
+	js.stale = js.stale || moved.reason != ""
+	return treeSymbolVerdict(deps, dir, c, js, moved, piped)
 }
 
 // searchReach is how far a search reaches, which decides whether the graph replaces it.
@@ -630,24 +627,31 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 
 // treeSymbolVerdict denies a search of the tree for names the index vouches for, and
 // carries the index's own answer when it has one: every site under the searched paths.
+// An index behind the tree carries none, since its list could be short.
 // A pipe after the search is named as not reproduced; the answer is never filtered.
-func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js searchJudgment, piped bool) ShellVerdict {
+func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js searchJudgment, moved staleGraph, piped bool) ShellVerdict {
 	routes := js.routes
 	textNote, textNext := textRemedy(c, js)
 	d := denySymbolSearch(routes, js)
-	v := ShellVerdict{Deny: d.Say + textNote, Why: d.Why, Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
-	if answer, ok := treeSymbolAnswer(deps, dir, c, routes); ok {
-		// The answer stays inline with the verdict, since it is what the search was for;
-		// a lead would drop it.
-		v.Deny += fmt.Sprintf("\n%s%s", answerBlock("Its answer", answer), pipeNote(piped))
-		return v
+	behind := ""
+	if js.stale {
+		behind = fmt.Sprintf(" The symbol index %s; refs refreshes it as it answers.", symbolIndexCause(moved))
+	}
+	v := ShellVerdict{Deny: d.Say + behind + textNote, Why: d.Why, Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
+	if !js.stale {
+		if answer, ok := treeSymbolAnswer(deps, dir, c, routes); ok {
+			// The answer stays inline with the verdict, since it is what the search was for;
+			// a lead would drop it.
+			v.Deny += fmt.Sprintf("\n%s%s", answerBlock("Its answer", answer), pipeNote(piped))
+			return v
+		}
 	}
 	v.Deny += pipeNote(piped)
 	next := routeNexts(routes)
 	if len(next) > 0 {
 		next = append(next, textNext...)
 	}
-	return v.withRemedy(fmt.Sprintf("%s, which the graph answers exactly. %s%s", denySymbolSearchLead, classifiedLine(js), textNote), next...)
+	return v.withRemedy(fmt.Sprintf("%s, which the graph answers exactly.%s %s%s", denySymbolSearchLead, behind, classifiedLine(js), textNote), next...)
 }
 
 // routeNexts serves each route as a remedy, or none when one of them cannot be.
@@ -859,8 +863,8 @@ func provableRoutes(deps Dependencies, c hint.Invocation) ([]searchRoute, bool) 
 // searchJudgment is what the index made of one search's alternatives.
 type searchJudgment struct {
 	routes []searchRoute
-	// stale reports a route the index could not vouch for as current, so the deny serves a
-	// rebuild before the graph command.
+	// stale reports a route the index could not vouch for as current, so the
+	// deny carries no answer and names the refresh refs makes.
 	stale bool
 	texts []searchAlt // the alternatives that are text, served on their own
 	// classified is one clause per alternative naming what it was taken for and why, so a
@@ -970,18 +974,6 @@ func symbolIndexCause(moved staleGraph) string {
 	return "is older than the sources it covers"
 }
 
-// indexCauseNote is what deps observed about why the index fell behind and what keeps it
-// current, on a line of its own, or "" when it observed nothing within its budget.
-func indexCauseNote(deps Dependencies) string {
-	if deps.IndexCause == nil {
-		return ""
-	}
-	if cause := deps.IndexCause(); cause != "" {
-		return "\n" + cause
-	}
-	return ""
-}
-
 // classifiedLine is the deny's account of each alternative.
 func classifiedLine(js searchJudgment) string {
 	return fmt.Sprintf("Classified: %s.", strings.Join(js.classified, "; "))
@@ -1013,60 +1005,6 @@ func textRemedy(c hint.Invocation, js searchJudgment) (string, []types.NextStep)
 		next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "a literal search over the same paths, for the text the graph does not hold."))
 	}
 	return fmt.Sprintf("\nThe text alternatives (%s) are not symbols: search them on their own.", strings.Join(names, ", ")), next
-}
-
-// staleSymbolVerdict denies a search for names a stale index vouches for, serving the
-// rebuild and then the graph command for each name.
-func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment, moved staleGraph, piped bool) ShellVerdict {
-	build := hint.GraphBuild.With("--silent")
-	textNote, textNext := textRemedy(c, js)
-	wait := hint.Status.With("--wait")
-	rebuild, leadRebuild := fmt.Sprintf("rebuild it: `%s`", build), "rebuild it, then ask the graph. "
-	full := budgetFullText()
-	// A worker never waits for a seat outside the call that spends it, so its remedy is the
-	// report its check would make.
-	worker := full != "" && deps.worker
-	switch {
-	case worker:
-		rebuild = fmt.Sprintf("the rebuild has no seat (%s); report that and stop, as a worker's check does", full)
-		leadRebuild = "the rebuild has no seat; report that and stop. "
-	case full != "":
-		rebuild = fmt.Sprintf("the rebuild has no seat (%s); wait for one: `%s`, then rebuild it: `%s`", full, wait, build)
-		leadRebuild = "wait for a seat, then rebuild it and ask the graph. "
-	}
-	v := ShellVerdict{
-		Deny: fmt.Sprintf("%s, and the symbol index %s; %s.", denySymbolSearchLead, symbolIndexCause(moved), rebuild),
-		Why: fmt.Sprintf("Then %s this exactly.\n%s\nrefs checks every site against the tree, the generated and cross-language ones a pattern misses included.%s%s%s",
-			routeClause(js.routes), classifiedLine(js), indexCauseNote(deps), textNote, pipeNote(piped)),
-		Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(js.routes)},
-	}
-	argv := servedArgv(build)
-	if len(argv) == 0 || worker {
-		return v
-	}
-	var next []types.NextStep
-	if full != "" {
-		next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), servedArgv(wait), "waits for a seat in the build budget; the rebuild after it then has one."))
-	}
-	next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "brings the symbol index up to the tree, so the next command answers exactly."))
-	routes := routeNexts(js.routes)
-	if len(routes) == 0 {
-		return v
-	}
-	next = append(append(next, routes...), textNext...)
-	// The lead replaces the deny when the remedy is served, so it carries the classification:
-	// it is what makes a false positive disputable.
-	return v.withRemedy(fmt.Sprintf("%s, and the symbol index %s; %s%s%s", denySymbolSearchLead, symbolIndexCause(moved), leadRebuild, classifiedLine(js), textNote), next...)
-}
-
-// budgetFullText words the machine build budget when it has no seat for a rebuild, "" when
-// it has one or no broker answers.
-func budgetFullText() string {
-	s, err := budgetSnapshot(context.Background())
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSuffix(strings.SplitN(BudgetFull(s, time.Now()), ". ", 2)[0], ".")
 }
 
 // noGraphVerdict advises a search for a name in a workspace with no symbol index to route
