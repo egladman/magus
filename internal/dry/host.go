@@ -610,10 +610,14 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return vm.ListValue(nil), nil
 	}))
 
+	m.MapSet("diskReclaim", shaped("magus.diskReclaim", map[string]vm.Value{
+		"caches": empty, "listCommand": vm.StringValue(""),
+	}))
+
 	// Runtime-only members (a debugger, hints, fatal-abort, cache busting) have no
 	// dry-run effect; stub them as no-ops so a reference resolves. They're here to
 	// satisfy the API parity guard, not because the dry run acts on them.
-	for _, name := range []string{"fatal", "pry", "bustCache"} {
+	for _, name := range []string{"fatal", "pry", "bustCache", "fileDiskAttention"} {
 		m.MapSet(name, function("magus."+name, retNull))
 	}
 
