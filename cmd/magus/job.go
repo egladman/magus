@@ -1418,12 +1418,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if globalCfg.DryRun {
 		return forkDryRun(opts, validation)
 	}
-	if len(validation.Problems) > 0 {
-		return refuseFork(validation)
-	}
 	var worktree types.JobWorktree
 	made, built := false, false
-	if row.Checkout != "" {
+	// A refused fork still reaches ForkMerge, which asks a holder
+	// to release a config it holds.
+	if row.Checkout != "" && len(validation.Problems) == 0 {
 		exe, _ := os.Executable()
 		cache.KickDiskTick(exe, root, globalCfg.Disk.SampleEvery)
 		if err := refuseForkOnFullDisk(ctx, exe, root, row.Checkout, int64(globalCfg.Disk.CriticalFreeMB)<<20); err != nil {
