@@ -104,6 +104,35 @@ func TestAssembleCoverageWithoutSymbolsIsFileOnly(t *testing.T) {
 	assert.Equal(t, types.KindFile, sh.Nodes[0].Kind)
 }
 
+func TestCoverageGapsNamesDirectoriesTheProfileOmits(t *testing.T) {
+	cov := []FileCoverage{{Path: "internal/foo/foo.go", Total: 1}}
+	symbols := map[string][]types.KnowledgeSymbol{
+		"internal/foo":   {{Key: "m A#", Source: "internal/foo/foo.go:3"}},
+		"internal/guard": {{Key: "m B#", Source: "internal/guard/b.go:3"}},
+	}
+
+	assert.Equal(t, []string{"internal/guard"}, CoverageGaps(cov, symbols))
+}
+
+func TestCoverageGapsIgnoresTestFilesAndOtherLanguages(t *testing.T) {
+	symbols := map[string][]types.KnowledgeSymbol{
+		"internal/guard": {
+			{Key: "m B#", Source: "internal/guard/b_test.go:3"},
+			{Key: "m C#", Source: "console/src/c.ts:3"},
+		},
+	}
+
+	assert.Empty(t, CoverageGaps(nil, symbols))
+}
+
+func TestCoverageGapsOfAnEmptyProfileNamesEveryDirectory(t *testing.T) {
+	symbols := map[string][]types.KnowledgeSymbol{
+		"a": {{Key: "m A#", Source: "internal/a/a.go:1"}, {Key: "m B#", Source: "internal/b/b.go:1"}},
+	}
+
+	assert.Equal(t, []string{"internal/a", "internal/b"}, CoverageGaps(nil, symbols))
+}
+
 func TestTestRefCount(t *testing.T) {
 	refs := []types.KnowledgeSymbolRef{
 		{Path: "internal/foo.go"},

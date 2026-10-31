@@ -2205,10 +2205,10 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // `args`. cmd/magus runs without -race: its TestScripts re-exec the raced binary hundreds
     // of times, and the engine's concurrency lives in the raced packages.
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-race", "-covermode=atomic", "-coverprofile=" + COVERAGE_PROFILE] + raced_packages() + args});
+        {"args": ["-race", "-covermode=atomic", "-coverprofile=" + coverage_profile_path(COVERAGE_PROFILE, args: args)] + raced_packages() + args});
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-covermode=atomic", "-coverprofile=" + CMD_MAGUS_PROFILE, CMD_MAGUS_PKG] + args});
-    // A narrowed run's profiles cover only what it selected.
+        {"args": ["-covermode=atomic", "-coverprofile=" + coverage_profile_path(CMD_MAGUS_PROFILE, args: args), CMD_MAGUS_PKG] + args});
+    // A narrowed run's profiles cover a slice and live under their own key.
     if (args.len() > 0) { return; }
     fs\writeFile(COVERAGE_PROFILE,
         merge_profiles(fs\readFile(COVERAGE_PROFILE), second: fs\readFile(CMD_MAGUS_PROFILE)));
@@ -2228,6 +2228,16 @@ final CMD_MAGUS_PROFILE = ".magus/coverage.cmd.out";
 
 final COVERAGE_PROFILE = ".magus/coverage.out";
 final COVERAGE_HAND_PROFILE = ".magus/coverage.hand.out";
+
+// Only a full run owns the base path, so a narrower run cannot clobber it.
+fun coverage_profile_path(base: str, args: [str]) > str {
+    if (args.len() == 0) { return base; }
+    var key = args.join("_");
+    foreach (ch in ["/", " ", "'", "\"", "|", "^", "$", "(", ")", "*", "?", "=", ":", "\\"]) {
+        key = key.replace(ch, "-");
+    }
+    return base.replace(".out", "." + key + ".out");
+}
 
 fun raced_packages() > [str] !> any {
     final module = cov\modulePath(fs\readFile("go.mod"));

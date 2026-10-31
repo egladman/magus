@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -266,4 +267,28 @@ func enclosingDef(defs []fileSymbolDef, startLine int) int {
 		found = i
 	}
 	return found
+}
+
+// CoverageGaps names directories that define Go symbols the profile has no file
+// for. A narrower run wrote such a profile; a caller refuses it, not reads it.
+func CoverageGaps(cov []FileCoverage, symbols map[string][]types.KnowledgeSymbol) []string {
+	profiled := map[string]bool{}
+	for _, fc := range cov {
+		profiled[path.Dir(fc.Path)] = true
+	}
+	seen := map[string]bool{}
+	for file := range symbolsByDefFile(symbols) {
+		if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		if dir := path.Dir(file); !profiled[dir] {
+			seen[dir] = true
+		}
+	}
+	gaps := make([]string, 0, len(seen))
+	for dir := range seen {
+		gaps = append(gaps, dir)
+	}
+	slices.Sort(gaps)
+	return gaps
 }
