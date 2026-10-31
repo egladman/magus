@@ -344,8 +344,18 @@ export fun parse(args: [str], names: [str]) > Selection !> any {
         }
         paths.append(word);
     }
+    // A bare word ends the flags, so a flag after a path arrives here.
+    // Read as a path, it would match no rule and pass in silence.
+    final first = args.len() - parsed.positionals.len();
+    var literal = first > 0 and args[first - 1] == "--";
     foreach (word in parsed.positionals) {
-        paths.append(word);
+        if (!literal and word == "--") {
+            literal = true;
+        } else if (!literal and word.startsWith("-")) {
+            throw "lint: flag {word} follows a path; flags go first\n{usage}";
+        } else {
+            paths.append(word);
+        }
     }
     // walk yields paths with no ./ prefix, and at() compares against them.
     final clean = mut [<str>];
@@ -471,10 +481,12 @@ test "a bare run selects every rule over the whole tree" {
     assert\equal(sel.paths.len(), want: 0, message: "no paths");
 }
 
-test "paths and --rule parse in any order, and a dashed path follows --" {
-    final sel = parse(["./x.lock", "--rule", "b", "docs/y.lock", "--", "-odd.lock"], names: ["a", "b"]);
+test "--rule precedes the paths, and a dashed path follows --" {
+    final sel = parse(["--rule", "b", "./x.lock", "docs/y.lock", "--", "-odd.lock"], names: ["a", "b"]);
     assert\equal(sel.rule!, want: "b", message: "rule");
     assert\equal(sel.paths, want: ["x.lock", "docs/y.lock", "-odd.lock"], message: "paths, ./ dropped");
+    assert\equal(parse(["--", "-odd.lock", "-also.lock"], names: ["a"]).paths, want: ["-odd.lock", "-also.lock"], message: "a leading --");
+    assert\equal(refusal(["x.lock", "--rule", "b"]), want: "lint: flag --rule follows a path; flags go first\n" + usage, message: "a flag after a path");
 }
 
 test "an unknown flag and an unknown rule are refused" {
