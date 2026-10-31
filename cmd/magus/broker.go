@@ -1,16 +1,21 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/egladman/magus/broker"
@@ -23,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
@@ -231,6 +237,9 @@ func brokerStatus(ctx context.Context, args []string) error {
 		}
 		return emitFormatted(opts, st)
 	}
+	if errors.Is(qerr, types.PeerFromAnotherBuild) {
+		return fmt.Errorf("broker status: %w", qerr)
+	}
 	if qerr != nil {
 		why := "a run starts one"
 		if globalCfg.Broker.Resolved() == types.BrokerOff {
@@ -261,12 +270,7 @@ func brokerStop(ctx context.Context, args []string) error {
 	}
 	c, err := broker.Dial(ctx, broker.DefaultAddr())
 	if err != nil {
-		if errors.Is(err, types.PeerFromAnotherBuild) {
-			// A broker answered; saying none runs would be false.
-			return fmt.Errorf("broker stop: %w", err)
-		}
-		slog.ErrorContext(ctx, "no broker is running", attr.Notice(""), attr.Component("magus"))
-		return exit.Reported(exit.Failure)
+		return stopUnanswering(ctx, f.Services, err)
 	}
 	defer func() { _ = c.Close() }()
 	if f.Services {
@@ -292,6 +296,84 @@ func brokerStop(ctx context.Context, args []string) error {
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("stopped broker (pid %d)", st.PID), attr.Notice(""), attr.Component("magus"))
 	return nil
+}
+
+// brokerDrainWait is how long a signalled broker gets per SIGTERM. A var so a
+// test can shorten it.
+var brokerDrainWait = stopTimeout
+
+// stopUnanswering stops whatever holds the broker socket when this build
+// cannot talk to it, as another build's broker refuses to. The kernel names
+// the holder.
+func stopUnanswering(ctx context.Context, services bool, dialErr error) error {
+	addr := broker.DefaultAddr()
+	sock := strings.TrimPrefix(addr, "unix://")
+	pid, err := broker.SocketPeer(ctx, addr)
+	if errors.Is(err, broker.ErrUnavailable) {
+		slog.ErrorContext(ctx, "no broker is running", attr.Notice(""), attr.Component("magus"))
+		return exit.Reported(exit.Failure)
+	}
+	if err != nil {
+		return unknownBrokerError(sock, err, dialErr)
+	}
+	if services {
+		return fmt.Errorf("broker stop --services: broker (pid %d) does not answer this build, which cannot ask it to stop only its services; `magus broker stop` stops it whole: %w", pid, dialErr)
+	}
+	command := processCommand(ctx, pid)
+	if !slices.Contains(strings.Fields(command), "broker") {
+		return fmt.Errorf("broker stop: pid %d (%s) holds %s and is no broker, so magus signalled nothing. Under systemd it is the socket unit: run `systemctl --user stop magus-broker.socket magus-broker.service`: %w",
+			pid, cmp.Or(command, "command unreadable"), sock, dialErr)
+	}
+	return signalBrokerStop(ctx, pid, dialErr)
+}
+
+// unknownBrokerError says what to run when the kernel will not name the holder.
+func unknownBrokerError(sock string, err, dialErr error) error {
+	return fmt.Errorf("broker stop: something holds %s and does not answer this build, and its pid is unreadable here (%w). Run `lsof -U`, take the pid on the line naming that socket, then `kill -TERM <pid>`: %w",
+		sock, err, dialErr)
+}
+
+// signalBrokerStop sends pid SIGTERM, which every build's broker handles: the
+// first drains it and a second stops it now. It returns once pid is gone.
+func signalBrokerStop(ctx context.Context, pid int, dialErr error) error {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("broker stop: find broker (pid %d): %w", pid, err)
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("broker (pid %d) does not answer this build (%v); sending it SIGTERM and waiting up to %s for it to drain",
+		pid, dialErr, brokerDrainWait), attr.Notice(""), attr.Component("magus"))
+	for range 2 {
+		if err := p.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			return fmt.Errorf("broker stop: signal broker (pid %d): %w", pid, err)
+		}
+		if waitProcessGone(ctx, pid, brokerDrainWait) {
+			slog.InfoContext(ctx, fmt.Sprintf("stopped broker (pid %d)", pid), attr.Notice(""), attr.Component("magus"))
+			return nil
+		}
+	}
+	return fmt.Errorf("broker stop: broker (pid %d) outlived two SIGTERMs, %s apart; run `kill -KILL %d`", pid, brokerDrainWait, pid)
+}
+
+func waitProcessGone(ctx context.Context, procID int, bound time.Duration) bool {
+	deadline := time.Now().Add(bound)
+	for pid.Alive(procID) {
+		if time.Now().After(deadline) || ctx.Err() != nil {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return true
+}
+
+// processCommand is pid's command line, "" when it cannot be read.
+func processCommand(ctx context.Context, pid int) string {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ps", "-o", "command=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // queryBroker reads the broker's status, bounded so a wedged broker cannot hang a

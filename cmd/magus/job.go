@@ -1885,7 +1885,7 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 		}
 	}
 	ancestors := types.InvocationAncestorsFromContext(ctx)
-	self := types.InvocationAncestorsFromContext(types.AppendInvocationAncestor(ctx, os.Getpid(), journal.NewInvocationID()))
+	self := types.InvocationAncestorsFromContext(types.AppendInvocationAncestor(ctx, os.Getpid(), types.WrapperInvocation(journal.NewInvocationID())))
 
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr

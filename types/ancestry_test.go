@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+// The mark rides the ref, so it goes wherever ancestry goes.
+func TestAWrapperIsToldApartFromARun(t *testing.T) {
+	refs := InvocationAncestorsFromContext(AppendInvocationAncestor(context.Background(), 100, WrapperInvocation("inv-a")))
+	if len(refs) != 1 || !IsWrapperInvocation(refs[0]) {
+		t.Fatalf("refs = %q, want one wrapper", refs)
+	}
+	if IsWrapperInvocation("100:inv-a") || IsWrapperInvocation("wrap-a") || IsWrapperInvocation("") {
+		t.Fatal("only a minted wrapper ref reads as a wrapper")
+	}
+	if RunsUnderAStep(nil) || RunsUnderAStep(refs) {
+		t.Fatal("nothing above a wrapper can be a blocked step")
+	}
+	if !RunsUnderAStep(append(refs, "200:inv-b")) {
+		t.Fatal("a run under the wrapper can be")
+	}
+}
+
 // TestInvocationAncestryIdentity pins what the lock's refuse-or-wait decision rests on: an
 // invocation is identified by its pid AND its id, because journal ids are only
 // process-unique. Two processes that mint the same id must not look like each other's

@@ -121,6 +121,34 @@ func (s *MemoryPressureSuite) TestANestedRunPassesUnderItsRunningParent() {
 	s.Zero(s.reads)
 }
 
+var underWrapper = "1:" + types.WrapperInvocation("exec")
+
+func (s *MemoryPressureSuite) TestARunUnderOnlyAWrapperIsRefused() {
+	s.reading(badMemory, nil)
+	g, adm := s.gate()
+	_, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{underWrapper}})
+	s.Require().ErrorIs(err, types.MemoryPressureHigh)
+	s.Zero(adm.requests, "no running step sits above it")
+}
+
+func (s *MemoryPressureSuite) TestARunUnderAStepUnderAWrapperPasses() {
+	s.reading(badMemory, nil)
+	g, _ := s.gate()
+	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{underWrapper, "2:parent"}})
+	s.Require().NoError(err)
+	release()
+	s.Zero(s.reads)
+}
+
+func (s *MemoryPressureSuite) TestARunUnderAWrapperUnderAStepPasses() {
+	s.T().Setenv("MAGUS_LEVEL", "1")
+	s.reading(badMemory, nil)
+	g, _ := s.gate()
+	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{underWrapper}})
+	s.Require().NoError(err)
+	release()
+}
+
 func (s *MemoryPressureSuite) TestANestedRunThatLostItsAncestryPassesToo() {
 	s.T().Setenv("MAGUS_LEVEL", "1")
 	s.reading(badMemory, nil)

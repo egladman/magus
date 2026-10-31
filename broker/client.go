@@ -10,6 +10,7 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -526,12 +527,47 @@ func (c *Client) sayHello(ctx context.Context, cn *conn, sock string) error {
 		}
 		if refusal != nil && refusal.Code == CodeProtocol {
 			return types.WrapDiagnostic(types.PeerFromAnotherBuild, err,
-				"the broker at %s is from another magus build (%v, this magus speaks protocol %d): it refuses every request, so `magus broker stop` cannot reach it; stop it with the magus that started it, or find its pid with `lsof -U` (the line naming %s) and send SIGTERM",
-				sock, err, ProtocolVersion, sock)
+				"the broker at %s is from another magus build (%v, this magus speaks protocol %d): it refuses every request; `magus broker stop` stops it",
+				sock, err, ProtocolVersion)
 		}
 		return fmt.Errorf("hello: %w", err)
 	}
 	return nil
+}
+
+// SocketPeer is the pid of the process listening at addr, read from the
+// kernel without a word to it, so it answers for a broker of any build. The
+// error wraps ErrUnavailable when nothing accepts the connection. Under socket
+// activation the listener is the supervisor, not a broker.
+func SocketPeer(ctx context.Context, addr string) (int, error) {
+	ep, err := endpoint.Parse(addr)
+	if err != nil {
+		return 0, fmt.Errorf("broker: %w", err)
+	}
+	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
+	nc, err := ep.Dial(dctx)
+	if err != nil {
+		return 0, fmt.Errorf("%w: dial %s: %w", ErrUnavailable, ep, err)
+	}
+	defer func() { _ = nc.Close() }()
+	sc, ok := nc.(syscall.Conn)
+	if !ok {
+		return 0, fmt.Errorf("broker: %s has no descriptor to ask the kernel about", ep)
+	}
+	raw, err := sc.SyscallConn()
+	if err != nil {
+		return 0, fmt.Errorf("broker: %w", err)
+	}
+	pid := 0
+	var peerErr error
+	if err := raw.Control(func(fd uintptr) { pid, peerErr = peerPID(int(fd)) }); err != nil {
+		return 0, fmt.Errorf("broker: %w", err)
+	}
+	if peerErr != nil {
+		return 0, fmt.Errorf("broker: read the pid at %s: %w", ep, peerErr)
+	}
+	return pid, nil
 }
 
 func (c *Client) connect(ctx context.Context) (*conn, error) {

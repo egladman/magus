@@ -2822,6 +2822,7 @@ github.com/egladman/magus/types.IsLiteralGlob func(pattern string) bool
 github.com/egladman/magus/types.IsMagusMaintained func(path string) bool
 github.com/egladman/magus/types.IsReservedCharm func(name string) bool
 github.com/egladman/magus/types.IsTestPath func(source string) bool
+github.com/egladman/magus/types.IsWrapperInvocation func(ref string) bool
 github.com/egladman/magus/types.Job type struct
 github.com/egladman/magus/types.Job.Attempt field *JobAttempt "json:\"attempt,omitempty\" yaml:\"attempt,omitempty\""
 github.com/egladman/magus/types.Job.Attempts field int "json:\"attempts,omitempty\"  yaml:\"attempts,omitempty\""
@@ -4690,6 +4691,7 @@ github.com/egladman/magus/types.RuleDoc.Name field string "json:\"name\""
 github.com/egladman/magus/types.RuleDoc.Verdicts field []GuardDecision "json:\"verdicts\""
 github.com/egladman/magus/types.RuleDoc.Why field string "json:\"why,omitempty\""
 github.com/egladman/magus/types.RuleDoc.Workspace field string "json:\"workspace,omitempty\""
+github.com/egladman/magus/types.RunsUnderAStep func(ancestors []string) bool
 github.com/egladman/magus/types.SameLeaseCheck func(a *LeaseCheck, b *LeaseCheck) bool
 github.com/egladman/magus/types.SandboxMode type string
 github.com/egladman/magus/types.SandboxMode.Enabled method func() bool
@@ -5801,6 +5803,7 @@ github.com/egladman/magus/types.WorkspaceRepository.embeds WorkspaceReader
 github.com/egladman/magus/types.WorkspaceState type string
 github.com/egladman/magus/types.WorkspaceStillLoading const DiagnosticCode = "MGS3017"
 github.com/egladman/magus/types.WrapDiagnostic func(c DiagnosticCode, cause error, format string, args ...any) *DiagnosticError
+github.com/egladman/magus/types.WrapperInvocation func(id string) string
 github.com/egladman/magus/types.WritePathClaimUngradable const DiagnosticCode = "MGS3031"
 github.com/egladman/magus/types.WritePathConfigWholeFile const DiagnosticCode = "MGS3036"
 github.com/egladman/magus/types.WritePathFileShared const DiagnosticCode = "MGS3032"

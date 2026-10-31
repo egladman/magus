@@ -313,7 +313,8 @@ Key properties:
   memory is in a bad state: on macOS the compressor at 75% of its segment limit or
   critical pressure, on Linux a full memory stall for 25% of the last 10 seconds. It
   never queues, a gate included, and a step that waited for a seat reads memory again
-  once seated. Running steps are never stopped, and a run nested under one passes. A
+  once seated. Running steps are never stopped, and a run nested under one passes,
+  including through a `magus job exec --timeout` between them. A
   missing or partial reading says so once per run. A low-headroom warning still speaks
   separately while a run works. A declaration always wins: `slots` is claimed as
   written, and `memory_mb` is a ceiling a measurement only narrows. A target that
@@ -350,10 +351,15 @@ Key properties:
   `magus job resume <job>...`; a run already holding the budget finishes, since nothing
   is preempted. A run is charged to the lease its checkout's `magus job exec` binds, else
   to the one `BAGGAGE` names, and `magus status` names it, or says `unleased`. A job's
-  `weight`, in (0,1] on its record and 0.5 when omitted, leans
-  its waiters forward: a run bound to the job asks again every 100ms (500ms under
-  `status --wait`) divided by weight/0.5, so weight 1 asks twice as often. It is a lean,
-  never a guarantee: the broker keeps no queue, and the first ask after a release wins.
+  `weight`, in (0,1] on its record and 0.5 when omitted, orders the requests the broker
+  holds: a run's own waits and `status --wait`. A gate still goes first, then the heavier
+  job, and equal weights go in the order they asked. A run bound to no job weighs 0.5. A
+  heavier request passes one already waiting at most four times, so a light job is never
+  starved. Weight decides no verdict: a request nobody holds is still refused at once.
+- **`magus job exec --timeout` shares its slots and nothing else.** A magus under the
+  command runs in the slots the wrapper holds, so it never competes with them. The
+  wrapper runs no step, so a machine strangers fill refuses that magus as it would the
+  same command without the wrapper, and so does bad memory.
 - **What a missing broker means is a setting.** `broker: best-effort` (the default)
   leaves a run whose broker does not start, or dies mid-run, unarbitrated and
   finishing, having said once that it is. `broker: required` refuses the step instead

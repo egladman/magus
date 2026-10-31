@@ -473,6 +473,11 @@ func (b *MachineBudget) freeSlot(ancestors []string) bool {
 	}
 	holding, running := map[string]bool{}, map[string]bool{}
 	for _, e := range b.claims {
+		// A wrapper runs no step: nothing is blocked in exec above its child,
+		// and it spends no seat of a step above it.
+		if types.IsWrapperInvocation(e.claim.Invocation) {
+			continue
+		}
 		if e.claim.Invocation != "" {
 			holding[e.claim.Invocation] = true
 		}

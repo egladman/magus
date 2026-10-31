@@ -273,9 +273,9 @@ func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, 
 
 // refuseUnderPressure is the MGS3053 refusal while the kernel says memory is
 // bad. A missing or partial reading is said once. A nested run passes: refusing
-// it would fail the running step above it.
+// it would fail the running step above it. A wrapper above it runs no step.
 func (g *machineGate) refuseUnderPressure(ctx context.Context, c types.MachineClaim) error {
-	if len(c.Ancestors) > 0 || blindToOwnAncestry(ctx) {
+	if types.RunsUnderAStep(c.Ancestors) || spawn.CurrentLevel() > 0 {
 		return nil
 	}
 	reason, err := readPressure(ctx)
