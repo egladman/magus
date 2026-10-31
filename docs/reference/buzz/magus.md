@@ -360,6 +360,24 @@ List the OPEN attention requests of this repository's session store: {requests, 
 
 **Returns:** map[string]any
 
+### diskReclaim
+
+What a disk reclaim reads off this workspace: {caches, listCommand}, caches each {spell, env, dir, trimMb} for a cache a resolved spell gives a trim budget, and listCommand the script serving event:disk-low, empty when none does. Annotate the result `> DiskReclaim`. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises when a budgeted cache locates no directory.
+
+**Signature:** `magus\diskReclaim() -> DiskReclaim` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
+
+**Returns:** map[string]any
+
+### fileDiskAttention
+
+Open the attention request a disk reclaim files for a person, with message as its text. It keeps one id, so a request still open is not filed again. Disposing it stays a person's act. Raises MGS1022 outside a workspace.
+
+**Signature:** `magus\fileDiskAttention(message)` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `message` | `string` |          |             |
+
 ### diagnoseDrift
 
 Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug). files are the drifted outputs as Paths based at the repository root. drifted is false with every field zero when the outputs are clean. It lives here rather than on vcs because choosing between those codes is magus policy; vcs only supplies the probe. Composes vcs\status; does not replace it.

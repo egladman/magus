@@ -2,13 +2,13 @@
 title: diskwatch module
 generated_from: reference/buzz/
 aliases: [modules/diskwatch]
-description: "The reclaim hook's cheap half: sample free disk space into a per-user store at most once per disk.sample_every, and decide from the last two samples whether to start a reclaim c..."
+description: "The cheap half of disk reclaiming: the per-user store of free-space samples, what a sample asks for, the fence a cache trim keeps, and the lines a person reads."
 tags: [diskwatch, module, stdlib, magusfile]
 ---
 
 # diskwatch
 
-The reclaim hook's cheap half: sample free disk space into a per-user store at most once per disk.sample_every, and decide from the last two samples whether to start a reclaim chunk.
+The cheap half of disk reclaiming: the per-user store of free-space samples, what a sample asks for, the fence a cache trim keeps, and the lines a person reads.
 
 > **Naming convention:** import the module under its bare name (`import "diskwatch"`), reach members with a backslash, and call methods in `camelCase`: `diskwatch\someMethod`.
 
@@ -62,6 +62,19 @@ decide grades cur against the thresholds and prev, the last earlier sample of th
 
 **Returns:** any
 
+### fenceMs
+
+fenceMs is the fence a cache trim keeps for a sample, 0 when no cache may be
+
+**Signature:** `diskwatch\fenceMs(cur, t) -> double`
+
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `cur`     | `any` |          |             |
+| `t`       | `any` |          |             |
+
+**Returns:** any
+
 ### chunkRunning
 
 chunkRunning reports whether a chunk started within CHUNK_WINDOW_MS has not yet finished,
@@ -88,17 +101,40 @@ lastOf is the newest sample of path, null when the store holds none.
 
 **Returns:** any
 
-### line
+### personLine
 
-line is what a hook prints for one sample: one line when it started a chunk or space is
+personLine is what a person reads after a tick: what happened, what it did
 
-**Signature:** `diskwatch\line(d, cur, started) -> str?`
+**Signature:** `diskwatch\personLine(r) -> str`
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
-| `d`       | `any` |          |             |
+| `r`       | `any` |          |             |
+
+**Returns:** any
+
+### criticalLine
+
+criticalLine is the line for space below disk.critical_free_mb when
+
+**Signature:** `diskwatch\criticalLine(cur) -> str`
+
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
 | `cur`     | `any` |          |             |
-| `started` | `any` |          |             |
+
+**Returns:** any
+
+### pendingLine
+
+pendingLine is what the store has that no person was told: a tick's result,
+
+**Signature:** `diskwatch\pendingLine(samples, now) -> str?`
+
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `samples` | `any` |          |             |
+| `now`     | `any` |          |             |
 
 **Returns:** any
 

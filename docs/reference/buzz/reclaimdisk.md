@@ -2,13 +2,13 @@
 title: reclaimdisk module
 generated_from: reference/buzz/
 aliases: [modules/reclaimdisk]
-description: "Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; trimCache trims a cache direct..."
+description: "Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; tick is the one decider every ..."
 tags: [reclaimdisk, module, stdlib, magusfile]
 ---
 
 # reclaimdisk
 
-Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; trimCache trims a cache directory to a budget by file age, never emptying it.
+Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; tick is the one decider every disk trigger calls, and trims only what a spell gives a budget.
 
 > **Naming convention:** import the module under its bare name (`import "reclaimdisk"`), reach members with a backslash, and call methods in `camelCase`: `reclaimdisk\someMethod`.
 
@@ -281,26 +281,87 @@ apply removes the removable rows and returns the plan with each row's result. A 
 
 ### trimCache
 
-trimCache trims the cache named name at dir to trimMb MiB through fs\trimOldest, which
+trimCache trims one cache to its budget, keeping files inside fence.
 
-**Signature:** `reclaimdisk\trimCache(name, dir, trimMb, deadline) -> str`
+**Signature:** `reclaimdisk\trimCache(name, dir, trimMb, fence, deadline) -> CacheTrim`
 
 | Parameter  | Type  | Optional | Description |
 | ---------- | ----- | -------- | ----------- |
 | `name`     | `any` |          |             |
 | `dir`      | `any` |          |             |
 | `trimMb`   | `any` |          |             |
+| `fence`    | `any` |          |             |
+| `deadline` | `any` |          |             |
+
+**Returns:** any
+
+### trimLine
+
+trimLine says what one trim really did, null when it did nothing to say.
+
+**Signature:** `reclaimdisk\trimLine(t, fence) -> str?`
+
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `t`       | `any` |          |             |
+| `fence`   | `any` |          |             |
+
+**Returns:** any
+
+### trimDeclared
+
+trimDeclared trims every cache a spell gives a budget and returns each
+
+**Signature:** `reclaimdisk\trimDeclared(fence, deadline) -> [CacheTrim]`
+
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `fence`    | `any` |          |             |
 | `deadline` | `any` |          |             |
 
 **Returns:** any
 
 ### chunk
 
-chunk is one bounded reclaim pass, the one the reclaim hook starts in the background: the
+chunk is the worktree half of a reclaim: the CHUNK_WORKTREES removable
 
-**Signature:** `reclaimdisk\chunk(deadline)`
+**Signature:** `reclaimdisk\chunk(deadline) -> [Item]`
 
 | Parameter  | Type  | Optional | Description |
 | ---------- | ----- | -------- | ----------- |
 | `deadline` | `any` |          |             |
+
+**Returns:** any
+
+### keptLine
+
+keptLine counts what a reclaim leaves for a person, "" when it leaves none.
+
+**Signature:** `reclaimdisk\keptLine(items) -> str`
+
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `items`   | `any` |          |             |
+
+**Returns:** any
+
+### tick
+
+tick is the one decider every trigger calls. It samples, decides, trims and
+
+**Signature:** `reclaimdisk\tick(cwd, deadline, [force]) -> TickResult`
+
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `cwd`      | `any` |          |             |
+| `deadline` | `any` |          |             |
+| `force`    | `any` | yes      |             |
+
+**Returns:** any
+
+### reclaimNow
+
+reclaimNow runs a tick in the foreground and prints what really happened. It
+
+**Signature:** `reclaimdisk\reclaimNow()`
 

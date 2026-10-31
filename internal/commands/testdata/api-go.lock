@@ -105,6 +105,7 @@ github.com/egladman/magus.Magus.Diff method(ptr) func(ctx context.Context, paths
 github.com/egladman/magus.Magus.DiffAgainst method(ptr) func(ctx context.Context, paths []string, base github.com/egladman/magus/types.KnowledgeGraphOutput, label string) (github.com/egladman/magus/types.Diff, error)
 github.com/egladman/magus.Magus.DiffTUIEnabled method(ptr) func() bool
 github.com/egladman/magus.Magus.DiffWith method(ptr) func(ctx context.Context, paths []string, opts github.com/egladman/magus/types.DiffOptions) (github.com/egladman/magus/types.Diff, error)
+github.com/egladman/magus.Magus.DiskReclaim method(ptr) func() (github.com/egladman/magus/types.DiskReclaim, error)
 github.com/egladman/magus.Magus.Duplication method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.DuplicationOutput, error)
 github.com/egladman/magus.Magus.EvaluateProjects method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.EvaluatedProjectsOutput, error)
 github.com/egladman/magus.Magus.EvaluateTarget method(ptr) func(ctx context.Context, t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.EvaluatedTarget, error)
@@ -114,6 +115,7 @@ github.com/egladman/magus.Magus.ExpandPath method(ptr) func(t github.com/egladma
 github.com/egladman/magus.Magus.ExportCache method(ptr) func(ctx context.Context, w io.Writer) error
 github.com/egladman/magus.Magus.ExportSCIP method(ptr) func(ctx context.Context, w io.Writer) error
 github.com/egladman/magus.Magus.FileAt method(ptr) func(ctx context.Context, rev string, path string) (string, error)
+github.com/egladman/magus.Magus.FileDiskAttention method(ptr) func(ctx context.Context, message string) error
 github.com/egladman/magus.Magus.FindOutputProducer method(ptr) func(absPath string) *github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.FreshenSymbolIndexes method(ptr) func(ctx context.Context) error
 github.com/egladman/magus.Magus.Get method(ptr) func(path string) *github.com/egladman/magus/types.Project
@@ -157,6 +159,7 @@ github.com/egladman/magus.Magus.PruneRemoteCache method(ptr) func(ctx context.Co
 github.com/egladman/magus.Magus.PublishOutput method(ptr) func(ctx context.Context, ref string) (string, error)
 github.com/egladman/magus.Magus.RangeDiff method(ptr) func(ctx context.Context, base string, head string, paths []string) (string, error)
 github.com/egladman/magus.Magus.RefMatchCommand method(ptr) func(mt github.com/egladman/magus/types.RefMatch) string
+github.com/egladman/magus.Magus.RefreshSymbolIndexes method(ptr) func(ctx context.Context) SymbolRefresh
 github.com/egladman/magus.Magus.Regions method(ptr) func(ctx context.Context, base string, files []github.com/egladman/magus/types.FileChange) ([]github.com/egladman/magus/types.RegionChange, error)
 github.com/egladman/magus.Magus.ReindexSymbols method(ptr) func(ctx context.Context) (int, error)
 github.com/egladman/magus.Magus.ResolveProjects method(ptr) func(targets []github.com/egladman/magus/types.Target) []*github.com/egladman/magus/types.Project
@@ -209,6 +212,7 @@ github.com/egladman/magus.PlanOptions.HistoryPath field string
 github.com/egladman/magus.PlanOptions.MaxShards field int
 github.com/egladman/magus.PlanOptions.RunnerPoolBudget field int
 github.com/egladman/magus.ProjectOption type = github.com/egladman/magus/internal/workspace.ProjectOption
+github.com/egladman/magus.RecentSymbolRefreshFailures func(cacheDir string, now time.Time) []string
 github.com/egladman/magus.ResolveCacheDir func(root string, opts ...Option) (string, error)
 github.com/egladman/magus.RetryOnVolatile func(reason string) TargetOption
 github.com/egladman/magus.RunOption type func(*run)
@@ -243,6 +247,13 @@ github.com/egladman/magus.SymbolOccurrenceRead type = github.com/egladman/magus/
 github.com/egladman/magus.SymbolOccurrenceRead.Files field []github.com/egladman/magus/types.SymbolOccurrenceFile
 github.com/egladman/magus.SymbolOccurrenceRead.Names field []string
 github.com/egladman/magus.SymbolOccurrenceRead.Unreadable field []github.com/egladman/magus/types.KnowledgeSymbolGap
+github.com/egladman/magus.SymbolRefresh type struct
+github.com/egladman/magus.SymbolRefresh.Indexed field time.Duration
+github.com/egladman/magus.SymbolRefresh.Problems field []string
+github.com/egladman/magus.SymbolRefresh.Refreshed field []string
+github.com/egladman/magus.SymbolRefresh.Swept field time.Duration
+github.com/egladman/magus.SymbolRefresh.Took field time.Duration
+github.com/egladman/magus.SymbolRefreshBudget const time.Duration = 180000000000
 github.com/egladman/magus.TargetHandler type func(context.Context, *github.com/egladman/magus/types.Project) error
 github.com/egladman/magus.TargetLabel func(targets []github.com/egladman/magus/types.Target, source string) string
 github.com/egladman/magus.TargetOption type = github.com/egladman/magus/internal/workspace.TargetOption
@@ -461,7 +472,7 @@ github.com/egladman/magus/std.FsStateDir func(ctx context.Context, purpose strin
 github.com/egladman/magus/std.FsSymlink func(ctx context.Context, target string, link string) error
 github.com/egladman/magus/std.FsTempDir func(ctx context.Context, prefix string) (string, error)
 github.com/egladman/magus/std.FsTempFile func(ctx context.Context, prefix string) (string, error)
-github.com/egladman/magus/std.FsTrimOldest func(ctx context.Context, dir string, maxBytes int, timeoutMs int) (github.com/egladman/magus/types.TrimReport, error)
+github.com/egladman/magus/std.FsTrimOldest func(ctx context.Context, dir string, maxBytes int, keepWithinMs int, timeoutMs int) (github.com/egladman/magus/types.TrimReport, error)
 github.com/egladman/magus/std.FsWalk func(ctx context.Context, root string, cb Callback) error
 github.com/egladman/magus/std.FsWatch func(ctx context.Context, paths []string, cb Callback) error
 github.com/egladman/magus/std.FsWriteFile func(ctx context.Context, path string, content string) error
@@ -535,9 +546,11 @@ github.com/egladman/magus/std.MagusDiagnosticCode func(ctx context.Context, text
 github.com/egladman/magus/std.MagusDiff func(ctx context.Context, opts github.com/egladman/magus/types.MagusDiffOptions) (github.com/egladman/magus/types.Diff, error)
 github.com/egladman/magus/std.MagusDir func(ctx context.Context, dir string) (github.com/egladman/magus/types.Dir, error)
 github.com/egladman/magus/std.MagusDirs func(ctx context.Context, glob string, opts github.com/egladman/magus/types.DirsOptions) ([]github.com/egladman/magus/types.Dir, error)
+github.com/egladman/magus/std.MagusDiskReclaim func(ctx context.Context) (github.com/egladman/magus/types.DiskReclaim, error)
 github.com/egladman/magus/std.MagusDoctor func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.DoctorReport, error)
 github.com/egladman/magus/std.MagusExitJob func(ctx context.Context, id string, result github.com/egladman/magus/types.JobResult) (github.com/egladman/magus/types.Job, error)
 github.com/egladman/magus/std.MagusExplain func(ctx context.Context, node string) (github.com/egladman/magus/types.KnowledgeExplainOutput, error)
+github.com/egladman/magus/std.MagusFileDiskAttention func(ctx context.Context, message string) error
 github.com/egladman/magus/std.MagusHasCharm func(ctx context.Context, name string) (bool, error)
 github.com/egladman/magus/std.MagusImpact func(ctx context.Context, base string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ImpactResult, error)
 github.com/egladman/magus/std.MagusImportGraph func(ctx context.Context) (github.com/egladman/magus/types.ImportGraph, error)
@@ -732,7 +745,7 @@ github.com/egladman/magus/std.TimeFormat func(_ context.Context, layout string, 
 github.com/egladman/magus/std.TimeNowISO func(_ context.Context) (string, error)
 github.com/egladman/magus/std.TimeParse func(_ context.Context, layout string, value string) (float64, error)
 github.com/egladman/magus/std.TimeParseDuration func(_ context.Context, duration string) (float64, error)
-github.com/egladman/magus/std.TrimOldest func(ctx context.Context, dir string, maxBytes int64, timeout time.Duration, now time.Time) (github.com/egladman/magus/types.TrimReport, error)
+github.com/egladman/magus/std.TrimOldest func(ctx context.Context, dir string, maxBytes int64, keepWithin time.Duration, timeout time.Duration, now time.Time) (github.com/egladman/magus/types.TrimReport, error)
 github.com/egladman/magus/std.TypeAny const TypeTag = 13
 github.com/egladman/magus/std.TypeAnyMap const TypeTag = 11
 github.com/egladman/magus/std.TypeBool const TypeTag = 4
@@ -1903,6 +1916,10 @@ github.com/egladman/magus/types.DirsOptions type struct
 github.com/egladman/magus/types.DirsOptions.Depth field int "json:\"depth,omitempty\" yaml:\"depth,omitempty\""
 github.com/egladman/magus/types.DirsOptions.Language field string "json:\"language,omitempty\" yaml:\"language,omitempty\""
 github.com/egladman/magus/types.DirsOptions.Layer field string "json:\"layer,omitempty\" yaml:\"layer,omitempty\""
+github.com/egladman/magus/types.DiskFull const DiagnosticCode = "MGS3052"
+github.com/egladman/magus/types.DiskReclaim type struct
+github.com/egladman/magus/types.DiskReclaim.Caches field []SpellCache "json:\"caches\""
+github.com/egladman/magus/types.DiskReclaim.ListCommand field string "json:\"listCommand\" buzz:\"listCommand\""
 github.com/egladman/magus/types.DiskSample type struct
 github.com/egladman/magus/types.DiskSample.Action field string "json:\"action\""
 github.com/egladman/magus/types.DiskSample.At field float64 "json:\"at\""
@@ -4447,6 +4464,7 @@ github.com/egladman/magus/types.ReasonCoverageUnknown const KnowledgeUnknownReas
 github.com/egladman/magus/types.ReasonIndexStale const KnowledgeUnknownReason = "index-stale"
 github.com/egladman/magus/types.ReasonSymbolIndexMissing const KnowledgeUnknownReason = "symbol-index-missing"
 github.com/egladman/magus/types.ReasonSymbolsNotLoaded const KnowledgeUnknownReason = "symbols-not-loaded"
+github.com/egladman/magus/types.ReclaimDiskCommand const untyped string = "magus buzz -e 'import \"magus/reclaimdisk\" as r; r\\reclaimNow();'"
 github.com/egladman/magus/types.RecordCPUMs func(ctx context.Context, ms int64)
 github.com/egladman/magus/types.RecordCurve func(ctx context.Context, start time.Time) (record func(MemorySample), end func())
 github.com/egladman/magus/types.RecordPeakRSS func(ctx context.Context, bytes int64)
@@ -4864,6 +4882,11 @@ github.com/egladman/magus/types.Spell.Targets field []string "json:\"targets,omi
 github.com/egladman/magus/types.Spell.Toolchains field []SpellToolchain "json:\"toolchains,omitempty\" yaml:\"toolchains,omitempty\""
 github.com/egladman/magus/types.Spell.VersionProbe field bool "json:\"version_probe,omitempty\" yaml:\"version_probe,omitempty\""
 github.com/egladman/magus/types.Spell.Versions field []SpellVersion "json:\"versions,omitempty\" yaml:\"versions,omitempty\""
+github.com/egladman/magus/types.SpellCache type struct
+github.com/egladman/magus/types.SpellCache.Dir field string "json:\"dir\""
+github.com/egladman/magus/types.SpellCache.Env field string "json:\"env\""
+github.com/egladman/magus/types.SpellCache.Spell field string "json:\"spell\""
+github.com/egladman/magus/types.SpellCache.TrimMB field int "json:\"trimMb\" buzz:\"trimMb\""
 github.com/egladman/magus/types.SpellContractViolated const DiagnosticCode = "MGS1051"
 github.com/egladman/magus/types.SpellDefinition const untyped string = "A spell is a language/runtime adapter that teaches magus how to build, test, lint, and format projects of a given type. Spells are registered at startup and bound to projects by importing the spell and listing it in the spells of magus.project in the magusfile."
 github.com/egladman/magus/types.SpellErrors type struct

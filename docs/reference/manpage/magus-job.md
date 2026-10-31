@@ -141,8 +141,8 @@ them and magus describe job prints one job's terms.
 
 ### job apply options
 
-**-f** *-*
-: The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line
+**-f** *file*
+: The records to apply: a file, or \`-\` for stdin; one JSON job, a JSON array, or one job per line
 
 **--[no-]fix** (default: off)
 : Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records

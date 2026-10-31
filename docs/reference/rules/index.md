@@ -31,6 +31,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [brief-plain-commands](brief-plain-commands.md)       | a brief for an isolated worker that teaches a substitution, a loop or an exec                       |
 | [busy-wait](busy-wait.md)                             | a while or until loop that sleeps, or a for loop that sleeps until it breaks out                    |
 | [buzz-unbriefed](buzz-unbriefed.md)                   | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill   |
+| [cache-clear](cache-clear.md)                         | clearing a build cache by hand, which a trim to its declared budget does and keeps what is in use   |
 | [cache-dir-write](cache-dir-write.md)                 | a write into this checkout's magus cache dir, which magus alone owns                                |
 | [capture-filter](capture-filter.md)                   | a filter over a run capture or log, which cuts the failure block apart                              |
 | [chained-run](chained-run.md)                         | magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast   |
@@ -141,15 +142,15 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [spawn-unplaced](spawn-unplaced.md)                     | a subagent's first call that no waiting spawn names, which then runs under no lease             |
 | [split-run](split-run.md)                               | the same target run again on a different project set, as a separate call                        |
 | [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                   |
-| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                       |
-| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                         |
+| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it              |
+| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it         |
 | [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                           |
 | [root-heavy-command](root-heavy-command.md)             | a main thread running delegable commands one after another without spawning                     |
 | [root-repeat](root-repeat.md)                           | a main thread running the same delegable command again with no write since                      |
 | [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                    |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at             |
 | [spawn-names-model](spawn-names-model.md)               | a main thread spawning a subagent without naming the model it runs on                           |
+| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                       |
+| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                         |
 | [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it            |
-| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it              |
-| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it         |
 | [stall](stall.md)                                       | a leased worker refused by something only the root can clear                                    |

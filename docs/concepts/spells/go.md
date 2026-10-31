@@ -434,7 +434,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## scip
 
-goPackages selects magus's in-process go/types indexer, which loads the patterns in args and re-indexes only the packages whose files moved. It loads packages through `go`, so the toolchain's version keys the index. Each other GOOS indexes only the packages with a file the host's build excludes and that GOOS selects. GOARCH stays the host's; amd64 and arm64 pair with all three.
+goPackages selects magus's in-process go/types indexer, which loads the patterns in args and re-indexes only the packages whose files moved. It loads packages through `go`, so the toolchain's version keys the index. Each other GOOS indexes only the packages with a file the host's build excludes and that GOOS selects. GOARCH stays the host's; amd64 and arm64 pair with all three. js pairs only with wasm, so it names both.
 
 **Command:** `go ./...`
 

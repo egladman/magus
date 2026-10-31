@@ -707,15 +707,16 @@ Return $XDG_STATE_HOME/magus/<purpose> (LocalAppData on Windows, else ~/.local/s
 
 ### trimOldest
 
-Remove the least recently modified files under dir, whole days of age at a time, until what is left fits in maxBytes, and return a TrimReport {dir, beforeBytes, afterBytes, removedFiles, removedBytes, cutoffMs, stopped}. Files modified within the last day are never removed, so the directory is never emptied; stopped says when they alone pass the budget. Two walks with one counter per day of age, so it suits a cache of millions of files. timeoutMs bounds the trim, which then stops between files and says so in stopped. Directories stay.
+Remove the least recently modified files under dir, whole hours of age at a time, until what is left fits in maxBytes, and return a TrimReport {dir, beforeBytes, afterBytes, removedFiles, removedBytes, cutoffMs, stopped}. Files modified within keepWithinMs, a whole number of hours and at least one, are never removed; stopped says when they alone pass the budget. Two walks with one counter per hour of age, so it suits a cache of millions of files. timeoutMs bounds the trim, which then stops between files and says so in stopped. Directories stay.
 
-**Signature:** `fs\trimOldest(dir, maxBytes, [timeoutMs]) -> TrimReport` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
+**Signature:** `fs\trimOldest(dir, maxBytes, keepWithinMs, [timeoutMs]) -> TrimReport` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
 
-| Parameter   | Type     | Optional | Description |
-| ----------- | -------- | -------- | ----------- |
-| `dir`       | `string` |          |             |
-| `maxBytes`  | `int`    |          |             |
-| `timeoutMs` | `int`    | yes      |             |
+| Parameter      | Type     | Optional | Description |
+| -------------- | -------- | -------- | ----------- |
+| `dir`          | `string` |          |             |
+| `maxBytes`     | `int`    |          |             |
+| `keepWithinMs` | `int`    |          |             |
+| `timeoutMs`    | `int`    | yes      |             |
 
 **Returns:** map[string]any
 
