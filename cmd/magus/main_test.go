@@ -852,6 +852,9 @@ func TestScripts(t *testing.T) {
 			// The cache store lives under the user cache dir, which HOME=/no-home cannot hold.
 			// Beside $WORK rather than in it, where a script's VCS status would list it.
 			e.Setenv("XDG_CACHE_HOME", e.WorkDir+"-cache")
+			// The machine's graph build lock lives under the state dir.
+			// One per script, so scripts never queue on each other's build.
+			e.Setenv("XDG_STATE_HOME", e.WorkDir+"-state")
 			// The shipped guard templates, by ABSOLUTE PATH to the real files.
 			// A script that copied them into its own archive would be testing a
 			// copy, and a copy of the artifact readers download is exactly what
