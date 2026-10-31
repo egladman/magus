@@ -268,8 +268,14 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 		if err != nil {
 			return err
 		}
-		if res, err = searchGraph(ctx, ws, globalCfg, read, qf.Refresh, qf.Global); err != nil {
-			return err
+		stored, answered := queryResult{}, false
+		if !qf.Refresh && !qf.Global {
+			stored, answered = searchStoredIfStale(ctx, ws, globalCfg, read)
+		}
+		if res = stored; !answered {
+			if res, err = searchGraph(ctx, ws, globalCfg, read, qf.Refresh, qf.Global); err != nil {
+				return err
+			}
 		}
 	}
 	out := res.Out
@@ -1247,6 +1253,35 @@ func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepos
 		return w.Magus(ctx)
 	}
 	return nil, fmt.Errorf("%T is not a workspace", ws)
+}
+
+// searchStoredIfStale answers read from the stored graph when an index is
+// behind the tree, false otherwise. An edit moves the graph's stamps too, and
+// reassembling it costs a read 10-30 s the background refresh pays.
+func searchStoredIfStale(ctx context.Context, ws graphWorkspace, cfg config.Config, read graphRead) (queryResult, bool) {
+	if !knowledge.CouldMatchLazyLayer(read.Input) {
+		return queryResult{}, false
+	}
+	stale := findStaleIndexes(ctx, ws)
+	if len(stale) == 0 {
+		return queryResult{}, false
+	}
+	cacheDir, err := magus.ResolveCacheDir(ws.Root(), workspace.WithLoadedConfig(cfg))
+	if err != nil {
+		return queryResult{}, false
+	}
+	store := knowledge.NewStore(cacheDir, true, 0, nil, slog.Default())
+	g, err := store.Load(ctx)
+	if err != nil {
+		return queryResult{}, false
+	}
+	g.SetRoot(ws.Root())
+	if knowledge.SeedsLazyLayer(read.Input) {
+		if err := store.MergeSymbolShards(ctx, g); err != nil || !g.HasSymbols() {
+			return queryResult{}, false
+		}
+	}
+	return searchLoaded(ctx, g, read, embedtable.Cached, knownStaleCoverage(ctx, ws, cfg, stale)), true
 }
 
 // refreshIndexesNow is `--refresh`: it waits for a refresh already running,
