@@ -53,6 +53,13 @@ func adviseContinueHandedBack(ctx context.Context, at location, facts hint.Gate,
 	if !ok {
 		return advice{}
 	}
+	if row.EndedWithSession() {
+		return advice{
+			Say: fmt.Sprintf("magus workspace: job %s ended with its worker's session; the resumed worker runs `%s` to take it back. No re-fork and no new row.",
+				row.ID, hint.JobExec.With(row.ID)),
+			Why: "The row's write boundary is the one the worker held, and job exec rebinds it.",
+		}
+	}
 	if row.State.Terminal() {
 		return advice{
 			Say: fmt.Sprintf("magus workspace: job %s is %s; fork a new job for more work.", row.ID, row.State),
