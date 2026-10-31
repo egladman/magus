@@ -305,10 +305,9 @@ func hasExecutableMagus(root string) bool {
 // reports whether a verdict came back in the shape expected.
 //
 // Read-only: it neither writes into root nor touches the real user config or
-// activity trail. HOME, XDG_STATE_HOME, XDG_CONFIG_HOME and TMPDIR are all
-// redirected to a throwaway directory removed when the probe returns, so
-// whatever `magus shell` would otherwise record (an activity event, a
-// guard-notice-once marker) lands there instead of in the machine's real state.
+// activity trail. XDG_STATE_HOME, XDG_CONFIG_HOME and TMPDIR point at a
+// throwaway directory removed on return, so recorded state lands there.
+// HOME is not redirected: a magus shim on PATH keeps its trust records there.
 func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, string) {
 	scratch, err := os.MkdirTemp("", "magus-harness-probe-*")
 	if err != nil {
@@ -325,7 +324,6 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader(event)
 	env := append(withoutLeaseClaim(os.Environ()),
-		"HOME="+scratch,
 		"XDG_STATE_HOME="+filepath.Join(scratch, "state"),
 		"XDG_CONFIG_HOME="+filepath.Join(scratch, "config"),
 		"TMPDIR="+scratch,
