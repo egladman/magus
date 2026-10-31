@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/scip-code/scip/bindings/go/scip"
@@ -309,6 +310,21 @@ func TestGraphBuildFailsOnlyOnALockRefusal(t *testing.T) {
 	got = reindexRefusals(errors.Join(missing, full))
 	require.ErrorIs(t, got, types.MachineBudgetExhausted, "a full budget fails the build")
 	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
+}
+
+type GraphReindexPressureSuite struct {
+	suite.Suite
+}
+
+func TestGraphReindexPressureSuite(t *testing.T) { suite.Run(t, new(GraphReindexPressureSuite)) }
+
+func (s *GraphReindexPressureSuite) TestARefusedReindexExitsTempFail() {
+	short := types.ExitError{Code: exit.TempFail, Err: types.DiagnosticErrorf(types.MemoryPressureHigh, "not starting scip: this machine is short of memory")}
+	missing := errors.New("docs: exit status 127; install scip-typescript")
+	got := reindexRefusals(errors.Join(missing, short))
+	s.Require().ErrorIs(got, types.MemoryPressureHigh)
+	s.NotContains(got.Error(), "scip-typescript", "only the refusal fails the build")
+	s.Equal(exit.TempFail, exit.Code(got))
 }
 
 // GraphExportSCIPSuite pins `magus graph export -o scip`: the symbol index as SCIP, for

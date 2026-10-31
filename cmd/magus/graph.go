@@ -222,6 +222,7 @@ func writeGuardIndexes(ctx context.Context, root string) error {
 // machine's build budget could not seat the indexer (MGS3009). A missing indexer is the
 // machine's state and stays a warning. A refusal means the index it wanted stayed stale, and
 // an exit 0 under magus\cmd's quiet hid that. Nil when nothing was refused.
+// A machine short of memory (MGS3053) refuses the same way.
 func reindexRefusals(err error) error {
 	errs := []error{err}
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
@@ -229,7 +230,7 @@ func reindexRefusals(err error) error {
 	}
 	var refused []error
 	for _, e := range errs {
-		if errors.Is(e, types.ProjectLockHeldByAncestor) || errors.Is(e, types.MachineBudgetExhausted) {
+		if errors.Is(e, types.ProjectLockHeldByAncestor) || errors.Is(e, types.MachineBudgetExhausted) || errors.Is(e, types.MemoryPressureHigh) {
 			refused = append(refused, e)
 		}
 	}

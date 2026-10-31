@@ -27,9 +27,9 @@ import (
 //
 // DECLARED, not observed, so the same command on the same host reaches the same
 // verdict whatever a browser is doing. A machine the kernel calls failing is
-// refused first: machineGate.claim. A
-// claim with a memory curve is charged by how long it has run, a wall-clock fact rather
-// than a host reading: two identical states at the same elapsed time agree.
+// refused first: machineGate.claim. A claim with a memory curve is charged by
+// how long it has run, a wall-clock fact rather than a host reading: two
+// identical states at the same elapsed time agree.
 type MachineBudget struct {
 	mu          sync.Mutex
 	budgetMB    int
