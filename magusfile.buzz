@@ -224,7 +224,7 @@ magus\project({
         },
         "agent-eval": {"skip_cache": "launches paid agent sessions; a replay would be a run that never happened"},
         "retrieval-eval-test": {"skip_cache": "reads the knowledge graph in the cache, which no input glob can key"},
-        "hoste2e-test": {
+        "agent-harness-test": {
             "skip_cache": "drives the installed agent hosts, whose versions and logins no input glob can key",
             "human_only": "drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
         },
@@ -2896,10 +2896,10 @@ export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
 // Drives the installed Claude Code, Codex, Cursor and OpenCode headless against a wired
 // workspace; see docs/guides/integrations/agents.md. Not `go-test` with forwarded args:
 // a target is what a policy can name, and this one spends model tokens.
-export fun hoste2e_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["internal/hoste2e/**"]);
+export fun agent_harness_test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["internal/agent/harness/**", "libs/testkit/e2e/**"]);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-tags", "e2e", "-run", "TestHosts", "-count=1", "./internal/hoste2e/"]});
+        {"args": ["-tags", "e2e", "-run", "^TestHosts$", "-count=1", "./internal/agent/harness/"]});
 }
 
 // Names every producer in one command: the root cannot depend on docs or console, since

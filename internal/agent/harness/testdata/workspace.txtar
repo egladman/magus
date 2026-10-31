@@ -1,5 +1,6 @@
 The throwaway workspace each host session runs in. newWorkspace replaces @SPELL@ with
-the harness spell under test and @NONCE@ with the session's code-word suffix.
+the harness spell under test, @NONCE@ with the session's code-word suffix and
+@ASK_TARGET@ with the person-only target.
 
 -- magus.yaml --
 # A throwaway workspace for the host end-to-end suite; built-in defaults throughout.
@@ -49,3 +50,18 @@ magus\project({"no_language": "host e2e fixture"});
 export fun generate(ctx: magus\Context, _a: [str]) > void {
     ctx.writesFiles(["gen/out.txt"]);
 }
+-- asks/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "host e2e fixture",
+    "targets": {
+        "@ASK_TARGET@": {
+            "skip_cache": "a run is the evidence",
+            "human_only": "this harness test wants a person. Code word: E2E-ASK-@NONCE@",
+        },
+    },
+});
+
+export fun ask_probe(ctx: magus\Context, _a: [str]) > void {}

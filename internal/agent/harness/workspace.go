@@ -1,27 +1,26 @@
 //go:build e2e
 
-package hoste2e
+package harness
 
 import (
 	"bufio"
-	"bytes"
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/rogpeppe/go-internal/txtar"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit/e2e"
 	"github.com/egladman/magus/types"
 )
 
@@ -52,16 +51,16 @@ type workspace struct {
 	ready int64
 }
 
-func (w *workspace) code(kind string) string { return "E2E-" + kind + "-" + w.nonce }
+func (w *workspace) code(kind string) string { return fmt.Sprintf("E2E-%s-%s", kind, w.nonce) }
 
 func (w *workspace) cacheDir() string { return filepath.Join(w.dir, ".magus") }
 
 func (w *workspace) proofreadCalls() string { return filepath.Join(w.root, "proofread-calls") }
 
-// repoPath resolves a path in this checkout; the suite runs from internal/hoste2e.
-func repoPath(t *testing.T, rel string) string {
+// checkoutPath resolves a path in this checkout from internal/agent/harness.
+func checkoutPath(t *testing.T, rel string) string {
 	t.Helper()
-	p, err := filepath.Abs(filepath.Join("..", "..", rel))
+	p, err := filepath.Abs(filepath.Join("..", "..", "..", rel))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +71,7 @@ func magusBinary(t *testing.T) string {
 	t.Helper()
 	bin := os.Getenv("MAGUS_E2E_MAGUS")
 	if bin == "" {
-		bin = repoPath(t, "magus")
+		bin = checkoutPath(t, "magus")
 	}
 	if info, err := os.Stat(bin); err != nil || info.Mode()&0o111 == 0 {
 		t.Fatalf("no executable magus at %s; build ./magus or set MAGUS_E2E_MAGUS", bin)
@@ -93,36 +92,23 @@ func newNonce(t *testing.T) string {
 // suite: a lease in BAGGAGE, a nested-host marker, magus settings for another tree.
 // CLAUDE_CODE_OAUTH_TOKEN is a login, not session state, so it passes through.
 func scrubbedEnv() []string {
-	drop := []string{"MAGUS_", "__MAGUS", "BAGGAGE=", "CLAUDECODE=", "CLAUDE_CODE_", "CLAUDE_PROJECT_DIR=", "CLAUDE_ENV_FILE=",
-		"AI_AGENT=", "CODEX_", "OPENCODE_CONFIG", "XDG_STATE_HOME=", "XDG_CONFIG_HOME=", "GIT_DIR=", "GIT_WORK_TREE=", "GIT_INDEX_FILE="}
-	var env []string
-next:
-	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "CLAUDE_CODE_OAUTH_TOKEN=") {
-			env = append(env, kv)
-			continue
-		}
-		for _, prefix := range drop {
-			if strings.HasPrefix(kv, prefix) {
-				continue next
-			}
-		}
-		env = append(env, kv)
-	}
-	return env
+	return e2e.Scrub(os.Environ(),
+		[]string{"MAGUS_", "__MAGUS", "BAGGAGE=", "CLAUDECODE=", "CLAUDE_CODE_", "CLAUDE_PROJECT_DIR=", "CLAUDE_ENV_FILE=",
+			"AI_AGENT=", "CODEX_", "OPENCODE_CONFIG", "XDG_STATE_HOME=", "XDG_CONFIG_HOME=", "GIT_DIR=", "GIT_WORK_TREE=", "GIT_INDEX_FILE="},
+		[]string{"CLAUDE_CODE_OAUTH_TOKEN="})
 }
 
 // newWorkspace builds the fixture the way a user wires a host: the harness spell copied
 // into the workspace, the shipped hook templates downloaded beside it, then
 // `magus describe harness` merged by the command it prints, verified, and the skills
 // installed. The host's wire step adds only what magus leaves to the user as prose: the
-// MCP entry, Codex's project trust, and the OpenCode plugin its guide says to copy.
+// MCP entry, project trust, and any plugin the host's guide says to copy.
 //
 // The directory outlives t: owner, the host's test, removes it once every scenario
 // reading this session's evidence has run. MAGUS_E2E_KEEP=1 keeps it.
 func newWorkspace(t, owner *testing.T, host *hostDriver) *workspace {
 	t.Helper()
-	tmp, err := os.MkdirTemp("", "magus-host-e2e-"+host.id+"-")
+	tmp, err := os.MkdirTemp("", fmt.Sprintf("magus-host-e2e-%s-", host.id))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +135,7 @@ func newWorkspace(t, owner *testing.T, host *hostDriver) *workspace {
 	copyFile(t, filepath.Join("testdata", "proofread-stub.sh"), stub, 0o755)
 
 	w.env = append(scrubbedEnv(),
-		"PATH="+w.bin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		fmt.Sprintf("PATH=%s%c%s", w.bin, os.PathListSeparator, os.Getenv("PATH")),
 		"XDG_STATE_HOME="+filepath.Join(root, "state"),
 		"MAGUS_SERVER_ENABLED=false",
 		"MAGUS_LOG_SILENT=true",
@@ -176,51 +162,23 @@ func newWorkspace(t, owner *testing.T, host *hostDriver) *workspace {
 	return w
 }
 
-// TestWorkspaceSetup builds each installed host's fixture and stops before
-// the host runs, so it spends no model tokens.
-func TestWorkspaceSetup(t *testing.T) {
-	for _, h := range drivers() {
-		t.Run(h.id, func(t *testing.T) {
-			if h.path == "" {
-				t.Skipf("%s: %s", h.binary, h.note)
-			}
-			newWorkspace(t, t, h)
-		})
-	}
-}
-
 func (w *workspace) writeFixture(t *testing.T, spell string) {
 	t.Helper()
 	archive, err := txtar.ParseFile(filepath.Join("testdata", "workspace.txtar"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	fill := strings.NewReplacer("@SPELL@", spell, "@NONCE@", w.nonce)
+	fill := strings.NewReplacer("@SPELL@", spell, "@NONCE@", w.nonce, "@ASK_TARGET@", askTarget)
 	for _, f := range archive.Files {
 		writeFile(t, filepath.Join(w.dir, f.Name), fill.Replace(string(f.Data)))
 	}
-	writeFile(t, filepath.Join(w.dir, "asks", "magusfile.buzz"), `import "magus";
 
-magus\project({
-    "sources": ["*.buzz"],
-    "no_language": "host e2e fixture",
-    "targets": {
-        "`+askTarget+`": {
-            "skip_cache": "a run is the evidence",
-            "human_only": "this harness test wants a person. Code word: `+w.code("ASK")+`",
-        },
-    },
-});
-
-export fun ask_probe(ctx: magus\Context, _a: [str]) > void {}
-`)
-
-	copyFile(t, repoPath(t, filepath.Join("spells", "harness", spell, "spell.buzz")),
+	copyFile(t, checkoutPath(t, filepath.Join("spells", "harness", spell, "spell.buzz")),
 		filepath.Join(w.dir, "spells", "harness", spell, "spell.buzz"), 0o644)
 
 	// The templates a user downloads into docs/guides/integrations/agents/. That
 	// directory's own magusfile.buzz is left behind: it would make the copy a project.
-	src := repoPath(t, filepath.Join("docs", "guides", "integrations", "agents"))
+	src := checkoutPath(t, filepath.Join("docs", "guides", "integrations", "agents"))
 	dst := filepath.Join(w.dir, "docs", "guides", "integrations", "agents")
 	for _, pattern := range []string{"*.buzz", "lib/*.buzz"} {
 		matches, err := filepath.Glob(filepath.Join(src, pattern))
@@ -240,10 +198,7 @@ export fun ask_probe(ctx: magus\Context, _a: [str]) > void {}
 // mergeHarness runs the merge command `magus describe harness <id> -o json` prints.
 func (w *workspace) mergeHarness(t *testing.T, spell string) {
 	t.Helper()
-	var plan types.HarnessPlan
-	if err := json.Unmarshal([]byte(w.magus(t, "describe", "harness", spell, "-o", "json")), &plan); err != nil {
-		t.Fatalf("describe harness %s: %v", spell, err)
-	}
+	plan := w.harnessPlan(t, spell)
 	if plan.Merge == "" {
 		t.Fatalf("describe harness %s printed no merge command for a fresh workspace", spell)
 	}
@@ -296,21 +251,22 @@ func (w *workspace) probeRules(t *testing.T, host string) {
 		{"shell", "--agent-name", host, "echo e2e-deny-probe"},
 		{"shell", "--agent-name", host, "--path", filepath.Join(w.dir, "blocked.txt")},
 	} {
-		out, err := w.exec(context.Background(), "magus", args...)
+		out, err := w.exec("magus", args...)
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) || exit.ExitCode() != 2 {
 			t.Fatalf("magus %s: want a deny (exit 2) from the fixture rule, got %v\n%s", strings.Join(args, " "), err, out)
 		}
 	}
-	out, _ := w.exec(context.Background(), "magus", "shell", "--agent-name", host, "--renders-ask", "-o", "json", askCommand)
+	// An ask exits nonzero with its reason on stderr: read stdout alone.
+	ask := w.command("magus", "shell", "--agent-name", host, "--renders-ask", "-o", "json", askCommand).Run()
 	var verdict hookResponse
-	if err := json.Unmarshal([]byte(out), &verdict); err != nil || verdict.Decision != "ask" {
-		t.Fatalf("magus shell %q: want an ask from the human_only target, got %v\n%s", askCommand, err, out)
+	if err := json.Unmarshal([]byte(ask.Stdout), &verdict); err != nil || verdict.Decision != "ask" {
+		t.Fatalf("magus shell %q: want an ask from the human_only target, got %v\n%s%s", askCommand, err, ask.Stdout, ask.Stderr)
 	}
 }
 
-// allowInSettings adds a permissions.allow rule to the workspace's Claude Code
-// settings: the rule whose match must not turn a hook's ask into a run.
+// allowInSettings adds a permissions.allow rule to .claude/settings.json: the
+// rule whose match must not turn a hook's ask into a run.
 func (w *workspace) allowInSettings(t *testing.T, rule string) {
 	t.Helper()
 	path := filepath.Join(w.dir, ".claude", "settings.json")
@@ -337,71 +293,54 @@ func (w *workspace) allowInSettings(t *testing.T, rule string) {
 // open until the result, because the host reads the answers from it.
 func (w *workspace) answerPrompts(t *testing.T, label, bin string, args, extraEnv []string, prompt string) askRun {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), hostTimeout())
-	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Dir = w.dir
-	cmd.Env = append(slices.Clone(w.env), extraEnv...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.WaitDelay = 10 * time.Second
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	send := func(v any) {
-		line, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
+	var prompted bool
+	command := e2e.Command{Path: bin, Args: args, Dir: w.dir, Env: append(slices.Clone(w.env), extraEnv...), Timeout: hostTimeout()}
+	result := command.Converse(func(stdin io.WriteCloser, stdout io.Reader) {
+		send := func(v any) {
+			line, err := json.Marshal(v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := stdin.Write(append(line, '\n')); err != nil {
+				t.Logf("%s: stdin closed: %v", label, err)
+			}
 		}
-		if _, err := stdin.Write(append(line, '\n')); err != nil {
-			t.Logf("%s: stdin closed: %v", label, err)
-		}
-	}
-	send(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": prompt}})
+		send(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": prompt}})
 
-	var run askRun
-	var seen strings.Builder
-	lines := bufio.NewScanner(stdout)
-	lines.Buffer(make([]byte, 0, 1<<20), 1<<26)
-	for lines.Scan() {
-		seen.WriteString(lines.Text() + "\n")
-		var event struct {
-			Type      string `json:"type"`
-			RequestID string `json:"request_id"`
-			Request   struct {
-				Subtype string `json:"subtype"`
-			} `json:"request"`
+		lines := bufio.NewScanner(stdout)
+		lines.Buffer(make([]byte, 0, 1<<20), 1<<26)
+		for lines.Scan() {
+			var event struct {
+				Type      string `json:"type"`
+				RequestID string `json:"request_id"`
+				Request   struct {
+					Subtype string `json:"subtype"`
+				} `json:"request"`
+			}
+			if json.Unmarshal(lines.Bytes(), &event) != nil {
+				continue
+			}
+			if event.Type == "result" {
+				_ = stdin.Close()
+			}
+			if event.Type == "control_request" && event.Request.Subtype == "can_use_tool" {
+				prompted = true
+				send(map[string]any{"type": "control_response", "response": map[string]any{
+					"subtype":    "success",
+					"request_id": event.RequestID,
+					"response":   map[string]any{"behavior": "deny", "message": "declined by the host e2e suite"},
+				}})
+			}
 		}
-		if json.Unmarshal(lines.Bytes(), &event) != nil {
-			continue
-		}
-		if event.Type == "result" {
-			_ = stdin.Close()
-		}
-		if event.Type == "control_request" && event.Request.Subtype == "can_use_tool" {
-			run.prompted = true
-			send(map[string]any{"type": "control_response", "response": map[string]any{
-				"subtype":    "success",
-				"request_id": event.RequestID,
-				"response":   map[string]any{"behavior": "deny", "message": "declined by the host e2e suite"},
-			}})
-		}
-	}
-	run.err = cmd.Wait()
-	run.stdout, run.stderr = seen.String(), stderr.String()
-	writeFile(t, filepath.Join(w.logs, label+".stdout"), run.stdout)
-	writeFile(t, filepath.Join(w.logs, label+".stderr"), run.stderr)
-	return run
+	})
+	w.keepLogs(t, label, result)
+	return askRun{Result: result, prompted: prompted}
+}
+
+func (w *workspace) keepLogs(t *testing.T, label string, r e2e.Result) {
+	t.Helper()
+	writeFile(t, filepath.Join(w.logs, label+".stdout"), r.Stdout)
+	writeFile(t, filepath.Join(w.logs, label+".stderr"), r.Stderr)
 }
 
 func (w *workspace) magus(t *testing.T, args ...string) string {
@@ -416,7 +355,7 @@ func (w *workspace) git(t *testing.T, args ...string) {
 
 func (w *workspace) run(t *testing.T, name string, args ...string) string {
 	t.Helper()
-	out, err := w.exec(context.Background(), name, args...)
+	out, err := w.exec(name, args...)
 	if err != nil {
 		t.Fatalf("%s %s: %v\n%s", name, strings.Join(args, " "), err, out)
 	}
@@ -425,18 +364,16 @@ func (w *workspace) run(t *testing.T, name string, args ...string) string {
 
 // exec runs name in the workspace with its environment; stdout alone is returned on
 // success so JSON stays parseable, and both streams on failure.
-func (w *workspace) exec(ctx context.Context, name string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, w.lookPath(name), args...)
-	cmd.Dir = w.dir
-	cmd.Env = w.env
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		return stdout.String() + stderr.String(), err
+func (w *workspace) exec(name string, args ...string) (string, error) {
+	r := w.command(name, args...).Run()
+	if r.Err != nil {
+		return r.Stdout + r.Stderr, r.Err
 	}
-	return stdout.String(), nil
+	return r.Stdout, nil
+}
+
+func (w *workspace) command(name string, args ...string) e2e.Command {
+	return e2e.Command{Path: w.lookPath(name), Args: args, Dir: w.dir, Env: w.env, Timeout: 2 * time.Minute}
 }
 
 func (w *workspace) lookPath(name string) string {
@@ -452,36 +389,13 @@ func (w *workspace) lookPath(name string) string {
 	return name
 }
 
-// hostRun is one headless host invocation and what it left behind.
-type hostRun struct {
-	stdout, stderr string
-	err            error
-}
-
-// runHost starts a host binary in its own process group so a timeout takes its MCP
-// servers and hook children down with it, and keeps both streams under logs/.
-func (w *workspace) runHost(t *testing.T, label, bin string, args []string) hostRun {
+// runHost runs a host binary once and keeps both streams under logs/.
+func (w *workspace) runHost(t *testing.T, label, bin string, args []string, extraEnv ...string) e2e.Result {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), hostTimeout())
-	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Dir = w.dir
-	cmd.Env = w.env
-	cmd.Stdin = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.WaitDelay = 10 * time.Second
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	start := time.Now()
-	err := cmd.Run()
-	if ctx.Err() != nil {
-		err = fmt.Errorf("timed out after %s: %w", hostTimeout(), err)
-	}
-	t.Logf("%s: %s exited after %s: %v", w.host, label, time.Since(start).Round(time.Second), err)
-	writeFile(t, filepath.Join(w.logs, label+".stdout"), stdout.String())
-	writeFile(t, filepath.Join(w.logs, label+".stderr"), stderr.String())
-	return hostRun{stdout: stdout.String(), stderr: stderr.String(), err: err}
+	r := e2e.Command{Path: bin, Args: args, Dir: w.dir, Env: append(slices.Clone(w.env), extraEnv...), Timeout: hostTimeout()}.Run()
+	t.Logf("%s: %s exited after %s: %v", w.host, label, r.Elapsed.Round(time.Second), r.Err)
+	w.keepLogs(t, label, r)
+	return r
 }
 
 func hostTimeout() time.Duration {
@@ -523,6 +437,15 @@ func copyFile(t *testing.T, src, dst string, mode os.FileMode) {
 	if err := os.WriteFile(dst, body, mode); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func writeJSON(t *testing.T, path string, v any) {
+	t.Helper()
+	body, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, path, string(body)+"\n")
 }
 
 func fileExists(path string) bool {

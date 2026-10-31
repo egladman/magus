@@ -218,7 +218,7 @@ Not verified against a client: what Cursor does with `permission: "ask"` under
 `--force`, auto-run or an allowlist, whether the desktop and CLI both show
 `user_message`, and any way to answer from a phone. Cloud agents defer
 `beforeMCPExecution`, so nothing here promises a prompt there. The `ask` end-to-end
-scenarios in `internal/hoste2e` run the first of these.
+scenarios in `internal/agent/harness` run the first of these.
 
 The `matcher` values are a regex (Cursor's own validator: outside `""` and `"*"`
 the string must compile). One entry per event is enough: the script is the same

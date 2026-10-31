@@ -301,7 +301,7 @@ hooks. Where no prompt can happen (no rules file, a `permission_mode` other than
 terminal. `systemMessage` carries that to the person, and the deny reason tells the agent
 to relay it verbatim if they saw nothing. Not verified against a client: what a prompt rule
 does under `approval_policy = "never"`, which a hook cannot read, and any way to answer a
-prompt from another device. The `ask` end-to-end scenarios in `internal/hoste2e` run the
+prompt from another device. The `ask` end-to-end scenarios in `internal/agent/harness` run the
 first. One open Codex bug ignores a prompt rule under `danger-full-access` with
 granular rules, [openai/codex#25312](https://github.com/openai/codex/issues/25312).
 The template refuses a session whose hook input reports `bypassPermissions`, but

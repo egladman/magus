@@ -1,15 +1,18 @@
 //go:build e2e
 
-package hoste2e
+package harness
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 // hookRequest is what the host sent, restated by magus. Tool is magus's normalized name
@@ -35,7 +38,7 @@ type record struct {
 
 // subject is what the call acted on, the key two judgments of one call share.
 func (r record) subject() string {
-	return r.Request.Tool + "\x00" + r.Request.Command + "\x00" + r.Request.Path
+	return strings.Join([]string{r.Request.Tool, r.Request.Command, r.Request.Path}, "\x00")
 }
 
 // records reads every agent_command and agent_spawn event the host's own hooks wrote
@@ -77,6 +80,15 @@ func readBlob[T any](t *testing.T, w *workspace, ref string) T {
 	return v
 }
 
+func hasRecord(t *testing.T, s *session, match func(record) bool) bool {
+	t.Helper()
+	if slices.ContainsFunc(s.w.records(t), match) {
+		return true
+	}
+	s.w.dumpRecords(t)
+	return false
+}
+
 func (w *workspace) dumpRecords(t *testing.T) {
 	t.Helper()
 	for _, r := range w.records(t) {
@@ -88,7 +100,7 @@ func (w *workspace) dumpRecords(t *testing.T) {
 // markers lists the guard's per-session marker files whose kind starts with kind.
 func (w *workspace) markers(t *testing.T, kind string) []string {
 	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(w.cacheDir(), "advisories", "*."+kind+"*"))
+	matches, err := filepath.Glob(filepath.Join(w.cacheDir(), "advisories", fmt.Sprintf("*.%s*", kind)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,8 +116,9 @@ type spawnedAgent struct {
 
 func (w *workspace) spawnedAgents(t *testing.T) []spawnedAgent {
 	t.Helper()
-	var out []spawnedAgent
-	for _, path := range w.markers(t, "agent-spawned-") {
+	paths := w.markers(t, "agent-spawned-")
+	out := make([]spawnedAgent, 0, len(paths))
+	for _, path := range paths {
 		body, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
@@ -137,11 +150,25 @@ func (w *workspace) checkpoints(t *testing.T) []checkpoint {
 	return listing.Checkpoints
 }
 
+// jobRow reads one row from the workspace's own `magus ls jobs`.
+func (w *workspace) jobRow(t *testing.T, id string) types.Job {
+	t.Helper()
+	var listing types.JobList
+	if err := json.Unmarshal([]byte(w.magus(t, "ls", "jobs", "-o", "json")), &listing); err != nil {
+		t.Fatalf("magus ls jobs -o json: %v", err)
+	}
+	i := slices.IndexFunc(listing.Jobs, func(r types.Job) bool { return r.ID == id })
+	if i < 0 {
+		t.Fatalf("magus ls jobs lists no row %s", id)
+	}
+	return listing.Jobs[i]
+}
+
 // proofreadReplies are the replies the stub proofread received from proofread-reply.buzz.
 func (w *workspace) proofreadReplies(t *testing.T) []string {
 	t.Helper()
 	matches, _ := filepath.Glob(filepath.Join(w.proofreadCalls(), "*.reply"))
-	var out []string
+	out := make([]string, 0, len(matches))
 	for _, m := range matches {
 		body, err := os.ReadFile(m)
 		if err != nil {

@@ -187,13 +187,13 @@ decision cell against the shipped adapters. That proves the guard's decision
 and adapter behavior for controlled events; it does not prove that a locally
 installed vendor client discovers configuration or dispatches a real hook.
 
-The Go suite in `internal/hoste2e` proves that part. It sits behind the `e2e`
-build tag, so a normal `go test` never compiles it, and it spends model tokens
-and the local logins of every host it drives. Run it on demand through the
-`hoste2e-test` target:
+The Go suites in `internal/agent/harness` prove that part, one per host. They sit
+behind the `e2e` build tag, so a normal `go test` never compiles them, and they
+spend model tokens and the local logins of every host they drive. Run them on
+demand through the `agent-harness-test` target:
 
 ```sh
-magus run hoste2e-test .
+magus run agent-harness-test .
 ```
 
 The target is declared `human_only`, so an agent's run of it asks you first,
@@ -204,8 +204,8 @@ merge `magus describe harness` prints, the skills), and drives the host
 headless through scripted turns. The scenarios cover a shell deny and advise,
 a judged read, a write to a declared output, a denied write, an MCP call, the
 recorded prompt, the opt-in reply check once the workspace wires it, the checkpoint,
-a skill load, a judged spawn with its child and context size, and the brief after a
-compaction. Each one
+a skill load, a judged spawn with its child and context size, a child continued after
+it stops with a question, and the brief after a compaction. Each one
 asserts on what magus recorded and on what the model said back, so a verdict
 that never reached the model fails.
 
