@@ -528,6 +528,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_INTERNAL_ADVICE_BASE_BRANCH**
 : Set by \`magus diff\` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting
 
+**MAGUS_DETACHED_REFRESH**
+: Set by magus on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh; never set it by hand
+
 ## Files
 
 **magus.yaml, .magus.yaml**

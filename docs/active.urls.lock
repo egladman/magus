@@ -190,6 +190,7 @@ design/judgment/told-never-guessed/
 design/principles/
 design/principles/a-cache-is-an-accelerator/
 design/principles/a-copy-can-be-the-right-answer/
+design/principles/a-deliberate-break-never-merges-red/
 design/principles/a-harness-is-not-an-agent-thing/
 design/principles/abstract-at-the-right-layer/
 design/principles/behavior-is-code-facts-are-data/
@@ -216,6 +217,7 @@ design/principles/sit-next-to-the-tools/
 design/principles/the-checker-catches-it/
 design/principles/the-go-proverbs/
 design/principles/the-harness-sits-on-the-tool-layer/
+design/principles/the-model-proposes-the-harness-executes/
 design/principles/the-orchestrator-plans/
 design/principles/unix-survives-at-the-verb/
 design/principles/verdicts-are-provenance-blind/
@@ -300,6 +302,7 @@ glossary/engine/
 glossary/harness/
 glossary/health/
 glossary/hotspot/
+glossary/inner-harness/
 glossary/insight/
 glossary/invocation/
 glossary/job/
@@ -315,6 +318,7 @@ glossary/module/
 glossary/one-off/
 glossary/one-vocabulary-rule/
 glossary/op/
+glossary/outer-harness/
 glossary/output-reference/
 glossary/ownership/
 glossary/pane/
@@ -746,6 +750,8 @@ reference/codes/sandbox/MGS3048/
 reference/codes/sandbox/MGS3049/
 reference/codes/sandbox/MGS3050/
 reference/codes/sandbox/MGS3051/
+reference/codes/sandbox/MGS3052/
+reference/codes/sandbox/MGS3053/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -927,6 +933,7 @@ reference/rules/brief-command/
 reference/rules/brief-plain-commands/
 reference/rules/busy-wait/
 reference/rules/buzz-unbriefed/
+reference/rules/cache-clear/
 reference/rules/cache-dir-write/
 reference/rules/capture-filter/
 reference/rules/cd/
@@ -941,6 +948,7 @@ reference/rules/conflict-rewrite/
 reference/rules/credential-verb/
 reference/rules/dependency-install/
 reference/rules/dependency-update/
+reference/rules/deviation-author/
 reference/rules/doc-search/
 reference/rules/echo-on-success/
 reference/rules/edit-ungraded/
@@ -1254,6 +1262,7 @@ tags/format/
 tags/formatter/
 tags/fs/
 tags/gate/
+tags/gates/
 tags/generated-files/
 tags/generated/
 tags/getting-started/

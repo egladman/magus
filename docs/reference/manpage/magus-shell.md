@@ -116,6 +116,9 @@ not block every tool call.
 **--session** *string*
 : The host's own session id for this invocation
 
+**--tool-ms** *int*
+: Read the input as a tool's name and record how many milliseconds the host says it ran, without judging: the verdict is always pass
+
 **--transcript** *string*
 : Path to the host's own log of this session, recorded as a pointer; magus never opens it
 
