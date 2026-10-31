@@ -24,6 +24,7 @@ var vocabulary = []concept{
 	{Flag: "autoload", GoField: "Autoload"},
 	{Flag: "reproducible", GoField: "Reproducible"},
 	{Flag: "ack"},
+	{Flag: "add-write-path"},
 	{Flag: "against"},
 	{Flag: "agent"},
 	{Flag: "agent-name"},

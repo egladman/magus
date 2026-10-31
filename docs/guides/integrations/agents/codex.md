@@ -28,7 +28,7 @@ contract.
 | your messages   | `UserPromptSubmit`, recorded and never answered                 |
 | checkpoint      | `Stop`                                                          |
 | reply check     | opt-in: `Stop`, a `block` that continues the turn once          |
-| scout agent     | `.codex/agents/magus-scout.toml`, `sandbox_mode = "read-only"`  |
+| scout agent     | `.codex/agents/magus-scout.toml`, read-only by its lease        |
 | rehydration     | `SessionStart` (`compact`)                                      |
 | MCP             | `~/.codex/config.toml`, see [MCP](../mcp.md)                    |
 | quiet output    | `[shell_environment_policy.set]` in `~/.codex/config.toml`      |
@@ -398,10 +398,8 @@ Three more hooks complete the picture of a subagent:
   context size a later continuation to that child reads. The child's own tool calls
   carry `agent_id` and `agent_type` too, so its commands are attributed to it.
 
-The scout agent file sets `sandbox_mode = "read-only"`, so the sandbox enforces what
-its instructions only ask for. Codex's read-only sandbox blocks writes, which may
-include magus's own cache and activity records, so a query that needs one can fail
-inside the scout. That has not been run live here.
+The scout agent file sets no sandbox, because Codex ignores one in an agent file. Its
+lease enforces what its instructions only ask for.
 
 ### Checking the Buzz it writes
 
