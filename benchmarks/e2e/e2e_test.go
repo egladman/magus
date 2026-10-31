@@ -17,7 +17,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) { testkit.Main(m) }
+// TestMain leaves the checkout so its lease grades no run here.
+func TestMain(m *testing.M) {
+	if err := os.Chdir(os.TempDir()); err != nil {
+		panic(err)
+	}
+	testkit.Main(m)
+}
 
 // writeProject creates root/name/magusfile.buzz with body. No magus.project
 // call is written: a bare magusfile that defines targets is expected to run via
