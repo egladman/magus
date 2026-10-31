@@ -100,6 +100,9 @@ type manifest struct {
 	// Extra is, per class, the workspace files its assembly read that the tree walk does
 	// not cover, so the caller can fold them into that class's next stamp.
 	Extra map[ShardClass][]string `json:"extra,omitempty"`
+	// ShardErrors is, per class, why a shard failed to assemble at its last
+	// sync. A read the stamps settle never assembles, so only this says why.
+	ShardErrors map[ShardClass][]string `json:"shard_errors,omitempty"`
 	// Routing is the symbolShardsKey the routing file was last written for, so a sync whose
 	// symbol shards came out unchanged leaves that multi-megabyte file alone.
 	Routing string `json:"routing,omitempty"`
@@ -198,6 +201,7 @@ type syncPlan struct {
 	reads          *readlog.Reads           // see manifest.Reads; nil keeps the recorded ones
 	targetPolicies *types.TargetPolicyIndex // see manifest.TargetPolicies; nil keeps the recorded one
 	extra          map[ShardClass][]string
+	shardErrors    map[ShardClass][]string // see manifest.ShardErrors
 	refresh        bool
 }
 
@@ -259,6 +263,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		Inputs:        map[ShardClass]string{},
 		FastStamps:    map[ShardClass]string{},
 		Extra:         map[ShardClass][]string{},
+		ShardErrors:   map[ShardClass][]string{},
 	}
 	if old != nil {
 		newMan.Routing = old.Routing
@@ -283,6 +288,11 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		for c, paths := range old.Extra {
 			if !plan.covers(c) {
 				newMan.Extra[c] = paths
+			}
+		}
+		for c, errs := range old.ShardErrors {
+			if !plan.covers(c) {
+				newMan.ShardErrors[c] = errs
 			}
 		}
 	}
@@ -338,6 +348,9 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		}
 		if paths := plan.extra[c]; len(paths) > 0 {
 			newMan.Extra[c] = paths
+		}
+		if errs := plan.shardErrors[c]; len(errs) > 0 {
+			newMan.ShardErrors[c] = errs
 		}
 	}
 	// A fast stamp for a class this plan does not cover belongs to one Ensure settled fresh
@@ -443,7 +456,8 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		slices.Equal(old.indexes(), newMan.Indexes) && old.indexesKnown() == newMan.IndexesKnown &&
 		readsEqual(old.reads(), newMan.Reads) && old.readsKnown() == newMan.ReadsKnown &&
 		reflect.DeepEqual(old.targetPolicies(), newMan.TargetPolicies) && old.targetPoliciesKnown() == newMan.TargetPoliciesKnown &&
-		maps.EqualFunc(old.extra(), newMan.Extra, slices.Equal) && old.routing() == newMan.Routing {
+		maps.EqualFunc(old.extra(), newMan.Extra, slices.Equal) && old.routing() == newMan.Routing &&
+		maps.EqualFunc(old.shardErrors(), newMan.ShardErrors, slices.Equal) {
 		return nil
 	}
 
@@ -1296,6 +1310,25 @@ func (m *manifest) extra() map[ShardClass][]string {
 		return nil
 	}
 	return m.Extra
+}
+
+func (m *manifest) shardErrors() map[ShardClass][]string {
+	if m == nil {
+		return nil
+	}
+	return m.ShardErrors
+}
+
+// ShardErrors returns why shards are absent from the store at cacheDir, sorted,
+// so a reader can say its answer lacks them.
+func ShardErrors(cacheDir string) []string {
+	man := NewStore(cacheDir, true, 0, nil, slog.Default()).readManifestOrNil()
+	var out []string
+	for _, errs := range man.shardErrors() {
+		out = append(out, errs...)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func (m *manifest) routing() string {

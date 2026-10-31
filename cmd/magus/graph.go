@@ -189,7 +189,10 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	slog.InfoContext(ctx, fmt.Sprintf("knowledge graph rebuilt: %d nodes, %d edges", out.NodeCount, out.EdgeCount), attr.Notice(""))
 	scriptsErr := writeGuardIndexes(ctx, root)
 	if refused != nil {
-		return errors.Join(scriptsErr, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused))
+		scriptsErr = errors.Join(scriptsErr, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused))
+	}
+	if errs := knowledge.ShardErrors(config.CacheDir(root, globalCfg)); len(errs) > 0 {
+		scriptsErr = errors.Join(scriptsErr, fmt.Errorf("magus graph build: left out of the graph: %s", strings.Join(errs, "; ")))
 	}
 	return scriptsErr
 }

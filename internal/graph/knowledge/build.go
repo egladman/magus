@@ -2,12 +2,14 @@ package knowledge
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"runtime"
 	"slices"
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/types"
 )
@@ -245,6 +247,27 @@ func fastStaleClasses(man *manifest, fast Stamps, want []ShardClass, refresh boo
 	return out
 }
 
+// splitShardErrors keeps a failed shard out of the store so a read still
+// answers from the rest. Its error goes on the manifest for each read to state
+// and for `magus graph build` to fail on.
+func splitShardErrors(ctx context.Context, log *slog.Logger, shards []Shard) ([]Shard, map[ShardClass][]string) {
+	var errs map[ShardClass][]string
+	kept := make([]Shard, 0, len(shards))
+	for _, sh := range shards {
+		if sh.Err == nil {
+			kept = append(kept, sh)
+			continue
+		}
+		log.WarnContext(ctx, "knowledge shard left out of the graph", slog.String("shard", sh.Name), attr.Error(sh.Err))
+		if errs == nil {
+			errs = map[ShardClass][]string{}
+		}
+		c := shardClass(sh.Name)
+		errs[c] = append(errs[c], fmt.Sprintf("%s: %v", sh.Name, sh.Err))
+	}
+	return kept, errs
+}
+
 // assembleAndSync assembles the classes in stale, fingerprints every shard, and persists
 // them with their stamps.
 func (e *ensureRun) assembleAndSync(ctx context.Context, in Inputs, stale []ShardClass) ([]Shard, error) {
@@ -262,12 +285,7 @@ func (e *ensureRun) assembleAndSync(ctx context.Context, in Inputs, stale []Shar
 		}
 		in.Layers = layers
 	}
-	shards := AssembleClasses(in, stale)
-	for _, sh := range shards {
-		if sh.Err != nil {
-			return nil, sh.Err
-		}
-	}
+	shards, shardErrors := splitShardErrors(ctx, store.log, AssembleClasses(in, stale))
 
 	// optimization: fingerprint shards in parallel. Each fingerprint builds a
 	// temp graph, sorts, marshals, and hashes: independent CPU work done for
@@ -312,7 +330,7 @@ func (e *ensureRun) assembleAndSync(ctx context.Context, in Inputs, stale []Shar
 			fast = nil
 		}
 	}
-	plan := syncPlan{classes: stale, stamps: opts.Stamps, fastStamps: fast, indexes: in.Indexes, reads: in.Reads, extra: in.Extra, refresh: opts.Refresh}
+	plan := syncPlan{classes: stale, stamps: opts.Stamps, fastStamps: fast, indexes: in.Indexes, reads: in.Reads, extra: in.Extra, shardErrors: shardErrors, refresh: opts.Refresh}
 	if len(in.TargetPolicies.Projects) > 0 {
 		plan.targetPolicies = &in.TargetPolicies
 	}

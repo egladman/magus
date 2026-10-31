@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -892,6 +893,38 @@ func TestCoverageGapsFailTheCoverageShard(t *testing.T) {
 	require.Len(t, shards, 1)
 	require.Error(t, shards[0].Err)
 	assert.Contains(t, shards[0].Err.Error(), "internal/guard")
+}
+
+func TestEnsureAnswersAroundAFailedShardAndRecordsWhy(t *testing.T) {
+	dir := t.TempDir()
+	in := Inputs{
+		Coverage:     []FileCoverage{{Path: "internal/foo/foo.go", Covered: 1, Total: 1}},
+		CoverageGaps: []string{"internal/guard"},
+	}
+	gather := func([]ShardClass) (Inputs, error) { return in, nil }
+
+	_, err := Ensure(t.Context(), dir, BuildOptions{}, []ShardClass{ClassCoverage}, gather, slog.Default())
+
+	require.NoError(t, err)
+	errs := ShardErrors(dir)
+	require.Len(t, errs, 1)
+	assert.Contains(t, errs[0], "internal/guard")
+}
+
+func TestASyncWithoutTheFailureClearsTheRecordedError(t *testing.T) {
+	dir := t.TempDir()
+	cov := []FileCoverage{{Path: "internal/foo/foo.go", Covered: 1, Total: 1}}
+	build := func(in Inputs) {
+		gather := func([]ShardClass) (Inputs, error) { return in, nil }
+		_, err := Ensure(t.Context(), dir, BuildOptions{Refresh: true}, []ShardClass{ClassCoverage}, gather, slog.Default())
+		require.NoError(t, err)
+	}
+
+	build(Inputs{Coverage: cov, CoverageGaps: []string{"internal/guard"}})
+	require.NotEmpty(t, ShardErrors(dir))
+
+	build(Inputs{Coverage: cov})
+	assert.Empty(t, ShardErrors(dir))
 }
 
 func TestNoCoverageProfileIsNotAGapFailure(t *testing.T) {

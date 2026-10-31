@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
@@ -57,6 +58,13 @@ func measureSymbolCoverage(ctx context.Context, ws graphWorkspace, cfg config.Co
 	cov.Gaps, cov.Probed = workspacegraph.SymbolGaps(ctx, ws, ws.Root(), cfg, slog.Default())
 	cov.Stale = findStaleIndexes(ctx, ws)
 	return cov
+}
+
+// noteShardErrors says a read's answer lacks a shard that failed to assemble.
+func noteShardErrors(ctx context.Context, root, label string) {
+	for _, msg := range knowledge.ShardErrors(config.CacheDir(root, globalCfg)) {
+		slog.WarnContext(ctx, "this answer lacks "+msg, attr.Notice(label))
+	}
 }
 
 // printVerdict writes the block explaining an answer that reported nothing. It prints

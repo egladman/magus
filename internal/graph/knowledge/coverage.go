@@ -270,7 +270,7 @@ func enclosingDef(defs []fileSymbolDef, startLine int) int {
 	return found
 }
 
-// coverageGapError is the refusal for a profile that omits whole directories.
+// coverageGapError is why a profile that omits whole directories is left out.
 func coverageGapError(gaps []string) error {
 	shown := gaps
 	if len(shown) > 5 {

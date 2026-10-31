@@ -117,6 +117,7 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 		wait := hint.Refs.With(fmt.Sprintf("'%s'", strings.ReplaceAll(pos[0], "'", `'\''`)), "--refresh")
 		res.noteRefresh(refreshInBackground(ctx, root, res.answer(), wait))
 	}
+	noteShardErrors(ctx, root, "magus refs")
 	if len(res.Ambiguous) > 0 {
 		return refuseAmbiguous(noticeLines{ctx: ctx, level: slog.LevelError}, pos[0], res.Ambiguous)
 	}

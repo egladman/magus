@@ -283,6 +283,7 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 			out.Answer.IndexCause = cause
 		}
 	}
+	noteShardErrors(ctx, root, "magus query")
 
 	stop := traceFromContext(ctx).phase("query.next")
 	nx := newNextGate(root)
@@ -929,6 +930,7 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 			res.Answer.IndexCause = cause
 		}
 	}
+	noteShardErrors(ctx, root, "magus explain")
 	if !res.Found {
 		slog.ErrorContext(ctx, fmt.Sprintf("no node matches %q", pos[0]), attr.Notice("magus explain"))
 		missLines := noticeLines{ctx: ctx, level: slog.LevelError}
