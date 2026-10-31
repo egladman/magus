@@ -1,0 +1,72 @@
+# A low-disk tick, end to end, through the binary. The thresholds say this disk
+# is below the critical floor. The cache is sparse, so nothing is really written.
+
+[!unix] skip
+[!exec:truncate] skip
+[!exec:git] skip
+
+env XDG_STATE_HOME=$WORK/state
+env ACMECACHE=$WORK/acmecache
+
+exec git init -q -b main .
+exec git add magusfile.buzz magus.yaml spells/acme/spell.buzz
+exec git -c user.email=a@b -c user.name=a commit -q -m init
+
+# 30 GiB untouched for years and 25 GiB just used, against a 20 GiB budget.
+mkdir acmecache/ab
+exec truncate -s 30G acmecache/ab/old
+exec touch -t 202001010000 acmecache/ab/old
+exec truncate -s 25G acmecache/ab/young
+
+exec magus buzz -e 'import "magus/reclaimdisk" as r; r\reclaimNow();'
+stdout '^magus: disk '
+stdout '^Did: trimmed 30\.0 GiB of the acme spell''s ACMECACHE; 25\.0 GiB left, past its 20480 MiB budget and all newer than the 6h fence\.$'
+! exists acmecache/ab/old
+exists acmecache/ab/young
+
+# The store holds the same line, so the next prompt hook can say it once.
+exists state/magus/disk/samples.jsonl
+grep '"action":"reclaimed"' state/magus/disk/samples.jsonl
+grep 'trimmed 30.0 GiB' state/magus/disk/samples.jsonl
+
+# The prompt hook says that line once, from the store. A stand-in takes the tick
+# it starts, so nothing outlives this script.
+env __MAGUS_BIN=$WORK/stand-in
+chmod 0755 stand-in
+exec touch -t 202001010000 state/magus/disk/samples.jsonl
+stdin event.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-reclaim-disk.buzz -- --agent-name claude-code
+stdout '^Did: trimmed 30\.0 GiB'
+
+exec touch -t 202001010000 state/magus/disk/samples.jsonl
+stdin event.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-reclaim-disk.buzz -- --agent-name claude-code
+! stdout .
+
+-- stand-in --
+#!/bin/sh
+exit 0
+-- event.json --
+{"cwd": "."}
+-- magus.yaml --
+disk:
+  min_free_mb: 99999999
+  critical_free_mb: 99999999
+-- magusfile.buzz --
+import "magus";
+import "spells/acme";
+magus\project({ "spells": [acme] });
+export fun fill(ctx: magus\Context, args: [str]) > void { acme.fill(ctx); }
+-- spells/acme/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "acme"; }
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [SandboxAllow{env = "ACMECACHE", base = "userCache", path = "acme", mode = SandboxAccess.rwx}],
+        caches = [SandboxCache{env = "ACMECACHE", trimMb = 20480}],
+    };
+}
+fun fill(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "echo 'write x: no space left on device' >&2; exit 1"]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"fill": fill}; }

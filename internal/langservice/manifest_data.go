@@ -98,7 +98,7 @@ var modules = []Module{
 	},
 	{
 		Name: "diskwatch",
-		Doc:  "The reclaim hook's cheap half: sample free disk space into a per-user store at most once per disk.sample_every, and decide from the last two samples whether to start a reclaim chunk.",
+		Doc:  "The cheap half of disk reclaiming: the per-user store of free-space samples, what a sample asks for, the fence a cache trim keeps, and the lines a person reads.",
 		Methods: []Method{
 			{Name: "storePath", Doc: "storePath is the store's path, creating its directory.", Sig: "diskwatch\\storePath() -> str"},
 			{Name: "thresholds", Doc: "thresholds reads the disk section of `magus config view -o json`. A key the config does", Sig: "diskwatch\\thresholds(config) -> Thresholds"},
@@ -436,7 +436,7 @@ var modules = []Module{
 	},
 	{
 		Name: "reclaimdisk",
-		Doc:  "Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; trimCache trims a cache directory to a budget by file age, never emptying it.",
+		Doc:  "Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; tick is the one decider every disk trigger calls, and trims only what a spell gives a budget.",
 		Methods: []Method{
 			{Name: "parseWorktrees", Doc: "parseWorktrees reads `git worktree list --porcelain`: one stanza per worktree, the main", Sig: "reclaimdisk\\parseWorktrees(porcelain) -> [Worktree]"},
 			{Name: "displayPath", Doc: "displayPath is path relative to the main worktree when it sits under it.", Sig: "reclaimdisk\\displayPath(path, main) -> str"},

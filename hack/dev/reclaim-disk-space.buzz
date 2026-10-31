@@ -32,7 +32,7 @@ final SUMMARY = "free disk by removing finished worktrees and trimming spell cac
 final SERVES = ["rule:worktree-remove -- --caches", "rule:cache-clear -- --caches --apply", "event:disk-low"];
 
 final USAGE = "usage: magus buzz hack/dev/reclaim-disk-space.buzz -- [--keep-recent <duration>] [--base <rev>] [--caches] [--keep-within <hours>] [-o json] [--apply]";
-final HELP = "cost: a git status and rev-list per worktree, one lsof and a du per removable worktree; --apply removes worktrees and merged agent branches, --caches also trims each cache to the budget its spell declares\n{USAGE}";
+final HELP = "the prompt hook, `magus job fork` and `magus run` start one bounded reclaim on their own; run this to see what it left for you\ncost: a git status and rev-list per worktree, one lsof and a du per removable worktree; --apply removes worktrees and merged agent branches, --caches also trims each cache to the budget its spell declares\n{USAGE}";
 
 fun encode(s: reclaim\Survey, items: [reclaim\Item], applied: bool, keepRecent: str, trimmed: str) > str !> any {
     final rows = items.map(fun (i: int, it: reclaim\Item) > {str: any} => {

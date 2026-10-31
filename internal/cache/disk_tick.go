@@ -24,6 +24,9 @@ const ReclaimNowSnippet = `import "magus/reclaimdisk" as r; r\reclaimNow();`
 // package, so the print seat cannot read it; doctor's test holds them equal.
 const DiskFullFloorBytes int64 = 10240 << 20
 
+// diskFullFloor is a var so a test can stand in for a really low disk.
+var diskFullFloor = DiskFullFloorBytes
+
 // diskTickFloor is diskwatch's FLOOR_MS.
 const diskTickFloor = time.Minute
 

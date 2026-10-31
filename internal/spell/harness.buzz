@@ -79,11 +79,10 @@ export fun buzzCheckHook(host: str) > HookCommand {
     };
 }
 
-// reclaimDiskHook is the rate-limited disk hook: one stat on most turns, and past
-// disk.sample_every a free-space sample and at most one detached reclaim chunk, so it never
-// waits on the reclaim itself. A spell puts it on the event its host raises once a turn and
-// passes say "stderr" when that event reads stdout as a verdict; the glue prints one line
-// only when it started a chunk or space is critical.
+// reclaimDiskHook is the rate-limited disk hook: one stat on most turns, and
+// past the floor one detached tick. A spell puts it on the event its host
+// raises once a turn. say is "stderr" when that event reads stdout as a
+// verdict.
 export fun reclaimDiskHook(host: str, event: str, say: str) > HookCommand {
     final flags = mut ["--agent-name", host];
     if (say != "stdout") {

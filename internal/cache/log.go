@@ -1150,7 +1150,7 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		}
 	}
 	h.printWhy(colorize, causeIndent, f.why)
-	if full := DiskFullCause(tailOf(logPath, failureLogTail), ".", DiskFullFloorBytes); full != "" {
+	if full := DiskFullCause(tailOf(logPath, failureLogTail), ".", diskFullFloor); full != "" {
 		h.printf("  %s\n", full)
 	}
 	if ref != "" {

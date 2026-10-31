@@ -1,7 +1,9 @@
 package cache
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +51,28 @@ func (s *DiskFullSuite) TestAnUnreadableDiskIsNotBelow() {
 func (s *DiskFullSuite) TestZeroFloorIsOff() {
 	_, below := DiskBelow(s.dir, 0)
 	s.False(below)
+}
+
+func (s *DiskFullSuite) printedFailure(logText string, floor int64) string {
+	saved := diskFullFloor
+	diskFullFloor = floor
+	s.T().Cleanup(func() { diskFullFloor = saved })
+	p := filepath.Join(s.dir, "run.log")
+	s.Require().NoError(os.WriteFile(p, []byte(logText), 0o600))
+	var out bytes.Buffer
+	h := NewPrettyHandler(&out, slog.LevelInfo)
+	h.printFailure(false, failureReport{label: "workspace", project: ".", target: "build", cause: "go exited 1", logPath: p})
+	return out.String()
+}
+
+func (s *DiskFullSuite) TestAFailedRunOnALowDiskNamesTheCommand() {
+	got := s.printedFailure("write x: no space left on device\n", everyDisk)
+	s.Contains(got, "[MGS3052] the disk is full")
+	s.Contains(got, types.ReclaimDiskCommand)
+}
+
+func (s *DiskFullSuite) TestAFailedRunOnAHealthyDiskStaysQuiet() {
+	s.NotContains(s.printedFailure("no space left on device\n", 1), "MGS3052")
 }
 
 func (s *DiskFullSuite) TestTailReadsOnlyTheEnd() {

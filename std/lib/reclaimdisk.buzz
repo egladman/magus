@@ -671,6 +671,7 @@ export fun keptLine(items: [Item]) > str {
     if (t.keptBy["dirty"] -> n) { parts.append("{n} uncommitted"); }
     if (t.keptBy["unique"] -> n) { parts.append("{n} unpushed"); }
     if (t.keptBy["locked"] -> n) { parts.append("{n} locked"); }
+    if (parts.len() == 0) { return plural(t.kept, word: "worktree"); }
     return "{plural(t.kept, word: "worktree")} ({parts.join(", ")})";
 }
 
@@ -724,7 +725,8 @@ fun runTick(cwd: str, deadline: double, force: bool) > TickReport !> any {
 
     final did = mut [<str>];
     var freed = false;
-    final fence = diskwatch\fenceMs(cur, t: t);
+    final asked = diskwatch\fenceMs(cur, t: t);
+    final fence = if (force and asked == 0.0) diskwatch\LOW_FENCE_MS else asked;
     if (fence > 0.0) {
         final cacheDeadline = if (deadline - now > TRIM_MS * 1.25) now + TRIM_MS else now + (deadline - now) * 0.8;
         foreach (trim in trimDeclared(fence, deadline: cacheDeadline)) {
@@ -888,6 +890,7 @@ test "what a person reads counts kept worktrees by reason" {
         assert\isTrue(line.indexOf(word) != null, message: word);
     }
     assert\equal(keptLine([<Item>]), want: "", message: "none kept");
+    assert\equal(keptLine([Item{ kind = "worktree", name = "r", class = "keep", reasons = ["x"], keys = ["recent"] }]), want: "1 worktree", message: "no reason a person acts on");
 }
 
 test "the headline says what ran" {
