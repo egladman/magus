@@ -183,7 +183,7 @@ func TestCheckDefinitions(t *testing.T) {
 		site("a.go", 3, 5), site("b.go", 3, 5), site("a.go", 7, 0),
 		site("a.go", 3, 40), site("gone.go", 1, 0), site("other.go", 0, 0),
 	}
-	checkDefinitions(w.Root(), "F", sites, indexedAt, true)
+	checkDefinitions(w.Root(), "F", sites, indexedAt, sourceWindow{Show: true})
 
 	fn := "func F() {\n\treturn\n}"
 	assert.Equal(t, []types.KnowledgeDefinitionSite{
@@ -202,8 +202,62 @@ func TestCheckDefinitionsIncludesTheDocComment(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Write("a.go", "package a\n\n// unrelated\n\n// F splits a letter from a digit.\n// TestF pins it.\nfunc F() {}\n")
 	sites := []types.KnowledgeDefinitionSite{{File: "a.go", StartLine: 7, Status: types.DefinitionUnverified}}
-	checkDefinitions(w.Root(), "F", sites, nil, true)
+	checkDefinitions(w.Root(), "F", sites, nil, sourceWindow{Show: true})
 	assert.Equal(t, "// F splits a letter from a digit.\n// TestF pins it.\nfunc F() {}", sites[0].Source)
+}
+
+type refsSourceSuite struct {
+	suite.Suite
+	w     *testkit.Workspace
+	files []types.SymbolOccurrenceFile
+}
+
+func TestRefsSourceSuite(t *testing.T) { suite.Run(t, new(refsSourceSuite)) }
+
+func (s *refsSourceSuite) SetupTest() {
+	s.w = testkit.NewWorkspace(s.T())
+	s.w.Write("a.go", "one\ntwo\nthree\nfour\nfive\n")
+	s.files = []types.SymbolOccurrenceFile{{File: "a.go", Occurrences: []types.SymbolOccurrence{{Line: 3, EndLine: 3}}}}
+}
+
+func (s *refsSourceSuite) TestAnOccurrencePrintsItsOwnLine() {
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true})
+	s.Equal("three", s.files[0].Occurrences[0].Source)
+}
+
+func (s *refsSourceSuite) TestBeforeAndAfterWidenTheBlock() {
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, Before: 1, After: 1})
+	s.Equal("two\nthree\nfour", s.files[0].Occurrences[0].Source)
+}
+
+func (s *refsSourceSuite) TestTheWindowClampsToTheFile() {
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, Before: 9, After: 9})
+	s.Equal("one\ntwo\nthree\nfour\nfive", s.files[0].Occurrences[0].Source)
+}
+
+func (s *refsSourceSuite) TestAnUnreadableFileKeepsNoSource() {
+	s.files[0].File = "gone.go"
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true})
+	s.Empty(s.files[0].Occurrences[0].Source)
+}
+
+func (s *refsSourceSuite) TestADefinitionWidensPastItsDocComment() {
+	s.w.Write("b.go", "package a\n\n// F is f.\nfunc F() {}\n\nvar x\n")
+	sites := []types.KnowledgeDefinitionSite{{File: "b.go", StartLine: 4, Status: types.DefinitionUnverified}}
+	checkDefinitions(s.w.Root(), "F", sites, nil, sourceWindow{Show: true, Before: 1, After: 1})
+	s.Equal("\n// F is f.\nfunc F() {}\n", sites[0].Source)
+}
+
+func (s *refsSourceSuite) TestOccurrencesPrintTheirBlockUnderTheirSite() {
+	refs := types.KnowledgeRefsOutput{Symbol: "symbol:a F().", Label: "F", Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound}}
+	s.files[0].Occurrences[0].Status = types.SymbolOccurrenceVerified
+	var err error
+	got := captureStdout(s.T(), func() {
+		err = emitOccurrences(context.Background(), s.w.Root(), output.Options{Format: outputText}, refs,
+			&magus.SymbolOccurrenceRead{Files: s.files, Names: []string{"F"}}, sourceWindow{Show: true, After: 1})
+	})
+	s.Require().NoError(err)
+	s.Contains(got, "    3:0-3:0  verified\n      three\n      four\n")
 }
 
 func TestEmitDefinitionsText(t *testing.T) {

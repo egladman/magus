@@ -66,6 +66,13 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 	if rf.Rename != "" && (rf.Text || rf.Occurrences || rf.Definition || rf.Source) {
 		return exit.Usagef("magus refs: --rename takes none of --text, --occurrences, --definition, --source")
 	}
+	if rf.Before < 0 || rf.After < 0 {
+		return exit.Usagef("magus refs: --before and --after take 0 or more lines, got %d and %d", rf.Before, rf.After)
+	}
+	if (rf.Before > 0 || rf.After > 0) && (!rf.Source || rf.Text) {
+		return exit.Usagef("magus refs: --before and --after widen --source, and --text prints no source")
+	}
+	source := sourceWindow{Show: rf.Source, Before: rf.Before, After: rf.After}
 
 	if rf.Text {
 		// Computed here, once, and passed down: the same shape the symbol-miss
@@ -169,13 +176,13 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 	out.Answer = withIndexCause(ctx, root, out.Answer)
 
 	if rf.Occurrences {
-		return emitOccurrences(ctx, root, opts, out, res.Occurrences)
+		return emitOccurrences(ctx, root, opts, out, res.Occurrences, source)
 	}
 	if rf.Definition || rf.Source {
 		defs, _ := g.Definitions(out.Symbol)
 		defs.Answer = knowledge.Answer(pos[0], len(defs.Definitions) > 0, res.coverage)
 		defs.Answer.IndexCause = out.Answer.IndexCause
-		checkDefinitions(resolveRootOrEmpty(root), defs.Label, defs.Definitions, symbolIndexTimes(ctx, root), rf.Source)
+		checkDefinitions(resolveRootOrEmpty(root), defs.Label, defs.Definitions, symbolIndexTimes(ctx, root), source)
 		return emitDefinitions(ctx, os.Stdout, opts, defs)
 	}
 
@@ -580,7 +587,7 @@ func refsTextCommand(ctx context.Context, root, pattern string, scopeArgs []stri
 // It reports; it does not edit. The output is what a caller needs to make the edit itself,
 // which is the same division every other magus verb keeps between naming what a change
 // touches and touching it.
-func emitOccurrences(ctx context.Context, root string, opts output.Options, refs types.KnowledgeRefsOutput, occurrences *magus.SymbolOccurrenceRead) error {
+func emitOccurrences(ctx context.Context, root string, opts output.Options, refs types.KnowledgeRefsOutput, occurrences *magus.SymbolOccurrenceRead, source sourceWindow) error {
 	if occurrences == nil {
 		// The probe itself failed, so magus cannot say where the symbol appears. Reporting
 		// an empty list here would read as "nowhere", which is the one answer it has no
@@ -590,6 +597,9 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 	}
 	read := *occurrences
 	files := read.Files
+	if source.Show {
+		fillOccurrenceSources(resolveRootOrEmpty(root), files, source)
+	}
 
 	out := types.KnowledgeOccurrencesOutput{
 		Definition:    types.KnowledgeOccurrencesDefinition,
@@ -704,6 +714,12 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 				fmt.Printf("  (found %q, want one of %q)", occ.Text, out.Names)
 			}
 			fmt.Println()
+			for line := range strings.Lines(occ.Source) {
+				fmt.Printf("      %s", line)
+			}
+			if occ.Source != "" {
+				fmt.Println()
+			}
 		}
 	}
 	if out.VerifiedCount < out.OccurrenceCount {
@@ -760,7 +776,7 @@ func symbolIndexTimes(ctx context.Context, root string) indexedAtFunc {
 // its start line (else changed) and the file predating its index (else unverified, since
 // an edit inside the body moves the end). A site with no end line is checked and printed
 // over its declaration line alone.
-func checkDefinitions(root, name string, sites []types.KnowledgeDefinitionSite, indexedAt indexedAtFunc, withSource bool) {
+func checkDefinitions(root, name string, sites []types.KnowledgeDefinitionSite, indexedAt indexedAtFunc, source sourceWindow) {
 	type sourceFile struct {
 		lines   [][]byte
 		modTime time.Time
@@ -796,8 +812,45 @@ func checkDefinitions(root, name string, sites []types.KnowledgeDefinitionSite, 
 				site.Status = types.DefinitionVerified
 			}
 		}
-		if withSource {
-			site.Source = string(bytes.Join(file.lines[docStart(file.lines, site.StartLine-1):end], []byte("\n")))
+		if source.Show {
+			site.Source = source.text(file.lines, docStart(file.lines, site.StartLine-1), end)
+		}
+	}
+}
+
+// sourceWindow is what --source prints around a range:
+// nothing unless Show, then Before lines above and After below.
+type sourceWindow struct {
+	Show          bool
+	Before, After int
+}
+
+// text joins lines[first:end] and the window around them, clamped to the file.
+// The empty element after a final newline is not a line to print.
+func (w sourceWindow) text(lines [][]byte, first, end int) string {
+	last := len(lines)
+	if last > 0 && len(lines[last-1]) == 0 {
+		last--
+	}
+	first, end = max(first-w.Before, 0), min(end+w.After, last)
+	if first >= end {
+		return ""
+	}
+	return string(bytes.Join(lines[first:end], []byte("\n")))
+}
+
+// fillOccurrenceSources sets each occurrence's Source from the file under root.
+// An unreadable file keeps an empty Source: Status says the site failed.
+func fillOccurrenceSources(root string, files []types.SymbolOccurrenceFile, source sourceWindow) {
+	for i := range files {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(files[i].File)))
+		if err != nil {
+			continue
+		}
+		lines := types.SplitSourceLines(data)
+		for j := range files[i].Occurrences {
+			occ := &files[i].Occurrences[j]
+			occ.Source = source.text(lines, occ.Line-1, max(occ.Line, occ.EndLine))
 		}
 	}
 }

@@ -1569,7 +1569,9 @@ against the file on disk: verified when the file predates its index,
 changed (exit 1) when the symbol's name has left the start line, and
 unverified when the name is there but the file was edited since. An index
 that recorded no end line says so instead of guessing one. --source adds
-the lines themselves.
+the lines themselves; with --occurrences it prints each site's lines
+instead. --before and --after widen what --source prints, clamped to the
+file.
 
 --text switches to that other question on purpose: a literal substring
 search with no symbol index and no graph, printed as path:line:text like
@@ -1592,7 +1594,9 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Re-ingest the SCIP index before answering"},
 		{Name: "occurrences", Kind: cmdline.Bool, Default: false, Doc: "Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in."},
 		{Name: "definition", Kind: cmdline.Bool, Default: false, Doc: "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed"},
-		{Name: "source", Kind: cmdline.Bool, Default: false, Doc: "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n"},
+		{Name: "source", Kind: cmdline.Bool, Default: false, Doc: "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n. With --occurrences, print each site's lines"},
+		{Name: "before", Kind: cmdline.Int, Doc: "With --source, also print this many lines above each range, clamped to the file (grep -B)"},
+		{Name: "after", Kind: cmdline.Int, Doc: "With --source, also print this many lines below each range, clamped to the file (grep -A)"},
 		{Name: "text", Kind: cmdline.Bool, Default: false, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace"},
 		// Custom, not Bool: bound by refsCommand itself alongside flaggen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
@@ -1607,6 +1611,7 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Comment: "As JSON", Command: "magus refs Open -o json"},
 		{Comment: "Where a symbol's body starts and ends", Command: "magus refs Open --definition"},
 		{Comment: "A symbol's body, by name", Command: "magus refs Open --source"},
+		{Comment: "Every site's code, with two lines above and below", Command: "magus refs Open --occurrences --source --before 2 --after 2"},
 		{Comment: "Raw text search, no index needed", Command: "magus refs TODO --text"},
 		{Comment: "Preview a rename", Command: "magus refs parseQuery --rename parseTerms --dry-run"},
 		{Comment: "Rename a symbol at every verified site", Command: "magus refs parseQuery --rename parseTerms"},

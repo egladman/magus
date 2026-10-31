@@ -1467,6 +1467,8 @@ type SymbolOccurrence struct {
 	// reader whether the index is stale or the encoding assumption was wrong.
 	Text   string                 `json:"text,omitempty" yaml:"text,omitempty"`
 	Status SymbolOccurrenceStatus `json:"status"         yaml:"status"`
+	// Source is the site's lines and context, set only under --source.
+	Source string `json:"source,omitempty" yaml:"source,omitempty"`
 }
 
 // SymbolOccurrenceFile groups one file's occurrences. Occurrences are sorted by position,

@@ -5206,6 +5206,7 @@ github.com/egladman/magus/types.SymbolOccurrence.Definition field bool "json:\"d
 github.com/egladman/magus/types.SymbolOccurrence.EndColumn field int "json:\"end_column\" yaml:\"end_column\""
 github.com/egladman/magus/types.SymbolOccurrence.EndLine field int "json:\"end_line\"   yaml:\"end_line\""
 github.com/egladman/magus/types.SymbolOccurrence.Line field int "json:\"line\"       yaml:\"line\""
+github.com/egladman/magus/types.SymbolOccurrence.Source field string "json:\"source,omitempty\" yaml:\"source,omitempty\""
 github.com/egladman/magus/types.SymbolOccurrence.Status field SymbolOccurrenceStatus "json:\"status\"         yaml:\"status\""
 github.com/egladman/magus/types.SymbolOccurrence.Text field string "json:\"text,omitempty\" yaml:\"text,omitempty\""
 github.com/egladman/magus/types.SymbolOccurrenceFile type struct

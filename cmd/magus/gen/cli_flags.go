@@ -533,6 +533,10 @@ const (
 	FlagQueueValidateVCS = "vcs"
 	// queue validate: --verdicts
 	FlagQueueValidateVerdicts = "verdicts"
+	// refs: --after
+	FlagRefsAfter = "after"
+	// refs: --before
+	FlagRefsBefore = "before"
 	// refs: --definition
 	FlagRefsDefinition = "definition"
 	// refs: --generated
@@ -1097,6 +1101,8 @@ type RefsFlags struct {
 	Occurrences bool   // --[no-]occurrences
 	Definition  bool   // --[no-]definition
 	Source      bool   // --[no-]source
+	Before      int    // --before
+	After       int    // --after
 	Text        bool   // --[no-]text
 	Generated   bool   // --[no-]generated
 	Limit       int    // --limit
@@ -1112,8 +1118,10 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	cmdline.NegatedBoolVar(fs, &f.Occurrences, FlagRefsOccurrences)
 	fs.BoolVar(&f.Definition, FlagRefsDefinition, false, "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed")
 	cmdline.NegatedBoolVar(fs, &f.Definition, FlagRefsDefinition)
-	fs.BoolVar(&f.Source, FlagRefsSource, false, "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n")
+	fs.BoolVar(&f.Source, FlagRefsSource, false, "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n. With --occurrences, print each site's lines")
 	cmdline.NegatedBoolVar(fs, &f.Source, FlagRefsSource)
+	fs.IntVar(&f.Before, FlagRefsBefore, 0, "With --source, also print this many lines above each range, clamped to the file (grep -B)")
+	fs.IntVar(&f.After, FlagRefsAfter, 0, "With --source, also print this many lines below each range, clamped to the file (grep -A)")
 	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace")
 	cmdline.NegatedBoolVar(fs, &f.Text, FlagRefsText)
 	fs.BoolVar(&f.Generated, FlagRefsGenerated, true, "In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely")

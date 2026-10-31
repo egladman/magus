@@ -252,6 +252,8 @@ flag query/refresh
 flag query/secrets
 flag query/stdin
 flag query/url
+flag refs/after
+flag refs/before
 flag refs/definition
 flag refs/generated
 flag refs/limit
