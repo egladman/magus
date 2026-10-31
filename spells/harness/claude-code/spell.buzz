@@ -354,12 +354,23 @@ export fun mgs_getMcp() > McpServer {
     };
 }
 
-// claude_agent renders one shipped agent as a Claude Code subagent file. A read-only agent
-// is limited to the tools that cannot change the workspace. An agent carrying a model runs
-// on that alias; one without leaves the host default.
+// A subagent finds its other tools and skills through these. An allowlist
+// that omits them hides them, so a render never writes one.
+final DISCOVERY_TOOLS = ["ToolSearch", "Skill"];
+
+fun claude_write_tools() > [str] {
+    final names = mut [<str>];
+    foreach (row in claude_tools()) {
+        if (row.capability == ToolCapability.writes) { names.append(row.name); }
+    }
+    return names;
+}
+
+// claude_agent renders one shipped agent as a Claude Code subagent file.
+// A read-only agent denies the write tools and inherits the rest.
 fun claude_agent(agent: ShippedAgent) > AgentFile {
     final lines = mut ["---", "name: " + yamlQuote(agent.name), "description: " + yamlQuote(agent.description)];
-    if (agent.readOnly) { lines.append("tools: Read, Grep, Glob, Bash"); }
+    if (agent.readOnly) { lines.append("disallowedTools: " + claude_write_tools().join(", ")); }
     if (agent.model != "") { lines.append("model: {agent.model}"); }
     lines.append("---");
     lines.append("");
@@ -411,19 +422,32 @@ test "mgs_renderPrompts writes no file because the hook prompts" {
     assert\equal(mgs_renderPrompts({"agent-bench-run": "launches paid sessions"}).len(), 0, "permissionDecision ask is the prompt");
 }
 
-test "mgs_renderAgents renders a read-only agent with limited tools and the model it carries" {
+test "mgs_renderAgents renders a read-only agent that denies write tools and the model it carries" {
     final file = claude_agent(claude_scout_fixture(true, model: "cheap-alias"));
     assert\equal(file.path, ".claude/agents/magus-scout.md", "Claude Code reads .claude/agents");
     assert\equal(
         file.content,
-        "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ntools: Read, Grep, Glob, Bash\nmodel: cheap-alias\n---\n\nFirst line.\n\nSecond line.\n",
+        "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ndisallowedTools: Write, Edit, MultiEdit, NotebookEdit, mcp__ccd_host__sync_with_base_branch, mcp__ccd_host__clean_up_worktrees, mcp__ccd_host__discard_kept_worktree\nmodel: cheap-alias\n---\n\nFirst line.\n\nSecond line.\n",
         "frontmatter then the instructions",
     );
 }
 
+test "mgs_renderAgents never hides a discovery tool from a read-only agent" {
+    final content = claude_agent(claude_scout_fixture(true, model: "")).content;
+    assert\isTrue(content.indexOf("\ntools:") == null, "an allowlist would drop every tool it omits");
+    foreach (name in DISCOVERY_TOOLS) {
+        assert\isTrue(content.indexOf(name) == null, "{name} stays inherited");
+        var listed = false;
+        foreach (row in claude_tools()) {
+            if (row.name == name) { listed = true; }
+        }
+        assert\isTrue(listed, "{name} is a row the guard knows");
+    }
+}
+
 test "mgs_renderAgents leaves tools and model unset for a writable agent with no model" {
     final content = claude_agent(claude_scout_fixture(false, model: "")).content;
-    assert\isTrue(content.indexOf("tools:") == null, "no tool restriction");
+    assert\isTrue(content.indexOf("disallowedTools:") == null, "no tool restriction");
     assert\isTrue(content.indexOf("model:") == null, "the host default model applies");
 }
 

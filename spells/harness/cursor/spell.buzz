@@ -185,6 +185,9 @@ export fun mgs_getLimits() > Limits {
     return Limits{hookTimeoutMs = HOOK_TIMEOUT_S * 1000, observesSkillLoads = true, payloadFields = PAYLOAD_FIELDS, channels = ["capture", "notice"]};
 }
 
+// Cursor documents no discovery tool, and a subagent inherits all of them.
+final DISCOVERY_TOOLS = [<str>];
+
 // Every Cursor tool the guard should know whose input's shape does not say what it does; a
 // tool missing here is one the guard cannot judge (unjudged-tool).
 export fun mgs_listTools() > HarnessTools {
@@ -241,6 +244,14 @@ fun cursor_scout_fixture(readOnly: bool) > ShippedAgent {
         instructions = "First line.\n\nSecond line.\n",
         readOnly = readOnly,
     };
+}
+
+test "mgs_renderAgents restricts no tool of a read-only agent, so discovery stays reachable" {
+    final content = cursor_agent(cursor_scout_fixture(true)).content;
+    assert\isTrue(content.indexOf("\ntools:") == null, "an allowlist would drop what it omits");
+    foreach (name in DISCOVERY_TOOLS) {
+        assert\isTrue(content.indexOf(name) == null, "{name} is not removed");
+    }
 }
 
 test "mgs_renderAgents renders a read-only agent that inherits the model" {

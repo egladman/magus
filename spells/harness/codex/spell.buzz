@@ -192,15 +192,18 @@ export fun mgs_getSkills() > HarnessSkills {
     return HarnessSkills{paths = [".agents/skills"], form = SkillForm.both};
 }
 
+// No official page names a Codex discovery tool, so no render may restrict one.
+final DISCOVERY_TOOLS = ["tool_search", "search_tool_bm25"];
+
 // Every Codex tool the guard should know whose input's shape does not say what it does. A
 // shell call carries its command and is judged by it; a tool missing here is one the guard
 // cannot judge (unjudged-tool).
 export fun mgs_listTools() > HarnessTools {
     final rows = mut [HarnessTool{name = "apply_patch", capability = ToolCapability.writes}];
-    foreach (name in ["spawn_agent", "collaborationspawn_agent"]) {
+    foreach (name in ["spawn_agent", "collaborationspawn_agent", "send_input", "resume_agent"]) {
         rows.append(HarnessTool{name = name, capability = ToolCapability.spawns});
     }
-    foreach (name in ["close_agent", "update_plan", "view_image", "web_search"]) {
+    foreach (name in ["wait_agent", "close_agent", "update_plan", "view_image", "web_search"]) {
         rows.append(HarnessTool{name = name, capability = ToolCapability.inert});
     }
     return HarnessTools{dir = TOOLS_DIR, rows = rows};
@@ -290,12 +293,11 @@ export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] {
     return [Prompt{path = codex_rules_path(), content = codex_rules(humanOnly)}];
 }
 
-// codex_agent renders one shipped agent as a Codex custom agent file. It sets no model, so
-// the agent runs on the person's agents.default_subagent_model. A read-only agent runs in
-// Codex's read-only sandbox, which the instructions alone could not enforce.
+// codex_agent renders one shipped agent as a Codex custom agent file.
+// It sets no model, so the agent runs on agents.default_subagent_model.
+// Codex ignores a sandbox here, so read-only is the lease's to enforce.
 fun codex_agent(agent: ShippedAgent) > AgentFile {
     final lines = mut ["name = " + tomlBasic(agent.name), "description = " + tomlBasic(agent.description)];
-    if (agent.readOnly) { lines.append("sandbox_mode = \"read-only\""); }
     lines.append("developer_instructions = " + tomlMultiline(agent.instructions.trim() + "\n"));
     return AgentFile{
         path = ".codex/agents/{agent.name}.toml",
@@ -336,20 +338,29 @@ fun codex_commands(event: str) > [str] {
     return commands;
 }
 
-test "mgs_renderAgents renders name, description, sandbox and instructions with no model" {
+test "mgs_renderAgents renders name, description and instructions with no model" {
     final file = codex_agent(codex_scout_fixture("First line.\n\nUse `a\\b` and \"c\".\n"));
     assert\equal(file.path, ".codex/agents/magus-scout.toml", "Codex reads .codex/agents");
     assert\equal(
         file.content,
-        "name = \"magus-scout\"\ndescription = \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nsandbox_mode = \"read-only\"\ndeveloper_instructions = '''\nFirst line.\n\nUse `a\\b` and \"c\".\n'''\n",
+        "name = \"magus-scout\"\ndescription = \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ndeveloper_instructions = '''\nFirst line.\n\nUse `a\\b` and \"c\".\n'''\n",
         "all three required fields, instructions as a literal",
     );
     assert\isTrue(file.content.indexOf("model") == null, "default_subagent_model applies");
 }
 
-test "mgs_renderAgents leaves the sandbox alone for a writable agent" {
+test "mgs_renderAgents writes no sandbox the host would ignore, read-only or not" {
     final writable = ShippedAgent{name = "magus-worker", description = "Edits files.", instructions = "First line.\n"};
     assert\isTrue(codex_agent(writable).content.indexOf("sandbox_mode") == null, "the person's default sandbox applies");
+    assert\isTrue(codex_agent(codex_scout_fixture("x\n")).content.indexOf("sandbox_mode") == null, "an agent file cannot override the parent");
+}
+
+test "mgs_renderAgents restricts no tool, so discovery stays reachable" {
+    final content = codex_agent(codex_scout_fixture("x\n")).content;
+    foreach (name in DISCOVERY_TOOLS) {
+        assert\isTrue(content.indexOf(name) == null, "{name} is not removed");
+    }
+    assert\isTrue(content.indexOf("features.") == null, "no feature switched off");
 }
 
 test "mgs_renderAgents escapes instructions that carry the literal delimiter" {

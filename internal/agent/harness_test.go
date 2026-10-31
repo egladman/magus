@@ -1711,10 +1711,10 @@ func TestHarnessScoutIsReadOnlyByConfigWhereTheHostHasAKnob(t *testing.T) {
 		require.NoError(t, err, rel)
 		return string(body)
 	}
-	assert.Contains(t, read(".codex/agents/magus-scout.toml"), "\nsandbox_mode = \"read-only\"\n")
+	assert.NotContains(t, read(".codex/agents/magus-scout.toml"), "sandbox_mode", "Codex ignores a sandbox in an agent file")
 	assert.Contains(t, read(".cursor/agents/magus-scout.md"), "\nreadonly: true\n")
 	assert.Contains(t, read(".opencode/agents/magus-scout.md"), "\npermission:\n  edit: deny\n")
-	assert.Contains(t, read(".claude/agents/magus-scout.md"), "\ntools: Read, Grep, Glob, Bash\n")
+	assert.Contains(t, read(".claude/agents/magus-scout.md"), "\ndisallowedTools: Write, Edit, MultiEdit, NotebookEdit, mcp__ccd_host__sync_with_base_branch, mcp__ccd_host__clean_up_worktrees, mcp__ccd_host__discard_kept_worktree\n")
 	assert.NotContains(t, read(".opencode/agents/magus-scout.md"), "bash:",
 		"the scout runs read-only magus commands, so bash stays at the session's setting")
 }

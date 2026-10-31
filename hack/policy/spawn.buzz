@@ -40,6 +40,9 @@ export object Spawn {
     // ownBuild: the spawned job owns its checkout and its write paths cover a build input of
     // ./cmd/magus there, so its worker builds ./magus (see builds\OwnBuild).
     ownBuild: bool = false,
+    // agentType is the host's subagent type. No rule reads it: the type is the
+    // orchestrator's choice, and the host enforces the tools it carries.
+    agentType: str = "",
 }
 
 // Lineage is a `<parent>/<role> <job>` title taken apart, or null for any other form.
@@ -303,6 +306,20 @@ test "a thinking role, an isolated worker and a continue pass" {
     std\assert(judged(request("v050-prep/review naming-advisory", isolated: false), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a review");
     std\assert(judged(request("orchestrator/feat guard-command", isolated: true), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "isolated");
     std\assert(judged(Spawn{ kind = magus\SpawnKind.continuation, title = "", isolated = false }, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a continue");
+}
+
+test "a spawn differing only in agent type gets the same verdict" {
+    final rows = [helpers\JobRow{ id = "guard-command", state = magus\JobState.running }];
+    foreach (title in ["orchestrator/review guard-command", "orchestrator/feat guard-command", "orchestrator/review nothing-here"]) {
+        foreach (isolated in [true, false]) {
+            final plain = judged(Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = isolated }, rows: rows, unreadable: "");
+            foreach (agentType in ["general-purpose", "Explore", "magus-scout", "a-type-nobody-ships"]) {
+                final typed = judged(Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = isolated, agentType = agentType }, rows: rows, unreadable: "");
+                std\assert(typed.decision == plain.decision, message: "{title} {isolated} {agentType}");
+                std\assert(typed.reason == plain.reason, message: "reason for {title} {agentType}");
+            }
+        }
+    }
 }
 
 fun briefed(prompt: str) > Spawn {

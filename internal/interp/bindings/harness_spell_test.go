@@ -67,11 +67,11 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 	}{
 		{"claude-code", types.AgentFile{
 			Path:    ".claude/agents/magus-scout.md",
-			Content: fmt.Sprintf("---\nname: \"magus-scout\"\ndescription: %s\ntools: Read, Grep, Glob, Bash\n---\n\n%s", quoted, instructions),
+			Content: fmt.Sprintf("---\nname: \"magus-scout\"\ndescription: %s\ndisallowedTools: Write, Edit, MultiEdit, NotebookEdit, mcp__ccd_host__sync_with_base_branch, mcp__ccd_host__clean_up_worktrees, mcp__ccd_host__discard_kept_worktree\n---\n\n%s", quoted, instructions),
 		}},
 		{"codex", types.AgentFile{
 			Path:    ".codex/agents/magus-scout.toml",
-			Content: fmt.Sprintf("name = \"magus-scout\"\ndescription = %s\nsandbox_mode = \"read-only\"\ndeveloper_instructions = '''\n%s'''\n", quoted, instructions),
+			Content: fmt.Sprintf("name = \"magus-scout\"\ndescription = %s\ndeveloper_instructions = '''\n%s'''\n", quoted, instructions),
 			Hint:    "magus-scout runs on agents.default_subagent_model; set it under [agents] in ~/.codex/config.toml to a cheaper model to run lookups for less",
 		}},
 		{"cursor", types.AgentFile{
