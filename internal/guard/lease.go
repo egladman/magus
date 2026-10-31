@@ -2439,8 +2439,7 @@ func denyLeaseCheckout(ctx context.Context, deps Dependencies, actingLease, comm
 		if there := cmp.Or(c.root, envelope); there == "" || samePath(there, root) || scratchWorkspace(there, root) {
 			continue
 		}
-		args := withoutRelocation(c.inv.Args)
-		remedy := strings.Join(slices.Concat([]string{filepath.Join(root, "magus"), "-C", root}, args), " ")
+		remedy := strings.Join(slices.Concat([]string{"cd", root, "&&", "./magus"}, withoutRelocation(c.inv.Args)), " ")
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` runs outside lease %s's checkout %s; run it there: `%s`.", elideCommand(command), me.ID, root, remedy),
 			Why: "A host shell can start a subagent's call in its parent's directory, and a cd does not persist between calls, so a worker's magus run lands in a tree its row does not own and is graded against that tree. " +
@@ -2450,8 +2449,11 @@ func denyLeaseCheckout(ctx context.Context, deps Dependencies, actingLease, comm
 	return denial{}
 }
 
-// reportsOnly reports magus args that run nothing: a plan, a dry run, a graph or help.
+// reportsOnly reports magus args that run nothing, such as a describe or help.
 func reportsOnly(args []string) bool {
+	if kept := withoutRelocation(args); len(kept) > 0 && kept[0] == "describe" {
+		return true
+	}
 	return magusHelpRequest(args) || slices.ContainsFunc(args, func(a string) bool {
 		return slices.Contains([]string{"--plan", "--dry-run", "--graph", "--help", "-h"}, a)
 	})

@@ -374,8 +374,7 @@ func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {
 	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
 	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
 		Args: []string{"cli/registry.go", "docs/notes.md"}}, row.Goals[i].Check, "lint is scoped to the written files, sorted")
-	assert.Contains(t, note, `added the goal "lint"`)
-	assert.Contains(t, note, "magus run lint . --no-default-charms -- cli/registry.go docs/notes.md")
+	assert.Contains(t, note, `added the goal "lint" (2 files)`)
 
 	row, note = resolve(func(u *types.Job) {
 		declare("cli/registry.go")(u)

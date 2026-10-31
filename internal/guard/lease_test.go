@@ -610,6 +610,8 @@ func TestDenyLeaseCheckoutPlacesACallByItsLine(t *testing.T) {
 		"./magus run go-test . --plan",
 		"./magus run go-test . --dry-run",
 		"./magus --help",
+		"./magus describe job feat",
+		fmt.Sprintf("./magus -C %s describe job feat", other),
 		"echo ./magus run go-test .",
 	} {
 		assert.Empty(t, denyLeaseCheckout(ctx, deps, row.ID, command), command)
@@ -624,7 +626,7 @@ func TestDenyLeaseCheckoutPlacesACallByItsLine(t *testing.T) {
 	} {
 		got := denyLeaseCheckout(ctx, deps, row.ID, command)
 		require.True(t, got.refused(), command)
-		assert.Contains(t, got.Say, fmt.Sprintf("`%s -C %s run go-test .`", filepath.Join(held, "magus"), held), command)
+		assert.Contains(t, got.Say, fmt.Sprintf("`cd %s && ./magus run go-test .`", held), command)
 	}
 }
 
