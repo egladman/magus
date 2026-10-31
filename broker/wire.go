@@ -7,7 +7,7 @@ import (
 
 // ProtocolVersion is the wire version the hello exchange carries. A broker refuses a
 // client speaking another one with CodeProtocol.
-const ProtocolVersion = 3
+const ProtocolVersion = 4
 
 // helloMagic guards the first frame on a connection. Every later frame mutates state
 // shared by every magus on the host (a claim against its memory, a release of one), so

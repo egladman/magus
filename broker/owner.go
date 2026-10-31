@@ -50,6 +50,10 @@ type Hold struct {
 	// zero is when the broker records it. A process that started after it leads another
 	// group under a reused id, so the broker never signals it.
 	Held time.Time `json:"held,omitzero"`
+	// Invocation and Ancestors go on a deadline hold's claim. A magus the
+	// command starts then runs under it as under a parent run's.
+	Invocation string   `json:"invocation,omitempty"`
+	Ancestors  []string `json:"ancestors,omitempty"`
 }
 
 // WorkKind is what kind of thing a [Work] is.
@@ -151,6 +155,7 @@ func (s *server) holdLocked(sess *session, h Hold) string {
 	slots := max(h.Slots, 1)
 	id := s.budget.Assert(types.MachineClaim{
 		Target: "job exec", Slots: slots, PID: sess.hello.PID, Dir: sess.hello.Dir, Command: h.Command,
+		Invocation: h.Invocation, Ancestors: h.Ancestors,
 	})
 	hw := &heldWork{hold: h, claim: id, work: Work{
 		Kind: WorkExec, Lease: h.Lease, Spawner: h.Spawner, PID: sess.hello.PID,

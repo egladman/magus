@@ -33,8 +33,10 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
@@ -1763,6 +1765,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "broker records the command with its owner, deadline and slots for `magus status`,")
 			fmt.Fprintln(os.Stderr, "stops the group if this process dies first, and files one attention row for")
 			fmt.Fprintln(os.Stderr, "each command it stops. The exit status is the command's, or 124 at the deadline.")
+			fmt.Fprintln(os.Stderr, "A magus the command starts runs under those slots and never waits on them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Examples:")
 			fmt.Fprintln(os.Stderr, "  magus job exec refactor/pricing   # in the worktree you will edit")
@@ -1837,11 +1840,11 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 		return exit.Usagef("magus job exec: --slots is %d; a running command takes at least 1", slots)
 	}
 	root = resolveRootOrEmpty(root)
-	spawn := trail.SpawnFromEnv()
-	lease := spawn.Lease
+	caller := trail.SpawnFromEnv()
+	lease := caller.Lease
 	if root != "" {
 		if loc, err := jobPlace(root); err == nil {
-			lease, _ = job.ActingLease(loc, spawn.Lease)
+			lease, _ = job.ActingLease(loc, caller.Lease)
 			if lease != "" {
 				if err := refusePaused(job.NewStore(loc), lease); err != nil {
 					return err
@@ -1849,9 +1852,14 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 			}
 		}
 	}
+	ancestors := types.InvocationAncestorsFromContext(ctx)
+	self := types.InvocationAncestorsFromContext(types.AppendInvocationAncestor(ctx, os.Getpid(), journal.NewInvocationID()))
 
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	// A magus under the command runs under the hold's claim. Ancestry
+	// alone: MAGUS_LEVEL would make a gate under the command act nested.
+	cmd.Env = append(os.Environ(), spawn.AncestorsEnvVar+"="+strings.Join(self, ","))
 	broker.InOwnGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
@@ -1860,8 +1868,9 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 	go func() { exited <- cmd.Wait() }()
 
 	h := broker.Hold{
-		Lease: lease, Spawner: spawn.Spawner, PGID: cmd.Process.Pid, Command: strings.Join(command, " "),
+		Lease: lease, Spawner: caller.Spawner, PGID: cmd.Process.Pid, Command: strings.Join(command, " "),
 		Root: root, Slots: slots, Deadline: time.Now().Add(timeout),
+		Invocation: self[len(self)-1], Ancestors: ancestors,
 	}
 	release := holdWithBroker(ctx, h)
 	defer release()

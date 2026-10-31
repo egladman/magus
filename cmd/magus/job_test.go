@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -1436,6 +1438,57 @@ func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 	} {
 		assert.Error(t, jobExec(t.Context(), root, args), name)
 	}
+}
+
+// A fork under `job exec --timeout` bootstraps with the wrapper holding the
+// whole budget. A stranger's claim of that size refuses the same run.
+func TestAForkUnderJobExecSharesItsClaim(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	testkit.Isolate(t)
+	privateSockDir(t)
+	t.Setenv("MAGUS_BROKER", "")
+	ln, err := broker.Listen(t.Context(), broker.DefaultAddr())
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { done <- broker.Serve(ctx, ln, broker.WithCapacity(0, 1)) }()
+	t.Cleanup(func() { cancel(); <-done })
+
+	root := testkit.NewRepository(t, map[string]string{
+		"magus.yaml":     "{}\n",
+		"magusfile.buzz": "import \"magus\";\n" + testTarget,
+		"a.go":           "package a\n",
+		filepath.FromSlash(job.CheckoutBootstrapScript): "import \"proc\";\n\nexport fun main(args: [str]) > void !> any {\n" +
+			"    _ = proc\\exec(\"./magus\", args: [\"run\", \"--no-cache\", \"test\", \".\"]);\n}\n",
+	}).Root()
+	// testscript.Main runs the CLI when this binary is invoked as `magus`.
+	self, err := os.Executable()
+	require.NoError(t, err)
+	bin := filepath.Join(root, "magus")
+	require.NoError(t, os.Symlink(self, bin))
+	run := func(args ...string) (string, error) {
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = root
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	stranger, err := broker.Dial(t.Context(), broker.DefaultAddr())
+	require.NoError(t, err)
+	defer func() { _ = stranger.Close() }()
+	v, err := stranger.Request(t.Context(), types.MachineClaim{Project: "other", Target: "test", Slots: 1, PID: 1})
+	require.NoError(t, err)
+	out, err := run("run", "--no-cache", "test", ".")
+	require.Error(t, err, out)
+	assert.Contains(t, out, "MGS3009")
+	stranger.Release(t.Context(), v.ID)
+
+	checkout := filepath.Join(t.TempDir(), "under-exec")
+	out, err = run("job", "exec", "--timeout", "2m", "--", bin,
+		"job", "fork", "under-exec", "--check", "test .", "--write-paths", "a.go", "--checkout", checkout)
+	require.NoError(t, err, out)
+	assert.NotContains(t, out, "MGS3009")
+	assert.DirExists(t, checkout)
 }
 
 // The base is read from the tree, so there is no flag to type one: --base is an unknown

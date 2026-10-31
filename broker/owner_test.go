@@ -429,3 +429,23 @@ func TestAStepGroupNeedsAClaimOfItsConnection(t *testing.T) {
 	_, err = c.Hold(t.Context(), Hold{Claim: v.ID, PGID: 4242, Command: "sleep 30"})
 	require.ErrorContains(t, err, "which this connection does not hold")
 }
+
+// A magus under a held command never competes with the hold's claim.
+func TestARunUnderAHeldCommandSharesItsClaim(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(0, 1))
+	cmd, _ := startGroup(t)
+	_, err := dial(t, addr).Hold(t.Context(), Hold{
+		PGID: cmd.Process.Pid, Command: "magus job fork", Slots: 1, Deadline: time.Now().Add(time.Hour),
+		Invocation: "1:exec",
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	v, err := dial(t, addr).Request(ctx, types.MachineClaim{
+		Project: "libs/x", Target: "install", Slots: 1, PID: 2, Invocation: "2:run", Ancestors: []string{"1:exec"},
+	})
+	require.NoError(t, err)
+	assert.True(t, v.Granted, "the only slot is its parent's")
+}
