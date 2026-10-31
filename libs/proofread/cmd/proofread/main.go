@@ -673,7 +673,7 @@ func parseTable(data []byte) (table, error) {
 		return table{}, err
 	}
 
-	rules, err := ruleDecisions(raw.Rules)
+	rules, err := proofread.RuleDecisions(raw.Rules)
 	if err != nil {
 		return table{}, err
 	}
@@ -718,7 +718,7 @@ func parseTable(data []byte) (table, error) {
 			return table{}, fmt.Errorf("path %q: %w", glob, err)
 		}
 
-		scopedRules, err := ruleDecisions(entry)
+		scopedRules, err := proofread.RuleDecisions(entry)
 		if err != nil {
 			return table{}, fmt.Errorf("path %q: %w", glob, err)
 		}
@@ -727,29 +727,6 @@ func parseTable(data []byte) (table, error) {
 	}
 
 	return t, nil
-}
-
-// ruleDecisions checks each name against the rules and each value against the
-// three decisions.
-func ruleDecisions(in map[string]string) (map[proofread.Rule]proofread.Decision, error) {
-	known := proofread.Rules()
-	out := make(map[proofread.Rule]proofread.Decision, len(in))
-
-	for _, name := range slices.Sorted(maps.Keys(in)) {
-		r := proofread.Rule(name)
-		if !slices.Contains(known, r) {
-			return nil, fmt.Errorf("unknown rule %q", name)
-		}
-
-		var d proofread.Decision
-		if err := d.UnmarshalText([]byte(in[name])); err != nil || d == 0 {
-			return nil, fmt.Errorf("rule %q: unknown decision %q: want off, advise or deny", name, in[name])
-		}
-
-		out[r] = d
-	}
-
-	return out, nil
 }
 
 // checkGlob refuses an empty glob and one path.Match cannot read.

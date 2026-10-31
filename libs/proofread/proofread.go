@@ -404,6 +404,29 @@ func Rules() []Rule {
 	return out
 }
 
+// RuleDecisions checks each name of a decisions table against [Rules]
+// and each value against the three decisions.
+func RuleDecisions(in map[string]string) (map[Rule]Decision, error) {
+	known := Rules()
+	out := make(map[Rule]Decision, len(in))
+
+	for _, name := range slices.Sorted(maps.Keys(in)) {
+		r := Rule(name)
+		if !slices.Contains(known, r) {
+			return nil, fmt.Errorf("unknown rule %q", name)
+		}
+
+		var d Decision
+		if err := d.UnmarshalText([]byte(in[name])); err != nil || d == 0 {
+			return nil, fmt.Errorf("rule %q: unknown decision %q: want off, advise or deny", name, in[name])
+		}
+
+		out[r] = d
+	}
+
+	return out, nil
+}
+
 // KindRules returns the rules that judge kind, in [Rules] order.
 func KindRules(kind Kind) []Rule {
 	var out []Rule

@@ -202,7 +202,7 @@ func (c *sampleConfig) resolveDecisions(p string) error {
 		return fmt.Errorf("decisions %s: a sample's records have no path, so the table cannot scope rules by glob", p)
 	}
 
-	decisions, err := ruleDecisions(raw.Rules)
+	decisions, err := proofread.RuleDecisions(raw.Rules)
 	if err != nil {
 		return fmt.Errorf("decisions %s: %w", p, err)
 	}
@@ -221,29 +221,6 @@ func (c *sampleConfig) resolveDecisions(p string) error {
 	c.decisions = decisions
 
 	return nil
-}
-
-// ruleDecisions checks each name against the rules and each value against the
-// three decisions. A copy of cmd/proofread's: neither main package can import the other.
-func ruleDecisions(in map[string]string) (map[proofread.Rule]proofread.Decision, error) {
-	known := proofread.Rules()
-	out := make(map[proofread.Rule]proofread.Decision, len(in))
-
-	for _, name := range slices.Sorted(maps.Keys(in)) {
-		r := proofread.Rule(name)
-		if !slices.Contains(known, r) {
-			return nil, fmt.Errorf("unknown rule %q", name)
-		}
-
-		var d proofread.Decision
-		if err := d.UnmarshalText([]byte(in[name])); err != nil || d == 0 {
-			return nil, fmt.Errorf("rule %q: unknown decision %q: want off, advise or deny", name, in[name])
-		}
-
-		out[r] = d
-	}
-
-	return out, nil
 }
 
 var sourceName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
