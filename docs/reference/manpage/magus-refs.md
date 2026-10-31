@@ -37,8 +37,15 @@ changed (exit 1) when the symbol's name has left the start line, and
 unverified when the name is there but the file was edited since. An index
 that recorded no end line says so instead of guessing one. --source adds
 the lines themselves; with --occurrences it prints each site's lines
-instead. --before and --after widen what --source prints, clamped to the
-file.
+instead. --context N adds N lines on both sides, and --before and --after
+set one side over it. --lines A:B picks a range counted from the match: 0
+is the matched line or a definition's whole body, -1 the line above it, 1
+the line below it, so --lines=-5:-1 prints only the 5 lines above. Write a
+negative range with the =, so the value does not read as a flag. Any of
+these implies --source, and all clamp to the file.
+
+--limit and --offset page --occurrences by site; a cut page prints the
+total and the next command.
 
 --text switches to that other question on purpose: a literal substring
 search with no symbol index and no graph, printed as path:line:text like
@@ -61,10 +68,13 @@ nothing. The inverse is the same command with the two names swapped.
 ## Options
 
 **--after** *int*
-: With --source, also print this many lines below each range, clamped to the file (grep -A)
+: Print this many lines below each range, over --context, clamped to the file (grep -A). Implies --source
 
 **--before** *int*
-: With --source, also print this many lines above each range, clamped to the file (grep -B)
+: Print this many lines above each range, over --context, clamped to the file (grep -B). Implies --source
+
+**--context** *int*
+: Print this many lines on both sides of each range, clamped to the file (grep -C). Implies --source
 
 **--[no-]definition** (default: off)
 : Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed
@@ -73,10 +83,16 @@ nothing. The inverse is the same command with the two names swapped.
 : In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely
 
 **--limit** *| head*
-: Print at most this many --text matches, then say how many more there were (0 for all). What | head would do, without losing the count or the exit code
+: Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What | head would do, without losing the count or the exit code
+
+**--lines** *string*
+: Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below. Write a negative range with =, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after
 
 **--[no-]occurrences** (default: off)
 : Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in.
+
+**--offset** *int*
+: With --occurrences, skip this many sites first; a cut page prints the next command
 
 **--[no-]refresh** (default: off)
 : Re-ingest the SCIP index before answering
@@ -122,10 +138,28 @@ magus refs Open --definition
 magus refs Open --source
 ```
 
-*Every site's code, with two lines above and below*
+*Every site's code, with five lines on both sides*
 
 ```sh
-magus refs Open --occurrences --source --before 2 --after 2
+magus refs Open --occurrences --context 5
+```
+
+*Only the five lines above each site; write a negative range with the =*
+
+```sh
+magus refs Open --occurrences --lines=-5:-1
+```
+
+*Five lines above each site, four below*
+
+```sh
+magus refs Open --occurrences --before 5 --after 4
+```
+
+*One page of sites*
+
+```sh
+magus refs Open --occurrences --limit 5 --offset 5
 ```
 
 *Raw text search, no index needed*
