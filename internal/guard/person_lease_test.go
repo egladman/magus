@@ -173,6 +173,25 @@ func (s *PersonLeaseSuite) TestTheBootstrapScriptsTakeNoClaim() {
 	}
 }
 
+// A workspace opened at a bare directory has no marker for the search to find.
+func (s *PersonLeaseSuite) TestAnOpenedWorkspaceIsNeverJudgedByTheProcessCwd() {
+	s.T().Chdir(s.root)
+	own := s.T().TempDir()
+	var opened []string
+	deps := Dependencies{
+		Workspace: own,
+		CacheDir:  func(string) (string, error) { return filepath.Join(own, ".magus"), nil },
+		Inspect: func(_ context.Context, root string) (types.WorkspaceRepository, error) {
+			opened = append(opened, root)
+			return nil, errNoDependency
+		},
+	}
+	s.Equal(own, hookLocation(context.Background(), deps).workspace)
+	Judge(context.Background(), deps, Request{Input: "magus run build svc", Dir: own})
+	judgeEdit(context.Background(), deps, own, "a.txt", []byte("a\n"), []byte("b\n"), false)
+	s.NotContains(opened, s.root)
+}
+
 func (s *PersonLeaseSuite) TestTheWiringDenialToAnAgentNamesTheOrchestrator() {
 	g := gradeHookWiringWrite("/repo", "", true, ".codex/hooks.json")
 	s.Equal(decisionDeny, g.Decision)

@@ -17,13 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMain leaves the checkout so its lease grades no run here.
-func TestMain(m *testing.M) {
-	if err := os.Chdir(os.TempDir()); err != nil {
-		panic(err)
-	}
-	testkit.Main(m)
-}
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // writeProject creates root/name/magusfile.buzz with body. No magus.project
 // call is written: a bare magusfile that defines targets is expected to run via
@@ -74,6 +68,30 @@ export fun beta(ctx: magus\Context, args: [str]) > void !> any {
 			require.NoErrorf(t, err, "expected %s:%s to have run (missing %s)", svc, tgt, p)
 		}
 	}
+}
+
+// A workspace opened at a bare directory has no marker, so the guard once
+// fell back to the cwd's workspace. This one keeps `build svc` for a person.
+func TestRunIsNeverJudgedByTheWorkspaceInTheCwd(t *testing.T) {
+	cwd := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "magus.yaml"), nil, 0o644))
+	writeProject(t, cwd, "svc", `
+import "magus";
+magus\project({"targets": {"build": {"human_only": "a person runs this"}}});
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`)
+	t.Chdir(cwd)
+
+	root := t.TempDir()
+	writeProject(t, root, "svc", "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void !> any {}\n")
+	ctx := context.Background()
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	require.NoError(t, err, "Open")
+	defer func() { _ = m.Close() }()
+
+	targets, err := m.ExpandPath(types.Target{Name: "build"})
+	require.NoError(t, err, "ExpandPath")
+	require.NoError(t, m.Run(ctx, targets), "Run")
 }
 
 // TestRunToolchainChangeRebuilds is the R1 proof: a project's cached build is

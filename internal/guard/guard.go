@@ -51,6 +51,9 @@ type Dependencies struct {
 	// own magus.yaml, because a cache dir configured in the orchestrator's tree says
 	// nothing about where a worker's cache lives.
 	CacheDir func(root string) (string, error)
+	// Workspace is the root of the workspace the caller opened.
+	// With one, the process cwd names no workspace.
+	Workspace string
 	// NotesShared is the workspace's declared shared notes store, empty when it declares none.
 	NotesShared string
 	// ShellRules are workspace-declared additive shell rules from
@@ -2622,6 +2625,14 @@ func hookLocation(ctx context.Context, deps Dependencies) location {
 // resolved config applies; another checkout reads its own magus.yaml, because a cache dir
 // configured in the orchestrator's tree says nothing about where a worker's cache lives.
 func hookLocationAt(deps Dependencies, dir string) location {
+	if dir == "" && deps.Workspace != "" {
+		cacheDir, err := deps.cacheDir("")
+		if err != nil {
+			return location{}
+		}
+		return location{cacheDir: cacheDir, workspace: deps.Workspace, dir: deps.Workspace, models: deps.ModelRows,
+			policies: policiesAt(context.Background(), deps, deps.Workspace)}
+	}
 	root, err := workspace.FindRoot(dir)
 	if err != nil {
 		return location{}

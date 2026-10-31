@@ -63,6 +63,7 @@ func (m *Magus) guardDependencies(ctx context.Context) (guard.Dependencies, erro
 	if deps.LoadFailure != nil {
 		return guard.Dependencies{}, deps.LoadFailure
 	}
+	deps.Workspace = m.Root()
 	deps.ModelTiers = func() *types.ModelTierSet { return m.ModelTiers(ctx) }
 	return deps, nil
 }
