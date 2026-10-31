@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
@@ -100,16 +101,21 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 		if err != nil {
 			return err
 		}
-		if g, err = loadRefsGraph(ctx, ws, globalCfg, rf.Refresh, pos[0]); err != nil {
-			return err
-		}
 		if rf.Rename != "" {
+			if g, err = loadRefsGraph(ctx, ws, globalCfg, rf.Refresh, pos[0]); err != nil {
+				return err
+			}
 			return refsRenameCommand(ctx, root, opts, g, pos[0], rf.Rename, globalCfg.DryRun)
 		}
-		res = lookupRefs(ctx, ws, globalCfg, g, read, measuredCoverage(ctx, ws, globalCfg))
+		stale := findStaleIndexes(ctx, ws)
+		if g, err = loadRefsAnswerGraph(ctx, ws, globalCfg, rf.Refresh, pos[0], stale); err != nil {
+			return err
+		}
+		res = lookupRefs(ctx, ws, globalCfg, g, read, knownStaleCoverage(ctx, ws, globalCfg, stale))
 	}
 	if !rf.Refresh {
-		res.noteRefresh(refreshInBackground(ctx, root, res.answer(), hint.Refs.With(pos[0], "--refresh")))
+		wait := hint.Refs.With(fmt.Sprintf("'%s'", strings.ReplaceAll(pos[0], "'", `'\''`)), "--refresh")
+		res.noteRefresh(refreshInBackground(ctx, root, res.answer(), wait))
 	}
 	if len(res.Ambiguous) > 0 {
 		return refuseAmbiguous(noticeLines{ctx: ctx, level: slog.LevelError}, pos[0], res.Ambiguous)
@@ -373,6 +379,42 @@ func (r refsResult) answer() types.KnowledgeAnswer {
 		return r.Out.Answer
 	}
 	return r.Answer
+}
+
+// loadRefsAnswerGraph is loadRefsGraph, except that with an index behind the
+// tree it reads the stored graph as it stands. An edit moves the graph's stamps
+// too, and reassembling it costs a read 10-30 s the background refresh pays.
+func loadRefsAnswerGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, ref string, stale []types.KnowledgeStaleIndex) (*knowledge.Graph, error) {
+	if refresh || len(stale) == 0 {
+		return loadRefsGraph(ctx, ws, cfg, refresh, ref)
+	}
+	cacheDir, err := magus.ResolveCacheDir(ws.Root(), workspace.WithLoadedConfig(cfg))
+	if err != nil {
+		return loadRefsGraph(ctx, ws, cfg, refresh, ref)
+	}
+	g, err := knowledge.NewStore(cacheDir, true, 0, nil, slog.Default()).Load(ctx)
+	if err != nil {
+		return loadRefsGraph(ctx, ws, cfg, refresh, ref)
+	}
+	g.SetRoot(ws.Root())
+	if err := workspacegraph.MergeSymbolsForRef(ctx, ws, ws.Root(), cfg, g, ref, slog.Default()); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+// knownStaleCoverage is measuredCoverage over a staleness verdict the caller
+// already holds, since the sweep behind it forks the tool probes.
+func knownStaleCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config, stale []types.KnowledgeStaleIndex) coverageFunc {
+	return func(input string, seeded bool) knowledge.Coverage {
+		cov := knowledge.Coverage{Seeded: seeded}
+		if !knowledge.CouldMatchLazyLayer(input) {
+			return cov
+		}
+		cov.Gaps, cov.Probed = workspacegraph.SymbolGaps(ctx, ws, ws.Root(), cfg, slog.Default())
+		cov.Stale = stale
+		return cov
+	}
 }
 
 // noteRefresh files what a background refresh said on the lookup's verdict.
