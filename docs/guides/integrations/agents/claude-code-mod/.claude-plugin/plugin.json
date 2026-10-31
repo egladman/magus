@@ -2,14 +2,12 @@
   "name": "magus",
   "version": "0.1.0",
   "description": "magus in Claude Code: health of the binary, guard and server; a pane of jobs, runs and agents; prompt-cache expiry, price-step, subagent and budget cost gates",
-  "types": "./types/index.d.ts",
   "userConfig": {
     "cacheGate": {
       "type": "string",
       "title": "Cache expiry gate",
       "description": "What happens when you submit after the prompt cache expired: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
-      "default": "warn",
-      "options": ["off", "warn", "confirm"]
+      "default": "warn"
     },
     "cacheWarnMinutes": {
       "type": "number",
@@ -26,16 +24,14 @@
     "cacheTtl": {
       "type": "string",
       "title": "Prompt-cache TTL",
-      "description": "auto uses what Claude Code reports or what the mod observes, assuming 5m until then.",
-      "default": "auto",
-      "options": ["auto", "5m", "1h"]
+      "description": "One of auto, 5m or 1h. auto uses what Claude Code reports or what the mod observes, assuming 5m until then.",
+      "default": "auto"
     },
     "priceStepGate": {
       "type": "string",
       "title": "Price step gate",
       "description": "What happens when the context the next prompt re-sends is at or near a model's prompt-size price step, past which every request costs more: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
-      "default": "warn",
-      "options": ["off", "warn", "confirm"]
+      "default": "warn"
     },
     "priceStepMarginTokens": {
       "type": "number",
@@ -47,8 +43,7 @@
       "type": "string",
       "title": "Subagent cost gate",
       "description": "What happens when a subagent would run on a model whose input rate is over the cap below: off, warn (a toast), or deny (refuses the spawn and names a cheaper route).",
-      "default": "warn",
-      "options": ["off", "warn", "deny"]
+      "default": "warn"
     },
     "spawnMaxInputUsdPerMTok": {
       "type": "number",
@@ -66,8 +61,7 @@
       "type": "string",
       "title": "Session budget gate",
       "description": "What happens when you submit after the session's spend passed the budget: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
-      "default": "warn",
-      "options": ["off", "warn", "confirm"]
+      "default": "warn"
     },
     "subagentTokenBudget": {
       "type": "number",
@@ -87,5 +81,8 @@
       "description": "Say so when the rates file's checked date is older than this.",
       "default": 60
     }
+  },
+  "author": {
+    "name": "egladman"
   }
 }
