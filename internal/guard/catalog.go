@@ -672,9 +672,9 @@ var ruleDocGrantIsAPersons = types.RuleDoc{
 var ruleDocEditUngraded = types.RuleDoc{
 	Name:    string(denyRuleEditUngraded),
 	Catches: "a rewrite a magus process makes itself, as `refs --rename` or a Buzz fs write, that no lease grades",
-	Why: "Such a process knows no host session, so it acts under the lease its magus.lease BAGGAGE names, else the one job taken in its checkout with `magus job exec`. " +
-		"When several leases hold write paths in the checkout and none is named, or when the lease store does not read, nothing would grade the write, and passing it would make every lease boundary advice. " +
-		"Take the job in the checkout with `magus job exec <id>`, or name it: `BAGGAGE=magus.lease=<id> magus ...`.",
+	Why: "Such a process knows no host session, so it acts under its checkout's record, else the lease its magus.lease BAGGAGE names. A lease merely held in the checkout binds nobody, so a person's process stays unbound. " +
+		"The shell hook refuses a caller bound by its session a line that would rewrite with no claim, and the process itself refuses when the lease store does not read: either way nothing would grade the write, and passing it would make every lease boundary advice. " +
+		"Name the lease on the line: `export BAGGAGE=magus.lease=<id>; magus ...`.",
 }
 
 var ruleDocLeaseRowUnknown = types.RuleDoc{

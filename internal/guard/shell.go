@@ -1,10 +1,12 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -20,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -639,8 +642,88 @@ var graphReadVerbs = map[string]bool{"refs": true, "query": true, "explain": tru
 // renamesSymbol reports `refs --rename` without the global `--dry-run` (or its `-u`
 // short form), the one graph verb that writes.
 func renamesSymbol(args []string) bool {
-	return slices.ContainsFunc(args, func(a string) bool { return a == "--rename" || strings.HasPrefix(a, "--rename=") }) &&
-		!slices.Contains(args, "--dry-run") && !slices.Contains(args, "-u")
+	return namesRename(args) && !slices.Contains(args, "--dry-run") && !slices.Contains(args, "-u")
+}
+
+func namesRename(args []string) bool {
+	return slices.ContainsFunc(args, func(a string) bool { return a == "--rename" || strings.HasPrefix(a, "--rename=") })
+}
+
+// buzzGradedWriterRe finds the fs members std/fs.go asks the edit judge about.
+var buzzGradedWriterRe = regexp.MustCompile(`\bfs\\(?:writeFileAtomic|writeFile|writeLines|appendFile|copyFile|copyDir)\s*\(`)
+
+// denyUngradedRewrite refuses a bound caller a rewrite no lease would grade.
+// A hook shares no environment with the process and rewrites no command.
+// So the line names the claim. A person's terminal never reaches this hook.
+func denyUngradedRewrite(ctx context.Context, deps Dependencies, actingLease, command string) denial {
+	if actingLease == "" {
+		return denial{}
+	}
+	d := effectiveDialect(deps.ShellDialect)
+	f, err := parseFile(command, d)
+	if err != nil {
+		return denial{}
+	}
+	at := hookLocation(ctx, deps)
+	// A checkout record outranks any claim, so it grades the process already.
+	if record, _ := job.ActingLease(at.jobs(), ""); record != "" {
+		return denial{}
+	}
+	if cmp.Or(lineBaggageLease(f), trail.LeaseFromEnv()) == actingLease {
+		return denial{}
+	}
+	var heredoc strings.Builder
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if st, ok := n.(*syntax.Stmt); ok {
+			heredoc.WriteString(heredocText(st))
+		}
+		return true
+	})
+	calls, ok := locateCalls(command, d, cmp.Or(deps.callDir, at.dir, at.workspace), isMagusInvocation, false)
+	if !ok || !slices.ContainsFunc(calls, func(c locatedCall) bool { return rewritesThroughGrader(c, heredoc.String()) }) {
+		return denial{}
+	}
+	if _, live := actingLiveLease(ctx, deps, actingLease); !live {
+		return denial{}
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` rewrites files in a process that cannot see your session, so lease %s would not grade them; start the line with `export %s=%s;`.",
+			elideCommand(command), actingLease, envHookLease, actingLease),
+		Why: "A hook shares no environment with the process it lets run, and the guard rewrites no command, so the line carries the claim. " +
+			"The process then grades each file against the lease's row, a dry run included.",
+	}
+}
+
+// rewritesThroughGrader reports a magus call that reaches judgeEdit itself.
+// A dry-run rename counts, since it grades the same files.
+// An unreadable program or an imported write reads as no rewrite.
+// The bootstrap scripts are recovery lines: they take no assignment.
+func rewritesThroughGrader(c locatedCall, heredoc string) bool {
+	args := withoutRelocation(c.inv.Args)
+	if magusHelpRequest(args) {
+		return false
+	}
+	words := magusSubcommandWords(args)
+	switch {
+	case len(words) == 0:
+		return false
+	case words[0] == "refs":
+		return namesRename(args)
+	case words[0] != "buzz":
+		return false
+	}
+	if script, ok := inlineBuzz(args, heredoc); ok {
+		return buzzGradedWriterRe.MatchString(script)
+	}
+	file, ok := buzzScriptFile(args)
+	if !ok || file == placementScript || strings.HasSuffix(path.Clean("/"+file), "/"+job.CheckoutBootstrapScript) {
+		return false
+	}
+	if dir, placed := magusCallDir(c); placed && !filepath.IsAbs(file) {
+		file = filepath.Join(dir, file)
+	}
+	script, ok := readScript(file)
+	return ok && buzzGradedWriterRe.MatchString(script)
 }
 
 // judgeEdit judges a whole-file rewrite a magus verb makes itself, exactly as the host edit

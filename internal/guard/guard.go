@@ -1617,6 +1617,7 @@ func roleScopedCommandRules() []roleScopedRule {
 		{denyRuleLeaseRebind, denyLeaseScopedRebind},
 		{denyRuleLeaseHarness, denyLeaseScopedHarness},
 		{denyRuleLeaseWrite, oneString(denyWriteOutsideLease)},
+		{denyRuleEditUngraded, denyUngradedRewrite},
 		{denyRuleSleepPoll, denyRefusedRetry},
 	}
 }
