@@ -24,7 +24,6 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	internalci "github.com/egladman/magus/internal/ci"
-	"github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
@@ -1297,7 +1296,7 @@ func printImpactText(out *types.ImpactResult) error {
 		if len(out.SeedProjects) > 1 {
 			label = fmt.Sprintf("%s (1 of %d seeds)", seed, len(out.SeedProjects))
 		}
-		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: fmt.Sprintf("%s:%s", types.KindProject, seed)})
+		link := liveExplorerLink(graphLinkOpts{View: "blast", Node: fmt.Sprintf("%s:%s", types.KindProject, seed)})
 		fmt.Printf("\nView the blast radius of %s in the Graph Explorer: %s\n", label, link)
 		fmt.Printf("%s\n", authHint(link))
 		fmt.Printf("(start the magus server if the graph does not load)\n")

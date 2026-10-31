@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -989,7 +988,7 @@ func writeExplainText(w io.Writer, root, asked string, nx nextGate, next []types
 	// open to an empty focus; omit it. The link is always printed for other kinds;
 	// the server may not be up when the browser opens it, hence the hint.
 	if out.Node.Kind != types.KindSymbol {
-		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: out.Node.ID})
+		link := liveExplorerLink(graphLinkOpts{View: "blast", Node: out.Node.ID})
 		fmt.Fprintf(w, "\nView in Graph Explorer: %s\n", link)
 		fmt.Fprintf(w, "%s\n", authHint(link))
 		fmt.Fprintf(w, "(start the magus server if the graph does not load)\n")
