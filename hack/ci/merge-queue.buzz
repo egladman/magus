@@ -478,8 +478,8 @@ export fun options(step: str, argv: [str], required: [str], optional: [str]) > {
     foreach (name in required) { valued.append(name); }
     foreach (name in optional) { valued.append(name); }
     final parsed = flags\parse(argv, switches: [<str>], valued: valued);
-    if (parsed.unknown.len() > 0) {
-        throw "queue: {step} does not take {parsed.unknown.join(" ")}\n{usage}";
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "queue: {step} does not take {(parsed.unknown + parsed.positionals).join(" ")}\n{usage}";
     }
     foreach (name in required) {
         if ((parsed.values[name] ?? "") == "") {

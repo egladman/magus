@@ -122,7 +122,7 @@ export fun parse(args: [str]) > Options !> str {
     var parsed = flags\FlagParse{ values = {<str: str>}, lists = {<str: [str]>}, positionals = [<str>], unknown = [<str>] };
     try {
         parsed = flags\parse(args, switches: ["-h", "--help", "--keep", "--ls"], valued: ["--image", "--delete"],
-            repeated: ["--env"], command: true);
+            repeated: ["--env"]);
     } catch (e: {str: str}) {
         throw (e["message"] ?? "{e}").replace("flags.parse: ", with: "");
     }

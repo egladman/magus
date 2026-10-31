@@ -117,7 +117,7 @@ func TestFlagsParse(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, err := FlagsParse(context.Background(), tc.argv, switches, valued, nil, nil, false)
+			got, err := FlagsParse(context.Background(), tc.argv, switches, valued, nil, nil)
 			require.NoError(t, err)
 			if tc.want.Lists == nil {
 				tc.want.Lists = map[string][]string{}
@@ -131,7 +131,7 @@ func TestFlagsParse(t *testing.T) {
 // silently became empty is what makes a misconfigured call look like a configured one,
 // which is the failure this module exists to stop repeating.
 func TestFlagsParseRefusesAValuedFlagWithNoValue(t *testing.T) {
-	_, err := FlagsParse(context.Background(), []string{"--session"}, nil, []string{"--session"}, nil, nil, false)
+	_, err := FlagsParse(context.Background(), []string{"--session"}, nil, []string{"--session"}, nil, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--session takes a value and none followed it")
@@ -147,23 +147,23 @@ func TestFlagsParseRefusesAnAbsentOrEmptyRequiredFlag(t *testing.T) {
 		"empty":  {"--issue", "", "--out", "d.md"},
 		"=empty": {"--issue=", "--out", "d.md"},
 	} {
-		_, err := FlagsParse(context.Background(), argv, nil, valued, required, nil, false)
+		_, err := FlagsParse(context.Background(), argv, nil, valued, required, nil)
 		require.Error(t, err, name)
 		assert.Contains(t, err.Error(), "--issue required and absent or empty", name)
 	}
 
-	got, err := FlagsParse(context.Background(), []string{"--issue", "12"}, nil, valued, required, nil, false)
+	got, err := FlagsParse(context.Background(), []string{"--issue", "12"}, nil, valued, required, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "12", got.Values["--issue"])
 
-	_, err = FlagsParse(context.Background(), nil, []string{"--all"}, valued, []string{"--all"}, nil, false)
+	_, err = FlagsParse(context.Background(), nil, []string{"--all"}, valued, []string{"--all"}, nil)
 	require.ErrorContains(t, err, "a switch cannot be required")
 }
 
 // The empty groups come back as empty lists rather than nil, so a script reads an absent
 // group without a null check every caller would otherwise write.
 func TestFlagsParseReturnsEmptyGroupsNotNull(t *testing.T) {
-	got, err := FlagsParse(context.Background(), nil, nil, nil, nil, nil, false)
+	got, err := FlagsParse(context.Background(), nil, nil, nil, nil, nil)
 
 	require.NoError(t, err)
 	assert.NotNil(t, got.Values)
@@ -176,21 +176,21 @@ func TestFlagsParseReturnsEmptyGroupsNotNull(t *testing.T) {
 // Values; required holds for it when one non-empty value arrived.
 func TestFlagsParseCollectsARepeatedFlag(t *testing.T) {
 	got, err := FlagsParse(context.Background(), []string{"--env", "A", "--env=B", "--image", "x"}, nil,
-		[]string{"--image"}, []string{"--env"}, []string{"--env"}, false)
+		[]string{"--image"}, []string{"--env"}, []string{"--env"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"A", "B"}, got.Lists["--env"])
 	assert.Equal(t, map[string]string{"--image": "x"}, got.Values)
 
-	_, err = FlagsParse(context.Background(), []string{"--image", "x"}, nil, []string{"--image"}, []string{"--env"}, []string{"--env"}, false)
+	_, err = FlagsParse(context.Background(), []string{"--image", "x"}, nil, []string{"--image"}, []string{"--env"}, []string{"--env"})
 	require.ErrorContains(t, err, "--env required and absent or empty")
 }
 
-// Command mode reads argv the way sudo and Go's flag package do: the first bare word
+// A bare word reads argv the way sudo and Go's flag package do: the first bare word
 // starts the command, which keeps its own flags verbatim, and the script's flags after
 // it are the command's.
-func TestFlagsParseCommandModeKeepsTheCommandVerbatim(t *testing.T) {
+func TestFlagsParseKeepsTheCommandVerbatim(t *testing.T) {
 	argv := []string{"--keep", "--arch", "arm64", "magus", "run", "test", "--keep", "-s"}
-	got, err := FlagsParse(context.Background(), argv, []string{"--keep"}, []string{"--arch"}, nil, nil, true)
+	got, err := FlagsParse(context.Background(), argv, []string{"--keep"}, []string{"--arch"}, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.FlagParse{
 		Values:      map[string]string{"--keep": "true", "--arch": "arm64"},
@@ -199,7 +199,7 @@ func TestFlagsParseCommandModeKeepsTheCommandVerbatim(t *testing.T) {
 		Unknown:     []string{},
 	}, got)
 
-	got, err = FlagsParse(context.Background(), []string{"--bogus", "ls"}, nil, nil, nil, nil, true)
+	got, err = FlagsParse(context.Background(), []string{"--bogus", "ls"}, nil, nil, nil, nil)
 	require.NoError(t, err)
 	// An undeclared flag before the command is still unknown.
 	assert.Equal(t, types.FlagParse{

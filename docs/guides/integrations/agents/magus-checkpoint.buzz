@@ -68,7 +68,7 @@ final AGENT_NAME_FLAG = "--agent-name";
 fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
-    foreach (word in parsed!.unknown) {
+    foreach (word in parsed!.unknown + parsed!.positionals) {
         warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }

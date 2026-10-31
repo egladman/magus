@@ -9,7 +9,7 @@ import "hack/dev/show-feedback" as show;
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/mark-feedback.buzz -- --verdict should-deny|should-advise|wrong-deny|fine [--note <text>] [--session <id>] [--since <duration|RFC3339>] [--until <RFC3339>] [--apply] -- <label|id>...";
+final USAGE = "usage: magus buzz hack/dev/mark-feedback.buzz -- --verdict should-deny|should-advise|wrong-deny|fine [--note <text>] [--session <id>] [--since <duration|RFC3339>] [--until <RFC3339>] [--apply] <label|id>...";
 final HELP = "cost: reads the session's trails the way show-feedback does; with --apply, appends one line per row to this repository's feedback store\n{USAGE}\n"
     + "Prints the plan and writes nothing unless --apply. Pass the window show-feedback printed, so a label resolves to the row you read;\n"
     + "each mark is stored under the row's stable id, so it holds across pages, re-renders and later sessions.";

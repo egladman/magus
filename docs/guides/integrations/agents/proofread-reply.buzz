@@ -357,7 +357,7 @@ fun output(stop: Stop, host: str, judged: fun (reply: str) > [Finding]) > str {
 fun main(args: [str]) > void {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_FLAG, DECISIONS_FLAG, PROOFREAD_FLAG]) catch null;
     if (parsed == null) { return; }
-    foreach (word in parsed!.unknown) {
+    foreach (word in parsed!.unknown + parsed!.positionals) {
         warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_FLAG}, {DECISIONS_FLAG} and {PROOFREAD_FLAG}. "
             + "Fix the hook command in your host config.");
     }

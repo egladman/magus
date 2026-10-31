@@ -184,7 +184,7 @@ final usage = "usage: {SCRIPT} [options] magus <argv>\n"
 // parse reads options up to the first word that is not one, sudo-style: that word and
 // everything after it is the command, untouched.
 export fun parse(args: [str]) > Options !> any {
-    final parsed = flags\parse(args, switches: SWITCHES, valued: VALUED, command: true);
+    final parsed = flags\parse(args, switches: SWITCHES, valued: VALUED);
     if (parsed.unknown.len() > 0) {
         throw "on-actions: {parsed.unknown[0]} is not an option of this script, and the command starts with magus\n{usage}";
     }

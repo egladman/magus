@@ -439,7 +439,7 @@ github.com/egladman/magus/std.FieldFuncName func(f Field) string
 github.com/egladman/magus/std.FieldResolverPackage func(f Field) (importPath string, pkgIdent string)
 github.com/egladman/magus/std.FieldResolverTakesContext func(f Field) bool
 github.com/egladman/magus/std.Flags var Module
-github.com/egladman/magus/std.FlagsParse func(_ context.Context, argv []string, switches []string, valued []string, required []string, repeated []string, command bool) (github.com/egladman/magus/types.FlagParse, error)
+github.com/egladman/magus/std.FlagsParse func(_ context.Context, argv []string, switches []string, valued []string, required []string, repeated []string) (github.com/egladman/magus/types.FlagParse, error)
 github.com/egladman/magus/std.Fmt var Module
 github.com/egladman/magus/std.FmtSprintf func(_ context.Context, format string, args ...string) (string, error)
 github.com/egladman/magus/std.Fs var Module

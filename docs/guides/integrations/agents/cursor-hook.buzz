@@ -165,7 +165,7 @@ object Entry {
 fun readArgs(args: [str]) > Entry {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME]) catch null;
     if (parsed == null) { return Entry{ agent = "" }; }
-    foreach (word in parsed!.unknown) {
+    foreach (word in parsed!.unknown + parsed!.positionals) {
         warn("unsupported argument {word}; this call was judged WITHOUT it");
     }
     return Entry{

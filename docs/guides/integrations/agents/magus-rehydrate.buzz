@@ -77,7 +77,7 @@ fun parseOptions(args: [str]) > {str: str} {
         warn("could not read the arguments {args}; using the defaults. Fix the hook command in your host config.");
         return {<str: str>};
     }
-    foreach (word in parsed!.unknown) {
+    foreach (word in parsed!.unknown + parsed!.positionals) {
         warn("unsupported argument \"{word}\"; this hook accepts {RULES_FLAG} and {FORMAT_FLAG}. "
             + "Fix the hook command in your host config.");
     }

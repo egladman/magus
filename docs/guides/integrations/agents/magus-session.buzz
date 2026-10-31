@@ -48,7 +48,7 @@ fun envFilePath(args: [str]) > str {
         warn("could not read the arguments {args}; PATH is unchanged. Fix the hook command in your host config.");
         return "";
     }
-    foreach (word in parsed!.unknown) {
+    foreach (word in parsed!.unknown + parsed!.positionals) {
         warn("unsupported argument \"{word}\"; this hook accepts only {ENV_FILE_FLAG}. "
             + "Fix the hook command in your host config.");
     }
