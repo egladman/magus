@@ -2022,6 +2022,7 @@ var capabilityMatrix = map[types.VCSCapability]map[string]bool{
 	types.CapRangeReporter:         {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapRegionReporter:        {"git": true},
 	types.CapAncestryReporter:      {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapCheckoutFastForwarder: {"git": true},
 	types.CapConflictResolver:      {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapRevisionFileReader:    {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapRevisionExporter:      {"git": true, "hg": true, "sl": true, "jj": true},
@@ -2090,6 +2091,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 			return errOf(d.Regions(ctx, dir, "-x", []types.FileChange{{Path: "x"}}))
 		}},
 		{types.CapAncestryReporter, "IsAncestor", func(d types.VCSDriver, dir string) error { return errOf(d.IsAncestor(ctx, dir, "-x", "-x")) }},
+		{types.CapCheckoutFastForwarder, "FastForward", func(d types.VCSDriver, dir string) error { return d.FastForward(ctx, dir, "-x") }},
 		{types.CapConflictResolver, "Conflicts", func(d types.VCSDriver, dir string) error { return errOf(d.Conflicts(ctx, dir)) }},
 		{types.CapConflictResolver, "KeepIncoming", func(d types.VCSDriver, dir string) error { return d.KeepIncoming(ctx, dir, nil) }},
 		{types.CapConflictResolver, "MarkResolved", func(d types.VCSDriver, dir string) error { return d.MarkResolved(ctx, dir, nil) }},

@@ -381,6 +381,17 @@ func (v gitVCS) RangeCommits(ctx context.Context, dir, base, head string, paths 
 	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
 }
 
+// FastForward implements types.CheckoutFastForwarder.
+func (v gitVCS) FastForward(ctx context.Context, root, rev string) error {
+	if err := checkRev(rev); err != nil {
+		return err
+	}
+	if _, err := gitOutput(ctx, root, gitOpts{}, "merge", "--quiet", "--ff-only", rev); err != nil {
+		return fmt.Errorf("git merge --ff-only %s: %w", rev, err)
+	}
+	return nil
+}
+
 // IsAncestor implements types.AncestryReporter. merge-base's exit 1 is its answer "no";
 // every other failure is it declining to answer (an unknown revision, or a shallow clone
 // missing the history that would decide).

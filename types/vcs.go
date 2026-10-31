@@ -176,6 +176,7 @@ type VCSDriver interface {
 	TreeMerger
 	GeneratedPathReporter
 	CheckoutProvisioner
+	CheckoutFastForwarder
 	CheckoutLister
 	CheckoutReporter
 	RevisionFetcher
@@ -434,6 +435,7 @@ const (
 	CapTreeMerger            VCSCapability = "TreeMerger"
 	CapGeneratedPathReporter VCSCapability = "GeneratedPathReporter"
 	CapCheckoutProvisioner   VCSCapability = "CheckoutProvisioner"
+	CapCheckoutFastForwarder VCSCapability = "CheckoutFastForwarder"
 	CapCheckoutLister        VCSCapability = "CheckoutLister"
 	CapCheckoutReporter      VCSCapability = "CheckoutReporter"
 	CapRevisionFetcher       VCSCapability = "RevisionFetcher"
@@ -1137,6 +1139,14 @@ type GeneratedPathReporter interface {
 	// GeneratedPaths reports which of paths rev marks generated. Paths absent from the
 	// result are not marked. An empty paths returns an empty map.
 	GeneratedPaths(ctx context.Context, root, rev string, paths []string) (map[string]bool, error)
+}
+
+// CheckoutFastForwarder moves a checkout's current branch forward.
+type CheckoutFastForwarder interface {
+	// FastForward moves root's branch and working tree to rev.
+	// It moves nothing when rev does not descend from the head
+	// or a local change would be lost.
+	FastForward(ctx context.Context, root, rev string) error
 }
 
 // CheckoutProvisioner is the capability to create, list and remove secondary checkouts
