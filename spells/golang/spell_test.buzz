@@ -199,6 +199,17 @@ test "golangci-lint observes the linter build, not just its version" {
     std\assert(observe.args.join(" ") == "version --debug", message: "build info with checksums");
 }
 
+test "go-vet takes its package from the caller and keys on the compile selectors" {
+    final vet = command("go-vet");
+    std\assert(vet.args.indexOf("./...") == null, message: "fixed ./... would follow the caller's package");
+    std\assert(vet.defaultArgs.join(" ") == "./...", message: "default package");
+    foreach (op in ["go-build", "go-test", "go-vet", "go-fuzz"]) {
+        foreach (name in ["GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED"]) {
+            std\assert(command(op).envKeys.indexOf(name) != null, message: "{name} keys {op}");
+        }
+    }
+}
+
 test "golangci-lint keys on the platform and the Go toolchain selectors" {
     final keys = command("golangci-lint").envKeys;
     foreach (name in ["GOOS", "GOARCH", "GOROOT", "GOTOOLCHAIN", "GOEXPERIMENT", "GOFLAGS"]) {

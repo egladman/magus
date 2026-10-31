@@ -219,11 +219,14 @@ final GO_MOD_HINTS = [
 // these names itself: a magusfile target composing the op has no reason to know it
 // needs its own ctx.envInputs("GOOS") beside the call, and a GOOS the shell set for one
 // run and not the next would otherwise replay a different platform's result.
-final GO_PLATFORM_ENV = ["GOOS", "GOARCH", "GOARM", "GOAMD64"];
+//
+// GOFLAGS carries -tags, so a tagged run and a plain run must not share a key.
+final GO_PLATFORM_ENV = ["GOOS", "GOARCH", "GOARM", "GOAMD64", "GOFLAGS",
+    "GOEXPERIMENT", "CGO_ENABLED", "GOTOOLCHAIN"];
 
-// GO_TOOLCHAIN_ENV names the variables that pick which Go toolchain golangci-lint loads
-// packages with. The linter's own build only records the toolchain that compiled it.
-final GO_TOOLCHAIN_ENV = ["GOROOT", "GOTOOLCHAIN", "GOEXPERIMENT", "GOFLAGS"];
+// GO_TOOLCHAIN_ENV adds what GO_PLATFORM_ENV lacks for golangci-lint: the root
+// of the toolchain that loads packages. The linter records only its own.
+final GO_TOOLCHAIN_ENV = ["GOROOT"];
 
 // -trimpath is a default: without it each checkout's absolute path is baked into the build ID, so checkouts of one source never share cache entries.
 fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build", "-trimpath"], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV}; }
@@ -308,7 +311,8 @@ fun goModJSON(target: Target) > Command {
     return Command{bin = "go", args = ["mod", "edit", "-json"], capture = true, quiet = true};
 }
 // -trimpath: see go-test above; keeps vet's cache key worktree-independent too.
-fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "-trimpath", "./..."], envKeys = GO_PLATFORM_ENV}; }
+// ./... is a default so a caller's package replaces it, as in go-test.
+fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "-trimpath"], defaultArgs = ["./..."], envKeys = GO_PLATFORM_ENV}; }
 // Invoked directly rather than through `go tool`, for the same reason as golangCILint above:
 // `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is
