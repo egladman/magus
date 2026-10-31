@@ -1,0 +1,187 @@
+// Cost: one graph read from the ingested symbol indexes.
+//
+// Shows, per pair of packages, whether either reaches the other through
+// imports and which packages import both. Writes nothing.
+//
+//	magus buzz hack/dev/show-import-meet.buzz --
+//	    [-o text|json] -- <package> <package> [<package> <package>...]
+namespace showimportmeet;
+
+import "flags";
+import "magus";
+import "std";
+import "encoding/json";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/show-import-meet.buzz -- [-o text|json] -- <package> <package> [<package> <package>...]";
+final HELP = "cost: one graph read from the ingested symbol indexes\npackages are directories as `magus\\importGraph` names them (\".\" for the root); pairs are read two at a time\n{USAGE}";
+final FORMATS = ["text", "json"];
+
+export object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
+export object Meet {
+    a: str,
+    b: str,
+    aReachesB: bool,
+    bReachesA: bool,
+    importersOfBoth: [str] = [<str>],
+}
+
+// known is true for a package that imports or is imported by another.
+// The graph keys only importers, so a leaf is known by appearing in a list.
+export fun known(pkgs: {str: [str]}, name: str) > bool {
+    if (pkgs[name] != null) {
+        return true;
+    }
+    foreach (pkg, deps in pkgs) {
+        if (deps.indexOf(name) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+export fun reaches(pkgs: {str: [str]}, start: str, target: str) > bool {
+    final seen = mut {start: true};
+    final todo = mut [start];
+    while (todo.len() > 0) {
+        foreach (dep in pkgs[todo.pop()!] ?? [<str>]) {
+            if (dep == target) {
+                return true;
+            }
+            if (!(seen[dep] ?? false)) {
+                seen[dep] = true;
+                todo.append(dep);
+            }
+        }
+    }
+    return false;
+}
+
+// importersOfBoth lists the packages that import a and b directly, sorted.
+export fun importersOfBoth(pkgs: {str: [str]}, a: str, b: str) > [str] {
+    final both = mut [<str>];
+    foreach (pkg, deps in pkgs) {
+        if (deps.indexOf(a) != null and deps.indexOf(b) != null) {
+            both.append(pkg);
+        }
+    }
+    return both.sort(fun (left: str, right: str) > bool => left < right);
+}
+
+export fun meet(pkgs: {str: [str]}, a: str, b: str) > Result::<Meet> {
+    foreach (name in [a, b]) {
+        if (!known(pkgs, name)) {
+            return Result::<Meet>{ error = "unknown package {name}: no indexed package imports it or is imported by it; `magus query kind=dir` lists the directories" };
+        }
+    }
+    return Result::<Meet>{ value = Meet{
+        a = a,
+        b = b,
+        aReachesB = reaches(pkgs, start: a, target: b),
+        bReachesA = reaches(pkgs, start: b, target: a),
+        importersOfBoth = importersOfBoth(pkgs, a: a, b: b),
+    } };
+}
+
+// pairs reads positionals two at a time and refuses an odd count.
+export fun pairs(words: [str]) > Result::<[[str]]> {
+    if (words.len() == 0 or words.len() % 2 != 0) {
+        return Result::<[[str]]>{ error = "expected an even number of packages, at least two, got {words.len()}" };
+    }
+    final rows = mut [<[str]>];
+    var i = 0;
+    while (i + 1 < words.len()) {
+        rows.append([words[i], words[i + 1]]);
+        i = i + 2;
+    }
+    return Result::<[[str]]>{ value = rows };
+}
+
+fun render(m: Meet) > str {
+    final both = if (m.importersOfBoth.len() == 0) "none" else m.importersOfBoth.join(", ");
+    return "{m.a} | {m.b}  {m.a}->{m.b}={m.aReachesB}  {m.b}->{m.a}={m.bReachesA}  imported directly by both: {both}";
+}
+
+fun record(m: Meet) > {str: any} {
+    return {
+        "a": m.a,
+        "b": m.b,
+        "aReachesB": m.aReachesB,
+        "bReachesA": m.bReachesA,
+        "importersOfBoth": m.importersOfBoth,
+    };
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["-o"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0) {
+        throw "show-import-meet: unknown {parsed.unknown.join(" ")}\n{USAGE}";
+    }
+    final format = parsed.values["-o"] ?? "text";
+    if (FORMATS.indexOf(format) == null) {
+        throw "show-import-meet: -o takes {FORMATS.join(" or ")}\n{USAGE}";
+    }
+    final asked = pairs(parsed.positionals);
+    if (asked.error -> err) {
+        throw "show-import-meet: {err}\n{USAGE}";
+    }
+    final g = magus\importGraph();
+    if (!g.indexed) {
+        throw "show-import-meet: no symbol index was ingested; build one with `magus graph build`";
+    }
+    final meets = mut [<{str: any}>];
+    foreach (pair in asked.value!) {
+        final found = meet(g.packages, a: pair[0], b: pair[1]);
+        if (found.error -> err) {
+            throw "show-import-meet: {err}";
+        }
+        if (format == "json") {
+            meets.append(record(found.value!));
+        } else {
+            std\print(render(found.value!));
+        }
+    }
+    if (format == "json") {
+        std\print(json\stringify(meets, indent: "  "));
+    }
+}
+
+test "a package reaches another through a chain, not the reverse" {
+    final pkgs = {"a": ["b"], "b": ["c"], "c": [<str>]};
+    assert\equal(reaches(pkgs, start: "a", target: "c"), want: true, message: "a->c");
+    assert\equal(reaches(pkgs, start: "c", target: "a"), want: false, message: "c->a");
+}
+
+test "a cycle terminates" {
+    final pkgs = {"a": ["b"], "b": ["a"]};
+    assert\equal(reaches(pkgs, start: "a", target: "z"), want: false, message: "cycle");
+}
+
+test "importers of both are the packages naming each directly" {
+    final pkgs = {"x": ["a", "b"], "w": ["a", "b", "c"], "y": ["a"], "z": ["b"]};
+    assert\equal(importersOfBoth(pkgs, a: "a", b: "b").join(" "), want: "w x", message: "both");
+    assert\equal(importersOfBoth(pkgs, a: "a", b: "c").join(" "), want: "w", message: "one pair");
+}
+
+test "an unknown package is an error, a leaf is not" {
+    final pkgs = {"x": ["leaf", "a"], "a": [<str>]};
+    assert\equal(known(pkgs, name: "leaf"), want: true, message: "leaf");
+    assert\equal(meet(pkgs, a: "leaf", b: "nope").error == null, want: false, message: "unknown");
+    assert\equal(meet(pkgs, a: "leaf", b: "a").error == null, want: true, message: "known");
+}
+
+test "an odd count of packages is refused" {
+    assert\equal(pairs(["a"]).error == null, want: false, message: "one");
+    assert\equal(pairs(["a", "b", "c"]).error == null, want: false, message: "three");
+    assert\equal(pairs([<str>]).error == null, want: false, message: "none");
+    assert\equal(pairs(["a", "b", "c", "d"]).value!.len(), want: 2, message: "four");
+}

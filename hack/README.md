@@ -64,6 +64,7 @@ Find the script by what you are doing; each row's flags are in its row under `de
 | resume a session that hit a limit or crashed | `hack/dev/show-interrupted-session.buzz` |
 | see what the guard refused, and mark the verdicts | `hack/dev/count-refusals.buzz`, `hack/dev/show-feedback.buzz`, `hack/dev/mark-feedback.buzz`, `hack/dev/count-feedback.buzz` |
 | check the hooks still block what they should | `hack/dev/check-guard-blocks.buzz` |
+| judge whether a word or type reused across packages has meanings that meet: whether A reaches B, B reaches A, and which packages import both | `hack/dev/show-import-meet.buzz -- [-o text\|json] -- <package> <package>...` |
 | see which processes the OS killed under memory pressure | `hack/dev/show-memory-kills.buzz` |
 | start a retro: trace a commit, trail record, job, or path and time back through the guard trail and job store, with each line's record and every link no record holds | `hack/retro/trace.buzz -- (--commit <rev> \| --record <ref> \| --job <id> \| --path <file> --at <time>) --trail <checkout>` |
 | see which tests reach a symbol, file or package by directed calls, their layer signals, the statements the coverage profile says never ran, and a worklist to judge through magus-test-design | `hack/retro/tests.buzz -- (--symbol <name>... \| --file <path> \| --package <dir>) [--profile <coverage profile>]` |
