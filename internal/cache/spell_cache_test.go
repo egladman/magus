@@ -430,7 +430,8 @@ func TestSpellCacheRemoteSaveAndRestore(t *testing.T) {
 	})
 
 	t.Run("a tampered newest bundle is refused and an older verified one is taken", func(t *testing.T) {
-		later := now.AddDate(0, 0, 1)
+		// Not AddDate: across a DST change a day is 25 hours.
+		later := now.Add(restoredAge)
 		_, err := writer.saveSpellCache(t.Context(), key, sourceRoots(t), later)
 		require.NoError(t, err)
 		stored := remote.artifactPath(spellCacheNamespace, key.remoteKey(later))

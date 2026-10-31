@@ -1,0 +1,18 @@
+# A graph build takes the machine's build lock first. A state dir it cannot use fails
+# the build at once with the lock named; it never waits or passes.
+env XDG_STATE_HOME=$WORK/magus.yaml/state
+! exec magus graph build --no-sessions
+stderr 'graph build lock'
+! exists .magus/knowledge/graph-build.holder.json
+
+# No state dir at all stops magus before the lock, and says what to set.
+env XDG_STATE_HOME=
+env HOME=
+! exec magus graph build --no-sessions
+stderr 'set XDG_STATE_HOME'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+magus\project({});
