@@ -253,24 +253,35 @@ func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, 
 	if err := g.refuseUnderPressure(ctx, c); err != nil {
 		return "", nil, err
 	}
-	return g.seat(ctx, c)
+	id, release, err := g.seat(ctx, c)
+	if err != nil {
+		return "", nil, err
+	}
+	// seat can hold a claim 30 minutes, and a healthy machine can fail in that.
+	if err := g.refuseUnderPressure(ctx, c); err != nil {
+		release()
+		return "", nil, err
+	}
+	return id, release, nil
 }
 
 // refuseUnderPressure is the MGS3053 refusal while the kernel says memory is
-// bad. A host with no reading is said once and passes, since refusing would
-// stop every run on it forever.
+// bad. A missing or partial reading is said once. A nested run passes: refusing
+// it would fail the running step above it.
 func (g *machineGate) refuseUnderPressure(ctx context.Context, c types.MachineClaim) error {
-	p, err := readPressure(ctx)
+	if len(c.Ancestors) > 0 || blindToOwnAncestry(ctx) {
+		return nil
+	}
+	reason, err := readPressure(ctx)
 	if err != nil {
 		g.unread.Do(func() {
-			g.log.WarnContext(ctx, "host memory state is not read for this run, so steps start whatever it is", attr.Error(err))
+			g.log.WarnContext(ctx, "this run's memory reading is missing or partial, so a step may start on a bad machine", attr.Error(err))
 		})
+	}
+	if reason == "" {
 		return nil
 	}
-	if !p.Bad {
-		return nil
-	}
-	return memoryPressureError(c, p, claimLease(ctx))
+	return memoryPressureError(c, reason, claimLease(ctx))
 }
 
 // seat asks the budget for c, with no reading of memory.
@@ -595,7 +606,7 @@ func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Tim
 	next := fmt.Sprintf("To run it once the budget can seat it, pipe the budget into the same command: `%s | %s <same args>`",
 		hint.Status.With("--wait"), hint.Run)
 	if lease != "" {
-		next = owedFiling(lease)
+		next = fmt.Sprintf("Job %s never waits for a seat: %s", lease, owedFiling(lease))
 	}
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this machine's build budget is full; %s, and %s. %s. The broker %s. %s",
@@ -605,20 +616,27 @@ func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Tim
 
 // owedFiling tells a caller under a job lease how to file a refused check.
 func owedFiling(lease string) string {
-	return fmt.Sprintf("Job %s never waits for a seat: file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
-		lease, hint.JobExit.With(lease), types.OwedNoSeat)
+	return fmt.Sprintf("file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
+		hint.JobExit.With(lease), types.OwedNoSeat)
+}
+
+// LeasedPressureNext is what a job does after MGS3053. An integration cannot
+// file its own checks as owed, and no seat clears this.
+func LeasedPressureNext(lease string) string {
+	return fmt.Sprintf("Job %s does not wait on memory. An integration owns its checks, so free memory and run this again; any other job should %s",
+		lease, owedFiling(lease))
 }
 
 // memoryPressureError offers no wait pipe: that waits on declared claims and
 // cannot see this.
-func memoryPressureError(c types.MachineClaim, p mem.Pressure, lease string) error {
+func memoryPressureError(c types.MachineClaim, reason, lease string) error {
 	next := fmt.Sprintf("Free memory, then run the same command again: `%s` shows what magus holds, and this reading counts everything on the machine", hint.Status.String())
 	if lease != "" {
-		next = owedFiling(lease)
+		next = LeasedPressureNext(lease)
 	}
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MemoryPressureHigh,
 		"not starting %s %s: this machine is short of memory right now: %s. Running steps keep going. %s",
-		displayProject(c.Project), c.Target, p.State, next)}
+		displayProject(c.Project), c.Target, reason, next)}
 }
 
 // claimLease is the job lease the refused run acts under, "" when it acts under none or

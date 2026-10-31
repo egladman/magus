@@ -1189,6 +1189,17 @@ func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "status --wait | <the check>`")
 }
 
+func TestAnIntegrationOwingACheckIsToldWhatClearsMemoryToo(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "integrate", Integrates: []string{"a"}, Check: acceptRow().Check}
+	rep := passingResult()
+	rep.Job = "integrate"
+	rep.Validation = types.JobResultValidation{Command: acceptRow().Validation, Owed: types.OwedNoSeat}
+	v := VerifyGates(row, rep, types.JobAttempt{}, nil, nil, Observed{})
+	assert.Contains(t, strings.Join(v.Violations, "\n"), "after MGS3053, which no seat clears, frees memory and runs the check again")
+}
+
 // A worker that found no build seat files its checks as owed, and the integration that
 // merges its branch runs each one its own full go-test and lint do not already cover.
 func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {

@@ -25,20 +25,19 @@ func psiFile(someAvg10, fullAvg10 string) string {
 func (s *PSIPressureSuite) TestFullStallAtTheThresholdRefuses() {
 	got, err := parsePSI(strings.NewReader(psiFile("90.00", "25.00")))
 	s.Require().NoError(err)
-	s.True(got.Bad)
-	s.Contains(got.State, "25.0% of the last 10 s")
+	s.Contains(got, "25.0% of the last 10 s")
 }
 
 func (s *PSIPressureSuite) TestFullStallBelowTheThresholdAdmits() {
 	got, err := parsePSI(strings.NewReader(psiFile("0.00", "24.99")))
 	s.Require().NoError(err)
-	s.False(got.Bad)
+	s.Empty(got)
 }
 
 func (s *PSIPressureSuite) TestSomeStallAloneAdmits() {
 	got, err := parsePSI(strings.NewReader(psiFile("99.00", "0.00")))
 	s.Require().NoError(err)
-	s.False(got.Bad)
+	s.Empty(got)
 }
 
 func (s *PSIPressureSuite) TestAFileWithNoFullLineIsAnError() {

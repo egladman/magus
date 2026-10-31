@@ -26,36 +26,37 @@ var psiPaths = []string{
 	"/proc/pressure/memory",
 }
 
-// ReadPressure reads Pressure Stall Information. An error means no file
-// answered, as on a kernel without CONFIG_PSI or one booted with psi=0.
-func ReadPressure(_ context.Context) (Pressure, error) {
+// ReadPressure reads Pressure Stall Information. It returns why a new step must
+// not start, "" when nothing says so. An error means no file answered, as on a
+// kernel without CONFIG_PSI or one booted with psi=0.
+func ReadPressure(_ context.Context) (string, error) {
 	var errs []error
 	for _, path := range psiPaths {
-		p, err := readPSI(path)
+		reason, err := readPSI(path)
 		if err == nil {
-			return p, nil
+			return reason, nil
 		}
 		errs = append(errs, err)
 	}
-	return Pressure{}, fmt.Errorf("the kernel has no readable pressure stall information: %w", errors.Join(errs...))
+	return "", fmt.Errorf("the kernel has no readable pressure stall information: %w", errors.Join(errs...))
 }
 
-func readPSI(path string) (Pressure, error) {
+func readPSI(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return Pressure{}, err
+		return "", err
 	}
 	defer f.Close()
-	p, err := parsePSI(f)
+	reason, err := parsePSI(f)
 	if err != nil {
-		return Pressure{}, fmt.Errorf("%s: %w", path, err)
+		return "", fmt.Errorf("%s: %w", path, err)
 	}
-	return p, nil
+	return reason, nil
 }
 
 // parsePSI judges a PSI file's full avg10, a percentage. A file without it
 // is an error rather than a calm reading.
-func parsePSI(r io.Reader) (Pressure, error) {
+func parsePSI(r io.Reader) (string, error) {
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
@@ -64,17 +65,19 @@ func parsePSI(r io.Reader) (Pressure, error) {
 		}
 		raw, ok := strings.CutPrefix(fields[1], "avg10=")
 		if !ok {
-			return Pressure{}, fmt.Errorf("the full line has no avg10: %q", sc.Text())
+			return "", fmt.Errorf("the full line has no avg10: %q", sc.Text())
 		}
 		avg, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
-			return Pressure{}, fmt.Errorf("the full line's avg10: %w", err)
+			return "", fmt.Errorf("the full line's avg10: %w", err)
 		}
-		state := fmt.Sprintf("every runnable task was stalled on memory for %.1f%% of the last 10 s", avg)
-		return Pressure{Bad: avg >= psiFullBadPercent, State: state}, nil
+		if avg < psiFullBadPercent {
+			return "", nil
+		}
+		return fmt.Sprintf("every runnable task was stalled on memory for %.1f%% of the last 10 s", avg), nil
 	}
 	if err := sc.Err(); err != nil {
-		return Pressure{}, err
+		return "", err
 	}
-	return Pressure{}, errors.New("no full line")
+	return "", errors.New("no full line")
 }

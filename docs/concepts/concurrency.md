@@ -312,17 +312,18 @@ Key properties:
   ([MGS3053](../reference/codes/sandbox/MGS3053.md), exit **75**) while the kernel says
   memory is in a bad state: on macOS the compressor at 75% of its segment limit or
   critical pressure, on Linux a full memory stall for 25% of the last 10 seconds. It
-  never queues, a gate included, and running steps are never stopped. A platform with no
-  reading says so once per run and starts the step. A low-headroom warning still speaks
-  separately while a run works. A declaration always wins: `slots` is claimed as written, and `memory_mb` is a ceiling a measurement only
-  narrows. A target that declares nothing claims, once it has three successful measured
-  runs, 1.25 times their highest peak memory and the 75th percentile of their CPU time
-  over wall time as slots, rounded up; before that, no memory and one slot. A run that
-  kept 90% of its slots busy is saturated: its claim capped it, so it sits out the
-  percentile and the next claim doubles, up to the budget, until a run granted more
-  slots comes back unsaturated. A replayed
-  step claims nothing. [MGS3009](../reference/codes/sandbox/MGS3009.md) has the whole
-  rule, and `magus session -o json` records how each step's claim was sized.
+  never queues, a gate included, and a step that waited for a seat reads memory again
+  once seated. Running steps are never stopped, and a run nested under one passes. A
+  missing or partial reading says so once per run. A low-headroom warning still speaks
+  separately while a run works. A declaration always wins: `slots` is claimed as
+  written, and `memory_mb` is a ceiling a measurement only narrows. A target that
+  declares nothing claims, once it has three successful measured runs, 1.25 times their
+  highest peak memory and the 75th percentile of their CPU time over wall time as slots,
+  rounded up; before that, no memory and one slot. A run that kept 90% of its slots busy
+  is saturated: its claim capped it, so it sits out the percentile and the next claim
+  doubles, up to the budget, until a run granted more slots comes back unsaturated. A
+  replayed step claims nothing. [MGS3009](../reference/codes/sandbox/MGS3009.md) has the
+  whole rule, and `magus session -o json` records how each step's claim was sized.
 - **A step runs Go as wide as it claims.** Every process a step starts gets
   `GOMAXPROCS` and `-p` equal to its slots, one included, since `go` reads no jobserver
   and would otherwise take every core the budget counted as free. So a Go target's

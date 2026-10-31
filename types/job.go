@@ -598,8 +598,9 @@ type JobResultValidation struct {
 	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
 }
 
-// OwedNoSeat is the one reason a worker files a check as owed: the machine's build budget
-// had no seat for it, and a worker never waits for one.
+// OwedNoSeat is the one reason a worker files a check as owed: the machine
+// would not seat it. Its budget was full (MGS3009) or its memory short
+// (MGS3053), and a worker waits on neither.
 const OwedNoSeat = "no seat"
 
 // JobStatus reports the result of verifying a job.

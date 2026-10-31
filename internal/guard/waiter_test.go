@@ -393,14 +393,43 @@ func (s *PressureRetrySuite) TestALeasedRetryIsToldTheOwedFilingAndNotTheWait() 
 	d := denyRefusedRetry(s.refusedAgo(10*time.Second), Dependencies{lease: "figures"}, "", pressureRetry)
 	s.Require().True(d.refused())
 	s.Contains(d.Say, "refused with MGS3053 10s ago")
-	s.Contains(d.Say, "owed \""+types.OwedNoSeat+"\"")
+	s.Contains(d.Say, cache.LeasedPressureNext("figures"), "the guard and the refusal say one thing")
 	s.NotContains(d.Say, "status --wait", "no seat clears this")
+}
+
+func (s *PressureRetrySuite) TestAWaitGatedRetryIsStillRefused() {
+	line := "./magus status --wait | " + pressureRetry
+	s.True(denyRefusedRetry(s.refusedAgo(10*time.Second), Dependencies{lease: "figures"}, "", line).refused())
+}
+
+func (s *PressureRetrySuite) TestAWaitGatedRetryOfAFullBudgetPasses() {
+	cacheDir := s.T().TempDir()
+	runsDir := filepath.Join(cacheDir, "runs")
+	s.Require().NoError(os.MkdirAll(runsDir, 0o755))
+	writeCodedLog(s.T(), runsDir, "invrefused", time.Now().Add(-10*time.Second), types.MachineBudgetExhausted, "run", "lint", ".")
+	ctx := context.WithValue(s.T().Context(), locationKey{}, location{cacheDir: cacheDir})
+	s.False(denyRefusedRetry(ctx, Dependencies{lease: "figures"}, "", "./magus status --wait | "+pressureRetry).refused())
+}
+
+func (s *PressureRetrySuite) TestEachListedCodeIsReadBack() {
+	for _, code := range refusalCodes {
+		runsDir := s.T().TempDir()
+		writeCodedLog(s.T(), runsDir, "inv", time.Now(), code, "run", "lint", ".")
+		got, ok := recentRefusal(runsDir, [][]string{{"run", "lint", "."}}, time.Now())
+		s.Require().True(ok, code)
+		s.Equal(code, got.code)
+	}
+}
+
+func (s *PressureRetrySuite) TestTheRuleTextNamesBothRefusals() {
+	s.Contains(ruleDocSleepPoll.Why, "refused with MGS3009 or MGS3053")
+	s.Contains(ruleDocSleepPoll.Why, "After MGS3053 no seat clears it")
 }
 
 func (s *PressureRetrySuite) TestAnUnboundRetryIsToldToFreeMemoryAndNotToFork() {
 	d := denyRefusedRetry(s.refusedAgo(10*time.Second), Dependencies{}, "", pressureRetry)
 	s.Require().True(d.refused())
-	s.Contains(d.Say, "free memory first")
+	s.Contains(d.Say, "Free memory first")
 	s.NotContains(d.Say, "fork a job")
 }
 

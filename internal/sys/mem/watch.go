@@ -53,15 +53,6 @@ type Reading struct {
 	SwapTriggered bool
 }
 
-// Pressure is the kernel's own word on memory, read when a step asks to start.
-// On darwin, headroom and swap do not move while the compressor absorbs load.
-type Pressure struct {
-	// Bad says a new step must not start.
-	Bad bool
-	// State says what was read, in words a refusal can quote.
-	State string
-}
-
 // Watch reports memory trouble until ctx is done, calling report when headroom
 // first falls below an eighth of total, on every further 250MB drop, and whenever
 // this run has pushed another 512MB into swap. It reads the host itself, and

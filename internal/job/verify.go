@@ -663,8 +663,8 @@ func owedGate(row types.Job, gate types.Goal, reason string) types.GateStatus {
 	case gate.Kind != types.GoalKindCheck:
 		status.Violations = append(status.Violations, fmt.Sprintf("files a %s goal as owed, and only a check has a run to owe", gate.Kind))
 	case row.Integrating():
-		status.Violations = append(status.Violations, fmt.Sprintf("an integration runs the checks it owns: it waits for a seat with `%s | <the check>`",
-			hint.Status.With("--wait")))
+		status.Violations = append(status.Violations, fmt.Sprintf("an integration runs the checks it owns: it waits for a seat with `%s | <the check>`, or after %s, which no seat clears, frees memory and runs the check again",
+			hint.Status.With("--wait"), types.MemoryPressureHigh))
 	case reason != types.OwedNoSeat:
 		status.Violations = append(status.Violations, fmt.Sprintf("files its run as owed because %q, and the one reason a run is owed is %q", reason, types.OwedNoSeat))
 	}

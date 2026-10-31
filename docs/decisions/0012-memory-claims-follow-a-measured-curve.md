@@ -309,8 +309,8 @@ steps from claiming.
 ### 2026-10-31: a failing machine refuses a new step
 
 This ADR relied on the 2026-10-16 brake row of the [record of refusals](../design/refusals.md)
-as standing. That row is reversed by decision 213, on new evidence. At 00:19 on 2026-10-31
-the machine panicked with "73% of compressed pages limit (OK) and 100% of segments limit
+as standing. That row is reversed on new evidence. At 00:19 on 2026-10-31 the machine
+panicked with "73% of compressed pages limit (OK) and 100% of segments limit
 (BAD)". Jetsam killed thousands of small daemons and no magus process, and `watchdogd`
 stalled 90 seconds. Nothing declared or measured could see what filled that machine.
 
