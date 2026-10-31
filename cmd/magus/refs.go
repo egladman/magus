@@ -392,15 +392,36 @@ func loadRefsAnswerGraph(ctx context.Context, ws types.WorkspaceRepository, cfg 
 	if err != nil {
 		return loadRefsGraph(ctx, ws, cfg, refresh, ref)
 	}
-	g, err := knowledge.NewStore(cacheDir, true, 0, nil, slog.Default()).Load(ctx)
+	store := knowledge.NewStore(cacheDir, true, 0, nil, slog.Default())
+	g, err := store.Load(ctx)
 	if err != nil {
 		return loadRefsGraph(ctx, ws, cfg, refresh, ref)
 	}
 	g.SetRoot(ws.Root())
-	if err := workspacegraph.MergeSymbolsForRef(ctx, ws, ws.Root(), cfg, g, ref, slog.Default()); err != nil {
-		return nil, err
+	if err := mergeStoredSymbols(ctx, store, g, ref); err != nil || !g.HasSymbols() {
+		return loadRefsGraph(ctx, ws, cfg, refresh, ref)
 	}
 	return g, nil
+}
+
+// mergeStoredSymbols merges ref's symbol shards as the store holds them. A copy
+// of mergeWorkspaceSymbolsForRef's routing without its reassembly, which is
+// what a stale read must not pay.
+func mergeStoredSymbols(ctx context.Context, store *knowledge.Store, g *knowledge.Graph, ref string) error {
+	if strings.HasPrefix(ref, types.KindSymbol+":") {
+		return store.MergeSymbolShardsByID(ctx, g, []string{ref})
+	}
+	if names := store.SymbolShardsForLabel(ref); len(names) > 0 {
+		routed := knowledge.NewGraph()
+		if err := store.MergeSymbolShardsNamed(ctx, routed, names); err != nil {
+			return err
+		}
+		if len(routed.SymbolsNamed(ref)) > 0 {
+			knowledge.UnionInto(g, routed)
+			return nil
+		}
+	}
+	return store.MergeSymbolShards(ctx, g)
 }
 
 // knownStaleCoverage is measuredCoverage over a staleness verdict the caller
