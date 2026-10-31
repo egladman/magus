@@ -58,6 +58,7 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 		if log := judgmentPhases(ctx); note == policyUnreadNote && (log.lapsed(phaseTargetPolicies) || log.lapsed(phaseInspect)) {
 			call := judgedCall{what: fmt.Sprintf("`%s`", elideCommand(command))}
 			lapse := ruleLapse{budget: inspectBudget, said: lapseWording{"reading this workspace's target policies", "finish"}}
+			log.markLapseDenied()
 			return decisionDeny, lapseReason(call, lapse, isDryRun(ctx))
 		}
 		return "", ""
