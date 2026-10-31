@@ -642,7 +642,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 	}
 	pageNote := page.note(shown, out.OccurrenceCount)
 	if pageNote != "" && opts.Format != outputText {
-		slog.InfoContext(ctx, pageNote, attr.Notice("magus refs"))
+		slog.WarnContext(ctx, pageNote, attr.Notice("magus refs"))
 	}
 
 	switch opts.Format {

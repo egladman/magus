@@ -1573,9 +1573,9 @@ the lines themselves; with --occurrences it prints each site's lines
 instead. --context N adds N lines on both sides, and --before and --after
 set one side over it. --lines A:B picks a range counted from the match: 0
 is the matched line or a definition's whole body, -1 the line above it, 1
-the line below it, so --lines=-5:-1 prints only the 5 lines above. A
-negative range needs the =. Any of these implies --source, and all clamp to
-the file.
+the line below it, so --lines=-5:-1 prints only the 5 lines above. Write a
+negative range with the =, so the value does not read as a flag. Any of
+these implies --source, and all clamp to the file.
 
 --limit and --offset page --occurrences by site; a cut page prints the
 total and the next command.
@@ -1622,7 +1622,7 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Comment: "Where a symbol's body starts and ends", Command: "magus refs Open --definition"},
 		{Comment: "A symbol's body, by name", Command: "magus refs Open --source"},
 		{Comment: "Every site's code, with five lines on both sides", Command: "magus refs Open --occurrences --context 5"},
-		{Comment: "Only the five lines above each site; a negative range needs the =", Command: "magus refs Open --occurrences --lines=-5:-1"},
+		{Comment: "Only the five lines above each site; write a negative range with the =", Command: "magus refs Open --occurrences --lines=-5:-1"},
 		{Comment: "Five lines above each site, four below", Command: "magus refs Open --occurrences --before 5 --after 4"},
 		{Comment: "One page of sites", Command: "magus refs Open --occurrences --limit 5 --offset 5"},
 		{Comment: "Raw text search, no index needed", Command: "magus refs TODO --text"},
