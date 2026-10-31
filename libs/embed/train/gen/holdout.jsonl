@@ -158,12 +158,14 @@
 {"group":"file:changes/unreleased/job-proof-counts-declared.md","path":"changes/unreleased/job-proof-counts-declared.md"}
 {"group":"file:changes/unreleased/job-prune.md","path":"changes/unreleased/job-prune.md"}
 {"group":"file:changes/unreleased/job-record-waivers.md","path":"changes/unreleased/job-record-waivers.md"}
+{"group":"file:changes/unreleased/job-row-risks.md","path":"changes/unreleased/job-row-risks.md"}
 {"group":"file:changes/unreleased/job-store-appends-changed-lines.md","path":"changes/unreleased/job-store-appends-changed-lines.md"}
 {"group":"file:changes/unreleased/job-store-is-json-lines.md","path":"changes/unreleased/job-store-is-json-lines.md"}
 {"group":"file:changes/unreleased/job-store-schema-not-commit.md","path":"changes/unreleased/job-store-schema-not-commit.md"}
 {"group":"file:changes/unreleased/job-verbs-stay-scoped-ended.md","path":"changes/unreleased/job-verbs-stay-scoped-ended.md"}
 {"group":"file:changes/unreleased/job-wait-accepts-a-same-second-run.md","path":"changes/unreleased/job-wait-accepts-a-same-second-run.md"}
 {"group":"file:changes/unreleased/jobs-retain.md","path":"changes/unreleased/jobs-retain.md"}
+{"group":"file:changes/unreleased/kb-freshness.md","path":"changes/unreleased/kb-freshness.md"}
 {"group":"file:changes/unreleased/lapsed-judgment-passes-an-outside-append.md","path":"changes/unreleased/lapsed-judgment-passes-an-outside-append.md"}
 {"group":"file:changes/unreleased/lease-commits-in-another-repo.md","path":"changes/unreleased/lease-commits-in-another-repo.md"}
 {"group":"file:changes/unreleased/lease-row-one-resolver.md","path":"changes/unreleased/lease-row-one-resolver.md"}
@@ -829,6 +831,7 @@
 {"group":"file:docs/reference/rules/checkpoint-state.md","path":"docs/reference/rules/checkpoint-state.md"}
 {"group":"file:docs/reference/rules/compat-marker.md","path":"docs/reference/rules/compat-marker.md"}
 {"group":"file:docs/reference/rules/conflict-rewrite.md","path":"docs/reference/rules/conflict-rewrite.md"}
+{"group":"file:docs/reference/rules/deviation-author.md","path":"docs/reference/rules/deviation-author.md"}
 {"group":"file:docs/reference/rules/echo-on-success.md","path":"docs/reference/rules/echo-on-success.md"}
 {"group":"file:docs/reference/rules/exit-status-echo.md","path":"docs/reference/rules/exit-status-echo.md"}
 {"group":"file:docs/reference/rules/filter-without-input.md","path":"docs/reference/rules/filter-without-input.md"}
@@ -934,6 +937,7 @@
 {"group":"dir:hack/dev","path":"hack/dev/render-brief.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/resolve-conflicts.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-code-context.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/show-dependency.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-feedback.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-interrupted-session.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-memory-kills.buzz"}
@@ -956,6 +960,7 @@
 {"group":"dir:hack/lint","path":"hack/lint/hack-scripts-parse-argv-with-flags.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/hack-scripts-start-with-a-verb.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/landing-rotator-slots-match-headline-count.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/local-skills-reach-every-host.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/lockfiles-are-sorted.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/magusfile-modules-have-no-main.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/magusfiles-hold-no-tests.buzz"}
@@ -1052,6 +1057,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/buzz_read_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/buzz_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/cache.go"}
+{"group":"dir:internal/guard","path":"internal/guard/cache_clear.go"}
+{"group":"dir:internal/guard","path":"internal/guard/cache_clear_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/cache_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/catalog.go"}
 {"group":"dir:internal/guard","path":"internal/guard/catalog_test.go"}
