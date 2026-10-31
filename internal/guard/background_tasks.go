@@ -567,7 +567,8 @@ func readBackgroundTranscript(transcript, cacheDir string, now time.Time) (trans
 		return transcriptTasks{}, err
 	}
 	defer f.Close()
-	store := taskCheckpointPath(cacheDir, transcript)
+	storePath := taskCheckpointPath(cacheDir, transcript)
+	store := checkpointLog(storePath)
 	r, start, saved := resumeTaskReader(store, transcript, f)
 	if _, err := f.Seek(start, io.SeekStart); err != nil {
 		return transcriptTasks{}, err
@@ -589,7 +590,7 @@ func readBackgroundTranscript(transcript, cacheDir string, now time.Time) (trans
 		offset += int64(len(line))
 		r.fold(line)
 	}
-	if store != "" && offset > start {
+	if storePath != "" && offset > start {
 		r.prune()
 		if head, err := transcriptHead(f, offset); err == nil {
 			r.save(store, saved, taskCheckpoint{Transcript: transcript, Offset: offset, Head: head})
@@ -651,27 +652,28 @@ func transcriptHead(f *os.File, n int64) (string, error) {
 // resumeTaskReader is a reader holding store's newest checkpoint of transcript and the
 // offset to read on from, or an empty reader and 0 when no checkpoint matches f. It also
 // returns the store's lines as read, which save needs to append or compact.
-func resumeTaskReader(store, transcript string, f *os.File) (*taskReader, int64, file.Lines) {
+func resumeTaskReader(store file.Log[taskCheckpoint], transcript string, f *os.File) (*taskReader, int64, savedCheckpoints) {
 	r := &taskReader{
 		commands: map[string]backgroundTask{},
 		live:     map[string]*backgroundTask{},
 		endedIDs: map[string]bool{},
 		heard:    map[string]time.Time{},
 	}
-	if store == "" {
-		return r, 0, file.Lines{}
+	if store.Path == "" {
+		return r, 0, savedCheckpoints{}
 	}
-	saved, err := file.ReadLines(store)
+	entries, err := store.Load()
 	if err != nil {
-		return r, 0, file.Lines{}
+		// The next save starts the store over.
+		return r, 0, savedCheckpoints{unreadable: true}
 	}
+	saved := savedCheckpoints{entries: entries}
 	info, err := f.Stat()
 	if err != nil {
 		return r, 0, saved
 	}
-	for _, line := range slices.Backward(saved.Lines) {
-		var cp taskCheckpoint
-		if json.Unmarshal(line.Text, &cp) != nil || cp.Transcript != transcript || cp.Offset > info.Size() {
+	for _, cp := range slices.Backward(entries) {
+		if cp.Transcript != transcript || cp.Offset > info.Size() {
 			continue
 		}
 		if head, err := transcriptHead(f, cp.Offset); err != nil || head != cp.Head {
@@ -692,26 +694,36 @@ func resumeTaskReader(store, transcript string, f *os.File) (*taskReader, int64,
 // to that one entry once it is due compaction. A failed write is dropped: the next call
 // reads the transcript from the last checkpoint that did land, which is slower, never
 // wrong.
-func (r *taskReader) save(store string, saved file.Lines, cp taskCheckpoint) {
+func (r *taskReader) save(store file.Log[taskCheckpoint], saved savedCheckpoints, cp taskCheckpoint) {
 	cp.Pending = r.commands
 	cp.Heard = r.heard
 	cp.HostVersion = r.version
 	for _, callID := range r.order {
 		cp.Live = append(cp.Live, checkpointTask{CallID: callID, Task: *r.live[callID]})
 	}
-	line, err := json.Marshal(cp)
-	if err != nil {
+	if saved.unreadable {
+		_ = os.Remove(store.Path)
+	}
+	if len(saved.entries) == 0 {
+		sweepCheckpoints(filepath.Dir(store.Path))
+	}
+	ctx := context.Background()
+	if store.Append(ctx, cp) != nil {
 		return
 	}
-	if len(saved.Lines) == 0 && !saved.Partial {
-		sweepCheckpoints(filepath.Dir(store))
-	}
-	if saved.Partial || file.CompactDue(len(saved.Lines)+1, 1) {
-		_ = file.RewriteLines(store, [][]byte{line}, 0o644)
-		return
-	}
-	// One write per hook call: a sync would cost more than the checkpoint saves.
-	_ = file.AppendLines(store, [][]byte{line}, 0o644, file.WithoutSync())
+	_, _ = store.Compact(ctx)
+}
+
+// savedCheckpoints is a store as resumeTaskReader read it.
+type savedCheckpoints struct {
+	entries    []taskCheckpoint
+	unreadable bool
+}
+
+// checkpointLog keeps the newest checkpoint. Its appends skip the sync, since
+// one write per hook call would cost more than a checkpoint saves.
+func checkpointLog(path string) file.Log[taskCheckpoint] {
+	return file.Log[taskCheckpoint]{Path: path, Perm: 0o644, Keep: 1, SkipSync: true}
 }
 
 // checkpointRetention is how long a session's checkpoint store outlives its last write,
