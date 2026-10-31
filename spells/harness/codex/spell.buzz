@@ -123,8 +123,10 @@ export fun mgs_listHooks() > [HookCommand] {
 
 // Codex declares no wait limits. turn_id rides its tool and stop events, and
 // no other host sends it (https://learn.chatgpt.com/docs/hooks, read 2026-10-29).
+// A PreToolUse reply's additionalContext reaches the agent alone, a systemMessage the person
+// alone, and a deny reason both. A Stop reply takes no hookSpecificOutput.
 export fun mgs_getLimits() > Limits {
-    return Limits{payloadFields = ["turn_id"]};
+    return Limits{payloadFields = ["turn_id"], channels = ["display", "capture", "notice"]};
 }
 
 export fun mgs_listUnsupportedHooks() > [HookBinding] {
@@ -186,12 +188,6 @@ export fun mgs_getHarnessConfig() > HarnessConfig {
 
 export fun mgs_getSkills() > HarnessSkills {
     return HarnessSkills{paths = [".agents/skills"], form = SkillForm.both};
-}
-
-// A PreToolUse reply's additionalContext reaches the agent alone, a systemMessage the person
-// alone, and a deny reason both. A Stop reply takes no hookSpecificOutput.
-export fun mgs_getLimits() > Limits {
-    return Limits{channels = ["display", "capture", "notice"]};
 }
 
 // Every Codex tool the guard should know whose input's shape does not say what it does. A
