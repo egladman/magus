@@ -53,6 +53,17 @@ export fun modulePath(gomod: str) > str !> str {
     throw "coverage: go.mod has no module line";
 }
 
+// profilePath is where a test run writes its profile. A full run owns base; a
+// narrowed run writes base.<its args>.out, so it cannot overwrite the full one.
+export fun profilePath(base: str, args: [str]) > str {
+    if (args.len() == 0) { return base; }
+    var key = args.join("_");
+    foreach (ch in ["/", " ", "'", "\"", "|", "^", "$", "(", ")", "*", "?", "=", ":", "\\"]) {
+        key = key.replace(ch, with: "-");
+    }
+    return base.replace(".out", with: "." + key + ".out");
+}
+
 // isGeneratedSource reports whether a Go source body carries the marker.
 //
 // The scan stops at the package clause: the convention places the marker in the
