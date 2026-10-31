@@ -82,7 +82,7 @@
       "items": {
         "type": "string"
       },
-      "description": "FollowUps is work the holder leaves for later. Each item stands until the row's Deferred answers it, as an unresolved risk does."
+      "description": "FollowUps is work the holder explicitly leaves for later. Each item stands until the row's Deferred answers it."
     },
     "observed_generation": {
       "type": "integer",

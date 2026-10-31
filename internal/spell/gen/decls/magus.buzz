@@ -1837,6 +1837,7 @@ export object JobUnmerged {
 export object JobUnmergedReport {
     branch: str = "",
     rows: [JobUnmerged] = [],
+    risks: [JobUnmerged] = [],
     unknown: str = "",
 }
 

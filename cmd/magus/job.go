@@ -511,6 +511,12 @@ func lsJobs(root string, args []string) error {
 		for _, line := range unmerged.Lines() {
 			fmt.Fprintln(os.Stdout, line)
 		}
+		if len(unmerged.Risks) > 0 {
+			fmt.Fprintf(os.Stdout, "unresolved risks, which stop nothing: %d\n", len(unmerged.Risks))
+		}
+		for _, risk := range unmerged.Risks {
+			fmt.Fprintf(os.Stdout, "  %s: %q\n", risk.Job, risk.Item)
+		}
 		printInflight(os.Stdout, list, all)
 		pointAtConsole(context.Background(), "")
 		return nil

@@ -578,8 +578,8 @@ type JobResult struct {
 	GateEvidence    []GateEvidence      `json:"gate_evidence,omitempty" yaml:"gate_evidence,omitempty"`
 	Descendants     []string            `json:"descendants,omitempty" yaml:"descendants,omitempty"`
 	UnresolvedRisks []string            `json:"unresolved_risks" yaml:"unresolved_risks"`
-	// FollowUps is work the holder leaves for later. Each item stands
-	// until the row's Deferred answers it, as an unresolved risk does.
+	// FollowUps is work the holder explicitly leaves for later. Each item
+	// stands until the row's Deferred answers it.
 	FollowUps []string `json:"follow_ups,omitempty" yaml:"follow_ups,omitempty"`
 	// ObservedGeneration is the job's Generation when the result was filed, stamped by the
 	// store rather than taken from the holder.
@@ -1246,10 +1246,12 @@ type JobUnmerged struct {
 
 // JobUnmergedReport is what the checkout's branch does not hold. Unknown says
 // why the branch could not be read: Rows then holds deferred items only, and
-// a row absent from it is not thereby merged.
+// a row absent from it is not thereby merged. Risks are unanswered unresolved
+// risks: listed for reading, and no work the branch lacks.
 type JobUnmergedReport struct {
 	Branch  string        `json:"branch,omitempty"  yaml:"branch,omitempty"`
 	Rows    []JobUnmerged `json:"rows,omitempty"    yaml:"rows,omitempty"`
+	Risks   []JobUnmerged `json:"risks,omitempty"   yaml:"risks,omitempty"`
 	Unknown string        `json:"unknown,omitempty" yaml:"unknown,omitempty"`
 }
 

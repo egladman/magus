@@ -303,7 +303,10 @@ func Unmerged(ctx context.Context, root string, rows []types.Job) types.JobUnmer
 		if row.Holder.OrSession() == types.HolderServer || row.LeftUnmerged != "" || !ownTree(rows, root, row) {
 			continue
 		}
-		report.Rows = append(report.Rows, unanswered(rows, row)...)
+		if row.Result != nil {
+			report.Rows = append(report.Rows, unanswered(rows, row, row.Result.FollowUps, "its result defers this and no row carries it")...)
+			report.Risks = append(report.Risks, unanswered(rows, row, row.Result.UnresolvedRisks, "its result names this risk and no row carries it")...)
+		}
 		if !row.ReadOnly && !row.State.Editing() && (row.Result != nil || row.State.Terminal()) && !strings.HasPrefix(row.EndReason, landedReasonPrefix) {
 			work = append(work, row)
 		}
@@ -337,20 +340,17 @@ func Unmerged(ctx context.Context, root string, rows []types.Job) types.JobUnmer
 	return report
 }
 
-// unanswered are row's deferred items no answer settles. An answer naming a
-// row the store lost settles nothing.
-func unanswered(rows []types.Job, row types.Job) []types.JobUnmerged {
-	if row.Result == nil {
-		return nil
-	}
+// unanswered are the items no answer on row settles. An answer naming a row
+// the store lost settles nothing.
+func unanswered(rows []types.Job, row types.Job, items []string, why string) []types.JobUnmerged {
 	var out []types.JobUnmerged
-	for _, item := range slices.Concat(row.Result.UnresolvedRisks, row.Result.FollowUps) {
+	for _, item := range items {
 		i := slices.IndexFunc(row.Deferred, func(d types.JobDeferred) bool { return d.Item == item })
 		if i >= 0 && (row.Deferred[i].Reason != "" || slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == row.Deferred[i].Row })) {
 			continue
 		}
 		out = append(out, types.JobUnmerged{
-			Job: row.ID, Item: item, Why: "its result defers this and no row carries it",
+			Job: row.ID, Item: item, Why: why,
 			Remedy: fmt.Sprintf("declare a row for it, or dismiss it: `%s` with {\"schema_version\":%d,\"id\":%q,\"deferred\":[{\"item\":\"<item>\",\"row\":\"<row>\"}]}, or \"reason\":\"<why>\" in place of row",
 				hint.JobApply.With("-f", "-"), types.JobSchemaVersion, row.ID),
 		})

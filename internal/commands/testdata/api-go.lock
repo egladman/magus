@@ -3177,6 +3177,7 @@ github.com/egladman/magus/types.JobUnmerged.Why field string "json:\"why\"      
 github.com/egladman/magus/types.JobUnmergedReport type struct
 github.com/egladman/magus/types.JobUnmergedReport.Branch field string "json:\"branch,omitempty\"  yaml:\"branch,omitempty\""
 github.com/egladman/magus/types.JobUnmergedReport.Lines method func() []string
+github.com/egladman/magus/types.JobUnmergedReport.Risks field []JobUnmerged "json:\"risks,omitempty\"   yaml:\"risks,omitempty\""
 github.com/egladman/magus/types.JobUnmergedReport.Rows field []JobUnmerged "json:\"rows,omitempty\"    yaml:\"rows,omitempty\""
 github.com/egladman/magus/types.JobUnmergedReport.Unknown field string "json:\"unknown,omitempty\" yaml:\"unknown,omitempty\""
 github.com/egladman/magus/types.JobValidation type struct

@@ -358,15 +358,34 @@ func (s *unmergedSuite) TestADetachedCheckoutIsUnknownNeverMerged() {
 	s.Empty(got.Rows)
 }
 
-func (s *unmergedSuite) TestADeferredItemStandsUntilAnswered() {
+func (s *unmergedSuite) TestAFollowUpStandsUntilAnswered() {
 	row := types.Job{ID: "r", State: types.StatePass, ReadOnly: true,
-		Result: &types.JobResult{UnresolvedRisks: []string{"a risk"}, FollowUps: []string{"a follow-up"}}}
+		Result: &types.JobResult{FollowUps: []string{"a follow-up"}}}
 
 	got := s.unmerged(row)
 
-	s.Require().Len(got.Rows, 2)
-	s.Equal("a risk", got.Rows[0].Item)
-	s.Equal("a follow-up", got.Rows[1].Item)
+	s.Require().Len(got.Rows, 1)
+	s.Equal("a follow-up", got.Rows[0].Item)
+	s.Empty(got.Risks)
+}
+
+func (s *unmergedSuite) TestARowWithOnlyUnresolvedRisksHasNothingUnmerged() {
+	row := types.Job{ID: "r", State: types.StatePass, ReadOnly: true,
+		Result: &types.JobResult{UnresolvedRisks: []string{"a risk"}}}
+
+	got := s.unmerged(row)
+
+	s.Empty(got.Rows)
+	s.Require().Len(got.Risks, 1)
+	s.Equal("a risk", got.Risks[0].Item)
+}
+
+func (s *unmergedSuite) TestAnAnsweredRiskLeavesTheList() {
+	row := types.Job{ID: "r", State: types.StatePass, ReadOnly: true,
+		Result:   &types.JobResult{UnresolvedRisks: []string{"a risk"}},
+		Deferred: []types.JobDeferred{{Item: "a risk", Reason: "accepted"}}}
+
+	s.Empty(s.unmerged(row).Risks)
 }
 
 func (s *unmergedSuite) TestAReasonOrADeclaredRowAnswersAnItem() {
@@ -374,7 +393,10 @@ func (s *unmergedSuite) TestAReasonOrADeclaredRowAnswersAnItem() {
 		Result:   &types.JobResult{UnresolvedRisks: []string{"a risk"}, FollowUps: []string{"a follow-up"}},
 		Deferred: []types.JobDeferred{{Item: "a risk", Reason: "accepted"}, {Item: "a follow-up", Row: "next"}}}
 
-	s.Empty(s.unmerged(row, types.Job{ID: "next", State: types.StateDeclared}).Rows)
+	got := s.unmerged(row, types.Job{ID: "next", State: types.StateDeclared})
+
+	s.Empty(got.Rows)
+	s.Empty(got.Risks)
 }
 
 func (s *unmergedSuite) TestAnAnswerNamingAMissingRowLeavesTheItemStanding() {

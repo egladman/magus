@@ -3732,6 +3732,11 @@ func ObjectJobUnmergedReport(v types.JobUnmergedReport) vm.Value {
 		itemsRows[indexRows] = ObjectJobUnmerged(v.Rows[indexRows])
 	}
 	out.MapSet("rows", vm.ListValue(itemsRows))
+	itemsRisks := make([]vm.Value, len(v.Risks))
+	for indexRisks := range v.Risks {
+		itemsRisks[indexRisks] = ObjectJobUnmerged(v.Risks[indexRisks])
+	}
+	out.MapSet("risks", vm.ListValue(itemsRisks))
 	out.MapSet("unknown", vm.StringValue(v.Unknown))
 	return out
 }

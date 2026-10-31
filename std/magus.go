@@ -803,7 +803,8 @@ var Magus = Module{
 					Name: "unmerged",
 					Doc: "What the branch checked out at workspace does not hold, for the job trees " +
 						"forked from it: filed or ended work off the branch, uncommitted paths in a " +
-						"filed row's checkout, and deferred items no row carries and no reason dismisses. " +
+						"filed row's checkout, and follow_ups no row carries and no reason dismisses. " +
+						"risks lists unanswered unresolved_risks apart, to read and not to stop on. " +
 						"Facts only: repo policy decides what they stop. An unknown branch fills unknown " +
 						"and an unreadable head is a row, so neither reads as merged. It reads the " +
 						"version control per row, so call it from a stop rule, not on every tool call.",
