@@ -443,6 +443,10 @@ fun readAgentName(args: [str]) > str {
         warn("unsupported argument \"{word}\"; this call was judged WITHOUT it. "
             + "This hook takes only {AGENT_NAME_FLAG} <host>. Fix the hook command in your host config.");
     }
+    foreach (word in parsed!.positionals) {
+        warn("stray word \"{word}\"; this call was judged WITHOUT it. "
+            + "This hook takes only {AGENT_NAME_FLAG} <host>. Fix the hook command in your host config.");
+    }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
@@ -1170,6 +1174,10 @@ fun readAgentName(args: [str]) > str {
         warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
+    foreach (word in parsed!.positionals) {
+        warn("stray word \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
+            + "Fix the hook command in your host config.");
+    }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
@@ -1219,6 +1227,103 @@ fun main(args: [str]) > void {
         "--transcript", field(event, dotPath: transcriptPath),
         "--event", "PreToolUse",
     ], dir: cwd, opts: proc\ExecOptions{quiet = true, allowFailure = true, stdin = reached}) catch void;
+}
+```
+
+## `magus-tool-time.buzz`
+
+Carries no verdict either. Wire it to the host's post-call event on every tool, in
+the background where the host has one, and it records how long the tool ran as the
+host reports it. A host whose event carries no duration records nothing. It always
+exits 0.
+
+```buzz
+// magus tool-time hook: records how long a tool ran, as the host says.
+// It judges nothing and always exits 0.
+// Run as `magus buzz -s magus-tool-time.buzz -- --agent-name <host>`.
+// An event with no duration records nothing.
+// The HOST_*_PATH variables retarget a field, as in magus-observe.buzz.
+//
+// magus-guard-template: 35
+
+import "std";
+import "io";
+import "flags";
+import "encoding/json";
+import "proc";
+import "lib/hook" as hook;
+
+fun field(event: any?, dotPath: str) > str {
+    final value = hook\dig(event, dotPath: dotPath);
+    if (value == null) { return ""; }
+    return (value as? str) ?? "";
+}
+
+// A run under one millisecond reads as 1, since 0 means nothing was reported.
+fun milliseconds(event: any?, dotPath: str) > int {
+    final value = hook\dig(event, dotPath: dotPath);
+    var ms = 0;
+    if (value is int) { ms = value as int; }
+    if (value is double) { ms = std\toInt(value as double); }
+    if (value == null or ms < 0) { return 0; }
+    if (ms == 0) { return 1; }
+    return ms;
+}
+
+fun warn(message: str) > void {
+    io\stderr.write("magus-tool-time.buzz: {message}\n") catch void;
+}
+
+final AGENT_NAME_FLAG = "--agent-name";
+
+fun readAgentName(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
+            + "Fix the hook command in your host config.");
+    }
+    foreach (word in parsed!.positionals) {
+        warn("stray word \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
+            + "Fix the hook command in your host config.");
+    }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
+}
+
+fun main(args: [str]) > void {
+    final agentName = readAgentName(args);
+    if (agentName == "") {
+        warn("[MGS3024] this hook was not given --agent-name, so nothing was recorded. "
+            + "Merge what `magus describe harness` prints into the host's hook configuration; "
+            + "the commands it prints name the host.");
+        return;
+    }
+    final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
+    final raw = io\stdin.readAll() catch "";
+    final event = json\parse(raw) catch null;
+    // Cursor names its session conversation_id.
+    var session = field(event, dotPath: sessionPath);
+    if (session == "") { session = field(event, dotPath: "conversation_id"); }
+    final cwd = field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
+    final tool = field(event, dotPath: hook\envOr("HOST_TOOL_PATH", fallback: "tool_name"));
+    var ms = milliseconds(event, dotPath: hook\envOr("HOST_DURATION_PATH", fallback: "duration_ms"));
+    if (ms == 0) { ms = milliseconds(event, dotPath: "duration"); }
+    if (tool == "" or ms == 0) { return; }
+
+    final bin = hook\resolveBin(cwd: cwd);
+    if (bin == "" or !hook\isExecutable(bin)) {
+        io\stdout.write(hook\unrecordedNotice(bin, session: session,
+            host: agentName, file: "magus-tool-time.buzz", root: hook\workspaceRootAt(cwd))) catch void;
+        return;
+    }
+
+    _ = proc\exec(bin, args: [
+        "shell", "--tool-ms", "{ms}",
+        "--agent-name", agentName,
+        "--session", session,
+        "--transcript", field(event, dotPath: hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path")),
+        "--event", "PostToolUse",
+    ], dir: cwd, opts: proc\ExecOptions{quiet = true, allowFailure = true, stdin = tool}) catch void;
 }
 ```
 
