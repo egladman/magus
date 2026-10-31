@@ -2904,10 +2904,9 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	return vcsRefusal{op: op, kind: vcsOpLands, why: why}
 }
 
-<<<<<<< HEAD
 // relocateFlag is the option each backend takes to run in another directory.
 var relocateFlag = map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", "jj": "-R"}
-=======
+
 // commitPathsRefusal grades what a commit carries against row's write paths.
 // A write is judged as it happens, and a generator run writes past them.
 // A merge's commit is exempt: it carries the base it merged.
@@ -3037,7 +3036,6 @@ func lineStagedPaths(ctx context.Context, cmds []hint.Invocation, dir string) []
 	}
 	return out
 }
->>>>>>> 6cf85bf9d (grade a leased commit path by path; refuse an empty job result; hold outputs on an integration row)
 
 // refMoveRefusal places a call that moves HEAD, a ref or the index like a commit: in another
 // checkout of the repository it moves that checkout's state, and a repository of its own
