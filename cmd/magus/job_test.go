@@ -2297,3 +2297,32 @@ func (s *GradeCheckLapseSuite) TestARealDenyStillRefuses() {
 	s.True(verdict.Denied)
 	s.Empty(verdict.Deferred)
 }
+
+type ForkDiskFloorSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestForkDiskFloorSuite(t *testing.T) {
+	suite.Run(t, new(ForkDiskFloorSuite))
+}
+
+func (s *ForkDiskFloorSuite) SetupTest() {
+	s.root = s.T().TempDir()
+}
+
+const everyDiskIsLow = int64(1) << 62
+
+func (s *ForkDiskFloorSuite) TestANewCheckoutOnALowDiskIsRefusedNamingTheCode() {
+	err := refuseForkOnFullDisk(s.T().Context(), "false", s.root, filepath.Join(s.root, "new"), everyDiskIsLow)
+	s.ErrorIs(err, types.DiskFull)
+	s.ErrorContains(err, types.ReclaimDiskCommand)
+}
+
+func (s *ForkDiskFloorSuite) TestAnAdoptedCheckoutIsExempt() {
+	s.NoError(refuseForkOnFullDisk(s.T().Context(), "false", s.root, s.root, everyDiskIsLow))
+}
+
+func (s *ForkDiskFloorSuite) TestADiskAboveTheFloorPasses() {
+	s.NoError(refuseForkOnFullDisk(s.T().Context(), "false", s.root, filepath.Join(s.root, "new"), 1))
+}
