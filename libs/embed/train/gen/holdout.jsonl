@@ -689,6 +689,7 @@
 {"group":"dir:docs/glossary","path":"docs/glossary/harness.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/health.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/hotspot.md"}
+{"group":"dir:docs/glossary","path":"docs/glossary/inner-harness.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/insight.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/invocation.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/job.md"}
@@ -704,6 +705,7 @@
 {"group":"dir:docs/glossary","path":"docs/glossary/one-off.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/one-vocabulary-rule.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/op.md"}
+{"group":"dir:docs/glossary","path":"docs/glossary/outer-harness.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/output-reference.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/ownership.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/pane.md"}
@@ -863,6 +865,7 @@
 {"group":"figure:ci-providers","path":"docs/site/diagrams/ci-providers.buzz"}
 {"group":"figure:diagram-pipeline","path":"docs/site/diagrams/diagram-pipeline.buzz"}
 {"group":"figure:guard-path","path":"docs/site/diagrams/guard-path.buzz"}
+{"group":"dir:docs/site/diagrams","path":"docs/site/diagrams/harness-pyramid.buzz"}
 {"group":"figure:image-build","path":"docs/site/diagrams/image-build.buzz"}
 {"group":"figure:kustomize-architecture","path":"docs/site/diagrams/kustomize-architecture.buzz"}
 {"group":"dir:docs/site/diagrams","path":"docs/site/diagrams/mandate.buzz"}
