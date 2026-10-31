@@ -153,7 +153,7 @@ type TargetResult struct {
 	Replayed   bool   `json:"replayed,omitempty"`
 	// Permitted says a deviation ledger let this pass. Outcome stays pass:
 	// a push gate and a job's owed check compare on it.
-	Permitted bool   `json:"permitted,omitempty"`
+	Permitted bool   `json:"permitted,omitzero"`
 	Ref       string `json:"ref,omitempty"`
 	// DiagnosticCode is the MGS code of a failure that never ran, such as an admission
 	// refusal.
