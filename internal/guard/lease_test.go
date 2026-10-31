@@ -764,6 +764,7 @@ func figuresWorkspace(t *testing.T) Dependencies {
 	}}
 	ws.EXPECT().Get("docs").Return(docs).Maybe()
 	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
+	ws.EXPECT().All().Return([]*types.Project{docs}).Maybe()
 	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
 }
 
@@ -795,16 +796,13 @@ func composingWorkspace(t *testing.T) Dependencies {
 		}},
 		{Path: "libs/conventions", Nodes: []types.TargetGraphNode{{Name: "proofread-build"}}},
 	}}, nil).Maybe()
-	ws.EXPECT().ClassifyFiles(mock.Anything, []string{checkoutBinary}).Return([]types.FileEntry{{
-		Path: "magus", Project: ".", Role: "output",
-		Claims: []types.FileClaim{{Project: ".", Target: "go-build", Role: "output", Glob: "magus"}},
-	}}, nil).Maybe()
 	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 	ws.EXPECT().Get(".").Return(&types.Project{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"}}).Maybe()
 	ws.EXPECT().Get("libs/conventions").Return(&types.Project{Path: "libs/conventions", MagusfileTargets: []string{"proofread-build"}}).Maybe()
 	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	ws.EXPECT().All().Return([]*types.Project{
-		{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"}},
+		{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"},
+			TargetPolicies: map[string]types.Target{"go-build": {Relinks: "./magus"}}},
 		{Path: "libs/conventions", MagusfileTargets: []string{"proofread-build"}},
 	}).Maybe()
 	return Dependencies{
@@ -3687,4 +3685,166 @@ func (s *ScratchWorkspaceSuite) TestAWriteInASiblingCheckoutUnderTheMagusTmpDirI
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
 	s.linkSibling(dir, "written-sibling")
 	s.Equal(decisionDeny, denyOtherCheckout(s.held, s.row.ID, filepath.Join(dir, "main.go")).Decision)
+}
+
+// workerCheckReadsSuite pins which unlisted runs worker-check-only lets a bound
+// worker make, and that each neighbouring run stays refused.
+type workerCheckReadsSuite struct {
+	suite.Suite
+}
+
+func TestWorkerCheckReadsSuite(t *testing.T) {
+	suite.Run(t, new(workerCheckReadsSuite))
+}
+
+// judged is what denyWorkerCheckOnly answers for command under row.
+func (s *workerCheckReadsSuite) judged(row types.Job, deps Dependencies, command string) denial {
+	ctx, _ := fleetFixture(s.T(), row)
+	deps.lease = row.ID
+	return denyWorkerCheckOnly(ctx, deps, row.ID, command)
+}
+
+// judgedInCheckout is judged, with row's fork having made the workspace.
+func (s *workerCheckReadsSuite) judgedInCheckout(row types.Job, deps Dependencies, command string) denial {
+	ctx, _ := fleetFixture(s.T(), row)
+	at, _ := ctx.Value(locationKey{}).(location)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: at.cacheDir, Root: at.workspace})
+	_, err := store.RecordWorktree(ctx, row.ID, types.JobWorktree{Root: at.workspace, Source: s.T().TempDir()})
+	require.NoError(s.T(), err)
+	deps.lease = row.ID
+	return denyWorkerCheckOnly(ctx, deps, row.ID, command)
+}
+
+// ruled is a workspace whose command rule is loaded.
+func (s *workerCheckReadsSuite) ruled() Dependencies {
+	deps := composingWorkspace(s.T())
+	deps.CommandRule = (&commandRuleProbe{}).rule()
+	return deps
+}
+
+// movedProjectRow is a worker whose check still names libs/conventions while
+// its write paths sit elsewhere, as after that project was renamed.
+func movedProjectRow() types.Job {
+	row := testCheckLease()
+	row.Check = &types.LeaseCheck{Target: "test", Project: "libs/conventions"}
+	return row
+}
+
+func (s *workerCheckReadsSuite) TestAReadOnlyRunOverAReadPathProjectPasses() {
+	row := testCheckLease()
+	row.ReadPaths = []string{"libs/conventions/errmsg/**"}
+	s.Empty(s.judged(row, composingWorkspace(s.T()), "./magus run lint libs/conventions --no-default-charms"))
+}
+
+func (s *workerCheckReadsSuite) TestAReadOnlyRunOverTheCheckProjectPasses() {
+	s.Empty(s.judged(movedProjectRow(), composingWorkspace(s.T()), "./magus run lint libs/conventions --no-default-charms"))
+}
+
+func (s *workerCheckReadsSuite) TestAReadOnlyRunOverAnUnnamedProjectIsRefused() {
+	s.True(s.judged(movedProjectRow(), composingWorkspace(s.T()), "./magus run lint docs --no-default-charms").refused())
+}
+
+func (s *workerCheckReadsSuite) TestARunOverAReadPathWithoutTheFlagIsRefused() {
+	row := testCheckLease()
+	row.ReadPaths = []string{"libs/conventions/**"}
+	s.True(s.judged(row, composingWorkspace(s.T()), "./magus run lint libs/conventions").refused())
+}
+
+func (s *workerCheckReadsSuite) TestAWritingRunOverAReadPathIsRefused() {
+	row := testCheckLease()
+	row.ReadPaths = []string{"libs/conventions/**"}
+	s.True(s.judged(row, composingWorkspace(s.T()), "./magus run lint:rw libs/conventions --no-default-charms").refused())
+}
+
+func (s *workerCheckReadsSuite) TestACheckOverEveryProjectOwnsNone() {
+	row := testCheckLease()
+	row.Check = &types.LeaseCheck{Target: "test", Project: "/"}
+	s.True(s.judged(row, composingWorkspace(s.T()), "./magus run lint / --no-default-charms").refused())
+}
+
+func (s *workerCheckReadsSuite) TestTheGateOverTheCheckProjectStaysRefused() {
+	row := movedProjectRow()
+	ctx, _ := fleetFixture(s.T(), row)
+	s.True(denyLeaseScopedGate(ctx, composingWorkspace(s.T()), row.ID, "./magus run ci libs/conventions --no-default-charms").refused())
+}
+
+func (s *workerCheckReadsSuite) TestABuildInAnOwnedCheckoutIsLeftToTheWorkspaceRule() {
+	s.Empty(s.judgedInCheckout(testCheckLease(), s.ruled(), "./magus run go-build ."))
+}
+
+func (s *workerCheckReadsSuite) TestABuildWithNoWorkspaceRuleIsRefused() {
+	got := s.judgedInCheckout(testCheckLease(), composingWorkspace(s.T()), "./magus run go-build .")
+	s.Contains(got.Say, workerBuildVerdict)
+}
+
+func (s *workerCheckReadsSuite) TestABuildInACheckoutTheJobDoesNotOwnNamesThePlacement() {
+	row := testCheckLease()
+	row.Worktree = &types.JobWorktree{Root: s.T().TempDir(), Source: s.T().TempDir()}
+	got := s.judged(row, s.ruled(), "./magus run go-build .")
+	s.Contains(got.Say, workerBuildVerdict)
+	s.Contains(got.Why, onePerBase)
+}
+
+func (s *workerCheckReadsSuite) TestAReadOnlyBuildOutsideAnOwnedCheckoutNamesThePlacement() {
+	s.Contains(s.judged(testCheckLease(), s.ruled(), "./magus run go-build . --no-default-charms").Say, workerBuildVerdict)
+}
+
+func (s *workerCheckReadsSuite) TestABuildWithACharmStaysRefusedInAnOwnedCheckout() {
+	s.Contains(s.judgedInCheckout(testCheckLease(), s.ruled(), "./magus run go-build:rw .").Say, workerBuildVerdict)
+}
+
+func (s *workerCheckReadsSuite) TestABuildOverEveryProjectStaysRefusedInAnOwnedCheckout() {
+	s.Contains(s.judgedInCheckout(testCheckLease(), s.ruled(), "./magus run go-build /").Say, workerBuildVerdict)
+}
+
+func (s *workerCheckReadsSuite) TestAnotherProjectsGoBuildIsNotABuildOfTheBinary() {
+	s.NotContains(s.judged(testCheckLease(), s.ruled(), "./magus run go-build docs").Say, "builds ./magus")
+}
+
+// placed is the workspace the command rule is told for line, run from main.
+func (s *workerCheckReadsSuite) placed(main, line string) string {
+	req := types.CommandRequest{Dir: main, Workspace: main}
+	at := magusRepoAt
+	at.workspace, at.dir = main, main
+	placeMovedCall(&req, commandRuleInput{command: line, dialect: DialectBash}, at)
+	return req.Workspace
+}
+
+func (s *workerCheckReadsSuite) TestTheRuleJudgesARelinkInTheCheckoutTheLineEnters() {
+	main, own := s.T().TempDir(), s.T().TempDir()
+	placeFile(s.T(), own, "magus.yaml", "")
+	s.Equal(own, s.placed(main, fmt.Sprintf("cd %s && ./magus run go-build .", own)))
+}
+
+func (s *workerCheckReadsSuite) TestTheRuleStaysPutForARunThatRelinksNothing() {
+	main, own := s.T().TempDir(), s.T().TempDir()
+	placeFile(s.T(), own, "magus.yaml", "")
+	s.Equal(main, s.placed(main, fmt.Sprintf("cd %s && ./magus run lint .", own)))
+}
+
+func (s *workerCheckReadsSuite) TestTheRuleStaysPutForARelinkWithNoCd() {
+	main := s.T().TempDir()
+	s.Equal(main, s.placed(main, "./magus run go-build ."))
+}
+
+// briefed reports whether a brief teaching command is refused for row.
+func (s *workerCheckReadsSuite) briefed(row types.Job, deps Dependencies, command string) bool {
+	ctx, root := fleetFixture(s.T(), row)
+	judge := newRowJudge(ctx, deps, row, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
+	_, _, refused := briefOffCheck(briefRuns(fmt.Sprintf("Run `%s`.", command)), judge)
+	return refused
+}
+
+func (s *workerCheckReadsSuite) TestABriefMayTeachAReadOnlyRunOverTheCheckProject() {
+	s.False(s.briefed(movedProjectRow(), composingWorkspace(s.T()), "./magus run lint libs/conventions --no-default-charms"))
+}
+
+func (s *workerCheckReadsSuite) TestABriefMayTeachTheBuildToARowHoldingACheckout() {
+	row := testCheckLease()
+	row.Worktree = &types.JobWorktree{Root: s.T().TempDir(), Source: s.T().TempDir()}
+	s.False(s.briefed(row, s.ruled(), "./magus run go-build ."))
+}
+
+func (s *workerCheckReadsSuite) TestABriefMayNotTeachTheBuildToARowHoldingNoCheckout() {
+	s.True(s.briefed(testCheckLease(), s.ruled(), "./magus run go-build . --no-default-charms"))
 }

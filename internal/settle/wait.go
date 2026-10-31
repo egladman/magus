@@ -37,7 +37,8 @@ func Waiting(run RunFunc, bound, poll time.Duration, say func(ctx context.Contex
 				return fmt.Errorf("waited %s: %w", bound, err)
 			}
 			if !told {
-				say(ctx, fmt.Sprintf("%s; waiting up to %s for it", strings.TrimSuffix(err.Error(), ", not waiting"), bound))
+				refused, _, _ := strings.Cut(err.Error(), ", not waiting")
+				say(ctx, fmt.Sprintf("%s; waiting up to %s for it", refused, bound))
 				told = true
 			}
 			select {

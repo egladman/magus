@@ -933,6 +933,12 @@ func TestARunIsRefusedWhenARefreshInAnotherProcessDoesNotStop(t *testing.T) {
 	assert.Contains(t, out.String(), "the background refresh on project app did not stop within 50ms")
 }
 
+func TestALockRefusalNamesTheWayToWait(t *testing.T) {
+	refused := &lockContendedError{Project: "app", Owner: "pid 41221 (magus run test)"}
+	assert.Contains(t, refused.Error(), "this command succeeds once that run ends")
+	assert.Contains(t, refused.Error(), "a backgrounded run announces its end")
+}
+
 func TestABackgroundRefreshNeverStopsAnother(t *testing.T) {
 	cacheDir := t.TempDir()
 	holdAsBackgroundRefresh(t, cacheDir, 5000)

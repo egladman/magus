@@ -525,20 +525,23 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		for i, c := range checks {
 			commands[i] = fmt.Sprintf("`%s`", checkCommand(c))
 		}
-		if buildsCheckoutBinary(ctx, judge.workspace, r) {
+		if buildsCheckoutBinary(judge.workspace, r) {
+			if leavesBuildToRule(deps, r) && ownsCheckout(ctx, deps, at, at.workspace) {
+				continue
+			}
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
 				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks.",
 					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0]),
 			}
 		}
-		if readsOwnProjects(r, me.WritePaths) {
+		if readsOwnProjects(r, me) {
 			continue
 		}
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` is not lease %s's check; run %s.", r.target, me.ID, commands[0]),
 			Why: fmt.Sprintf("Lease %s's checks: %s. The checkout's integrator, "+integratorIs+", runs every other target serially, in its own tree, after it integrates the units.\n"+
-				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Any target passes read-only over the projects holding those paths: name it with --no-default-charms and no rw charm. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
+				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Any target passes read-only over the projects holding its write or read paths or named by its checks: name it with --no-default-charms and no rw charm. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
 				me.ID, strings.Join(commands, ", "), elideCommand(command), r.target, me.ID),
 		}
 	}
@@ -558,11 +561,19 @@ func vetsWritePaths(r targetRun, writePaths []string, deps Dependencies) bool {
 	return holdsWritePaths(r.selection(), writePaths)
 }
 
-// readsOwnProjects reports a `magus run` of any target that writes nothing back,
-// --no-default-charms and no rw charm named, over projects holding the write paths, so a
-// worker whose check is lint still runs the tests it wrote.
-func readsOwnProjects(r targetRun, writePaths []string) bool {
-	return r.verb == "run" && r.noDefaultCharms && !r.rewrites(nil) && holdsWritePaths(r.selection(), writePaths)
+// readsOwnProjects reports a `magus run` that writes nothing back, over
+// projects row's paths or checks name. A moved project stays runnable.
+// "/" is every project, so a check naming it owns none.
+func readsOwnProjects(r targetRun, row types.Job) bool {
+	if r.verb != "run" || !r.noDefaultCharms || r.rewrites(nil) {
+		return false
+	}
+	paths := slices.Concat(row.WritePaths, row.ReadPaths)
+	checks := rowChecks(row)
+	return !slices.ContainsFunc(r.selection(), func(p string) bool {
+		p = path.Clean(p)
+		return !holdsWritePaths([]string{p}, paths) && (p == "/" || !slices.ContainsFunc(checks, func(c types.LeaseCheck) bool { return path.Clean(c.Project) == p }))
+	})
 }
 
 // holdsWritePaths reports projects that each hold one of writePaths. "/" is every project,
@@ -1354,37 +1365,34 @@ func checksCompose(targetGraph func() (types.TargetGraphOutput, error), checks [
 	return func(target, project string) bool { return composed[key{targetName(target), path.Clean(project)}] }
 }
 
-// checkoutBinary is the binary the hooks and the guard run, by the name they find it by
-// at the checkout's root.
-const checkoutBinary = "magus"
-
-// buildsCheckoutBinary reports a run of a target the workspace declares as the producer
-// of ./magus: only a workspace that builds magus itself declares one.
-func buildsCheckoutBinary(ctx context.Context, workspace func() (types.WorkspaceRepository, error), r targetRun) bool {
-	if r.verb != "run" {
-		return false
-	}
+// buildsCheckoutBinary reports a run of a target declaring that it relinks
+// the binary. Its relinks policy says so: the target declares no output.
+func buildsCheckoutBinary(workspace func() (types.WorkspaceRepository, error), r targetRun) bool {
 	ws, err := workspace()
 	if err != nil {
 		return false
 	}
-	files, err := ws.ClassifyFiles(ctx, []string{checkoutBinary})
-	if err != nil {
+	return runRelinks(types.IndexTargetPolicies(ws), r)
+}
+
+// leavesBuildToRule reports a build the workspace's command rule answers
+// next, in hack/policy/builds.buzz. That rule misses a charm or another
+// project, and no loaded rule answers nothing, so those stay refused here.
+func leavesBuildToRule(deps Dependencies, r targetRun) bool {
+	_, t, err := r.parse()
+	if err != nil || len(t.Charms) > 0 || !slices.Equal(runProjects(r), []string{"."}) {
 		return false
 	}
-	selected := r.selection()
-	for _, f := range files {
-		if path.Clean(f.Path) != checkoutBinary {
-			continue
-		}
-		for _, c := range f.Claims {
-			if c.Role == "output" && targetName(c.Target) == targetName(r.target) &&
-				(slices.Contains(selected, "/") || slices.Contains(selected, path.Clean(cmp.Or(c.Project, ".")))) {
-				return true
-			}
-		}
+	return deps.CommandRule != nil || deps.ApprovedCommandRule != nil
+}
+
+// runsOffCheck reports a run a brief may teach though no check permits it.
+// A brief has no checkout yet, so the row's standing one stands in for it.
+func (j rowJudge) runsOffCheck(r targetRun) bool {
+	if buildsCheckoutBinary(j.workspace, r) {
+		return leavesBuildToRule(j.deps, r) && j.row.Worktree.Standing()
 	}
-	return false
+	return readsOwnProjects(r, j.row)
 }
 
 // rowChecks are the runs a row names as its checks: the check record and every check goal.
