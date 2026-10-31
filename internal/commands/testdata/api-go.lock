@@ -3854,6 +3854,7 @@ github.com/egladman/magus/types.MemoryCurve.PeakMB method func() int
 github.com/egladman/magus/types.MemoryCurve.UnmarshalJSON method(ptr) func(b []byte) error
 github.com/egladman/magus/types.MemoryCurveBuckets const untyped int = 20
 github.com/egladman/magus/types.MemoryDeclarationDrift const DiagnosticCode = "MGS1030"
+github.com/egladman/magus/types.MemoryPressureHigh const DiagnosticCode = "MGS3053"
 github.com/egladman/magus/types.MemoryProfile type struct
 github.com/egladman/magus/types.MemoryProfile.Curve field MemoryCurve "json:\"curve\""
 github.com/egladman/magus/types.MemoryProfile.D10Ms field int64 "json:\"d10_ms\""
