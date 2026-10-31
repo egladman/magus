@@ -355,7 +355,7 @@ test("an ask with no push prompt configured refuses, naming the person's termina
   await h.config({ permission: { bash: { "git push *": "allow" } } });
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "git push" } }),
-    /own terminal/,
+    /own terminal\. If they saw no such message, relay this one to them verbatim\./,
   );
 });
 

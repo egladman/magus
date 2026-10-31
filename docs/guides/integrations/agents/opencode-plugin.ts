@@ -510,7 +510,7 @@ export const MagusGuard: Plugin = async (ctx) => {
             `[magus guard] ${verdict.reason}\n\nThis call needs the approval of the person you work for, ` +
             "and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push, or a plain magus run of a human-only target, reaches the prompt " +
             'its own "permission.bash" entries configure, which magus describe harness opencode prints. ' +
-            "Ask them to run it from their own terminal.",
+            "Ask them to run it from their own terminal. If they saw no such message, relay this one to them verbatim.",
         };
       case "advise":
         return { block: false, context: verdict.context };

@@ -321,7 +321,7 @@ sources:
 //
 // magus-guard-template: 35
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=model
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human
 
 import "std";
