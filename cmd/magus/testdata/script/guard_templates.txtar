@@ -304,9 +304,9 @@ cd $WORK
 # An event that names no tool and carries text at `prompt` (Claude Code's envelope key) is
 # the person's message, not a call. The glue hands it to `magus shell --message` and says
 # NOTHING: a message hook's stdout reaches the model, and a recorded topic is not news to it. What the record does
-# shows on the next call, which architecture-unbriefed holds until the agent loads the
-# architecture skill. The workspace sets that rule to deny, since it only advises by
-# default.
+# shows on the next call, which architecture-unbriefed advises until the agent loads the
+# architecture skill. A read is never refused, even where the workspace sets the rule to
+# deny; a write waits on the load.
 
 cd arch-ws
 
@@ -315,10 +315,11 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 ! stdout .
 ! stderr .
 
-# case: command/deny
+# case: command/advise
 stdin $WORK/arch-bash.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout '"permissionDecision":"deny"'
+! stdout '"permissionDecision":"deny"'
+stdout '"additionalContext"'
 stdout 'magus-architecture-review'
 
 # case: command/pass
