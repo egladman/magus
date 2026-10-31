@@ -2213,7 +2213,10 @@ func refuseForkOnFullDisk(ctx context.Context, exe, root, checkout string, floor
 	if _, err := os.Stat(checkout); err == nil {
 		return nil
 	}
-	free, below := cache.DiskBelow(root, floorBytes)
+	free, below, err := cache.DiskBelow(root, floorBytes)
+	if err != nil {
+		return fmt.Errorf("magus job fork: cannot read the disk holding %s, so a new checkout cannot be checked against disk.critical_free_mb: %w", root, err)
+	}
 	if !below {
 		return nil
 	}
@@ -2221,7 +2224,10 @@ func refuseForkOnFullDisk(ctx context.Context, exe, root, checkout string, floor
 	if err := reclaimNow(ctx, exe, root); err != nil {
 		fmt.Fprintf(os.Stderr, "magus job fork: the reclaim stopped: %v\n", err)
 	}
-	free, below = cache.DiskBelow(root, floorBytes)
+	free, below, err = cache.DiskBelow(root, floorBytes)
+	if err != nil {
+		return fmt.Errorf("magus job fork: cannot read the disk holding %s after a reclaim: %w", root, err)
+	}
 	if !below {
 		return nil
 	}

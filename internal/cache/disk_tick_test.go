@@ -43,13 +43,21 @@ func (s *DiskFullSuite) TestALowDiskWithoutTheTextSaysNothing() {
 	s.Empty(DiskFullCause("compile error", s.dir, everyDisk))
 }
 
-func (s *DiskFullSuite) TestAnUnreadableDiskIsNotBelow() {
-	_, below := DiskBelow(filepath.Join(s.dir, "absent"), everyDisk)
+func (s *DiskFullSuite) TestAnUnreadableDiskIsAnErrorNotAVerdict() {
+	_, below, err := DiskBelow(filepath.Join(s.dir, "absent"), everyDisk)
+	s.Error(err)
 	s.False(below)
 }
 
+func (s *DiskFullSuite) TestAnUnreadableDiskNamesItselfInTheFullCause() {
+	got := DiskFullCause("no space left on device", filepath.Join(s.dir, "absent"), everyDisk)
+	s.Contains(got, "could not check")
+	s.NotContains(got, types.ReclaimDiskCommand)
+}
+
 func (s *DiskFullSuite) TestZeroFloorIsOff() {
-	_, below := DiskBelow(s.dir, 0)
+	_, below, err := DiskBelow(s.dir, 0)
+	s.NoError(err)
 	s.False(below)
 }
 

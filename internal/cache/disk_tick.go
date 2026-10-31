@@ -56,10 +56,17 @@ func KickDiskTick(exe, dir string, every time.Duration) {
 }
 
 // DiskBelow reports what the filesystem holding dir has free, and whether that
-// is under floorBytes. A disk it cannot read is not below: the failure speaks.
-func DiskBelow(dir string, floorBytes int64) (free int64, below bool) {
-	_, free, err := StatDisk(dir)
-	return free, err == nil && floorBytes > 0 && free < floorBytes
+// is under floorBytes. A floor of zero is off and reads nothing. A disk it
+// cannot read is an error, never a verdict.
+func DiskBelow(dir string, floorBytes int64) (free int64, below bool, err error) {
+	if floorBytes <= 0 {
+		return 0, false, nil
+	}
+	_, free, err = StatDisk(dir)
+	if err != nil {
+		return 0, false, err
+	}
+	return free, free < floorBytes, nil
 }
 
 // DiskFullCause is the line naming the fix when output says the disk is full
@@ -69,7 +76,10 @@ func DiskFullCause(output, dir string, floorBytes int64) string {
 	if !strings.Contains(strings.ToLower(output), noSpaceText) {
 		return ""
 	}
-	free, below := DiskBelow(dir, floorBytes)
+	free, below, err := DiskBelow(dir, floorBytes)
+	if err != nil {
+		return fmt.Sprintf("the output says the disk is full, but this could not check: %v", err)
+	}
 	if !below {
 		return ""
 	}

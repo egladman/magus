@@ -2376,6 +2376,13 @@ func (s *ForkDiskFloorSuite) TestAnAdoptedCheckoutIsExempt() {
 	s.NoError(refuseForkOnFullDisk(s.T().Context(), "false", s.root, s.root, everyDiskIsLow))
 }
 
+func (s *ForkDiskFloorSuite) TestAnUnreadableDiskIsRefusedSayingSo() {
+	absent := filepath.Join(s.root, "absent")
+	err := refuseForkOnFullDisk(s.T().Context(), "false", absent, filepath.Join(s.root, "new"), 1)
+	s.ErrorContains(err, "cannot read the disk holding "+absent)
+	s.NotErrorIs(err, types.DiskFull)
+}
+
 func (s *ForkDiskFloorSuite) TestADiskAboveTheFloorPasses() {
 	s.NoError(refuseForkOnFullDisk(s.T().Context(), "false", s.root, filepath.Join(s.root, "new"), 1))
 }
