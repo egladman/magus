@@ -397,7 +397,7 @@ func TestDoctorGuardWiringHarnessReportsAnEnabledModNobodyInstalled(t *testing.T
 		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "mod-host")
 		// Personal plugin installs cannot be fixed in CI; doctor advises, verify still fails.
 		require.Equal(t, types.CheckAdvice, c.Status)
-		assert.Contains(t, strings.Join(c.Details, "\n"), "/plugin install magus --marketplace egladman/magus")
+		assert.Contains(t, strings.Join(c.Details, "\n"), "claude plugin marketplace add egladman/magus")
 	})
 
 	t.Run("enabled and installed -> no plugin problem", func(t *testing.T) {

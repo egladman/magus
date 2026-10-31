@@ -597,6 +597,9 @@ whose source is `claude-code-mod/` beside this page. Add the marketplace once pe
 claude plugin marketplace add egladman/magus
 ```
 
+From a local checkout, `claude plugin marketplace add <checkout> --scope local` then
+`claude plugin install magus@magus --scope local` does the same.
+
 It adds these to a session:
 
 - A status line entry and a band above the prompt that name a magus problem with the
