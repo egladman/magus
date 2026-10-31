@@ -4,7 +4,7 @@
 // imports and which packages import both. Writes nothing.
 //
 //	magus buzz hack/dev/show-import-meet.buzz --
-//	    [-o text|json] -- <package> <package> [<package> <package>...]
+//	    [-o text|json] <package> <package> [<package> <package>...]
 namespace showimportmeet;
 
 import "flags";
@@ -14,7 +14,7 @@ import "encoding/json";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/show-import-meet.buzz -- [-o text|json] -- <package> <package> [<package> <package>...]";
+final USAGE = "usage: magus buzz hack/dev/show-import-meet.buzz -- [-o text|json] <package> <package> [<package> <package>...]";
 final HELP = "cost: one graph read from the ingested symbol indexes\npackages are directories as `magus\\importGraph` names them (\".\" for the root); pairs are read two at a time\n{USAGE}";
 final FORMATS = ["text", "json"];
 

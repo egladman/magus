@@ -33,17 +33,18 @@ var Flags = Module{
 			Doc: "Parse argv against the declared flags, returning {values, lists, positionals, unknown}: " +
 				"switches take no value and record \"true\", valued flags take the next word or an " +
 				"=value suffix (a repeated valued flag records the last), flags named in repeated take " +
-				"a value each time and collect them in order into lists, everything after `--` is a " +
-				"positional, and every argument that was not declared is returned in unknown rather " +
-				"than guessed at. A flag is declared as it is typed, dashes included (\"--file\", not " +
-				"\"file\"), and values and lists are keyed the same way. A bare word before `--` is " +
-				"unknown, not a positional; `magus buzz <file> -- <args>` consumes its own `--`, so a " +
-				"script taking paths is run with a second one. With command set, the first bare word " +
-				"instead starts a command, the way sudo, env and Go's flag package read argv: it and " +
-				"every word after it are positionals, verbatim, flags included. Errors when a valued " +
-				"flag is given no value, and when a flag named in required is absent or given an empty " +
-				"value: a workflow passing an unset variable (`--issue \"$ISSUE\"`) is refused rather " +
-				"than read as a choice.",
+				"a value each time and collect them in order into lists, the first bare word (one that " +
+				"does not start with a dash) ends the flags and it and every word after it are " +
+				"positionals, verbatim, flags included, the way sudo, env and Go's flag package read " +
+				"argv, and a lone `--` ends the flags too, so a positional that starts with a dash " +
+				"follows it. A dashed word that was not declared, and an empty argument, are returned " +
+				"in unknown rather than guessed at. A flag is declared as it is typed, dashes " +
+				"included (\"--file\", not \"file\"), and values and lists are keyed the same way. " +
+				"`magus buzz <file> -- <args>` consumes its own `--`, so a script taking paths needs " +
+				"no second one. The command argument changes nothing now and is pending removal. " +
+				"Errors when a valued flag is given no value, and when a flag named in required is " +
+				"absent or given an empty value: a workflow passing an unset variable " +
+				"(`--issue \"$ISSUE\"`) is refused rather than read as a choice.",
 			Args: []Arg{
 				{Name: "argv", Type: TypeStringSlice},
 				{Name: "switches", Type: TypeStringSlice},
@@ -142,9 +143,9 @@ func flagsParse(argv, switches, valued, repeated []string, command bool) (types.
 				record(name, value)
 				continue
 			}
-			// In command mode a bare word starts the command, and the command keeps its
-			// own flags: `on-linux --arch arm64 magus run test -s` runs `magus run test -s`.
-			if command && !strings.HasPrefix(word, "-") {
+			// A bare word starts the positionals, flags included.
+			// An empty word stays unknown so an unset variable shows.
+			if word != "" && !strings.HasPrefix(word, "-") {
 				parsed.Positionals = append(parsed.Positionals, word)
 				parsed.Positionals = append(parsed.Positionals, rest...)
 				return parsed, nil

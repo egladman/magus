@@ -81,14 +81,20 @@ func TestFlagsParse(t *testing.T) {
 				Unknown:     []string{"--not-a-flag"},
 			},
 		},
-		// A leading dash does not make a word a flag: only declaring it does. A bare word
-		// is as unrecognized as a dashed one, and both come back the same way.
-		"a word with no dash is unknown too": {
-			argv: []string{"bare"},
+		"a bare word is a positional without a separator": {
+			argv: []string{"--observes-skill-loads", "a.go", "b.go"},
+			want: types.FlagParse{
+				Values:      map[string]string{"--observes-skill-loads": "true"},
+				Positionals: []string{"a.go", "b.go"},
+				Unknown:     []string{},
+			},
+		},
+		"a bare word ends the flags": {
+			argv: []string{"a.go", "--session", "s1"},
 			want: types.FlagParse{
 				Values:      map[string]string{},
-				Positionals: []string{},
-				Unknown:     []string{"bare"},
+				Positionals: []string{"a.go", "--session", "s1"},
+				Unknown:     []string{},
 			},
 		},
 		// The case a host config produces by expanding a variable that is unset. It is
