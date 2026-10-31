@@ -9,9 +9,10 @@ export fun volatilityFigure() > figure\Figure !> any {
     final decide = magus\dir("internal/ci/volatility");
     final fail = figure\external("Target fails", look: figure\Look.plain);
     final report = figure\external("Report failure", look: figure\Look.plain);
-    final thin = codeStage(decide, symbol: "shouldRetry().", name: "enough history?", look: figure\Look.decision);
-    final touched = codeStage(decide, symbol: "shouldRetry().", name: "diff touched it?", look: figure\Look.decision);
-    final rate = codeStage(decide, symbol: "score().", name: "over threshold?", look: figure\Look.decision);
+    final shouldRetry = "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/shouldRetry().";
+    final thin = codeStage(decide, symbol: shouldRetry, name: "enough history?", look: figure\Look.decision);
+    final touched = codeStage(decide, symbol: shouldRetry, name: "diff touched it?", look: figure\Look.decision);
+    final rate = codeStage(decide, symbol: "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/score().", name: "over threshold?", look: figure\Look.decision);
     // invokeSpell in the root package reruns the target; codeStage cannot anchor a symbol there.
     final retry = figure\external("Retry once", sub: "the same target", look: figure\Look.plain);
     final volatile = figure\external("Record volatile", sub: "the run continues", look: figure\Look.plain);
@@ -25,7 +26,7 @@ export fun volatilityFigure() > figure\Figure !> any {
                 + "and the run continues; anything else is a suspected regression.",
             direction: figure\Direction.down)
         .actor(fail)
-        .box(decide, label: "Decide", sub: "on, and opted in?", symbol: magus\refs("Runtime#Decide()."))
+        .box(decide, label: "Decide", sub: "on, and opted in?", symbol: magus\refs("symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/Runtime#Decide()."))
         .actor(report)
         .actor(thin)
         .actor(touched)

@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "harness-stack",
+  "findings": [],
+  "stamp": "sha256:bb26547b3998b03b1c81d723c07906faa5f41fc32f542a3bda8273074d820b06"
+}
