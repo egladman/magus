@@ -66,6 +66,10 @@ func (s *CacheClearSuite) TestRankFillsASilence() {
 	s.Equal(denyRuleCacheClear, got.Rule.Name)
 }
 
-func (s *CacheClearSuite) TestRankKeepsAnEarlierDeny() {
-	s.Equal("first", rankCacheClear(ShellVerdict{Deny: "first"}, "no").Deny)
+func (s *CacheClearSuite) TestRankOutranksTheRawToolDeny() {
+	s.Equal("no", rankCacheClear(ShellVerdict{Deny: "raw tool"}, "no").Deny)
+}
+
+func (s *CacheClearSuite) TestRankWithNoReasonKeepsTheVerdict() {
+	s.Equal("raw tool", rankCacheClear(ShellVerdict{Deny: "raw tool"}, "").Deny)
 }

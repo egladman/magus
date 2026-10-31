@@ -63,9 +63,10 @@ func clearsCache(c hint.Invocation) bool {
 	})
 }
 
-// rankCacheClear fills a silence and outranks an advisory, never a deny.
+// rankCacheClear outranks an existing deny: `go clean -cache` also earns the
+// raw-tool refusal, whose fix names a target no project declares.
 func rankCacheClear(v ShellVerdict, reason string) ShellVerdict {
-	if reason == "" || v.Deny != "" {
+	if reason == "" {
 		return v
 	}
 	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleCacheClear}}
