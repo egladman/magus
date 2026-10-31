@@ -702,8 +702,8 @@ func (s *AdapterConformanceSuite) TestEveryBoundJudgingPointDeclaresItsVerdictTr
 	}
 }
 
-// failClosed says which hosts block a gated call when the guard cannot
-// answer. Only Cursor's hook config can say so (failClosed on an entry).
+// failClosed says which hosts' hook config blocks a gated call when the hook
+// itself cannot run. Only Cursor's can say so (failClosed on an entry).
 var failClosed = map[string]bool{"cursor": true}
 
 func (s *AdapterConformanceSuite) TestEachHostsFailStanceIsTheOneDecided() {
@@ -719,8 +719,8 @@ func (s *AdapterConformanceSuite) TestEachHostsFailStanceIsTheOneDecided() {
 	for _, event := range []string{"preToolUse", "beforeShellExecution", "beforeMCPExecution"} {
 		s.True(entryFailsClosed(s.loaded["cursor"], event), "cursor's %s entry must fail closed", event)
 	}
-	s.Contains(readGlue(s.T(), "opencode-plugin.ts"), "this call is UNGUARDED",
-		"the plugin fails open, and says so")
+	s.Contains(readGlue(s.T(), "opencode-plugin.ts"), "${verdict.why}; refused.",
+		"the plugin refuses a call no magus judged, and says so")
 }
 
 func entryFailsClosed(d agent.HarnessDescriptor, event string) bool {
