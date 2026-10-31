@@ -56,6 +56,16 @@
           }
         ],
         "matcher": "compact"
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "statusMessage": "magus: briefing the session",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|resume|clear"
       }
     ],
     "Stop": [
@@ -73,6 +83,15 @@
           {
             "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name codex",
             "statusMessage": "magus: recording where the work stands",
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus guard: checking the stop",
             "type": "command"
           }
         ]
