@@ -2559,12 +2559,14 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	if role == "" {
 		return ""
 	}
+	// Rendered words drop a loop's variable; the located call has it bound.
+	placedByWords := func(c hint.Invocation) bool { return movesNamedPaths(c) || reattachesOwnBranch(c, me) }
 	// A line that creates a repository is located call by call, whatever else it runs:
 	// the verbs after the init may belong to the repository it made.
 	creates := slices.ContainsFunc(cmds, isInit)
 	if !creates {
 		for _, c := range cmds {
-			if op := workerVCSOp(c); op != "" && !workerLands(c) && !integrationMerge(c, me) {
+			if op := workerVCSOp(c); op != "" && !workerLands(c) && !integrationMerge(c, me) && !placedByWords(c) {
 				cwd, _ := deps.workingDir()
 				if isWorktreeRemove(c) && removesOwnCheckout(command, cwd, me) {
 					continue
@@ -2579,9 +2581,9 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 			}
 		}
 	}
-	matches := placed
+	matches := func(c hint.Invocation) bool { return placed(c) || placedByWords(c) }
 	if creates {
-		matches = func(c hint.Invocation) bool { return workerVCSOp(c) != "" || placed(c) }
+		matches = func(c hint.Invocation) bool { return workerVCSOp(c) != "" || placed(c) || placedByWords(c) }
 	}
 	d := effectiveDialect(deps.ShellDialect)
 	cwd, _ := deps.workingDir()
@@ -2596,6 +2598,9 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 		site, unlocated := shellCommitSite(c)
 		if isInit(c.inv) && unlocated == "" {
 			unlocated = nonLiteralInit(c)
+		}
+		if placedByWords(c.inv) && unlocated == "" {
+			unlocated = nonLiteralWords(c)
 		}
 		if c.inv.Name == "git" && unlocated == "" {
 			switch {
@@ -2801,6 +2806,8 @@ func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) stri
 			checkout, what, r.op, row.ID, role, r.why, leaseActorClause("create it"))
 	case vcsOpLands:
 		return landDenial(what, r.op, row, role, fmt.Sprintf("magus workspace: a worker commits only on its own branch in its own checkout, %s.", checkout), r.why)
+	case vcsOpMoves:
+		return landDenial(what, r.op, row, role, fmt.Sprintf("magus workspace: a worker moves only paths its line spells out, in its own checkout, %s.", checkout), r.why)
 	}
 	return landDenial(what, r.op, row, role,
 		fmt.Sprintf("magus workspace: `%s` stays with the orchestrator, not a worker; report your worktree path, branch and `git status --short`.", r.op),
@@ -2828,6 +2835,9 @@ const (
 	// vcsOpInit creates a repository, refused with a why unless it lies wholly outside the
 	// worker's checkout.
 	vcsOpInit
+	// vcsOpMoves is a call movesNamedPaths reports, refused with a why unless
+	// it spells out every path and runs in the worker's own checkout.
+	vcsOpMoves
 )
 
 // vcsRefusal is lease-vcs's answer for one call.
@@ -2858,6 +2868,12 @@ type vcsSite struct {
 // unlocated is why site could not be read, which refuses a commit, since a commit that
 // cannot be placed cannot be shown to be in the worker's own checkout.
 func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
+	if movesNamedPaths(inv) {
+		return moveRefusal(ctx, opts, row, inv, site, unlocated)
+	}
+	if reattachesOwnBranch(inv, row) {
+		return refMoveRefusal(ctx, opts, row.Worktree, inv, site, unlocated)
+	}
 	op := workerVCSOp(inv)
 	if own := row.Worktree; op == "" && own.Standing() && workerVCSMovesRefs(inv) {
 		return refMoveRefusal(ctx, opts, own, inv, site, unlocated)
@@ -2879,6 +2895,9 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	return vcsRefusal{op: op, kind: vcsOpLands, why: why}
 }
 
+// relocateFlag is the option each backend takes to run in another directory.
+var relocateFlag = map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", "jj": "-R"}
+
 // refMoveRefusal places a call that moves HEAD, a ref or the index like a commit: in another
 // checkout of the repository it moves that checkout's state, and a repository of its own
 // holds none of the job's.
@@ -2899,8 +2918,7 @@ func refMoveRefusal(ctx context.Context, opts types.VCSOptions, own *types.JobWo
 	if ok {
 		where = root
 	}
-	flag := map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", "jj": "-R"}[inv.Name]
-	remedy := strings.Join(slices.Concat([]string{inv.Name, flag, own.Root, sub}, rest), " ")
+	remedy := strings.Join(slices.Concat([]string{inv.Name, relocateFlag[inv.Name], own.Root, sub}, rest), " ")
 	return vcsRefusal{op: moves, kind: vcsOpLands, why: fmt.Sprintf(
 		"It moves a branch, HEAD or the index in %s, outside %s, the checkout the job's fork made; run `%s` instead.", where, own.Root, remedy)}
 }
@@ -3188,7 +3206,7 @@ func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, ba
 	ref, err := res.VCS.Ref(ctx, root)
 	switch {
 	case err != nil || ref == "":
-		return fmt.Sprintf("%s has no branch checked out; %s", root, switchToJobBranch(backend, row.ID)), ""
+		return fmt.Sprintf("%s has no branch checked out; %s", root, switchToJobBranch(backend, row)), ""
 	case isBaseBranch(ref, res.Base):
 		return fmt.Sprintf("%s is on %s, the base branch.", root, ref), ""
 	}
@@ -3205,11 +3223,16 @@ func isBaseBranch(ref, base string) bool {
 // after the job as the orchestrator names it, or creates that branch when it does not exist.
 // A detached HEAD is never a place to commit: the orchestrator lands a branch, and a commit
 // on no branch is one it cannot name.
-func switchToJobBranch(backend, job string) string {
-	if backend != "git" {
-		return fmt.Sprintf("check out a branch named %s first.", job)
+//
+// A row with its own checkout gets the line that keeps the detached commits.
+func switchToJobBranch(backend string, row types.Job) string {
+	switch {
+	case backend != "git":
+		return fmt.Sprintf("check out a branch named %s first.", row.ID)
+	case row.Worktree.Standing():
+		return fmt.Sprintf("run `git switch -C %s`, which puts that branch on this HEAD and keeps the commits made here.", row.ID)
 	}
-	return fmt.Sprintf("run `git switch %s`, or `git switch -c %s` when no such branch exists.", job, job)
+	return fmt.Sprintf("run `git switch %s`, or `git switch -c %s` when no such branch exists.", row.ID, row.ID)
 }
 
 // siteCheckout resolves site to the root of the checkout it stands in.
@@ -3575,7 +3598,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	// command run from a subdirectory is not the checkout's root, and the line's cds move it.
 	checkout := leaseCheckout(ctx, location, actingLease)
 	start, home := cmp.Or(deps.callDir, checkout), userHome()
-	removed := removedOrMovedOperands(command, 0, dialect, start, home)
+	removed := append(removedOrMovedOperands(command, 0, dialect, start, home), boundPathOperands(command, dialect, start)...)
 	for _, candidate := range placedWriteCandidates(command, dialect, start, home) {
 		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
 		// written `./-p`, which still resolves.
@@ -3654,6 +3677,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		_, err = res.VCS.ReadFileAt(ctx, checkout, revision, rel)
 		return err != nil
 	}
+	landings := directoryLandings(command, dialect, start, home, checkout, me)
 	for _, operand := range removed {
 		target, placed := operand.place(home)
 		if !placed {
@@ -3663,7 +3687,11 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		if !inside {
 			continue
 		}
-		if outside := reachOutside(checkout, me, rel); outside != "" && (outside != rel || !madeByHolder(rel)) {
+		outside, landing := landings[target]
+		if !landing {
+			outside = reachOutside(checkout, me, rel)
+		}
+		if outside != "" && (outside != rel || !madeByHolder(rel)) {
 			what := outside + " is"
 			if outside != rel {
 				what = fmt.Sprintf("%s holds %s, which is", rel, outside)
