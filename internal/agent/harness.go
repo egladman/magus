@@ -737,6 +737,9 @@ func verifyHarnessHooks(d HarnessDescriptor) HarnessCheck {
 	return HarnessCheck{Status: HarnessVerified}
 }
 
+// harnessOwnedMarker ends a command the spell marks as its own.
+const harnessOwnedMarker = " # magus:harness"
+
 // hookInvocation is the tail of the command line that runs h.
 func hookInvocation(h types.HookCommand) string {
 	invocation := fmt.Sprintf("/%s.buzz", h.Script)
@@ -757,7 +760,9 @@ func entriesRunHook(groups []types.ManagedEntries, h types.HookCommand) bool {
 			if matcher != h.Matcher {
 				continue
 			}
-			if slices.ContainsFunc(commands, func(c string) bool { return strings.HasSuffix(c, invocation) }) {
+			if slices.ContainsFunc(commands, func(c string) bool {
+				return strings.HasSuffix(strings.TrimSuffix(c, harnessOwnedMarker), invocation)
+			}) {
 				return true
 			}
 		}

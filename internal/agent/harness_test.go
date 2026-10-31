@@ -17,6 +17,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // registerHarnessSpell decodes a JSON descriptor body — the same shape a
@@ -1741,4 +1742,28 @@ func TestVerifyHarnessHooksHoldsTheHookListToTheEntries(t *testing.T) {
 	assert.False(t, got.Failing(), "a skipped check did not run, so it fails nothing")
 
 	assert.Equal(t, HarnessCheck{}, verifyHarnessHooks(HarnessDescriptor{ID: "none"}), "no hooks, nothing to check")
+}
+
+type entriesRunHookSuite struct{ suite.Suite }
+
+func TestEntriesRunHookSuite(t *testing.T) {
+	suite.Run(t, new(entriesRunHookSuite))
+}
+
+func (s *entriesRunHookSuite) entries(command string) []types.ManagedEntries {
+	return []types.ManagedEntries{{Path: []string{"hooks", "PostToolUse"}, Entries: []map[string]any{{
+		"matcher": "Bash",
+		"hooks":   []any{map[string]any{"command": command}},
+	}}}}
+}
+
+func (s *entriesRunHookSuite) TestAHarnessOwnedMarkerAfterTheInvocationStillMatches() {
+	hook := types.HookCommand{Event: "PostToolUse", Matcher: "Bash", Script: "magus-tool-time", Flags: []string{"--agent-name", "h"}}
+	command := "magus buzz -s hooks/magus-tool-time.buzz -- --agent-name h" + harnessOwnedMarker
+	s.True(entriesRunHook(s.entries(command), hook))
+}
+
+func (s *entriesRunHookSuite) TestAnotherScriptDoesNotMatch() {
+	hook := types.HookCommand{Event: "PostToolUse", Matcher: "Bash", Script: "magus-tool-time"}
+	s.False(entriesRunHook(s.entries("magus buzz -s hooks/magus-observe.buzz"+harnessOwnedMarker), hook))
 }
