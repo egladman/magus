@@ -190,7 +190,7 @@ var (
 	// goldenGoPlatformEnv mirrors GO_PLATFORM_ENV in spells/golang/spell.buzz: the ops
 	// whose result depends on the target platform (build, vet, test, golangci-lint's
 	// go compile) key on it.
-	goldenGoPlatformEnv = []string{"GOOS", "GOARCH", "GOARM", "GOAMD64"}
+	goldenGoPlatformEnv = []string{"GOOS", "GOARCH", "GOARM", "GOAMD64", "GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED"}
 
 	goldenDevServerCommand = spells.Command{Bin: "pnpm", Args: []string{"exec"},
 		NeedsArgs: `dev-server runs the command you name; pass it as args: typescript["dev-server"](ctx, {"args": ["vite"]})`}
@@ -378,7 +378,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
 			// `go tool golangci-lint` reported "no such tool" and the op could not run.
 			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.
-			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, EnvKeys: []string{"GOOS", "GOARCH", "GOARM", "GOAMD64", "GOROOT", "GOTOOLCHAIN", "GOEXPERIMENT", "GOFLAGS"}, Charms: map[string]spells.Charm{
+			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, EnvKeys: []string{"GOOS", "GOARCH", "GOARM", "GOAMD64", "GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED", "GOROOT", "GOTOOLCHAIN"}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
@@ -396,7 +396,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
 				"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
-			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "-trimpath", "./..."}, EnvKeys: goldenGoPlatformEnv}},
+			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "-trimpath"}, DefaultArgs: []string{"./..."}, EnvKeys: goldenGoPlatformEnv}},
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", DefaultArgs: []string{"./..."}, Capture: true, External: spells.ExternalReads}},
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.

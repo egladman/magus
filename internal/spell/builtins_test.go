@@ -520,7 +520,7 @@ func TestGoFuzzOp(t *testing.T) {
 	assert.Equal(t, spells.Command{
 		Bin:     "go",
 		Args:    []string{"test", "-trimpath", "-run", "^$"},
-		EnvKeys: []string{"GOOS", "GOARCH", "GOARM", "GOAMD64"},
+		EnvKeys: []string{"GOOS", "GOARCH", "GOARM", "GOAMD64", "GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED"},
 		// A randomized run is never replayable; go-fuzz asks its target for skip_cache.
 		External: spells.ExternalReads,
 		Hints:    op.Hints,
