@@ -312,8 +312,9 @@ fun goModJSON(target: Target) > Command {
     return Command{bin = "go", args = ["mod", "edit", "-json"], capture = true, quiet = true};
 }
 // -trimpath: see go-test above; keeps vet's cache key worktree-independent too.
-// ./... is a default so a caller's package replaces it, as in go-test.
-fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "-trimpath"], defaultArgs = ["./..."], envKeys = GO_PLATFORM_ENV}; }
+// ./... trails because go vet reads no flag after a package, so any forwarded
+// arg drops it and the caller names the package.
+fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "-trimpath"], trailingArgs = ["./..."], envKeys = GO_PLATFORM_ENV}; }
 // Invoked directly rather than through `go tool`, for the same reason as golangCILint above:
 // `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is
