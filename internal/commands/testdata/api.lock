@@ -314,6 +314,7 @@ flag shell/observe
 flag shell/path
 flag shell/renders-ask
 flag shell/session
+flag shell/tool-ms
 flag shell/transcript
 flag shell/transport
 flag status/W

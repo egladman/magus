@@ -590,6 +590,9 @@ type Request struct {
 	// CallTimeout is the one the call gave its shell command, zero when it named none. An
 	// envelope's timeout fills it when it is zero.
 	CallTimeout time.Duration
+	// ToolMs records how long the tool named by Input ran, as the host
+	// reports it. Nothing is judged. Zero means no such record.
+	ToolMs int64
 	// HostForegroundDefault is the host's timeout for a shell command that names none, and
 	// HostForegroundMax the longest one it allows, both declared by the wiring. With either
 	// zero the advice that reads them stands down: a fact nobody declared is not "no
@@ -657,6 +660,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	if req.Message {
 		if !req.DryRun {
 			recordMessageTopics(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), input)
+		}
+		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	}
+	if req.ToolMs > 0 {
+		if !req.DryRun {
+			appendToolTime(ctx, hookLocation(ctx, deps), who, input, req.ToolMs)
 		}
 		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	}
@@ -2505,7 +2514,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		BinaryVersion:   by.version,
 		Cwd:             by.cwd,
 		Phases:          phases,
-		DurationMs:      judged,
+		GuardMs:         judged,
 		AgentFacts:      cost,
 	}
 	if tool == hookToolCommand {
@@ -2514,6 +2523,25 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		command.Path = input
 	}
 	trail.AppendAgentCommand(ctx, location.cacheDir, command)
+}
+
+// appendToolTime records how long a host says tool ran. Best-effort like
+// appendHookActivity, and it carries no verdict.
+func appendToolTime(ctx context.Context, location location, who hookAttribution, tool string, ms int64) {
+	if location.cacheDir == "" {
+		return
+	}
+	trail.AppendAgentCommand(ctx, location.cacheDir, trail.AgentCommand{
+		EntryPoint: trail.EntryPointFromContext(ctx),
+		Workspace:  location.workspace,
+		Host:       who.Host,
+		Session:    who.Session,
+		Agent:      who.Agent,
+		Transcript: who.Transcript,
+		Event:      who.Event,
+		Tool:       tool,
+		ToolMs:     ms,
+	})
 }
 
 // spawnVerdictRecord is what the trail keeps about how a spawn or continuation was judged.

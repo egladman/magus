@@ -59,6 +59,12 @@ final SPAWN_MATCHER = "Agent|Task";
 // The tools that write a file, after which the Buzz check runs on a .buzz path.
 final WRITE_MATCHER = "Write|Edit|MultiEdit";
 
+// Every tool but the spawn tool, whose own hook already runs after the call.
+final TIMED_MATCHER = "^(?!(Agent|Task)$).*";
+
+// The recorder runs in the background, so the call never waits on it.
+final TOOL_TIME_SCRIPT = "magus-tool-time";
+
 // The session starts that get a fresh CLAUDE_ENV_FILE. compact keeps the session's
 // environment and only rehydrates.
 final SESSION_PATH_MATCHER = "startup|resume|clear";
@@ -92,6 +98,8 @@ fun claude_hooks() > [HookCommand] {
         claude_hook("PreToolUse", matcher: "Read", script: "magus-observe", flags: claude_named(), points: RECORDS),
         claude_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: claude_named(), points: [HookPoint.spawn]),
         claude_buzz_check_hook(),
+        // PostToolUse carries duration_ms, the tool's own run time.
+        claude_hook("PostToolUse", matcher: TIMED_MATCHER, script: TOOL_TIME_SCRIPT, flags: claude_named(), points: RECORDS),
         // PATH's first entry becomes the root for the agent's own Bash tool commands, through
         // CLAUDE_ENV_FILE, the file Claude Code sources before each one; it never reaches a
         // hook command (code.claude.com/docs/en/hooks, "Persist environment variables").
@@ -157,7 +165,9 @@ fun claude_checkout(plain: str) > str {
 fun claude_entry(hook: HookCommand) > {str: any} {
     final entry = mut {<str: any>};
     if (hook.matcher != "") { entry["matcher"] = hook.matcher; }
-    entry["hooks"] = [{"type": "command", "command": claude_command(hook), "timeout": hook.timeoutS}];
+    final command: mut {str: any} = mut {"type": "command", "command": claude_command(hook), "timeout": hook.timeoutS};
+    if (hook.script == TOOL_TIME_SCRIPT) { command["async"] = true; }
+    entry["hooks"] = [command];
     return entry;
 }
 
@@ -536,9 +546,13 @@ test "the entries cover PreToolUse PostToolUse SessionStart Stop SubagentStop an
     foreach (block in claude_entries()) { events.append(block.path[1]); }
     assert\equal(events.join(","), "PreToolUse,PostToolUse,SessionStart,Stop,SubagentStop,UserPromptSubmit", "six managed path blocks");
     final post = claude_block("PostToolUse")!;
-    assert\equal(post.entries.len(), 2, "the finished spawn and the Buzz check");
+    assert\equal(post.entries.len(), 3, "the finished spawn, the Buzz check and the tool time");
     assert\equal(post.entries[0]["matcher"] as? str, SPAWN_MATCHER, "both names of the spawn tool");
     assert\equal(post.entries[1]["matcher"] as? str, WRITE_MATCHER, "every tool that writes a file");
+    assert\equal(post.entries[2]["matcher"] as? str, TIMED_MATCHER, "every tool but the spawn, so it is timed once");
+    final timed = (post.entries[2]["hooks"] as [any])[0];
+    assert\isTrue((timed["async"] as? bool) ?? false, "the recorder never makes a call wait");
+    assert\isTrue("{timed["command"]}".indexOf("magus-tool-time.buzz") != null, "the tool-time recorder");
     final start = claude_block("SessionStart")!;
     assert\equal(start.entries[0]["matcher"] as? str, SESSION_PATH_MATCHER, "every start that gets a fresh env file");
     assert\equal(start.entries[1]["matcher"] as? str, "compact", "rehydrate");

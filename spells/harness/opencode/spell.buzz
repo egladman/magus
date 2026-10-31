@@ -45,7 +45,8 @@ export fun mgs_listHooks() > [HookCommand] {
             points = [HookPoint.spawn, HookPoint.subagentStop]},
         HookCommand{event = "tool.execute.after", matcher = "edit|write|apply_patch", script = check.script,
             flags = check.flags, timeoutS = check.timeoutS},
-        // The brief rides the session's first tool result.
+        // tool.execute.after carries no duration, so no tool time is
+        // recorded. The brief rides the session's first tool result.
         HookCommand{event = "session.created", script = plugin, flags = named, points = [HookPoint.sessionStart]},
         // A root session's idle is its stop: a deny goes back as a follow-up.
         HookCommand{event = "session.idle", script = plugin, flags = named, points = [HookPoint.stop]},

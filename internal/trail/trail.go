@@ -153,7 +153,8 @@ type Event struct {
 	LeaseFrom     types.LeaseSource `json:"lease_from,omitempty"`
 	Outcome       string            `json:"outcome"`                 // one of the Outcome* constants
 	Error         string            `json:"error,omitempty"`         // error text when Outcome is OutcomeError
-	DurationMs    int64             `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions
+	DurationMs    int64             `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions; on an agent command, the host-reported tool time
+	GuardMs       int64             `json:"guard_ms,omitempty"`      // how long the guard took to judge an agent command
 	RequestRef    string            `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
 	ResponseRef   string            `json:"response_ref,omitempty"`  // blob ref for the response body
 	Preview       string            `json:"preview,omitempty"`       // opening characters of the response, for list views
@@ -277,9 +278,12 @@ type AgentCommand struct {
 	BinaryVersion string
 	Cwd           string
 	Phases        []Phase
-	// DurationMs is how long the guard took to judge the call. A pre-call hook
-	// never sees the call's own run time, so this is not tool time.
-	DurationMs int64
+	// GuardMs is how long the guard took to judge the call. A pre-call
+	// hook never sees the run time, so this is not tool time.
+	GuardMs int64
+	// ToolMs is the run time the host reports on its post-call hook. It
+	// becomes the event's duration_ms. Zero when the host reports none.
+	ToolMs int64
 	// AgentFacts are the caller's cost facts, recorded in the request blob.
 	types.AgentFacts
 }
@@ -334,7 +338,8 @@ func redactFailures(ctx context.Context, in []RuleFailure) []RuleFailure {
 // make command execution contingent on the trail, so this function follows Append's best-effort,
 // error-free contract.
 func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) {
-	if base == "" || (command.Command == "" && command.Path == "") {
+	// A tool-time row names its tool and carries no command or path.
+	if base == "" || (command.Command == "" && command.Path == "" && command.ToolMs == 0) {
 		return
 	}
 	// A hook observes a shell command line, which is exactly where a credential passed as an
@@ -397,8 +402,9 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Lease:         lease,
 		LeaseFrom:     leaseFrom,
 		Outcome:       OutcomeOK,
-		DurationMs:    command.DurationMs,
-		RequestRef:    reqRef,
+		DurationMs:    command.ToolMs,
+		GuardMs:       command.GuardMs,
+		RequestRef:   reqRef,
 		RequestBytes:  reqBytes,
 		ResponseRef:   respRef,
 		ResponseBytes: respBytes,

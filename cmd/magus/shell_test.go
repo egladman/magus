@@ -1647,6 +1647,27 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	assert.Equal(t, "pass", run("--call-timeout-ms", "600000").Decision)
 }
 
+func TestShellToolMsRecordsTheToolAndPasses(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{}
+	testkit.Isolate(t)
+	root, cacheDir := t.TempDir(), t.TempDir()
+	ctx := guard.WithLocation(t.Context(), cacheDir, root, "")
+
+	var out bytes.Buffer
+	require.NoError(t, shellStdin(ctx, strings.NewReader("Bash"), &out,
+		[]string{"--tool-ms", "420", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
+	var v types.GuardJudgment
+	require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
+	assert.Equal(t, "pass", v.Decision)
+
+	events, err := trail.ReadRecent(cacheDir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, int64(420), events[0].DurationMs)
+	assert.Equal(t, "Bash", events[0].Action)
+}
+
 // denyRules is a magusfile whose spawn rule denies every spawn and whose command rule
 // denies every command.
 const denyRules = `import "magus";

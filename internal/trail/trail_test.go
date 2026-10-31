@@ -170,12 +170,25 @@ func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 
 func TestAppendAgentCommand_RecordsHowLongTheGuardJudged(t *testing.T) {
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: "pass", DurationMs: 278})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: "pass", GuardMs: 278})
 
 	events, err := ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, int64(278), events[0].DurationMs)
+	assert.Equal(t, int64(278), events[0].GuardMs)
+	assert.Zero(t, events[0].DurationMs, "guard time is not tool time")
+}
+
+func TestAppendAgentCommand_RecordsHowLongTheToolRan(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Event: "PostToolUse", ToolMs: 1500})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, int64(1500), events[0].DurationMs)
+	assert.Zero(t, events[0].GuardMs)
+	assert.Equal(t, "Bash", events[0].Action)
 }
 
 // A hook row names the magus that judged the call and the directory the host reported, and

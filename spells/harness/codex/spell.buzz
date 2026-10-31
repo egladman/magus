@@ -80,6 +80,8 @@ fun codex_hooks() > [CodexHook] {
         // spawn answers with its task_name path, a v1 spawn with the agent id.
         codex_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent",
             points: [HookPoint.spawn]),
+        // PostToolUse input carries no duration, so no tool time is
+        // recorded: a hook would only spend a process per call.
         codex_hook("PostToolUse", matcher: "apply_patch", script: check.script, flags: check.flags, status: "magus: checking the Buzz it wrote", points: RECORDS),
         // The v2 spawn message is encrypted, so nothing the parent wrote can carry a brief
         // to the child. This hook's context is the child's first instruction. The second

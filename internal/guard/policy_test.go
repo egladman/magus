@@ -169,6 +169,19 @@ func TestRecordPolicyEventCarriesRefsNotBodies(t *testing.T) {
 }
 
 // Every verdict event names the policy in force and which side decided it.
+func TestAToolTimeRecordsTheToolsRunTimeAndJudgesNothing(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+
+	v := Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
+
+	assert.Equal(t, decisionPass, v.Decision)
+	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	require.Len(t, commands, 1)
+	assert.Equal(t, int64(420), commands[0].DurationMs)
+	assert.Zero(t, commands[0].GuardMs)
+	assert.Equal(t, "Bash", commands[0].Action)
+}
+
 func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	deps := Dependencies{Policy: func() PolicyState { return PolicyState{Digest: "d9", ShellRules: 1} }}
@@ -179,7 +192,7 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	// The clock, the stamped account, the workspace and the content-addressed fields are
 	// cleared first, so a field added to the event cannot be dropped here unseen.
 	e := commands[0]
-	e.Ts, e.Origin, e.Workspace, e.DurationMs = 0, types.Origin{}, "", 0
+	e.Ts, e.Origin, e.Workspace, e.GuardMs = 0, types.Origin{}, "", 0
 	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
 	e.Preview, e.VerdictRef = "", ""
 	assert.NotEmpty(t, e.Cwd, "a bare command records the directory the judge ran in")

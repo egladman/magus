@@ -1522,6 +1522,7 @@ not block every tool call.`,
 		{Name: "renders-ask", Kind: cmdline.Bool, Default: false, Doc: "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny"},
 		{Name: "call-background", Kind: cmdline.Bool, Default: false, Doc: "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused"},
 		{Name: "call-timeout-ms", Kind: cmdline.Int, Doc: "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default"},
+		{Name: "tool-ms", Kind: cmdline.Int, Doc: "Read the input as a tool's name and record how many milliseconds the host says it ran, without judging: the verdict is always pass"},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Check one command", Command: "magus shell 'go test ./...'"},

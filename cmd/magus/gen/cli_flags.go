@@ -653,6 +653,8 @@ const (
 	FlagShellRendersAsk = "renders-ask"
 	// shell: --session
 	FlagShellSession = "session"
+	// shell: --tool-ms
+	FlagShellToolMs = "tool-ms"
 	// shell: --transcript
 	FlagShellTranscript = "transcript"
 	// shell: --transport
@@ -1010,6 +1012,7 @@ type ShellFlags struct {
 	RendersAsk     bool   // --[no-]renders-ask
 	CallBackground bool   // --[no-]call-background
 	CallTimeoutMs  int    // --call-timeout-ms
+	ToolMs         int    // --tool-ms
 }
 
 // BindShell registers `magus shell`'s flags on fs and returns the destination.
@@ -1033,6 +1036,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
 	cmdline.NegatedBoolVar(fs, &f.CallBackground, FlagShellCallBackground)
 	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
+	fs.IntVar(&f.ToolMs, FlagShellToolMs, 0, "Read the input as a tool's name and record how many milliseconds the host says it ran, without judging: the verdict is always pass")
 	return &f
 }
 

@@ -419,7 +419,7 @@ func TestHookRowsRecordEachPhase(t *testing.T) {
 // so a recorded event compares whole and a field added to it cannot be dropped unseen. A
 // phase keeps its name and whether it lapsed.
 func clearVolatile(e trail.Event) trail.Event {
-	e.Ts, e.Origin, e.Workspace, e.DurationMs = 0, types.Origin{}, "", 0
+	e.Ts, e.Origin, e.Workspace, e.GuardMs = 0, types.Origin{}, "", 0
 	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
 	e.Preview, e.VerdictRef = "", ""
 	phases := make([]trail.Phase, len(e.Phases))
