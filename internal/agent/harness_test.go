@@ -1698,8 +1698,7 @@ func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t
 					"the host name is the one argument; the spell says skill loads are seen: %s", h.Command)
 			}
 		}
-		assert.Empty(t, wiredOn(t, config, "subagentStop"),
-			"Cursor's subagentStop names no subagent id, which the usage record is filed under")
+		requireWired(t, config, "subagentStop", "", "cursor-hook.buzz")
 	})
 }
 

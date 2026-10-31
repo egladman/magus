@@ -366,6 +366,7 @@ func hookCommandEvent(ctx context.Context, got trail.Event, origin types.Origin,
 		BinaryVersion: got.BinaryVersion,
 		Cwd:           got.Cwd,
 		Phases:        got.Phases,
+		GuardMs:       got.GuardMs,
 	}
 }
 
@@ -401,8 +402,13 @@ func assertJudgedBy(t *testing.T, got *trail.Event) {
 	for i, p := range got.Phases {
 		names[i] = p.Name
 	}
-	assert.Equal(t, []string{"load_rules", "builtin_rules", "notices", "judge"}, names)
-	got.Binary, got.BinaryVersion, got.Phases = "", "", nil
+	// A spawn is judged apart from the shell rules.
+	if got.Kind == trail.KindAgentSpawn {
+		assert.Equal(t, []string{"load_rules", "judge"}, names)
+	} else {
+		assert.Equal(t, []string{"load_rules", "builtin_rules", "notices", "judge"}, names)
+	}
+	got.Binary, got.BinaryVersion, got.Phases, got.GuardMs = "", "", nil, 0
 }
 
 func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
