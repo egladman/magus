@@ -850,8 +850,7 @@ type Job struct {
 	// branch. It exempts the row's work and its deferred items.
 	LeftUnmerged string `json:"left_unmerged,omitempty" yaml:"left_unmerged,omitempty"`
 	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
-	// MachineClaim and polls the budget weight/DefaultJobWeight times as often. In (0,1];
-	// zero reads as DefaultJobWeight.
+	// MachineClaim. In (0,1]; zero reads as DefaultJobWeight.
 	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
 	// Paused is the unix second a person paused the job, zero while it is not. A claim the
 	// holder already has finishes; exec and the guard refuse its next magus run.

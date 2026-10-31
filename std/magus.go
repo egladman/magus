@@ -381,11 +381,11 @@ var Magus = Module{
 			Impl:    MagusDiskReclaim,
 		},
 		{
-			Name:    "file_disk_attention",
-			Doc:     "Open the attention request a disk reclaim files for a person, with message as its text. It keeps one id, so a request still open is not filed again. Disposing it stays a person's act. Raises MGS1022 outside a workspace.",
-			Args:    []Arg{{Name: "message", Type: TypeString}},
-			Raises:  true,
-			Impl:    MagusFileDiskAttention,
+			Name:   "file_disk_attention",
+			Doc:    "Open the attention request a disk reclaim files for a person, with message as its text. It keeps one id, so a request still open is not filed again. Disposing it stays a person's act. Raises MGS1022 outside a workspace.",
+			Args:   []Arg{{Name: "message", Type: TypeString}},
+			Raises: true,
+			Impl:   MagusFileDiskAttention,
 		},
 		{
 			Name: "diagnose_drift",

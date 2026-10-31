@@ -299,7 +299,7 @@ grep '"SubagentStop"' .codex/hooks.json
 ! grep '"matcher": "Read"' .codex/hooks.json
 grep '"UserPromptSubmit"' .codex/hooks.json
 grep '"beforeSubmitPrompt"' .cursor/hooks.json
-grep 'sandbox_mode = "read-only"' .codex/agents/magus-scout.toml
+! grep 'sandbox_mode' .codex/agents/magus-scout.toml
 grep -count=1 'proofread-reply.buzz' .claude/settings.json
 grep -count=1 'proofread-reply.buzz' .codex/hooks.json
 grep -count=1 'proofread-reply.buzz' .cursor/hooks.json

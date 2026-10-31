@@ -226,7 +226,7 @@ func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
 		return ""
 	}
 	return fmt.Sprintf(landedReasonPrefix+"on %s at %s: the %d changed path(s) at %s in %s read the same there",
-		res.Base,shortRevision(base), paths, shortRevision(head), row.CheckoutRoot)
+		res.Base, shortRevision(base), paths, shortRevision(head), row.CheckoutRoot)
 }
 
 // landedInIntegration reports why row's work is in the checkout of a live integration job
