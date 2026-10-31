@@ -34,20 +34,18 @@ type MachineAdmitter interface {
 	// Overrun says the granted claim id held more than its memory curve predicted, so
 	// the budget charges it its full peak until Release. Best-effort, like Release.
 	Overrun(ctx context.Context, id string)
+	// HoldGroup ties process group pgid to the claim. The broker stops
+	// it on release, or when this process's connection closes.
+	HoldGroup(ctx context.Context, claim string, pgid int, command string) (string, error)
+	// ReleaseHold returns an error when the broker did not answer and may
+	// still hold the group.
+	ReleaseHold(ctx context.Context, id string) error
 }
 
 // KickingAdmitter is admit with kick called once, on the first claim. No claim
 // waits for it: a held step may be the one that would free space.
 func KickingAdmitter(admit MachineAdmitter, kick func()) MachineAdmitter {
-	k := &kickingAdmitter{MachineAdmitter: admit, kick: sync.OnceFunc(kick)}
-	// Embedding the interface hides this, and then no step's groups are held.
-	if holder, ok := admit.(GroupHolder); ok {
-		return struct {
-			*kickingAdmitter
-			GroupHolder
-		}{k, holder}
-	}
-	return k
+	return &kickingAdmitter{MachineAdmitter: admit, kick: sync.OnceFunc(kick)}
 }
 
 type kickingAdmitter struct {
@@ -448,25 +446,14 @@ func watchOverrun(ctx context.Context) {
 	})
 }
 
-// GroupHolder is an admitter that ends a step's process groups with the step's claim:
-// the broker stops a group still running when the claim is released, or when this
-// process's connection to it closes, as it does when the process dies.
-type GroupHolder interface {
-	HoldGroup(ctx context.Context, claim string, pgid int, command string) (string, error)
-	// ReleaseHold returns an error when the broker did not answer and may still hold the
-	// group.
-	ReleaseHold(ctx context.Context, id string) error
-}
-
 // withStepGroups returns ctx under which every process group spawn.Exec starts rides
-// the claim claim names when the group starts, when admit can hold groups.
+// the claim claim names when the group starts.
 //
 // A claim that reads "" while a group starts is handed back (lent, or the step ended),
 // so the group is left unheld without a warning. A broker that refuses a hold warns
 // once per step, not once per child.
 func withStepGroups(ctx context.Context, admit MachineAdmitter, claim func() string) context.Context {
-	holder, ok := admit.(GroupHolder)
-	if !ok || claim() == "" {
+	if claim() == "" {
 		return ctx
 	}
 	var project, target string
@@ -484,7 +471,7 @@ func withStepGroups(ctx context.Context, admit MachineAdmitter, claim func() str
 		if id == "" {
 			return func() {}
 		}
-		return holdStepGroup(ctx, holder, id, pgid, command, unheld)
+		return holdStepGroup(ctx, admit, id, pgid, command, unheld)
 	})
 }
 
@@ -505,7 +492,7 @@ func UnheldGroupWarning(project, target string, pgid int, command string, err er
 // leave a hold the broker recorded that this process never learns the id of, and so
 // never releases. It is bounded the way a release is, so a sick broker cannot stall the
 // step that started the group.
-func holdStepGroup(ctx context.Context, holder GroupHolder, claim string, pgid int, command string, unheld func(pgid int, command string, err error)) (release func()) {
+func holdStepGroup(ctx context.Context, holder MachineAdmitter, claim string, pgid int, command string, unheld func(pgid int, command string, err error)) (release func()) {
 	hctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 	id, err := holder.HoldGroup(hctx, claim, pgid, command)
 	cancel()

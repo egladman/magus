@@ -448,6 +448,12 @@ func (s *scriptedSeats) Release(_ context.Context, id string) { s.released = app
 
 func (s *scriptedSeats) Overrun(context.Context, string) {}
 
+func (s *scriptedSeats) HoldGroup(context.Context, string, int, string) (string, error) {
+	return "", nil
+}
+
+func (s *scriptedSeats) ReleaseHold(context.Context, string) error { return nil }
+
 func (s *scriptedSeats) Await(_ context.Context, claims []types.MachineClaim, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
 	s.awaited = append(s.awaited, claims...)
 	parked(claims[0], types.MachineVerdict{Fits: true, BudgetMB: 4096, HeldMB: 4096})

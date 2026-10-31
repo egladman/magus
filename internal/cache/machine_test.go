@@ -443,6 +443,12 @@ type budgetAdmitter struct {
 	overruns []string
 }
 
+func (*budgetAdmitter) HoldGroup(context.Context, string, int, string) (string, error) {
+	return "", nil
+}
+
+func (*budgetAdmitter) ReleaseHold(context.Context, string) error { return nil }
+
 func (f *budgetAdmitter) Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -380,6 +380,12 @@ func (refusingAdmitter) Release(context.Context, string) {}
 
 func (refusingAdmitter) Overrun(context.Context, string) {}
 
+func (a refusingAdmitter) HoldGroup(context.Context, string, int, string) (string, error) {
+	return "", a.err
+}
+
+func (refusingAdmitter) ReleaseHold(context.Context, string) error { return nil }
+
 // overrunAdmitter sends each overrun it is told of on overruns.
 type overrunAdmitter struct {
 	refusingAdmitter
@@ -449,6 +455,7 @@ func (a *groupAdmitter) ReleaseHold(_ context.Context, id string) error {
 // unansweredHolder is a broker that records each hold on whatever context it was handed
 // and answers no release.
 type unansweredHolder struct {
+	MachineAdmitter
 	holdErr     error
 	holdHasTime bool
 }

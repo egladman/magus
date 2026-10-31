@@ -536,7 +536,7 @@ func (c *Client) Hold(ctx context.Context, h Hold) (string, error) {
 	return reply.ID, nil
 }
 
-var _ cache.GroupHolder = (*Client)(nil)
+var _ cache.MachineAdmitter = (*Client)(nil)
 
 // HoldGroup hands the broker process group pgid, which a step holding claim (an id
 // [Client.Request] granted) started, so the group ends with the claim: when it is
