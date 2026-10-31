@@ -859,6 +859,15 @@ test "a deferred item refuses the stop and an unknown read is never taken as mer
     std\assert(unknown.decision == magus\GuardDecision.deny and unknown.reason.indexOf("no branch") != null, message: "says why");
 }
 
+test "a row with only unresolved risks lets the root stop, with no mandate and under one" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final root = StopFacts{ role = "root", stopHookActive = false };
+    final risks = JobUnmergedReport{ risks = [JobUnmerged{ job = "go-indexer", item = "a caveat", why = "listed", remedy = "dismiss it" }] };
+    std\assert(decideStop(root, q: Queue{ jobs = doneStore, unmerged = risks }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "no mandate");
+    std\assert(decideStop(root, q: Queue{ jobs = doneStore, unmerged = risks }, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "under a mandate");
+}
+
 test "a long report names the first facts and points at the whole list" {
     final many = mut [<JobUnmerged>];
     for (var i = 0; i < unmergedShown + 2; i = i + 1) {
