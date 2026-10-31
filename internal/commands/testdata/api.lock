@@ -254,9 +254,11 @@ flag query/stdin
 flag query/url
 flag refs/after
 flag refs/before
+flag refs/context
 flag refs/definition
 flag refs/generated
 flag refs/limit
+flag refs/lines
 flag refs/no-definition
 flag refs/no-generated
 flag refs/no-occurrences
@@ -264,6 +266,7 @@ flag refs/no-refresh
 flag refs/no-source
 flag refs/no-text
 flag refs/occurrences
+flag refs/offset
 flag refs/refresh
 flag refs/rename
 flag refs/source

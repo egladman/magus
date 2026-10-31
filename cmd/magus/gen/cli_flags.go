@@ -537,14 +537,20 @@ const (
 	FlagRefsAfter = "after"
 	// refs: --before
 	FlagRefsBefore = "before"
+	// refs: --context
+	FlagRefsContext = "context"
 	// refs: --definition
 	FlagRefsDefinition = "definition"
 	// refs: --generated
 	FlagRefsGenerated = "generated"
 	// refs: --limit
 	FlagRefsLimit = "limit"
+	// refs: --lines
+	FlagRefsLines = "lines"
 	// refs: --occurrences
 	FlagRefsOccurrences = "occurrences"
+	// refs: --offset
+	FlagRefsOffset = "offset"
 	// refs: --refresh
 	FlagRefsRefresh = "refresh"
 	// refs: --rename
@@ -1101,11 +1107,14 @@ type RefsFlags struct {
 	Occurrences bool   // --[no-]occurrences
 	Definition  bool   // --[no-]definition
 	Source      bool   // --[no-]source
+	Context     int    // --context
 	Before      int    // --before
 	After       int    // --after
+	Lines       string // --lines
 	Text        bool   // --[no-]text
 	Generated   bool   // --[no-]generated
 	Limit       int    // --limit
+	Offset      int    // --offset
 	Rename      string // --rename
 }
 
@@ -1120,13 +1129,16 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	cmdline.NegatedBoolVar(fs, &f.Definition, FlagRefsDefinition)
 	fs.BoolVar(&f.Source, FlagRefsSource, false, "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n. With --occurrences, print each site's lines")
 	cmdline.NegatedBoolVar(fs, &f.Source, FlagRefsSource)
-	fs.IntVar(&f.Before, FlagRefsBefore, 0, "With --source, also print this many lines above each range, clamped to the file (grep -B)")
-	fs.IntVar(&f.After, FlagRefsAfter, 0, "With --source, also print this many lines below each range, clamped to the file (grep -A)")
+	fs.IntVar(&f.Context, FlagRefsContext, 0, "Print this many lines on both sides of each range, clamped to the file (grep -C). Implies --source")
+	fs.IntVar(&f.Before, FlagRefsBefore, 0, "Print this many lines above each range, over --context, clamped to the file (grep -B). Implies --source")
+	fs.IntVar(&f.After, FlagRefsAfter, 0, "Print this many lines below each range, over --context, clamped to the file (grep -A). Implies --source")
+	fs.StringVar(&f.Lines, FlagRefsLines, "", "Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below. Write a negative range with =, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after")
 	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace")
 	cmdline.NegatedBoolVar(fs, &f.Text, FlagRefsText)
 	fs.BoolVar(&f.Generated, FlagRefsGenerated, true, "In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely")
 	cmdline.NegatedBoolVar(fs, &f.Generated, FlagRefsGenerated)
-	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code")
+	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What `| head` would do, without losing the count or the exit code")
+	fs.IntVar(&f.Offset, FlagRefsOffset, 0, "With --occurrences, skip this many sites first; a cut page prints the next command")
 	fs.StringVar(&f.Rename, FlagRefsRename, "", "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is")
 	return &f
 }

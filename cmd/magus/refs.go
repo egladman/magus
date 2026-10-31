@@ -37,7 +37,9 @@ import (
 // rows), which is why it is a distinct subcommand rather than a `magus query` neighborhood.
 func refsCommand(ctx context.Context, root string, args []string) error {
 	var rf *flaggen.RefsFlags
+	var flags *flag.FlagSet
 	pos, err := commandParse("refs", args, func(fs *flag.FlagSet) {
+		flags = fs
 		rf = flaggen.BindRefs(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus refs <symbol> [flags]")
@@ -54,6 +56,11 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	source, err := refsSourceWindow(rf, flags)
+	if err != nil {
+		return err
+	}
+	rf.Source = source.Show
 	noGenerated := !rf.Generated
 	if len(pos) == 0 {
 		if rf.Text {
@@ -63,16 +70,13 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 		}
 		return exit.Reported(exit.Usage)
 	}
+	page, err := refsOccurrencePage(rf, flags, pos[0])
+	if err != nil {
+		return err
+	}
 	if rf.Rename != "" && (rf.Text || rf.Occurrences || rf.Definition || rf.Source) {
 		return exit.Usagef("magus refs: --rename takes none of --text, --occurrences, --definition, --source")
 	}
-	if rf.Before < 0 || rf.After < 0 {
-		return exit.Usagef("magus refs: --before and --after take 0 or more lines, got %d and %d", rf.Before, rf.After)
-	}
-	if (rf.Before > 0 || rf.After > 0) && (!rf.Source || rf.Text) {
-		return exit.Usagef("magus refs: --before and --after widen --source, and --text prints no source")
-	}
-	source := sourceWindow{Show: rf.Source, Before: rf.Before, After: rf.After}
 
 	if rf.Text {
 		// Computed here, once, and passed down: the same shape the symbol-miss
@@ -176,7 +180,7 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 	out.Answer = withIndexCause(ctx, root, out.Answer)
 
 	if rf.Occurrences {
-		return emitOccurrences(ctx, root, opts, out, res.Occurrences, source)
+		return emitOccurrences(ctx, root, opts, out, res.Occurrences, source, page)
 	}
 	if rf.Definition || rf.Source {
 		defs, _ := g.Definitions(out.Symbol)
@@ -587,7 +591,7 @@ func refsTextCommand(ctx context.Context, root, pattern string, scopeArgs []stri
 // It reports; it does not edit. The output is what a caller needs to make the edit itself,
 // which is the same division every other magus verb keeps between naming what a change
 // touches and touching it.
-func emitOccurrences(ctx context.Context, root string, opts output.Options, refs types.KnowledgeRefsOutput, occurrences *magus.SymbolOccurrenceRead, source sourceWindow) error {
+func emitOccurrences(ctx context.Context, root string, opts output.Options, refs types.KnowledgeRefsOutput, occurrences *magus.SymbolOccurrenceRead, source sourceWindow, page occurrencePage) error {
 	if occurrences == nil {
 		// The probe itself failed, so magus cannot say where the symbol appears. Reporting
 		// an empty list here would read as "nowhere", which is the one answer it has no
@@ -597,9 +601,6 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 	}
 	read := *occurrences
 	files := read.Files
-	if source.Show {
-		fillOccurrenceSources(resolveRootOrEmpty(root), files, source)
-	}
 
 	out := types.KnowledgeOccurrencesOutput{
 		Definition:    types.KnowledgeOccurrencesDefinition,
@@ -633,6 +634,15 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 				out.VerifiedCount++
 			}
 		}
+	}
+	shown := 0
+	out.Files, shown = page.cut(files)
+	if source.Show {
+		fillOccurrenceSources(resolveRootOrEmpty(root), out.Files, source)
+	}
+	pageNote := page.note(shown, out.OccurrenceCount)
+	if pageNote != "" && opts.Format != outputText {
+		slog.InfoContext(ctx, pageNote, attr.Notice("magus refs"))
 	}
 
 	switch opts.Format {
@@ -721,6 +731,9 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 				fmt.Println()
 			}
 		}
+	}
+	if pageNote != "" {
+		fmt.Println(pageNote)
 	}
 	if out.VerifiedCount < out.OccurrenceCount {
 		// The count alone does not say what to do about it, and the wrong response (edit
@@ -818,25 +831,141 @@ func checkDefinitions(root, name string, sites []types.KnowledgeDefinitionSite, 
 	}
 }
 
-// sourceWindow is what --source prints around a range:
-// nothing unless Show, then Before lines above and After below.
+// sourceWindow is what --source prints around a range. From and To count from
+// it: 0 is the range however long, -1 the line above it, 1 the line below it.
 type sourceWindow struct {
-	Show          bool
-	Before, After int
+	Show     bool
+	From, To int
 }
 
-// text joins lines[first:end] and the window around them, clamped to the file.
+// refsSourceWindow reads the window off the parsed flags.
+// An explicit --before 0 overrides --context, so flagGiven decides.
+func refsSourceWindow(rf *flaggen.RefsFlags, fs *flag.FlagSet) (sourceWindow, error) {
+	given := func(name string) bool { return flagGiven(fs, name) }
+	sides := given(flaggen.FlagRefsContext) || given(flaggen.FlagRefsBefore) || given(flaggen.FlagRefsAfter)
+	ranged := given(flaggen.FlagRefsLines)
+	if rf.Text && (sides || ranged) {
+		return sourceWindow{}, exit.Usagef("magus refs: --text prints no source; drop --context, --before, --after and --lines")
+	}
+	if ranged {
+		if sides {
+			return sourceWindow{}, exit.Usagef("magus refs: --lines sets both sides; use it alone, as --lines=-5:4, or use --context, --before and --after")
+		}
+		from, to, err := parseLineRange(rf.Lines)
+		return sourceWindow{Show: true, From: from, To: to}, err
+	}
+	if rf.Context < 0 || rf.Before < 0 || rf.After < 0 {
+		return sourceWindow{}, exit.Usagef("magus refs: --context, --before and --after take 0 or more lines")
+	}
+	w := sourceWindow{Show: rf.Source || sides, From: -rf.Context, To: rf.Context}
+	if given(flaggen.FlagRefsBefore) {
+		w.From = -rf.Before
+	}
+	if given(flaggen.FlagRefsAfter) {
+		w.To = rf.After
+	}
+	return w, nil
+}
+
+func parseLineRange(text string) (from, to int, err error) {
+	a, b, found := strings.Cut(text, ":")
+	from, errFrom := strconv.Atoi(a)
+	to, errTo := strconv.Atoi(b)
+	if !found || errFrom != nil || errTo != nil {
+		return 0, 0, exit.Usagef("magus refs: --lines takes A:B counted from the match, as --lines=-5:-1; got %q", text)
+	}
+	if from > to {
+		return 0, 0, exit.Usagef("magus refs: --lines %s runs backwards; write the smaller number first", text)
+	}
+	return from, to, nil
+}
+
+// text prints the window around lines[first:end], clamped to the file.
 // The empty element after a final newline is not a line to print.
 func (w sourceWindow) text(lines [][]byte, first, end int) string {
 	last := len(lines)
 	if last > 0 && len(lines[last-1]) == 0 {
 		last--
 	}
-	first, end = max(first-w.Before, 0), min(end+w.After, last)
-	if first >= end {
+	start, stop := first, end
+	switch {
+	case w.From < 0:
+		start = first + w.From
+	case w.From > 0:
+		start = end + w.From - 1
+	}
+	switch {
+	case w.To < 0:
+		stop = first + w.To + 1
+	case w.To > 0:
+		stop = end + w.To
+	}
+	start, stop = max(start, 0), min(stop, last)
+	if start >= stop {
 		return ""
 	}
-	return string(bytes.Join(lines[first:end], []byte("\n")))
+	return string(bytes.Join(lines[start:stop], []byte("\n")))
+}
+
+// occurrencePage is the sites --limit and --offset keep.
+// again is the command that asked, less those two flags.
+type occurrencePage struct {
+	limit, offset int
+	again         string
+}
+
+// refsOccurrencePage validates the paging flags and spells the next command.
+func refsOccurrencePage(rf *flaggen.RefsFlags, fs *flag.FlagSet, symbol string) (occurrencePage, error) {
+	if !rf.Occurrences && flagGiven(fs, flaggen.FlagRefsOffset) {
+		return occurrencePage{}, exit.Usagef("magus refs: --offset counts --occurrences sites; add --occurrences")
+	}
+	if rf.Occurrences && (rf.Limit < 0 || rf.Offset < 0) {
+		return occurrencePage{}, exit.Usagef("magus refs: --limit and --offset take 0 or more sites")
+	}
+	args := []string{"'" + strings.ReplaceAll(symbol, "'", `'\''`) + "'", "--occurrences"}
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case flaggen.FlagRefsOccurrences, flaggen.FlagRefsLimit, flaggen.FlagRefsOffset:
+			return
+		}
+		if b, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {
+			args = append(args, "--"+f.Name)
+			return
+		}
+		args = append(args, "--"+f.Name+"="+f.Value.String())
+	})
+	return occurrencePage{limit: rf.Limit, offset: rf.Offset, again: hint.Refs.With(args...)}, nil
+}
+
+// cut keeps the page's sites and drops a file left with none.
+func (p occurrencePage) cut(files []types.SymbolOccurrenceFile) (kept []types.SymbolOccurrenceFile, shown int) {
+	skip := p.offset
+	for _, f := range files {
+		sites := f.Occurrences[min(skip, len(f.Occurrences)):]
+		skip -= len(f.Occurrences) - len(sites)
+		if p.limit > 0 {
+			sites = sites[:min(p.limit-shown, len(sites))]
+		}
+		if len(sites) > 0 {
+			f.Occurrences = sites
+			kept = append(kept, f)
+			shown += len(sites)
+		}
+	}
+	return kept, shown
+}
+
+// note says what the page cut, and is empty when it cut nothing.
+func (p occurrencePage) note(shown, total int) string {
+	switch {
+	case shown == total:
+		return ""
+	case p.offset >= total:
+		return fmt.Sprintf("0 of %d sites; --offset %d is past the last site", total, p.offset)
+	case p.offset+shown < total:
+		return fmt.Sprintf("%d of %d sites; next: %s --limit %d --offset %d", shown, total, p.again, p.limit, p.offset+shown)
+	}
+	return fmt.Sprintf("%d of %d sites", shown, total)
 }
 
 // fillOccurrenceSources sets each occurrence's Source from the file under root.

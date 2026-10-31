@@ -1570,8 +1570,15 @@ changed (exit 1) when the symbol's name has left the start line, and
 unverified when the name is there but the file was edited since. An index
 that recorded no end line says so instead of guessing one. --source adds
 the lines themselves; with --occurrences it prints each site's lines
-instead. --before and --after widen what --source prints, clamped to the
-file.
+instead. --context N adds N lines on both sides, and --before and --after
+set one side over it. --lines A:B picks a range counted from the match: 0
+is the matched line or a definition's whole body, -1 the line above it, 1
+the line below it, so --lines=-5:-1 prints only the 5 lines above. A
+negative range needs the =. Any of these implies --source, and all clamp to
+the file.
+
+--limit and --offset page --occurrences by site; a cut page prints the
+total and the next command.
 
 --text switches to that other question on purpose: a literal substring
 search with no symbol index and no graph, printed as path:line:text like
@@ -1595,13 +1602,16 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Name: "occurrences", Kind: cmdline.Bool, Default: false, Doc: "Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in."},
 		{Name: "definition", Kind: cmdline.Bool, Default: false, Doc: "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed"},
 		{Name: "source", Kind: cmdline.Bool, Default: false, Doc: "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n. With --occurrences, print each site's lines"},
-		{Name: "before", Kind: cmdline.Int, Doc: "With --source, also print this many lines above each range, clamped to the file (grep -B)"},
-		{Name: "after", Kind: cmdline.Int, Doc: "With --source, also print this many lines below each range, clamped to the file (grep -A)"},
+		{Name: "context", Kind: cmdline.Int, Doc: "Print this many lines on both sides of each range, clamped to the file (grep -C). Implies --source"},
+		{Name: "before", Kind: cmdline.Int, Doc: "Print this many lines above each range, over --context, clamped to the file (grep -B). Implies --source"},
+		{Name: "after", Kind: cmdline.Int, Doc: "Print this many lines below each range, over --context, clamped to the file (grep -A). Implies --source"},
+		{Name: "lines", Kind: cmdline.String, Doc: "Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below. Write a negative range with =, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after"},
 		{Name: "text", Kind: cmdline.Bool, Default: false, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace"},
 		// Custom, not Bool: bound by refsCommand itself alongside flaggen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
 		{Name: "generated", Kind: cmdline.Bool, Default: true, Doc: "In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely"},
-		{Name: "limit", Kind: cmdline.Int, Doc: "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code"},
+		{Name: "limit", Kind: cmdline.Int, Doc: "Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What `| head` would do, without losing the count or the exit code"},
+		{Name: "offset", Kind: cmdline.Int, Doc: "With --occurrences, skip this many sites first; a cut page prints the next command"},
 		{Name: "rename", Kind: cmdline.String, Doc: "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is"},
 	},
 	Usage: "magus refs <symbol> [flags]",
@@ -1611,7 +1621,10 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Comment: "As JSON", Command: "magus refs Open -o json"},
 		{Comment: "Where a symbol's body starts and ends", Command: "magus refs Open --definition"},
 		{Comment: "A symbol's body, by name", Command: "magus refs Open --source"},
-		{Comment: "Every site's code, with two lines above and below", Command: "magus refs Open --occurrences --source --before 2 --after 2"},
+		{Comment: "Every site's code, with five lines on both sides", Command: "magus refs Open --occurrences --context 5"},
+		{Comment: "Only the five lines above each site; a negative range needs the =", Command: "magus refs Open --occurrences --lines=-5:-1"},
+		{Comment: "Five lines above each site, four below", Command: "magus refs Open --occurrences --before 5 --after 4"},
+		{Comment: "One page of sites", Command: "magus refs Open --occurrences --limit 5 --offset 5"},
 		{Comment: "Raw text search, no index needed", Command: "magus refs TODO --text"},
 		{Comment: "Preview a rename", Command: "magus refs parseQuery --rename parseTerms --dry-run"},
 		{Comment: "Rename a symbol at every verified site", Command: "magus refs parseQuery --rename parseTerms"},
