@@ -11,10 +11,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// maxOvertakes is how many requests a release may seat ahead of the request at the head
-// of the queue. A smaller claim that fits the room a release freed goes first, which
-// keeps the host busy; once this many have, everything behind the head is judged as if
-// the head already held its seat, so a stream of small claims cannot starve a large one.
+// maxOvertakes is how many requests may go ahead of a parked one: a smaller
+// claim fitting freed room, or a heavier job's. Past it, everything behind the
+// head is judged as if the head held its seat.
 const maxOvertakes = 4
 
 // outcome is what one try of a parked request came to.

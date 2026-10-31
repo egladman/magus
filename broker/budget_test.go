@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -134,6 +135,123 @@ func TestAParkedQueueLetsSmallClaimsByUntilTheHeadStarves(t *testing.T) {
 
 	c.Release(t.Context(), overtook[3])
 	assert.True(t, requireAnswer(t, small[maxOvertakes]).v.Granted)
+}
+
+// holdOnlySlot fills a one-slot broker, so whatever c claims next parks on it.
+func holdOnlySlot(t *testing.T) (addr string, c *Client, held string) {
+	t.Helper()
+	addr = testAddr(t)
+	serve(t, addr, WithCapacity(0, 1))
+	c = dial(t, addr)
+	v, err := c.Claim(t.Context(), types.MachineClaim{Target: "holder", Slots: 1})
+	require.NoError(t, err)
+	require.True(t, v.Granted)
+	return addr, c, v.ID
+}
+
+// seatInOrder passes the one slot along, and returns who took it each time.
+func seatInOrder(t *testing.T, c *Client, held string, parked map[string]<-chan claimed) []string {
+	t.Helper()
+	var order []string
+	for range len(parked) {
+		c.Release(t.Context(), held)
+		var seated string
+		require.Eventually(t, func() bool {
+			for target, done := range parked {
+				select {
+				case got := <-done:
+					require.True(t, got.v.Granted)
+					seated, held = target, got.v.ID
+					return true
+				default:
+				}
+			}
+			return false
+		}, 5*time.Second, time.Millisecond)
+		order = append(order, seated)
+		delete(parked, seated)
+	}
+	return order
+}
+
+func TestAParkedQueueSeatsTheHeavierJobFirst(t *testing.T) {
+	addr, c, held := holdOnlySlot(t)
+	parked := map[string]<-chan claimed{}
+	for _, w := range []struct {
+		target string
+		weight float64
+	}{{"light", 0.25}, {"unbound", 0}, {"heavy", 1}, {"named-default", types.DefaultJobWeight}} {
+		parked[w.target] = claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: w.target, Slots: 1, Weight: w.weight})
+	}
+	assert.Equal(t, []string{"heavy", "unbound", "named-default", "light"}, seatInOrder(t, c, held, parked),
+		"no weight weighs the default, and equal weights stay in the order they asked")
+}
+
+func TestAParkedQueueStopsLettingHeavierJobsPastAfterMaxOvertakes(t *testing.T) {
+	addr, c, held := holdOnlySlot(t)
+	parked := map[string]<-chan claimed{
+		"light": claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: "light", Slots: 1, Weight: 0.25}),
+	}
+	want := make([]string, 0, maxOvertakes+2)
+	for i := range maxOvertakes + 1 {
+		target := fmt.Sprintf("heavy-%d", i)
+		parked[target] = claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: target, Slots: 1, Weight: 1})
+		want = append(want, target)
+	}
+	want = slices.Insert(want, maxOvertakes, "light")
+	assert.Equal(t, want, seatInOrder(t, c, held, parked))
+}
+
+func TestAGateStillGoesAheadOfAHeavierJob(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(0, 1))
+	c := dial(t, addr)
+	v, err := c.Claim(t.Context(), types.MachineClaim{Target: "holder", Slots: 1})
+	require.NoError(t, err)
+	require.True(t, v.Granted)
+	heavy := claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: "heavy", Slots: 1, Weight: 1})
+
+	gate := NewClient(addr, WithGate(true))
+	t.Cleanup(func() { _ = gate.Close() })
+	gated := claimAsync(t, t.Context(), addr, gate, types.MachineClaim{Target: "ci", Slots: 1})
+
+	c.Release(t.Context(), v.ID)
+	assert.True(t, requireAnswer(t, gated).v.Granted)
+	requirePending(t, heavy)
+}
+
+func TestAStatusWaitCarriesItsJobsWeightIntoTheQueue(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(0, 1))
+	holder := dial(t, addr)
+	v, err := holder.Request(t.Context(), types.MachineClaim{Target: "holder", Slots: 1, PID: 1})
+	require.NoError(t, err)
+	require.True(t, v.Granted)
+
+	reserve := func(target string, weight float64) <-chan error {
+		c := dial(t, addr)
+		reader := startReader(t).Process.Pid
+		parked, done := make(chan struct{}), make(chan error, 1)
+		go func() {
+			_, err := c.Reserve(t.Context(), types.MachineClaim{Target: target, Slots: 1, Weight: weight}, reader,
+				func(types.MachineVerdict) { close(parked) })
+			done <- err
+		}()
+		<-parked
+		return done
+	}
+	light := reserve("light", 0.25)
+	heavy := reserve("heavy", 1)
+
+	holder.Release(t.Context(), v.ID)
+	require.NoError(t, <-heavy, "the heavier reservation takes the room")
+	require.Len(t, holders(t, addr), 1)
+	assert.Equal(t, "heavy", holders(t, addr)[0].Target)
+	select {
+	case err := <-light:
+		t.Fatalf("the light reservation was answered (%v) with the slot taken", err)
+	default:
+	}
 }
 
 func TestAParkedSeatWaitIsSeatedWhenTheSeatsRunEnds(t *testing.T) {

@@ -303,3 +303,11 @@ sit on the job row, outside the budget:
 
 Priority ceiling protocols stay rejected for the reason given: neither control is a static
 map of nested work.
+
+### 2026-10-31: weight orders the broker's queue
+
+The broker now parks requests and wakes them, and no client retries, so the retry interval
+above no longer exists and `weight` was written and never read. It now orders parked
+requests: gates first, then the heavier job, in asking order within a weight. A request
+that goes ahead counts as overtaking, so `maxOvertakes` bounds how long a light job waits.
+Weight still decides no verdict, and a refused claim still holds no place in the queue.

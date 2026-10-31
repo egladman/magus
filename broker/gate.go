@@ -130,18 +130,37 @@ func (s *server) requestLocked(sess *session, c types.MachineClaim) types.Machin
 	return s.budget.Request(c)
 }
 
-// enqueueLocked queues p: a gate behind the gates already waiting and ahead of every
-// other request, anything else last. Callers hold s.mu.
+// enqueueLocked queues p: a gate behind the gates waiting, ahead of the rest;
+// anything else behind every request of its weight or more. Going ahead counts
+// as overtaking, so a stream of heavier jobs cannot starve a light one.
+// Callers hold s.mu.
 func (s *server) enqueueLocked(p *parked) {
-	if !p.gate {
-		s.queue = append(s.queue, p)
+	if p.gate {
+		i := slices.IndexFunc(s.queue, func(q *parked) bool { return !q.gate })
+		if i < 0 {
+			i = len(s.queue)
+		}
+		s.queue = slices.Insert(s.queue, i, p)
 		return
 	}
-	i := slices.IndexFunc(s.queue, func(q *parked) bool { return !q.gate })
-	if i < 0 {
-		i = len(s.queue)
+	i := len(s.queue)
+	for i > 0 {
+		q := s.queue[i-1]
+		if q.gate || q.overtaken >= maxOvertakes || jobWeight(q.claim) >= jobWeight(p.claim) {
+			break
+		}
+		i--
+	}
+	for _, q := range s.queue[i:] {
+		q.overtaken++
 	}
 	s.queue = slices.Insert(s.queue, i, p)
+}
+
+// jobWeight is what c weighs in the queue. A run bound to no job, and a job
+// that names no weight, carry zero and weigh the default.
+func jobWeight(c types.MachineClaim) float64 {
+	return cmp.Or(c.Weight, types.DefaultJobWeight)
 }
 
 // gateDeadlineLocked is the earliest instant a waiting gate claim reaches gateWaitBound.
