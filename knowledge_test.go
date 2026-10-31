@@ -1632,3 +1632,16 @@ func TestRootModuleGapsDropsNestedModuleDirectories(t *testing.T) {
 
 	assert.Equal(t, []string{"internal/guard"}, got)
 }
+
+func TestRootModuleGapsDropsDirectoryExcludedByBuildConstraint(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "cmd", "buzz-playground")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte("//go:build js && wasm\n\npackage main\n\nfunc main() {}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "built"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "built", "a.go"), []byte("package built\n"), 0o644))
+
+	got := rootModuleGaps(root, []string{"cmd/buzz-playground", "internal/built"})
+
+	assert.Equal(t, []string{"internal/built"}, got)
+}

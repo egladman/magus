@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"go/build"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -1138,15 +1139,24 @@ func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
 	return knowledge.ParseCoverage(profile, module)
 }
 
-// rootModuleGaps drops nested modules' directories; the profile omits them.
+// rootModuleGaps drops directories a native run cannot profile: nested
+// modules and platform-only packages such as cmd/buzz-playground.
 func rootModuleGaps(root string, dirs []string) []string {
 	var kept []string
 	for _, dir := range dirs {
-		if !inNestedModule(root, dir) {
+		if !inNestedModule(root, dir) && !excludedOnThisPlatform(root, dir) {
 			kept = append(kept, dir)
 		}
 	}
 	return kept
+}
+
+// excludedOnThisPlatform reports a directory whose Go files all fail the
+// build constraints here. An absent directory stays a gap.
+func excludedOnThisPlatform(root, dir string) bool {
+	_, err := build.Default.ImportDir(filepath.Join(root, filepath.FromSlash(dir)), 0)
+	var noGo *build.NoGoError
+	return errors.As(err, &noGo)
 }
 
 // inNestedModule reports a go.mod at dir or between dir and root.
