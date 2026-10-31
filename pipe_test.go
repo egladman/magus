@@ -34,9 +34,9 @@ import (
 // TestHelperPipeStage is not a test: it is one stage of a shell pipe, re-executed from
 // this binary so it runs the same executable a real magus stage would. PIPETEST_*
 // configures it: raise the pipe gate when GATE is set, sleep PRE_MS, take PROJECTS
-// through takeRunLocks, touch READY, wait for the budget until the FIFO AWAIT_FILE is
-// written, write WRITE_HOLDING and WRITE_BYTES while holding, hold HOLD_MS, release, write
-// WRITE_AFTER.
+// through takeRunLocks, touch READY. With AWAIT_RELEASE, wait for the budget
+// until the pipe at descriptor 3 closes. Then write WRITE_HOLDING and
+// WRITE_BYTES while holding, hold HOLD_MS, release, write WRITE_AFTER.
 // RESULT, when set, receives "acquired" or the acquisition's error. EXIT, when set, is
 // the status it records and exits with.
 func TestHelperPipeStage(t *testing.T) {
@@ -72,10 +72,11 @@ func TestHelperPipeStage(t *testing.T) {
 	if r := env("READY"); r != "" {
 		_ = os.WriteFile(r, []byte("1"), 0o644)
 	}
-	if f := env("AWAIT_FILE"); f != "" {
-		// Opening a FIFO to read blocks until the test opens it to write: the release.
+	if env("AWAIT_RELEASE") != "" {
+		// Not a FIFO: on macOS a reader can miss a writer that opens, writes
+		// nothing and closes, and block in read forever.
 		budget := func(context.Context, func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
-			_, err := os.ReadFile(f)
+			_, err := io.ReadAll(os.NewFile(3, "release"))
 			return types.MachineClaim{}, types.MachineVerdict{Granted: true, Fits: true}, err
 		}
 		if err := cache.AwaitMachine(context.Background(), budget, nil); err != nil {
@@ -618,18 +619,21 @@ func TestStatusWaitPipeRunsTheDownstreamAfterRelease(t *testing.T) {
 	cacheDir := t.TempDir()
 	r, w := shellPipe(t)
 	ready := readyFile(t)
-	freed := filepath.Join(t.TempDir(), "freed")
-	if err := syscall.Mkfifo(freed, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "AWAIT_FILE": freed, "EXIT": "0"}, "readonly")
+	held, freed := shellPipe(t)
+	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "AWAIT_RELEASE": "1", "EXIT": "0"}, "readonly")
+	up.ExtraFiles = []*os.File{held}
 	startUpstream(t, up, w)
+	_ = held.Close()
 	waitForFile(t, ready, 5*time.Second)
 
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withOutput(io.Discard), withStdio(&pipe.Stdio{Stdin: r, TakesLocks: readOnly}))
+	waiting := make(chan struct{})
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, withOutput(notifyWriter{waiting}), withStdio(&pipe.Stdio{Stdin: r, TakesLocks: readOnly}))
 	done := make(chan error, 1)
+	// The wait reports this bound itself, naming the stage that never ended.
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
 	go func() {
-		release, _, err := l.takeRunLocks(t.Context(), []string{"p"})
+		release, _, err := l.takeRunLocks(ctx, []string{"p"})
 		if err == nil {
 			release()
 		}
@@ -638,19 +642,31 @@ func TestStatusWaitPipeRunsTheDownstreamAfterRelease(t *testing.T) {
 	select {
 	case err := <-done:
 		t.Fatalf("the run started (%v) while the budget was still full", err)
-	case <-time.After(700 * time.Millisecond):
-	}
-	if err := os.WriteFile(freed, nil, 0o644); err != nil {
-		t.Fatal(err)
+	case <-waiting:
 	}
 	select {
 	case err := <-done:
-		if err != nil {
-			t.Fatalf("takeRunLocks once the budget freed: %v", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the run never started after the budget freed")
+		t.Fatalf("the run started (%v) while saying it waits", err)
+	default:
 	}
+	if err := freed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("takeRunLocks once the budget freed: %v", err)
+	}
+}
+
+// notifyWriter closes its channel at the first line the locker says.
+type notifyWriter struct{ said chan struct{} }
+
+func (w notifyWriter) Write(p []byte) (int, error) {
+	select {
+	case <-w.said:
+	default:
+		close(w.said)
+	}
+	return len(p), nil
 }
 
 // TestTransitiveUpstreamIsWeighed: in a | b | c the stage two back holds c's project,
