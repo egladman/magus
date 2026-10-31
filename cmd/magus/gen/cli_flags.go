@@ -289,6 +289,8 @@ const (
 	FlagInitLocal = "local"
 	// init: --vcs
 	FlagInitVCS = "vcs"
+	// job apply: --add-write-path
+	FlagJobApplyAddWritePath = "add-write-path"
 	// job apply: --f
 	FlagJobApplyF = "f"
 	// job apply: --fix
@@ -1534,6 +1536,9 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 }
 
 // JobApplyFlags are the flags declared for `magus job apply`.
+//
+// It does NOT carry --add-write-path: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type JobApplyFlags struct {
 	F   string // -f
 	Fix bool   // --[no-]fix

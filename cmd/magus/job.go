@@ -2872,43 +2872,64 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 // each record is a job's whole spec, upserted in order, and nothing magus records about the
 // job (its state, holder, registration, results) moves. A new id creates the job.
 func jobApply(ctx context.Context, root string, args []string) error {
-	var flags *flaggen.JobApplyFlags
+	var (
+		flags    *flaggen.JobApplyFlags
+		addPaths listFlag
+	)
 	pos, err := commandParse("job apply", args, func(fs *flag.FlagSet) {
 		flags = flaggen.BindJobApply(fs)
+		fs.Var(&addPaths, "add-write-path", "A path to add to the job's write paths, or `<file>#<declaration>` to claim one declaration of a file; repeatable or comma-separated")
 		fs.Usage = func() { printJobVerbHelp(fs, "apply") }
 	})
 	if err != nil {
 		return err
 	}
-	if len(pos) > 0 {
+	adding := len(addPaths) > 0
+	var (
+		records []types.Declaration
+		store   *job.Store
+	)
+	root = resolveRootOrEmpty(root)
+	switch {
+	case adding && flags.F != "":
+		return exit.Usagef("magus job apply: --add-write-path widens the job it names, and -f applies whole records: name one or the other")
+	case adding && len(pos) != 1:
+		return exit.Usagef("magus job apply: --add-write-path widens one job: name its id as the one argument")
+	case !adding && len(pos) > 0:
 		return exit.Usagef("magus job apply: the records name their jobs, so %q is one argument too many", pos[0])
+	case !adding:
+		var in io.Reader
+		switch flags.F {
+		case "":
+			return exit.Usagef("magus job apply: name the records with -f <file>, or -f - for stdin")
+		case "-":
+			in = os.Stdin
+		default:
+			f, err := os.Open(flags.F)
+			if err != nil {
+				return exit.Usagef("magus job apply: %s", err)
+			}
+			defer f.Close()
+			in = f
+		}
+		if records, err = job.DecodeDeclarations(in); err != nil {
+			return exit.Usagef("magus job apply: %s (`%s` prints the schema each record must satisfy)", err, hint.JobFork.With("--schema"))
+		}
+		if slices.ContainsFunc(records, func(r types.Declaration) bool { return len(r.Claim) > 0 }) {
+			return applyClaim(ctx, root, records)
+		}
 	}
-	var in io.Reader
-	switch flags.F {
-	case "":
-		return exit.Usagef("magus job apply: name the records with -f <file>, or -f - for stdin")
-	case "-":
-		in = os.Stdin
-	default:
-		f, err := os.Open(flags.F)
+	// A dry run assigns no tier, so it runs no matrix.
+	store, err = openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun, ModelTiers: !globalCfg.DryRun})
+	if err != nil {
+		return err
+	}
+	if adding {
+		widened, err := widenedDeclaration(store, pos[0], addPaths)
 		if err != nil {
 			return exit.Usagef("magus job apply: %s", err)
 		}
-		defer f.Close()
-		in = f
-	}
-	records, err := job.DecodeDeclarations(in)
-	if err != nil {
-		return exit.Usagef("magus job apply: %s (`%s` prints the schema each record must satisfy)", err, hint.JobFork.With("--schema"))
-	}
-	root = resolveRootOrEmpty(root)
-	if slices.ContainsFunc(records, func(r types.Declaration) bool { return len(r.Claim) > 0 }) {
-		return applyClaim(ctx, root, records)
-	}
-	// A dry run assigns no tier, so it runs no matrix.
-	store, err := openJobs(ctx, root, jobOpen{DryRun: globalCfg.DryRun, ModelTiers: !globalCfg.DryRun})
-	if err != nil {
-		return err
+		records = []types.Declaration{widened}
 	}
 	jobWS := jobWorkspace(ctx, root)
 	store = store.InWorkspace(jobWS)
@@ -2975,6 +2996,27 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, ClaimNotes: claims[a.Next.ID]})
 	}
 	return emitFormatted(opts, report)
+}
+
+// widenedDeclaration is the job's own spec plus the paths it lacks, so a
+// widening is validated as a whole record is.
+func widenedDeclaration(store *job.Store, id string, add []string) (types.Declaration, error) {
+	rows, err := store.List()
+	if err != nil {
+		return types.Declaration{}, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	if i < 0 {
+		return types.Declaration{}, fmt.Errorf("no job %s to widen; `magus ls jobs` lists them", id)
+	}
+	rec := job.RetryDeclaration(rows[i])
+	rec.WritePaths = slices.Clone(rec.WritePaths)
+	for _, p := range add {
+		if !slices.Contains(rec.WritePaths, p) {
+			rec.WritePaths = append(rec.WritePaths, p)
+		}
+	}
+	return rec, nil
 }
 
 // applyClaimNotes is job.ForkNotes for each applied row, keyed by job id, against the plan

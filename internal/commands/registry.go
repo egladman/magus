@@ -2365,6 +2365,10 @@ Widening is the orchestrator's: a session holding a lease may apply only a spec
 that removes some of its own write paths, which releases them. Ending a job is
 ` + "`magus job exit`" + `.
 
+--add-write-path <path> <id> widens one job without a record: it applies the
+job's own spec plus the paths, so every refusal of a whole record holds. It
+cannot be combined with -f.
+
 The one claim a holder applies is proved: a record carrying only id and
 claim, [{"path": ..., "because": ...}], where because is refs:<symbol>,
 test:<file>, output:<project>:<target> or released. magus proves each path
@@ -2373,10 +2377,12 @@ record when it refuses a write it can prove. It applies alone.`,
 			Flags: []cmdline.Flag{
 				{Name: "f", Kind: cmdline.String, Doc: "The records to apply: a `file`, or `-` for stdin; one JSON job, a JSON array, or one job per line"},
 				{Name: "fix", Kind: cmdline.Bool, Default: false, Doc: "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records"},
+					{Name: "add-write-path", Kind: cmdline.Custom, Doc: "A path to add to the job's write paths, or `<file>#<declaration>` to claim one declaration of a file; repeatable or comma-separated"},
 			},
-			Usage: "magus job apply -f <file|->",
+			Usage: "magus job apply <-f <file|->|--add-write-path <path> <id>>",
 			Examples: []cmdline.Example{
 				{Comment: "Print what the records would change, writing nothing", Command: "magus job apply -f jobs.jsonl --dry-run"},
+					{Comment: "Widen one job by a path, without writing a record", Command: "magus job apply my-job --add-write-path internal/job/plan.go"},
 			},
 		},
 		{
