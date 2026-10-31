@@ -125,7 +125,7 @@ func TestEnumMappingsExhaustive(t *testing.T) {
 		journal.StatusCached: viewerv1.Status_STATUS_CACHED,
 
 		journal.StatusPermitted: viewerv1.Status_STATUS_PERMITTED,
-		"bogus":              viewerv1.Status_STATUS_UNSPECIFIED,
+		"bogus":                 viewerv1.Status_STATUS_UNSPECIFIED,
 	}
 	for in, want := range statuses {
 		assert.Equal(t, want, statusToProto(in), "statusToProto(%q)", in)

@@ -404,7 +404,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Outcome:       OutcomeOK,
 		DurationMs:    command.ToolMs,
 		GuardMs:       command.GuardMs,
-		RequestRef:   reqRef,
+		RequestRef:    reqRef,
 		RequestBytes:  reqBytes,
 		ResponseRef:   respRef,
 		ResponseBytes: respBytes,

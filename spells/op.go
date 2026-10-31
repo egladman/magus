@@ -309,7 +309,6 @@ func (s Service) Validate() error {
 //
 // In-VM spell logic is not an op kind: a remote cache provider is a separate contract
 // magus invokes by name, and other custom logic belongs in a magusfile target body.
-//
 type Op struct {
 	// Kind is the op's lifecycle kind (OpKind*); empty means OpKindCommand.
 	Kind string `json:"kind,omitempty"`
