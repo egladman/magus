@@ -621,6 +621,8 @@ body[data-dash-native] { margin: 0; }
 .console-dashboard-gantt__legend .console-dashboard-legend--failed::before { background: var(--console-status-danger); border-color: var(--console-status-danger); }
 .console-dashboard-gantt__legend .console-dashboard-legend--cached { color: var(--console-status-running); }
 .console-dashboard-gantt__legend .console-dashboard-legend--cached::before { background: var(--console-status-running); border-color: var(--console-status-running); opacity: 0.35; }
+.console-dashboard-gantt__legend .console-dashboard-legend--permitted { color: var(--pf-t--global--text--color--status--warning--default); }
+.console-dashboard-gantt__legend .console-dashboard-legend--permitted::before { background: var(--pf-t--global--color--status--warning--default); border-color: var(--pf-t--global--color--status--warning--default); }
 
 .console-dashboard-rowlist {
   list-style: none;

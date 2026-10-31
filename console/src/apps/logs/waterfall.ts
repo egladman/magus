@@ -37,7 +37,12 @@ const WF_CHAR_W = 7.2;
 const WF_BAR_LABEL_MIN = 64;
 
 // WF_WORD is the word a result is drawn with; the table twin and the bar both use it.
-const WF_WORD: Record<string, string> = { pass: "Passed", fail: "Failed", cached: "Cached" };
+const WF_WORD: Record<string, string> = {
+  pass: "Passed",
+  fail: "Failed",
+  cached: "Cached",
+  permitted: "Permitted",
+};
 
 // A domain (visible time window) - the full run span or a focus window.
 interface Domain {

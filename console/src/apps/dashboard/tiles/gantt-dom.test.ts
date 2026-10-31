@@ -92,6 +92,36 @@ test("failed and queued say what they are in text beside the bar", () => {
   }
 });
 
+test("a permitted target is drawn as its own state and written as a word", () => {
+  const now = Date.now();
+  const { tile } = mount();
+  try {
+    tile.update(
+      frame([
+        {
+          inv: "inv1",
+          trigger: "ci",
+          targets: [{ ...target("a:lint", "permitted", now), terminal: true, durationMs: 6000 }],
+        },
+      ]),
+    );
+    assert.ok(
+      tile.el.querySelector('.console-dashboard-gantt__bar[data-state="permitted"]'),
+      "the bar carries the permitted state the stylesheet colours",
+    );
+    const words = [...tile.el.querySelectorAll(".console-dashboard-gantt__dur")].map(
+      (d) => d.textContent ?? "",
+    );
+    assert.ok(
+      words.some((w) => w.startsWith("permitted")),
+      words.join("|"),
+    );
+    assert.equal(tile.el.querySelectorAll(".console-dashboard-legend--permitted").length, 1);
+  } finally {
+    tile.destroy();
+  }
+});
+
 test("its scroller can be reached and is named", () => {
   const { tile, scroller } = mount();
   try {

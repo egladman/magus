@@ -50,7 +50,7 @@ function barSpan(t: TargetRunView, now: number): { s: number; e: number } | null
   if (t.state === "running") {
     return { s: t.startMs ?? now, e: now };
   }
-  // terminal: passed | failed | cached
+  // terminal: passed | failed | cached | permitted
   const e = t.endMs ?? (t.startMs != null ? t.startMs + t.durationMs : now);
   const s = t.startMs ?? (t.endMs != null ? t.endMs - t.durationMs : e);
   return { s, e };
@@ -69,6 +69,7 @@ function stateWord(state: TargetRunView["state"]): string {
   if (state === "failed") return "failed";
   if (state === "queued") return "queued";
   if (state === "cached") return "cached";
+  if (state === "permitted") return "permitted";
   return "";
 }
 
@@ -106,6 +107,7 @@ export function ganttTile(): Tile {
     ["passed", "passed"],
     ["failed", "failed"],
     ["cached", "cached"],
+    ["permitted", "permitted"],
     // The one legend entry that is not a color. The dashed leader is the chart's most useful mark
     // and the least guessable, since nothing else on the board uses dashes to mean elapsed time.
     ["wait", "waiting to start"],

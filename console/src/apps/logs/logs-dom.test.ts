@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test as nodeTest, type TestContext } from "node:test";
 import { INV_CI } from "../../desktop/demo-scenario";
+import { Kind, Status } from "@wire/viewer/v1alpha1/viewer_pb";
 import { NOTIFY_EVENT, type NotifyInput } from "../../lib/notifications";
 import { activate, deactivate, docTitle } from "./main";
 import { bindRefSlot, resolveDom, setRefIdentity, setStatus } from "./dom";
@@ -155,6 +156,33 @@ test("the waterfall names every result in words and has a table twin", () => {
     assert.match(cached.getAttribute("fill") ?? "", /^url\(#console-wf-hatch-/);
     assert.ok(svg.querySelector("pattern"), "and the pattern it names exists");
   }
+});
+
+test("a permitted result is drawn in its own colour and written as a word", () => {
+  panel();
+  const journal = demoJournal(INV_CI);
+  assert.ok(journal);
+  const result = journal.events.find((e) => e.kind === Kind.RESULT && e.status === Status.PASS);
+  assert.ok(result, "the demo run has a passed result to turn into a permitted one");
+  result.status = Status.PERMITTED;
+  state.currentJournal = journal;
+  state.currentJournals = null;
+  const built = buildModelMulti(waterfallSource());
+  state.model = { sections: built.sections, titled: built.titled };
+  state.rawLines = built.rawLines;
+  state.timeline = true;
+  renderWaterfall();
+
+  const svg = document.querySelector<SVGElement>(".console-log-waterfall__svg");
+  assert.ok(svg);
+  assert.ok(
+    svg.querySelector('.console-log-waterfall__bar[data-status="permitted"]'),
+    "the bar carries the permitted status the stylesheet colours",
+  );
+  const word = svg.querySelector('.console-log-waterfall__barlabel[data-status="permitted"]');
+  assert.equal(text(word), "Permitted");
+  const table = document.querySelector<HTMLTableElement>(".pf-v6-screen-reader table");
+  assert.match(text(table), /Permitted/);
 });
 
 test("a filter that matches nothing offers a way back", () => {

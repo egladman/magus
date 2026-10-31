@@ -155,6 +155,7 @@
 .console-log-waterfall__bar--step { fill: var(--pf-t--global--text--color--subtle); opacity: 0.7; }
 .console-log-waterfall__bar[data-status="pass"] { fill: var(--pf-t--global--color--status--success--default); }
 .console-log-waterfall__bar[data-status="fail"] { fill: var(--pf-t--global--color--status--danger--default); }
+.console-log-waterfall__bar[data-status="permitted"] { fill: var(--pf-t--global--color--status--warning--default); }
 /* waterfall.ts hatches a cached bar with a pattern fill; the stripe colour is here. */
 .console-log-waterfall__hatch { fill: var(--pf-t--global--border--color--control--default); }
 .console-log-waterfall__barlabel {
@@ -166,6 +167,7 @@
 }
 .console-log-waterfall__barlabel[data-status="pass"] { fill: var(--pf-t--global--text--color--status--on-success--default); }
 .console-log-waterfall__barlabel[data-status="fail"] { fill: var(--pf-t--global--text--color--status--on-danger--default); }
+.console-log-waterfall__barlabel[data-status="permitted"] { fill: var(--pf-t--global--text--color--status--on-warning--default); }
 .console-log-waterfall__barlabel.console-log-waterfall__barlabel--outside { fill: var(--pf-t--global--text--color--regular); }
 .console-log-waterfall__empty {
   padding: var(--pf-t--global--spacer--xl);
