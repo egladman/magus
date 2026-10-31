@@ -166,11 +166,27 @@ refactor/pricing: 0 of 1 goal(s) met
 net lines: +0 -0 (+0)
 exports no goal declares: none
 left defined with no use: none
+goal commands
+  check: magus run test .
+the result `magus job exit refactor/pricing --stdin` reads
+{
+  "schema_version": 2,
+  "job": "refactor/pricing",
+  "changed_paths": [
+    "<each file you changed>"
+  ],
+  "validation": {
+    "command": "magus run test .",
+    "output_ref": "<ref its run printed>"
+  },
+  "unresolved_risks": []
+}
+A check the machine would not seat has no ref: set "output_ref": "" and "owed": "no seat" on its validation or gate_evidence entry.
 ```
 
 The other half's file is listed as somebody else's, and the check is unmet because
-no run has been filed. The last three lines measure her diff so far, which is empty:
-they report, and never decide whether the job passes. She edits `total.sh` and runs the check:
+no run has been filed. The `net lines` line and the two under it measure her diff so far,
+which is empty: they report, and never decide whether the job passes. She edits `total.sh` and runs the check:
 
 ```sh
 magus run test .
@@ -197,6 +213,7 @@ changed and which run proves it:
 ```console
 $ magus job exit refactor/pricing --stdin < result.json
 exited refactor/pricing, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait refactor/pricing`
+  check: out<hex> is attempt out<hex>, which passed
 ```
 
 Exiting does not let go of the job. On stderr, exit adds that she stays bound to its
@@ -247,6 +264,8 @@ JOB               HOLDER        STATE      MODEL     PATHS  PROOF     CHECK
 refactor/pricing  shop-pricing  pass       standard  1      alone     magus run test .
 refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
+not merged onto main: 1
+  refactor/pricing at 58d5e2c: ~/src/shop-pricing holds 1 uncommitted path(s), first pricing/total.sh; commit them in ~/src/shop-pricing, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -407,6 +426,22 @@ currency: 0 of 1 goal(s) met
 net lines: +0 -0 (+0)
 exports no goal declares: none
 left defined with no use: none
+goal commands
+  check: magus run test .
+the result `magus job exit currency --stdin` reads
+{
+  "schema_version": 2,
+  "job": "currency",
+  "changed_paths": [
+    "<each file you changed>"
+  ],
+  "validation": {
+    "command": "magus run test .",
+    "output_ref": "<ref its run printed>"
+  },
+  "unresolved_risks": []
+}
+A check the machine would not seat has no ref: set "output_ref": "" and "owed": "no seat" on its validation or gate_evidence entry.
 ```
 
 ### Splitting a file by declaration

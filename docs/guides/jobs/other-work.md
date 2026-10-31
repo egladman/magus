@@ -86,6 +86,9 @@ JOB          HOLDER  STATE  MODEL     PATHS  PROOF     CHECK
 upgrade/api  ana     pass   standard  1      alone     magus run test api
 upgrade/web  ben     pass   standard  1      disjoint  magus run test web
 
+not merged onto main: 2
+  upgrade/api at 321cadb: ~/src/ana holds 1 uncommitted path(s), first api/deps.txt; commit them in ~/src/ana, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
+  upgrade/web at 321cadb: ~/src/ben holds 1 uncommitted path(s), first web/deps.txt; commit them in ~/src/ben, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -203,6 +206,10 @@ JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
 release-1.3/changelog  changelog  exited  standard  1      alone     -
 release-1.3/notes      notes      exited  standard  1      disjoint  -
 
+not merged onto main: 1
+  release-1.3/changelog at 5f6b136: ~/src/changelog holds 1 uncommitted path(s), first CHANGELOG.md; commit them in ~/src/changelog, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
+unresolved risks, which stop nothing: 1
+  release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -246,6 +253,10 @@ JOB                    HOLDER     STATE    MODEL     PATHS  PROOF     CHECK
 release-1.3/changelog  changelog  pass     standard  1      alone     -
 release-1.3/notes      notes      running  standard  1      disjoint  -
 
+not merged onto main: 1
+  release-1.3/changelog at 5f6b136: ~/src/changelog holds 1 uncommitted path(s), first CHANGELOG.md; commit them in ~/src/changelog, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
+unresolved risks, which stop nothing: 1
+  release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 

@@ -144,3 +144,19 @@ currency: 0 of 1 goal(s) met
 net lines: +0 -0 (+0)
 exports no goal declares: none
 left defined with no use: none
+goal commands
+  check: magus run test .
+the result `magus job exit currency --stdin` reads
+{
+  "schema_version": 2,
+  "job": "currency",
+  "changed_paths": [
+    "<each file you changed>"
+  ],
+  "validation": {
+    "command": "magus run test .",
+    "output_ref": "<ref its run printed>"
+  },
+  "unresolved_risks": []
+}
+A check the machine would not seat has no ref: set "output_ref": "" and "owed": "no seat" on its validation or gate_evidence entry.
