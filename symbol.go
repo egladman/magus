@@ -267,6 +267,11 @@ func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 		st.dirty = true
 		return
 	}
+	if errors.Is(err, types.GateSuperseded) || lostTheLock(err) {
+		// A run wanted this project: no verdict on the indexer.
+		st.dirty = true
+		return
+	}
 	if err != nil {
 		st.failures++
 		st.dirty = true
@@ -388,7 +393,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			return refsByPath[project]
 		},
 		runIndex: func(ctx context.Context, ref indexRef) error {
-			err := m.runTargets(ctx, []types.Target{{Path: ref.project, Name: ref.op}}, run{})
+			err := m.runTargets(ctx, []types.Target{{Path: ref.project, Name: ref.op}}, run{Background: true})
 			if err == nil {
 				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
 					slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", attr.Error(gerr))
@@ -690,7 +695,7 @@ func (m *Magus) RefreshSymbolIndexes(ctx context.Context) SymbolRefresh {
 			return symbols.IndexPath(cacheDir, cmp.Or(s.Project.Path, "."), s.Op)
 		},
 		run: func(ctx context.Context, s types.SymbolIndexStatus) error {
-			err := m.runTargets(ctx, []types.Target{{Path: cmp.Or(s.Project.Path, "."), Name: s.Op}}, run{})
+			err := m.runTargets(ctx, []types.Target{{Path: cmp.Or(s.Project.Path, "."), Name: s.Op}}, run{Background: true})
 			if err == nil {
 				return nil
 			}
@@ -797,6 +802,10 @@ func (r symbolRefresher) work(ctx context.Context, report func(refreshed, proble
 			_ = os.Remove(index + symbolRefreshFailedSuffix)
 			refreshed = true
 			report(name, "", 0, took)
+		case errors.Is(err, types.GateSuperseded):
+			// The next index may share the lock the run is polling for.
+			report("", types.InlineDiagnostic(err), 0, took)
+			return refreshed
 		case lostTheLock(err):
 			report("", types.InlineDiagnostic(err), 0, took)
 		default:
@@ -1139,7 +1148,7 @@ func toDiagnostic(err error) types.Diagnostic {
 // reports no version (MGS3035), never reached it either, and rerunning does not help, so it
 // gets no hint of either kind: the diagnostic says what to do.
 func symbolRunError(project types.ProjectRef, language string, err error) error {
-	if errors.Is(err, types.ProjectLockHeldByAncestor) || errors.Is(err, types.ToolUnprobeable) {
+	if errors.Is(err, types.ProjectLockHeldByAncestor) || errors.Is(err, types.ToolUnprobeable) || errors.Is(err, types.GateSuperseded) {
 		return fmt.Errorf("%s: %w", project.Display(), err)
 	}
 	var busy interface{ ExitCode() int }

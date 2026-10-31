@@ -76,15 +76,13 @@ func (h *projectHold) yieldRequested() (string, processRecord, bool) {
 // project concurrently. This is the complement of the per-target `exclusive`
 // scheduling policy, which is a different, intra-invocation concern.
 //
-// gate marks this invocation the workspace's gate, which is what admits it to
-// supersession in both directions: it may take a lock from an earlier gate on this same
-// tree, and a later one may take its locks (MGS3014). See projectLocker.acquire for
-// which other contentions queue and which are refused.
+// role is asGate or asBackground, which admit it to supersession (MGS3014).
+// See projectLocker.acquire for which contentions queue and which are refused.
 //
 // stdio, when the invocation runs in this process, first holds the acquisition back
 // while a magus upstream of it in a shell pipe still needs one of these projects (see
 // pipe.Stdio), and publishes the finished lock set for the stage downstream.
-func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer, stdio *pipe.Stdio) (*projectHold, error) {
+func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, rw *report.Writer, stdio *pipe.Stdio, role ...lockerOption) (*projectHold, error) {
 	paths := make([]string, 0, len(projects))
 	for _, p := range projects {
 		paths = append(paths, p.Path)
@@ -97,10 +95,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, spawn.AncestorsFromEnv())
 	}
-	lopts := []lockerOption{withReportWriter(rw), withOutput(m.noticeWriter()), withCommandLine(m.commandLine)}
-	if gate {
-		lopts = append(lopts, asGate())
-	}
+	lopts := append([]lockerOption{withReportWriter(rw), withOutput(m.noticeWriter()), withCommandLine(m.commandLine)}, role...)
 	if stdio != nil {
 		lopts = append(lopts, withStdio(stdio))
 	}
@@ -263,6 +258,9 @@ type projectLocker struct {
 	// gate marks this invocation the whole ci target. Only a gate supersedes, and only a
 	// gate is superseded.
 	gate bool
+	// background marks index work nobody waits on.
+	// Any run that wants its locks stops it.
+	background bool
 	// out is where the lock's decision lines go: the workspace's WithStderr writer in a
 	// run, a buffer under test so it can read the exact bytes a user sees. The lines are written
 	// straight to the stream, never through the console, which is why -s/--silent
@@ -301,6 +299,9 @@ type lockerOption func(*projectLocker)
 
 // asGate marks this invocation the workspace's gate. See projectLocker.gate.
 func asGate() lockerOption { return func(l *projectLocker) { l.gate = true } }
+
+// asBackground marks background work. See projectLocker.background.
+func asBackground() lockerOption { return func(l *projectLocker) { l.background = true } }
 
 // withReportWriter records the supersede decisions on w instead of printing them. nil is
 // a no-op, so callers can pass the run's writer unconditionally.
@@ -419,6 +420,8 @@ func heldBy(owner string) string {
 //     is blocked on this invocation and would never release;
 //   - an earlier gate on this same tree, when this invocation is a gate: asked to stop
 //     (MGS3014), and the lock is taken when it does;
+//   - background work on this tree, unless this is too: asked to stop
+//     within supersedeYieldBound, and the lock is taken when it does;
 //   - another invocation of this process, or a sibling of this invocation's own run in
 //     another process: queued behind, until ctx ends;
 //   - any other magus process: refused at once with a *lockContendedError (exit 75), and
@@ -471,10 +474,21 @@ func (l *projectLocker) takeLocal(ctx context.Context, projectPath string, local
 		return err
 	}
 	holder, superseding := l.supersedes(projectPath)
+	waitCtx := ctx
 	if superseding {
 		defer l.askHolderToYield(ctx, projectPath)()
 	}
-	if err := local.take(ctx); err != nil {
+	if superseding && holder.Background {
+		l.emitYieldWait(projectPath, holder)
+		var cancel context.CancelFunc
+		waitCtx, cancel = context.WithTimeout(ctx, supersedeYieldBound)
+		defer cancel()
+	}
+	if err := local.take(waitCtx); err != nil {
+		if ctx.Err() == nil {
+			l.emitSupersedeRefused(projectPath, holder)
+			return &lockContendedError{Project: projectPath, Owner: l.describeOwner(projectPath)}
+		}
 		return fmt.Errorf("workspace lock: gave up waiting for %s: %w", projectPath, err)
 	}
 	if superseding {
@@ -665,6 +679,16 @@ type processRecord struct {
 	// names it knows and ignores every other line.
 	Root string `record:"root,omitempty"`
 	Gate bool   `record:"gate,omitempty"`
+	// Background says any run on the same tree may stop this holder.
+	Background bool `record:"background,omitempty"`
+}
+
+// role names the holder in a lock decision.
+func (o processRecord) role() string {
+	if o.Background {
+		return "the background refresh"
+	}
+	return "the earlier gate"
 }
 
 // The owner record layout, in ONE place. HeldLocks previously re-derived these by hand
@@ -709,14 +733,15 @@ func (l *projectLocker) selfRecord(ctx context.Context, started time.Time) proce
 	// nothing, so the tail is its PARENT's id, and stamping that on the lock would have a
 	// sibling nested run refuse a lock the parent does not hold.
 	return processRecord{
-		PID:     os.Getpid(),
-		Command: strings.Join(l.commandLine, " "),
-		Dir:     dir,
-		Started: started,
-		Inv:     journal.InvocationIDFromContext(ctx),
-		Run:     types.InvocationRoot(ctx),
-		Root:    l.root,
-		Gate:    l.gate,
+		PID:        os.Getpid(),
+		Command:    strings.Join(l.commandLine, " "),
+		Dir:        dir,
+		Started:    started,
+		Inv:        journal.InvocationIDFromContext(ctx),
+		Run:        types.InvocationRoot(ctx),
+		Root:       l.root,
+		Gate:       l.gate,
+		Background: l.background,
 	}
 }
 
@@ -774,14 +799,23 @@ func (l *projectLocker) yieldPath(projectPath string) string {
 // them is superseded, because a supersede that cannot prove it is the later run is a
 // coin toss.
 //
+// Background work is the other qualifier. Stopping it costs one index a read
+// rebuilds, so any foreground run on the tree takes its lock.
+//
 // An ancestor holding the lock never reaches here: reentrantError answers that one first,
 // and MGS3007 stays the more specific diagnosis.
 func (l *projectLocker) supersedes(projectPath string) (processRecord, bool) {
-	if !l.gate || l.root == "" {
+	if l.root == "" {
 		return processRecord{}, false
 	}
 	rec := l.readOwner(projectPath)
-	if rec.PID == 0 || !rec.Gate || rec.Root != l.root {
+	if rec.PID == 0 || rec.Root != l.root {
+		return processRecord{}, false
+	}
+	if rec.Background {
+		return rec, !l.background
+	}
+	if !l.gate || !rec.Gate {
 		return processRecord{}, false
 	}
 	if rec.Started.IsZero() || !rec.Started.Before(l.started) {
@@ -801,14 +835,15 @@ func (l *projectLocker) supersedes(projectPath string) (processRecord, bool) {
 // requester's pid is probed too: a request nobody is waiting on stops nothing, and is
 // swept here so the next holder does not read it either.
 func (l *projectLocker) pendingYield(projectPath string) (processRecord, bool) {
-	if !l.gate || l.root == "" {
+	if (!l.gate && !l.background) || l.root == "" {
 		return processRecord{}, false
 	}
 	rec := readRecord(l.yieldPath(projectPath))
-	if rec.PID == 0 || !rec.Gate || rec.Root != l.root {
+	if rec.PID == 0 || rec.Root != l.root {
 		return processRecord{}, false
 	}
-	if !l.started.Before(rec.Started) {
+	// Background work answers any live requester, whichever began first.
+	if !l.background && (!rec.Gate || !l.started.Before(rec.Started)) {
 		return processRecord{}, false
 	}
 	if !pid.Alive(rec.PID) {
@@ -857,6 +892,7 @@ func (l *projectLocker) clearStaleYield(projectPath string) {
 // bound expiring is a fallback rather than a failure.
 func (l *projectLocker) takeBySuperseding(ctx context.Context, projectPath string, fl *flock.Flock, holder processRecord) (bool, error) {
 	retract := l.askHolderToYield(ctx, projectPath)
+	l.emitYieldWait(projectPath, holder)
 	waitCtx, cancel := context.WithTimeout(ctx, supersedeYieldBound)
 	defer cancel()
 	got, err := fl.TryLockContext(waitCtx, lockPollEvery)
@@ -872,8 +908,22 @@ func (l *projectLocker) takeBySuperseding(ctx context.Context, projectPath strin
 	return true, nil
 }
 
-// emitSupersedeRefused says the earlier gate did not stop within the bound, so this run
-// is refused: a record of its own, because nothing was superseded.
+// emitYieldWait says what this run waits on and for how long, before it waits.
+func (l *projectLocker) emitYieldWait(projectPath string, holder processRecord) {
+	p := projectPath
+	if p == "" {
+		p = "."
+	}
+	msg := fmt.Sprintf("magus: asked %s on project %s to stop%s; waiting at most %s for it.", holder.role(), p, heldBy(holder.describe()), supersedeYieldBound)
+	if l.rw != nil {
+		_ = report.Record(l.rw, report.Notice{Level: slog.LevelInfo, Message: msg})
+		return
+	}
+	fmt.Fprintln(l.out, msg)
+}
+
+// emitSupersedeRefused says the holder did not stop within the bound.
+// This run is refused: a record of its own, because nothing was superseded.
 func (l *projectLocker) emitSupersedeRefused(projectPath string, holder processRecord) {
 	p := projectPath
 	if p == "" {
@@ -885,7 +935,7 @@ func (l *projectLocker) emitSupersedeRefused(projectPath string, holder processR
 		})
 		return
 	}
-	fmt.Fprintf(l.out, "magus: the earlier gate on project %s did not stop within %s; refusing instead of waiting for it.\n", p, supersedeYieldBound)
+	fmt.Fprintf(l.out, "magus: %s on project %s did not stop within %s; refusing instead of waiting for it.\n", holder.role(), p, supersedeYieldBound)
 }
 
 // emitSuperseded states the decision, once, on the run that made it. It is a decision and
@@ -900,8 +950,13 @@ func (l *projectLocker) emitSuperseded(ctx context.Context, projectPath string, 
 		_ = report.Record(l.rw, report.LockSuperseded{Project: p, HolderPID: holder.PID, Command: holder.Command})
 		return
 	}
-	fmt.Fprintf(l.out, "magus: superseded the earlier gate on project %s%s; its verdict would have described a tree that has since changed.\n",
-		p, heldBy(holder.describe()))
+	if holder.Background {
+		fmt.Fprintf(l.out, "magus: stopped the background refresh on project %s%s; the next read starts it again.\n",
+			p, heldBy(holder.describe()))
+	} else {
+		fmt.Fprintf(l.out, "magus: superseded the earlier gate on project %s%s; its verdict would have described a tree that has since changed.\n",
+			p, heldBy(holder.describe()))
+	}
 	slog.InfoContext(ctx, "lock.superseded",
 		slog.String("project", p),
 		slog.Int("holder_pid", holder.PID),

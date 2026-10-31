@@ -70,9 +70,21 @@ type run struct {
 	ExtraArgs       []string // forwarded to spells via project.WithExtraArgs
 	Cache           bool     // replay cache hits; false forces a fresh run that still refreshes the entry (magus run --no-cache); applyRunOptions defaults it true
 	Gate            bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
+	Background      bool     // index work; any run that wants its locks stops it
 	narrowing       *project.OpNarrowing
 	session         string // the host session the guard judges the run for; see WithSession
 	observer        types.Observer
+}
+
+// lockRole is what the run's project locks admit it to.
+func (o run) lockRole() []lockerOption {
+	switch {
+	case o.Gate:
+		return []lockerOption{asGate()}
+	case o.Background:
+		return []lockerOption{asBackground()}
+	}
+	return nil
 }
 
 // out is the sink the run reports through.
@@ -1949,7 +1961,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// The streams are this invocation's own: a run a target starts in this process reads
 	// none of them, so it neither waits on this pipe's upstream nor publishes to its reader.
 	ctx = pipe.WithStdio(ctx, pipe.Stdio{})
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.lockReport, stdio)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.lockReport, stdio, opts.lockRole()...)
 	if err != nil {
 		return err
 	}
@@ -1965,9 +1977,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx, stall := m.watchForStall(ctx, prog, hold.release)
 	defer stall.close()
 
-	// Armed alongside it, over the other condition this run cannot diagnose from inside
-	// itself: a later gate on this same tree waiting for the locks held above. Inert
-	// unless this invocation is the gate. See watchForSupersede.
+	// Armed alongside it, for a later run waiting on the locks held above.
+	// Inert unless this is the gate or background work. See watchForSupersede.
 	ctx, superseded := m.watchForSupersede(ctx, hold)
 	defer superseded.close()
 	// The supersede verdict is applied last: a superseded gate that goes quiet during a

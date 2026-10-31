@@ -212,6 +212,32 @@ func TestSupersedeWatchCancelsAndKeepsTheLocks(t *testing.T) {
 		"the lock is still held: the watch cancelled and released nothing")
 }
 
+// A background holder stops for any run on its tree, gate or not.
+func TestSupersedeWatchStopsBackgroundWorkForAnyRun(t *testing.T) {
+	quickSupersede(t, 5*time.Second)
+	hold := gateHold(t, "app", asBackground())
+	defer hold.release()
+
+	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
+	defer watch.close()
+	later := newProjectLocker("", testWorkspaceRoot)
+	rec := later.selfRecord(t.Context(), time.Now())
+	rec.Command = "magus run go-test ."
+	require.NoError(t, record.Write(hold.locker.yieldPath("app"), rec))
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the refresh never stopped for the run")
+	}
+	verdict := watch.verdict(nil)
+	assert.ErrorIs(t, verdict, types.GateSuperseded)
+	assert.ErrorContains(t, verdict, "magus run go-test .")
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, verdict, &stated)
+	assert.Equal(t, lockContendedExit, stated.ExitCode(), "a refresh that gave way is no failed index")
+}
+
 // TestSupersedeWatchIgnoresANonGate is the containment: only a gate is superseded, so an
 // ordinary run holding the same lock must never be aborted by a marker beside it.
 func TestSupersedeWatchIgnoresANonGate(t *testing.T) {

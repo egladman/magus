@@ -157,8 +157,8 @@ const supersedeExit = 75
 // watchForSupersede aborts the run when a LATER gate on this same tree asks for the
 // project locks this one holds, and returns the context the run should use.
 //
-// Inert for anything that is not a gate: only a gate supersedes and only a gate is
-// superseded, so a `run build` and a `run test` queue on each other exactly as before.
+// Inert unless this is a gate or background work, the only holders superseded.
+// A `run build` and a `run test` queue on each other as before.
 //
 // The abort is a cancellation and nothing more: the locks come back when the run has
 // unwound and its deferred release runs, never before, because cancellation is not
@@ -171,7 +171,7 @@ const supersedeExit = 75
 // far as the locks are concerned, and is superseded like any other gate.
 func (m *Magus) watchForSupersede(ctx context.Context, hold *projectHold) (context.Context, *abortWatch) {
 	w := &abortWatch{done: make(chan struct{}), exit: supersedeExit}
-	if hold == nil || hold.locker == nil || !hold.locker.gate || len(hold.paths) == 0 {
+	if hold == nil || hold.locker == nil || (!hold.locker.gate && !hold.locker.background) || len(hold.paths) == 0 {
 		w.stop = func() {}
 		close(w.done)
 		return ctx, w
@@ -207,10 +207,13 @@ func (m *Magus) watchForSupersede(ctx context.Context, hold *projectHold) (conte
 					continue
 				}
 				err := supersededDiagnostic(project, by)
+				if hold.locker.background {
+					err = refreshYieldedDiagnostic(project, by)
+				}
 				w.tripped.Store(err)
 				// Logged as well as returned, so a reader watching the terminal learns why
 				// the run stopped at the moment it stops rather than only at the end.
-				slog.WarnContext(logCtx, "gate superseded; yielding its project locks", attr.Error(err))
+				slog.WarnContext(logCtx, "yielding project locks to a later run", attr.Error(err))
 				cancel(err)
 				return
 			}
@@ -232,6 +235,18 @@ func supersededDiagnostic(projectPath string, by processRecord) *types.Diagnosti
 			"  yielded: project %s, along with every other project this run had locked\n"+
 			"  the later gate is running now, so there is nothing to rerun here",
 		by.PID, by.Started.UTC().Format(time.RFC3339), by.Command, p)
+}
+
+// refreshYieldedDiagnostic is MGS3014 for background work.
+// A later read reports it, so it names the run that wanted the lock.
+func refreshYieldedDiagnostic(projectPath string, by processRecord) *types.DiagnosticError {
+	p := projectPath
+	if p == "" {
+		p = "."
+	}
+	return types.DiagnosticErrorf(types.GateSuperseded,
+		"this background refresh gave project %s to pid %d (%s); nothing here was wrong, and the next read starts it again",
+		p, by.PID, by.Command)
 }
 
 // stallPollInterval samples often enough that the reported quiet time is close to the

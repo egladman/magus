@@ -258,6 +258,22 @@ func TestSymbolIndexerExecuteFailureBacksOff(t *testing.T) {
 	assert.False(t, st.backoffTill.IsZero(), "a failure sets a backoff deadline")
 }
 
+func TestSymbolIndexerDoesNotBackOffWhenItGaveWayToARun(t *testing.T) {
+	si, _, _ := newTestIndexer(t)
+	si.runIndex = func(ctx context.Context, ref indexRef) error {
+		return types.ExitError{Err: refreshYieldedDiagnostic("pkg/a", processRecord{PID: 1}), Code: supersedeExit}
+	}
+	si.state[goIndexA] = &indexState{dirty: true}
+
+	si.execute(t.Context(), goIndexA)
+
+	st := si.state[goIndexA]
+	assert.Zero(t, st.failures)
+	assert.True(t, st.dirty, "the index is still behind")
+	assert.True(t, st.backoffTill.IsZero())
+	assert.False(t, st.lastRun.IsZero(), "the min interval still spaces the retry")
+}
+
 // One edit dirties every index of its project, and a missing scip-buzz backs off only the
 // Buzz index: the Go index beside it keeps being rebuilt on schedule.
 func TestSymbolIndexerBacksOffOneIndexOfAProject(t *testing.T) {
@@ -485,12 +501,21 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 	return m, src, &version
 }
 
+// indexersHeld maps a workspace root to a channel writesTheIndex closes.
+// That one run then blocks until cancelled.
+var indexersHeld sync.Map
+
 // writesTheIndex is a symbol indexer body that writes a fixed index where dispatch tells a
 // real indexer to, inside the run, so the entry the run files records it.
 func writesTheIndex(ctx context.Context, req spells.InvokeRequest) (any, error) {
 	root, err := filepath.EvalSymlinks(types.WorkspaceFromContext(ctx).Root())
 	if err != nil {
 		return nil, err
+	}
+	if started, ok := indexersHeld.LoadAndDelete(root); ok {
+		close(started.(chan struct{}))
+		<-ctx.Done()
+		return nil, ctx.Err()
 	}
 	dir, err := filepath.EvalSymlinks(req.Dir)
 	if err != nil {
@@ -741,6 +766,38 @@ func (s *magusSuite) TestRefreshBringsAStaleIndexCurrentAndNamesIt() {
 	s.Equal(types.SymbolIndexFresh, freshness(s.T(), m))
 }
 
+func (s *magusSuite) TestRefreshGivesTheProjectLockToARun() {
+	quickSupersede(s.T(), 10*time.Second)
+	m, src := newIndexedWorkspace(s.T())
+	s.Require().NoError(os.WriteFile(src, []byte("package main\n\nfunc added() {}\n"), 0o644))
+	root, err := filepath.EvalSymlinks(m.Root())
+	s.Require().NoError(err)
+	started := make(chan struct{})
+	indexersHeld.Store(root, started)
+
+	result := make(chan SymbolRefresh, 1)
+	go func() { result <- m.RefreshSymbolIndexes(s.T().Context()) }()
+	select {
+	case <-started:
+	case <-time.After(30 * time.Second):
+		s.FailNow("the refresh never reached its indexer")
+	}
+
+	out, toOut := captureLockOut()
+	runner := newProjectLocker(resolveCacheDir(m.Root(), m.cfg), m.Root(), toOut)
+	release, err := runner.acquire(s.T().Context(), ".")
+	s.Require().NoError(err, "a run must not be refused for a refresh")
+	release()
+
+	got := <-result
+	s.Empty(got.Refreshed)
+	s.Require().Len(got.Problems, 1)
+	s.Contains(got.Problems[0], "gave project . to pid")
+	s.Contains(out.String(), "asked the background refresh on project . to stop")
+	s.NotContains(got.Problems[0], "never ran", "the indexer did run, and stopped")
+	s.Empty(RecentSymbolRefreshFailures(resolveCacheDir(m.Root(), m.cfg), time.Now()), "giving way is no failure to back off from")
+}
+
 func (s *magusSuite) TestRefreshLeavesACurrentIndexAlone() {
 	m, _ := newIndexedWorkspace(s.T())
 
@@ -803,6 +860,26 @@ func (s *magusSuite) TestRefreshNamesARunThatFailsAndBacksOffTheNextRead() {
 	s.Contains(second.Problems[0], "libs/a (go index): its last refresh failed")
 	s.Contains(second.Problems[0], "scip-go exploded")
 	s.Equal(1, runs, "the backoff spares the second read the run")
+}
+
+func (s *magusSuite) TestRefreshStopsWhenARunTakesItsLockAndRecordsNoFailure() {
+	dir := s.T().TempDir()
+	runs := 0
+	r := staleRefresher(dir, func(context.Context, types.SymbolIndexStatus) error {
+		runs++
+		return types.ExitError{Err: refreshYieldedDiagnostic("libs/a", processRecord{PID: 4242, Command: "magus run go-test ."}), Code: supersedeExit}
+	})
+	status := r.status
+	r.status = func(ctx context.Context) []types.SymbolIndexStatus {
+		return append(status(ctx), status(ctx)...)
+	}
+
+	got := r.refresh(s.T().Context())
+
+	s.Equal(1, runs, "the next index may share the lock the run is polling for")
+	s.Require().Len(got.Problems, 1)
+	s.Contains(got.Problems[0], "pid 4242")
+	s.NoFileExists(r.indexPath(types.SymbolIndexStatus{})+symbolRefreshFailedSuffix, "giving way to a run is no failure to back off from")
 }
 
 func (s *magusSuite) TestRefreshRetriesOnceTheBackoffHasPassed() {
