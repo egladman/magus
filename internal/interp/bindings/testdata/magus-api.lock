@@ -64,6 +64,7 @@ job.modelTier
 job.modelTiers
 job.put
 job.register
+job.unmerged
 job.wait
 layer
 lifecycle

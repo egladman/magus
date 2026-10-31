@@ -101,6 +101,9 @@ type sessionBrief struct {
 	// Unintegrated are the finished jobs whose branches hold commits this checkout has not
 	// got, nil when none wait. Without a count here, nothing reminds a session they exist.
 	Unintegrated *briefUnintegrated `json:"unintegrated,omitempty"`
+	// Unmerged is what the checkout's branch does not hold, the facts
+	// the stop rule refuses on.
+	Unmerged types.JobUnmergedReport `json:"unmerged"`
 	// Attention is the open attention queue, the same count `session ls` prints. Nil means
 	// the brief was not gathered, which prints nothing; a store that could not be read is
 	// Unread on a non-nil value, so the two never read as an empty queue.
@@ -331,6 +334,9 @@ func admitSessionBrief(ctx context.Context, root string) (func(), error) {
 	}, required)
 }
 
+// briefUnmergedLines caps what the brief prints of the unmerged report.
+const briefUnmergedLines = 10
+
 // gatherSessionBrief reads the checkout. ws is the loaded workspace, or nil when the
 // magusfile would not load, which costs the classification and nothing else.
 //
@@ -349,7 +355,9 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	}
 	if rows, err := readJobRows(ctx, root); err != nil {
 		brief.Jobs = &briefJobTree{Unread: err.Error()}
+		brief.Unmerged.Unknown = err.Error()
 	} else {
+		brief.Unmerged = job.Unmerged(ctx, root, rows)
 		acting, _, _ := checkoutLease(ctx, root)
 		brief.Leases, brief.OtherLeases = briefLeases(rows, acting, root)
 		brief.Jobs = sessionJobTree(ctx, rows, acting, root, vcsOpts)
@@ -791,6 +799,13 @@ func (b sessionBrief) Text() string {
 	b.writeFailures(&s)
 	b.writeLeases(&s)
 	b.writeUnintegrated(&s)
+	unmerged := b.Unmerged.Lines()
+	for _, line := range unmerged[:min(len(unmerged), briefUnmergedLines)] {
+		briefLine(&s, "%s", line)
+	}
+	if len(unmerged) > briefUnmergedLines {
+		briefLine(&s, "  and %d more; `%s` lists every one", len(unmerged)-briefUnmergedLines, hint.LsJobs.With())
+	}
 	b.writeJobs(&s)
 	b.writeAttention(&s)
 	b.writeFeedback(&s)

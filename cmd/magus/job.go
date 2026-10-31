@@ -479,6 +479,9 @@ func lsJobs(root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// Before ended rows drop out: their work is what most often goes missing.
+	unmerged := job.Unmerged(ctx, resolveRootOrEmpty(root), list.Jobs)
+	list.Unmerged = &unmerged
 	if !all {
 		var ended int
 		list, ended = withoutEnded(list)
@@ -505,6 +508,9 @@ func lsJobs(root string, args []string) error {
 	case outputText:
 		printJobTree(os.Stdout, list)
 		fmt.Fprintln(os.Stdout)
+		for _, line := range unmerged.Lines() {
+			fmt.Fprintln(os.Stdout, line)
+		}
 		printInflight(os.Stdout, list, all)
 		pointAtConsole(context.Background(), "")
 		return nil
@@ -3012,6 +3018,23 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	}
 	jobWS := jobWorkspace(ctx, root)
 	store = store.InWorkspace(jobWS)
+	if slices.ContainsFunc(records, types.Declaration.Settles) {
+		settled, err := store.Settle(ctx, records, globalCfg.DryRun)
+		if err != nil {
+			return exit.Usagef("magus job apply: %s", err)
+		}
+		opts, err := outputOptionsOrDefault()
+		if err != nil {
+			return err
+		}
+		if opts.Format != outputText {
+			return emitFormatted(opts, settled)
+		}
+		for _, row := range settled {
+			fmt.Printf("settled %s: %d deferred item(s) answered, left_unmerged %q\n", row.ID, len(row.Deferred), row.LeftUnmerged)
+		}
+		return nil
+	}
 	checkpoint := func() string {
 		token, _ := checkoutBaseToken(ctx, root)
 		return token

@@ -404,9 +404,10 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	// The envelope and the key, which a put names outside its map, decode.go's own legacy
 	// compat, checkout, soft_paths and integrates, which only a fork makes, and claim, which
 	// only apply proves.
+	// A settlement's fields too: only apply writes them.
 	skipped := func(field string) bool {
 		return field == "schema_version" || field == "requires" || field == "id" || field == "checkout" || field == "soft_paths" ||
-			field == "integrates" || field == "claim" || legacy[field]
+			field == "integrates" || field == "claim" || field == "deferred" || field == "left_unmerged" || legacy[field]
 	}
 	_, err := DecodePut(map[string]any{"checkout": "/tmp/co"})
 	require.ErrorContains(t, err, "which only a fork makes")

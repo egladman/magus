@@ -42,6 +42,13 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		}
 		return bindgen.ObjectJobList(report, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
+	ns.MapSet("unmerged", directVal(obs, "magus.job.unmerged", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		report, err := std.MagusUnmergedJob(ctx, ffi.String(args, 0))
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return bindgen.ObjectJobUnmergedReport(report), nil
+	}))
 	ns.MapSet("put", directVal(obs, "magus.job.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		put, err := job.DecodePut(ffi.AnyMap(args, 1))
 		if err != nil {

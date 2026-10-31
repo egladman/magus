@@ -3706,6 +3706,36 @@ func ObjectJobRelease(v types.JobRelease) vm.Value {
 	return out
 }
 
+func ObjectJobDeferred(v types.JobDeferred) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("item", vm.StringValue(v.Item))
+	out.MapSet("row", vm.StringValue(v.Row))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	return out
+}
+
+func ObjectJobUnmerged(v types.JobUnmerged) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("job", vm.StringValue(v.Job))
+	out.MapSet("head", vm.StringValue(v.Head))
+	out.MapSet("item", vm.StringValue(v.Item))
+	out.MapSet("why", vm.StringValue(v.Why))
+	out.MapSet("remedy", vm.StringValue(v.Remedy))
+	return out
+}
+
+func ObjectJobUnmergedReport(v types.JobUnmergedReport) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("branch", vm.StringValue(v.Branch))
+	itemsRows := make([]vm.Value, len(v.Rows))
+	for indexRows := range v.Rows {
+		itemsRows[indexRows] = ObjectJobUnmerged(v.Rows[indexRows])
+	}
+	out.MapSet("rows", vm.ListValue(itemsRows))
+	out.MapSet("unknown", vm.StringValue(v.Unknown))
+	return out
+}
+
 func ObjectJobUnattributedWrite(v types.JobUnattributedWrite) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
@@ -3839,6 +3869,11 @@ func ObjectJobResult(v types.JobResult) vm.Value {
 		itemsUnresolvedRisks[indexUnresolvedRisks] = vm.StringValue(v.UnresolvedRisks[indexUnresolvedRisks])
 	}
 	out.MapSet("unresolvedRisks", vm.ListValue(itemsUnresolvedRisks))
+	itemsFollowUps := make([]vm.Value, len(v.FollowUps))
+	for indexFollowUps := range v.FollowUps {
+		itemsFollowUps[indexFollowUps] = vm.StringValue(v.FollowUps[indexFollowUps])
+	}
+	out.MapSet("followUps", vm.ListValue(itemsFollowUps))
 	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
 	return out
 }
@@ -4177,6 +4212,12 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("generation", vm.IntValue(int64(v.Generation)))
 	out.MapSet("maxAttempts", vm.IntValue(int64(v.MaxAttempts)))
 	out.MapSet("maxClaims", vm.IntValue(int64(v.MaxClaims)))
+	itemsDeferred := make([]vm.Value, len(v.Deferred))
+	for indexDeferred := range v.Deferred {
+		itemsDeferred[indexDeferred] = ObjectJobDeferred(v.Deferred[indexDeferred])
+	}
+	out.MapSet("deferred", vm.ListValue(itemsDeferred))
+	out.MapSet("leftUnmerged", vm.StringValue(v.LeftUnmerged))
 	out.MapSet("weight", vm.FloatValue(float64(v.Weight)))
 	out.MapSet("paused", vm.IntValue(int64(v.Paused)))
 	out.MapSet("pausedBy", ObjectOrigin(v.PausedBy, enums))
@@ -4448,6 +4489,11 @@ func ObjectJobList(v types.JobList, enums ffi.EnumCases) vm.Value {
 		itemsUnproposed[indexUnproposed] = vm.StringValue(v.Unproposed[indexUnproposed])
 	}
 	out.MapSet("unproposed", vm.ListValue(itemsUnproposed))
+	optUnmerged := vm.Null
+	if v.Unmerged != nil {
+		optUnmerged = ObjectJobUnmergedReport((*v.Unmerged))
+	}
+	out.MapSet("unmerged", optUnmerged)
 	return out
 }
 

@@ -800,6 +800,19 @@ var Magus = Module{
 					Extern:  true,
 				},
 				{
+					Name: "unmerged",
+					Doc: "What the branch checked out at workspace does not hold, for the job trees " +
+						"forked from it: filed or ended work off the branch, uncommitted paths in a " +
+						"filed row's checkout, and deferred items no row carries and no reason dismisses. " +
+						"Facts only: repo policy decides what they stop. An unknown branch fills unknown " +
+						"and an unreadable head is a row, so neither reads as merged. It reads the " +
+						"version control per row, so call it from a stop rule, not on every tool call.",
+					Args:    []Arg{{Name: "workspace", Type: TypeString}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "JobUnmergedReport"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
 					Name: "put",
 					Doc: "Record or advance one row, merging only the fields opts names: parent, " +
 						"criteria, checkpoint, write_paths, deny_paths, read_paths, depends_on, model, " +
@@ -2011,6 +2024,26 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 	// never fetches.
 	root := ws.Root()
 	return queue.JoinInflight(ctx, root, list, job.Identity{Lease: store.Actor().Lease})
+}
+
+// MagusUnmergedJob backs magus\job.unmerged. A rule reads the rows the guard
+// pinned, and the version control only for this call.
+func MagusUnmergedJob(ctx context.Context, workspace string) (types.JobUnmergedReport, error) {
+	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
+		if snap.Err != nil {
+			return types.JobUnmergedReport{}, snap.Err
+		}
+		return job.Unmerged(ctx, workspace, snap.Clone().Rows), nil
+	}
+	store, err := jobStoreFromContext(ctx, "job.unmerged")
+	if err != nil {
+		return types.JobUnmergedReport{}, err
+	}
+	rows, err := store.List()
+	if err != nil {
+		return types.JobUnmergedReport{}, err
+	}
+	return job.Unmerged(ctx, workspace, rows), nil
 }
 
 // MagusPutJob backs magus\job.put: it merges the fields put sets into row id, through

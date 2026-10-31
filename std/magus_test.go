@@ -535,6 +535,30 @@ func TestLedgerNeedsAWorkspace(t *testing.T) {
 	require.Error(t, err)
 }
 
+// A stop rule runs under the rows the guard pinned.
+func TestJobUnmergedAnswersFromThePinnedRows(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "r", State: types.StatePass, ReadOnly: true, Result: &types.JobResult{FollowUps: []string{"later"}}}
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []types.Job{row}})
+
+	got, err := MagusUnmergedJob(ctx, t.TempDir())
+
+	require.NoError(t, err)
+	require.Len(t, got.Rows, 1)
+	assert.Equal(t, "later", got.Rows[0].Item)
+}
+
+func TestJobUnmergedRaisesAPinnedReadError(t *testing.T) {
+	t.Parallel()
+
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Err: errors.New("unreadable")})
+
+	_, err := MagusUnmergedJob(ctx, t.TempDir())
+
+	require.ErrorContains(t, err, "unreadable")
+}
+
 // TestLedgerNeedsACacheDir covers the workspace that answers the reading verbs
 // (ls, affected, ...) but was never given a cache directory: a test double, not the
 // real *magus.Magus.

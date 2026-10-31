@@ -178,6 +178,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobAttempt", Zero: types.JobAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobAttempt(v.(types.JobAttempt)) }},
 	{Name: "JobBlock", Zero: types.JobBlock{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobBlock(v.(types.JobBlock), enums) }},
 	{Name: "JobClaim", Zero: types.JobClaim{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobClaim(v.(types.JobClaim), enums) }},
+	{Name: "JobDeferred", Zero: types.JobDeferred{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobDeferred(v.(types.JobDeferred)) }},
 	{Name: "JobDenial", Zero: types.JobDenial{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobDenial(v.(types.JobDenial)) }},
 	{Name: "JobEntry", Zero: types.JobEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobEntry(v.(types.JobEntry), enums) }},
 	{Name: "JobGateAttempt", Zero: types.JobGateAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobGateAttempt(v.(types.JobGateAttempt)) }},
@@ -200,6 +201,8 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobUnattributedWrite", Zero: types.JobUnattributedWrite{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectJobUnattributedWrite(v.(types.JobUnattributedWrite))
 	}},
+	{Name: "JobUnmerged", Zero: types.JobUnmerged{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobUnmerged(v.(types.JobUnmerged)) }},
+	{Name: "JobUnmergedReport", Zero: types.JobUnmergedReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobUnmergedReport(v.(types.JobUnmergedReport)) }},
 	{Name: "JobWorktree", Zero: types.JobWorktree{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWorktree(v.(types.JobWorktree)) }},
 	{Name: "KnowledgeAnswer", Zero: types.KnowledgeAnswer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeAnswer(v.(types.KnowledgeAnswer), enums)

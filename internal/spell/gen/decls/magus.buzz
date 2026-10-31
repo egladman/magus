@@ -1375,6 +1375,12 @@ export object JobClaim {
     by: Origin = Origin{},
 }
 
+export object JobDeferred {
+    item: str = "",
+    row: str = "",
+    reason: str = "",
+}
+
 export object GateStatus {
     id: str = "",
     verified: bool = false,
@@ -1507,6 +1513,7 @@ export object JobResult {
     gateEvidence: [GateEvidence] = [],
     descendants: [str] = [],
     unresolvedRisks: [str] = [],
+    followUps: [str] = [],
     observedGeneration: int = 0,
 }
 
@@ -1577,6 +1584,8 @@ export object Job {
     generation: int = 0,
     maxAttempts: int = 0,
     maxClaims: int = 0,
+    deferred: [JobDeferred] = [],
+    leftUnmerged: str = "",
     weight: double = 0.0,
     paused: int = 0,
     pausedBy: Origin = Origin{},
@@ -1817,6 +1826,20 @@ export object InflightFetch {
     elapsedMS: int = 0,
 }
 
+export object JobUnmerged {
+    job: str = "",
+    head: str = "",
+    item: str = "",
+    why: str = "",
+    remedy: str = "",
+}
+
+export object JobUnmergedReport {
+    branch: str = "",
+    rows: [JobUnmerged] = [],
+    unknown: str = "",
+}
+
 export object JobList {
     jobs: [Job] = [],
     overlaps: [JobOverlap] = [],
@@ -1828,6 +1851,7 @@ export object JobList {
     changes: [InflightChange] = [],
     fetched: InflightFetch? = null,
     unproposed: [str] = [],
+    unmerged: JobUnmergedReport? = null,
 }
 
 export object FileChange {
@@ -2486,6 +2510,7 @@ export object job {
     static extern fun modelTiers(tiers: any, default: any = null, hosts: any = null, bounds: any = null, skills: any = null) > void;
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
     static extern fun register(id: str) > {str: any} !> any;
+    static extern fun unmerged(workspace: str) > JobUnmergedReport !> any;
     static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
 }
 

@@ -1,6 +1,7 @@
 package types
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"path"
@@ -577,6 +578,9 @@ type JobResult struct {
 	GateEvidence    []GateEvidence      `json:"gate_evidence,omitempty" yaml:"gate_evidence,omitempty"`
 	Descendants     []string            `json:"descendants,omitempty" yaml:"descendants,omitempty"`
 	UnresolvedRisks []string            `json:"unresolved_risks" yaml:"unresolved_risks"`
+	// FollowUps is work the holder leaves for later. Each item stands
+	// until the row's Deferred answers it, as an unresolved risk does.
+	FollowUps []string `json:"follow_ups,omitempty" yaml:"follow_ups,omitempty"`
 	// ObservedGeneration is the job's Generation when the result was filed, stamped by the
 	// store rather than taken from the holder.
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
@@ -840,6 +844,11 @@ type Job struct {
 	// MaxClaims caps how many proved claims one attempt takes, chosen by whoever declares the
 	// job; zero takes the default. A fork raising it past jobs.max_claims is refused.
 	MaxClaims int `json:"max_claims,omitempty" yaml:"max_claims,omitempty"`
+	// Deferred answers the items the row's result left for later.
+	Deferred []JobDeferred `json:"deferred,omitempty" yaml:"deferred,omitempty"`
+	// LeftUnmerged is the stated reason the row's work stays off the merge
+	// branch. It exempts the row's work and its deferred items.
+	LeftUnmerged string `json:"left_unmerged,omitempty" yaml:"left_unmerged,omitempty"`
 	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
 	// MachineClaim and polls the budget weight/DefaultJobWeight times as often. In (0,1];
 	// zero reads as DefaultJobWeight.
@@ -1209,6 +1218,62 @@ type Declaration struct {
 	// one write path with the proof the store re-proves before it writes. A record carrying
 	// it declares nothing else.
 	Claim []JobClaimRequest `json:"claim,omitempty"`
+	// Deferred and LeftUnmerged turn the record into a settlement of the
+	// row ID names, ended or not. It declares nothing else.
+	Deferred     []JobDeferred `json:"deferred,omitempty"`
+	LeftUnmerged string        `json:"left_unmerged,omitempty"`
+}
+
+// JobDeferred answers one item of a row's result. Item is its exact text.
+// Exactly one of Row, the declared row carrying it, and Reason, why it is
+// dismissed, is set.
+type JobDeferred struct {
+	Item   string `json:"item"             yaml:"item"`
+	Row    string `json:"row,omitempty"    yaml:"row,omitempty" schema:"leaseid"`
+	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
+}
+
+// JobUnmerged is one fact against a row: work off the merge branch, or a
+// deferred item nothing answers. Head is empty when no commit could be read.
+type JobUnmerged struct {
+	Job  string `json:"job"            yaml:"job"`
+	Head string `json:"head,omitempty" yaml:"head,omitempty"`
+	// Item is the deferred item's text, empty for a fact about the work.
+	Item   string `json:"item,omitempty" yaml:"item,omitempty"`
+	Why    string `json:"why"            yaml:"why"`
+	Remedy string `json:"remedy"         yaml:"remedy"`
+}
+
+// JobUnmergedReport is what the checkout's branch does not hold. Unknown says
+// why the branch could not be read: Rows then holds deferred items only, and
+// a row absent from it is not thereby merged.
+type JobUnmergedReport struct {
+	Branch  string        `json:"branch,omitempty"  yaml:"branch,omitempty"`
+	Rows    []JobUnmerged `json:"rows,omitempty"    yaml:"rows,omitempty"`
+	Unknown string        `json:"unknown,omitempty" yaml:"unknown,omitempty"`
+}
+
+// Lines renders the report for a person, one line per fact, none when there
+// is nothing to say.
+func (r JobUnmergedReport) Lines() []string {
+	var out []string
+	if r.Unknown != "" {
+		out = append(out, "not merged: unknown, "+r.Unknown)
+	}
+	if len(r.Rows) > 0 {
+		out = append(out, fmt.Sprintf("not merged onto %s: %d", cmp.Or(r.Branch, "the branch"), len(r.Rows)))
+	}
+	for _, u := range r.Rows {
+		switch {
+		case u.Item != "":
+			out = append(out, fmt.Sprintf("  %s: %q: %s; %s", u.Job, u.Item, u.Why, u.Remedy))
+		case u.Head != "":
+			out = append(out, fmt.Sprintf("  %s at %s: %s; %s", u.Job, u.Head, u.Why, u.Remedy))
+		default:
+			out = append(out, fmt.Sprintf("  %s: %s; %s", u.Job, u.Why, u.Remedy))
+		}
+	}
+	return out
 }
 
 // JobClaimRequest is one write path a claim record asks for, and Because the proof:
@@ -1361,6 +1426,9 @@ func (r Declaration) Problems() JobProblems {
 	if len(r.Claim) > 0 {
 		return append(ps, r.claimProblems()...)
 	}
+	if r.Settles() {
+		return append(ps, r.settlementProblems()...)
+	}
 	if p := strings.TrimSpace(r.Parent); p != "" && !ValidJobID(p) {
 		invalid("parent", fmt.Sprintf("parent %q is not a lease id", r.Parent), "name the id of the job this one was forked under")
 	}
@@ -1490,6 +1558,41 @@ func (r Declaration) claimProblems() JobProblems {
 		}
 		if _, err := ParseClaimEvidence(w.Because); err != nil {
 			invalid(at+".because", fmt.Sprintf("%s: %s", at, err), "name the proof the path rests on")
+		}
+	}
+	return ps
+}
+
+// Settles reports whether the record answers a row's deferred items or states
+// why its work stays unmerged, rather than declaring a spec.
+func (r Declaration) Settles() bool {
+	return len(r.Deferred) > 0 || r.LeftUnmerged != ""
+}
+
+func (r Declaration) settlementProblems() JobProblems {
+	var ps JobProblems
+	invalid := func(field, message, fix string) {
+		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
+	}
+	rest := r
+	rest.Schema, rest.ID, rest.Deferred, rest.LeftUnmerged = Schema{}, "", nil, ""
+	if !reflect.ValueOf(rest).IsZero() {
+		invalid("deferred", "a record carrying deferred or left_unmerged settles a job and declares nothing, so it carries only schema_version, id, deferred and left_unmerged",
+			"drop every other field, or drop deferred and left_unmerged")
+	}
+	if r.LeftUnmerged != "" && strings.TrimSpace(r.LeftUnmerged) == "" {
+		invalid("left_unmerged", "left_unmerged is blank", "state why the work stays off the merge branch")
+	}
+	for i, d := range r.Deferred {
+		at := fmt.Sprintf("deferred[%d]", i)
+		row, reason := strings.TrimSpace(d.Row), strings.TrimSpace(d.Reason)
+		switch {
+		case strings.TrimSpace(d.Item) == "":
+			invalid(at+".item", at+" names no item", "copy the item's text from the row's result")
+		case (row == "") == (reason == ""):
+			invalid(at, at+" answers with neither or both of row and reason", "name the declared row that carries it, or the reason it is dismissed")
+		case row != "" && !ValidJobID(row):
+			invalid(at+".row", fmt.Sprintf("%s row %q is not a lease id", at, d.Row), "name the declared row that carries it")
 		}
 	}
 	return ps
@@ -2093,6 +2196,9 @@ type JobList struct {
 	// Unproposed are the caller's live jobs whose checkout is on a branch no change
 	// carries: work in flight that has no change yet.
 	Unproposed []string `json:"unproposed,omitempty" yaml:"unproposed,omitempty"`
+	// Unmerged is filled by `magus ls jobs` alone. It reads the version
+	// control per row, and every other door lists on a hot path.
+	Unmerged *JobUnmergedReport `json:"unmerged,omitempty" yaml:"unmerged,omitempty"`
 }
 
 // InflightChange is one open change as a person reads it: the provider's record joined to
@@ -2646,6 +2752,7 @@ func (u Job) Clone() Job {
 		c.ReleaseRequests[i].Wanted = slices.Clone(r.Wanted)
 	}
 	c.Deviations = slices.Clone(u.Deviations)
+	c.Deferred = slices.Clone(u.Deferred)
 	if u.ModelTier != nil {
 		tier := *u.ModelTier
 		c.ModelTier = &tier
@@ -2656,6 +2763,7 @@ func (u Job) Clone() Job {
 		result.ChangedPaths = slices.Clone(u.Result.ChangedPaths)
 		result.Descendants = slices.Clone(u.Result.Descendants)
 		result.UnresolvedRisks = slices.Clone(u.Result.UnresolvedRisks)
+		result.FollowUps = slices.Clone(u.Result.FollowUps)
 		result.GateEvidence = slices.Clone(u.Result.GateEvidence)
 		c.Result = &result
 	}

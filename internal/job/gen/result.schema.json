@@ -77,6 +77,13 @@
         "type": "string"
       }
     },
+    "follow_ups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "FollowUps is work the holder leaves for later. Each item stands until the row's Deferred answers it, as an unresolved risk does."
+    },
     "observed_generation": {
       "type": "integer",
       "description": "ObservedGeneration is the job's Generation when the result was filed, stamped by the store rather than taken from the holder."
