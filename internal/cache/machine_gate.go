@@ -39,7 +39,15 @@ type MachineAdmitter interface {
 // KickingAdmitter is admit with kick called once, on the first claim. No claim
 // waits for it: a held step may be the one that would free space.
 func KickingAdmitter(admit MachineAdmitter, kick func()) MachineAdmitter {
-	return &kickingAdmitter{MachineAdmitter: admit, kick: sync.OnceFunc(kick)}
+	k := &kickingAdmitter{MachineAdmitter: admit, kick: sync.OnceFunc(kick)}
+	// Embedding the interface hides this, and then no step's groups are held.
+	if holder, ok := admit.(GroupHolder); ok {
+		return struct {
+			*kickingAdmitter
+			GroupHolder
+		}{k, holder}
+	}
+	return k
 }
 
 type kickingAdmitter struct {
