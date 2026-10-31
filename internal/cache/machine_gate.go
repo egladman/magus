@@ -286,6 +286,9 @@ func (g *machineGate) refuseUnderPressure(ctx context.Context, c types.MachineCl
 
 // seat asks the budget for c, with no reading of memory.
 func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (string, func(), error) {
+	if g == nil || g.admit == nil {
+		return "", func() {}, nil
+	}
 	v, err := g.ask(ctx, c)
 	if err != nil {
 		if ctx.Err() != nil {
