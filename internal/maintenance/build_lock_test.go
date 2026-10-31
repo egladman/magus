@@ -135,6 +135,30 @@ func TestTryGraphBuildNamesTheHolderAndTakesNothing(t *testing.T) {
 	require.NoError(t, lock.Release())
 }
 
+func TestMachineGraphBuildDirIsOnePlaceForEveryCheckout(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+
+	dir, err := MachineGraphBuildDir()
+
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(state, "magus", "graph-build"), dir)
+}
+
+func TestGraphBuildHolderRecordsItsStore(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "machine")
+	me := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the first", Store: "/ws/knowledge"}
+	lock, _, err := TryGraphBuild(dir, me, &bytes.Buffer{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = lock.Release() })
+
+	_, busy, err := TryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &bytes.Buffer{})
+
+	require.NoError(t, err)
+	require.NotNil(t, busy)
+	assert.Equal(t, "/ws/knowledge", busy.Store)
+}
+
 // deadPID returns the pid of a process that has exited and been reaped.
 func deadPID(t *testing.T) int {
 	t.Helper()

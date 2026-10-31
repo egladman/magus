@@ -40,7 +40,6 @@ import (
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/embed"
-	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -1319,16 +1318,6 @@ func searchStoredIfStale(ctx context.Context, ws graphWorkspace, cfg config.Conf
 // detachedRefreshEnv marks the process startRefresh detached.
 const detachedRefreshEnv = "MAGUS_DETACHED_REFRESH"
 
-// machineRefreshDir holds the graph build lock of the one symbol refresh
-// this machine runs, whichever checkout it serves.
-func machineRefreshDir() (string, error) {
-	state, err := xdg.StateDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(state, "magus", "symbol-refresh"), nil
-}
-
 // takeRefreshLock takes the graph build lock in dir for a refresh. A
 // detached refresh never queues: a nil lock and nil error mean it should stop.
 func takeRefreshLock(ctx context.Context, dir string, me maintenance.GraphBuildHolder, verb string, detached bool) (*maintenance.GraphBuildLock, error) {
@@ -1367,11 +1356,11 @@ func refreshIndexesNow(ctx context.Context, root, verb string) bool {
 	if err != nil {
 		return failed(err)
 	}
-	machineDir, err := machineRefreshDir()
+	machineDir, err := maintenance.MachineGraphBuildDir()
 	if err != nil {
 		return failed(err)
 	}
-	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of " + wsRoot}
+	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of " + wsRoot, Store: storeDir}
 	machine, err := takeRefreshLock(ctx, machineDir, me, verb, detached)
 	if err != nil {
 		return failed(err)
@@ -1425,7 +1414,7 @@ func refreshInBackground(ctx context.Context, root string, ans types.KnowledgeAn
 		slog.ErrorContext(ctx, why, attr.Notice("magus"))
 		return &types.KnowledgeIndexCause{Why: why, Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
 	}
-	machineDir, err := machineRefreshDir()
+	machineDir, err := maintenance.MachineGraphBuildDir()
 	if err != nil {
 		slog.ErrorContext(ctx, "could not start a background refresh", attr.Notice("magus"), attr.Error(err))
 		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}

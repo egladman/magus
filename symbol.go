@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/internal/symbols"
@@ -61,6 +62,30 @@ const (
 	symbolIndexBackoffBase   = 2 * time.Minute  // first backoff after a failed run (doubles, capped)
 	symbolIndexBackoffMax    = 30 * time.Minute
 )
+
+// errMachineBuildHeld stops a background index when another build on this
+// machine holds the build lock. It never queues behind one.
+var errMachineBuildHeld = errors.New("another graph build holds this machine's build lock")
+
+// takeMachineBuildLock takes the machine's build lock for a background index
+// of root, or answers errMachineBuildHeld naming the holder. It records no
+// store, so a graph build queued behind it still builds.
+func takeMachineBuildLock(root string) (*maintenance.GraphBuildLock, error) {
+	dir, err := maintenance.MachineGraphBuildDir()
+	if err != nil {
+		return nil, err
+	}
+	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the background symbol index of " + root}
+	notices := slog.NewLogLogger(slog.Default().Handler(), slog.LevelInfo).Writer()
+	lock, holder, err := maintenance.TryGraphBuild(dir, me, notices)
+	if err != nil {
+		return nil, err
+	}
+	if holder != nil {
+		return nil, fmt.Errorf("%w: %s", errMachineBuildHeld, holder)
+	}
+	return lock, nil
+}
 
 // indexRef names one symbol index: a project and the indexer op that writes it. A project
 // bound to go and buzz holds two, scheduled, run and backed off apart, so a missing
@@ -258,6 +283,12 @@ func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 		st.dirty = true
 		return
 	}
+	if errors.Is(err, errMachineBuildHeld) {
+		// Nothing ran, so no throttle: the next tick asks the lock again.
+		si.log.DebugContext(ctx, "background symbol index stopped", slog.String("project", ref.project), slog.String("op", ref.op), attr.Error(err))
+		st.dirty = true
+		return
+	}
 	// A run that actually executed (completed or failed) stamps lastRun to throttle re-runs.
 	st.lastRun = si.now()
 	if errors.Is(err, types.UndeclaredSourceModified) {
@@ -393,8 +424,20 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			return refsByPath[project]
 		},
 		runIndex: func(ctx context.Context, ref indexRef) error {
-			err := m.runTargets(ctx, []types.Target{{Path: ref.project, Name: ref.op}}, run{Background: true})
+			lock, err := takeMachineBuildLock(m.Root())
+			if err != nil {
+				return err
+			}
+			defer func() { _ = lock.Release() }()
+			err = m.runTargets(ctx, []types.Target{{Path: ref.project, Name: ref.op}}, run{Background: true})
 			if err == nil {
+				// Claimed after the run: a step behind its own process's claim
+				// may never seat.
+				release, aerr := m.admitSymbolRefresh(ctx)
+				if aerr != nil {
+					return aerr
+				}
+				defer release()
 				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
 					slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", attr.Error(gerr))
 				}

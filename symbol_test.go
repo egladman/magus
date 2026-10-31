@@ -190,6 +190,37 @@ func TestSymbolIndexerExecuteRetriesAMidRunEditWithoutBackoff(t *testing.T) {
 	assert.Equal(t, *clock, st.lastRun, "the min interval still throttles the retry")
 }
 
+func TestSymbolIndexerExecuteStopsForTheMachineLockWithoutThrottle(t *testing.T) {
+	si, _, _ := newTestIndexer(t)
+	si.state[goIndexA] = &indexState{dirty: true}
+	si.runIndex = func(context.Context, indexRef) error {
+		return fmt.Errorf("%w: another checkout", errMachineBuildHeld)
+	}
+
+	si.execute(context.Background(), goIndexA)
+
+	st := si.state[goIndexA]
+	assert.True(t, st.dirty, "the index still needs building")
+	assert.Zero(t, st.failures)
+	assert.True(t, st.backoffTill.IsZero(), "another build says nothing about the indexer")
+	assert.True(t, st.lastRun.IsZero(), "nothing ran, so the next tick may ask again")
+}
+
+func TestTakeMachineBuildLockStopsAndNamesTheHolder(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	first, err := takeMachineBuildLock("/ws/first")
+	require.NoError(t, err)
+
+	_, err = takeMachineBuildLock("/ws/second")
+
+	require.ErrorIs(t, err, errMachineBuildHeld)
+	assert.Contains(t, err.Error(), "the background symbol index of /ws/first")
+	require.NoError(t, first.Release())
+	again, err := takeMachineBuildLock("/ws/second")
+	require.NoError(t, err)
+	require.NoError(t, again.Release())
+}
+
 // TestRunReturnsUndeclaredSourceModified pins what the retry above relies on: MGS4007
 // raised by the cache survives Magus.Run's error chain, so errors.Is sees it.
 func TestRunReturnsUndeclaredSourceModified(t *testing.T) {

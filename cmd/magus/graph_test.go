@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -12,8 +13,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
@@ -359,4 +362,121 @@ func (s *GraphExportSCIPSuite) TestWritesAnIndexRootedAtTheWorkspace() {
 	s.Equal("magus", idx.Metadata.ToolInfo.Name)
 	s.Contains(idx.Metadata.ProjectRoot, filepath.ToSlash(w.Root()))
 	s.Empty(idx.Documents, "a workspace no spell indexes exports no documents")
+}
+
+func TestGraphBuildWaitsOnAnotherCheckoutsMachineLock(t *testing.T) {
+	root := holdMachineRefresh(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	_, _, err := acquireGraphBuild(ctx, root)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Contains(t, err.Error(), "stopped waiting for the symbol refresh of /other")
+	store, err := knowledgeStoreDir(root)
+	require.NoError(t, err)
+	_, running := maintenance.RunningGraphBuild(store)
+	assert.False(t, running, "a waiter holds no store, so a read does not take it for a build")
+}
+
+// acquireBehindBuild runs acquireGraphBuild queued behind a holder of the
+// machine lock that wrote store, and returns who it can load from.
+func acquireBehindBuild(t *testing.T, store func(root string) string) *maintenance.GraphBuildHolder {
+	t.Helper()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	dir, err := maintenance.MachineGraphBuildDir()
+	require.NoError(t, err)
+	ahead := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the build ahead", Store: store(root)}
+	lock, _, err := maintenance.AcquireGraphBuild(t.Context(), dir, ahead, io.Discard, time.Millisecond)
+	require.NoError(t, err)
+
+	type result struct {
+		release  func() error
+		waitedOn *maintenance.GraphBuildHolder
+		err      error
+	}
+	got := make(chan result, 1)
+	go func() {
+		release, waitedOn, err := acquireGraphBuild(t.Context(), root)
+		got <- result{release, waitedOn, err}
+	}()
+	select {
+	case r := <-got:
+		t.Fatalf("it took the machine lock while another held it: %+v", r)
+	case <-time.After(50 * time.Millisecond):
+	}
+	require.NoError(t, lock.Release())
+	r := <-got
+	require.NoError(t, r.err)
+	require.NoError(t, r.release())
+	return r.waitedOn
+}
+
+func TestGraphBuildLoadsFromTheBuildAheadOnItsOwnStore(t *testing.T) {
+	waitedOn := acquireBehindBuild(t, func(root string) string {
+		store, err := knowledgeStoreDir(root)
+		require.NoError(t, err)
+		return store
+	})
+
+	require.NotNil(t, waitedOn)
+	assert.Equal(t, "the build ahead", waitedOn.By)
+}
+
+func TestGraphBuildStillBuildsBehindAnotherCheckout(t *testing.T) {
+	waitedOn := acquireBehindBuild(t, func(string) string { return "/other/knowledge" })
+
+	assert.Nil(t, waitedOn)
+}
+
+// scriptedSeats answers each Claim from verdicts in turn and records Awaits.
+type scriptedSeats struct {
+	verdicts []types.MachineVerdict
+	awaited  []types.MachineClaim
+	released []string
+}
+
+func (s *scriptedSeats) Claim(context.Context, types.MachineClaim) (types.MachineVerdict, error) {
+	v := s.verdicts[0]
+	s.verdicts = s.verdicts[1:]
+	return v, nil
+}
+
+func (s *scriptedSeats) Release(_ context.Context, id string) { s.released = append(s.released, id) }
+
+func (s *scriptedSeats) Overrun(context.Context, string) {}
+
+func (s *scriptedSeats) Await(_ context.Context, claims []types.MachineClaim, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+	s.awaited = append(s.awaited, claims...)
+	parked(claims[0], types.MachineVerdict{Fits: true, BudgetMB: 4096, HeldMB: 4096})
+	return types.MachineClaim{}, types.MachineVerdict{Granted: true}, nil
+}
+
+// graphBuildClaim names ancestors so the claim reads no real memory pressure.
+func graphBuildClaim() types.MachineClaim {
+	return types.MachineClaim{Project: ".", Target: "graph-build", MemoryMB: graphBuildMemoryMB, Ancestors: []string{"1:parent"}}
+}
+
+func TestGraphBuildSeatWaitsForRoomThenClaims(t *testing.T) {
+	seats := &scriptedSeats{verdicts: []types.MachineVerdict{{Fits: true}, {Granted: true, Fits: true, ID: "seat"}}}
+
+	release, err := awaitGraphBuildSeat(t.Context(), seats, graphBuildClaim(), false)
+
+	require.NoError(t, err)
+	require.Len(t, seats.awaited, 1)
+	assert.Equal(t, "graph-build", seats.awaited[0].Target)
+	assert.Empty(t, seats.verdicts, "it claimed again after the wait")
+	release()
+	assert.Equal(t, []string{"seat"}, seats.released)
+}
+
+func TestGraphBuildSeatRefusesWhatTheWholeBudgetCannotSeat(t *testing.T) {
+	seats := &scriptedSeats{verdicts: []types.MachineVerdict{{Fits: false, BudgetMB: 1024, BudgetSlots: 4}}}
+
+	_, err := awaitGraphBuildSeat(t.Context(), seats, graphBuildClaim(), false)
+
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	assert.Empty(t, seats.awaited, "no wait admits it")
 }

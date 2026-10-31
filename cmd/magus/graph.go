@@ -20,6 +20,7 @@ import (
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -141,11 +142,11 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	lock, waitedOn, err := acquireGraphBuild(ctx, root)
+	release, waitedOn, err := acquireGraphBuild(ctx, root)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, lock.Release()) }()
+	defer func() { err = errors.Join(err, release()) }()
 	if waitedOn != nil {
 		if current, err := loadBuiltGraph(ctx, root, *waitedOn); current || err != nil {
 			return err
@@ -172,6 +173,13 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	if bf.Sessions {
 		ingestSessions(ctx, root)
 	}
+
+	// Claimed only now: a step behind its own process's claim may never seat.
+	seated, err := admitGraphBuild(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer seated()
 
 	g, err := loadKnowledgeGraph(ctx, root, true /* refresh */, false, false)
 	if err != nil {
@@ -237,13 +245,17 @@ func reindexRefusals(err error) error {
 	return errors.Join(refused...)
 }
 
-// graphBuildPoll is how often a waiting graph build retries the build lock.
-const graphBuildPoll = 250 * time.Millisecond
+const (
+	// graphBuildPoll is how often a waiting graph build retries.
+	graphBuildPoll = 250 * time.Millisecond
+	// A build's own process while it assembles the graph. Measured 2026-10-31
+	// here: 1.83 and 2.13 GiB resident, 2.28 GiB in that day's memory panic.
+	graphBuildMemoryMB = 2400
+)
 
-// acquireGraphBuild takes the build lock on the workspace's knowledge store, waiting for
-// the build that holds it, manual or the server's sync-graph job. The holder it returns
-// names that build, nil when the lock was free.
-func acquireGraphBuild(ctx context.Context, root string) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error) {
+// acquireGraphBuild takes the machine's build lock, then the store's, waiting
+// on each and saying so. waitedOn is the build whose work this one can load.
+func acquireGraphBuild(ctx context.Context, root string) (release func() error, waitedOn *maintenance.GraphBuildHolder, err error) {
 	wsRoot := resolveRootOrEmpty(root)
 	if wsRoot == "" {
 		return nil, nil, errors.New("magus graph build: no workspace root here, so no knowledge store to build")
@@ -252,12 +264,67 @@ func acquireGraphBuild(ctx context.Context, root string) (*maintenance.GraphBuil
 	if err != nil {
 		return nil, nil, fmt.Errorf("magus graph build: %w", err)
 	}
-	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build`"}
-	if proc.IsJob(ctx) {
-		me.By = "the server's sync-graph job"
+	machineDir, err := maintenance.MachineGraphBuildDir()
+	if err != nil {
+		return nil, nil, fmt.Errorf("magus graph build: %w", err)
 	}
-	return maintenance.AcquireGraphBuild(ctx, dir, me,
-		noticeLines{ctx: ctx, level: slog.LevelInfo, label: "magus graph build", prefix: "magus graph build: "}, graphBuildPoll)
+	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build` in " + wsRoot, Store: dir}
+	if proc.IsJob(ctx) {
+		me.By = "the server's sync-graph job in " + wsRoot
+	}
+	notices := noticeLines{ctx: ctx, level: slog.LevelInfo, label: "magus graph build", prefix: "magus graph build: "}
+	machine, behind, err := maintenance.AcquireGraphBuild(ctx, machineDir, me, notices, graphBuildPoll)
+	if err != nil {
+		return nil, nil, err
+	}
+	store, waitedOn, err := maintenance.AcquireGraphBuild(ctx, dir, me, notices, graphBuildPoll)
+	if err != nil {
+		return nil, nil, errors.Join(err, machine.Release())
+	}
+	// The build ahead released this store first, so its lock read free.
+	if waitedOn == nil && behind != nil && behind.Store == dir {
+		waitedOn = behind
+	}
+	return func() error { return errors.Join(store.Release(), machine.Release()) }, waitedOn, nil
+}
+
+// admitGraphBuild claims the machine budget for assembling the graph, under
+// the workspace's broker policy.
+func admitGraphBuild(ctx context.Context, root string) (func(), error) {
+	policy := globalCfg.Broker.Resolved()
+	if policy == types.BrokerOff {
+		return func() {}, nil
+	}
+	claim := types.MachineClaim{Project: ".", Target: "graph-build", MemoryMB: graphBuildMemoryMB, Dir: resolveRootOrEmpty(root)}
+	return awaitGraphBuildSeat(ctx, processBrokerClient(), claim, policy == types.BrokerRequired)
+}
+
+// budgetSeats is the broker as a graph build reaches it.
+type budgetSeats interface {
+	cache.MachineAdmitter
+	Await(ctx context.Context, claims []types.MachineClaim, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error)
+}
+
+// awaitGraphBuildSeat claims c, waiting and saying so while another run fills
+// the budget: the indexing a refusal would discard is already paid for. Any
+// other refusal stands, since no broker wait can clear it.
+func awaitGraphBuildSeat(ctx context.Context, seats budgetSeats, c types.MachineClaim, required bool) (func(), error) {
+	wait := func(ctx context.Context, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+		return seats.Await(ctx, []types.MachineClaim{c}, parked)
+	}
+	waiting := func(msg string) { slog.InfoContext(ctx, msg, attr.Notice("magus graph build")) }
+	for {
+		release, err := cache.AdmitMachine(ctx, seats, c, required)
+		var refused types.ExitError
+		if !errors.Is(err, types.MachineBudgetExhausted) || !errors.As(err, &refused) || refused.Code != cache.ExitCodeMachineBusy {
+			return release, err
+		}
+		if err := cache.AwaitMachine(ctx, wait, waiting); err != nil {
+			return nil, err
+		}
+		// Await judges by snapshot, so room there can still lose the claim.
+		time.Sleep(graphBuildPoll)
+	}
 }
 
 // noticeLines logs each line written to it as a notice. It stands in for os.Stderr where a

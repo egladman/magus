@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sys/pid"
+	"github.com/egladman/magus/libs/xdg"
 )
 
 const (
@@ -29,6 +30,20 @@ type GraphBuildHolder struct {
 	// By names the build for a reader: "`magus graph build`" for a manual one, "the
 	// server's sync-graph job" for one the server runs inside its own process.
 	By string `json:"by"`
+	// Store is the knowledge store the work writes, empty when none. A build
+	// queued behind this holder loads from it only when the store is its own.
+	Store string `json:"store,omitempty"`
+}
+
+// MachineGraphBuildDir holds this machine's one build lock, taken by every
+// graph build, symbol refresh and background symbol index. Take it before a
+// store's lock, so two builds never each hold one and wait on the other.
+func MachineGraphBuildDir() (string, error) {
+	state, err := xdg.StateDir()
+	if err != nil {
+		return "", fmt.Errorf("maintenance: machine graph build lock: %w", err)
+	}
+	return filepath.Join(state, "magus", "graph-build"), nil
 }
 
 func (h GraphBuildHolder) String() string {
