@@ -87,12 +87,17 @@ func printVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 			// answer that found something, and vanish on the miss it actually accounted for.
 			fmt.Fprintf(w, "  the symbol index predates the sources it covers, so a definition added since it was built is not in it: %s\n",
 				ans.DescribeStale())
-			fmt.Fprintf(w, "  refresh and ask again: %s\n", hint.GraphBuild)
+			if ans.IndexCause == nil {
+				fmt.Fprintf(w, "  refresh and ask again: %s\n", hint.GraphBuild)
+			}
 		}
 		if len(ans.Gaps) > 0 {
 			fmt.Fprintf(w, "  outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
 		}
-		if slices.ContainsFunc(ans.Gaps, types.KnowledgeSymbolGap.Buildable) {
+		// A cause is what the read did about its index, so no rebuild is owed.
+		if c := ans.IndexCause; c != nil {
+			fmt.Fprintf(w, "  why: %s\n  fix: %s\n", c.Why, c.Fix)
+		} else if slices.ContainsFunc(ans.Gaps, types.KnowledgeSymbolGap.Buildable) {
 			fmt.Fprintf(w, "  build the missing index with: %s\n", hint.GraphBuild)
 		}
 	}

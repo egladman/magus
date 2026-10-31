@@ -152,9 +152,11 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 			}
 		}
 		miss := refsMiss{name: pos[0], answer: withIndexCause(ctx, root, ans), searched: searched}
+		matchedFiles := 0
 		if ans.Text != nil {
-			miss.notes = textPresenceNotes(skipped, generated, ans.Text.Files, classifiedFiles, noGenerated)
+			matchedFiles = ans.Text.Files
 		}
+		miss.notes = textPresenceNotes(skipped, generated, matchedFiles, classifiedFiles, noGenerated)
 		missLines := noticeLines{ctx: ctx, level: slog.LevelError}
 		if err := reportRefsMiss(missLines, opts, miss); err != nil {
 			return err
@@ -215,7 +217,6 @@ func writeRefsText(w io.Writer, out types.KnowledgeRefsOutput) error {
 	if len(out.Refs) == 0 {
 		fmt.Fprintln(w, "no references found")
 		printVerdict(w, out.Answer, "")
-		printIndexCause(w, out.Answer)
 		if err := reportIndexStaleness(w, out.Answer); err != nil {
 			return err
 		}
@@ -293,6 +294,9 @@ func reportRefsMiss(stderr io.Writer, opts output.Options, m refsMiss) error {
 	}
 	fmt.Fprintf(stderr, "magus refs: no node matches %q\n", m.name)
 	printVerdict(stderr, m.answer, "")
+	if m.answer.Text == nil && len(m.notes) > 0 {
+		fmt.Fprintf(stderr, "  no text match in %d file(s) searched (%s)\n", m.searched, strings.Join(m.notes, "; "))
+	}
 	if t := m.answer.Text; t != nil {
 		fmt.Fprintf(stderr, "  not a symbol, but present as TEXT: %d occurrence(s) in %d file(s) of %d searched",
 			t.Hits, t.Files, m.searched)
@@ -311,7 +315,6 @@ func reportRefsMiss(stderr io.Writer, opts output.Options, m refsMiss) error {
 		}
 		fmt.Fprintln(stderr, "  magus indexes symbols, not text; grep is the tool for a string literal or a comment")
 	}
-	printIndexCause(stderr, m.answer)
 	return nil
 }
 

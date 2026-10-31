@@ -907,6 +907,9 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 	}
 
 	read := graphRead{Input: pos[0]}
+	if xf.Refresh && !xf.Global {
+		refreshIndexesNow(ctx, root, "magus explain")
+	}
 	var res explainResult
 	if xf.Refresh || xf.Global || !askServer(ctx, root, readExplain, &read, &res) {
 		ws, err := openForRead(ctx, root)
@@ -915,6 +918,16 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 		}
 		if res, err = explainNode(ctx, ws, globalCfg, read, xf.Refresh, xf.Global); err != nil {
 			return err
+		}
+	}
+	if !res.Found {
+		res.Answer = explainMissAnswer(ctx, root, pos[0], res.Answer)
+	}
+	// A stale index only: reading a card never starts a first build.
+	if !xf.Refresh && !xf.Global && len(res.Answer.StaleIndexes) > 0 {
+		wait := fmt.Sprintf("%s explain '%s' --refresh", hint.BinaryName(), strings.ReplaceAll(pos[0], "'", `'\''`))
+		if cause := refreshInBackground(ctx, root, res.Answer, wait); cause != nil {
+			res.Answer.IndexCause = cause
 		}
 	}
 	if !res.Found {
@@ -941,6 +954,24 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 	}
 
 	return writeExplainText(os.Stdout, root, pos[0], nx, next, res)
+}
+
+// explainMissAnswer drops each gap no build closes whose project
+// holds no text of the node's name, as refs does.
+func explainMissAnswer(ctx context.Context, root, input string, ans types.KnowledgeAnswer) types.KnowledgeAnswer {
+	searchRoot := resolveRootOrEmpty(root)
+	if searchRoot == "" || !slices.ContainsFunc(ans.Gaps, func(g types.KnowledgeSymbolGap) bool { return g.Unindexable }) {
+		return ans
+	}
+	name := input
+	if _, rest, kinded := strings.Cut(input, ":"); kinded {
+		name = rest
+	}
+	matches, _, _, _, _, err := textScan(ctx, searchRoot, name, nil, false, nil)
+	if err != nil {
+		return ans
+	}
+	return withoutUnheldGaps(ans, searchRoot, matches)
 }
 
 // writeExplainText writes res, the node asked resolved to, as `magus explain` prints it
@@ -1318,7 +1349,7 @@ func refreshIndexesNow(ctx context.Context, root, verb string) {
 // what the read should say about it, nil when it has nothing to say. A plain
 // read never waits on an indexer. wait is the command that does.
 func refreshInBackground(ctx context.Context, root string, ans types.KnowledgeAnswer, wait string) *types.KnowledgeIndexCause {
-	if !indexesBehind(ans) || globalCfg.DryRun || globalCfg.Knowledge.SymbolIndexing.Disabled {
+	if !ans.IndexBehind() || globalCfg.DryRun || globalCfg.Knowledge.SymbolIndexing.Disabled {
 		return nil
 	}
 	dir, err := knowledgeStoreDir(root)
@@ -1343,12 +1374,6 @@ func refreshInBackground(ctx context.Context, root string, ans types.KnowledgeAn
 		return nil
 	}
 	return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a refresh started in the background", Fix: fix}
-}
-
-// indexesBehind reports whether ans was drawn from an index a run could
-// bring current. An index with no indexer to run would only fail.
-func indexesBehind(ans types.KnowledgeAnswer) bool {
-	return len(ans.StaleIndexDetails) > 0 || slices.ContainsFunc(ans.Gaps, types.KnowledgeSymbolGap.Buildable)
 }
 
 // startRefresh runs this command again with --refresh, detached, logging to

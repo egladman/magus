@@ -580,6 +580,15 @@ func TestReportRefsMissPrintsTextSites(t *testing.T) {
 	assert.Equal(t, ans.Text, record.Answer.Text)
 }
 
+// An absent verdict with no text match says what the text search did not read.
+func TestReportRefsMissNamesTheSkippedFilesUnderAbsent(t *testing.T) {
+	miss := refsMiss{name: "Foo", answer: types.ClassifyAnswer(false, "", nil), searched: 10, notes: textPresenceNotes(6, 0, 0, true, false)}
+	var stderr bytes.Buffer
+	require.NoError(t, reportRefsMiss(&stderr, output.Options{Format: outputText}, miss))
+	assert.Contains(t, stderr.String(), "verdict: absent")
+	assert.Contains(t, stderr.String(), "no text match in 10 file(s) searched (6 skipped: binary, empty, or over")
+}
+
 // withIndexCause diagnoses only an answer drawn from a missing or stale index; a clean
 // answer stays without the key.
 func TestWithIndexCauseFillsOnlyAnIndexBehind(t *testing.T) {

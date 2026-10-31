@@ -197,6 +197,19 @@ func (s *VerdictRemedySuite) TestAnUnbuiltIndexBesideOneNothingMakesGetsTheBuild
 	s.Contains(got, "build the missing index with: ")
 }
 
+func (s *VerdictRemedySuite) TestAReadThatRefreshedPrintsItsCauseAndNoRebuild() {
+	cause := &types.KnowledgeIndexCause{Why: "a refresh started in the background", Fix: "ask again once it lands"}
+	stale := knowledge.Answer("Foo", false, knowledge.Coverage{Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{{Project: "libs/api"}}})
+	stale.IndexCause = cause
+	missing := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{gap("libs/api")})
+	missing.IndexCause = cause
+	for _, ans := range []types.KnowledgeAnswer{stale, missing} {
+		got := renderVerdict(ans, "")
+		s.Contains(got, "  why: a refresh started in the background\n  fix: ask again once it lands\n")
+		s.NotContains(got, "graph build")
+	}
+}
+
 func (s *VerdictRemedySuite) TestAMissingIndexerGetsItsInstallNotABuild() {
 	missing := gap("libs/api")
 	missing.Language, missing.Hint = "go", "install scip-go"

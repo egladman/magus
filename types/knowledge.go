@@ -1102,10 +1102,11 @@ type KnowledgeAnswer struct {
 	IndexCause *KnowledgeIndexCause `json:"index_cause,omitempty" yaml:"index_cause,omitempty"`
 }
 
-// IndexBehind reports whether the answer was drawn from a symbol index that is missing or
-// older than its sources, the condition IndexCause explains.
+// IndexBehind reports whether a run could bring the answer's index current,
+// the condition IndexCause explains: it is older than its sources, or a gap
+// a build closes.
 func (a KnowledgeAnswer) IndexBehind() bool {
-	return len(a.Gaps) > 0 || len(a.StaleIndexes) > 0
+	return len(a.StaleIndexes) > 0 || slices.ContainsFunc(a.Gaps, KnowledgeSymbolGap.Buildable)
 }
 
 // DescribeStale renders the answer's stale indexes as "libs/api (go index), docs", or ""

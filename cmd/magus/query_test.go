@@ -42,28 +42,56 @@ type indexesBehindSuite struct{ suite.Suite }
 
 func TestIndexesBehindSuite(t *testing.T) { suite.Run(t, new(indexesBehindSuite)) }
 
+func (s *indexesBehindSuite) TestAGapNoBuildClosesGetsNoCause() {
+	proto := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("proto", "/ws/proto"), Language: "protobuf", Unindexable: true},
+	})
+	s.Nil(withIndexCause(s.T().Context(), s.T().TempDir(), proto).IndexCause)
+}
+
+func (s *indexesBehindSuite) TestExplainMissDropsAGapHoldingNoTextOfTheName() {
+	proto := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("proto", "/ws/proto"), Language: "protobuf", Unindexable: true},
+	})
+	got := explainMissAnswer(s.T().Context(), s.T().TempDir(), "file:nosuch/go.mod", proto)
+	s.Equal(types.VerdictAbsent, got.Verdict)
+	s.Empty(got.Gaps)
+}
+
+func (s *indexesBehindSuite) TestExplainMissKeepsAGapWhoseProjectHoldsTheName() {
+	root := s.T().TempDir()
+	s.Require().NoError(os.MkdirAll(filepath.Join(root, "proto"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "proto", "a.proto"), []byte("message Wanted {}\n"), 0o644))
+	proto := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("proto", "/ws/proto"), Language: "protobuf", Unindexable: true},
+	})
+	got := explainMissAnswer(s.T().Context(), root, "Wanted", proto)
+	s.Equal(types.VerdictUnknown, got.Verdict)
+	s.Len(got.Gaps, 1)
+}
+
 func (s *indexesBehindSuite) TestACurrentAnswerIsNotBehind() {
-	s.False(indexesBehind(types.ClassifyAnswer(true, "", nil)))
+	s.False(types.ClassifyAnswer(true, "", nil).IndexBehind())
 }
 
 func (s *indexesBehindSuite) TestAGapNoBuildClosesIsNotBehind() {
-	s.False(indexesBehind(types.KnowledgeAnswer{Gaps: []types.KnowledgeSymbolGap{
+	s.False(types.KnowledgeAnswer{Gaps: []types.KnowledgeSymbolGap{
 		{Project: types.NewProjectRef("proto", "/ws/proto"), Language: "protobuf", Unindexable: true},
 		{Project: types.NewProjectRef("web", "/ws/web"), Language: "typescript", Hint: "install scip-typescript"},
-	}}))
+	}}.IndexBehind())
 }
 
 func (s *indexesBehindSuite) TestABuildableGapIsBehind() {
-	s.True(indexesBehind(types.KnowledgeAnswer{Gaps: []types.KnowledgeSymbolGap{
+	s.True(types.KnowledgeAnswer{Gaps: []types.KnowledgeSymbolGap{
 		{Project: types.NewProjectRef("libs/a", "/ws/libs/a"), Language: "go"},
-	}}))
+	}}.IndexBehind())
 }
 
 func (s *indexesBehindSuite) TestAStaleIndexIsBehind() {
-	s.True(indexesBehind(types.KnowledgeAnswer{
+	s.True(types.KnowledgeAnswer{
 		StaleIndexes:      []string{"libs/a"},
 		StaleIndexDetails: []types.KnowledgeStaleIndex{{Project: "libs/a", Language: "go", Op: "scip"}},
-	}))
+	}.IndexBehind())
 }
 
 func (s *indexesBehindSuite) TestTheStaleNoticeSaysWhatTheReadDidAboutIt() {
