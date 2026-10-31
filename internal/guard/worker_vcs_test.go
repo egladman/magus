@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -58,8 +59,6 @@ func TestWorkerVCSOp(t *testing.T) {
 			// A remove or move of named paths: lease-write grades each one.
 			"git rm a.go", "git rm -r --cached internal/x", "git mv a.go b.go", "git rm -- -odd.go",
 			"hg remove a.go", "hg rm -A a.go", "sl rename a.go b.go", "hg mv a.go dir/",
-			// The fast-forward to a placed binary's commit, named by its id.
-			"git merge --ff-only f1980cc5c", "git merge f1980cc5c3224cc9fca99c41a9f03415fd77db4b --ff-only",
 		} {
 			assert.Empty(t, op(t, line), line)
 		}
@@ -92,6 +91,7 @@ func TestWorkerVCSOp(t *testing.T) {
 			"git reset --hard f1980cc5c":          "git reset",
 			"git merge f1980cc5c":                 "git merge",
 			"git merge --no-ff f1980cc5c":         "git merge",
+			"git merge --ff-only f1980cc5c":       "git merge",
 			"git merge --ff-only main":            "git merge",
 			"git merge --ff-only F1980CC5C":       "git merge",
 			"git merge --ff-only f1980c":          "git merge",
@@ -165,6 +165,63 @@ func TestIntegrationMergeAllowsOnlyTheListedBranches(t *testing.T) {
 		assert.False(t, merge(line, row), line)
 	}
 	assert.False(t, merge("git merge --no-ff done-a", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
+}
+
+// A landing row commits and fast-forwards its own checkout, with or without -C.
+// Force, added history, a branch name and any other checkout stay refused.
+func TestLandingRowMovesItsCheckout(t *testing.T) {
+	r := newWorktreeRepository(t)
+	wt := r.add("lease-job")
+	worker := narrowLease()
+	worker.Parent = "orchestrator"
+	worker.CheckoutRoot = wt
+	ctx, _ := fleetFixture(t, worker)
+	from := func(dir string) Dependencies {
+		return Dependencies{callDir: dir, VCS: types.VCSOptions{BaseRef: "origin/main"}}
+	}
+	const rev = "4cf8063f2"
+
+	for _, command := range []string{
+		"git merge --ff-only " + rev,
+		"git merge " + rev + " --ff-only",
+		"git commit -m done",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), "in place: %q", command)
+	}
+	for _, command := range []string{
+		"git -C " + wt + " merge --ff-only " + rev,
+		"git -C " + wt + " commit -m done",
+		"cd " + wt + " && git merge --ff-only " + rev,
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command), "pointed at its own checkout: %q", command)
+	}
+
+	elsewhere := fmt.Sprintf("It commits in %s, and the lease was taken in %s.", r.main, wt)
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git merge --ff-only "+rev), elsewhere)
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, "git -C "+r.main+" merge --ff-only "+rev), elsewhere)
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, "cd "+r.main+" && git merge --ff-only "+rev), elsewhere)
+
+	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
+	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git merge --ff-only "+rev), "the base branch")
+
+	for _, command := range []string{
+		"git -C " + wt + " merge --ff-only other-job",
+		"git -C " + wt + " merge " + rev,
+		"git -C " + wt + " merge --no-ff " + rev,
+		"git -C " + wt + " merge --ff-only --no-ff " + rev,
+		"git -C " + wt + " merge --ff-only --squash " + rev,
+		"git -C " + wt + " merge --ff-only -s ours " + rev,
+		"git -C " + wt + " merge --ff-only " + rev + " a1b2c3d",
+		"git -C " + wt + " reset --hard " + rev,
+		"git -C " + wt + " branch -f lease-job " + rev,
+		"git -C " + wt + " update-ref refs/heads/lease-job " + rev,
+		"git -C " + wt + " --work-tree=../x merge --ff-only " + rev,
+	} {
+		assert.NotEmpty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command), "%q", command)
+	}
+
+	refused := denyLeaseScopedVCS(ctx, from(wt), worker.ID, "git merge a1b2c3d")
+	assert.Contains(t, refused, "`git merge --ff-only <commit id>`", "the refusal names the fast-forward that passes")
 }
 
 func TestWorkerVCSMovesRefs(t *testing.T) {

@@ -17,9 +17,6 @@ import (
 // what it may run rather than vcsMutation's list of what nobody may: a verb neither list
 // names, a config alias included, is refused instead of slipping through.
 func workerVCSOp(c hint.Invocation) string {
-	if fastForward(c) {
-		return ""
-	}
 	if op := vcsMutation(c); op != "" {
 		return op
 	}
@@ -41,17 +38,21 @@ func workerVCSOp(c hint.Invocation) string {
 	return fmt.Sprintf("%s %s", c.Name, sub)
 }
 
-// fastForward reports `git merge --ff-only <commit>`, the recovery of a worker whose placed
-// ./magus was built ahead of its checkout: it moves the branch the checkout is on forward to
-// a commit named by its id, and git refuses it when the branch has diverged or a change
-// nobody committed is in the way, so it rewrites and loses nothing. A branch name is refused,
-// since following one is how a worker drifts onto commits nobody handed it, and so is a git
-// option ahead of the verb, which can point the merge at another checkout.
+// fastForward reports `git merge --ff-only <commit>` with nothing ahead of the
+// verb. The stale-binary rule reads it and cannot place a call, so a -C that
+// could name another checkout is refused.
 func fastForward(c hint.Invocation) bool {
-	if c.Name != "git" || len(c.Args) != 3 || c.Args[0] != "merge" {
+	return c.Name == "git" && len(c.Args) == 3 && c.Args[0] == "merge" && fastForwardWords(c.Args[1:])
+}
+
+// fastForwardWords reads the words after `git merge` as a fast-forward to a
+// commit id. git refuses a diverged branch, so nothing is rewritten. A branch
+// name is refused: following one drifts onto commits nobody handed the worker.
+func fastForwardWords(words []string) bool {
+	if len(words) != 2 {
 		return false
 	}
-	flag, commit := c.Args[1], c.Args[2]
+	flag, commit := words[0], words[1]
 	if flag != "--ff-only" {
 		flag, commit = commit, flag
 	}
@@ -96,6 +97,10 @@ func workerMerge(inv hint.Invocation) (operand string, ok bool) {
 		return "", false
 	}
 	if len(rest) == 1 && (rest[0] == "--continue" || rest[0] == "--abort") {
+		return "", true
+	}
+	// A fast-forward adds no history, so mergesBase has no operand to judge.
+	if fastForwardWords(rest) {
 		return "", true
 	}
 	var operands []string

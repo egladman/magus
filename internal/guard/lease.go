@@ -2909,13 +2909,14 @@ func mergeRefusal(operand, base string, row types.Job) string {
 	if deps := slices.DeleteFunc(slices.Clone(row.DependsOn), func(d string) bool { return d == "" }); len(deps) > 0 {
 		accepts = append(accepts, "a depends_on branch: "+strings.Join(deps, ", "))
 	}
+	const moves = " To move this checkout to any other commit, run `git merge --ff-only <commit id>`."
 	switch len(accepts) {
 	case 1:
-		return fmt.Sprintf("%s%s.", why, accepts[0])
+		return fmt.Sprintf("%s%s.%s", why, accepts[0], moves)
 	case 2:
-		return fmt.Sprintf("%s%s, or %s.", why, accepts[0], accepts[1])
+		return fmt.Sprintf("%s%s, or %s.%s", why, accepts[0], accepts[1], moves)
 	}
-	return fmt.Sprintf("%s%s, or %s.", why, strings.Join(accepts[:len(accepts)-1], ", "), accepts[len(accepts)-1])
+	return fmt.Sprintf("%s%s, or %s.%s", why, strings.Join(accepts[:len(accepts)-1], ", "), accepts[len(accepts)-1], moves)
 }
 
 // workerLands reports a call that lands work on the branch its checkout is on: a commit, a
