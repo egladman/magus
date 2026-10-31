@@ -151,6 +151,20 @@ func TestLiveBackgroundTasksRereadsAReplacedTranscript(t *testing.T) {
 	assert.Empty(t, got, "a transcript cut short is read from its start")
 }
 
+// A background command shows on the job its session holds, with its stop call.
+func TestJobBackgroundCommandsNamesWhatTheHolderStillRuns(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	checkout := t.TempDir()
+	now := bgTime(t, "2026-10-13T11:40:00Z")
+	stampHeartbeat(t.Context(), checkout, heartbeat{Session: "s", Lease: "live", Transcript: writeTranscript(t, bgSearchCall, bgSearchResult), At: now})
+	stampHeartbeat(t.Context(), checkout, heartbeat{Session: "s", Lease: "done", Transcript: writeTranscript(t, bgSearchCall, bgSearchResult, bgSearchDone), At: now})
+
+	got := JobBackgroundCommands(checkout, types.Job{ID: "live", CheckoutRoot: checkout}, now)
+	assert.Contains(t, got, `stop it: TaskStop {"task_id":`)
+	assert.Empty(t, JobBackgroundCommands(checkout, types.Job{ID: "done", CheckoutRoot: checkout}, now))
+	assert.Empty(t, JobBackgroundCommands(checkout, types.Job{ID: "unstamped", CheckoutRoot: checkout}, now))
+}
+
 // A session's first checkpoint sweeps the stores no session has written for a week.
 func TestLiveBackgroundTasksSweepsStaleCheckpoints(t *testing.T) {
 	cacheDir := t.TempDir()

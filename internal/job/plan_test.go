@@ -79,6 +79,65 @@ func (s *applyCheckoutSuite) TestANewJobNamingACheckoutIsLeftToAFork() {
 	s.ErrorContains(err, "which only a fork makes")
 }
 
+// resultShapeSuite pins the result a holder is shown and the runs it filed.
+type resultShapeSuite struct {
+	suite.Suite
+}
+
+func TestResultShape(t *testing.T) { suite.Run(t, new(resultShapeSuite)) }
+
+func (s *resultShapeSuite) row() types.Job {
+	return types.Job{
+		ID:         "w",
+		WritePaths: []string{"a.go"},
+		Check:      &types.LeaseCheck{Target: "go-vet", Project: "."},
+		Goals: []types.Goal{
+			{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
+		},
+	}
+}
+
+func (s *resultShapeSuite) TestTheShapeDecodesAsAResult() {
+	shape, _, _ := strings.Cut(ResultShape(s.row()), "\nA check")
+	got, err := DecodeResult(strings.NewReader(shape))
+	s.Require().NoError(err)
+	s.Equal("w", got.Job)
+	s.Equal("lint", got.GateEvidence[0].GateID)
+}
+
+func (s *resultShapeSuite) TestTheShapeNamesTheOwedForm() {
+	s.Contains(ResultShape(s.row()), `"owed": "no seat"`)
+}
+
+func (s *resultShapeSuite) TestEveryGoalPrintsItsCommand() {
+	var out strings.Builder
+	RenderGoalCommands(&out, s.row())
+	s.Contains(out.String(), "lint: magus run lint .")
+}
+
+func (s *resultShapeSuite) TestFiledRunsNameTheirAttempt() {
+	row := s.row()
+	row.Attempt = &types.JobAttempt{Ref: "outa", AttemptID: "out1", Failed: true}
+	row.GateAttempts = []types.JobGateAttempt{{GateID: "lint", Attempt: types.JobAttempt{Ref: "outb", AttemptID: "out2"}}}
+	var out strings.Builder
+	RenderFiled(&out, row)
+	s.Equal("  check: outa is attempt out1, which failed\n  lint: outb is attempt out2, which passed\n", out.String())
+}
+
+func (s *resultShapeSuite) TestRewroteOutsideNamesOnlyDeclaredOutputsPastTheLease() {
+	project := &types.Project{Path: "docs", TargetOutputs: map[string][]types.OutputRef{"gen": {{Glob: "gen/*.json"}, {Glob: "gen/*.svg"}}}}
+	row := types.Job{WritePaths: []string{"docs/gen/*.svg"}}
+	got := RewroteOutside(row, []*types.Project{project}, "gen", []string{"docs/gen/a.json", "docs/gen/a.svg", "docs/page.md"})
+	s.Equal([]string{"docs/gen/a.json"}, got)
+}
+
+func (s *resultShapeSuite) TestAnIntegrationHoldsEveryDeclaredOutputSoftly() {
+	project := &types.Project{Path: "docs", TargetOutputs: map[string][]types.OutputRef{"gen": {{Glob: "gen/*.json"}}}}
+	write, soft := IntegrationOutputs(Workspace{Projects: []*types.Project{project}}, []string{"a.go"})
+	s.Equal([]string{"a.go", "docs/gen/*.json"}, write)
+	s.Equal([]string{"docs/gen/*.json"}, soft)
+}
+
 // ancestorDeviationSuite pins a row that permitted `test .` over a sub-project
 // write before MGS3045 named the owner.
 type ancestorDeviationSuite struct {

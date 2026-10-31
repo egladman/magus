@@ -22,12 +22,12 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -247,6 +247,22 @@ func partAt(v []int, i int) int {
 		return v[i]
 	}
 	return 0
+}
+
+// JobBackgroundCommands lists the background commands the session holding row
+// still runs, each with the call that stops it, leaving out those that end on
+// their own. "" for none, and for a transcript it cannot read.
+func JobBackgroundCommands(workspace string, row types.Job, now time.Time) string {
+	s, ok := newestStamp(row, workspace)
+	if !ok || s.Transcript == "" {
+		return ""
+	}
+	tasks, err := liveBackgroundTasks(s.Transcript, "", now)
+	if err != nil {
+		return ""
+	}
+	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool { return endsOnItsOwn(t.Command) })
+	return stoppableTasks(tasks, now)
 }
 
 // endsOnItsOwn reports a backgrounded line of runs under `magus job exec --timeout`, which

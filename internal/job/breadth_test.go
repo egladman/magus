@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // breadthWorkspace is a root project holding pkg/ and a second project, web, each with Go
@@ -116,6 +117,29 @@ func TestBroadClaimNeverMeasuresAClaimALiteralOrAReadOnlyRow(t *testing.T) {
 
 	assert.Empty(t, broadClaimProblems(ctx, root, types.Job{ID: "claim", WritePaths: []string{"pkg/a.go#Foo", "web/x.go"}}, Workspace{}, nil))
 	assert.Empty(t, broadClaimProblems(ctx, root, types.Job{ID: "scout", ReadOnly: true, WritePaths: []string{"**/*.go"}}, Workspace{}, nil))
+}
+
+type broadClaimIntegrationSuite struct {
+	suite.Suite
+}
+
+func TestBroadClaimIntegration(t *testing.T) { suite.Run(t, new(broadClaimIntegrationSuite)) }
+
+func (s *broadClaimIntegrationSuite) TestSkipsAnIntegrationRow() {
+	root := breadthWorkspace(s.T())
+	row := types.Job{ID: "merge", Integrates: []string{"a"}, WritePaths: []string{"**/*.go"}, SoftPaths: []string{"**/*.go"}}
+
+	s.Empty(broadClaimProblems(s.T().Context(), root, row, Workspace{}, nil))
+}
+
+func (s *broadClaimIntegrationSuite) TestStillRefusesTheSameGlobWithoutIntegrates() {
+	root := breadthWorkspace(s.T())
+	row := types.Job{ID: "sweep", WritePaths: []string{"**/*.go"}, SoftPaths: []string{"**/*.go"}}
+
+	got := broadClaimProblems(s.T().Context(), root, row, Workspace{}, nil)
+
+	s.Require().Len(got, 1)
+	s.Equal(types.WritePathTooBroad, got[0].Code)
 }
 
 func TestBroadClaimDropsIgnoredFilesAndReadsTheLoadedProjects(t *testing.T) {

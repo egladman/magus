@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -2615,6 +2616,9 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 		if inFreshRepository(c.inv, site, unlocated, fresh) {
 			continue
 		}
+		if c.inv.Name == "git" && recordsCommit(c.inv) && unlocated == "" {
+			site.stagedOnLine = lineStagedPaths(ctx, cmds, cmp.Or(site.dir, me.CheckoutRoot))
+		}
 		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
 		if r.refused() {
 			return workerVCSDenial(fmt.Sprintf("`%s`", command), r, me, role)
@@ -2861,6 +2865,8 @@ func (r vcsRefusal) refused() bool {
 type vcsSite struct {
 	dir    string
 	gitDir string
+	// stagedOnLine is what an earlier `git add` on the shell line stages.
+	stagedOnLine []string
 }
 
 // workerVCSRefusal is the one decision behind lease-vcs, shared by the shell rule and
@@ -2892,11 +2898,146 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	if operand, merge := workerMerge(inv); why == "" && merge && operand != "" && !mergesBase(operand, base, row) {
 		why = mergeRefusal(operand, base, row)
 	}
+	if why == "" {
+		why = commitPathsRefusal(ctx, opts, row, inv, site)
+	}
 	return vcsRefusal{op: op, kind: vcsOpLands, why: why}
 }
 
+<<<<<<< HEAD
 // relocateFlag is the option each backend takes to run in another directory.
 var relocateFlag = map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", "jj": "-R"}
+=======
+// commitPathsRefusal grades what a commit carries against row's write paths.
+// A write is judged as it happens, and a generator run writes past them.
+// A merge's commit is exempt: it carries the base it merged.
+func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite) string {
+	sub, rest := vcsSubcommand(inv)
+	if sub != "commit" && sub != "ci" {
+		return ""
+	}
+	root := row.CheckoutRoot
+	opts.Name = inv.Name
+	res, err := vcs.Resolve(ctx, root, "", opts)
+	if err != nil || res.VCS == nil {
+		return fmt.Sprintf("Version control is disabled or unresolvable for %s, so what it commits cannot be read.", root)
+	}
+	if op, err := res.VCS.OperationInProgress(ctx, root); err == nil && op == types.OperationMerge {
+		return ""
+	}
+	paths, err := committedPaths(ctx, inv.Name, rest, cmp.Or(site.dir, root))
+	if err != nil {
+		return fmt.Sprintf("What it commits cannot be read: %v.", err)
+	}
+	var outside []string
+	for _, p := range slices.Concat(paths, site.stagedOnLine) {
+		if _, held, _ := declarationCovering(row.WritePaths, p); !held && !types.IsMagusMaintained(p) && !slices.Contains(outside, p) {
+			outside = append(outside, p)
+		}
+	}
+	if len(outside) == 0 {
+		return ""
+	}
+	slices.Sort(outside)
+	list := strings.Join(outside, " ")
+	return fmt.Sprintf("It commits %s, outside the lease's write paths (%s). Unstage them with `git restore --staged -- %s` and file them owed: the integrator regenerates an output, and your orchestrator widens the row for anything else.",
+		list, strings.Join(row.WritePaths, ", "), list)
+}
+
+// committedPaths lists what a commit with these arguments records, from dir.
+// git reads its index unless the arguments select otherwise. hg, sl and jj
+// have no index, so a commit limited by paths over-reports.
+func committedPaths(ctx context.Context, backend string, args []string, dir string) ([]string, error) {
+	var argv []string
+	switch backend {
+	case "git":
+		all, named := gitCommitSelection(args)
+		switch {
+		case len(named) > 0:
+			argv = append([]string{"diff", "--name-only", "--no-renames", "-z", "HEAD", "--"}, named...)
+		case all:
+			argv = []string{"diff", "--name-only", "--no-renames", "-z", "HEAD"}
+		default:
+			argv = []string{"diff", "--cached", "--name-only", "--no-renames", "-z"}
+		}
+	case "jj":
+		argv = []string{"diff", "--name-only"}
+	default:
+		argv = []string{"status", "-mar", "-n"}
+	}
+	cmd := exec.CommandContext(ctx, backend, argv...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%s %s: %w", backend, strings.Join(argv, " "), err)
+	}
+	return strings.FieldsFunc(string(out), func(r rune) bool { return r == 0 || r == '\n' }), nil
+}
+
+// gitCommitValued are the options of `git commit` that take the next word.
+var gitCommitValued = []string{
+	"--message", "--file", "--reuse-message", "--reedit-message", "--fixup", "--squash",
+	"--author", "--date", "--cleanup", "--template", "--trailer",
+}
+
+// gitCommitSelection reads which paths a `git commit` takes beyond its index:
+// all tracked changes, or the paths it names. A `--pathspec-from-file` list
+// reads as all, since a hook cannot read a list arriving on a pipe.
+func gitCommitSelection(args []string) (all bool, named []string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			return all, append(named, args[i+1:]...)
+		case a == "--all", strings.HasPrefix(a, "--pathspec-from-file"):
+			all = true
+		case slices.Contains(gitCommitValued, a):
+			i++
+		case strings.HasPrefix(a, "--"):
+		case strings.HasPrefix(a, "-") && len(a) > 1:
+			for j, flag := range a[1:] {
+				if flag == 'a' {
+					all = true
+				}
+				if strings.ContainsRune("mFCct", flag) {
+					if j == len(a)-2 {
+						i++
+					}
+					break
+				}
+			}
+		default:
+			named = append(named, a)
+		}
+	}
+	return all, named
+}
+
+// lineStagedPaths is what the line's own `git add` calls stage, read with a
+// dry run from dir, since a hook runs before they do. An add that would fail
+// stages nothing.
+func lineStagedPaths(ctx context.Context, cmds []hint.Invocation, dir string) []string {
+	var out []string
+	for _, c := range cmds {
+		sub, rest := vcsSubcommand(c)
+		if c.Name != "git" || sub != "add" {
+			continue
+		}
+		cmd := exec.CommandContext(ctx, "git", append([]string{"add", "--dry-run"}, rest...)...)
+		cmd.Dir = dir
+		stdout, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(stdout), "\n") {
+			if _, quoted, ok := strings.Cut(line, " '"); ok {
+				out = append(out, strings.TrimSuffix(quoted, "'"))
+			}
+		}
+	}
+	return out
+}
+>>>>>>> 6cf85bf9d (grade a leased commit path by path; refuse an empty job result; hold outputs on an integration row)
 
 // refMoveRefusal places a call that moves HEAD, a ref or the index like a commit: in another
 // checkout of the repository it moves that checkout's state, and a repository of its own

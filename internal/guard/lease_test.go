@@ -1596,6 +1596,75 @@ func TestDenyLeaseScopedVCSGradesWorkersByHolder(t *testing.T) {
 	}
 }
 
+// commitPathsSuite pins the grade of what a worker's commit carries.
+type commitPathsSuite struct {
+	suite.Suite
+	ctx    context.Context
+	repo   worktreeRepo
+	worker types.Job
+	dir    string
+}
+
+func TestCommitPaths(t *testing.T) { suite.Run(t, new(commitPathsSuite)) }
+
+func (s *commitPathsSuite) SetupTest() {
+	s.ctx, s.repo, s.worker, s.dir = leaseVCSRepository(s.T())
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.dir, "cmd/magus"), 0o755))
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.dir, "docs"), 0o755))
+}
+
+func (s *commitPathsSuite) write(rel string) {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, rel), []byte("x\n"), 0o644))
+}
+
+func (s *commitPathsSuite) deny(command string) string {
+	return denyLeaseScopedVCS(s.ctx, Dependencies{callDir: s.dir}, s.worker.ID, command)
+}
+
+func (s *commitPathsSuite) TestAStagedPathInsideTheLeasePasses() {
+	s.write("cmd/magus/x.go")
+	s.repo.git(s.dir, "add", "cmd/magus/x.go")
+	s.Empty(s.deny("git commit -m done"))
+}
+
+func (s *commitPathsSuite) TestAStagedPathOutsideTheLeaseIsNamedWithTheRoute() {
+	s.write("cmd/magus/x.go")
+	s.write("docs/gen.json")
+	s.repo.git(s.dir, "add", "cmd/magus/x.go", "docs/gen.json")
+	got := s.deny("git commit -m done")
+	s.Contains(got, "It commits docs/gen.json, outside the lease's write paths")
+	s.Contains(got, "git restore --staged -- docs/gen.json")
+	s.Contains(got, "file them owed")
+	s.NotContains(got, "It commits cmd/magus/x.go")
+}
+
+func (s *commitPathsSuite) TestAnAddOnTheSameLineIsGraded() {
+	s.write("docs/gen.json")
+	s.Contains(s.deny("git add docs/gen.json && git commit -m done"), "It commits docs/gen.json")
+}
+
+func (s *commitPathsSuite) TestCommitAllGradesTrackedChangesOnly() {
+	s.write("a.txt")
+	s.write("docs/untracked.json")
+	got := s.deny("git commit -am done")
+	s.Contains(got, "It commits a.txt")
+	s.NotContains(got, "untracked.json")
+}
+
+func (s *commitPathsSuite) TestANamedPathLeavesTheRestOfTheIndexOut() {
+	s.write("cmd/magus/x.go")
+	s.repo.git(s.dir, "add", "cmd/magus/x.go")
+	s.write("a.txt")
+	s.repo.git(s.dir, "add", "a.txt")
+	s.Empty(s.deny("git commit -m done -- cmd/magus/x.go"))
+}
+
+func (s *commitPathsSuite) TestAMergeCommitIsExempt() {
+	base := s.repo.commitFiles(s.repo.main, map[string]string{"base.txt": "b\n"})
+	s.repo.git(s.dir, "merge", "-q", "--no-ff", "--no-commit", base)
+	s.Empty(s.deny("git commit -m merged"))
+}
+
 // leaseVCSRepository is a worker's checkout as `magus job exec` leaves it: a linked worktree on
 // the job's own branch, its row a child of the orchestrator's and bound to that worktree.
 func leaseVCSRepository(t *testing.T) (context.Context, worktreeRepo, types.Job, string) {

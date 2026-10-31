@@ -30,8 +30,8 @@ import (
 	"github.com/egladman/magus/internal/queue"
 	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -1105,6 +1105,37 @@ func TestJobExitTellsTheHolderItStaysBound(t *testing.T) {
 	assert.True(t, strings.HasPrefix(out, "exited held, recorded exited, with its result filed."), out)
 	assert.NotContains(t, out, exitedBindingNote)
 	assert.Contains(t, stderr, exitedBindingNote)
+}
+
+// jobExitShapeSuite pins that a refused result prints the shape to file.
+type jobExitShapeSuite struct {
+	suite.Suite
+}
+
+func TestJobExitShape(t *testing.T) { suite.Run(t, new(jobExitShapeSuite)) }
+
+func (s *jobExitShapeSuite) refusal(stdin string) string {
+	t := s.T()
+	row := leaseRow("held", "")
+	row.WritePaths, row.Registered = []string{"a/**"}, time.Now().Unix()
+	root, _ := execFixture(t, row)
+	writeStdin(t, stdin)
+	err := jobExit(t.Context(), root, []string{"held", "--stdin"})
+	s.Require().Error(err)
+	return err.Error()
+}
+
+func (s *jobExitShapeSuite) TestAnEmptyResultOnAWritingRowIsRefused() {
+	got := s.refusal(`{"schema_version":2}`)
+	s.Contains(got, "held writes, and its result names no changed path")
+	s.Contains(got, `"changed_paths"`)
+	s.Contains(got, `"owed": "no seat"`)
+}
+
+func (s *jobExitShapeSuite) TestAnUnknownFieldPrintsTheShape() {
+	got := s.refusal(`{"schema_version":2,"summary":"done"}`)
+	s.Contains(got, "File this shape:")
+	s.Contains(got, `"owed": "no seat"`)
 }
 
 // jobApplyStateSuite pins what `job apply` says of a state it moved.

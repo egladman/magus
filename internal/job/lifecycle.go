@@ -104,6 +104,10 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	if resolve == nil {
 		return types.Job{}, errors.New("job: no output resolver files a result's validation evidence")
 	}
+	if !rows[i].ReadOnly && emptyResult(*result) {
+		return types.Job{}, fmt.Errorf("job: %s writes, and its result names no changed path, evidence or risk, so it records nothing. File this shape:\n%s",
+			id, ResultShape(rows[i]))
+	}
 	resolve, where := store.acrossCheckouts(rows, id, resolve)
 	attempt, gateAttempts, err := resolveResultAttempts(ctx, *result, resolve, where)
 	if err != nil {

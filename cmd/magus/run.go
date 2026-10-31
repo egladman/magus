@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
@@ -415,6 +416,20 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	if err != nil {
 		return err
+	}
+	if slices.Contains(charms, types.CharmReadWrite) {
+		loc, placeErr := jobPlace(m.Root())
+		lease, outside, readErr := "", []string(nil), placeErr
+		if placeErr == nil {
+			lease, outside, readErr = job.LeaseRewrites(ctx, loc, targetName, m.ResolveProjects(targets))
+		}
+		switch {
+		case readErr != nil:
+			slog.InfoContext(ctx, fmt.Sprintf("what this run rewrote outside its lease was not read: %v", readErr), attr.Notice("note"))
+		case len(outside) > 0:
+			slog.InfoContext(ctx, fmt.Sprintf("this run rewrote declared outputs outside lease %s's write paths, and a commit carrying one is refused: unstage it and file it owed:\n  %s",
+				lease, strings.Join(outside, "\n  ")), attr.Notice("note"))
+		}
 	}
 	emitConcurrencyNudge(ctx, sink, m, os.Args[1:])
 	if global.silent && opts.Format == outputText {

@@ -14,7 +14,9 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // deadlineAfter is the one clock read a deadline is stamped from. The apply funcs that call
@@ -562,6 +564,131 @@ func keepFrozenSignatures(row *types.Job, prev types.Job) {
 			}
 		}
 	}
+}
+
+// emptyResult reports a result with no changed path, evidence or risk.
+func emptyResult(r types.JobResult) bool {
+	return len(r.ChangedPaths) == 0 && r.Validation == (types.JobResultValidation{}) &&
+		len(r.GateEvidence) == 0 && len(r.UnresolvedRisks) == 0
+}
+
+// ResultShape is the result row's holder files, as JSON naming the row's
+// goals, then how a check the machine would not seat is filed.
+func ResultShape(row types.Job) string {
+	shape := types.JobResult{
+		Schema:          types.Schema{Version: types.JobResultSchemaVersion},
+		Job:             row.ID,
+		ChangedPaths:    []string{},
+		UnresolvedRisks: []string{},
+	}
+	if !row.ReadOnly {
+		shape.ChangedPaths = []string{"<each file you changed>"}
+	}
+	for _, goal := range row.EffectiveGoals() {
+		switch {
+		case goal.Kind != types.GoalKindCheck:
+		case goal.ID == types.PrimaryGoalID:
+			shape.Validation = types.JobResultValidation{Command: goal.Check.String(), OutputRef: "<ref its run printed>"}
+		default:
+			shape.GateEvidence = append(shape.GateEvidence, types.GateEvidence{GateID: goal.ID, OutputRef: "<ref its run printed>"})
+		}
+	}
+	encoded, err := json.MarshalIndent(shape, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("the shape did not encode: %v", err)
+	}
+	return fmt.Sprintf("%s\nA check the machine would not seat has no ref: set \"output_ref\": \"\" and \"owed\": %q on its validation or gate_evidence entry.",
+		encoded, types.OwedNoSeat)
+}
+
+// FiledShape is [ResultShape] for the row named id, or where to read the
+// schema when no row has that name.
+func FiledShape(store *Store, id string) string {
+	rows, err := store.List()
+	if err == nil {
+		if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
+			return ResultShape(rows[i])
+		}
+	}
+	return fmt.Sprintf("`%s` prints the schema", hint.JobExit.With("--schema"))
+}
+
+// RenderGoalCommands writes the exact command of each of row's check goals,
+// so a holder never guesses one a fork added, then the result it files.
+func RenderGoalCommands(out io.Writer, row types.Job) {
+	fmt.Fprintln(out, "goal commands")
+	for _, goal := range row.EffectiveGoals() {
+		if goal.Kind == types.GoalKindCheck {
+			fmt.Fprintf(out, "  %s: %s\n", goal.ID, goal.Check)
+		}
+	}
+	fmt.Fprintf(out, "the result `%s` reads\n%s\n", hint.JobExit.With(row.ID, "--stdin"), ResultShape(row))
+}
+
+// RenderFiled writes the run each output ref of a filed result resolved to.
+// A ref names a step, and a rerun of that step takes the ref over, so only
+// the attempt id names one run.
+func RenderFiled(out io.Writer, row types.Job) {
+	line := func(id string, a types.JobAttempt) {
+		outcome := "passed"
+		if a.Failed {
+			outcome = "failed"
+		}
+		fmt.Fprintf(out, "  %s: %s is attempt %s, which %s\n", id, a.Ref, a.AttemptID, outcome)
+	}
+	if row.Attempt != nil {
+		line(types.PrimaryGoalID, *row.Attempt)
+	}
+	for _, gate := range row.GateAttempts {
+		line(gate.GateID, gate.Attempt)
+	}
+}
+
+// RewroteOutside is each of dirty, the checkout's uncommitted paths, that a
+// declared output of target matches and row's write paths do not hold, sorted.
+func RewroteOutside(row types.Job, projects []*types.Project, target string, dirty []string) []string {
+	var out []string
+	for _, p := range dirty {
+		if _, held := matching(row.WritePaths, p); held {
+			continue
+		}
+		for _, project := range projects {
+			if slices.ContainsFunc(project.TargetOutputs[target], func(ref types.OutputRef) bool { return ref.Rooted(project.Path).Match(p) }) {
+				out = append(out, p)
+				break
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// LeaseRewrites is [RewroteOutside] for a run of target on projects, under the
+// lease acting on ctx. No lease rewrites nothing. An error means the checkout's
+// changes or the lease's row could not be read.
+func LeaseRewrites(ctx context.Context, loc Location, target string, projects []*types.Project) (lease string, paths []string, err error) {
+	lease, _ = RunLease(ctx, loc)
+	if lease == "" {
+		return "", nil, nil
+	}
+	loc.DryRun = true
+	rows, err := NewStore(loc).List()
+	if err != nil {
+		return lease, nil, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == lease })
+	if i < 0 {
+		return lease, nil, nil
+	}
+	res, err := vcs.Resolve(ctx, loc.Root, "", types.VCSOptions{})
+	if err != nil {
+		return lease, nil, err
+	}
+	dirty, err := res.VCS.DirtyFiles(ctx, loc.Root, nil)
+	if err != nil {
+		return lease, nil, err
+	}
+	return lease, RewroteOutside(rows[i], projects, target, dirty), nil
 }
 
 // RenderGates writes a gate report one gate per line, each unmet one followed by why, then

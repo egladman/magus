@@ -746,6 +746,29 @@ func IntegrationWritePaths(ctx context.Context, root, checkpoint string, branche
 	return paths, base, nil
 }
 
+// IntegrationOutputs is the write set of an integration job over paths, the
+// files its branches changed: those plus every output ws declares, each of
+// them soft. Regenerating them is that job's work, and a soft claim overlaps
+// no sibling.
+func IntegrationOutputs(ws Workspace, paths []string) (write, soft []string) {
+	seen := map[string]bool{}
+	for _, p := range paths {
+		seen[p] = true
+	}
+	for _, project := range ws.Projects {
+		for _, refs := range project.TargetOutputs {
+			for _, ref := range refs {
+				if g := ref.Rooted(project.Path).Pattern; !seen[g] {
+					seen[g] = true
+					soft = append(soft, g)
+				}
+			}
+		}
+	}
+	slices.Sort(soft)
+	return slices.Concat(paths, soft), soft
+}
+
 // rangeDriver is the version control answering at root as the range reader it must be, or
 // why it cannot read one.
 func rangeDriver(ctx context.Context, root string) (types.VCSDriver, types.RangeReporter, error) {

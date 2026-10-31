@@ -983,6 +983,10 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		fmt.Print(brief.String())
 		printJobWorktree(os.Stdout, row, false)
 		job.RenderGates(os.Stdout, status)
+		job.RenderGoalCommands(os.Stdout, row)
+		if running := guard.JobBackgroundCommands(root, row, time.Now()); running != "" {
+			fmt.Printf("background commands its session still runs\n%s\n", running)
+		}
 		printJobEntries(os.Stdout, row.Entries)
 		joined, _, err := joinInflight(ctx, root, store, types.JobList{Jobs: leases})
 		if err != nil {
@@ -1352,7 +1356,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			slog.InfoContext(ctx, fmt.Sprintf("the record names no checkpoint, so the branches were compared with the revision %s of %s, and the job starts there", base, at), attr.Notice("note"))
 			row.Checkpoint = base
 		}
-		row.WritePaths = paths
+		row.WritePaths, row.SoftPaths = job.IntegrationOutputs(jobWS, paths)
+		if jobWS.Unavailable != "" {
+			slog.InfoContext(ctx, fmt.Sprintf("the workspace did not load (%s), so the job holds only the files its branches changed, and no declared output", jobWS.Unavailable), attr.Notice("note"))
+		}
 	case row.Parent == "":
 		advice, refuse, err := store.IntegrationAdvice(ctx, globalCfg.Jobs)
 		switch {
@@ -2027,13 +2034,24 @@ func jobExit(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
+	if rows, listErr := store.List(); listErr == nil {
+		for _, row := range rows {
+			if !slices.Contains(pos, row.ID) {
+				continue
+			}
+			if running := guard.JobBackgroundCommands(root, row, time.Now()); running != "" {
+				slog.InfoContext(ctx, fmt.Sprintf("%s's session still runs these in the background, and ending the job does not stop them:\n%s", row.ID, running), attr.Notice("note"))
+			}
+		}
+	}
+
 	if !stdin {
 		return abandonJobs(ctx, store, pos)
 	}
 
 	result, err := job.DecodeResult(os.Stdin)
 	if err != nil {
-		return exit.Usagef("magus job exit: %s (`%s` prints the schema it must satisfy)", err, hint.JobExit.With("--schema"))
+		return exit.Usagef("magus job exit: %s\nFile this shape:\n%s", err, job.FiledShape(store, pos[0]))
 	}
 	// Exit owns the portable evidence snapshot for every declared gate. Keeping the
 	// CLI as a decoder/renderer avoids a second lifecycle that silently files only
@@ -2060,6 +2078,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 				stored.ID, stored.State, hint.JobWait.With(stored.ID))
 			slog.InfoContext(ctx, exitedBindingNote, attr.Notice("note"))
 		}
+		job.RenderFiled(os.Stdout, stored)
 	default:
 		err = emitFormatted(opts, stored)
 	}
