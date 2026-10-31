@@ -224,6 +224,14 @@ export fun judgeStop(req: StopRequest) > GuardVerdict !> any {
     foreach (b in list.blocked) {
         blocked.append(b.job);
     }
+    var unmerged = JobUnmergedReport{};
+    if (req.role.value == "root") {
+        try {
+            unmerged = magus\job.unmerged(req.workspace);
+        } catch (e: any) {
+            unmerged = JobUnmergedReport{ unknown = "magus\\job.unmerged raised: {e}" };
+        }
+    }
     final count = fun (key: str) > int {
         return magus\guard.count(key);
     };
@@ -232,7 +240,7 @@ export fun judgeStop(req: StopRequest) > GuardVerdict !> any {
         mandate\fileAttention(req.workspace, rows: rows, now: now);
     };
     return mandate\decideStop(mandate\StopFacts{ role = req.role.value,stopHookActive = req.stopHookActive },
-        q: mandate\Queue{ jobs = mandate\rows(list.jobs), blocked = blocked }, m: mandate\loadMandate(req.workspace), now: now, count: count, file: file);
+        q: mandate\Queue{ jobs = mandate\rows(list.jobs), blocked = blocked, unmerged = unmerged }, m: mandate\loadMandate(req.workspace), now: now, count: count, file: file);
 }
 
 fun leaseWrites(req: CommandRequest) > [str] {

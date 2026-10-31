@@ -558,6 +558,49 @@ export object Queue {
     jobs: [Row],
     // blocked are the rows the store reports waiting on another.
     blocked: [str] = [],
+    // unmerged is magus\job.unmerged's report on the root's branch.
+    unmerged: JobUnmergedReport = JobUnmergedReport{},
+}
+
+// unmergedShown is how many facts one refusal spells out.
+final unmergedShown = 10;
+
+// unmergedLines renders each fact with its row, head and remedy. An
+// unknown read is a line of its own: it never reads as merged.
+fun unmergedLines(report: JobUnmergedReport) > [str] {
+    final lines = mut [<str>];
+    if (report.unknown != "") {
+        lines.append("unknown: {report.unknown}. Nothing is taken as merged until that read answers.");
+    }
+    foreach (i, u in report.rows) {
+        if (i == unmergedShown) {
+            lines.append("and {report.rows.len() - unmergedShown} more; `./magus ls jobs` lists every one.");
+            break;
+        }
+        var subject = u.job;
+        if (u.head != "") {
+            subject = "{subject} at {u.head}";
+        }
+        if (u.item != "") {
+            subject = "{subject}, item \"{u.item}\"";
+        }
+        lines.append("{subject}: {u.why}. Remedy: {u.remedy}.");
+    }
+    return lines;
+}
+
+// unmergedRows names what a refusal is over, for its count and attention.
+fun unmergedRows(report: JobUnmergedReport) > [str] {
+    final names = mut [<str>];
+    if (report.unknown != "") {
+        names.append("unknown");
+    }
+    foreach (u in report.rows) {
+        if (names.indexOf(u.job) == null) {
+            names.append(u.job);
+        }
+    }
+    return names;
 }
 
 // forkable are the rows the root could work next: declared, not paused or blocked, every row
@@ -590,6 +633,7 @@ export fun forkable(q: Queue, m: Mandate?, now: int) > [str] {
 // it. With no mandate in force it refuses once per stop, so a person present can end a turn.
 // Under a mandate a refusal naming the same rows loopLimit stops running lets the turn end and
 // calls file with the rows, for the person. Past the mandate's end the turn ends.
+// What magus\job.unmerged reports refuses the same way as a waiting row.
 export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: fun (key: str) > int, file: fun (rows: [str]) > void) > GuardVerdict {
     if (facts.role != "root") {
         return magus\guard.allow();
@@ -605,22 +649,33 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
         }
     }
     final ready = forkable(q, m: m, now: now);
-    if (ready.len() == 0) {
+    final unmerged = unmergedLines(q.unmerged);
+    if (ready.len() == 0 and unmerged.len() == 0) {
         return magus\guard.allow();
     }
     // The first line is all the person sees; the rest reaches the agent alone.
-    final reason = "this stop is refused: rows wait to be worked and no worker runs to wake this session\n"
-        + "ready: {ready.join(", ")}. Spawn a worker on {ready[0]}; `./magus describe job {ready[0]}` prints its terms.\n"
-        + "To stop instead, pause the rows: `./magus job pause {ready.join(" ")}`.";
+    var reason = "";
+    var names = ready;
+    if (ready.len() > 0) {
+        reason = "this stop is refused: rows wait to be worked and no worker runs to wake this session\n"
+            + "ready: {ready.join(", ")}. Spawn a worker on {ready[0]}; `./magus describe job {ready[0]}` prints its terms.\n"
+            + "To stop instead, pause the rows: `./magus job pause {ready.join(" ")}`.";
+    } else {
+        reason = "this stop is refused: finished work is not merged, or a deferred item stands";
+    }
+    if (unmerged.len() > 0) {
+        reason = reason + "\n" + unmerged.join("\n");
+        names = ready + unmergedRows(q.unmerged);
+    }
     if (!inForce(m, now: now)) {
         if (facts.stopHookActive) {
             return magus\guard.allow();
         }
         return magus\guard.deny(reason, opts: {"rule": "idle-stop"});
     }
-    if (count("mandate-idle-stop:" + ready.join(",")) >= loopLimit) {
-        file(ready);
-        return magus\guard.advise("the mandate refused this stop {loopLimit} times over the same rows, so the turn ends and they wait for the person: {ready.join(", ")}",
+    if (count("mandate-idle-stop:" + names.join(",")) >= loopLimit) {
+        file(names);
+        return magus\guard.advise("the mandate refused this stop {loopLimit} times over the same rows, so the turn ends and they wait for the person: {names.join(", ")}",
             opts: {"rule": "idle-stop"});
     }
     return magus\guard.deny(reason, opts: {"rule": "idle-stop"});
@@ -774,6 +829,64 @@ test "a running row lets the root stop, and so do rows paused, blocked or waitin
     std\assert(decideStop(root, q: held, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "paused and waiting");
     final blocked = Queue{ jobs = [Row{ id = "naming-lint", state = magus\JobState.declared }], blocked = ["naming-lint"] };
     std\assert(decideStop(root, q: blocked, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "blocked");
+}
+
+final offBranch = JobUnmergedReport{ branch = "feat/x", rows = [JobUnmerged{ job = "go-indexer", head = "abc123", why = "2 commit(s) are not on feat/x", remedy = "merge abc123" }] };
+final doneStore = [Row{ id = "go-indexer", state = magus\JobState.pass }];
+
+test "finished work off the branch refuses the root's stop, naming the row, its head and the remedy" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final root = StopFacts{ role = "root", stopHookActive = false };
+    final refused = decideStop(root, q: Queue{ jobs = doneStore, unmerged = offBranch }, m: null, now: 2000, count: none, file: skip);
+    std\assert(refused.decision == magus\GuardDecision.deny, message: "refused");
+    std\assert(refused.reason.split("\n")[0].indexOf("`") == null, message: "the line the person sees carries no command");
+    std\assert(refused.reason.indexOf("go-indexer at abc123") != null, message: "row and head");
+    std\assert(refused.reason.indexOf("Remedy: merge abc123") != null, message: "remedy");
+    std\assert(decideStop(root, q: Queue{ jobs = doneStore }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "nothing off the branch");
+    std\assert(decideStop(StopFacts{ role = "root", stopHookActive = true }, q: Queue{ jobs = doneStore, unmerged = offBranch }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a person present can still stop on the second");
+    std\assert(decideStop(StopFacts{ role = "worker", stopHookActive = false }, q: Queue{ jobs = doneStore, unmerged = offBranch }, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a worker");
+}
+
+test "a deferred item refuses the stop and an unknown read is never taken as merged" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final root = StopFacts{ role = "root", stopHookActive = false };
+    final item = JobUnmergedReport{ rows = [JobUnmerged{ job = "go-indexer", item = "picked a name", why = "no row carries it", remedy = "declare a row" }] };
+    final deferred = decideStop(root, q: Queue{ jobs = doneStore, unmerged = item }, m: null, now: 2000, count: none, file: skip);
+    std\assert(deferred.decision == magus\GuardDecision.deny and deferred.reason.indexOf("picked a name") != null, message: "names the item");
+    final unknown = decideStop(root, q: Queue{ jobs = doneStore, unmerged = JobUnmergedReport{ unknown = "no branch" } }, m: null, now: 2000, count: none, file: skip);
+    std\assert(unknown.decision == magus\GuardDecision.deny and unknown.reason.indexOf("no branch") != null, message: "says why");
+}
+
+test "a long report names the first facts and points at the whole list" {
+    final many = mut [<JobUnmerged>];
+    for (var i = 0; i < unmergedShown + 2; i = i + 1) {
+        many.append(JobUnmerged{ job = "r{i}", why = "off", remedy = "merge" });
+    }
+    final lines = unmergedLines(JobUnmergedReport{ rows = many });
+    std\assert(lines.len() == unmergedShown + 1, message: "the first ones and a count");
+    std\assert(lines[unmergedShown].startsWith("and 2 more"), message: "says how many are left");
+}
+
+test "an unmerged refusal carries the verdict shape" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    _ = verdict\checked(decideStop(StopFacts{ role = "root", stopHookActive = false }, q: Queue{ jobs = doneStore, unmerged = offBranch }, m: null, now: 2000, count: none, file: skip), label: "unmerged");
+}
+
+test "under a mandate unmerged work refuses until the loop limit, then files the rows" {
+    final filed = mut [<str>];
+    final record = fun (rows: [str]) > void {
+        foreach (r in rows) {
+            filed.append(r);
+        }
+    };
+    final root = StopFacts{ role = "root", stopHookActive = true };
+    final q = Queue{ jobs = doneStore, unmerged = offBranch };
+    std\assert(decideStop(root, q: q, m: issued, now: 2000, count: fun (key: str) > int => 1, file: record).decision == magus\GuardDecision.deny, message: "refused");
+    std\assert(decideStop(root, q: q, m: issued, now: 2000, count: fun (key: str) > int => 3, file: record).decision == magus\GuardDecision.advise, message: "the turn ends");
+    std\assert(filed.join(",") == "go-indexer", message: "files the row");
 }
 
 test "every denial carries the verdict shape" {
