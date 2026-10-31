@@ -327,7 +327,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 
 ## go-vet
 
--trimpath: see go-test above; keeps vet's cache key worktree-independent too.
+-trimpath: see go-test above; keeps vet's cache key worktree-independent too. ./... is a default so a caller's package replaces it, as in go-test.
 
 **Command:** `go vet -trimpath ./...`
 

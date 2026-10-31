@@ -84,6 +84,7 @@ automates a decision and when it hands the decision to you.
 - [The checker catches it; the runtime is the backstop](design/principles/the-checker-catches-it.md): A mistake the Buzz checker, the spell contract, a generated decoder or a Go analyzer can find is refused at check time; a runtime refusal is for input the checker cannot see, and it names the typed fix.
 - [Flags, config and help from one source](design/principles/flags-config-help-one-source.md): Each flag is declared once, by its positive name. Parsing, help, the man page, the completions and the config vocabulary read that declaration.
 - [A deliberate break never merges red](design/principles/a-deliberate-break-never-merges-red.md): A person making a deliberate break is never put in the position of merging a red pull request; the change carries its own recorded way to green.
+- [The model proposes, the harness executes](design/principles/the-model-proposes-the-harness-executes.md): A model emits text that proposes an action; a harness runs the tool, reads and writes the files, refuses the call that breaks a rule and keeps the state. Harnesses come in layers, and the layers compose.
 
 ### Judgment
 

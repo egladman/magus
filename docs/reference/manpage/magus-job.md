@@ -141,6 +141,9 @@ them and magus describe job prints one job's terms.
 
 ### job apply options
 
+**--add-write-path** *\<file\>#\<declaration\>*
+: A path to add to the job's write paths, or \<file\>#\<declaration\> to claim one declaration of a file; repeatable or comma-separated
+
 **-f** *file*
 : The records to apply: a file, or \`-\` for stdin; one JSON job, a JSON array, or one job per line
 

@@ -14,7 +14,7 @@ A process table inspected to wait on magus work the lock already reports.
 
 ## Why
 
-A magus run holds a project lock and announces itself, and `magus status --watch=15s` reads that same lock state continuously: holder PID, command, age. `pgrep`, `pidof`, `ps` and `kill -0` invent a poll with no bound of its own that answers a question the lock message already answered.
+A magus run holds a project lock and announces itself, and one `magus status` reads that same lock state: holder PID, command, age. A second run into the lock exits 75 at once, and a run the caller backgrounded under `magus job exec --timeout` announces its own end, so the wait is that completion notice. `pgrep`, `pidof`, `ps` and `kill -0` invent a poll with no bound of its own that answers a question the lock message already answered.
 
 ## Default and override
 

@@ -229,9 +229,17 @@ An action a model can call through its host: a name, a description, a typed inpu
 
 The deterministic scaffolding around the work on a change, for a person or an agent: compiler errors, formatters, linters, checks, gates, leases and hooks, placed at points a person chose. Around an agent's loop, magus supplies one and keeps it outside. [Harness in full](glossary/harness.md).
 
+### Inner harness
+
+The host's agent loop: Claude Code, Codex, Cursor or OpenCode. It sends context to the model, runs the tool calls the model proposes and keeps the conversation between turns. magus is never one. [Inner harness in full](glossary/inner-harness.md).
+
 ### Skill
 
 A packaged set of instructions an agent host loads when a task matches its description: a directory holding a SKILL.md. magus ships its magus-* skills in the binary and writes them with magus agent install. [Skill in full](glossary/skill.md).
+
+### Outer harness
+
+The deterministic scaffolding a repository adds around any agent loop: guard verdicts, job leases, the job store and graph-backed answers. magus is one, and it stays outside the loop. [Outer harness in full](glossary/outer-harness.md).
 
 ## Sessions and leases
 

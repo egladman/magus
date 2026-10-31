@@ -22,7 +22,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | Rule                                                  | Catches                                                                                             |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | [agent-sign-off](agent-sign-off.md)                   | an agent stamping a read receipt or closing an attention request, which only a person may do        |
-| [architecture-unbriefed](architecture-unbriefed.md)   | an agent's next call after a structure question, or a new directory, before the architecture skill  |
+| [architecture-unbriefed](architecture-unbriefed.md)   | a write after a structure question, or into a new directory, before the architecture skill          |
 | [background-left](background-left.md)                 | an agent finishing while shell commands it ran in the background are still running                  |
 | [background-silent](background-silent.md)             | a background task of the session that has written nothing for advise_minutes (30 unset)             |
 | [background-unbounded](background-unbounded.md)       | a shell command run in the background with nothing to end it                                        |

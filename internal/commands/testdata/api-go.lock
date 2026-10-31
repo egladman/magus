@@ -1063,6 +1063,7 @@ github.com/egladman/magus/types.CapAncestryReporter const VCSCapability = "Ances
 github.com/egladman/magus/types.CapBisector const VCSCapability = "Bisector"
 github.com/egladman/magus/types.CapBranchChangeReporter const VCSCapability = "BranchChangeReporter"
 github.com/egladman/magus/types.CapBundler const VCSCapability = "Bundler"
+github.com/egladman/magus/types.CapCheckoutFastForwarder const VCSCapability = "CheckoutFastForwarder"
 github.com/egladman/magus/types.CapCheckoutLister const VCSCapability = "CheckoutLister"
 github.com/egladman/magus/types.CapCheckoutProvisioner const VCSCapability = "CheckoutProvisioner"
 github.com/egladman/magus/types.CapCheckoutReporter const VCSCapability = "CheckoutReporter"
@@ -1186,6 +1187,8 @@ github.com/egladman/magus/types.CheckoutCommit type struct
 github.com/egladman/magus/types.CheckoutCommit.CommitMeta embedded CommitMeta
 github.com/egladman/magus/types.CheckoutCommit.Paths field []string
 github.com/egladman/magus/types.CheckoutConfigHeld const DiagnosticCode = "MGS3046"
+github.com/egladman/magus/types.CheckoutFastForwarder type interface
+github.com/egladman/magus/types.CheckoutFastForwarder.FastForward imethod func(ctx context.Context, root string, rev string) error
 github.com/egladman/magus/types.CheckoutLister type interface
 github.com/egladman/magus/types.CheckoutLister.OtherCheckouts imethod func(root string) ([]string, error)
 github.com/egladman/magus/types.CheckoutProvisioner type interface
@@ -5628,6 +5631,7 @@ github.com/egladman/magus/types.VCSDriver.embeds AncestryReporter
 github.com/egladman/magus/types.VCSDriver.embeds Bisector
 github.com/egladman/magus/types.VCSDriver.embeds BranchChangeReporter
 github.com/egladman/magus/types.VCSDriver.embeds Bundler
+github.com/egladman/magus/types.VCSDriver.embeds CheckoutFastForwarder
 github.com/egladman/magus/types.VCSDriver.embeds CheckoutLister
 github.com/egladman/magus/types.VCSDriver.embeds CheckoutProvisioner
 github.com/egladman/magus/types.VCSDriver.embeds CheckoutReporter

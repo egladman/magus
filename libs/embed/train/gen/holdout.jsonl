@@ -151,6 +151,7 @@
 {"group":"file:changes/unreleased/hook-output-by-audience-a-guard-deny-shows.md","path":"changes/unreleased/hook-output-by-audience-a-guard-deny-shows.md"}
 {"group":"file:changes/unreleased/image-tree-directory-pattern.md","path":"changes/unreleased/image-tree-directory-pattern.md"}
 {"group":"file:changes/unreleased/integration-defers-the-settle.md","path":"changes/unreleased/integration-defers-the-settle.md"}
+{"group":"file:changes/unreleased/job-apply-add-write-path.md","path":"changes/unreleased/job-apply-add-write-path.md"}
 {"group":"file:changes/unreleased/job-edit.md","path":"changes/unreleased/job-edit.md"}
 {"group":"file:changes/unreleased/job-end-two-person-rule.md","path":"changes/unreleased/job-end-two-person-rule.md"}
 {"group":"file:changes/unreleased/job-exit-many.md","path":"changes/unreleased/job-exit-many.md"}
@@ -398,10 +399,12 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/interrupt.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/interrupt_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/job_apply_add_write_path_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_claim.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_claim_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_delta.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_delta_test.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/job_fork_checkout_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_grant.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_grant_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_graph.go"}
@@ -503,6 +506,7 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/text_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/timeout.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/vcs.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/vcs_resolve_failures_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/vcs_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/verbosity.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/verbosity_test.go"}
@@ -1227,6 +1231,7 @@
 {"group":"dir:internal/guard","path":"internal/guard/waiter_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/wiring.go"}
 {"group":"dir:internal/guard","path":"internal/guard/wiring_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/worker_reattach_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/worker_vcs.go"}
 {"group":"dir:internal/guard","path":"internal/guard/worker_vcs_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/workspace_rule.go"}

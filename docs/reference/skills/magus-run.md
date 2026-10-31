@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 15258
-skill_short_bytes: 8892
+skill_full_bytes: 15309
+skill_short_bytes: 8937
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `52b4a5cd1aec` |
+| `skill-content` | `e1c3311b4e0d` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -196,11 +196,11 @@ Run generators before the full test run, so a drift test does not fail for nothi
 
 Run whose project lock or machine budget another magus invocation holds: exits 75 at once, naming holder.
 - Never write `sleep`/`ps`/`pgrep` polling loops; guard denies `pgrep`, `pidof`, `ps`.
-- `magus status --watch=15s`: reads lock state continuously: holder PID, command, directory, age. Re-run once lock releases.
+- `magus status`: reads lock state once: holder PID, command, directory, age. To wait: background run as `magus job exec --timeout <d> -- <command>`, wait for its completion notice.
 - Long-running holder alone: not evidence of hang.
 
 ```sh
-magus status --watch=15s
+magus status
 ```
 
 If lock crossed stale warning threshold -> report exact holder, inspect its captured target output.
@@ -497,12 +497,13 @@ at once, naming the holder.
 
 - Never write `sleep`/`ps`/`pgrep` polling loops. The guard denies `pgrep`,
   `pidof`, and `ps` for this reason.
-- `magus status --watch=15s` reads that lock state continuously: holder PID,
-  command, directory, and age. Re-run once the lock releases.
+- `magus status` reads that lock state once: holder PID, command, directory,
+  and age. To wait, background your run as `magus job exec --timeout <d> -- <command>`
+  and wait for its completion notice.
 - A long-running holder is not, by itself, evidence of a hang.
 
 ```sh
-magus status --watch=15s
+magus status
 ```
 
 If the lock has crossed its stale warning threshold, report the exact holder and
