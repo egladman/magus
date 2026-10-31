@@ -36,8 +36,17 @@ changed are rebuilt; --refresh forces a full rebuild.
 **--[no-]global** (default: off)
 : Resolve across the workspaces registered in config (knowledge.workspaces)
 
+**--max-lines** *int* (default: 200)
+: Print at most this many lines of the section (0 for all), then say how many there were and print the next command. Implies --source
+
 **--[no-]refresh** (default: off)
 : Force a full graph rebuild before explaining
+
+**--skip-lines** *int*
+: Skip this many lines of the section first; line numbers carry on. Implies --source
+
+**--[no-]source** (default: off)
+: Print a doc section's lines from its indexed extent instead of the card, checked against the file on disk. A symbol's body is refs --source
 
 ## Examples
 
@@ -45,6 +54,12 @@ changed are rebuilt; --refresh forces a full rebuild.
 
 ```sh
 magus explain target:pkg/api:build
+```
+
+*A doc section's text, by anchor*
+
+```sh
+magus explain docsection:docs/reference/cli.md#verbosity --source
 ```
 
 *Resolve by bare name*

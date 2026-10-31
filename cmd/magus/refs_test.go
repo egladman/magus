@@ -446,7 +446,7 @@ func (s *refsSourceSuite) TestSourceRecordsItsFirstLine() {
 func (s *refsSourceSuite) TestABlockNumbersItsLinesAndMarksTheFocus() {
 	var b bytes.Buffer
 	writeSourceBlock(&b, "  ", "nine\nten", 9, 10, "")
-	s.Equal("   9  nine\n  >10  ten\n", b.String())
+	s.Equal("    9  nine\n  >10  ten\n", b.String())
 }
 
 func (s *refsSourceSuite) TestABlockAboveTheMatchMarksNothing() {

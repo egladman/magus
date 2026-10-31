@@ -40,12 +40,16 @@ the lines themselves; with --occurrences it prints each site's lines
 instead. --context N adds N lines on both sides, and --before and --after
 set one side over it. --lines A:B picks a range counted from the match: 0
 is the matched line or a definition's whole body, -1 the line above it, 1
-the line below it, so --lines=-5:-1 prints only the 5 lines above. Write a
-negative range with the =, so the value does not read as a flag. Any of
-these implies --source, and all clamp to the file.
+the line below it, so --lines=-5:-1 prints only the 5 lines above. Any of
+these implies --source, all clamp to the file, and a range with no lines
+says so. Blocks number their lines and mark the matched one with \>.
+--max-lines caps each block at 200 lines by default (0 prints all) and
+--skip-lines pages through it; a cut block prints the lines shown, the total
+and the next command.
 
---limit and --offset page --occurrences by site; a cut page prints the
-total and the next command.
+--file keeps the --occurrences sites at or under a workspace-relative path.
+--limit and --offset page them by site; a cut page prints the total and the
+next command.
 
 --text switches to that other question on purpose: a literal substring
 search with no symbol index and no graph, printed as path:line:text like
@@ -79,6 +83,9 @@ nothing. The inverse is the same command with the two names swapped.
 **--[no-]definition** (default: off)
 : Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed
 
+**--file** *string*
+: With --occurrences, keep the sites at or under this workspace-relative path, and say how many of the total it kept
+
 **--[no-]generated** (default: on)
 : In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely
 
@@ -86,7 +93,10 @@ nothing. The inverse is the same command with the two names swapped.
 : Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What | head would do, without losing the count or the exit code
 
 **--lines** *string*
-: Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below. Write a negative range with =, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after
+: Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after
+
+**--max-lines** *int* (default: 200)
+: Print at most this many lines of each block (0 for all), then say how many there were and print the next command. Implies --source
 
 **--[no-]occurrences** (default: off)
 : Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in.
@@ -99,6 +109,9 @@ nothing. The inverse is the same command with the two names swapped.
 
 **--rename** *string*
 : Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is
+
+**--skip-lines** *int*
+: Skip this many lines of each block first; line numbers carry on. Implies --source
 
 **--[no-]source** (default: off)
 : With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n. With --occurrences, print each site's lines
@@ -144,7 +157,7 @@ magus refs Open --source
 magus refs Open --occurrences --context 5
 ```
 
-*Only the five lines above each site; write a negative range with the =*
+*Only the five lines above each site*
 
 ```sh
 magus refs Open --occurrences --lines=-5:-1
@@ -160,6 +173,12 @@ magus refs Open --occurrences --before 5 --after 4
 
 ```sh
 magus refs Open --occurrences --limit 5 --offset 5
+```
+
+*The sites in one file*
+
+```sh
+magus refs Open --occurrences --file magus.go --context 2
 ```
 
 *Raw text search, no index needed*
