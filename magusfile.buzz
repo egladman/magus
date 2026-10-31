@@ -2173,7 +2173,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
         ctx.needs(compress_cgo_test, completion_test);
     }
     // Declared so coverage_render finds the profiles after a cache hit.
-    ctx.writesFiles([".magus/coverage.out", ".magus/coverage.hand.out", ".magus/coverage.cmd.out"]);
+    // A glob: a narrowed run writes only keyed profiles.
+    ctx.writesFiles([".magus/coverage*.out"]);
     // ctx.readsFiles replaces the target's footprint, so the suite's whole tree is restated.
     // The Markdown and fixtures are enumerated: a test reading a file outside these roots
     // replays a stale pass when that file changes.
@@ -2217,6 +2218,11 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     fs\writeFile(COVERAGE_HAND_PROFILE,
         cov\stripGenerated(fs\readFile(COVERAGE_PROFILE),
             prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
+    // A full run supersedes every slice; the glob would snapshot them.
+    final whole = [COVERAGE_PROFILE, COVERAGE_HAND_PROFILE, CMD_MAGUS_PROFILE];
+    foreach (profile in fs\glob(".magus/coverage*.out")) {
+        if (whole.indexOf(profile.value) == null) { fs\remove(profile.value); }
+    }
     // Only a full run judges the floor; a narrowed gate measured a slice.
     if (!ctx.narrowed() and std\parseInt(coverage_percent().split(".")[0]) < 70) {
         throw "test: coverage " + coverage_percent() + "% is below the 70% floor; investigate the regression or lower the floor deliberately";
