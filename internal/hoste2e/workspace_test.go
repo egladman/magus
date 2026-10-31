@@ -170,10 +170,23 @@ func newWorkspace(t, owner *testing.T, host *hostDriver) *workspace {
 	w.magus(t, "agent", "harness", "install", "--id", host.id)
 	w.magus(t, "job", "fork", jobID, "--write-paths", "probe.txt", "--check", "generate .",
 		"--criteria", w.code("BRIEF")+" is this lease's code word; a host end-to-end probe")
-	w.probeRules(t)
+	w.probeRules(t, host.id)
 	host.wire(t, w)
 	w.ready = time.Now().UnixMilli()
 	return w
+}
+
+// TestWorkspaceSetup builds each installed host's fixture and stops before
+// the host runs, so it spends no model tokens.
+func TestWorkspaceSetup(t *testing.T) {
+	for _, h := range drivers() {
+		t.Run(h.id, func(t *testing.T) {
+			if h.path == "" {
+				t.Skipf("%s: %s", h.binary, h.note)
+			}
+			newWorkspace(t, t, h)
+		})
+	}
 }
 
 func (w *workspace) writeFixture(t *testing.T, spell string) {
@@ -274,14 +287,14 @@ func (w *workspace) harnessPlan(t *testing.T, spell string) types.HarnessPlan {
 	return plan
 }
 
-// probeRules judges the probe command and write once with a host name no scenario
-// uses, so a magusfile that fails to load stops the test before any model tokens are
-// spent rather than failing open in every hook.
-func (w *workspace) probeRules(t *testing.T) {
+// probeRules judges the probe command and write once as host. A magusfile
+// that fails to load stops the test before any model tokens are spent.
+// host must be installed: magus refuses a name it does not know.
+func (w *workspace) probeRules(t *testing.T, host string) {
 	t.Helper()
 	for _, args := range [][]string{
-		{"shell", "--agent-name", "e2e-setup", "echo e2e-deny-probe"},
-		{"shell", "--agent-name", "e2e-setup", "--path", filepath.Join(w.dir, "blocked.txt")},
+		{"shell", "--agent-name", host, "echo e2e-deny-probe"},
+		{"shell", "--agent-name", host, "--path", filepath.Join(w.dir, "blocked.txt")},
 	} {
 		out, err := w.exec(context.Background(), "magus", args...)
 		var exit *exec.ExitError
@@ -289,7 +302,7 @@ func (w *workspace) probeRules(t *testing.T) {
 			t.Fatalf("magus %s: want a deny (exit 2) from the fixture rule, got %v\n%s", strings.Join(args, " "), err, out)
 		}
 	}
-	out, _ := w.exec(context.Background(), "magus", "shell", "--agent-name", "e2e-setup", "--renders-ask", "-o", "json", askCommand)
+	out, _ := w.exec(context.Background(), "magus", "shell", "--agent-name", host, "--renders-ask", "-o", "json", askCommand)
 	var verdict hookResponse
 	if err := json.Unmarshal([]byte(out), &verdict); err != nil || verdict.Decision != "ask" {
 		t.Fatalf("magus shell %q: want an ask from the human_only target, got %v\n%s", askCommand, err, out)
