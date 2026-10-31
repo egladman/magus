@@ -3975,6 +3975,12 @@ func decodeLimits(v vm.Value, path string) (types.Limits, error) {
 				return out, err
 			}
 			out.PayloadFields = strsPayloadFields
+		case "channels":
+			strsChannels, err := decodeStringList(item, path+".channels")
+			if err != nil {
+				return out, err
+			}
+			out.Channels = strsChannels
 		default:
 			return out, unknownMember(path, "Limits", key)
 		}

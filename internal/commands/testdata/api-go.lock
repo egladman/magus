@@ -3640,6 +3640,7 @@ github.com/egladman/magus/types.LifecycleStatus.State field string "json:\"state
 github.com/egladman/magus/types.LifecycleUnreached const untyped string = "unreached"
 github.com/egladman/magus/types.LifecycleUnwired const untyped string = "unwired"
 github.com/egladman/magus/types.Limits type struct
+github.com/egladman/magus/types.Limits.Channels field []string "json:\"channels,omitempty\""
 github.com/egladman/magus/types.Limits.ForegroundDefaultMs field int64 "json:\"foreground_default_ms,omitempty\""
 github.com/egladman/magus/types.Limits.ForegroundMaxMs field int64 "json:\"foreground_max_ms,omitempty\""
 github.com/egladman/magus/types.Limits.HookTimeoutMs field int64 "json:\"hook_timeout_ms,omitempty\""
