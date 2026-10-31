@@ -45,7 +45,7 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
         .scope(magus\layer("handler").dirs)
         .except([magus\dir("libs/gopherbuzz")],
             why: "the Buzz runtime every module runs on, figures included; drawn in buzz-engine")
-        .except([magus\dir("libs/testlayout")],
+        .except([magus\dir("libs/testpairing")],
             why: "the Go analyzer for test layout; no figure passes through it")
         .except([magus\dir("libs/proofread")],
             why: "the prose linter; figure layout does not use it")

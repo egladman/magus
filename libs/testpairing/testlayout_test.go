@@ -1,4 +1,4 @@
-package testlayout
+package testpairing
 
 import (
 	"testing"

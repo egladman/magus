@@ -8,7 +8,7 @@ import (
 )
 
 // TestNewPluginDecodesSettings drives the path production actually runs: a yaml
-// settings block arrives as map[string]any and has to reach [testlayout.Options].
+// settings block arrives as map[string]any and has to reach [testpairing.Options].
 // The transpose this replaced was a hand-written field copy, where a missed field
 // compiled clean and silently ignored what the user configured, so the point of
 // this test is that the json tags, not a copy, are what carry the values across.
@@ -21,7 +21,7 @@ func TestNewPluginDecodesSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assertOneAnalyzer(t, p, "testlayout")
+	assertOneAnalyzer(t, p, "testpairing")
 }
 
 // TestNewPluginRejectsUnknownKey pins register.DecodeSettings's DisallowUnknownFields
@@ -31,7 +31,7 @@ func TestNewPluginDecodesSettings(t *testing.T) {
 func TestNewPluginRejectsUnknownKey(t *testing.T) {
 	for _, key := range []string{"ignore-marker", "allow", "report-unpaired", "honor-marker", "pair-benchmarks"} {
 		_, err := newPlugin(map[string]any{key: true})
-		if err == nil || !strings.HasPrefix(err.Error(), "decode linters.settings.custom.testlayout.settings: ") {
+		if err == nil || !strings.HasPrefix(err.Error(), "decode linters.settings.custom.testpairing.settings: ") {
 			t.Errorf("want %q to fail naming the linter, got %v", key, err)
 		}
 	}
@@ -44,7 +44,7 @@ func TestNewPluginEmptySettings(t *testing.T) {
 }
 
 // TestNewPairingPlugin checks testpair builds with no settings block, and under
-// its own name, which is what keeps a //nolint:testlayout from reaching it.
+// its own name, which is what keeps a //nolint:testpairing from reaching it.
 func TestNewPairingPlugin(t *testing.T) {
 	for _, raw := range []any{nil, map[string]any{}} {
 		p, err := newPairingPlugin(raw)

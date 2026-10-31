@@ -419,3 +419,7 @@ reference/rules/waiver-is-a-persons/
 # carrier, and a one-page tag gets no index.
 reference/codes/race/MGS4009/
 tags/commit/
+# libs/testlayout became libs/testpairing: testkit beside testlayout read like two test
+# libraries when it is one analyzer whose rule is Pairing. A project page is
+# generated per project, so the rename retires the old URL, now at development/libs-testpairing/.
+development/libs-testlayout/

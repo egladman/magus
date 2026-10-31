@@ -1,4 +1,4 @@
-package testlayout
+package testpairing
 
 import (
 	"fmt"
@@ -22,8 +22,8 @@ When some prefix of X names a source file - resolver_edge_cases_test.go against
 resolver.go - the message says which file's tests these are.`
 
 // Pairing reports a test file with no source file of the same stem. It has no
-// options and reports under the name testpair rather than testlayout, so the one
-// directive a tree legitimately writes, //nolint:testlayout for an external test
+// options and reports under the name testpair rather than testpairing, so the one
+// directive a tree legitimately writes, //nolint:testpairing for an external test
 // package that dodges an import cycle, does not silence it.
 var Pairing = &analysis.Analyzer{Name: "testpair", Doc: pairingDoc, Run: runPairing}
 

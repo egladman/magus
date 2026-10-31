@@ -1,4 +1,4 @@
-# testlayout
+# testpairing
 
 Two Go analyzers over the layout of test files, as plain `analysis.Analyzer`s with
 no linter-runner dependency, plus a golangci-lint module plugin in `plugin/` that
@@ -7,7 +7,7 @@ registers each under its own name.
 | Linter       | Reports                                                                      |
 | ------------ | ---------------------------------------------------------------------------- |
 | `testpair`   | every `X_test.go` with no `X.go` beside it                                   |
-| `testlayout` | a test file in an external test package; optionally `_unix` names and `main` |
+| `testpairing` | a test file in an external test package; optionally `_unix` names and `main` |
 
 ## testpair: every test file has a pair
 
@@ -53,18 +53,18 @@ report at it. Source names come off disk, so a tagged source file still pairs.
 
 golangci-lint reports every analyzer a plugin builds under the plugin's name. A
 tree that keeps an external test package to dodge an import cycle writes
-`//nolint:testlayout` on its package clause, and if pairing reported as
-`testlayout` too, that one directive would silence it. Under its own name it
-cannot. This repository's `hack/lint/testlayout-pairing-has-no-exemptions.buzz`
+`//nolint:testpairing` on its package clause, and if pairing reported as
+`testpairing` too, that one directive would silence it. Under its own name it
+cannot. This repository's `hack/lint/testpairing-pairing-has-no-exemptions.buzz`
 refuses the remaining exits golangci-lint gives every linter: a nolint naming
 `testpair` or `all`, a bare `//nolint`, an exclusion rule, a path exclusion, and a
 module run whose `--enable-only` leaves it out.
 
-## testlayout
+## testpairing
 
 A test belongs in the package it tests, so a file declaring `package foo_test` is
 reported. The external package is for the case where an in-package test would
-close an import cycle, and that case is worth a `//nolint:testlayout` naming the
+close an import cycle, and that case is worth a `//nolint:testpairing` naming the
 cycle rather than a silent convention.
 
 Two options, both off by default:
@@ -98,14 +98,14 @@ version: "2"
 
 linters:
   enable:
-    - testlayout
+    - testpairing
     - testpair
   settings:
     custom:
-      testlayout:
+      testpairing:
         type: module
         description: reports a test file outside its package, or named for unix
-        original-url: github.com/egladman/magus/libs/testlayout
+        original-url: github.com/egladman/magus/libs/testpairing
         settings:
           report-unix-suffix: false
           report-main-tests: false
@@ -113,7 +113,7 @@ linters:
       testpair:
         type: module
         description: reports a test file with no source file of the same name
-        original-url: github.com/egladman/magus/libs/testlayout
+        original-url: github.com/egladman/magus/libs/testpairing
 ```
 
 ## Building the binary
@@ -123,13 +123,13 @@ build a binary carrying this one. `.custom-gcl.yml` in this directory declares i
 and `golangci-lint custom` reads that file from its working directory:
 
 ```bash
-cd libs/testlayout && golangci-lint custom
+cd libs/testpairing && golangci-lint custom
 ```
 
 `destination: ../../.magus` writes `.magus/custom-gcl`, which reads
 `.golangci.yml` exactly as the stock binary does. `magus run lint` does both steps.
 
-Once `testlayout` appears in `.golangci.yml` the stock binary can no longer read
+Once `testpairing` appears in `.golangci.yml` the stock binary can no longer read
 it, so every lint entry point has to move to `.magus/custom-gcl`.
 
 One binary carries every in-repo plugin, so a second linter is another entry in
@@ -141,11 +141,11 @@ The analyzers have no golangci-lint dependency, so `singlechecker`, `multichecke
 and `go vet` tools work too:
 
 ```go
-multichecker.Main(testlayout.Pairing, testlayout.Analyzer)
+multichecker.Main(testpairing.Pairing, testpairing.Analyzer)
 ```
 
 `Analyzer` runs with every option off; build another with
-`testlayout.New(testlayout.Options{...})`. `Pairing` has no options.
+`testpairing.New(testpairing.Options{...})`. `Pairing` has no options.
 
 ## Not hermetic
 

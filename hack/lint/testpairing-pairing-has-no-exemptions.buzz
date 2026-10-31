@@ -1,4 +1,4 @@
-// testlayout-pairing-has-no-exemptions keeps testpair, the linter that pairs every
+// testpairing-pairing-has-no-exemptions keeps testpair, the linter that pairs every
 // X_test.go with an X.go, without a way out. The analyzer has no options and its
 // plugin refuses a settings block, so what is left is what golangci-lint offers every
 // linter: an exclusion rule, a path exclusion, a nolint directive, leaving it off, or
@@ -31,7 +31,7 @@ export fun reads() > [str] {
             "libs/conventions/**/*_test.go",
             "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
             "libs/gopherbuzz/**/*_test.go", "libs/proofread/**/*_test.go",
-            "libs/testlayout/**/*_test.go", "libs/xdg/**/*_test.go", "libs/cmdline/**/*_test.go"];
+            "libs/testpairing/**/*_test.go", "libs/xdg/**/*_test.go", "libs/cmdline/**/*_test.go"];
 }
 
 export fun check(files: [Path]) > [Finding] !> any {
@@ -141,14 +141,14 @@ fun directiveFindings(f: Path, found: mut [Finding]) > void !> any {
     }
 }
 
-final CONFIG = "version: \"2\"\nlinters:\n  enable:\n    - testlayout\n    - testpair\n  settings:\n    custom:\n      testpair:\n        type: module\n  exclusions:\n    rules:\n      - path: ^a\\.go$\n        linters: [testlayout]\n";
+final CONFIG = "version: \"2\"\nlinters:\n  enable:\n    - testpairing\n    - testpair\n  settings:\n    custom:\n      testpair:\n        type: module\n  exclusions:\n    rules:\n      - path: ^a\\.go$\n        linters: [testpairing]\n";
 
 test "a config enabling testpair with no way out passes" {
     assert\equal(check(support\fixture({".golangci.yml": CONFIG})).len(), want: 0, message: "clean");
 }
 
 test "every config escape hatch is reported" {
-    final escaped = "version: \"2\"\nrun:\n  tests: false\nlinters:\n  enable:\n    - testlayout\n  disable:\n    - testpair\n  settings:\n    custom:\n      testpair:\n        settings:\n          allow: [x_test.go]\n  exclusions:\n    paths:\n      - conventions_test.go\n    rules:\n      - path: ^a_test\\.go$\n        linters: [testpair]\n      - path: ^b_test\\.go$\n";
+    final escaped = "version: \"2\"\nrun:\n  tests: false\nlinters:\n  enable:\n    - testpairing\n  disable:\n    - testpair\n  settings:\n    custom:\n      testpair:\n        settings:\n          allow: [x_test.go]\n  exclusions:\n    paths:\n      - conventions_test.go\n    rules:\n      - path: ^a_test\\.go$\n        linters: [testpair]\n      - path: ^b_test\\.go$\n";
     assert\equal(support\messages(check(support\fixture({".golangci.yml": escaped}))), want: [
         "linters.enable leaves out testpair, so no test file is held to a pair",
         "linters.disable names testpair",
@@ -168,7 +168,7 @@ test "a libs run that leaves testpair out is reported at its line" {
 }
 
 test "a nolint covering testpair is reported and one naming other linters is not" {
-    final src = "package a //nolint:testlayout // cycle\n//nolint:all // no\nvar x = 1 //nolint\nvar y = 2 //nolint:testpair,errcheck // no\nvar z = \"//nolint\"\n// the enable entry and //nolint name agree\n";
+    final src = "package a //nolint:testpairing // cycle\n//nolint:all // no\nvar x = 1 //nolint\nvar y = 2 //nolint:testpair,errcheck // no\nvar z = \"//nolint\"\n// the enable entry and //nolint name agree\n";
     final got = check(support\fixture({"a/a_test.go": src, "a/testdata/b_test.go": "//nolint\n"}));
     assert\equal(got.len(), want: 3, message: "all, bare and testpair");
     assert\equal(got[0].line, want: 2, message: "all");

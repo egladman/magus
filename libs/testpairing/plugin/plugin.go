@@ -1,39 +1,39 @@
-// Package plugin adapts testlayout to golangci-lint's module plugin system.
+// Package plugin adapts testpairing to golangci-lint's module plugin system.
 //
-// Separate from the analyzers so that testlayout itself carries no golangci-lint
+// Separate from the analyzers so that testpairing itself carries no golangci-lint
 // dependency and stays usable under go vet or singlechecker. Nothing calls into
 // this package: `golangci-lint custom` blank-imports it, and the init below is
 // the whole contract.
 //
 // It registers two linters. testpair is a plugin of its own, not a second analyzer
-// inside testlayout, because golangci-lint reports every analyzer a plugin builds
-// under the plugin's name, and a //nolint:testlayout would then silence pairing too.
+// inside testpairing, because golangci-lint reports every analyzer a plugin builds
+// under the plugin's name, and a //nolint:testpairing would then silence pairing too.
 package plugin
 
 import (
 	"fmt"
 
-	"github.com/egladman/magus/libs/testlayout"
+	"github.com/egladman/magus/libs/testpairing"
 	"github.com/golangci/plugin-module-register/register"
 	"golang.org/x/tools/go/analysis"
 )
 
 func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register API registers only from init
-	register.Plugin("testlayout", newPlugin)
+	register.Plugin("testpairing", newPlugin)
 	register.Plugin("testpair", newPairingPlugin)
 }
 
-// newPlugin builds the plugin from its linters.settings.custom.testlayout.settings
-// block. It decodes into [testlayout.Options] directly rather than into a copy
+// newPlugin builds the plugin from its linters.settings.custom.testpairing.settings
+// block. It decodes into [testpairing.Options] directly rather than into a copy
 // declared here: a parallel struct plus a field-by-field transpose is a place
 // where adding an option compiles clean while silently ignoring the user's yaml.
 func newPlugin(raw any) (register.LinterPlugin, error) {
-	opts, err := register.DecodeSettings[testlayout.Options](raw)
+	opts, err := register.DecodeSettings[testpairing.Options](raw)
 	if err != nil {
-		return nil, fmt.Errorf("decode linters.settings.custom.testlayout.settings: %w", err)
+		return nil, fmt.Errorf("decode linters.settings.custom.testpairing.settings: %w", err)
 	}
 
-	return &linter{analyzer: testlayout.New(opts)}, nil
+	return &linter{analyzer: testpairing.New(opts)}, nil
 }
 
 // newPairingPlugin builds testpair, which takes no settings. Decoding into an
@@ -45,7 +45,7 @@ func newPairingPlugin(raw any) (register.LinterPlugin, error) {
 		return nil, fmt.Errorf("testpair: takes no settings: %w", err)
 	}
 
-	return &linter{analyzer: testlayout.Pairing}, nil
+	return &linter{analyzer: testpairing.Pairing}, nil
 }
 
 type linter struct {

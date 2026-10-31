@@ -1,4 +1,4 @@
-package guard_test //nolint:testlayout // in-package would close a cycle: the root package imports internal/guard
+package guard_test //nolint:testpairing // in-package would close a cycle: the root package imports internal/guard
 
 import (
 	"context"

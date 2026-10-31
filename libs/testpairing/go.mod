@@ -1,4 +1,4 @@
-module github.com/egladman/magus/libs/testlayout
+module github.com/egladman/magus/libs/testpairing
 
 go 1.26
 

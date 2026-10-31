@@ -93,19 +93,19 @@ linters:
     - nolintlint      # enforce that //nolint directives include a reason
     - whitespace      # flag unnecessary blank lines inside functions/blocks
 
-    # --- In-repo linters (see libs/testlayout/.custom-gcl.yml) ---
+    # --- In-repo linters (see libs/testpairing/.custom-gcl.yml) ---
     # testpair reports every X_test.go with no X.go beside it, with no exemptions:
     # no conventional names, no allow list, no marker, no exclusion below. It is a
-    # linter of its own so the //nolint:testlayout an import cycle earns cannot
-    # silence it, and hack/lint/testlayout-pairing-has-no-exemptions.buzz refuses
-    # any directive or exclusion that would. testlayout reports a test file outside
-    # its package and a _unix file name. The reasoning is in libs/testlayout/README.md.
+    # linter of its own so the //nolint:testpairing an import cycle earns cannot
+    # silence it, and hack/lint/testpairing-pairing-has-no-exemptions.buzz refuses
+    # any directive or exclusion that would. testpairing reports a test file outside
+    # its package and a _unix file name. The reasoning is in libs/testpairing/README.md.
     #
     # These only exist in .magus/custom-gcl. The stock golangci-lint on PATH
     # cannot read this config while the lines below are present - it exits with
-    # `plugin("testlayout") not found`. That is the price of golangci-lint having
+    # `plugin("testpairing") not found`. That is the price of golangci-lint having
     # no runtime plugin loading, and it is why `magus run lint` builds the binary.
-    - testlayout
+    - testpairing
     - testpair
 
     # This repo's own rules over Go source, one linter each, from libs/conventions
@@ -189,7 +189,7 @@ linters:
             - pkg: github.com/egladman/magus/
               desc: types may depend on spells, libs/diagnostics, internal/json and types/enum, nothing else in magus
 
-        # libs/conventions, libs/proofread and libs/testlayout are magus-repo policy, never shipped.
+        # libs/conventions, libs/proofread and libs/testpairing are magus-repo policy, never shipped.
         root-imports-no-repo-policy:
           list-mode: lax
           files:
@@ -200,15 +200,15 @@ linters:
               desc: the conventions are magus-repo policy and never ship in the root module
             - pkg: github.com/egladman/magus/libs/proofread
               desc: the conventions are magus-repo policy and never ship in the root module
-            - pkg: github.com/egladman/magus/libs/testlayout
+            - pkg: github.com/egladman/magus/libs/testpairing
               desc: the conventions are magus-repo policy and never ship in the root module
 
 
     custom:
-      testlayout:
+      testpairing:
         type: module
         description: reports a test file outside its package, or named for unix
-        original-url: github.com/egladman/magus/libs/testlayout
+        original-url: github.com/egladman/magus/libs/testpairing
         settings:
           # Name the platforms (X_linux.go, X_darwin.go, X_other.go), never unix.
           report-unix-suffix: true
@@ -217,7 +217,7 @@ linters:
       testpair:
         type: module
         description: reports a test file with no source file of the same name
-        original-url: github.com/egladman/magus/libs/testlayout
+        original-url: github.com/egladman/magus/libs/testpairing
 
       hostagnostic:
         type: module
@@ -888,25 +888,25 @@ linters:
       # run reports it. Pairing is testpair's, so nothing here can hide an unpaired
       # test file.
       - path: ^broker/(activation_unix|activation_unix_test)\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^cmd/magus/(bootstrap_exec_unix|detach_unix)\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/audit/inode_unix\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/file/identity_unix\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/job/store_unix_test\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/proc/spawn/(jobserver_unix|jobserver_unix_test|pty_unix|reap_unix|reap_unix_test|run_unix|rusage_unix)\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/proc/sockdir/(sockdir_unix|sockdir_unix_test)\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/sandbox/owner_unix\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/sessions/adapter_unix\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/textindex/mmap_unix\.go$
-        linters: [testlayout]
+        linters: [testpairing]
 
       # filenames' backlog: concatenations already in the tree when the rule
       # landed. Each is a rename waiting for a session with room for it, not an
@@ -917,7 +917,7 @@ linters:
         # standard term for a dependency lock file.
         text: ^(magusfile|lockfile|eventstream|hostmodules|promptcache|selfupdate|toolref) mashes
 
-      # stutter's backlog, in testlayout's shape above: each entry is a rename to
+      # stutter's backlog, in testpairing's shape above: each entry is a rename to
       # make, and the fix deletes it. The rule was a test that read the symbol graph
       # and skipped whenever the index was empty, which in the test run was always,
       # so these 40 names reached main unseen. Each rule names its symbols, so a new

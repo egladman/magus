@@ -58,7 +58,7 @@ import "hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as qu
 import "hack/lint/skill-renders-follow-markdown-and-description-budgets" as skillrenders;
 import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
 import "hack/lint/symbol-docs-follow-proofread-rules" as symbolproofread;
-import "hack/lint/testlayout-pairing-has-no-exemptions" as testpairing;
+import "hack/lint/testpairing-pairing-has-no-exemptions" as testpairing;
 import "hack/lint/tool-descriptions-follow-proofread-rules" as tooldesc;
 import "hack/lint/typescript-never-throws" as typescriptthrows;
 import "hack/lint/trusted-jobs-restore-no-actions-cache" as trustedcache;
@@ -100,7 +100,7 @@ export fun rules() > [Rule] {
         Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
         Rule{ name = "buzz-sources-pass-the-static-check", reads = buzzcheck\reads(), check = buzzcheck\check },
         Rule{ name = "diagnostic-codes-have-docs-pages", reads = codepages\reads(), check = codepages\check },
-        Rule{ name = "testlayout-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },
+        Rule{ name = "testpairing-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },
         Rule{ name = "prose-names-targets-that-exist", reads = prosetargets\reads(), check = prosetargets\check },
         Rule{ name = "code-follows-mined-precedents", reads = precedents\reads(), check = precedents\check },
         Rule{ name = "code-stays-within-the-conformance-ceiling", reads = conformanceceiling\reads(), check = conformanceceiling\check },

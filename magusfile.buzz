@@ -60,7 +60,7 @@ import "project/libs/gopherbuzz";
 import "project/libs/diagnostics";
 import "project/libs/conventions";
 import "project/libs/proofread" as proofreadlib;
-import "project/libs/testlayout";
+import "project/libs/testpairing";
 import "project/libs/scipbuzz";
 import "project/libs/xdg";
 import "project/libs/cmdline";
@@ -2103,7 +2103,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         if (v == null or m["root"] != "") { continue; }
         magus\log.info("release: tag " + m["prefix"] + "v" + v);
         if (deliver) { _ = vcs\cmd(["tag", m["prefix"] + "v" + v]); }
-        // Ask go.mod, not the manifest: golangci-lint compiles libs/testlayout, and the root
+        // Ask go.mod, not the manifest: golangci-lint compiles libs/testpairing, and the root
         // never imports it.
         if (m["gomodule"] != "" and gomod.indexOf(m["gomodule"] + " v") == null) {
             magus\log.info("release: go.mod  " + m["gomodule"] + "  - not required by the root; tag only");
@@ -2291,7 +2291,7 @@ fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
 export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // generate first: the denominator reads every Go file the generators write.
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test,
-        conventions\test, testlayout\test, scipbuzz\test, xdg\test, cmdline\test, buzz_test);
+        conventions\test, testpairing\test, scipbuzz\test, xdg\test, cmdline\test, buzz_test);
     ctx.writesFiles(["gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg"]);
     if (!fs\exists("gen/site/index.html")) {
@@ -2308,7 +2308,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final tables = cov\staticBlockTables();
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
-         "libs/conventions/coverage.out", "libs/testlayout/coverage.out",
+         "libs/conventions/coverage.out", "libs/testpairing/coverage.out",
          "libs/scipbuzz/coverage.out", "libs/xdg/coverage.out", "libs/cmdline/coverage.out"]));
     final go_pct = cov\formatPercent(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
@@ -2411,14 +2411,14 @@ export fun build(ctx: magus\Context, args: [str])  > void {
     }
 }
 // Builds .magus/custom-gcl, the golangci-lint carrying this repo's own linters.
-// Runs in libs/testlayout because `golangci-lint custom` reads .custom-gcl.yml from its
+// Runs in libs/testpairing because `golangci-lint custom` reads .custom-gcl.yml from its
 // cwd. No declared outputs, for go-build's reason, so a read-only run leaves no binary.
 export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
     // The custom linters read Go sources that format may rewrite. Keep the reader after
     // that writer whenever lint runs on its own as well as under the CI composition.
     ctx.needs(format);
-    ctx.readsFiles(["libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
-                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
+    ctx.readsFiles(["libs/testpairing/.custom-gcl.yml", "libs/testpairing/go.mod",
+                    "libs/testpairing/go.sum", "libs/testpairing/**/*.go",
                     "libs/conventions/go.mod", "libs/conventions/go.sum",
                     "libs/conventions/**/*.go",
                     "libs/proofread/go.mod", "libs/proofread/go.sum", "libs/proofread/**/*.go"]);
@@ -2428,7 +2428,7 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
     // custom-gcl's version salt hashes only plugin dirs with a path, and libs/proofread
     // enters through a go.mod replace, so a rebuilt binary would replay stale findings.
     fs\removeAll(".magus/golangci-lint");
-    _ = proc\exec("golangci-lint", ["custom"], "libs/testlayout");
+    _ = proc\exec("golangci-lint", ["custom"], "libs/testpairing");
 }
 
 // Measures the change's base for the conformance ceiling rule, which only reads the measure.
@@ -2445,7 +2445,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
     // This rule reads broad source and prose globs. Run every formatter CI uses first so
     // the scheduler can order those writes before its reads (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventions\format,
-        testlayout\format, scipbuzz\format, xdg\format, cmdline\format,
+        testpairing\format, scipbuzz\format, xdg\format, cmdline\format,
         proofreadlib\proofread_build, conformance_base, textsearch\install);
     ctx.readsFiles(["hack/lint/*.buzz",
                     "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
@@ -2463,7 +2463,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/proofread/testdata/commit-history.txtar",
                     "libs/diagnostics/magusfile.buzz",
                     "libs/figure/magusfile.buzz", "libs/gopherbuzz/magusfile.buzz",
-                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
+                    "libs/testpairing/magusfile.buzz", "libs/textsearch/magusfile.buzz",
                     "libs/scipbuzz/magusfile.buzz", "libs/xdg/magusfile.buzz",
                     "libs/cmdline/magusfile.buzz", "libs/kustomize/*.buzz",
                     "libs/kustomize/testdata/*.yaml",
@@ -2482,20 +2482,20 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "docs/guides/integrations/agents/**/*.md",
                     "libs/conventions/**/*.md", "libs/proofread/**/*.md",
                     "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
-                    "libs/gopherbuzz/**/*.md", "libs/testlayout/**/*.md",
+                    "libs/gopherbuzz/**/*.md", "libs/testpairing/**/*.md",
                     "libs/textsearch/**/*.md", "libs/scipbuzz/**/*.md", "libs/xdg/**/*.md",
                     "libs/cmdline/**/*.md", "libs/kustomize/**/*.md",
                     "proto/**/*.md",
                     "**/*_test.go", "libs/conventions/**/*_test.go", "libs/proofread/**/*_test.go",
                     "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
-                    "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go",
+                    "libs/gopherbuzz/**/*_test.go", "libs/testpairing/**/*_test.go",
                     "libs/scipbuzz/**/*_test.go", "libs/xdg/**/*_test.go",
                     "libs/cmdline/**/*_test.go",
                     "**/*.go",
                     "libs/conventions/**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
                     "libs/proofread/**/*.go", "libs/proofread/train/**/*.go",
                     "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
-                    "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go", "libs/xdg/**/*.go",
+                    "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/xdg/**/*.go",
                     "libs/cmdline/**/*.go", "libs/embed/**/*.go", "libs/embed/train/**/*.go",
                     "console/**/*.ts", "docs/**/*.ts",
                     "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
@@ -2504,7 +2504,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "**/*.buzz", "console/**/*.buzz", "docs/**/*.buzz",
                     "docs/guides/integrations/agents/**/*.buzz", "libs/conventions/**/*.buzz",
                     "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
-                    "libs/scipbuzz/**/*.buzz", "libs/testlayout/**/*.buzz", "libs/textsearch/**/*.buzz",
+                    "libs/scipbuzz/**/*.buzz", "libs/testpairing/**/*.buzz", "libs/textsearch/**/*.buzz",
                     "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz", "libs/embed/**/*.buzz",
                     "libs/embed/train/**/*.buzz", "libs/proofread/train/**/*.buzz",
                     "proto/**/*.buzz",
@@ -2514,7 +2514,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "**/*.yaml", "console/**/*.yaml", "docs/**/*.yaml",
                     "docs/guides/integrations/agents/**/*.yaml", "libs/textsearch/**/*.yaml",
                     "proto/**/*.yaml",
-                    "**/*.yml", "libs/testlayout/**/*.yml",
+                    "**/*.yml", "libs/testpairing/**/*.yml",
                     "proto/**/*.proto", "**/*.txtar"]);
     // code-follows-mined-precedents and symbol-docs-follow-proofread-rules fail on a stale symbol
     // index. magus\precedents freshens every index here, under this run's lock, so the rules
@@ -2546,7 +2546,7 @@ export fun harness_drift(ctx: magus\Context, args: [str]) > void !> any {
 // binary the go spell would run cannot read .golangci.yml.
 export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install_linter);
-    ctx.readsFiles(["libs/testlayout/.custom-gcl.yml", "libs/**/*.go", "libs/**/go.mod", "libs/**/go.sum",
+    ctx.readsFiles(["libs/testpairing/.custom-gcl.yml", "libs/**/*.go", "libs/**/go.mod", "libs/**/go.sum",
                     "**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".golangci.yml"]);
     golangci\run(".", if (ctx.hasCharm("rw")) ["--fix"] else []);
 }
@@ -2568,7 +2568,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     }
     // Not go["golangci-lint"]: that runs the stock binary off PATH. These reads key the
     // custom linter by content.
-    ctx.readsFiles(["libs/testlayout/.custom-gcl.yml",
+    ctx.readsFiles(["libs/testpairing/.custom-gcl.yml",
                     "libs/**/*.go", "libs/**/go.mod", "libs/**/go.sum"]);
     // Restated because readsFiles replaces the footprint; see `test`.
     ctx.readsFiles(["**/*.go", "**/*.s", "**/*.S", "**/*.c", "**/*.h",
@@ -2701,7 +2701,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     // tree. lint reads libs/**/*.go and test reads **/*.go, which each nested module's
     // format rewrites (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventions\format,
-        testlayout\format, scipbuzz\format, xdg\format, cmdline\format);
+        testpairing\format, scipbuzz\format, xdg\format, cmdline\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);
         return;

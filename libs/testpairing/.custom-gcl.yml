@@ -16,12 +16,12 @@ version: v2.12.2
 destination: ../../.magus
 
 plugins:
-  # testlayout reports a test file whose name narrows a source file's name.
+  # testpairing reports a test file whose name narrows a source file's name.
   # Local `path` rather than a proxy `version` on purpose - the module lives in
   # this repo, so a rule change is exercised by the very commit that makes it,
   # with no tag-then-consume round trip.
-  - module: github.com/egladman/magus/libs/testlayout
-    import: github.com/egladman/magus/libs/testlayout/plugin
+  - module: github.com/egladman/magus/libs/testpairing
+    import: github.com/egladman/magus/libs/testpairing/plugin
     path: .
   # conventions carries this repo's own rules over Go source, one plugin per rule.
   - module: github.com/egladman/magus/libs/conventions

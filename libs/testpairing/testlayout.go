@@ -1,9 +1,9 @@
-// Package testlayout defines two analyzers over the layout of Go test files.
+// Package testpairing defines two analyzers over the layout of Go test files.
 //
 // [Pairing] reports every X_test.go with no X.go beside it. It has no options and
 // no exemptions: a test file pairs with a source file of the same stem, with that
 // stem less its build suffixes, or with a platform family, and with nothing else.
-// It reports under its own name, testpair, so a //nolint:testlayout written for
+// It reports under its own name, testpair, so a //nolint:testpairing written for
 // one of the rules below cannot silence it.
 //
 // [Analyzer] and [New] carry the rest: a test file in an external test package,
@@ -16,7 +16,7 @@
 // checked, from the pass's ignored files, and source names come off disk, so a
 // driver caching results against declared package inputs (go vet's unitchecker)
 // can replay a stale verdict after you add or remove a sibling file.
-package testlayout
+package testpairing
 
 import (
 	"fmt"
@@ -35,7 +35,7 @@ import (
 // compiles and passes: only a reader ever objects.
 func externalPackageMessage(pkg string) string {
 	inner := strings.TrimSuffix(pkg, "_test")
-	return fmt.Sprintf("test file declares `package %s`; put it in `package %s` with the code it tests. If that closes an import cycle - the test needs a package that imports %s back - move the test to the package that already sits above both, or keep the external package with a //nolint:testlayout naming the cycle.", pkg, inner, inner)
+	return fmt.Sprintf("test file declares `package %s`; put it in `package %s` with the code it tests. If that closes an import cycle - the test needs a package that imports %s back - move the test to the package that already sits above both, or keep the external package with a //nolint:testpairing naming the cycle.", pkg, inner, inner)
 }
 
 // isMainTestPackage reports whether name is the package clause of a test file
@@ -105,14 +105,14 @@ type Options struct {
 	ReportMainTests bool `json:"report-main-tests"`
 }
 
-// New returns the testlayout analyzer configured by opts.
+// New returns the testpairing analyzer configured by opts.
 func New(opts Options) *analysis.Analyzer {
 	l := linter{unixSuffix: opts.ReportUnixSuffix, mainTests: opts.ReportMainTests}
 
-	return &analysis.Analyzer{Name: "testlayout", Doc: doc, Run: l.run}
+	return &analysis.Analyzer{Name: "testpairing", Doc: doc, Run: l.run}
 }
 
-// Analyzer is the testlayout analyzer with every option off: it reports external
+// Analyzer is the testpairing analyzer with every option off: it reports external
 // test packages only. Use [New] to turn the options on.
 var Analyzer = New(Options{})
 

@@ -32,7 +32,7 @@ export fun reads() > [str] {
     return ["**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
         "libs/proofread/**/*.go", "libs/proofread/proofread.buzz",
         "hack/policy/proofread.buzz", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
-        "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
+        "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go",
         "libs/xdg/**/*.go", "libs/cmdline/**/*.go", "console/**/*.ts", "docs/**/*.ts", "docs/guides/integrations/agents/**/*.ts",
         "libs/textsearch/**/*.ts"];
 }

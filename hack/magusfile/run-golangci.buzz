@@ -28,7 +28,7 @@ export fun binary() > str !> any {
 export fun linkOnce() > void !> any {
     final root = magus\describe.project().workspace;
     if (!fs\exists(root + "/.magus/custom-gcl")) {
-        _ = proc\exec("golangci-lint", args: ["custom"], dir: root + "/libs/testlayout");
+        _ = proc\exec("golangci-lint", args: ["custom"], dir: root + "/libs/testpairing");
     }
 }
 
@@ -36,8 +36,8 @@ export fun linkOnce() > void !> any {
 // replaces the project baseline.
 export fun readLibFiles(ctx: magus\Context) > void !> any {
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum",
-                    "../../.golangci.yml", "../testlayout/.custom-gcl.yml",
-                    "../testlayout/**/*.go", "../testlayout/go.mod", "../testlayout/go.sum",
+                    "../../.golangci.yml", "../testpairing/.custom-gcl.yml",
+                    "../testpairing/**/*.go", "../testpairing/go.mod", "../testpairing/go.sum",
                     "../conventions/**/*.go", "../conventions/go.mod", "../conventions/go.sum"]);
 }
 
@@ -55,7 +55,7 @@ export fun run(dir: str, args: [str]) > void !> any {
 // lintLib runs the tree-wide conventions over the lib module at dir; a module is a separate
 // golangci-lint root, so the root run never reaches it. gopherbuzz's error text follows
 // upstream Buzz, not Go's error-string idiom, so it skips errmsg. The --enable-only list
-// stays on one line: hack/lint/testlayout-pairing-has-no-exemptions.buzz refuses it without testpair.
+// stays on one line: hack/lint/testpairing-pairing-has-no-exemptions.buzz refuses it without testpair.
 export fun lintLib(dir: str, fix: bool) > void !> any {
     final args = libArgs(dir).cloneMutable();
     if (fix) {
@@ -66,7 +66,7 @@ export fun lintLib(dir: str, fix: bool) > void !> any {
 
 fun libArgs(dir: str) > [str] {
     final errorStrings = if (fs\basename(dir) != "gopherbuzz") ",errmsg" else "";
-    return ["--enable-only", "filenames,hostagnostic,namewords,stutter,testifylint,testlayout,testpair" + errorStrings];
+    return ["--enable-only", "filenames,hostagnostic,namewords,stutter,testifylint,testpairing,testpair" + errorStrings];
 }
 
 // packagesOf groups the Go files among files by the module holding them, "." or one of
