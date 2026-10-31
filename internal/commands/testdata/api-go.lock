@@ -3264,6 +3264,9 @@ github.com/egladman/magus/types.KnowledgeDefinitionSite type struct
 github.com/egladman/magus/types.KnowledgeDefinitionSite.EndLine field int "json:\"end_line,omitempty\" yaml:\"end_line,omitempty\""
 github.com/egladman/magus/types.KnowledgeDefinitionSite.File field string "json:\"file\" yaml:\"file\""
 github.com/egladman/magus/types.KnowledgeDefinitionSite.Source field string "json:\"source,omitempty\" yaml:\"source,omitempty\""
+github.com/egladman/magus/types.KnowledgeDefinitionSite.SourceNote field string "json:\"source_note,omitempty\" yaml:\"source_note,omitempty\""
+github.com/egladman/magus/types.KnowledgeDefinitionSite.SourceStartLine field int "json:\"source_start_line,omitempty\" yaml:\"source_start_line,omitempty\""
+github.com/egladman/magus/types.KnowledgeDefinitionSite.SourceTotalLines field int "json:\"source_total_lines,omitempty\" yaml:\"source_total_lines,omitempty\""
 github.com/egladman/magus/types.KnowledgeDefinitionSite.StartLine field int "json:\"start_line,omitempty\" yaml:\"start_line,omitempty\""
 github.com/egladman/magus/types.KnowledgeDefinitionSite.Status field KnowledgeDefinitionStatus "json:\"status\"             yaml:\"status\""
 github.com/egladman/magus/types.KnowledgeDefinitionStatus type string
@@ -5207,12 +5210,17 @@ github.com/egladman/magus/types.SymbolOccurrence.EndColumn field int "json:\"end
 github.com/egladman/magus/types.SymbolOccurrence.EndLine field int "json:\"end_line\"   yaml:\"end_line\""
 github.com/egladman/magus/types.SymbolOccurrence.Line field int "json:\"line\"       yaml:\"line\""
 github.com/egladman/magus/types.SymbolOccurrence.Source field string "json:\"source,omitempty\" yaml:\"source,omitempty\""
+github.com/egladman/magus/types.SymbolOccurrence.SourceNote field string "json:\"source_note,omitempty\" yaml:\"source_note,omitempty\""
+github.com/egladman/magus/types.SymbolOccurrence.SourceStartLine field int "json:\"source_start_line,omitempty\" yaml:\"source_start_line,omitempty\""
+github.com/egladman/magus/types.SymbolOccurrence.SourceTotalLines field int "json:\"source_total_lines,omitempty\" yaml:\"source_total_lines,omitempty\""
 github.com/egladman/magus/types.SymbolOccurrence.Status field SymbolOccurrenceStatus "json:\"status\"         yaml:\"status\""
 github.com/egladman/magus/types.SymbolOccurrence.Text field string "json:\"text,omitempty\" yaml:\"text,omitempty\""
 github.com/egladman/magus/types.SymbolOccurrenceFile type struct
 github.com/egladman/magus/types.SymbolOccurrenceFile.File field string "json:\"file\"        yaml:\"file\""
+github.com/egladman/magus/types.SymbolOccurrenceFile.Generated field bool "json:\"generated,omitempty\" yaml:\"generated,omitempty\""
 github.com/egladman/magus/types.SymbolOccurrenceFile.Occurrences field []SymbolOccurrence "json:\"occurrences\" yaml:\"occurrences\""
 github.com/egladman/magus/types.SymbolOccurrenceFile.Stale field bool "json:\"stale,omitempty\" yaml:\"stale,omitempty\""
+github.com/egladman/magus/types.SymbolOccurrenceFile.Test field bool "json:\"test,omitempty\" yaml:\"test,omitempty\""
 github.com/egladman/magus/types.SymbolOccurrenceMismatch const SymbolOccurrenceStatus = "mismatch"
 github.com/egladman/magus/types.SymbolOccurrenceStatus type string
 github.com/egladman/magus/types.SymbolOccurrenceUnreadable const SymbolOccurrenceStatus = "unreadable"

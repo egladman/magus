@@ -881,7 +881,9 @@ func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events
 
 func explainCommand(ctx context.Context, root string, args []string) error {
 	var xf *flaggen.ExplainFlags
+	var flags *flag.FlagSet
 	pos, err := commandParse("explain", args, func(fs *flag.FlagSet) {
+		flags = fs
 		xf = flaggen.BindExplain(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus explain <node-id-or-name> [flags]")
@@ -899,6 +901,14 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 	if len(pos) == 0 {
 		slog.ErrorContext(ctx, "requires a node ID or name", attr.Notice("magus explain"))
 		return exit.Reported(exit.Usage)
+	}
+	if err := checkSourcePage("explain", xf.MaxLines, xf.SkipLines); err != nil {
+		return err
+	}
+	source := sourceWindow{
+		Show:     xf.Source || flagGiven(flags, flaggen.FlagExplainMaxLines) || flagGiven(flags, flaggen.FlagExplainSkipLines),
+		MaxLines: xf.MaxLines, SkipLines: xf.SkipLines,
+		again: commandAgain(hint.Explain.With, flags, pos[0], flaggen.FlagExplainMaxLines, flaggen.FlagExplainSkipLines),
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -945,11 +955,29 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 	next := nx.served(hint.NextForExplain(out))
 	stop()
 
+	var section *types.KnowledgeDefinitionSite
+	if source.Show {
+		site, err := docSectionSource(resolveRootOrEmpty(root), out.Node, source)
+		if err != nil {
+			return err
+		}
+		section = &site
+		if opts.Format == outputText {
+			return emitDocSectionSource(os.Stdout, site)
+		}
+	}
+
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, explainWithNext{
-			KnowledgeExplainOutput: out, Next: next, AgentSessions: sessionContact(root, out.Node),
-		})
+		if err := emitFormatted(opts, explainWithNext{
+			KnowledgeExplainOutput: out, Next: next, AgentSessions: sessionContact(root, out.Node), Source: section,
+		}); err != nil {
+			return err
+		}
+		if section != nil {
+			return docSectionExit(*section)
+		}
+		return nil
 	case outputName:
 		return emitNames(os.Stdout, []string{out.Node.ID})
 	}

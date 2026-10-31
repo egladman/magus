@@ -520,9 +520,13 @@ changed are rebuilt; --refresh forces a full rebuild.`,
 	Flags: []cmdline.Flag{
 		{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Force a full graph rebuild before explaining"},
 		{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Resolve across the workspaces registered in config (knowledge.workspaces)"},
+		{Name: "source", Kind: cmdline.Bool, Default: false, Doc: "Print a doc section's lines from its indexed extent instead of the card, checked against the file on disk. A symbol's body is refs --source"},
+		{Name: "max-lines", Kind: cmdline.Int, Default: 200, Doc: "Print at most this many lines of the section (0 for all), then say how many there were and print the next command. Implies --source"},
+		{Name: "skip-lines", Kind: cmdline.Int, Doc: "Skip this many lines of the section first; line numbers carry on. Implies --source"},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "A target in full", Command: "magus explain target:pkg/api:build"},
+		{Comment: "A doc section's text, by anchor", Command: "magus explain docsection:docs/reference/cli.md#verbosity --source"},
 		{Comment: "Resolve by bare name", Command: "magus explain build"},
 		{Comment: "A spell's context", Command: "magus explain spell:go"},
 		{Comment: "As a record", Command: "magus explain build -o json"},
@@ -1573,12 +1577,16 @@ the lines themselves; with --occurrences it prints each site's lines
 instead. --context N adds N lines on both sides, and --before and --after
 set one side over it. --lines A:B picks a range counted from the match: 0
 is the matched line or a definition's whole body, -1 the line above it, 1
-the line below it, so --lines=-5:-1 prints only the 5 lines above. Write a
-negative range with the =, so the value does not read as a flag. Any of
-these implies --source, and all clamp to the file.
+the line below it, so --lines=-5:-1 prints only the 5 lines above. Any of
+these implies --source, all clamp to the file, and a range with no lines
+says so. Blocks number their lines and mark the matched one with >.
+--max-lines caps each block at 200 lines by default (0 prints all) and
+--skip-lines pages through it; a cut block prints the lines shown, the total
+and the next command.
 
---limit and --offset page --occurrences by site; a cut page prints the
-total and the next command.
+--file keeps the --occurrences sites at or under a workspace-relative path.
+--limit and --offset page them by site; a cut page prints the total and the
+next command.
 
 --text switches to that other question on purpose: a literal substring
 search with no symbol index and no graph, printed as path:line:text like
@@ -1605,7 +1613,10 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Name: "context", Kind: cmdline.Int, Doc: "Print this many lines on both sides of each range, clamped to the file (grep -C). Implies --source"},
 		{Name: "before", Kind: cmdline.Int, Doc: "Print this many lines above each range, over --context, clamped to the file (grep -B). Implies --source"},
 		{Name: "after", Kind: cmdline.Int, Doc: "Print this many lines below each range, over --context, clamped to the file (grep -A). Implies --source"},
-		{Name: "lines", Kind: cmdline.String, Doc: "Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below. Write a negative range with =, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after"},
+		{Name: "lines", Kind: cmdline.String, Doc: "Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after"},
+		{Name: "max-lines", Kind: cmdline.Int, Default: 200, Doc: "Print at most this many lines of each block (0 for all), then say how many there were and print the next command. Implies --source"},
+		{Name: "skip-lines", Kind: cmdline.Int, Doc: "Skip this many lines of each block first; line numbers carry on. Implies --source"},
+		{Name: "file", Kind: cmdline.String, Doc: "With --occurrences, keep the sites at or under this workspace-relative path, and say how many of the total it kept"},
 		{Name: "text", Kind: cmdline.Bool, Default: false, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace"},
 		// Custom, not Bool: bound by refsCommand itself alongside flaggen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
@@ -1622,9 +1633,10 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Comment: "Where a symbol's body starts and ends", Command: "magus refs Open --definition"},
 		{Comment: "A symbol's body, by name", Command: "magus refs Open --source"},
 		{Comment: "Every site's code, with five lines on both sides", Command: "magus refs Open --occurrences --context 5"},
-		{Comment: "Only the five lines above each site; write a negative range with the =", Command: "magus refs Open --occurrences --lines=-5:-1"},
+		{Comment: "Only the five lines above each site", Command: "magus refs Open --occurrences --lines=-5:-1"},
 		{Comment: "Five lines above each site, four below", Command: "magus refs Open --occurrences --before 5 --after 4"},
 		{Comment: "One page of sites", Command: "magus refs Open --occurrences --limit 5 --offset 5"},
+		{Comment: "The sites in one file", Command: "magus refs Open --occurrences --file magus.go --context 2"},
 		{Comment: "Raw text search, no index needed", Command: "magus refs TODO --text"},
 		{Comment: "Preview a rename", Command: "magus refs parseQuery --rename parseTerms --dry-run"},
 		{Comment: "Rename a symbol at every verified site", Command: "magus refs parseQuery --rename parseTerms"},

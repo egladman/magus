@@ -215,9 +215,13 @@ flag events/limit
 flag events/no-follow
 flag events/type
 flag explain/global
+flag explain/max-lines
 flag explain/no-global
 flag explain/no-refresh
+flag explain/no-source
 flag explain/refresh
+flag explain/skip-lines
+flag explain/source
 flag init/dry-run
 flag init/force
 flag init/global
@@ -256,9 +260,11 @@ flag refs/after
 flag refs/before
 flag refs/context
 flag refs/definition
+flag refs/file
 flag refs/generated
 flag refs/limit
 flag refs/lines
+flag refs/max-lines
 flag refs/no-definition
 flag refs/no-generated
 flag refs/no-occurrences
@@ -269,6 +275,7 @@ flag refs/occurrences
 flag refs/offset
 flag refs/refresh
 flag refs/rename
+flag refs/skip-lines
 flag refs/source
 flag refs/text
 flag run/cache

@@ -26,14 +26,29 @@ changed are rebuilt; \-\-refresh forces a full rebuild.
 \fB\-\-[no\-]global\fR (default: off)
 Resolve across the workspaces registered in config (knowledge.workspaces)
 .TP
+\fB\-\-max\-lines\fR \fIint\fR (default: 200)
+Print at most this many lines of the section (0 for all), then say how many there were and print the next command. Implies \-\-source
+.TP
 \fB\-\-[no\-]refresh\fR (default: off)
 Force a full graph rebuild before explaining
+.TP
+\fB\-\-skip\-lines\fR \fIint\fR
+Skip this many lines of the section first; line numbers carry on. Implies \-\-source
+.TP
+\fB\-\-[no\-]source\fR (default: off)
+Print a doc section's lines from its indexed extent instead of the card, checked against the file on disk. A symbol's body is refs \-\-source
 .RE
 .SH EXAMPLES
 \fIA target in full\fR
 .PP
 .EX
 magus explain target:pkg/api:build
+.EE
+.PP
+\fIA doc section's text, by anchor\fR
+.PP
+.EX
+magus explain docsection:docs/reference/cli.md#verbosity --source
 .EE
 .PP
 \fIResolve by bare name\fR

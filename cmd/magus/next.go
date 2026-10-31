@@ -44,6 +44,8 @@ type explainWithNext struct {
 	// makes a reader conclude a file is quiet. That argument does not weaken when the
 	// reader is a program.
 	AgentSessions *sessions.PathContact `json:"agent_sessions,omitempty" yaml:"agent_sessions,omitempty"`
+	// Source is a doc section's lines, set only under --source.
+	Source *types.KnowledgeDefinitionSite `json:"section_source,omitempty" yaml:"section_source,omitempty"`
 }
 
 type filesWithNext struct {

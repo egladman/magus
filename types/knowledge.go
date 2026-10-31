@@ -1398,6 +1398,12 @@ type KnowledgeDefinitionSite struct {
 	Status  KnowledgeDefinitionStatus `json:"status"             yaml:"status"`
 	// Source is the text of the lines, filled only on request (--source).
 	Source string `json:"source,omitempty" yaml:"source,omitempty"`
+	// SourceStartLine is Source's first line, 0 when it holds none.
+	SourceStartLine int `json:"source_start_line,omitempty" yaml:"source_start_line,omitempty"`
+	// SourceTotalLines is the whole window's length when a page cut it.
+	SourceTotalLines int `json:"source_total_lines,omitempty" yaml:"source_total_lines,omitempty"`
+	// SourceNote says what --source cut, or why it printed no lines.
+	SourceNote string `json:"source_note,omitempty" yaml:"source_note,omitempty"`
 }
 
 // KnowledgeDefinitionStatus says whether a definition's recorded range still bounds the
@@ -1469,6 +1475,12 @@ type SymbolOccurrence struct {
 	Status SymbolOccurrenceStatus `json:"status"         yaml:"status"`
 	// Source is the site's lines and context, set only under --source.
 	Source string `json:"source,omitempty" yaml:"source,omitempty"`
+	// SourceStartLine is Source's first line, 0 when it holds none.
+	SourceStartLine int `json:"source_start_line,omitempty" yaml:"source_start_line,omitempty"`
+	// SourceTotalLines is the whole window's length when a page cut it.
+	SourceTotalLines int `json:"source_total_lines,omitempty" yaml:"source_total_lines,omitempty"`
+	// SourceNote says what --source cut, or why it printed no lines.
+	SourceNote string `json:"source_note,omitempty" yaml:"source_note,omitempty"`
 }
 
 // SymbolOccurrenceFile groups one file's occurrences. Occurrences are sorted by position,
@@ -1489,6 +1501,10 @@ type SymbolOccurrenceFile struct {
 	// magus can compute from the index alone detects that. Completeness rests on the
 	// index being current; `magus status` reports which indexes are.
 	Stale bool `json:"stale,omitempty" yaml:"stale,omitempty"`
+	// Generated marks a declared output: regenerate it, never hand-edit a site.
+	Generated bool `json:"generated,omitempty" yaml:"generated,omitempty"`
+	// Test marks a test file, by the path rule of IsTestPath.
+	Test bool `json:"test,omitempty" yaml:"test,omitempty"`
 }
 
 // KnowledgeOccurrencesOutput is the result of `magus refs <symbol> --occurrences`: every

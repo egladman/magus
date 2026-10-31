@@ -3,11 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -74,6 +77,7 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	source.again = commandAgain(hint.Refs.With, flags, pos[0], flaggen.FlagRefsMaxLines, flaggen.FlagRefsSkipLines)
 	if rf.Rename != "" && (rf.Text || rf.Occurrences || rf.Definition || rf.Source) {
 		return exit.Usagef("magus refs: --rename takes none of --text, --occurrences, --definition, --source")
 	}
@@ -600,7 +604,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 		return exit.Reported(exit.Failure)
 	}
 	read := *occurrences
-	files := read.Files
+	files := page.scoped(read.Files)
 
 	out := types.KnowledgeOccurrencesOutput{
 		Definition:    types.KnowledgeOccurrencesDefinition,
@@ -618,7 +622,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 	// different source: an index that is merely declared satisfies refs' coverage check and
 	// can still fail to decode here. So the gaps are recomposed rather than inherited, and
 	// an index this read could not open downgrades the verdict even when refs was clean.
-	out.Answer = types.ClassifyAnswer(len(files) > 0, refs.Answer.Reason, append(append([]types.KnowledgeSymbolGap(nil), refs.Answer.Gaps...), read.Unreadable...))
+	out.Answer = types.ClassifyAnswer(len(read.Files) > 0, refs.Answer.Reason, append(append([]types.KnowledgeSymbolGap(nil), refs.Answer.Gaps...), read.Unreadable...))
 	if out.Answer.IndexBehind() {
 		if out.Answer.IndexCause = refs.Answer.IndexCause; out.Answer.IndexCause == nil {
 			out.Answer = withIndexCause(ctx, root, out.Answer)
@@ -637,12 +641,24 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 	}
 	shown := 0
 	out.Files, shown = page.cut(files)
+	var classify classifyFunc
+	if ws, err := inspectWorkspace(ctx, root); err == nil {
+		classify = ws.ClassifyFiles
+	}
+	if note := markOccurrenceFiles(ctx, out.Files, classify); note != "" {
+		slog.WarnContext(ctx, note, attr.Notice("magus refs"))
+	}
 	if source.Show {
 		fillOccurrenceSources(resolveRootOrEmpty(root), out.Files, source)
 	}
+	scopeNote := page.scopeNote(read.Files, out.OccurrenceCount)
 	pageNote := page.note(shown, out.OccurrenceCount)
-	if pageNote != "" && opts.Format != outputText {
-		slog.WarnContext(ctx, pageNote, attr.Notice("magus refs"))
+	if opts.Format != outputText {
+		for _, note := range []string{scopeNote, pageNote} {
+			if note != "" {
+				slog.WarnContext(ctx, note, attr.Notice("magus refs"))
+			}
+		}
 	}
 
 	switch opts.Format {
@@ -697,6 +713,9 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 		fmt.Printf("  (%s)", out.Label)
 	}
 	fmt.Println()
+	if scopeNote != "" {
+		fmt.Println(scopeNote)
+	}
 	if out.OccurrenceCount == 0 {
 		fmt.Println("no occurrences found")
 		printVerdict(os.Stdout, out.Answer, "")
@@ -709,6 +728,12 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 	fmt.Printf("%d occurrence(s) in %d file(s), %d verified:\n", out.OccurrenceCount, out.FileCount, out.VerifiedCount)
 	for _, f := range out.Files {
 		fmt.Printf("  %s", f.File)
+		if f.Generated {
+			fmt.Print("  (generated: regenerate it, never hand-edit)")
+		}
+		if f.Test {
+			fmt.Print("  (test)")
+		}
 		if f.Stale {
 			fmt.Print("  (stale: this file changed after it was indexed)")
 		}
@@ -724,12 +749,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 				fmt.Printf("  (found %q, want one of %q)", occ.Text, out.Names)
 			}
 			fmt.Println()
-			for line := range strings.Lines(occ.Source) {
-				fmt.Printf("      %s", line)
-			}
-			if occ.Source != "" {
-				fmt.Println()
-			}
+			writeSourceBlock(os.Stdout, "      ", occ.Source, occ.SourceStartLine, occ.Line, occ.SourceNote)
 		}
 	}
 	if pageNote != "" {
@@ -826,7 +846,7 @@ func checkDefinitions(root, name string, sites []types.KnowledgeDefinitionSite, 
 			}
 		}
 		if source.Show {
-			site.Source = source.text(file.lines, docStart(file.lines, site.StartLine-1), end)
+			site.Source, site.SourceStartLine, site.SourceTotalLines, site.SourceNote = source.text(file.lines, docStart(file.lines, site.StartLine-1), end)
 		}
 	}
 }
@@ -836,6 +856,41 @@ func checkDefinitions(root, name string, sites []types.KnowledgeDefinitionSite, 
 type sourceWindow struct {
 	Show     bool
 	From, To int
+	// MaxLines caps a block, 0 for no cap. SkipLines is where its page starts.
+	MaxLines, SkipLines int
+	// again is the command that asked, less those two flags.
+	again string
+}
+
+// checkSourcePage refuses the --max-lines and --skip-lines no page can honor.
+func checkSourcePage(command string, maxLines, skipLines int) error {
+	if maxLines < 0 || skipLines < 0 {
+		return exit.Usagef("magus %s: --max-lines and --skip-lines take 0 or more lines", command)
+	}
+	return nil
+}
+
+// commandAgain respells a command from its given flags, leaving out drop.
+func commandAgain(with func(...string) string, fs *flag.FlagSet, subject string, drop ...string) string {
+	args := []string{"'" + strings.ReplaceAll(subject, "'", `'\''`) + "'"}
+	if flagGiven(fs, flaggen.FlagRefsOccurrences) && !slices.Contains(drop, flaggen.FlagRefsOccurrences) {
+		args = append(args, "--"+flaggen.FlagRefsOccurrences)
+	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == flaggen.FlagRefsOccurrences || slices.Contains(drop, f.Name) {
+			return
+		}
+		if b, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {
+			args = append(args, "--"+f.Name)
+			return
+		}
+		if len(f.Name) == 1 {
+			args = append(args, "-"+f.Name, f.Value.String())
+			return
+		}
+		args = append(args, "--"+f.Name+"="+f.Value.String())
+	})
+	return with(args...)
 }
 
 // refsSourceWindow reads the window off the parsed flags.
@@ -844,20 +899,24 @@ func refsSourceWindow(rf *flaggen.RefsFlags, fs *flag.FlagSet) (sourceWindow, er
 	given := func(name string) bool { return flagGiven(fs, name) }
 	sides := given(flaggen.FlagRefsContext) || given(flaggen.FlagRefsBefore) || given(flaggen.FlagRefsAfter)
 	ranged := given(flaggen.FlagRefsLines)
-	if rf.Text && (sides || ranged) {
-		return sourceWindow{}, exit.Usagef("magus refs: --text prints no source; drop --context, --before, --after and --lines")
+	paged := given(flaggen.FlagRefsMaxLines) || given(flaggen.FlagRefsSkipLines)
+	if rf.Text && (sides || ranged || paged) {
+		return sourceWindow{}, exit.Usagef("magus refs: --text prints no source; drop --context, --before, --after, --lines, --max-lines and --skip-lines")
+	}
+	if err := checkSourcePage("refs", rf.MaxLines, rf.SkipLines); err != nil {
+		return sourceWindow{}, err
 	}
 	if ranged {
 		if sides {
 			return sourceWindow{}, exit.Usagef("magus refs: --lines sets both sides; use it alone, as --lines=-5:4, or use --context, --before and --after")
 		}
 		from, to, err := parseLineRange(rf.Lines)
-		return sourceWindow{Show: true, From: from, To: to}, err
+		return sourceWindow{Show: true, From: from, To: to, MaxLines: rf.MaxLines, SkipLines: rf.SkipLines}, err
 	}
 	if rf.Context < 0 || rf.Before < 0 || rf.After < 0 {
 		return sourceWindow{}, exit.Usagef("magus refs: --context, --before and --after take 0 or more lines")
 	}
-	w := sourceWindow{Show: rf.Source || sides, From: -rf.Context, To: rf.Context}
+	w := sourceWindow{Show: rf.Source || sides || paged, From: -rf.Context, To: rf.Context, MaxLines: rf.MaxLines, SkipLines: rf.SkipLines}
 	if given(flaggen.FlagRefsBefore) {
 		w.From = -rf.Before
 	}
@@ -880,9 +939,11 @@ func parseLineRange(text string) (from, to int, err error) {
 	return from, to, nil
 }
 
-// text prints the window around lines[first:end], clamped to the file.
+// text is the window around lines[first:end], clamped to the file.
+// It says so in note when no line is left or the page cut some.
+// total counts the window's lines, set only when it was cut.
 // The empty element after a final newline is not a line to print.
-func (w sourceWindow) text(lines [][]byte, first, end int) string {
+func (w sourceWindow) text(lines [][]byte, first, end int) (text string, startLine, total int, note string) {
 	last := len(lines)
 	if last > 0 && len(lines[last-1]) == 0 {
 		last--
@@ -902,39 +963,77 @@ func (w sourceWindow) text(lines [][]byte, first, end int) string {
 	}
 	start, stop = max(start, 0), min(stop, last)
 	if start >= stop {
-		return ""
+		return "", 0, 0, fmt.Sprintf("no lines: %d:%d falls outside the file", w.From, w.To)
 	}
-	return string(bytes.Join(lines[start:stop], []byte("\n")))
+	whole := stop - start
+	if w.SkipLines >= whole {
+		return "", 0, whole, fmt.Sprintf("no lines: --skip-lines %d is past the last of %d lines", w.SkipLines, whole)
+	}
+	start += w.SkipLines
+	shown := stop - start
+	if w.MaxLines > 0 {
+		shown = min(shown, w.MaxLines)
+	}
+	text = string(bytes.Join(lines[start:start+shown], []byte("\n")))
+	switch {
+	case shown == whole:
+		return text, start + 1, 0, ""
+	case w.SkipLines+shown < whole:
+		note = fmt.Sprintf("%d of %d lines; next: %s --max-lines %d --skip-lines %d", shown, whole, w.again, w.MaxLines, w.SkipLines+shown)
+	default:
+		note = fmt.Sprintf("%d of %d lines", shown, whole)
+	}
+	return text, start + 1, whole, note
 }
 
-// occurrencePage is the sites --limit and --offset keep.
-// again is the command that asked, less those two flags.
+// occurrencePage is the sites --file, --limit and --offset keep.
+// again is the command that asked, less the last two flags.
 type occurrencePage struct {
+	file          string
 	limit, offset int
 	again         string
 }
 
 // refsOccurrencePage validates the paging flags and spells the next command.
 func refsOccurrencePage(rf *flaggen.RefsFlags, fs *flag.FlagSet, symbol string) (occurrencePage, error) {
-	if !rf.Occurrences && flagGiven(fs, flaggen.FlagRefsOffset) {
-		return occurrencePage{}, exit.Usagef("magus refs: --offset counts --occurrences sites; add --occurrences")
+	if !rf.Occurrences && (flagGiven(fs, flaggen.FlagRefsOffset) || flagGiven(fs, flaggen.FlagRefsFile)) {
+		return occurrencePage{}, exit.Usagef("magus refs: --offset and --file narrow --occurrences sites; add --occurrences")
 	}
 	if rf.Occurrences && (rf.Limit < 0 || rf.Offset < 0) {
 		return occurrencePage{}, exit.Usagef("magus refs: --limit and --offset take 0 or more sites")
 	}
-	args := []string{"'" + strings.ReplaceAll(symbol, "'", `'\''`) + "'", "--occurrences"}
-	fs.Visit(func(f *flag.Flag) {
-		switch f.Name {
-		case flaggen.FlagRefsOccurrences, flaggen.FlagRefsLimit, flaggen.FlagRefsOffset:
-			return
+	again := commandAgain(hint.Refs.With, fs, symbol, flaggen.FlagRefsLimit, flaggen.FlagRefsOffset)
+	file := ""
+	if rf.File != "" {
+		file = path.Clean(filepath.ToSlash(rf.File))
+	}
+	return occurrencePage{file: file, limit: rf.Limit, offset: rf.Offset, again: again}, nil
+}
+
+// scoped keeps the files at or under --file, a workspace-relative path.
+func (p occurrencePage) scoped(files []types.SymbolOccurrenceFile) []types.SymbolOccurrenceFile {
+	if p.file == "" {
+		return files
+	}
+	var kept []types.SymbolOccurrenceFile
+	for _, f := range files {
+		if f.File == p.file || strings.HasPrefix(f.File, p.file+"/") {
+			kept = append(kept, f)
 		}
-		if b, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {
-			args = append(args, "--"+f.Name)
-			return
-		}
-		args = append(args, "--"+f.Name+"="+f.Value.String())
-	})
-	return occurrencePage{limit: rf.Limit, offset: rf.Offset, again: hint.Refs.With(args...)}, nil
+	}
+	return kept
+}
+
+// scopeNote counts what --file left out, so a narrowed count reads as one.
+func (p occurrencePage) scopeNote(files []types.SymbolOccurrenceFile, kept int) string {
+	if p.file == "" {
+		return ""
+	}
+	total := 0
+	for _, f := range files {
+		total += len(f.Occurrences)
+	}
+	return fmt.Sprintf("--file %s keeps %d of %d sites", p.file, kept, total)
 }
 
 // cut keeps the page's sites and drops a file left with none.
@@ -969,19 +1068,119 @@ func (p occurrencePage) note(shown, total int) string {
 }
 
 // fillOccurrenceSources sets each occurrence's Source from the file under root.
-// An unreadable file keeps an empty Source: Status says the site failed.
 func fillOccurrenceSources(root string, files []types.SymbolOccurrenceFile, source sourceWindow) {
 	for i := range files {
 		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(files[i].File)))
-		if err != nil {
-			continue
-		}
-		lines := types.SplitSourceLines(data)
 		for j := range files[i].Occurrences {
 			occ := &files[i].Occurrences[j]
-			occ.Source = source.text(lines, occ.Line-1, max(occ.Line, occ.EndLine))
+			if err != nil {
+				occ.SourceNote = "no lines: cannot read " + files[i].File
+				continue
+			}
+			lines := types.SplitSourceLines(data)
+			occ.Source, occ.SourceStartLine, occ.SourceTotalLines, occ.SourceNote = source.text(lines, occ.Line-1, max(occ.Line, occ.EndLine))
 		}
 	}
+}
+
+// Attrs the docsection index records on a section node.
+const (
+	docSectionStartLine = "start_line"
+	docSectionEndLine   = "end_line"
+	docSectionDigest    = "digest"
+)
+
+// docSectionSource reads a doc section's lines from its indexed extent.
+func docSectionSource(root string, node types.KnowledgeNode, w sourceWindow) (types.KnowledgeDefinitionSite, error) {
+	if node.Kind != types.KindDocSection {
+		return types.KnowledgeDefinitionSite{}, exit.Usagef("magus explain: --source reads a doc section, and %s is a %s; a symbol's body is magus refs --source", node.ID, node.Kind)
+	}
+	file, _, _ := strings.Cut(node.Source, "#")
+	start, _ := strconv.Atoi(node.Attrs[docSectionStartLine])
+	end, _ := strconv.Atoi(node.Attrs[docSectionEndLine])
+	site := types.KnowledgeDefinitionSite{File: file, StartLine: start, EndLine: end, Status: types.DefinitionUnreadable}
+	if start == 0 {
+		site.SourceNote = "no lines: the index recorded no extent for this section"
+		return site, nil
+	}
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file)))
+	if err != nil {
+		site.SourceNote = "no lines: cannot read " + file
+		return site, nil
+	}
+	lines := types.SplitSourceLines(data)
+	if end > len(lines) {
+		site.SourceNote = fmt.Sprintf("no lines: the index recorded %d-%d and %s is shorter", start, end, file)
+		return site, nil
+	}
+	sum := sha256.Sum256(bytes.Join(lines[start-1:end], []byte("\n")))
+	site.Status = types.DefinitionChanged
+	if hex.EncodeToString(sum[:]) == node.Attrs[docSectionDigest] {
+		site.Status = types.DefinitionVerified
+	}
+	site.Source, site.SourceStartLine, site.SourceTotalLines, site.SourceNote = w.text(lines, start-1, end)
+	return site, nil
+}
+
+// emitDocSectionSource prints site alone, and exits 1 when its lines are not
+// the section's: a reader citing them would cite the wrong text.
+func emitDocSectionSource(w io.Writer, site types.KnowledgeDefinitionSite) error {
+	fmt.Fprintf(w, "%s  %s\n", definitionRange(site), site.Status)
+	writeSourceBlock(w, "", site.Source, site.SourceStartLine, site.StartLine, site.SourceNote)
+	return docSectionExit(site)
+}
+
+func docSectionExit(site types.KnowledgeDefinitionSite) error {
+	if site.Status == types.DefinitionVerified {
+		return nil
+	}
+	return exit.Reported(exit.Failure)
+}
+
+// writeSourceBlock prints source numbered, marking the line focus, then note.
+func writeSourceBlock(w io.Writer, indent, source string, start, focus int, note string) {
+	if start > 0 {
+		lines := strings.Split(source, "\n")
+		width := len(strconv.Itoa(start + len(lines) - 1))
+		for i, line := range lines {
+			marker := " "
+			if start+i == focus {
+				marker = ">"
+			}
+			fmt.Fprintf(w, "%s%s%*d  %s\n", indent, marker, width, start+i, line)
+		}
+	}
+	if note != "" {
+		fmt.Fprintf(w, "%s(%s)\n", indent, note)
+	}
+}
+
+// markOccurrenceFiles sets what a site's file is: a test by its path, generated
+// by its declaration. It returns a note when it could not tell generated apart.
+func markOccurrenceFiles(ctx context.Context, files []types.SymbolOccurrenceFile, classify classifyFunc) string {
+	paths := make([]string, len(files))
+	for i := range files {
+		paths[i] = files[i].File
+		files[i].Test = types.IsTestPath(files[i].File)
+	}
+	if len(paths) == 0 {
+		return ""
+	}
+	if classify == nil {
+		return "generated files are not marked: the workspace did not load"
+	}
+	entries, err := classify(ctx, paths)
+	if err != nil {
+		return "generated files are not marked: " + err.Error()
+	}
+	generated := map[string]bool{}
+	for _, e := range entries {
+		generated[e.Path] = e.Role == types.DiffRoleOutput
+	}
+	for i := range files {
+		files[i].Generated = generated[files[i].File]
+	}
+	return ""
 }
 
 // docStart returns the index of the first line of the comment block that sits directly
@@ -1105,7 +1304,7 @@ func emitDefinitions(ctx context.Context, w io.Writer, opts output.Options, out 
 		return nil
 	}
 	for i, s := range out.Definitions {
-		if i > 0 && s.Source != "" {
+		if i > 0 && s.SourceStartLine > 0 {
 			fmt.Fprintln(w)
 		}
 		fmt.Fprint(w, definitionRange(s))
@@ -1121,9 +1320,7 @@ func emitDefinitions(ctx context.Context, w io.Writer, opts output.Options, out 
 			}
 		}
 		fmt.Fprintln(w)
-		if s.Source != "" {
-			fmt.Fprintln(w, s.Source)
-		}
+		writeSourceBlock(w, "", s.Source, s.SourceStartLine, s.StartLine, s.SourceNote)
 	}
 	return settle(w)
 }

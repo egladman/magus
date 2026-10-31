@@ -213,8 +213,14 @@ const (
 	FlagEventsType = "type"
 	// explain: --global
 	FlagExplainGlobal = "global"
+	// explain: --max-lines
+	FlagExplainMaxLines = "max-lines"
 	// explain: --refresh
 	FlagExplainRefresh = "refresh"
+	// explain: --skip-lines
+	FlagExplainSkipLines = "skip-lines"
+	// explain: --source
+	FlagExplainSource = "source"
 	// graph build: --sessions
 	FlagGraphBuildSessions = "sessions"
 	// graph build: --symbols
@@ -541,12 +547,16 @@ const (
 	FlagRefsContext = "context"
 	// refs: --definition
 	FlagRefsDefinition = "definition"
+	// refs: --file
+	FlagRefsFile = "file"
 	// refs: --generated
 	FlagRefsGenerated = "generated"
 	// refs: --limit
 	FlagRefsLimit = "limit"
 	// refs: --lines
 	FlagRefsLines = "lines"
+	// refs: --max-lines
+	FlagRefsMaxLines = "max-lines"
 	// refs: --occurrences
 	FlagRefsOccurrences = "occurrences"
 	// refs: --offset
@@ -555,6 +565,8 @@ const (
 	FlagRefsRefresh = "refresh"
 	// refs: --rename
 	FlagRefsRename = "rename"
+	// refs: --skip-lines
+	FlagRefsSkipLines = "skip-lines"
 	// refs: --source
 	FlagRefsSource = "source"
 	// refs: --text
@@ -1111,6 +1123,9 @@ type RefsFlags struct {
 	Before      int    // --before
 	After       int    // --after
 	Lines       string // --lines
+	MaxLines    int    // --max-lines
+	SkipLines   int    // --skip-lines
+	File        string // --file
 	Text        bool   // --[no-]text
 	Generated   bool   // --[no-]generated
 	Limit       int    // --limit
@@ -1132,7 +1147,10 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	fs.IntVar(&f.Context, FlagRefsContext, 0, "Print this many lines on both sides of each range, clamped to the file (grep -C). Implies --source")
 	fs.IntVar(&f.Before, FlagRefsBefore, 0, "Print this many lines above each range, over --context, clamped to the file (grep -B). Implies --source")
 	fs.IntVar(&f.After, FlagRefsAfter, 0, "Print this many lines below each range, over --context, clamped to the file (grep -A). Implies --source")
-	fs.StringVar(&f.Lines, FlagRefsLines, "", "Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below. Write a negative range with =, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after")
+	fs.StringVar(&f.Lines, FlagRefsLines, "", "Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after")
+	fs.IntVar(&f.MaxLines, FlagRefsMaxLines, 200, "Print at most this many lines of each block (0 for all), then say how many there were and print the next command. Implies --source")
+	fs.IntVar(&f.SkipLines, FlagRefsSkipLines, 0, "Skip this many lines of each block first; line numbers carry on. Implies --source")
+	fs.StringVar(&f.File, FlagRefsFile, "", "With --occurrences, keep the sites at or under this workspace-relative path, and say how many of the total it kept")
 	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace")
 	cmdline.NegatedBoolVar(fs, &f.Text, FlagRefsText)
 	fs.BoolVar(&f.Generated, FlagRefsGenerated, true, "In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely")
@@ -1145,8 +1163,11 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 
 // ExplainFlags are the flags declared for `magus explain`.
 type ExplainFlags struct {
-	Refresh bool // --[no-]refresh
-	Global  bool // --[no-]global
+	Refresh   bool // --[no-]refresh
+	Global    bool // --[no-]global
+	Source    bool // --[no-]source
+	MaxLines  int  // --max-lines
+	SkipLines int  // --skip-lines
 }
 
 // BindExplain registers `magus explain`'s flags on fs and returns the destination.
@@ -1156,6 +1177,10 @@ func BindExplain(fs *flag.FlagSet) *ExplainFlags {
 	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagExplainRefresh)
 	fs.BoolVar(&f.Global, FlagExplainGlobal, false, "Resolve across the workspaces registered in config (knowledge.workspaces)")
 	cmdline.NegatedBoolVar(fs, &f.Global, FlagExplainGlobal)
+	fs.BoolVar(&f.Source, FlagExplainSource, false, "Print a doc section's lines from its indexed extent instead of the card, checked against the file on disk. A symbol's body is refs --source")
+	cmdline.NegatedBoolVar(fs, &f.Source, FlagExplainSource)
+	fs.IntVar(&f.MaxLines, FlagExplainMaxLines, 200, "Print at most this many lines of the section (0 for all), then say how many there were and print the next command. Implies --source")
+	fs.IntVar(&f.SkipLines, FlagExplainSkipLines, 0, "Skip this many lines of the section first; line numbers carry on. Implies --source")
 	return &f
 }
 
