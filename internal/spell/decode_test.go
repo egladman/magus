@@ -199,7 +199,7 @@ func TestDescriptor_SymbolIndexerEnvs(t *testing.T) {
 func TestBuiltinGoSymbolIndexerCoversEveryOS(t *testing.T) {
 	si := Builtins()["go"].SymbolIndexer
 	require.NotNil(t, si)
-	assert.Equal(t, []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}}, si.Envs)
+	assert.Equal(t, []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}, {"GOOS": "js", "GOARCH": "wasm"}}, si.Envs)
 }
 
 // The shipped indexers that declare no op keep the op and the index file every cached

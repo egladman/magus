@@ -404,7 +404,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages,
 			Command: spells.Command{Bin: "go", Args: []string{"./..."}}, Uses: []string{"go"},
-			Envs: []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}}},
+			Envs: []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}, {"GOOS": "js", "GOARCH": "wasm"}}},
 	},
 	"markdown": {
 		Name:  "markdown",
