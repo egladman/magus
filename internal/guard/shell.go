@@ -2095,7 +2095,7 @@ var (
 		"A watcher running the same loop is the same poll; if nothing else records the work, one watcher, armed once, is the most it earns."
 
 	denyProcessPoll    = fmt.Sprintf("`pgrep`, `pidof` and `ps` poll for what the project lock already records; background your call as `%s` and wait for its notice.", boundedRunWait)
-	denyProcessPollWhy = "A run backgrounded that way waits out the lock and is announced when it ends, where the process table invents an unbounded poll."
+	denyProcessPollWhy = "A second run on a held project lock exits 75 and never waits, so retry it after the notice. A run backgrounded that way is announced when it ends, where the process table invents an unbounded poll."
 
 	// Names what the filter cuts, or the reader corrects the spelling instead of the
 	// mistake: the ref two lines under each failure's cause.
@@ -2811,12 +2811,16 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	// Beside busy-wait: both invent a waiter for work magus already tracks. This one is
 	// the process-table form (pgrep/ps/pidof); that one is the sleep-loop form.
 	if parsed && processPollFires(work) {
-		// The one-shot read, not --watch: a watch never exits, and a served command that
-		// holds the caller's tool slot until it times out is the poll again.
-		poll := ShellVerdict{Deny: denyProcessPoll, Why: denyProcessPollWhy, Rule: denyRule{Name: denyRuleProcessPoll}}.withRemedy(
-			"process-table reads and `kill -0` answer what the project lock already records.",
-			hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
-				"status reads the live pool once and exits, where the process table only guesses at it."))
+		poll := ShellVerdict{Deny: denyProcessPoll, Why: denyProcessPollWhy, Rule: denyRule{Name: denyRuleProcessPoll}}
+		if lead, next := waitRemedy(deps, denyRuleProcessPoll, command, d); lead != "" {
+			poll = poll.withRemedy(lead, next)
+		} else {
+			// The one-shot read, not --watch: a watch never exits, and a served command that
+			// holds the caller's tool slot until it times out is the poll again.
+			poll = poll.withRemedy("process-table reads and `kill -0` answer what the project lock already records.",
+				hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
+					"status reads the live pool once and exits, where the process table only guesses at it."))
+		}
 		if v, ok := held.ends(deps, poll); ok {
 			return v
 		}

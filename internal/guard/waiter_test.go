@@ -587,6 +587,22 @@ func TestEveryServedWaitPassesTheGuardForEveryRole(t *testing.T) {
 	}
 }
 
+func TestProcessPollOnALineWithARunServesThatRunInTheBackground(t *testing.T) {
+	v := Evaluate(strict(testDependencies()), "kill -0 4242 && ./magus run go-test .")
+	assert.Equal(t, denyRuleProcessPoll, v.Rule.Name)
+	require.Len(t, v.Next, 1)
+	assert.Contains(t, v.Next[0].Run, "job exec --timeout")
+	assert.Contains(t, v.Next[0].Run, "-- ./magus run go-test .")
+	assert.Contains(t, v.Why, "never waits")
+}
+
+func TestProcessPollWithNoRunOnTheLineReadsStatus(t *testing.T) {
+	v := Evaluate(strict(testDependencies()), "pgrep -fl magus")
+	assert.Equal(t, denyRuleProcessPoll, v.Rule.Name)
+	require.Len(t, v.Next, 1)
+	assert.Equal(t, hint.Status.String(), v.Next[0].Run)
+}
+
 // A wait on the pid of a run holding a seat spends the budget wait outside the call that
 // runs; a pid no run holds is some other process.
 func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
@@ -605,8 +621,6 @@ func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
 	}
 	probe := Judge(ctx, Dependencies{}, Request{Input: "kill -0 4242 && ./magus run go-test .", Lease: worker.ID})
 	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleProcessPoll)}, judgedAs(probe))
-	require.Len(t, probe.Next, 1)
-	assert.Equal(t, hint.Status.String(), probe.Next[0].Run)
 	for _, line := range []string{
 		"caffeinate -w 9999",
 		"wait 9999",
