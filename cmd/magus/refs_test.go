@@ -335,6 +335,14 @@ func (s *refsSourceSuite) TestTheBodyNextCommandDropsOnlyItsOwnFlags() {
 	s.NotContains(got, "lines")
 }
 
+func (s *refsSourceSuite) TestShellArgLeavesARangeBare() {
+	s.Equal("-5:-1", shellArg("-5:-1"))
+}
+
+func (s *refsSourceSuite) TestShellArgQuotesAValueWithASpace() {
+	s.Equal("'template={{.a}} b'", shellArg("template={{.a}} b"))
+}
+
 func (s *refsSourceSuite) TestMarksATestFile() {
 	files := []types.SymbolOccurrenceFile{{File: "a_test.go"}, {File: "a.go"}}
 	s.Empty(markOccurrenceFiles(context.Background(), files, func(context.Context, []string) ([]types.FileEntry, error) { return nil, nil }))

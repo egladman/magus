@@ -885,12 +885,20 @@ func commandAgain(with func(...string) string, fs *flag.FlagSet, subject string,
 			return
 		}
 		if len(f.Name) == 1 {
-			args = append(args, "-"+f.Name, f.Value.String())
+			args = append(args, "-"+f.Name, shellArg(f.Value.String()))
 			return
 		}
-		args = append(args, "--"+f.Name+"="+f.Value.String())
+		args = append(args, "--"+f.Name+"="+shellArg(f.Value.String()))
 	})
 	return with(args...)
+}
+
+// shellArg quotes a value a paste would otherwise split or expand.
+func shellArg(s string) string {
+	if !strings.ContainsAny(s, " \t'\"$`\\*?{}()&;|<>") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // refsSourceWindow reads the window off the parsed flags.
