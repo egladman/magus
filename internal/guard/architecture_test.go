@@ -11,8 +11,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -123,6 +121,12 @@ func requireArchitectureDeny(t *testing.T, v types.GuardJudgment, msgAndArgs ...
 	require.Equal(t, []string{"deny", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule}, msgAndArgs...)
 }
 
+// requireArchitectureAdvice checks that a read is advised and never refused.
+func requireArchitectureAdvice(t *testing.T, v types.GuardJudgment, msgAndArgs ...any) {
+	t.Helper()
+	require.Equal(t, []string{"advise", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule}, msgAndArgs...)
+}
+
 func TestArchitectureUnbriefedDeniesAfterAStructureMessage(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 
@@ -133,10 +137,12 @@ func TestArchitectureUnbriefedDeniesAfterAStructureMessage(t *testing.T) {
 	assert.Empty(t, v.Context, "and nothing is said back")
 
 	v = s.bash("", "ls")
-	requireArchitectureDeny(t, v, "the next graded call waits on the load")
-	assert.Contains(t, v.Reason,
+	requireArchitectureAdvice(t, v, "a read of the workspace is advised, never refused")
+	assert.Contains(t, v.Context,
 		"acting on an architecture question before the magus-architecture-review skill loaded; load Skill(magus-architecture-review), then retry.")
-	requireArchitectureDeny(t, s.write("", "notes.txt"), "a write is a graded call too")
+	v = s.write("", "notes.txt")
+	requireArchitectureDeny(t, v, "a write waits on the load")
+	assert.Contains(t, v.Reason, "acting on an architecture question before the magus-architecture-review skill loaded")
 
 	s.load("", architectureSkill.String())
 	assert.NotEqual(t, "deny", s.bash("", "ls").Decision, "the load clears the gate")
@@ -170,18 +176,18 @@ func TestArchitectureUnbriefedCountsLoadsPerAgent(t *testing.T) {
 
 	s.load("", architectureSkill.String())
 	assert.NotEqual(t, "deny", s.bash("", "ls").Decision, "the root loaded it")
-	requireArchitectureDeny(t, s.bash("a1b2c3", "ls"), "the parent's load is not the child's")
+	requireArchitectureDeny(t, s.write("a1b2c3", "notes.txt"), "the parent's load is not the child's")
 
 	s.load("a1b2c3", architectureSkill.String())
-	assert.NotEqual(t, "deny", s.bash("a1b2c3", "ls").Decision, "the child loaded it itself")
-	requireArchitectureDeny(t, s.bash("d4e5f6", "ls"), "a sibling is briefed by its own load only")
+	assert.NotEqual(t, "deny", s.write("a1b2c3", "notes.txt").Decision, "the child loaded it itself")
+	requireArchitectureDeny(t, s.write("d4e5f6", "notes.txt"), "a sibling is briefed by its own load only")
 }
 
 func TestASubagentLoadDoesNotBriefItsParent(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("the architecture skill should be able to catch all these crazy imports and the sprawl")
 	s.load("a1b2c3", architectureSkill.String())
-	requireArchitectureDeny(t, s.bash("", "ls"))
+	requireArchitectureDeny(t, s.write("", "notes.txt"))
 }
 
 func TestArchitectureUnbriefedGatesANewDirectory(t *testing.T) {
@@ -230,32 +236,27 @@ func TestArchitectureUnbriefedFiresOnlyOnAProbeOfSource(t *testing.T) {
 	assert.NotEqual(t, "deny", s.bash("", "wc -l main.go").Decision, "counting lines probes no structure")
 	assert.NotEqual(t, "deny", s.bash("", "cat /var/memory/MEMORY.md").Decision, "a memory file is outside the workspace")
 	assert.NotEqual(t, "deny", s.bash("", "ls /var/memory").Decision, "so is a listing of its directory")
-	requireArchitectureDeny(t, s.bash("", "grep -rn handler ."), "a search of the workspace reads its structure")
-	requireArchitectureDeny(t, s.bash("", "ls internal"), "so does a listing of it")
+	requireArchitectureAdvice(t, s.bash("", "grep -rn handler ."), "a search of the workspace reads its structure")
+	assert.NotEqual(t, "deny", s.bash("", "ls internal").Decision, "a listing of it is advised once, never refused")
 }
 
-func TestArchitectureUnbriefedStandsDownForAnAgentWithNoSkillTool(t *testing.T) {
+func TestArchitectureUnbriefedNeverDeniesARead(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("does this respect our current architecture patterns?")
-	facts := hint.NewGate(s.t.TempDir(), FactsKey("claude-code", s.session))
-	writeAgentMarker(facts, agentTypeKind("a1b2c3"), []byte(`{"type":"magus-scout"}`))
-
-	assert.False(t, Dependencies{facts: facts, caller: job.Caller{Agent: "a1b2c3"}}.loadsSkills(), "a read-only agent type cannot load a skill")
-	assert.True(t, Dependencies{facts: facts, caller: job.Caller{Agent: "d4e5f6"}}.loadsSkills(), "an agent of no recorded type can")
-	requireArchitectureDeny(t, s.bash("d4e5f6", "ls internal"))
+	for _, command := range []string{
+		"cat docs/design/refusals.md",
+		"cat internal/guard/guard.go",
+		"sed -n 1,20p internal/guard/guard.go",
+		"head -5 docs/design.md",
+		"ls internal",
+		"grep -rn handler .",
+	} {
+		assert.NotEqual(t, "deny", s.bash("", command).Decision, command)
+	}
 }
 
-// A host names the calling subagent's type on each of its calls, so a scout whose spawn
-// the guard never saw is still known to have no Skill tool.
-func TestArchitectureUnbriefedStandsDownForAnEnvelopeNamedReadOnlyType(t *testing.T) {
-	s := newArchSession(t, strict(testDependencies()), true)
-	s.message("does this respect our current architecture patterns?")
-	scout := fmt.Sprintf(`{"session_id":%q,"hook_event_name":"PreToolUse","agent_id":"s9","agent_type":"magus-scout","tool_name":"Bash","tool_input":{"command":"ls internal"}}`, s.session)
-	assert.Equal(t, []string{"pass", ""}, decisionAndRule(s.judge(scout)))
-}
-
-// The write arm stands down where the shell arm does: a read-only agent's write and a write
-// outside the workspace both ask for a skill that cannot help.
+// A write outside the workspace asks for no skill. A read-only agent
+// keeps its Skill tool, so it is asked like any other.
 func TestSkillDemandsSkipWritesNoSkillCouldBrief(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("does this respect our current architecture patterns?")
@@ -266,10 +267,7 @@ func TestSkillDemandsSkipWritesNoSkillCouldBrief(t *testing.T) {
 	scout := func(path string) types.GuardJudgment {
 		return s.judge(fmt.Sprintf(`{"session_id":%q,"hook_event_name":"PreToolUse","agent_id":"s9","agent_type":"magus-scout","tool_name":"Write","tool_input":{"file_path":%q,"content":"x\n"}}`, s.session, path))
 	}
-	assert.Equal(t, []string{"pass", ""}, decisionAndRule(scout("notes.txt")), "a read-only agent cannot load the architecture skill")
-	assert.Equal(t, []string{"pass", ""}, decisionAndRule(scout("check.buzz")), "nor the Buzz one")
-	assert.Equal(t, []string{"advise", string(advisoryNewSourceDir)}, decisionAndRule(scout(filepath.Join("kvdir", "kvdir.go"))),
-		"nor brief a new directory, which is still worth a word")
+	requireArchitectureDeny(t, scout("notes.txt"), "a read-only agent can load the skill, so it is asked")
 }
 
 func decisionAndRule(v types.GuardJudgment) []string {
@@ -310,9 +308,9 @@ func (s *ArchitectureJobReadSuite) TestDescribeJobInAnotherCheckoutIsNotAProbe()
 }
 
 func (s *ArchitectureJobReadSuite) TestDescribeJobBesideASourceListingStillIs() {
-	requireArchitectureDeny(s.T(), s.session.bash("", "./magus describe job scratch-workspace-guard; ls internal"))
+	requireArchitectureAdvice(s.T(), s.session.bash("", "./magus describe job scratch-workspace-guard; ls internal"))
 }
 
 func (s *ArchitectureJobReadSuite) TestASearchOfTheWorkspaceStillIs() {
-	requireArchitectureDeny(s.T(), s.session.bash("", "grep -rn handler ."))
+	requireArchitectureAdvice(s.T(), s.session.bash("", "grep -rn handler ."))
 }

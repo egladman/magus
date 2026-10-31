@@ -457,10 +457,6 @@ func (d Dependencies) rankGraded(v ShellVerdict, rule denyRuleName, reason strin
 	if reason == "" {
 		return v
 	}
-	// A skill the caller cannot load is a remedy it cannot take.
-	if (rule == denyArchitectureUnbriefed || rule == denyBuzzUnbriefed) && !d.loadsSkills() {
-		return v
-	}
 	if g := d.grade(ShellVerdict{Deny: reason, Rule: denyRule{Name: rule}}); g.Deny == "" {
 		return stronger(v, g)
 	}
@@ -996,12 +992,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				}
 			}
 		}
-		// Last of the denies and first thing a Buzz write meets, in that order for a
-		// reason: the two above answer whether this agent may touch the file at all, and
-		// there is nothing to learn before a write that is refused anyway.
-		// Neither asks a caller that cannot load a skill, nor briefs a write outside the
-		// workspace, such as a report in a scratchpad.
-		briefable := deps.loadsSkills() && inSource(location.workspace, input)
+		// Last of the denies: a refused write has nothing to learn first.
+		// A write outside the workspace is not briefed.
+		briefable := inSource(location.workspace, input)
 		if verdict.Decision != decisionDeny && briefable {
 			if reason := denyBuzzWriteWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input); reason != "" {
 				refuse(denyBuzzUnbriefed, reason)

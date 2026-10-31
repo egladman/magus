@@ -360,7 +360,6 @@ func servedRoles(t *testing.T) (context.Context, []servedRole) {
 	groundwork := as("", "")
 	groundwork.Input, groundwork.DryRun = "git show HEAD", true
 	require.Equal(t, string(denyRuleOrchestratorGroundwork), Judge(ctx, strict(Dependencies{}), groundwork).Rule, "the root is proven to orchestrate")
-	require.False(t, Dependencies{facts: facts, caller: job.Caller{Agent: "a-scout"}}.loadsSkills(), "the scout cannot load a skill")
 	return ctx, []servedRole{
 		{name: "person"},
 		{name: "root with a handed-out row", call: as("", "")},
