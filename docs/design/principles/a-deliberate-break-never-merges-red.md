@@ -31,6 +31,13 @@ and neither is switching the gate off for everyone after this change.
   wrote them. The `deviation-author` guard rule, a seatbelt rather than a boundary,
   refuses an agent adding a line.
 
+- `pr-deliberate-break`, run by `.github/workflows/deliberate-break.yaml` on
+  `pull_request_target`, lists each line a pull request adds and each edit to the gate
+  files, as a job summary and a notice per line. It reads the changed files through the
+  API and never runs the pull request's code. It always succeeds: a person's merge is the
+  check on the list.
+- A ledger that is a symlink, or whose name does not end in `.deviations.jsonl`, is an error.
+
 ## Good
 
 The change that removes the value carries the decision, and `ci` stays green:

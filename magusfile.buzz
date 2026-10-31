@@ -10,6 +10,7 @@ import "./hack/policy/commits" as wording;
 import "./hack/policy/pull_requests" as descriptions;
 import "./hack/magusfile/changelog" as changelog;
 import "./hack/magusfile/advisories" as advisories;
+import "./hack/magusfile/deviations" as deviations;
 import "spells/git/hooks" as githooks;
 import "./hack/policy/guard" as agentpolicy;
 import "./hack/policy/builtins" as agentbuiltins;
@@ -852,6 +853,34 @@ export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
         return;
     }
     magus\log.info("pr-changelog: {added.len()} changelog fragment(s) cover {owed.len()} shipped path(s)");
+}
+
+// Lists the deviation lines a pull request adds and the gate files it edits.
+// --files is the JSON the workflow fetched from the pull request files API.
+// It never fails: a person reads the list, and the gate stays the check.
+export fun pr_deliberate_break(ctx: magus\Context, args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: [<str>], valued: ["--files"], required: ["--files"]);
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "pr-deliberate-break: unexpected arguments {args.join(" ")}; pass --files=<json>";
+    }
+    final listing = deviations\parseChanged(fs\readFile(parsed.values["--files"] ?? ""));
+    if (listing.error != "") {
+        std\print("::error::pr-deliberate-break: {listing.error}");
+        return;
+    }
+    final summary = mut ["### Deliberate breaks", ""];
+    if (listing.notices.len() == 0) {
+        summary.append("This pull request adds no deviation line and edits no gate.");
+    }
+    foreach (n in listing.notices) {
+        final level = if (n.error) "error" else "notice";
+        std\print("::{level} file={n.path}::{n.text}");
+        summary.append("- {n.text}");
+    }
+    final target = os\env("GITHUB_STEP_SUMMARY") ?? "";
+    if (target != "") {
+        fs\appendFile(target, content: summary.join("\n") + "\n");
+    }
 }
 
 // Deletes the shims once installed from hack/git-hooks, and no other hook.

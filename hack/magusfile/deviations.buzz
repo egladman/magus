@@ -12,6 +12,27 @@ import "encoding/json";
 import "magus/lint";
 import "assert";
 
+final SUFFIX = ".deviations.jsonl";
+
+// nameError is "" when path names a ledger. A name outside the suffix escapes
+// the guard rule that refuses an agent adding a line.
+export fun nameError(path: str) > str {
+    if (path.endsWith(SUFFIX)) {
+        return "";
+    }
+    return "{path}: a ledger name ends in {SUFFIX}";
+}
+
+fun symlinkError(path: str) > str {
+    return "{path}: a ledger is a regular file, never a symlink";
+}
+
+// isSymlink is true when path is a link, whatever it points at. fs\readlink
+// raises on anything else.
+fun isSymlink(path: str) > bool {
+    return (fs\readlink(path) catch null) != null;
+}
+
 // showArgs is each backend's spelling of "print path as of rev", path relative
 // to the working directory.
 fun showArgs(rev: str, path: str) > [str] {
@@ -216,6 +237,13 @@ export fun permit(found: [lint\Finding], counted: [Deviation], subject: fun (f: 
 // comparison gate: once the break is in the base, the next change answers only
 // for what it did. It covers uncommitted work, since it reads the tree.
 export fun permitAdded(found: [lint\Finding], ledger: str, base: str, subject: fun (f: lint\Finding) > str) > Permit {
+    final named = nameError(ledger);
+    if (named != "") {
+        return Permit{ error = named };
+    }
+    if (isSymlink(ledger)) {
+        return Permit{ error = symlinkError(ledger) };
+    }
     var tree = "";
     try {
         if (fs\exists(ledger)) {
@@ -341,6 +369,154 @@ export fun judge(run: any, findingsExit: int, ledger: str, shown: str, base: str
     return Verdict{ permitted = p.permitted.len(), failure = failure(p, ledger: shown, subject: comparisonSubject) };
 }
 
+// Changed is one entry of GitHub's pull request files listing. patch is the
+// unified diff, "" when GitHub omits it for a large file.
+export object Changed {
+    path: str,
+    status: str = "modified",
+    patch: str = "",
+    symlink: bool = false,
+}
+
+// Notice is one line of the listing. error marks a ledger that cannot be
+// read as one; it is still reported, never raised.
+export object Notice {
+    path: str,
+    text: str,
+    error: bool = false,
+}
+
+// Listing is the notices for a pull request, or why its files were unreadable.
+export object Listing {
+    notices: [Notice] = [],
+    error: str = "",
+}
+
+// WATCHED are files whose edit changes what a gate permits. Everything under
+// .github/workflows/ counts too.
+final WATCHED = {
+    "proto/buf.yaml": "the buf configuration: check its breaking: block",
+    "proto/magusfile.buzz": "the proto gate",
+    "hack/magusfile/deviations.buzz": "the code that matches ledger lines",
+};
+
+// patchAdded is the lines a unified diff adds, without the file header.
+export fun patchAdded(patch: str) > [str] {
+    final added = mut [<str>];
+    foreach (line in patch.split("\n")) {
+        if (line.startsWith("+") and !line.startsWith("+++")) {
+            added.append(line.sub(1, len: line.len() - 1));
+        }
+    }
+    return added;
+}
+
+fun patchTouches(patch: str, word: str) > bool {
+    foreach (line in patch.split("\n")) {
+        if ((line.startsWith("+") or line.startsWith("-")) and line.indexOf(word) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun looksLikeLedger(path: str) > bool {
+    final name = fs\basename(path);
+    return name.indexOf("deviations.jsonl") != null;
+}
+
+fun ledgerNotices(file: Changed) > [Notice] {
+    final notes = mut [<Notice>];
+    final named = nameError(file.path);
+    if (named != "") {
+        notes.append(Notice{ path = file.path, text = named, error = true });
+        return notes;
+    }
+    if (file.symlink) {
+        notes.append(Notice{ path = file.path, text = symlinkError(file.path), error = true });
+        return notes;
+    }
+    if (file.patch == "") {
+        if (file.status != "removed") {
+            notes.append(Notice{ path = file.path, text = "{file.path}: GitHub sent no diff, so the added lines are not listed", error = true });
+        }
+        return notes;
+    }
+    foreach (line in patchAdded(file.patch)) {
+        if (isBlank(line)) {
+            continue;
+        }
+        final one = parseLine(line, where: file.path);
+        if (one.error != "") {
+            notes.append(Notice{ path = file.path, text = one.error, error = true });
+        } else {
+            final d = one.lines[0];
+            notes.append(Notice{ path = file.path, text = "deviation added: {d.code} | {d.subject} | {d.reason}" });
+        }
+    }
+    return notes;
+}
+
+fun watchedNotice(file: Changed) > Notice? {
+    if (file.path.startsWith(".github/workflows/")) {
+        return Notice{ path = file.path, text = "workflow changed: {file.path}" };
+    }
+    if (file.path == "magus.yaml") {
+        if (patchTouches(file.patch, word: "vcs")) {
+            return Notice{ path = file.path, text = "magus.yaml changed a vcs setting, which picks the base a ledger is compared against" };
+        }
+        return null;
+    }
+    final why = WATCHED[file.path];
+    if (why == null) {
+        return null;
+    }
+    return Notice{ path = file.path, text = "{file.path} changed: {why!}" };
+}
+
+// listChanges reads the API's diffs, never the tree, so it needs no checkout
+// of the pull request. It lists each added ledger line and each watched edit.
+export fun listChanges(files: [Changed]) > Listing {
+    final notes = mut [<Notice>];
+    foreach (file in files) {
+        if (file.path.endsWith(SUFFIX) or looksLikeLedger(file.path)) {
+            foreach (n in ledgerNotices(file)) {
+                notes.append(n);
+            }
+            continue;
+        }
+        final watched = watchedNotice(file);
+        if (watched != null) {
+            notes.append(watched!);
+        }
+    }
+    return Listing{ notices = notes };
+}
+
+// parseChanged reads the JSON array `gh api repos/{repo}/pulls/{n}/files`
+// prints, plus an optional symlink flag per entry.
+export fun parseChanged(text: str) > Listing {
+    final rows = (json\parse(text) catch null) as? [any];
+    if (rows == null) {
+        return Listing{ error = "the changed files are not a JSON array" };
+    }
+    final files = mut [<Changed>];
+    foreach (row in rows!) {
+        final doc = row as? {str: any};
+        final path = (doc?["filename"] as? str) ?? "";
+        if (path == "") {
+            return Listing{ error = "a changed file without a filename" };
+        }
+        files.append(Changed{
+            path = path,
+            status = (doc?["status"] as? str) ?? "modified",
+            patch = (doc?["patch"] as? str) ?? "",
+            symlink = (doc?["symlink"] as? bool) ?? false,
+        });
+    }
+    return listChanges(files);
+}
+
 fun finding(rule: str, path: str, message: str) > lint\Finding {
     return lint\Finding{ rule = rule, path = path, message = message };
 }
@@ -458,4 +634,78 @@ test "judge lets a tool failure stand, and a crash that parses to nothing" {
     assert\equal(crash.failure, want: "the tool exited 1: boom", message: "tool failure");
     final empty = judge({"code": 100, "stdout": "", "stderr": ""}, findingsExit: 100, ledger: "l", shown: "l", base: "HEAD");
     assert\equal(empty.failure, want: "the tool exited 100 and reported no findings", message: "nothing parsed");
+}
+
+fun patchOf(lines: [str]) > str {
+    return "@@ -0,0 +1,{lines.len()} @@\n" + lines.map(fun (index: int, l: str) > str => "+" + l).join("\n");
+}
+
+test "a ledger name outside the suffix is an error" {
+    assert\equal(nameError("proto/x.deviations.jsonl"), want: "", message: "suffix");
+    assert\isTrue(nameError("proto/x.deviations.jsonl.bak") != "", message: "backup name");
+    assert\isTrue(nameError("deviations.jsonl") != "", message: "bare name");
+}
+
+test "permitAdded refuses a ledger with a foreign name" {
+    final p = permitAdded([], ledger: "x.jsonl", base: "HEAD", subject: comparisonSubject);
+    assert\isTrue(p.error.indexOf("ends in") != null, message: p.error);
+}
+
+test "patchAdded keeps added lines and drops the header" {
+    final got = patchAdded("--- a/x\n+++ b/x\n@@ -1 +1,2 @@\n kept\n+one\n-gone\n+two");
+    assert\equal(got.join("|"), want: "one|two", message: "added");
+}
+
+test "an added ledger line is listed with its code, subject and reason" {
+    final got = listChanges([Changed{ path = "proto/buf-breaking.deviations.jsonl", status = "added", patch = patchOf([LINE]) }]);
+    assert\equal(got.notices.len(), want: 1, message: "one line");
+    assert\equal(got.notices[0].text, want: "deviation added: R | a.proto: gone | renamed on purpose", message: "text");
+    assert\isTrue(!got.notices[0].error, message: "not an error");
+}
+
+test "a ledger line that does not parse is listed as an error" {
+    final got = listChanges([Changed{ path = "proto/x.deviations.jsonl", patch = patchOf(["nope"]) }]);
+    assert\isTrue(got.notices[0].error, message: "error");
+    assert\equal(got.notices[0].text, want: "proto/x.deviations.jsonl: not a JSON object", message: "text");
+}
+
+test "a symlinked ledger is an error" {
+    final got = listChanges([Changed{ path = "proto/x.deviations.jsonl", symlink = true, patch = patchOf([LINE]) }]);
+    assert\isTrue(got.notices[0].error, message: "error");
+    assert\isTrue(got.notices[0].text.indexOf("symlink") != null, message: got.notices[0].text);
+}
+
+test "a ledger named outside the suffix is an error" {
+    final got = listChanges([Changed{ path = "proto/x.deviations.jsonl.bak", patch = patchOf([LINE]) }]);
+    assert\isTrue(got.notices[0].error, message: "error");
+}
+
+test "a ledger without a diff says so" {
+    final got = listChanges([Changed{ path = "proto/x.deviations.jsonl" }]);
+    assert\isTrue(got.notices[0].error, message: "error");
+    assert\equal(listChanges([Changed{ path = "proto/x.deviations.jsonl", status = "removed" }]).notices.len(), want: 0, message: "a removal adds nothing");
+}
+
+test "edits to what decides a gate are listed" {
+    final got = listChanges([
+        Changed{ path = "proto/buf.yaml" },
+        Changed{ path = "proto/magusfile.buzz" },
+        Changed{ path = "hack/magusfile/deviations.buzz" },
+        Changed{ path = ".github/workflows/ci.yaml" },
+        Changed{ path = "README.md" },
+    ]);
+    assert\equal(got.notices.len(), want: 4, message: "four watched files");
+}
+
+test "magus.yaml is listed only when a vcs line changed" {
+    assert\equal(listChanges([Changed{ path = "magus.yaml", patch = "@@ -1 +1 @@\n-cache: a\n+cache: b" }]).notices.len(), want: 0, message: "unrelated");
+    assert\equal(listChanges([Changed{ path = "magus.yaml", patch = "@@ -1 +1 @@\n-vcs: a\n+vcs: b" }]).notices.len(), want: 1, message: "vcs");
+}
+
+test "parseChanged reads the files listing" {
+    final got = parseChanged(`[\{"filename":"proto/buf.yaml","status":"modified"\},\{"filename":"proto/x.deviations.jsonl","symlink":true\}]`);
+    assert\equal(got.error, want: "", message: "no error");
+    assert\equal(got.notices.len(), want: 2, message: "two notices");
+    assert\isTrue(parseChanged("nope").error != "", message: "not an array");
+    assert\isTrue(parseChanged(`[\{"status":"added"\}]`).error != "", message: "no filename");
 }
