@@ -629,7 +629,7 @@ var ruleDocHookWiringWrite = types.RuleDoc{
 	Catches: "a leased or agent-attributed write to the host hook wiring or the workspace's ./magus",
 	Why: "The wiring and the binary it runs decide whether any rule runs at all from the host's next call or session on, so no scope anybody hands out includes them. " +
 		"A write tool and a shell line are judged alike: a redirect, `cp`, `mv`, `ln`, `tee`, `dd of=`, `install` or `rm` whose target is `.claude/settings.json`, `.claude/settings.local.json`, another host's hook file or the workspace root's `magus` is refused, after the line's `cd`s. " +
-		"A person's own session goes ahead, told which wiring file it is editing. A line that runs `go` is left to raw-tool, which advises the one relink of `./magus` a checkout that cannot load its sources needs.",
+		"A person's own session goes ahead, told which wiring file it is editing, and so does a magus command a person runs in a job's checkout: a lease merely held there never binds it.A line that runs `go` is left to raw-tool, which advises the one relink of `./magus` a checkout that cannot load its sources needs.",
 }
 
 var ruleDocLeaseCheckout = types.RuleDoc{

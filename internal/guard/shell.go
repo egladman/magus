@@ -644,11 +644,10 @@ func renamesSymbol(args []string) bool {
 }
 
 // judgeEdit judges a whole-file rewrite a magus verb makes itself, exactly as the host edit
-// hook judges the same edit. The verb's process knows no host session, so it acts under the
-// lease it resolves on its own: its checkout record or magus.lease BAGGAGE claim, else the
-// one lease `job exec` took in the checkout at root. Several held there and none named is a
-// deny, and so is a lease store that does not read: a worker bound only by its session
-// would otherwise be graded by nobody. dryRun judges as [Request.DryRun] does.
+// hook judges the same edit. The process has no agent attribution, so it acts
+// under the lease its checkout record or claim names. A lease merely held
+// there is never inferred. An unreadable store is a deny.
+// dryRun judges as [Request.DryRun] does.
 func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) types.GuardJudgment {
 	envelope, _ := json.Marshal(map[string]any{
 		"cwd": root,
@@ -663,33 +662,15 @@ func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny,
 			Rule: string(denyRuleEditUngraded), Reason: denial{Say: say, Why: why}.full()}
 	}
-	rows, err := leaseRows(ctx, at)
-	if err != nil {
+	if _, err := leaseRows(ctx, at); err != nil {
 		return ungraded(fmt.Sprintf("magus workspace: the lease store did not read (%v), so this edit is refused.", err),
 			"An unread store hides the leases that would grade the edit.")
 	}
-	var held []string
-	for _, row := range job.HeldIn(rows, at.workspace) {
-		held = append(held, row.ID)
-	}
-	slices.Sort(held)
 	lease, from := job.RunLease(ctx, at.jobs())
-	if lease == "" && len(held) == 1 {
-		lease, from = held[0], types.LeaseSourceMarker
-	}
 	v := Judge(ctx, deps, Request{Input: string(envelope), DryRun: dryRun, Lease: lease})
 	if lease != "" && v.Lease == lease {
 		v.LeaseFrom = from
 	}
-	if v.Decision == decisionDeny || v.Lease != "" || len(held) == 0 {
-		return v
-	}
-	v.Decision, v.Context, v.Rule = decisionDeny, "", string(denyRuleEditUngraded)
-	v.Reason = denial{
-		Say: fmt.Sprintf("magus workspace: leases %s hold write paths in this checkout, and this process names no lease; name yours: `%s=<id> magus ...`.",
-			strings.Join(held, ", "), envHookLease),
-		Why: "Nothing would grade the edit. A magus process cannot see the host session its caller is bound by.",
-	}.full()
 	return v
 }
 

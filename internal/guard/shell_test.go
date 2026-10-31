@@ -2680,32 +2680,6 @@ func (s *GradeEditSuite) TestTheCheckoutBindingNamesTheLease() {
 	s.Equal(graded{true, "lease-a", types.LeaseSourceMarker}, gradedAs(s.edit("cmd/magus/main.go")))
 }
 
-// holdHere records id as taken in this checkout, as `job exec` does.
-func (s *GradeEditSuite) holdHere(id string, paths ...string) {
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: hookLocation(s.ctx, Dependencies{}).cacheDir, Root: s.root})
-	_, err := store.Update(s.T().Context(), id, func(cur *types.Job) {
-		*cur = types.Job{ID: id, WritePaths: paths, State: types.StateRunning, CheckoutRoot: s.root}
-	})
-	s.Require().NoError(err)
-}
-
-func (s *GradeEditSuite) TestTheOneLeaseHeldHereGradesTheEdit() {
-	s.T().Setenv(trail.EnvBaggage, "")
-	s.holdHere("lease-c", "web/**")
-	v := s.edit("docs/readme.md")
-	s.Equal(graded{true, "lease-c", types.LeaseSourceMarker}, gradedAs(v))
-	s.Equal(string(denyRuleLeaseWrite), v.Rule)
-}
-
-func (s *GradeEditSuite) TestSeveralLeasesHeldHereAndNoneNamedIsDenied() {
-	s.T().Setenv(trail.EnvBaggage, "")
-	s.holdHere("lease-c", "web/**")
-	s.holdHere("lease-d", "docs/**")
-	v := s.edit("docs/readme.md")
-	s.Equal(string(denyRuleEditUngraded), v.Rule)
-	s.Contains(v.Reason, "leases lease-c, lease-d hold write paths in this checkout")
-}
-
 func (s *GradeEditSuite) TestAnUnreadLeaseStoreRefusesLoudly() {
 	s.T().Setenv(trail.EnvBaggage, "")
 	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Err: errors.New("store locked")})
