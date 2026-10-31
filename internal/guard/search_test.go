@@ -621,10 +621,11 @@ func TestSearchIntentOnRecordedCommands(t *testing.T) {
 	}
 }
 
-// TestSymbolSearchOnAStaleIndex pins the rows the index state decides: a name the stale
-// index holds and a declaration it has not reached yet are refused with the rebuild served
-// first; a bare CamelCase word it does not hold is as often a string, and runs; with no
-// index at all, or one built with no symbols, the search runs, advised.
+// TestSymbolSearchOnAStaleIndex pins the rows the index state decides.
+// A name the stale index holds is refused with refs served.
+// So is a declaration it has not reached yet.
+// A bare CamelCase word it does not hold is as often a string, and runs.
+// With no index, or one built with no symbols, the search runs, advised.
 func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 	root := recordedSearchTree(t)
 	cacheDir := t.TempDir()
@@ -667,7 +668,8 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 		}
 		require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: tt.arg}, v.Rule, "%q: %s", tt.command, v.Context)
 		require.NotEmpty(t, v.Next, tt.command)
-		assert.Equal(t, hint.GraphBuild.With("--silent"), v.Next[0].Run, "%q: the rebuild comes first", tt.command)
+		assert.Contains(t, v.Next[0].Run, " refs "+tt.arg, "%q: refs is served, never a rebuild", tt.command)
+		assert.Contains(t, v.Deny+v.Why, "refs refreshes it as it answers", tt.command)
 	}
 }
 
