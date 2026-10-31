@@ -309,7 +309,7 @@ export fun page(r: Report, n: int, size: int = PAGE) > [str] !> any {
         i = i + 1;
     }
     lines.append("");
-    lines.append("mark rows: magus buzz hack/dev/mark-feedback.buzz -- --verdict should-deny|should-advise|wrong-deny|fine [--note \"...\"] {window(r)} -- <label>...");
+    lines.append("mark rows: magus buzz hack/dev/mark-feedback.buzz -- --verdict should-deny|should-advise|wrong-deny|fine [--note \"...\"] {window(r)} <label>...");
     if (n < total) {
         lines.append("next page: magus buzz hack/dev/show-feedback.buzz -- {window(r)} --page {n + 1}");
     } else {
