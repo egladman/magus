@@ -950,10 +950,17 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
+	// leaseBoundary took 12 s warm and most of 22 s cold, printing nothing.
+	waiting := time.AfterFunc(3*time.Second, func() {
+		fmt.Fprintf(os.Stderr, "magus describe job: loading the workspace and the knowledge graph for %s's terms, usually 10 to 25 s\n", row.ID)
+	})
+	defer waiting.Stop()
+
 	// A read: the symbol goals, their delta, the deletion candidates and the graph evidence
 	// take the graph as built, and none while a symbol index is stale (see jobGraph).
 	graph := newJobGraph(root, false)
 	facts := leaseBoundary(ctx, root, store, row, leases, graph)
+	waiting.Stop()
 	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, graph, row.WritePaths)
 	brief := job.NewTerms(row, facts)
 
@@ -1379,18 +1386,21 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	// Validating before the worktree is made leaves nothing behind for a record with problems.
-	judged := judgedMerge(row)
-	if globalCfg.DryRun || row.Checkout != "" {
-		validation, err := job.ValidateFork(ctx, store, row.ID, judged, globalCfg.Jobs, reader)
-		if err != nil {
-			return err
-		}
-		if globalCfg.DryRun {
-			return forkDryRun(opts, validation)
-		}
-		if len(validation.Problems) > 0 {
-			return refuseFork(validation)
-		}
+	// A real fork's store write says each notice, so this pass stays quiet.
+	validating := store
+	if !globalCfg.DryRun {
+		validating = store.Quiet()
+	}
+	validation, err := job.ValidateFork(ctx, validating, row.ID, judgedMerge(row), globalCfg.Jobs, reader)
+	if err != nil {
+		return err
+	}
+	judgedLive := noteForkJudgedAsUpdate(ctx, store, row.ID)
+	if globalCfg.DryRun {
+		return forkDryRun(opts, validation)
+	}
+	if len(validation.Problems) > 0 {
+		return refuseFork(validation)
 	}
 	var worktree types.JobWorktree
 	made, built := false, false
@@ -1401,14 +1411,20 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		mirrored := job.MirroredBinary(exe, root)
+		priorHead := job.CheckoutHead(ctx, row.Checkout)
 		if worktree, made, err = store.ForkWorktree(ctx, row.ID, row.Checkout, row.Checkpoint, mirrored); err != nil {
 			return err
 		}
-		if made && mirrored != "" && worktree.Binary == "" && job.BuildsItsOwnMagus(worktree.Root) {
-			if err := bootstrapCheckout(ctx, mirrored, root, worktree.Root); err != nil {
+		followed := !made && priorHead != "" && priorHead != worktree.Base
+		if mirrored != "" && (followed || made && worktree.Binary == "") && job.BuildsItsOwnMagus(worktree.Root) {
+			reused, err := provisionCheckout(ctx, store, jobWS, mirrored, root, row, worktree)
+			if err != nil {
+				if !made {
+					return err
+				}
 				return errors.Join(err, store.DiscardWorktree(ctx, worktree))
 			}
-			worktree.Binary, built = filepath.Join(worktree.Root, "magus"), true
+			worktree.Binary, built = filepath.Join(worktree.Root, "magus"), !reused
 		}
 		declare := merge
 		merge = func(u *types.Job) {
@@ -1434,8 +1450,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	case errors.As(err, &refused):
 		return err
 	case err != nil:
+		noteForkRowEnded(ctx, store, row.ID, judgedLive)
 		// The fork stored nothing, so the validation is read again for the list it joined.
-		if v, verr := job.ValidateFork(ctx, store, row.ID, merge, globalCfg.Jobs, reader); verr == nil && len(v.Problems) > 0 {
+		if v, verr := job.ValidateFork(ctx, store.Quiet(), row.ID, merge, globalCfg.Jobs, reader); verr == nil && len(v.Problems) > 0 {
 			return refuseFork(v)
 		}
 		return exit.Usagef("magus job fork: %s", err)
@@ -1477,10 +1494,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 		printClaimNotes(os.Stdout, slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)))
 		if len(derived) > 0 {
-			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover:\n", len(derived))
-			for _, claim := range derived {
-				fmt.Printf("  %s\n", claim)
-			}
+			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover: -o json lists each\n", len(derived))
 		}
 		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.load, stored))
 		job.RenderReferencedOutside(os.Stdout, referenced, referencedGap)
@@ -2186,11 +2200,57 @@ func printJobWorktree(out io.Writer, row types.Job, built bool) {
 	}
 }
 
+// noteForkJudgedAsUpdate says when id is live, so its fork is judged only on
+// what it adds. A fork of the same record after the row ends is judged whole.
+func noteForkJudgedAsUpdate(ctx context.Context, store *job.Store, id string) bool {
+	live, err := store.RowLive(id)
+	if err != nil {
+		slog.InfoContext(ctx, "whether "+id+" is live could not be read: "+err.Error(), attr.Notice("note"))
+		return false
+	}
+	if live {
+		slog.InfoContext(ctx, fmt.Sprintf("%s is live, so this fork is judged only on what it adds; once it ends, the same record is judged whole", id), attr.Notice("note"))
+	}
+	return live
+}
+
+// noteForkRowEnded explains a refusal that the validation before the build did
+// not list: the row ended meanwhile, so the store write judged it whole.
+func noteForkRowEnded(ctx context.Context, store *job.Store, id string, wasLive bool) {
+	if !wasLive {
+		return
+	}
+	if live, err := store.RowLive(id); err == nil && !live {
+		slog.InfoContext(ctx, fmt.Sprintf("%s ended while this fork ran, so it is judged whole as a new job, not as an update", id), attr.Notice("note"))
+	}
+}
+
+// provisionCheckout readies a checkout the fork made or moved: it reuses a
+// ./magus built at the checkout's base, else the script builds one. It then
+// installs only the projects row touches. reused says no build ran.
+func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, exe, forker string, row types.Declaration, wt types.JobWorktree) (reused bool, err error) {
+	placed, err := store.PlaceBuiltBinary(ctx, exe, wt.Base, wt.Root)
+	if err != nil {
+		return false, err
+	}
+	if placed != "" {
+		fmt.Fprintf(os.Stderr, "magus job fork: reused %s, already built at %.12s\n", placed, wt.Base)
+	}
+	if ws.Unavailable != "" {
+		fmt.Fprintf(os.Stderr, "magus job fork: the workspace did not load (%s), so every project's dependencies are installed\n", ws.Unavailable)
+		return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root)
+	}
+	var declared types.Job
+	row.Apply(&declared)
+	return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root, "--install", job.InstallProjects(forker, declared, ws.Projects))
+}
+
 // bootstrapCheckout builds ./magus in dir, a checkout the fork just made, from dir's own
 // sources: exe runs the forker's copy of [job.CheckoutBootstrapScript] from forker, and the
 // script's progress goes to stderr, since the fork's stdout is its record.
-func bootstrapCheckout(ctx context.Context, exe, forker, dir string) error {
-	cmd := exec.CommandContext(ctx, exe, "buzz", job.CheckoutBootstrapScript, "--", "--checkout", dir)
+func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...string) error {
+	args := append([]string{"buzz", job.CheckoutBootstrapScript, "--", "--checkout", dir}, flags...)
+	cmd := exec.CommandContext(ctx, exe, args...)
 	var output bytes.Buffer
 	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, os.Stderr, io.MultiWriter(os.Stderr, &output)
 	if err := cmd.Run(); err != nil {

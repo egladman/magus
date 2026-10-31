@@ -8,11 +8,166 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type FollowCheckpointSuite struct {
+	suite.Suite
+	store *Store
+	repo  *testkit.Repo
+	row   types.Job
+	start string
+}
+
+func TestFollowCheckpointSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(FollowCheckpointSuite))
+}
+
+func (s *FollowCheckpointSuite) SetupTest() {
+	s.store, _, s.repo = worktreeStore(s.T())
+	s.row = forkInto(s.T(), s.store, "w1", "")
+	s.start = s.row.Worktree.Base
+}
+
+func (s *FollowCheckpointSuite) advance() string {
+	s.repo.Git("commit", "-q", "--allow-empty", "-m", "newer")
+	return s.repo.Head()
+}
+
+func (s *FollowCheckpointSuite) fork(checkpoint string) (types.JobWorktree, error) {
+	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", s.row.Worktree.Root, checkpoint, "")
+	s.False(made)
+	return wt, err
+}
+
+func (s *FollowCheckpointSuite) head() string {
+	return s.repo.Git("-C", s.row.Worktree.Root, "rev-parse", "HEAD")
+}
+
+func (s *FollowCheckpointSuite) TestACleanCheckoutFastForwardsToADescendant() {
+	newer := s.advance()
+	wt, err := s.fork(newer)
+	s.Require().NoError(err)
+	s.Equal(newer, wt.Base)
+	s.Equal(newer, s.head())
+	s.Equal("w1", s.repo.Git("-C", wt.Root, "symbolic-ref", "--short", "HEAD"))
+}
+
+func (s *FollowCheckpointSuite) TestADirtyCheckoutIsRefusedNamingThePathAndStays() {
+	newer := s.advance()
+	s.Require().NoError(os.WriteFile(filepath.Join(s.row.Worktree.Root, "a.txt"), []byte("work\n"), 0o644))
+	_, err := s.fork(newer)
+	s.Require().ErrorContains(err, s.row.Worktree.Root)
+	s.ErrorContains(err, "uncommitted work (a.txt)")
+	s.Equal(s.start, s.head())
+}
+
+func (s *FollowCheckpointSuite) TestACheckpointThatLeavesCommitsBehindIsRefused() {
+	newer := s.advance()
+	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "the job's own")
+	mine := s.head()
+	_, err := s.fork(newer)
+	s.Require().ErrorContains(err, "does not descend")
+	s.Equal(mine, s.head())
+}
+
+func (s *FollowCheckpointSuite) TestForkingAtItsOwnBaseKeepsItsCommits() {
+	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "the job's own")
+	mine := s.head()
+	wt, err := s.fork(s.start)
+	s.Require().NoError(err)
+	s.Equal(s.start, wt.Base)
+	s.Equal(mine, s.head())
+}
+
+func (s *FollowCheckpointSuite) TestAnUnknownCheckpointIsRefused() {
+	_, err := s.fork("0123456789abcdef0123456789abcdef01234567")
+	s.Require().ErrorContains(err, "cannot find")
+	s.Equal(s.start, s.head())
+}
+
+func TestAdoptingAtAnAncestorOfTheHeadStaysAtTheHead(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	old := repo.Head()
+	repo.Git("commit", "-q", "--allow-empty", "-m", "newer")
+	dir := filepath.Join(t.TempDir(), "shared")
+	repo.Git("worktree", "add", "-q", "-b", "shared", dir)
+
+	wt, made, err := s.ForkWorktree(t.Context(), "child", dir, old, "")
+	require.NoError(t, err)
+	assert.False(t, made)
+	assert.Equal(t, repo.Head(), wt.Base)
+}
+
+func TestInstallProjectsNamesOwnersWithAnInstallTarget(t *testing.T) {
+	t.Parallel()
+	projects := []*types.Project{
+		{Path: "."},
+		{Path: "docs", MagusfileTargets: []string{"install"}},
+		{Path: "libs/xdg"},
+	}
+	row := types.Job{WritePaths: []string{"docs/a.md", "docs/b.md", "libs/xdg/x.go", "main.go"}}
+	assert.Equal(t, "docs", InstallProjects(t.TempDir(), row, projects))
+}
+
+func TestInstallProjectsSaysNoneForAGoOnlyJob(t *testing.T) {
+	t.Parallel()
+	projects := []*types.Project{{Path: "."}, {Path: "docs", MagusfileTargets: []string{"install"}}}
+	assert.Equal(t, "none", InstallProjects(t.TempDir(), types.Job{WritePaths: []string{"main.go"}}, projects))
+}
+
+func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
+	t.Parallel()
+	s, _ := validateWorkspace(t)
+	var notes strings.Builder
+	s.notices = &notes
+	merge := func(u *types.Job) { u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
+
+	_, err := ValidateFork(t.Context(), s.Quiet(), "w", merge, config.Jobs{}, nil)
+	require.NoError(t, err)
+	_, _ = ForkMerge(t.Context(), s, "w", merge, config.Jobs{}, nil)
+	assert.Equal(t, 1, strings.Count(notes.String(), `added the goal "lint"`), notes.String())
+}
+
+func TestInstallProjectsSaysNoneForAReadOnlyJob(t *testing.T) {
+	t.Parallel()
+	projects := []*types.Project{{Path: "docs", MagusfileTargets: []string{"install"}}}
+	assert.Equal(t, "none", InstallProjects(t.TempDir(), types.Job{ReadOnly: true}, projects))
+}
+
+func TestPlaceBuiltBinaryFindsNoneWhenExeCannotAnswer(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	placed, err := s.PlaceBuiltBinary(t.Context(), filepath.Join(t.TempDir(), "absent"), repo.Head(), t.TempDir())
+	require.NoError(t, err)
+	assert.Empty(t, placed)
+}
+
+// Soft paths come from the symbol index, so warm must raise what cold does.
+func TestSoftPathsRaiseNoWorkspaceProblem(t *testing.T) {
+	t.Parallel()
+	store, _ := validateWorkspace(t)
+	cold := types.Job{ID: "w", WritePaths: []string{"docs/site/page.buzz"}, ReadOnly: false, Check: &types.LeaseCheck{Target: "site-generate", Project: "docs"}}
+	warm := cold.Clone()
+	warm.WritePaths = append(warm.WritePaths, "cli/registry_test.go")
+	warm.SoftPaths = []string{"cli/registry_test.go"}
+
+	coldList, _ := workspaceProblems(t.Context(), store, cold, cold, false, nil)
+	warmList, _ := workspaceProblems(t.Context(), store, warm, warm, false, nil)
+	assert.Equal(t, codes(coldList), codes(warmList))
+	assert.NotContains(t, codes(warmList), types.GateNotRun)
+
+	warm.SoftPaths = nil
+	declared, _ := workspaceProblems(t.Context(), store, warm, warm, false, nil)
+	assert.Contains(t, codes(declared), types.GateNotRun, "the same path, declared, raises its gate")
+}
 
 // worktreeStore is a job store over a fresh git repository, and that repository.
 func worktreeStore(t *testing.T) (*Store, Location, *testkit.Repo) {

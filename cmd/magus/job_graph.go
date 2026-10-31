@@ -610,10 +610,9 @@ func staleIndexHits(s types.KnowledgeStaleIndex, paths []string) bool {
 	})
 }
 
-// extendedFootprint is rec with the tests beside what it writes added to its write paths and
-// the outputs regenerated from them permitted as the integrator's, with a note for each and a
-// count line. A bound caller, whose fork may not widen its boundary, and a workspace that
-// did not load are skipped.
+// extendedFootprint adds to rec's write paths the tests beside what it writes.
+// It permits the outputs they regenerate as the integrator's. Each kind gets a
+// count line. It skips a bound caller and a workspace that did not load.
 func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, root string, rec types.Declaration, ws job.Workspace) (types.Declaration, []string) {
 	if store.Actor().Bound() || ws.Unavailable != "" {
 		return rec, nil
@@ -624,12 +623,16 @@ func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, r
 	if g := graph.load(ctx); g != nil && g.HasSymbols() {
 		referrers = g.Referrers
 	}
-	paths, notes := job.ExtendFootprint(root, declared, ws.Projects, referrers)
+	paths, _ := job.ExtendFootprint(root, declared, ws.Projects, referrers)
 	rec.WritePaths = append(rec.WritePaths, paths...)
 	rec.SoftPaths = append(rec.SoftPaths, paths...)
 	declared.WritePaths = append(declared.WritePaths, paths...)
 	deviations := job.IntegratorDeviations(root, declared, ws.Projects, ws.Ignored)
 	rec.Deviations = append(rec.Deviations, deviations...)
+	var notes []string
+	if len(paths) > 0 {
+		notes = append(notes, fmt.Sprintf("%d test file(s) beside the write paths were added to them: -o json lists each", len(paths)))
+	}
 	if len(deviations) > 0 {
 		notes = append(notes, fmt.Sprintf("%d regenerated output(s) outside the write paths are permitted: the integrator owns them", len(deviations)))
 	}

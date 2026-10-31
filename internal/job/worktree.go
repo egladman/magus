@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -58,7 +59,8 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		switch {
 		case samePath(held.Root, dir):
 			held.Kept = ""
-			return held, false, nil
+			followed, err := s.followCheckpoint(ctx, id, held, checkpoint, false)
+			return followed, false, err
 		case held.Made:
 			return types.JobWorktree{}, false, fmt.Errorf("job: %s already owns the checkout %s, which its fork made and magus removes once the job ends, so fork it with `--checkout %s` or let it end first",
 				id, held.Root, held.Root)
@@ -66,7 +68,11 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 	}
 	if _, err := os.Stat(dir); err == nil {
 		wt, err := s.adoptCheckout(ctx, id, dir)
-		return wt, false, err
+		if err != nil {
+			return types.JobWorktree{}, false, err
+		}
+		followed, err := s.followCheckpoint(ctx, id, wt, checkpoint, true)
+		return followed, false, err
 	}
 	revision, digest := types.ParseCheckpointToken(checkpoint)
 	if digest != "" {
@@ -107,6 +113,162 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 	}
 	return wt, true, nil
 }
+
+// followCheckpoint moves wt to the revision a fork names. The job's own base
+// stays put, so a retry keeps its commits. Adopting allows an ancestor of the
+// head, which a child in a shared checkout names.
+func (s *Store) followCheckpoint(ctx context.Context, id string, wt types.JobWorktree, checkpoint string, adopting bool) (types.JobWorktree, error) {
+	revision, digest := types.ParseCheckpointToken(checkpoint)
+	if revision == "" {
+		return wt, nil
+	}
+	drv, why := resolveDriver(ctx, wt.Source)
+	if drv == nil {
+		return wt, fmt.Errorf("job: %s names the checkpoint %s for the checkout %s, and %s", id, revision, wt.Root, why)
+	}
+	target, err := drv.FindCommit(ctx, wt.Source, revision)
+	if err != nil {
+		return wt, fmt.Errorf("job: %s's checkpoint %s is a commit %s cannot find: %w", id, revision, drv.Name(), err)
+	}
+	head, err := drv.FindCommit(ctx, wt.Root, "")
+	if err != nil {
+		return wt, fmt.Errorf("job: the head of %s, the checkout of %s, cannot be read: %w", wt.Root, id, err)
+	}
+	if target.ID == wt.Base {
+		return wt, nil
+	}
+	if target.ID == head.ID {
+		wt.Base = head.ID
+		return wt, nil
+	}
+	if digest != "" {
+		return wt, fmt.Errorf("job: %s's checkpoint %s carries uncommitted changes, which %s cannot move to: commit them, then fork at the commit", id, checkpoint, wt.Root)
+	}
+	dirty, err := drv.DirtyFiles(ctx, wt.Root, nil)
+	if err != nil {
+		return wt, fmt.Errorf("job: the status of %s, the checkout of %s, cannot be read: %w", wt.Root, id, err)
+	}
+	dirty = slices.DeleteFunc(dirty, func(p string) bool { return p == binaryName })
+	if len(dirty) > 0 {
+		return wt, fmt.Errorf("job: %s's checkout %s stays at %.12s, not its checkpoint %.12s: %d path(s) in it hold uncommitted work (%s), so commit or drop them, then fork again",
+			id, wt.Root, head.ID, target.ID, len(dirty), listPaths(dirty))
+	}
+	descends, err := drv.IsAncestor(ctx, wt.Root, head.ID, target.ID)
+	if err != nil {
+		return wt, fmt.Errorf("job: whether %.12s descends from %.12s, the head of %s, cannot be read: %w", target.ID, head.ID, wt.Root, err)
+	}
+	if !descends {
+		if contained, err := drv.IsAncestor(ctx, wt.Root, target.ID, head.ID); err == nil && contained && adopting {
+			return wt, nil
+		}
+		return wt, fmt.Errorf("job: %s's checkout %s stays at %.12s: its checkpoint %.12s does not descend from that head, so moving there would leave commits behind. Fork at a descendant of the head, or end the job so its next fork makes a new checkout",
+			id, wt.Root, head.ID, target.ID)
+	}
+	if err := drv.FastForward(ctx, wt.Root, target.ID); err != nil {
+		return wt, fmt.Errorf("job: fast-forwarding %s, the checkout of %s, to its checkpoint %.12s: %w", wt.Root, id, target.ID, err)
+	}
+	wt.Base = target.ID
+	return wt, nil
+}
+
+// CheckoutHead is the revision the checkout at dir has checked out, "" when dir
+// is no checkout or its head cannot be read.
+func CheckoutHead(ctx context.Context, dir string) string {
+	if _, err := os.Stat(dir); err != nil {
+		return ""
+	}
+	drv, _ := resolveDriver(ctx, dir)
+	if drv == nil {
+		return ""
+	}
+	head, err := drv.FindCommit(ctx, dir, "")
+	if err != nil {
+		return ""
+	}
+	return head.ID
+}
+
+// RowLive reports whether job id has a row that has not ended, which a fork
+// updates rather than declares.
+func (s *Store) RowLive(id string) (bool, error) {
+	rows, err := s.dry().List()
+	if err != nil {
+		return false, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	return i >= 0 && !rows[i].State.Terminal(), nil
+}
+
+// PlaceBuiltBinary copies into dir a ./magus built at base with nothing
+// uncommitted: exe, or the one a standing checkout at base holds. It returns
+// the source, or "" when none is. Each candidate's own version says what it
+// holds, since a checkout's binary can outlive the base its row records.
+func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (string, error) {
+	rows, err := s.List()
+	if err != nil {
+		return "", err
+	}
+	candidates := []string{exe}
+	for _, r := range rows {
+		if r.Worktree.Standing() && r.Worktree.Base == base && r.Worktree.Binary != "" {
+			candidates = append(candidates, r.Worktree.Binary)
+		}
+	}
+	for _, bin := range candidates {
+		if !builtAt(ctx, bin, base) {
+			continue
+		}
+		if _, err := placeBinary(bin, dir); err != nil {
+			return "", fmt.Errorf("placing %s in %s: %w", bin, dir, err)
+		}
+		return bin, nil
+	}
+	return "", nil
+}
+
+// builtAt reports whether the magus at bin says it was built at base, clean.
+// A binary that cannot answer is not one to reuse.
+func builtAt(ctx context.Context, bin, base string) bool {
+	if bin == "" {
+		return false
+	}
+	out, err := exec.CommandContext(ctx, bin, "version", "-o", "json").Output()
+	if err != nil {
+		return false
+	}
+	var v struct {
+		Version string `json:"version"`
+		Commit  string `json:"commit"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil {
+		return false
+	}
+	return v.Commit == base && !strings.HasSuffix(v.Version, "-dirty")
+}
+
+// InstallProjects is the comma-joined projects with an install target that own
+// a file row writes, "none" when no such project does. A project whose spells
+// are unresolved cannot list its targets, so it is left out.
+func InstallProjects(root string, row types.Job, projects []*types.Project) string {
+	if row.ReadOnly {
+		return noInstall
+	}
+	var found []string
+	for _, f := range writtenFiles(root, row) {
+		p := owningProject(projects, f)
+		if p != nil && runsTarget(p, "install") && !slices.Contains(found, p.Path) {
+			found = append(found, p.Path)
+		}
+	}
+	if len(found) == 0 {
+		return noInstall
+	}
+	slices.Sort(found)
+	return strings.Join(found, ",")
+}
+
+// noInstall is what bootstrap-checkout.buzz's --install reads as no project.
+const noInstall = "none"
 
 // BuildsItsOwnMagus reports whether the checkout at dir holds [CheckoutBootstrapScript], and
 // so builds its ./magus from its own sources instead of taking a copy.

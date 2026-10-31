@@ -327,6 +327,11 @@ func (s *Store) loadedWorkspace() (Workspace, string) {
 // that no check or goal of merged runs, and a write path broader than it allows. Each check
 // that could not run is named, with why, in the second result.
 func workspaceProblems(ctx context.Context, store *Store, merged, judged types.Job, updates bool, read SymbolReader) (types.JobProblems, []string) {
+	// Soft paths come from the symbol index, so a list judged on them would
+	// change with the index's temperature.
+	judged.WritePaths = slices.DeleteFunc(slices.Clone(judged.WritePaths), func(p string) bool {
+		return slices.Contains(merged.SoftPaths, p)
+	})
 	ws, why := store.loadedWorkspace()
 	writes := !judged.ReadOnly && len(judged.WritePaths) > 0
 	if why != "" {

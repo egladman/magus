@@ -2103,7 +2103,10 @@ func TestJobForkGradesWithTheInstalledGrader(t *testing.T) {
 	})
 
 	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
-	assert.Equal(t, []string{root}, graded)
+	assert.NotEmpty(t, graded)
+	for _, at := range graded {
+		assert.Equal(t, root, at)
+	}
 }
 
 func TestEvidenceFlagCollectsGoalRefPairs(t *testing.T) {
