@@ -1,0 +1,7 @@
+### Changed
+
+- **A machine short of memory now refuses a new step.** While the kernel says memory is in
+  a bad state, a step exits 75 with MGS3053 instead of starting: on macOS the compressor at
+  75% of its segment limit or critical pressure, on Linux a full memory stall for 25% of
+  the last 10 seconds. Running steps keep going. A platform with no reading says so once
+  per run. `broker: off` is the only way to turn it off.

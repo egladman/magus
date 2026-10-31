@@ -341,9 +341,19 @@ func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 // when refused and passed otherwise, last written at at.
 func writeRefusalLog(t *testing.T, runsDir, inv string, at time.Time, refused bool, args ...string) {
 	t.Helper()
-	result := journal.Event{Ts: at.UnixMilli(), Inv: inv, Project: ".", Target: "go-test:rw", Kind: journal.KindResult, Status: journal.StatusPass}
+	var code types.DiagnosticCode
 	if refused {
-		result.Status, result.DiagnosticCode = journal.StatusFail, string(types.MachineBudgetExhausted)
+		code = types.MachineBudgetExhausted
+	}
+	writeCodedLog(t, runsDir, inv, at, code, args...)
+}
+
+// writeCodedLog is writeRefusalLog naming the code; "" passes the target.
+func writeCodedLog(t *testing.T, runsDir, inv string, at time.Time, code types.DiagnosticCode, args ...string) {
+	t.Helper()
+	result := journal.Event{Ts: at.UnixMilli(), Inv: inv, Project: ".", Target: "go-test:rw", Kind: journal.KindResult, Status: journal.StatusPass}
+	if code != "" {
+		result.Status, result.DiagnosticCode = journal.StatusFail, string(code)
 	}
 	var body []byte
 	for _, ev := range []journal.Event{
@@ -359,6 +369,43 @@ func writeRefusalLog(t *testing.T, runsDir, inv string, at time.Time, refused bo
 	path := filepath.Join(runsDir, inv+".jsonl")
 	require.NoError(t, os.WriteFile(path, body, 0o644))
 	require.NoError(t, os.Chtimes(path, at, at))
+}
+
+type PressureRetrySuite struct {
+	suite.Suite
+}
+
+func TestPressureRetrySuite(t *testing.T) {
+	suite.Run(t, new(PressureRetrySuite))
+}
+
+const pressureRetry = "./magus run lint ."
+
+func (s *PressureRetrySuite) refusedAgo(ago time.Duration) context.Context {
+	cacheDir := s.T().TempDir()
+	runsDir := filepath.Join(cacheDir, "runs")
+	s.Require().NoError(os.MkdirAll(runsDir, 0o755))
+	writeCodedLog(s.T(), runsDir, "invrefused", time.Now().Add(-ago), types.MemoryPressureHigh, "run", "lint", ".")
+	return context.WithValue(s.T().Context(), locationKey{}, location{cacheDir: cacheDir})
+}
+
+func (s *PressureRetrySuite) TestALeasedRetryIsToldTheOwedFilingAndNotTheWait() {
+	d := denyRefusedRetry(s.refusedAgo(10*time.Second), Dependencies{lease: "figures"}, "", pressureRetry)
+	s.Require().True(d.refused())
+	s.Contains(d.Say, "refused with MGS3053 10s ago")
+	s.Contains(d.Say, "owed \""+types.OwedNoSeat+"\"")
+	s.NotContains(d.Say, "status --wait", "no seat clears this")
+}
+
+func (s *PressureRetrySuite) TestAnUnboundRetryIsToldToFreeMemoryAndNotToFork() {
+	d := denyRefusedRetry(s.refusedAgo(10*time.Second), Dependencies{}, "", pressureRetry)
+	s.Require().True(d.refused())
+	s.Contains(d.Say, "free memory first")
+	s.NotContains(d.Say, "fork a job")
+}
+
+func (s *PressureRetrySuite) TestARetryAfterTheMinutePasses() {
+	s.False(denyRefusedRetry(s.refusedAgo(90*time.Second), Dependencies{}, "", pressureRetry).refused())
 }
 
 // TestDenyRefusedRetry: a run this checkout saw refused with MGS3009 inside the minute is

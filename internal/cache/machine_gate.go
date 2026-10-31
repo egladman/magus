@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -58,6 +59,9 @@ func (k *kickingAdmitter) Claim(ctx context.Context, c types.MachineClaim) (type
 // A var, not a const, for the same reason as elsewhere in this package: a timing a test
 // cannot shorten is a timing that either costs real wall-clock or goes uncovered.
 var machineReleaseTimeout = 5 * time.Second
+
+// readPressure is a var so a test can stand in for a really full machine.
+var readPressure = mem.ReadPressure
 
 // ExitCodeMachineBusy is the process status a machine-budget refusal asks for: 75,
 // EX_TEMPFAIL. It lives here rather than beside the CLI's other exit codes because the
@@ -115,6 +119,8 @@ type machineGate struct {
 	admit MachineAdmitter
 	log   *slog.Logger
 	lost  sync.Once
+	// unread says once that this host's memory state has no reading.
+	unread sync.Once
 	// required refuses a step the admitter could not answer for, where the default
 	// admits it unarbitrated.
 	required bool
@@ -130,6 +136,7 @@ type machineGate struct {
 //
 // A broker that dies, or a transport that breaks, admits the step and says so once
 // under best-effort; under required it refuses with MGS3022 (exit 69).
+// A machine short of memory refuses with MGS3053 (exit 75) before that.
 func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func(), error) {
 	_, release, err := g.claim(ctx, c)
 	return release, err
@@ -187,6 +194,7 @@ func (h *machineHold) lend() {
 // reclaim takes the claim again once the last lent dispatch returns. It waits on this
 // run's claims and is refused by any other invocation's, so a composer can fail here
 // after its members ran.
+// It reads no memory: this step is running, and running work is never refused.
 func (h *machineHold) reclaim(ctx context.Context) error {
 	h.mu.Lock()
 	h.lent--
@@ -197,7 +205,7 @@ func (h *machineHold) reclaim(ctx context.Context) error {
 	}
 	// Claimed unlocked, so a wait starting meanwhile never blocks behind it; such a wait
 	// gets the claim handed straight back.
-	id, release, err := h.gate.claim(ctx, h.claim)
+	id, release, err := h.gate.seat(ctx, h.claim)
 	if err != nil {
 		return err
 	}
@@ -237,11 +245,36 @@ func LendMachineClaim(ctx context.Context, fn func(context.Context) error) error
 }
 
 // claim is acquire, also returning the id of the claim granted: "" when nothing
-// arbitrates the step.
+// arbitrates the step. broker: off is that case, and reads no memory either.
 func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, func(), error) {
 	if g == nil || g.admit == nil {
 		return "", func() {}, nil
 	}
+	if err := g.refuseUnderPressure(ctx, c); err != nil {
+		return "", nil, err
+	}
+	return g.seat(ctx, c)
+}
+
+// refuseUnderPressure is the MGS3053 refusal while the kernel says memory is
+// bad. A host with no reading is said once and passes, since refusing would
+// stop every run on it forever.
+func (g *machineGate) refuseUnderPressure(ctx context.Context, c types.MachineClaim) error {
+	p, err := readPressure(ctx)
+	if err != nil {
+		g.unread.Do(func() {
+			g.log.WarnContext(ctx, "host memory state is not read for this run, so steps start whatever it is", attr.Error(err))
+		})
+		return nil
+	}
+	if !p.Bad {
+		return nil
+	}
+	return memoryPressureError(c, p, claimLease(ctx))
+}
+
+// seat asks the budget for c, with no reading of memory.
+func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (string, func(), error) {
 	v, err := g.ask(ctx, c)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -562,13 +595,30 @@ func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Tim
 	next := fmt.Sprintf("To run it once the budget can seat it, pipe the budget into the same command: `%s | %s <same args>`",
 		hint.Status.With("--wait"), hint.Run)
 	if lease != "" {
-		next = fmt.Sprintf("Job %s never waits for a seat: file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
-			lease, hint.JobExit.With(lease), types.OwedNoSeat)
+		next = owedFiling(lease)
 	}
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this machine's build budget is full; %s, and %s. %s. The broker %s. %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
 		describeMachineRemaining(v), describeMachineHolders(v.Holders), describeMachinePacking(c, v, now), next)}
+}
+
+// owedFiling tells a caller under a job lease how to file a refused check.
+func owedFiling(lease string) string {
+	return fmt.Sprintf("Job %s never waits for a seat: file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
+		lease, hint.JobExit.With(lease), types.OwedNoSeat)
+}
+
+// memoryPressureError offers no wait pipe: that waits on declared claims and
+// cannot see this.
+func memoryPressureError(c types.MachineClaim, p mem.Pressure, lease string) error {
+	next := fmt.Sprintf("Free memory, then run the same command again: `%s` shows what magus holds, and this reading counts everything on the machine", hint.Status.String())
+	if lease != "" {
+		next = owedFiling(lease)
+	}
+	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MemoryPressureHigh,
+		"not starting %s %s: this machine is short of memory right now: %s. Running steps keep going. %s",
+		displayProject(c.Project), c.Target, p.State, next)}
 }
 
 // claimLease is the job lease the refused run acts under, "" when it acts under none or

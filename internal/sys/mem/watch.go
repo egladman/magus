@@ -19,9 +19,8 @@ const (
 	// LowHeadroomDivisor sets the threshold: the watchdog talks below total/8. Above
 	// it a build is using the machine, which is what a build is for.
 	//
-	// This is the OBSERVED half and it only ever warns. What magus queues or refuses on
-	// is the DECLARED half, cache.MachineBudget, so the same command reaches the same
-	// verdict whatever else the machine happens to be doing.
+	// Low headroom only warns. What magus queues on is the DECLARED budget,
+	// cache.MachineBudget, and what it refuses on besides is ReadPressure.
 	LowHeadroomDivisor = 8
 
 	// reWarnDropBytes is how much further the floor must fall before saying so
@@ -52,6 +51,15 @@ type Reading struct {
 	// reported. Word the warning from this rather than from SwapGrowthBytes being
 	// non-zero: a headroom warning routinely carries a few megabytes of drift.
 	SwapTriggered bool
+}
+
+// Pressure is the kernel's own word on memory, read when a step asks to start.
+// On darwin, headroom and swap do not move while the compressor absorbs load.
+type Pressure struct {
+	// Bad says a new step must not start.
+	Bad bool
+	// State says what was read, in words a refusal can quote.
+	State string
 }
 
 // Watch reports memory trouble until ctx is done, calling report when headroom

@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,11 +15,127 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/types"
 )
+
+type MemoryPressureSuite struct {
+	suite.Suite
+	reads int
+}
+
+func TestMemoryPressureSuite(t *testing.T) {
+	suite.Run(t, new(MemoryPressureSuite))
+}
+
+func (s *MemoryPressureSuite) reading(p mem.Pressure, err error) {
+	saved := readPressure
+	s.T().Cleanup(func() { readPressure = saved })
+	s.reads = 0
+	readPressure = func(context.Context) (mem.Pressure, error) {
+		s.reads++
+		return p, err
+	}
+}
+
+var badMemory = mem.Pressure{Bad: true, State: "the memory compressor holds 97% of its segment limit"}
+
+func (s *MemoryPressureSuite) gate() (*machineGate, *budgetAdmitter) {
+	b, _ := testBudget(s.T(), 10_000, 8)
+	return testGate(s.T(), b)
+}
+
+func (s *MemoryPressureSuite) TestABadReadingRefusesBeforeTheBudgetIsAsked() {
+	s.reading(badMemory, nil)
+	g, adm := s.gate()
+	_, err := g.acquire(s.T().Context(), types.MachineClaim{Project: "docs", Target: "test", PID: 100})
+	s.Require().ErrorIs(err, types.MemoryPressureHigh)
+	var exit types.ExitError
+	s.Require().ErrorAs(err, &exit)
+	s.Equal(ExitCodeMachineBusy, exit.Code)
+	s.Contains(err.Error(), "not starting docs test")
+	s.Contains(err.Error(), badMemory.State)
+	s.Contains(err.Error(), "Running steps keep going")
+	s.Zero(adm.requests, "the refusal reaches no budget, so no claim waits, a gate's included")
+}
+
+func (s *MemoryPressureSuite) TestARefusalOffersNoWaitForASeat() {
+	s.reading(badMemory, nil)
+	g, _ := s.gate()
+	_, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test"})
+	s.NotContains(err.Error(), "--wait")
+}
+
+func (s *MemoryPressureSuite) TestARefusalToALeasedWorkerNamesTheOwedFiling() {
+	s.T().Setenv("XDG_STATE_HOME", s.T().TempDir())
+	s.reading(badMemory, nil)
+	g, _ := s.gate()
+	_, err := g.acquire(types.WithJobLease(s.T().Context(), "wave/api"), types.MachineClaim{Target: "test"})
+	s.Require().ErrorIs(err, types.MemoryPressureHigh)
+	s.Contains(err.Error(), owedFiling("wave/api"))
+}
+
+func (s *MemoryPressureSuite) TestAHealthyReadingSeatsTheClaim() {
+	s.reading(mem.Pressure{State: "fine"}, nil)
+	g, adm := s.gate()
+	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+	s.Require().NoError(err)
+	release()
+	s.Equal(1, adm.requests)
+}
+
+func (s *MemoryPressureSuite) TestAnUnreadableHostSaysSoOnceAndAdmits() {
+	s.reading(mem.Pressure{}, errors.New("this platform has no memory-pressure reading"))
+	g, adm := s.gate()
+	var logged bytes.Buffer
+	g.log = slog.New(slog.NewTextHandler(&logged, nil))
+	for range 2 {
+		release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+		s.Require().NoError(err)
+		release()
+	}
+	s.Equal(2, adm.requests)
+	s.Equal(1, strings.Count(logged.String(), "host memory state is not read"))
+	s.Contains(logged.String(), "this platform has no memory-pressure reading")
+}
+
+// A composer waiting on its members is a running step. Memory going bad while
+// it waited must not fail its retake.
+func (s *MemoryPressureSuite) TestARunningStepRetakesItsClaimUnderPressure() {
+	s.reading(mem.Pressure{State: "fine"}, nil)
+	g, _ := s.gate()
+	claim := types.MachineClaim{Target: "ci", PID: 100}
+	id, release, err := g.claim(s.T().Context(), claim)
+	s.Require().NoError(err)
+	h := &machineHold{gate: g, claim: claim, id: id, release: release}
+	h.lend()
+	s.Empty(h.current())
+
+	s.reading(badMemory, nil)
+	s.Require().NoError(h.reclaim(s.T().Context()))
+	s.NotEmpty(h.current())
+	s.Zero(s.reads, "a retake reads no memory")
+	h.close()
+}
+
+func (s *MemoryPressureSuite) TestAdmitMachineRefusesHostWorkToo() {
+	s.reading(badMemory, nil)
+	_, adm := s.gate()
+	_, err := AdmitMachine(s.T().Context(), adm, types.MachineClaim{Project: ".", Target: "session-brief"}, false)
+	s.Require().ErrorIs(err, types.MemoryPressureHigh)
+}
+
+func (s *MemoryPressureSuite) TestNoAdmitterReadsNoMemory() {
+	s.reading(badMemory, nil)
+	release, err := AdmitMachine(s.T().Context(), nil, types.MachineClaim{Target: "test"}, false)
+	s.Require().NoError(err, "broker: off wires no admitter, and is the one way out of a machine stuck bad")
+	release()
+	s.Zero(s.reads)
+}
 
 func TestMachineRefusalNamesTheOversizedClaimAndTheWaitForm(t *testing.T) {
 	b, _ := testBudget(t, 4000, 8)

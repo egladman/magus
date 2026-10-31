@@ -809,6 +809,11 @@ const JobStoreWriterOlder DiagnosticCode = "MGS3051"
 // it ran on is below the critical floor, or a fork refused for that. Text alone
 // cannot tell a fixture printing it from a full disk.
 const DiskFull DiagnosticCode = "MGS3052"
+
+// MemoryPressureHigh is a step magus did not start because the kernel says
+// memory is in a bad state right now. It exits 75 like MGS3009, but no seat
+// clears it: the cause may be nothing magus holds.
+const MemoryPressureHigh DiagnosticCode = "MGS3053"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1145,6 +1150,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	StoreLineUndecodable,
 	JobStoreWriterOlder,
 	DiskFull,
+	MemoryPressureHigh,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,

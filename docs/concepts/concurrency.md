@@ -304,11 +304,17 @@ Key properties:
   machine; `aggressive` reserves none of that, taking every usable megabyte down to a
   fixed 512 MiB floor for the kernel and its page cache. A CI job that asks for
   `aggressive` claims memory the same way it claims cores.
-- **Declared or measured, never observed live.** It arbitrates what targets say they
-  need ([`memory_mb`](targets.md) and `slots`) and what their recorded runs measured, so
-  the same command with the same history reaches the same verdict whatever else is
-  running. Observed pressure warns separately and never blocks. A declaration always
-  wins: `slots` is claimed as written, and `memory_mb` is a ceiling a measurement only
+- **A claim is declared or measured; a failing machine refuses anyway.** The budget
+  arbitrates what targets say they need ([`memory_mb`](targets.md) and `slots`) and what
+  their recorded runs measured, so on a healthy machine the same command with the same
+  history reaches the same verdict whatever else is running. No declaration can see what
+  else fills the machine, so a new step is also refused
+  ([MGS3053](../reference/codes/sandbox/MGS3053.md), exit **75**) while the kernel says
+  memory is in a bad state: on macOS the compressor at 75% of its segment limit or
+  critical pressure, on Linux a full memory stall for 25% of the last 10 seconds. It
+  never queues, a gate included, and running steps are never stopped. A platform with no
+  reading says so once per run and starts the step. A low-headroom warning still speaks
+  separately while a run works. A declaration always wins: `slots` is claimed as written, and `memory_mb` is a ceiling a measurement only
   narrows. A target that declares nothing claims, once it has three successful measured
   runs, 1.25 times their highest peak memory and the 75th percentile of their CPU time
   over wall time as slots, rounded up; before that, no memory and one slot. A run that

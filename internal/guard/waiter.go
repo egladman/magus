@@ -242,14 +242,18 @@ func eachCall(f *syntax.File, d Dialect, fn func(*syntax.CallExpr, hint.Invocati
 // consecutive refusals came back inside it.
 const refusedRetryWindow = 60 * time.Second
 
-// refusalCode is how a refusal's code reads inside a run log line, matched before the line
-// is decoded so a log full of output costs a byte search per line.
-var refusalCode = []byte(`"` + types.MachineBudgetExhausted + `"`)
+// refusalCodes are the refusals as a run log line spells them. Matching before
+// decoding keeps a log full of output to a byte search per line.
+var refusalCodes = [][]byte{
+	[]byte(`"` + types.MachineBudgetExhausted + `"`),
+	[]byte(`"` + types.MemoryPressureHigh + `"`),
+}
 
-// refusedRun is a magus command this checkout's run log recorded refused with MGS3009.
+// refusedRun is a magus command this checkout's log recorded refused.
 type refusedRun struct {
 	argv []string
 	at   time.Time
+	code types.DiagnosticCode
 }
 
 // denyRefusedRetry refuses a magus run that repeats, argv for argv, one this checkout's run
@@ -261,6 +265,9 @@ type refusedRun struct {
 // window are opened. A leased caller is told the pipe, whose wait holds the seat for the run it
 // feeds; the unbound root is told to fork a job instead, since orchestrator-groundwork
 // refuses it the run.
+//
+// MGS3053 counts too. No seat clears it, so a caller is told the owed filing
+// or to free memory, never the pipe.
 func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string) denial {
 	argvs := unwaitedRuns(command)
 	if len(argvs) == 0 {
@@ -272,21 +279,36 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string)
 		return denial{}
 	}
 	run := strings.Join(append([]string{hint.BinaryName()}, quoteArgs(r.argv)...), " ")
+	ago := now.Sub(r.at).Round(time.Second)
+	if r.code == types.MemoryPressureHigh {
+		next := "free memory first, then run it once the minute has passed"
+		if deps.lease != "" {
+			next = fmt.Sprintf("file this check as owed with `%s --stdin` and owed %q on its gate evidence", hint.JobExit.With(deps.lease), types.OwedNoSeat)
+		}
+		return denial{
+			Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago: this machine is short of memory; %s.", run, r.code, ago, next),
+			Why: denyPressureRetryWhy,
+		}
+	}
 	if deps.lease == "" {
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; the root runs no target: fork a job for it: `%s`.",
-				run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.JobFork.String()),
+				run, r.code, ago, hint.JobFork.String()),
 			Why: denyRefusedRetryWhy,
 		}
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; wait for a seat in the same call: `%s | %s`.",
-			run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.Status.With("--wait"), run),
+			run, r.code, ago, hint.Status.With("--wait"), run),
 		Why: denyRefusedRetryWhy + " `status --wait` sizes the piped run's claim, waits until the budget can seat it and reserves that seat for the run, so the run starts as soon as a seat frees instead of on the caller's next turn, and no one takes the seat in between.",
 	}
 }
 
-var denyRefusedRetryWhy = "A refusal frees no seat, and the same command run again inside a minute meets the same full budget: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
+var (
+	denyRefusedRetryWhy = "A refusal frees no seat, and the same command run again inside a minute meets the same full budget: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
+
+	denyPressureRetryWhy = "A refusal frees no memory, and a retry within the minute reads the same failing machine. On 2026-10-31 this state ended in a kernel panic, so an agent looping here spends turns on the machine least able to afford them."
+)
 
 // unwaitedRuns is the argv of each magus run or affected on a line that no `magus status
 // --wait` gates (see seatWaits); nil for a line that runs neither.
@@ -331,8 +353,8 @@ func recentRefusal(runsDir string, argvs [][]string, now time.Time) (refusedRun,
 		if prev, ok := latest[key]; ok && !at.After(prev.started) {
 			return
 		}
-		refusedAt, refused := readRefusal(rest)
-		latest[key] = commandAttempt{started: at, refusal: refusedRun{argv: started.Command.Arguments, at: refusedAt}, refused: refused}
+		refusedAt, code, refused := readRefusal(rest)
+		latest[key] = commandAttempt{started: at, refusal: refusedRun{argv: started.Command.Arguments, at: refusedAt, code: code}, refused: refused}
 	})
 	var newest refusedRun
 	found := false
@@ -344,18 +366,19 @@ func recentRefusal(runsDir string, argvs [][]string, now time.Time) (refusedRun,
 	return newest, found
 }
 
-// readRefusal reads the rest of one run log for a result carrying MGS3009, and when it
-// was recorded.
-func readRefusal(rest *bufio.Reader) (time.Time, bool) {
+// readRefusal reads the rest of one run log for a refused result: when it was
+// recorded and its code.
+func readRefusal(rest *bufio.Reader) (time.Time, types.DiagnosticCode, bool) {
 	for {
 		line, err := rest.ReadBytes('\n')
 		var ev journal.Event
-		if bytes.Contains(line, refusalCode) && json.Unmarshal(line, &ev) == nil &&
-			ev.Kind == journal.KindResult && ev.DiagnosticCode == string(types.MachineBudgetExhausted) {
-			return time.UnixMilli(ev.Ts), true
+		if slices.ContainsFunc(refusalCodes, func(code []byte) bool { return bytes.Contains(line, code) }) &&
+			json.Unmarshal(line, &ev) == nil && ev.Kind == journal.KindResult &&
+			(ev.DiagnosticCode == string(types.MachineBudgetExhausted) || ev.DiagnosticCode == string(types.MemoryPressureHigh)) {
+			return time.UnixMilli(ev.Ts), types.DiagnosticCode(ev.DiagnosticCode), true
 		}
 		if err != nil {
-			return time.Time{}, false
+			return time.Time{}, "", false
 		}
 	}
 }
