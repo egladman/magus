@@ -627,6 +627,7 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 	}
 	if needs(knowledge.ClassCoverage) {
 		in.Coverage = loadKnowledgeCoverage(src.root)
+		in.CoverageGaps = rootModuleGaps(src.root, knowledge.CoverageGaps(in.Coverage, in.Symbols))
 	}
 	if needs(knowledge.ClassSession) {
 		in.AgentContacts = loadKnowledgeAgentContacts(src.root)
@@ -1135,6 +1136,27 @@ func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
 		return nil
 	}
 	return knowledge.ParseCoverage(profile, module)
+}
+
+// rootModuleGaps drops nested modules' directories; the profile omits them.
+func rootModuleGaps(root string, dirs []string) []string {
+	var kept []string
+	for _, dir := range dirs {
+		if !inNestedModule(root, dir) {
+			kept = append(kept, dir)
+		}
+	}
+	return kept
+}
+
+// inNestedModule reports a go.mod at dir or between dir and root.
+func inNestedModule(root, dir string) bool {
+	for d := dir; d != "." && d != "/" && d != ""; d = filepath.Dir(d) {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(d), "go.mod")); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // loadKnowledgeAgentContacts reads the per-repo session store for the agent events

@@ -120,6 +120,9 @@ type Inputs struct {
 	// ratio onto the file (and, via SCIP def lines, symbol) nodes rather than churning
 	// the deterministic @symbols shards it annotates.
 	Coverage []FileCoverage
+	// CoverageGaps lists directories whose functions Coverage omits. With a
+	// profile present, any entry fails the build.
+	CoverageGaps []string
 	// AgentContacts carries the agent-session events `magus session load` folded into the
 	// per-repo session store, reduced to the path contacts the @session overlay counts.
 	// Observed and machine-local like Coverage, and lazily loaded for the same reason:
@@ -210,7 +213,9 @@ func AssembleClasses(in Inputs, classes []ShardClass) []Shard {
 	// onto the file/symbol nodes above. Lazily loaded (its targets are), so an empty
 	// shard is dropped rather than persisted.
 	if slices.Contains(classes, ClassCoverage) {
-		if c := assembleCoverage(in.Coverage, in.Symbols); len(c.Nodes) > 0 {
+		if len(in.Coverage) > 0 && len(in.CoverageGaps) > 0 {
+			shards = append(shards, Shard{Name: coverageShardName, Err: coverageGapError(in.CoverageGaps)})
+		} else if c := assembleCoverage(in.Coverage, in.Symbols); len(c.Nodes) > 0 {
 			shards = append(shards, c)
 		}
 	}

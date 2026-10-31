@@ -881,6 +881,25 @@ func BenchmarkAssembleShards(b *testing.B) {
 	}
 }
 
+func TestCoverageGapsFailTheCoverageShard(t *testing.T) {
+	in := Inputs{
+		Coverage:     []FileCoverage{{Path: "internal/foo/foo.go", Covered: 1, Total: 1}},
+		CoverageGaps: []string{"internal/guard"},
+	}
+
+	shards := AssembleClasses(in, []ShardClass{ClassCoverage})
+
+	require.Len(t, shards, 1)
+	require.Error(t, shards[0].Err)
+	assert.Contains(t, shards[0].Err.Error(), "internal/guard")
+}
+
+func TestNoCoverageProfileIsNotAGapFailure(t *testing.T) {
+	in := Inputs{CoverageGaps: []string{"internal/guard"}}
+
+	assert.Empty(t, AssembleClasses(in, []ShardClass{ClassCoverage}))
+}
+
 func BenchmarkMergeOutput(b *testing.B) {
 	shards := AssembleShards(syntheticInputs(benchProjects, benchTargets))
 	b.ReportAllocs()

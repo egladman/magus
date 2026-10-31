@@ -1621,3 +1621,14 @@ func TestAggregateFileCouplingIgnoresOrderAndDuplicates(t *testing.T) {
 func TestAggregateFileCouplingEmpty(t *testing.T) {
 	assert.Empty(t, aggregateFileCoupling(nil, ""))
 }
+
+func TestRootModuleGapsDropsNestedModuleDirectories(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "xdg", "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "libs", "xdg", "go.mod"), []byte("module x\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module y\n"), 0o644))
+
+	got := rootModuleGaps(root, []string{"internal/guard", "libs/xdg", "libs/xdg/sub"})
+
+	assert.Equal(t, []string{"internal/guard"}, got)
+}
