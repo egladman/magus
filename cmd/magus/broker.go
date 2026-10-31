@@ -261,6 +261,10 @@ func brokerStop(ctx context.Context, args []string) error {
 	}
 	c, err := broker.Dial(ctx, broker.DefaultAddr())
 	if err != nil {
+		if errors.Is(err, types.PeerFromAnotherBuild) {
+			// A broker answered; saying none runs would be false.
+			return fmt.Errorf("broker stop: %w", err)
+		}
 		slog.ErrorContext(ctx, "no broker is running", attr.Notice(""), attr.Component("magus"))
 		return exit.Reported(exit.Failure)
 	}

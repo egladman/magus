@@ -1,14 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"flag"
+	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
@@ -207,4 +212,50 @@ func (s *GateArgvSuite) TestARootFlagValueIsNotTheVerb() {
 
 func (s *GateArgvSuite) TestAVerbThatRunsNothingIsNoGate() {
 	s.False(gateArgv([]string{"status", "--wait"}))
+}
+
+type BrokerStopSuite struct{ suite.Suite }
+
+func TestBrokerStopSuite(t *testing.T) { suite.Run(t, new(BrokerStopSuite)) }
+
+// standInOtherBuild refuses one hello as a broker on another protocol does.
+func (s *BrokerStopSuite) standInOtherBuild() {
+	sock := strings.TrimPrefix(broker.DefaultAddr(), "unix://")
+	ln, err := net.Listen("unix", sock)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = ln.Close() })
+	s.Require().NoError(os.WriteFile(sock+".handshake", []byte("stand-in"), 0o600))
+	go func() {
+		nc, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = nc.Close() }()
+		_, _ = nc.Write([]byte(`{"type":"handshake"}` + "\n"))
+		line, err := bufio.NewReader(nc).ReadBytes('\n')
+		if err != nil {
+			return
+		}
+		var f struct {
+			ID uint64 `json:"id"`
+		}
+		_ = json.Unmarshal(line, &f)
+		refusal := `{"type":"error","id":%d,"body":{"code":"protocol","message":"protocol 99"}}`
+		_, _ = fmt.Fprintf(nc, refusal+"\n", f.ID)
+	}()
+}
+
+func (s *BrokerStopSuite) TestABrokerOfAnotherBuildIsNamedNotDeniedExistence() {
+	privateSockDir(s.T())
+	s.standInOtherBuild()
+	err := brokerStop(s.T().Context(), nil)
+	s.Require().Error(err)
+	s.ErrorIs(err, types.PeerFromAnotherBuild)
+	s.ErrorContains(err, "another magus build")
+	s.ErrorContains(err, "SIGTERM")
+}
+
+func (s *BrokerStopSuite) TestNoBrokerIsStillNoBroker() {
+	privateSockDir(s.T())
+	s.Equal(exit.Reported(exit.Failure), brokerStop(s.T().Context(), nil))
 }

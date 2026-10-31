@@ -526,8 +526,8 @@ func (c *Client) sayHello(ctx context.Context, cn *conn, sock string) error {
 		}
 		if refusal != nil && refusal.Code == CodeProtocol {
 			return types.WrapDiagnostic(types.PeerFromAnotherBuild, err,
-				"the broker at %s is from another magus build (%v, this magus speaks protocol %d): stop it with `magus broker stop`",
-				sock, err, ProtocolVersion)
+				"the broker at %s is from another magus build (%v, this magus speaks protocol %d): it refuses every request, so `magus broker stop` cannot reach it; stop it with the magus that started it, or find its pid with `lsof -U` (the line naming %s) and send SIGTERM",
+				sock, err, ProtocolVersion, sock)
 		}
 		return fmt.Errorf("hello: %w", err)
 	}
