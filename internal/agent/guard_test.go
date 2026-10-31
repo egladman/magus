@@ -40,6 +40,7 @@ var hookTemplates = []string{
 	// no guard coverage and owe no parity row. See the note at the top of each for why
 	// that absence is deliberate rather than a hole.
 	"magus-observe.buzz",
+	"magus-tool-time.buzz",
 	"magus-checkpoint.buzz",
 	"magus-rehydrate.buzz",
 	"magus-session.buzz",

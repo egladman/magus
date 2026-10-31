@@ -18,6 +18,7 @@ export final TEMPLATE_PAGES = {
     "magus-command.buzz": "guard-templates.md",
     "magus-path.buzz": "guard-templates.md",
     "magus-observe.buzz": "guard-templates.md",
+    "magus-tool-time.buzz": "guard-templates.md",
     "magus-checkpoint.buzz": "guard-templates.md",
     "magus-rehydrate.buzz": "guard-templates.md",
     "magus-session.buzz": "guard-templates.md",
