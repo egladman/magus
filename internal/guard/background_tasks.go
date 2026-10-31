@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"os"
 	"path"
@@ -21,6 +22,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
@@ -664,8 +666,8 @@ func resumeTaskReader(store file.Log[taskCheckpoint], transcript string, f *os.F
 	}
 	entries, err := store.Load()
 	if err != nil {
-		// The next save starts the store over.
-		return r, 0, savedCheckpoints{unreadable: true}
+		// The next save starts the store over and says so.
+		return r, 0, savedCheckpoints{loadErr: err}
 	}
 	saved := savedCheckpoints{entries: entries}
 	info, err := f.Stat()
@@ -701,13 +703,15 @@ func (r *taskReader) save(store file.Log[taskCheckpoint], saved savedCheckpoints
 	for _, callID := range r.order {
 		cp.Live = append(cp.Live, checkpointTask{CallID: callID, Task: *r.live[callID]})
 	}
-	if saved.unreadable {
+	ctx := context.Background()
+	if saved.loadErr != nil {
+		slog.With(attr.Component("magus")).WarnContext(ctx, "background task checkpoint store is corrupt; reset it, so this read folded its transcript from the start",
+			slog.String("path", store.Path), attr.Error(saved.loadErr))
 		_ = os.Remove(store.Path)
 	}
 	if len(saved.entries) == 0 {
 		sweepCheckpoints(filepath.Dir(store.Path))
 	}
-	ctx := context.Background()
 	if store.Append(ctx, cp) != nil {
 		return
 	}
@@ -716,8 +720,8 @@ func (r *taskReader) save(store file.Log[taskCheckpoint], saved savedCheckpoints
 
 // savedCheckpoints is a store as resumeTaskReader read it.
 type savedCheckpoints struct {
-	entries    []taskCheckpoint
-	unreadable bool
+	entries []taskCheckpoint
+	loadErr error
 }
 
 // checkpointLog keeps the newest checkpoint. Its appends skip the sync, since
