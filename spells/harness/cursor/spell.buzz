@@ -132,7 +132,8 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
 fun cursor_entry(hook: HookCommand) > {str: any} {
     final entry = mut {<str: any>};
     if (hook.matcher != "") { entry["matcher"] = hook.matcher; }
-    entry["command"] = buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
+    final command = buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
+    entry["command"] = if (hook.script == "magus-tool-time") command + " # magus:harness" else command;
     entry["timeout"] = hook.timeoutS;
     if (hook.event == "beforeMCPExecution" or hook.event == "beforeShellExecution" or hook.event == "preToolUse") {
         entry["failClosed"] = true;
@@ -307,6 +308,7 @@ test "the entries cover every Cursor event magus uses, one guard entry each" {
     assert\equal(post.entries.len(), 3, "the advice, the Buzz check and the tool time");
     assert\equal("{post.entries[1]["matcher"]}", WRITE_MATCHER, "every tool that writes a file");
     assert\isTrue("{post.entries[2]["command"]}".indexOf("magus-tool-time.buzz") != null, "the recorder");
+    assert\isTrue("{post.entries[2]["command"]}".endsWith(" # magus:harness"), "magus cannot tell the recorder is its own without the marker");
 }
 
 test "mgs_getMcp prints Cursor stdio setup guidance only" {

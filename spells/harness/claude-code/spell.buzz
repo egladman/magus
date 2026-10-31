@@ -133,7 +133,9 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
 }
 
 fun claude_command(hook: HookCommand) > str {
-    return claude_checkout(buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags));
+    final command = claude_checkout(buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags));
+    if (hook.script == TOOL_TIME_SCRIPT) { return command + " # magus:harness"; }
+    return command;
 }
 
 fun claude_guard_command() > str {
@@ -481,6 +483,14 @@ test "mgs_getSkills installs both forms under .claude/skills" {
     assert\equal(skills.paths.join(","), ".claude/skills", "Claude Code reads .claude/skills");
 }
 
+test "a hook on a recorder outside the shipped templates carries the ownership marker" {
+    foreach (hook in mgs_listHooks()) {
+        if (hook.script == TOOL_TIME_SCRIPT) {
+            assert\isTrue(claude_command(hook).endsWith(" # magus:harness"), "magus cannot tell {hook.script} is its own without it");
+        }
+    }
+}
+
 test "every hook appears in the entries, so the drift check magus runs passes" {
     final commands = claude_commands();
     assert\equal(commands.len(), mgs_listHooks().len(), "one entry per hook");
@@ -509,7 +519,7 @@ test "the glue commands are the plain argv every machine shares" {
     final head = "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/";
     foreach (cmd in claude_commands()) {
         assert\isTrue(cmd.startsWith(head), "the same string on every machine, checkout binary first: {cmd}");
-        assert\isTrue(cmd.indexOf(".sh") == null and cmd.indexOf("#") == null, "a shipped Buzz template, no marker: {cmd}");
+        assert\isTrue(cmd.indexOf(".sh") == null and cmd.replace(" # magus:harness", with: "").indexOf("#") == null, "a shipped Buzz template, no marker but the ownership one: {cmd}");
         foreach (meta in ["&&", "|", ">", "$(", "`", "bash"]) {
             if (meta == "|") {
                 assert\equal(cmd.replace("||", with: "").indexOf("|"), null, "no pipe, only the binary fallback: {cmd}");
