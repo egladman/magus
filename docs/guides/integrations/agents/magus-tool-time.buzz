@@ -43,6 +43,10 @@ fun readAgentName(args: [str]) > str {
         warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
+    foreach (word in parsed!.positionals) {
+        warn("stray word \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
+            + "Fix the hook command in your host config.");
+    }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
