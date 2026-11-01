@@ -49,6 +49,7 @@ import "magus/spell"
 import "crypto"
 import "std"
 import "os"
+import "result"
 
 // Named for the product (Amazon S3), not the capability it provides here. Its
 // siblings are named the same way - github-actions, gitlab-ci - and "s3-cache"
@@ -256,26 +257,29 @@ export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //n
 // marker needs percent-encoding, and the canonical query string (keys sorted:
 // marker before prefix) is byte-identical to the one on the URL.
 //
-// RAISES on a non-200 rather than returning "". It used to return "", which listing()
-// reads as end-of-listing - indistinguishable from a genuinely complete one. A
+// FAILS on a non-200 rather than returning "". It used to return "", which
+// listing() reads as end-of-listing, the same as a genuinely complete one. A
 // transient 500 or throttle on page 3 of 10 therefore truncated the enumeration
 // silently, and prune then applied keep_last to the PARTIAL set: with 1000 objects
 // and keep_last=100, a failure after 200 evicted 100 of the 200 seen, including
 // objects inside the true global newest-100. It printed a plausible count and exited
 // 0. Deleting the wrong artifact is unrecoverable, so a listing that cannot be
 // completed must stop the prune, not shrink it.
-fun listPage(marker: str) > str !> any { //nolint:no-throw // a raise stops the prune on a partial listing
+fun listPage(marker: str) > result\Result::<str> {
     var query = "prefix=magus-";
     if (marker != "") { query = "marker=" + marker + "&prefix=magus-"; }
     final path = "/" + bucket();
     final headers = sign("GET", path, query, EMPTY_SHA256);
-    final res = http\get(endpoint() + path + "?" + query, headers);
-    if (res["status"] != 200) {
-        //nolint:no-throw // a raise stops the prune on a partial listing
-        throw "s3 prune: listing page failed with status {res["status"]} "
-            + "(marker \"{marker}\"); refusing to prune from a partial listing";
+    try {
+        final res = http\get(endpoint() + path + "?" + query, headers);
+        if (res["status"] != 200) {
+            return result\fail::<str>("s3 prune: listing page failed with status {res["status"]} "
+                + "(marker \"{marker}\"); refusing to prune from a partial listing");
+        }
+        return result\ok::<str>("{res["body"]}");
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    return "{res["body"]}";
 }
 
 // listing is a fiber generator over every magus- object in the bucket. Each resume
@@ -284,10 +288,16 @@ fun listPage(marker: str) > str !> any { //nolint:no-throw // a raise stops the 
 // coroutine. It returns null when the listing is exhausted; since a real artifact is
 // never null, the consumer drains it with a resume-until-null loop. The bucket's
 // LastModified is the S3-side mtime, so no per-object HEAD is needed.
-fun listing() > any !> any { //nolint:no-throw // the listing fiber raises when a page fails
+// Each row is a Result: a page that fails yields a failed one and ends it.
+fun listing() > any {
     var marker = "";
     while (true) {
-        final body = listPage(marker);
+        final page = listPage(marker);
+        if (page.error -> err) {
+            yield result\Result::<any>{ error = err };
+            return null;
+        }
+        final body = page.value!;
         // Each <Contents> block carries one object's <Key> and <LastModified>;
         // blocks[0] is the preamble before the first object, so skip it.
         final blocks = body.split("<Contents>");
@@ -297,7 +307,7 @@ fun listing() > any !> any { //nolint:no-throw // the listing fiber raises when 
             final key = b.split("<Key>")[1].split("</Key>")[0];
             final lm = b.split("<LastModified>")[1].split("</LastModified>")[0];
             last = key;
-            yield mut {"key": key, "lastModified": lm};
+            yield result\ok::<any>(mut {"key": key, "lastModified": lm});
         }
         // Continue only while S3 reports the listing truncated.
         final trunc = body.split("<IsTruncated>");
@@ -311,11 +321,15 @@ fun listing() > any !> any { //nolint:no-throw // the listing fiber raises when 
 
 // deleteObject removes one object by key (S3 DeleteObject, path-style). DeleteObject
 // is idempotent, returning 204 No Content whether or not the key existed.
-fun deleteObject(key: str) > bool !> any { //nolint:no-throw // a raise stops the prune
+fun deleteObject(key: str) > result\Result::<bool> {
     final path = "/" + bucket() + "/" + key;
     final headers = sign("DELETE", path, "", EMPTY_SHA256);
-    final res = http\request("DELETE", endpoint() + path, "", headers);
-    return res["status"] == 204 or res["status"] == 200;
+    try {
+        final res = http\request("DELETE", endpoint() + path, "", headers);
+        return result\ok::<bool>(res["status"] == 204 or res["status"] == 200);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 // prune evicts cache objects per a retention policy, enumerating them through the
@@ -337,11 +351,17 @@ export fun prune(target: Target, req: PruneRequest) > PruneResult !> any { //nol
     // millis once (host time module) so the bounds below are integer comparisons.
     var artifacts = mut [];
     final gen = &listing();
-    var e = resume(gen);
-    while (e != null) {
+    var next = resume(gen);
+    while (next != null) {
+        final row: result\Result::<any> = next;
+        if (row.error -> err) {
+            //nolint:no-throw // magus reads a raise as a failed prune
+            throw err.message;
+        }
+        final e: any = row.value!;
         e["ms"] = time\parse(S3_TIME_LAYOUT, "{e["lastModified"]}");
         artifacts.append(e);
-        e = resume(gen);
+        next = resume(gen);
     }
 
     // Select objects to evict, de-duplicated by key across the two bounds.
@@ -371,7 +391,12 @@ export fun prune(target: Target, req: PruneRequest) > PruneResult !> any { //nol
             std\print("s3 prune: would delete {key} ({it["lastModified"]})");
             removed = removed + 1;
         } else {
-            if (deleteObject(key)) { removed = removed + 1; }
+            final deleted = deleteObject(key);
+            if (deleted.error -> err) {
+                //nolint:no-throw // magus reads a raise as a failed prune
+                throw err.message;
+            }
+            if (deleted.value!) { removed = removed + 1; }
         }
     }
     if (dry) {

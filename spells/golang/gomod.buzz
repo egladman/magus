@@ -7,6 +7,7 @@ import "serialize";
 import "std";
 import "magus";
 import "fs";
+import "result";
 
 fun module_json(mod: any) > str {
     return serialize\Boxed.init(mod).q("json").stringValue();
@@ -20,14 +21,22 @@ fun module_path(mod: any) > str {
     return serialize\jsonDecode(module_json(mod)).q(["Module", "Path"]).stringValue();
 }
 
-fun replace_path(base: str, to: str) > str !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
-    final rel = path\rel(base, target: to);
-    if (rel == "." or rel.startsWith("../") or rel.startsWith("./")) { return rel; }
-    return "./" + rel;
+fun replace_path(base: str, to: str) > result\Result::<str> {
+    try {
+        final rel = path\rel(base, target: to);
+        if (rel == "." or rel.startsWith("../") or rel.startsWith("./")) { return result\ok::<str>(rel); }
+        return result\ok::<str>("./" + rel);
+    } catch (err: any) {
+        return result\caught::<str>(err);
+    }
 }
 
-fun same_replace_path(dir: str, got: str, want: str) > bool !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
-    return path\abs(dir + "/" + got) == path\abs(dir + "/" + want);
+fun same_path(left: str, right: str) > result\Result::<bool> {
+    try {
+        return result\ok::<bool>(path\abs(left) == path\abs(right));
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 fun sorted_keys(values: {str: any}) > [str] {
@@ -40,7 +49,7 @@ fun sorted_keys(values: {str: any}) > [str] {
 // `go mod edit -json` result for a workspace module, captured by the go spell in the
 // caller's context. Only replacements whose old path names a workspace module are
 // touched; third-party replacements are deliberately preserved.
-export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
+export fun replaceArgs(currentJSON: str, modules: [any]) > result\Result::<[str]> {
 	final currentName = serialize\jsonDecode(currentJSON).q(["Module", "Path"]).stringValue();
     var current: any = null;
     var byPath: mut {str: any} = mut {};
@@ -50,17 +59,20 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any { //noli
         byPath[name] = mod;
         if (name == currentName) { current = mod; }
     }
-    //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
-    if (current == null) { throw "gomod.replaceArgs: no workspace Go module named " + currentName; }
+    if (current == null) { return result\fail::<[str]>("gomod.replaceArgs: no workspace Go module named " + currentName); }
 
     final parsed = serialize\jsonDecode(module_json(current));
     var desired: mut {str: str} = mut {};
     foreach (require in parsed.q("Require").listValue()) {
         final name = require.q("Path").stringValue();
         final provider = byPath[name];
-        if (provider != null and path\abs(module_dir(provider)) != path\abs(module_dir(current))) {
-            desired[name] = replace_path(module_dir(current), to: module_dir(provider));
-        }
+        if (provider == null) { continue; }
+        final same = same_path(module_dir(provider), right: module_dir(current));
+        if (same.error -> err) { return result\Result::<[str]>{ error = err }; }
+        if (same.value!) { continue; }
+        final relative = replace_path(module_dir(current), to: module_dir(provider));
+        if (relative.error -> err) { return result\Result::<[str]>{ error = err }; }
+        desired[name] = relative.value!;
     }
 
     var existing: mut {str: mut [str]} = mut {};
@@ -82,27 +94,17 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any { //noli
     foreach (name in sorted_keys(all)) {
         final wanted = desired[name];
         final found = existing[name];
-        final correct = wanted != null and found != null and found.len() == 1
-            and same_replace_path(module_dir(current), got: found[0], want: wanted);
+        var correct = false;
+        if (wanted != null and found != null and found.len() == 1) {
+            final dir = module_dir(current);
+            final same = same_path(dir + "/" + found[0], right: dir + "/" + wanted);
+            if (same.error -> err) { return result\Result::<[str]>{ error = err }; }
+            correct = same.value!;
+        }
         if (found != null and correct == false) { drops.append("-dropreplace=" + name); }
         if (wanted != null and correct == false) { replacements.append("-replace=" + name + "=" + wanted); }
     }
-    return drops + replacements;
-}
-
-// The go spell arrives as a parameter because a spell file cannot import another spell
-// (`magus/spell/go` is bound only for magusfiles), which is also why this file's header
-// says the caller supplies the two ops it needs.
-fun workspace_go_mods(ctx: magus\Context, go: any) > [any] !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
-    final projects: Projects = magus\describe.project();
-    var modules: mut [any] = mut [<any>];
-    foreach (project in projects.projects) {
-        if (fs\exists(project.dir + "/go.mod")) {
-            final result = go["go-mod-json"](ctx.withCwd(project.dir));
-            modules.append({"dir": project.dir, "json": result.stdout});
-        }
-    }
-    return modules;
+    return result\ok::<[str]>(drops + replacements);
 }
 
 // replaceWorkspaceModules points every workspace-local requirement in this project's
@@ -113,11 +115,25 @@ fun workspace_go_mods(ctx: magus\Context, go: any) > [any] !> any { //nolint:no-
 // editsExistingSource, not a produced file: as an output go.mod would be snapshotted and
 // replayable, so a cache hit could restore a pre-release go.mod over the version bump
 // `release` had just written - the two-owner hazard MGS1020 reports.
+//
+// go is a parameter because a spell file cannot import another spell.
 export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > void !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
     ctx.writesFiles(["go.mod"], editsExistingSource: true);
-    final flags = replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx, go));
-    if (flags.len() == 0) { return; }
-    final edited = go["go-mod-edit"](ctx, {"args": flags});
+    final projects: Projects = magus\describe.project();
+    var modules: mut [any] = mut [<any>];
+    foreach (workspaceProject in projects.projects) {
+        if (fs\exists(workspaceProject.dir + "/go.mod")) {
+            final described = go["go-mod-json"](ctx.withCwd(workspaceProject.dir));
+            modules.append({"dir": workspaceProject.dir, "json": described.stdout});
+        }
+    }
+    final flags = replaceArgs(go["go-mod-json"](ctx).stdout, modules: modules);
+    if (flags.error -> err) {
+        //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
+        throw err.message;
+    }
+    if (flags.value!.len() == 0) { return; }
+    final edited = go["go-mod-edit"](ctx, {"args": flags.value!});
     if (ctx.hasCharm("rw")) { return; }
     if (edited.stdout != fs\readFile("go.mod")) {
         //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
@@ -132,7 +148,7 @@ test "derives a replacement and removes a stale workspace replacement" {
         {"dir": "/repo", "json": root},
         {"dir": "/repo/libs/lib", "json": lib},
     ]);
-    std\assert(got.join("|") == "-dropreplace=example.com/lib|-replace=example.com/lib=./libs/lib", message: "reconcile workspace replacement");
+    std\assert(got.value!.join("|") == "-dropreplace=example.com/lib|-replace=example.com/lib=./libs/lib", message: "reconcile workspace replacement");
 }
 
 test "keeps a correct parent replacement and ignores third-party replacements" {
@@ -142,5 +158,5 @@ test "keeps a correct parent replacement and ignores third-party replacements" {
         {"dir": "/repo/libs/app", "json": app},
         {"dir": "/repo/libs/diag", "json": diag},
     ]);
-    std\assert(got.join("|") == "", message: "preserve correct and external replacements");
+    std\assert(got.value!.join("|") == "", message: "preserve correct and external replacements");
 }
