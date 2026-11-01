@@ -3160,11 +3160,15 @@ func scriptRunDirs(command string, d Dialect, start shellDir, run scriptRun) []s
 		named, ok := parseScriptRun(slices.Concat([]string{c.Name}, c.Args))
 		return ok && named.path == run.path
 	}, false)
-	if ok && len(calls) > 0 {
-		dirs := make([]shellDir, len(calls))
-		for i, c := range calls {
-			dirs[i] = c.at
+	var dirs []shellDir
+	for _, c := range calls {
+		// A wrapped call names no program word, so its name match stands.
+		if c.inv.Name == path.Base(run.path) && c.program != "" && c.program != run.path {
+			continue
 		}
+		dirs = append(dirs, c.at)
+	}
+	if ok && len(dirs) > 0 {
 		return dirs
 	}
 	cmds, _ := ParseCommandsDialect(command, d)
