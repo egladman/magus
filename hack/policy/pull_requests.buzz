@@ -2259,7 +2259,7 @@ fun fakeProofread(ws: str, script: str) > void {
     final bin = "{dir}/{proofread\binary}";
     fs\writeFile(bin, content: "#!/bin/sh\ncat >/dev/null\n" + script) catch void;
     fs\chmod(bin, mode: 0b111101101) catch void;
-    fs\writeFile("{dir}/{proofread\inputsFile}", content: (proofread\inputs(dir) catch "") + "\n") catch void;
+    fs\writeFile("{dir}/{proofread\inputsFile}", content: (proofread\inputs(dir).value ?? "") + "\n") catch void;
 }
 
 test "proofread runs from a relative workspace and its absence is a finding" {
