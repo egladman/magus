@@ -1123,7 +1123,7 @@ func (w *sweeper) reason(x rowIndex, rows []types.Job, row types.Job) (string, e
 		return "", nil
 	}
 	liveChild := x.liveChild[row.ID]
-	if l, ok := w.landed[row.ID]; ok && row.State == types.StateExited && l.updated == row.Updated && !liveChild {
+	if l, ok := w.landed[row.ID]; ok && landingCandidate(row) && l.updated == row.Updated && !liveChild {
 		return l.reason, nil
 	}
 	if row.State != types.StateExited && w.checkoutGone(row.CheckoutRoot) {

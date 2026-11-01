@@ -194,6 +194,19 @@ func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
 // the work: the integration row's checkout reads the worker's paths as the worker does. A
 // worker no live integration row names stays exited.
 func TestAWorkerMergedIntoALiveIntegrationCheckoutEnds(t *testing.T) {
+	workerMergedIntoIntegration(t, types.StateExited, false)
+}
+
+func TestARunningWorkerWithAFiledResultEndsWhenItsCleanWorkLanded(t *testing.T) {
+	workerMergedIntoIntegration(t, types.StateRunning, false)
+}
+
+func TestARunningWorkerWithUncommittedEditsKeepsItsLease(t *testing.T) {
+	workerMergedIntoIntegration(t, types.StateRunning, true)
+}
+
+func workerMergedIntoIntegration(t *testing.T, state types.JobState, dirty bool) {
+	t.Helper()
 	repo := testkit.NewRepository(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
 	seedRev := repo.Head()
 	wa := repo.AddWorktree("job-a")
@@ -211,14 +224,22 @@ func TestAWorkerMergedIntoALiveIntegrationCheckoutEnds(t *testing.T) {
 	var notices strings.Builder
 	s.notices = &notices
 	exited := func(id string, wt *testkit.Repo, file string) types.Job {
-		return types.Job{ID: id, State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
+		return types.Job{ID: id, State: state, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
 			WritePaths: []string{file}, Result: &types.JobResult{ChangedPaths: []string{file}}, Updated: 1}
 	}
 	plant(t, s, exited("job-a", wa, "a.go"), exited("job-b", wb, "b.go"),
 		types.Job{ID: "integration", State: types.StateRunning, Checkpoint: seedRev, CheckoutRoot: integration.Root(),
 			Integrates: []string{"job-a", "job-b"}, Updated: 1})
 
+	if dirty {
+		wa.Write("a.go", "package a // still editing\n")
+	}
 	got := states(t, s)
+	if dirty {
+		assert.Equal(t, state, got["job-a"].State)
+		assert.False(t, got["job-a"].Landed)
+		return
+	}
 	ended := exited("job-a", wa, "a.go")
 	ended.Schema = got["job-a"].Schema // the envelope is the store's, stamped on read
 	ended.State, ended.Updated = types.StateNoReturn, got["job-a"].Updated
@@ -226,7 +247,7 @@ func TestAWorkerMergedIntoALiveIntegrationCheckoutEnds(t *testing.T) {
 	ended.EndReason = fmt.Sprintf("its work landed in integration job integration at %s: the 1 changed path(s) at %s in %s read the same there",
 		integration.Head()[:7], wa.Head()[:7], wa.Root())
 	assert.Equal(t, ended, got["job-a"])
-	assert.Equal(t, types.StateExited, got["job-b"].State, "named by the integration row, but its checkout lacks the work")
+	assert.Equal(t, state, got["job-b"].State, "named by the integration row, but its checkout lacks the work")
 }
 
 type unmergedSuite struct {

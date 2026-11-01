@@ -685,3 +685,16 @@ two seconds (code is read deliberately, not skimmed), and an image or diagram at
 seconds, so a code-heavy page gets a truer estimate than its word count would suggest.
 Pages under about 45 seconds get no chip at all. The whole calculation is
 [`readingTime` in `docs/engine/meta.buzz`](https://github.com/egladman/magus/blob/main/docs/engine/meta.buzz#L49).
+
+## Recovering a checkout binary
+
+When this repository's binary cannot load its sources or current store schema,
+run `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --recover`.
+Recovery stops the daemon and rebuilds from the current working tree. It permits
+uncommitted changes and labels the result as a recovery build. Commit and
+validate the source and generated outputs before relying on a clean build.
+
+For a guard change spanning Go and Buzz, land the Go implementation first,
+regenerate its outputs through the declared targets, commit them, and rebuild
+the checkout binary. Then change the Buzz policy that calls the new behavior,
+check it, and commit it. Restart the daemon after placing the new binary.

@@ -303,7 +303,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 	}
 	// Checking a worker's acceptance evidence by its ref is the orchestrator's own job.
 	// Refused, the root relays the ref to a worker and never sees the evidence itself.
-	if call.work != "" && readsOutputRef(in.command) {
+	if call.work != "" && (readsOutputRef(in.command) || ownSourceRoot(at.workspace) && recoversOwnCheckout(in.command)) {
 		call.work = ""
 	}
 	if call.work != "" {
@@ -560,4 +560,13 @@ func (f forkedTier) rankedAbove(host, model string) string {
 	alias, _ := f.set.Alias(host, f.tier)
 	return fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above job %s's %s: spawn it on %s, or re-fork the row at the tier the work needs.",
 		model, spawned.Name(), spawned.Rank(), f.job, f.line(alias), alias)
+}
+
+// Only the explicit recovery entry is root work; ordinary builds remain delegated.
+func recoversOwnCheckout(line string) bool {
+	cmds, ok := ParseCommands(line)
+	if !ok || len(cmds) != 1 || !isMagusInvocation(cmds[0]) {
+		return false
+	}
+	return slices.Equal(magusSubcommandWords(cmds[0].Args), []string{"buzz", "hack/dev/bootstrap-checkout.buzz", "--", "--here", "--recover"})
 }

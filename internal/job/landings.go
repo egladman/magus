@@ -50,10 +50,10 @@ type probeLog struct {
 	partial bool
 }
 
-// landingCandidate reports an exited row whose result names changed paths in a checkout,
+// landingCandidate reports a running or exited row with a filed result in a checkout,
 // the only rows a landing can be judged for.
 func landingCandidate(row types.Job) bool {
-	return row.State == types.StateExited && row.Holder.OrSession() != types.HolderServer && !row.ReadOnly &&
+	return (row.State == types.StateExited || row.State == types.StateRunning) && row.Holder.OrSession() != types.HolderServer && !row.ReadOnly &&
 		row.Result != nil && len(row.Result.ChangedPaths) > 0 && row.CheckoutRoot != "" &&
 		checkpointRevision(row.Checkpoint) != ""
 }
@@ -267,6 +267,9 @@ func (s *Store) landedInIntegration(ctx context.Context, row types.Job, rows []t
 // checkout HEAD), or still reads at head as it did at the checkpoint.
 func contentLanded(ctx context.Context, driver types.VCSDriver, row types.Job, head types.Commit, targetRoot string, target types.Commit) int {
 	checkpoint := checkpointRevision(row.Checkpoint)
+	if dirty, err := driver.Dirty(ctx, row.CheckoutRoot, nil); err != nil || dirty {
+		return 0
+	}
 	// The paths alone: changedSince also places every changed line in its declaration,
 	// a VCS read per path this verdict never looks at.
 	paths, err := driver.ChangedFiles(ctx, row.CheckoutRoot, checkpoint)

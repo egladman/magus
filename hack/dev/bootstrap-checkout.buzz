@@ -35,7 +35,7 @@ import "vcs";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --gate-ready] [--install <p,q|none>]";
+final USAGE = "usage: magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --gate-ready | --recover] [--install <p,q|none>]";
 final HELP = "cost: two Go compiles of magus in the checkout\n{USAGE}";
 final SUMMARY = "build ./magus in a checkout at its own revision";
 final SERVES = ["code:MGS1021 -- --checkout \{checkout}"];
@@ -95,7 +95,8 @@ export fun targetProblem(checkout: str, here: bool) > str {
 
 // dirtyRefusal is why a checkout holding uncommitted changes gets no binary, "" when it
 // holds none: the binary would carry changes its HEAD does not.
-export fun dirtyRefusal(dir: str, porcelain: str) > str {
+export fun dirtyRefusal(dir: str, porcelain: str, recovery: bool = false) > str {
+    if (recovery) { return ""; }
     final changed = mut [<str>];
     foreach (line in porcelain.split("\n")) {
         if (line.trim() != "") {
@@ -110,14 +111,14 @@ export fun dirtyRefusal(dir: str, porcelain: str) > str {
 
 // versionMismatch is why the built binary is not the checkout's, "" when its commit is head
 // and nothing uncommitted went into it.
-export fun versionMismatch(versionJSON: str, head: str) > str !> any {
+export fun versionMismatch(versionJSON: str, head: str, recovery: bool = false) > str !> any {
     final j = json\parse(versionJSON);
     final commit: str = j["commit"] ?? "";
     final version: str = j["version"] ?? "";
     if (commit == "" or !(commit.startsWith(head) or head.startsWith(commit))) {
         return "bootstrap-checkout: the built ./magus names commit {commit}, not the checkout's HEAD {head}";
     }
-    if (version.endsWith("-dirty")) {
+    if (version.endsWith("-dirty") and !recovery) {
         return "bootstrap-checkout: the built ./magus is {version}, built from uncommitted changes";
     }
     return "";
@@ -514,14 +515,14 @@ fun hasMise() > bool {
     }
 }
 
-fun build(dir: str) > str !> any {
+fun build(dir: str, recovery: bool = false) > str !> any {
     if (!fs\isDir(dir)) {
         throw "bootstrap-checkout: {dir} is not a directory\n{USAGE}";
     }
     if (vcs\name() != "git") {
         throw "bootstrap-checkout: builds in git checkouts, and this one is {vcs\name()}";
     }
-    final refused = dirtyRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout);
+    final refused = dirtyRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout, recovery: recovery);
     if (refused != "") {
         throw refused;
     }
@@ -532,7 +533,7 @@ fun build(dir: str) > str !> any {
     }
     final rewrote = compile(liveHost(), dir: dir);
     final bin = fs\join(dir, name: "magus");
-    final mismatch = versionMismatch(proc\exec(bin, args: ["version", "-o", "json"], dir: dir, opts: proc\ExecOptions{quiet = true}).stdout, head: head);
+    final mismatch = versionMismatch(proc\exec(bin, args: ["version", "-o", "json"], dir: dir, opts: proc\ExecOptions{quiet = true}).stdout, head: head, recovery: recovery);
     if (mismatch != "") {
         final regenerated = regeneratedRefusal(dir, porcelain: vcs\cmd(["status", "--porcelain"], opts: vcs\CommandOptions{dir = dir, quiet = true}).stdout);
         if (regenerated != "" and mismatch.endsWith("uncommitted changes")) {
@@ -543,11 +544,14 @@ fun build(dir: str) > str !> any {
         }
         throw mismatch;
     }
+    if (recovery) {
+        return "placed {bin} for recovery from the working tree at {head}; commit and validate before using it as a clean build";
+    }
     return "placed {bin}, built at {head}";
 }
 
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--help", "--here", "--restart", "--gate-ready"], valued: ["--checkout", "--install"]);
+    final parsed = flags\parse(args, switches: ["--help", "--here", "--restart", "--gate-ready", "--recover"], valued: ["--checkout", "--install"]);
     if (parsed.values["--help"] != null) {
         std\print(HELP);
         return;
@@ -564,6 +568,14 @@ export fun main(args: [str]) > void !> any {
     final dir = if (here) vcs\root() else checkout;
     final restart = parsed.values["--restart"] != null;
     final h = liveHost();
+    if (parsed.values["--recover"] != null) {
+        if (restart or parsed.values["--gate-ready"] != null or parsed.values["--install"] != null) {
+            throw "bootstrap-checkout: --recover cannot combine with --restart, --gate-ready or --install";
+        }
+        std\print(stopDaemon(h, dir: dir));
+        std\print(build(dir, recovery: true));
+        return;
+    }
     if (parsed.values["--gate-ready"] != null) {
         foreach (line in gateReady(h, dir: dir, restart: restart)) {
             std\print(line);
@@ -974,4 +986,11 @@ test "exactly one of --checkout and --here names the target" {
     assert\equal(targetProblem("", here: true), want: "", message: "here");
     assert\equal(targetProblem("/w/c", here: true), want: "bootstrap-checkout: --here and --checkout are exclusive", message: "both");
     assert\equal(targetProblem("", here: false), want: "bootstrap-checkout: --checkout or --here is required", message: "neither");
+}
+
+test "explicit recovery permits a dirty tree without accepting another revision" {
+    assert\equal(dirtyRefusal("/c", porcelain: " M a.go", recovery: true), want: "", message: "recovery builds the working tree");
+    assert\equal(versionMismatch(`{"commit":"abc123","version":"v0.5.0-dirty"}`, head: "abc123", recovery: true), want: "", message: "dirty recovery is explicit");
+    final why = versionMismatch(`{"commit":"other","version":"v0.5.0-dirty"}`, head: "abc123", recovery: true);
+    assert\equal(why.indexOf("not the checkout") != null, want: true, message: why);
 }
