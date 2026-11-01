@@ -656,7 +656,8 @@ var buzzGradedWriterRe = regexp.MustCompile(`\bfs\\(?:writeFileAtomic|writeFile|
 // A hook shares no environment with the process and rewrites no command.
 // So the line names the claim. A person's terminal never reaches this hook.
 func denyUngradedRewrite(ctx context.Context, deps Dependencies, actingLease, command string) denial {
-	if actingLease == "" {
+	// A forking row has no record yet: `job exec` writes its holder's.
+	if actingLease == "" || pendingRowID(ctx) == actingLease {
 		return denial{}
 	}
 	d := effectiveDialect(deps.ShellDialect)

@@ -752,8 +752,9 @@ func (j rowJudge) heldBy(own []job.RegeneratedOutput, projects []*types.Project)
 		if !other.ReadOnly && (other.Created < j.row.Created || other.Created == j.row.Created && other.ID < j.row.ID) {
 			theirs = job.RegeneratedOutside(j.root, other, projects, nil)
 		}
+		// An untaken holder has no copy here, so an ignored file is not shared.
 		shared := own
-		if other.CheckoutRoot != "" && j.root != "" && !samePath(other.CheckoutRoot, j.root) {
+		if j.root != "" && !samePath(job.WorkingCheckout(other.CheckoutRoot, other), j.root) {
 			shared = committed()
 		}
 		for _, o := range shared {

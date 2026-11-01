@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -164,7 +165,8 @@ type binarySkew struct {
 	Contract []string `json:"contract,omitempty"`
 }
 
-const binarySkewFile = "binary-skew.jsonl"
+// binarySkewFile was renamed so no answer of the two-way diff is read back.
+const binarySkewFile = "binary-contract-skew.jsonl"
 
 // key is what a kept answer is looked up by: the HEAD it judged and the commit the binary
 // was built at.
@@ -193,7 +195,9 @@ func checkoutSkew(ctx context.Context, deps Dependencies, at location) (binarySk
 			}
 		}
 	}
-	changed, err := gitNames(ctx, root, "diff", "--name-only", deps.BinaryCommit, "HEAD")
+	// Three dots: only what HEAD carries that the build lacks.
+	// A build descending from HEAD lacks nothing, and its load says the rest.
+	changed, err := gitNames(ctx, root, "diff", "--name-only", deps.BinaryCommit+"...HEAD")
 	if err != nil {
 		return binarySkew{}, false
 	}
@@ -231,8 +235,10 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 	}
 	fix := binaryRemedy(true, at.workspace, deps.lease, deps.lease == "")
 	return denial{
-		Say: fmt.Sprintf("magus workspace: ./magus was built at %s, before %s changed the load contract; %s first.", built, leadPath(skew.Contract), fix.say),
+		Say: fmt.Sprintf("magus workspace: %s (%s) was built at %s, before %s changed the load contract; %s first.",
+			deps.Binary, cmp.Or(deps.BinaryVersion, "an unknown version"), built, leadPath(skew.Contract), fix.say),
 		Why: withPolicyNote("A binary built before a change to the host declarations, the API locks, the generated bindings or the Buzz checker may not load the tree after it, and anything run now is judged by a policy it may not read. "+
+			"This names the process that judged the call: a file replaced since it started answers `version` with its own build. "+
 			"Reads, `git status`, VCS recovery and the rebuild still run.", runPolicyNote(line, at)),
 	}.full()
 }

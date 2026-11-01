@@ -11,7 +11,54 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// ContractSkewDirectionSuite places a ./magus on each side of HEAD.
+type ContractSkewDirectionSuite struct {
+	suite.Suite
+	root, base, decls string
+}
+
+func TestContractSkewDirectionSuite(t *testing.T) {
+	suite.Run(t, new(ContractSkewDirectionSuite))
+}
+
+func (s *ContractSkewDirectionSuite) SetupTest() {
+	s.root, s.base, s.decls, _ = contractCheckout(s.T())
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus"), []byte("#!/bin/sh\n"), 0o755))
+}
+
+func (s *ContractSkewDirectionSuite) git(args ...string) string {
+	out, err := exec.Command("git", append([]string{"-C", s.root, "-c", "user.name=t", "-c", "user.email=t@t"}, args...)...).CombinedOutput()
+	s.Require().NoError(err, "%s", out)
+	return strings.TrimSpace(string(out))
+}
+
+func (s *ContractSkewDirectionSuite) deny(built, head string) string {
+	deps := Dependencies{Binary: filepath.Join(s.root, "magus"), BinaryCommit: built, BinaryVersion: "v0-test",
+		Revision: func(context.Context, string, string) string { return head }}
+	s.git("reset", "-q", "--hard", head)
+	at := location{workspace: s.root, dir: s.root, cacheDir: s.T().TempDir(), policies: magusRepoAt.policies}
+	return denyContractSkew(s.T().Context(), deps, at, "touch notes.txt", DialectBash)
+}
+
+func (s *ContractSkewDirectionSuite) TestABuildDescendingFromHeadIsNotOlder() {
+	s.Empty(s.deny(s.decls, s.base))
+}
+
+func (s *ContractSkewDirectionSuite) TestABuildBeforeHeadIsRefusedAndNamesTheBinaryThatJudged() {
+	got := s.deny(s.base, s.decls)
+	s.Contains(got, fmt.Sprintf("%s (v0-test) was built at %s, before", filepath.Join(s.root, "magus"), s.base[:12]))
+}
+
+func (s *ContractSkewDirectionSuite) TestABuildOnASiblingLineIsJudgedByWhatHeadAlone() {
+	s.git("reset", "-q", "--hard", s.base)
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "other.md"), []byte("x\n"), 0o644))
+	s.git("add", "other.md")
+	s.git("commit", "-q", "-m", "sibling")
+	s.Empty(s.deny(s.decls, s.git("rev-parse", "HEAD")), "the sibling's own line changed no load contract")
+}
 
 func TestLoadContractNamesTheTriggerPaths(t *testing.T) {
 	for _, p := range []string{
@@ -104,7 +151,7 @@ func TestContractSkewRefusesChangesUntilTheRebuild(t *testing.T) {
 	ctx := context.Background()
 
 	deny := denyContractSkew(ctx, deps, at, "touch notes.txt", DialectBash)
-	assert.Contains(t, deny, fmt.Sprintf("./magus was built at %s, before internal/spell/gen/decls/magus.buzz changed the load contract; rebuild ./magus with `./magus run go-build .` first.", base[:12]))
+	assert.Contains(t, deny, fmt.Sprintf("%s (an unknown version) was built at %s, before internal/spell/gen/decls/magus.buzz changed the load contract; rebuild ./magus with `./magus run go-build .` first.", filepath.Join(root, "magus"), base[:12]))
 	assert.Empty(t, denyContractSkew(ctx, deps, at, "git status", DialectBash))
 	assert.Empty(t, denyContractSkew(ctx, deps, at, "./magus run go-build .", DialectBash))
 

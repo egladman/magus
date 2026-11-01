@@ -328,6 +328,7 @@ var defaults = map[string]decision{
 	"lease-claim":           Deny,
 	"lease-row-unknown":     Deny,
 	"grant-is-a-persons":    Deny,
+	"conflict-commit":       Deny,
 	"conflict-rewrite":      Deny,
 	"merge-side-checkout":   Deny,
 	"notes-author":          Deny,

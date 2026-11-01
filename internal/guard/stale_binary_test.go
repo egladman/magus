@@ -552,6 +552,45 @@ func TestReadOnlyLine(t *testing.T) {
 }
 
 // awk reads when its program is on the line and neither redirects, pipes nor calls system().
+func TestReadOnlyLineReadsMagusListings(t *testing.T) {
+	for _, line := range []string{"./magus where docs", "./magus vcs ls-files -o name"} {
+		assert.True(t, readOnlyLine(line, DialectBash), line)
+	}
+	assert.False(t, readOnlyLine("./magus vcs resolve a.go", DialectBash))
+}
+
+// WorkerRouteSuite pins the one line a worker's own row can always run.
+type WorkerRouteSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestWorkerRouteSuite(t *testing.T) {
+	suite.Run(t, new(WorkerRouteSuite))
+}
+
+func (s *WorkerRouteSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus"), []byte("#!/bin/sh\n"), 0o755))
+}
+
+func (s *WorkerRouteSuite) TestACheckoutHoldingTheScriptNamesItsOwnBuild() {
+	placeFile(s.T(), s.root, job.CheckoutBootstrapScript, "namespace b;\n")
+	fix := binaryRemedy(true, s.root, "lease-a", false)
+	s.Contains(fix.say, job.CheckoutBootstrap(s.root))
+	s.Empty(fix.placeFor)
+}
+
+func (s *WorkerRouteSuite) TestACheckoutWithoutTheScriptAsksForAPlacement() {
+	fix := binaryRemedy(true, s.root, "lease-a", false)
+	s.Equal("lease-a", fix.placeFor)
+}
+
+func (s *WorkerRouteSuite) TestTheNamedLinePassesWithTheLeaseExportInFront() {
+	line := "export BAGGAGE=magus.lease=lease-a; " + job.CheckoutBootstrap(s.root)
+	s.True(recoveryLine(line, DialectBash, "lease-a", false, magusRepoAt))
+}
+
 // The first line is a read pipeline a lapse once denied as state-changing.
 func TestReadOnlyLineReadsAnAwkProgram(t *testing.T) {
 	for _, line := range []string{

@@ -1591,6 +1591,7 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	v = rankWorktreeRemove(v, deps.grade(denyWorktreeRemove(ctx, deps, at, callDir, line, d)))
 	v = deps.rankGraded(v, denyRuleInterpreterRewrite, denyInterpreterRewrite(at, line, d), rankInterpreterRewrite)
 	v = deps.rankGraded(v, denyRuleConflictRewrite, denyConflictRewrite(at, line, d), rankConflictRewrite)
+	v = deps.rankGraded(v, denyRuleConflictCommit, denyConflictCommit(ctx, at, line, d), rankConflictCommit)
 	v = deps.rankGraded(v, denyRuleUnreadCommand, denyUnreadCommand(line, d), rankUnreadCommand)
 	v = deps.rankGraded(v, denyRuleCacheClear, denyCacheClear(line, d), rankCacheClear)
 	v = deps.rankGraded(v, denyRuleCacheDirWrite, denyCacheDirCommand(at, line, d), rankCacheDirWrite)
@@ -2355,7 +2356,16 @@ func withPendingRow(ctx context.Context, row types.Job) context.Context {
 		row.State = types.StateDeclared
 	}
 	rows := slices.DeleteFunc(slices.Clone(snap.Rows), func(r types.Job) bool { return r.ID == row.ID })
+	ctx = context.WithValue(ctx, pendingRowKey{}, row.ID)
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: append(rows, row.Clone())})
+}
+
+type pendingRowKey struct{}
+
+// pendingRowID is the row withPendingRow pinned, or "".
+func pendingRowID(ctx context.Context) string {
+	id, _ := ctx.Value(pendingRowKey{}).(string)
+	return id
 }
 
 // leaseRows reports the pinned job store, reading it when nothing pinned one. A test that

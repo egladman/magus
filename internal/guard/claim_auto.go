@@ -20,8 +20,14 @@ func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, chec
 	// Observing the claim facts diffs the whole checkout against the checkpoint. An
 	// integration row's diff is every merged branch, which took the write judgment past
 	// its deadline on each write, and no edge from a merge's diff proves a claim.
+	// The row's own branches do scope it: a merge's conflict is its holder's.
 	if me.Integrating() {
-		return writeGrade{}, fmt.Sprintf("%s integrates %d branches, so a diff since its checkpoint proves no claim", me.ID, len(me.Integrates))
+		if branch := integratedBranchChanging(ctx, checkout, me, rel); branch != "" {
+			return writeGrade{Decision: decisionAdvise,
+				Context: fmt.Sprintf("magus workspace: %s is in scope for lease %s: %s, a branch it integrates, changed it.", rel, me.ID, branch),
+				Why:     "The row names its branches, so the paths their merges bring are its to settle, as `git checkout` and `git commit` of them already are."}, ""
+		}
+		return writeGrade{}, fmt.Sprintf("%s integrates %d branches, and none of them changed %s", me.ID, len(me.Integrates), rel)
 	}
 	var projects []*types.Project
 	if repo, err := deps.inspect(ctx, checkout); err == nil && repo != nil {
@@ -40,6 +46,21 @@ func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, chec
 		return withStop(gradeProvedClaim(ctx, deps, checkout, me, rows, rel), d.Stop), d.Stop
 	}
 	return writeGrade{}, d.Stop
+}
+
+// integratedBranchChanging names the first branch me integrates that changed
+// rel since me's checkpoint, or "". A branch git cannot read shows no change.
+func integratedBranchChanging(ctx context.Context, checkout string, me types.Job, rel string) string {
+	rev, _ := types.ParseCheckpointToken(me.Checkpoint)
+	if rev == "" {
+		return ""
+	}
+	for _, branch := range me.Integrates {
+		if names, err := gitNames(ctx, checkout, "diff", "--name-only", rev+"..."+branch, "--", rel); err == nil && len(names) > 0 {
+			return branch
+		}
+	}
+	return ""
 }
 
 // claimedAdvice is the one line a write passes with once magus claimed its path for me.

@@ -12,7 +12,60 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// IntegrationMergePathsSuite integrates a branch that changed merged.go.
+type IntegrationMergePathsSuite struct {
+	suite.Suite
+	root string
+	row  types.Job
+}
+
+func TestIntegrationMergePathsSuite(t *testing.T) {
+	suite.Run(t, new(IntegrationMergePathsSuite))
+}
+
+func (s *IntegrationMergePathsSuite) git(args ...string) string {
+	cmd := exec.Command("git", append([]string{"-C", s.root, "-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.CombinedOutput()
+	s.Require().NoError(err, "%s", out)
+	return strings.TrimSpace(string(out))
+}
+
+func (s *IntegrationMergePathsSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.git("init", "-q", "-b", "landing")
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "merged.go"), []byte("package a\n"), 0o644))
+	s.git("add", "merged.go")
+	s.git("commit", "-q", "-m", "base")
+	base := s.git("rev-parse", "HEAD")
+	s.git("checkout", "-q", "-b", "job-a")
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "merged.go"), []byte("package a\nvar a = 1\n"), 0o644))
+	s.git("commit", "-q", "-am", "a")
+	s.git("checkout", "-q", "landing")
+	s.row = claimLease("integration", "run.go")
+	s.row.Checkpoint, s.row.Integrates = base, []string{"job-a", "job-gone"}
+}
+
+func (s *IntegrationMergePathsSuite) grade(rel string) (writeGrade, string) {
+	return gradeClaimOutside(s.T().Context(), Dependencies{}, location{}, s.root, s.row, []types.Job{s.row}, nil, rel)
+}
+
+func (s *IntegrationMergePathsSuite) TestAPathABranchItIntegratesChangedIsInScope() {
+	g, stop := s.grade("merged.go")
+	s.Empty(stop)
+	s.Equal(decisionAdvise, g.Decision)
+	s.Contains(g.Context, "merged.go is in scope")
+	s.Contains(g.Context, "job-a")
+}
+
+func (s *IntegrationMergePathsSuite) TestAPathNoBranchChangedStaysRefused() {
+	g, stop := s.grade("other.go")
+	s.Equal(writeGrade{}, g)
+	s.Equal("integration integrates 2 branches, and none of them changed other.go", stop)
+}
 
 const claimedGo = `package run
 
@@ -61,7 +114,7 @@ func TestAnIntegrationRowObservesNoClaimFacts(t *testing.T) {
 	g, stop := gradeClaimOutside(t.Context(), Dependencies{}, location{}, t.TempDir(), row, []types.Job{row}, nil, "other.go")
 
 	assert.Equal(t, writeGrade{}, g)
-	assert.Equal(t, "integration integrates 2 branches, so a diff since its checkpoint proves no claim", stop)
+	assert.Equal(t, "integration integrates 2 branches, and none of them changed other.go", stop)
 }
 
 func TestGradeClaimedDeclarations(t *testing.T) {
