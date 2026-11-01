@@ -160,7 +160,6 @@ type agentTypeRecord struct {
 	Type string `json:"type"`
 }
 
-
 // recordPendingSpawn files a spawn that passed, for the start of the child it makes to be
 // joined to it. A host whose finished spawn already names the child never reads it.
 func recordPendingSpawn(facts hint.Gate, env hookRequest, spawner string, now time.Time) {

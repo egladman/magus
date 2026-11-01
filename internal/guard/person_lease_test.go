@@ -1,8 +1,8 @@
 package guard
 
 import (
-	"fmt"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
