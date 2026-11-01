@@ -37,13 +37,13 @@ type bindableSuite interface {
 // TestHosts runs each installed host's suite, in parallel across hosts. It
 // spends model tokens: run it on demand, never in a normal test run.
 //
-// MAGUS_E2E_HOSTS limits the hosts (comma-separated ids).
-// MAGUS_E2E_<HOST>_MODEL and MAGUS_E2E_<HOST>_BIN override a host's model
-// and binary. MAGUS_E2E_TIMEOUT bounds one host invocation, MAGUS_E2E_MAGUS
-// names the magus binary, MAGUS_E2E_KEEP=1 keeps workspaces, and
-// MAGUS_E2E_REPORT names the report's path.
+// AGENT_HARNESS_HOSTS limits the hosts (comma-separated ids).
+// AGENT_HARNESS_<HOST>_MODEL and AGENT_HARNESS_<HOST>_BIN override a host's
+// model and binary. AGENT_HARNESS_TIMEOUT bounds one host invocation,
+// AGENT_HARNESS_MAGUS names the magus binary, AGENT_HARNESS_KEEP=1 keeps
+// workspaces, and AGENT_HARNESS_REPORT names the report's path.
 func TestHosts(t *testing.T) {
-	only := os.Getenv("MAGUS_E2E_HOSTS")
+	only := os.Getenv("AGENT_HARNESS_HOSTS")
 	report := e2e.NewReport()
 	var hosts []hostReport
 	drive := func(t *testing.T, h *hostDriver, s bindableSuite) {
@@ -68,7 +68,7 @@ func TestHosts(t *testing.T) {
 
 func writeReport(t *testing.T, hosts []hostReport, report *e2e.Report) {
 	t.Helper()
-	magus := os.Getenv("MAGUS_E2E_MAGUS")
+	magus := os.Getenv("AGENT_HARNESS_MAGUS")
 	if magus == "" {
 		magus = checkoutPath(t, "magus")
 	}
@@ -79,7 +79,7 @@ func writeReport(t *testing.T, hosts []hostReport, report *e2e.Report) {
 	report.Attach("magus", magus)
 	report.Attach("magus_version", magusVersion)
 	report.Attach("hosts", hosts)
-	path := os.Getenv("MAGUS_E2E_REPORT")
+	path := os.Getenv("AGENT_HARNESS_REPORT")
 	if path == "" {
 		path = filepath.Join(os.TempDir(), "magus-host-e2e", "report.json")
 	}

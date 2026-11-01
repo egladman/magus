@@ -37,16 +37,16 @@ type hostDriver struct {
 }
 
 func envModel(name, fallback string) string {
-	if m := os.Getenv(fmt.Sprintf("MAGUS_E2E_%s_MODEL", name)); m != "" {
+	if m := os.Getenv(fmt.Sprintf("AGENT_HARNESS_%s_MODEL", name)); m != "" {
 		return m
 	}
 	return fallback
 }
 
-// locate resolves the binary from MAGUS_E2E_<HOST>_BIN, then candidates,
+// locate resolves the binary from AGENT_HARNESS_<HOST>_BIN, then candidates,
 // then PATH.
 func (h *hostDriver) locate(envName string, candidates ...e2e.Candidate) {
-	variable := fmt.Sprintf("MAGUS_E2E_%s_BIN", envName)
+	variable := fmt.Sprintf("AGENT_HARNESS_%s_BIN", envName)
 	first := e2e.Candidate{Path: os.Getenv(variable), Source: variable}
 	h.install = e2e.LocateBinary(h.binary, scrubbedEnv(), append([]e2e.Candidate{first}, candidates...)...)
 }

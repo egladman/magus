@@ -69,12 +69,12 @@ func checkoutPath(t *testing.T, rel string) string {
 
 func magusBinary(t *testing.T) string {
 	t.Helper()
-	bin := os.Getenv("MAGUS_E2E_MAGUS")
+	bin := os.Getenv("AGENT_HARNESS_MAGUS")
 	if bin == "" {
 		bin = checkoutPath(t, "magus")
 	}
 	if info, err := os.Stat(bin); err != nil || info.Mode()&0o111 == 0 {
-		t.Fatalf("no executable magus at %s; build ./magus or set MAGUS_E2E_MAGUS", bin)
+		t.Fatalf("no executable magus at %s; build ./magus or set AGENT_HARNESS_MAGUS", bin)
 	}
 	return bin
 }
@@ -93,7 +93,7 @@ func newNonce(t *testing.T) string {
 // CLAUDE_CODE_OAUTH_TOKEN is a login, not session state, so it passes through.
 func scrubbedEnv() []string {
 	return e2e.Scrub(os.Environ(),
-		[]string{"MAGUS_", "__MAGUS", "BAGGAGE=", "CLAUDECODE=", "CLAUDE_CODE_", "CLAUDE_PROJECT_DIR=", "CLAUDE_ENV_FILE=",
+		[]string{"MAGUS_", "__MAGUS", "AGENT_HARNESS_", "BAGGAGE=", "CLAUDECODE=", "CLAUDE_CODE_", "CLAUDE_PROJECT_DIR=", "CLAUDE_ENV_FILE=",
 			"AI_AGENT=", "CODEX_", "OPENCODE_CONFIG", "XDG_STATE_HOME=", "XDG_CONFIG_HOME=", "GIT_DIR=", "GIT_WORK_TREE=", "GIT_INDEX_FILE="},
 		[]string{"CLAUDE_CODE_OAUTH_TOKEN="})
 }
@@ -105,7 +105,7 @@ func scrubbedEnv() []string {
 // MCP entry, project trust, and any plugin the host's guide says to copy.
 //
 // The directory outlives t: owner, the host's test, removes it once every scenario
-// reading this session's evidence has run. MAGUS_E2E_KEEP=1 keeps it.
+// reading this session's evidence has run. AGENT_HARNESS_KEEP=1 keeps it.
 func newWorkspace(t, owner *testing.T, host *hostDriver) *workspace {
 	t.Helper()
 	tmp, err := os.MkdirTemp("", fmt.Sprintf("magus-host-e2e-%s-", host.id))
@@ -113,7 +113,7 @@ func newWorkspace(t, owner *testing.T, host *hostDriver) *workspace {
 		t.Fatal(err)
 	}
 	owner.Cleanup(func() {
-		if os.Getenv("MAGUS_E2E_KEEP") == "1" {
+		if os.Getenv("AGENT_HARNESS_KEEP") == "1" {
 			owner.Logf("kept %s", tmp)
 			return
 		}
@@ -140,7 +140,7 @@ func newWorkspace(t, owner *testing.T, host *hostDriver) *workspace {
 		"MAGUS_SERVER_ENABLED=false",
 		"MAGUS_LOG_SILENT=true",
 		"__PROOFREAD_BIN="+stub,
-		"MAGUS_E2E_PROOFREAD_CALLS="+w.proofreadCalls(),
+		"AGENT_HARNESS_PROOFREAD_CALLS="+w.proofreadCalls(),
 	)
 	w.env = append(w.env, host.env(t, w)...)
 
@@ -399,7 +399,7 @@ func (w *workspace) runHost(t *testing.T, label, bin string, args []string, extr
 }
 
 func hostTimeout() time.Duration {
-	if d, err := time.ParseDuration(os.Getenv("MAGUS_E2E_TIMEOUT")); err == nil && d > 0 {
+	if d, err := time.ParseDuration(os.Getenv("AGENT_HARNESS_TIMEOUT")); err == nil && d > 0 {
 		return d
 	}
 	return 6 * time.Minute
