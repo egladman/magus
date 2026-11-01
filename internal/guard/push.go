@@ -510,6 +510,11 @@ type locatedCall struct {
 // runs them, each with the directory it runs in, starting from cwd. first stops at the
 // first match. False when the line does not parse.
 func locateCalls(command string, d Dialect, cwd string, match func(hint.Invocation) bool, first bool) ([]locatedCall, bool) {
+	return locateCallsAt(command, d, shellDir{dir: cwd, known: true}, match, first)
+}
+
+// locateCallsAt is locateCalls for a line that starts at start.
+func locateCallsAt(command string, d Dialect, start shellDir, match func(hint.Invocation) bool, first bool) ([]locatedCall, bool) {
 	f, err := parseFile(command, d)
 	if err != nil {
 		return nil, false
@@ -521,7 +526,7 @@ func locateCalls(command string, d Dialect, cwd string, match func(hint.Invocati
 		w.funcs = w.funcs || fn
 		return !w.funcs
 	})
-	w.stmts(f.Stmts, shellDir{dir: cwd, known: true})
+	w.stmts(f.Stmts, start)
 	return w.calls, true
 }
 

@@ -200,6 +200,9 @@ type Dependencies struct {
 	// callDir is the directory the judged call runs in, where its relative paths resolve.
 	// Judge fills it from the envelope's cwd; empty means the hook process's own.
 	callDir string
+	// callDirUnread marks a script's lines behind a cd no hook can read.
+	// Neither callDir nor the hook's own directory says where they run.
+	callDirUnread bool
 	// caller is who makes the judged call, which decides whether a lease acts as a worker.
 	// Judge fills it; zero is an identity-less caller.
 	caller job.Caller
@@ -223,11 +226,20 @@ type Dependencies struct {
 // workingDir is where a relative path on the judged line resolves. The hook process's cwd
 // is only the fallback: a host runs its hooks from wherever it likes.
 func (d Dependencies) workingDir() (string, bool) {
+	if d.callDirUnread {
+		return "", false
+	}
 	if d.callDir != "" {
 		return d.callDir, true
 	}
 	wd, err := os.Getwd()
 	return wd, err == nil
+}
+
+// callShellDir is where the judged line starts, as a walk of it reads that.
+func (d Dependencies) callShellDir() shellDir {
+	cwd, _ := d.workingDir()
+	return shellDir{dir: cwd, known: !d.callDirUnread}
 }
 
 // errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent

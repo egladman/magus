@@ -184,6 +184,23 @@ func (s *commitGradeRoutesSuite) TestAnAbsoluteScriptAfterAnUnknownCdIsRead() {
 	s.Empty(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)))
 }
 
+func (s *commitGradeRoutesSuite) TestARelativeCallInAScriptAfterAnUnknownCdIsRefused() {
+	s.scriptIn("tools", "inner.sh", "git rebase main\n")
+	script := s.script("outer.sh", "./inner.sh\n")
+	s.Contains(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)), "from a directory only running the line can reveal")
+}
+
+func (s *commitGradeRoutesSuite) TestACommitInAScriptAfterAnUnknownCdIsRefused() {
+	script := s.script("save.sh", "git commit -m done\n")
+	s.Contains(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)), "where it commits cannot be read")
+}
+
+func (s *commitGradeRoutesSuite) TestALiteralCdInAScriptAfterAnUnknownCdIsRead() {
+	s.scriptIn("tools", "inner.sh", "git rebase main\n")
+	script := s.script("outer.sh", fmt.Sprintf("cd %s && ./inner.sh\n", filepath.Join(s.dir, "tools")))
+	s.Contains(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)), "`git rebase` stays with the orchestrator")
+}
+
 func (s *commitGradeRoutesSuite) TestAScriptInASubstitutionRunsFromTheCallDirectory() {
 	s.script("ok.sh", "git status --short\n")
 	s.Empty(s.deny("x=$(./ok.sh)"))
