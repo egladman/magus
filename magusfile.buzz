@@ -126,9 +126,9 @@ magus\project({
     "name": "magus",
     // Only this edge puts a .proto edit in the affected set and orders proto's generate first.
     // libs/figure: go-build embeds figure.buzz.
-    // libs/result: go-build embeds result.buzz.
     // libs/embed: go.mod replaces it with the local module, so its Go builds into magus.
-    "depends_on": ["proto", "libs/figure", "libs/result", "libs/embed"],
+    // libs/result is not a project: result.buzz lives under this tree (go-build embeds it).
+    "depends_on": ["proto", "libs/figure", "libs/embed"],
     "layers": {
         "internal/httpx": "transport",
         "internal/handler/*": "handler",
@@ -2458,7 +2458,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
                     "docs/guides/integrations/agents/magusfile.buzz",
                     "libs/conventions/magusfile.buzz", "libs/proofread/magusfile.buzz",
-                    "libs/result/magusfile.buzz", "libs/result/result.buzz", "libs/result/*.go",
+                    "libs/result/result.buzz", "libs/result/*.go",
                    // proofread's staleness check hashes the labeled cases the binary embeds.
                     "libs/proofread/internal/calibrate/cases/*.txtar", "libs/proofread/proofread.buzz",
                     "libs/proofread/testdata/*.css",
