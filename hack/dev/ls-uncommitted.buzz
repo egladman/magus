@@ -19,6 +19,11 @@ import "assert";
 final USAGE = "usage: magus buzz hack/dev/ls-uncommitted.buzz";
 final HELP = "cost: grows with tree size\n{USAGE}";
 
+export object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
 export object Entry {
     path: str,
     project: str,
@@ -58,19 +63,23 @@ export fun render(entries: [Entry]) > [str] {
     return lines;
 }
 
-export fun uncommitted() > [Entry] !> any {
-    final paths = mut [<str>];
-    foreach (p in vcs\status().files) {
-        paths.append(p.value);
-    }
+export fun uncommitted() > Result::<[Entry]> {
     final entries = mut [<Entry>];
-    if (paths.len() == 0) {
-        return entries;
+    try {
+        final paths = mut [<str>];
+        foreach (p in vcs\status().files) {
+            paths.append(p.value);
+        }
+        if (paths.len() == 0) {
+            return Result::<[Entry]>{ value = entries };
+        }
+        foreach (f in magus\describe.file(paths).files) {
+            entries.append(Entry{ path = f.path, project = f.project, role = f.role });
+        }
+    } catch (err: any) {
+        return Result::<[Entry]>{ error = "ls-uncommitted: read the working tree: {err}" };
     }
-    foreach (f in magus\describe.file(paths).files) {
-        entries.append(Entry{ path = f.path, project = f.project, role = f.role });
-    }
-    return entries;
+    return Result::<[Entry]>{ value = entries };
 }
 
 export fun main(args: [str]) > void !> any {
@@ -83,7 +92,11 @@ export fun main(args: [str]) > void !> any {
         throw "ls-uncommitted: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     std\print("read-only");
-    final entries = uncommitted();
+    final found = uncommitted();
+    if (found.error != null) {
+        throw found.error!;
+    }
+    final entries = found.value!;
     if (entries.len() == 0) {
         std\print("nothing uncommitted");
         return;
@@ -115,6 +128,6 @@ test "files group by project, then by role, each with its count" {
 }
 
 test "every uncommitted path in this checkout is classified once" {
-    final entries = uncommitted();
+    final entries = uncommitted().value!;
     assert\equal(entries.len(), want: vcs\status().files.len(), message: "one entry per status path");
 }

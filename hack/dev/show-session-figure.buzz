@@ -22,6 +22,11 @@ final STATES = [
     ["no return or failed", "no_return", "fail"],
 ];
 
+export object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
 // JobBox is one job as the figure draws it. Not Node or Tree: an object name a script
 // declares replaces magus/figure's private one of the same name inside the library.
 export object JobBox {
@@ -151,48 +156,52 @@ fun boxSubtitle(n: JobBox) > str {
 // drawJobTree draws tr: the session focal, a box per job zoned by state, solid spawn edges and
 // dashed dependency edges. Nothing sets a coordinate; the zones, the direction and the two
 // strokes are the whole of its shape.
-export fun drawJobTree(tr: JobTree) > figure\Figure !> any {
-    final root = figure\external(tr.root, sub: "the orchestrating session", look: figure\Look.focal);
-    final actors = mut {<str: figure\Actor>};
-    actors[tr.root] = root;
-    foreach (n in tr.nodes) {
-        final unfinished = n.state == "running" or n.state == "declared";
-        actors[n.id] = figure\external(n.id, sub: boxSubtitle(n), tag: n.state, look: if (unfinished) figure\Look.optional else figure\Look.plain);
-    }
-    final f = figure\of("session-{shortSession(tr.session)}",
-            title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs",
-            eyebrow: "session",
-            desc: "Every job the session's agents worked under, with the jobs they hang from. A solid edge is a spawn, a dashed one a declared dependency.",
-            direction: figure\Direction.across)
-        .unscoped("a session's jobs are units of work, not directories")
-        .actor(root);
-    foreach (n in tr.nodes) {
-        _ = f.actor(actors[n.id]!);
-    }
-    foreach (e in tr.spawns) {
-        _ = f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, stroke: figure\Stroke.plain);
-    }
-    foreach (e in tr.depends) {
-        _ = f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, label: "after", stroke: figure\Stroke.optional);
-    }
-    foreach (z in STATES) {
-        final members = mut [<figure\Actor>];
+export fun drawJobTree(tr: JobTree) > Result::<figure\Figure> {
+    try {
+        final root = figure\external(tr.root, sub: "the orchestrating session", look: figure\Look.focal);
+        final actors = mut {<str: figure\Actor>};
+        actors[tr.root] = root;
         foreach (n in tr.nodes) {
-            if (z.sub(1).indexOf(n.state) != null) {
-                members.append(actors[n.id]!);
+            final unfinished = n.state == "running" or n.state == "declared";
+            actors[n.id] = figure\external(n.id, sub: boxSubtitle(n), tag: n.state, look: if (unfinished) figure\Look.optional else figure\Look.plain);
+        }
+        final f = figure\of("session-{shortSession(tr.session)}",
+                title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs",
+                eyebrow: "session",
+                desc: "Every job the session's agents worked under, with the jobs they hang from. A solid edge is a spawn, a dashed one a declared dependency.",
+                direction: figure\Direction.across)
+            .unscoped("a session's jobs are units of work, not directories")
+            .actor(root);
+        foreach (n in tr.nodes) {
+            _ = f.actor(actors[n.id]!);
+        }
+        foreach (e in tr.spawns) {
+            _ = f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, stroke: figure\Stroke.plain);
+        }
+        foreach (e in tr.depends) {
+            _ = f.flowAcross(actors[e[0]]!, dst: actors[e[1]]!, label: "after", stroke: figure\Stroke.optional);
+        }
+        foreach (z in STATES) {
+            final members = mut [<figure\Actor>];
+            foreach (n in tr.nodes) {
+                if (z.sub(1).indexOf(n.state) != null) {
+                    members.append(actors[n.id]!);
+                }
+            }
+            if (members.len() > 0) {
+                _ = f.zone(z[0], actors: members);
             }
         }
-        if (members.len() > 0) {
-            _ = f.zone(z[0], actors: members);
-        }
+        return Result::<figure\Figure>{ value = f.legend(figure\Look.focal, label: "the orchestrating session")
+            .legend(figure\Look.optional, label: "not finished") };
+    } catch (err: any) {
+        return Result::<figure\Figure>{ error = "show-session-figure: draw the job tree: {err}" };
     }
-    return f.legend(figure\Look.focal, label: "the orchestrating session")
-        .legend(figure\Look.optional, label: "not finished");
 }
 
 // link is the console URL that explores tr in a browser, "" when it is too long for one.
 // Spawn edges go solid and dependency edges dashed and labelled "after", as in the figure.
-export fun link(tr: JobTree, base: str) > str !> any {
+export fun link(tr: JobTree, base: str) > Result::<str> {
     final nodes = mut [figurelink\FigureNode{ id = tr.root, label = tr.root, seed = true }];
     foreach (n in tr.nodes) {
         nodes.append(figurelink\FigureNode{ id = n.id, label = "{n.id} ({n.state})" });
@@ -200,7 +209,11 @@ export fun link(tr: JobTree, base: str) > str !> any {
     final edges = mut [<[str]>];
     foreach (e in tr.spawns) { edges.append(e); }
     foreach (e in tr.depends) { edges.append([e[0], e[1], "optional", "after"]); }
-    return figurelink\figureLink(base, title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs", nodes: nodes, edges: edges);
+    try {
+        return Result::<str>{ value = figurelink\figureLink(base, title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs", nodes: nodes, edges: edges) };
+    } catch (err: any) {
+        return Result::<str>{ error = "show-session-figure: build the console link: {err}" };
+    }
 }
 
 fun counts(tr: JobTree) > str {
@@ -242,52 +255,71 @@ export fun main(args: [str]) > void !> any {
     }
     final tr = tree(t, jobs: magus\job.list().jobs, all: parsed.values["--all"] != null, start: std\toInt(t.start / 1000));
     final theme = if (themeName == "dark") figure\Theme.dark else figure\Theme.light;
-    std\print(rendered(tr, format: format, theme: theme, console: parsed.values["--console"] ?? ""));
+    final text = rendered(tr, format: format, theme: theme, console: parsed.values["--console"] ?? "");
+    if (text.error != null) {
+        throw text.error!;
+    }
+    std\print(text.value!);
 }
 
 // rendered is what the script prints: the SVG alone for -o svg, so a redirect places it,
 // else a one-line summary and the console link that explores the tree.
-export fun rendered(tr: JobTree, format: str, theme: figure\Theme, console: str) > str !> any {
+export fun rendered(tr: JobTree, format: str, theme: figure\Theme, console: str) > Result::<str> {
     if (format == "svg") {
-        return figure\draw(drawJobTree(tr), theme: theme);
+        final drawn = drawJobTree(tr);
+        if (drawn.error != null) {
+            return Result::<str>{ error = drawn.error };
+        }
+        try {
+            return Result::<str>{ value = figure\draw(drawn.value!, theme: theme) };
+        } catch (err: any) {
+            return Result::<str>{ error = "show-session-figure: render the figure: {err}" };
+        }
     }
     final url = link(tr, base: console);
-    return "read-only: {tr.nodes.len()} jobs ({counts(tr)}), {tr.spawns.len()} spawn and {tr.depends.len()} dependency edges, session {tr.session}\n"
-        + (if (url != "") "explore: {url}" else "explore: the tree is too large for a link; -o svg prints the figure");
+    if (url.error != null) {
+        return Result::<str>{ error = url.error };
+    }
+    return Result::<str>{ value = "read-only: {tr.nodes.len()} jobs ({counts(tr)}), {tr.spawns.len()} spawn and {tr.depends.len()} dependency edges, session {tr.session}\n"
+        + (if (url.value! != "") "explore: {url.value!}" else "explore: the tree is too large for a link; -o svg prints the figure") };
 }
 
 // fixture builds the tree of hack/testdata/session-figure-jobs.json over the feedback trail
 // fixture, the shape magus\job.list() and magus\trail.read() return.
-fun fixture() > JobTree !> any {
-    final raw = json\parse(fs\readFile("hack/testdata/session-figure-jobs.json"));
-    final jobs = mut [<magus\Job>];
-    foreach (j in raw["jobs"]) {
-        final deps = mut [<str>];
-        foreach (d in j["dependsOn"] ?? []) { deps.append(d); }
-        final paths = mut [<str>];
-        foreach (p in j["writePaths"] ?? []) { paths.append(p); }
-        final target = j["check"] ?? "";
-        jobs.append(magus\Job{
-            id = j["id"], parent = j["parent"] ?? "", dependsOn = deps, model = j["model"] ?? "", state = magus\JobState(j["state"] ?? ""),
-            writePaths = paths, created = std\toInt(j["created"] ?? 0),
-            check = if (target != "") magus\LeaseCheck{ target = target, project = "." } else null,
-        });
+fun fixture() > Result::<JobTree> {
+    try {
+        final raw = json\parse(fs\readFile("hack/testdata/session-figure-jobs.json"));
+        final jobs = mut [<magus\Job>];
+        foreach (j in raw["jobs"]) {
+            final deps = mut [<str>];
+            foreach (d in j["dependsOn"] ?? []) { deps.append(d); }
+            final paths = mut [<str>];
+            foreach (p in j["writePaths"] ?? []) { paths.append(p); }
+            final target = j["check"] ?? "";
+            jobs.append(magus\Job{
+                id = j["id"], parent = j["parent"] ?? "", dependsOn = deps, model = j["model"] ?? "", state = magus\JobState(j["state"] ?? ""),
+                writePaths = paths, created = std\toInt(j["created"] ?? 0),
+                check = if (target != "") magus\LeaseCheck{ target = target, project = "." } else null,
+            });
+        }
+        final trailText = fs\readFile("hack/testdata/feedback-trail.json");
+        final t = json\parse(trailText);
+        final obs = mut [<TrailObservation>];
+        foreach (o in t["observations"]) {
+            obs.append(TrailObservation{ at = std\toInt(o["at"]), agent = o["agent"] ?? "", lease = o["lease"] ?? "" });
+        }
+        final spawns = mut [<TrailSpawn>];
+        foreach (s in t["spawns"]) {
+            spawns.append(TrailSpawn{ at = std\toInt(s["at"]), agent = s["agent"] ?? "", child = s["child"] ?? "", lease = s["lease"] ?? "" });
+        }
+        return Result::<JobTree>{ value = tree(Trail{ session = t["session"], observations = obs, spawns = spawns }, jobs: jobs, all: false, start: 0) };
+    } catch (err: any) {
+        return Result::<JobTree>{ error = "show-session-figure: read the fixture: {err}" };
     }
-    final trailText = fs\readFile("hack/testdata/feedback-trail.json");
-    final t = json\parse(trailText);
-    final obs = mut [<TrailObservation>];
-    foreach (o in t["observations"]) {
-        obs.append(TrailObservation{ at = std\toInt(o["at"]), agent = o["agent"] ?? "", lease = o["lease"] ?? "" });
-    }
-    final spawns = mut [<TrailSpawn>];
-    foreach (s in t["spawns"]) {
-        spawns.append(TrailSpawn{ at = std\toInt(s["at"]), agent = s["agent"] ?? "", child = s["child"] ?? "", lease = s["lease"] ?? "" });
-    }
-    return tree(Trail{ session = t["session"], observations = obs, spawns = spawns }, jobs: jobs, all: false, start: 0);
 }
 
 test "the trail's leases select the jobs, with their parents and dependencies" {
-    final tr = fixture();
+    final tr = fixture().value!;
     final ids = mut [<str>];
     foreach (n in tr.nodes) { ids.append(n.id); }
     assert\equal(ids, want: ["job-a", "job-b", "job-a/eval", "base"], message: "drawn jobs");
@@ -296,19 +328,19 @@ test "the trail's leases select the jobs, with their parents and dependencies" {
 }
 
 test "-o svg prints the golden SVG and nothing else" {
-    assert\equal(rendered(fixture(), format: "svg", theme: figure\Theme.light, console: ""), want: fs\readFile("hack/testdata/session-figure.svg"), message: "svg");
+    assert\equal(rendered(fixture().value!, format: "svg", theme: figure\Theme.light, console: "").value!, want: fs\readFile("hack/testdata/session-figure.svg"), message: "svg");
 }
 
 test "without -o it prints a one-line summary and the console link" {
-    final lines = rendered(fixture(), format: "text", theme: figure\Theme.light, console: "https://example.test/console/").split("\n");
+    final lines = rendered(fixture().value!, format: "text", theme: figure\Theme.light, console: "https://example.test/console/").value!.split("\n");
     assert\equal(lines.len(), want: 2, message: "two lines");
     assert\equal(lines[0], want: "read-only: 4 jobs (3 passed or exited, 1 no return or failed), 4 spawn and 1 dependency edges, session s-fixture", message: "summary");
     assert\equal(lines[1].startsWith("explore: https://example.test/console/graph/#figure="), want: true, message: lines[1]);
 }
 
 test "the console link carries the tree and decodes to it" {
-    final tr = fixture();
-    final doc = figurelink\decodeFigureLink(link(tr, base: "https://example.test/console/"));
+    final tr = fixture().value!;
+    final doc = figurelink\decodeFigureLink(link(tr, base: "https://example.test/console/").value!);
     assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
     final nodes = doc.q("nodes").listValue();
     assert\equal(nodes.len(), want: tr.nodes.len() + 1, message: "every job and the session");

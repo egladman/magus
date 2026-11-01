@@ -22,6 +22,11 @@ import "assert";
 final USAGE = "usage: magus buzz hack/dev/ls-worktrees.buzz -- [--dirty]";
 final HELP = "cost: grows with the number of worktrees\n{USAGE}";
 
+export object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
 export object Row {
     path: str,
     // dirty is the count of uncommitted files, -1 for a worktree whose directory is gone.
@@ -54,34 +59,45 @@ export fun render(rows: [Row]) > [str] {
 }
 
 // jobsByCheckout is each checkout's newest job, as "<id> (<state>)".
-fun jobsByCheckout() > {str: str} !> any {
-    final list: magus\JobList = magus\job.list();
+fun jobsByCheckout() > Result::<{str: str}> {
     final newest = mut {<str: int>};
     final label = mut {<str: str>};
-    foreach (j in list.jobs) {
-        if (j.checkoutRoot != "" and j.updated >= (newest[j.checkoutRoot] ?? -1)) {
-            newest[j.checkoutRoot] = j.updated;
-            label[j.checkoutRoot] = "{j.id} ({j.state.value})";
+    try {
+        final list: magus\JobList = magus\job.list();
+        foreach (j in list.jobs) {
+            if (j.checkoutRoot != "" and j.updated >= (newest[j.checkoutRoot] ?? -1)) {
+                newest[j.checkoutRoot] = j.updated;
+                label[j.checkoutRoot] = "{j.id} ({j.state.value})";
+            }
         }
+    } catch (err: any) {
+        return Result::<{str: str}>{ error = "ls-worktrees: list the jobs: {err}" };
     }
-    return label;
+    return Result::<{str: str}>{ value = label };
 }
 
 // worktrees is a row per worktree of this repository, main first; with dirtyOnly, only
 // those holding uncommitted files or gone from disk.
-export fun worktrees(dirtyOnly: bool) > [Row] !> any {
-    final root = vcs\root();
-    final trees = reclaim\parseWorktrees(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
-    final jobs = jobsByCheckout();
-    final main = if (trees.len() > 0) trees[0].path else "";
+export fun worktrees(dirtyOnly: bool) > Result::<[Row]> {
     final found = mut [<Row>];
-    foreach (t in trees) {
-        final st = reclaim\status(t.path, deadline: 0.0);
-        if (!dirtyOnly or st.dirty != 0) {
-            found.append(Row{ path = reclaim\displayPath(t.path, main: main), dirty = st.dirty, unpushed = st.unpushed, job = jobs[t.path] ?? "" });
-        }
+    final jobs = jobsByCheckout();
+    if (jobs.error != null) {
+        return Result::<[Row]>{ error = jobs.error };
     }
-    return found;
+    try {
+        final root = vcs\root();
+        final trees = reclaim\parseWorktrees(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
+        final main = if (trees.len() > 0) trees[0].path else "";
+        foreach (t in trees) {
+            final st = reclaim\status(t.path, deadline: 0.0);
+            if (!dirtyOnly or st.dirty != 0) {
+                found.append(Row{ path = reclaim\displayPath(t.path, main: main), dirty = st.dirty, unpushed = st.unpushed, job = jobs.value![t.path] ?? "" });
+            }
+        }
+    } catch (err: any) {
+        return Result::<[Row]>{ error = "ls-worktrees: list the worktrees: {err}" };
+    }
+    return Result::<[Row]>{ value = found };
 }
 
 export fun main(args: [str]) > void !> any {
@@ -97,8 +113,11 @@ export fun main(args: [str]) > void !> any {
         throw "ls-worktrees: reads git worktrees, and this checkout is {vcs\name()}";
     }
     final rows = worktrees(parsed.values["--dirty"] != null);
+    if (rows.error != null) {
+        throw rows.error!;
+    }
     std\print("read-only");
-    foreach (line in render(rows)) {
+    foreach (line in render(rows.value!)) {
         std\print(line);
     }
 }

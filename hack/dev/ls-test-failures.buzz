@@ -28,6 +28,11 @@ final LOCATION = std\pattern(`^\s+([\w.-]+\.go):(\d+): ?(.*)$`);
 final TESTIFY_ERROR = std\pattern(`^\s+Error:\s+(.*)$`);
 final FAIL_PACKAGE = std\pattern(`^FAIL\s+(\S+)\s`);
 
+export object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
 export object Failure {
     test: str,
     file: str = "",
@@ -88,25 +93,33 @@ export fun render(f: Failure) > str {
 }
 
 // latestFailedTest is the newest failed test target's output ref, or "".
-fun latestFailedTest() > str !> any {
-    final listing = json\parse(magus\cmd("session", args: ["ls", "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout);
-    foreach (inv in listing["invocations"] ?? []) {
-        foreach (t in inv["targets"] ?? []) {
-            if ((t["target"] ?? "").startsWith("test") and t["outcome"] == "fail") {
-                return t["ref"] ?? "";
+fun latestFailedTest() > Result::<str> {
+    try {
+        final listing = json\parse(magus\cmd("session", args: ["ls", "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout);
+        foreach (inv in listing["invocations"] ?? []) {
+            foreach (t in inv["targets"] ?? []) {
+                if ((t["target"] ?? "").startsWith("test") and t["outcome"] == "fail") {
+                    return Result::<str>{ value = t["ref"] ?? "" };
+                }
             }
         }
+    } catch (err: any) {
+        return Result::<str>{ error = "ls-test-failures: read `magus session ls`: {err}" };
     }
-    return "";
+    return Result::<str>{ value = "" };
 }
 
-fun modulePath() > str !> any {
-    foreach (line in fs\readLines("go.mod")) {
-        if (line.startsWith("module ")) {
-            return line.sub(7).trim();
+fun modulePath() > Result::<str> {
+    try {
+        foreach (line in fs\readLines("go.mod")) {
+            if (line.startsWith("module ")) {
+                return Result::<str>{ value = line.sub(7).trim() };
+            }
         }
+    } catch (err: any) {
+        return Result::<str>{ error = "ls-test-failures: read go.mod: {err}" };
     }
-    return "";
+    return Result::<str>{ value = "" };
 }
 
 export fun main(args: [str]) > void !> any {
@@ -118,7 +131,11 @@ export fun main(args: [str]) > void !> any {
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "ls-test-failures: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
-    final run = testFailures(parsed.values["--ref"] ?? "");
+    final found = testFailures(parsed.values["--ref"] ?? "");
+    if (found.error != null) {
+        throw found.error!;
+    }
+    final run = found.value!;
     std\print("read-only");
     std\print("{run.ref} {run.target}: {run.failures.len()} failing tests");
     foreach (f in run.failures) {
@@ -134,13 +151,28 @@ export object Run {
 
 // testFailures reads the failures of the test run whose output is ref, or of the newest
 // failed test target when ref is "".
-export fun testFailures(ref: str) > Run !> any {
-    final chosen = if (ref != "") ref else latestFailedTest();
+export fun testFailures(ref: str) > Result::<Run> {
+    var chosen = ref;
     if (chosen == "") {
-        throw "ls-test-failures: no failed test run in `magus session ls`; pass --ref <output-ref>";
+        final latest = latestFailedTest();
+        if (latest.error != null) {
+            return Result::<Run>{ error = latest.error };
+        }
+        chosen = latest.value!;
     }
-    final rec: magus\OutputRecord = magus\output(chosen);
-    return Run{ ref = rec.ref, target = "{rec.project}:{rec.target}", failures = failures(rec.output, module: modulePath()) };
+    if (chosen == "") {
+        return Result::<Run>{ error = "ls-test-failures: no failed test run in `magus session ls`; pass --ref <output-ref>" };
+    }
+    final module = modulePath();
+    if (module.error != null) {
+        return Result::<Run>{ error = module.error };
+    }
+    try {
+        final rec: magus\OutputRecord = magus\output(chosen);
+        return Result::<Run>{ value = Run{ ref = rec.ref, target = "{rec.project}:{rec.target}", failures = failures(rec.output, module: module.value!) } };
+    } catch (err: any) {
+        return Result::<Run>{ error = "ls-test-failures: read output {chosen}: {err}" };
+    }
 }
 
 test "each failure is its file and line under its package's directory, with its message" {

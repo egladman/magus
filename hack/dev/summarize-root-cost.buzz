@@ -26,6 +26,11 @@ final HELP = "cost: none\n{USAGE}";
 // PROFILES is the order shadow verdicts print in, least to most refusing.
 final PROFILES = ["light", "standard", "strict"];
 
+export object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
 export object Rollup {
     sessions: int,
     withContext: int,
@@ -51,7 +56,7 @@ fun count(items: {str: int}, key: str) > int {
 
 // fold reads each `magus session show -o json` document into one rollup. A document with
 // no cost section is a session an older magus loaded and is not counted.
-export fun fold(shows: [str]) > Rollup !> any {
+export fun fold(shows: [str]) > Result::<Rollup> {
     var sessions = 0;
     var withContext = 0;
     var withDelegable = 0;
@@ -69,7 +74,13 @@ export fun fold(shows: [str]) > Rollup !> any {
     final verdicts = mut {<str: int>};
 
     foreach (text in shows) {
-        final cost = json\parse(text)["cost"];
+        var doc: any = null;
+        try {
+            doc = json\parse(text);
+        } catch (err: any) {
+            return Result::<Rollup>{ error = "summarize-root-cost: a session document is not JSON: {err}" };
+        }
+        final cost = doc["cost"];
         if (cost == null) {
             continue;
         }
@@ -143,7 +154,7 @@ export fun fold(shows: [str]) > Rollup !> any {
         }
     }
 
-    return Rollup{
+    return Result::<Rollup>{ value = Rollup{
         sessions = sessions,
         withContext = withContext,
         maxPeak = maxPeak,
@@ -160,7 +171,7 @@ export fun fold(shows: [str]) > Rollup !> any {
         shadow = shadow,
         priced = priced,
         usd = usd,
-    };
+    } };
 }
 
 // money renders dollars to the cent.
@@ -215,17 +226,23 @@ export fun render(r: Rollup) > [str] {
 }
 
 // sessionIds lists the host sessions `magus session ls` knows, each once.
-export fun sessionIds(listing: str) > [str] !> any {
+export fun sessionIds(listing: str) > Result::<[str]> {
     final seen = mut {<str: bool>};
     final ids = mut [<str>];
-    foreach (c in json\parse(listing)["checkpoints"] ?? []) {
+    var doc: any = null;
+    try {
+        doc = json\parse(listing);
+    } catch (err: any) {
+        return Result::<[str]>{ error = "summarize-root-cost: the session listing is not JSON: {err}" };
+    }
+    foreach (c in doc["checkpoints"] ?? []) {
         final id = c["host_session"] ?? "";
         if (id != "" and !seen.hasKey(id)) {
             seen[id] = true;
             ids.append(id);
         }
     }
-    return ids;
+    return Result::<[str]>{ value = ids };
 }
 
 export fun main(args: [str]) > void !> any {
@@ -243,14 +260,22 @@ export fun main(args: [str]) > void !> any {
     }
     final listing = magus\cmd("session", args: listArgs, opts: magus\CommandOptions{ quiet = true }).stdout;
     final shows = mut [<str>];
-    foreach (id in sessionIds(listing)) {
+    final ids = sessionIds(listing);
+    if (ids.error != null) {
+        throw ids.error!;
+    }
+    foreach (id in ids.value!) {
         final shown = magus\cmd("session", args: ["show", id, "-o", "json"], opts: magus\CommandOptions{ quiet = true, allowFailure = true });
         if (shown.ok) {
             shows.append(shown.stdout);
         }
     }
+    final rollup = fold(shows);
+    if (rollup.error != null) {
+        throw rollup.error!;
+    }
     std\print("read-only");
-    foreach (line in render(fold(shows))) {
+    foreach (line in render(rollup.value!)) {
         std\print(line);
     }
 }
@@ -279,7 +304,7 @@ final UNMEASURED = `\{"session": "c", "cost": \{
 \}\}`;
 
 test "totals add up and name how many sessions measured each section" {
-    assert\equal(render(fold([MEASURED, SECOND])), want: [
+    assert\equal(render(fold([MEASURED, SECOND]).value!), want: [
         "main-thread cost over 2 session(s)",
         "  context: peak 800000 tokens, median peak 200000; measured in 2 of 2 session(s)",
         "  delegable: 40% of 2000 result chars; measured in 2 of 2 session(s)",
@@ -291,7 +316,7 @@ test "totals add up and name how many sessions measured each section" {
 }
 
 test "a session that measured nothing is counted but never as zero context" {
-    final lines = render(fold([UNMEASURED]));
+    final lines = render(fold([UNMEASURED]).value!);
     assert\equal(lines[0], want: "main-thread cost over 1 session(s)", message: "counted");
     assert\equal(lines[1], want: "  context: not measured in any session", message: "context");
     assert\equal(lines[2], want: "  delegable: not measured in any session", message: "delegable");
@@ -300,7 +325,7 @@ test "a session that measured nothing is counted but never as zero context" {
 }
 
 test "a document with no cost section is not a session" {
-    assert\equal(fold([`\{"session": "old"\}`]).sessions, want: 0, message: "skipped");
+    assert\equal(fold([`\{"session": "old"\}`]).value!.sessions, want: 0, message: "skipped");
 }
 
 test "money rounds to the cent and pads the cents" {
@@ -311,5 +336,5 @@ test "money rounds to the cent and pads the cents" {
 
 test "session ids come once each from the listing" {
     final listing = `\{"checkpoints": [\{"host_session": "a"\}, \{"host_session": "b"\}, \{"host_session": "a"\}, \{"host_session": ""\}]\}`;
-    assert\equal(sessionIds(listing), want: ["a", "b"], message: "ids");
+    assert\equal(sessionIds(listing).value!, want: ["a", "b"], message: "ids");
 }

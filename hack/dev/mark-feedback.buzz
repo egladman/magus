@@ -16,15 +16,20 @@ final HELP = "cost: reads the session's trails the way show-feedback does; with 
 
 final VERDICTS = ["should-deny", "should-advise", "wrong-deny", "fine"];
 
+export object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
 // plan resolves each label (C3) or id (fb...) against the report's rows and builds the
 // marks to store. A label names a position in this report only; the mark carries the
 // row's id, so it outlives the position.
-export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > [TrailMark] !> any {
+export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > Result::<[TrailMark]> {
     if (VERDICTS.indexOf(verdict) == null) {
-        throw "mark-feedback: --verdict is one of {VERDICTS.join(", ")}, not `{verdict}`\n{USAGE}";
+        return Result::<[TrailMark]>{ error = "mark-feedback: --verdict is one of {VERDICTS.join(", ")}, not `{verdict}`\n{USAGE}" };
     }
     if (refs.len() == 0) {
-        throw "mark-feedback: name at least one row by its label (C3) or id\n{USAGE}";
+        return Result::<[TrailMark]>{ error = "mark-feedback: name at least one row by its label (C3) or id\n{USAGE}" };
     }
     final marks = mut [<TrailMark>];
     foreach (ref in refs) {
@@ -39,7 +44,7 @@ export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > [TrailMa
             foreach (row in r.rows) {
                 labels.append(row.label);
             }
-            throw "mark-feedback: {ref} is not a row of session {r.session} in this window; its rows are {labels.join(" ")}";
+            return Result::<[TrailMark]>{ error = "mark-feedback: {ref} is not a row of session {r.session} in this window; its rows are {labels.join(" ")}" };
         }
         final row = found!;
         marks.append(TrailMark{
@@ -47,7 +52,7 @@ export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > [TrailMa
             session = r.session, at = 0, examples = row.examples,
         });
     }
-    return marks;
+    return Result::<[TrailMark]>{ value = marks };
 }
 
 fun planLine(m: TrailMark, r: show\Report) > str {
@@ -70,8 +75,16 @@ export fun main(args: [str]) > void !> any {
         throw "mark-feedback: unknown {parsed.unknown.join(" ")}\n{USAGE}";
     }
     final verdict = parsed.values["--verdict"] ?? "";
-    final r = show\report(parsed.values["--session"] ?? "", since: parsed.values["--since"] ?? "", through: parsed.values["--until"] ?? "");
-    final marks = plan(r, refs: parsed.positionals, verdict: verdict, note: parsed.values["--note"] ?? "");
+    final read = show\report(parsed.values["--session"] ?? "", since: parsed.values["--since"] ?? "", through: parsed.values["--until"] ?? "");
+    if (read.error != null) {
+        throw read.error!;
+    }
+    final r = read.value!;
+    final planned = plan(r, refs: parsed.positionals, verdict: verdict, note: parsed.values["--note"] ?? "");
+    if (planned.error != null) {
+        throw planned.error!;
+    }
+    final marks = planned.value!;
     final apply = parsed.values["--apply"] != null;
     if (!apply) {
         std\print("dry run: would mark {marks.len()} row(s) {verdict} in this repository's feedback store; rerun with --apply to write");
@@ -89,12 +102,20 @@ export fun main(args: [str]) > void !> any {
     }
 }
 
-fun fixture() > show\Report !> any {
-    return show\fold(show\trailFromJSON(fs\readFile("hack/testdata/feedback-trail.json")), marks: [<TrailMark>]);
+fun fixture() > Result::<show\Report> {
+    try {
+        final trail = show\trailFromJSON(fs\readFile("hack/testdata/feedback-trail.json"));
+        if (trail.error != null) {
+            return Result::<show\Report>{ error = trail.error };
+        }
+        return Result::<show\Report>{ value = show\fold(trail.value!, marks: [<TrailMark>]) };
+    } catch (err: any) {
+        return Result::<show\Report>{ error = "mark-feedback: read the fixture: {err}" };
+    }
 }
 
 test "a label resolves to the row's stable id, not its position" {
-    final marks = plan(fixture(), refs: ["C1", "a2"], verdict: "should-deny", note: "guard it");
+    final marks = plan(fixture().value!, refs: ["C1", "a2"], verdict: "should-deny", note: "guard it").value!;
     assert\equal(marks.len(), want: 2, message: "two marks");
     assert\equal(marks[0].id, want: show\rowID("unguarded", key: "grep -rn <arg>"), message: "C1 id");
     assert\equal(marks[0].key, want: "grep -rn <arg>", message: "C1 key");
@@ -105,24 +126,14 @@ test "a label resolves to the row's stable id, not its position" {
 
 test "an id resolves like its label, including a shape that ran once and has no label" {
     final id = show\rowID("advised", key: "lease-state");
-    assert\equal(plan(fixture(), refs: [id], verdict: "fine", note: "")[0].key, want: "lease-state", message: "by id");
+    assert\equal(plan(fixture().value!, refs: [id], verdict: "fine", note: "").value![0].key, want: "lease-state", message: "by id");
     final once = show\rowID("unguarded", key: "make <arg>");
-    assert\equal(plan(fixture(), refs: [once], verdict: "should-advise", note: "")[0].key, want: "make <arg>", message: "unlabelled");
+    assert\equal(plan(fixture().value!, refs: [once], verdict: "should-advise", note: "").value![0].key, want: "make <arg>", message: "unlabelled");
 }
 
 test "an unknown label or verdict is refused, naming what exists" {
-    var refused = "";
-    try {
-        _ = plan(fixture(), refs: ["C9"], verdict: "fine", note: "");
-    } catch (e: str) {
-        refused = e;
-    }
+    final refused = plan(fixture().value!, refs: ["C9"], verdict: "fine", note: "").error ?? "";
     assert\equal(refused, want: "mark-feedback: C9 is not a row of session s-fixture in this window; its rows are A1 A2 B1 C1 C2 D1", message: "label");
-    refused = "";
-    try {
-        _ = plan(fixture(), refs: ["C1"], verdict: "bad", note: "");
-    } catch (e: str) {
-        refused = e;
-    }
-    assert\equal(refused.startsWith("mark-feedback: --verdict is one of should-deny"), want: true, message: "verdict");
+    final badVerdict = plan(fixture().value!, refs: ["C1"], verdict: "bad", note: "").error ?? "";
+    assert\equal(badVerdict.startsWith("mark-feedback: --verdict is one of should-deny"), want: true, message: "verdict");
 }
