@@ -327,6 +327,24 @@ fun writeKeepingMode(file: str, content: str) > result\Result::<bool> {
     return result\ok::<bool>(true);
 }
 
+// report prints the patch, writing it first when apply holds.
+fun report(file: str, before: str, after: str, taken: int, hunks: int, apply: bool) > result\Result::<bool> {
+    final patch = diff\unified(before, b: after, fromLabel: file, toLabel: "{file} resolved");
+    if (!apply) {
+        std\print("dry run: nothing changed; pass --apply to write");
+    } else {
+        final written = writeKeepingMode(file, content: after);
+        if (written.error != null) {
+            return written;
+        }
+        final left = hunks - taken;
+        final next = if (left == 0) "; stage it with `git add {file}`" else "; {left} hunk(s) left";
+        std\print("resolved {taken} of {hunks} hunk(s) in {file}{next}");
+    }
+    std\print(patch);
+    return result\ok::<bool>(true);
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--apply", "--help"], valued: ["--file"], repeated: ["--take", "--text"]);
     if (parsed.values["--help"] != null) {
@@ -366,20 +384,10 @@ export fun main(args: [str]) > void !> any {
     if (settled.error != null) {
         throw "resolve-conflicts: {file}: {settled.error!.message}";
     }
-    final after = settled.value!;
-    final left = c.hunks.len() - choices.len();
-    final patch = diff\unified(before, b: after, fromLabel: file, toLabel: "{file} resolved");
-    if (parsed.values["--apply"] == null) {
-        std\print("dry run: nothing changed; pass --apply to write");
-    } else {
-        final written = writeKeepingMode(file, content: after);
-        if (written.error != null) {
-            throw written.error!.message;
-        }
-        final next = if (left == 0) "; stage it with `git add {file}`" else "; {left} hunk(s) left";
-        std\print("resolved {choices.len()} of {c.hunks.len()} hunk(s) in {file}{next}");
+    final reported = report(file, before: before, after: settled.value!, taken: choices.len(), hunks: c.hunks.len(), apply: parsed.values["--apply"] != null);
+    if (reported.error != null) {
+        throw reported.error!.message;
     }
-    std\print(patch);
 }
 
 final TWO_SIDED = "package x\n<<<<<<< HEAD\nours one\n=======\ntheirs one\n>>>>>>> feature\nmiddle\n<<<<<<< HEAD\nours two\n=======\ntheirs two\n>>>>>>> feature\nend\n";

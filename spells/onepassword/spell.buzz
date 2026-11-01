@@ -67,6 +67,19 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //no
     return read.value!;
 }
 
+// failure names which way a nonzero `op read` failed, from its stderr.
+fun failure(err: str, uri: str) > str {
+    if (has(err, needle: "not signed in") or has(err, needle: "no active session")) {
+        return "onepassword: not signed in. Run `op signin`, or for an unattended run "
+            + "set OP_SERVICE_ACCOUNT_TOKEN.\n  reference: " + uri;
+    }
+    if (has(err, needle: "isn't an item") or has(err, needle: "not found")) {
+        return "onepassword: " + uri + " does not resolve to an item field. Check the "
+            + "vault, item and field names - `op item list --vault <vault>` lists them.";
+    }
+    return "onepassword: `op read " + uri + "` failed: " + err.trim();
+}
+
 fun readSecret(ref: str) > result\Result::<Secret> {
     if (ref == "") {
         return result\fail::<Secret>("onepassword: no reference given");
@@ -101,16 +114,7 @@ fun readSecret(ref: str) > result\Result::<Secret> {
         final res = proc\exec("op", args: ["read", uri], dir: ".",
             opts: proc\ExecOptions{allowFailure = true, quiet = true});
         if (res["code"] != 0) {
-            final err = "{res["stderr"]}";
-            if (has(err, needle: "not signed in") or has(err, needle: "no active session")) {
-                return result\fail::<Secret>("onepassword: not signed in. Run `op signin`, or for an unattended run "
-                    + "set OP_SERVICE_ACCOUNT_TOKEN.\n  reference: " + uri);
-            }
-            if (has(err, needle: "isn't an item") or has(err, needle: "not found")) {
-                return result\fail::<Secret>("onepassword: " + uri + " does not resolve to an item field. Check the "
-                    + "vault, item and field names - `op item list --vault <vault>` lists them.");
-            }
-            return result\fail::<Secret>("onepassword: `op read " + uri + "` failed: " + err.trim());
+            return result\fail::<Secret>(failure("{res["stderr"]}", uri: uri));
         }
 
         final value = "{res["stdout"]}";

@@ -183,6 +183,27 @@ export object Schema {
     wrote: bool,
 }
 
+// refresh fetches one published row. When write holds and the bytes
+// moved, it replaces the vendored file.
+fun refresh(file: str, origin: str, url: str, recorded: str, write: bool) > result\Result::<Schema> {
+    var body = "";
+    try {
+        body = http\get(url, opts: http\Options{ fail = true }).body;
+    } catch (err: any) {
+        return result\caught::<Schema>(err, doing: "host-schemas: fetch {url}");
+    }
+    final digest = crypto\sha256Hex(body);
+    final moved = digest != recorded;
+    if (moved and write) {
+        try {
+            fs\writeFile(DIR + "/" + file, content: body);
+        } catch (err: any) {
+            return result\caught::<Schema>(err, doing: "host-schemas: write {DIR}/{file}");
+        }
+    }
+    return result\ok::<Schema>(Schema{ file = file, origin = origin, url = url, recorded = recorded, digest = digest, wrote = moved and write });
+}
+
 // schemas re-fetches every `published` row and, when write holds, replaces each vendored
 // file whose bytes moved. It never edits SOURCES; the new digest is on the returned row.
 export fun schemas(write: bool) > result\Result::<[Schema]> {
@@ -212,24 +233,12 @@ export fun schemas(write: bool) > result\Result::<[Schema]> {
             continue;
         }
 
-        final recorded = code(cells, index: 5);
-        var body = "";
-        try {
-            body = http\get(url, opts: http\Options{ fail = true }).body;
-        } catch (err: any) {
-            return result\caught::<[Schema]>(err, doing: "host-schemas: fetch {url}");
+        final row = refresh(file, origin: origin, url: url, recorded: code(cells, index: 5), write: write);
+        if (row.error != null) {
+            return result\fail::<[Schema]>(row.error!.message);
         }
-        final digest = crypto\sha256Hex(body);
         checked = checked + 1;
-        final moved = digest != recorded;
-        if (moved and write) {
-            try {
-                fs\writeFile(DIR + "/" + file, content: body);
-            } catch (err: any) {
-                return result\caught::<[Schema]>(err, doing: "host-schemas: write {DIR}/{file}");
-            }
-        }
-        rows.append(Schema{ file = file, origin = origin, url = url, recorded = recorded, digest = digest, wrote = moved and write });
+        rows.append(row.value!);
     }
 
     // A table that matched no row means the format changed under this parser, and a
@@ -272,6 +281,26 @@ export fun parse(args: [str]) > result\Result::<str> {
     }
 }
 
+// reportBundles prints each upstream bundle and returns how many moved.
+// A moved bundle has no bytes fetch could rewrite, so it is counted apart
+// from the schemas.
+fun reportBundles() > result\Result::<int> {
+    var moved = 0;
+    final watched = bundles();
+    if (watched.error != null) {
+        return result\fail::<int>(watched.error!.message);
+    }
+    foreach (b in watched.value!) {
+        if (b.digest == b.recorded) {
+            std\print("same {b.pkg}@{b.version} {b.inner}");
+            continue;
+        }
+        moved = moved + 1;
+        std\print("MOVED {b.pkg}@{b.version} {b.inner}: upstream hashes {b.digest}, the table records {b.recorded}; re-read the validator by hand");
+    }
+    return result\ok::<int>(moved);
+}
+
 export fun main(args: [str]) > void !> any {
     final chosen = parse(args);
     if (chosen.error != null) {
@@ -308,23 +337,11 @@ export fun main(args: [str]) > void !> any {
         }
     }
 
-    // Counted apart from `moved`, because the two have different remedies and one message
-    // covering both sends a reader to a step that cannot help them: fetch rewrites a
-    // published schema from upstream bytes, and an upstream bundle has none to rewrite
-    // from. A moved bundle is read by a person.
-    var upstreamMoved = 0;
-    final watched = bundles();
-    if (watched.error != null) {
-        throw watched.error!.message;
+    final counted = reportBundles();
+    if (counted.error != null) {
+        throw counted.error!.message;
     }
-    foreach (b in watched.value!) {
-        if (b.digest == b.recorded) {
-            std\print("same {b.pkg}@{b.version} {b.inner}");
-            continue;
-        }
-        upstreamMoved = upstreamMoved + 1;
-        std\print("MOVED {b.pkg}@{b.version} {b.inner}: upstream hashes {b.digest}, the table records {b.recorded}; re-read the validator by hand");
-    }
+    final upstreamMoved = counted.value!;
     if (write) {
         std\print("fetched {checked} published schema(s); {moved} changed");
         return;
