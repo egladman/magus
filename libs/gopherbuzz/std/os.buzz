@@ -46,7 +46,7 @@ export extern fun tmpFilename(prefix: str?) > str;
 export extern fun exit(exitCode: int) > void;
 
 /// Run `command` and return its exit code.
-export extern fun execute(command: [str]) > int !> any;
+export extern fun execute(command: [str]) > int !> any; //nolint:no-throw // the host raises; this declares it
 
 /// Socket protocols.
 export enum SocketProtocol {
@@ -63,10 +63,10 @@ export enum SocketProtocol {
 /// implementation does not have. Reconciling the two is a separate change; this file
 /// states what is actually callable. The first parameter is not `protocol`, a reserved word.
 export object Socket {
-    static extern fun connect(kind: SocketProtocol, host: str, port: int) > Socket !> any;
+    static extern fun connect(kind: SocketProtocol, host: str, port: int) > Socket !> any; //nolint:no-throw // the host raises; this declares it
 
-    extern fun send(payload: str) > void !> any;
-    extern fun receive() > str? !> any;
+    extern fun send(payload: str) > void !> any; //nolint:no-throw // the host raises; this declares it
+    extern fun receive() > str? !> any; //nolint:no-throw // the host raises; this declares it
     extern fun close() > void;
     extern fun collect() > void;
 }
@@ -74,9 +74,9 @@ export object Socket {
 /// A TCP server. See the header: init is a different function from upstream's, not
 /// a reordering of it.
 export object TcpServer {
-    static extern fun init(port: int, kind: SocketProtocol) > TcpServer !> any;
+    static extern fun init(port: int, kind: SocketProtocol) > TcpServer !> any; //nolint:no-throw // the host raises; this declares it
 
-    extern fun accept() > Socket !> any;
+    extern fun accept() > Socket !> any; //nolint:no-throw // the host raises; this declares it
     extern fun close() > void;
     extern fun collect() > void;
 }

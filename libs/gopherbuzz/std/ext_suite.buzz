@@ -166,21 +166,21 @@ export object Suite {
 
     /// Marks the current test skipped and stops its body (Go's t.Skip).
     /// @param message Why the test was skipped
-    mut fun skip(message: str) > void !> str {
+    mut fun skip(message: str) > void !> str { //nolint:no-throw // a suite stops its test body by raising
         this.currentSkipped = true;
         io\stdout.write("  SKIP: {this.currentName}{tail(message)}\n");
 
-        throw "suite: skip";
+        throw "suite: skip"; //nolint:no-throw // a suite stops its test body by raising
     }
 
     /// Records a failure and stops the current test's body (Go's t.Fatal). Use it
     /// for a broken precondition where continuing is pointless; the soft matchers
     /// record and continue.
     /// @param message Why the test cannot continue
-    mut fun fatal(message: str) > void !> str {
+    mut fun fatal(message: str) > void !> str { //nolint:no-throw // a suite stops its test body by raising
         this.report("fatal", message: message);
 
-        throw "suite: fatal";
+        throw "suite: fatal"; //nolint:no-throw // a suite stops its test body by raising
     }
 
     /// Records a failure: prints detail to stderr and marks the current test failed.
