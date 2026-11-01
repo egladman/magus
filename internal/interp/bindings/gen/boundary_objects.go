@@ -4279,6 +4279,7 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	out.MapSet("baseVerdict", enums.Case("JobBaseVerdict", string(v.BaseVerdict)))
 	out.MapSet("registeredBy", ObjectOrigin(v.RegisteredBy, enums))
 	out.MapSet("registered", vm.IntValue(int64(v.Registered)))
+	out.MapSet("holderStopped", vm.IntValue(int64(v.HolderStopped)))
 	out.MapSet("checkoutRoot", vm.StringValue(v.CheckoutRoot))
 	optWorktree := vm.Null
 	if v.Worktree != nil {
