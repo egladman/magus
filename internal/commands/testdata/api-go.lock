@@ -947,6 +947,8 @@ github.com/egladman/magus/types.BranchChange.Paths field []string "json:\"paths\
 github.com/egladman/magus/types.BranchChange.Ref field string "json:\"ref\""
 github.com/egladman/magus/types.BranchChangeReporter type interface
 github.com/egladman/magus/types.BranchChangeReporter.BranchChanges imethod func(ctx context.Context, dir string, base string, limit int) ([]BranchChange, error)
+github.com/egladman/magus/types.BranchHeadReporter type interface
+github.com/egladman/magus/types.BranchHeadReporter.BranchHeads imethod func(ctx context.Context, root string) (map[string]string, error)
 github.com/egladman/magus/types.BranchIdents func(lines [][]byte, start int, end int, language string) []string
 github.com/egladman/magus/types.Brief type struct
 github.com/egladman/magus/types.Brief.Decisions field []BriefDecision "json:\"decisions,omitempty\""
@@ -1062,6 +1064,7 @@ github.com/egladman/magus/types.CacheableSecretRead const DiagnosticCode = "MGS1
 github.com/egladman/magus/types.CapAncestryReporter const VCSCapability = "AncestryReporter"
 github.com/egladman/magus/types.CapBisector const VCSCapability = "Bisector"
 github.com/egladman/magus/types.CapBranchChangeReporter const VCSCapability = "BranchChangeReporter"
+github.com/egladman/magus/types.CapBranchHeadReporter const VCSCapability = "BranchHeadReporter"
 github.com/egladman/magus/types.CapBundler const VCSCapability = "Bundler"
 github.com/egladman/magus/types.CapCheckoutFastForwarder const VCSCapability = "CheckoutFastForwarder"
 github.com/egladman/magus/types.CapCheckoutLister const VCSCapability = "CheckoutLister"
@@ -5630,6 +5633,7 @@ github.com/egladman/magus/types.VCSDriver.Tags imethod func(ctx context.Context,
 github.com/egladman/magus/types.VCSDriver.embeds AncestryReporter
 github.com/egladman/magus/types.VCSDriver.embeds Bisector
 github.com/egladman/magus/types.VCSDriver.embeds BranchChangeReporter
+github.com/egladman/magus/types.VCSDriver.embeds BranchHeadReporter
 github.com/egladman/magus/types.VCSDriver.embeds Bundler
 github.com/egladman/magus/types.VCSDriver.embeds CheckoutFastForwarder
 github.com/egladman/magus/types.VCSDriver.embeds CheckoutLister
