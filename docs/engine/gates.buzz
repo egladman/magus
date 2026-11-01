@@ -522,6 +522,17 @@ test "conventionPages lists a tracked page and not a stale ignored render" {
     assert\equal(pages.join(","), "guides/tracked.md", "the ignored render is not judged");
 }
 
+// pagesIn is the pages files names, or every page when files is empty.
+fun pagesIn(pages: [str], files: [str]) > [str] {
+    if (files.len() == 0) { return pages; }
+    return pages.filter(fun (i: int, page: str) > bool => files.indexOf(page) != null);
+}
+
+test "pagesIn keeps every page with no files and only the named ones with some" {
+    assert\equal(pagesIn(["a.md", "b.md"], files: [<str>]).join(","), "a.md,b.md", "no files is the whole tree");
+    assert\equal(pagesIn(["a.md", "b.md"], files: ["b.md", "c.go"]).join(","), "b.md", "a named file that is no page is skipped");
+}
+
 // pathExists is the one filesystem question the conventions lint asks.
 fun pathExists(p: str) > bool !> any {
     return fs\exists(p);
@@ -542,8 +553,11 @@ fun pathExists(p: str) > bool !> any {
 //
 // Every violation is collected before throwing. Failing on the first would turn a
 // three-minute fix into three round trips.
-export fun conventionsCheck(root: str, docs: str) > void !> any {
-    final sorted = conventionPages(root + "/" + docs).cloneMutable().sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+//
+// files, relative to docs, narrows the check to those pages. A page's
+// run does not answer for the root prose or the crosscheck.
+export fun conventionsCheck(root: str, docs: str, files: [str]) > void !> any {
+    final sorted = pagesIn(conventionPages(root + "/" + docs), files: files).cloneMutable().sort(fun (a: str, b: str) > bool { return strLess(a, b); });
 
     final violations: mut [str] = mut [<str>];
     var checked = 0;
@@ -557,15 +571,20 @@ export fun conventionsCheck(root: str, docs: str) > void !> any {
     // The repo-root prose, where a stale path does the most damage: it is the first thing a
     // newcomer reads, and a backticked path in a sentence is invisible to every markdown
     // linter, because it is not a link.
-    foreach (name in ["README.md", "CONTRIBUTING.md"]) {
-        if (pathExists(root + "/" + name)) {
-            checked = checked + 1;
-            collectFindings(root, file: name, abs: root + "/" + name,
-                violations: violations);
+    if (files.len() == 0) {
+        foreach (name in ["README.md", "CONTRIBUTING.md"]) {
+            if (pathExists(root + "/" + name)) {
+                checked = checked + 1;
+                collectFindings(root, file: name, abs: root + "/" + name,
+                    violations: violations);
+            }
         }
     }
 
-    final cross = crosscheckFindings(root, docs: docs, pages: sorted);
+    var cross = [<str>];
+    if (files.len() == 0) {
+        cross = crosscheckFindings(root, docs: docs, pages: sorted);
+    }
 
     if (violations.len() > 0 or cross.len() > 0) {
         var message = "";

@@ -440,10 +440,15 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file(".claude/settings.json"),
         agents\file("cursor-hook.buzz"), agents\file("magus-*.buzz"), agents\file("codex-hooks.json"),
         agents\file("opencode-plugin.ts")]);
-    renderer\site_conventions(ROOT, DOCS);
+    renderer\site_conventions(ROOT, docs: DOCS, files: args);
 }
 // lint runs conventions, typos, tsc and Biome, plus the lint of each project the site embeds.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    // Named files are judged alone: the tree's drift is not theirs.
+    if (args.len() > 0) {
+        conventions(ctx, args: args);
+        return;
+    }
     // Before conventions: a page content-generate creates is missing until format finishes.
     ctx.needs(format);
     ctx.needs(conventions);
