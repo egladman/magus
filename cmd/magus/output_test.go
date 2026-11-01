@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"go/ast"
 	"go/parser"
@@ -10,6 +11,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -576,13 +578,27 @@ func TestOutputFormatsSuite(t *testing.T) { suite.Run(t, new(outputFormatsSuite)
 func (s *outputFormatsSuite) SetupSuite() {
 	paths, err := filepath.Glob("*.go")
 	s.Require().NoError(err)
-	s.funcs, s.parsedAt = map[string]*ast.FuncDecl{}, map[string]string{}
+	var files []*ast.File
 	for _, path := range paths {
 		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		src, err := os.ReadFile(path)
 		s.Require().NoError(err)
+		// The stub redefines selfUpdateCommand for the build that drops it.
+		if bytes.HasPrefix(src, []byte("//go:build noselfupdate")) {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, src, 0)
+		s.Require().NoError(err)
+		files = append(files, file)
+	}
+	s.load(files)
+}
+
+func (s *outputFormatsSuite) load(files []*ast.File) {
+	s.funcs, s.parsedAt = map[string]*ast.FuncDecl{}, map[string]string{}
+	for _, file := range files {
 		for _, decl := range file.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
 				// reach goes by name, so a func outranks a method.
@@ -593,6 +609,12 @@ func (s *outputFormatsSuite) SetupSuite() {
 			}
 		}
 	}
+}
+
+func (s *outputFormatsSuite) loadSource(src string) {
+	file, err := parser.ParseFile(token.NewFileSet(), "synthetic.go", src, 0)
+	s.Require().NoError(err)
+	s.load([]*ast.File{file})
 }
 
 func (s *outputFormatsSuite) recordParses(fn *ast.FuncDecl) {
@@ -632,30 +654,104 @@ func leadingString(expr ast.Expr) (string, bool) {
 	return "", false
 }
 
-// handler finds the func that parses a leaf's flags.
+// handler finds the func serving a leaf. It never guesses from a name.
+// A FlagSet named the leaf wins, else its parent's switch names it.
 func (s *outputFormatsSuite) handler(leaf string) (string, bool) {
-	words := strings.Fields(leaf)
-	for i, word := range words[1:] {
-		words[i+1] = strings.ToUpper(word[:1]) + word[1:]
+	if fn, ok := servedBy[leaf]; ok {
+		return fn, true
 	}
-	if camel := strings.Join(words, ""); len(words) > 1 && s.funcs[camel] != nil {
-		return camel, true
+	if fn, ok := s.parsedAt[leaf]; ok {
+		return fn, true
 	}
-	for _, name := range []string{leaf, leaf + "s", strings.TrimSuffix(leaf, "s")} {
-		if fn, ok := s.parsedAt[name]; ok {
-			return fn, true
-		}
-	}
-	for name, fn := range s.parsedAt {
-		if strings.HasSuffix(name, " ") && strings.HasPrefix(leaf+" ", name) {
-			return fn, true
-		}
-	}
-	parent, _, ok := cutLastWord(leaf)
+	parent, last, ok := cutLastWord(leaf)
 	if !ok {
 		return "", false
 	}
-	return s.handler(parent)
+	from, ok := s.handler(parent)
+	if !ok {
+		return "", false
+	}
+	for name := range s.reach(from, nil) {
+		if fn, ok := s.dispatchedTo(s.funcs[name], last); ok {
+			return fn, true
+		}
+	}
+	return "", false
+}
+
+// servedBy names the funcs whose dispatch the walk cannot read. Each entry
+// is a command root, or a leaf whose case label is computed.
+var servedBy = map[string]string{
+	"affected":         "affected",        // main routes it, no FlagSet named for it
+	"describe":         "describeCommand", // root of the describe nouns
+	"job":              "jobCommand",      // root, its case labels are hint calls
+	"job run":          "jobRunCatalog",   // label is hint.JobRun.Leaf()
+	"describe targets": "describeTargets", // its first named func is append
+	"ls":               "ls",              // root of the ls nouns
+	"ls job":           "lsJobs",          // the noun is plural in the func
+	"ls target":        "lsTargets",       // the noun is plural in the func
+	"ls targets":       "lsTargets",       // the leaf and its alias share a func
+	"query":            "queryCommand",    // root of the query nouns
+	"query invocation": "queryInvocation", // queryCommand picks it by flag
+	"query output":     "queryOutputRef",  // queryCommand picks it by flag
+	"queue":            "runQueue",        // root, the verb is chosen by assignment
+	"run":              "runTarget",       // main routes it, no FlagSet named for it
+	"server":           "serverCommand",   // root, its case labels are hint calls
+	"session":          "sessionCommand",  // root, ls is the default verb
+}
+
+var camelBoundary = regexp.MustCompile(`[A-Z][a-z0-9]*|[a-z0-9]+`)
+
+// labelNames reports whether a case label is word: a string literal, or a
+// computed label such as hint.ServerStop.Leaf() whose name words contain it.
+func labelNames(expr ast.Expr, word string) bool {
+	if text, ok := leadingString(expr); ok {
+		return text == word
+	}
+	var tokens []string
+	ast.Inspect(expr, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			for _, t := range camelBoundary.FindAllString(id.Name, -1) {
+				tokens = append(tokens, strings.ToLower(t))
+			}
+		}
+		return true
+	})
+	want := strings.Split(word, "-")
+	for i := 0; i+len(want) <= len(tokens); i++ {
+		if slices.Equal(tokens[i:i+len(want)], want) {
+			return true
+		}
+	}
+	return false
+}
+
+// dispatchedTo is the first func a case clause for word in fn names.
+func (s *outputFormatsSuite) dispatchedTo(fn *ast.FuncDecl, word string) (string, bool) {
+	var found string
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		clause, ok := n.(*ast.CaseClause)
+		if !ok || found != "" {
+			return found == ""
+		}
+		matches := slices.ContainsFunc(clause.List, func(e ast.Expr) bool {
+			return labelNames(e, word)
+		})
+		if !matches {
+			return true
+		}
+		for _, stmt := range clause.Body {
+			ast.Inspect(stmt, func(n ast.Node) bool {
+				id, ok := n.(*ast.Ident)
+				if ok && found == "" && s.funcs[id.Name] != nil && id.Name != fn.Name.Name {
+					found = id.Name
+				}
+				return found == ""
+			})
+		}
+		return false
+	})
+	return found, found != ""
 }
 
 func cutLastWord(path string) (rest, last string, ok bool) {
@@ -667,12 +763,13 @@ func cutLastWord(path string) (rest, last string, ok bool) {
 }
 
 // reach is every func of this package fn names, directly or through another.
-func (s *outputFormatsSuite) reach(fn string) map[string]bool {
+// It stops at stop, whose renders belong to other commands.
+func (s *outputFormatsSuite) reach(fn string, stop map[string]bool) map[string]bool {
 	seen := map[string]bool{fn: true}
 	for queue := []string{fn}; len(queue) > 0; queue = queue[1:] {
 		ast.Inspect(s.funcs[queue[0]], func(n ast.Node) bool {
 			id, ok := n.(*ast.Ident)
-			if ok && s.funcs[id.Name] != nil && !seen[id.Name] {
+			if ok && s.funcs[id.Name] != nil && !seen[id.Name] && !stop[id.Name] {
 				seen[id.Name] = true
 				queue = append(queue, id.Name)
 			}
@@ -680,6 +777,18 @@ func (s *outputFormatsSuite) reach(fn string) map[string]bool {
 		})
 	}
 	return seen
+}
+
+// othersHandlers is every leaf's handler but the one serving leaf.
+func (s *outputFormatsSuite) othersHandlers(leaf string) map[string]bool {
+	mine, _ := s.handler(leaf)
+	others := map[string]bool{}
+	cmdline.Walk(commands.Root, func(other string, c cmdline.Command) {
+		if fn, ok := s.handler(other); ok && fn != mine && len(c.Children) == 0 {
+			others[fn] = true
+		}
+	})
+	return others
 }
 
 func (s *outputFormatsSuite) TestEveryLeafRendersEveryFormatOrRefusesThem() {
@@ -691,10 +800,65 @@ func (s *outputFormatsSuite) TestEveryLeafRendersEveryFormatOrRefusesThem() {
 		if !s.True(ok, "no commandParse or FlagSet is named %q: name one, or add it to commandsWithoutOutput", leaf) {
 			return
 		}
-		reached := s.reach(fn)
+		reached := s.reach(fn, s.othersHandlers(leaf))
 		s.True(reached["writeFormatted"], "%s reaches no structured printer from %s: render a record or add it to commandsWithoutOutput", leaf, fn)
 		s.True(reached["emitNames"], "%s reaches no -o name printer from %s", leaf, fn)
 	})
+}
+
+const dispatchSource = `package main
+
+func thing(args []string) error {
+	commandParse("thing", args, nil)
+	switch args[0] {
+	case "ls":
+		return lister(args)
+	case "rm":
+		return remover(args)
+	}
+	return nil
+}
+
+func lister(args []string) error { return writeFormatted(nil, nil, args) }
+
+func remover(args []string) error { return lister(args) }
+
+func thingMv(args []string) error { return writeFormatted(nil, nil, args) }
+`
+
+func (s *outputFormatsSuite) TestHandlerIsFoundByDispatchNotByName() {
+	var synthetic outputFormatsSuite
+	synthetic.SetT(s.T())
+	synthetic.loadSource(dispatchSource)
+	fn, ok := synthetic.handler("thing rm")
+	s.True(ok)
+	s.Equal("remover", fn)
+	_, ok = synthetic.handler("thing mv")
+	s.False(ok, "thingMv is named like the leaf and nothing dispatches to it")
+}
+
+func (s *outputFormatsSuite) TestEveryServedByNamesAFunc() {
+	for leaf, fn := range servedBy {
+		s.NotNil(s.funcs[fn], "servedBy[%q] names %q, which is no func", leaf, fn)
+	}
+}
+
+func (s *outputFormatsSuite) TestAComputedCaseLabelNamesItsWords() {
+	label, err := parser.ParseExpr("hint.ServerStop.Leaf()")
+	s.Require().NoError(err)
+	s.True(labelNames(label, "stop"))
+	s.False(labelNames(label, "top"))
+	label, err = parser.ParseExpr("job.NamePrunePreserved")
+	s.Require().NoError(err)
+	s.True(labelNames(label, "prune-preserved"))
+}
+
+func (s *outputFormatsSuite) TestASiblingsPrinterDoesNotReachALeaf() {
+	var synthetic outputFormatsSuite
+	synthetic.SetT(s.T())
+	synthetic.loadSource(dispatchSource)
+	s.True(synthetic.reach("remover", nil)["lister"])
+	s.False(synthetic.reach("remover", map[string]bool{"lister": true})["lister"])
 }
 
 func (s *outputFormatsSuite) TestEveryRefusalNamesAVerbThatExists() {
@@ -762,9 +926,9 @@ func (s *outputFormatsSuite) TestNoCommandRefusesAFormatByName() {
 }
 
 func (s *outputFormatsSuite) TestOutputBeforeTheVerbIsRefused() {
-	err := refuseOutputOnPath("json", []string{"server", "stop"})
+	err := refuseOutputOnPath("json", []string{"server", "start"})
 	s.Equal(exit.Usage, exit.Code(err))
-	s.ErrorContains(err, "magus server stop: -o is not supported")
+	s.ErrorContains(err, "magus server start: -o is not supported")
 }
 
 func (s *outputFormatsSuite) TestOutputOnAVerbWithARecordPasses() {
@@ -772,7 +936,53 @@ func (s *outputFormatsSuite) TestOutputOnAVerbWithARecordPasses() {
 }
 
 func (s *outputFormatsSuite) TestNoOutputPasses() {
-	s.NoError(refuseOutputOnPath("", []string{"server", "stop"}))
+	s.NoError(refuseOutputOnPath("", []string{"server", "start"}))
+}
+
+func (s *outputFormatsSuite) TestAVerbThatReportsAnOutcomeIsNotRefused() {
+	s.NoError(refuseOutputOnPath("json", []string{"server", "stop"}))
+	s.NoError(refuseOutputOnPath("json", []string{"config", "set", "key=a,value=b"}))
+}
+
+func (s *outputFormatsSuite) TestEveryOutcomeRecordRendersEveryFormat() {
+	records := map[string]any{
+		"config set":  configSetOutput{Path: "magus.yaml", Key: "cache.mode", Value: "write"},
+		"server stop": serverStopOutput{Stopped: true, PID: 7, Address: "unix:///s"},
+		"job run":     jobRunOutput{Job: "sync-graph", Outcome: "no-server"},
+		"self place":  selfPlaceOutput{Commit: "abc", BuildDate: "d", Path: "/bin/magus"},
+	}
+	for verb, record := range records {
+		for _, format := range []string{"json", "yaml", "jsonl", "name", "template={{.}}"} {
+			opts, err := output.Parse(format)
+			s.Require().NoError(err, verb)
+			got := captureStdout(s.T(), func() {
+				s.Require().NoError(emitRecord(opts, record, []string{verb}), "%s -o %s", verb, format)
+			})
+			s.NotEmpty(got, "%s -o %s", verb, format)
+		}
+	}
+}
+
+func (s *outputFormatsSuite) TestConfigSetReportsTheKeyItWrote() {
+	s.T().Cleanup(snapshotGlobals())
+	s.T().Chdir(s.T().TempDir())
+	global.output = "json"
+	got := captureStdout(s.T(), func() {
+		s.Require().NoError(runConfigSet(context.Background(), []string{"key=cache.mode,value=write"}))
+	})
+	s.Contains(got, `"key": "cache.mode"`)
+	s.Contains(got, `"path": "magus.yaml"`)
+}
+
+func (s *outputFormatsSuite) TestJobRunReportsWhyNothingWasSubmitted() {
+	s.T().Cleanup(snapshotGlobals())
+	s.T().Chdir(s.T().TempDir())
+	globalCfg.Server.Address = filepath.Join(s.T().TempDir(), "absent.sock")
+	got := captureStdout(s.T(), func() {
+		s.Require().NoError(jobRunCatalog(context.Background(), []string{"-o", "json", "rotate-logs"}))
+	})
+	s.Contains(got, `"outcome": "no-server"`)
+	s.Contains(got, `"job": "rotate-logs"`)
 }
 
 func (s *outputFormatsSuite) TestCommandPathStopsAtTheDeepestChild() {

@@ -154,6 +154,11 @@ func selfUpdateCommand(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	format, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	structured := format.Format != outputText
 
 	if uf.Version != "" && !strings.HasPrefix(uf.Version, "v") {
 		uf.Version = "v" + uf.Version
@@ -178,6 +183,9 @@ func selfUpdateCommand(ctx context.Context, args []string) error {
 	}
 
 	if uf.Check {
+		if structured {
+			return emitRecord(format, selfUpdateOutput{Current: version, Latest: rel.Version, Outcome: "checked"}, []string{rel.Version})
+		}
 		selfupdate.PrintUpdateStatus(rel.Version, version)
 		return nil
 	}
@@ -258,11 +266,18 @@ func selfUpdateCommand(ctx context.Context, args []string) error {
 	}
 
 	if uf.DryRun {
+		if structured {
+			return emitRecord(format, selfUpdateOutput{Current: version, Latest: manifest.Version, Path: targetPath, Outcome: "dry-run"}, []string{manifest.Version})
+		}
 		fmt.Printf("dry-run: would install magus %s -> %s\n", manifest.Version, targetPath)
 		return nil
 	}
 
-	if err := confirmInstall(os.Stdout, os.Stdin, tty.StdinIsTerminal(), uf.Yes, manifest.Version, discoveryHost(opts), targetPath); err != nil {
+	prompt := io.Writer(os.Stdout)
+	if structured {
+		prompt = os.Stderr
+	}
+	if err := confirmInstall(prompt, os.Stdin, tty.StdinIsTerminal(), uf.Yes, manifest.Version, discoveryHost(opts), targetPath); err != nil {
 		return err
 	}
 
@@ -273,6 +288,16 @@ func selfUpdateCommand(ctx context.Context, args []string) error {
 	if err := minioselfupdate.Apply(binary, minioselfupdate.Options{TargetPath: targetPath}); err != nil {
 		return fmt.Errorf("apply update: %w", err)
 	}
+	if structured {
+		return emitRecord(format, selfUpdateOutput{Current: version, Latest: manifest.Version, Path: targetPath, Outcome: "installed"}, []string{manifest.Version})
+	}
 	fmt.Printf("magus %s installed to %s\n", manifest.Version, targetPath)
 	return nil
+}
+
+type selfUpdateOutput struct {
+	Current string `json:"current"`
+	Latest  string `json:"latest"`
+	Path    string `json:"path,omitempty"`
+	Outcome string `json:"outcome"`
 }

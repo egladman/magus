@@ -32,7 +32,8 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false))
+	_, _, err := installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false, true)
+	require.NoError(t, err)
 	assert.Contains(t, log.String(), `msg=wrote component="agent harness install"`)
 
 	// An orphan from an earlier release: magus stamped it, so this install prunes it.
@@ -43,7 +44,8 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 
 	log.Reset()
 	out := captureStdout(t, func() {
-		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false))
+		_, _, err := installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false, true)
+		require.NoError(t, err)
 	})
 	assert.NoDirExists(t, orphan)
 	assert.Equal(t, fmt.Sprintf("removed skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")), out)
@@ -53,7 +55,8 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
 		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort), 0o644))
 	out = captureStdout(t, func() {
-		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, true))
+		_, _, err := installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, true, true)
+		require.NoError(t, err)
 	})
 	assert.DirExists(t, orphan)
 	assert.Contains(t, out, fmt.Sprintf("would remove skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")))

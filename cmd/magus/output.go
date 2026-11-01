@@ -238,58 +238,28 @@ func templateJoin(list any, sep string) string {
 // entry here is loud rather than silent (the verb's own `-o json` tests fail), which is
 // what makes the list safe to keep by hand.
 var commandsWithoutOutput = map[string]bool{
-	"affected --bisect":           true,
-	"agent harness install":       true,
-	"agent install":               true,
-	"agent starter":               true,
-	"broker":                      true,
-	"broker stop":                 true,
-	"buzz":                        true,
-	"buzz lsp":                    true,
-	"completion":                  true,
-	"config cache export":         true,
-	"config cache import":         true,
-	"config cache prune":          true,
-	"config console token create": true,
-	"config console token ls":     true,
-	"config console token revoke": true,
-	"config history dedup":        true,
-	"config history import":       true,
-	"config history passed":       true,
-	"config mcp connector create": true,
-	"config mcp connector ls":     true,
-	"config mcp connector revoke": true,
-	"config set":                  true,
-	"config token generate":       true,
-	"config token print":          true,
-	"config token revoke":         true,
-	"config token status":         true,
-	"graph build":                 true,
-	"graph pull":                  true,
-	"graph push":                  true,
-	"init":                        true,
-	"job watch":                   true,
-	"man install":                 true,
-	"mcp":                         true,
-	"notes capture":               true,
-	"notes edit":                  true,
-	"queue apply":                 true,
-	"queue gate":                  true,
-	"queue ls":                    true,
-	"queue plan":                  true,
-	"queue validate":              true,
-	"self install-shorthand":      true,
-	"self place":                  true,
-	"self update":                 true,
-	"server prune-preserved":      true,
-	"server reload":               true,
-	"server rotate-activities":    true,
-	"server rotate-logs":          true,
-	"server start":                true,
-	"server stop":                 true,
-	"vcs merge-driver":            true,
-	"vcs resolve":                 true,
-	"watch":                       true,
+	"agent starter":               true, // stdout is the AGENTS.md text
+	"broker":                      true, // runs the broker in the foreground
+	"buzz":                        true, // runs a script, whose output is its own
+	"buzz lsp":                    true, // speaks the language server protocol on stdio
+	"completion":                  true, // stdout is the shell script
+	"config cache export":         true, // stdout is the archive
+	"config console token create": true, // --tee would write the secret to a file
+	"config mcp connector create": true, // --tee would write the secret to a file
+	"config token generate":       true, // --tee would write the secret to a file
+	"config token print":          true, // --tee would write the secret to a file
+	"job watch":                   true, // streams until the job ends
+	"mcp":                         true, // serves MCP on stdio
+	"notes capture":               true, // reports through several prose paths
+	"notes edit":                  true, // hands the terminal to an editor
+	"queue apply":                 true, // stdout is the provider's event stream
+	"queue gate":                  true, // stdout is the provider's event stream
+	"queue plan":                  true, // stdout is the provider's event stream
+	"queue validate":              true, // stdout is the provider's event stream
+	"server start":                true, // runs the server, or detaches it
+	"vcs merge-driver":            true, // git calls it and reads only the exit status
+	"vcs resolve":                 true, // reports through several prose paths
+	"watch":                       true, // streams until interrupted
 }
 
 // checkOutputSupported rejects -o on a verb that renders nothing structured. Usage-class

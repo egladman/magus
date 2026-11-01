@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/types"
 )
@@ -137,20 +138,40 @@ func graphPush(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 
+	var rec graphRegistryOutput
 	if table {
 		if refresh {
 			return errors.New("graph push: -refresh rebuilds the graph, and -table publishes no graph")
 		}
-		return tablePush(ctx, ref, user)
+		rec, err = tablePush(ctx, ref, user)
+	} else {
+		rec, err = pushGraph(ctx, root, ref, user, refresh)
 	}
-	return pushGraph(ctx, root, ref, user, refresh)
+	if err != nil || opts.Format == outputText {
+		return err
+	}
+	return emitRecord(opts, rec, []string{rec.Ref})
+}
+
+type graphRegistryOutput struct {
+	Ref    string `json:"ref"`
+	Table  bool   `json:"table"`
+	Done   bool   `json:"done"`
+	Shards int    `json:"shards"`
+	Bytes  int    `json:"bytes"`
+	Path   string `json:"path,omitempty"`
 }
 
 // pushGraph publishes the knowledge graph to ref, rebuilding it first under refresh.
-func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error {
+func pushGraph(ctx context.Context, root, ref, user string, refresh bool) (graphRegistryOutput, error) {
+	var none graphRegistryOutput
 	if ref == "" {
-		return errorNoGraphDestination("push")
+		return none, errorNoGraphDestination("push")
 	}
 	// The tag --ref carries is the tag written. Recomputing a tag set here would mean two
 	// implementations of tag policy, and the caller's would lose; the magusfile already
@@ -159,11 +180,11 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error 
 	// string.
 	dest, err := graphReference(ref, graphFloatingTag)
 	if err != nil {
-		return err
+		return none, err
 	}
 	layers, err := graphLayers(ctx, root, refresh)
 	if err != nil {
-		return err
+		return none, err
 	}
 	var size int
 	for _, l := range layers {
@@ -172,7 +193,7 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error 
 
 	pass, err := readToken(ctx)
 	if err != nil {
-		return fmt.Errorf("graph push: %w", err)
+		return none, fmt.Errorf("graph push: %w", err)
 	}
 	client := &oci.Client{
 		HTTP:        &http.Client{Timeout: graphRegistryTimeout},
@@ -183,10 +204,10 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error 
 	defer cancel()
 	repo := oci.Reference{Registry: dest.Registry, Repository: dest.Repository}
 	if _, err := client.PushArtifact(ctx, repo, oci.Artifact{ArtifactType: graphArtifactType, Blobs: layers}, dest.Tag); err != nil {
-		return fmt.Errorf("graph push: %w", err)
+		return none, fmt.Errorf("graph push: %w", err)
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pushed %s (%d shards, %d bytes)", dest, len(layers)-1, size), attr.Notice(""))
-	return nil
+	return graphRegistryOutput{Ref: dest.String(), Done: true, Shards: len(layers) - 1, Bytes: size}, nil
 }
 
 // graphLayers is the published artifact's content: the knowledge store's routing manifest,
@@ -292,15 +313,26 @@ func graphPull(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 
 	if table {
 		if out != "" {
 			return errors.New("graph pull: -table writes the table to the cache, so --out names nothing")
 		}
-		return tablePull(ctx, ref)
+		rec, err := tablePull(ctx, ref)
+		if err != nil || opts.Format == outputText {
+			return err
+		}
+		return emitRecord(opts, rec, []string{rec.Ref})
 	}
 	if ref == "" {
 		return errorNoGraphDestination("pull")
+	}
+	if out == "" && opts.Format != outputText {
+		return exit.Usagef("magus graph pull: -o needs --out, since stdout is the graph")
 	}
 	src, err := graphReference(ref, graphFloatingTag)
 	if err != nil {
@@ -325,6 +357,9 @@ func graphPull(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("graph pull: %w", err)
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pulled %s into %s (%d bytes)", src, out, len(raw)), attr.Notice(""))
+	if opts.Format != outputText {
+		return emitRecord(opts, graphRegistryOutput{Ref: src.String(), Done: true, Bytes: len(raw), Path: out}, []string{src.String()})
+	}
 	return nil
 }
 
@@ -341,54 +376,57 @@ func graphReference(ref, tag string) (oci.Reference, error) {
 // tablePush publishes the cached embedding table under its pin. The release runs it
 // after `magus run table libs/embed/train`; a table that does not hash to the pin is
 // refused, never published under a tag of its own.
-func tablePush(ctx context.Context, repo, user string) error {
+func tablePush(ctx context.Context, repo, user string) (graphRegistryOutput, error) {
+	var none graphRegistryOutput
 	dest, err := embedtable.Reference(repo)
 	if err != nil {
-		return fmt.Errorf("graph push -table: %w", err)
+		return none, fmt.Errorf("graph push -table: %w", err)
 	}
 	path, err := embedtable.Options{}.Path()
 	if err != nil {
-		return fmt.Errorf("graph push -table: %w", err)
+		return none, fmt.Errorf("graph push -table: %w", err)
 	}
 	pass, err := readToken(ctx)
 	if err != nil {
-		return fmt.Errorf("graph push -table: %w", err)
+		return none, fmt.Errorf("graph push -table: %w", err)
 	}
 	client := &oci.Client{HTTP: registryHTTP(), Credentials: oci.Credentials{Username: user, Password: pass}}
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
 	pushed, err := embedtable.Publish(ctx, client, dest, path)
 	if err != nil {
-		return fmt.Errorf("graph push -table: %w", err)
+		return none, fmt.Errorf("graph push -table: %w", err)
 	}
+	rec := graphRegistryOutput{Ref: dest.String(), Table: true, Done: pushed, Path: path}
 	if !pushed {
 		slog.InfoContext(ctx, fmt.Sprintf("kept %s, already published with the pinned table", dest), attr.Notice(""))
-		return nil
+		return rec, nil
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pushed %s from %s", dest, path), attr.Notice(""))
-	return nil
+	return rec, nil
 }
 
 // tablePull fetches the pinned embedding table into the cache, anonymously for the
 // reason graphPull is.
-func tablePull(ctx context.Context, repo string) error {
+func tablePull(ctx context.Context, repo string) (graphRegistryOutput, error) {
+	var none graphRegistryOutput
 	src, err := embedtable.Reference(repo)
 	if err != nil {
-		return fmt.Errorf("graph pull -table: %w", err)
+		return none, fmt.Errorf("graph pull -table: %w", err)
 	}
 	opts := embedtable.Options{}
 	path, err := opts.Path()
 	if err != nil {
-		return fmt.Errorf("graph pull -table: %w", err)
+		return none, fmt.Errorf("graph pull -table: %w", err)
 	}
 	client := &oci.Client{HTTP: registryHTTP()}
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
 	if err := embedtable.Pull(ctx, client, src, opts); err != nil {
-		return fmt.Errorf("graph pull -table: %w", err)
+		return none, fmt.Errorf("graph pull -table: %w", err)
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pulled %s into %s", src, path), attr.Notice(""))
-	return nil
+	return graphRegistryOutput{Ref: src.String(), Table: true, Done: true, Path: path}, nil
 }
 
 // pullMergedGraph fetches every shard the artifact names and merges them into the
