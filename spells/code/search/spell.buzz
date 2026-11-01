@@ -274,7 +274,7 @@ fun underPath(path: str, scope: str) > bool {
 
 // classify fills each hit's owning project and role (source, output, ...) from one
 // describe.file over every path, so a generated file reads as one before anyone edits it.
-fun classify(hits: [mut Hit]) > void !> any {
+fun classify(hits: [mut Hit]) > void !> any { //nolint:no-throw // the host query raises through the search layers
     final paths = mut [<str>];
     final seen = mut {<str: bool>};
     foreach (h in hits) {
@@ -324,7 +324,7 @@ fun queriesFor(terms: str, opts: Options) > [str] {
     return ["kind=symbol {scoped}", scoped];
 }
 
-fun gather(pool: mut Pool, q: str, alone: bool, fetch: int, wanted: [str]) > void !> any {
+fun gather(pool: mut Pool, q: str, alone: bool, fetch: int, wanted: [str]) > void !> any { //nolint:no-throw // the host query raises through the search layers
     final res: magus\QueryResult = magus\query(q, opts: magus\QueryOptions{limit = fetch, budget = fetch});
     pool.total = pool.total + res.matchCount;
     pool.fetched = pool.fetched + res.matches.len();
@@ -360,7 +360,7 @@ fun gather(pool: mut Pool, q: str, alone: bool, fetch: int, wanted: [str]) > voi
 // matches is layer 1: the ranked hits for terms. The name as typed outranks the same name
 // in another case, which outranks a longer name holding it (isTestPath, then
 // TestIsTestPath, after IsTestPath); then the graph's score decides.
-export fun matches(terms: str, opts: Options) > mut Result !> any {
+export fun matches(terms: str, opts: Options) > mut Result !> any { //nolint:no-throw // the host query raises through the search layers
     final filtered = opts.file != "" or opts.grep != "";
     final queries = queriesFor(terms, opts: opts);
     final pool = mut Pool{ hits = mut [<mut Hit>], seen = mut {<str: int>}, stale = mut [<str>] };
@@ -599,7 +599,7 @@ fun position(n: magus\KnowledgeNode?) > str {
 
 // calls reads one neighborhood: callers and callees from the calls edges, with callers in
 // test files listed apart as tests.
-fun calls(h: Hit, opts: Options) > [mut Section] !> any {
+fun calls(h: Hit, opts: Options) > [mut Section] !> any { //nolint:no-throw // the host query raises through the search layers
     final hood: magus\NeighborhoodResult = magus\neighborhood(h.id, opts: magus\NeighborhoodOptions{ depth = 1, relations = [magus\RelationID.calls] });
     final nodes = mut {<str: magus\KnowledgeNode>};
     foreach (n in hood.nodes) {
@@ -647,7 +647,7 @@ fun calls(h: Hit, opts: Options) > [mut Section] !> any {
 
 // references lists every file that uses the symbol with its first lines, and counts the
 // test files among them.
-fun references(h: Hit, opts: Options) > Section !> any {
+fun references(h: Hit, opts: Options) > Section !> any { //nolint:no-throw // the host query raises through the search layers
     final refs: magus\RefsResult = magus\refs(h.id, opts: magus\RefsOptions{limit = 200});
     final files = mut [<Neighbor>];
     var testFiles = 0;
@@ -691,7 +691,7 @@ fun nodeAround(h: Hit, opts: Options) > [Section] {
 }
 
 // docs are the doc sections a query for the hit's name matches on every word.
-fun docs(h: Hit, opts: Options) > Section !> any {
+fun docs(h: Hit, opts: Options) > Section !> any { //nolint:no-throw // the host query raises through the search layers
     final q: magus\QueryResult = magus\query("kind=docsection {shortLabel(h.label)}", opts: magus\QueryOptions{limit = cap(opts.neighbors)});
     final all = mut [<Neighbor>];
     foreach (m in q.matches) {
@@ -707,7 +707,7 @@ fun docs(h: Hit, opts: Options) > Section !> any {
 }
 
 // around is layer 4 for one hit.
-export fun around(h: Hit, opts: Options) > Around !> any {
+export fun around(h: Hit, opts: Options) > Around !> any { //nolint:no-throw // the host query raises through the search layers
     final a = mut Around{ project = h.project, role = h.role };
     final sections = mut [<Section>];
     if (h.kind == "symbol") {
@@ -729,7 +729,7 @@ export fun around(h: Hit, opts: Options) > Around !> any {
 
 // run is every layer opts.depth asks for: matches, then site, block and around for the
 // first opts.expand of them.
-export fun run(terms: str, opts: Options) > Result !> any {
+export fun run(terms: str, opts: Options) > Result !> any { //nolint:no-throw // the host query raises through the search layers
     final r = matches(terms, opts: opts);
     if (opts.depth < 2) {
         return r;

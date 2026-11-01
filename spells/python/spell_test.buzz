@@ -10,16 +10,17 @@ fun source(path: str) > DiscoveryFile {
     return DiscoveryFile{path = path};
 }
 
-fun discover(files: [DiscoveryFile]) > [DiscoveredProject] !> any {
+fun discover(files: [DiscoveryFile]) > [DiscoveredProject] !> any { //nolint:no-throw // a test helper; a missing claim fails the test
     return python\discover_projects(Target{}, req: DiscoveryQuery{root = "/w", files = files});
 }
 
-fun claimAt(claims: [DiscoveredProject], path: str) > DiscoveredProject !> str {
+fun claimAt(claims: [DiscoveredProject], path: str) > DiscoveredProject !> str { //nolint:no-throw // a test helper; a missing claim fails the test
     foreach (claim in claims) {
         if (claim.path == path) {
             return claim;
         }
     }
+    //nolint:no-throw // a test helper; a missing claim fails the test
     throw "no claim at {path}";
 }
 

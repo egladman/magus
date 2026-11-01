@@ -55,9 +55,10 @@ fun has(haystack: str, needle: str) > bool {
 // reference is the item's service name on every platform; an account is never part of
 // it, because the CLIs find the item by service alone and an account in the reference
 // would make one machine's entry unreadable on another.
-export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
+export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //nolint:no-throw // magus reads a raise as an unresolved secret
     final ref = req.ref;
     if (ref == "") {
+        //nolint:no-throw // magus reads a raise as an unresolved secret
         throw "system-keychain: no reference given";
     }
     final platform = os\platform()[0];
@@ -67,6 +68,7 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
     if (platform == "linux") {
         return from_secret_tool(ref);
     }
+    //nolint:no-throw // magus reads a raise as an unresolved secret
     throw "system-keychain: not implemented on " + platform + " yet; export " + ref
         + " in the environment and select the environment provider instead";
 }
@@ -75,10 +77,11 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
 // a trailing newline; magus trims captured output. quiet is not optional: that stdout
 // IS the secret, and without it the value is echoed to the console and into the run
 // log magus persists.
-fun from_security(ref: str) > Secret !> any {
+fun from_security(ref: str) > Secret !> any { //nolint:no-throw // magus reads a raise as an unresolved secret
     try {
         _ = proc\which("security");
     } catch (e) {
+        //nolint:no-throw // magus reads a raise as an unresolved secret
         throw "system-keychain: the `security` CLI is not on PATH";
     }
 
@@ -87,6 +90,7 @@ fun from_security(ref: str) > Secret !> any {
     if (res["code"] != 0) {
         final err = "{res["stderr"]}";
         if (has(err, "could not be found")) {
+            //nolint:no-throw // magus reads a raise as an unresolved secret
             throw "system-keychain: no generic password is stored under service " + ref + ". Store one with\n"
                 + "  security add-generic-password -a \"$USER\" -s " + ref + " -w\n"
                 + "which prompts for the value and never echoes it.";
@@ -94,14 +98,17 @@ fun from_security(ref: str) > Secret !> any {
         // Headless (no window to prompt in), a dismissed prompt, and a locked keychain
         // are the three refusals `security` words differently; the remedy is the same.
         if (has(err, "User interaction is not allowed") or has(err, "User canceled") or has(err, "keychain is locked")) {
+            //nolint:no-throw // magus reads a raise as an unresolved secret
             throw "system-keychain: access to " + ref + " was refused; unlock the login keychain, or answer "
                 + "Always Allow when the keychain asks about `security`.";
         }
+        //nolint:no-throw // magus reads a raise as an unresolved secret
         throw "system-keychain: `security find-generic-password -s " + ref + " -w` failed: " + err.trim();
     }
 
     final value = "{res["stdout"]}";
     if (value == "") {
+        //nolint:no-throw // magus reads a raise as an unresolved secret
         throw "system-keychain: " + ref + " resolved to an empty value; store it again with a non-empty password";
     }
     return Secret{ value = value };
@@ -111,10 +118,11 @@ fun from_security(ref: str) > Secret !> any {
 // secret alone and exits non-zero, printing nothing, when no item carries the
 // attribute; quiet for the same reason as above. Written to the `secret-tool` manual
 // and not exercised by this repository's own checks, which run on macOS.
-fun from_secret_tool(ref: str) > Secret !> any {
+fun from_secret_tool(ref: str) > Secret !> any { //nolint:no-throw // magus reads a raise as an unresolved secret
     try {
         _ = proc\which("secret-tool");
     } catch (e) {
+        //nolint:no-throw // magus reads a raise as an unresolved secret
         throw "system-keychain: the `secret-tool` CLI is not on PATH; it ships as libsecret-tools (Debian, Ubuntu) or libsecret (Fedora, Arch)";
     }
 
@@ -122,6 +130,7 @@ fun from_secret_tool(ref: str) > Secret !> any {
         opts: proc\ExecOptions{allowFailure = true, quiet = true});
     final value = "{res["stdout"]}";
     if (res["code"] != 0 or value == "") {
+        //nolint:no-throw // magus reads a raise as an unresolved secret
         throw "system-keychain: no secret is stored under service " + ref + ". Store one with\n"
             + "  secret-tool store --label=" + ref + " service " + ref + "\n"
             + "which prompts for the value and never echoes it.";

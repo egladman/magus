@@ -57,9 +57,10 @@ final SCHEME = "op://";
 // all fail the read rather than returning a blank that fails later at whatever consumes
 // it - but by way of the classified throws below, not proc\exec's own raise, which
 // allow_failure deliberately turns off so the exit code can be inspected first.
-export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
+export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //nolint:no-throw // magus reads a raise as an unresolved secret
     final ref = req.ref;
     if (ref == "") {
+        //nolint:no-throw // magus reads a raise as an unresolved secret
         throw "onepassword: no reference given";
     }
 
@@ -71,6 +72,7 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
     try {
         _ = proc\which("op");
     } catch (e) {
+        //nolint:no-throw // magus reads a raise as an unresolved secret
         throw "onepassword: the `op` CLI is not on PATH.\n"
             + "  mise:     mise use -g op\n"
             + "  homebrew: brew install 1password-cli\n"
@@ -93,18 +95,22 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
     if (res["code"] != 0) {
         final err = "{res["stderr"]}";
         if (has(err, "not signed in") or has(err, "no active session")) {
+            //nolint:no-throw // magus reads a raise as an unresolved secret
             throw "onepassword: not signed in. Run `op signin`, or for an unattended run "
                 + "set OP_SERVICE_ACCOUNT_TOKEN.\n  reference: " + uri;
         }
         if (has(err, "isn't an item") or has(err, "not found")) {
+            //nolint:no-throw // magus reads a raise as an unresolved secret
             throw "onepassword: " + uri + " does not resolve to an item field. Check the "
                 + "vault, item and field names - `op item list --vault <vault>` lists them.";
         }
+        //nolint:no-throw // magus reads a raise as an unresolved secret
         throw "onepassword: `op read " + uri + "` failed: " + err.trim();
     }
 
     final value = "{res["stdout"]}";
     if (value == "") {
+        //nolint:no-throw // magus reads a raise as an unresolved secret
         throw "onepassword: " + uri + " resolved to an empty value; check the item and field names";
     }
     return Secret{ value = value };

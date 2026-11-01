@@ -111,7 +111,7 @@ fun base() > str { return getenv("ACTIONS_RESULTS_URL"); }
 // Under Actions no provider is selected, so the built-in environment provider resolves
 // this to exactly the same variable getenv was reading. Same source, same value, one
 // meaningful difference.
-fun token() > str !> any { return magus\secret.read("ACTIONS_RUNTIME_TOKEN"); }
+fun token() > str !> any { return magus\secret.read("ACTIONS_RUNTIME_TOKEN"); } //nolint:no-throw // magus reads a raise as a failed cache call
 
 // has_token reports presence WITHOUT resolving, so the cache-path guards stay cheap and
 // cannot prompt.
@@ -128,7 +128,7 @@ fun cache_key(hash: str) > str { return "magus-" + hash; }
 
 // rpc POSTs a JSON Twirp request to the named CacheService method and returns the
 // host http response map ({status, body}).
-fun rpc(method: str, payload: any) > any !> any {
+fun rpc(method: str, payload: any) > any !> any { //nolint:no-throw // magus reads a raise as a failed cache call
     final url = base() + SERVICE + method;
     final headers = mut {
         "Authorization": "Bearer " + token(),
@@ -160,13 +160,14 @@ fun snippet(body: str) > str {
 // cache_fail throws for a protocol step that did not do what the contract says. The
 // contract's false means miss (get) or already present (put), so a failure must not
 // return one: a service rejecting every read would read as a cold cache.
-fun cache_fail(step: str, detail: str) > void !> any {
+fun cache_fail(step: str, detail: str) > void !> any { //nolint:no-throw // magus reads a raise as a failed cache call
+    //nolint:no-throw // magus reads a raise as a failed cache call
     throw "github-actions cache: {step}: {detail}";
 }
 
 // download_url asks the service where the entry for hash is stored; "" when it holds
 // none. ok=false is the service's miss.
-fun download_url(hash: str) > str !> any {
+fun download_url(hash: str) > str !> any { //nolint:no-throw // magus reads a raise as a failed cache call
     final res = rpc("GetCacheEntryDownloadURL", {"key": cache_key(hash), "version": CACHE_VERSION});
     if (res["status"] != 200) {
         cache_fail("GetCacheEntryDownloadURL", "status {res["status"]}: {snippet("{res["body"]}")}");
@@ -183,7 +184,7 @@ fun download_url(hash: str) > str !> any {
 // get_artifact downloads the cache artifact for req.hash into req.path: ok on a hit
 // (the path written), not ok on a miss or when the step exports no cache service. A
 // failed request throws.
-export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed cache call
     if (base() == "" or !has_token()) { return Ack{ ok = false }; }
     final loc = download_url(req.hash);
     if (loc == "") { return Ack{ ok = false }; }
@@ -197,7 +198,7 @@ export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
 
 // has_artifact reports whether the service holds req.hash, without downloading it:
 // the lookup half of get_artifact.
-export fun has_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+export fun has_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed cache call
     if (base() == "" or !has_token()) { return Ack{ ok = false }; }
     return Ack{ ok = download_url(req.hash) != "" };
 }
@@ -205,7 +206,7 @@ export fun has_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
 // put_artifact uploads the artifact at req.path for req.hash: ok once uploaded, not ok
 // when the entry is already stored (a 409) or another job holds the reservation
 // (ok=false), neither of which is a failure. A failed request throws.
-export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed cache call
     if (base() == "" or !has_token()) {
         cache_fail("put_artifact", "this step exports no ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN");
     }
@@ -335,7 +336,7 @@ export fun annotate(target: Target, req: CIAnnotation) > Ack {
 // non-PR event, without the run's workflow and repository, without a token (the
 // workflow must export GITHUB_TOKEN and grant actions: read), or when no green
 // run of this workflow exists for the branch. The plan then fans out normally.
-export fun last_green_run(target: Target, req: Empty) > GreenRun !> any {
+export fun last_green_run(target: Target, req: Empty) > GreenRun !> any { //nolint:no-throw // magus reads a raise as a failed cache call
     if (getenv("GITHUB_EVENT_NAME") != "pull_request") { return GreenRun{}; }
     final branch = getenv("GITHUB_HEAD_REF");
     final api = getenv("GITHUB_API_URL");
@@ -415,9 +416,10 @@ final OIDC_PREFIX = "oidc:";
 
 // resolve_secret is the secret-provider contract, detected by name and called by
 // magus\secret.read(). It receives the reference as req.ref and returns a Secret.
-export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any {
+export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //nolint:no-throw // magus reads a raise as a failed secret lookup
     final ref = req.ref;
     if (ref == "") {
+        //nolint:no-throw // magus reads a raise as a failed secret lookup
         throw "github-actions: no reference given";
     }
 
@@ -464,6 +466,7 @@ fun maskInRunnerLog(value: str) > void {
 fun workflowEnv(name: str) > str {
     final value = getenv(name);
     if (value != "") { return value; }
+    //nolint:no-throw // magus reads a raise as a failed secret lookup
     throw "github-actions: $" + name + " is not set in this step's environment.\n"
         + "  An Actions secret is only readable through the workflow file - nothing\n"
         + "  running inside the job can fetch one. Add it to the step:\n"
@@ -481,14 +484,16 @@ fun workflowEnv(name: str) > str {
 // The audience identifies the relying party: "sts.amazonaws.com" for AWS, the
 // workload-identity-pool provider URL for GCP, whatever the trust policy on the
 // other end was written against.
-fun oidcToken(audience: str) > str !> any {
+fun oidcToken(audience: str) > str !> any { //nolint:no-throw // magus reads a raise as a failed secret lookup
     if (audience == "") {
+        //nolint:no-throw // magus reads a raise as a failed secret lookup
         throw "github-actions: an oidc: reference needs an audience, as in "
             + "magus\\secret.read(\"oidc:sts.amazonaws.com\")";
     }
     final endpoint = getenv("ACTIONS_ID_TOKEN_REQUEST_URL");
     final request_token = getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN");
     if (endpoint == "" or request_token == "") {
+        //nolint:no-throw // magus reads a raise as a failed secret lookup
         throw "github-actions: this job has no OIDC token endpoint.\n"
             + "  Grant it permission to mint one:\n"
             + "      permissions:\n"
@@ -504,6 +509,7 @@ fun oidcToken(audience: str) > str !> any {
     // different one entirely, so pinning a domain would break real installations while
     // this rejects the plaintext case outright.
     if (!endpoint.startsWith("https://")) {
+        //nolint:no-throw // magus reads a raise as a failed secret lookup
         throw "github-actions: refusing to send the OIDC request token to a non-HTTPS "
             + "endpoint. ACTIONS_ID_TOKEN_REQUEST_URL is not an https:// URL, which the "
             + "runner never produces - something in this job rewrote it.";
@@ -517,11 +523,13 @@ fun oidcToken(audience: str) > str !> any {
         // is the one that can CONTAIN a token, and an error string is the least
         // redacted thing magus handles - it has not been resolved yet, so nothing is
         // registered for redaction at the moment it is thrown.
+        //nolint:no-throw // magus reads a raise as a failed secret lookup
         throw "github-actions: the OIDC token endpoint answered {res["status"]} "
             + "for audience {audience}";
     }
     final value = serialize\jsonDecode(res["body"]).q("value").stringValue();
     if (value == "") {
+        //nolint:no-throw // magus reads a raise as a failed secret lookup
         throw "github-actions: the OIDC token endpoint returned no token for audience "
             + audience;
     }

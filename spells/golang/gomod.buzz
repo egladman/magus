@@ -20,13 +20,13 @@ fun module_path(mod: any) > str {
     return serialize\jsonDecode(module_json(mod)).q(["Module", "Path"]).stringValue();
 }
 
-fun replace_path(base: str, to: str) > str !> any {
+fun replace_path(base: str, to: str) > str !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
     final rel = path\rel(base, target: to);
     if (rel == "." or rel.startsWith("../") or rel.startsWith("./")) { return rel; }
     return "./" + rel;
 }
 
-fun same_replace_path(dir: str, got: str, want: str) > bool !> any {
+fun same_replace_path(dir: str, got: str, want: str) > bool !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
     return path\abs(dir + "/" + got) == path\abs(dir + "/" + want);
 }
 
@@ -40,7 +40,7 @@ fun sorted_keys(values: {str: any}) > [str] {
 // `go mod edit -json` result for a workspace module, captured by the go spell in the
 // caller's context. Only replacements whose old path names a workspace module are
 // touched; third-party replacements are deliberately preserved.
-export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any {
+export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
 	final currentName = serialize\jsonDecode(currentJSON).q(["Module", "Path"]).stringValue();
     var current: any = null;
     var byPath: mut {str: any} = mut {};
@@ -50,6 +50,7 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any {
         byPath[name] = mod;
         if (name == currentName) { current = mod; }
     }
+    //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
     if (current == null) { throw "gomod.replaceArgs: no workspace Go module named " + currentName; }
 
     final parsed = serialize\jsonDecode(module_json(current));
@@ -92,7 +93,7 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any {
 // The go spell arrives as a parameter because a spell file cannot import another spell
 // (`magus/spell/go` is bound only for magusfiles), which is also why this file's header
 // says the caller supplies the two ops it needs.
-fun workspace_go_mods(ctx: magus\Context, go: any) > [any] !> any {
+fun workspace_go_mods(ctx: magus\Context, go: any) > [any] !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
     final projects: Projects = magus\describe.project();
     var modules: mut [any] = mut [<any>];
     foreach (project in projects.projects) {
@@ -112,13 +113,14 @@ fun workspace_go_mods(ctx: magus\Context, go: any) > [any] !> any {
 // editsExistingSource, not a produced file: as an output go.mod would be snapshotted and
 // replayable, so a cache hit could restore a pre-release go.mod over the version bump
 // `release` had just written - the two-owner hazard MGS1020 reports.
-export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > void !> any {
+export fun replaceWorkspaceModules(ctx: magus\Context, go: any, project: str) > void !> any { //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
     ctx.writesFiles(["go.mod"], editsExistingSource: true);
     final flags = replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx, go));
     if (flags.len() == 0) { return; }
     final edited = go["go-mod-edit"](ctx, {"args": flags});
     if (ctx.hasCharm("rw")) { return; }
     if (edited.stdout != fs\readFile("go.mod")) {
+        //nolint:no-throw // the replace sync raises MGS1016 and its host calls raise through it
         throw "MGS1016: go.mod has workspace-local replace drift; re-run this target with the rw charm (`magus run <target>:rw " + project + "`) to apply the derived replacements";
     }
 }

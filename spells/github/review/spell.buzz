@@ -125,9 +125,9 @@ fun getenv(name: str) > str {
 // must never be asked for a credential by the act of looking.
 fun has_token() > bool { return getenv(TOKEN_REF) != ""; }
 
-fun token() > str !> any { return magus\secret.read(TOKEN_REF); }
+fun token() > str !> any { return magus\secret.read(TOKEN_REF); } //nolint:no-throw // magus reads a raise as a failed review call
 
-fun headers() > any !> any {
+fun headers() > any !> any { //nolint:no-throw // magus reads a raise as a failed review call
     return mut {
         "Authorization": "Bearer " + token(),
         "Accept": "application/vnd.github+json",
@@ -209,7 +209,7 @@ export fun reviewBody(summary: str, verdict: str, drafts: [ReviewDraft]) > any {
 // find_review reports the pull request open for this branch, or an empty number when there is
 // none. A branch with no pull request is the ORDINARY state - most branches, most of the time -
 // so it is never an error and never a reason a diff fails to open.
-export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !> any {
+export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !> any { //nolint:no-throw // magus reads a raise as a failed review call
     if (!has_token()) {
         return ReviewTarget{ reason = "no credential" };
     }
@@ -290,7 +290,7 @@ export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !>
 // sets wantViewer only while its cache is empty, so this costs one call ever rather than one per
 // diff opened. Empty on any failure: not knowing who you are is not a reason to fail a lookup,
 // and magus reads an empty pair as UNKNOWN rather than as "yours".
-fun viewerLogin(want: bool) > str !> any {
+fun viewerLogin(want: bool) > str !> any { //nolint:no-throw // magus reads a raise as a failed review call
     if (!want) {
         return "";
     }
@@ -308,17 +308,20 @@ fun viewerLogin(want: bool) > str !> any {
 // is written would send the first thought before the fifth changed your mind about it.
 //
 // A failed post throws rather than answering false, so the reason reaches the reader.
-export fun publish_review(target: Target, req: PublishReviewRequest) > Ack !> any {
+export fun publish_review(target: Target, req: PublishReviewRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed review call
     if (!has_token()) {
+        //nolint:no-throw // magus reads a raise as a failed review call
         throw "github-review: no credential; publishing needs {TOKEN_REF}";
     }
     if (req.repo == "" or req.id == "") {
+        //nolint:no-throw // magus reads a raise as a failed review call
         throw "github-review: publish needs a repo and a pull-request id";
     }
     final payload = reviewBody(req.summary, verdict: req.verdict, drafts: req.drafts);
     final url = apiBase() + "/repos/" + req.repo + "/pulls/" + req.id + "/reviews";
     final res = http\post(url, body: serialize\jsonEncode(payload), headers: headers());
     if (res["status"] != 200 and res["status"] != 201) {
+        //nolint:no-throw // magus reads a raise as a failed review call
         throw "github-review: publish failed: HTTP {res["status"]}: {res["body"]}";
     }
     return Ack{ ok = true };
@@ -328,7 +331,7 @@ export fun publish_review(target: Target, req: PublishReviewRequest) > Ack !> an
 //
 // jsonDecode returns a boxed value: a map of accessors over the payload. An array must be read
 // through .listValue(), or the foreach walks the accessors instead of the rows.
-fun decodeThreads(body: str) > [ReviewComment] !> any {
+fun decodeThreads(body: str) > [ReviewComment] !> any { //nolint:no-throw // magus reads a raise as a failed review call
     final threads = mut [<ReviewComment>];
     foreach (c in serialize\jsonDecode(body).listValue()) {
         // GitHub reports a null line once the commented line has left the head, and the boxed
@@ -360,7 +363,7 @@ fun decodeThreads(body: str) > [ReviewComment] !> any {
 // after the thirtieth". A page that fails discards the pages before it for the same reason:
 // the return has no way to say "incomplete", so a short list would read as a finished
 // conversation. The 10-page cap bounds an unbounded loop against a paging bug.
-export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] !> any {
+export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] !> any { //nolint:no-throw // magus reads a raise as a failed review call
     if (!has_token() or req.repo == "" or req.id == "") {
         return [<ReviewComment>];
     }
@@ -385,7 +388,7 @@ export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] !> a
 }
 
 // reply_review answers one existing thread, so a conversation can be finished without leaving.
-export fun reply_review(target: Target, req: ReplyReviewRequest) > Ack !> any {
+export fun reply_review(target: Target, req: ReplyReviewRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed review call
     if (!has_token() or req.repo == "" or req.id == "" or req.thread == "") {
         return Ack{ ok = false };
     }
