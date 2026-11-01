@@ -126,8 +126,9 @@ magus\project({
     "name": "magus",
     // Only this edge puts a .proto edit in the affected set and orders proto's generate first.
     // libs/figure: go-build embeds figure.buzz.
+    // libs/result: go-build embeds result.buzz.
     // libs/embed: go.mod replaces it with the local module, so its Go builds into magus.
-    "depends_on": ["proto", "libs/figure", "libs/embed"],
+    "depends_on": ["proto", "libs/figure", "libs/result", "libs/embed"],
     "layers": {
         "internal/httpx": "transport",
         "internal/handler/*": "handler",
