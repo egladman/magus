@@ -382,21 +382,21 @@ export fun headline(items: [Item], applied: bool, trimmed: str) > str {
 
 /// timeLeft is the timeoutMs a call made now may take: 0, no bound, when deadline is 0, and
 /// a raise once the deadline has passed, so a chunk stops between steps.
-export fun timeLeft(deadline: double, now: double) > double !> any {
+export fun timeLeft(deadline: double, now: double) > double !> any { //nolint:no-throw // a passed deadline raises through it
     if (deadline <= 0.0) { return 0.0; }
-    if (now >= deadline) { throw "reclaimdisk: past its deadline"; }
+    if (now >= deadline) { throw "reclaimdisk: past its deadline"; } //nolint:no-throw // a passed deadline stops a chunk by raising
     return deadline - now;
 }
 
-fun bound(deadline: double) > double !> any {
+fun bound(deadline: double) > double !> any { //nolint:no-throw // a passed deadline raises through it
     return timeLeft(deadline, now: os\time());
 }
 
-fun git(dir: str, args: [str], deadline: double) > str !> any {
+fun git(dir: str, args: [str], deadline: double) > str !> any { //nolint:no-throw // a passed deadline raises through it
     return vcs\cmd(args, opts: vcs\CommandOptions{ dir = dir, quiet = true, timeoutMs = bound(deadline) }).stdout;
 }
 
-fun gitOk(dir: str, args: [str], deadline: double) > bool !> any {
+fun gitOk(dir: str, args: [str], deadline: double) > bool !> any { //nolint:no-throw // a passed deadline raises through it
     return vcs\cmd(args, opts: vcs\CommandOptions{ dir = dir, quiet = true, allowFailure = true, timeoutMs = bound(deadline) }).code == 0;
 }
 
@@ -405,7 +405,7 @@ fun countLines(text: str) > int {
 }
 
 /// status reads one worktree's dirt; a directory that is gone reads dirty -1.
-export fun status(path: str, deadline: double) > Status !> any {
+export fun status(path: str, deadline: double) > Status !> any { //nolint:no-throw // a passed deadline raises through it
     if (!fs\isDir(path)) { return Status{ dirty = -1, unpushed = 0 }; }
     final dirty = countLines(git(path, args: ["--no-optional-locks", "status", "--porcelain"], deadline: deadline));
     final unpushed = std\parseInt(git(path, args: ["rev-list", "--count", "HEAD", "--not", "--remotes"], deadline: deadline).trim()) ?? 0;
@@ -414,7 +414,7 @@ export fun status(path: str, deadline: double) > Status !> any {
 
 /// readGitDir is a linked worktree's administrative directory, from the gitdir line of its
 /// .git file.
-fun readGitDir(path: str) > str !> any {
+fun readGitDir(path: str) > str !> any { //nolint:no-throw // a passed deadline raises through it
     final dotgit = path + "/.git";
     if (!fs\isFile(dotgit)) { return dotgit; }
     final line = fs\readFile(dotgit).trim();
@@ -424,7 +424,7 @@ fun readGitDir(path: str) > str !> any {
     return path + "/" + dir;
 }
 
-fun touchedAt(path: str, gitdir: str) > double !> any {
+fun touchedAt(path: str, gitdir: str) > double !> any { //nolint:no-throw // a passed deadline raises through it
     var newest = 0.0;
     foreach (p in [path, gitdir + "/index", gitdir + "/HEAD", gitdir + "/logs/HEAD"]) {
         if (fs\exists(p)) {
@@ -435,13 +435,13 @@ fun touchedAt(path: str, gitdir: str) > double !> any {
     return newest;
 }
 
-fun readLock(gitdir: str) > str? !> any {
+fun readLock(gitdir: str) > str? !> any { //nolint:no-throw // a passed deadline raises through it
     final f = gitdir + "/locked";
     if (gitdir == "" or !fs\isFile(f)) { return null; }
     return fs\readFile(f).trim();
 }
 
-fun duKiB(path: str, deadline: double) > int !> any {
+fun duKiB(path: str, deadline: double) > int !> any { //nolint:no-throw // a passed deadline raises through it
     // du exits 1 when one entry is unreadable and still prints the total of the rest.
     final res = proc\exec("du", args: ["-sk", path], opts: proc\ExecOptions{ quiet = true, allowFailure = true, timeoutMs = bound(deadline) });
     return std\parseInt(res.stdout.trim().split("\t")[0]) ?? -1;
@@ -449,7 +449,7 @@ fun duKiB(path: str, deadline: double) > int !> any {
 
 /// caches lists the ignored build state git status reports at the top of a worktree's
 /// ignored directories: the per-checkout magus cache, node_modules, and the magus binary.
-fun caches(path: str, deadline: double) > [Cache] !> any {
+fun caches(path: str, deadline: double) > [Cache] !> any { //nolint:no-throw // a passed deadline raises through it
     final found = mut [<Cache>];
     foreach (line in git(path, args: ["--no-optional-locks", "status", "--porcelain", "--ignored"], deadline: deadline).split("\n")) {
         if (!line.startsWith("!! ")) { continue; }
@@ -468,22 +468,22 @@ fun caches(path: str, deadline: double) > [Cache] !> any {
     return found;
 }
 
-fun processCwds(deadline: double) > [Cwd] !> any {
+fun processCwds(deadline: double) > [Cwd] !> any { //nolint:no-throw // a passed deadline raises through it
     try {
         _ = proc\which("lsof");
     } catch (e) {
-        throw "reclaimdisk: lsof is not on PATH, so which processes work inside a worktree cannot be read; install it rather than plan blind";
+        throw "reclaimdisk: lsof is not on PATH, so which processes work inside a worktree cannot be read; install it rather than plan blind"; //nolint:no-throw // the chunk stops when lsof is missing
     }
     // lsof exits 1 when it cannot read some process, and still lists every one it can.
     return parseCwds(proc\exec("lsof", args: ["-d", "cwd", "-Fpn", "-w"], opts: proc\ExecOptions{ quiet = true, allowFailure = true, timeoutMs = bound(deadline) }).stdout);
 }
 
-fun jobLeases() > [Lease] !> any {
+fun jobLeases() > [Lease] !> any { //nolint:no-throw // a passed deadline raises through it
     final list: magus\JobList = magus\job.list();
     return list.jobs.map(fun (i: int, j: magus\Job) > Lease => Lease{ id = j.id, state = j.state.value, checkoutRoot = j.checkoutRoot });
 }
 
-fun agentBranches(root: str, base: str, baseOk: bool, deadline: double) > {str: {str: str}} !> any {
+fun agentBranches(root: str, base: str, baseOk: bool, deadline: double) > {str: {str: str}} !> any { //nolint:no-throw // a passed deadline raises through it
     final tips = mut {<str: str>};
     foreach (line in git(root, args: ["for-each-ref", "--format=%(refname:short) %(objectname)"] + AGENT_BRANCHES, deadline: deadline).split("\n")) {
         final parts = line.trim().split(" ");
@@ -499,7 +499,7 @@ fun agentBranches(root: str, base: str, baseOk: bool, deadline: double) > {str: 
     return {"tips": tips, "unique": unique};
 }
 
-fun observe(t: Worktree, main: str, base: str, baseOk: bool, deadline: double) > Observed !> any {
+fun observe(t: Worktree, main: str, base: str, baseOk: bool, deadline: double) > Observed !> any { //nolint:no-throw // a passed deadline raises through it
     final st = status(t.path, deadline: deadline);
     var unique = 0;
     if (st.dirty >= 0 and st.unpushed > 0) {
@@ -516,7 +516,7 @@ fun observe(t: Worktree, main: str, base: str, baseOk: bool, deadline: double) >
 
 /// survey reads every worktree and agent branch of the repository at the working directory
 /// and returns the plan, unranked; measure runs du on each removable worktree.
-export fun survey(base: str, now: double, keepRecent: double, measure: bool, deadline: double) > Survey !> any {
+export fun survey(base: str, now: double, keepRecent: double, measure: bool, deadline: double) > Survey !> any { //nolint:no-throw // a passed deadline raises through it
     final root = vcs\root();
     final trees = parseWorktrees(git(root, args: ["worktree", "list", "--porcelain"], deadline: deadline));
     final main = if (trees.len() > 0) trees[0].path else "";
@@ -550,7 +550,7 @@ fun copyItem(it: Item, kib: int, caches: [Cache], result: str) > Item {
         caches = caches, path = it.path, branch = it.branch, tip = it.tip, touched = it.touched, result = result };
 }
 
-fun magusBin() > str !> any {
+fun magusBin() > str !> any { //nolint:no-throw // a passed deadline raises through it
     final named = os\env("__MAGUS_BIN");
     if (named -> bin) {
         if (bin != "") { return bin; }
@@ -643,7 +643,7 @@ export fun trimLine(t: CacheTrim, fence: double) > str? {
 
 /// trimDeclared trims every cache a spell gives a budget and returns each
 /// result. A cache that fails names itself, and the others still run.
-export fun trimDeclared(fence: double, deadline: double) > [CacheTrim] !> any {
+export fun trimDeclared(fence: double, deadline: double) > [CacheTrim] !> any { //nolint:no-throw // a passed deadline raises through it
     final plan: magus\DiskReclaim = magus\diskReclaim();
     final done = mut [<CacheTrim>];
     foreach (c in plan.caches) {
@@ -655,7 +655,7 @@ export fun trimDeclared(fence: double, deadline: double) > [CacheTrim] !> any {
 /// chunk is the worktree half of a reclaim: the CHUNK_WORKTREES removable
 /// worktrees untouched longest and the agent branches they and none hold.
 /// It returns the whole plan with each row's result, and raises past deadline.
-export fun chunk(deadline: double) > [Item] !> any {
+export fun chunk(deadline: double) > [Item] !> any { //nolint:no-throw // a passed deadline raises through it
     final s = survey(vcs\base(), now: os\time(), keepRecent: 7200000.0, measure: false, deadline: deadline);
     final done = apply(pickChunk(s.items, n: CHUNK_WORKTREES), root: vcs\root(), deadline: deadline);
     final byName = mut {<str: Item>};
@@ -688,7 +688,7 @@ export object TickResult {
     error: str = "",
 }
 
-fun readConfig(cwd: str) > diskwatch\Thresholds !> any {
+fun readConfig(cwd: str) > diskwatch\Thresholds !> any { //nolint:no-throw // a passed deadline raises through it
     final config = proc\exec(magusBin(), args: ["config", "view", "-o", "json"], dir: cwd, opts: proc\ExecOptions{ quiet = true, timeoutMs = 5000.0 });
     return diskwatch\thresholds(config.stdout);
 }
@@ -704,7 +704,7 @@ fun waitingLine(listCommand: str) > str {
     return "`git worktree list` names them";
 }
 
-fun runTick(cwd: str, deadline: double, force: bool) > TickReport !> any {
+fun runTick(cwd: str, deadline: double, force: bool) > TickReport !> any { //nolint:no-throw // a passed deadline raises through it
     final store = diskwatch\storePath();
     final now = os\time();
     final t = readConfig(cwd);

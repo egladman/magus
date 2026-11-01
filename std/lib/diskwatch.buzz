@@ -74,21 +74,21 @@ export object Report {
 }
 
 /// storePath is the store's path, creating its directory.
-export fun storePath() > str !> any {
+export fun storePath() > str !> any { //nolint:no-throw // a std call; its callers catch the raise
     return fs\join(fs\stateDir("disk"), name: "samples.jsonl");
 }
 
 /// thresholds reads the disk section of `magus config view -o json`. A key the config does
 /// not carry is an error naming it, never a default: the binary that printed the config is
 /// the one that knows the defaults.
-export fun thresholds(config: str) > Thresholds !> any {
+export fun thresholds(config: str) > Thresholds !> any { //nolint:no-throw // a std call; its callers catch the raise
     final disk = json\parse(config)["disk"];
     if (disk == null) {
-        throw "diskwatch: the config has no disk section; the magus that printed it predates disk.*";
+        throw "diskwatch: the config has no disk section; the magus that printed it predates disk.*"; //nolint:no-throw // a std call; its callers catch the raise
     }
     final every = time\parseDuration("{disk["sample_every"]}") catch -1.0;
     if (every < 0.0) {
-        throw "diskwatch: disk.sample_every is not a duration: {disk["sample_every"]}";
+        throw "diskwatch: disk.sample_every is not a duration: {disk["sample_every"]}"; //nolint:no-throw // a std call; its callers catch the raise
     }
     return Thresholds{
         minFreeBytes = std\toInt(disk["min_free_mb"]) * MIB,
@@ -196,11 +196,11 @@ export fun pendingLine(samples: [DiskSample], now: double) > str? {
     return said;
 }
 
-export fun encode(s: DiskSample) > str !> any {
+export fun encode(s: DiskSample) > str !> any { //nolint:no-throw // a std call; its callers catch the raise
     return json\stringify({"at": s.at, "path": s.path, "totalBytes": s.totalBytes, "freeBytes": s.freeBytes, "action": s.action, "detail": s.detail});
 }
 
-export fun decode(text: str) > DiskSample !> any {
+export fun decode(text: str) > DiskSample !> any { //nolint:no-throw // a std call; its callers catch the raise
     final doc = json\parse(text);
     return DiskSample{
         at = std\toDouble(doc["at"]),
@@ -213,13 +213,13 @@ export fun decode(text: str) > DiskSample !> any {
 }
 
 /// read decodes every line of the store at path; a missing store is empty.
-export fun read(path: str) > [DiskSample] !> any {
+export fun read(path: str) > [DiskSample] !> any { //nolint:no-throw // a std call; its callers catch the raise
     if (!fs\exists(path)) { return [<DiskSample>]; }
-    return fs\readLines(path).map(fun (index: int, text: str) > DiskSample !> any => decode(text));
+    return fs\readLines(path).map(fun (index: int, text: str) > DiskSample !> any => decode(text)); //nolint:no-throw // the same std call
 }
 
 /// append adds s to the store, then compacts it by rename once it holds twice keepLines.
-export fun append(path: str, s: DiskSample) > void !> any {
+export fun append(path: str, s: DiskSample) > void !> any { //nolint:no-throw // a std call; its callers catch the raise
     fs\appendFile(path, content: encode(s) + "\n");
     final lines = fs\readLines(path);
     if (lines.len() > keepLines * 2) {
