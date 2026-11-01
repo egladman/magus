@@ -600,7 +600,6 @@ fun conflictsByLayer(dir: str, found: [Conflict], merged: [str]) > result\Result
     return result\ok::<[Conflict]>(annotated);
 }
 
-// sealMerge commits a merge settle left open and returns the layer's reason.
 fun sealMerge(dir: str, settled: [str]) > result\Result::<str> {
     final merging = gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
     if (merging.error -> err) { return result\Result::<str>{ error = err }; }
@@ -1031,21 +1030,14 @@ fun printVerdicts(verdicts: [Verdict]) > bool {
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--apply", "--verify", "--help"],
         valued: ["--jobs", "--branches", "--stack", "--base", "--into", "-o"]);
-    if (parsed.values["--help"] != null) {
-        std\print(HELP);
-        return;
-    }
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "merge-job-branches: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
-    }
+    if (parsed.values["--help"] != null) { std\print(HELP); return; }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) { throw "merge-job-branches: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}"; }
     final format = parsed.values["-o"] ?? "text";
     if (format != "text" and format != "json") { throw "merge-job-branches: -o takes text or json\n{USAGE}"; }
     final apply = parsed.values["--apply"] != null;
     final verify = parsed.values["--verify"] != null;
     final into = parsed.values["--into"] ?? "";
-    if ((apply or verify) and into == "") {
-        throw "merge-job-branches: --apply and --verify name the integration branch with --into <branch>\n{USAGE}";
-    }
+    if ((apply or verify) and into == "") { throw "merge-job-branches: --apply and --verify name the integration branch with --into <branch>\n{USAGE}"; }
     final root = vcs\root();
     final planRun = planned(root, values: parsed.values);
     if (planRun.error -> err) { throw err.message; }
