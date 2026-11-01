@@ -186,9 +186,10 @@ func TestAppendAgentCommand_RecordsHowLongTheToolRan(t *testing.T) {
 	events, err := ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, int64(1500), events[0].DurationMs)
-	assert.Zero(t, events[0].GuardMs)
-	assert.Equal(t, "Bash", events[0].Action)
+	event := events[0]
+	event.Ts, event.Origin, event.Workspace = 0, types.Origin{}, ""
+	event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = "", "", 0, 0
+	assert.Equal(t, Event{Kind: KindAgentCommand, Action: "Bash", Outcome: OutcomeOK, DurationMs: 1500, Preview: "observed"}, event)
 }
 
 // A hook row names the magus that judged the call and the directory the host reported, and

@@ -87,8 +87,8 @@ func DiskFullCause(output, dir string, floorBytes int64) string {
 		types.DiskFull, free>>20, types.ReclaimDiskCommand)
 }
 
-// tailOf is the last n bytes of the file at path, "" when it cannot be read.
-func tailOf(path string, n int64) string {
+// fileTail is the last n bytes of the file at path, "" when it cannot be read.
+func fileTail(path string, n int64) string {
 	f, err := os.Open(path)
 	if err != nil {
 		return ""

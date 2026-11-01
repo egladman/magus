@@ -1293,3 +1293,91 @@ func (s *leaseRewritesSuite) TestDisabledVersionControlIsAnErrorNotAPanic() {
 		s.ErrorContains(err, "version control is disabled")
 	})
 }
+
+// reapplySuite applies a declaration over a row an exit already touched.
+type reapplySuite struct {
+	suite.Suite
+}
+
+func TestReapply(t *testing.T) { suite.Run(t, new(reapplySuite)) }
+
+// exitApplied files a result for appliedRow's job, whose check is `test .`.
+func (s *reapplySuite) exitApplied(loc Location) types.Job {
+	s.T().Helper()
+	result := passingResult()
+	result.Job, result.ChangedPaths = "w", []string{"a.go"}
+	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+		return types.JobAttempt{Found: true, Ref: ref, Target: "test", Project: ".", TimestampMs: 9_999_999_999_999}, nil
+	}
+	exited, err := Exit(s.T().Context(), boundStore(loc, "w"), "w", &result, resolve)
+	s.Require().NoError(err)
+	return exited
+}
+
+func (s *reapplySuite) TestWideningAppliedWhileRunningSurvivesExitAndRetake() {
+	store, loc := appliedRow(s.T(), "a.go", "b.go")
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go", "c.go")}, config.Jobs{}, nil, nil, false)
+	s.Require().NoError(err)
+	s.Require().Equal([]string{"a.go", "b.go", "c.go"}, applied[0].Next.WritePaths)
+
+	exited := s.exitApplied(loc)
+	s.Equal([]string{"a.go", "b.go", "c.go"}, exited.WritePaths)
+
+	retaken, err := NewStore(loc).Exec(s.T().Context(), "w")
+	s.Require().NoError(err)
+	want := exited
+	want.State, want.GateAttempts = types.StateRunning, nil
+	s.Equal(want, retaken)
+}
+
+func (s *reapplySuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
+	store, loc := appliedRow(s.T(), "a.go")
+	want := s.exitApplied(loc)
+	want.WritePaths, want.State, want.Widenings, want.GateAttempts = []string{"a.go", "b.go"}, types.StateDeclared, 1, nil
+
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+	s.Require().NoError(err)
+
+	next := applied[0].Next
+	want.Validated, want.WriteProof = next.Validated, next.WriteProof
+	s.Equal(want, next)
+}
+
+// narrowedAt plants w as an exit that cut b.go used to leave it.
+func (s *reapplySuite) narrowedAt(state types.JobState) *Store {
+	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
+	plant(s.T(), store, types.Job{
+		ID: "w", Criteria: "goal", WritePaths: []string{"a.go"}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
+		Releases: []types.JobRelease{{Path: "b.go", Digest: types.DigestAbsent, ReleasedAt: 1}},
+	})
+	rows, err := store.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows[0].Releases, 1)
+	return store
+}
+
+func (s *reapplySuite) TestReapplyRestoresAPathAnExitCutFromAnExitedRow() {
+	s.reappliedIs(types.StateExited, types.StateDeclared)
+}
+
+func (s *reapplySuite) TestReapplyRestoresAPathAnExitCutFromARunningRow() {
+	s.reappliedIs(types.StateRunning, types.StateRunning)
+}
+
+func (s *reapplySuite) reappliedIs(from, to types.JobState) {
+	s.T().Helper()
+	store := s.narrowedAt(from)
+	rows, err := store.List()
+	s.Require().NoError(err)
+	want := rows[0]
+	want.WritePaths, want.State, want.Widenings = []string{"a.go", "b.go"}, to, 1
+
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+
+	s.Require().NoError(err)
+	next := applied[0].Next
+	s.Empty(next.Releases)
+	want.Releases, want.Version, want.Generation, want.Attempts = next.Releases, next.Version, next.Generation, next.Attempts
+	want.Validation, want.Validated, want.WriteProof = next.Validation, next.Validated, next.WriteProof
+	s.Equal(want, next)
+}

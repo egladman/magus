@@ -130,7 +130,7 @@ func (s *configSuite) TestLoadRefusesABadVerdictInTheUserConfig() {
 	s.Contains(err.Error(), "entry https://blog.example/go must be one of")
 }
 
-func (s *configSuite) repoWithSources() string {
+func (s *configSuite) repositoryWithSources() string {
 	repo := s.T().TempDir()
 	s.Require().NoError(os.WriteFile(filepath.Join(repo, Filename),
 		[]byte("sources:\n  - url: https://go.dev/doc/\n    verdict: follow\n"), 0o644))
@@ -139,15 +139,15 @@ func (s *configSuite) repoWithSources() string {
 
 func (s *configSuite) TestLoadRefusesSourcesInTheWorkspaceConfig() {
 	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
-	_, err := LoadWithRoot("", s.repoWithSources())
+	_, err := LoadWithRoot("", s.repositoryWithSources())
 	s.Require().Error(err)
 	s.Contains(err.Error(), "sets sources")
 	s.Contains(err.Error(), "$XDG_CONFIG_HOME/magus")
 }
 
-func (s *configSuite) TestLoadRefusesSourcesInACwdConfig() {
+func (s *configSuite) TestLoadRefusesSourcesInAWorkingDirConfig() {
 	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
-	s.T().Chdir(s.repoWithSources())
+	s.T().Chdir(s.repositoryWithSources())
 	_, err := LoadWithRoot("", "")
 	s.Require().Error(err)
 	s.Contains(err.Error(), "sets sources")
@@ -155,12 +155,12 @@ func (s *configSuite) TestLoadRefusesSourcesInACwdConfig() {
 
 func (s *configSuite) TestLoadWorkspaceOnlyRefusesSources() {
 	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
-	_, err := LoadWorkspaceOnly(s.repoWithSources())
+	_, err := LoadWorkspaceOnly(s.repositoryWithSources())
 	s.Require().Error(err)
 	s.Contains(err.Error(), "sets sources")
 }
 
-func (s *configSuite) TestLoadAcceptsSourcesWhenTheCwdIsTheUserConfigDir() {
+func (s *configSuite) TestLoadAcceptsSourcesWhenTheWorkingDirIsTheUserConfigDir() {
 	home := s.T().TempDir()
 	s.T().Setenv("XDG_CONFIG_HOME", home)
 	dir := filepath.Join(home, "magus")

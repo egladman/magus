@@ -120,7 +120,7 @@ func TestLogCrashBeforeTheRenameLeavesTheOldLog(t *testing.T) {
 
 	l := Log[event]{Path: filepath.Join(t.TempDir(), "events.jsonl"), Keep: 1}
 	appendEach(t, l, events(0, 0, 2))
-	dead := filepath.Join(filepath.Dir(l.Path), "."+filepath.Base(l.Path)+".tmp.12345")
+	dead := filepath.Join(filepath.Dir(l.Path), fmt.Sprintf(".%s.tmp.12345", filepath.Base(l.Path)))
 	require.NoError(t, os.WriteFile(dead, []byte(`{"writer":0,"n":1}`+"\n"), 0o644))
 
 	got, err := l.Load()

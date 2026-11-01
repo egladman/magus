@@ -105,8 +105,7 @@ func (s *configSuite) TestSourcesRefusesAMissingVerdict() {
 func (s *configSuite) TestSourcesRefusesAnEntryWithNoURL() {
 	failures := s.sourcesFailures(Source{Topic: "go", Verdict: SourceFollow})
 	s.Require().Len(failures, 1)
-	s.Equal("sources[0].url", failures[0].Field)
-	s.Equal("required", failures[0].Tag)
+	s.Equal(FieldFailure{Field: "sources[0].url", Tag: "required"}, failures[0])
 }
 
 func TestValidate_ValidMinimal(t *testing.T) {

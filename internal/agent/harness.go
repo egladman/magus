@@ -122,8 +122,8 @@ const (
 	// ChannelDisplay is read by the person and the agent alike: a deny reason, a thrown
 	// tool error. It gets a deny's verdict line.
 	ChannelDisplay HarnessChannel = "display"
-	// ChannelCapture is read by the agent alone: Claude Code's additionalContext, Cursor's
-	// agent_message. It gets the whole deny.
+	// ChannelCapture is read by the agent alone, in the field a host keeps for
+	// context. It gets the whole deny.
 	ChannelCapture HarnessChannel = "capture"
 	// ChannelNotice is read by the person alone: a systemMessage, Cursor's user_message.
 	ChannelNotice HarnessChannel = attr.NoticeKey
@@ -791,7 +791,7 @@ func pluginMissingReason(d HarnessDescriptor, enabled types.Setting, id string) 
 			source = repo
 		}
 	}
-	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere, and %s holds no cached %s); run once: claude plugin marketplace add %s (or trust the folder and start a session)",
+	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere, and %s holds no cached %s); run once: claude plugin marketplace add %s (or trust the folder and start a session)", //nolint:hostagnostic // only the host spell that has plugins sets enabledPlugins
 		id, enabled.Path, filepath.Join(claudePluginsRoot(), "installed_plugins.json"), filepath.Join(claudePluginsRoot(), "cache", marketplace, name), name, source)
 	if registered, err := claudeMarketplaceKnown(marketplace); err == nil && !registered {
 		reason += fmt.Sprintf(" (marketplace %s is not registered either)", marketplace)
