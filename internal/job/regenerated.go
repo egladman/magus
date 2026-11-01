@@ -195,7 +195,7 @@ func regeneratedLines(outputs []RegeneratedOutput) []string {
 		lines = append(lines, fmt.Sprintf("and %d more from %d target(s); -o json lists every one", len(rest), len(targets)))
 	}
 	return append(lines,
-		"never hand-edit or commit them: the integrator regenerates them, so unstage what the target named beside one writes and file it owed")
+		"never hand-edit or commit them: the integrator regenerates them, so unstage what the target named beside one writes")
 }
 
 // outputInside reports whether the row's write paths hold every file g can name, read the

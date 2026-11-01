@@ -57,6 +57,8 @@ type Observed struct {
 	Landed       []string
 	LandedKnown  bool
 	LandedReason string
+	// changedFiles are what a file-scoped goal's run must have read: rowFiles.
+	changedFiles []string
 	// Present are the paths that exist in the tree right now, and PresentKnown says
 	// somebody looked. Separate from Changed because they answer different questions: a
 	// file can exist and be untouched, or be deleted and therefore changed.
@@ -541,6 +543,11 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 				" -run and -skip select tests inside the packages `%s` runs, so it ran every package the check does",
 				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " "), gate.Check))
 		}
+		if gate.Kind == types.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(gate.Check) &&
+			narrowedFiles(gate.Check, attemptByGate[gate.ID]) {
+			v.Notes = append(v.Notes, fmt.Sprintf("goal %q was graded on output ref %q, a run over the files this job changed: `-- %s`",
+				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " ")))
+		}
 	}
 	// A dependency may appear after its consumer in the declaration. Re-evaluate until
 	// no status changes so a failed prerequisite propagates through the whole typed
@@ -747,12 +754,12 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under lease %q, not this job's lease %q, so it is another job's evidence",
 			status.OutputRef, attempt.Lease, row.ID))
 	}
-	if !ranCheck(gate.Check, attempt, seen.DefaultCharms) {
-		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run",
-			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms)))
+	if !ranOver(gate.Check, attempt, seen.DefaultCharms, seen.changedFiles) {
+		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run%s",
+			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms), leftOut(gate.Check, attempt, seen.changedFiles)))
 	}
 	if attempt.Failed {
-		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q failed, so its check did not pass", status.OutputRef))
+		status.Violations = append(status.Violations, runFailed(status.OutputRef, gate.Check))
 	}
 	status.Verified = len(status.Violations) == 0
 	return status
@@ -805,6 +812,74 @@ func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 	return spell == "" || a.Spell == "" || spell == a.Spell
 }
 
+// ranOver is ranCheck for a job that changed the files in changed. A
+// file-scoped check judges only the files it is handed, so its list is graded
+// against changed and never compared verbatim.
+func ranOver(c types.LeaseCheck, a types.JobAttempt, defaults, changed []string) bool {
+	if fileScoped(c) && onlyFiles(a.ExtraArgs) && len(changed) > 0 {
+		if len(unreadFiles(c, a, changed)) > 0 {
+			return false
+		}
+		c.Args = a.ExtraArgs
+	}
+	return ranCheck(c, a, defaults)
+}
+
+// fileScoped reports whether c's args name the files it judges. Lint reads
+// them that way with or without a list. A script's args are its argv, and a
+// package argument does not scope go-test.
+func fileScoped(c types.LeaseCheck) bool {
+	if c.Script != "" || runsGoTest(c) {
+		return false
+	}
+	target := c.Target
+	if _, unqualified, qualified := strings.Cut(target, "::"); qualified {
+		target = unqualified
+	}
+	name, _ := splitCharms(target)
+	return name == lintTarget || onlyFiles(c.Args)
+}
+
+// onlyFiles reports whether args are paths and nothing else.
+func onlyFiles(args []string) bool {
+	return len(args) > 0 && !slices.ContainsFunc(args, func(arg string) bool { return strings.HasPrefix(arg, "-") })
+}
+
+// unreadFiles are the files of changed under c's project that a's args leave
+// out, relative to that project. A file outside it is not this goal's.
+func unreadFiles(c types.LeaseCheck, a types.JobAttempt, changed []string) []string {
+	return slices.DeleteFunc(filesIn(path.Clean(c.Project), changed), func(f string) bool {
+		return slices.ContainsFunc(a.ExtraArgs, func(arg string) bool { return coversPath(arg, f) })
+	})
+}
+
+// leftOut says which changed files a's narrowed run of c did not read, or "".
+func leftOut(c types.LeaseCheck, a types.JobAttempt, changed []string) string {
+	if !fileScoped(c) || !onlyFiles(a.ExtraArgs) {
+		return ""
+	}
+	unread := unreadFiles(c, a, changed)
+	if len(unread) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(": it leaves out what this job changed: %s", strings.Join(unread, ", "))
+}
+
+// runFailed is the violation of a failed run. A file-scoped check's findings in
+// other files are not this job's.
+func runFailed(ref string, c types.LeaseCheck) string {
+	failed := fmt.Sprintf("the run behind output ref %q failed, so its check did not pass", ref)
+	if fileScoped(c) {
+		return failed + ": a finding in a file this job did not change is not this job's, so run it over the files it changed"
+	}
+	return failed
+}
+
+// narrowedFiles reports whether a ran file-scoped c over another list of files.
+func narrowedFiles(c types.LeaseCheck, a types.JobAttempt) bool {
+	return fileScoped(c) && onlyFiles(a.ExtraArgs) && !slices.Equal(a.ExtraArgs, c.Args)
+}
+
 // scopedRun reports whether a ran c's go test with other -run or -skip patterns and the
 // same args otherwise. Those flags select tests inside the packages go-test runs and leave
 // the package set alone (a package argument does not scope go-test either), so the run
@@ -818,6 +893,9 @@ func scopedRun(c types.LeaseCheck, a types.JobAttempt) bool {
 // or a package argument. It is "" for any other run, which ran every package and test c
 // names.
 func runScope(c types.LeaseCheck, a types.JobAttempt) string {
+	if narrowedFiles(c, a) {
+		return fmt.Sprintf("-- %s", strings.Join(a.ExtraArgs, " "))
+	}
 	if !runsGoTest(c) || len(a.ExtraArgs) == 0 {
 		return ""
 	}

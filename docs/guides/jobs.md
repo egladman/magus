@@ -472,6 +472,28 @@ because every path the new entry names is one the glob matches. Going the other 
 from `internal/job/breadth.go` to `internal/job/*.go`, widens the claim: the fork checks
 it as a new claim, with the breadth and overlap checks that a new claim gets.
 
+### What a lint goal grades
+
+A fork that writes Go source adds a `lint` goal over the files it writes. Test files the
+fork added beside them on its own stay out of that list until the job changes one. A
+finding in a file the job did not change is not the job's to meet, and the integration's
+whole-tree lint still reports it.
+
+So a lint run counts when it read every file the job changed, whatever the goal's list
+says now. Run `magus run lint . --no-default-charms -- <the files you changed>` and cite
+its ref; widening the job afterwards does not cost you the run. `magus job exit` checks the
+run against `changed_paths`, and `magus job wait` checks it against what the branch
+committed, or the diff when no branch of its own could be read. A generated report and a
+deleted file have nothing to read and are left out. A run that misses a changed file is
+refused and names the file, and a run taken before a later commit changed a file is
+refused as stale. A check whose args are all files gets the same answer. Any other check's
+args still have to match.
+
+A run is owed for one reason, `"no seat"`, and `magus job exit` refuses any other. An output
+regenerated outside the write paths files nothing, because the integrator regenerates it.
+A goal that is not the job's goes back to whoever forked it, to drop or to permit with a
+deviation.
+
 ## Checking a record before you fork it
 
 `magus job fork` validates the whole record before it writes anything. A record with

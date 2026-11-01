@@ -182,12 +182,14 @@ func permitBut(ps types.JobProblems, deviations []types.Deviation) (kept, permit
 // The goal passes the written files after `--`, relative to the goal's project, so lint
 // judges only them: a finding in a file the worker may not write is not the worker's to
 // meet, and full lint belongs to integration. Files rather than the write paths' globs,
-// because a check's args are matched verbatim and a shell expands a glob the worker pastes.
+// because a shell expands a glob the worker pastes.
+// A soft path stays out: nobody asked for it, and the grade reads it once the
+// row changes it ([ranOver]).
 func lintGoals(root string, row types.Job, ws Workspace) []types.Goal {
 	if row.ReadOnly || len(row.WritePaths) == 0 || ws.Unavailable != "" {
 		return nil
 	}
-	written := writtenFiles(root, row)
+	written := slices.DeleteFunc(writtenFiles(root, row), func(f string) bool { return slices.Contains(row.SoftPaths, f) })
 	if !slices.ContainsFunc(written, func(f string) bool { return path.Ext(f) == ".go" }) {
 		return nil
 	}

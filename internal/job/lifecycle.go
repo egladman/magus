@@ -105,7 +105,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.Job{}, errors.New("job: no output resolver files a result's validation evidence")
 	}
 	if !rows[i].ReadOnly && emptyResult(*result) {
-		return types.Job{}, fmt.Errorf("job: %s writes, and its result names no changed path, evidence or risk, so it records nothing. File this shape:\n%s",
+		return types.Job{}, fmt.Errorf("job: %s writes, and its result names no changed path, evidence or risk, so it records nothing: File this shape: %s",
 			id, ResultShape(rows[i]))
 	}
 	resolve, where := store.acrossCheckouts(rows, id, resolve)
@@ -113,7 +113,9 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	if err != nil {
 		return types.Job{}, err
 	}
-	if err := refuseWrongRun(rows[i], attempt, gateAttempts, workspaceDefaultCharms(WorkTree(store.root, rows[i]))); err != nil {
+	tree := WorkTree(store.root, rows[i])
+	changed := func() []string { return rowFiles(tree, Observed{}, *result, store.generated) }
+	if err := refuseWrongRun(rows[i], attempt, gateAttempts, workspaceDefaultCharms(tree), changed); err != nil {
 		return types.Job{}, err
 	}
 	return update(func(row *types.Job) {
@@ -151,15 +153,21 @@ func workspaceDefaultCharms(tree string) []string {
 
 // refuseWrongRun refuses evidence of another command than its goal's check,
 // charm set included. A goal the row does not declare is left for the wait.
-func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGateAttempt, defaults []string) error {
+// changed is what the result claims: exit reads no diff, and the wait does. It
+// loads the workspace, so only a run the check does not name verbatim asks.
+func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGateAttempt, defaults []string, changed func() []string) error {
 	goals := row.EffectiveGoals()
 	check := func(id string, attempt types.JobAttempt) error {
 		i := slices.IndexFunc(goals, func(g types.Goal) bool { return g.ID == id && g.Kind == types.GoalKindCheck })
 		if i < 0 || ranCheck(goals[i].Check, attempt, defaults) {
 			return nil
 		}
-		return fmt.Errorf("job: goal %q cites output ref %q, which records `%s`, and its check runs `%s`: cite a run of that check, or file it as owed with no output_ref",
-			id, attempt.Ref, attempt, resolveCheck(goals[i].Check, defaults))
+		files := changed()
+		if ranOver(goals[i].Check, attempt, defaults, files) {
+			return nil
+		}
+		return fmt.Errorf("job: goal %q cites output ref %q, which records `%s`, and its check runs `%s`%s: cite a run of that check, or file it as owed with no output_ref",
+			id, attempt.Ref, attempt, resolveCheck(goals[i].Check, defaults), leftOut(goals[i].Check, attempt, files))
 	}
 	if primary.Found {
 		if err := check(types.PrimaryGoalID, primary); err != nil {
@@ -249,6 +257,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		}
 	}
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, store.generated, ev.runs()...)
+	seen.changedFiles = rowFiles(WorkTree(store.root, jobs[i]), seen, ev.result, store.generated)
 
 	var taken *types.JobIntegration
 	if len(evidence) > 0 {
@@ -551,13 +560,7 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 	if tree == "" {
 		return nil
 	}
-	var changed []string
-	for _, c := range slices.Concat(seen.Changed, result.ChangedPaths) {
-		if p := path.Clean(filepath.ToSlash(strings.TrimSpace(c))); filepath.IsLocal(filepath.FromSlash(p)) && !generated(p) {
-			changed = append(changed, p)
-		}
-	}
-	changed = slices.Compact(slices.Sorted(slices.Values(changed)))
+	changed := localSources(slices.Concat(seen.Changed, result.ChangedPaths), generated)
 	stale := map[string]string{}
 	for _, run := range runs {
 		if !run.Found || seen.CurrentRun.holds(ctx, tree, run) {
@@ -568,6 +571,31 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 		}
 	}
 	return stale
+}
+
+// localSources is paths as sorted local slash paths, less what generated names.
+func localSources(paths []string, generated func(string) bool) []string {
+	var out []string
+	for _, c := range paths {
+		if p := path.Clean(filepath.ToSlash(strings.TrimSpace(c))); filepath.IsLocal(filepath.FromSlash(p)) && !generated(p) {
+			out = append(out, p)
+		}
+	}
+	return slices.Compact(slices.Sorted(slices.Values(out)))
+}
+
+// rowFiles is what a file-scoped goal's run has to have read: what the job's
+// branch committed, else its diff, and what its result claims. A generated
+// report or a deleted file has nothing to read.
+func rowFiles(tree string, seen Observed, result types.JobResult, generated func(string) bool) []string {
+	changed := seen.Changed
+	if seen.LandedKnown {
+		changed = seen.Landed
+	}
+	return slices.DeleteFunc(localSources(slices.Concat(changed, result.ChangedPaths), generated), func(p string) bool {
+		info, err := os.Lstat(filepath.Join(tree, filepath.FromSlash(p)))
+		return errors.Is(err, fs.ErrNotExist) || err == nil && info.IsDir()
+	})
 }
 
 // generated reports whether p, a workspace-relative slash path, is one magus maintains
@@ -804,9 +832,12 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 		return types.JobAttempt{}, nil, errors.New("job: no output resolver files a result's evidence")
 	}
 	var primary types.JobAttempt
+	if err := refuseOwedReason(result); err != nil {
+		return types.JobAttempt{}, nil, err
+	}
 	if ref := result.Validation.OutputRef; ref != "" {
 		if result.Validation.Owed != "" {
-			return types.JobAttempt{}, nil, fmt.Errorf("job: the result files its check as owed and cites output ref %q; an owed run has no ref, so name one or the other", ref)
+			return types.JobAttempt{}, nil, fmt.Errorf("job: the result files its check as owed and cites output ref %q, and an owed run has no ref, so name one or the other", ref)
 		}
 		attempt, err := resolve(ctx, ref)
 		if err != nil {
@@ -824,7 +855,7 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 		case evidence.GateID == "":
 			return types.JobAttempt{}, nil, errors.New("job: each gate_evidence entry requires gate_id")
 		case evidence.Owed != "" && evidence.OutputRef != "":
-			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q is filed as owed and cites output ref %q; an owed run has no ref, so name one or the other", evidence.GateID, evidence.OutputRef)
+			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q is filed as owed and cites output ref %q, and an owed run has no ref, so name one or the other", evidence.GateID, evidence.OutputRef)
 		case evidence.Owed == "" && evidence.OutputRef == "":
 			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q names neither output_ref nor owed, so it files nothing", evidence.GateID)
 		}
@@ -845,6 +876,25 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 		gates = append(gates, types.JobGateAttempt{GateID: evidence.GateID, Attempt: attempt})
 	}
 	return primary, gates, nil
+}
+
+// refuseOwedReason refuses any owed reason but a missing seat, and names where
+// the reasons workers reach for go instead.
+func refuseOwedReason(result types.JobResult) error {
+	owed := map[string]string{types.PrimaryGoalID: result.Validation.Owed}
+	for _, evidence := range result.GateEvidence {
+		owed[evidence.GateID] = evidence.Owed
+	}
+	for _, goal := range slices.Sorted(maps.Keys(owed)) {
+		if reason := owed[goal]; reason != "" && reason != types.OwedNoSeat {
+			return fmt.Errorf("job: goal %q is filed as owed because %q, and the one reason a run is owed is %q:"+
+				" the integrator regenerates an output outside the write paths, so that files nothing,"+
+				" your orchestrator drops a goal that is not this job's or adds a deviation,"+
+				" and a lint finding in a file this job did not change clears by linting the files it changed",
+				goal, reason, types.OwedNoSeat)
+		}
+	}
+	return nil
 }
 
 // acrossCheckouts is resolve, falling back to the output stores of the checkouts job id
@@ -921,6 +971,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 		}
 	}
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, store.generated, ev.runs()...)
+	seen.changedFiles = rowFiles(WorkTree(store.root, row), seen, ev.result, store.generated)
 	// Graded against a row whose state is cleared, so the "already verified" rule does not
 	// fire on a job that legitimately passed: this asks where the gates stand, and a job
 	// that finished stands with all of them met.

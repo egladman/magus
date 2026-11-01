@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -329,4 +330,71 @@ func releaseRequests(t *testing.T, root string) []sessions.AttentionRequest {
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 	return slices.DeleteFunc(sessions.AttentionQueue(fold), func(r sessions.AttentionRequest) bool { return r.Source != ReleaseRequestSource })
+}
+
+func (s *exitEvidenceSuite) TestOwedForAnyReasonButNoSeatIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: "generated drift"}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `goal "lint" is filed as owed because "generated drift", and the one reason a run is owed is "no seat"`)
+	s.ErrorContains(err, "the integrator regenerates")
+}
+
+func (s *exitEvidenceSuite) TestOwedCheckForAnyReasonButNoSeatIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: "not this row's target"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `goal "check" is filed as owed because "not this row's target"`)
+}
+
+func (s *exitEvidenceSuite) TestNarrowedLintOverTheClaimedFilesIsFiled() {
+	row := s.row()
+	loc := declared(s.T(), row)
+	for _, f := range []string{"cmd/magus/ledger.go", "internal/ledger/report.go"} {
+		full := filepath.Join(loc.Root, filepath.FromSlash(f))
+		s.Require().NoError(os.MkdirAll(filepath.Dir(full), 0o755))
+		s.Require().NoError(os.WriteFile(full, []byte("package x\n"), 0o644))
+	}
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}}
+	exit := func(args ...string) (types.Job, error) {
+		resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+			return types.JobAttempt{Found: true, Ref: ref, Project: ".", Target: "lint", ExtraArgs: args, TimestampMs: 9_999_999_999_999}, nil
+		}
+		return Exit(s.T().Context(), boundStore(loc, row.ID), row.ID, &result, resolve)
+	}
+
+	_, err := exit("cmd/magus/ledger.go")
+	s.ErrorContains(err, "internal/ledger/report.go", "exit names the changed file the run left out")
+
+	exited, err := exit("cmd/magus/ledger.go", "internal/ledger/report.go")
+	s.Require().NoError(err)
+	s.Equal(types.StateExited, exited.State)
+}
+
+func TestLintGoalLeavesOutTheTestsAForkAddedByItself(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	merge := func(u *types.Job) {
+		u.WritePaths, u.SoftPaths, u.Check = []string{"cli/registry.go", "cli/registry_test.go"}, []string{"cli/registry_test.go"}, forkCheck()
+	}
+	merged, err := resolveMerge(t.Context(), s, nil, "w", merge, nil)
+	require.NoError(t, err)
+	var row types.Job
+	merged(&row)
+
+	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
+	assert.Equal(t, []string{"cli/registry.go"}, row.Goals[i].Check.Args, "lint reads a soft path once the row changes it")
+	assert.Contains(t, row.WritePaths, "cli/registry_test.go", "the worker may still write it")
 }

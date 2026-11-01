@@ -3,6 +3,8 @@ package job
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -1226,4 +1228,138 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 	}
 	assert.Equal(t, want, got, "the scoped go-test and lint ride the full runs; a check paid for and a branch not merged add nothing")
 	assert.Empty(t, owedGoals(types.Job{ID: "w"}, []types.Job{worker}, nil), "a job that integrates nothing owes nothing")
+}
+
+// narrowedRunSuite pins a file-scoped goal grading what the row changed.
+type narrowedRunSuite struct {
+	suite.Suite
+}
+
+func TestNarrowedRun(t *testing.T) { suite.Run(t, new(narrowedRunSuite)) }
+
+func (s *narrowedRunSuite) row(args ...string) types.Job {
+	row := acceptRow()
+	row.Goals = []types.Goal{types.Goal{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true, Args: args}}.Resolve()}
+	return row
+}
+
+func (s *narrowedRunSuite) grade(row types.Job, seen Observed, args ...string) Status {
+	check := types.JobAttempt{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"-run", "Ledger"}}
+	lint := types.JobAttempt{Found: true, Target: "lint", Project: ".", Ref: "out2", ExtraArgs: args}
+	rep := passingResult()
+	rep.GateEvidence = []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}}
+	return VerifyGates(row, rep, check, []types.JobGateAttempt{{GateID: "lint", Attempt: lint}}, nil, seen)
+}
+
+func (s *narrowedRunSuite) seen(changed ...string) Observed {
+	return Observed{Changed: changed, ChangedKnown: true, changedFiles: changed}
+}
+
+func (s *narrowedRunSuite) TestRunOverTheChangedFilesPassesAWiderGoal() {
+	row := s.row("cmd/magus/ledger.go", "internal/ledger/report.go", "internal/ledger/report_test.go", "internal/ledger/other_test.go")
+
+	v := s.grade(row, s.seen("internal/ledger/report.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go", "internal/ledger/report.go")
+
+	s.True(v.Verified, "%v", v.Violations)
+	s.Contains(strings.Join(v.Notes, "\n"), `goal "lint" was graded on output ref "out2", a run over the files this job changed`)
+}
+
+func (s *narrowedRunSuite) TestGoalWithNoArgsTakesARunOverTheChangedFiles() {
+	v := s.grade(s.row(), s.seen("internal/ledger/report.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go", "internal/ledger/report.go")
+
+	s.True(v.Verified, "%v", v.Violations)
+}
+
+func (s *narrowedRunSuite) TestRunMissingAChangedFileIsRefused() {
+	v := s.grade(s.row("cmd/magus/ledger.go", "internal/ledger/report.go"), s.seen("internal/ledger/report.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go")
+
+	s.False(v.Verified)
+	s.Contains(strings.Join(v.Violations, "\n"), "leaves out what this job changed: internal/ledger/report.go")
+}
+
+func (s *narrowedRunSuite) TestRunOverTheGoalsArgsMissingAChangedFileIsRefused() {
+	v := s.grade(s.row("cmd/magus/ledger.go"), s.seen("internal/ledger/report_test.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go")
+
+	s.False(v.Verified, "the goal's own list is no answer for a file the row went on to change")
+	s.Contains(strings.Join(v.Violations, "\n"), "internal/ledger/report_test.go")
+}
+
+func (s *narrowedRunSuite) TestUnknownChangeIsRefused() {
+	v := s.grade(s.row("cmd/magus/ledger.go", "internal/ledger/report.go"), Observed{ChangedKnown: true}, "cmd/magus/ledger.go")
+
+	s.False(v.Verified, "a run narrowed against nothing anyone read cannot pass")
+}
+
+func (s *narrowedRunSuite) TestWholeRunStillPasses() {
+	v := s.grade(s.row("cmd/magus/ledger.go"), s.seen("internal/ledger/report.go", "cmd/magus/ledger.go"))
+
+	s.True(v.Verified, "%v", v.Violations)
+}
+
+func (s *narrowedRunSuite) TestStaleRunIsStillRefused() {
+	seen := s.seen("internal/ledger/report.go", "cmd/magus/ledger.go")
+	seen.Stale = map[string]string{"out2": "the changed paths read now as the run read them"}
+
+	v := s.grade(s.row(), seen, "cmd/magus/ledger.go", "internal/ledger/report.go")
+
+	s.False(v.Verified)
+	s.Contains(strings.Join(v.Violations, "\n"), "predates the job's last write")
+}
+
+func (s *narrowedRunSuite) TestNestedProjectReadsItsOwnFiles() {
+	c := types.LeaseCheck{Target: "lint", Project: "libs/x", Args: []string{"a.go", "b.go"}}
+	run := types.JobAttempt{Found: true, Target: "lint", Project: "libs/x", ExtraArgs: []string{"a.go"}}
+
+	s.True(ranOver(c, run, nil, []string{"libs/x/a.go", "cli/other.go"}), "a file outside the project is not this goal's")
+	s.False(ranOver(c, run, nil, []string{"libs/x/b.go"}))
+}
+
+func (s *narrowedRunSuite) TestCheckOverFilesGetsTheSameAnswer() {
+	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "b.go"}}
+	run := types.JobAttempt{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
+
+	s.True(ranOver(c, run, nil, []string{"a.go"}))
+}
+
+func (s *narrowedRunSuite) TestNoArgCheckThatIsNotLintStaysWhole() {
+	vet := types.LeaseCheck{Target: "go-vet", Project: "."}
+	narrowed := types.JobAttempt{Found: true, Target: "go-vet", Project: ".", ExtraArgs: []string{"a.go"}}
+
+	s.False(ranOver(vet, narrowed, nil, []string{"a.go"}))
+}
+
+func (s *narrowedRunSuite) TestRunWithAFlagIsAnotherRun() {
+	c := types.LeaseCheck{Target: "lint", Project: ".", Args: []string{"a.go"}}
+	run := types.JobAttempt{Found: true, Target: "lint", Project: ".", ExtraArgs: []string{"--fix", "a.go"}}
+
+	s.False(ranOver(c, run, nil, []string{"a.go"}))
+}
+
+func (s *narrowedRunSuite) TestScriptArgsStayItsArgv() {
+	c := types.LeaseCheck{Script: "probes/key.buzz", Args: []string{"a.go", "b.go"}}
+	run := types.JobAttempt{Found: true, Target: "buzz probes/key.buzz", Project: ".", ExtraArgs: []string{"a.go"}}
+
+	s.False(ranOver(c, run, nil, []string{"a.go"}))
+}
+
+func (s *narrowedRunSuite) TestPackageArgumentDoesNotScopeGoTest() {
+	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "./other"}}
+	run := types.JobAttempt{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"./pkg"}}
+
+	s.False(ranOver(c, run, nil, []string{"pkg/a.go"}))
+}
+
+func (s *narrowedRunSuite) TestRowFilesPreferWhatLanded() {
+	tree := s.T().TempDir()
+	for _, f := range []string{"own.go", "claimed.go", "gen.go", "merged.go"} {
+		s.Require().NoError(os.WriteFile(filepath.Join(tree, f), []byte("x\n"), 0o644))
+	}
+	seen := Observed{Changed: []string{"own.go", "merged.go"}, ChangedKnown: true, Landed: []string{"own.go", "gen.go", "deleted.go"}, LandedKnown: true}
+	result := types.JobResult{ChangedPaths: []string{"claimed.go"}}
+	generated := func(p string) bool { return p == "gen.go" }
+
+	s.Equal([]string{"claimed.go", "own.go"}, rowFiles(tree, seen, result, generated), "a merged line's file is not the row's")
+
+	seen.LandedKnown = false
+	s.Equal([]string{"claimed.go", "merged.go", "own.go"}, rowFiles(tree, seen, result, generated), "the diff answers when nothing read the branch")
 }
