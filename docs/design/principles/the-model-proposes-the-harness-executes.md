@@ -14,9 +14,7 @@ parses it, runs the command, writes the file, refuses the call that breaks a
 rule and carries the result into the next turn. That something is the harness.
 The model proposes; the harness executes what the model proposes.
 
-### What people get wrong
-
-### The model does the work
+## The model does the work
 
 People say the model "pulled you up by brute force"
 ([deadbabe, HN](https://news.ycombinator.com/item?id=50152615)). The model has
@@ -25,7 +23,7 @@ no hands and no memory: "LLMs are stateless"
 The harness extracts the tool call, runs it, and sends the conversation back in
 full on every turn.
 
-### The harness is the product
+## The harness is the product
 
 People say "codex: OpenAI's agent harness."
 ([nater5000, HN](https://news.ycombinator.com/item?id=50195141)). A product
@@ -35,7 +33,7 @@ the model, the harness and the apps you reach it through
 The harness is the code between the model and the machine, whatever window it
 runs in, and the checks a repository adds around it are no product at all.
 
-### A harness is a thin wrapper or a prompt
+## A harness is a thin wrapper or a prompt
 
 People say "GPT wrapper (now called Harness)"
 ([hek2sch, HN](https://news.ycombinator.com/item?id=48516505)). A prompt is
@@ -44,7 +42,7 @@ what make a harness. Mitchell Hashimoto's fix for a mistake an agent repeats
 moves past AGENTS.md text to "Actual, programmed tools."
 ([My AI adoption journey](https://mitchellh.com/writing/my-ai-adoption-journey)).
 
-### The next model makes it unnecessary
+## The next model makes it unnecessary
 
 People say "those scaffolds will also just be replaced by the reasoning models"
 (Noam Brown, quoted by
@@ -55,7 +53,7 @@ file is generated or a check passed: "Part of harness engineering is figuring
 out what can be done deterministically to avoid calling an LLM"
 ([chickensong, HN](https://news.ycombinator.com/item?id=49655268)).
 
-### A harness is a test rig
+## A harness is a test rig
 
 People read the older sense: "a collection of stubs and drivers configured to
 assist with the testing of an application or component"
@@ -65,7 +63,7 @@ one. Anthropic keeps them apart: "we're evaluating the harness and the model
 working together"
 ([Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)).
 
-### Everything that is not the model is one harness
+## Everything that is not the model is one harness
 
 People say "If you're not the model, you're the harness."
 ([Vivek Trivedy, LangChain](https://langchain.com/blog/the-anatomy-of-an-agent-harness)).
@@ -75,7 +73,7 @@ the term "means different things depending on the bounded context"
 ([Harness engineering](https://martinfowler.com/articles/harness-engineering.html)).
 Say which layer you mean.
 
-### A harness can drive other agents
+## A harness can drive other agents
 
 People say "The Harness can be as much the brain as the LLM."
 ([mindcrime, HN](https://news.ycombinator.com/item?id=50152494)). A component
@@ -84,7 +82,7 @@ gets "conflated with an agent framework, an SDK, an IDE plugin, or an
 orchestrator" ([arXiv 2606.10106](https://arxiv.org/abs/2606.10106)). A harness
 fixes the steps that have a right answer and leaves the plan to the model.
 
-### The layers
+## The layers
 
 Harnesses come in layers, listed here from the top, and each does what the one
 below it cannot:
@@ -113,7 +111,7 @@ at fixed layers: cost belongs to the person, who chooses the work and the tier
 table; security belongs to the outer harness, whose guard judges every call
 against declared outputs, leases and VCS state, whichever inner harness made it.
 
-### Records, not a loop over loops
+## Records, not a loop over loops
 
 Two inner harnesses can work under one outer harness at the same time, on the
 same repository, with the person above both. They never talk to each other, and
