@@ -137,12 +137,63 @@ fun refusedEarly(req: CommandRequest, programs: [helpers\Program], opens: fun (a
     return null;
 }
 
+// forkVerdict is the fork limit's answer for req's line. Workers and the root
+// both reach it, because every agent shell command passes through judge.
+fun forkVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerdict {
+    final read = fun (path: str) > str {
+        final file = if (path.startsWith("/")) path else "{req.dir}/{path}";
+        return fs\readFile(file) catch "";
+    };
+    final facts = fun () > spawn\ForkCounts {
+        return forkCounts(req.workspace);
+    };
+    return spawn\decideForkLine(programs, line: req.command, read: read, facts: facts, limit: spawn\finishedBranchLimit);
+}
+
+// forkCounts is magus\job.forkFacts for the fork rule. A failed read leaves
+// both counts unknown, which refuses nothing.
+fun forkCounts(workspace: str) > spawn\ForkCounts {
+    try {
+        return countsFrom(magus\job.forkFacts(workspace));
+    } catch (e) {
+        final why = errorText(e);
+        return spawn\ForkCounts{ branchesUnknown = why, testUnknown = why };
+    }
+}
+
+fun countsFrom(facts: JobForkFacts) > spawn\ForkCounts {
+    return spawn\ForkCounts{
+        finishedBranches = facts.finishedBranches,
+        branchesUnknown = facts.branchesUnknown,
+        integrateRecord = facts.integrateRecord,
+        commitsSinceTest = facts.commitsSinceTest,
+        lastTest = "{facts.lastTestRef} at {facts.lastTestRevision}",
+        testUnknown = facts.testUnknown,
+    };
+}
+
+test "the fork counts read every fact the host hands over" {
+    final counts = countsFrom(JobForkFacts{
+        finishedBranches = ["done (job done, 1 commit(s))"],
+        integrateRecord = "\{\}",
+        commitsSinceTest = 4,
+        lastTestRef = "out1",
+        lastTestRevision = "abc",
+    });
+    std\assert(counts.finishedBranches.len() == 1 and counts.commitsSinceTest == 4, message: "counts");
+    std\assert(counts.lastTest == "out1 at abc" and counts.testUnknown == "", message: counts.lastTest);
+}
+
 // judge is the command rule the root magusfile registers. opens is the
 // pull request verb the delivery rule reads.
 export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > GuardVerdict {
     final programs = parsePrograms(req);
     if (refusedEarly(req, programs: programs, opens: opens) -> refused) {
         return refused;
+    }
+    final forked = forkVerdict(req, programs: programs);
+    if (forked.decision == magus\GuardDecision.deny) {
+        return forked;
     }
     final denial = binariesDenial(req, programs: programs);
     if (denial != "") {
@@ -180,7 +231,19 @@ export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > 
         diff: pullRequests\pullRequestDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
         publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic },
         reads: host\readsFrom(req.workspace, dir: req.dir));
-    if (decided.decision != magus\GuardDecision.allow or stale\rebuilds(programs)) {
+    return lastWord(req, programs: programs, decided: decided, forked: forked, once: once);
+}
+
+// lastWord is judge's answer once nothing denied: another rule's verdict, then
+// the fork rule's note, then the stale binary's advice.
+fun lastWord(req: CommandRequest, programs: [helpers\Program], decided: GuardVerdict, forked: GuardVerdict, once: fun (key: str) > bool) > GuardVerdict {
+    if (decided.decision != magus\GuardDecision.allow) {
+        return decided;
+    }
+    if (forked.decision != magus\GuardDecision.allow) {
+        return forked;
+    }
+    if (stale\rebuilds(programs)) {
         return decided;
     }
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
