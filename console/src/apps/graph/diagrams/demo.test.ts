@@ -21,11 +21,14 @@ test("each listed demo figure renders nodes that its edges name", () => {
 
 test("the demo draws without touching the network", () => {
   const real = globalThis.fetch;
-  globalThis.fetch = (() => {
-    throw new Error("the demo asked for the network");
+  let asked = 0;
+  globalThis.fetch = (async () => {
+    asked++;
+    return new Response(null);
   }) as typeof fetch;
   try {
     for (const entry of demoDiagramList()) assert.ok(!renderDemoDiagram(entry.id).error);
+    assert.equal(asked, 0, "the demo asked for the network");
   } finally {
     globalThis.fetch = real;
   }
