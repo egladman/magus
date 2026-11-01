@@ -37,6 +37,12 @@ import "std";
 import "assert";
 import "magus";
 
+// Result is what the private layers return. Exported calls raise it.
+object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
 // escapeSvg makes s safe as SVG text or as a double-quoted attribute value.
 fun escapeSvg(s: str) > str {
     return s.replace("&", with: "&amp;").replace("\"", with: "&quot;").replace("<", with: "&lt;").replace(">", with: "&gt;");
@@ -1122,10 +1128,10 @@ fun edgeStroke(kind: str) > Paint {
 // box face; a boundary goes under them because crossing it is what a connector is for.
 //
 // Style is optional: renderSvg(d, palette) draws the design system as shipped.
-fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > str !> str {
+fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > Result::<str> {
     final errs = validate(d);
     if (errs.len() > 0) {
-        throw "diagram \"{d.id}\": " + errs.join("; ");
+        return Result::<str>{ error = "diagram \"{d.id}\": " + errs.join("; ") };
     }
 
     // A heading gets its own band and the content is translated beneath it, so authored
@@ -1174,7 +1180,12 @@ fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > str !> str {
     parts.append(renderLegend(d, p, s));
     parts.append("</g>");
     parts.append("</svg>");
-    return parts.join("");
+    return Result::<str>{ value = parts.join("") };
+}
+
+// drawn is the SVG, or "threw" when the render failed.
+fun drawn(r: Result::<str>) > str {
+    return r.value ?? "threw";
 }
 
 // renderMarkers defines one arrowhead per connector kind. All three are always emitted:
@@ -1676,7 +1687,7 @@ test "a two-axis route bends on one crossing segment" {
 }
 
 test "marker ids are namespaced by diagram id" {
-    final svg = renderSvg(twoBox(), p: lightPalette()) catch "threw";
+    final svg = drawn(renderSvg(twoBox(), p: lightPalette()));
     std\assert(svg.indexOf("id=\"t-arrow-default\"") != null, message: "marker id carries the diagram id");
     std\assert(svg.indexOf("url(#t-arrow-default)") != null, message: "the edge references it");
 }
@@ -1686,7 +1697,7 @@ test "an invalid diagram fails the render rather than shipping crooked" {
         id = "t", width = 480, height = 240,
         nodes = [ Node{ id = "a", label = "A", x = 33, y = 80, w = 160, h = 56 } ],
     };
-    final svg = renderSvg(bad, p: lightPalette()) catch "threw";
+    final svg = drawn(renderSvg(bad, p: lightPalette()));
     assert\equal(svg, want: "threw", message: "renderSvg throws on a validation finding");
 }
 
@@ -1712,21 +1723,21 @@ test "the default Style renders the pre-Style bytes" {
         + `<rect x="288" y="112" width="160" height="56" rx="6" fill="#ffffff" stroke="#e6e6e8" stroke-width="1.2"/>`
         + `<text x="368" y="144" fill="#2d3142" font-family="sans-serif" font-size="12" font-weight="600" text-anchor="middle">B</text></g>`
         + `</g></svg>`;
-    assert\equal(renderSvg(twoBox(), p: lightPalette()) catch "threw", want, message: "twoBox at the shipped defaults");
-    assert\equal(renderSvg(twoBox(), p: lightPalette(), s: defaultStyle()) catch "threw", want,
+    assert\equal(drawn(renderSvg(twoBox(), p: lightPalette())), want, message: "twoBox at the shipped defaults");
+    assert\equal(drawn(renderSvg(twoBox(), p: lightPalette(), s: defaultStyle())), want,
         message: "naming the default explicitly changes nothing");
 }
 
 // Three field kinds (a double, an int and a string), because each reaches its attribute by a
 // different formatting path.
 test "a customized Style field reaches the attribute" {
-    final styled = renderSvg(twoBox(), p: lightPalette(),
-        s: Style{ strokeWidth = 2.0, nodeRadius = 12, fontFamily = "Iosevka" }) catch "threw";
+    final styled = drawn(renderSvg(twoBox(), p: lightPalette(),
+        s: Style{ strokeWidth = 2.0, nodeRadius = 12, fontFamily = "Iosevka" }));
     std\assert(styled.indexOf("stroke-width=\"2\"") != null, message: "the wider stroke landed");
     std\assert(styled.indexOf("rx=\"12\"") != null, message: "the rounder corner landed");
     std\assert(styled.indexOf("font-family=\"Iosevka\"") != null, message: "the family landed");
     std\assert(styled.indexOf("stroke-width=\"1\"") == null, message: "and the default is gone from it");
-    final plain = renderSvg(twoBox(), p: lightPalette()) catch "threw";
+    final plain = drawn(renderSvg(twoBox(), p: lightPalette()));
     std\assert(plain.indexOf("stroke-width=\"2\"") == null, message: "a default render is untouched by it");
 }
 
@@ -1787,7 +1798,7 @@ test "the legend strip carries its word and keeps nodes out" {
     final base = twoBox();
     final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes,
         edges = base.edges, legend = [ LegendItem{ role = Role.focal, label = "focal" } ] };
-    final svg = renderSvg(d, p: lightPalette()) catch "threw";
+    final svg = drawn(renderSvg(d, p: lightPalette()));
     std\assert(svg.indexOf(">LEGEND</text>") != null, message: "the strip is labelled");
     final low = Diagram{ id = base.id, width = base.width, height = base.height, legend = d.legend,
         nodes = [ Node{ id = "a", label = "A", x = 32, y = 176, w = 160, h = 56 } ] };
@@ -1807,7 +1818,7 @@ test "input and security paint the skill's treatments" {
         edges = [ Edge{ src = "a", dst = "b" } ],
     };
     assert\equal(validate(d).len(), want: 0, message: "a node wholly inside a boundary is not an overlap");
-    final svg = renderSvg(d, p: lightPalette()) catch "threw";
+    final svg = drawn(renderSvg(d, p: lightPalette()));
     std\assert(svg.indexOf("fill=\"#4f5d75\" stroke=\"#5f6780\" fill-opacity=\"0.1\"") != null, message: "input is muted at 10%");
     std\assert(svg.indexOf("stroke-opacity=\"0.5\" stroke-width=\"1.2\" stroke-dasharray=\"4,4\"") != null, message: "security is dashed accent at half");
     std\assert(svg.indexOf(">TRUSTED</text>") != null, message: "the boundary label is painted");
@@ -1822,7 +1833,7 @@ test "a boundary zone paints the security treatment and a plain zone does not" {
     final z = ZoneRect{ label = "trusted", x = 16, y = 80, w = 448, h = 120, boundary = true };
     final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, edges = base.edges, zones = [z] };
     assert\equal(validate(d).len(), want: 0, message: "a boundary is a zone, so boxes inside it are no overlap");
-    final svg = renderSvg(d, p: lightPalette()) catch "threw";
+    final svg = drawn(renderSvg(d, p: lightPalette()));
     std\assert(svg.indexOf("stroke-opacity=\"0.5\" stroke-width=\"1.2\" stroke-dasharray=\"4,4\"") != null, message: "dashed accent at half");
     std\assert(svg.indexOf(">TRUSTED</text>") != null and svg.indexOf("y=\"74\"") != null, message: "the label masked on the top border");
     std\assert(svg.indexOf("fill-opacity=\"0.02\"") == null, message: "not the plain band's wash");
@@ -1832,7 +1843,7 @@ test "a node link paints an <a> whatever anchorHref says" {
     final base = twoBox();
     final d = Diagram{ id = base.id, width = base.width, height = base.height, edges = base.edges,
         nodes = [ Node{ id = "a", label = "A", link = "https://stripe.com/docs", x = 32, y = 112 }, base.nodes[1] ] };
-    final svg = renderSvg(d, p: lightPalette()) catch "threw";
+    final svg = drawn(renderSvg(d, p: lightPalette()));
     std\assert(svg.indexOf("<a href=\"https://stripe.com/docs\" data-node=\"a\"><g>") != null, message: "linked: {svg}");
     std\assert(svg.indexOf("<g data-node=\"b\">") != null, message: "the other node is a plain group");
 }
@@ -1883,7 +1894,7 @@ test "zones paint a solid hairline wash and stop at three" {
     final base = twoBox();
     final z = ZoneRect{ label = "core", x = 16, y = 80, w = 448, h = 120 };
     final d = Diagram{ id = base.id, width = base.width, height = base.height, nodes = base.nodes, edges = base.edges, zones = [z] };
-    final svg = renderSvg(d, p: lightPalette()) catch "threw";
+    final svg = drawn(renderSvg(d, p: lightPalette()));
     std\assert(svg.indexOf("fill=\"#2d3142\" stroke=\"#2d3142\" fill-opacity=\"0.02\" stroke-opacity=\"0.1\" stroke-width=\"0.8\"/>") != null,
         message: "ink wash, ink hairline, no dash");
     std\assert(svg.indexOf("x=\"240\" y=\"93\" fill=\"#5f6780\" font-family=\"monospace\" font-size=\"7\"") != null, message: "label centred, 7px, soft");
@@ -1901,7 +1912,7 @@ test "a bend too tight for the floor is a finding, not a sharper corner" {
     std\assert(errs[0].indexOf("leaves 4px") != null, message: "named: {errs[0]}");
     final roomy = Diagram{ id = base.id, width = base.width, height = base.height, nodes = nodes,
         edges = [ Edge{ src = "a", dst = "b", srcSide = Side.right, dstSide = Side.left } ] };
-    final svg = renderSvg(roomy, p: lightPalette(), s: Style{ bendRadius = 2 }) catch "threw";
+    final svg = drawn(renderSvg(roomy, p: lightPalette(), s: Style{ bendRadius = 2 }));
     std\assert(svg.indexOf("L 234 140 Q 240 140 240 146") != null, message: "a radius under the floor is raised to 6");
 }
 
@@ -1909,11 +1920,11 @@ test "anchorHref links an anchored node and leaves the rest alone" {
     final base = twoBox();
     final d = Diagram{ id = base.id, width = base.width, height = base.height, edges = base.edges,
         nodes = [ Node{ id = "a", label = "A", anchor = "internal/job", x = 32, y = 112 }, base.nodes[1] ] };
-    final linked = renderSvg(d, p: lightPalette(), s: Style{ anchorHref = "/code/\{path\}" }) catch "threw";
+    final linked = drawn(renderSvg(d, p: lightPalette(), s: Style{ anchorHref = "/code/\{path\}" }));
     std\assert(linked.indexOf("<a href=\"/code/internal/job\" data-node=\"a\" data-anchor=\"internal/job\"><g>") != null,
         message: "the anchored node is wrapped in a link");
     std\assert(linked.indexOf("<g data-node=\"b\">") != null, message: "the unanchored node is a plain group");
-    final plain = renderSvg(d, p: lightPalette()) catch "threw";
+    final plain = drawn(renderSvg(d, p: lightPalette()));
     std\assert(plain.indexOf("<a ") == null, message: "no template, no link");
     std\assert(plain.indexOf("<g data-node=\"a\" data-anchor=\"internal/job\">") != null, message: "the anchor still reaches the group");
 }
@@ -2062,7 +2073,7 @@ test "every proper crossing hops the dashed or lesser edge" {
     assert\equal(dashed[0].bridged, want: 0, message: "a dashed edge hops whatever its order");
     final accent = crossings(cross(plain, down: Edge{ src = "c", dst = "d", srcSide = Side.bottom, dstSide = Side.top, kind = "accent" }));
     assert\equal(accent[0].bridged, want: 0, message: "a plain edge hops the accent");
-    final svg = renderSvg(cross(plain, down: down), p: lightPalette()) catch "threw";
+    final svg = drawn(renderSvg(cross(plain, down: down), p: lightPalette()));
     std\assert(svg.indexOf("d=\"M 240 72 L 240 132 A 8 8 0 0 0 240 148 L 240 232\"") != null, message: "a downward hop bulges left: {svg}");
     std\assert(svg.indexOf("d=\"M 144 140 L 336 140\"") != null, message: "the kept edge runs unbroken");
     assert\equal(routePath([0, 0, 100, 0], radius: 8, hops: [[40, 0]]), want: "M 0 0 L 32 0 A 8 8 0 0 1 48 0 L 100 0", message: "a rightward hop bulges up");
@@ -2104,7 +2115,7 @@ test "every edge path carries a stable id a fragment can target" {
         ],
         edges = [ Edge{ src = "a/b", dst = "c" }, Edge{ src = "a/b", dst = "c", srcSide = Side.bottom, dstSide = Side.bottom, via = [112, 200, 368, 200] } ] };
     assert\equal(edgeIds(d), want: ["my_20fig-edge-a_2fb-c", "my_20fig-edge-a_2fb-c-2"], message: "escaped, and the repeat numbered");
-    final svg = renderSvg(d, p: lightPalette()) catch "threw";
+    final svg = drawn(renderSvg(d, p: lightPalette()));
     std\assert(svg.indexOf("data-edge=\"a/b->c\" id=\"my_20fig-edge-a_2fb-c\"") != null, message: "beside data-edge: {svg}");
 }
 
@@ -2409,13 +2420,21 @@ object Sketch {
     // diagram lays the figure out and validates it. Throws one finding per line, each
     // naming the flow call to change, when the declaration contradicts itself or no layout
     // the search tries comes out clean. Same declarations, same Diagram.
-    fun diagram() > Diagram !> str {
-        return layoutFlow(this);
+    fun diagram() > Diagram !> str { //nolint:no-throw // the exported call raises
+        final laid = layoutFlow(this);
+        if (laid.error -> e) {
+            throw e; //nolint:no-throw // the exported call raises
+        }
+        return laid.value!;
     }
 
-    fun svg(p: Palette, s: Style = Style{}) > str !> str {
+    fun svg(p: Palette, s: Style = Style{}) > str !> str { //nolint:no-throw // the exported call raises
         final d = this.diagram();
-        return renderSvg(d, p: p, s: s);
+        final drawnSvg = renderSvg(d, p: p, s: s);
+        if (drawnSvg.error -> e) {
+            throw e; //nolint:no-throw // the exported call raises
+        }
+        return drawnSvg.value!;
     }
 }
 
@@ -5042,14 +5061,14 @@ fun layoutFindings(found: [Fault]) > [str] {
     return msgs;
 }
 
-fun layoutFlow(declared: Sketch) > Diagram !> str {
+fun layoutFlow(declared: Sketch) > Result::<Diagram> {
     final f = compose(declared);
     final structural = compositionFindings(declared);
     foreach (msg in declarationFindings(f)) { structural.append(msg); }
-    if (structural.len() > 0) { throw voiced(f.id, found: structural); }
+    if (structural.len() > 0) { return Result::<Diagram>{ error = voiced(f.id, found: structural) }; }
     final pl = plan(f);
     final contradictions = constraintFindings(f, pl: pl);
-    if (contradictions.len() > 0) { throw voiced(f.id, found: contradictions); }
+    if (contradictions.len() > 0) { return Result::<Diagram>{ error = voiced(f.id, found: contradictions) }; }
     // A label with no spot clear of every stroke sits in a gap its channels crowd; each gap
     // the connector spans grows by WidenStep and the figure is placed again. Past MaxWiden
     // rounds the label is the author's finding.
@@ -5058,14 +5077,14 @@ fun layoutFlow(declared: Sketch) > Diagram !> str {
     while (round <= MaxWiden) {
         final found: mut [str] = mut [<str>];
         final d = place(f, pl: pl, found: found, widen: widen);
-        if (found.len() > 0) { throw voiced(f.id, found: found); }
+        if (found.len() > 0) { return Result::<Diagram>{ error = voiced(f.id, found: found) }; }
         final wrong = faults(d);
         var crowded = 0;
         foreach (fault in wrong) {
             if (fault.rule == "label") { crowded = crowded + 1; }
         }
-        if (wrong.len() == 0) { return d; }
-        if (crowded < wrong.len() or round == MaxWiden) { throw voiced(f.id, found: layoutFindings(wrong)); }
+        if (wrong.len() == 0) { return Result::<Diagram>{ value = d }; }
+        if (crowded < wrong.len() or round == MaxWiden) { return Result::<Diagram>{ error = voiced(f.id, found: layoutFindings(wrong)) }; }
         foreach (fault in wrong) {
             var li = 0;
             while (li < f.edges.len()) {
@@ -5084,7 +5103,7 @@ fun layoutFlow(declared: Sketch) > Diagram !> str {
         }
         round = round + 1;
     }
-    return Diagram{};
+    return Result::<Diagram>{ value = Diagram{} };
 }
 
 fun lookupNode(d: Diagram, id: str) > Node {
@@ -6490,15 +6509,27 @@ export enum<str> Theme { page, light, dark }
 //
 // Raises naming a dir in drop that dirs does not hold, so a drop left behind by a rename
 // fails rather than hiding nothing.
-export fun without(dirs: [magus\Dir], drop: [magus\Dir]) > [magus\Dir] !> str {
-    mustBeDirs(dirs, call: "without");
-    mustBeDirs(drop, call: "without(drop:)");
+export fun without(dirs: [magus\Dir], drop: [magus\Dir]) > [magus\Dir] !> str { //nolint:no-throw // the exported call raises
+    final left = dropped(dirs, drop: drop);
+    if (left.error -> e) {
+        throw e; //nolint:no-throw // the exported call raises
+    }
+    return left.value!;
+}
+
+fun dropped(dirs: [magus\Dir], drop: [magus\Dir]) > Result::<[magus\Dir]> {
+    if (notDirs(dirs, call: "without") -> bad) {
+        return Result::<[magus\Dir]>{ error = bad };
+    }
+    if (notDirs(drop, call: "without(drop:)") -> bad) {
+        return Result::<[magus\Dir]>{ error = bad };
+    }
     final held: mut {str: bool} = mut {<str: bool>};
     foreach (d in dirs) { held[d.path] = true; }
     final gone: mut {str: bool} = mut {<str: bool>};
     foreach (d in drop) {
         if (held[d.path] == null) {
-            throw "without drops {quote(d.path)}, which dirs does not hold; take it out of drop:";
+            return Result::<[magus\Dir]>{ error = "without drops {quote(d.path)}, which dirs does not hold; take it out of drop:" };
         }
         gone[d.path] = true;
     }
@@ -6506,7 +6537,7 @@ export fun without(dirs: [magus\Dir], drop: [magus\Dir]) > [magus\Dir] !> str {
     foreach (d in dirs) {
         if (gone[d.path] == null) { kept.append(d); }
     }
-    return kept;
+    return Result::<[magus\Dir]>{ value = kept };
 }
 
 // recordPath is a Dir's path, or empty when d is not a Dir record. The checker lets any
@@ -6516,14 +6547,15 @@ fun recordPath(d: magus\Dir) > str {
     return path ?? "";
 }
 
-fun mustBeDirs(dirs: [magus\Dir], call: str) > void !> str {
+fun notDirs(dirs: [magus\Dir], call: str) > str? {
     var i = 0;
     while (i < dirs.len()) {
         if (recordPath(dirs[i]) == "") {
-            throw "{call} takes Dir records from magus\\dir or magus\\dirs, and item {i} is not one";
+            return "{call} takes Dir records from magus\\dir or magus\\dirs, and item {i} is not one";
         }
         i = i + 1;
     }
+    return null;
 }
 
 // Actor is a box that names no directory: a person, a vendor service, a step in a
@@ -6775,8 +6807,12 @@ export object Figure {
 
     // diagram lays the figure out. Raises every finding, one per line, each naming the call
     // to change. Same declarations and records, same Diagram.
-    fun diagram() > Diagram !> str {
-        return laidOut(this);
+    fun diagram() > Diagram !> str { //nolint:no-throw // the exported call raises
+        final laid = laidOut(this);
+        if (laid.error -> e) {
+            throw e; //nolint:no-throw // the exported call raises
+        }
+        return laid.value!;
     }
 
     // useActor draws a on first use; the same actor again adds nothing.
@@ -6868,16 +6904,24 @@ object DrawnBand {
 // draw lays f out and paints it with theme. anchorHref is a URL template: {path} takes a
 // box's anchor. Raises every finding at once, one per line,
 // each naming the call to change.
-export fun draw(f: Figure, theme: Theme, anchorHref: str = "") > str !> str {
+export fun draw(f: Figure, theme: Theme, anchorHref: str = "") > str !> str { //nolint:no-throw // the exported call raises
     final named: str? = theme.value;
-    if (named == null) { throw "figure {quote(f.id)}: draw takes theme: Theme.<case>, not a string"; }
+    if (named == null) {
+        throw "figure {quote(f.id)}: draw takes theme: Theme.<case>, not a string"; //nolint:no-throw // the exported call raises
+    }
     final d = laidOut(f);
+    if (d.error -> e) {
+        throw e; //nolint:no-throw // the exported call raises
+    }
     var p = pagePalette();
     if (theme == Theme.light) { p = lightPalette(); }
     if (theme == Theme.dark) { p = darkPalette(); }
-    final svg = renderSvg(d, p: p, s: Style{ anchorHref = anchorHref });
-    if (theme == Theme.page) { return svg; }
-    return XmlDeclaration + svg;
+    final painted = renderSvg(d.value!, p: p, s: Style{ anchorHref = anchorHref });
+    if (painted.error -> e) {
+        throw e; //nolint:no-throw // the exported call raises
+    }
+    if (theme == Theme.page) { return painted.value!; }
+    return XmlDeclaration + painted.value!;
 }
 
 // nodeFact is the line a figure's stamp records for n. A box anchoring a symbol records the
@@ -6892,14 +6936,16 @@ export fun nodeFact(n: Node) > str {
     return "node {n.id} {n.role.value} {n.label} / {n.sub} symbol {n.symbol} {n.signature ?? "unknown"}";
 }
 
-fun laidOut(fig: Figure) > Diagram !> str {
-    final f = lowered(fig);
-    try {
-        return layoutFlow(f);
-    } catch (msg: str) {
-        throw revoiced(msg);
+fun laidOut(fig: Figure) > Result::<Diagram> {
+    final lowest = lowered(fig);
+    if (lowest.error -> e) {
+        return Result::<Diagram>{ error = e };
     }
-    return Diagram{};
+    final laid = layoutFlow(lowest.value!);
+    if (laid.error -> e) {
+        return Result::<Diagram>{ error = revoiced(e) };
+    }
+    return laid;
 }
 
 // lookName is look's value: null when none was passed, empty when look is not a Look.
@@ -7151,7 +7197,7 @@ object Derived {
 
 // lowered checks the figure against its records and turns it into the flow the layout
 // places, or raises every finding at once.
-fun lowered(fig: Figure) > Sketch !> str {
+fun lowered(fig: Figure) > Result::<Sketch> {
     final found: mut [str] = mut [<str>];
     final records: mut {str: magus\Dir} = mut {<str: magus\Dir>};
     final actorRecords: mut {str: Actor} = mut {<str: Actor>};
@@ -7407,9 +7453,9 @@ fun lowered(fig: Figure) > Sketch !> str {
     if (found.len() > 0) {
         final lines: mut [str] = mut [<str>];
         foreach (msg in found) { lines.append("figure {quote(fig.id)}: {msg}"); }
-        throw lines.join("\n");
+        return Result::<Sketch>{ error = lines.join("\n") };
     }
-    return f;
+    return Result::<Sketch>{ value = f };
 }
 
 // foldPair records the graph edge from directory src to dst as an edge between the boxes
@@ -7525,7 +7571,7 @@ fun serverDir() > magus\Dir {
 fun handlers() > magus\Layer { return newLayer("handler", dirs: [mcpDir(), graphDir(), jobDir()]); }
 
 // serverHttp is the decided shape of the server-http figure.
-fun serverHttp(layer: magus\Layer) > mut Figure !> str {
+fun serverHttp(layer: magus\Layer) > mut Figure !> str { //nolint:no-throw // a fixture; its tests catch the raise
     final guard = guardDir();
     final mcp = mcpDir();
     return of("server-http", title: "The HTTP routes")
