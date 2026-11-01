@@ -20,12 +20,12 @@ final SERVES = ["rule:stale-binary"];
 final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout> | --build-from <checkout>] | --check --from <checkout>)";
 final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this script compiles magus only under --build-from\n{USAGE}\n\n"
     + "Makes a fresh worktree of this repository usable for the worker holding <id>: places the root checkout's ./magus\n"
-    + "(the main checkout, or the one --from names), seeds its symbol index from there, refreshes the wired harness skills, takes the job's lease, refuses\n"
+    + "(the main checkout, or the one --from names), seeds its symbol index from there, takes the job's lease, refuses\n"
     + "unless the row names this worktree as its checkout and the base it recorded matches the row's checkpoint, and builds\n"
     + "the graph last. The lease comes first so an edit made while the graph builds lands after the base is recorded. A\n"
     + "graph build that fails prints a line naming `./magus graph build` and does not fail the bootstrap. The last line\n"
-    + "printed says the worktree is ready: act on that line, never on partial output. Writes ./magus, harness skills,\n"
-    + "the job row and the graph.\n\n"
+    + "printed says the worktree is ready: act on that line, never on partial output. Writes ./magus, the job row and\n"
+    + "the graph, and never the harness wiring: hack/dev/bootstrap-harnesses.buzz is the person's run for that.\n\n"
     + "The orchestrator builds one ./magus per base commit, in the root, and every worker checkout receives a copy. A copy is\n"
     + "placed only when it is provably the binary this worktree would build: go-build stamps it with a digest of its Go\n"
     + "build inputs (each file `go list -deps ./cmd/magus` compiles or embeds, and the root go.mod, go.sum or go.work), and\n"
@@ -179,15 +179,6 @@ export fun placed(bin: str, digest: str) > str {
     return "{bin} was built from this worktree's Go build inputs (digest {digest})";
 }
 
-// syncHarnesses merges the wired harnesses' host config through hack/dev/bootstrap-harnesses.buzz and
-// returns what it printed. A leased session skips it, as it does the skill install.
-export fun syncHarnesses(run: fun (args: [str]) > str !> any, lease: str) > str !> any {
-    if (lease != "") {
-        return "skipped the harness config sync; this session holds the lease `{lease}`";
-    }
-    return run(["buzz", "hack/dev/bootstrap-harnesses.buzz"]).trim();
-}
-
 // refusal is the error for a source with no placeable binary: what the orchestrator builds, once, in the root.
 export fun refusal(why: str, source: str) > str {
     return "bootstrap-worktree: REFUSED to place {why}\n"
@@ -254,8 +245,9 @@ fun buildFrom(source: str, root: str) > void !> any {
     _ = proc\exec(bin, args: buildArgs(source));
 }
 
-// bootstrap places ./magus in root, refreshes harness skills, takes job, checks the row fits, builds the graph, and
-// returns the row as the fresh binary reads it back. ./magus is copied from source, the main checkout when source is "",
+// bootstrap places ./magus in root, takes job and checks the row fits.
+// It builds the graph and returns the row as the fresh binary reads it.
+// ./magus is copied from source, the main checkout when source is "",
 // and only when that binary is provably root's own build; otherwise it raises, since a worker
 // checkout never compiles magus. Raises on any step that fails and on a row unfit for a worker
 // here, so a caller never starts work on a wrong binding. The graph build runs last, after the
@@ -278,10 +270,6 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     fs\rename("{local}.bootstrap", dst: local);
     std\print("placed " + placed(v.bin, digest: v.digest));
     std\print(checkout\seedLine([origin, main], dir: root));
-    final lease = leaseOf(env\getOr("BAGGAGE", def: "") catch "");
-    final runLocal = fun (args: [str]) > str !> any => magusAt(local, root: root, args: args);
-    std\print(refreshSkills(runLocal, lease: lease));
-    std\print(syncHarnesses(runLocal, lease: lease));
     return claimThenIndex(
         fun (args: [str]) > str !> any => magusAt(local, root: root, args: args),
         root: root,
@@ -292,17 +280,6 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
             _ = vcs\cmd(["switch", "--detach", checkpoint], opts: vcs\CommandOptions{ dir = root, quiet = true });
         },
     );
-}
-
-// refreshSkills refreshes every wired harness's skills and returns the line to print. A bound job
-// cannot rewrite the skills that steer it ("bound job cannot change a harness skill tree"), so a
-// session already under a lease skips the install.
-export fun refreshSkills(run: fun (args: [str]) > str !> any, lease: str) > str !> any {
-    if (lease != "") {
-        return "skipped the harness skill install; this session holds the lease `{lease}`, and a bound job cannot change a harness skill tree";
-    }
-    _ = run(["agent", "harness", "install"]);
-    return "refreshed the wired harness skills";
 }
 
 // claimThenIndex takes the job's lease, refuses a row unfit for root, and only then builds the
@@ -488,30 +465,6 @@ test "a row with no checkpoint passes and says nothing verified its base" {
     final row = Row{ id = "j", state = "declared", checkpoint = "", reportedBase = "abc", baseVerdict = "unknown", checkoutRoot = WT };
     assert\equal(fitReasons(row, root: WT, main: MAIN, trackedClean: true), want: [<str>], message: "fit");
     assert\equal(render(row, root: WT)[1], want: "base abc recorded; the row names no checkpoint, so nothing verified it", message: "note");
-}
-
-test "the harness skill install is skipped under a lease and run without one" {
-    final ran = mut [<str>];
-    final run = fun (args: [str]) > str !> any {
-        ran.append(args.join(" "));
-        return "";
-    };
-    _ = refreshSkills(run, lease: "policy-bootstrap");
-    assert\equal(ran.len(), want: 0, message: "no install under a lease");
-    assert\equal(refreshSkills(run, lease: ""), want: "refreshed the wired harness skills", message: "line without a lease");
-    assert\equal(ran.join("|"), want: "agent harness install", message: "install without a lease");
-}
-
-test "the harness config sync is skipped under a lease and run without one" {
-    final ran = mut [<str>];
-    final run = fun (args: [str]) > str !> any {
-        ran.append(args.join(" "));
-        return "no change\n";
-    };
-    assert\equal(syncHarnesses(run, lease: "policy-bootstrap").startsWith("skipped"), want: true, message: "line under a lease");
-    assert\equal(ran.len(), want: 0, message: "no sync under a lease");
-    assert\equal(syncHarnesses(run, lease: ""), want: "no change", message: "sync output");
-    assert\equal(ran.join("|"), want: "buzz hack/dev/bootstrap-harnesses.buzz", message: "sync without a lease");
 }
 
 test "the lease is taken before the graph is built" {
