@@ -14,6 +14,7 @@ import "flags";
 import "fs";
 import "magus";
 import "proc";
+import "result";
 import "std";
 import "vcs";
 import "encoding/json";
@@ -24,11 +25,6 @@ import "assert";
 final USAGE = "usage: magus buzz hack/dev/show-dependency.buzz -- --package <name> [--manager gomod|npm] [--fetch]";
 final HELP = "cost: one graph read and a go env; --fetch downloads one module or tarball\n{USAGE}";
 final MANAGERS = ["gomod", "npm"];
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 // Source is one locked version's source.
 // integrity says what was checked against the lock, and what could not be.
@@ -132,7 +128,7 @@ fun projectDirs(found: magus\ExplainResult) > [str] {
     return dirs;
 }
 
-export fun lookup(name: str, managers: [str]) > Result::<Dependency> {
+export fun lookup(name: str, managers: [str]) > result\Result::<Dependency> {
     foreach (manager in managers) {
         final names = if (manager == "gomod") parentModules(name) else [name];
         foreach (candidate in names) {
@@ -142,7 +138,7 @@ export fun lookup(name: str, managers: [str]) > Result::<Dependency> {
                 if (f.docsURL != "") {
                     docs.append(f.docsURL);
                 }
-                return Result::<Dependency>{ value = Dependency{
+                return result\Result::<Dependency>{ value = Dependency{
                     manager = manager,
                     name = candidate,
                     docs = docs,
@@ -152,15 +148,15 @@ export fun lookup(name: str, managers: [str]) > Result::<Dependency> {
             }
         }
     }
-    return Result::<Dependency>{ error = "no package node for {name} under {managers.join(", ")}; `magus query kind=package` lists them" };
+    return result\fail::<Dependency>("no package node for {name} under {managers.join(", ")}; `magus query kind=package` lists them");
 }
 
-fun goCache() > Result::<str> {
+fun goCache() > result\Result::<str> {
     try {
         final run = proc\exec("go", args: ["env", "GOMODCACHE"], opts: proc\ExecOptions{ quiet = true });
-        return Result::<str>{ value = run.stdout.trim() };
+        return result\ok::<str>(run.stdout.trim());
     } catch (err: any) {
-        return Result::<str>{ error = "go env GOMODCACHE: {err}" };
+        return result\caught::<str>(err, doing: "go env GOMODCACHE");
     }
 }
 
@@ -179,29 +175,29 @@ fun lockedGoSum(root: str, dep: Dependency, version: str) > str? {
 }
 
 // goDownload fetches and hashes the zip; `go mod download` compiles nothing.
-fun goDownload(dep: Dependency, version: str, want: str, root: str) > Result::<str> {
+fun goDownload(dep: Dependency, version: str, want: str, root: str) > result\Result::<str> {
     try {
         final run = proc\exec("go", args: ["mod", "download", "-json", "{dep.name}@{version}"], dir: root, opts: proc\ExecOptions{ quiet = true });
         final record: {str: any} = json\parse(run.stdout);
         final sum = "{record["Sum"] ?? ""}";
         if (sum != want) {
-            return Result::<str>{ error = "{dep.name}@{version}: downloaded sum {sum} is not the locked {want}" };
+            return result\fail::<str>("{dep.name}@{version}: downloaded sum {sum} is not the locked {want}");
         }
-        return Result::<str>{ value = "{record["Dir"] ?? ""}" };
+        return result\ok::<str>("{record["Dir"] ?? ""}");
     } catch (err: any) {
-        return Result::<str>{ error = "go mod download {dep.name}@{version}: {err}" };
+        return result\caught::<str>(err, doing: "go mod download {dep.name}@{version}");
     }
 }
 
-export fun goSource(dep: Dependency, version: str, fetch: bool) > Result::<Source> {
+export fun goSource(dep: Dependency, version: str, fetch: bool) > result\Result::<Source> {
     final cache = goCache();
     if (cache.error -> err) {
-        return Result::<Source>{ error = err };
+        return result\Result::<Source>{ error = err };
     }
     final root = vcs\root() catch ".";
     final want = lockedGoSum(root, dep: dep, version: version);
     if (want == null) {
-        return Result::<Source>{ error = "{dep.name}@{version}: no go.sum of {dep.projects.join(", ")} pins it, so there is nothing to check it against" };
+        return result\fail::<Source>("{dep.name}@{version}: no go.sum of {dep.projects.join(", ")} pins it, so there is nothing to check it against");
     }
     final module = escapeModule(dep.name);
     final at = escapeModule(version);
@@ -209,23 +205,23 @@ export fun goSource(dep: Dependency, version: str, fetch: bool) > Result::<Sourc
     final present = fs\isDir(dir) catch false;
     if (!present) {
         if (!fetch) {
-            return Result::<Source>{ value = Source{ version = version, integrity = "not checked: nothing to check until --fetch" } };
+            return result\ok::<Source>(Source{ version = version, integrity = "not checked: nothing to check until --fetch" });
         }
         final fetched = goDownload(dep, version: version, want: want!, root: root);
         if (fetched.error -> err) {
-            return Result::<Source>{ error = err };
+            return result\Result::<Source>{ error = err };
         }
-        return Result::<Source>{ value = Source{ version = version, dir = fetched.value!, present = true, integrity = "ok: download matches go.sum {want!}" } };
+        return result\ok::<Source>(Source{ version = version, dir = fetched.value!, present = true, integrity = "ok: download matches go.sum {want!}" });
     }
     final hashFile = fs\join(cache.value!, a: "cache", b: "download", c: module, d: "@v", e: "{at}.ziphash");
     final recorded = (fs\readFile(hashFile) catch "").trim();
     if (recorded == "") {
-        return Result::<Source>{ value = Source{ version = version, dir = dir, present = true, integrity = "not checked: the cache holds no {at}.ziphash" } };
+        return result\ok::<Source>(Source{ version = version, dir = dir, present = true, integrity = "not checked: the cache holds no {at}.ziphash" });
     }
     if (recorded != want!) {
-        return Result::<Source>{ error = "{dep.name}@{version}: the module cache holds {recorded}, the lock pins {want!}" };
+        return result\fail::<Source>("{dep.name}@{version}: the module cache holds {recorded}, the lock pins {want!}");
     }
-    return Result::<Source>{ value = Source{ version = version, dir = dir, present = true, integrity = "ok: module cache matches go.sum {want!}" } };
+    return result\ok::<Source>(Source{ version = version, dir = dir, present = true, integrity = "ok: module cache matches go.sum {want!}" });
 }
 
 fun lockedIntegrity(root: str, dep: Dependency, version: str) > str? {
@@ -247,7 +243,7 @@ fun lockedIntegrity(root: str, dep: Dependency, version: str) > str? {
 }
 
 // npmPack downloads with scripts off, and checks before it unpacks.
-export fun npmPack(dep: Dependency, version: str, want: str) > Result::<str> {
+export fun npmPack(dep: Dependency, version: str, want: str) > result\Result::<str> {
     try {
         final cache = fs\stateDir("dependency-source");
         final dir = fs\join(cache, a: pnpmDir(dep.name, version: version));
@@ -257,41 +253,41 @@ export fun npmPack(dep: Dependency, version: str, want: str) > Result::<str> {
         final got = "sha512-{hexToBase64(crypto\sha512File(tarball))}";
         if (got != want) {
             fs\removeAll(tmp);
-            return Result::<str>{ error = "{dep.name}@{version}: downloaded {got} is not the locked {want}" };
+            return result\fail::<str>("{dep.name}@{version}: downloaded {got} is not the locked {want}");
         }
         final unpacked = archive\uncompress(tarball, dest: dir, opts: archive\Options{ strip = 1 });
         std\print("unpacked {unpacked.files.len()} files");
         fs\removeAll(tmp);
-        return Result::<str>{ value = dir };
+        return result\ok::<str>(dir);
     } catch (err: any) {
-        return Result::<str>{ error = "npm pack {dep.name}@{version}: {err}" };
+        return result\caught::<str>(err, doing: "npm pack {dep.name}@{version}");
     }
 }
 
-export fun npmSource(dep: Dependency, version: str, fetch: bool) > Result::<Source> {
+export fun npmSource(dep: Dependency, version: str, fetch: bool) > result\Result::<Source> {
     final root = vcs\root() catch ".";
     final want = lockedIntegrity(root, dep: dep, version: version);
     if (want == null) {
-        return Result::<Source>{ error = "{dep.name}@{version}: no pnpm-lock.yaml of {dep.projects.join(", ")} pins it, so there is nothing to check it against" };
+        return result\fail::<Source>("{dep.name}@{version}: no pnpm-lock.yaml of {dep.projects.join(", ")} pins it, so there is nothing to check it against");
     }
     foreach (project in dep.projects) {
         final dir = fs\join(root, a: project, b: "node_modules", c: ".pnpm", d: pnpmDir(dep.name, version: version), e: "node_modules", f: dep.name);
         if (fs\isDir(dir) catch false) {
-            return Result::<Source>{ value = Source{ version = version, dir = dir, present = true, integrity = "not checked: pnpm keeps no tarball to hash; the lock pins {want!}" } };
+            return result\ok::<Source>(Source{ version = version, dir = dir, present = true, integrity = "not checked: pnpm keeps no tarball to hash; the lock pins {want!}" });
         }
     }
     final kept = fs\join(fs\stateDir("dependency-source") catch "", a: pnpmDir(dep.name, version: version));
     if (fs\isDir(kept) catch false) {
-        return Result::<Source>{ value = Source{ version = version, dir = kept, present = true, integrity = "ok: checked against {want!} when fetched" } };
+        return result\ok::<Source>(Source{ version = version, dir = kept, present = true, integrity = "ok: checked against {want!} when fetched" });
     }
     if (!fetch) {
-        return Result::<Source>{ value = Source{ version = version, integrity = "not checked: nothing to check until --fetch" } };
+        return result\ok::<Source>(Source{ version = version, integrity = "not checked: nothing to check until --fetch" });
     }
     final fetched = npmPack(dep, version: version, want: want!);
     if (fetched.error -> err) {
-        return Result::<Source>{ error = err };
+        return result\Result::<Source>{ error = err };
     }
-    return Result::<Source>{ value = Source{ version = version, dir = fetched.value!, present = true, integrity = "ok: tarball matches the lock's {want!}" } };
+    return result\ok::<Source>(Source{ version = version, dir = fetched.value!, present = true, integrity = "ok: tarball matches the lock's {want!}" });
 }
 
 fun workspaceSections(name: str) > [str] {
@@ -376,14 +372,14 @@ export fun main(args: [str]) > void !> any {
 
     final found = lookup(name!, managers: if (manager != null) [manager!] else MANAGERS);
     if (found.error -> err) {
-        throw "show-dependency: {err}";
+        throw "show-dependency: {err.message}";
     }
     final dep = found.value!;
     final sources = mut [<Source>];
     foreach (version in dep.versions) {
         final source = if (dep.manager == "gomod") goSource(dep, version: version, fetch: fetch) else npmSource(dep, version: version, fetch: fetch);
         if (source.error -> err) {
-            throw "show-dependency: {err}";
+            throw "show-dependency: {err.message}";
         }
         sources.append(source.value!);
     }
