@@ -659,6 +659,8 @@ const (
 	FlagShellAgentName = "agent-name"
 	// shell: --call-background
 	FlagShellCallBackground = "call-background"
+	// shell: --call-digest
+	FlagShellCallDigest = "call-digest"
 	// shell: --call-timeout-ms
 	FlagShellCallTimeoutMs = "call-timeout-ms"
 	// shell: --event
@@ -673,6 +675,8 @@ const (
 	FlagShellPath = "path"
 	// shell: --renders-ask
 	FlagShellRendersAsk = "renders-ask"
+	// shell: --result-digest
+	FlagShellResultDigest = "result-digest"
 	// shell: --session
 	FlagShellSession = "session"
 	// shell: --tool-ms
@@ -1035,6 +1039,8 @@ type ShellFlags struct {
 	CallBackground bool   // --[no-]call-background
 	CallTimeoutMs  int    // --call-timeout-ms
 	ToolMs         int    // --tool-ms
+	CallDigest     string // --call-digest
+	ResultDigest   string // --result-digest
 }
 
 // BindShell registers `magus shell`'s flags on fs and returns the destination.
@@ -1059,6 +1065,8 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	cmdline.NegatedBoolVar(fs, &f.CallBackground, FlagShellCallBackground)
 	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
 	fs.IntVar(&f.ToolMs, FlagShellToolMs, 0, "Read the input as a tool's name and record how many milliseconds the host says it ran, without judging: the verdict is always pass")
+	fs.StringVar(&f.CallDigest, FlagShellCallDigest, "", "With --tool-ms, a fingerprint of the call the host ran, so a repeat of it can be counted; never the call's text")
+	fs.StringVar(&f.ResultDigest, FlagShellResultDigest, "", "With --tool-ms, a fingerprint of the call's result, so an equal answer can be told from a changed one; never the result's text. Absent means the host gave none, and the record says so")
 	return &f
 }
 

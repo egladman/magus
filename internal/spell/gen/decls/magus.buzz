@@ -1610,6 +1610,7 @@ export object Job {
     baseVerdict: JobBaseVerdict = JobBaseVerdict.none,
     registeredBy: Origin = Origin{},
     registered: int = 0,
+    holderStopped: int = 0,
     checkoutRoot: str = "",
     worktree: JobWorktree? = null,
     endReason: str = "",
