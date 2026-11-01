@@ -90,6 +90,21 @@ func sourceRoots(t *testing.T) []SpellCacheRoot {
 	return goRoots(src.Path("gocache"), src.Path("gomod"))
 }
 
+// sourceRootsAt stamps every file at at, so a pinned save instant keeps them.
+func sourceRootsAt(t *testing.T, at time.Time) []SpellCacheRoot {
+	t.Helper()
+	roots := sourceRoots(t)
+	for _, root := range roots {
+		require.NoError(t, filepath.WalkDir(root.Dir, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			return os.Chtimes(p, at, at)
+		}))
+	}
+	return roots
+}
+
 func destRoots(t *testing.T) []SpellCacheRoot {
 	t.Helper()
 	dst := t.TempDir()
@@ -369,7 +384,42 @@ func TestSpellCacheKeyChangesWithEachInput(t *testing.T) {
 	day := time.Date(2026, 9, 26, 23, 0, 0, 0, time.UTC)
 	assert.Equal(t, base.String()+"-20260926", base.remoteKey(day))
 	assert.True(t, strings.HasPrefix(base.remoteKey(day), "go-"), "a bundle is filed under its spell")
-	assert.NotEqual(t, base.remoteKey(day), base.remoteKey(day.AddDate(0, 0, 1)), "each day is its own key")
+	assert.NotEqual(t, base.remoteKey(day), base.remoteKey(day.AddDate(0, 0, 1)), "each day is its own key") //nolint:forbidigo // day is UTC
+}
+
+// New York's clocks fall back on 2026-11-01, so its days are 25 hours there.
+func TestSpellCacheRestoreProbesEveryUTCDayAcrossFallBack(t *testing.T) {
+	newYork, err := time.LoadLocation("America/New_York")
+	require.NoError(t, err)
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err)
+	pub, seed := genKeypair(t)
+	trusted := [][]byte{pub}
+	_, writer := openSigned(t, remote, seed, trusted)
+	_, reader := openSigned(t, remote, nil, trusted)
+	key := testSpellCacheKey()
+
+	filed := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	saved, err := writer.saveSpellCache(t.Context(), key, sourceRootsAt(t, filed), filed)
+	require.NoError(t, err)
+	require.Equal(t, key.remoteKey(filed), saved.Key)
+
+	reading := time.Date(2026, 11, 1, 19, 30, 0, 0, newYork)
+	require.Equal(t, 2, reading.UTC().Day())
+
+	t.Run("a reader with the same lockfiles", func(t *testing.T) {
+		got, err := reader.restoreSpellCache(t.Context(), key, destRoots(t), reading)
+		require.NoError(t, err)
+		assert.Equal(t, saved.Key, got.Key)
+	})
+
+	t.Run("a reader with other lockfiles takes the pointer", func(t *testing.T) {
+		moved := key
+		moved.Locks = strings.Repeat("1", 64)
+		got, err := reader.restoreSpellCache(t.Context(), moved, destRoots(t), reading)
+		require.NoError(t, err)
+		assert.Equal(t, saved.Key, got.Key)
+	})
 }
 
 func TestSpellCacheRemoteSaveAndRestore(t *testing.T) {
@@ -379,15 +429,16 @@ func TestSpellCacheRemoteSaveAndRestore(t *testing.T) {
 	trusted := [][]byte{pub}
 	_, writer := openSigned(t, remote, seed, trusted)
 	key := testSpellCacheKey()
-	now := time.Now()
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	stamped := now.Add(time.Minute)
 
-	saved, err := writer.saveSpellCache(t.Context(), key, sourceRoots(t), now)
+	saved, err := writer.saveSpellCache(t.Context(), key, sourceRootsAt(t, stamped), now)
 	require.NoError(t, err)
 	assert.Equal(t, key.remoteKey(now), saved.Key)
 	assert.Equal(t, 5, saved.Files)
 	assert.Positive(t, saved.Transferred)
 
-	again, err := writer.saveSpellCache(t.Context(), key, sourceRoots(t), now)
+	again, err := writer.saveSpellCache(t.Context(), key, sourceRootsAt(t, stamped), now)
 	require.NoError(t, err)
 	assert.True(t, again.Present, "the day's first bundle stands")
 	assert.Zero(t, again.Files, "a stored key is not rebuilt")
@@ -424,7 +475,7 @@ func TestSpellCacheRemoteSaveAndRestore(t *testing.T) {
 		pr, err := Open(t.Context(), filepath.Join(root, ".magus"), WithLocalWrite(true), WithRemoteBackend(remote),
 			WithSigningKey(seed), WithTrustedKeys(trusted), WithRemoteWrite(false))
 		require.NoError(t, err)
-		_, err = pr.saveSpellCache(t.Context(), key, sourceRoots(t), now.AddDate(0, 0, 1))
+		_, err = pr.saveSpellCache(t.Context(), key, sourceRootsAt(t, stamped), now.Add(restoredAge))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "may not write (remote writes are off)")
 	})
@@ -432,7 +483,7 @@ func TestSpellCacheRemoteSaveAndRestore(t *testing.T) {
 	t.Run("a tampered newest bundle is refused and an older verified one is taken", func(t *testing.T) {
 		// Not AddDate: across a DST change a day is 25 hours.
 		later := now.Add(restoredAge)
-		_, err := writer.saveSpellCache(t.Context(), key, sourceRoots(t), later)
+		_, err := writer.saveSpellCache(t.Context(), key, sourceRootsAt(t, stamped), later)
 		require.NoError(t, err)
 		stored := remote.artifactPath(spellCacheNamespace, key.remoteKey(later))
 		tampered := rewriteTarMember(t, stored, func(name string) bool { return name == "GOCACHE/ab/ab01-d" }, []byte("OUTPUT"))
