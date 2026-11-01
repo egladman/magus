@@ -537,7 +537,7 @@ export interface RelayoutInput {
 export function relayout(input: RelayoutInput): Relayout {
   const cut = cutDeclaration(input.decl, input.lens);
   if (cut.error) return { kind: "bad-lens", detail: cut.error.message };
-  const figure = buildFigure(cut.value,input.meta, describeLens(input.lens));
+  const figure = buildFigure(cut.value, input.meta, describeLens(input.lens));
   if (figure.error) return { kind: "failed", detail: figure.error.message };
   return toRelayout(input.runtime.drawFigure(figure.value, input.meta.anchorHref));
 }

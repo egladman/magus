@@ -3,8 +3,7 @@
 
 import { MagusError, fail, ok, type Result } from "../../../gen/magus/types";
 
-const lensError = (message: string): Result<never> =>
-  fail(new MagusError({ code: "", message }));
+const lensError = (message: string): Result<never> => fail(new MagusError({ code: "", message }));
 
 export interface Lens {
   readonly scope: readonly string[];

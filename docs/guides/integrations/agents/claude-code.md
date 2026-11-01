@@ -479,6 +479,13 @@ hook that can break the session it was meant to watch. It opens with the same
 workspace-root walk as the lease hook above, for the same reason.
 [Attention hooks](notifications.md) covers the envelope and the outcome vocabulary.
 
+## Recording how long a tool ran
+
+Wire `PostToolUse` to
+[`magus-tool-time.buzz`](guard-templates.md#magus-tool-timebuzz) (this repository
+does, under the matcher that excludes `Agent|Task`) and each finished call
+records how long the host said the tool took. It judges nothing and exits 0.
+
 ## Recording where the work stands
 
 Wire `Stop` to [`magus-checkpoint.buzz`](guard-templates.md#magus-checkpointbuzz)

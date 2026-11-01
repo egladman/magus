@@ -5,9 +5,9 @@ import { afterEach, describe, test } from "node:test";
 import { mountSharePanel } from "./share";
 
 function pressedLabels(): string[] {
-  return [...document.querySelectorAll('.console-shell-share__durations [aria-pressed="true"]')].map(
-    (b) => (b.textContent ?? "").trim(),
-  );
+  return [
+    ...document.querySelectorAll('.console-shell-share__durations [aria-pressed="true"]'),
+  ].map((b) => (b.textContent ?? "").trim());
 }
 
 afterEach(() => {
