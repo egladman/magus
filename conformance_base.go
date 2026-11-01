@@ -27,8 +27,11 @@ import (
 // noBaseIndex is why a touched file of an externally indexed language has no ceiling.
 const noBaseIndex = "no in-process index; ceiling not applied"
 
+// projectNewAtHead is why a file of a project the base lacks has no ceiling.
+const projectNewAtHead = "its project is new at head, so the base holds no measure; ceiling not applied"
+
 // baseMeasureVersion keys the kept measures; bump it when measureTree measures differently.
-const baseMeasureVersion = "2"
+const baseMeasureVersion = "3"
 
 // ConformanceCeilings is head, the lens over the working tree, with c.Base's ceilings: each file
 // changed since c.Base whose count of violations of a metric in c.Checks rose past its count
@@ -72,6 +75,10 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Conformance, he
 			head.Unmeasured = append(head.Unmeasured, types.ConformanceUnmeasured{File: p, Language: lang, Reason: noBaseIndex})
 			continue
 		}
+		if project, ok := insideAbsentProject(base.Unmeasured, p); ok {
+			head.Unmeasured = append(head.Unmeasured, types.ConformanceUnmeasured{File: p, Language: project.Language, Reason: project.Reason})
+			continue
+		}
 		judged = append(judged, p)
 	}
 	head.Base = commit
@@ -113,10 +120,12 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 	if err != nil {
 		return "", err
 	}
-	out, err := m.measureTree(ctx, tree, plan)
+	present, absent := plan.splitAbsent(tree)
+	out, err := m.measureTree(ctx, tree, present)
 	if err != nil {
 		return "", fmt.Errorf("conformance: measure %s: %w", commit, err)
 	}
+	out.Unmeasured = absent
 	line, err := json.Marshal(out)
 	if err != nil {
 		return "", fmt.Errorf("conformance: encode %s: %w", commit, err)
@@ -219,6 +228,31 @@ func (p baseIndexPlan) unmeasured(file string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// splitAbsent parts the indexes by whether tree holds their project. The plan
+// is head's, so a project new at head has no directory in a base tree.
+func (p baseIndexPlan) splitAbsent(tree string) (baseIndexPlan, []types.ConformanceUnmeasured) {
+	present := baseIndexPlan{external: p.external}
+	var absent []types.ConformanceUnmeasured
+	for _, ix := range p.indexes {
+		if _, err := os.Stat(filepath.Join(tree, filepath.FromSlash(ix.project))); errors.Is(err, os.ErrNotExist) {
+			absent = append(absent, types.ConformanceUnmeasured{File: ix.project, Language: ix.language, Reason: projectNewAtHead})
+			continue
+		}
+		present.indexes = append(present.indexes, ix)
+	}
+	return present, absent
+}
+
+// insideAbsentProject is the base measure's record of the project holding file.
+func insideAbsentProject(absent []types.ConformanceUnmeasured, file string) (types.ConformanceUnmeasured, bool) {
+	for _, project := range absent {
+		if strings.HasPrefix(file, project.File+"/") {
+			return project, true
+		}
+	}
+	return types.ConformanceUnmeasured{}, false
 }
 
 // baseIndexPlan reads which index each project's symbol-capable spells declare, with head's
