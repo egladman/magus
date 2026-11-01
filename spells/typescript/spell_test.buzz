@@ -14,7 +14,7 @@ fun discover(files: [DiscoveryFile]) > [DiscoveredProject] !> any {
     return typescript\discover_projects(Target{}, req: DiscoveryQuery{root = "/repo", files = files});
 }
 
-fun claimAt(claims: [DiscoveredProject], path: str) > DiscoveredProject !> str {
+fun claimAt(claims: [DiscoveredProject], path: str) > DiscoveredProject {
     foreach (claim in claims) {
         if (claim.path == path) {
             return claim;

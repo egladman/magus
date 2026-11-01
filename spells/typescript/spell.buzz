@@ -476,7 +476,7 @@ fun gap(file: str, why: str) > DiscoveryGap {
     return DiscoveryGap{file = file, why = why};
 }
 
-fun parsePackage(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > NodePackage !> any {
+fun parsePackage(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > NodePackage {
     if (file.content -> content) {
         final parsed: any = json\parse(content) catch null;
         if (!(parsed is {str: any})) {
@@ -522,7 +522,7 @@ fun workspaceOf(pkg: NodePackage, gaps: mut [DiscoveryGap]) > NodeWorkspace? {
     return null;
 }
 
-fun parsePnpmWorkspace(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > NodeWorkspace? !> any {
+fun parsePnpmWorkspace(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > NodeWorkspace? {
     if (file.content -> content) {
         final parsed: any = yaml\parse(content) catch null;
         if (parsed == null) {
@@ -757,7 +757,7 @@ object NodeScan {
 
 // nodeScan parses each pnpm-workspace.yaml, then each package.json and the workspaces field
 // pnpm does not own.
-fun nodeScan(req: DiscoveryQuery) > NodeScan !> any {
+fun nodeScan(req: DiscoveryQuery) > NodeScan {
     final scan = NodeScan{packages = mut [], gapsByFile = mut {}, workspaces = mut [], workspaceGaps = mut []};
     final pnpmRoots = mut {<str: bool>};
     foreach (file in req.files) {
