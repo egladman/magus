@@ -178,6 +178,7 @@ func (s *BindOnExecSuite) SetupTest() {
 	var err error
 	s.here, err = workspace.FindRoot(s.here)
 	s.Require().NoError(err)
+	commitCheckout(s.T(), s.here)
 	ended := types.EndReasonSessionEnded
 	rows := []types.Job{
 		{ID: "owned-elsewhere", State: types.StateDeclared, Worktree: &types.JobWorktree{Root: elsewhere, Made: true}},
@@ -219,6 +220,13 @@ func (s *BindOnExecSuite) TestAPausedRowDoesNotBind() {
 
 func (s *BindOnExecSuite) TestARowEndedWithItsSessionElsewhereDoesNotBind() {
 	s.Equal(job.Binding{}, s.bind("ended-elsewhere"))
+}
+
+func (s *BindOnExecSuite) TestARowInACheckoutWithNoRevisionDoesNotBind() {
+	bare := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(bare, "magus.yaml"), []byte("{}\n"), 0o644))
+	bindOnExec(s.ctx, s.at, s.who, fmt.Sprintf("cd %s && ./magus job exec free", bare))
+	s.Equal(job.Binding{}, s.store.Binding(s.who.caller()))
 }
 
 func (s *BindOnExecSuite) TestAFreeRowBinds() {

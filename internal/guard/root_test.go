@@ -441,6 +441,8 @@ func TestOrchestrationFollowsTheLiveRows(t *testing.T) {
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	writeCostState(facts, costState{Forked: []string{"own"}, Forks: map[string]int64{"own": 1}})
 	require.Equal(t, types.OrchestrationProven, role(at))
+	fixtureGit(t, at.workspace, "init", "-q", "-b", "main")
+	commitCheckout(t, at.workspace)
 	bindOnExec(t.Context(), at, who, "./magus job exec own")
 	assert.Empty(t, readCostState(facts).Forked, "a row the session takes itself is no longer handed out")
 	assert.Empty(t, readCostState(facts).Forks)

@@ -158,7 +158,7 @@ func bindOnExec(ctx context.Context, at location, who hookAttribution, command s
 	}
 	store := job.NewStore(at.jobs())
 	if here, placed := execCheckout(command, at); placed {
-		if store.ExecRefusal(rows[i], here) != nil {
+		if store.ExecRefusal(ctx, rows[i], here) != nil {
 			return
 		}
 	} else if !rows[i].State.Live() {
