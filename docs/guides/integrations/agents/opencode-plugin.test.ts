@@ -1069,7 +1069,10 @@ test("no findings, no reply, or a subagent means no follow-up", async () => {
 test("a reply check that judged nothing reaches the person as a toast and OpenCode's log", async () => {
   await withReplyScript(async () => {
     const said = "proofread-reply judges no reply: no proofread is on PATH. Install proofread.";
-    stubBun(() => null, (call) => (isReplyCheck(call) ? `${said}\n` : ""));
+    stubBun(
+      () => null,
+      (call) => (isReplyCheck(call) ? `${said}\n` : ""),
+    );
     const prompts: Array<{ id: string; text: string }> = [];
     const toasts: string[] = [];
     const logs: string[] = [];

@@ -44,13 +44,13 @@ adds at most one new layer holding the files and symlinks a Spec lists, rewrites
 image config, and writes a new OCI image layout. A separate, explicit step publishes a
 layout to a registry. `Index` joins single-platform layouts into one image index.
 
-| Item                                                                                         | State    |
-| -------------------------------------------------------------------------------------------- | -------- |
-| `internal/image`: layer writer, config and manifest rewrite, layout read and write, `Index`  | done     |
-| The std `image` module, trampolines generated like `archive`                                 | done     |
-| Our own static image Spec, a Buzz file under `hack/magusfile/` that `magusfile.buzz` imports | done     |
-| Registry `Pull` and `Publish` over `internal/oci`, no go-containerregistry                   | done     |
-| The release path publishes the layout instead of running `docker buildx`                     | done     |
+| Item                                                                                         | State |
+| -------------------------------------------------------------------------------------------- | ----- |
+| `internal/image`: layer writer, config and manifest rewrite, layout read and write, `Index`  | done  |
+| The std `image` module, trampolines generated like `archive`                                 | done  |
+| Our own static image Spec, a Buzz file under `hack/magusfile/` that `magusfile.buzz` imports | done  |
+| Registry `Pull` and `Publish` over `internal/oci`, no go-containerregistry                   | done  |
+| The release path publishes the layout instead of running `docker buildx`                     | done  |
 
 <!--diagram:oci-assembly-->
 

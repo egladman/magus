@@ -22,11 +22,11 @@ The split is deliberate. The workspace is the unit of _discovery, caching, and a
 
 `FindRoot` walks up from the current directory and picks the root by the first of these rules that matches:
 
-| Marker                          | The directory that roots the workspace                                                         |
-| ------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `magus.yaml`                    | the nearest one, so a worktree nested inside its parent repo keeps its own                     |
-| `magusfile.buzz`, `magusfiles/` | the outermost of an unbroken run of directories holding one, so a stray ancestor never joins   |
-| `.jj`, `.hg`, `.sl`, `.git`     | the nearest VCS checkout, with a warning that names `magus init`                               |
+| Marker                          | The directory that roots the workspace                                                       |
+| ------------------------------- | -------------------------------------------------------------------------------------------- |
+| `magus.yaml`                    | the nearest one, so a worktree nested inside its parent repo keeps its own                   |
+| `magusfile.buzz`, `magusfiles/` | the outermost of an unbroken run of directories holding one, so a stray ancestor never joins |
+| `.jj`, `.hg`, `.sl`, `.git`     | the nearest VCS checkout, with a warning that names `magus init`                             |
 
 No language's manifest roots a workspace: a `go.mod` or `package.json` is a spell's knowledge, never core's, so a multi-module repo does not split at each module. With none of these markers, magus fails with [MGS3008](../reference/codes/sandbox/MGS3008.md). `magus.yaml` (workspace configuration; see [config.md](../reference/config.md)) lives at the root; it is optional, and its absence does not stop discovery once a root is found by another marker.
 
