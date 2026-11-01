@@ -506,7 +506,7 @@ fun main(args: [str]) > int {
     if (toStdout) {
         io\stdout.write(stream) catch void;
     } else {
-        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: proc\ExecOptions{stdin = stream, allowFailure = true}) catch null;
         if (loaded == null or loaded!.code != 0) { return 1; }
     }
 
@@ -680,7 +680,7 @@ fun main(args: [str]) > int {
     if (toStdout) {
         io\stdout.write(stream) catch void;
     } else {
-        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: proc\ExecOptions{stdin = stream, allowFailure = true}) catch null;
         if (loaded == null or loaded!.code != 0) { return 1; }
     }
 
@@ -999,7 +999,7 @@ fun main(args: [str]) > int {
     if (toStdout) {
         io\stdout.write(stream) catch void;
     } else {
-        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: proc\ExecOptions{stdin = stream, allowFailure = true}) catch null;
         if (loaded == null or loaded!.code != 0) { return 1; }
     }
 
@@ -1154,7 +1154,7 @@ fun parseSkip(mark: str) > int {
 fun sessionIds(opencode: str) > [str] {
     final declared = env\get("HOST_SESSION_IDS") catch "";
     if (declared != "") { return strings\fields(declared); }
-    final listed = proc\exec(opencode, args: ["sessions", "--json"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    final listed = proc\exec(opencode, args: ["sessions", "--json"], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
     if (listed == null or listed!.code != 0) { return [<str>]; }
     final ids = mut [<str>];
     final listing = json\parse(listed!.stdout) catch null;
@@ -1195,7 +1195,7 @@ fun main(args: [str]) > int {
     final marks = mut {<str: int>};
     foreach (id in sessionIds(opencode)) {
         final mark = "{stateDir}/{crypto\sha256Hex(id).sub(0, len: 16)}";
-        final exported = proc\exec(opencode, args: ["export", id], opts: {"quiet": true, "allow_failure": true}) catch null;
+        final exported = proc\exec(opencode, args: ["export", id], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
         if (exported == null or exported!.code != 0) { continue; }
         final doc = json\parse(exported!.stdout) catch null;
         if (doc == null) { continue; }
@@ -1213,7 +1213,7 @@ fun main(args: [str]) > int {
     if (toStdout) {
         io\stdout.write(stream) catch void;
     } else {
-        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: proc\ExecOptions{stdin = stream, allowFailure = true}) catch null;
         if (loaded == null or loaded!.code != 0) { return 1; }
     }
 

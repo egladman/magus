@@ -227,6 +227,16 @@ shown here:
     ],
     "SessionStart": [
       {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "statusMessage": "magus: briefing the session"
+          }
+        ]
+      },
+      {
         "matcher": "compact",
         "hooks": [
           {
@@ -238,6 +248,15 @@ shown here:
       }
     ],
     "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus guard: checking the stop"
+          }
+        ]
+      },
       {
         "hooks": [
           {
@@ -255,6 +274,15 @@ shown here:
             "type": "command",
             "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus: noting the request"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-reclaim-disk.buzz -- --agent-name codex",
+            "statusMessage": "magus: sampling free disk space"
           }
         ]
       }

@@ -116,7 +116,9 @@ other templates.
 ```ts
 // magus guard hook for OpenCode. OpenCode has no shell-command hook config: a
 // plugin intercepts tool calls instead, and throwing from tool.execute.before
-// blocks the call.
+// blocks the call: its signature returns Promise<void> and lets a plugin change only the
+// args, so a rejection is the one way to stop a call
+// (https://github.com/anomalyco/opencode/blob/v1.19.4/packages/plugin/src/index.ts#L266-L269).
 //
 // This file is the source of truth. Copy it to .opencode/plugins/ in the project, never
 // to ~/.config/opencode/plugins/, and adjust to taste; nothing in it is magus-internal.
@@ -150,6 +152,10 @@ other templates.
 // __PROOFREAD_REPLY_BUZZ at a copy of proofread-reply.buzz, the reply that ends a turn is
 // proofread, with the findings sent back as a follow-up prompt.
 //
+// It runs what other hosts wire as hooks. A root session's idle is its stop:
+// the guard answers it, and a deny goes back as a follow-up. A root session's
+// brief, and a .buzz file's check after an edit, ride the next tool result.
+//
 // An ASK puts the call in front of the person, and a plugin cannot prompt: throwing is
 // the only answer tool.execute.before has. So the prompt is OpenCode's own. The opencode
 // harness writes each backend's push verb (`git push`, `hg push`, `sl push`, `jj git push`),
@@ -171,8 +177,8 @@ other templates.
 // deliberately avoids the MAGUS_* space, which is magus's own settings.
 //
 // The reply check is off until you turn it on: it runs the proofread-reply.buzz at the path
-// in __PROOFREAD_REPLY_BUZZ. With that unset, naming a file that does not exist, or with
-// no proofread binary, the check is silent.
+// in __PROOFREAD_REPLY_BUZZ. With that unset, or naming no file, it is off.
+// A proofread the script cannot run is shown as a toast.
 
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -190,6 +196,17 @@ type Verdict =
   | { schema_version: number; decision: "advise"; context: string }
   | { schema_version: number; decision: "deny"; reason: string }
   | { schema_version: number; decision: "ask"; reason: string };
+
+/** What a verdict means for the call: stop it with the reason, or let it run holding a context. */
+type Decided = { block: true; reason: string } | { block: false; context: string };
+
+/** No magus judged the call; `why` names the binary and what went wrong. */
+type Unjudged = { decision: "unjudged"; why: string };
+
+/** How to get a magus that runs, for whoever reads a refused call. */
+const MAGUS_FIX =
+  "Install magus (https://eli.gladman.cc/magus/guides/setup/), build it from source " +
+  "(https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path.";
 
 /** A verdict envelope before its decision is trusted: another process's stdout. */
 type Envelope = { schema_version: number; decision: unknown } & Record<string, unknown>;
@@ -359,6 +376,37 @@ function replyScript(): string | null {
   return existsSync(named) ? named : null;
 }
 
+/** The disk hook, workspace-relative, as `magus describe harness` wires it on every host. */
+const RECLAIM_DISK_SCRIPT = "docs/guides/integrations/agents/magus-reclaim-disk.buzz";
+
+/** The glue the other hosts run after a file write, workspace-relative. */
+const BUZZ_CHECK_SCRIPT = "docs/guides/integrations/agents/magus-buzz-check.buzz";
+
+/** The glue the other hosts run on a read, workspace-relative. */
+const OBSERVE_SCRIPT = "docs/guides/integrations/agents/magus-observe.buzz";
+
+/** The tools that write a file, after which a .buzz path is checked. */
+const WRITE_TOOLS = ["edit", "write", "apply_patch"];
+
+/** A brief over this is dropped, as cursor-hook.buzz drops one. */
+const SESSION_BRIEF_MAX_BYTES = 16384;
+
+/**
+ * Appends a note to the result the model reads next. An MCP result carries
+ * `content` parts and no `output`. False when the result has room for neither.
+ */
+function appendNote(result: { output?: string; content?: unknown }, note: string): boolean {
+  if (Array.isArray(result.content)) {
+    result.content.push({ type: "text", text: note });
+    return true;
+  }
+  if (typeof result.output === "string") {
+    result.output = `${result.output}\n\n${note}`;
+    return true;
+  }
+  return false;
+}
+
 /** The session a call acts in: the root's id, plus the child's when a subagent made it. */
 type Who = { session?: string; agent?: string };
 
@@ -377,13 +425,6 @@ export const MagusGuard: Plugin = async (ctx) => {
   // fails to recognize the config key that arms the rule and returns pass.
   const magus = process.env.__MAGUS_BIN ?? workspaceMagus() ?? "magus";
 
-  // Said once per session. This plugin instance lives as long as the session does, so a
-  // flag here IS the session and needs no marker on disk, unlike the Buzz templates whose
-  // process ends with each tool call. The notice reports a broken installation: a fact
-  // for the person, with nothing in it a model can act on, so a repeat is noise.
-  // Measured over recent sessions: 99% of these firings were same-session repeats.
-  let saidUnguarded = false;
-
   // Advisories waiting for the call they belong to, keyed by callID. An advise is
   // produced BEFORE a call and delivered AFTER it, because tool.execute.after is the
   // only hook that can rewrite what the model reads, and judging a second time there
@@ -394,35 +435,64 @@ export const MagusGuard: Plugin = async (ctx) => {
   // cheaper leak than judging everything twice to avoid it.
   const pending = new Map<string, Held>();
 
+  // The disk hook's one line, said when it started a reclaim chunk or space is critical.
+  // OpenCode raises no event whose output reaches the model once a turn, so the line waits
+  // here for the next tool result, the same channel an advisory takes.
+  let diskNote: string | null = null;
+
+  // A new root session's brief, held for the next tool result like diskNote.
+  let briefNote: string | null = null;
+
   /**
    * Runs one `magus shell` invocation and returns its raw stdout, or null when the
    * binary could not be run at all (missing, not executable). An older binary that
    * rejects a flag still runs and exits, so that case comes back as "" here, not
    * null - the caller distinguishes them.
    */
-  const runOnce = async (args: readonly string[], input: string): Promise<string | null> => {
+  const runOnce = async (args: readonly string[], input: string): Promise<string | null> =>
+    (await runCaptured(args, input))?.stdout ?? null;
+
+  /** runOnce with stderr kept, for a script whose stderr is a notice. */
+  const runCaptured = async (
+    args: readonly string[],
+    input: string,
+  ): Promise<{ stdout: string; stderr: string } | null> => {
     try {
       const proc = Bun.spawn([magus, ...args], {
         stdin: new TextEncoder().encode(input),
         stdout: "pipe",
-        stderr: "ignore",
+        stderr: "pipe",
       });
-      const stdout = await new Response(proc.stdout).text();
+      const [stdout, stderr] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
       await proc.exited;
-      return stdout;
+      return { stdout, stderr };
     } catch {
       return null;
     }
   };
 
   /**
-   * Runs one guard query. Returns null when no verdict could be obtained, which
-   * every caller treats as allow.
-   *
-   * Failing OPEN is deliberate. Throwing is OpenCode's only way to stop a call,
-   * so a guard that threw whenever magus was missing would block every tool
-   * call and make the session unusable - worse than no guard. The failure is
-   * logged rather than swallowed, so an unguarded session stays visible.
+   * Shows the person a line a script said on stderr. A hook reply here has
+   * no notice field, so it goes out as a toast and into OpenCode's log.
+   */
+  const notify = async (message: string): Promise<void> => {
+    const toast = await ctx.client.tui
+      .showToast({ body: { title: "magus", message, variant: "warning" } })
+      .catch((error: unknown) => ({ error }));
+    const logged = await ctx.client.app
+      .log({ body: { service: "magus", level: "warn", message } })
+      .catch((error: unknown) => ({ error }));
+    if (toast.error !== undefined && logged.error !== undefined) {
+      console.warn(`[magus] ${message}`);
+    }
+  };
+
+  /**
+   * Runs one guard query. Returns an Unjudged when no verdict came back, which
+   * `apply` refuses. The thrown error is the one line the person reads.
    *
    * The thing being judged goes in on STDIN, never in argv. `magus shell` takes
    * no positional arguments at all, and that is not an incidental preference:
@@ -443,21 +513,14 @@ export const MagusGuard: Plugin = async (ctx) => {
    * agent-host-attribution-not-captured) and ported here so this plugin degrades
    * the same way.
    */
-  const judge = async (args: readonly string[], input: string): Promise<Verdict | null> => {
-    const unguarded = () => {
-      if (saidUnguarded) return;
-      saidUnguarded = true;
-      console.warn(
-        `[magus guard] could not run ${magus}; this call is UNGUARDED. ` +
-          "Install magus, or set __MAGUS_BIN to its path.",
-      );
-    };
+  const judge = async (args: readonly string[], input: string): Promise<Verdict | Unjudged> => {
+    const unjudged = (why: string): Unjudged => ({
+      decision: "unjudged",
+      why: `magus guard could not judge this call: ${why}`,
+    });
 
     let stdout = await runOnce(args, input);
-    if (stdout === null) {
-      unguarded();
-      return null;
-    }
+    if (stdout === null) return unjudged(`${magus} could not be run`);
     if (stdout.trim() === "") {
       // --renders-ask, --session and --agent go too: a binary that rejects any predates them.
       const withoutValued = (list: readonly string[], flag: string): string[] => {
@@ -468,29 +531,21 @@ export const MagusGuard: Plugin = async (ctx) => {
         .reduce((list, flag) => withoutValued(list, flag), [...args])
         .filter((arg) => arg !== "--renders-ask");
       stdout = await runOnce(withoutName, input);
-      if (stdout === null) {
-        unguarded();
-        return null;
-      }
+      if (stdout === null) return unjudged(`${magus} could not be run`);
     }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(stdout);
     } catch {
-      console.warn("[magus guard] verdict was not JSON; allowing");
-      return null;
+      return unjudged(`${magus} answered something that is not JSON`);
     }
-    if (!isEnvelope(parsed)) {
-      console.warn("[magus guard] unrecognized verdict shape; allowing");
-      return null;
-    }
+    if (!isEnvelope(parsed)) return unjudged(`${magus} answered an unrecognized verdict shape`);
     if (parsed.schema_version !== SUPPORTED_SCHEMA) {
-      console.warn(
-        `[magus guard] verdict schema ${parsed.schema_version} differs from the expected ` +
-          `${SUPPORTED_SCHEMA}; allowing. Update this plugin from the magus docs.`,
+      return unjudged(
+        `${magus} answered verdict schema ${parsed.schema_version}, not ${SUPPORTED_SCHEMA}; ` +
+          "update this plugin from the magus docs",
       );
-      return null;
     }
     return toVerdict(parsed);
   };
@@ -562,28 +617,46 @@ export const MagusGuard: Plugin = async (ctx) => {
     });
 
   /**
-   * Throws on a deny, which is OpenCode's only way to stop a call, and on an ask that
-   * OpenCode's own prompt will not reach. Returns an advise's context for the caller to
-   * hold until the call lands, and "" for everything else.
+   * Judges a verdict without throwing: a block carries the reason the model reads, an allow
+   * carries an advise's context for the caller to hold until the call lands, "" otherwise.
    */
-  const apply = (verdict: Verdict | null, promptable: boolean): string => {
-    if (verdict === null) return "";
+  const decide = (verdict: Verdict | Unjudged, promptable: boolean): Decided => {
     switch (verdict.decision) {
+      case "unjudged":
+        return { block: true, reason: `[magus guard] ${verdict.why}; refused.\n${MAGUS_FIX}` };
       case "deny":
-        throw new Error(`[magus guard] ${verdict.reason}`);
+        return { block: true, reason: `[magus guard] ${verdict.reason}` };
       case "ask":
-        if (promptable) return "";
-        throw new Error(
-          `[magus guard] ${verdict.reason}\n\nThis call needs the approval of the person you work for, ` +
+        if (promptable) return { block: false, context: "" };
+        return {
+          block: true,
+          reason:
+            `[magus guard] ${verdict.reason}\n\nThis call needs the approval of the person you work for, ` +
             "and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push, or a plain magus run of a human-only target, reaches the prompt " +
             'its own "permission.bash" entries configure, which magus describe harness opencode prints. ' +
-            "Ask them to run it from their own terminal.",
-        );
+            "Ask them to run it from their own terminal. If they saw no such message, relay this one to them verbatim.",
+        };
       case "advise":
-        return verdict.context;
+        return { block: false, context: verdict.context };
       case "pass":
-        return "";
+        return { block: false, context: "" };
     }
+    const exhausted: never = verdict;
+    return exhausted;
+  };
+
+  /**
+   * The one place this file throws: tool.execute.before returns Promise<void> and takes only
+   * `args` to mutate, so a rejection is the only way to stop a call. Returns an advise's
+   * context, or "" when there is none.
+   */
+  const apply = (verdict: Verdict | Unjudged, promptable: boolean): string => {
+    const decided = decide(verdict, promptable);
+    if (decided.block) {
+      // platform contract: opencode tool.execute.before
+      throw new Error(decided.reason);
+    }
+    return decided.context;
   };
 
   /** Holds an advisory for the call it judged, so tool.execute.after can deliver it. */
@@ -631,10 +704,13 @@ export const MagusGuard: Plugin = async (ctx) => {
     if (script === null) return;
     const reply = await lastReply(id);
     if (reply === "") return;
-    const stdout = await runOnce(
+    const ran = await runCaptured(
       ["buzz", "-s", script, "--", "--agent-name", "opencode"],
       JSON.stringify({ last_assistant_message: reply, stop_hook_active: false }),
     );
+    // The script's stderr says it judged nothing; it holds that to once.
+    if (ran !== null && ran.stderr.trim() !== "") await notify(ran.stderr.trim());
+    const stdout = ran?.stdout ?? null;
     let prompt: unknown;
     try {
       prompt = JSON.parse(stdout ?? "").prompt;
@@ -651,6 +727,151 @@ export const MagusGuard: Plugin = async (ctx) => {
     } catch (error) {
       followUps.delete(id);
       console.warn(`[magus guard] could not send the reply check back: ${String(error)}`);
+    }
+  };
+
+  /**
+   * Runs the rate-limited disk hook the other hosts wire to their prompt event. It
+   * returns at once on most turns; past disk.sample_every it samples free space and may
+   * start one reclaim chunk detached. Its line, when it says one, is held for the next
+   * tool result.
+   */
+  const sampleDisk = async (): Promise<void> => {
+    const said = await runOnce(
+      ["buzz", "-C", ctx.directory, "-s", RECLAIM_DISK_SCRIPT, "--", "--agent-name", "opencode"],
+      JSON.stringify({ cwd: ctx.directory }),
+    );
+    if (said !== null && said.trim() !== "") diskNote = said.trim();
+  };
+
+  /** Runs one glue script the other hosts wire as a hook, handing it event. */
+  const runGlue = (script: string, event: unknown): Promise<string | null> =>
+    runOnce(
+      ["buzz", "-C", ctx.directory, "-s", script, "--", "--agent-name", "opencode"],
+      JSON.stringify(event),
+    );
+
+  /** Records the path a read reached. It judges nothing and prints nothing. */
+  const observe = async (who: Who, path: string): Promise<void> => {
+    await runGlue(OBSERVE_SCRIPT, {
+      session_id: who.session,
+      tool_input: { file_path: path },
+      cwd: ctx.directory,
+    });
+  };
+
+  /** The reason a written .buzz file fails its check, or "" when it passes. */
+  const buzzCheck = async (tool: string, args: unknown): Promise<string> => {
+    const path = argString(args, ["filePath", "file_path", "path"]);
+    const patch = argString(args, ["patchText"]);
+    const touches = path !== "" ? path.endsWith(".buzz") : patch.includes(".buzz");
+    if (!touches) return "";
+    const input = path !== "" ? { file_path: path } : { patch };
+    const said = await runGlue(BUZZ_CHECK_SCRIPT, {
+      tool_name: tool,
+      tool_input: input,
+      cwd: ctx.directory,
+    });
+    try {
+      const reply = JSON.parse(said ?? "") as { decision?: unknown; reason?: unknown };
+      if (reply.decision === "block" && typeof reply.reason === "string") return reply.reason;
+    } catch {
+      // A pass prints nothing.
+    }
+    return "";
+  };
+
+  /** Holds a new root session's brief for the next tool result. */
+  const holdBrief = async (): Promise<void> => {
+    const said = await runOnce(["session", "--brief"], "");
+    const brief = said?.trim() ?? "";
+    if (brief === "") return;
+    if (brief.length > SESSION_BRIEF_MAX_BYTES) {
+      console.warn(
+        `[magus guard] session --brief was ${brief.length} bytes, over ` +
+          `${SESSION_BRIEF_MAX_BYTES}; dropping it`,
+      );
+      return;
+    }
+    briefNote = brief;
+  };
+
+  /**
+   * Answers a root session's stop. A follow-up prompt is how a plugin keeps a
+   * session working, so a deny goes back as one. True when one was sent.
+   */
+  const guardStop = async (id: string, followed: boolean): Promise<boolean> => {
+    const body = JSON.stringify({
+      hook_event_name: "Stop",
+      session_id: id,
+      stop_hook_active: followed,
+      cwd: ctx.directory,
+    });
+    const verdict = await judge(shellArgs, body);
+    if (verdict.decision === "unjudged") {
+      console.warn(`[magus guard] ${verdict.why}\n${MAGUS_FIX}`);
+      return false;
+    }
+    if (verdict.decision === "advise") {
+      console.warn(`[magus guard] ${verdict.context}`);
+      return false;
+    }
+    if (verdict.decision !== "deny") return false;
+    const prompt = `[magus guard] ${verdict.reason}`;
+    followUps.set(id, prompt);
+    try {
+      await ctx.client.session.promptAsync({
+        path: { id },
+        body: { parts: [{ type: "text", text: prompt }] },
+      });
+      return true;
+    } catch (error) {
+      followUps.delete(id);
+      console.warn(`[magus guard] could not send the stop refusal back: ${String(error)}`);
+      return false;
+    }
+  };
+
+  // Children of a backgrounded task, each true once a refusal was sent
+  // to it. Their task call returns at once, so a child's idle ends it.
+  const background = new Map<string, boolean>();
+
+  /**
+   * Asks the guard about a subagent's end: a deny's reason, else "".
+   * An advise goes to the console, since no reply can carry it.
+   */
+  const guardSubagentStop = async (who: Who, child: string, followed = false): Promise<string> => {
+    const body = JSON.stringify({
+      hook_event_name: "SubagentStop",
+      session_id: who.session,
+      agent_id: child,
+      stop_hook_active: followed,
+      cwd: ctx.directory,
+    });
+    const verdict = await judge(shellArgs, body);
+    if (verdict.decision === "unjudged") console.warn(`[magus guard] ${verdict.why}\n${MAGUS_FIX}`);
+    if (verdict.decision === "advise") console.warn(`[magus guard] ${verdict.context}`);
+    return verdict.decision === "deny" ? verdict.reason : "";
+  };
+
+  /**
+   * A backgrounded child went idle. A deny is prompted back to the
+   * child, which resumes it as a refused stop does elsewhere.
+   */
+  const backgroundChildIdle = async (child: string): Promise<void> => {
+    const reason = await guardSubagentStop(await whoIs(child), child, background.get(child));
+    if (reason === "") {
+      background.delete(child);
+      return;
+    }
+    background.set(child, true);
+    try {
+      await ctx.client.session.promptAsync({
+        path: { id: child },
+        body: { parts: [{ type: "text", text: `[magus guard] ${reason}` }] },
+      });
+    } catch (error) {
+      console.warn(`[magus guard] could not send the subagent stop refusal back: ${String(error)}`);
     }
   };
 
@@ -707,6 +928,7 @@ export const MagusGuard: Plugin = async (ctx) => {
       // call no rule can read (unjudged-tool) rather than letting it run unseen. OpenCode
       // spells a file filePath; magus reads file_path.
       const filePath = argString(output.args, ["filePath"]);
+      if (input.tool === "read" && filePath !== "") await observe(who, filePath);
       const args =
         filePath === ""
           ? output.args
@@ -753,7 +975,7 @@ export const MagusGuard: Plugin = async (ctx) => {
       const key = promptKey(command);
       if (key === null || !asksBefore(loadedConfig, key)) return;
       const verdict = await judge(inThread(shellArgs, await whoIs(input.sessionID)), command);
-      switch (verdict?.decision) {
+      switch (verdict.decision) {
         case "pass":
         case "advise":
           output.status = "allow";
@@ -764,6 +986,8 @@ export const MagusGuard: Plugin = async (ctx) => {
         case "deny":
           output.status = "deny";
           return;
+        case "unjudged":
+          return;
       }
     },
 
@@ -771,6 +995,12 @@ export const MagusGuard: Plugin = async (ctx) => {
       // The hook types a result as text, but an MCP result carries `content` parts and no
       // `output`: a string set there is dropped, a part pushed there reaches the model.
       const result = output as { output?: string; content?: unknown; metadata?: unknown };
+      if (briefNote !== null && appendNote(result, briefNote)) briefNote = null;
+      if (diskNote !== null && appendNote(result, `[magus disk] ${diskNote}`)) diskNote = null;
+      if (WRITE_TOOLS.includes(input.tool)) {
+        const failed = await buzzCheck(input.tool, input.args);
+        if (failed !== "") appendNote(result, `[magus buzz check] ${failed}`);
+      }
       const held = pending.get(input.callID);
       if (held !== undefined) {
         pending.delete(input.callID);
@@ -790,7 +1020,8 @@ export const MagusGuard: Plugin = async (ctx) => {
       // The finished spawn names the child, which is how magus ties the child's calls to
       // the job it was spawned for. The child's session is already known to be this one's.
       if (input.tool !== "task") return;
-      const child = (result.metadata as { sessionId?: unknown } | undefined)?.sessionId;
+      const metadata = result.metadata as { sessionId?: unknown; background?: unknown } | undefined;
+      const child = metadata?.sessionId;
       if (typeof child !== "string" || child === "") return;
       parents.set(child, input.sessionID);
       const who = await whoIs(input.sessionID);
@@ -798,6 +1029,18 @@ export const MagusGuard: Plugin = async (ctx) => {
         shellArgs,
         envelope("PostToolUse", who, input.tool, input.args, { agent_id: child }),
       );
+
+      // A foreground task returns when its child finishes: this is the
+      // child's stop. A deny rides the parent's result, with the task_id
+      // that resumes the child.
+      if (metadata?.background === true) {
+        background.set(child, false);
+        return;
+      }
+      const reason = await guardSubagentStop(who, child);
+      if (reason !== "") {
+        appendNote(result, `[magus guard] ${reason}\n\nResume the subagent with task_id ${child}.`);
+      }
     },
 
     // NO experimental.session.compacting handler, deliberately, and this comment is the
@@ -819,14 +1062,19 @@ export const MagusGuard: Plugin = async (ctx) => {
     // can reason about, and magus's job is to stay out of the model's way rather than to
     // shape what it remembers on whichever host happens to allow it.
     //
-    // The cost is real and is accepted: the session.compacted event fires after a
-    // compaction, but the bus is read-only and this plugin does not subscribe to it, so a
-    // compacted OpenCode session gets no brief. It can still ask, and `magus session --brief`
-    // prints the same state on demand, which is the command every host shares.
+    // A compacted root still gets the brief, as on Cursor. session.compacted
+    // fires once the summary is written. The brief rides the next tool
+    // result, after the summary.
 
     event: async ({ event }) => {
       if (event.type === "session.created" || event.type === "session.updated") {
-        parents.set(event.properties.info.id, event.properties.info.parentID ?? null);
+        const parent = event.properties.info.parentID ?? null;
+        parents.set(event.properties.info.id, parent);
+        if (event.type === "session.created" && parent === null) await holdBrief();
+        return;
+      }
+      if (event.type === "session.compacted") {
+        if ((await parentOf(event.properties.sessionID)) === null) await holdBrief();
         return;
       }
       if (event.type !== "session.idle") return;
@@ -834,12 +1082,20 @@ export const MagusGuard: Plugin = async (ctx) => {
       // A subagent goes idle too, once per spawn. Its work is reported by the spawn that
       // finished, and a checkpoint or a reply check per child would drown the root's.
       const id = event.properties.sessionID;
+      if (background.has(id)) {
+        await backgroundChildIdle(id);
+        return;
+      }
       if ((await parentOf(id)) !== null) return;
 
       // OpenCode has no session-end event; session.idle is the proxy. The checkpoint
       // records where the work stands so whoever comes back reads `magus session`
       // rather than reconstructing it. It judges nothing and its output is ignored.
+      // Read before checkReply consumes it: this idle ends a turn we prompted.
+      const followed = followUps.has(id);
       await runOnce(["session", "checkpoint", "--agent-name", "opencode"], "");
+      await sampleDisk();
+      if (await guardStop(id, followed)) return;
       await checkReply(id);
     },
   };
