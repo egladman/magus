@@ -67,67 +67,126 @@ final POD_TEMPLATES: {str: [str]} = {
 // build reads the kustomization in dir and returns the objects `kustomize build dir` would
 // emit, in the same order of transformers. A field, directive or source it does not read
 // raises naming it, never builds something kustomize would not.
-export fun build(dir: str) > [Resource] !> any {
-    final file = kustomizationFile(dir);
-    final k = (yaml\parse(fs\readFile(file)) as? {str: any}) ?? {<str: any>};
-    foreach (key, value in k) {
-        if (KNOWN_FIELDS.indexOf(key) == null) {
-            throw "{file}: field \"{key}\" is not read by libs/kustomize; drop it or teach the reader";
-        }
+export fun build(dir: str) > [Resource] !> any { //nolint:no-throw // callers catch the refusal that names the field
+    final r = built(dir);
+    if (r.error -> e) {
+        throw e; //nolint:no-throw // callers catch the refusal that names the field
     }
-    var objects = mut [<Resource>];
-    foreach (entry in strings(k["resources"]) + strings(k["bases"])) {
-        foreach (r in load(dir, entry: entry, file: file)) {
-            objects.append(r);
-        }
-    }
-    final genOptions = (k["generatorOptions"] as? {str: any}) ?? {<str: any>};
-    foreach (g in maps(k["configMapGenerator"])) {
-        objects.append(generate(dir, entry: g, kind: "ConfigMap", options: genOptions, file: file));
-    }
-    foreach (g in maps(k["secretGenerator"])) {
-        objects.append(generate(dir, entry: g, kind: "Secret", options: genOptions, file: file));
-    }
-    unique(objects);
+    return r.value!;
+}
 
-    var built: [Resource] = objects;
-    foreach (i, p in patchList(dir, k: k, field: "patchesStrategicMerge", file: file)) {
-        built = applyPatch(built, patch: p);
-    }
-    foreach (p in patchList(dir, k: k, field: "patches", file: file)) {
-        built = applyPatch(built, patch: p);
-    }
-    final ns = text(k["namespace"]);
-    if (ns != "") {
-        built = built.map(fun (i: int, r: Resource) > Resource => withNamespace(r, ns: ns));
-    }
-    built = renamed(built, prefix: text(k["namePrefix"]), suffix: text(k["nameSuffix"]));
-    foreach (set in maps(k["labels"])) {
-        final pairs = (set["pairs"] as? {str: any}) ?? {<str: any>};
-        final selectors = (set["includeSelectors"] as? bool) ?? false;
-        final templates = (set["includeTemplates"] as? bool) ?? false;
-        if (set.hasKey("fields")) {
-            throw "{file}: labels[].fields is not read by libs/kustomize";
+object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
+fun built(dir: str) > Result::<[Resource]> {
+    try {
+        final found = kustomizationFile(dir);
+        if (found.error -> e) {
+            return Result::<[Resource]>{ error = e };
         }
-        built = built.map(fun (i: int, r: Resource) > Resource => labeled(r, pairs: pairs, selectors: selectors, templates: selectors or templates));
+        final file = found.value!;
+        final k = (yaml\parse(fs\readFile(file)) as? {str: any}) ?? {<str: any>};
+        foreach (key, value in k) {
+            if (KNOWN_FIELDS.indexOf(key) == null) {
+                return Result::<[Resource]>{ error = "{file}: field \"{key}\" is not read by libs/kustomize; drop it or teach the reader" };
+            }
+        }
+        var objects = mut [<Resource>];
+        foreach (entry in strings(k["resources"]) + strings(k["bases"])) {
+            final loaded = load(dir, entry: entry, file: file);
+            if (loaded.error -> e) {
+                return Result::<[Resource]>{ error = e };
+            }
+            foreach (r in loaded.value!) {
+                objects.append(r);
+            }
+        }
+        final genOptions = (k["generatorOptions"] as? {str: any}) ?? {<str: any>};
+        foreach (g in maps(k["configMapGenerator"])) {
+            final made = generate(dir, entry: g, kind: "ConfigMap", options: genOptions, file: file);
+            if (made.error -> e) {
+                return Result::<[Resource]>{ error = e };
+            }
+            objects.append(made.value!);
+        }
+        foreach (g in maps(k["secretGenerator"])) {
+            final made = generate(dir, entry: g, kind: "Secret", options: genOptions, file: file);
+            if (made.error -> e) {
+                return Result::<[Resource]>{ error = e };
+            }
+            objects.append(made.value!);
+        }
+        if (duplicate(objects) -> twice) {
+            return Result::<[Resource]>{ error = twice };
+        }
+
+        var stack: [Resource] = objects;
+        final merges = patchList(dir, k: k, field: "patchesStrategicMerge", file: file);
+        if (merges.error -> e) {
+            return Result::<[Resource]>{ error = e };
+        }
+        foreach (p in merges.value!) {
+            final applied = applyPatch(stack, patch: p);
+            if (applied.error -> e) {
+                return Result::<[Resource]>{ error = e };
+            }
+            stack = applied.value!;
+        }
+        final plain = patchList(dir, k: k, field: "patches", file: file);
+        if (plain.error -> e) {
+            return Result::<[Resource]>{ error = e };
+        }
+        foreach (p in plain.value!) {
+            final applied = applyPatch(stack, patch: p);
+            if (applied.error -> e) {
+                return Result::<[Resource]>{ error = e };
+            }
+            stack = applied.value!;
+        }
+        final ns = text(k["namespace"]);
+        if (ns != "") {
+            stack = stack.map(fun (i: int, r: Resource) > Resource => withNamespace(r, ns: ns));
+        }
+        stack = renamed(stack, prefix: text(k["namePrefix"]), suffix: text(k["nameSuffix"]));
+        foreach (set in maps(k["labels"])) {
+            final pairs = (set["pairs"] as? {str: any}) ?? {<str: any>};
+            final selectors = (set["includeSelectors"] as? bool) ?? false;
+            final templates = (set["includeTemplates"] as? bool) ?? false;
+            if (set.hasKey("fields")) {
+                return Result::<[Resource]>{ error = "{file}: labels[].fields is not read by libs/kustomize" };
+            }
+            stack = stack.map(fun (i: int, r: Resource) > Resource => labeled(r, pairs: pairs, selectors: selectors, templates: selectors or templates));
+        }
+        if (k["commonLabels"] as? {str: any} -> common) {
+            stack = stack.map(fun (i: int, r: Resource) > Resource => labeled(r, pairs: common, selectors: true, templates: true));
+        }
+        if (k["commonAnnotations"] as? {str: any} -> notes) {
+            stack = stack.map(fun (i: int, r: Resource) > Resource => annotated(r, pairs: notes));
+        }
+        final jsonPatches = patchList(dir, k: k, field: "patchesJson6902", file: file);
+        if (jsonPatches.error -> e) {
+            return Result::<[Resource]>{ error = e };
+        }
+        foreach (p in jsonPatches.value!) {
+            final applied = applyPatch(stack, patch: p);
+            if (applied.error -> e) {
+                return Result::<[Resource]>{ error = e };
+            }
+            stack = applied.value!;
+        }
+        foreach (image in maps(k["images"])) {
+            stack = stack.map(fun (i: int, r: Resource) > Resource => retagged(r, image: image));
+        }
+        return Result::<[Resource]>{ value = stack };
+    } catch (err: any) {
+        return Result::<[Resource]>{ error = "{err}" };
     }
-    if (k["commonLabels"] as? {str: any} -> common) {
-        built = built.map(fun (i: int, r: Resource) > Resource => labeled(r, pairs: common, selectors: true, templates: true));
-    }
-    if (k["commonAnnotations"] as? {str: any} -> notes) {
-        built = built.map(fun (i: int, r: Resource) > Resource => annotated(r, pairs: notes));
-    }
-    foreach (p in patchList(dir, k: k, field: "patchesJson6902", file: file)) {
-        built = applyPatch(built, patch: p);
-    }
-    foreach (image in maps(k["images"])) {
-        built = built.map(fun (i: int, r: Resource) > Resource !> any => retagged(r, image: image));
-    }
-    return built;
 }
 
 // manifests is the build as one multi-document YAML stream, for kubeconform.
-export fun manifests(objects: [Resource]) > str !> any {
+export fun manifests(objects: [Resource]) > str !> any { //nolint:no-throw // callers catch a stringify failure
     final docs = mut [<str>];
     foreach (r in objects) {
         docs.append(yaml\stringify(r.doc));
@@ -135,107 +194,128 @@ export fun manifests(objects: [Resource]) > str !> any {
     return docs.join("---\n");
 }
 
-fun kustomizationFile(dir: str) > str !> any {
-    foreach (name in KUSTOMIZATION_FILES) {
-        final candidate = fs\join(dir, name);
-        if (fs\isFile(candidate)) {
-            return candidate;
+fun kustomizationFile(dir: str) > Result::<str> {
+    try {
+        foreach (name in KUSTOMIZATION_FILES) {
+            final candidate = fs\join(dir, name);
+            if (fs\isFile(candidate)) {
+                return Result::<str>{ value = candidate };
+            }
         }
+    } catch (err: any) {
+        return Result::<str>{ error = "{err}" };
     }
-    throw "{dir}: no kustomization.yaml";
+    return Result::<str>{ error = "{dir}: no kustomization.yaml" };
 }
 
 // load reads one resources entry: a directory is a nested kustomization, a file holds one
 // or more objects.
-fun load(dir: str, entry: str, file: str) > [Resource] !> any {
+fun load(dir: str, entry: str, file: str) > Result::<[Resource]> {
     if (entry.indexOf("://") != null or entry.startsWith("github.com/")) {
-        throw "{file}: remote resource \"{entry}\" is not read by libs/kustomize";
+        return Result::<[Resource]>{ error = "{file}: remote resource \"{entry}\" is not read by libs/kustomize" };
     }
-    final path = fs\join(dir, entry);
-    if (fs\isDir(path)) {
-        return build(path);
-    }
-    final objects = mut [<Resource>];
-    foreach (doc in documents(fs\readFile(path), origin: path)) {
-        final m = doc as? {str: any};
-        if (m == null) {
-            throw "{path}: a document is not a mapping";
+    try {
+        final path = fs\join(dir, entry);
+        if (fs\isDir(path)) {
+            return built(path);
         }
-        final r = Resource{ doc = m!, origin = path };
-        if (r.kind() == "" or r.name() == "") {
-            throw "{path}: an object without kind or metadata.name";
+        final objects = mut [<Resource>];
+        final docs = documents(fs\readFile(path), origin: path);
+        if (docs.error -> e) {
+            return Result::<[Resource]>{ error = e };
         }
-        objects.append(Resource{ doc = m!, origin = path, names = [r.name()] });
+        foreach (doc in docs.value!) {
+            final m = doc as? {str: any};
+            if (m == null) {
+                return Result::<[Resource]>{ error = "{path}: a document is not a mapping" };
+            }
+            final r = Resource{ doc = m!, origin = path };
+            if (r.kind() == "" or r.name() == "") {
+                return Result::<[Resource]>{ error = "{path}: an object without kind or metadata.name" };
+            }
+            objects.append(Resource{ doc = m!, origin = path, names = [r.name()] });
+        }
+        return Result::<[Resource]>{ value = objects };
+    } catch (err: any) {
+        return Result::<[Resource]>{ error = "{err}" };
     }
-    return objects;
 }
 
 // documents splits a YAML stream on its `---` lines; yaml\parse reads one document.
-fun documents(source: str, origin: str) > [any] !> any {
+fun documents(source: str, origin: str) > Result::<[any]> {
     final docs = mut [<any>];
     final chunk = mut [<str>];
-    foreach (line in source.split("\n") + ["---"]) {
-        if (line.trim() == "---" or line.startsWith("--- ")) {
-            final body = chunk.join("\n");
-            if (body.trim() != "") {
-                final doc = yaml\parse(body);
-                if (doc != null) {
-                    docs.append(doc);
+    try {
+        foreach (line in source.split("\n") + ["---"]) {
+            if (line.trim() == "---" or line.startsWith("--- ")) {
+                final body = chunk.join("\n");
+                if (body.trim() != "") {
+                    final doc = yaml\parse(body);
+                    if (doc != null) {
+                        docs.append(doc);
+                    }
                 }
+                while (chunk.len() > 0) {
+                    chunk.pop();
+                }
+                continue;
             }
-            while (chunk.len() > 0) {
-                chunk.pop();
-            }
-            continue;
+            chunk.append(line);
         }
-        chunk.append(line);
+    } catch (err: any) {
+        return Result::<[any]>{ error = "{err}" };
     }
-    return docs;
+    return Result::<[any]>{ value = docs };
 }
 
 test "documents splits a stream and skips empty ones" {
-    final docs = documents("---\na: 1\n---\n\n---\nb: 2\n", origin: "t") catch [<any>];
+    final docs = documents("---\na: 1\n---\n\n---\nb: 2\n", origin: "t").value ?? [<any>];
     std\assert(docs.len() == 2, message: "two documents, got {docs.len()}");
 }
 
-fun unique(objects: [Resource]) > void !> any {
+fun duplicate(objects: [Resource]) > str? {
     final seen = mut {<str: str>};
     foreach (r in objects) {
         if (seen[r.id()] -> first) {
-            throw "{r.origin}: {r.id()} is also defined in {first}";
+            return "{r.origin}: {r.id()} is also defined in {first}";
         }
         seen[r.id()] = r.origin;
     }
+    return null;
 }
 
 // generate builds a ConfigMap or Secret from a generator entry. The name carries no hash.
-fun generate(dir: str, entry: {str: any}, kind: str, options: {str: any}, file: str) > Resource !> any {
+fun generate(dir: str, entry: {str: any}, kind: str, options: {str: any}, file: str) > Result::<Resource> {
     final name = text(entry["name"]);
     if (name == "") {
-        throw "{file}: a {kind} generator has no name";
+        return Result::<Resource>{ error = "{file}: a {kind} generator has no name" };
     }
     final behavior = text(entry["behavior"]);
     if (behavior != "" and behavior != "create") {
-        throw "{file}: generator {name}: behavior \"{behavior}\" is not read by libs/kustomize";
+        return Result::<Resource>{ error = "{file}: generator {name}: behavior \"{behavior}\" is not read by libs/kustomize" };
     }
     final data = mut {<str: any>};
     foreach (literal in strings(entry["literals"])) {
         final eq = literal.indexOf("=");
         if (eq == null) {
-            throw "{file}: generator {name}: literal \"{literal}\" has no =";
+            return Result::<Resource>{ error = "{file}: generator {name}: literal \"{literal}\" has no =" };
         }
         data[literal.sub(0, len: eq!)] = literal.sub(eq! + 1);
     }
-    foreach (source in strings(entry["files"])) {
-        final eq = source.indexOf("=");
-        final key = if (eq != null) source.sub(0, len: eq!) else fs\basename(source);
-        final rel = if (eq != null) source.sub(eq! + 1) else source;
-        data[key] = fs\readFile(fs\join(dir, rel));
-    }
-    foreach (envFile in strings(entry["envs"]) + strings(entry["env"])) {
-        foreach (key, value in env\parseDotenv(fs\readFile(fs\join(dir, envFile)))) {
-            data[key] = value;
+    try {
+        foreach (source in strings(entry["files"])) {
+            final eq = source.indexOf("=");
+            final key = if (eq != null) source.sub(0, len: eq!) else fs\basename(source);
+            final rel = if (eq != null) source.sub(eq! + 1) else source;
+            data[key] = fs\readFile(fs\join(dir, rel));
         }
+        foreach (envFile in strings(entry["envs"]) + strings(entry["env"])) {
+            foreach (key, value in env\parseDotenv(fs\readFile(fs\join(dir, envFile)))) {
+                data[key] = value;
+            }
+        }
+    } catch (err: any) {
+        return Result::<Resource>{ error = "{err}" };
     }
     final encoded = mut {<str: any>};
     foreach (key, value in data) {
@@ -263,7 +343,7 @@ fun generate(dir: str, entry: {str: any}, kind: str, options: {str: any}, file: 
     if (kind == "Secret") {
         doc["type"] = if (text(entry["type"]) != "") text(entry["type"]) else "Opaque";
     }
-    return Resource{ doc = doc, origin = "{file}: {kind} generator {name}", names = [name] };
+    return Result::<Resource>{ value = Resource{ doc = doc, origin = "{file}: {kind} generator {name}", names = [name] } };
 }
 
 // Patch is one patch to apply: ops for JSON6902, or a mapping to merge.
@@ -274,46 +354,54 @@ object Patch {
     merge: {str: any}? = null,
 }
 
-fun patchList(dir: str, k: {str: any}, field: str, file: str) > [Patch] !> any {
-    final built = mut [<Patch>];
-    foreach (i, entry in lists(k[field])) {
-        final origin = "{file}: {field}[{i}]";
-        var source = "";
-        var target: {str: any}? = null;
-        if (entry as? str -> pathOrInline) {
-            source = if (pathOrInline.indexOf("\n") != null) pathOrInline else fs\readFile(fs\join(dir, pathOrInline));
-        } else if (entry as? {str: any} -> m) {
-            target = m["target"] as? {str: any};
-            if (m["path"] as? str -> path) {
-                source = fs\readFile(fs\join(dir, path));
-            } else {
-                source = text(m["patch"]);
-            }
-            if (m.hasKey("options")) {
-                throw "{origin}: patch options are not read by libs/kustomize";
-            }
-        }
-        if (source.trim() == "") {
-            throw "{origin}: an empty patch";
-        }
-        foreach (doc in documents(source, origin: origin)) {
-            if (doc as? [any] -> ops) {
-                if (target == null) {
-                    throw "{origin}: a JSON6902 patch needs a target";
+fun patchList(dir: str, k: {str: any}, field: str, file: str) > Result::<[Patch]> {
+    final found = mut [<Patch>];
+    try {
+        foreach (i, entry in lists(k[field])) {
+            final origin = "{file}: {field}[{i}]";
+            var source = "";
+            var target: {str: any}? = null;
+            if (entry as? str -> pathOrInline) {
+                source = if (pathOrInline.indexOf("\n") != null) pathOrInline else fs\readFile(fs\join(dir, pathOrInline));
+            } else if (entry as? {str: any} -> m) {
+                target = m["target"] as? {str: any};
+                if (m["path"] as? str -> path) {
+                    source = fs\readFile(fs\join(dir, path));
+                } else {
+                    source = text(m["patch"]);
                 }
-                built.append(Patch{ origin = origin, target = target, ops = ops });
-            } else if (doc as? {str: any} -> m) {
-                built.append(Patch{ origin = origin, target = target, merge = m });
-            } else {
-                throw "{origin}: a patch is neither a list of operations nor a mapping";
+                if (m.hasKey("options")) {
+                    return Result::<[Patch]>{ error = "{origin}: patch options are not read by libs/kustomize" };
+                }
+            }
+            if (source.trim() == "") {
+                return Result::<[Patch]>{ error = "{origin}: an empty patch" };
+            }
+            final docs = documents(source, origin: origin);
+            if (docs.error -> e) {
+                return Result::<[Patch]>{ error = e };
+            }
+            foreach (doc in docs.value!) {
+                if (doc as? [any] -> ops) {
+                    if (target == null) {
+                        return Result::<[Patch]>{ error = "{origin}: a JSON6902 patch needs a target" };
+                    }
+                    found.append(Patch{ origin = origin, target = target, ops = ops });
+                } else if (doc as? {str: any} -> m) {
+                    found.append(Patch{ origin = origin, target = target, merge = m });
+                } else {
+                    return Result::<[Patch]>{ error = "{origin}: a patch is neither a list of operations nor a mapping" };
+                }
             }
         }
+    } catch (err: any) {
+        return Result::<[Patch]>{ error = "{err}" };
     }
-    return built;
+    return Result::<[Patch]>{ value = found };
 }
 
 // applyPatch applies p to every object its target selects; a patch selecting nothing raises.
-fun applyPatch(objects: [Resource], patch: Patch) > [Resource] !> any {
+fun applyPatch(objects: [Resource], patch: Patch) > Result::<[Resource]> {
     var target = patch.target;
     if (target == null) {
         final m = patch.merge!;
@@ -321,32 +409,42 @@ fun applyPatch(objects: [Resource], patch: Patch) > [Resource] !> any {
     }
     foreach (key, value in target!) {
         if (["group", "version", "kind", "name", "namespace"].indexOf(key) == null) {
-            throw "{patch.origin}: target.{key} is not read by libs/kustomize";
+            return Result::<[Resource]>{ error = "{patch.origin}: target.{key} is not read by libs/kustomize" };
         }
     }
     var hits = 0;
-    final built = mut [<Resource>];
+    final patched = mut [<Resource>];
     foreach (r in objects) {
         if (!selects(target!, r: r)) {
-            built.append(r);
+            patched.append(r);
             continue;
         }
         hits = hits + 1;
         var doc: {str: any} = r.doc;
         if (patch.ops -> ops) {
             foreach (op in ops) {
-                doc = applyOp(doc, op: op, origin: patch.origin);
+                final done = applyOp(doc, op: op, origin: patch.origin);
+                if (done.error -> e) {
+                    return Result::<[Resource]>{ error = e };
+                }
+                doc = done.value!;
             }
         } else {
-            refuseDrawn(r.kind(), patch: patch.merge!, origin: patch.origin);
-            doc = (mergeValue(doc, patch: patch.merge!, origin: patch.origin) as? {str: any})!;
+            if (refusedDrawn(r.kind(), patch: patch.merge!, origin: patch.origin) -> why) {
+                return Result::<[Resource]>{ error = why };
+            }
+            final merged = mergeValue(doc, patch: patch.merge!, origin: patch.origin);
+            if (merged.error -> e) {
+                return Result::<[Resource]>{ error = e };
+            }
+            doc = (merged.value as? {str: any})!;
         }
-        built.append(Resource{ doc = doc, origin = r.origin, names = r.names });
+        patched.append(Resource{ doc = doc, origin = r.origin, names = r.names });
     }
     if (hits == 0) {
-        throw "{patch.origin}: the target selects no object in the build";
+        return Result::<[Resource]>{ error = "{patch.origin}: the target selects no object in the build" };
     }
-    return built;
+    return Result::<[Resource]>{ value = patched };
 }
 
 fun selects(target: {str: any}, r: Resource) > bool {
@@ -398,7 +496,7 @@ fun drawnPaths(kind: str) > [[str]] {
     return paths;
 }
 
-fun refuseDrawn(kind: str, patch: {str: any}, origin: str) > void !> any {
+fun refusedDrawn(kind: str, patch: {str: any}, origin: str) > str? {
     final leaves = mut [<[str]>];
     collectLeaves(patch, at: [<str>], into: leaves);
     foreach (leaf in leaves) {
@@ -408,10 +506,11 @@ fun refuseDrawn(kind: str, patch: {str: any}, origin: str) > void !> any {
         }
         foreach (drawn in drawnPaths(kind)) {
             if (overlaps(leaf, drawn: drawn)) {
-                throw "{origin}: a strategic-merge patch sets {leaf.join("/")} on a {kind}, which the figure draws; write it as a JSON6902 patch";
+                return "{origin}: a strategic-merge patch sets {leaf.join("/")} on a {kind}, which the figure draws; write it as a JSON6902 patch";
             }
         }
     }
+    return null;
 }
 
 fun collectLeaves(value: any, at: [str], into: mut [[str]]) > void {
@@ -448,12 +547,7 @@ fun overlaps(leaf: [str], drawn: [str]) > bool {
 }
 
 fun refusal(kind: str, patch: {str: any}) > str {
-    try {
-        refuseDrawn(kind, patch: patch, origin: "p");
-    } catch (e: str) {
-        return e;
-    }
-    return "";
+    return refusedDrawn(kind, patch: patch, origin: "p") ?? "";
 }
 
 test "a strategic-merge patch on a drawn field is refused, a resources patch is not" {
@@ -466,21 +560,25 @@ test "a strategic-merge patch on a drawn field is refused, a resources patch is 
 // mergeValue is a strategic merge narrowed to what plain data can say: mappings merge
 // recursively, null deletes a key, a list of named mappings merges by name, any other list
 // is replaced. A $patch or $setElementOrder directive raises.
-fun mergeValue(base: any, patch: any, origin: str) > any !> any {
+fun mergeValue(base: any, patch: any, origin: str) > Result::<any> {
     if (patch as? {str: any} -> p) {
         final b = (base as? {str: any}) ?? {<str: any>};
         final next: mut {str: any} = b.cloneMutable();
         foreach (key, value in p) {
             if (key.startsWith("$")) {
-                throw "{origin}: the {key} directive is not read by libs/kustomize";
+                return Result::<any>{ error = "{origin}: the {key} directive is not read by libs/kustomize" };
             }
             if (value == null) {
                 next.remove(key);
             } else {
-                next[key] = mergeValue(b[key], patch: value, origin: origin);
+                final inner = mergeValue(b[key], patch: value, origin: origin);
+                if (inner.error -> e) {
+                    return inner;
+                }
+                next[key] = inner.value;
             }
         }
-        return next;
+        return Result::<any>{ value = next };
     }
     if (patch as? [any] -> items) {
         if (base as? [any] -> existing) {
@@ -491,7 +589,11 @@ fun mergeValue(base: any, patch: any, origin: str) > any !> any {
                     var found = false;
                     foreach (i, have in next) {
                         if (text((have as? {str: any})!["name"]) == name) {
-                            next[i] = mergeValue(have, patch: item, origin: origin);
+                            final inner = mergeValue(have, patch: item, origin: origin);
+                            if (inner.error -> e) {
+                                return inner;
+                            }
+                            next[i] = inner.value;
                             found = true;
                         }
                     }
@@ -499,11 +601,11 @@ fun mergeValue(base: any, patch: any, origin: str) > any !> any {
                         next.append(item);
                     }
                 }
-                return next;
+                return Result::<any>{ value = next };
             }
         }
     }
-    return patch;
+    return Result::<any>{ value = patch };
 }
 
 fun allNamed(items: [any]) > bool {
@@ -518,87 +620,126 @@ fun allNamed(items: [any]) > bool {
 
 test "a merge keeps siblings and merges named list items" {
     final base = {"a": 1, "list": [{"name": "x", "v": 1}, {"name": "y", "v": 2}]};
-    final built = mergeValue(base, patch: {"list": [{"name": "y", "v": 3}], "b": 2}, origin: "t") catch null;
+    final built = mergeValue(base, patch: {"list": [{"name": "y", "v": 3}], "b": 2}, origin: "t").value;
     std\assert(yaml\stringify(built) catch "" == yaml\stringify({"a": 1, "b": 2, "list": [{"name": "x", "v": 1}, {"name": "y", "v": 3}]}) catch "-", message: "merged: {built}");
 }
 
 // applyOp applies one RFC 6902 operation.
-fun applyOp(doc: {str: any}, op: any, origin: str) > {str: any} !> any {
+fun applyOp(doc: {str: any}, op: any, origin: str) > Result::<{str: any}> {
     final m = op as? {str: any};
     if (m == null) {
-        throw "{origin}: an operation is not a mapping";
+        return Result::<{str: any}>{ error = "{origin}: an operation is not a mapping" };
     }
     final kind = text(m!["op"]);
-    final path = pointer(text(m!["path"]), origin: origin);
+    final at = pointer(text(m!["path"]), origin: origin);
+    if (at.error -> e) {
+        return Result::<{str: any}>{ error = e };
+    }
+    final path = at.value!;
     var built: any = doc;
     if (kind == "add" or kind == "replace") {
         if (!m!.hasKey("value")) {
-            throw "{origin}: {kind} {m!["path"]} has no value";
+            return Result::<{str: any}>{ error = "{origin}: {kind} {m!["path"]} has no value" };
         }
-        built = edit(doc, segs: path, op: kind, value: m!["value"], origin: origin);
+        final edited = edit(doc, segs: path, op: kind, value: m!["value"], origin: origin);
+        if (edited.error -> e) {
+            return Result::<{str: any}>{ error = e };
+        }
+        built = edited.value;
     } else if (kind == "remove") {
-        built = edit(doc, segs: path, op: kind, value: null, origin: origin);
-    } else if (kind == "copy" or kind == "move") {
-        final source = pointer(text(m!["from"]), origin: origin);
-        final value = valueAt(doc, segs: source, origin: origin);
-        if (kind == "move") {
-            built = edit(built, segs: source, op: "remove", value: null, origin: origin);
+        final edited = edit(doc, segs: path, op: kind, value: null, origin: origin);
+        if (edited.error -> e) {
+            return Result::<{str: any}>{ error = e };
         }
-        built = edit(built, segs: path, op: "add", value: value, origin: origin);
+        built = edited.value;
+    } else if (kind == "copy" or kind == "move") {
+        final fromAt = pointer(text(m!["from"]), origin: origin);
+        if (fromAt.error -> e) {
+            return Result::<{str: any}>{ error = e };
+        }
+        final source = fromAt.value!;
+        final found = valueAt(doc, segs: source, origin: origin);
+        if (found.error -> e) {
+            return Result::<{str: any}>{ error = e };
+        }
+        if (kind == "move") {
+            final removed = edit(built, segs: source, op: "remove", value: null, origin: origin);
+            if (removed.error -> e) {
+                return Result::<{str: any}>{ error = e };
+            }
+            built = removed.value;
+        }
+        final added = edit(built, segs: path, op: "add", value: found.value, origin: origin);
+        if (added.error -> e) {
+            return Result::<{str: any}>{ error = e };
+        }
+        built = added.value;
     } else if (kind == "test") {
-        if (yaml\stringify(valueAt(doc, segs: path, origin: origin)) != yaml\stringify(m!["value"])) {
-            throw "{origin}: test {m!["path"]} failed";
+        final found = valueAt(doc, segs: path, origin: origin);
+        if (found.error -> e) {
+            return Result::<{str: any}>{ error = e };
+        }
+        try {
+            if (yaml\stringify(found.value) != yaml\stringify(m!["value"])) {
+                return Result::<{str: any}>{ error = "{origin}: test {m!["path"]} failed" };
+            }
+        } catch (err: any) {
+            return Result::<{str: any}>{ error = "{err}" };
         }
     } else {
-        throw "{origin}: unknown operation \"{kind}\"";
+        return Result::<{str: any}>{ error = "{origin}: unknown operation \"{kind}\"" };
     }
     final result = built as? {str: any};
     if (result == null) {
-        throw "{origin}: an operation replaced the whole object";
+        return Result::<{str: any}>{ error = "{origin}: an operation replaced the whole object" };
     }
-    return result!;
+    return Result::<{str: any}>{ value = result! };
 }
 
-fun pointer(path: str, origin: str) > [str] !> any {
+fun pointer(path: str, origin: str) > Result::<[str]> {
     if (!path.startsWith("/")) {
-        throw "{origin}: \"{path}\" is not a JSON pointer";
+        return Result::<[str]>{ error = "{origin}: \"{path}\" is not a JSON pointer" };
     }
     final segs = mut [<str>];
     foreach (raw in path.sub(1).split("/")) {
         segs.append(raw.replace("~1", with: "/").replace("~0", with: "~"));
     }
-    return segs;
+    return Result::<[str]>{ value = segs };
 }
 
-fun valueAt(doc: any, segs: [str], origin: str) > any !> any {
+fun valueAt(doc: any, segs: [str], origin: str) > Result::<any> {
     var cur = doc;
     foreach (seg in segs) {
         if (cur as? {str: any} -> m) {
             if (!m.hasKey(seg)) {
-                throw "{origin}: no value at {segs.join("/")}";
+                return Result::<any>{ error = "{origin}: no value at {segs.join("/")}" };
             }
             cur = m[seg];
         } else if (cur as? [any] -> items) {
-            cur = items[index(seg, len: items.len(), origin: origin)];
+            final i = index(seg, len: items.len(), origin: origin);
+            if (i.error -> e) {
+                return Result::<any>{ error = e };
+            }
+            cur = items[i.value!];
         } else {
-            throw "{origin}: no value at {segs.join("/")}";
+            return Result::<any>{ error = "{origin}: no value at {segs.join("/")}" };
         }
     }
-    return cur;
+    return Result::<any>{ value = cur };
 }
 
-fun index(seg: str, len: int, origin: str) > int !> any {
+fun index(seg: str, len: int, origin: str) > Result::<int> {
     final i = std\parseInt(seg);
     if (i == null or i! < 0 or i! >= len) {
-        throw "{origin}: index {seg} is out of range";
+        return Result::<int>{ error = "{origin}: index {seg} is out of range" };
     }
-    return i!;
+    return Result::<int>{ value = i! };
 }
 
 // edit returns doc with op applied at segs, copying each container on the way down.
-fun edit(doc: any, segs: [str], op: str, value: any, origin: str) > any !> any {
+fun edit(doc: any, segs: [str], op: str, value: any, origin: str) > Result::<any> {
     if (segs.len() == 0) {
-        throw "{origin}: an operation on the whole object";
+        return Result::<any>{ error = "{origin}: an operation on the whole object" };
     }
     final seg = segs[0];
     final last = segs.len() == 1;
@@ -606,37 +747,60 @@ fun edit(doc: any, segs: [str], op: str, value: any, origin: str) > any !> any {
         final next: mut {str: any} = m.cloneMutable();
         if (!last) {
             if (!m.hasKey(seg)) {
-                throw "{origin}: no value at {seg}";
+                return Result::<any>{ error = "{origin}: no value at {seg}" };
             }
-            next[seg] = edit(m[seg], segs: segs.sub(1), op: op, value: value, origin: origin);
+            final inner = edit(m[seg], segs: segs.sub(1), op: op, value: value, origin: origin);
+            if (inner.error -> e) {
+                return inner;
+            }
+            next[seg] = inner.value;
         } else if (op == "add") {
             next[seg] = value;
         } else if (!m.hasKey(seg)) {
-            throw "{origin}: {op} of {seg}, which is not there";
+            return Result::<any>{ error = "{origin}: {op} of {seg}, which is not there" };
         } else if (op == "replace") {
             next[seg] = value;
         } else {
             next.remove(seg);
         }
-        return next;
+        return Result::<any>{ value = next };
     }
     if (doc as? [any] -> items) {
         final next: mut [any] = items.cloneMutable();
         if (!last) {
-            final i = index(seg, len: items.len(), origin: origin);
-            next[i] = edit(items[i], segs: segs.sub(1), op: op, value: value, origin: origin);
+            final at = index(seg, len: items.len(), origin: origin);
+            if (at.error -> e) {
+                return Result::<any>{ error = e };
+            }
+            final inner = edit(items[at.value!], segs: segs.sub(1), op: op, value: value, origin: origin);
+            if (inner.error -> e) {
+                return inner;
+            }
+            next[at.value!] = inner.value;
         } else if (op == "add" and seg == "-") {
             next.append(value);
         } else if (op == "add") {
-            next.insert(index(seg, len: items.len() + 1, origin: origin), value: value);
+            final at = index(seg, len: items.len() + 1, origin: origin);
+            if (at.error -> e) {
+                return Result::<any>{ error = e };
+            }
+            next.insert(at.value!, value: value);
         } else if (op == "replace") {
-            next[index(seg, len: items.len(), origin: origin)] = value;
+            final at = index(seg, len: items.len(), origin: origin);
+            if (at.error -> e) {
+                return Result::<any>{ error = e };
+            }
+            next[at.value!] = value;
         } else {
-            next.remove(index(seg, len: items.len(), origin: origin));
+            final at = index(seg, len: items.len(), origin: origin);
+            if (at.error -> e) {
+                return Result::<any>{ error = e };
+            }
+            next.remove(at.value!);
         }
-        return next;
+        return Result::<any>{ value = next };
     }
-    throw "{origin}: {seg} is inside a scalar";
+    return Result::<any>{ error = "{origin}: {seg} is inside a scalar" };
 }
 
 test "JSON6902 add, replace, remove, move and test" {
@@ -651,12 +815,12 @@ test "JSON6902 add, replace, remove, move and test" {
     ];
     var built: {str: any} = doc;
     foreach (op in ops) {
-        built = applyOp(built, op: op, origin: "t") catch {<str: any>};
+        built = applyOp(built, op: op, origin: "t").value ?? {<str: any>};
     }
     final want = {"spec": {"list": ["x", "b", "z"], "count": 2}};
     std\assert(yaml\stringify(built) catch "" == yaml\stringify(want) catch "-", message: "got {built}");
-    final missing = applyOp(doc, op: {"op": "replace", "path": "/spec/nope", "value": 1}, origin: "t") catch {"failed": true};
-    std\assert(missing["failed"] != null, message: "replace of a missing key raises");
+    final missing = applyOp(doc, op: {"op": "replace", "path": "/spec/nope", "value": 1}, origin: "t");
+    std\assert(missing.error != null, message: "replace of a missing key is refused");
 }
 
 // withNamespace sets metadata.namespace; a Namespace object takes the namespace as its name,
@@ -670,7 +834,7 @@ fun withNamespace(r: Resource, ns: str) > Resource {
 
 // renamed applies namePrefix and nameSuffix, then points each pod template's references at
 // the new names. A Namespace keeps its name.
-fun renamed(objects: [Resource], prefix: str, suffix: str) > [Resource] !> any {
+fun renamed(objects: [Resource], prefix: str, suffix: str) > [Resource] {
     if (prefix == "" and suffix == "") {
         return objects;
     }
@@ -813,7 +977,7 @@ fun addPairs(doc: {str: any}, path: [str], pairs: {str: any}, create: bool) > {s
 }
 
 // retagged applies one images entry to every container whose image names it.
-fun retagged(r: Resource, image: {str: any}) > Resource !> any {
+fun retagged(r: Resource, image: {str: any}) > Resource {
     final template = POD_TEMPLATES[r.kind()];
     if (template == null) {
         return r;
@@ -902,7 +1066,7 @@ object Drawing {
 // no rules draws as the policy denying the workloads it selects. An object a pod names that
 // the build does not hold is drawn as outside it. Nothing here is a directory, so the
 // figure is unscoped.
-export fun figureOf(objects: [Resource], id: str, title: str, eyebrow: str = "", desc: str = "") > figure\Figure !> any {
+export fun figureOf(objects: [Resource], id: str, title: str, eyebrow: str = "", desc: str = "") > figure\Figure !> any { //nolint:no-throw // callers catch the refusal that names the policy
     final d = Drawing{ actors = mut {<str: figure\Actor>}, order = mut [<str>], edges = mut [<str>], looks = mut {<str: bool>} };
     final f = figure\of(id, title: title, eyebrow: eyebrow, desc: desc)
         .unscoped(why: "Kubernetes objects read from kustomize YAML, not directories: no package in the tree holds them");
@@ -960,7 +1124,9 @@ export fun figureOf(objects: [Resource], id: str, title: str, eyebrow: str = "",
         }
     }
     foreach (np in objects.filter(fun (i: int, r: Resource) > bool => r.kind() == "NetworkPolicy")) {
-        policy(d, f: f, np: np, workloads: workloads);
+        if (policy(d, f: f, np: np, workloads: workloads) -> refused) {
+            throw refused; //nolint:no-throw // callers catch the refusal that names the policy
+        }
     }
     final legend: {str: str} = {
         "focal": "workload", "plain": "object", "store": "claim", "input": "config or secret",
@@ -974,15 +1140,15 @@ export fun figureOf(objects: [Resource], id: str, title: str, eyebrow: str = "",
     return f;
 }
 
-fun policy(d: Drawing, f: mut figure\Figure, np: Resource, workloads: [Resource]) > void !> any {
+fun policy(d: Drawing, f: mut figure\Figure, np: Resource, workloads: [Resource]) > str? {
     final selector = (dig(np.doc, path: ["spec", "podSelector"]) as? {str: any}) ?? {<str: any>};
     if (selector.hasKey("matchExpressions")) {
-        throw "{np.origin}: podSelector.matchExpressions is not read by libs/kustomize";
+        return "{np.origin}: podSelector.matchExpressions is not read by libs/kustomize";
     }
     final want = (selector["matchLabels"] as? {str: any}) ?? {<str: any>};
     final selected = workloads.filter(fun (i: int, w: Resource) > bool => w.ns() == np.ns() and matches(want, labels: templateLabels(w)));
     if (selected.len() == 0) {
-        return;
+        return null;
     }
     final types = strings(dig(np.doc, path: ["spec", "policyTypes"]));
     final ways = if (types.len() > 0) types else ["Ingress"];
@@ -1003,7 +1169,11 @@ fun policy(d: Drawing, f: mut figure\Figure, np: Resource, workloads: [Resource]
                 ends.append(external(d, name: "anywhere", sub: "", look: figure\Look.external));
             }
             foreach (peer in peers) {
-                foreach (a in peerActors(d, f: f, peer: (peer as? {str: any}) ?? {<str: any>}, np: np, workloads: workloads)) {
+                final found = peerActors(d, f: f, peer: (peer as? {str: any}) ?? {<str: any>}, np: np, workloads: workloads);
+                if (found.error -> e) {
+                    return e;
+                }
+                foreach (a in found.value!) {
                     ends.append(a);
                 }
             }
@@ -1025,24 +1195,25 @@ fun policy(d: Drawing, f: mut figure\Figure, np: Resource, workloads: [Resource]
             flow(d, f: f, src: src, dst: actorNamed(d, r: w), label: label);
         }
     }
+    return null;
 }
 
-fun peerActors(d: Drawing, f: mut figure\Figure, peer: {str: any}, np: Resource, workloads: [Resource]) > [figure\Actor] !> any {
+fun peerActors(d: Drawing, f: mut figure\Figure, peer: {str: any}, np: Resource, workloads: [Resource]) > Result::<[figure\Actor]> {
     if (dig(peer, path: ["ipBlock", "cidr"]) as? str -> cidr) {
         final except = lists(dig(peer, path: ["ipBlock", "except"]));
         final sub = if (except.len() > 0) "except " + strings(except).join(", ") else "";
-        return [external(d, name: cidr, sub: sub, look: figure\Look.external)];
+        return Result::<[figure\Actor]>{ value = [external(d, name: cidr, sub: sub, look: figure\Look.external)] };
     }
     foreach (sel in ["podSelector", "namespaceSelector"]) {
         if (dig(peer, path: [sel, "matchExpressions"]) != null) {
-            throw "{np.origin}: {sel}.matchExpressions is not read by libs/kustomize";
+            return Result::<[figure\Actor]>{ error = "{np.origin}: {sel}.matchExpressions is not read by libs/kustomize" };
         }
     }
     final pods = (dig(peer, path: ["podSelector", "matchLabels"]) as? {str: any}) ?? {<str: any>};
     if (!peer.hasKey("namespaceSelector")) {
         final local = workloads.filter(fun (i: int, w: Resource) > bool => w.ns() == np.ns() and matches(pods, labels: templateLabels(w)));
         if (local.len() > 0) {
-            return local.map(fun (i: int, w: Resource) > figure\Actor => actorNamed(d, r: w));
+            return Result::<[figure\Actor]>{ value = local.map(fun (i: int, w: Resource) > figure\Actor => actorNamed(d, r: w)) };
         }
     }
     final nsLabels = (dig(peer, path: ["namespaceSelector", "matchLabels"]) as? {str: any}) ?? {<str: any>};
@@ -1052,7 +1223,7 @@ fun peerActors(d: Drawing, f: mut figure\Figure, peer: {str: any}, np: Resource,
         else if (nsLabels.len() == 0) "any namespace"
         else pairsText(nsLabels);
     final who = if (pods.len() == 0) "all pods" else pods.values().map(fun (i: int, v: any) > str => text(v)).join(",");
-    return [external(d, name: "{ns}/{who}", sub: pairsText(pods), look: figure\Look.external)];
+    return Result::<[figure\Actor]>{ value = [external(d, name: "{ns}/{who}", sub: pairsText(pods), look: figure\Look.external)] };
 }
 
 fun allowLabel(ports: [any]) > str {
@@ -1203,12 +1374,12 @@ fun maps(value: any) > [{str: any}] {
 // ---- tests over testdata and the committed overlay ----
 
 // An importer runs these tests from its own cwd, so paths hang off the root.
-fun testdataDir() > str !> any {
+fun testdataDir() > str !> any { //nolint:no-throw // a test helper; a raise fails the test
     return fs\join(vcs\root(), name: "libs/kustomize/testdata");
 }
 
 // staged copies testdata files into a fresh directory, kustomization first.
-fun staged(kustomization: str, files: [str]) > str !> any {
+fun staged(kustomization: str, files: [str]) > str !> any { //nolint:no-throw // a test helper; a raise fails the test
     final dir = fs\tempDir("kustomize-test-");
     fs\copyFile(fs\join(testdataDir(), name: kustomization), dst: fs\join(dir, name: "kustomization.yaml"));
     foreach (name in files) {
@@ -1217,28 +1388,27 @@ fun staged(kustomization: str, files: [str]) > str !> any {
     return dir;
 }
 
-fun named(objects: [Resource], kind: str) > Resource !> any {
+fun named(objects: [Resource], kind: str) > Resource? {
     foreach (r in objects) {
         if (r.kind() == kind) {
             return r;
         }
     }
-    throw "no {kind} in the build";
+    return null;
 }
 
 fun buildError(kustomization: str) > str {
     try {
-        _ = build(staged(kustomization, files: ["app.yaml"]));
+        return built(staged(kustomization, files: ["app.yaml"])).error ?? "";
     } catch (e: str) {
         return e;
     }
-    return "";
 }
 
 test "namespace, prefix, suffix and commonLabels match kustomize build" {
     final objects = build(staged("prefix-kustomization.yaml", files: ["app.yaml", "namespace.yaml"])) catch [<Resource>];
     std\assert(objects.len() == 8, message: "eight objects, got {objects.len()}");
-    final deploy = named(objects, kind: "Deployment") catch Resource{ doc = {<str: any>}, origin = "" };
+    final deploy = (named(objects, kind: "Deployment") ?? Resource{ doc = {<str: any>}, origin = "" });
     std\assert(deploy.name() == "x-app-v1" and deploy.ns() == "team", message: deploy.id());
     final spec = dig(deploy.doc, path: ["spec", "template", "spec"]);
     std\assert(text(dig(spec, path: ["serviceAccountName"])) == "x-app-v1", message: "service account repointed");
@@ -1247,7 +1417,7 @@ test "namespace, prefix, suffix and commonLabels match kustomize build" {
     std\assert(text(dig(volumes[1], path: ["secret", "secretName"])) == "creds", message: "a secret outside the build keeps its name");
     std\assert(text(dig(deploy.doc, path: ["spec", "replicas"])) == "3", message: "the JSON6902 patch matched the pre-prefix name");
     std\assert(text(dig(deploy.doc, path: ["spec", "selector", "matchLabels", "tier"])) == "back", message: "commonLabels reach selectors");
-    final ns = named(objects, kind: "Namespace") catch deploy;
+    final ns = (named(objects, kind: "Namespace") ?? deploy);
     std\assert(ns.name() == "team", message: "a Namespace takes the namespace as its name: {ns.name()}");
     final policy = objects.filter(fun (i: int, r: Resource) > bool => r.name() == "x-allow-web-v1");
     final peer = dig(lists(dig(lists(dig(policy[0].doc, path: ["spec", "ingress"]))[0], path: ["from"]))[0], path: ["podSelector", "matchLabels"]);
@@ -1270,7 +1440,7 @@ test "the dev overlay builds the paranoid base into magus-dev" {
     foreach (r in objects) {
         std\assert(r.kind() == "Namespace" or r.ns() == "magus-dev", message: "{r.id()} outside magus-dev");
     }
-    final deploy = named(objects, kind: "Deployment") catch objects[0];
+    final deploy = (named(objects, kind: "Deployment") ?? objects[0]);
     final pod = dig(deploy.doc, path: ["spec", "template", "spec"]);
     std\assert(dig(pod, path: ["automountServiceAccountToken"]) == false, message: "no token automount");
     std\assert(text(dig(pod, path: ["securityContext", "seccompProfile", "type"])) == "RuntimeDefault", message: "seccomp");
@@ -1278,11 +1448,11 @@ test "the dev overlay builds the paranoid base into magus-dev" {
     std\assert(dig(container, path: ["securityContext", "readOnlyRootFilesystem"]) == true, message: "read-only root");
     std\assert(text(lists(dig(container, path: ["securityContext", "capabilities", "drop"]))[0]) == "ALL", message: "drop ALL");
     std\assert(text(dig(container, path: ["imagePullPolicy"])) == "Always", message: "the overlay's JSON6902 patch");
-    final claim = named(objects, kind: "PersistentVolumeClaim") catch objects[0];
+    final claim = (named(objects, kind: "PersistentVolumeClaim") ?? objects[0]);
     std\assert(text(dig(claim.doc, path: ["spec", "resources", "requests", "storage"])) == "2Gi", message: "dev claim size");
 }
 
-fun edgeLabels(f: figure\Figure) > [str] !> any {
+fun edgeLabels(f: figure\Figure) > [str] !> any { //nolint:no-throw // a test helper; a raise fails the test
     final labels = mut [<str>];
     foreach (e in f.diagram().edges) {
         labels.append(e.label);
