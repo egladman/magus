@@ -225,8 +225,7 @@ func (u *ui) wireShare() {
 // wireDownload turns the file bar's Download button into a save of whatever is in
 // the editor. Nothing is uploaded and nothing is fetched: the click wraps the
 // textarea's value in a Blob, points a synthetic <a download> at an object URL for
-// it, and clicks that. Same property the Share button has - the snippet never
-// leaves the browser - reached the other way.
+// it, and clicks that. Like Share, the snippet never leaves the browser.
 //
 // Hidden rather than left inert where object URLs are missing, for wireShare's
 // reason: a button that cannot do its job should not be drawn.
