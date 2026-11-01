@@ -645,7 +645,7 @@ func refusal(runs []*ScoredRun) string {
 }
 
 func dataQuality(runs []*ScoredRun, c cellRuns, tasks, arms []string) DataQuality {
-	unpaired := []UnpairedTask{} // serialized; see runIDs
+	unpaired := []unpairedTask{} // serialized; see runIDs
 	for _, task := range tasks {
 		var missing []string
 		for _, arm := range []string{armFull, armRampant} {
@@ -654,7 +654,7 @@ func dataQuality(runs []*ScoredRun, c cellRuns, tasks, arms []string) DataQualit
 			}
 		}
 		if len(missing) > 0 {
-			unpaired = append(unpaired, UnpairedTask{Task: task, MissingArms: missing})
+			unpaired = append(unpaired, unpairedTask{Task: task, MissingArms: missing})
 		}
 	}
 	// How far the table sits from what the host reported, over the runs that

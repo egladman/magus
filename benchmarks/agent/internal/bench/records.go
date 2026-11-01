@@ -242,8 +242,8 @@ type controlCell struct {
 	Discriminates bool         `json:"discriminates"`
 }
 
-// UnpairedTask is a task one arm ran and another did not.
-type UnpairedTask struct {
+// unpairedTask is a task one arm ran and another did not.
+type unpairedTask struct {
 	Task        string   `json:"task"`
 	MissingArms []string `json:"missing_arms"`
 }
@@ -257,7 +257,7 @@ type DataQuality struct {
 	RunsWithoutCheck            []string       `json:"runs_without_check"`
 	RunsWithAssumedCacheTTL     []string       `json:"runs_with_assumed_cache_ttl"`
 	RunsWithInvariantViolations []string       `json:"runs_with_invariant_violations"`
-	UnpairedTasks               []UnpairedTask `json:"unpaired_tasks"`
+	UnpairedTasks               []unpairedTask `json:"unpaired_tasks"`
 }
 
 // Analysis is analysis.json. Cells are keyed arm/task, Comparisons by metric.

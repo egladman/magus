@@ -1234,11 +1234,8 @@ func FsTrimOldest(ctx context.Context, dir string, maxBytes int, keepWithinMs in
 // hourly. timeout bounds both walks; zero is none.
 func TrimOldest(ctx context.Context, dir string, maxBytes int64, keepWithin, timeout time.Duration, now time.Time) (types.TrimReport, error) {
 	report := types.TrimReport{Dir: dir}
-	if maxBytes < 0 {
-		return report, fmt.Errorf("trim %s: maxBytes is %d, and it takes 0 or more", dir, maxBytes)
-	}
-	if keepWithin < time.Hour || keepWithin%time.Hour != 0 {
-		return report, fmt.Errorf("trim %s: keepWithin is %s, and it takes a whole number of hours, at least one", dir, keepWithin)
+	if err := checkTrimBounds(dir, maxBytes, keepWithin); err != nil {
+		return report, err
 	}
 	if timeout > 0 {
 		var cancel context.CancelFunc
@@ -1284,6 +1281,16 @@ func TrimOldest(ctx context.Context, dir string, maxBytes int64, keepWithin, tim
 		report.Stopped = stopped
 	}
 	return report, err
+}
+
+func checkTrimBounds(dir string, maxBytes int64, keepWithin time.Duration) error {
+	if maxBytes < 0 {
+		return fmt.Errorf("trim %s: maxBytes is %d, and it takes 0 or more", dir, maxBytes)
+	}
+	if keepWithin < time.Hour || keepWithin%time.Hour != 0 {
+		return fmt.Errorf("trim %s: keepWithin is %s, and it takes a whole number of hours, at least one", dir, keepWithin)
+	}
+	return nil
 }
 
 // trimCutoff is the youngest age in hours whose files go. Every hour inside

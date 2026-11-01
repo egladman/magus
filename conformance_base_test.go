@@ -59,8 +59,7 @@ func (s *ConformanceBaseSuite) TestAProjectTheBaseLacksIsNamedAndNotIndexed() {
 
 	present, absent := s.plan.splitAbsent(tree)
 
-	s.Equal([]baseIndex{{project: "libs/old", language: "go"}}, present.indexes)
-	s.Equal(s.plan.external, present.external)
+	s.Equal(baseIndexPlan{indexes: []baseIndex{{project: "libs/old", language: "go"}}, external: s.plan.external}, present)
 	s.Equal([]types.ConformanceUnmeasured{{File: "libs/new", Language: "go", Reason: projectNewAtHead}}, absent)
 }
 

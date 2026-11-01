@@ -949,7 +949,7 @@ func (s *bindingsSuite) TestGoFmtFailsOnAnUnformattedFile() {
 
 func (s *bindingsSuite) TestGoFmtRwRewritesTheFileAndPasses() {
 	dir, err := s.goFmtRun(map[string]string{"b.go": goFmtDrift}, "rw")
-	s.NoError(err)
+	s.Require().NoError(err)
 	got, readErr := os.ReadFile(filepath.Join(dir, "b.go"))
 	s.Require().NoError(readErr)
 	s.Equal(goFmtClean, string(got))

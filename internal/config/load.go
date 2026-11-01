@@ -98,7 +98,7 @@ func LoadWithRoot(explicitPath, knownRoot string) (Config, error) {
 		wsRoot = findWorkspaceRoot()
 	}
 	if wsRoot != "" {
-		loaded, err := loadRepoDirInto(cfg, wsRoot)
+		loaded, err := loadRepositoryDirInto(cfg, wsRoot)
 		if err != nil {
 			return Config{}, err
 		}
@@ -109,7 +109,7 @@ func LoadWithRoot(explicitPath, knownRoot string) (Config, error) {
 	// another tree, such as the checkout a `--root` run was started from.
 	cwd, err := os.Getwd()
 	if err == nil && (wsRoot == "" || below(wsRoot, cwd)) {
-		loaded, err := loadRepoDirInto(cfg, cwd)
+		loaded, err := loadRepositoryDirInto(cfg, cwd)
 		if err != nil {
 			return Config{}, err
 		}
@@ -169,7 +169,7 @@ func LoadWorkspaceOnly(root string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return loadRepoDirInto(cfg, root)
+	return loadRepositoryDirInto(cfg, root)
 }
 
 // loadDirInto looks for magus.yaml or .magus.yaml in dir and, if found,
@@ -183,10 +183,10 @@ func loadDirInto(cfg Config, dir string) (Config, error) {
 	return loadFileInto(cfg, path)
 }
 
-// loadRepoDirInto is [loadDirInto] for a tier a repository can carry.
+// loadRepositoryDirInto is [loadDirInto] for a tier a repository can carry.
 // It refuses sources: committed, they rank every contributor's searches.
 // The user directory is exempt: a cwd inside it reads it as this tier.
-func loadRepoDirInto(cfg Config, dir string) (Config, error) {
+func loadRepositoryDirInto(cfg Config, dir string) (Config, error) {
 	path, err := configFileIn(dir)
 	if err != nil || path == "" {
 		return cfg, err

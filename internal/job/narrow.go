@@ -16,9 +16,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ReleaseRequestSource is the attention source of a request asking a job to release write
-// paths a refused fork needed. The guard reads it to advise the holder.
-const ReleaseRequestSource = "magus/job-release"
+// releaseRequestSource is the attention source of a request asking a job to release write
+// paths a refused fork needed.
+const releaseRequestSource = "magus/job-release"
 
 // projectConfig reports whether rel is a project's configuration this workspace loads: a
 // magusfile source or a magus.yaml among describe.WorkspaceLoadFiles, the set
@@ -179,7 +179,7 @@ func (s *Store) requestRelease(ctx context.Context, holder, file string, wanted,
 	open := sessions.AttentionOpen{
 		Outcome:  string(types.OutcomeWaiting),
 		Severity: string(types.SeverityWarning),
-		Source:   ReleaseRequestSource,
+		Source:   releaseRequestSource,
 		Where:    file,
 		Lease:    s.Actor().Lease,
 		Files:    files,
@@ -245,7 +245,7 @@ func (s *Store) CloseReleaseRequest(ctx context.Context, id string) error {
 // ReleaseRequestDisposed clears req off its holder's row in the repository at
 // root once a person disposed it. Any other kind of request is left alone.
 func ReleaseRequestDisposed(ctx context.Context, root string, req sessions.AttentionRequest) error {
-	if req.Source != ReleaseRequestSource {
+	if req.Source != releaseRequestSource {
 		return nil
 	}
 	base, err := xdg.StateDir()
