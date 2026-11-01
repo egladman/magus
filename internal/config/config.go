@@ -1166,11 +1166,10 @@ var envOnly = []cmdline.Env{
 	{Name: "MAGUS_DETACHED_REFRESH", Key: "", Default: "", Doc: "Set by magus on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh; never set it by hand"},
 }
 
-// DefaultShutdownGrace is shutdown_grace when nothing sets it. Long enough for most test
-// and build steps to finish; a supervisor that will not wait this long sends its own
-// second signal or SIGKILL, and runs outlive the broker anyway, re-asserting their claims
-// on the next one.
-const DefaultShutdownGrace = 5 * time.Minute
+// defaultShutdownGrace is shutdown_grace when nothing sets it. Long enough for
+// most test and build steps to finish. A supervisor that will not wait sends
+// its own second signal or SIGKILL. Runs outlive the broker anyway.
+const defaultShutdownGrace = 5 * time.Minute
 
 // Defaults returns a Config populated with the magus built-in defaults. It reads no
 // environment, so HistoryPath is empty; the loaders set it from [DefaultHistoryPath].
@@ -1187,7 +1186,7 @@ func Defaults() Config {
 				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},
 		},
-		ShutdownGrace: DefaultShutdownGrace,
+		ShutdownGrace: defaultShutdownGrace,
 		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
