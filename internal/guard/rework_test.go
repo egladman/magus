@@ -170,12 +170,11 @@ func (s *ContinueToExitedWorkerSuite) TestContinueToAnEndedWorkerAdvisesTheRoot(
 	s.Contains(v.Context, "job guard-facts is pass; fork a new job for more work")
 }
 
-func (s *ContinueToExitedWorkerSuite) TestASessionEndedRowAdvisesJobExec() {
-	got := handedBackAdvice(types.Job{ID: "guard-facts", State: types.StateNoReturn,
-		EndReason: types.EndReasonSessionEnded + " (claude-code)"})
-	s.Contains(got.Say, "job guard-facts ended with its worker's session")
-	s.Contains(got.Say, "job exec guard-facts")
-	s.NotContains(got.Say, "fork a new job")
+// A continued worker is still bound: no advice and no rework round.
+func (s *ContinueToExitedWorkerSuite) TestContinueToAStoppedWorkerSaysNothing() {
+	v := s.continueWorker(types.StateRunning)
+	s.NotContains(v.Context, "job guard-facts is")
+	s.Zero(s.f.rounds(s.T()))
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnOtherwiseEndedNoReturnWorkerAdvisesFork() {

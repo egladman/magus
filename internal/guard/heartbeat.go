@@ -202,16 +202,31 @@ func deadOwners(at location, owners []types.Job, rel, exclude string, now time.T
 	return out
 }
 
-// deadHolder judges the holder of row dead at now: the session that took it ended, or its
-// newest stamp is older than [SilentLeaseAfter] and its transcript shows no background
-// command running. A row nobody took, a server's, and one whose transcript cannot be read
-// are never dead: magus grants a dead holder's path to someone else, so it does not guess.
+// clearHolderStopped takes the stamp off who's row. A store error is
+// logged, since it must never fail a judgment.
+func clearHolderStopped(ctx context.Context, at location, who hookAttribution) {
+	if at.cacheDir == "" {
+		return
+	}
+	if err := job.NewStore(at.jobs()).ClearHolderStopped(ctx, who.caller()); err != nil {
+		slog.With(attr.Component("magus")).WarnContext(ctx, "holder's stop stamp not cleared", attr.Error(err))
+	}
+}
+
+// deadHolder judges row's holder dead at now: its session ended, its
+// stop passed [SilentLeaseAfter], or it went silent that long with no
+// background command. An untaken row, a server's and an unread
+// transcript are never dead.
 func deadHolder(store *job.Store, at location, row types.Job, now time.Time) (job.DeadHolder, bool) {
 	if !job.Editing(row) || row.Registered == 0 || row.Holder.OrSession() == types.HolderServer {
 		return job.DeadHolder{}, false
 	}
 	if since, ok := store.SessionEnded(row.ID); ok {
 		return job.DeadHolder{Row: row, Since: since, Why: "its holder's session ended"}, true
+	}
+	if stopped := time.Unix(row.HolderStopped, 0); row.HolderStopped != 0 && now.Sub(stopped) > SilentLeaseAfter {
+		return job.DeadHolder{Row: row, Since: row.HolderStopped, Why: fmt.Sprintf("its holder stopped %s ago, past %s, and nobody continued it",
+			now.Sub(stopped).Round(time.Second), SilentLeaseAfter)}, true
 	}
 	s, ok := newestStamp(row, at.workspace)
 	if !ok || now.Sub(s.At) <= SilentLeaseAfter || s.Transcript == "" {

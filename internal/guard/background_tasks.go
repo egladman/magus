@@ -174,7 +174,7 @@ func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.Gua
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      decisionDeny,
 		Rule:          string(denyRuleBackgroundLeft),
-		Reason: fmt.Sprintf("magus workspace: this stop is refused while background tasks still run\nStop each one before you finish, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
+		Reason: fmt.Sprintf("magus workspace: this stop is refused while background tasks still run\nStop each, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
 			stoppableTasks(tasks, now), why),
 	}
 }
@@ -306,10 +306,8 @@ func committing(sub string) bool {
 	return slices.Contains([]string{"commit", "ci", "merge", "cherry-pick", "revert"}, sub)
 }
 
-// sessionEnded reports whether raw ends its caller's agent session: a subagent's stop
-// (a SubagentStop) or a SessionEnd. A root session's Stop ends a turn, not the session. A
-// host that fires neither in print mode, or whose idle event is a pause, ends a job with its
-// checkout or its deadline.
+// sessionEnded reports whether raw is a SessionEnd. A subagent's stop
+// is a pause, since its parent can continue it. A root's Stop ends a turn.
 func sessionEnded(raw string) bool {
 	if !strings.HasPrefix(strings.TrimSpace(raw), "{") {
 		return false
@@ -317,22 +315,30 @@ func sessionEnded(raw string) bool {
 	var env struct {
 		HookEventName string `json:"hook_event_name"`
 	}
-	if json.Unmarshal([]byte(raw), &env) == nil && env.HookEventName == "SessionEnd" {
-		return true
-	}
+	return json.Unmarshal([]byte(raw), &env) == nil && env.HookEventName == "SessionEnd"
+}
+
+// subagentStopped reports a subagent's stop. Cursor's stop names no
+// agent, so its row reads as it did before the stop.
+func subagentStopped(raw string) bool {
 	stop, ok := decodeStop(raw)
 	return ok && stop.AgentID != ""
 }
 
-// endStoppedSession ends the job caller c's session held when raw ends that session and
-// the guard did not refuse the stop: a refused stop leaves the agent running, and so does a
-// subagent stop the host resumes (see resumedStop).
+// endStoppedSession settles c's row when the guard let raw stand. A
+// SessionEnd ends the row and reports true. A subagent's stop stamps it,
+// unless the host resumes the subagent itself (see resumedStop).
 func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw, resumesFrom string, v types.GuardJudgment) (bool, error) {
-	if v.Decision == decisionDeny || !sessionEnded(raw) || resumedStop(raw, resumesFrom, time.Now()) {
+	switch {
+	case v.Decision == decisionDeny:
 		return false, nil
+	case sessionEnded(raw):
+		_, ended, err := store.EndSession(ctx, c)
+		return ended, err
+	case subagentStopped(raw) && !resumedStop(raw, resumesFrom, time.Now()):
+		return false, store.StampHolderStopped(ctx, c)
 	}
-	_, ended, err := store.EndSession(ctx, c)
-	return ended, err
+	return false, nil
 }
 
 // resumedStop reports a subagent stop that leaves a background task running on a host that

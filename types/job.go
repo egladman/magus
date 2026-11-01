@@ -946,6 +946,9 @@ type Job struct {
 	// caller, for the reason Created and Updated do not: a client-supplied timestamp is a
 	// fact about the client's clock.
 	Registered int64 `json:"registered,omitempty" yaml:"registered,omitempty"`
+	// HolderStopped is unix seconds, set when the holder's turn ended
+	// with the row open, and cleared by its next hook call. It ends nothing.
+	HolderStopped int64 `json:"holder_stopped,omitempty" yaml:"holder_stopped,omitempty"`
 	// CheckoutRoot is the absolute root of the checkout `magus job exec` took this job in,
 	// stamped by the store on that write. Once the directory is gone, nobody can be
 	// holding the job, and the store ends it.

@@ -1504,6 +1504,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	judgmentPhases(ctx).enclose("")
 	if !req.DryRun {
 		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord, deps.judging(callDir))
+		clearHolderStopped(ctx, location, who)
 	}
 	return verdict
 }

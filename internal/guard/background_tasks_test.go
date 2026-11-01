@@ -350,17 +350,22 @@ func TestJudgeOffersTheWorkspaceCeiling(t *testing.T) {
 	assert.Contains(t, v.Reason, "bound it at the ceiling: `magus job exec --timeout 45m -- <command>`")
 }
 
-func TestSessionEndedIsASubagentStopOrASessionEnd(t *testing.T) {
-	assert.True(t, sessionEnded(subagentStop(t, "a05d44b006f8f68af", "/x/agent.jsonl")))
+func TestSessionEndedIsOnlyASessionEnd(t *testing.T) {
+	assert.False(t, sessionEnded(subagentStop(t, "a05d44b006f8f68af", "/x/agent.jsonl")), "its parent can continue it")
 	assert.True(t, sessionEnded(hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "hook_event_name": "SessionEnd", "reason": "prompt_input_exit"})))
 	assert.False(t, sessionEnded(rootStop(t, "/x/root.jsonl")), "a root's Stop ends a turn")
 	assert.False(t, sessionEnded(hookJSON(t, map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": "ls"}})))
 	assert.False(t, sessionEnded("ls"))
 }
 
-// A subagent whose stop the guard lets through ends the job it held; one it refuses is
-// still running, so its job stays.
-func TestEndStoppedSessionEndsTheJobOnlyWhenTheStopStands(t *testing.T) {
+func TestSubagentStoppedNeedsAnAgent(t *testing.T) {
+	assert.True(t, subagentStopped(subagentStop(t, "a05d44b006f8f68af", "/x/agent.jsonl")))
+	assert.False(t, subagentStopped(rootStop(t, "/x/root.jsonl")), "Cursor's stop names no agent, so it reads as this one")
+	assert.False(t, subagentStopped("ls"))
+}
+
+// A stop that stands stamps the job. A refused one leaves it as it was.
+func TestEndStoppedSessionStampsTheJobOnlyWhenTheStopStands(t *testing.T) {
 	root := t.TempDir()
 	commitCheckout(t, root)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
@@ -375,17 +380,46 @@ func TestEndStoppedSessionEndsTheJobOnlyWhenTheStopStands(t *testing.T) {
 	ended, err := endStoppedSession(t.Context(), store, worker, stop, "", types.GuardJudgment{Decision: decisionDeny})
 	require.NoError(t, err)
 	assert.False(t, ended)
+	rows, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Zero(t, rows[0].HolderStopped, "a refused stop leaves the agent running")
 
 	ended, err = endStoppedSession(t.Context(), store, worker, stop, "", types.GuardJudgment{})
+	require.NoError(t, err)
+	assert.False(t, ended)
+	rows, err = store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.NotZero(t, rows[0].HolderStopped)
+	assert.False(t, store.Binding(worker).Gone)
+}
+
+func TestEndStoppedSessionEndsTheJobAtASessionEnd(t *testing.T) {
+	root := t.TempDir()
+	commitCheckout(t, root)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	require.NoError(t, err)
+	_, err = store.Exec(t.Context(), "w")
+	require.NoError(t, err)
+	holder := job.Caller{Host: "claude-code", Session: "8f2c6a1e"}
+	require.NoError(t, store.Bind(holder, "w"))
+	end := hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "hook_event_name": "SessionEnd", "reason": "prompt_input_exit"})
+
+	ended, err := endStoppedSession(t.Context(), store, holder, end, "", types.GuardJudgment{})
 	require.NoError(t, err)
 	assert.True(t, ended)
 	rows, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.True(t, rows[0].EndedWithSession(), rows[0].EndReason)
+	assert.True(t, store.Binding(holder).Gone, "#587: nothing is graded as a session that is over")
 }
 
-func TestJudgeEndsTheJobASubagentStopReleases(t *testing.T) {
+// A continued child is still bound, and its next call clears the stamp.
+func TestJudgeStampsTheJobASubagentStopReleasesAndItsNextCallClears(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	at := hookLocation(ctx, Dependencies{})
 	commitCheckout(t, at.workspace)
@@ -402,7 +436,40 @@ func TestJudgeEndsTheJobASubagentStopReleases(t *testing.T) {
 	rows, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.True(t, rows[0].EndedWithSession(), rows[0].EndReason)
+	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.NotZero(t, rows[0].HolderStopped)
+	assert.Equal(t, job.Binding{Job: "w"}, store.Binding(worker), "no tombstone")
+
+	Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, map[string]any{
+		"session_id": worker.Session, "agent_id": worker.Agent, "hook_event_name": "PreToolUse",
+		"tool_name": "Bash", "tool_input": map[string]any{"command": "ls"},
+	}), Host: "claude-code"})
+	rows, err = store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Zero(t, rows[0].HolderStopped)
+	assert.Equal(t, types.StateRunning, rows[0].State)
+}
+
+// A host whose stop names no agent never stamps, so its row reads as running.
+func TestJudgeLeavesTheJobOfAStopNamingNoAgent(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	at := hookLocation(ctx, Dependencies{})
+	commitCheckout(t, at.workspace)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: at.workspace, CacheDir: cacheDir, Actor: &job.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	require.NoError(t, err)
+	_, err = store.Exec(t.Context(), "w")
+	require.NoError(t, err)
+	holder := job.Caller{Host: "cursor", Session: "8f2c6a1e"}
+	require.NoError(t, store.Bind(holder, "w"))
+
+	Judge(ctx, Dependencies{}, Request{Input: rootStop(t, writeTranscript(t)), Host: "cursor"})
+	rows, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+	assert.Zero(t, rows[0].HolderStopped)
 }
 
 // A backgrounded call nothing bounds is refused, unless it is a waiter: the waiter rules
@@ -555,7 +622,7 @@ func TestHostResumes(t *testing.T) {
 
 // stopEachTask is a subagent's refused stop: the tasks to stop, then why the stop is not let
 // through.
-const stopEachTask = "magus workspace: this stop is refused while background tasks still run\nStop each one before you finish, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s."
+const stopEachTask = "magus workspace: this stop is refused while background tasks still run\nStop each, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s."
 
 // A subagent whose only live task is a run it bounded with `magus job exec --timeout` stops
 // to wait for it, on any host version: the stop stands, and its job stays bound for the turn
@@ -661,12 +728,12 @@ func TestReadBackgroundTranscriptKeepsTheVersionAcrossACheckpoint(t *testing.T) 
 	assert.Len(t, read.tasks, 1)
 }
 
-// A subagent stop its host resumes leaves the job's row as it was; one below the declared
-// version, or with none declared, ends it no_return.
+// A stop its host resumes leaves the row as it was, since a wake is
+// coming. Below the declared version, or with none, the stop stamps it.
 func TestEndStoppedSessionKeepsTheJobOfAResumedSubagent(t *testing.T) {
 	for _, tc := range []struct {
 		version, from string
-		ended         bool
+		stamped       bool
 	}{{"2.1.299", "2.1.299", false}, {"2.1.298", "2.1.299", true}, {"2.1.299", "", true}} {
 		t.Run(fmt.Sprintf("%s at %q", tc.version, tc.from), func(t *testing.T) {
 			root := t.TempDir()
@@ -682,11 +749,12 @@ func TestEndStoppedSessionKeepsTheJobOfAResumedSubagent(t *testing.T) {
 
 			ended, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), tc.from, types.GuardJudgment{Decision: decisionAdvise})
 			require.NoError(t, err)
-			assert.Equal(t, tc.ended, ended)
+			assert.False(t, ended)
 			rows, err := store.List()
 			require.NoError(t, err)
 			require.Len(t, rows, 1)
-			assert.Equal(t, tc.ended, rows[0].State == types.StateNoReturn, rows[0].EndReason)
+			assert.Equal(t, types.StateRunning, rows[0].State, rows[0].EndReason)
+			assert.Equal(t, tc.stamped, rows[0].HolderStopped != 0)
 		})
 	}
 }

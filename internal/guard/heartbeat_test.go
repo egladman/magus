@@ -174,6 +174,26 @@ func TestDeadHolderNeedsSilenceAndNoBackgroundCommand(t *testing.T) {
 	assert.False(t, ok, "a row nobody took has no holder to die")
 }
 
+// A stale stop is dead with no heartbeat to read, so paths never strand
+// (#587). A recent stop is a worker waiting on its parent.
+func TestDeadHolderReadsAStaleStop(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	at := location{workspace: t.TempDir(), cacheDir: t.TempDir()}
+	store := job.NewStore(at.jobs())
+	now := time.Unix(1_800_000_000, 0)
+	stopped := func(ago time.Duration) types.Job {
+		return types.Job{ID: "w", State: types.StateRunning, Registered: 1, HolderStopped: now.Add(-ago).Unix()}
+	}
+
+	got, ok := deadHolder(store, at, stopped(45*time.Minute), now)
+	require.True(t, ok)
+	assert.Equal(t, job.DeadHolder{Row: stopped(45 * time.Minute), Since: now.Add(-45 * time.Minute).Unix(),
+		Why: "its holder stopped 45m0s ago, past 30m0s, and nobody continued it"}, got)
+
+	_, ok = deadHolder(store, at, stopped(5*time.Minute), now)
+	assert.False(t, ok, "a recent stop is a pause")
+}
+
 // Past heartbeatMaxEntries pairs, a stamp rewrites the store by rename to the newest pairs,
 // one line each, dropping any older than heartbeatRetain.
 func TestStampHeartbeatCompactsPastItsBound(t *testing.T) {

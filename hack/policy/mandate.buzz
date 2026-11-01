@@ -57,6 +57,8 @@ export object Row {
     checkpoint: str = "",
     checkoutRoot: str = "",
     unresolvedRisks: [str] = [],
+    // holderStopped is when the holder ended its turn, 0 when it did not.
+    holderStopped: int = 0,
 }
 
 // Assessed is a job's proven risk tier and the evidence behind it.
@@ -629,18 +631,48 @@ export fun forkable(q: Queue, m: Mandate?, now: int) > [str] {
     return found;
 }
 
+fun stoppedLine(stopped: [str]) > str {
+    return "stopped with no result: {stopped.join(", ")}. Exit each with `./magus job exit <job>`, or continue that worker.";
+}
+
+// idleStopReason is why decideStop refuses. The first line is all the
+// person sees; the rest reaches the agent alone.
+fun idleStopReason(ready: [str], unmerged: [str], stopped: [str]) > str {
+    var reason = "this stop is refused: finished work is not merged, or a deferred item stands";
+    if (ready.len() > 0) {
+        reason = "this stop is refused: rows wait to be worked and no worker runs to wake this session\n"
+            + "ready: {ready.join(", ")}. Spawn a worker on {ready[0]}; `./magus describe job {ready[0]}` prints its terms.\n"
+            + "To stop instead, pause the rows: `./magus job pause {ready.join(" ")}`.";
+    }
+    if (unmerged.len() > 0) {
+        reason = reason + "\n" + unmerged.join("\n");
+    }
+    if (stopped.len() > 0) {
+        reason = reason + "\n" + stoppedLine(stopped);
+    }
+    return reason;
+}
+
 // decideStop refuses the root's stop while rows it could fork wait and no worker runs to wake
 // it. With no mandate in force it refuses once per stop, so a person present can end a turn.
 // Under a mandate a refusal naming the same rows loopLimit stops running lets the turn end and
 // calls file with the rows, for the person. Past the mandate's end the turn ends.
 // What magus\job.unmerged reports refuses the same way as a waiting row.
+// A running row whose holder stopped wakes nobody.
+// With nothing else waiting it refuses once.
 export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: fun (key: str) > int, file: fun (rows: [str]) > void) > GuardVerdict {
     if (facts.role != "root") {
         return magus\guard.allow();
     }
+    final stopped = mut [<str>];
     foreach (r in q.jobs) {
         if (r.state == magus\JobState.running) {
-            return magus\guard.allow();
+            if (r.holderStopped == 0) {
+                return magus\guard.allow();
+            }
+            if (!r.paused) {
+                stopped.append(r.id);
+            }
         }
     }
     if (m -> mandate) {
@@ -651,20 +683,14 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
     final ready = forkable(q, m: m, now: now);
     final unmerged = unmergedLines(q.unmerged);
     if (ready.len() == 0 and unmerged.len() == 0) {
-        return magus\guard.allow();
+        if (stopped.len() == 0 or facts.stopHookActive) {
+            return magus\guard.allow();
+        }
+        return magus\guard.deny("this stop is refused: a stopped worker's row has no result\n{stoppedLine(stopped)}", opts: {"rule": "idle-stop"});
     }
-    // The first line is all the person sees; the rest reaches the agent alone.
-    var reason = "";
+    final reason = idleStopReason(ready, unmerged: unmerged, stopped: stopped);
     var names = ready;
-    if (ready.len() > 0) {
-        reason = "this stop is refused: rows wait to be worked and no worker runs to wake this session\n"
-            + "ready: {ready.join(", ")}. Spawn a worker on {ready[0]}; `./magus describe job {ready[0]}` prints its terms.\n"
-            + "To stop instead, pause the rows: `./magus job pause {ready.join(" ")}`.";
-    } else {
-        reason = "this stop is refused: finished work is not merged, or a deferred item stands";
-    }
     if (unmerged.len() > 0) {
-        reason = reason + "\n" + unmerged.join("\n");
         names = ready + unmergedRows(q.unmerged);
     }
     if (!inForce(m, now: now)) {
@@ -829,6 +855,37 @@ test "a running row lets the root stop, and so do rows paused, blocked or waitin
     std\assert(decideStop(root, q: held, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "paused and waiting");
     final blocked = Queue{ jobs = [Row{ id = "naming-lint", state = magus\JobState.declared }], blocked = ["naming-lint"] };
     std\assert(decideStop(root, q: blocked, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "blocked");
+}
+
+test "a stopped holder's row refuses the root's stop once and never reads as a running worker" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final root = StopFacts{ role = "root", stopHookActive = false };
+    final again = StopFacts{ role = "root", stopHookActive = true };
+    final alone = Queue{ jobs = [Row{ id = "go-indexer", state = magus\JobState.running, holderStopped = 1500 }] };
+    final refused = decideStop(root, q: alone, m: null, now: 2000, count: none, file: skip);
+    std\assert(refused.decision == magus\GuardDecision.deny, message: "refused");
+    std\assert(refused.reason.indexOf("go-indexer") != null, message: "names the row");
+    std\assert(refused.reason.split("\n")[0].indexOf("`") == null, message: "the line the person sees carries no command");
+    std\assert(refused.reason.indexOf("continue that worker") != null, message: "names the continuation and no tool");
+    _ = verdict\checked(refused, label: "stopped holder");
+    std\assert(decideStop(again, q: alone, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "the second stop stands");
+    std\assert(decideStop(again, q: alone, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "once under a mandate too");
+
+    final beside = Queue{ jobs = [alone.jobs[0], Row{ id = "naming-lint", state = magus\JobState.running }] };
+    std\assert(decideStop(root, q: beside, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a running worker still wakes the root");
+    final paused = Queue{ jobs = [Row{ id = "go-indexer", state = magus\JobState.running, holderStopped = 1500, paused = true }] };
+    std\assert(decideStop(root, q: paused, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a person paused it");
+}
+
+test "a stopped holder's row does not let the root idle with work queued" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final queued = Queue{ jobs = [Row{ id = "go-indexer", state = magus\JobState.running, holderStopped = 1500 }, Row{ id = "naming-lint", state = magus\JobState.declared }] };
+    final refused = decideStop(StopFacts{ role = "root", stopHookActive = true }, q: queued, m: issued, now: 2000, count: none, file: skip);
+    std\assert(refused.decision == magus\GuardDecision.deny, message: "every stop under a mandate");
+    std\assert(refused.reason.indexOf("naming-lint") != null, message: "names the waiting row");
+    std\assert(refused.reason.indexOf("stopped with no result: go-indexer") != null, message: "names the stopped row");
 }
 
 final offBranch = JobUnmergedReport{ branch = "feat/x", rows = [JobUnmerged{ job = "go-indexer", head = "abc123", why = "2 commit(s) are not on feat/x", remedy = "merge abc123" }] };
