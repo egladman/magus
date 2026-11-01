@@ -23,6 +23,9 @@
 {"group":"dir:broker","path":"broker/listen_test.go"}
 {"group":"dir:broker","path":"broker/owner.go"}
 {"group":"dir:broker","path":"broker/owner_test.go"}
+{"group":"dir:broker","path":"broker/peer_darwin.go"}
+{"group":"dir:broker","path":"broker/peer_linux.go"}
+{"group":"dir:broker","path":"broker/peer_other.go"}
 {"group":"dir:broker","path":"broker/rights.go"}
 {"group":"dir:broker","path":"broker/rights_darwin.go"}
 {"group":"dir:broker","path":"broker/rights_linux.go"}
@@ -952,7 +955,6 @@
 {"group":"dir:hack/dev","path":"hack/dev/rename-symbol.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/render-brief.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/resolve-conflicts.buzz"}
-{"group":"dir:hack/dev","path":"hack/dev/show-code-context.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-dependency.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-feedback.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-import-meet.buzz"}
