@@ -57,9 +57,17 @@ func bindGlobalFlags(fs *flag.FlagSet, root, cfgPath *string) {
 }
 
 func bindDisplayFlags(fs *flag.FlagSet) {
+	bindOutputFlags(fs)
+	bindProgressFlags(fs)
+}
+
+func bindOutputFlags(fs *flag.FlagSet) {
 	fs.StringVar(&global.output, "output", global.output, outputFormatHelp)
 	fs.StringVar(&global.output, "o", global.output, "Short for --output")
 	fs.StringVar(&global.tee, "tee", global.tee, "Also write structured output (-o json|yaml|jsonl|template) to this file (append-create mode)")
+}
+
+func bindProgressFlags(fs *flag.FlagSet) {
 	fs.Var(&global.verbose, "v", "increase log verbosity (-v/-vv: debug; -vvv: trace)")
 	fs.BoolVar(&global.quiet, "quiet", global.quiet, "suppress progress output; only print errors and dump failing project output to stderr")
 	fs.BoolVar(&global.quiet, "q", global.quiet, "short for --quiet")
@@ -246,8 +254,7 @@ type recordedFlag struct {
 func recordFlagSet(name string, fs *flag.FlagSet) {
 	var flags []recordedFlag
 	fs.VisitAll(func(f *flag.Flag) {
-		boolean, _ := f.Value.(interface{ IsBoolFlag() bool })
-		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage, Bool: boolean != nil && boolean.IsBoolFlag()})
+		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage, Bool: flagIsBool(f)})
 	})
 	flagRecord.Lock()
 	defer flagRecord.Unlock()
@@ -273,11 +280,15 @@ func printOwnDefaults(fs *flag.FlagSet) {
 		return
 	}
 	printGroupedFlagHelp(fs.Output(), help, cmd.Flags)
-	if len(cmd.Examples) > 0 {
-		fmt.Fprintln(fs.Output(), "\nExamples:")
+	printExamples(fs.Output(), cmd.Examples)
+}
+
+func printExamples(w io.Writer, examples []cmdline.Example) {
+	if len(examples) > 0 {
+		fmt.Fprintln(w, "\nExamples:")
 	}
-	for _, e := range cmd.Examples {
-		fmt.Fprintf(fs.Output(), "  %s\n    \t%s\n", e.Command, e.Comment)
+	for _, e := range examples {
+		fmt.Fprintf(w, "  %s\n    \t%s\n", e.Command, e.Comment)
 	}
 }
 

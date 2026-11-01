@@ -397,8 +397,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	// The config tier stays: usage text reads it (server.address in `server -h`),
 	// and reading magus.yaml writes nothing.
 	if sub == "self" {
-		// self update is the stale binary's remedy, so it runs where that binary cannot
-		// decode magus.yaml (MGS1040), help included.
+		// self update fixes a stale binary that cannot decode magus.yaml.
 		return dispatchProfile{}
 	}
 	if wantsUsage(subArgs) {
@@ -846,9 +845,8 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		stopSock()
 		if sock != "" {
 			stopFwd := trace.phase("startup.forward")
-			// The flags are not parsed yet, so this is magus.yaml and the environment,
-			// the inherited floor included; a --sandbox flag rides in args and the server
-			// reads it there (see adoptedSandbox).
+			// Flags are unparsed, so this is magus.yaml and the environment.
+			// A --sandbox flag rides in args (see adoptedSandbox).
 			fwdCtx := rootCtx
 			if globalCfg.Sandbox.Mode.Enabled() {
 				fwdCtx = proc.WithSandboxFloor(rootCtx, globalCfg.Sandbox.Mode)
@@ -861,15 +859,9 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 				return startupResult{cleanup: cleanup}, code
 			}
 			logForwardFallback(rootCtx, slog.Default(), fwdErr)
-			// parentLive is a narrower question than "not adopted": keep MAGUS_PROC_SOCKET
-			// pointed at the parent only when it is a usable pool for deeper adoptable
-			// calls. A not-adoptable subcommand leaves a live, same-version server worth
-			// forwarding to (nested adoptable calls hit the single top-level pool; probes
-			// like doctor's server check see the real server). A version/protocol mismatch
-			// (like a transport failure) leaves a server we cannot use: clear the
-			// pointer so nothing keeps dialing it, and fall through to hosting our own pool.
-			// Clearing it keeps MGS3048 to once per run: no process
-			// below this one reaches the other build to warn again.
+			// Keep MAGUS_PROC_SOCKET on the parent only while it can serve.
+			// A refused or dead parent is cleared and we host our own pool,
+			// which keeps MGS3048 to once per run.
 			parentLive = errors.Is(fwdErr, proc.ErrNotAdoptable)
 			if !parentLive {
 				_ = os.Unsetenv(proc.SocketEnv)
@@ -1477,8 +1469,8 @@ func startupTraceEnabled(args []string) bool {
 
 // registerDiagnosticCatalogs reserves each shipped catalog's prefix; a clash is a build defect.
 func registerDiagnosticCatalogs() error {
-	own := diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes())
-	return errors.Join(own, diagnostics.RegisterCatalog("gopherbuzz", buzz.Codes()))
+	return errors.Join(diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes()),
+		diagnostics.RegisterCatalog("gopherbuzz", buzz.Codes()))
 }
 
 // diagnosticArgs is err's rationale as an [attr.Why], plus an origin mark on a workspace code.

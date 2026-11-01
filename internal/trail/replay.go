@@ -265,9 +265,9 @@ type RepeatRun struct {
 	SpanMs       int64              `json:"span_ms"`
 }
 
-// Repeats folds calls into the runs of two or more. A call missing either
+// repeats folds calls into the runs of two or more. A call missing either
 // digest joins no run: an absent digest would equal every other.
-func Repeats(calls []SessionCall) []RepeatRun {
+func repeats(calls []SessionCall) []RepeatRun {
 	ordered := slices.Clone(calls)
 	slices.SortStableFunc(ordered, func(a, b SessionCall) int { return a.At.Compare(b.At) })
 	open := map[string]map[string]*RepeatRun{}
@@ -315,10 +315,14 @@ func Repeats(calls []SessionCall) []RepeatRun {
 			finish(run)
 		}
 	}
-	slices.SortFunc(out, func(a, b RepeatRun) int {
+	sortRepeatRuns(out)
+	return out
+}
+
+func sortRepeatRuns(runs []RepeatRun) {
+	slices.SortFunc(runs, func(a, b RepeatRun) int {
 		return cmp.Or(a.First.Compare(b.First), strings.Compare(a.CallDigest, b.CallDigest))
 	})
-	return out
 }
 
 // SessionCall is one guard observation of a call and the cost facts recorded beside it.
@@ -410,7 +414,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 			out.Leases = append(out.Leases, e.Lease)
 		}
 	}
-	out.Repeats = Repeats(out.Calls)
+	out.Repeats = repeats(out.Calls)
 	return out
 }
 

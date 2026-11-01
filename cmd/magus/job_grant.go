@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -81,6 +83,10 @@ func jobGrant(ctx context.Context, root string, args []string) error {
 		fmt.Printf("revoked %s's grant of %s\n", id, rule)
 		return nil
 	}
+	return grantJobRule(ctx, store, opts, id, rule, lasting)
+}
+
+func grantJobRule(ctx context.Context, store *job.Store, opts output.Options, id, rule string, lasting time.Duration) error {
 	var until int64
 	if lasting > 0 {
 		until = time.Now().Add(lasting).Unix()

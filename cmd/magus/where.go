@@ -59,10 +59,14 @@ func emitWhere(wsRoot string, matches []whereMatch) error {
 	case outputName:
 		return emitItemNames(os.Stdout, matches, func(m whereMatch) string { return m.Path })
 	}
+	printWherePaths(matches)
+	return nil
+}
+
+func printWherePaths(matches []whereMatch) {
 	for _, m := range matches {
 		fmt.Println(m.Path)
 	}
-	return nil
 }
 
 // normalizeFilters canonicalises the path-SHAPED filters to the workspace-relative slash
