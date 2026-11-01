@@ -1,8 +1,0 @@
-// No build target: std/lib.go embeds result.buzz into the binary.
-import "magus";
-
-magus\project({
-    // No spell claims .buzz, so this line declares result.buzz a source.
-    // The root's build compiles embed.go and the root's test tests it.
-    "sources": ["*.buzz", "*.go"],
-});
