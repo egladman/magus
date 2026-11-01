@@ -4,9 +4,9 @@ Two Go analyzers over the layout of test files, as plain `analysis.Analyzer`s wi
 no linter-runner dependency, plus a golangci-lint module plugin in `plugin/` that
 registers each under its own name.
 
-| Linter       | Reports                                                                      |
-| ------------ | ---------------------------------------------------------------------------- |
-| `testpair`   | every `X_test.go` with no `X.go` beside it                                   |
+| Linter        | Reports                                                                      |
+| ------------- | ---------------------------------------------------------------------------- |
+| `testpair`    | every `X_test.go` with no `X.go` beside it                                   |
 | `testpairing` | a test file in an external test package; optionally `_unix` names and `main` |
 
 ## testpair: every test file has a pair
