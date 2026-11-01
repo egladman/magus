@@ -112,6 +112,27 @@ fun append(root: str, m: mandate\Mandate) > result\Result::<bool> {
     return result\ok::<bool>(true);
 }
 
+fun unknownRows(named: [str], jobs: [mandate\Row]) > [str] {
+    return named.filter(fun (index: int, id: str) > bool {
+        foreach (r in jobs) {
+            if (r.id == id) {
+                return false;
+            }
+        }
+        return true;
+    });
+}
+
+fun printTerms(named: [str], tolerance: str) > void {
+    std\print("rows: {named.join(", ")} and the children forked from them");
+    std\print("tolerance: an unsettled job's work is integrated only at {tolerance} or below; above it, it is held for review");
+    std\print("stop condition: the end time passes, every mandated row is paused or done, or one refusal repeats {mandate\loopLimit} stops running");
+    std\print("reserved for you:");
+    foreach (r in reserved) {
+        std\print("  - {r}");
+    }
+}
+
 fun issue(root: str, args: [str]) > result\Result::<bool> {
     try {
         final parsed = flags\parse(args, switches: [<str>], valued: ["--until", "--tolerance", "--rows", "--tokens"]);
@@ -138,14 +159,7 @@ fun issue(root: str, args: [str]) > result\Result::<bool> {
             return result\fail::<bool>("mandate issue: --rows names the plan's job rows, comma-separated; a mandate with none has nothing to carry out");
         }
         final jobs = mandate\rows(magus\job.list().jobs);
-        final missing = named.filter(fun (index: int, id: str) > bool {
-            foreach (r in jobs) {
-                if (r.id == id) {
-                    return false;
-                }
-            }
-            return true;
-        });
+        final missing = unknownRows(named, jobs: jobs);
         if (missing.len() > 0) {
             return result\fail::<bool>("mandate issue: the job store holds no row {missing.join(", ")}; `job apply` the plan before the mandate is issued");
         }
@@ -163,13 +177,7 @@ fun issue(root: str, args: [str]) > result\Result::<bool> {
             return appended;
         }
         std\print("mandate in force until {clock} local ({(ends - now) / 60000} minutes from now)");
-        std\print("rows: {named.join(", ")} and the children forked from them");
-        std\print("tolerance: an unsettled job's work is integrated only at {tolerance} or below; above it, it is held for review");
-        std\print("stop condition: the end time passes, every mandated row is paused or done, or one refusal repeats {mandate\loopLimit} stops running");
-        std\print("reserved for you:");
-        foreach (r in reserved) {
-            std\print("  - {r}");
-        }
+        printTerms(named, tolerance: tolerance);
         return result\ok::<bool>(true);
     } catch (err: any) {
         return result\caught::<bool>(err, doing: "mandate issue");

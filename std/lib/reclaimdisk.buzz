@@ -704,6 +704,18 @@ fun waitingLine(listCommand: str) > str {
     return "`git worktree list` names them";
 }
 
+// trimInto trims each declared cache and adds a line per trim to did.
+// It reports whether any trim freed bytes.
+fun trimInto(did: mut [str], fence: double, now: double, deadline: double) > bool !> any { //nolint:no-throw // a passed deadline raises through it
+    var freed = false;
+    final cacheDeadline = if (deadline - now > TRIM_MS * 1.25) now + TRIM_MS else now + (deadline - now) * 0.8;
+    foreach (trim in trimDeclared(fence, deadline: cacheDeadline)) {
+        if (trim.removedBytes > 0) { freed = true; }
+        if (trimLine(trim, fence: fence) -> text) { did.append(text); }
+    }
+    return freed;
+}
+
 fun runTick(cwd: str, deadline: double, force: bool) > TickReport !> any { //nolint:no-throw // a passed deadline raises through it
     final store = diskwatch\storePath();
     final now = os\time();
@@ -727,13 +739,7 @@ fun runTick(cwd: str, deadline: double, force: bool) > TickReport !> any { //nol
     var freed = false;
     final asked = diskwatch\fenceMs(cur, t: t);
     final fence = if (force and asked == 0.0) diskwatch\LOW_FENCE_MS else asked;
-    if (fence > 0.0) {
-        final cacheDeadline = if (deadline - now > TRIM_MS * 1.25) now + TRIM_MS else now + (deadline - now) * 0.8;
-        foreach (trim in trimDeclared(fence, deadline: cacheDeadline)) {
-            if (trim.removedBytes > 0) { freed = true; }
-            if (trimLine(trim, fence: fence) -> text) { did.append(text); }
-        }
-    }
+    if (fence > 0.0 and trimInto(did, fence: fence, now: now, deadline: deadline)) { freed = true; }
     var kept = "";
     try {
         final items = chunk(deadline);
