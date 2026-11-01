@@ -66,6 +66,8 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
             why: "OCI layout assembly; no figure passes through it")
         .except([magus\dir("libs/oci")],
             why: "the registry client; no figure passes through it")
+        .except([magus\dir("libs/result")],
+            why: "the Buzz Result type embedded by go-build; no figure passes through it")
         .except([magus\dir("std/gen/stdtest")], why: "generated test mocks")
         .except(goPackages("std/encoding/**"),
             why: "the encoding host modules; a figure source reads the graph through the magus module alone")

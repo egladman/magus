@@ -1139,7 +1139,7 @@ func carriesOwnedMarker(command string) bool {
 // Narrower than invokesMagus on purpose: that one also answers true for a bare
 // `magus ...` line, which says nothing about who wrote it.
 func runsAShippedTemplate(command string) bool {
-	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "magus-tool-time", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz", "magus-buzz-check.buzz", "magus-reclaim-disk.buzz"} {
+	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "magus-duration", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz", "magus-buzz-check.buzz", "magus-reclaim-disk.buzz"} {
 		if strings.Contains(command, template) {
 			return true
 		}
@@ -1218,7 +1218,7 @@ func invokesMagus(command string) bool {
 	case strings.Contains(command, "magus-command"),
 		strings.Contains(command, "magus-path"),
 		strings.Contains(command, "magus-observe"),
-		strings.Contains(command, "magus-tool-time"):
+		strings.Contains(command, "magus-duration"):
 		return true
 	case strings.Contains(command, "cursor-hook."):
 		return true

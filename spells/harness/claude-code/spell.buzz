@@ -63,7 +63,7 @@ final WRITE_MATCHER = "Write|Edit|MultiEdit";
 final TIMED_MATCHER = "^(?!(Agent|Task)$).*";
 
 // The recorder runs in the background, so the call never waits on it.
-final TOOL_TIME_SCRIPT = "magus-tool-time";
+final DURATION_SCRIPT = "magus-duration";
 
 // The session starts that get a fresh CLAUDE_ENV_FILE. compact keeps the session's
 // environment and only rehydrates.
@@ -99,7 +99,7 @@ fun claude_hooks() > [HookCommand] {
         claude_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: claude_named(), points: [HookPoint.spawn]),
         claude_buzz_check_hook(),
         // PostToolUse carries duration_ms, the tool's own run time.
-        claude_hook("PostToolUse", matcher: TIMED_MATCHER, script: TOOL_TIME_SCRIPT, flags: claude_named(), points: RECORDS),
+        claude_hook("PostToolUse", matcher: TIMED_MATCHER, script: DURATION_SCRIPT, flags: claude_named(), points: RECORDS),
         // PATH's first entry becomes the root for the agent's own Bash tool commands, through
         // CLAUDE_ENV_FILE, the file Claude Code sources before each one; it never reaches a
         // hook command (code.claude.com/docs/en/hooks, "Persist environment variables").
@@ -134,7 +134,7 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
 
 fun claude_command(hook: HookCommand) > str {
     final command = claude_checkout(buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags));
-    if (hook.script == TOOL_TIME_SCRIPT) { return command + " # magus:harness"; }
+    if (hook.script == DURATION_SCRIPT) { return command + " # magus:harness"; }
     return command;
 }
 
@@ -168,7 +168,7 @@ fun claude_entry(hook: HookCommand) > {str: any} {
     final entry = mut {<str: any>};
     if (hook.matcher != "") { entry["matcher"] = hook.matcher; }
     final command: mut {str: any} = mut {"type": "command", "command": claude_command(hook), "timeout": hook.timeoutS};
-    if (hook.script == TOOL_TIME_SCRIPT) { command["async"] = true; }
+    if (hook.script == DURATION_SCRIPT) { command["async"] = true; }
     entry["hooks"] = [command];
     return entry;
 }
@@ -509,7 +509,7 @@ test "mgs_getSkills installs both forms under .claude/skills" {
 
 test "a hook on a recorder outside the shipped templates carries the ownership marker" {
     foreach (hook in mgs_listHooks()) {
-        if (hook.script == TOOL_TIME_SCRIPT) {
+        if (hook.script == DURATION_SCRIPT) {
             assert\isTrue(claude_command(hook).endsWith(" # magus:harness"), "magus cannot tell {hook.script} is its own without it");
         }
     }
@@ -580,13 +580,13 @@ test "the entries cover PreToolUse PostToolUse SessionStart Stop SubagentStop an
     foreach (block in claude_entries()) { events.append(block.path[1]); }
     assert\equal(events.join(","), "PreToolUse,PostToolUse,SessionStart,Stop,SubagentStop,UserPromptSubmit", "six managed path blocks");
     final post = claude_block("PostToolUse")!;
-    assert\equal(post.entries.len(), 3, "the finished spawn, the Buzz check and the tool time");
+    assert\equal(post.entries.len(), 3, "the finished spawn, the Buzz check and the duration recorder");
     assert\equal(post.entries[0]["matcher"] as? str, SPAWN_MATCHER, "both names of the spawn tool");
     assert\equal(post.entries[1]["matcher"] as? str, WRITE_MATCHER, "every tool that writes a file");
     assert\equal(post.entries[2]["matcher"] as? str, TIMED_MATCHER, "every tool but the spawn, so it is timed once");
     final timed = (post.entries[2]["hooks"] as [any])[0];
     assert\isTrue((timed["async"] as? bool) ?? false, "the recorder never makes a call wait");
-    assert\isTrue("{timed["command"]}".indexOf("magus-tool-time.buzz") != null, "the tool-time recorder");
+    assert\isTrue("{timed["command"]}".indexOf("magus-duration.buzz") != null, "the duration recorder");
     final start = claude_block("SessionStart")!;
     assert\equal(start.entries[0]["matcher"] as? str, SESSION_PATH_MATCHER, "every start that gets a fresh env file");
     assert\equal(start.entries[1]["matcher"] as? str, "compact", "rehydrate");

@@ -1,6 +1,6 @@
-// magus tool-time hook: records how long a tool ran, as the host says.
+// magus duration hook: records how long a tool ran, as the host says.
 // It judges nothing and always exits 0.
-// Run as `magus buzz -s magus-tool-time.buzz -- --agent-name <host>`.
+// Run as `magus buzz -s magus-duration.buzz -- --agent-name <host>`.
 // An event with no duration records nothing.
 // The HOST_*_PATH variables retarget a field, as in magus-observe.buzz.
 //
@@ -9,7 +9,7 @@
 // digest, and magus records the result as unobserved. HOST_AGENT_PATH names
 // the subagent, which tells a worker from its parent.
 //
-// magus-guard-template: 35
+// magus-guard-template: 36
 
 import "std";
 import "io";
@@ -53,7 +53,7 @@ fun digestOf(event: any?, dotPath: str) > str {
 }
 
 fun warn(message: str) > void {
-    io\stderr.write("magus-tool-time.buzz: {message}\n") catch void;
+    io\stderr.write("magus-duration.buzz: {message}\n") catch void;
 }
 
 final AGENT_NAME_FLAG = "--agent-name";
@@ -95,12 +95,12 @@ fun main(args: [str]) > void {
     final bin = hook\resolveBin(cwd: cwd);
     if (bin == "" or !hook\isExecutable(bin)) {
         io\stdout.write(hook\unrecordedNotice(bin, session: session,
-            host: agentName, file: "magus-tool-time.buzz", root: hook\workspaceRootAt(cwd))) catch void;
+            host: agentName, file: "magus-duration.buzz", root: hook\workspaceRootAt(cwd))) catch void;
         return;
     }
 
     final args = mut [
-        "shell", "--tool-ms", "{ms}",
+        "shell", "--duration", "{ms}ms",
         "--agent-name", agentName,
         "--session", session,
         "--agent", field(event, dotPath: hook\envOr("HOST_AGENT_PATH", fallback: "agent_id")),

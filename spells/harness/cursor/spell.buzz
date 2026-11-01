@@ -108,7 +108,7 @@ fun cursor_hooks() > [HookCommand] {
     hooks.append(cursor_buzz_check_hook());
     // postToolUse carries duration in ms. Cursor has no background
     // mode for a hook, so this one waits on the recorder.
-    hooks.append(HookCommand{event = "postToolUse", matcher = POSTTOOL_MATCHER, script = "magus-tool-time",
+    hooks.append(HookCommand{event = "postToolUse", matcher = POSTTOOL_MATCHER, script = "magus-duration",
         flags = cursor_guard_flags(), timeoutS = HOOK_TIMEOUT_S, points = [<HookPoint>]});
     // Cursor reads a beforeSubmitPrompt hook's stdout as its JSON verdict, so the disk
     // hook's one line goes to stderr, where Cursor's hook log shows it.
@@ -133,7 +133,7 @@ fun cursor_entry(hook: HookCommand) > {str: any} {
     final entry = mut {<str: any>};
     if (hook.matcher != "") { entry["matcher"] = hook.matcher; }
     final command = buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
-    entry["command"] = if (hook.script == "magus-tool-time") command + " # magus:harness" else command;
+    entry["command"] = if (hook.script == "magus-duration") command + " # magus:harness" else command;
     entry["timeout"] = hook.timeoutS;
     if (hook.event == "beforeMCPExecution" or hook.event == "beforeShellExecution" or hook.event == "preToolUse") {
         entry["failClosed"] = true;
@@ -316,9 +316,9 @@ test "the entries cover every Cursor event magus uses, one guard entry each" {
         assert\equal((guard["matcher"] as? str) ?? "", cursor_matcher(names[i]), "the matcher the event takes");
     }
     final post = entries[names.indexOf("postToolUse")!];
-    assert\equal(post.entries.len(), 3, "the advice, the Buzz check and the tool time");
+    assert\equal(post.entries.len(), 3, "the advice, the Buzz check and the duration recorder");
     assert\equal("{post.entries[1]["matcher"]}", WRITE_MATCHER, "every tool that writes a file");
-    assert\isTrue("{post.entries[2]["command"]}".indexOf("magus-tool-time.buzz") != null, "the recorder");
+    assert\isTrue("{post.entries[2]["command"]}".indexOf("magus-duration.buzz") != null, "the recorder");
     assert\isTrue("{post.entries[2]["command"]}".endsWith(" # magus:harness"), "magus cannot tell the recorder is its own without the marker");
 }
 

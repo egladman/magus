@@ -237,7 +237,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // Where no prompt can happen it renders as a deny, never an allow.
 // promptBlocker names those cells. systemMessage tells the person why
 // and what to type at their terminal.
-// magus-guard-template: 35
+// magus-guard-template: 36
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
@@ -420,8 +420,8 @@ fun callFlags(event: any?) > [str] {
     if (timeout is int) { ms = timeout as int; }
     if (timeout is double) { ms = std\toInt(timeout as double); }
     if (ms > 0) {
-        facts.append("--call-timeout-ms");
-        facts.append("{ms}");
+        facts.append("--call-timeout");
+        facts.append("{ms}ms");
     }
     return facts;
 }
@@ -885,7 +885,7 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 35
+// magus-guard-template: 36
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
 
 import "io";
@@ -1126,7 +1126,7 @@ input, and this file carries no verdict on any input.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 35
+// magus-guard-template: 36
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1230,7 +1230,7 @@ fun main(args: [str]) > void {
 }
 ```
 
-## `magus-tool-time.buzz`
+## `magus-duration.buzz`
 
 Carries no verdict either. Wire it to the host's post-call event on every tool, in
 the background where the host has one, and it records how long the tool ran as the
@@ -1238,9 +1238,9 @@ host reports it. A host whose event carries no duration records nothing. It alwa
 exits 0.
 
 ```buzz
-// magus tool-time hook: records how long a tool ran, as the host says.
+// magus duration hook: records how long a tool ran, as the host says.
 // It judges nothing and always exits 0.
-// Run as `magus buzz -s magus-tool-time.buzz -- --agent-name <host>`.
+// Run as `magus buzz -s magus-duration.buzz -- --agent-name <host>`.
 // An event with no duration records nothing.
 // The HOST_*_PATH variables retarget a field, as in magus-observe.buzz.
 //
@@ -1249,7 +1249,7 @@ exits 0.
 // digest, and magus records the result as unobserved. HOST_AGENT_PATH names
 // the subagent, which tells a worker from its parent.
 //
-// magus-guard-template: 35
+// magus-guard-template: 36
 
 import "std";
 import "io";
@@ -1293,7 +1293,7 @@ fun digestOf(event: any?, dotPath: str) > str {
 }
 
 fun warn(message: str) > void {
-    io\stderr.write("magus-tool-time.buzz: {message}\n") catch void;
+    io\stderr.write("magus-duration.buzz: {message}\n") catch void;
 }
 
 final AGENT_NAME_FLAG = "--agent-name";
@@ -1335,12 +1335,12 @@ fun main(args: [str]) > void {
     final bin = hook\resolveBin(cwd: cwd);
     if (bin == "" or !hook\isExecutable(bin)) {
         io\stdout.write(hook\unrecordedNotice(bin, session: session,
-            host: agentName, file: "magus-tool-time.buzz", root: hook\workspaceRootAt(cwd))) catch void;
+            host: agentName, file: "magus-duration.buzz", root: hook\workspaceRootAt(cwd))) catch void;
         return;
     }
 
     final args = mut [
-        "shell", "--tool-ms", "{ms}",
+        "shell", "--duration", "{ms}ms",
         "--agent-name", agentName,
         "--session", session,
         "--agent", field(event, dotPath: hook\envOr("HOST_AGENT_PATH", fallback: "agent_id")),
@@ -1462,7 +1462,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 35
+// magus-guard-template: 36
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1616,7 +1616,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 35
+// magus-guard-template: 36
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1764,7 +1764,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 35
+// magus-guard-template: 36
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
@@ -2023,7 +2023,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
 // carries no verdict on any input.
 //
-// magus-guard-template: 35
+// magus-guard-template: 36
 
 import "io";
 import "fs";
@@ -2562,7 +2562,7 @@ not a call.
 //
 // NO magus-guard-coverage line: it judges a file the agent already wrote, not a call.
 //
-// magus-guard-template: 35
+// magus-guard-template: 36
 
 import "io";
 import "flags";
@@ -2797,7 +2797,7 @@ exits 0, and declares no `magus-guard-coverage` line: it judges no call.
 //
 // NO magus-guard-coverage line: it carries no verdict on any input.
 //
-// magus-guard-template: 35
+// magus-guard-template: 36
 
 import "io";
 import "std";

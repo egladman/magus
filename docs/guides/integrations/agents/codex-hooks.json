@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-tool-time.buzz -- --agent-name codex # magus:harness",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-duration.buzz -- --agent-name codex # magus:harness",
             "statusMessage": "magus: recording tool time"
           }
         ]

@@ -482,7 +482,7 @@ workspace-root walk as the lease hook above, for the same reason.
 ## Recording how long a tool ran
 
 Wire `PostToolUse` to
-[`magus-tool-time.buzz`](guard-templates.md#magus-tool-timebuzz) (this repository
+[`magus-duration.buzz`](guard-templates.md#magus-durationbuzz) (this repository
 does, under the matcher that excludes `Agent|Task`) and each finished call
 records how long the host said the tool took. It judges nothing and exits 0.
 

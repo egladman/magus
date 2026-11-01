@@ -1760,12 +1760,12 @@ func (s *entriesRunHookSuite) entries(command string) []types.ManagedEntries {
 }
 
 func (s *entriesRunHookSuite) TestAHarnessOwnedMarkerAfterTheInvocationStillMatches() {
-	hook := types.HookCommand{Event: "PostToolUse", Matcher: "Bash", Script: "magus-tool-time", Flags: []string{"--agent-name", "h"}}
-	command := "magus buzz -s hooks/magus-tool-time.buzz -- --agent-name h" + harnessOwnedMarker
+	hook := types.HookCommand{Event: "PostToolUse", Matcher: "Bash", Script: "magus-duration", Flags: []string{"--agent-name", "h"}}
+	command := "magus buzz -s hooks/magus-duration.buzz -- --agent-name h" + harnessOwnedMarker
 	s.True(entriesRunHook(s.entries(command), hook))
 }
 
 func (s *entriesRunHookSuite) TestAnotherScriptDoesNotMatch() {
-	hook := types.HookCommand{Event: "PostToolUse", Matcher: "Bash", Script: "magus-tool-time"}
+	hook := types.HookCommand{Event: "PostToolUse", Matcher: "Bash", Script: "magus-duration"}
 	s.False(entriesRunHook(s.entries("magus buzz -s hooks/magus-observe.buzz"+harnessOwnedMarker), hook))
 }

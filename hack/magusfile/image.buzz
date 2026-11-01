@@ -3,6 +3,7 @@
 
 import "fs";
 import "image";
+import "serialize";
 
 final SOURCE = "https://github.com/egladman/magus";
 final DESCRIPTION = "magus - content-addressed monorepo build cache";
@@ -129,6 +130,37 @@ export fun loadedID(output: str) > LoadedID {
         }
     }
     return LoadedID{ error = "image-build: docker load printed no image ID:\n{output}" };
+}
+
+// blobPath is the path docker's load archive and the OCI layout share for a digest.
+fun blobPath(d: image\Digest) > str {
+    return "blobs/{d.algorithm}/{d.encoded}";
+}
+
+// prepareLoad writes the docker-save manifest.json classic `docker load` needs
+// beside the OCI layout. Without it, a daemon that is not on the containerd
+// image store fails with `blobs/json: no such file or directory`. RepoTags stay
+// empty so load prints `Loaded image ID:` rather than a tag name.
+export fun prepareLoad(layout: str) > str {
+    try {
+        final opened = image\open(layout);
+        if (opened.config == null) {
+            return "image-build: prepareLoad {layout}: layout holds no image config";
+        }
+        final layers = mut [<str>];
+        foreach (layer in opened.layers) {
+            layers.append(blobPath(layer.digest));
+        }
+        final body = serialize\jsonEncode(serialize\Boxed.init([{
+            "Config": blobPath(opened.config!.digest),
+            "RepoTags": [<str>],
+            "Layers": layers,
+        }]));
+        fs\writeFile(layout + "/manifest.json", content: body);
+        return "";
+    } catch (e) {
+        return "image-build: prepareLoad {layout}: {e}";
+    }
 }
 
 export fun slug(p: image\Platform) > str {

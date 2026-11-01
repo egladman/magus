@@ -180,6 +180,16 @@ shown here:
             "statusMessage": "magus: checking the Buzz it wrote"
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-duration.buzz -- --agent-name codex # magus:harness",
+            "statusMessage": "magus: recording tool time"
+          }
+        ]
       }
     ],
     "SubagentStart": [

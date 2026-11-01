@@ -50,6 +50,24 @@ test "loadedID reads docker load's line and reports its absence" {
     assert\contains(images\loadedID("Loaded image: x:y\n").error, item: "printed no image ID", message: "absent");
 }
 
+test "prepareLoad writes the docker-save manifest classic load needs" {
+    final dir = fs\tempDir("image-prepare-load");
+    final bin = dir + "/magus";
+    fs\writeFile(bin, content: "#!/bin/true\n");
+    final layout = image\assemble(image\Spec{
+        scratch = true,
+        platform = AMD64,
+        files = [image\File{ source = bin, path = "/magus", mode = 493 }],
+    }, layout: dir + "/layout");
+    assert\equal(images\prepareLoad(layout.path), want: "", message: "no error");
+    final body = fs\readFile(layout.path + "/manifest.json");
+    assert\contains(body, item: "\"Config\":\"blobs/sha256/", message: "config blob path");
+    assert\contains(body, item: "\"RepoTags\":[]", message: "untagged so load prints an ID");
+    assert\contains(body, item: "\"Layers\":[\"blobs/sha256/", message: "layer blob paths");
+    assert\isTrue(images\prepareLoad(dir + "/missing").startsWith("image-build: prepareLoad "), message: "missing names the path");
+    fs\removeAll(dir);
+}
+
 test "spec places the binary and keeps the Dockerfile's config" {
     final step = images\plan(images\STATIC, ldflags: "").steps[0];
     final s = images\spec(images\STATIC, step: step, mode: 493);
