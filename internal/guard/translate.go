@@ -986,7 +986,7 @@ func translateDeclarations(deps Dependencies, dir string, c hint.Invocation, sc 
 		args: []string{"explain", fmt.Sprintf("%s:%s", types.KindFile, rel)},
 		why: fmt.Sprintf("Every line the pattern selects declares a symbol, and the index holds each of the %s. "+
 			"The file node lists everything the file defines, and `%s` prints any one body.",
-			countNoun(len(names), "name"), hint.Refs.With("<name>", "--definition", "--source")),
+			countNoun(len(names), "name"), hint.Refs.With("<name>", "--source")),
 		answer: names,
 	}, true
 }

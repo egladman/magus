@@ -495,7 +495,7 @@ func declarationRoutes(deps Dependencies, root, dir string, c hint.Invocation, i
 	var routes []searchRoute
 	for _, ident := range idents {
 		if defined, definitive := deps.symbolDefined(ident); defined && definitive {
-			routes = append(routes, searchRoute{name: ident, run: hint.Refs.With(ident, "--definition", "--source"), indexed: true})
+			routes = append(routes, searchRoute{name: ident, run: hint.Refs.With(ident, "--source"), indexed: true})
 			continue
 		}
 		found := liveDeclarations(deps, root, dir, c, ident)
@@ -922,7 +922,7 @@ func judgeSearch(deps Dependencies, c hint.Invocation) searchJudgment {
 		if a.kind == altDefinition {
 			// A declaration lookup wants the body next; --source prints it in place of the
 			// grep-then-sed pair.
-			r.run = hint.Refs.With(a.ident, "--definition", "--source")
+			r.run = hint.Refs.With(a.ident, "--source")
 		}
 		defined, definitive := deps.symbolDefined(a.ident)
 		ids := deps.symbolIDs(a.ident)
@@ -1065,7 +1065,7 @@ func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
 	if definition {
 		// A `func X` lookup wants the body next; --source prints it in place of the
 		// grep-then-sed pair.
-		return searchRoute{name: ident, run: hint.Refs.With(ident, "--definition", "--source"), indexed: true}, true
+		return searchRoute{name: ident, run: hint.Refs.With(ident, "--source"), indexed: true}, true
 	}
 	return searchRoute{name: ident, run: hint.Refs.With(ident, "--occurrences"), indexed: true}, true
 }

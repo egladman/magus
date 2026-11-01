@@ -130,7 +130,7 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 	}{
 		{`grep -n HandleRequest internal/api/handler.go`, deps, "refs HandleRequest --occurrences` answers this for every file."},
 		{`rg -n 'HandleRequest\(' internal/api/handler.go`, deps, "refs HandleRequest --occurrences`"},
-		{`grep -n 'func HandleRequest' internal/api/handler.go`, deps, "refs HandleRequest --definition --source`"},
+		{`grep -n 'func HandleRequest' internal/api/handler.go`, deps, "refs HandleRequest --source`"},
 		{`grep -n ParseConfig internal/api/handler.go`, deps, "refs ParseConfig --occurrences`"},
 		// A pipe changes nothing: the search still runs as typed.
 		{`grep -n HandleRequest internal/api/handler.go | head -1`, deps, "refs HandleRequest --occurrences`"},
@@ -192,12 +192,12 @@ func TestGrepReaderDeniesContextReads(t *testing.T) {
 		deps    Dependencies
 		serves  []string // the commands served, nil for no deny
 	}{
-		{`grep -n 'func HandleRequest' -A 20 internal/api/handler.go`, deps, []string{"magus refs HandleRequest --definition --source"}},
-		{`grep -nA20 'func HandleRequest' internal/api/handler.go`, deps, []string{"magus refs HandleRequest --definition --source"}},
-		{`grep -rn --after-context=40 '^type Config struct' internal/`, deps, []string{"magus refs Config --definition --source"}},
-		{`rg -C5 'func HandleRequest|type Config' internal/api`, deps, []string{"magus refs HandleRequest --definition --source", "magus refs Config --definition --source"}},
-		{`grep -n -5 'func HandleRequest' internal/api/handler.go`, deps, []string{"magus refs HandleRequest --definition --source"}},
-		{`grep -n 'func HandleRequest' -A20 internal/api/handler.go | grep serve`, deps, []string{"magus refs HandleRequest --definition --source"}},
+		{`grep -n 'func HandleRequest' -A 20 internal/api/handler.go`, deps, []string{"magus refs HandleRequest --source"}},
+		{`grep -nA20 'func HandleRequest' internal/api/handler.go`, deps, []string{"magus refs HandleRequest --source"}},
+		{`grep -rn --after-context=40 '^type Config struct' internal/`, deps, []string{"magus refs Config --source"}},
+		{`rg -C5 'func HandleRequest|type Config' internal/api`, deps, []string{"magus refs HandleRequest --source", "magus refs Config --source"}},
+		{`grep -n -5 'func HandleRequest' internal/api/handler.go`, deps, []string{"magus refs HandleRequest --source"}},
+		{`grep -n 'func HandleRequest' -A20 internal/api/handler.go | grep serve`, deps, []string{"magus refs HandleRequest --source"}},
 		// A stale index gets the declaration's lines from a parse of the file.
 		{`grep -n 'func HandleRequest' -A 20 internal/api/handler.go`, stale, []string{"sed -n 3,4p internal/api/handler.go"}},
 		{`grep -n 'func HandleRequest' -A 20 internal/api/*.go`, stale, []string{"sed -n 3,4p internal/api/handler.go"}},

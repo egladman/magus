@@ -286,7 +286,7 @@ var ruleDocGrepReader = types.RuleDoc{
 	Name:    string(denyRuleGrepReader),
 	Catches: "a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body",
 	Why: "A context count guesses at a declaration's length: too short cuts the body off and costs another call, too long spends lines on whatever follows. " +
-		"`magus refs X --definition --source` prints the declaration whole, numbered and checked against the index. Where the index cannot vouch for the name, the deny serves `sed -n <first>,<last>p <file>` instead, the declaration's own lines from a parse of the file the search reads (a named file or glob, or under a directory the files the index last saw name it). " +
+		"`magus refs X --source` prints the declaration whole, numbered and checked against the index. Where the index cannot vouch for the name, the deny serves `sed -n <first>,<last>p <file>` instead, the declaration's own lines from a parse of the file the search reads (a named file or glob, or under a directory the files the index last saw name it). " +
 		"The single-file allowance symbol-search gives `grep -n 'func X' f.go` does not apply: with -A, -B or -C the search is the read. " +
 		"A deny resting on the index advises instead while the graph describes another tree, as graph-stale; one parsed from a named file does not. " +
 		"It fires only when every alternative is a definition lookup (`func X`, `func (r *T) X`, `type X`, `type X struct`) and a declaration of each name is found; a search for uses, a case-insensitive one, or one with any text alternative is left to the search rules. A pipe after it is named as not reproduced.",
@@ -559,7 +559,7 @@ var ruleDocSymbolSearch = types.RuleDoc{
 	Why: "Each alternative of the pattern is classified by what it looks for, and the deny names every classification and why, so a false positive is disputable from the message alone. " +
 		"A name is a declaration lookup (`func X`, `type X`, `class X`, `function X`, `const X`), a CamelCase identifier, or a short name the syntax marks as one: a word search (`\\bX\\b`, -w), a qualified member (`pkg.X`, `\\.X`) or an assignment, when it is capitalized. " +
 		"Text is everything else: a plain word, which is as likely prose; snake_case, which in this tree is a config key, a JSON tag or a Buzz function; a lowercase call or member (`Mkdir(` is os.Mkdir as often as a local function); a standard-library member (`os.Rename`); a declaration of a lowercase word many share (`func main`); a string literal, a path, a hyphenated word or a regular expression. With -i a plain or marked short name widens to text, and a CamelCase one stays a name. " +
-		"The deny fires when ANY alternative is a name the index defines, serving `magus refs X --occurrences` per name (`--definition --source` for a declaration lookup, which prints the body in place of the grep-then-sed pair) and `magus refs --text <literal> <paths>` for each literal text alternative, and `magus explain diagnostic:<code>` for a code the graph holds a node for. " +
+		"The deny fires when ANY alternative is a name the index defines, serving `magus refs X --occurrences` per name (`--source` for a declaration lookup, which prints the body in place of the grep-then-sed pair) and `magus refs --text <literal> <paths>` for each literal text alternative, and `magus explain diagnostic:<code>` for a code the graph holds a node for. " +
 		"A stale index still answers, and refs refreshes it as it answers: it still knows the names it held, and it vouches for a declaration lookup or a CamelCase call it has not indexed yet, since that is the name a branch is adding; a bare word it does not hold stays text. An index goes stale on the first edit, so a rule that stood down for a stale one would let every symbol search through. Only a workspace with no symbol index at all is advised instead, since a deny there routes nowhere. " +
 		"An index built at another revision is stale on the same terms; a rebase still underway turns the deny into graph-stale's advice, since a rebuild then would describe a tree about to move. " +
 		"The search must reach the tree: a directory, a glob, or several files. One named file is a read and runs, with refs advised when the index vouches for the name; a definition lookup carrying -A, -B or -C is a read of the body, and grep-reader refuses it. " +
@@ -790,7 +790,7 @@ var ruleDocReadNavigation = types.RuleDoc{
 	Name:    string(denyRuleReadNavigation),
 	Catches: "a whole read of a Go, Buzz or Markdown file past the workspace's line limit",
 	Why: "The deny carries the file's declarations or headings with their lines, and the command that prints one of them, so the refused read costs nothing. " +
-		"The map is parsed from the file itself, so a stale index still gets one: where the index vouches for every name, `magus refs <name> --definition --source` prints one checked against it and the graph lists the map; where it does not, and for Buzz, which nothing indexes for refs, `sed -n <first>,<last>p <file>` prints one by its lines. " +
+		"The map is parsed from the file itself, so a stale index still gets one: where the index vouches for every name, `magus refs <name> --source` prints one checked against it and the graph lists the map; where it does not, and for Buzz, which nothing indexes for refs, `sed -n <first>,<last>p <file>` prints one by its lines. " +
 		"A Go declaration spans its doc comment to its closing brace, each member of a grouped var, const or type is its own entry, and a method is named `Type.Method`. A Buzz entry is a top-level fun, test, object or enum, from its doc comment to the line before the next statement. " +
 		"Every file a `cat` or `nl` prints is judged, so `cat a.go b.go` is refused for whichever mapped file is over the threshold. A host's read tool is restated as the same line (`cat <file>`, or `sed -n` over its offset and limit, a limit over 300 counting as whole) and judged the same way. " +
 		"The size worth flagging is the rule's `lines` setting, which a workspace sets: the binary ships no number for it. " +
@@ -948,7 +948,7 @@ var ruleDocTimedMagus = types.RuleDoc{
 
 var ruleDocReadSymbol = types.RuleDoc{
 	Name:    string(advisoryReadSymbol),
-	Catches: "a bounded read inside one indexed declaration, which refs --definition --source prints checked",
+	Catches: "a bounded read inside one indexed declaration, which refs --source prints checked",
 	Why:     "Silent inside a method: refs resolves bare names, so its command would print every method of that name.",
 }
 

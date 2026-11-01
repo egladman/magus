@@ -313,7 +313,7 @@ type mapEntry struct {
 // line range otherwise.
 func (m fileMap) read(e mapEntry) string {
 	if m.indexed && e.symbol != "" {
-		return hint.Refs.With(e.symbol, "--definition", "--source")
+		return hint.Refs.With(e.symbol, "--source")
 	}
 	return sedRangeCommand(m.rel, e.first, e.last)
 }
@@ -646,7 +646,7 @@ func denyReadNavigation(m fileMap) denial {
 	byLines := fmt.Sprintf("`sed -n <first>,<last>p %s`", shellWord(m.rel))
 	read := byLines
 	if m.indexed {
-		read = fmt.Sprintf("`%s`", hint.Refs.With("<name>", "--definition", "--source"))
+		read = fmt.Sprintf("`%s`", hint.Refs.With("<name>", "--source"))
 	}
 	say := fmt.Sprintf("magus workspace: %d lines; read one %s: %s.", m.lines, m.noun, read)
 	var b strings.Builder

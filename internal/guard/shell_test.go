@@ -2563,6 +2563,19 @@ func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 	dryRun := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename", "Bar", "--dry-run"}}
 	short := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename", "Bar", "-u"}}
 	write := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename=Bar"}}
+	for _, args := range [][]string{
+		{"refs", "Foo", "-rename", "Bar"},
+		{"refs", "Foo", "-rename=Bar"},
+		{"refs", "Foo", "--rename", "Bar"},
+		{"refs", "-rename", "Bar", "Foo"},
+		{"refs", "Foo", "--rename", "Bar", "--dry-run=false"},
+		{"refs", "Foo", "--rename", "Bar", "--", "-u"},
+	} {
+		assert.False(t, graphReadOnly([]hint.Invocation{{Name: "./magus", Args: args}}), "%v writes", args)
+		assert.True(t, namesRename(args), "%v names a rename", args)
+	}
+	assert.False(t, namesRename([]string{"refs", "Foo", "--", "-rename"}), "past -- is an operand")
+	assert.True(t, graphReadOnly([]hint.Invocation{{Name: "./magus", Args: []string{"refs", "Foo", "-rename", "Bar", "-dry-run"}}}))
 	assert.True(t, graphReadOnly([]hint.Invocation{read}))
 	assert.True(t, graphReadOnly([]hint.Invocation{dryRun}))
 	assert.True(t, graphReadOnly([]hint.Invocation{short}))

@@ -642,11 +642,11 @@ var graphReadVerbs = map[string]bool{"refs": true, "query": true, "explain": tru
 // renamesSymbol reports `refs --rename` without the global `--dry-run` (or its `-u`
 // short form), the one graph verb that writes.
 func renamesSymbol(args []string) bool {
-	return namesRename(args) && !slices.Contains(args, "--dry-run") && !slices.Contains(args, "-u")
+	return namesRename(args) && !magusFlag(args, "dry-run", "u")
 }
 
 func namesRename(args []string) bool {
-	return slices.ContainsFunc(args, func(a string) bool { return a == "--rename" || strings.HasPrefix(a, "--rename=") })
+	return magusFlag(args, flaggen.FlagRefsRename)
 }
 
 // buzzGradedWriterRe finds the fs members std/fs.go asks the edit judge about.
@@ -1327,7 +1327,7 @@ func trimmableMagus(cmds []hint.Invocation) bool {
 		if magusInvokes(one, "query", "output") {
 			continue
 		}
-		if magusInvokes(one, "refs") && slices.ContainsFunc(c.Args, isRefsTextFlag) {
+		if magusInvokes(one, "refs") && magusFlag(c.Args, flaggen.FlagRefsText) {
 			continue
 		}
 		if magusHelpRequest(c.Args) {
@@ -1336,13 +1336,6 @@ func trimmableMagus(cmds []hint.Invocation) bool {
 		return true
 	}
 	return false
-}
-
-// isRefsTextFlag matches refs' --text flag, spelled either --text or -text (Go's
-// flag package treats a single and a double dash the same), bare or with a value
-// (--text=true).
-func isRefsTextFlag(a string) bool {
-	return a == "-text" || a == "--text" || strings.HasPrefix(a, "-text=") || strings.HasPrefix(a, "--text=")
 }
 
 func isTextFilter(cmds []hint.Invocation) bool {
