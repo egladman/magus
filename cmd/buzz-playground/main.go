@@ -232,9 +232,8 @@ func (u *ui) wireShare() {
 // reason: a button that cannot do its job should not be drawn.
 //
 // No outcome flash, unlike Share. A copy either reached the clipboard or did not,
-// and the promise says which; a save is handed to the browser, which may still put
-// up a dialog the visitor cancels - so "Saved" would be a claim this code cannot
-// check. The browser's own download UI is the report.
+// and the promise says which. A save goes to the browser, so "Saved" could not
+// be checked. The browser's own download UI is the report.
 func (u *ui) wireDownload() {
 	btn := u.doc.Call("getElementById", "download-btn")
 	if !btn.Truthy() {
