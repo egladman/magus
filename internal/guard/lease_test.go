@@ -3621,6 +3621,34 @@ func (s *guardSuite) TestACommittedOutputRegeneratedInAnotherCheckoutRuns() {
 		"each branch regenerates its own copy, and integration regenerates once")
 }
 
+func (s *guardSuite) TestAnIgnoredOutputAnUntakenLeaseRegeneratesRuns() {
+	s.Empty(s.regenerateBeside(func(string) string { return "" }, "testdata/api.lock\n"))
+}
+
+func (s *guardSuite) TestACommittedOutputAnUntakenLeaseRegeneratesWaits() {
+	s.Contains(s.regenerateBeside(func(string) string { return "" }, ""), "held by live lease a/first")
+}
+
+// rewriteGrade judges a script check that writes through the grader.
+func (s *guardSuite) rewriteGrade(pending bool) denial {
+	row := regeneratingLease("a/script")
+	ctx, root := fleetFixture(s.T(), row)
+	script := filepath.Join(root, "check.buzz")
+	s.Require().NoError(os.WriteFile(script, []byte("import \"fs\";\nfs\\writeFile(\"out\", content: \"x\");\n"), 0o644))
+	if pending {
+		ctx = withPendingRow(ctx, row)
+	}
+	return denyUngradedRewrite(ctx, Dependencies{}, row.ID, "./magus buzz -t "+script)
+}
+
+func (s *guardSuite) TestAScriptCheckIsRefusedToAHolderWithNoRecord() {
+	s.True(s.rewriteGrade(false).refused())
+}
+
+func (s *guardSuite) TestAScriptCheckIsNotRefusedAtFork() {
+	s.False(s.rewriteGrade(true).refused())
+}
+
 func (s *guardSuite) TestAnIgnoredOutputRegeneratedInTheSameCheckoutWaits() {
 	s.Equal(heldByFirst, s.regenerateBeside(func(root string) string { return root }, "testdata/api.lock\n"))
 }

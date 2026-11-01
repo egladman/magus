@@ -4,17 +4,98 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/testkit"
 )
 
 const conflictedGo = "package agent\n<<<<<<< HEAD\nvar a = 1\n=======\nvar a = 2\n>>>>>>> origin/main\n"
+
+// ConflictCommitSuite grades commit lines in a one-commit repository.
+type ConflictCommitSuite struct {
+	suite.Suite
+	at location
+}
+
+func TestConflictCommitSuite(t *testing.T) {
+	suite.Run(t, new(ConflictCommitSuite))
+}
+
+func (s *ConflictCommitSuite) SetupTest() {
+	root := s.T().TempDir()
+	s.at = location{workspace: root, dir: root}
+	s.git("init", "-q")
+	s.write("a.go", "package a\n")
+	s.git("add", "a.go")
+	s.git("commit", "-q", "-m", "base")
+}
+
+func (s *ConflictCommitSuite) git(args ...string) {
+	cmd := exec.Command("git", append([]string{"-C", s.at.workspace, "-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+	out, err := cmd.CombinedOutput()
+	s.Require().NoError(err, "%s", out)
+}
+
+func (s *ConflictCommitSuite) write(rel, body string) {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.at.workspace, rel), []byte(body), 0o644))
+}
+
+func (s *ConflictCommitSuite) deny(line string) string {
+	return denyConflictCommit(s.T().Context(), s.at, line, DialectBash)
+}
+
+func (s *ConflictCommitSuite) TestAStagedMarkerIsRefusedAndNamesTheFile() {
+	s.write("a.go", conflictedGo)
+	s.git("add", "a.go")
+	s.Contains(s.deny("git commit -m x"), "a.go:2")
+}
+
+func (s *ConflictCommitSuite) TestCommitAllReadsTheWorkingTree() {
+	s.write("a.go", conflictedGo)
+	s.Contains(s.deny("git commit -am x"), "a.go:2")
+}
+
+func (s *ConflictCommitSuite) TestAddOnTheLineReadsTheWorkingTree() {
+	s.write("a.go", conflictedGo)
+	s.Contains(s.deny("git add a.go && git commit -m x"), "a.go:2")
+}
+
+func (s *ConflictCommitSuite) TestAnUnstagedMarkerIsNotThisCommits() {
+	s.write("a.go", conflictedGo)
+	s.write("b.go", "package a\n")
+	s.git("add", "b.go")
+	s.Empty(s.deny("git commit -m x"))
+}
+
+func (s *ConflictCommitSuite) TestAMarkerAlreadyCommittedChargesNoBystander() {
+	s.write("a.go", conflictedGo)
+	s.git("add", "a.go")
+	s.git("commit", "-q", "-m", "fixture")
+	s.write("a.go", conflictedGo+"var b = 1\n")
+	s.git("add", "a.go")
+	s.Empty(s.deny("git commit -m x"))
+}
+
+func (s *ConflictCommitSuite) TestAFixtureDeclaringALongerMarkerPasses() {
+	s.write(".gitattributes", "a.go conflict-marker-size=32\n")
+	s.write("a.go", conflictedGo)
+	s.git("add", "a.go", ".gitattributes")
+	s.Empty(s.deny("git commit -m x"))
+}
+
+func (s *ConflictCommitSuite) TestOtherLinesPass() {
+	s.write("a.go", conflictedGo)
+	s.git("add", "a.go")
+	s.Empty(s.deny("git status"))
+}
 
 // conflictFixture is a workspace carrying one file mid-merge and one clean tracked file.
 func conflictFixture(t *testing.T) location {

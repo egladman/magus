@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -128,7 +129,7 @@ func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types
 		if !verdict.Denied {
 			continue
 		}
-		p := deniedCheckProblem(row.ID, which, goal.Check, verdict)
+		p := deniedCheckProblem(row, which, goal.Check, verdict)
 		p.Field = goalCheckField(row, goal)
 		ps = append(ps, p)
 	}
@@ -141,15 +142,39 @@ func ungradedCheckProblem(id, which string, check types.LeaseCheck, why string) 
 		Code: types.JobUngraded,
 		Message: fmt.Sprintf("%s's %s `%s` could not be graded against the guard: %s,"+
 			" so nothing says its worker may run it", id, which, check.String(), strings.Join(strings.Fields(why), " ")),
-		Fix: fmt.Sprintf("make the guard load in this checkout (`%s` names what it cannot load), then fork again", hint.Doctor),
+		Fix: fmt.Sprintf("a magus older than this tree cannot judge it, so fork with one built at this checkout's HEAD or later; if that one refuses too, `%s` names what it cannot load", hint.Doctor),
 	}
 }
 
-// deniedCheckProblem words the problem with row id's check, which names it in the row. A
-// target a person runs is no check a worker could ever run, so that problem names the
-// rule's reason and asks for another check; any other deny recommends the compiling check,
-// which the guard lets a worker it keeps from building run.
-func deniedCheckProblem(id, which string, check types.LeaseCheck, verdict CheckVerdict) types.JobProblem {
+// replacementCheckFix is what a denied check of row becomes.
+// The compiling check grades only Go, so another row gets its own kind.
+func replacementCheckFix(row types.Job) string {
+	writes := func(ext string) (string, bool) {
+		i := slices.IndexFunc(row.WritePaths, func(p string) bool { return path.Ext(p) == ext })
+		if i < 0 {
+			return "", false
+		}
+		return row.WritePaths[i], true
+	}
+	_, goSource := writes(".go")
+	script, buzz := writes(".buzz")
+	switch {
+	case !goSource && buzz:
+		return fmt.Sprintf(`declare the script check that tests what it writes, with "check": {"script": %q, "test": true}`, script)
+	case !goSource && len(row.WritePaths) > 0:
+		return fmt.Sprintf("declare a check that grades what it writes, with `magus job fork %s --check '<target> <project>'`", row.ID)
+	}
+	compiling := CompilingCheck()
+	recommended := fmt.Sprintf("%s %s", compiling.Target, compiling.Project)
+	return fmt.Sprintf("declare a target that compiles without building the binary, such as `%s`,"+
+		" with `magus job fork %s --check '%s'`", recommended, row.ID, recommended)
+}
+
+// deniedCheckProblem words the problem with row's check. A target a person runs
+// can never be a worker's check, so that problem asks for another.
+// Any other deny gets [replacementCheckFix].
+func deniedCheckProblem(row types.Job, which string, check types.LeaseCheck, verdict CheckVerdict) types.JobProblem {
+	id := row.ID
 	reason := strings.Join(strings.Fields(verdict.Reason), " ")
 	if verdict.Rule == humanOnlyRule {
 		return types.JobProblem{
@@ -164,14 +189,11 @@ func deniedCheckProblem(id, which string, check types.LeaseCheck, verdict CheckV
 	if verdict.Rule != "" {
 		rule = fmt.Sprintf(" (%s)", verdict.Rule)
 	}
-	compiling := CompilingCheck()
-	recommended := fmt.Sprintf("%s %s", compiling.Target, compiling.Project)
 	return types.JobProblem{
 		Code: types.JobCheckUnrunnable,
 		Message: fmt.Sprintf("%s's %s `%s` would be denied to its worker by the guard%s: %s,"+
 			" and the holder runs the check under its lease, so a denied one can never verify the job",
 			id, which, check.String(), rule, reason),
-		Fix: fmt.Sprintf("declare a target that compiles without building the binary, such as `%s`,"+
-			" with `magus job fork %s --check '%s'`", recommended, id, recommended),
+		Fix: replacementCheckFix(row),
 	}
 }

@@ -52,8 +52,8 @@ func unknownRowDenial(deps Dependencies, row types.Job) denial {
 	binary := cmp.Or(deps.Binary, "this magus")
 	version := cmp.Or(deps.BinaryVersion, "an unknown version")
 	return denial{
-		Say: fmt.Sprintf("magus workspace: %s (%s) cannot read %s on job %s's row; build this checkout's ./magus, or ask the root to rebuild the hook's.",
-			binary, version, strings.Join(members, ", "), row.ID),
+		Say: fmt.Sprintf("magus workspace: %s (%s) cannot read %s on job %s's row; build this checkout's ./magus, alone on its line: `%s`.",
+			binary, version, strings.Join(members, ", "), row.ID, job.CheckoutBootstrap(cmp.Or(job.WorkingCheckout(row.CheckoutRoot, row), "<checkout>"))),
 		Why: fmt.Sprintf("A member this build does not know may widen or narrow what the row permits, and judging as if it were absent would be a guess. "+
 			"The hook hands a call to a checkout's own ./magus when it was built at HEAD, after HEAD, or after the hook's binary. "+
 			"The holder of the job whose checkout this is builds one, alone on its line: `%s`. "+

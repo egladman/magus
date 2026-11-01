@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
@@ -31,6 +32,38 @@ func graderStore(t *testing.T, verdict CheckVerdict) (*Store, *gradeRecorder) {
 	loc := tempLocation(t, testRoot(t).Root())
 	loc.Grader = rec.grade
 	return NewStore(loc), rec
+}
+
+// ReplacementCheckSuite pins what a refused check is told to become.
+type ReplacementCheckSuite struct {
+	suite.Suite
+}
+
+func TestReplacementCheckSuite(t *testing.T) {
+	suite.Run(t, new(ReplacementCheckSuite))
+}
+
+func (s *ReplacementCheckSuite) fix(paths ...string) string {
+	return replacementCheckFix(types.Job{ID: "w", WritePaths: paths})
+}
+
+func (s *ReplacementCheckSuite) TestABuzzRowIsOfferedAScriptCheckNotGoVet() {
+	got := s.fix("hack/dev/a.buzz")
+	s.Equal(`declare the script check that tests what it writes, with "check": {"script": "hack/dev/a.buzz", "test": true}`, got)
+}
+
+func (s *ReplacementCheckSuite) TestARowWritingNeitherIsAskedForAnyCheckThatGradesIt() {
+	s.NotContains(s.fix("docs/a.md"), "go-vet")
+}
+
+func (s *ReplacementCheckSuite) TestAGoRowIsOfferedTheCompilingCheck() {
+	s.Contains(s.fix("internal/a/*.go", "hack/dev/a.buzz"), "go-vet")
+}
+
+func (s *ReplacementCheckSuite) TestAnUngradedCheckNamesTheNewerBinaryBeforeDoctor() {
+	got := ungradedCheckProblem("w", "check", *forkCheck(), "the guard denies").Fix
+	s.Contains(got, "built at this checkout's HEAD or later")
+	s.Contains(got, "doctor")
 }
 
 func TestStoreGradesAgainstItsOwnRoot(t *testing.T) {

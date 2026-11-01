@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
@@ -313,7 +314,7 @@ func ghReadOnly(args []string) bool {
 }
 
 // magusReadVerbs are the magus verbs that answer a question and write nothing shared.
-var magusReadVerbs = []string{"version", "ls", "describe", "query", "status", "explain", "refs", "path", "doctor"}
+var magusReadVerbs = []string{"version", "ls", "describe", "query", "status", "explain", "refs", "path", "doctor", "where"}
 
 // magusReadOnly reports a magus invocation that reads. Asking for help always does, and so
 // does `affected --explain`, which says why each project is affected and runs nothing.
@@ -330,6 +331,8 @@ func magusReadOnly(args []string) bool {
 		return false
 	case words[0] == "affected":
 		return magusFlag(args, "explain")
+	case words[0] == "vcs":
+		return len(words) > 1 && words[1] == "ls-files"
 	}
 	return slices.Contains(magusReadVerbs, words[0])
 }
@@ -360,6 +363,7 @@ func scoutRecord(args []string) bool {
 // Whether a worker may build is the raw-tool rule's to say. The rebuild is a run of a
 // target at declares relinks, read off at's record, never off a target's name.
 func recoveryLine(command string, d Dialect, lease string, builds bool, at location) bool {
+	command = withoutLeaseExport(command, d)
 	call, ok := soleCall(command, d)
 	if !ok {
 		return false
@@ -372,7 +376,7 @@ func recoveryLine(command string, d Dialect, lease string, builds bool, at locat
 		return true
 	}
 	// denyCheckoutBootstrap still judges who may build which checkout.
-	places := len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" &&
+	places := onlyBaggageAssigns(call.Assigns) && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" &&
 		(words[2] == placementScript || words[2] == job.CheckoutBootstrapScript)
 	if places {
 		return true
@@ -393,6 +397,35 @@ func recoveryLine(command string, d Dialect, lease string, builds bool, at locat
 		}
 	}
 	return false
+}
+
+// withoutLeaseExport is command past a leading `export BAGGAGE=...`, the prefix
+// edit-ungraded teaches. Any other command comes back unchanged.
+func withoutLeaseExport(command string, d Dialect) string {
+	f, err := parseFile(command, d)
+	if err != nil || len(f.Stmts) == 0 {
+		return command
+	}
+	first, rest := f.Stmts[0], f.Stmts[1:]
+	if bin, ok := first.Cmd.(*syntax.BinaryCmd); ok && len(rest) == 0 && bin.Op == syntax.AndStmt {
+		first, rest = bin.X, []*syntax.Stmt{bin.Y}
+	}
+	decl, ok := first.Cmd.(*syntax.DeclClause)
+	if !ok || len(rest) != 1 || decl.Variant == nil || decl.Variant.Value != "export" || !onlyBaggageAssigns(decl.Args) {
+		return command
+	}
+	var b strings.Builder
+	if syntax.NewPrinter().Print(&b, rest[0]) != nil {
+		return command
+	}
+	return b.String()
+}
+
+// onlyBaggageAssigns reports assignments setting nothing but the lease claim.
+func onlyBaggageAssigns(assigns []*syntax.Assign) bool {
+	return !slices.ContainsFunc(assigns, func(a *syntax.Assign) bool {
+		return a.Name == nil || a.Name.Value != trail.EnvBaggage
+	})
 }
 
 // vcsRecoveryLine reports a git line that continues, skips or aborts an interrupted
@@ -570,6 +603,13 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	hasBinary := hasMagusBinary(root)
 	bootstrap := config.SourceCommand(root, "", "", true)
 	switch {
+	case lease != "" && own && hasBinary && job.BuildsItsOwnMagus(root):
+		// A placement can be older than a tree the worker's own commits moved.
+		return binaryFix{
+			say: fmt.Sprintf("build this checkout's own, alone on its line: `%s`", job.CheckoutBootstrap(root)),
+			why: "That line runs for the holder of the job whose checkout it is, whatever judges the call. The main session can place a ./magus instead when no Go build input differs.\n" +
+				workerFastForward + "\n" + onePerBase,
+		}
 	case lease != "" && own && hasBinary:
 		return binaryFix{
 			say:      "ask the main session to place a ./magus that loads this workspace",

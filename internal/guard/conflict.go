@@ -1,9 +1,12 @@
 package guard
 
 import (
+	"cmp"
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -165,6 +168,71 @@ func conflictRewriteDenial(workspace, rel string) string {
 		say = fmt.Sprintf("%s; resolve its hunks with `%s`.", what, cmd)
 	}
 	return fmt.Sprintf("%s\nA script that opens a file for writing and then raises leaves it empty, and mid-merge the working copy is the only copy of the half-resolved file.\nYour editor tool reads the file first and reports what it changed. Taking one side whole? `git checkout --ours` or `--theirs` names which.", say)
+}
+
+// denyRuleConflictCommit is a commit recording an added conflict marker.
+const denyRuleConflictCommit denyRuleName = "conflict-commit"
+
+// leftoverMarker is how `git diff --check` reports a marker on an added line.
+const leftoverMarker = ": leftover conflict marker"
+
+// denyConflictCommit refuses a `git commit` recording an added conflict marker.
+// git's own check reads added lines only and honors conflict-marker-size.
+func denyConflictCommit(ctx context.Context, at location, line string, d Dialect) string {
+	cmds, ok := ParseCommandsDialect(line, d)
+	if !ok {
+		return ""
+	}
+	i := slices.IndexFunc(cmds, func(c hint.Invocation) bool {
+		return c.Name == "git" && recordsCommit(c)
+	})
+	if i < 0 {
+		return ""
+	}
+	site, ok := locateCheckout(line, d, cmp.Or(at.dir, at.workspace))
+	if !ok {
+		return ""
+	}
+	args := []string{"-C", site.dir, "diff", "--check", "--cached", "HEAD"}
+	if commitReadsWorkingTree(cmds, i) {
+		args = []string{"-C", site.dir, "diff", "--check", "HEAD"}
+	}
+	// git exits non-zero for any finding, so only the output says which.
+	out, _ := exec.CommandContext(ctx, "git", args...).Output()
+	for found := range strings.Lines(string(out)) {
+		if place, hit := strings.CutSuffix(strings.TrimSpace(found), leftoverMarker); hit {
+			return denial{
+				Say: fmt.Sprintf("magus workspace: this commit records a conflict marker at %s; resolve that hunk, stage it and commit again.", place),
+				Why: "A marker the merge left behind compiles in no language and reads as a resolved file once it is staged. " +
+					"`git diff --check` found it on a line this commit adds. A fixture that must hold one sets git's `conflict-marker-size` attribute.",
+			}.full()
+		}
+	}
+	return ""
+}
+
+// commitReadsWorkingTree reports a commit at cmds[i] whose content is not
+// staged yet: an `add` earlier on its line, -a, or named paths.
+func commitReadsWorkingTree(cmds []hint.Invocation, i int) bool {
+	if slices.ContainsFunc(cmds[:i], func(c hint.Invocation) bool {
+		sub, _ := vcsSubcommand(c)
+		return c.Name == "git" && sub == "add"
+	}) {
+		return true
+	}
+	_, rest := vcsSubcommand(cmds[i])
+	return slices.ContainsFunc(rest, func(a string) bool {
+		short := strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.Contains(a, "a")
+		return a == "--all" || a == "--" || short
+	})
+}
+
+// rankConflictCommit outranks only a pass or an advisory.
+func rankConflictCommit(v ShellVerdict, reason string) ShellVerdict {
+	if reason == "" || v.Deny != "" {
+		return v
+	}
+	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleConflictCommit}}
 }
 
 // rankConflictRewrite ranks this reason over the rewrite rules' denies, which refuse the
