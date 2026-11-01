@@ -199,7 +199,7 @@ func isDeviationLedger(path string) bool {
 
 func deviationDenial(path string) string {
 	return denial{
-		Say: fmt.Sprintf("magus workspace: only a person adds a line to %s; name the line in your result so they can.", strings.TrimSpace(path)),
+		Say: fmt.Sprintf("magus workspace: only a person adds a line to %s, so name the line in your result.", strings.TrimSpace(path)),
 		Why: ruleDocDeviationAuthor.Why,
 	}.full()
 }
@@ -324,7 +324,7 @@ func deviationWriteTarget(line string, d Dialect) string {
 			}
 		}
 	}
-	for _, target := range writeTargetCandidates(line, 0, d) {
+	for _, target := range writeTargetCandidates(line, d) {
 		if !isDeviationLedger(target) {
 			continue
 		}

@@ -822,7 +822,7 @@ func TestForkFactsCountCommitsSinceTheLastFullTest(t *testing.T) {
 	facts := ForkFacts(t.Context(), repo.Root(), nil, FullTest{Ref: "out1", Revision: tested})
 	assert.Equal(t, 2, facts.CommitsSinceTest)
 	assert.Empty(t, facts.TestUnknown)
-	assert.Contains(t, ForkFactsLine(facts), "2 commit(s) since the last full test (out1 at "+tested+")")
+	assert.Contains(t, ForkFactsLine(facts), fmt.Sprintf("2 commit(s) since the last full test (out1 at %s)", tested))
 	assert.Contains(t, ForkFactsLine(facts), "0 finished branches off the base")
 
 	gone := ForkFacts(t.Context(), repo.Root(), nil, FullTest{Ref: "out1", Revision: "0000000000000000000000000000000000000000"})

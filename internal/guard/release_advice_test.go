@@ -115,9 +115,10 @@ func (s *ReleaseAdviceSuite) TestALeasedCallOpensNoSessionFile() {
 		}
 	})
 
+	input := bashCall(s.T(), "holder", "", "ls")
 	done := make(chan types.GuardJudgment, 1)
 	go func() {
-		done <- Judge(ctx, Dependencies{}, Request{Input: bashCall(s.T(), "holder", "", "ls"), Host: "claude-code", Lease: "lease-a"})
+		done <- Judge(ctx, Dependencies{}, Request{Input: input, Host: "claude-code", Lease: "lease-a"})
 	}()
 
 	select {

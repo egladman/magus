@@ -16,7 +16,7 @@ import (
 // Creating path with O_EXCL and then writing it is the obvious alternative and is wrong:
 // the file exists empty until the write lands, and a reader in that window sees "".
 func Publish(path string, data []byte, perm os.FileMode) (err error) {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp.*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), fmt.Sprintf(".%s.tmp.*", filepath.Base(path)))
 	if err != nil {
 		return err
 	}

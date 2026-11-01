@@ -170,7 +170,7 @@ func (s *LapsePersonOnlySuite) lapses(req Request, setup func(context.Context)) 
 	return out
 }
 
-func (s *LapsePersonOnlySuite) commandReq(line string) Request {
+func (s *LapsePersonOnlySuite) commandRequest(line string) Request {
 	return Request{Input: line, Host: "claude-code", Session: "s1"}
 }
 
@@ -182,7 +182,7 @@ func loaded(ctx context.Context) {
 }
 
 func (s *LapsePersonOnlySuite) TestAShellWriteToALedgerIsRefusedByItsRule() {
-	for i, v := range s.lapses(s.commandReq("echo x >> proto/buf-breaking.deviations.jsonl"), func(context.Context) {}) {
+	for i, v := range s.lapses(s.commandRequest("echo x >> proto/buf-breaking.deviations.jsonl"), func(context.Context) {}) {
 		s.Equal(verdictWithRule(decisionDeny, string(denyRuleDeviationAuthor)), unworded(v), "lapse %d", i+1)
 	}
 }
@@ -205,37 +205,37 @@ func (s *LapsePersonOnlySuite) TestAnEditDeletingALedgerLineDegrades() {
 }
 
 func (s *LapsePersonOnlySuite) TestAnAgentGrantIsRefusedByItsRule() {
-	for i, v := range s.lapses(s.commandReq("magus job grant w --rule lease-write"), func(context.Context) {}) {
+	for i, v := range s.lapses(s.commandRequest("magus job grant w --rule lease-write"), func(context.Context) {}) {
 		s.Equal(verdictWithRule(decisionDeny, string(denyRuleGrantIsAPersons)), unworded(v), "lapse %d", i+1)
 	}
 }
 
 func (s *LapsePersonOnlySuite) TestAHumanOnlyRunIsNeverDegraded() {
-	for i, v := range s.lapses(s.commandReq("magus run agent-bench-run ."), loaded) {
+	for i, v := range s.lapses(s.commandRequest("magus run agent-bench-run ."), loaded) {
 		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
 	}
 }
 
 func (s *LapsePersonOnlySuite) TestARunReachingAHumanOnlyTargetIsNeverDegraded() {
-	for i, v := range s.lapses(s.commandReq("magus run bench-all ."), loaded) {
+	for i, v := range s.lapses(s.commandRequest("magus run bench-all ."), loaded) {
 		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
 	}
 }
 
 func (s *LapsePersonOnlySuite) TestARunWithPoliciesUnreadIsNeverDegraded() {
-	for i, v := range s.lapses(s.commandReq("magus run test ."), func(context.Context) {}) {
+	for i, v := range s.lapses(s.commandRequest("magus run test ."), func(context.Context) {}) {
 		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
 	}
 }
 
 func (s *LapsePersonOnlySuite) TestARunTheRecordClearsDegrades() {
-	got := s.lapses(s.commandReq("magus run test ."), loaded)
+	got := s.lapses(s.commandRequest("magus run test ."), loaded)
 	s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(got[0]))
 	s.Equal(decisionAdvise, got[len(got)-1].Decision)
 }
 
 func (s *LapsePersonOnlySuite) TestAnOrdinaryCommandStillDegrades() {
-	got := s.lapses(s.commandReq("touch notes.txt"), func(context.Context) {})
+	got := s.lapses(s.commandRequest("touch notes.txt"), func(context.Context) {})
 	s.Equal(decisionAdvise, got[len(got)-1].Decision)
 }
 

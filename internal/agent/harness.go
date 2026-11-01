@@ -122,8 +122,8 @@ const (
 	// ChannelDisplay is read by the person and the agent alike: a deny reason, a thrown
 	// tool error. It gets a deny's verdict line.
 	ChannelDisplay HarnessChannel = "display"
-	// ChannelCapture is read by the agent alone: Claude Code's additionalContext, Cursor's
-	// agent_message. It gets the whole deny.
+	// ChannelCapture is read by the agent alone, in the field a host keeps for
+	// context. It gets the whole deny.
 	ChannelCapture HarnessChannel = "capture"
 	// ChannelNotice is read by the person alone: a systemMessage, Cursor's user_message.
 	ChannelNotice HarnessChannel = attr.NoticeKey

@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"context"
 	"os"
 	"path/filepath"
@@ -127,7 +128,7 @@ func (s *PersonLeaseSuite) TestABuzzScriptThatWritesNeedsTheClaim() {
 
 func (s *PersonLeaseSuite) TestABuzzScriptAfterDashCNeedsTheClaim() {
 	s.script("writes.buzz", buzzWritesAFile)
-	s.Equal(string(denyRuleEditUngraded), s.judgeBound("./magus -C "+s.root+" buzz writes.buzz").Rule)
+	s.Equal(string(denyRuleEditUngraded), s.judgeBound(fmt.Sprintf("./magus -C %s buzz writes.buzz", s.root)).Rule)
 }
 
 func (s *PersonLeaseSuite) TestAnInlineBuzzWriteNeedsTheClaim() {
@@ -174,7 +175,7 @@ func (s *PersonLeaseSuite) TestTheBootstrapScriptsTakeNoClaim() {
 }
 
 // A workspace opened at a bare directory has no marker for the search to find.
-func (s *PersonLeaseSuite) TestAnOpenedWorkspaceIsNeverJudgedByTheProcessCwd() {
+func (s *PersonLeaseSuite) TestAnOpenedWorkspaceIsNeverJudgedByTheProcessWorkingDir() {
 	s.T().Chdir(s.root)
 	own := s.T().TempDir()
 	var opened []string

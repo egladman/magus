@@ -855,7 +855,8 @@ func pickWrites(ctx context.Context, command string, d Dialect, start, home stri
 // selects them: a range walks, a lone commit does not. Each commit counts, so a
 // file a range writes and reverts is still named, and renames name both sides.
 func pickedPaths(ctx context.Context, dir string, revs []string) ([]string, error) {
-	args := []string{"-C", dir, "log", "--format=", "--name-only", "-z", "--no-renames", "--diff-merges=separate", "--no-walk=unsorted"}
+	args := make([]string, 0, 9+len(revs))
+	args = append(args, "-C", dir, "log", "--format=", "--name-only", "-z", "--no-renames", "--diff-merges=separate", "--no-walk=unsorted")
 	cmd := exec.CommandContext(ctx, "git", append(append(args, revs...), "--")...)
 	out, err := cmd.Output()
 	if err != nil {
@@ -1122,8 +1123,8 @@ func stripPatchPath(name string, strip int) (string, bool) {
 // Any `sh -c` or `eval` payload is scanned on its own afterwards: peelWrappers hands back
 // the commands inside one, but a redirect there belongs to the inner parse tree and is
 // invisible to a walk of the outer one.
-func writeTargetCandidates(command string, depth int, d Dialect) []string {
-	placed := collectWriteCandidates(command, depth, d, "", "", func(_ string, w *syntax.Word) string { return literalWord(w.Parts) })
+func writeTargetCandidates(command string, d Dialect) []string {
+	placed := collectWriteCandidates(command, 0, d, "", "", func(_ string, w *syntax.Word) string { return literalWord(w.Parts) })
 	out := slices.Grow([]string(nil), len(placed)) // stays nil for a line that writes nothing
 	for _, p := range placed {
 		out = append(out, p.word)

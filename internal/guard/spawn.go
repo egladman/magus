@@ -160,14 +160,6 @@ type agentTypeRecord struct {
 	Type string `json:"type"`
 }
 
-// spawnedAgentType is the subagent type agentID was spawned as, "" when it is not known.
-func spawnedAgentType(facts hint.Gate, agentID string) string {
-	if agentID == "" {
-		return ""
-	}
-	rec, _ := readMarker[agentTypeRecord](facts, agentTypeKind(agentID))
-	return rec.Type
-}
 
 // recordPendingSpawn files a spawn that passed, for the start of the child it makes to be
 // joined to it. A host whose finished spawn already names the child never reads it.
