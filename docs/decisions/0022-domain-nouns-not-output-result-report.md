@@ -60,17 +60,17 @@ Measured on this tree 2026-11-01: `Output` 25, `Report` 20, `Result` 9,
 9. The majority-shape API replaces precedents with `Hold`, `Holds`, `Count`,
    `Counts`; methods `magus\holds(family)` and `magus\counts(family)`.
 
-| Item | State |
-| ---- | ----- |
-| This record; refuse new `*Output` / `*Report` answer types in review | done |
-| `PrecedentReport` → `Holds`, `SymbolReport` → `Symbols` | done |
-| `ConformanceOutput` → `Conformance`; ceiling ask → `Ceiling` | done |
-| History metric `*Output` / `VolatilityReport` → domain nouns | done |
-| Delete `Insight` / `InsightReport` / `InsightView` umbrella; no `magus\insight` bundle | done |
-| Proto `insight` → `historymetrics`; nested nouns; `GetHistoryMetrics*Response` | done |
-| Lint: RPC I/O ends in Request/Response; nested messages have no `*Output`/`*Report` suffix | done |
-| Action `*Result` renames when those files are touched | todo |
-| `magus\precedents` → `magus\holds` / `magus\counts` | todo |
+| Item                                                                                       | State |
+| ------------------------------------------------------------------------------------------ | ----- |
+| This record; refuse new `*Output` / `*Report` answer types in review                       | done  |
+| `PrecedentReport` → `Holds`, `SymbolReport` → `Symbols`                                    | done  |
+| `ConformanceOutput` → `Conformance`; ceiling ask → `Ceiling`                               | done  |
+| History metric `*Output` / `VolatilityReport` → domain nouns                               | done  |
+| Delete `Insight` / `InsightReport` / `InsightView` umbrella; no `magus\insight` bundle     | done  |
+| Proto `insight` → `historymetrics`; nested nouns; `GetHistoryMetrics*Response`             | done  |
+| Lint: RPC I/O ends in Request/Response; nested messages have no `*Output`/`*Report` suffix | done  |
+| Action `*Result` renames when those files are touched                                      | todo  |
+| `magus\precedents` → `magus\holds` / `magus\counts`                                        | todo  |
 
 ### Principles checked
 
@@ -93,7 +93,7 @@ Measured on this tree 2026-11-01: `Output` 25, `Report` 20, `Result` 9,
   not runs.
 - **Generate `.proto` from `types/` (or protobuf tags on domain structs).** Lost:
   the clean separation between application types and the wire. Reopen only with
-  evidence the dual map is the defect, not parallel *names*.
+  evidence the dual map is the defect, not parallel _names_.
 - **Keep an `Insight` / `Lenses` / `Measures` domain bundle.** Lost: empty
   umbrella beside the real nouns. The RPC response may still group fields.
 - **`GetInsightResponse` as the envelope.** Lost: reintroduces Insight in the

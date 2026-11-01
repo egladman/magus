@@ -391,7 +391,10 @@ export class DashboardTransport {
     const ctrl = new AbortController();
     this.historyMetricsAbort = ctrl;
     try {
-      const client = createClient(HistoryMetricsService, createServerTransport(host, getLiveToken()));
+      const client = createClient(
+        HistoryMetricsService,
+        createServerTransport(host, getLiveToken()),
+      );
       const resp = await client.getHistoryMetrics({}, { signal: ctrl.signal });
       // The SUCCESS path needs the same guard as the catch. A superseded poll can still resolve if
       // its body was already buffered when the next tick aborted it, and writing here would both

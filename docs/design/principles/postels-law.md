@@ -34,7 +34,7 @@ So the rule has two halves, and both are required:
 
 This is the permissive twin of [No silent defaults](../judgment/no-silent-defaults.md).
 That page refuses a default that changes what happens without saying so. This
-page refuses a default that *is* said (in help, in the declaration) so the
+page refuses a default that _is_ said (in help, in the declaration) so the
 liberal accept stays safe. The unit is a fact the registry owns, not a
 convention the caller is expected to remember.
 

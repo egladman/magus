@@ -52,14 +52,14 @@ route. The daemon refuses to start if a procedure has no need, or a need is
 none or names a level its scope lacks, and a daemon whose workspace failed to
 load holds every route to the same needs.
 
-| Route                                                                                                        | Needs           |
-| ------------------------------------------------------------------------------------------------------------ | --------------- |
-| `/mcp`                                                                                                       | `mcp=write`     |
-| TokenService, every procedure                                                                                | `tokens=write`  |
-| JobService `RunJob`                                                                                          | `console=write` |
-| `/api/v1/diff` and its sub-routes, `/api/v1/plan`, `/api/v1/attention`, `POST /api/v1/share`                 | `console=write` |
+| Route                                                                                                               | Needs           |
+| ------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `/mcp`                                                                                                              | `mcp=write`     |
+| TokenService, every procedure                                                                                       | `tokens=write`  |
+| JobService `RunJob`                                                                                                 | `console=write` |
+| `/api/v1/diff` and its sub-routes, `/api/v1/plan`, `/api/v1/attention`, `POST /api/v1/share`                        | `console=write` |
 | every other procedure: Activity, Graph, HistoryMetrics, Status, Tool, Notes, Metrics, Viewer, JobService `ListJobs` | `console=read`  |
-| `/api/v1/events`, `/api/v1/graph`                                                                            | `console=read`  |
+| `/api/v1/events`, `/api/v1/graph`                                                                                   | `console=read`  |
 
 The diff, plan and attention routes need `console=write` because they serve
 unreviewed source, every target's name, or an action.
