@@ -18,6 +18,36 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+type appliedChangeLinesSuite struct {
+	suite.Suite
+}
+
+func TestAppliedChangeLines(t *testing.T) { suite.Run(t, new(appliedChangeLinesSuite)) }
+
+func (s *appliedChangeLinesSuite) TestAListNamesWhatItGainedAndLost() {
+	a := Applied{
+		Prev:    types.Job{Breaks: []string{"legacy_key", "api.Open"}},
+		Next:    types.Job{Breaks: []string{"api.Open", "ledger.json"}},
+		Changed: []string{"breaks"},
+	}
+
+	s.Equal([]string{"breaks +ledger.json -legacy_key"}, a.ChangeLines())
+}
+
+func (s *appliedChangeLinesSuite) TestAValueNamesOnlyItsField() {
+	s.Equal([]string{"criteria changed"}, Applied{Changed: []string{"criteria"}}.ChangeLines())
+}
+
+func (s *appliedChangeLinesSuite) TestAReorderedListNamesOnlyItsField() {
+	a := Applied{
+		Prev:    types.Job{WritePaths: []string{"a", "b"}},
+		Next:    types.Job{WritePaths: []string{"b", "a"}},
+		Changed: []string{"write_paths"},
+	}
+
+	s.Equal([]string{"write_paths changed"}, a.ChangeLines())
+}
+
 // applyCheckoutSuite pins a record that names a checkout.
 type applyCheckoutSuite struct {
 	suite.Suite

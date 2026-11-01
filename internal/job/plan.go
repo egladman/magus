@@ -120,6 +120,51 @@ type Applied struct {
 	Changed []string
 }
 
+// ChangeLines is one line per changed field: the entries a list field gained
+// and lost, or the field's name for a value that changed.
+func (a Applied) ChangeLines() []string {
+	lists := map[string][2][]string{
+		"write_paths": {a.Prev.WritePaths, a.Next.WritePaths},
+		"deny_paths":  {a.Prev.DenyPaths, a.Next.DenyPaths},
+		"read_paths":  {a.Prev.ReadPaths, a.Next.ReadPaths},
+		"depends_on":  {a.Prev.DependsOn, a.Next.DependsOn},
+		"breaks":      {a.Prev.Breaks, a.Next.Breaks},
+		"goals":       {goalIDs(a.Prev.Goals), goalIDs(a.Next.Goals)},
+	}
+	lines := make([]string, len(a.Changed))
+	for i, field := range a.Changed {
+		lines[i] = field + " changed"
+		if parts := listChange(lists[field]); len(parts) > 0 {
+			lines[i] = fmt.Sprintf("%s %s", field, strings.Join(parts, " "))
+		}
+	}
+	return lines
+}
+
+// listChange is what pair's second list gained, then what it lost.
+func listChange(pair [2][]string) []string {
+	var parts []string
+	for _, p := range pair[1] {
+		if !slices.Contains(pair[0], p) {
+			parts = append(parts, "+"+p)
+		}
+	}
+	for _, p := range pair[0] {
+		if !slices.Contains(pair[1], p) {
+			parts = append(parts, "-"+p)
+		}
+	}
+	return parts
+}
+
+func goalIDs(goals []types.Goal) []string {
+	ids := make([]string, len(goals))
+	for i, g := range goals {
+		ids[i] = g.ID
+	}
+	return ids
+}
+
 // Apply upserts each record's spec, in order, the way `kubectl apply` does: the record is
 // the whole spec, so a spec field it omits is cleared, while status (state, holder,
 // registration, results, releases) is never touched. checkpoint and timeout are the two
