@@ -111,7 +111,7 @@ func denyCacheDirPath(location location, writePath string) string {
 // reason internal/guard/parse.go's doc gives: a quoted string that merely NAMES the marker is
 // not a write to it.
 func denyCacheDirCommand(location location, command string, d Dialect) string {
-	for _, candidate := range writeTargetCandidates(command, 0, d) {
+	for _, candidate := range writeTargetCandidates(command, d) {
 		if namesWorkspaceCacheDir(location, candidate) {
 			return cacheDirDenial(candidate)
 		}

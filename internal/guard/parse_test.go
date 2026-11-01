@@ -21,7 +21,7 @@ func TestVCSRemovesAndMovesOfferTheirPaths(t *testing.T) {
 		"git log -- a.go":                      nil,
 		"hg status a.go":                       nil,
 	} {
-		assert.Equal(t, want, writeTargetCandidates(line, 0, DialectBash), line)
+		assert.Equal(t, want, writeTargetCandidates(line, DialectBash), line)
 	}
 	assert.False(t, onlyReads("git", "", []string{"rm", "a.go"}))
 	assert.False(t, onlyReads("git", "", []string{"-C", "x", "mv", "a", "b"}))
@@ -65,7 +65,7 @@ func TestDescriptorDuplicationNamesNoWriteTarget(t *testing.T) {
 	}
 	for line, want := range cases {
 		assert.Equal(t, want, redirectTargets(line, 0, DialectBash), "redirectTargets(%q)", line)
-		got := writeTargetCandidates(line, 0, DialectBash)
+		got := writeTargetCandidates(line, DialectBash)
 		for _, w := range want {
 			assert.Contains(t, got, w, "writeTargetCandidates(%q)", line)
 		}
