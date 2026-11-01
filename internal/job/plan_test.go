@@ -1241,3 +1241,25 @@ func TestForkDoorsGradeAgainstTheRowsTheyRead(t *testing.T) {
 
 	assert.Equal(t, [][]string{{}, {"a"}, {"a", "b"}, {"a", "b"}}, pinned)
 }
+
+// leaseRewritesSuite pins what a run reports of its rewrites under a lease.
+type leaseRewritesSuite struct {
+	suite.Suite
+}
+
+func TestLeaseRewrites(t *testing.T) { suite.Run(t, new(leaseRewritesSuite)) }
+
+func (s *leaseRewritesSuite) TestDisabledVersionControlIsAnErrorNotAPanic() {
+	_, loc := appliedRow(s.T(), "a.go")
+	s.T().Setenv("MAGUS_VCS_ENABLED", "false")
+	ctx := types.WithJobLease(s.T().Context(), "w")
+
+	s.NotPanics(func() {
+		lease, paths, err := LeaseRewrites(ctx, loc, "gen", nil)
+
+		s.Equal("w", lease)
+		s.Empty(paths)
+		s.Require().Error(err)
+		s.ErrorContains(err, "version control is disabled")
+	})
+}

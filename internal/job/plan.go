@@ -684,6 +684,9 @@ func LeaseRewrites(ctx context.Context, loc Location, target string, projects []
 	if err != nil {
 		return lease, nil, err
 	}
+	if res.VCS == nil {
+		return lease, nil, errVCSDisabled
+	}
 	dirty, err := res.VCS.DirtyFiles(ctx, loc.Root, nil)
 	if err != nil {
 		return lease, nil, err
