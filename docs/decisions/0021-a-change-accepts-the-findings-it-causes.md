@@ -530,7 +530,7 @@ shipped Go stays language-agnostic and repo policy lives in repo Buzz.
 - **An unreadable base fails.** `proto` `ci` used to skip `buf-breaking` with an info line
   when `<base>:proto/buf.yaml` could not be read, which made an unfetched base a silent
   pass. It now fails naming the base.
-- **Provenance:** this was checked against
+- This was checked against
   [Verdicts are provenance-blind](../design/principles/verdicts-are-provenance-blind.md).
   The conflict was not real, since a permitted finding is disposition, and that page's
   "exactly one code path" sentence was false. The page changed.
