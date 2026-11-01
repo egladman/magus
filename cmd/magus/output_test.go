@@ -900,8 +900,8 @@ func isFormatField(expr ast.Expr) bool {
 }
 
 func (s *outputFormatsSuite) TestAFuncThatRendersARecordAlsoHandlesName() {
-	// emitRunResult's callers switch on -o name first.
-	exempt := map[string]bool{"emitFormatted": true, "emitRecord": true, "emitRunResult": true}
+	// emitRunResult's and emitExplainRecord's callers switch on -o name first.
+	exempt := map[string]bool{"emitFormatted": true, "emitRecord": true, "emitRunResult": true, "emitExplainRecord": true}
 	for name, fn := range s.funcs {
 		var renders, names bool
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
@@ -968,9 +968,9 @@ func (s *outputFormatsSuite) TestConfigSetReportsTheKeyItWrote() {
 	s.T().Chdir(s.T().TempDir())
 	global.output = "json"
 	got := captureStdout(s.T(), func() {
-		s.Require().NoError(runConfigSet(context.Background(), []string{"key=cache.mode,value=write"}))
+		s.Require().NoError(runConfigSet(context.Background(), []string{"key=cache.write.enabled,value=true"}))
 	})
-	s.Contains(got, `"key": "cache.mode"`)
+	s.Contains(got, `"key": "cache.write.enabled"`)
 	s.Contains(got, `"path": "magus.yaml"`)
 }
 

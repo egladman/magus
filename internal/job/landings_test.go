@@ -222,6 +222,7 @@ func TestAWorkerMergedIntoALiveIntegrationCheckoutEnds(t *testing.T) {
 	ended := exited("job-a", wa, "a.go")
 	ended.Schema = got["job-a"].Schema // the envelope is the store's, stamped on read
 	ended.State, ended.Updated = types.StateNoReturn, got["job-a"].Updated
+	ended.Landed = true
 	ended.EndReason = fmt.Sprintf("its work landed in integration job integration at %s: the 1 changed path(s) at %s in %s read the same there",
 		integration.Head()[:7], wa.Head()[:7], wa.Root())
 	assert.Equal(t, ended, got["job-a"])
