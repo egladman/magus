@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"maps"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -106,7 +105,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	}
 	if !rows[i].ReadOnly && emptyResult(*result) {
 		return types.Job{}, fmt.Errorf("job: %s writes, and its result names no changed path, evidence or risk, so it records nothing: File this shape: %s",
-			id, ResultShape(rows[i]))
+			id, resultShape(rows[i]))
 	}
 	resolve, where := store.acrossCheckouts(rows, id, resolve)
 	attempt, gateAttempts, err := resolveResultAttempts(ctx, *result, resolve, where)
@@ -114,7 +113,10 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.Job{}, err
 	}
 	tree := WorkTree(store.root, rows[i])
-	changed := func() []string { return rowFiles(tree, Observed{}, *result, store.generated) }
+	goals := rows[i].EffectiveGoals()
+	changed := func() ([]string, map[string]bool) {
+		return rowFiles(tree, Observed{}, *result, store.generated), namedFiles(tree, goals, result.ChangedPaths)
+	}
 	if err := refuseWrongRun(rows[i], attempt, gateAttempts, workspaceDefaultCharms(tree), changed); err != nil {
 		return types.Job{}, err
 	}
@@ -155,19 +157,19 @@ func workspaceDefaultCharms(tree string) []string {
 // charm set included. A goal the row does not declare is left for the wait.
 // changed is what the result claims: exit reads no diff, and the wait does. It
 // loads the workspace, so only a run the check does not name verbatim asks.
-func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGateAttempt, defaults []string, changed func() []string) error {
+func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGateAttempt, defaults []string, changed func() ([]string, map[string]bool)) error {
 	goals := row.EffectiveGoals()
 	check := func(id string, attempt types.JobAttempt) error {
 		i := slices.IndexFunc(goals, func(g types.Goal) bool { return g.ID == id && g.Kind == types.GoalKindCheck })
 		if i < 0 || ranCheck(goals[i].Check, attempt, defaults) {
 			return nil
 		}
-		files := changed()
-		if ranOver(goals[i].Check, attempt, defaults, files) {
+		files, named := changed()
+		if ranOver(goals[i].Check, attempt, defaults, files, named) {
 			return nil
 		}
 		return fmt.Errorf("job: goal %q cites output ref %q, which records `%s`, and its check runs `%s`%s: cite a run of that check, or file it as owed with no output_ref",
-			id, attempt.Ref, attempt, resolveCheck(goals[i].Check, defaults), leftOut(goals[i].Check, attempt, files))
+			id, attempt.Ref, attempt, resolveCheck(goals[i].Check, defaults), leftOut(goals[i].Check, attempt, files, named))
 	}
 	if primary.Found {
 		if err := check(types.PrimaryGoalID, primary); err != nil {
@@ -258,6 +260,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 	}
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, jobs[i]), seen, ev.result, store.generated)
+	seen.namedFiles = namedFiles(WorkTree(store.root, jobs[i]), inheritGoals(jobs[i], jobs).EffectiveGoals(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
 
 	var taken *types.JobIntegration
 	if len(evidence) > 0 {
@@ -518,7 +521,7 @@ func sameChangedPaths(ctx context.Context, holder, here string, changed []string
 	}
 	var differ, local []string
 	for _, c := range changed {
-		p := path.Clean(filepath.ToSlash(strings.TrimSpace(c)))
+		p := cleanPath(c)
 		rel := filepath.FromSlash(p)
 		if !filepath.IsLocal(rel) || holder != here && !sameContent(ctx, filepath.Join(holder, rel), filepath.Join(here, rel)) {
 			differ = append(differ, p)
@@ -577,7 +580,7 @@ func staleRuns(ctx context.Context, tree string, seen Observed, result types.Job
 func localSources(paths []string, generated func(string) bool) []string {
 	var out []string
 	for _, c := range paths {
-		if p := path.Clean(filepath.ToSlash(strings.TrimSpace(c))); filepath.IsLocal(filepath.FromSlash(p)) && !generated(p) {
+		if p := cleanPath(c); filepath.IsLocal(filepath.FromSlash(p)) && !generated(p) {
 			out = append(out, p)
 		}
 	}
@@ -972,6 +975,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 	}
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, row), seen, ev.result, store.generated)
+	seen.namedFiles = namedFiles(WorkTree(store.root, row), row.EffectiveGoals(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
 	// Graded against a row whose state is cleared, so the "already verified" rule does not
 	// fire on a job that legitimately passed: this asks where the gates stand, and a job
 	// that finished stands with all of them met.
@@ -992,6 +996,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 // ending is one live row the sweep ends, and the reason it records.
 type ending struct {
 	id, reason string
+	landed     bool
 }
 
 // sweeper decides which live rows are provably dead as of one instant. It carries what
@@ -1053,7 +1058,7 @@ func (w *sweeper) dead(rows []types.Job) ([]ending, error) {
 				return nil, err
 			}
 			if reason != "" {
-				round = append(round, ending{id: row.ID, reason: reason})
+				round = append(round, ending{id: row.ID, reason: reason, landed: w.proved(row.ID, reason)})
 			}
 		}
 		if len(round) == 0 {
@@ -1065,6 +1070,12 @@ func (w *sweeper) dead(rows []types.Job) ([]ending, error) {
 		}
 		out = append(out, round...)
 	}
+}
+
+// proved reports reason as the landing probe's verdict on id.
+func (w *sweeper) proved(id, reason string) bool {
+	l, ok := w.landed[id]
+	return ok && l.reason == reason
 }
 
 // rowIndex is one sweep round's rows by id, and the ids with a live child. Built once per
@@ -1234,6 +1245,7 @@ func endRows(rows []types.Job, dead []ending, now int64) {
 		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == e.id })
 		rows[i].State = types.StateNoReturn
 		rows[i].EndReason = e.reason
+		rows[i].Landed = e.landed
 		rows[i].Updated = now
 	}
 }
@@ -1336,6 +1348,7 @@ func (s *Store) Prune(ctx context.Context, opts PruneOptions, restated ...string
 			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.ID })
 			cur.Jobs[i].State = types.StateNoReturn
 			cur.Jobs[i].EndReason = e.Reason
+			cur.Jobs[i].Landed = w.proved(e.ID, e.Reason)
 			cur.Jobs[i].Updated = w.now
 			if err := ended.hold(s, cur.Jobs, cur.Jobs[i]); err != nil {
 				return err

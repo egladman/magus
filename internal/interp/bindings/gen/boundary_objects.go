@@ -4223,6 +4223,7 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	}
 	out.MapSet("deferred", vm.ListValue(itemsDeferred))
 	out.MapSet("leftUnmerged", vm.StringValue(v.LeftUnmerged))
+	out.MapSet("landed", vm.BoolValue(v.Landed))
 	out.MapSet("weight", vm.FloatValue(float64(v.Weight)))
 	out.MapSet("paused", vm.IntValue(int64(v.Paused)))
 	out.MapSet("pausedBy", ObjectOrigin(v.PausedBy, enums))

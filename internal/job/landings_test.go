@@ -72,8 +72,9 @@ func TestListEndsExitedJobsWhoseWorkLanded(t *testing.T) {
 	assert.Equal(t, []string{"landed", "busy", "pending"}, probed, "only exited rows with changed paths in a checkout are probed")
 	landed := exited("landed")
 	landed.Schema = got["landed"].Schema // the envelope is the store's, stamped on read
-	landed.State, landed.EndReason, landed.Updated = types.StateNoReturn, "its work landed on origin/main at base1", 100_000
+	landed.State, landed.EndReason, landed.Updated, landed.Landed = types.StateNoReturn, "its work landed on origin/main at base1", 100_000, true
 	assert.Equal(t, landed, got["landed"])
+	assert.False(t, got["busy/child"].Landed, "another ending is no landing")
 	for _, id := range []string{"busy", "pending", "reader"} {
 		assert.Equal(t, types.StateExited, got[id].State, id)
 	}
@@ -350,31 +351,64 @@ func (s *unmergedSuite) TestAReadPastItsDeadlineNamesWhatItLeftAndTheNextCarries
 	s.Len(s.unmerged(row).Rows, 1)
 }
 
+func (s *unmergedSuite) TestAnAnswerForARowTheStoreLostIsDropped() {
+	s.branch("gone")
+	s.branch("w")
+	gone := types.Job{ID: "gone", State: types.StatePass}
+	kept := types.Job{ID: "w", State: types.StatePass}
+	s.unmerged(gone, kept)
+	path := unmergedFactsPath(s.repo.Root())
+	s.Require().Contains(readUnmergedFacts(path).facts, unmergedKey("gone", s.main))
+
+	s.unmerged(kept)
+
+	facts := readUnmergedFacts(path).facts
+	s.NotContains(facts, unmergedKey("gone", s.main))
+	s.Contains(facts, unmergedKey("w", s.main))
+}
+
+func (s *unmergedSuite) TestAnAnswerForABranchThatIsGoneIsDropped() {
+	s.branch("w")
+	row := types.Job{ID: "w", State: types.StatePass}
+	s.repo.Git("switch", "-q", "-c", "other", s.main)
+	s.unmerged(row)
+	path := unmergedFactsPath(s.repo.Root())
+	s.Require().Contains(readUnmergedFacts(path).facts, unmergedKey("w", "other"))
+	s.repo.Git("switch", "-q", s.main)
+	s.repo.Git("branch", "-q", "-D", "other")
+
+	s.unmerged(row)
+
+	facts := readUnmergedFacts(path).facts
+	s.NotContains(facts, unmergedKey("w", "other"))
+	s.Contains(facts, unmergedKey("w", s.main))
+}
+
 // slowMissing answers MissingCommits after took, or gives up with its context.
 type slowMissing struct {
-	types.RangeReporter
+	types.VCSDriver
 	took time.Duration
 }
 
 func (r slowMissing) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
 	select {
 	case <-time.After(r.took):
-		return r.RangeReporter.MissingCommits(ctx, dir, branch, head)
+		return r.VCSDriver.MissingCommits(ctx, dir, branch, head)
 	case <-ctx.Done():
 		return 0, ctx.Err()
 	}
 }
 
 func (s *unmergedSuite) readWith(ctx context.Context, took time.Duration, work ...types.Job) *unmergedRead {
-	driver, ranges, err := rangeDriver(ctx, s.repo.Root())
-	s.Require().NoError(err)
+	driver, why := resolveDriver(ctx, s.repo.Root())
+	s.Require().NotNil(driver, why)
 	meta, err := driver.Metadata(ctx, s.repo.Root())
 	s.Require().NoError(err)
 	r := &unmergedRead{
-		driver: driver, ranges: slowMissing{ranges, took},
-		root: s.repo.Root(), branch: s.main, tip: meta.ID, now: time.Now().Unix(),
+		driver: slowMissing{driver, took},
+		root:   s.repo.Root(), branch: s.main, tip: meta.ID, now: time.Now().Unix(),
 	}
-	r.run(ctx, work)
+	r.run(ctx, work, work)
 	return r
 }
 
@@ -449,9 +483,17 @@ func (s *unmergedSuite) TestAStatedReasonLeavesTheRowOut() {
 func (s *unmergedSuite) TestARowALandingProbeEndedIsLeftOut() {
 	s.branch("w")
 
-	got := s.unmerged(types.Job{ID: "w", State: types.StateNoReturn, EndReason: landedReasonPrefix + "on main at abc"})
+	got := s.unmerged(types.Job{ID: "w", State: types.StateNoReturn, Landed: true})
 
 	s.Empty(got.Rows)
+}
+
+func (s *unmergedSuite) TestAnEndReasonThatOnlyReadsLikeALandingIsStillChecked() {
+	s.branch("w")
+
+	got := s.unmerged(types.Job{ID: "w", State: types.StateNoReturn, EndReason: "its work landed on main at abc"})
+
+	s.Len(got.Rows, 1)
 }
 
 func (s *unmergedSuite) TestARunningRowIsStillWorking() {

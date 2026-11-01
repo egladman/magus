@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,62 @@ type hgVCS struct{ declines[hgName] }
 
 func (v hgVCS) Name() string     { return "hg" }
 func (v hgVCS) Claims() []string { return []string{".hg"} }
+
+// FastForward implements types.CheckoutFastForwarder. An update deactivates a
+// bookmark it does not name, so an active bookmark is moved and named again.
+func (v hgVCS) FastForward(ctx context.Context, root, rev string) error {
+	descends, err := hgIsAncestor(ctx, "hg", root, ".", rev)
+	if err != nil {
+		return err
+	}
+	if !descends {
+		return fmt.Errorf("hg: %s does not descend from the head of %s", rev, root)
+	}
+	active, err := vcsOutput(ctx, root, "hg", "log", "-r", ".", "--template", "{activebookmark}")
+	if err != nil {
+		return fmt.Errorf("hg log -r .: %w", err)
+	}
+	if err := runVCS(ctx, "hg", root, []string{"update", "--check", "--rev", rev}); err != nil {
+		return err
+	}
+	if active == "" {
+		return nil
+	}
+	if err := runVCS(ctx, "hg", root, []string{"bookmark", "--force", "--rev", rev, "--", active}); err != nil {
+		return err
+	}
+	return runVCS(ctx, "hg", root, []string{"update", "--rev", active})
+}
+
+// BranchHeads implements types.BranchHeadReporter. A job's branch is a
+// bookmark, which wins over a named branch of the same name, as a revset does.
+func (v hgVCS) BranchHeads(ctx context.Context, root string) (map[string]string, error) {
+	heads, err := hgHeads(ctx, "hg", root, "branches", "--closed", "-T", "{node} {branch}\n")
+	if err != nil {
+		return nil, err
+	}
+	bookmarks, err := hgHeads(ctx, "hg", root, "bookmarks", "-T", "{node} {bookmark}\n")
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(heads, bookmarks)
+	return heads, nil
+}
+
+// hgHeads reads "<id> <name>" lines from a listing hg or Sapling prints.
+func hgHeads(ctx context.Context, prog, root string, args ...string) (map[string]string, error) {
+	listed, err := vcsOutputRaw(ctx, root, prog, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s %s: %w", prog, args[0], err)
+	}
+	heads := map[string]string{}
+	for _, line := range splitLines([]byte(listed)) {
+		if id, name, ok := strings.Cut(line, " "); ok {
+			heads[name] = id
+		}
+	}
+	return heads, nil
+}
 
 // Base is the "default" BRANCH, not "tip".
 //

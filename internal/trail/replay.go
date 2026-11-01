@@ -304,11 +304,7 @@ func repeats(calls []SessionCall) []RepeatRun {
 		if run != nil {
 			finish(run)
 		}
-		runs[call.CallDigest] = &RepeatRun{
-			Worker: call.Worker, Thread: call.Thread, ThreadFrom: call.ThreadFrom,
-			Tool: call.Action, CallDigest: call.CallDigest, ResultDigest: call.ResultDigest,
-			Count: 1, First: call.At, Last: call.At, ToolMs: call.ToolMs,
-		}
+		runs[call.CallDigest] = startRun(call)
 	}
 	for _, runs := range open {
 		for _, run := range runs {
@@ -323,6 +319,14 @@ func sortRepeatRuns(runs []RepeatRun) {
 	slices.SortFunc(runs, func(a, b RepeatRun) int {
 		return cmp.Or(a.First.Compare(b.First), strings.Compare(a.CallDigest, b.CallDigest))
 	})
+}
+
+func startRun(call SessionCall) *RepeatRun {
+	return &RepeatRun{
+		Worker: call.Worker, Thread: call.Thread, ThreadFrom: call.ThreadFrom,
+		Tool: call.Action, CallDigest: call.CallDigest, ResultDigest: call.ResultDigest,
+		Count: 1, First: call.At, Last: call.At, ToolMs: call.ToolMs,
+	}
 }
 
 // SessionCall is one guard observation of a call and the cost facts recorded beside it.

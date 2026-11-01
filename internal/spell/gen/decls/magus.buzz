@@ -1586,6 +1586,7 @@ export object Job {
     maxClaims: int = 0,
     deferred: [JobDeferred] = [],
     leftUnmerged: str = "",
+    landed: bool = false,
     weight: double = 0.0,
     paused: int = 0,
     pausedBy: Origin = Origin{},

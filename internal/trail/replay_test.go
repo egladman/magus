@@ -328,9 +328,10 @@ func (s *RepeatsSuite) TestOneCallWithOneAnswerFormsARunWithItsTurnsAndToolTime(
 
 func (s *RepeatsSuite) TestAChangedAnswerStartsANewRun() {
 	got := repeats([]SessionCall{s.poll(0, "", "c", "r1"), s.poll(1, "", "c", "r1"), s.poll(2, "", "c", "r2")})
-	s.Require().Len(got, 1)
-	s.Equal("r1", got[0].ResultDigest)
-	s.Equal(2, got[0].Count)
+	s.Equal([]RepeatRun{{
+		Tool: "Bash", CallDigest: "c", ResultDigest: "r1", Count: 2,
+		First: s.start, Last: s.start.Add(time.Second), ToolMs: 200, SpanMs: 1000,
+	}}, got)
 }
 
 func (s *RepeatsSuite) TestAWriteByTheSameWorkerEndsTheRun() {
@@ -374,9 +375,9 @@ func (s *RepeatsSuite) TestForSessionCarriesWorkerDigestsAndTheUnobservedNote() 
 	s.Equal("w1", got.Calls[0].Worker)
 	s.Equal([]string{"result"}, got.Calls[2].Unobserved)
 	s.Require().Len(got.Repeats, 1)
-	s.Equal(2, got.Repeats[0].Count)
-	s.Equal(int64(100), got.Repeats[0].ToolMs)
-	s.Equal("w1", got.Repeats[0].Worker)
+	run := got.Repeats[0]
+	run.First, run.Last, run.SpanMs = time.Time{}, time.Time{}, 0
+	s.Equal(RepeatRun{Worker: "w1", Thread: "unknown", Tool: "Bash", CallDigest: "c", ResultDigest: "r", Count: 2, ToolMs: 100}, run)
 }
 
 func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {

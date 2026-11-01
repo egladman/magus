@@ -196,29 +196,25 @@ func landedSince(ctx context.Context, driver types.VCSDriver, tree, base string,
 				continue
 			}
 			// A line that does not resolve here brought nothing in.
-			theirs, err := driver.RangeFiles(ctx, tree, line, tip, nil)
-			if err != nil {
+			if _, err := driver.FindCommit(ctx, tree, line); err != nil && ctx.Err() == nil {
 				continue
 			}
+			theirs, err := driver.RangeFiles(ctx, tree, line, tip, nil)
+			if err != nil {
+				return nil, false, fmt.Sprintf("the commits since %s could not be read: %v", line, err)
+			}
+			differ, err := vcs.DifferingPaths(ctx, driver, tree, line, tip, paths)
+			if err != nil {
+				return nil, false, fmt.Sprintf("the files at %s could not be compared: %v", line, err)
+			}
 			paths = slices.DeleteFunc(paths, func(p string) bool {
-				return !slices.Contains(theirs, p) || readsSameAt(ctx, driver, tree, line, tip, p)
+				return !slices.Contains(theirs, p) || !slices.Contains(differ, cleanPath(p))
 			})
 		}
 		landed = append(landed, paths...)
 	}
 	slices.Sort(landed)
 	return slices.Compact(landed), true, ""
-}
-
-// readsSameAt reports path reading the same at both revisions. A path missing
-// from either reads as different.
-func readsSameAt(ctx context.Context, driver types.VCSDriver, tree, a, b, path string) bool {
-	left, err := driver.ReadFileAt(ctx, tree, a, path)
-	if err != nil {
-		return false
-	}
-	right, err := driver.ReadFileAt(ctx, tree, b, path)
-	return err == nil && left == right
 }
 
 // changedSince asks driver what differs from the checkpoint's revision, and which
