@@ -31,7 +31,7 @@ const noBaseIndex = "no in-process index; ceiling not applied"
 const projectNewAtHead = "its project is new at head, so the base holds no measure; ceiling not applied"
 
 // baseMeasureVersion keys the kept measures; bump it when measureTree measures differently.
-const baseMeasureVersion = "3"
+const baseMeasureVersion = "4"
 
 // ConformanceCeilings is head, the lens over the working tree, with c.Base's ceilings: each file
 // changed since c.Base whose count of violations of a metric in c.Checks rose past its count

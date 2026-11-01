@@ -229,6 +229,137 @@ func TestExportScope(t *testing.T) {
 	}, exportScope(lensFixture(), lensFixtureOptions()), "methods, the root package and test files are out of scope")
 }
 
+// ExportScopeSuite pins what counts as use of an export. Each case is named
+// for a real finding in internal/config or internal/agent.
+type ExportScopeSuite struct {
+	suite.Suite
+}
+
+func TestExportScopeSuite(t *testing.T) {
+	suite.Run(t, new(ExportScopeSuite))
+}
+
+const (
+	exportReader     = "cmd/tool/main.go"
+	exportTestReader = "cmd/tool/main_test.go"
+	exportBinder     = "internal/cfg/gen/bind.go"
+)
+
+// exportSym is a symbol of package internal/cfg with that rendering.
+func exportSym(desc, signature string, refs ...string) types.KnowledgeSymbol {
+	s := conformanceSym("/internal/cfg", desc, "internal/cfg/cfg.go", 1, 1, 1, "", 0, refs...)
+	s.Signature = signature
+	return s
+}
+
+// flagged is what export-scope reports over syms, within internal/cfg.
+func (s *ExportScopeSuite) flagged(syms ...types.KnowledgeSymbol) []string {
+	all := append([]types.KnowledgeSymbol{
+		conformancePkg("/internal/cfg", []string{"internal/cfg/cfg.go"}),
+		conformancePkg("/internal/cfg/gen", []string{exportBinder}),
+		conformancePkg("/cmd/tool", []string{exportReader}),
+		conformanceSym("/cmd/tool", "main().", exportReader, 1, 2, 2, "", 0),
+	}, syms...)
+	var out []string
+	for _, it := range exportScope(assembleLens(all), lensFixtureOptions()) {
+		if name, ok := strings.CutPrefix(it.ID, "internal/cfg/cfg.go#"); ok {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func (s *ExportScopeSuite) TestFieldReadOutsideUsesItsType() {
+	s.Empty(s.flagged(
+		exportSym("VCS#", "type VCS struct"),
+		exportSym("VCS#BaseRef.", "struct field BaseRef string", exportReader),
+	))
+}
+
+func (s *ExportScopeSuite) TestMethodReadOutsideUsesItsType() {
+	s.Empty(s.flagged(
+		exportSym("CarryApprovals#", "type CarryApprovals CarryPolicy"),
+		exportSym("CarryApprovals#Policy().", "func (c CarryApprovals) Policy() queuetypes.CarryPolicy", exportReader),
+	))
+}
+
+func (s *ExportScopeSuite) TestReadFieldCarriesItsType() {
+	s.Empty(s.flagged(
+		exportSym("Config#", "type Config struct", exportReader),
+		exportSym("Config#Queue.", "struct field Queue Queue", exportReader),
+		exportSym("Queue#", "type Queue struct"),
+	))
+}
+
+func (s *ExportScopeSuite) TestReadFieldCarriesItsMapValueType() {
+	s.Empty(s.flagged(
+		exportSym("ConformanceConfig#", "type ConformanceConfig struct", exportReader),
+		exportSym("ConformanceConfig#Checks.",
+			"struct field Checks map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig", exportReader),
+		exportSym("ConformanceLimitConfig#", "type ConformanceLimitConfig struct"),
+	))
+}
+
+func (s *ExportScopeSuite) TestUsedSignatureCarriesItsTypes() {
+	s.Empty(s.flagged(
+		exportSym("RegisterHarnessSpellLoader().", "func RegisterHarnessSpellLoader(fn HarnessSpellLoader) (previous HarnessSpellLoader)", exportReader),
+		exportSym("HarnessSpellLoader#", "type HarnessSpellLoader func(ctx context.Context) error"),
+	))
+}
+
+func (s *ExportScopeSuite) TestUnreadFieldCarriesNothing() {
+	s.Equal([]string{"Source"}, s.flagged(
+		exportSym("Config#", "type Config struct", exportReader),
+		exportSym("Config#Sources.", "struct field Sources []Source"),
+		exportSym("Source#", "type Source struct"),
+	))
+}
+
+func (s *ExportScopeSuite) TestAFieldNameIsNotItsType() {
+	s.Equal([]string{"Diff"}, s.flagged(
+		exportSym("Report#", "type Report struct", exportReader),
+		exportSym("Report#Diff.", "struct field Diff string", exportReader),
+		exportSym("Diff#", "type Diff struct"),
+	))
+}
+
+func (s *ExportScopeSuite) TestAConstGroupIsOneUnit() {
+	s.Empty(s.flagged(
+		exportSym("HarnessStatus#", "type HarnessStatus string"),
+		exportSym("HarnessVerified.", `const HarnessVerified HarnessStatus = "verified"`, exportReader),
+		exportSym("HarnessUncovered.", `const HarnessUncovered HarnessStatus = "uncovered"`),
+	))
+}
+
+func (s *ExportScopeSuite) TestAConstGroupNoOneReadsStaysAFinding() {
+	s.Equal([]string{"SourceCaveat", "SourceFollow", "SourceVerdict"}, s.flagged(
+		exportSym("SourceVerdict#", "type SourceVerdict string"),
+		exportSym("SourceFollow.", `const SourceFollow SourceVerdict = "follow"`, exportTestReader),
+		exportSym("SourceCaveat.", `const SourceCaveat SourceVerdict = "caveat"`),
+	))
+}
+
+func (s *ExportScopeSuite) TestConstsOfAnotherPackagesTypeAreNoGroup() {
+	s.Equal([]string{"DefaultShutdownGrace"}, s.flagged(
+		exportSym("DefaultShutdownGrace.", "const DefaultShutdownGrace time.Duration = 300000000000"),
+		exportSym("DefaultPoll.", "const DefaultPoll time.Duration = 1000000000", exportReader),
+	))
+}
+
+func (s *ExportScopeSuite) TestATestReadIsNoUse() {
+	s.Equal([]string{"ConformanceGatesConfig"}, s.flagged(
+		exportSym("ConformanceGatesConfig#", "type ConformanceGatesConfig struct", exportTestReader),
+		exportSym("ConformanceGatesConfig#Bar.", "struct field Bar float64", exportTestReader),
+	))
+}
+
+func (s *ExportScopeSuite) TestAGeneratedReadIsNoUse() {
+	s.Equal([]string{"Diff"}, s.flagged(
+		exportSym("Diff#", "type Diff struct"),
+		exportSym("Diff#Tui.", "struct field Tui *bool", exportBinder),
+	))
+}
+
 func TestConformanceSamplesDropGeneratedAndExcluded(t *testing.T) {
 	samples := conformanceSamples(lensFixture(), lensFixtureOptions())
 	for key, items := range samples {
