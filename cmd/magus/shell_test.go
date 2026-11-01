@@ -2245,7 +2245,8 @@ func TestCheckoutBinaryIsAnotherBinaryOnly(t *testing.T) {
 // own ./magus, a stub that denies with exit 2.
 type DelegateToCheckoutSuite struct {
 	suite.Suite
-	repo *testkit.Repo
+	repo    *testkit.Repo
+	running string
 }
 
 func TestDelegateToCheckoutSuite(t *testing.T) {
@@ -2254,6 +2255,7 @@ func TestDelegateToCheckoutSuite(t *testing.T) {
 
 func (s *DelegateToCheckoutSuite) SetupTest() {
 	s.repo = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.running = ""
 }
 
 // line is a Bash call from a session in another directory that runs magus in the checkout.
@@ -2263,8 +2265,39 @@ func (s *DelegateToCheckoutSuite) line() string {
 
 func (s *DelegateToCheckoutSuite) delegate(input string) (handled bool, declined, out string, err error) {
 	var stdout, stderr bytes.Buffer
-	handled, decline, err := delegateToCheckout(context.Background(), input, &stdout, &stderr)
+	handled, decline, err := delegateToCheckout(context.Background(), s.running, input, &stdout, &stderr)
 	return handled, decline.note, stdout.String(), err
+}
+
+// The lockout: HEAD moved past ./magus, and an older judge cannot read the row.
+func (s *DelegateToCheckoutSuite) TestABuildBehindHeadButNewerThanTheJudgeJudges() {
+	s.running = s.repo.Head()
+	built := s.repo.Commit("the build", nil)
+	s.repo.Commit("moved on", nil)
+	placeStub(s.T(), s.repo.Root(), built, `{"decision":"deny"}`, 2)
+	handled, declined, out, err := s.delegate(s.line())
+	s.True(handled)
+	s.Empty(declined)
+	s.Equal(2, exit.Code(err))
+	s.Equal(`{"decision":"deny"}`, out)
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildBehindHeadAtTheJudgesCommitLeavesTheCallHere() {
+	s.running = s.repo.Head()
+	placeStub(s.T(), s.repo.Root(), s.running, `{"decision":"deny"}`, 2)
+	s.repo.Commit("moved on", nil)
+	handled, declined, _, _ := s.delegate(s.line())
+	s.False(handled)
+	s.Contains(declined, "neither the checkout's HEAD")
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildOlderThanTheJudgeLeavesTheCallHere() {
+	built := s.repo.Head()
+	s.running = s.repo.Commit("the judge", nil)
+	s.repo.Commit("moved on", nil)
+	placeStub(s.T(), s.repo.Root(), built, `{"decision":"deny"}`, 2)
+	handled, _, _, _ := s.delegate(s.line())
+	s.False(handled)
 }
 
 func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {

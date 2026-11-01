@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
@@ -370,8 +371,10 @@ func recoveryLine(command string, d Dialect, lease string, builds bool, at locat
 	if lease != "" && len(call.Assigns) == 0 && fastForward(hint.Invocation{Name: path.Base(words[0]), Args: words[1:]}) {
 		return true
 	}
-	placement := len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" && words[2] == placementScript
-	if placement {
+	// denyCheckoutBootstrap still judges who may build which checkout.
+	places := len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" &&
+		(words[2] == placementScript || words[2] == job.CheckoutBootstrapScript)
+	if places {
 		return true
 	}
 	workerOnly := lease != "" && !builds

@@ -159,7 +159,7 @@ fun goIntoCheckout(p: helpers\Program, where: Where, disk: Disk) > str {
     if (!covered) { return ""; }
     final root = absolute(call.chdir, dir: where.dir);
     final isCheckout = disk.isCheckout;
-    if (root == "" or !isCheckout(root)) { return ""; }
+    if (root == "" or !isCheckout(root) or root == where.workspace) { return ""; }
     if (bootstrap(call.args)) { return ""; }
     return ("go -C into another checkout of magus runs outside its cache and its drift tracking\n"
         + "`go -C {root} {verb}` runs a toolchain command in another checkout of magus; run the target from that checkout: "
@@ -322,6 +322,7 @@ test "go -C into a foreign tree, inside the workspace, or for an uncovered verb 
         ["go", "-C", "sub", "test", "./..."],
         ["go", "-C", "/w/a", "version"],
         ["go", "-C", "/w/a", "env", "GOPATH"],
+        ["go", "-C", "/w/b", "test", "./..."],
         ["go", "test", "./..."],
     ]) {
         std\assert(binaryDenial([argv], where: inB, disk: disk) == "", message: argv.join(" "));

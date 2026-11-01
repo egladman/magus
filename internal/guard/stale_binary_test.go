@@ -713,6 +713,9 @@ func TestRecoveryLine(t *testing.T) {
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from /repo", "lease-a", true},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from /repo && go build ./cmd/magus", "lease-a", false},
 		{"/repo/magus buzz hack/dev/other.buzz", "lease-a", false},
+		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", "lease-a", true},
+		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /w/a", "lease-a", true},
+		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- --here && git push", "lease-a", false},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job x --from /repo", "", true},
 	} {
 		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.lease == "", magusRepoAt), "%s (lease %q)", tc.line, tc.lease)

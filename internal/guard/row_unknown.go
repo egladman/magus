@@ -8,20 +8,24 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
 
 // denyUnknownRowMembers refuses every call under a row carrying members this build does
 // not declare: one may widen or narrow the row, and grading as if it were absent is a
-// silent default. Only the root can rebuild the hook's binary, yet this denies rather than
-// advises (ADR 0013's notice) because an unjudgeable call has no safe answer.
-func denyUnknownRowMembers(ctx context.Context, deps Dependencies, actingLease, _ string) denial {
+// silent default. An unjudgeable call has no safe answer (ADR 0013's notice).
+// A line that replaces the judge passes, or no way out is left.
+func denyUnknownRowMembers(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" {
 		return denial{}
 	}
 	standing := actingLeaseStanding(ctx, deps, actingLease)
 	if !standing.declared {
+		return denial{}
+	}
+	if recoveryLine(command, effectiveDialect(deps.ShellDialect), actingLease, false, hookLocation(ctx, deps)) {
 		return denial{}
 	}
 	return unknownRowDenial(deps, standing.row)
@@ -37,11 +41,13 @@ func unknownRowDenial(deps Dependencies, row types.Job) denial {
 	binary := cmp.Or(deps.Binary, "this magus")
 	version := cmp.Or(deps.BinaryVersion, "an unknown version")
 	return denial{
-		Say: fmt.Sprintf("magus workspace: %s (%s) cannot read %s on job %s's row; ask the root to rebuild the hook's ./magus.",
+		Say: fmt.Sprintf("magus workspace: %s (%s) cannot read %s on job %s's row; build this checkout's ./magus, or ask the root to rebuild the hook's.",
 			binary, version, strings.Join(members, ", "), row.ID),
 		Why: fmt.Sprintf("A member this build does not know may widen or narrow what the row permits, and judging as if it were absent would be a guess. "+
-			"The root rebuilds the ./magus the host hook runs (`%s`), then restarts the daemon (`./magus server stop`, then `./magus server start`). "+
-			"The worker cannot take that remedy, and the hook never switches to the binary the worker's own checkout built.",
-			ward.BootstrapCommand),
+			"The hook hands a call to a checkout's own ./magus when it was built at HEAD, after HEAD, or after the hook's binary. "+
+			"The holder of the job whose checkout this is builds one, alone on its line: `%s`. "+
+			"A placement and `git merge --ff-only <commit>` still run too. "+
+			"The root rebuilds the ./magus the host hook runs (`%s`), then restarts the daemon (`./magus server stop`, then `./magus server start`).",
+			job.CheckoutBootstrap("<checkout>"), ward.BootstrapCommand),
 	}
 }

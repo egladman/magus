@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -59,6 +60,27 @@ func TestRowUnknownRefusesARowCarryingAMemberThisBuildDoesNotDeclare(t *testing.
 	assert.Contains(t, write.Reason, "widens_paths")
 
 	assert.Equal(t, denyRuleLeaseRowUnknown, roleScopedCommandRules()[0].name, "judged before any rule that reads the row")
+}
+
+// Refusing these locked a worker out of the only lines that replace the judge.
+func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
+	row := narrowLease()
+	ctx, _ := fleetFixture(t, row)
+	plantUnknownMember(t, ctx, row.ID, "widens_paths")
+	deps := Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
+
+	for _, line := range []string{
+		fmt.Sprintf("/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job %s --from /repo", row.ID),
+		"git merge --ff-only f1980cc5c",
+		"./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /work/job",
+		"./magus buzz hack/dev/bootstrap-checkout.buzz -- --here",
+		ward.BootstrapCommand,
+	} {
+		assert.False(t, denyUnknownRowMembers(ctx, deps, row.ID, line).refused(), line)
+	}
+	for _, line := range []string{"./build.sh", "./magus run go-build .", "git commit -m x"} {
+		assert.True(t, denyUnknownRowMembers(ctx, deps, row.ID, line).refused(), line)
+	}
 }
 
 func TestRowUnknownPassesARowItCanRead(t *testing.T) {

@@ -485,8 +485,9 @@ func rankOwnBuild(v ShellVerdict, oc *ownBuildOutcome) ShellVerdict {
 	return oc.apply(v)
 }
 
-// checkoutBootstrapDir is the checkout a line's magus call hands job.CheckoutBootstrapScript
-// with --checkout, resolved against cwd; ok is false for a line running no such call.
+// checkoutBootstrapDir is the checkout a line's magus call hands
+// job.CheckoutBootstrapScript, by --checkout or --here, resolved against cwd.
+// ok is false for a line running no such call.
 func checkoutBootstrapDir(cmds []hint.Invocation, cwd string) (string, bool) {
 	for _, c := range cmds {
 		words := magusSubcommandWords(c.Args)
@@ -495,6 +496,9 @@ func checkoutBootstrapDir(cmds []hint.Invocation, cwd string) (string, bool) {
 		}
 		rest := c.Args[slices.Index(c.Args, "--")+1:]
 		for i, a := range rest {
+			if a == "--here" {
+				return filepath.Clean(cwd), true
+			}
 			dir, joined := strings.CutPrefix(a, "--checkout=")
 			if !joined {
 				if a != "--checkout" || i+1 >= len(rest) {

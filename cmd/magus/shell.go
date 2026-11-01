@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/guard"
@@ -208,7 +209,8 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	}
 	var judge, judgeRoot string
 	if sf.Transport != "" {
-		handled, declined, err := delegateToCheckout(ctx, input, out, errOut)
+		commit, _ := buildinfo.Commit()
+		handled, declined, err := delegateToCheckout(ctx, commit, input, out, errOut)
 		if handled {
 			return err
 		}
@@ -956,7 +958,10 @@ func checkoutBinary(dir, running string) string {
 // was built at its HEAD or later, since a branch extending types or bindings loads only in
 // its own build. The delegate runs here, so this session's policy still applies. On handled
 // false this binary judges, and declined says why the checkout's ./magus did not.
-func delegateToCheckout(ctx context.Context, input string, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
+//
+// A build behind HEAD still judges when newer than runningCommit.
+// An older judge cannot read a newer row, and denied every call.
+func delegateToCheckout(ctx context.Context, runningCommit, input string, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
 	if os.Getenv(delegatedEnv) != "" {
 		return false, checkoutDecline{}, nil
 	}
@@ -978,7 +983,8 @@ func delegateToCheckout(ctx context.Context, input string, out, errOut io.Writer
 	// The sentinel keeps the delegate from re-execing into the ./magus of this process's
 	// directory, which is the binary handing the call over.
 	env := append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running), bootstrapExecSentinelVar+"=1")
-	if behind := checkoutBinaryBehind(ctx, own, env); behind != "" {
+	built, behind := checkoutBinaryBehind(ctx, own, env)
+	if behind != "" && !newerThanRunning(ctx, filepath.Dir(own), built, runningCommit) {
 		if line := guard.BootstrapLine(filepath.Dir(own)); line != "" {
 			behind += fmt.Sprintf(". A ./magus at HEAD judges here once the main session places one, or the bootstrap builds it, alone on its line: `%s`", line)
 		}
@@ -1023,40 +1029,54 @@ func unloadableCheckout(ctx context.Context, root string) string {
 	return root
 }
 
-// checkoutBinaryBehind says why own, a checkout's ./magus, was not built at that checkout's
-// HEAD or a commit after it, "" when it was. The binary is asked for its own stamp, run
-// with env.
-func checkoutBinaryBehind(ctx context.Context, own string, env []string) string {
+// checkoutBinaryBehind is the commit own was built at, "" when unstamped.
+// why says it is not the checkout's HEAD or after it, "" when it is.
+// The binary is asked for its own stamp, run with env.
+func checkoutBinaryBehind(ctx context.Context, own string, env []string) (built, why string) {
 	root := filepath.Dir(own)
 	var stamp bytes.Buffer
 	probe := exec.CommandContext(ctx, own, "version", "--client", "-o", "template={{.commit}}")
 	probe.Dir, probe.Env, probe.Stdout = root, env, &stamp
 	if err := probe.Run(); err != nil {
-		return fmt.Sprintf("`%s version` failed: %v", own, err)
+		return "", fmt.Sprintf("`%s version` failed: %v", own, err)
 	}
-	built := strings.TrimSpace(stamp.String())
+	built = strings.TrimSpace(stamp.String())
 	if built == "" || built == unknownVersion {
-		return "it carries no commit stamp"
+		return "", "it carries no commit stamp"
 	}
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	if err != nil || res.VCS == nil {
-		return fmt.Sprintf("no version control answered in %s to place its commit %s (%v)", root, shortCommit(built), err)
+		return built, fmt.Sprintf("no version control answered in %s to place its commit %s (%v)", root, shortCommit(built), err)
 	}
 	head, err := res.VCS.FindCommit(ctx, root, "")
 	if err != nil {
-		return fmt.Sprintf("the checkout's HEAD could not be read to place its commit %s: %v", shortCommit(built), err)
+		return built, fmt.Sprintf("the checkout's HEAD could not be read to place its commit %s: %v", shortCommit(built), err)
 	}
 	if head.ID == built {
-		return ""
+		return built, ""
 	}
 	after, err := res.VCS.IsAncestor(ctx, root, head.ID, built)
 	switch {
 	case err != nil:
-		return fmt.Sprintf("it was built at %s, which could not be placed against HEAD %s: %v", shortCommit(built), shortCommit(head.ID), err)
+		return built, fmt.Sprintf("it was built at %s, which could not be placed against HEAD %s: %v", shortCommit(built), shortCommit(head.ID), err)
 	case !after:
-		return fmt.Sprintf("it was built at %s, which is neither the checkout's HEAD %s nor a commit after it", shortCommit(built), shortCommit(head.ID))
+		return built, fmt.Sprintf("it was built at %s, which is neither the checkout's HEAD %s nor a commit after it", shortCommit(built), shortCommit(head.ID))
 	}
-	return ""
+	return built, ""
+}
+
+// newerThanRunning reports whether built descends from running, this binary's
+// commit. An unknown commit, or one the checkout cannot place, is not newer.
+func newerThanRunning(ctx context.Context, root, built, running string) bool {
+	if built == "" || running == "" || running == unknownVersion || built == running {
+		return false
+	}
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return false
+	}
+	newer, err := res.VCS.IsAncestor(ctx, root, running, built)
+	return err == nil && newer
 }
 
 // judgedBy appends note, which says which binary judged, to the verdict's text. A pass

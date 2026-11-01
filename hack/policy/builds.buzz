@@ -81,7 +81,8 @@ export fun workerPlacement(built: str, lease: str) > str {
         + "which it builds and places in one step with "
         + "`<main checkout>/magus buzz {stale\placementScript} -- --job <id> --build-from <main checkout>`. "
         + "A worker runs `./magus run go-build .` itself only in a checkout its job owns, and only when the "
-        + "job's write paths cover a build input of ./cmd/magus.";
+        + "job's write paths cover a build input of ./cmd/magus. A row that moved the checkout it owns, "
+        + "by a fast-forward or a merge, finishes with `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here`.";
 }
 
 // OwnBuild is what a worker's build of magus is judged against: root is the checkout it
