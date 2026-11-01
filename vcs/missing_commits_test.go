@@ -1,6 +1,8 @@
 package vcs
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +15,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 )
 
 const lockLines = "1\n2\n3\n4\n5\n6\n7\n8\n9\n"
@@ -116,6 +119,70 @@ func (s *missingCommitsSuite) TestABranchFarAheadCostsNoGitCallPerCommit() {
 		}
 	}
 	s.Equal(2, logs, "one log per side of the range:\n%s", logged)
+}
+
+func (s *missingCommitsSuite) TestADifferentCommitSharingASubjectIsMissing() {
+	s.repo.Commit("edit top", map[string]string{"other.txt": "unrelated\n"})
+
+	s.Equal(1, s.missing())
+}
+
+func (s *missingCommitsSuite) TestADifferentEditOfTheSameFileSharingASubjectIsMissing() {
+	s.repo.Commit("edit top", map[string]string{"lock": "1\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
+
+	s.Equal(1, s.missing())
+}
+
+func (s *missingCommitsSuite) TestAFixupFoldedIntoItsCommitIsHeld() {
+	s.repo.Git("switch", "-q", "side")
+	s.repo.Commit("fixup! edit top", map[string]string{"lock": "one\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
+	s.repo.Git("switch", "-q", s.main)
+	s.repo.Commit("edit top", map[string]string{"lock": "one\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
+	s.repo.Commit("edit middle", map[string]string{"lock": "one\n2\n3\n4\nfive\n6\n7\n8\nnine\n"})
+
+	s.Zero(s.missing())
+}
+
+func (s *missingCommitsSuite) TestACommitAndItsRevertLeaveNothingMissing() {
+	s.repo.Git("switch", "-q", "side")
+	s.repo.Git("revert", "--no-edit", "HEAD")
+	s.repo.Git("switch", "-q", s.main)
+
+	s.Zero(s.missing())
+}
+
+// treeless declines DiffTrees, as hg, jj and sapling do.
+type treeless struct{ gitVCS }
+
+func (treeless) DiffTrees(context.Context, string, string, string) ([]string, error) {
+	return nil, &types.VCSUnsupportedError{VCS: "treeless", Capability: types.CapTreeReporter}
+}
+
+// brokenTrees has a tree diff that fails rather than declines.
+type brokenTrees struct{ gitVCS }
+
+func (brokenTrees) DiffTrees(context.Context, string, string, string) ([]string, error) {
+	return nil, errors.New("diff-tree failed")
+}
+
+func (s *missingCommitsSuite) TestASquashLandingADeletionIsHeldByEveryBackend() {
+	s.repo.Git("switch", "-q", "side")
+	s.repo.Git("rm", "-q", "lock")
+	s.repo.Git("commit", "-q", "-m", "drop the lock")
+	s.repo.Git("switch", "-q", s.main)
+	s.repo.Git("rm", "-q", "lock")
+	s.repo.Git("commit", "-q", "-m", "squash")
+
+	s.Zero(s.missing())
+	got, err := missingCommits(s.T().Context(), treeless{}, s.repo.Root(), s.main, "side")
+	s.Require().NoError(err)
+	s.Zero(got)
+}
+
+func (s *missingCommitsSuite) TestATreeDiffThatFailsProvesNothing() {
+	s.repo.Commit("squash", map[string]string{"lock": "one\n2\n3\n4\n5\n6\n7\n8\n9\n"})
+
+	s.False(contentOnBranch(s.T().Context(), brokenTrees{}, s.repo.Root(), s.main, "side"))
 }
 
 func (s *missingCommitsSuite) TestAnUnknownRevisionIsAnError() {

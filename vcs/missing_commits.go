@@ -2,6 +2,7 @@ package vcs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -33,40 +34,109 @@ func missingCommits(ctx context.Context, r workReader, dir, branch, head string)
 	if err != nil {
 		return 0, err
 	}
-	copies := make(map[string]bool, len(onBranch))
+	copies := make(map[string][]types.Commit, len(onBranch))
 	for _, c := range onBranch {
-		copies[replayIdentity(c)] = true
+		id := replayIdentity(c)
+		copies[id] = append(copies[id], c)
 	}
 	missing := 0
 	for _, c := range commits {
-		if len(c.Parents) < 2 && !copies[replayIdentity(c)] {
+		if len(c.Parents) > 1 {
+			continue
+		}
+		held, err := heldByCopy(ctx, r, dir, c, copies[replayIdentity(c)])
+		if err != nil {
+			return 0, err
+		}
+		if !held {
 			missing++
 		}
 	}
 	return missing, nil
 }
 
+// heldByCopy reports a candidate carrying every line c changed. Author and
+// subject alone repeat across unrelated commits. Only a subject match pays for
+// the diffs. A rewritten copy reads as not held, the side that loses no work.
+func heldByCopy(ctx context.Context, r workReader, dir string, c types.Commit, candidates []types.Commit) (bool, error) {
+	if len(candidates) == 0 || len(c.Parents) == 0 {
+		return false, nil
+	}
+	ours, err := changedLines(ctx, r, dir, c)
+	if err != nil {
+		return false, err
+	}
+	for _, candidate := range candidates {
+		if len(candidate.Parents) == 0 {
+			continue
+		}
+		theirs, err := changedLines(ctx, r, dir, candidate)
+		if err != nil {
+			return false, err
+		}
+		if carriesAll(theirs, ours) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func carriesAll(theirs, ours map[string]bool) bool {
+	for line := range ours {
+		if !theirs[line] {
+			return false
+		}
+	}
+	return true
+}
+
+// changedLines is what c changed against its first parent, without the hunk
+// positions and context a replay shifts.
+func changedLines(ctx context.Context, r workReader, dir string, c types.Commit) (map[string]bool, error) {
+	diff, err := r.RangeDiff(ctx, dir, c.Parents[0], c.ID, nil)
+	if err != nil {
+		return nil, err
+	}
+	lines := map[string]bool{}
+	for line := range strings.Lines(diff) {
+		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") || strings.HasPrefix(line, "Binary") {
+			lines[line] = true
+		}
+	}
+	return lines, nil
+}
+
 // contentOnBranch reports whether every file head changed since it diverged
 // reads the same at branch. A squash of several branches holds no commit of
-// any of them. A file either side cannot read leaves it unproven.
+// any of them. A path neither side holds reads the same, and a path only one
+// side can read, or a tree diff that fails, leaves it unproven.
 func contentOnBranch(ctx context.Context, r workReader, dir, branch, head string) bool {
 	paths, err := r.RangeFiles(ctx, dir, branch, head, nil)
-	if err != nil || len(paths) == 0 {
+	if err != nil {
 		return false
 	}
+	if len(paths) == 0 {
+		return true
+	}
 	// One call against a read per file: a wide branch took seconds.
-	if differ, err := r.DiffTrees(ctx, dir, branch, head); err == nil {
+	differ, err := r.DiffTrees(ctx, dir, branch, head)
+	if err == nil {
 		return !slices.ContainsFunc(paths, func(changed string) bool {
 			return slices.Contains(differ, cleanPath(changed))
 		})
 	}
+	var declined *types.VCSUnsupportedError
+	if !errors.As(err, &declined) {
+		return false
+	}
 	for _, changed := range paths {
 		p := cleanPath(changed)
-		ours, err := r.ReadFileAt(ctx, dir, head, p)
-		if err != nil {
+		ours, oursErr := r.ReadFileAt(ctx, dir, head, p)
+		theirs, theirsErr := r.ReadFileAt(ctx, dir, branch, p)
+		if ctx.Err() != nil {
 			return false
 		}
-		if theirs, err := r.ReadFileAt(ctx, dir, branch, p); err != nil || theirs != ours {
+		if (oursErr != nil) != (theirsErr != nil) || ours != theirs {
 			return false
 		}
 	}

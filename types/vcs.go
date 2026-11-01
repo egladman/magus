@@ -852,8 +852,8 @@ type RangeReporter interface {
 	// changed one of those literal repository-relative paths.
 	RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]Commit, error)
 	// MissingCommits counts head's commits branch lacks a copy of, by ancestry,
-	// content or author and subject. Reverted work reads as held; a rewritten
-	// squash later edited reads as missing.
+	// content or a same-subject commit carrying its changed lines. Reverted
+	// work reads as held; a rewritten squash later edited reads as missing.
 	MissingCommits(ctx context.Context, dir, branch, head string) (int, error)
 }
 
