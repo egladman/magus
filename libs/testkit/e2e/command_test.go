@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/internal/proc/spawn"
 )
 
 type commandSuite struct{ suite.Suite }
@@ -97,6 +100,43 @@ func (s *commandSuite) TestConverseClosesStdinAndKeepsWhatTalkLeftUnread() {
 
 	s.Require().NoError(r.Err)
 	s.Equal("after\n", r.Stdout)
+}
+
+// stragglerEnv makes this test binary a host leaving a child outside its group.
+const stragglerEnv = "E2E_COMMAND_STRAGGLER"
+
+// TestStragglerHost is the program under test when stragglerEnv is set.
+func TestStragglerHost(t *testing.T) {
+	if os.Getenv(stragglerEnv) == "" {
+		t.Skip("run only as the program under test")
+	}
+	child := exec.Command("sleep", "30")
+	child.Stdout = os.Stdout
+	spawn.SetupProcessGroup(child)
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("started")
+	os.Exit(0)
+}
+
+func (s *commandSuite) TestConverseEndsAtItsTimeoutWhenAStragglerHoldsStdout() {
+	c := Command{
+		Path:    os.Args[0],
+		Args:    []string{"-test.run=^TestStragglerHost$"},
+		Env:     append(os.Environ(), stragglerEnv+"=1"),
+		Timeout: time.Second,
+	}
+
+	r := c.Converse(func(_ io.WriteCloser, stdout io.Reader) {
+		lines := bufio.NewScanner(stdout)
+		for lines.Scan() {
+		}
+	})
+
+	s.True(r.TimedOut)
+	s.Contains(r.Stdout, "started")
+	s.Less(r.Elapsed, 10*time.Second)
 }
 
 func (s *commandSuite) TestConverseFailsToStartAMissingProgram() {

@@ -79,6 +79,12 @@ func (c Command) Converse(talk func(stdin io.WriteCloser, stdout io.Reader)) Res
 	if err := cmd.Start(); err != nil {
 		return Result{Err: err}
 	}
+	// WaitDelay acts only in Wait, which a straggler on stdout would block.
+	stop := context.AfterFunc(ctx, func() {
+		_ = pipe.Close()
+		_ = stdin.Close()
+	})
+	defer stop()
 	seen := io.TeeReader(pipe, &stdout)
 	talk(stdin, seen)
 	_ = stdin.Close()
