@@ -74,6 +74,7 @@
 {"name":"Magus.DiffAgainst","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
 {"name":"Magus.DiffTUIEnabled","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
 {"name":"Magus.DiffWith","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.DiskReclaim","reason":"cache, sandbox and lock state the CLI reports or manages"}
 {"name":"Magus.Duplication","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.EvaluateProjects","reason":"workspace accessor the CLI or std calls on the loaded handle"}
 {"name":"Magus.EvaluateTarget","reason":"workspace accessor the CLI or std calls on the loaded handle"}
@@ -83,6 +84,7 @@
 {"name":"Magus.ExportCache","reason":"cache, sandbox and lock state the CLI reports or manages"}
 {"name":"Magus.ExportSCIP","reason":"symbol index export as SCIP for code-intelligence tools, behind magus graph export -o scip"}
 {"name":"Magus.FileAt","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.FileDiskAttention","reason":"cache, sandbox and lock state the CLI reports or manages"}
 {"name":"Magus.FindOutputProducer","reason":"captured output lookup behind query output and the run ref"}
 {"name":"Magus.FreshenSymbolIndexes","reason":"symbol index query or refresh for refs and the conformance lens"}
 {"name":"Magus.Get","reason":"workspace accessor the CLI or std calls on the loaded handle"}
@@ -125,6 +127,7 @@
 {"name":"Magus.PublishOutput","reason":"captured output lookup behind query output and the run ref"}
 {"name":"Magus.RangeDiff","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
 {"name":"Magus.RefMatchCommand","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.RefreshSymbolIndexes","reason":"symbol index query or refresh for refs and the conformance lens"}
 {"name":"Magus.Regions","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.ReindexSymbols","reason":"symbol index query or refresh for refs and the conformance lens"}
 {"name":"Magus.ResolveProjects","reason":"workspace accessor the CLI or std calls on the loaded handle"}
@@ -172,6 +175,7 @@
 {"name":"OutputDescriptor","reason":"value type a Run or query result returns to the caller"}
 {"name":"PlanOptions","reason":"option type taken by Open, Run, Plan or a declaration"}
 {"name":"ProjectOption","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"RecentSymbolRefreshFailures","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"ResolveCacheDir","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
 {"name":"RetryOnVolatile","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"RunOption","reason":"option type taken by Open, Run, Plan or a declaration"}
@@ -192,6 +196,8 @@
 {"name":"SpawnRule","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"SpellCache","reason":"value type a Run or query result returns to the caller"}
 {"name":"SymbolOccurrenceRead","reason":"value type a Run or query result returns to the caller"}
+{"name":"SymbolRefresh","reason":"value type a Run or query result returns to the caller"}
+{"name":"SymbolRefreshBudget","reason":"constant a caller compares against or pins"}
 {"name":"TargetHandler","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"TargetLabel","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"TargetOption","reason":"option type taken by Open, Run, Plan or a declaration"}

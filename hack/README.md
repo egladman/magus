@@ -164,6 +164,7 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
 | `hack/magusfile/conformance-ceiling.buzz` | the conformance ceiling policy: which metrics a changed file may not hold more violations of than it held at the base revision |
 | `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
+| `hack/magusfile/coverage_test.buzz` | the coverage module's profile path for a full or narrowed run, checked by `buzz-test` |
 | `hack/magusfile/deviations.buzz` | a gate's ledger of the findings a person permitted |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
 | `hack/magusfile/harness.buzz` | which committed host config files lack what their wired harness spell renders, and the merge command for each |
