@@ -28,6 +28,11 @@ final HELP = "cost: none; reads and writes one file\n{USAGE}";
 
 final SIDES = ["ours", "theirs", "both", "base"];
 
+export object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
 export object Hunk {
     index: int,
     // line is the 1-based line of the hunk's <<<<<<< marker.
@@ -84,9 +89,9 @@ fun label(line: str) > str {
     return if (line.len() > 8) line.sub(8) else "";
 }
 
-// parse splits text into its plain runs and conflict hunks. It raises on a marker out of
-// order or a hunk left open, since resolving half of a malformed conflict guesses at the rest.
-export fun parse(text: str) > Conflicted !> str {
+// parse splits text into its plain runs and conflict hunks.
+// A marker out of order or an open hunk is an error: resolving half guesses.
+export fun parse(text: str) > Result::<Conflicted> {
     final lines = text.split("\n");
     final plain = mut [<[str]>];
     final hunks = mut [<Hunk>];
@@ -111,12 +116,12 @@ export fun parse(text: str) > Conflicted !> str {
                 hasBase = false;
                 theirs = mut [<str>];
             } else if (marker != "") {
-                throw "line {i + 1}: a {marker} marker outside any conflict";
+                return Result::<Conflicted>{ error = "line {i + 1}: a {marker} marker outside any conflict" };
             } else {
                 run.append(line);
             }
         } else if (marker == "start") {
-            throw "line {i + 1}: a conflict opens inside the conflict at line {start}";
+            return Result::<Conflicted>{ error = "line {i + 1}: a conflict opens inside the conflict at line {start}" };
         } else if (state == "ours" and marker == "base") {
             state = "base";
             hasBase = true;
@@ -130,7 +135,7 @@ export fun parse(text: str) > Conflicted !> str {
                 ours = ours, base = if (hasBase) base else null, baseLabel = baseLabel, theirs = theirs });
             state = "plain";
         } else if (marker != "") {
-            throw "line {i + 1}: a {marker} marker out of order in the conflict at line {start}";
+            return Result::<Conflicted>{ error = "line {i + 1}: a {marker} marker out of order in the conflict at line {start}" };
         } else if (state == "ours") {
             ours.append(line);
         } else if (state == "base") {
@@ -140,19 +145,19 @@ export fun parse(text: str) > Conflicted !> str {
         }
     }
     if (state != "plain") {
-        throw "the conflict at line {start} never closes";
+        return Result::<Conflicted>{ error = "the conflict at line {start} never closes" };
     }
     plain.append(run);
-    return Conflicted{ plain = plain, hunks = hunks };
+    return Result::<Conflicted>{ value = Conflicted{ plain = plain, hunks = hunks } };
 }
 
 // chosen is the lines hunk h resolves to under c.
-fun chosen(h: Hunk, c: Choice) > [str] !> str {
+fun chosen(h: Hunk, c: Choice) > Result::<[str]> {
     if (c.side == "ours") {
-        return h.ours;
+        return Result::<[str]>{ value = h.ours };
     }
     if (c.side == "theirs") {
-        return h.theirs;
+        return Result::<[str]>{ value = h.theirs };
     }
     if (c.side == "both") {
         final both = mut [<str>];
@@ -162,18 +167,18 @@ fun chosen(h: Hunk, c: Choice) > [str] !> str {
         foreach (l in h.theirs) {
             both.append(l);
         }
-        return both;
+        return Result::<[str]>{ value = both };
     }
     if (c.side == "base") {
         if (h.base -> base) {
-            return base;
+            return Result::<[str]>{ value = base };
         }
-        throw "hunk {h.index} has no base section; merge with conflictstyle diff3 to get one";
+        return Result::<[str]>{ error = "hunk {h.index} has no base section; merge with conflictstyle diff3 to get one" };
     }
     if (c.side == "text") {
-        return c.text;
+        return Result::<[str]>{ value = c.text };
     }
-    throw "hunk {h.index}: unknown choice {c.side}";
+    return Result::<[str]>{ error = "hunk {h.index}: unknown choice {c.side}" };
 }
 
 // render writes the hunk back as git wrote it, for a hunk no choice names.
@@ -196,14 +201,14 @@ fun render(h: Hunk) > [str] {
     return marked;
 }
 
-// settle is the file's whole text with each chosen hunk replaced. It raises on a choice
-// for a hunk the file does not have, an empty result, and a result whose markers are not
-// exactly the hunks left unchosen: a side or a replacement text that itself carries marker
-// lines would otherwise read as resolved and be staged.
-export fun settle(c: Conflicted, choices: {int: Choice}) > str !> str {
+// settle is the file's whole text with each chosen hunk replaced.
+// It errors on a choice for a missing hunk and on an empty result.
+// It errors when the markers left are not the hunks left unchosen, so text
+// carrying marker lines is never staged as resolved.
+export fun settle(c: Conflicted, choices: {int: Choice}) > Result::<str> {
     foreach (n, _ in choices) {
         if (n < 1 or n > c.hunks.len()) {
-            throw "there is no hunk {n}; the file has {c.hunks.len()}";
+            return Result::<str>{ error = "there is no hunk {n}; the file has {c.hunks.len()}" };
         }
     }
     final result = mut [<str>];
@@ -213,7 +218,11 @@ export fun settle(c: Conflicted, choices: {int: Choice}) > str !> str {
             result.append(l);
         }
         if (choices[h.index] -> choice) {
-            foreach (l in chosen(h, c: choice)) {
+            final lines = chosen(h, c: choice);
+            if (lines.error != null) {
+                return Result::<str>{ error = lines.error };
+            }
+            foreach (l in lines.value!) {
                 result.append(l);
             }
         } else {
@@ -228,28 +237,28 @@ export fun settle(c: Conflicted, choices: {int: Choice}) > str !> str {
     }
     final text = result.join("\n");
     if (text.trim() == "") {
-        throw "the result is empty; nothing was written";
+        return Result::<str>{ error = "the result is empty; nothing was written" };
     }
-    final left = parse(text) catch Conflicted{ plain = [<[str]>], hunks = [<Hunk>] };
-    if (left.plain.len() == 0 or left.hunks.len() != open) {
-        throw "the result carries conflict markers beyond the {open} hunk(s) left unchosen; a chosen side or text holds marker lines";
+    final left = parse(text);
+    if (left.error != null or left.value!.hunks.len() != open) {
+        return Result::<str>{ error = "the result carries conflict markers beyond the {open} hunk(s) left unchosen; a chosen side or text holds marker lines" };
     }
-    return text;
+    return Result::<str>{ value = text };
 }
 
 // parseChoices reads --take <n|all>=<side> and --text <n>=<file> into one choice per hunk.
 // A later --take or --text for the same hunk replaces the earlier one.
-export fun parseChoices(takes: [str], texts: [str], hunks: int) > {int: Choice} !> any {
+export fun parseChoices(takes: [str], texts: [str], hunks: int) > Result::<{int: Choice}> {
     final picked = mut {<int: Choice>};
     foreach (t in takes) {
         final eq = t.indexOf("=");
         if (eq == null) {
-            throw "--take {t}: want <n>=<side>";
+            return Result::<{int: Choice}>{ error = "--take {t}: want <n>=<side>" };
         }
         final which = t.sub(0, len: eq!);
         final side = t.sub(eq! + 1);
         if (SIDES.indexOf(side) == null) {
-            throw "--take {t}: the side is one of {SIDES.join(", ")}";
+            return Result::<{int: Choice}>{ error = "--take {t}: the side is one of {SIDES.join(", ")}" };
         }
         if (which == "all") {
             for (var n = 1; n <= hunks; n = n + 1) {
@@ -259,26 +268,31 @@ export fun parseChoices(takes: [str], texts: [str], hunks: int) > {int: Choice} 
         }
         final n = std\parseInt(which);
         if (n == null) {
-            throw "--take {t}: {which} is not a hunk number";
+            return Result::<{int: Choice}>{ error = "--take {t}: {which} is not a hunk number" };
         }
         picked[n!] = Choice{ side = side };
     }
     foreach (t in texts) {
         final eq = t.indexOf("=");
         if (eq == null) {
-            throw "--text {t}: want <n>=<file>";
+            return Result::<{int: Choice}>{ error = "--text {t}: want <n>=<file>" };
         }
         final n = std\parseInt(t.sub(0, len: eq!));
         if (n == null) {
-            throw "--text {t}: {t.sub(0, len: eq!)} is not a hunk number";
+            return Result::<{int: Choice}>{ error = "--text {t}: {t.sub(0, len: eq!)} is not a hunk number" };
         }
-        var body = fs\readFile(t.sub(eq! + 1));
+        var body = "";
+        try {
+            body = fs\readFile(t.sub(eq! + 1));
+        } catch (err: any) {
+            return Result::<{int: Choice}>{ error = "--text {t}: {err}" };
+        }
         if (body.endsWith("\n")) {
             body = body.sub(0, len: body.len() - 1);
         }
         picked[n!] = Choice{ side = "text", text = body.split("\n") };
     }
-    return picked;
+    return Result::<{int: Choice}>{ value = picked };
 }
 
 // listing is the report for a file no choice was given for.
@@ -304,12 +318,17 @@ export fun listing(file: str, c: Conflicted) > [str] {
 
 // writeKeepingMode swaps content in for file through a temp file and a rename in file's own
 // directory, then restores the permission bits the temp file did not carry.
-fun writeKeepingMode(file: str, content: str) > void !> any {
-    final mode = fs\stat(file).mode;
-    fs\writeFileAtomic(file, content: content);
-    if (fs\stat(file).mode != mode) {
-        fs\chmod(file, mode: mode);
+fun writeKeepingMode(file: str, content: str) > Result::<bool> {
+    try {
+        final mode = fs\stat(file).mode;
+        fs\writeFileAtomic(file, content: content);
+        if (fs\stat(file).mode != mode) {
+            fs\chmod(file, mode: mode);
+        }
+    } catch (err: any) {
+        return Result::<bool>{ error = "resolve-conflicts: write {file}: {err}" };
     }
+    return Result::<bool>{ value = true };
 }
 
 export fun main(args: [str]) > void !> any {
@@ -326,12 +345,11 @@ export fun main(args: [str]) > void !> any {
         throw "resolve-conflicts: --file is required\n{USAGE}";
     }
     final before = fs\readFile(file);
-    var c = Conflicted{ plain = [<[str]>], hunks = [<Hunk>] };
-    try {
-        c = parse(before);
-    } catch (e: str) {
-        throw "resolve-conflicts: {file}: {e}";
+    final split = parse(before);
+    if (split.error != null) {
+        throw "resolve-conflicts: {file}: {split.error!}";
     }
+    final c = split.value!;
     if (c.hunks.len() == 0) {
         throw "resolve-conflicts: {file} holds no conflict markers";
     }
@@ -343,19 +361,25 @@ export fun main(args: [str]) > void !> any {
         }
         return;
     }
-    final choices = parseChoices(takes, texts: texts, hunks: c.hunks.len());
-    var after = "";
-    try {
-        after = settle(c, choices: choices);
-    } catch (e: str) {
-        throw "resolve-conflicts: {file}: {e}";
+    final picked = parseChoices(takes, texts: texts, hunks: c.hunks.len());
+    if (picked.error != null) {
+        throw picked.error!;
     }
+    final choices = picked.value!;
+    final settled = settle(c, choices: choices);
+    if (settled.error != null) {
+        throw "resolve-conflicts: {file}: {settled.error!}";
+    }
+    final after = settled.value!;
     final left = c.hunks.len() - choices.len();
     final patch = diff\unified(before, b: after, fromLabel: file, toLabel: "{file} resolved");
     if (parsed.values["--apply"] == null) {
         std\print("dry run: nothing changed; pass --apply to write");
     } else {
-        writeKeepingMode(file, content: after);
+        final written = writeKeepingMode(file, content: after);
+        if (written.error != null) {
+            throw written.error!;
+        }
         final next = if (left == 0) "; stage it with `git add {file}`" else "; {left} hunk(s) left";
         std\print("resolved {choices.len()} of {c.hunks.len()} hunk(s) in {file}{next}");
     }
@@ -367,25 +391,15 @@ final TWO_SIDED = "package x\n<<<<<<< HEAD\nours one\n=======\ntheirs one\n>>>>>
 final DIFF3 = "a\n<<<<<<< HEAD\nmine\n||||||| merged common ancestors\nold\n=======\nyours\n>>>>>>> topic\nz\n";
 
 fun raised(text: str, choices: {int: Choice}) > str {
-    try {
-        _ = settle(parse(text), choices: choices);
-    } catch (e: str) {
-        return e;
-    }
-    return "";
+    return settle(parse(text).value!, choices: choices).error ?? "";
 }
 
 fun parseRaised(text: str) > str {
-    try {
-        _ = parse(text);
-    } catch (e: str) {
-        return e;
-    }
-    return "";
+    return parse(text).error ?? "";
 }
 
 test "parse finds each hunk, its sides and its labels" {
-    final c = parse(TWO_SIDED);
+    final c = parse(TWO_SIDED).value!;
     assert\equal(c.hunks.len(), want: 2, message: "hunks");
     assert\equal(c.plain.len(), want: 3, message: "plain runs");
     assert\equal(c.hunks[0].line, want: 2, message: "first hunk line");
@@ -396,7 +410,7 @@ test "parse finds each hunk, its sides and its labels" {
 }
 
 test "parse reads a diff3 base" {
-    final c = parse(DIFF3);
+    final c = parse(DIFF3).value!;
     if (c.hunks[0].base -> base) {
         assert\equal(base, want: ["old"], message: "base lines");
     } else {
@@ -405,22 +419,22 @@ test "parse reads a diff3 base" {
 }
 
 test "every hunk resolved leaves no markers and keeps the trailing newline" {
-    final got = settle(parse(TWO_SIDED), choices: {1: Choice{ side = "ours" }, 2: Choice{ side = "both" }});
+    final got = settle(parse(TWO_SIDED).value!, choices: {1: Choice{ side = "ours" }, 2: Choice{ side = "both" }}).value!;
     assert\equal(got, want: "package x\nours one\nmiddle\nours two\ntheirs two\nend\n", message: "result");
 }
 
 test "a hunk left unchosen is written back as git wrote it" {
-    final got = settle(parse(TWO_SIDED), choices: {2: Choice{ side = "theirs" }});
+    final got = settle(parse(TWO_SIDED).value!, choices: {2: Choice{ side = "theirs" }}).value!;
     assert\equal(got, want: "package x\n<<<<<<< HEAD\nours one\n=======\ntheirs one\n>>>>>>> feature\nmiddle\ntheirs two\nend\n", message: "partial");
 }
 
 test "base and replacement text resolve a diff3 hunk" {
-    assert\equal(settle(parse(DIFF3), choices: {1: Choice{ side = "base" }}), want: "a\nold\nz\n", message: "base");
-    assert\equal(settle(parse(DIFF3), choices: {1: Choice{ side = "text", text = ["new", "lines"] }}), want: "a\nnew\nlines\nz\n", message: "text");
+    assert\equal(settle(parse(DIFF3).value!, choices: {1: Choice{ side = "base" }}).value!, want: "a\nold\nz\n", message: "base");
+    assert\equal(settle(parse(DIFF3).value!, choices: {1: Choice{ side = "text", text = ["new", "lines"] }}).value!, want: "a\nnew\nlines\nz\n", message: "text");
 }
 
 test "an unchosen diff3 hunk keeps its base label" {
-    assert\equal(settle(parse(DIFF3), choices: {<int: Choice>}), want: DIFF3, message: "round trip");
+    assert\equal(settle(parse(DIFF3).value!, choices: {<int: Choice>}).value!, want: DIFF3, message: "round trip");
 }
 
 test "base is refused for a hunk without one" {
@@ -462,7 +476,7 @@ test "--take all and --text choose per hunk" {
     final dir = fs\tempDir("resolve-conflicts");
     final body = fs\join(dir, name: "body.txt");
     fs\writeFile(body, content: "replaced\n");
-    final choices = parseChoices(["all=theirs"], texts: ["2={body}"], hunks: 2);
+    final choices = parseChoices(["all=theirs"], texts: ["2={body}"], hunks: 2).value!;
     assert\equal(choices[1]?.side ?? "", want: "theirs", message: "all");
     assert\equal(choices[2]?.text ?? [<str>], want: ["replaced"], message: "text from a file");
     fs\removeAll(dir);
@@ -473,7 +487,8 @@ test "an applied resolution swaps the file and keeps its mode" {
     final file = fs\join(dir, name: "run.sh");
     fs\writeFile(file, content: TWO_SIDED);
     fs\chmod(file, mode: 0755);
-    writeKeepingMode(file, content: settle(parse(TWO_SIDED), choices: {1: Choice{ side = "theirs" }, 2: Choice{ side = "theirs" }}));
+    final settled = settle(parse(TWO_SIDED).value!, choices: {1: Choice{ side = "theirs" }, 2: Choice{ side = "theirs" }});
+    assert\equal(writeKeepingMode(file, content: settled.value!).error, want: null, message: "written");
     assert\equal(fs\readFile(file), want: "package x\ntheirs one\nmiddle\ntheirs two\nend\n", message: "content");
     assert\equal(fs\stat(file).mode, want: 0755, message: "mode");
     assert\equal(fs\listDir(dir).len(), want: 1, message: "no temp file left behind");
