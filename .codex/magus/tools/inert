@@ -1,4 +1,5 @@
 close_agent
 update_plan
 view_image
+wait_agent
 web_search

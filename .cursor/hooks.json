@@ -34,6 +34,11 @@
         "command": "magus buzz -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name cursor",
         "matcher": "Write|StrReplace|Edit",
         "timeout": 30
+      },
+      {
+        "command": "magus buzz -s docs/guides/integrations/agents/magus-tool-time.buzz -- --agent-name cursor # magus:harness",
+        "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*",
+        "timeout": 10
       }
     ],
     "postToolUseFailure": [
