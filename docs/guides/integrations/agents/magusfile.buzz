@@ -8,6 +8,7 @@ import "../../../../hack/magusfile/index" as index;
 
 import "proc";
 import "fs";
+import "semver";
 import "magus/spell/typescript";
 // Imported for dprint only. Listing it in spells would claim *.md, which the root lints.
 import "magus/spell/markdown";
@@ -19,10 +20,11 @@ magus\project({
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
                 "dprint.json",
                 // The Claude Code mod. Only Claude Code's engine can test or type-check
-                // it (`claude plugin test`), so no target here runs on it.
+                // it, so only mod-test runs on it, and ci cannot compose that.
                 "claude-code-mod/**"],
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
+        "mod-test": {"skip_cache": "runs on the installed claude, whose version no input glob can key"},
     },
 });
 
@@ -142,6 +144,18 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     final run = mut ["--test"];
     foreach (t in fs\glob("*.test.ts")) { run.append(t.value); }
     _ = proc\exec("node", run, ".");
+}
+
+// mod-test runs the Claude Code mod's tests on the engine that loads it.
+// CI has no claude, so ci never composes it.
+// 2.1.308 is the oldest build seen to carry `plugin test`.
+export fun mod_test(ctx: magus\Context, args: [str]) > void !> any {
+    final printed = proc\exec("claude", args: ["--version"], dir: ".", opts: proc\ExecOptions{quiet = true}).stdout;
+    final version = printed.trim().split(" ")[0];
+    if (!semver\isValid(version) or !semver\satisfies(version, constraint: ">= 2.1.308")) {
+        throw "mod-test: `claude plugin test` needs claude 2.1.308 or newer; `claude --version` on PATH printed: " + printed.trim();
+    }
+    _ = proc\exec("claude", args: ["plugin", "test", "claude-code-mod"], dir: ".");
 }
 
 // The anchor `magus affected ci` keys off.

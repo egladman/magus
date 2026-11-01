@@ -1,3 +1,9 @@
+### Added
+
+- **`magus run mod-test docs/guides/integrations/agents` runs the mod's tests.** It needs
+  `claude` 2.1.308 or newer on `PATH` and refuses an older one by name. `ci` does not
+  compose it.
+
 ### Changed
 
 - **The Claude Code mod draws less above the prompt.** The band keeps a guard that fails
