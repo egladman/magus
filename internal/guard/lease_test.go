@@ -1636,6 +1636,32 @@ func (s *commitPathsSuite) TestAStagedPathOutsideTheLeaseIsNamedWithTheRoute() {
 	s.Contains(got, "git restore --staged -- docs/gen.json")
 	s.Contains(got, "file them owed")
 	s.NotContains(got, "It commits cmd/magus/x.go")
+	s.Contains(got, "this commit carries paths outside lease")
+	s.NotContains(got, "a worker commits only", "the headline names the paths, since the branch was right")
+}
+
+func (s *commitPathsSuite) TestAnIntegratingRowCommitsWhatItRegenerates() {
+	project := &types.Project{Path: ".", TargetOutputs: map[string][]types.OutputRef{"gen": {{Glob: "docs/gen.json"}}},
+		TargetUpdates: map[string][]types.UpdateRef{"index": {{Glob: "docs/index.md"}}}}
+	ws := typestest.NewMockWorkspaceRepository(s.T())
+	ws.EXPECT().All().Return([]*types.Project{project}).Maybe()
+	deps := Dependencies{callDir: s.dir, Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+	s.write("docs/gen.json")
+	s.write("docs/index.md")
+	s.repo.git(s.dir, "add", "docs/gen.json", "docs/index.md")
+
+	s.Contains(denyLeaseScopedVCS(s.ctx, deps, s.worker.ID, "git commit -m done"), "It commits docs/gen.json docs/index.md",
+		"a worker's row holds no output")
+
+	integrating := s.worker
+	integrating.Integrates = []string{"other"}
+	ctx, _ := fleetFixture(s.T(), integrating)
+	s.Empty(denyLeaseScopedVCS(ctx, deps, integrating.ID, "git commit -m done"))
+
+	s.write("docs/hand.md")
+	s.repo.git(s.dir, "add", "docs/hand.md")
+	s.Contains(denyLeaseScopedVCS(ctx, deps, integrating.ID, "git commit -m done"), "It commits docs/hand.md",
+		"a file no target writes is still graded")
 }
 
 func (s *commitPathsSuite) TestAnAddOnTheSameLineIsGraded() {

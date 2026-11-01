@@ -2618,6 +2618,7 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 		}
 		if c.inv.Name == "git" && recordsCommit(c.inv) && unlocated == "" {
 			site.stagedOnLine = lineStagedPaths(ctx, cmds, cmp.Or(site.dir, me.CheckoutRoot))
+			site.regenerated = integrationRegenerates(ctx, deps, me)
 		}
 		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
 		if r.refused() {
@@ -2810,6 +2811,8 @@ func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) stri
 			checkout, what, r.op, row.ID, role, r.why, leaseActorClause("create it"))
 	case vcsOpLands:
 		return landDenial(what, r.op, row, role, fmt.Sprintf("magus workspace: a worker commits only on its own branch in its own checkout, %s.", checkout), r.why)
+	case vcsOpOutside:
+		return landDenial(what, r.op, row, role, fmt.Sprintf("magus workspace: this commit carries paths outside lease %s's write paths.", row.ID), r.why)
 	case vcsOpMoves:
 		return landDenial(what, r.op, row, role, fmt.Sprintf("magus workspace: a worker moves only paths its line spells out, in its own checkout, %s.", checkout), r.why)
 	}
@@ -2836,6 +2839,8 @@ const (
 	// vcsOpLands is a commit, a git cherry-pick or a git apply (see workerLands), refused
 	// with a why unless it lands on the worker's own branch in its own checkout.
 	vcsOpLands
+	// vcsOpOutside is a commit carrying a path its lease lacks.
+	vcsOpOutside
 	// vcsOpInit creates a repository, refused with a why unless it lies wholly outside the
 	// worker's checkout.
 	vcsOpInit
@@ -2867,6 +2872,8 @@ type vcsSite struct {
 	gitDir string
 	// stagedOnLine is what an earlier `git add` on the shell line stages.
 	stagedOnLine []string
+	// regenerated reports a path an integrating row regenerates.
+	regenerated func(path string) bool
 }
 
 // workerVCSRefusal is the one decision behind lease-vcs, shared by the shell rule and
@@ -2899,13 +2906,49 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 		why = mergeRefusal(operand, base, row)
 	}
 	if why == "" {
-		why = commitPathsRefusal(ctx, opts, row, inv, site)
+		return vcsRefusal{op: op, kind: vcsOpOutside, why: commitPathsRefusal(ctx, opts, row, inv, site)}
 	}
 	return vcsRefusal{op: op, kind: vcsOpLands, why: why}
 }
 
+// integrationRegenerates reports what a row naming Integrates may commit
+// beyond its write paths: every path a target declares writing. Regenerating
+// them is that row's work. The workspace opens only when a path needs it.
+func integrationRegenerates(ctx context.Context, deps Dependencies, row types.Job) func(string) bool {
+	if len(row.Integrates) == 0 {
+		return nil
+	}
+	return func(p string) bool {
+		ws, err := deps.inspect(ctx, row.CheckoutRoot)
+		if err != nil {
+			return false
+		}
+		return slices.ContainsFunc(ws.All(), func(project *types.Project) bool {
+			return project != nil && (declaresOutput(project, p) || declaresUpdate(project, p))
+		})
+	}
+}
+
+func declaresOutput(project *types.Project, p string) bool {
+	for _, refs := range project.TargetOutputs {
+		if slices.ContainsFunc(refs, func(r types.OutputRef) bool { return r.Rooted(project.Path).Match(p) }) {
+			return true
+		}
+	}
+	return false
+}
+
+func declaresUpdate(project *types.Project, p string) bool {
+	for _, refs := range project.TargetUpdates {
+		if slices.ContainsFunc(refs, func(r types.UpdateRef) bool { return r.Rooted(project.Path).Match(p) }) {
+			return true
+		}
+	}
+	return false
+}
+
 // relocateFlag is the option each backend takes to run in another directory.
-var relocateFlag = map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", "jj": "-R"}
+var relocateFlag =map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", "jj": "-R"}
 
 // commitPathsRefusal grades what a commit carries against row's write paths.
 // A write is judged as it happens, and a generator run writes past them.
@@ -2933,6 +2976,9 @@ func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Jo
 		if _, held, _ := declarationCovering(row.WritePaths, p); !held && !types.IsMagusMaintained(p) && !slices.Contains(outside, p) {
 			outside = append(outside, p)
 		}
+	}
+	if len(outside) > 0 && site.regenerated != nil {
+		outside = slices.DeleteFunc(outside, site.regenerated)
 	}
 	if len(outside) == 0 {
 		return ""
