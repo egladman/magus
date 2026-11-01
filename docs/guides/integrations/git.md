@@ -171,7 +171,8 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-Save it as `hack/git-hooks/commit-msg.buzz` and run `magus run git-hooks-install:rw .`.
+Save it as `commit-msg.buzz` in the directory the targets above name, and run
+`magus run git-hooks-install:rw .`.
 Adding another hook later is the same two steps: the file, then the target.
 
 Both targets follow the [`rw` charm](../../concepts/charms.md#the-rw-charm): without it they
