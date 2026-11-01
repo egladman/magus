@@ -178,10 +178,10 @@ func (r ExecRunner) bringUp(ctx context.Context, s spells.Service) (Handle, erro
 		ready := reprobe.Run() == nil
 		stopReprobe()
 		if ready {
-			slog.InfoContext(ctx, fmt.Sprintf("service: start %q failed (%v) but it is ready; adopting it", s.Start.Bin, err), attr.Notice("note"))
+			slog.InfoContext(ctx, fmt.Sprintf("adopted the service: start %q failed (%v), but it is ready", s.Start.Bin, err), attr.Notice("note"))
 			return Adopted, nil
 		}
-		return nil, fmt.Errorf("service: start %q: %w, and readiness %q still fails: %s", s.Start.Bin, err, s.Readiness.Bin, strings.TrimSpace(probeStderr.String()))
+		return nil, fmt.Errorf("service: start %q (readiness %q still fails: %s): %w", s.Start.Bin, s.Readiness.Bin, strings.TrimSpace(probeStderr.String()), err)
 	}
 	h := &startedHandle{stop: s.Stop}
 	if err := r.waitReady(ctx, s.Readiness); err != nil {
