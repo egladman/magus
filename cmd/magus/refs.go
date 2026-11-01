@@ -164,7 +164,7 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 				ans.Text = &presence
 			}
 			if textErr == nil && !noGenerated {
-				ans = withoutUnheldGaps(ans, searchRoot, matches)
+				ans = knowledge.WithoutUnheldGaps(ans, searchRoot, textHits(matches))
 			}
 		}
 		miss := refsMiss{name: pos[0], answer: withIndexCause(ctx, root, ans), searched: searched}
@@ -190,13 +190,14 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 		defs, _ := g.Definitions(out.Symbol)
 		defs.Answer = knowledge.Answer(pos[0], len(defs.Definitions) > 0, res.coverage)
 		defs.Answer.IndexCause = out.Answer.IndexCause
-		checkDefinitions(resolveRootOrEmpty(root), defs.Label, defs.Definitions, symbolIndexTimes(ctx, root), source)
+		source.checkDefinitions(resolveRootOrEmpty(root), defs.Label, defs.Definitions, symbolIndexTimes(ctx, root))
 		return emitDefinitions(ctx, os.Stdout, opts, defs)
 	}
 
-	out, note := page.scopedRefs(out)
-	if note != "" {
-		slog.WarnContext(ctx, note, attr.Notice("magus refs"))
+	unscoped := out.RefCount
+	out = page.ScopedRefs(out)
+	if len(page.Scopes) > 0 {
+		slog.WarnContext(ctx, page.refsNote(out.RefCount, unscoped), attr.Notice("magus refs"))
 	}
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -258,35 +259,17 @@ func writeRefsText(w io.Writer, out types.KnowledgeRefsOutput) error {
 	return reportIndexStaleness(w, out.Answer)
 }
 
-// withoutUnheldGaps drops a gap no build can close from a miss
-// when its project holds no text match of the name.
-// The name is not there, so that gap cannot explain the miss.
-func withoutUnheldGaps(ans types.KnowledgeAnswer, root string, matches []textindex.Match) types.KnowledgeAnswer {
-	holds := func(project string) bool {
-		return project == "." || slices.ContainsFunc(matches, func(m textindex.Match) bool {
-			rel := m.Path
-			if r, err := filepath.Rel(root, m.Path); err == nil && filepath.IsAbs(m.Path) {
-				rel = r
-			}
-			return strings.HasPrefix(filepath.ToSlash(rel), project+"/")
-		})
-	}
-	ans.Gaps = slices.DeleteFunc(slices.Clone(ans.Gaps), func(g types.KnowledgeSymbolGap) bool {
-		return g.Unindexable && !holds(g.Project.Path)
-	})
-	if len(ans.Gaps) == 0 && ans.Reason == types.ReasonSymbolIndexMissing {
-		ans.Verdict, ans.Reason = types.VerdictAbsent, ""
-	}
-	return ans
-}
-
-// missPresence reduces matches to the counts and the capped site list a symbol miss reports.
-func missPresence(root string, matches []textindex.Match) types.KnowledgeTextPresence {
+func textHits(matches []textindex.Match) []types.TextHit {
 	hits := make([]types.TextHit, len(matches))
 	for i, m := range matches {
 		hits[i] = types.TextHit{Path: m.Path, Line: m.Line}
 	}
-	return types.CountTextPresence(root, hits)
+	return hits
+}
+
+// missPresence reduces matches to the counts and the capped site list a symbol miss reports.
+func missPresence(root string, matches []textindex.Match) types.KnowledgeTextPresence {
+	return types.CountTextPresence(root, textHits(matches))
 }
 
 // refsMiss is what refs learned about a name no symbol node matches.
@@ -607,7 +590,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 		return exit.Reported(exit.Failure)
 	}
 	read := *occurrences
-	files := page.scoped(read.Files)
+	files := page.Scoped(read.Files)
 
 	out := types.KnowledgeOccurrencesOutput{
 		Definition:    types.KnowledgeOccurrencesDefinition,
@@ -643,7 +626,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 		}
 	}
 	var shown int
-	out.Files, shown = page.cut(files)
+	out.Files, shown = page.Cut(files)
 	var classify classifyFunc
 	if ws, err := inspectWorkspace(ctx, root); err == nil {
 		classify = ws.ClassifyFiles
@@ -805,64 +788,47 @@ func symbolIndexTimes(ctx context.Context, root string) indexedAtFunc {
 	}
 }
 
-// checkDefinitions sets each site's Status against the file on disk under root, and
-// fills Source when withSource is set. The graph is re-assembled from the working tree on
-// every query while the index keeps the positions of the tree it was built over, so a
-// digest of today's lines proves nothing. What does is the symbol's name still sitting on
-// its start line (else changed) and the file predating its index (else unverified, since
-// an edit inside the body moves the end). A site with no end line is checked and printed
-// over its declaration line alone.
-func checkDefinitions(root, name string, sites []types.KnowledgeDefinitionSite, indexedAt indexedAtFunc, source sourceWindow) {
-	type sourceFile struct {
-		lines   [][]byte
-		modTime time.Time
+// sourceWindow is a window and the command that asked for it, less
+// --max-lines and --skip-lines, for the sentence that says what it cut.
+type sourceWindow struct {
+	knowledge.SourceWindow
+	again string
+}
+
+// checkDefinitions checks each site and says what its window cut.
+func (w sourceWindow) checkDefinitions(root, name string, sites []types.KnowledgeDefinitionSite, indexedAt indexedAtFunc) {
+	w.CheckDefinitions(root, name, sites, indexedAt)
+	if !w.Show {
+		return
 	}
-	files := map[string]*sourceFile{}
 	for i := range sites {
 		site := &sites[i]
-		if site.StartLine == 0 {
-			continue
-		}
-		file, seen := files[site.File]
-		if !seen {
-			path := filepath.Join(root, filepath.FromSlash(site.File))
-			if data, err := os.ReadFile(path); err == nil {
-				file = &sourceFile{lines: types.SplitSourceLines(data)}
-				if info, err := os.Stat(path); err == nil {
-					file.modTime = info.ModTime()
-				}
-			}
-			files[site.File] = file
-		}
-		end := max(site.StartLine, site.EndLine)
-		if file == nil || end > len(file.lines) {
-			site.Status = types.DefinitionUnreadable
-			continue
-		}
-		site.Status = types.DefinitionUnverified
-		switch {
-		case name != "" && !containsWord(file.lines[site.StartLine-1], name):
-			site.Status = types.DefinitionChanged
-		case indexedAt != nil:
-			if at, ok := indexedAt(site.File); ok && !file.modTime.After(at) {
-				site.Status = types.DefinitionVerified
-			}
-		}
-		if source.Show {
-			site.Source, site.SourceStartLine, site.SourceTotalLines, site.SourceNote = source.text(file.lines, docStart(file.lines, site.StartLine-1), end)
+		if site.StartLine != 0 && site.Status != types.DefinitionUnreadable {
+			site.SourceNote = w.note(knowledge.SourceBlock{Text: site.Source, StartLine: site.SourceStartLine, Total: site.SourceTotalLines})
 		}
 	}
 }
 
-// sourceWindow is what --source prints around a range. From and To count from
-// it: 0 is the range however long, -1 the line above it, 1 the line below it.
-type sourceWindow struct {
-	Show     bool
-	From, To int
-	// MaxLines caps a block, 0 for no cap. SkipLines is where its page starts.
-	MaxLines, SkipLines int
-	// again is the command that asked, less those two flags.
-	again string
+// note says what the window cut from block, empty when it cut nothing.
+func (w sourceWindow) note(block knowledge.SourceBlock) string {
+	if block.StartLine == 0 {
+		return w.noLinesNote(block.Total)
+	}
+	if block.Total == 0 {
+		return ""
+	}
+	shown := strings.Count(block.Text, "\n") + 1
+	if w.SkipLines+shown < block.Total {
+		return fmt.Sprintf("%d of %d lines; next: %s --max-lines %d --skip-lines %d", shown, block.Total, w.again, w.MaxLines, w.SkipLines+shown)
+	}
+	return fmt.Sprintf("%d of %d lines", shown, block.Total)
+}
+
+func (w sourceWindow) noLinesNote(total int) string {
+	if total == 0 {
+		return fmt.Sprintf("no lines: %d:%d falls outside the file", w.From, w.To)
+	}
+	return fmt.Sprintf("no lines: --skip-lines %d is past the last of %d lines", w.SkipLines, total)
 }
 
 // checkSourcePage refuses the --max-lines and --skip-lines no page can honor.
@@ -875,25 +841,33 @@ func checkSourcePage(command string, maxLines, skipLines int) error {
 
 // commandAgain respells a command from its given flags, leaving out drop.
 func commandAgain(with func(...string) string, fs *flag.FlagSet, subject string, drop ...string) string {
-	args := []string{fmt.Sprintf("'%s'", strings.ReplaceAll(subject, "'", `'\''`))}
+	quoted := fmt.Sprintf("'%s'", strings.ReplaceAll(subject, "'", `'\''`))
+	return with(slices.Concat([]string{quoted}, givenFlagWords(fs, drop))...)
+}
+
+// givenFlagWords respells the given flags, --occurrences first, less drop.
+func givenFlagWords(fs *flag.FlagSet, drop []string) []string {
+	var words []string
 	if flagGiven(fs, flaggen.FlagRefsOccurrences) && !slices.Contains(drop, flaggen.FlagRefsOccurrences) {
-		args = append(args, "--"+flaggen.FlagRefsOccurrences)
+		words = append(words, "--"+flaggen.FlagRefsOccurrences)
 	}
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == flaggen.FlagRefsOccurrences || slices.Contains(drop, f.Name) {
-			return
+		if f.Name != flaggen.FlagRefsOccurrences && !slices.Contains(drop, f.Name) {
+			words = append(words, flagWords(f)...)
 		}
-		if b, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {
-			args = append(args, "--"+f.Name)
-			return
-		}
-		if len(f.Name) == 1 {
-			args = append(args, "-"+f.Name, shellArg(f.Value.String()))
-			return
-		}
-		args = append(args, fmt.Sprintf("--%s=%s", f.Name, shellArg(f.Value.String())))
 	})
-	return with(args...)
+	return words
+}
+
+// flagWords respells one given flag as a paste would type it.
+func flagWords(f *flag.Flag) []string {
+	if b, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {
+		return []string{"--" + f.Name}
+	}
+	if len(f.Name) == 1 {
+		return []string{"-" + f.Name, shellArg(f.Value.String())}
+	}
+	return []string{fmt.Sprintf("--%s=%s", f.Name, shellArg(f.Value.String()))}
 }
 
 // shellArg quotes a value a paste would otherwise split or expand.
@@ -907,34 +881,54 @@ func shellArg(s string) string {
 // refsSourceWindow reads the window off the parsed flags.
 // An explicit --before 0 overrides --context, so flagGiven decides.
 func refsSourceWindow(rf *flaggen.RefsFlags, fs *flag.FlagSet) (sourceWindow, error) {
-	given := func(name string) bool { return flagGiven(fs, name) }
-	sides := given(flaggen.FlagRefsContext) || given(flaggen.FlagRefsBefore) || given(flaggen.FlagRefsAfter)
-	ranged := given(flaggen.FlagRefsLines)
-	paged := given(flaggen.FlagRefsMaxLines) || given(flaggen.FlagRefsSkipLines)
-	if rf.Text && (sides || ranged || paged) {
-		return sourceWindow{}, exit.Usagef("magus refs: --text prints no source; drop --context, --before, --after, --lines, --max-lines and --skip-lines")
-	}
-	if err := checkSourcePage("refs", rf.MaxLines, rf.SkipLines); err != nil {
+	sides, ranged, paged := refsWindowFlagsGiven(fs)
+	if err := checkRefsWindow(rf, sides, ranged, paged); err != nil {
 		return sourceWindow{}, err
 	}
 	if ranged {
-		if sides {
-			return sourceWindow{}, exit.Usagef("magus refs: --lines sets both sides; use it alone, as --lines=-5:4, or use --context, --before and --after")
-		}
-		from, to, err := parseLineRange(rf.Lines)
-		return sourceWindow{Show: true, From: from, To: to, MaxLines: rf.MaxLines, SkipLines: rf.SkipLines}, err
+		return refsLinesWindow(rf)
 	}
-	if rf.Context < 0 || rf.Before < 0 || rf.After < 0 {
-		return sourceWindow{}, exit.Usagef("magus refs: --context, --before and --after take 0 or more lines")
+	return refsSidesWindow(rf, fs, rf.Source || sides || paged), nil
+}
+
+func refsWindowFlagsGiven(fs *flag.FlagSet) (sides, ranged, paged bool) {
+	given := func(name string) bool { return flagGiven(fs, name) }
+	sides = given(flaggen.FlagRefsContext) || given(flaggen.FlagRefsBefore) || given(flaggen.FlagRefsAfter)
+	paged = given(flaggen.FlagRefsMaxLines) || given(flaggen.FlagRefsSkipLines)
+	return sides, given(flaggen.FlagRefsLines), paged
+}
+
+// checkRefsWindow refuses the window flags that cannot go together.
+func checkRefsWindow(rf *flaggen.RefsFlags, sides, ranged, paged bool) error {
+	if rf.Text && (sides || ranged || paged) {
+		return exit.Usagef("magus refs: --text prints no source; drop --context, --before, --after, --lines, --max-lines and --skip-lines")
 	}
-	w := sourceWindow{Show: rf.Source || sides || paged, From: -rf.Context, To: rf.Context, MaxLines: rf.MaxLines, SkipLines: rf.SkipLines}
-	if given(flaggen.FlagRefsBefore) {
+	if err := checkSourcePage("refs", rf.MaxLines, rf.SkipLines); err != nil {
+		return err
+	}
+	if ranged && sides {
+		return exit.Usagef("magus refs: --lines sets both sides; use it alone, as --lines=-5:4, or use --context, --before and --after")
+	}
+	if !ranged && min(rf.Context, rf.Before, rf.After) < 0 {
+		return exit.Usagef("magus refs: --context, --before and --after take 0 or more lines")
+	}
+	return nil
+}
+
+func refsLinesWindow(rf *flaggen.RefsFlags) (sourceWindow, error) {
+	from, to, err := parseLineRange(rf.Lines)
+	return sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: from, To: to, MaxLines: rf.MaxLines, SkipLines: rf.SkipLines}}, err
+}
+
+func refsSidesWindow(rf *flaggen.RefsFlags, fs *flag.FlagSet, show bool) sourceWindow {
+	w := knowledge.SourceWindow{Show: show, From: -rf.Context, To: rf.Context, MaxLines: rf.MaxLines, SkipLines: rf.SkipLines}
+	if flagGiven(fs, flaggen.FlagRefsBefore) {
 		w.From = -rf.Before
 	}
-	if given(flaggen.FlagRefsAfter) {
+	if flagGiven(fs, flaggen.FlagRefsAfter) {
 		w.To = rf.After
 	}
-	return w, nil
+	return sourceWindow{SourceWindow: w}
 }
 
 func parseLineRange(text string) (from, to int, err error) {
@@ -950,65 +944,15 @@ func parseLineRange(text string) (from, to int, err error) {
 	return from, to, nil
 }
 
-// text is the window around lines[first:end], clamped to the file.
-// It says so in note when no line is left or the page cut some.
-// total counts the window's lines, set only when it was cut.
-// The empty element after a final newline is not a line to print.
-func (w sourceWindow) text(lines [][]byte, first, end int) (text string, startLine, total int, note string) {
-	last := len(lines)
-	if last > 0 && len(lines[last-1]) == 0 {
-		last--
-	}
-	start, stop := first, end
-	switch {
-	case w.From < 0:
-		start = first + w.From
-	case w.From > 0:
-		start = end + w.From - 1
-	}
-	switch {
-	case w.To < 0:
-		stop = first + w.To + 1
-	case w.To > 0:
-		stop = end + w.To
-	}
-	start, stop = max(start, 0), min(stop, last)
-	if start >= stop {
-		return "", 0, 0, fmt.Sprintf("no lines: %d:%d falls outside the file", w.From, w.To)
-	}
-	whole := stop - start
-	if w.SkipLines >= whole {
-		return "", 0, whole, fmt.Sprintf("no lines: --skip-lines %d is past the last of %d lines", w.SkipLines, whole)
-	}
-	start += w.SkipLines
-	shown := stop - start
-	if w.MaxLines > 0 {
-		shown = min(shown, w.MaxLines)
-	}
-	text = string(bytes.Join(lines[start:start+shown], []byte("\n")))
-	switch {
-	case shown == whole:
-		return text, start + 1, 0, ""
-	case w.SkipLines+shown < whole:
-		note = fmt.Sprintf("%d of %d lines; next: %s --max-lines %d --skip-lines %d", shown, whole, w.again, w.MaxLines, w.SkipLines+shown)
-	default:
-		note = fmt.Sprintf("%d of %d lines", shown, whole)
-	}
-	return text, start + 1, whole, note
-}
-
-// fillOccurrenceSources sets each occurrence's Source from the file under root.
+// fillOccurrenceSources sets each occurrence's source and what its window cut.
 func fillOccurrenceSources(root string, files []types.SymbolOccurrenceFile, source sourceWindow) {
-	for i := range files {
-		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(files[i].File)))
-		for j := range files[i].Occurrences {
-			occ := &files[i].Occurrences[j]
-			if err != nil {
-				occ.SourceNote = "no lines: cannot read " + files[i].File
-				continue
+	source.FillOccurrences(root, files)
+	for _, file := range files {
+		for j := range file.Occurrences {
+			occ := &file.Occurrences[j]
+			if occ.SourceNote == "" {
+				occ.SourceNote = source.note(knowledge.SourceBlock{Text: occ.Source, StartLine: occ.SourceStartLine, Total: occ.SourceTotalLines})
 			}
-			lines := types.SplitSourceLines(data)
-			occ.Source, occ.SourceStartLine, occ.SourceTotalLines, occ.SourceNote = source.text(lines, occ.Line-1, max(occ.Line, occ.EndLine))
 		}
 	}
 }
@@ -1033,12 +977,11 @@ func docSectionSource(root string, node types.KnowledgeNode, w sourceWindow) (ty
 		site.SourceNote = "no lines: the index recorded no extent for this section"
 		return site, nil
 	}
-	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file)))
-	if err != nil {
+	lines, readable := readSourceLines(root, file)
+	if !readable {
 		site.SourceNote = "no lines: cannot read " + file
 		return site, nil
 	}
-	lines := types.SplitSourceLines(data)
 	if end > len(lines) {
 		site.SourceNote = fmt.Sprintf("no lines: the index recorded %d-%d and %s is shorter", start, end, file)
 		return site, nil
@@ -1048,8 +991,17 @@ func docSectionSource(root string, node types.KnowledgeNode, w sourceWindow) (ty
 	if hex.EncodeToString(sum[:]) == node.Attrs[docSectionDigest] {
 		site.Status = types.DefinitionVerified
 	}
-	site.Source, site.SourceStartLine, site.SourceTotalLines, site.SourceNote = w.text(lines, start-1, end)
+	block := w.Text(lines, start-1, end)
+	site.Source, site.SourceStartLine, site.SourceTotalLines, site.SourceNote = block.Text, block.StartLine, block.Total, w.note(block)
 	return site, nil
+}
+
+func readSourceLines(root, file string) ([][]byte, bool) {
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file)))
+	if err != nil {
+		return nil, false
+	}
+	return types.SplitSourceLines(data), true
 }
 
 // emitDocSectionSource prints site alone, and exits 1 when its lines are not
@@ -1111,41 +1063,6 @@ func markOccurrenceFiles(ctx context.Context, files []types.SymbolOccurrenceFile
 		files[i].Generated = generated[files[i].File]
 	}
 	return ""
-}
-
-// docStart returns the index of the first line of the comment block that sits directly
-// above the declaration at index decl, or decl when none does. The doc comment is where a
-// symbol states its contract and the test that pins it, so a reader shown the body alone
-// misses exactly what --source is asked for.
-func docStart(lines [][]byte, decl int) int {
-	start := decl
-	for start > 0 {
-		above := bytes.TrimSpace(lines[start-1])
-		if !bytes.HasPrefix(above, []byte("//")) && !bytes.HasPrefix(above, []byte("#")) {
-			break
-		}
-		start--
-	}
-	return start
-}
-
-// containsWord reports whether line holds name delimited by non-identifier bytes, so a
-// declaration of F is not confirmed by a line declaring FF.
-func containsWord(line []byte, name string) bool {
-	isIdent := func(b byte) bool {
-		return b == '_' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= 0x80
-	}
-	for off := 0; ; {
-		i := bytes.Index(line[off:], []byte(name))
-		if i < 0 {
-			return false
-		}
-		start, stop := off+i, off+i+len(name)
-		if (start == 0 || !isIdent(line[start-1])) && (stop == len(line) || !isIdent(line[stop])) {
-			return true
-		}
-		off = start + 1
-	}
 }
 
 // definitionRange renders a site as path:start-end, path:start when the end is unknown, or
@@ -1440,4 +1357,101 @@ func renameGrade(ctx context.Context, ws types.WorkspaceRepository, rootOverride
 	return func(rel string, before, after []byte) (string, string) {
 		return guard.GradeEdit(ctx, deps, ws, rel, before, after, guard.EditGrade{DryRun: dryRun})
 	}
+}
+
+// checkRefsInput refuses what a form would otherwise drop:
+// an answer that ignored part of its question exits 0 and reads as complete.
+// It runs after refsSourceWindow, so rf.Source counts what implies it.
+func checkRefsInput(rf *flaggen.RefsFlags, fs *flag.FlagSet, pos []string) error {
+	if rf.Text {
+		for _, name := range []string{flaggen.FlagRefsOccurrences, flaggen.FlagRefsDefinition, flaggen.FlagRefsSource, flaggen.FlagRefsRename, flaggen.FlagRefsRefresh, flaggen.FlagRefsOffset} {
+			if flagGiven(fs, name) {
+				return exit.Usagef("magus refs: --text searches text with no symbol index, so --%s has nothing to act on; drop one of them", name)
+			}
+		}
+		return nil
+	}
+	body := rf.Definition || rf.Source && !rf.Occurrences
+	switch {
+	case rf.Rename != "" && (rf.Occurrences || body):
+		return exit.Usagef("magus refs: --rename takes none of --text, --occurrences, --definition, --source")
+	case rf.Definition && rf.Occurrences:
+		return exit.Usagef("magus refs: --definition lists where the body is and --occurrences every site; drop one (--occurrences --source prints each site's lines)")
+	case flagGiven(fs, flaggen.FlagRefsLimit) && !rf.Occurrences:
+		return exit.Usagef("magus refs: --limit cuts --occurrences sites or --text matches, and this list has neither; add --occurrences")
+	case len(pos) > 1 && (rf.Rename != "" || body):
+		return exit.Usagef("magus refs: --rename, --definition and --source take one symbol and no path (got %q); to scope a symbol's sites, use `%s`",
+			pos[1], hint.Refs.With(shellArg(pos[0]), "--occurrences", shellArg(pos[1])))
+	}
+	return nil
+}
+
+// refsAgain respells the command that asked, with its paths, less drop.
+func refsAgain(fs *flag.FlagSet, pos []string, drop ...string) string {
+	again := commandAgain(hint.Refs.With, fs, pos[0], drop...)
+	for _, p := range pos[1:] {
+		again += " " + shellArg(p)
+	}
+	return again
+}
+
+// occurrencePage is a page and the command that asked for it, less
+// --limit and --offset, for the sentence that says what it cut.
+type occurrencePage struct {
+	knowledge.OccurrencePage
+	again string
+}
+
+// refsOccurrencePage validates the paging flags and the trailing paths,
+// and spells the next command. A path that does not exist is an error,
+// since a mistyped second symbol reaches here reading as one.
+func refsOccurrencePage(rf *flaggen.RefsFlags, fs *flag.FlagSet, root string, pos []string) (occurrencePage, error) {
+	if rf.Text {
+		return occurrencePage{}, nil
+	}
+	if !rf.Occurrences && flagGiven(fs, flaggen.FlagRefsOffset) {
+		return occurrencePage{}, exit.Usagef("magus refs: --offset narrows --occurrences sites; add --occurrences")
+	}
+	if rf.Occurrences && (rf.Limit < 0 || rf.Offset < 0) {
+		return occurrencePage{}, exit.Usagef("magus refs: --limit and --offset take 0 or more sites")
+	}
+	abs, err := resolveSearchScopes(root, pos[1:])
+	if err != nil {
+		return occurrencePage{}, exit.Usagef("magus refs: a trailing word scopes the answer to a path: %v", err)
+	}
+	page, err := knowledge.NewOccurrencePage(root, abs, rf.Limit, rf.Offset)
+	if err != nil {
+		return occurrencePage{}, exit.Usagef("magus refs: %v", err)
+	}
+	return occurrencePage{OccurrencePage: page, again: refsAgain(fs, pos, flaggen.FlagRefsLimit, flaggen.FlagRefsOffset)}, nil
+}
+
+// scopeNote counts what the paths left out, so a narrowed count reads as one.
+func (p occurrencePage) scopeNote(files []types.SymbolOccurrenceFile, kept int) string {
+	if len(p.Scopes) == 0 {
+		return ""
+	}
+	total := 0
+	for _, f := range files {
+		total += len(f.Occurrences)
+	}
+	return fmt.Sprintf("%s keeps %d of %d sites", strings.Join(p.Scopes, ", "), kept, total)
+}
+
+// refsNote is scopeNote for the plain reference list.
+func (p occurrencePage) refsNote(kept, total int) string {
+	return fmt.Sprintf("%s keeps %d of %d references", strings.Join(p.Scopes, ", "), kept, total)
+}
+
+// note says what the page cut, and is empty when it cut nothing.
+func (p occurrencePage) note(shown, total int) string {
+	switch {
+	case shown == total:
+		return ""
+	case p.Offset >= total:
+		return fmt.Sprintf("0 of %d sites; --offset %d is past the last site", total, p.Offset)
+	case p.Offset+shown < total:
+		return fmt.Sprintf("%d of %d sites; next: %s --limit %d --offset %d", shown, total, p.again, p.Limit, p.Offset+shown)
+	}
+	return fmt.Sprintf("%d of %d sites", shown, total)
 }

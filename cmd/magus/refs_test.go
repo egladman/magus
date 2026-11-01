@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
@@ -161,55 +160,6 @@ func rootElsewhere(t *testing.T) string {
 	return loaded
 }
 
-// checkDefinitions is what stands between a recorded range and a wrong edit. A file older
-// than its index verifies; a newer one keeps the range only as unverified; a start line
-// that no longer names the symbol is changed; a range past the end of the file is
-// unreadable rather than silently truncated.
-func TestCheckDefinitions(t *testing.T) {
-	w := testkit.NewWorkspace(t)
-	w.Write("a.go", "package a\n\nfunc F() {\n\treturn\n}\n\nfunc FF() {}\n")
-	w.Write("b.go", "package a\n\nfunc F() {\n\treturn\n}\n")
-	info, err := os.Stat(w.Path("a.go"))
-	require.NoError(t, err)
-	indexedAt := func(file string) (time.Time, bool) {
-		switch file {
-		case "a.go":
-			return info.ModTime(), true
-		case "b.go":
-			return info.ModTime().Add(-time.Hour), true
-		}
-		return time.Time{}, false
-	}
-	site := func(file string, start, end int) types.KnowledgeDefinitionSite {
-		return types.KnowledgeDefinitionSite{File: file, StartLine: start, EndLine: end, Status: types.DefinitionUnverified}
-	}
-	sites := []types.KnowledgeDefinitionSite{
-		site("a.go", 3, 5), site("b.go", 3, 5), site("a.go", 7, 0),
-		site("a.go", 3, 40), site("gone.go", 1, 0), site("other.go", 0, 0),
-	}
-	checkDefinitions(w.Root(), "F", sites, indexedAt, sourceWindow{Show: true})
-
-	fn := "func F() {\n\treturn\n}"
-	assert.Equal(t, []types.KnowledgeDefinitionSite{
-		{File: "a.go", StartLine: 3, EndLine: 5, Status: types.DefinitionVerified, Source: fn, SourceStartLine: 3},
-		{File: "b.go", StartLine: 3, EndLine: 5, Status: types.DefinitionUnverified, Source: fn, SourceStartLine: 3},
-		{File: "a.go", StartLine: 7, Status: types.DefinitionChanged, Source: "func FF() {}", SourceStartLine: 7},
-		{File: "a.go", StartLine: 3, EndLine: 40, Status: types.DefinitionUnreadable},
-		{File: "gone.go", StartLine: 1, Status: types.DefinitionUnreadable},
-		{File: "other.go", Status: types.DefinitionUnverified},
-	}, sites)
-}
-
-// A definition's source carries the comment block directly above it, where the symbol
-// states its contract and names the test that pins it; a blank line ends the block.
-func TestCheckDefinitionsIncludesTheDocComment(t *testing.T) {
-	w := testkit.NewWorkspace(t)
-	w.Write("a.go", "package a\n\n// unrelated\n\n// F splits a letter from a digit.\n// TestF pins it.\nfunc F() {}\n")
-	sites := []types.KnowledgeDefinitionSite{{File: "a.go", StartLine: 7, Status: types.DefinitionUnverified}}
-	checkDefinitions(w.Root(), "F", sites, nil, sourceWindow{Show: true})
-	assert.Equal(t, "// F splits a letter from a digit.\n// TestF pins it.\nfunc F() {}", sites[0].Source)
-}
-
 type refsSourceSuite struct {
 	suite.Suite
 	w     *testkit.Workspace
@@ -234,25 +184,25 @@ func (s *refsSourceSuite) window(args ...string) (sourceWindow, error) {
 func (s *refsSourceSuite) TestContextSetsBothSidesAndImpliesSource() {
 	w, err := s.window("--context", "5")
 	s.Require().NoError(err)
-	s.Equal(sourceWindow{Show: true, From: -5, To: 5, MaxLines: 200}, w)
+	s.Equal(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -5, To: 5, MaxLines: 200}}, w)
 }
 
 func (s *refsSourceSuite) TestBeforeAndAfterImplySourceAlone() {
 	w, err := s.window("--before", "5", "--after", "4")
 	s.Require().NoError(err)
-	s.Equal(sourceWindow{Show: true, From: -5, To: 4, MaxLines: 200}, w)
+	s.Equal(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -5, To: 4, MaxLines: 200}}, w)
 }
 
 func (s *refsSourceSuite) TestBeforeOverridesOneSideOfContext() {
 	w, err := s.window("--context", "5", "--before", "1")
 	s.Require().NoError(err)
-	s.Equal(sourceWindow{Show: true, From: -1, To: 5, MaxLines: 200}, w)
+	s.Equal(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -1, To: 5, MaxLines: 200}}, w)
 }
 
 func (s *refsSourceSuite) TestAnExplicitZeroOverridesContext() {
 	w, err := s.window("--context", "5", "--after", "0")
 	s.Require().NoError(err)
-	s.Equal(sourceWindow{Show: true, From: -5, To: 0, MaxLines: 200}, w)
+	s.Equal(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -5, To: 0, MaxLines: 200}}, w)
 }
 
 func (s *refsSourceSuite) TestNoWindowFlagsPrintNoSource() {
@@ -269,49 +219,41 @@ func (s *refsSourceSuite) long(w sourceWindow) types.SymbolOccurrence {
 }
 
 func (s *refsSourceSuite) TestABodyShorterThanTheCapIsNotCut() {
-	occ := s.long(sourceWindow{Show: true, MaxLines: 200})
-	s.Equal("1\n2\n3\n4\n5\n6", occ.Source)
-	s.Zero(occ.SourceTotalLines)
-	s.Empty(occ.SourceNote)
+	occ := s.long(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, MaxLines: 200}})
+	s.Equal(types.SymbolOccurrence{Line: 1, EndLine: 6, Source: "1\n2\n3\n4\n5\n6", SourceStartLine: 1}, occ)
 }
 
 func (s *refsSourceSuite) TestACutBodySaysSoAndNamesTheNextCommand() {
-	occ := s.long(sourceWindow{Show: true, MaxLines: 2, again: "magus refs 'F' --source"})
-	s.Equal("1\n2", occ.Source)
-	s.Equal(6, occ.SourceTotalLines)
-	s.Equal("2 of 6 lines; next: magus refs 'F' --source --max-lines 2 --skip-lines 2", occ.SourceNote)
+	occ := s.long(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, MaxLines: 2}, again: "magus refs 'F' --source"})
+	s.Equal(types.SymbolOccurrence{Line: 1, EndLine: 6, Source: "1\n2", SourceStartLine: 1, SourceTotalLines: 6,
+		SourceNote: "2 of 6 lines; next: magus refs 'F' --source --max-lines 2 --skip-lines 2"}, occ)
 }
 
 func (s *refsSourceSuite) TestSkippedLinesCarryTheLineNumbersOn() {
-	occ := s.long(sourceWindow{Show: true, MaxLines: 2, SkipLines: 2, again: "x"})
-	s.Equal("3\n4", occ.Source)
-	s.Equal(3, occ.SourceStartLine)
-	s.Equal("2 of 6 lines; next: x --max-lines 2 --skip-lines 4", occ.SourceNote)
+	occ := s.long(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, MaxLines: 2, SkipLines: 2}, again: "x"})
+	s.Equal(types.SymbolOccurrence{Line: 1, EndLine: 6, Source: "3\n4", SourceStartLine: 3, SourceTotalLines: 6,
+		SourceNote: "2 of 6 lines; next: x --max-lines 2 --skip-lines 4"}, occ)
 }
 
 func (s *refsSourceSuite) TestTheLastBodyPageNamesNoNextCommand() {
-	occ := s.long(sourceWindow{Show: true, MaxLines: 2, SkipLines: 4})
-	s.Equal("5\n6", occ.Source)
-	s.Equal("2 of 6 lines", occ.SourceNote)
+	occ := s.long(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, MaxLines: 2, SkipLines: 4}})
+	s.Equal(types.SymbolOccurrence{Line: 1, EndLine: 6, Source: "5\n6", SourceStartLine: 5, SourceTotalLines: 6, SourceNote: "2 of 6 lines"}, occ)
 }
 
 func (s *refsSourceSuite) TestASkipPastTheEndSaysSo() {
-	occ := s.long(sourceWindow{Show: true, SkipLines: 9})
-	s.Empty(occ.Source)
-	s.Zero(occ.SourceStartLine)
-	s.Equal("no lines: --skip-lines 9 is past the last of 6 lines", occ.SourceNote)
+	occ := s.long(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, SkipLines: 9}})
+	s.Equal(types.SymbolOccurrence{Line: 1, EndLine: 6, SourceTotalLines: 6, SourceNote: "no lines: --skip-lines 9 is past the last of 6 lines"}, occ)
 }
 
 func (s *refsSourceSuite) TestMaxLinesZeroPrintsEverything() {
-	occ := s.long(sourceWindow{Show: true})
-	s.Equal(1, occ.SourceStartLine)
-	s.Empty(occ.SourceNote)
+	occ := s.long(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true}})
+	s.Equal(types.SymbolOccurrence{Line: 1, EndLine: 6, Source: "1\n2\n3\n4\n5\n6", SourceStartLine: 1}, occ)
 }
 
 func (s *refsSourceSuite) TestTheCapAppliesToALinesRange() {
-	occ := s.long(sourceWindow{Show: true, From: 0, To: 0, MaxLines: 1, again: "x"})
-	s.Equal("1", occ.Source)
-	s.Equal("1 of 6 lines; next: x --max-lines 1 --skip-lines 1", occ.SourceNote)
+	occ := s.long(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: 0, To: 0, MaxLines: 1}, again: "x"})
+	s.Equal(types.SymbolOccurrence{Line: 1, EndLine: 6, Source: "1", SourceStartLine: 1, SourceTotalLines: 6,
+		SourceNote: "1 of 6 lines; next: x --max-lines 1 --skip-lines 1"}, occ)
 }
 
 func (s *refsSourceSuite) TestMaxLinesAloneImpliesSource() {
@@ -371,37 +313,35 @@ func (s *refsSourceSuite) section(attrs map[string]string) types.KnowledgeNode {
 func (s *refsSourceSuite) TestADocSectionPrintsItsExtent() {
 	s.w.Write("d.md", "# A\n\n## B\n\nbody\n\n# C\n")
 	sum := sha256.Sum256([]byte("## B\n\nbody"))
-	site, err := docSectionSource(s.w.Root(), s.section(map[string]string{"start_line": "3", "end_line": "5", "digest": hex.EncodeToString(sum[:])}), sourceWindow{Show: true})
+	site, err := docSectionSource(s.w.Root(), s.section(map[string]string{"start_line": "3", "end_line": "5", "digest": hex.EncodeToString(sum[:])}), sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true}})
 	s.Require().NoError(err)
-	s.Equal("## B\n\nbody", site.Source)
-	s.Equal(3, site.SourceStartLine)
-	s.Equal(types.DefinitionVerified, site.Status)
+	s.Equal(types.KnowledgeDefinitionSite{File: "d.md", StartLine: 3, EndLine: 5, Status: types.DefinitionVerified, Source: "## B\n\nbody", SourceStartLine: 3}, site)
 }
 
 func (s *refsSourceSuite) TestAnEditedDocSectionSaysChanged() {
 	s.w.Write("d.md", "# A\n\n## B\n\nedited\n\n# C\n")
-	site, err := docSectionSource(s.w.Root(), s.section(map[string]string{"start_line": "3", "end_line": "5", "digest": "old"}), sourceWindow{Show: true})
+	site, err := docSectionSource(s.w.Root(), s.section(map[string]string{"start_line": "3", "end_line": "5", "digest": "old"}), sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true}})
 	s.Require().NoError(err)
 	s.Equal(types.DefinitionChanged, site.Status)
 	s.Equal(exit.Failure, exit.Code(docSectionExit(site)))
 }
 
 func (s *refsSourceSuite) TestADocSectionWithNoExtentSaysSo() {
-	site, err := docSectionSource(s.w.Root(), s.section(nil), sourceWindow{Show: true})
+	site, err := docSectionSource(s.w.Root(), s.section(nil), sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true}})
 	s.Require().NoError(err)
 	s.Contains(site.SourceNote, "no extent")
 }
 
 func (s *refsSourceSuite) TestADocSectionPastTheFileIsUnreadable() {
 	s.w.Write("d.md", "# A\n")
-	site, err := docSectionSource(s.w.Root(), s.section(map[string]string{"start_line": "3", "end_line": "50"}), sourceWindow{Show: true})
+	site, err := docSectionSource(s.w.Root(), s.section(map[string]string{"start_line": "3", "end_line": "50"}), sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true}})
 	s.Require().NoError(err)
 	s.Equal(types.DefinitionUnreadable, site.Status)
 	s.Contains(site.SourceNote, "is shorter")
 }
 
 func (s *refsSourceSuite) TestExplainSourceRefusesANodeThatIsNoSection() {
-	_, err := docSectionSource(s.w.Root(), types.KnowledgeNode{ID: "file:a", Kind: types.KindFile}, sourceWindow{Show: true})
+	_, err := docSectionSource(s.w.Root(), types.KnowledgeNode{ID: "file:a", Kind: types.KindFile}, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true}})
 	s.Equal(exit.Usage, exit.Code(err))
 	s.ErrorContains(err, "magus refs --source")
 }
@@ -417,29 +357,29 @@ func (s *refsSourceSuite) TestTextRefusesAWindow() {
 }
 
 func (s *refsSourceSuite) TestAnOccurrencePrintsItsOwnLine() {
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true}})
 	s.Equal("three", s.files[0].Occurrences[0].Source)
 }
 
 func (s *refsSourceSuite) TestBeforeAndAfterWidenTheBlock() {
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, From: -1, To: 1})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -1, To: 1}})
 	s.Equal("two\nthree\nfour", s.files[0].Occurrences[0].Source)
 }
 
 func (s *refsSourceSuite) TestTheWindowClampsToTheFile() {
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, From: -9, To: 9})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -9, To: 9}})
 	s.Equal("one\ntwo\nthree\nfour\nfive", s.files[0].Occurrences[0].Source)
 }
 
 func (s *refsSourceSuite) TestAnUnreadableFileSaysSo() {
 	s.files[0].File = "gone.go"
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true}})
 	s.Empty(s.files[0].Occurrences[0].Source)
 	s.Equal("no lines: cannot read gone.go", s.files[0].Occurrences[0].SourceNote)
 }
 
 func (s *refsSourceSuite) TestSourceRecordsItsFirstLine() {
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, From: -1, To: 0})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -1, To: 0}})
 	s.Equal(2, s.files[0].Occurrences[0].SourceStartLine)
 }
 
@@ -458,7 +398,7 @@ func (s *refsSourceSuite) TestABlockAboveTheMatchMarksNothing() {
 func (s *refsSourceSuite) TestABlankLineIsALineAndNotAnEmptyRange() {
 	s.w.Write("d.go", "one\n\nthree\n")
 	s.files[0].File = "d.go"
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, From: -1, To: -1})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -1, To: -1}})
 	occ := s.files[0].Occurrences[0]
 	s.Empty(occ.Source)
 	s.Equal(2, occ.SourceStartLine)
@@ -472,7 +412,7 @@ func (s *refsSourceSuite) TestAnEmptyRangeSaysSoInText() {
 }
 
 func (s *refsSourceSuite) TestAnEmptyRangeReachesJSON() {
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, From: 9, To: 12})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: 9, To: 12}})
 	got, err := json.Marshal(s.files[0].Occurrences[0])
 	s.Require().NoError(err)
 	s.Contains(string(got), `"source_note":"no lines: 9:12 falls outside the file"`)
@@ -481,7 +421,7 @@ func (s *refsSourceSuite) TestAnEmptyRangeReachesJSON() {
 func (s *refsSourceSuite) TestLinesTakesASeparateNegativeValue() {
 	w, err := s.window("--lines", "-5:-1")
 	s.Require().NoError(err)
-	s.Equal(sourceWindow{Show: true, From: -5, To: -1, MaxLines: 200}, w)
+	s.Equal(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -5, To: -1, MaxLines: 200}}, w)
 }
 
 // check parses args the way refsCommand does, positionals after the flags,
@@ -503,20 +443,18 @@ func (s *refsSourceSuite) TestATrailingPathKeepsOneFile() {
 	s.Require().NoError(fs.Parse([]string{"--occurrences"}))
 	page, err := refsOccurrencePage(rf, fs, s.w.Root(), []string{"Sym", filepath.Join(s.w.Root(), "a.go")})
 	s.Require().NoError(err)
-	s.Len(page.scoped(s.sites(4)), 1)
+	s.Len(page.Scoped(s.sites(4)), 1)
 	s.Equal("a.go keeps 2 of 4 sites", page.scopeNote(s.sites(4), 2))
 }
 
-func (s *refsSourceSuite) TestATrailingPathKeepsADirectoryAndNotASharedPrefix() {
-	page := occurrencePage{scopes: []string{"internal/a"}}
-	kept := page.scoped([]types.SymbolOccurrenceFile{{File: "internal/a/x.go"}, {File: "internal/ab/x.go"}})
-	s.Require().Len(kept, 1)
-	s.Equal("internal/a/x.go", kept[0].File)
+func (s *refsSourceSuite) TestNoPathKeepsTheWholeList() {
+	s.Len(occurrencePage{}.Scoped(s.sites(4)), 2)
+	s.Empty(occurrencePage{}.scopeNote(s.sites(4), 4))
 }
 
-func (s *refsSourceSuite) TestNoPathKeepsTheWholeList() {
-	s.Len(occurrencePage{}.scoped(s.sites(4)), 2)
-	s.Empty(occurrencePage{}.scopeNote(s.sites(4), 4))
+func (s *refsSourceSuite) TestAPathSaysWhatThePlainListKept() {
+	page := occurrencePage{OccurrencePage: knowledge.OccurrencePage{Scopes: []string{"a"}}}
+	s.Equal("a keeps 2 of 5 references", page.refsNote(2, 5))
 }
 
 func (s *refsSourceSuite) TestAPathThatDoesNotExistIsAUsageError() {
@@ -526,20 +464,6 @@ func (s *refsSourceSuite) TestAPathThatDoesNotExistIsAUsageError() {
 	_, err := refsOccurrencePage(rf, fs, s.w.Root(), []string{"Sym", filepath.Join(s.w.Root(), "AnotherSymbol")})
 	s.Equal(exit.Usage, exit.Code(err))
 	s.ErrorContains(err, "AnotherSymbol")
-}
-
-func (s *refsSourceSuite) TestAPathNarrowsThePlainListAndRecounts() {
-	out := types.KnowledgeRefsOutput{FileCount: 2, RefCount: 5, Refs: []types.KnowledgeRefSite{{File: "a/x.go", Count: 2}, {File: "b/y.go", Count: 3}}}
-	got, note := occurrencePage{scopes: []string{"a"}}.scopedRefs(out)
-	s.Equal(types.KnowledgeRefsOutput{FileCount: 1, RefCount: 2, Refs: []types.KnowledgeRefSite{{File: "a/x.go", Count: 2}}}, got)
-	s.Equal("a keeps 2 of 5 references", note)
-}
-
-func (s *refsSourceSuite) TestNoPathLeavesThePlainListAlone() {
-	out := types.KnowledgeRefsOutput{RefCount: 5}
-	got, note := occurrencePage{}.scopedRefs(out)
-	s.Equal(out, got)
-	s.Empty(note)
 }
 
 func (s *refsSourceSuite) TestTheNextCommandKeepsTheOutputFlagAndThePath() {
@@ -606,14 +530,14 @@ func (s *refsSourceSuite) TestRenameWithAReadModeIsRefused() {
 func (s *refsSourceSuite) TestADefinitionWidensPastItsDocComment() {
 	s.w.Write("b.go", "package a\n\n// F is f.\nfunc F() {}\n\nvar x\n")
 	sites := []types.KnowledgeDefinitionSite{{File: "b.go", StartLine: 4, Status: types.DefinitionUnverified}}
-	checkDefinitions(s.w.Root(), "F", sites, nil, sourceWindow{Show: true, From: -1, To: 1})
+	sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -1, To: 1}}.checkDefinitions(s.w.Root(), "F", sites, nil)
 	s.Equal("\n// F is f.\nfunc F() {}\n", sites[0].Source)
 }
 
 func (s *refsSourceSuite) TestLinesParsesARangeAndImpliesSource() {
 	w, err := s.window("--lines=-5:-1")
 	s.Require().NoError(err)
-	s.Equal(sourceWindow{Show: true, From: -5, To: -1, MaxLines: 200}, w)
+	s.Equal(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -5, To: -1, MaxLines: 200}}, w)
 }
 
 func (s *refsSourceSuite) TestLinesRefusesAMalformedRange() {
@@ -641,24 +565,24 @@ func (s *refsSourceSuite) TestLinesRefusesText() {
 }
 
 func (s *refsSourceSuite) TestLinesAboveLeavesOutTheMatch() {
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, From: -2, To: -1})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -2, To: -1}})
 	s.Equal("one\ntwo", s.files[0].Occurrences[0].Source)
 }
 
 func (s *refsSourceSuite) TestLinesBelowLeavesOutTheMatch() {
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, From: 1, To: 2})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: 1, To: 2}})
 	s.Equal("four\nfive", s.files[0].Occurrences[0].Source)
 }
 
 func (s *refsSourceSuite) TestLinesPastTheEndOfAFileSaySo() {
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, From: 9, To: 12})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: 9, To: 12}})
 	s.Empty(s.files[0].Occurrences[0].Source)
 	s.Equal("no lines: 9:12 falls outside the file", s.files[0].Occurrences[0].SourceNote)
 }
 
 func (s *refsSourceSuite) TestLinesAboveTheFirstLineSaySo() {
 	s.files[0].Occurrences[0].Line, s.files[0].Occurrences[0].EndLine = 1, 1
-	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{Show: true, From: -3, To: -1})
+	fillOccurrenceSources(s.w.Root(), s.files, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -3, To: -1}})
 	s.Empty(s.files[0].Occurrences[0].Source)
 	s.Equal("no lines: -3:-1 falls outside the file", s.files[0].Occurrences[0].SourceNote)
 }
@@ -666,20 +590,20 @@ func (s *refsSourceSuite) TestLinesAboveTheFirstLineSaySo() {
 func (s *refsSourceSuite) multiLineDefinition(w sourceWindow) string {
 	s.w.Write("c.go", "above\nfunc F() {\n\treturn\n}\nbelow\n")
 	sites := []types.KnowledgeDefinitionSite{{File: "c.go", StartLine: 2, EndLine: 4, Status: types.DefinitionUnverified}}
-	checkDefinitions(s.w.Root(), "F", sites, nil, w)
+	w.checkDefinitions(s.w.Root(), "F", sites, nil)
 	return sites[0].Source
 }
 
 func (s *refsSourceSuite) TestLinesZeroIsAMultiLineDefinitionsWholeBody() {
-	s.Equal("func F() {\n\treturn\n}", s.multiLineDefinition(sourceWindow{Show: true}))
+	s.Equal("func F() {\n\treturn\n}", s.multiLineDefinition(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true}}))
 }
 
 func (s *refsSourceSuite) TestLinesAboveAMultiLineDefinition() {
-	s.Equal("above", s.multiLineDefinition(sourceWindow{Show: true, From: -1, To: -1}))
+	s.Equal("above", s.multiLineDefinition(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: -1, To: -1}}))
 }
 
 func (s *refsSourceSuite) TestLinesBelowCountFromAMultiLineDefinitionsLastLine() {
-	s.Equal("below", s.multiLineDefinition(sourceWindow{Show: true, From: 1, To: 1}))
+	s.Equal("below", s.multiLineDefinition(sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, From: 1, To: 1}}))
 }
 
 func (s *refsSourceSuite) sites(n int) []types.SymbolOccurrenceFile {
@@ -695,26 +619,13 @@ func (s *refsSourceSuite) sites(n int) []types.SymbolOccurrenceFile {
 	return []types.SymbolOccurrenceFile{first, second}
 }
 
-func (s *refsSourceSuite) TestAPageCrossesAFile() {
-	kept, shown := occurrencePage{limit: 2, offset: 1}.cut(s.sites(4))
-	s.Equal(2, shown)
-	s.Equal(2, kept[0].Occurrences[0].Line)
-	s.Equal("b.go", kept[1].File)
-	s.Equal(3, kept[1].Occurrences[0].Line)
-}
-
-func (s *refsSourceSuite) TestNoLimitKeepsEverySite() {
-	_, shown := occurrencePage{}.cut(s.sites(4))
-	s.Equal(4, shown)
-}
-
 func (s *refsSourceSuite) TestACutPageNamesTheNextCommand() {
-	page := occurrencePage{limit: 5, offset: 5, again: "magus refs 'F' --occurrences"}
+	page := occurrencePage{OccurrencePage: knowledge.OccurrencePage{Limit: 5, Offset: 5}, again: "magus refs 'F' --occurrences"}
 	s.Equal("5 of 37 sites; next: magus refs 'F' --occurrences --limit 5 --offset 10", page.note(5, 37))
 }
 
 func (s *refsSourceSuite) TestTheLastPageNamesNoNextCommand() {
-	s.Equal("2 of 7 sites", occurrencePage{limit: 5, offset: 5}.note(2, 7))
+	s.Equal("2 of 7 sites", occurrencePage{OccurrencePage: knowledge.OccurrencePage{Limit: 5, Offset: 5}}.note(2, 7))
 }
 
 func (s *refsSourceSuite) TestAnUncutPageSaysNothing() {
@@ -722,8 +633,8 @@ func (s *refsSourceSuite) TestAnUncutPageSaysNothing() {
 }
 
 func (s *refsSourceSuite) TestOffsetPastTheLastSiteSaysSo() {
-	page := occurrencePage{limit: 5, offset: 9}
-	kept, shown := page.cut(s.sites(4))
+	page := occurrencePage{OccurrencePage: knowledge.OccurrencePage{Limit: 5, Offset: 9}}
+	kept, shown := page.Cut(s.sites(4))
 	s.Empty(kept)
 	s.Equal("0 of 4 sites; --offset 9 is past the last site", page.note(shown, 4))
 }
@@ -751,7 +662,7 @@ func (s *refsSourceSuite) TestOccurrencesPrintTheirBlockUnderTheirSite() {
 	var err error
 	got := captureStdout(s.T(), func() {
 		err = emitOccurrences(context.Background(), s.w.Root(), output.Options{Format: outputText}, refs,
-			&magus.SymbolOccurrenceRead{Files: s.files, Names: []string{"F"}}, sourceWindow{Show: true, To: 1}, occurrencePage{})
+			&magus.SymbolOccurrenceRead{Files: s.files, Names: []string{"F"}}, sourceWindow{SourceWindow: knowledge.SourceWindow{Show: true, To: 1}}, occurrencePage{})
 	})
 	s.Require().NoError(err)
 	s.Contains(got, "    3:0-3:0  verified\n      >3  three\n       4  four\n")
@@ -1006,49 +917,6 @@ func TestRefsTextExitsTwoOnScanError(t *testing.T) {
 	})
 	assert.Equal(t, exit.Reported(exit.Usage), err)
 	assert.NotEmpty(t, errOut)
-}
-
-type refsGapsSuite struct {
-	suite.Suite
-	proto types.KnowledgeAnswer
-}
-
-func TestRefsGapsSuite(t *testing.T) { suite.Run(t, new(refsGapsSuite)) }
-
-func (s *refsGapsSuite) SetupTest() {
-	s.proto = types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{
-		Project: types.NewProjectRef("proto", ""), Language: "protobuf", State: types.SymbolIndexNotBuilt, Unindexable: true,
-	}})
-}
-
-// A name only in Go files is not explained by a project holding only protobuf.
-func (s *refsGapsSuite) TestAProjectWithNoMatchCannotExplainTheMiss() {
-	got := withoutUnheldGaps(s.proto, "/w", []textindex.Match{{Path: "cmd/buzz-playground/main.go", Line: 1}})
-	s.Equal(types.VerdictAbsent, got.Verdict)
-	s.Empty(got.Gaps)
-}
-
-func (s *refsGapsSuite) TestAnAbsoluteMatchInTheProjectKeepsItsGap() {
-	got := withoutUnheldGaps(s.proto, "/w", []textindex.Match{{Path: "/w/proto/magus/a.proto", Line: 1}})
-	s.Equal(types.VerdictUnknown, got.Verdict)
-	s.Len(got.Gaps, 1)
-}
-
-func (s *refsGapsSuite) TestAProjectSharingAPrefixHoldsNoMatch() {
-	got := withoutUnheldGaps(s.proto, "/w", []textindex.Match{{Path: "protobuf/a.proto", Line: 1}})
-	s.Equal(types.VerdictAbsent, got.Verdict)
-}
-
-func (s *refsGapsSuite) TestTheRootProjectHoldsEveryMatch() {
-	root := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef(".", ""), Unindexable: true}})
-	s.Equal(types.VerdictUnknown, withoutUnheldGaps(root, "/w", nil).Verdict)
-}
-
-func (s *refsGapsSuite) TestAGapABuildClosesStays() {
-	unbuilt := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("libs/api", ""), State: types.SymbolIndexNotBuilt}})
-	got := withoutUnheldGaps(unbuilt, "/w", nil)
-	s.Equal(types.VerdictUnknown, got.Verdict)
-	s.Len(got.Gaps, 1)
 }
 
 // A name refs cannot resolve, from a workspace with an unbuilt index: -o json prints the
