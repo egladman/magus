@@ -484,45 +484,123 @@ func (s *refsSourceSuite) TestLinesTakesASeparateNegativeValue() {
 	s.Equal(sourceWindow{Show: true, From: -5, To: -1, MaxLines: 200}, w)
 }
 
-func (s *refsSourceSuite) page(args ...string) (occurrencePage, error) {
+// check parses args the way refsCommand does, positionals after the flags,
+// and returns what checkRefsInput says of them.
+func (s *refsSourceSuite) check(args ...string) error {
 	fs := flag.NewFlagSet("refs", flag.ContinueOnError)
 	rf := flaggen.BindRefs(fs)
 	s.Require().NoError(fs.Parse(args))
-	return refsOccurrencePage(rf, fs, "Sym")
+	source, err := refsSourceWindow(rf, fs)
+	s.Require().NoError(err)
+	rf.Source = source.Show
+	return checkRefsInput(rf, fs, fs.Args())
 }
 
-func (s *refsSourceSuite) TestFileKeepsOneFile() {
-	page, err := s.page("--occurrences", "--file", "./a.go")
+func (s *refsSourceSuite) TestATrailingPathKeepsOneFile() {
+	s.w.Write("a.go", "package a\n")
+	fs := flag.NewFlagSet("refs", flag.ContinueOnError)
+	rf := flaggen.BindRefs(fs)
+	s.Require().NoError(fs.Parse([]string{"--occurrences"}))
+	page, err := refsOccurrencePage(rf, fs, s.w.Root(), []string{"Sym", filepath.Join(s.w.Root(), "a.go")})
 	s.Require().NoError(err)
 	s.Len(page.scoped(s.sites(4)), 1)
-	s.Equal("--file a.go keeps 2 of 4 sites", page.scopeNote(s.sites(4), 2))
+	s.Equal("a.go keeps 2 of 4 sites", page.scopeNote(s.sites(4), 2))
 }
 
-func (s *refsSourceSuite) TestFileKeepsADirectoryAndNotASharedPrefix() {
-	page := occurrencePage{file: "internal/a"}
+func (s *refsSourceSuite) TestATrailingPathKeepsADirectoryAndNotASharedPrefix() {
+	page := occurrencePage{scopes: []string{"internal/a"}}
 	kept := page.scoped([]types.SymbolOccurrenceFile{{File: "internal/a/x.go"}, {File: "internal/ab/x.go"}})
 	s.Require().Len(kept, 1)
 	s.Equal("internal/a/x.go", kept[0].File)
 }
 
-func (s *refsSourceSuite) TestNoFileKeepsTheWholeList() {
+func (s *refsSourceSuite) TestNoPathKeepsTheWholeList() {
 	s.Len(occurrencePage{}.scoped(s.sites(4)), 2)
 	s.Empty(occurrencePage{}.scopeNote(s.sites(4), 4))
 }
 
-func (s *refsSourceSuite) TestFileWithoutOccurrencesIsAUsageError() {
-	_, err := s.page("--file", "a.go")
+func (s *refsSourceSuite) TestAPathThatDoesNotExistIsAUsageError() {
+	fs := flag.NewFlagSet("refs", flag.ContinueOnError)
+	rf := flaggen.BindRefs(fs)
+	s.Require().NoError(fs.Parse(nil))
+	_, err := refsOccurrencePage(rf, fs, s.w.Root(), []string{"Sym", filepath.Join(s.w.Root(), "AnotherSymbol")})
 	s.Equal(exit.Usage, exit.Code(err))
+	s.ErrorContains(err, "AnotherSymbol")
 }
 
-func (s *refsSourceSuite) TestTheNextCommandKeepsFileAndTheOutputFlag() {
+func (s *refsSourceSuite) TestAPathNarrowsThePlainListAndRecounts() {
+	out := types.KnowledgeRefsOutput{FileCount: 2, RefCount: 5, Refs: []types.KnowledgeRefSite{{File: "a/x.go", Count: 2}, {File: "b/y.go", Count: 3}}}
+	got, note := occurrencePage{scopes: []string{"a"}}.scopedRefs(out)
+	s.Equal(types.KnowledgeRefsOutput{FileCount: 1, RefCount: 2, Refs: []types.KnowledgeRefSite{{File: "a/x.go", Count: 2}}}, got)
+	s.Equal("a keeps 2 of 5 references", note)
+}
+
+func (s *refsSourceSuite) TestNoPathLeavesThePlainListAlone() {
+	out := types.KnowledgeRefsOutput{RefCount: 5}
+	got, note := occurrencePage{}.scopedRefs(out)
+	s.Equal(out, got)
+	s.Empty(note)
+}
+
+func (s *refsSourceSuite) TestTheNextCommandKeepsTheOutputFlagAndThePath() {
+	s.w.Write("a.go", "package a\n")
+	path := filepath.Join(s.w.Root(), "a.go")
 	fs := flag.NewFlagSet("refs", flag.ContinueOnError)
 	rf := flaggen.BindRefs(fs)
 	fs.String("o", "", "")
-	s.Require().NoError(fs.Parse([]string{"--occurrences", "--file=a.go", "-o", "json", "--limit", "5"}))
-	page, err := refsOccurrencePage(rf, fs, "Sym")
+	s.Require().NoError(fs.Parse([]string{"--occurrences", "-o", "json", "--limit", "5"}))
+	page, err := refsOccurrencePage(rf, fs, s.w.Root(), []string{"Sym", path})
 	s.Require().NoError(err)
-	s.Contains(page.note(5, 37), "refs 'Sym' --occurrences --file=a.go -o json --limit 5 --offset 5")
+	s.Contains(page.note(5, 37), fmt.Sprintf("refs 'Sym' --occurrences -o json %s --limit 5 --offset 5", path))
+}
+
+func (s *refsSourceSuite) TestAPathOnASymbolBodyIsRefusedNamingOccurrences() {
+	err := s.check("--source", "Foo", "some/dir")
+	s.Equal(exit.Usage, exit.Code(err))
+	s.ErrorContains(err, "refs Foo --occurrences some/dir`")
+}
+
+func (s *refsSourceSuite) TestAPathOnARenameIsRefused() {
+	s.Equal(exit.Usage, exit.Code(s.check("--rename", "Bar", "Foo", "some/dir")))
+}
+
+func (s *refsSourceSuite) TestAPathOnThePlainListOrOccurrencesPasses() {
+	s.NoError(s.check("Foo", "some/dir"))
+	s.NoError(s.check("--occurrences", "Foo", "some/dir"))
+}
+
+func (s *refsSourceSuite) TestLimitOnThePlainListIsRefusedNamingOccurrences() {
+	err := s.check("--limit", "1", "Foo")
+	s.Equal(exit.Usage, exit.Code(err))
+	s.ErrorContains(err, "add --occurrences")
+}
+
+func (s *refsSourceSuite) TestLimitOnOccurrencesAndTextPasses() {
+	s.NoError(s.check("--occurrences", "--limit", "1", "Foo"))
+	s.NoError(s.check("--text", "--limit", "1", "Foo"))
+}
+
+func (s *refsSourceSuite) TestDefinitionWithOccurrencesIsRefused() {
+	s.Equal(exit.Usage, exit.Code(s.check("--definition", "--occurrences", "Foo")))
+}
+
+func (s *refsSourceSuite) TestOccurrencesWithSourcePasses() {
+	s.NoError(s.check("--occurrences", "--source", "Foo"))
+}
+
+func (s *refsSourceSuite) TestTextWithASymbolFlagIsRefusedNamingIt() {
+	for _, name := range []string{"--occurrences", "--definition", "--source", "--refresh"} {
+		err := s.check("--text", name, "Foo")
+		s.Equal(exit.Usage, exit.Code(err), name)
+		s.ErrorContains(err, name)
+	}
+	s.ErrorContains(s.check("--text", "--rename", "Bar", "Foo"), "--rename")
+	s.ErrorContains(s.check("--text", "--offset", "1", "Foo"), "--offset")
+}
+
+func (s *refsSourceSuite) TestRenameWithAReadModeIsRefused() {
+	s.Equal(exit.Usage, exit.Code(s.check("--rename", "Bar", "--occurrences", "Foo")))
+	s.Equal(exit.Usage, exit.Code(s.check("--rename", "Bar", "--source", "Foo")))
 }
 
 func (s *refsSourceSuite) TestADefinitionWidensPastItsDocComment() {
@@ -654,7 +732,7 @@ func (s *refsSourceSuite) TestTheNextCommandKeepsTheWindowFlags() {
 	fs := flag.NewFlagSet("refs", flag.ContinueOnError)
 	rf := flaggen.BindRefs(fs)
 	s.Require().NoError(fs.Parse([]string{"--occurrences", "--lines=-5:-1", "--limit", "5"}))
-	page, err := refsOccurrencePage(rf, fs, "Sym")
+	page, err := refsOccurrencePage(rf, fs, s.w.Root(), []string{"Sym"})
 	s.Require().NoError(err)
 	s.Contains(page.note(5, 37), "refs 'Sym' --occurrences --lines=-5:-1 --limit 5 --offset 5")
 }
@@ -663,7 +741,7 @@ func (s *refsSourceSuite) TestOffsetWithoutOccurrencesIsAUsageError() {
 	fs := flag.NewFlagSet("refs", flag.ContinueOnError)
 	rf := flaggen.BindRefs(fs)
 	s.Require().NoError(fs.Parse([]string{"--offset", "5"}))
-	_, err := refsOccurrencePage(rf, fs, "Sym")
+	_, err := refsOccurrencePage(rf, fs, s.w.Root(), []string{"Sym"})
 	s.Equal(exit.Usage, exit.Code(err))
 }
 

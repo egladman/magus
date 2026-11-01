@@ -13,7 +13,6 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/cmdline/exit"
 )
 
@@ -245,13 +244,12 @@ func agentAdoptionCommand(args []string) error {
 	}
 	report := analyzeAdoption(lines)
 
-	if opts.Format == outputJSON {
-		b, err := json.MarshalIndent(report, "", "  ")
-		if err != nil {
-			return err
+	if opts.Format != outputText {
+		names := make([]string, len(report.TopSymbolGreps))
+		for i, p := range report.TopSymbolGreps {
+			names[i] = p.Pattern
 		}
-		fmt.Fprintln(os.Stdout, string(b))
-		return nil
+		return emitRecord(opts, report, names)
 	}
 	writeAdoptionTable(os.Stdout, report)
 	return nil

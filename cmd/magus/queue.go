@@ -4,6 +4,7 @@ package main
 // flags, opens what each step needs, and hands over.
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -22,6 +23,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/client"
@@ -285,9 +287,6 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if opts.Format != outputText && opts.Format != outputJSON && opts.Format != outputJSONL {
-		return exit.Usagef("magus queue describe: -o %s is not supported (want text, json or jsonl)", opts.Format)
-	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
 		return err
@@ -312,7 +311,11 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	if opts.Format != outputText {
-		return queue.WriteCapabilities(e.stdout, f.Base, caps)
+		var doc bytes.Buffer
+		if err := queue.WriteCapabilities(&doc, f.Base, caps); err != nil {
+			return err
+		}
+		return e.writeDocument(opts, doc.Bytes(), []string{f.Base})
 	}
 	if err := caps.Check(); err != nil {
 		return fmt.Errorf("%s: %w", types.SchemaCapabilities, err)
@@ -486,9 +489,6 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if opts.Format != outputText && opts.Format != outputJSON && opts.Format != outputJSONL {
-		return exit.Usagef("magus queue reviews: -o %s is not supported (want text, json or jsonl)", opts.Format)
-	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
 		return err
@@ -518,9 +518,30 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	if opts.Format != outputText {
-		return queue.WriteReviews(e.stdout, report)
+		var doc bytes.Buffer
+		if err := queue.WriteReviews(&doc, report); err != nil {
+			return err
+		}
+		return e.writeDocument(opts, doc.Bytes(), []string{f.Base})
 	}
 	return queue.WriteReviewLines(e.stdout, report)
+}
+
+// writeDocument renders one schema document the queue package encoded.
+// Json and jsonl keep its bytes: a provider's workflow reads that one line.
+func (e *queueEnv) writeDocument(opts output.Options, doc []byte, names []string) error {
+	switch opts.Format {
+	case outputJSON, outputJSONL:
+		_, err := e.stdout.Write(doc)
+		return err
+	case outputName:
+		return emitNames(e.stdout, names)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(doc, &record); err != nil {
+		return err
+	}
+	return writeFormatted(e.stdout, opts, record)
 }
 
 // remoteHost is the host a remote URL names, "" when it names none. It reads URL forms

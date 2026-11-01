@@ -1064,7 +1064,7 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 				stub: "#!/bin/sh\ncat > \"$GREP_INPUT_RECORD\"\nprintf no > \"$RENDERS_ASK_RECORD\"\nprintf '%s' \"$GLUE_VERDICT\"\n",
 				env: map[string]string{
 					"GREP_INPUT_RECORD":     record,
-					"GLUE_VERDICT":          `{"decision":"advise","context":"use magus refs HandleRequest --definition --source"}`,
+					"GLUE_VERDICT":          `{"decision":"advise","context":"use magus refs HandleRequest --source"}`,
 					"CURSOR_HOOK_STATE_DIR": t.TempDir(),
 				},
 			})
@@ -1091,7 +1091,7 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 			if event == "preToolUse" {
 				assert.Equal(t, "allow", glueDecode(t, event, out).(map[string]any)["permission"])
 			} else {
-				assert.Contains(t, out, "use magus refs HandleRequest --definition --source")
+				assert.Contains(t, out, "use magus refs HandleRequest --source")
 			}
 		})
 	}

@@ -35,7 +35,7 @@ import (
 // lists; there is deliberately no `attention raise` twin, because one ingest path
 // is what keeps the queue's contents traceable to a single normalization.
 func notifyCommand(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
-	fset := flag.NewFlagSet("notify", flag.ContinueOnError)
+	fset := flag.NewFlagSet("session notify",flag.ContinueOnError)
 	bindDisplayFlags(fset)
 	nf := flaggen.BindSessionNotify(fset)
 	fset.Usage = func() { notifyUsage(os.Stderr) }

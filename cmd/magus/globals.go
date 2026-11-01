@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 )
 
@@ -43,7 +43,7 @@ var global globalFlags
 // outputFormatHelp names the bare -o template form explicitly, because that is how a
 // caller discovers which field names a template may use: they are the -o json keys
 // (.name), not the Go field names (.Name), and nothing else advertises that.
-var outputFormatHelp = fmt.Sprintf("Output format (%s|template[=<go-template>]); default: text. Bare -o template lists the available template fields (they are the -o json names)", output.Join(output.Common, "|"))
+var outputFormatHelp = fmt.Sprintf("Output format (%s|template[=<go-template>]); default: text. Bare -o template lists the available template fields (they are the -o json names); see docs/reference/output-formats.md", output.Join(output.Common, "|"))
 
 // bindGlobalFlags registers the flags magus accepts before its subcommand, bar the display
 // set bindDisplayFlags adds. The guard reads a magus argv with its own copy of both
@@ -89,56 +89,18 @@ func commandParse(name string, args []string, local func(*flag.FlagSet)) ([]stri
 	return fs.Args(), nil
 }
 
-// commandsWithoutOutput names the verbs that render nothing structured, keyed by the
-// name they hand commandParse.
-//
-// -o is bound into EVERY FlagSet (bindDisplayFlags), because it is a global flag that
-// may precede or follow the subcommand. A verb that never consults it therefore accepted
-// `-o json`, printed prose, and exited 0: the accepted-and-ignored failure that costs
-// most in a pipe, since the caller's parse fails somewhere else entirely.
-//
-// Declared rather than derived: deriving it needs a check AFTER the verb has had its
-// chance to consult -o, which is a post-dispatch hook this file cannot reach. A wrong
-// entry here is loud rather than silent (the verb's own `-o json` tests fail), which is
-// what makes the list safe to keep by hand.
-var commandsWithoutOutput = map[string]bool{
-	"affected --bisect":        true,
-	"buzz":                     true,
-	"graph build":              true,
-	"mcp":                      true,
-	"notes capture":            true,
-	"notes edit":               true,
-	"queue apply":              true,
-	"queue ls":                 true,
-	"queue plan":               true,
-	"queue validate":           true,
-	"queue gate":               true,
-	"server prune-preserved":   true,
-	"server reload":            true,
-	"server rotate-activities": true,
-	"server rotate-logs":       true,
-	"server start":             true,
-	"server stop":              true,
-	"vcs resolve":              true,
-}
-
-// checkOutputSupported rejects -o on a verb that renders nothing structured. Usage-class
-// (exit 2): the flag was never going to do anything, so failing before the work happens
-// is the whole point.
-//
-// It asks the FlagSet whether -o was typed on THIS invocation rather than reading
-// global.output, which is ambient: bindDisplayFlags seeds each flag's default from the
-// live global. A value left there by an earlier dispatch on the same process (one
-// adopted run in the server, one testscript command) would otherwise fail the next
-// command for a flag nobody passed it.
-func checkOutputSupported(name string, fs *flag.FlagSet) error {
-	if !commandsWithoutOutput[name] {
-		return nil
+// commandAt is the tree's node for a FlagSet's name, or false for a name that
+// is no path, such as "run build".
+func commandAt(name string) (cmdline.Command, bool) {
+	node := commands.Root
+	for word := range strings.FieldsSeq(name) {
+		i := slices.IndexFunc(node.Children, func(c cmdline.Command) bool { return c.Name == word })
+		if i < 0 {
+			return cmdline.Command{}, false
+		}
+		node = node.Children[i]
 	}
-	if !flagWasSet(fs, "output") && !flagWasSet(fs, "o") {
-		return nil
-	}
-	return exit.Usagef("magus %s: -o is not supported by this command", name)
+	return node, true
 }
 
 // reorderFlagsFirst moves recognized flags (and their values) ahead of positional
@@ -304,7 +266,42 @@ func recordFlagSet(name string, fs *flag.FlagSet) {
 // lifts a backquoted word out of the usage as the value's name.
 func printOwnDefaults(fs *flag.FlagSet) {
 	globals := globalFlagNames()
-	printFlagHelp(fs.Output(), cmdline.FlagHelp(fs, func(name string) bool { return globals[name] }))
+	help := cmdline.FlagHelp(fs, func(name string) bool { return globals[name] })
+	cmd, known := commandAt(fs.Name())
+	if !known {
+		printFlagHelp(fs.Output(), help)
+		return
+	}
+	printGroupedFlagHelp(fs.Output(), help, cmd.Flags)
+	if len(cmd.Examples) > 0 {
+		fmt.Fprintln(fs.Output(), "\nExamples:")
+	}
+	for _, e := range cmd.Examples {
+		fmt.Fprintf(fs.Output(), "  %s\n    \t%s\n", e.Command, e.Comment)
+	}
+}
+
+// printGroupedFlagHelp prints the flags no group claims, then each group's
+// under its heading, in the order the tree declares them.
+func printGroupedFlagHelp(w io.Writer, help []cmdline.Help, declared []cmdline.Flag) {
+	groupOf := map[string]string{}
+	var groups []string
+	for _, f := range declared {
+		groupOf[f.Name] = f.Group
+		if f.Group != "" && !slices.Contains(groups, f.Group) {
+			groups = append(groups, f.Group)
+		}
+	}
+	inGroup := func(group string) []cmdline.Help {
+		return slices.DeleteFunc(slices.Clone(help), func(h cmdline.Help) bool {
+			return groupOf[strings.TrimLeft(strings.TrimPrefix(h.Name, "--[no-]"), "-")] != group
+		})
+	}
+	printFlagHelp(w, inGroup(""))
+	for _, group := range groups {
+		fmt.Fprintf(w, "\n%s\n", group)
+		printFlagHelp(w, inGroup(group))
+	}
 }
 
 // printRootFlags prints the flags the command tree declares on the program itself.

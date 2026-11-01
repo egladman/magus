@@ -118,10 +118,7 @@ func emitRuleList(opts output.Options, rules []types.RuleDoc) error {
 	// -o name is one id per line on every other describe noun, and a caller piping this
 	// into a loop wants the names rather than the table.
 	if opts.Format == outputName {
-		for _, r := range rules {
-			fmt.Println(r.Name)
-		}
-		return nil
+		return emitItemNames(os.Stdout, rules, func(r types.RuleDoc) string { return r.Name })
 	}
 	if opts.Format != outputText {
 		return writeFormatted(os.Stdout, opts, rules)
@@ -153,8 +150,7 @@ func emitRuleList(opts output.Options, rules []types.RuleDoc) error {
 // just read the slug off a refusal.
 func emitRuleDetail(opts output.Options, doc types.RuleDoc) error {
 	if opts.Format == outputName {
-		fmt.Println(doc.Name)
-		return nil
+		return emitNames(os.Stdout, []string{doc.Name})
 	}
 	if opts.Format != outputText {
 		return writeFormatted(os.Stdout, opts, doc)

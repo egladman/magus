@@ -130,7 +130,7 @@ func serverStatus(ctx context.Context, args []string) error {
 		return err
 	}
 	if opts.Format != outputText {
-		if err := emitFormatted(opts, report); err != nil {
+		if err := emitRecord(opts, report, statusNames(report)); err != nil {
 			return err
 		}
 		if report.Server == nil {

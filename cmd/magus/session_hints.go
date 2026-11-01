@@ -104,7 +104,11 @@ func sessionHints(root string, args []string) error {
 		renderHintUptake(os.Stdout, report)
 		return nil
 	}
-	return emitFormatted(opts, report)
+	names := make([]string, len(report.Hints))
+	for i, h := range report.Hints {
+		names[i] = h.ID
+	}
+	return emitRecord(opts, report, names)
 }
 
 // hintUptake counts each id's servings and what the calls after them did.

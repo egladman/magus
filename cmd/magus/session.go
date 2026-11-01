@@ -640,7 +640,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 	}
 	if opts.Format == outputText {
 		renderLoadSummary(os.Stdout, summary)
-	} else if err := emitFormatted(opts, summary); err != nil {
+	} else if err := emitRecord(opts, summary, []string{summary.Store}); err != nil {
 		return err
 	}
 	if len(summary.Rejects) > 0 {
@@ -964,7 +964,7 @@ func sessionShow(root string, args []string) error {
 		return err
 	}
 	if opts.Format != outputText {
-		return emitFormatted(opts, out)
+		return emitRecord(opts, out, []string{rest[0]})
 	}
 	renderSessionShow(os.Stdout, out)
 	return nil

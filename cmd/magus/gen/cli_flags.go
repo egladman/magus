@@ -547,8 +547,6 @@ const (
 	FlagRefsContext = "context"
 	// refs: --definition
 	FlagRefsDefinition = "definition"
-	// refs: --file
-	FlagRefsFile = "file"
 	// refs: --generated
 	FlagRefsGenerated = "generated"
 	// refs: --limit
@@ -1125,7 +1123,6 @@ type RefsFlags struct {
 	Lines       string // --lines
 	MaxLines    int    // --max-lines
 	SkipLines   int    // --skip-lines
-	File        string // --file
 	Text        bool   // --[no-]text
 	Generated   bool   // --[no-]generated
 	Limit       int    // --limit
@@ -1150,12 +1147,11 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	fs.StringVar(&f.Lines, FlagRefsLines, "", "Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after")
 	fs.IntVar(&f.MaxLines, FlagRefsMaxLines, 200, "Print at most this many lines of each block (0 for all), then say how many there were and print the next command. Implies --source")
 	fs.IntVar(&f.SkipLines, FlagRefsSkipLines, 0, "Skip this many lines of each block first; line numbers carry on. Implies --source")
-	fs.StringVar(&f.File, FlagRefsFile, "", "With --occurrences, keep the sites at or under this workspace-relative path, and say how many of the total it kept")
 	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace")
 	cmdline.NegatedBoolVar(fs, &f.Text, FlagRefsText)
 	fs.BoolVar(&f.Generated, FlagRefsGenerated, true, "In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely")
 	cmdline.NegatedBoolVar(fs, &f.Generated, FlagRefsGenerated)
-	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What `| head` would do, without losing the count or the exit code")
+	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What piping to head would do, without losing the count or the exit code")
 	fs.IntVar(&f.Offset, FlagRefsOffset, 0, "With --occurrences, skip this many sites first; a cut page prints the next command")
 	fs.StringVar(&f.Rename, FlagRefsRename, "", "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is")
 	return &f

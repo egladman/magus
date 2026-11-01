@@ -3033,7 +3033,11 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		if opts.Format != outputText {
-			return emitFormatted(opts, settled)
+			names := make([]string, len(settled))
+			for i, row := range settled {
+				names[i] = row.ID
+			}
+			return emitRecord(opts, settled, names)
 		}
 		for _, row := range settled {
 			fmt.Printf("settled %s: %d deferred item(s) answered, left_unmerged %q\n", row.ID, len(row.Deferred), row.LeftUnmerged)

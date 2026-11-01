@@ -447,12 +447,28 @@ func TestQueueDescribeWithoutAStatusContextReadsNoSetup(t *testing.T) {
 	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"atomic","linear_stacks":true,"methods":["squash"],"required_approvals":2}`+"\n", string(out))
 }
 
-func TestQueueDescribeRefusesAnOutputItDoesNotRender(t *testing.T) {
-	withOutput(t, "yaml")
-	f := newQueueFixture(t, "", "")
-	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main")
-	require.Equal(t, exit.Usage, exit.Code(err))
-	assert.ErrorContains(t, err, "-o yaml is not supported")
+func TestQueueDescribeRendersYAML(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "-o", "yaml", "--status-context", "", "--provider", "local.buzz", "--base", "main")
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "base: main")
+}
+
+func TestQueueDescribeRendersATemplate(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "-o", "template={{.base}}:{{.schema}}", "--status-context", "", "--provider", "local.buzz", "--base", "main")
+	require.NoError(t, err)
+	assert.Equal(t, "main:mergequeue.capabilities/v1", string(out))
+}
+
+func TestQueueDescribeRendersItsBaseAsAName(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "-o", "name", "--status-context", "", "--provider", "local.buzz", "--base", "main")
+	require.NoError(t, err)
+	assert.Equal(t, "main\n", string(out))
 }
 
 // The three steps as a workflow drives them, over nothing to merge: every path the

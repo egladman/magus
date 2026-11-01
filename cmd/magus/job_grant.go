@@ -66,9 +66,17 @@ func jobGrant(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	if revoke {
-		if _, err := store.Revoke(ctx, id, rule); err != nil {
+		g, err := store.Revoke(ctx, id, rule)
+		if err != nil {
 			return fmt.Errorf("magus job grant: %w", err)
+		}
+		if opts.Format != outputText {
+			return emitRecord(opts, g, []string{rule})
 		}
 		fmt.Printf("revoked %s's grant of %s\n", id, rule)
 		return nil
@@ -80,6 +88,9 @@ func jobGrant(ctx context.Context, root string, args []string) error {
 	g, err := store.Grant(ctx, id, rule, until)
 	if err != nil {
 		return fmt.Errorf("magus job grant: %w", err)
+	}
+	if opts.Format != outputText {
+		return emitRecord(opts, g, []string{rule})
 	}
 	ends := "when the job ends"
 	if g.Until != 0 {

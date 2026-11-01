@@ -23,10 +23,11 @@ This page groups them by the question you are asking rather than
 alphabetically, and covers the behavior that the per-command
 [reference pages](../reference/manpage/magus/) do not.
 
-Before anything else: **`-o json` works on every command that prints
-structured output**, as do `-o yaml`, `-o name`, and
-`-o template=<go-template>`. If you are scripting magus, or you are an agent
-reading its output, reach for that first instead of parsing the human format.
+Before anything else: **`-o json` works on every command that prints a
+record**, as do `-o yaml`, `-o jsonl`, `-o name`, and
+`-o template=<go-template>`; see [Output formats](output-formats.md). If you are
+scripting magus, or you are an agent reading its output, reach for that first
+instead of parsing the human format.
 The human format is allowed to change; the JSON shape is the contract.
 
 **Every boolean flag has an off spelling.** `-h` prints a boolean as

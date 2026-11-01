@@ -1584,9 +1584,9 @@ says so. Blocks number their lines and mark the matched one with >.
 --skip-lines pages through it; a cut block prints the lines shown, the total
 and the next command.
 
---file keeps the --occurrences sites at or under a workspace-relative path.
---limit and --offset page them by site; a cut page prints the total and the
-next command.
+A trailing path keeps the plain list or the --occurrences sites at or under it,
+as it scopes --text, and a path that does not exist is an error. --limit and
+--offset page the sites; a cut page prints the total and the next command.
 
 --text switches to that other question on purpose: a literal substring
 search with no symbol index and no graph, printed as path:line:text like
@@ -1606,26 +1606,25 @@ refuses the whole rename. Then every file is written or none is. The
 global --dry-run resolves and grades every site and prints them, writing
 nothing. The inverse is the same command with the two names swapped.`,
 	Flags: []cmdline.Flag{
-		{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Re-ingest the SCIP index before answering"},
-		{Name: "occurrences", Kind: cmdline.Bool, Default: false, Doc: "Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in."},
-		{Name: "definition", Kind: cmdline.Bool, Default: false, Doc: "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed"},
-		{Name: "source", Kind: cmdline.Bool, Default: false, Doc: "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n. With --occurrences, print each site's lines"},
-		{Name: "context", Kind: cmdline.Int, Doc: "Print this many lines on both sides of each range, clamped to the file (grep -C). Implies --source"},
-		{Name: "before", Kind: cmdline.Int, Doc: "Print this many lines above each range, over --context, clamped to the file (grep -B). Implies --source"},
-		{Name: "after", Kind: cmdline.Int, Doc: "Print this many lines below each range, over --context, clamped to the file (grep -A). Implies --source"},
-		{Name: "lines", Kind: cmdline.String, Doc: "Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after"},
-		{Name: "max-lines", Kind: cmdline.Int, Default: 200, Doc: "Print at most this many lines of each block (0 for all), then say how many there were and print the next command. Implies --source"},
-		{Name: "skip-lines", Kind: cmdline.Int, Doc: "Skip this many lines of each block first; line numbers carry on. Implies --source"},
-		{Name: "file", Kind: cmdline.String, Doc: "With --occurrences, keep the sites at or under this workspace-relative path, and say how many of the total it kept"},
-		{Name: "text", Kind: cmdline.Bool, Default: false, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace"},
+		{Name: "refresh", Kind: cmdline.Bool, Default: false, Group: "Each file using a symbol: magus refs <symbol> [<path>...]", Doc: "Re-ingest the SCIP index before answering"},
+		{Name: "occurrences", Kind: cmdline.Bool, Default: false, Group: "Every site: magus refs <symbol> --occurrences [<path>...]", Doc: "Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in."},
+		{Name: "definition", Kind: cmdline.Bool, Default: false, Group: "Read a symbol's code: magus refs <symbol> --source", Doc: "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed"},
+		{Name: "source", Kind: cmdline.Bool, Default: false, Group: "Read a symbol's code: magus refs <symbol> --source", Doc: "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n. With --occurrences, print each site's lines"},
+		{Name: "context", Kind: cmdline.Int, Group: "Read a symbol's code: magus refs <symbol> --source", Doc: "Print this many lines on both sides of each range, clamped to the file (grep -C). Implies --source"},
+		{Name: "before", Kind: cmdline.Int, Group: "Read a symbol's code: magus refs <symbol> --source", Doc: "Print this many lines above each range, over --context, clamped to the file (grep -B). Implies --source"},
+		{Name: "after", Kind: cmdline.Int, Group: "Read a symbol's code: magus refs <symbol> --source", Doc: "Print this many lines below each range, over --context, clamped to the file (grep -A). Implies --source"},
+		{Name: "lines", Kind: cmdline.String, Group: "Read a symbol's code: magus refs <symbol> --source", Doc: "Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after"},
+		{Name: "max-lines", Kind: cmdline.Int, Default: 200, Group: "Read a symbol's code: magus refs <symbol> --source", Doc: "Print at most this many lines of each block (0 for all), then say how many there were and print the next command. Implies --source"},
+		{Name: "skip-lines", Kind: cmdline.Int, Group: "Read a symbol's code: magus refs <symbol> --source", Doc: "Skip this many lines of each block first; line numbers carry on. Implies --source"},
+		{Name: "text", Kind: cmdline.Bool, Default: false, Group: "Search text with no index: magus refs --text <pattern> [<path>...]", Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace"},
 		// Custom, not Bool: bound by refsCommand itself alongside flaggen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
-		{Name: "generated", Kind: cmdline.Bool, Default: true, Doc: "In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely"},
-		{Name: "limit", Kind: cmdline.Int, Doc: "Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What `| head` would do, without losing the count or the exit code"},
-		{Name: "offset", Kind: cmdline.Int, Doc: "With --occurrences, skip this many sites first; a cut page prints the next command"},
-		{Name: "rename", Kind: cmdline.String, Doc: "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is"},
+		{Name: "generated", Kind: cmdline.Bool, Default: true, Group: "Search text with no index: magus refs --text <pattern> [<path>...]", Doc: "In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely"},
+		{Name: "limit", Kind: cmdline.Int, Group: "Every site: magus refs <symbol> --occurrences [<path>...]", Doc: "Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What piping to head would do, without losing the count or the exit code"},
+		{Name: "offset", Kind: cmdline.Int, Group: "Every site: magus refs <symbol> --occurrences [<path>...]", Doc: "With --occurrences, skip this many sites first; a cut page prints the next command"},
+		{Name: "rename", Kind: cmdline.String, Group: "Rename: magus refs <symbol> --rename <new>", Doc: "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is"},
 	},
-	Usage: "magus refs <symbol> [flags]",
+	Usage: "magus refs <symbol> [<path>...] [flags]",
 	Examples: []cmdline.Example{
 		{Comment: "Every reference to a symbol", Command: "magus refs Open"},
 		{Comment: "By fully-qualified node ID", Command: "magus refs symbol:github.com/egladman/magus/Open"},
@@ -1636,7 +1635,7 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Comment: "Only the five lines above each site", Command: "magus refs Open --occurrences --lines=-5:-1"},
 		{Comment: "Five lines above each site, four below", Command: "magus refs Open --occurrences --before 5 --after 4"},
 		{Comment: "One page of sites", Command: "magus refs Open --occurrences --limit 5 --offset 5"},
-		{Comment: "The sites in one file", Command: "magus refs Open --occurrences --file magus.go --context 2"},
+		{Comment: "The sites under one path", Command: "magus refs Open internal/guard --occurrences --context 2"},
 		{Comment: "Raw text search, no index needed", Command: "magus refs TODO --text"},
 		{Comment: "Preview a rename", Command: "magus refs parseQuery --rename parseTerms --dry-run"},
 		{Comment: "Rename a symbol at every verified site", Command: "magus refs parseQuery --rename parseTerms"},

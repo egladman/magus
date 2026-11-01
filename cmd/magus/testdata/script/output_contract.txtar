@@ -18,10 +18,14 @@ stderr 'magus notes edit: -o is not supported by this command'
 exec magus clean --dry-run -o json
 stdout '"dry_run": true'
 
-# -- events is a JSONL stream, so every other format is refused ------------------------
-! exec magus events -o json --limit 0
-stderr 'the event stream is JSONL only'
+# A -o before the verb is refused the same way.
+! exec magus -o json server stop
+stderr 'magus server stop: -o is not supported by this command'
+
+# -- events renders each record alone, in every format ----------------------------------
+exec magus events -o json --limit 0
 exec magus events -o jsonl --limit 0
+exec magus events -o name --limit 0
 
 # -- -o name is ONE token per line ----------------------------------------------------
 # describe file used to print "<path>\t<role>", which is two columns in the one format

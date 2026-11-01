@@ -355,6 +355,9 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 	if err != nil {
 		return err
 	}
+	if opts.Format == outputName {
+		return emitNames(w, []string{typed.ID})
+	}
 	if opts.Format != outputText {
 		return writeFormatted(w, opts, typed)
 	}

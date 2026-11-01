@@ -427,7 +427,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		case readErr != nil:
 			slog.InfoContext(ctx, fmt.Sprintf("what this run rewrote outside its lease was not read: %v", readErr), attr.Notice("note"))
 		case len(outside) > 0:
-			slog.InfoContext(ctx, fmt.Sprintf("this run rewrote declared outputs outside lease %s's write paths, and a commit carrying one is refused: unstage it and file it owed:\n  %s",
+			slog.InfoContext(ctx, fmt.Sprintf("this run rewrote declared outputs outside lease %s's write paths, and a commit carrying one is refused: unstage it:\n  %s",
 				lease, strings.Join(outside, "\n  ")), attr.Notice("note"))
 		}
 	}

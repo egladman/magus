@@ -56,6 +56,8 @@ func emitWhere(wsRoot string, matches []whereMatch) error {
 		return emitFormatted(opts, whereOutput{
 			Workspace: wsRoot, Count: len(matches), Matches: matches,
 		})
+	case outputName:
+		return emitItemNames(os.Stdout, matches, func(m whereMatch) string { return m.Path })
 	}
 	for _, m := range matches {
 		fmt.Println(m.Path)

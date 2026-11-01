@@ -107,7 +107,7 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 		qf = flaggen.BindQuery(fs, flaggen.QueryDefaults{URL: defaultLogViewerURL})
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json|jsonl] [--open] [--attempts] [--identity] [--publish]")
+			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o <format>] [--open] [--attempts] [--identity] [--publish]")
 			fmt.Fprintln(os.Stderr, "       magus query output --stdin")
 			fmt.Fprintln(os.Stderr, "       magus query invocation <id> [-o json] [--secrets]")
 			fmt.Fprintln(os.Stderr, "")
@@ -167,7 +167,7 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 			return oerr
 		}
 		if outOpts.Format != outputText {
-			return exit.Usagef("magus query output --stdin: -o %s is not supported; it prints each record's output, and the records themselves are already the structured form", outOpts.Format)
+			return exit.Usagef("magus query output --stdin takes no -o: it prints each untrusted record neutralized, and the records on stdin are already the structured form")
 		}
 		return printOutputRecords(os.Stdin, os.Stdout, noticeLines{ctx: ctx, level: slog.LevelInfo})
 	}
@@ -367,16 +367,6 @@ type outputRefOpts struct {
 // record; --open hands it to the browser log viewer. The bytes never leave the machine: --open
 // rides them in a URL fragment, exactly like `magus graph export --open`.
 func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) error {
-	// What this verb emits by default is the raw bytes a run captured, and bytes have no
-	// fields to template and no identity to name. Only the record WRAPPING them has a
-	// shape, which is why json, jsonl and yaml work and the rest are refused rather than
-	// silently answered with the bytes: the accepted-and-ignored failure -o exists to
-	// avoid, and worse here than elsewhere because the fallback looks like real output.
-	switch o.out.Format {
-	case outputText, outputJSON, outputJSONL, outputYAML:
-	default:
-		return exit.Usagef("magus query output: -o %s is not supported; a captured log has no fields to render, so json, jsonl and yaml (the record around the bytes) are the only structured forms", o.out.Format)
-	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
@@ -443,7 +433,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 			// A slice, or writeJSONL would stream one of the record's list fields.
 			return emitFormatted(o.out, []types.StoredOutput{rec})
 		}
-		return emitFormatted(o.out, rec)
+		return emitRecord(o.out, rec, []string{rec.Ref})
 	}
 	data, desc, err := m.OutputByRefRemote(ctx, ref)
 	if err != nil {
@@ -489,11 +479,6 @@ type trailPayloadRecord struct {
 // guard verdict (grd), an MCP request or response (mcp). The ref names its own store, so a
 // miss here is final and the run-output store is not consulted.
 func queryTrailPayload(ctx context.Context, root, ref string, out output.Options) error {
-	switch out.Format {
-	case outputText, outputJSON, outputYAML:
-	default:
-		return exit.Usagef("magus query output: -o %s is not supported; a stored payload has no fields to render, so json and yaml are the only structured forms", out.Format)
-	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
@@ -507,8 +492,8 @@ func queryTrailPayload(ctx context.Context, root, ref string, out output.Options
 	if err != nil {
 		return fmt.Errorf("magus query output: read %s: %w", ref, err)
 	}
-	if out.Format == outputJSON || out.Format == outputYAML {
-		return emitFormatted(out, trailPayloadRecord{Ref: ref, Output: string(data)})
+	if out.Format != outputText {
+		return emitRecord(out, trailPayloadRecord{Ref: ref, Output: string(data)}, []string{ref})
 	}
 	// A verdict is stored without a trailing newline, so it would run into the prompt.
 	if !bytes.HasSuffix(data, []byte("\n")) {
@@ -527,8 +512,12 @@ func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out out
 	if err != nil {
 		return reportRefLookupError(ctx, m, ref, err)
 	}
-	if out.Format == outputJSON || out.Format == outputYAML {
-		return emitFormatted(out, list)
+	if out.Format != outputText {
+		names := make([]string, len(list))
+		for i, d := range list {
+			names[i] = d.Attempt
+		}
+		return emitRecord(out, list, names)
 	}
 	// Head the listing with the STEP's identity: the portable ref when a v2
 	// descriptor carries the key, else the ref as the user typed it. list[0].Ref
@@ -1071,6 +1060,15 @@ func pathCommand(ctx context.Context, root string, args []string) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
+	case outputName:
+		names := make([]string, 0, len(out.Steps)+1)
+		for i, step := range out.Steps {
+			if i == 0 {
+				names = append(names, step.From)
+			}
+			names = append(names, step.To)
+		}
+		return emitNames(os.Stdout, names)
 	}
 
 	fmt.Print(render.PathText(out))

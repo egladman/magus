@@ -235,7 +235,7 @@ func brokerStatus(ctx context.Context, args []string) error {
 		if qerr != nil {
 			return exit.Reported(exit.Failure)
 		}
-		return emitFormatted(opts, st)
+		return emitRecord(opts, st, []string{strconv.Itoa(st.PID)})
 	}
 	if errors.Is(qerr, types.PeerFromAnotherBuild) {
 		return fmt.Errorf("broker status: %w", qerr)
@@ -599,7 +599,11 @@ func brokerUnits(ctx context.Context, args []string) error {
 		return err
 	}
 	if opts.Format != outputText {
-		return emitFormatted(opts, units)
+		names := make([]string, len(units))
+		for i, u := range units {
+			names[i] = u.Path
+		}
+		return emitRecord(opts, units, names)
 	}
 	for i, u := range units {
 		if i > 0 {

@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -45,14 +44,15 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 		flags = fs
 		rf = flaggen.BindRefs(fs)
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus refs <symbol> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus refs --text <pattern> [<path>...] [flags]")
-			fmt.Fprintln(os.Stderr, "")
+			if c, ok := commandAt("refs"); ok {
+				fmt.Fprintln(os.Stderr, "Usage: "+c.Usage)
+				fmt.Fprintln(os.Stderr, "")
+			}
 			fmt.Fprintln(os.Stderr, types.KnowledgeRefsDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "The argument is a symbol node ID (symbol:...) or a name that resolves to")
 			fmt.Fprintln(os.Stderr, "one. Symbols come from a declared SCIP index (see knowledge.symbols in config).")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fmt.Fprintln(os.Stderr, "Global flags are also accepted, see `magus -h`.")
 			printOwnDefaults(fs)
 		}
 	})
@@ -73,14 +73,14 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 		}
 		return exit.Reported(exit.Usage)
 	}
-	page, err := refsOccurrencePage(rf, flags, pos[0])
+	if err := checkRefsInput(rf, flags, pos); err != nil {
+		return err
+	}
+	page, err := refsOccurrencePage(rf, flags, resolveRootOrEmpty(root), pos)
 	if err != nil {
 		return err
 	}
-	source.again = commandAgain(hint.Refs.With, flags, pos[0], flaggen.FlagRefsMaxLines, flaggen.FlagRefsSkipLines)
-	if rf.Rename != "" && (rf.Text || rf.Occurrences || rf.Definition || rf.Source) {
-		return exit.Usagef("magus refs: --rename takes none of --text, --occurrences, --definition, --source")
-	}
+	source.again = refsAgain(flags, pos, flaggen.FlagRefsMaxLines, flaggen.FlagRefsSkipLines)
 
 	if rf.Text {
 		// Computed here, once, and passed down: the same shape the symbol-miss
@@ -194,6 +194,10 @@ func refsCommand(ctx context.Context, root string, args []string) error {
 		return emitDefinitions(ctx, os.Stdout, opts, defs)
 	}
 
+	out, note := page.scopedRefs(out)
+	if note != "" {
+		slog.WarnContext(ctx, note, attr.Notice("magus refs"))
+	}
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		if err := emitFormatted(opts, out); err != nil {
@@ -297,8 +301,7 @@ type refsMiss struct {
 // script reads the verdict and the index cause; the verdict block goes to stderr in every
 // format.
 func reportRefsMiss(stderr io.Writer, opts output.Options, m refsMiss) error {
-	switch opts.Format {
-	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+	if opts.Format != outputText && opts.Format != outputName {
 		if err := emitFormatted(opts, types.KnowledgeRefsOutput{
 			Definition:    types.KnowledgeRefsDefinition,
 			SchemaVersion: types.KnowledgeSchemaVersion,
@@ -639,7 +642,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 			}
 		}
 	}
-	shown := 0
+	var shown int
 	out.Files, shown = page.cut(files)
 	var classify classifyFunc
 	if ws, err := inspectWorkspace(ctx, root); err == nil {
@@ -872,7 +875,7 @@ func checkSourcePage(command string, maxLines, skipLines int) error {
 
 // commandAgain respells a command from its given flags, leaving out drop.
 func commandAgain(with func(...string) string, fs *flag.FlagSet, subject string, drop ...string) string {
-	args := []string{"'" + strings.ReplaceAll(subject, "'", `'\''`) + "'"}
+	args := []string{fmt.Sprintf("'%s'", strings.ReplaceAll(subject, "'", `'\''`))}
 	if flagGiven(fs, flaggen.FlagRefsOccurrences) && !slices.Contains(drop, flaggen.FlagRefsOccurrences) {
 		args = append(args, "--"+flaggen.FlagRefsOccurrences)
 	}
@@ -888,7 +891,7 @@ func commandAgain(with func(...string) string, fs *flag.FlagSet, subject string,
 			args = append(args, "-"+f.Name, shellArg(f.Value.String()))
 			return
 		}
-		args = append(args, "--"+f.Name+"="+shellArg(f.Value.String()))
+		args = append(args, fmt.Sprintf("--%s=%s", f.Name, shellArg(f.Value.String())))
 	})
 	return with(args...)
 }
@@ -898,7 +901,7 @@ func shellArg(s string) string {
 	if !strings.ContainsAny(s, " \t'\"$`\\*?{}()&;|<>") {
 		return s
 	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return fmt.Sprintf("'%s'", strings.ReplaceAll(s, "'", `'\''`))
 }
 
 // refsSourceWindow reads the window off the parsed flags.
@@ -992,87 +995,6 @@ func (w sourceWindow) text(lines [][]byte, first, end int) (text string, startLi
 		note = fmt.Sprintf("%d of %d lines", shown, whole)
 	}
 	return text, start + 1, whole, note
-}
-
-// occurrencePage is the sites --file, --limit and --offset keep.
-// again is the command that asked, less the last two flags.
-type occurrencePage struct {
-	file          string
-	limit, offset int
-	again         string
-}
-
-// refsOccurrencePage validates the paging flags and spells the next command.
-func refsOccurrencePage(rf *flaggen.RefsFlags, fs *flag.FlagSet, symbol string) (occurrencePage, error) {
-	if !rf.Occurrences && (flagGiven(fs, flaggen.FlagRefsOffset) || flagGiven(fs, flaggen.FlagRefsFile)) {
-		return occurrencePage{}, exit.Usagef("magus refs: --offset and --file narrow --occurrences sites; add --occurrences")
-	}
-	if rf.Occurrences && (rf.Limit < 0 || rf.Offset < 0) {
-		return occurrencePage{}, exit.Usagef("magus refs: --limit and --offset take 0 or more sites")
-	}
-	again := commandAgain(hint.Refs.With, fs, symbol, flaggen.FlagRefsLimit, flaggen.FlagRefsOffset)
-	file := ""
-	if rf.File != "" {
-		file = path.Clean(filepath.ToSlash(rf.File))
-	}
-	return occurrencePage{file: file, limit: rf.Limit, offset: rf.Offset, again: again}, nil
-}
-
-// scoped keeps the files at or under --file, a workspace-relative path.
-func (p occurrencePage) scoped(files []types.SymbolOccurrenceFile) []types.SymbolOccurrenceFile {
-	if p.file == "" {
-		return files
-	}
-	var kept []types.SymbolOccurrenceFile
-	for _, f := range files {
-		if f.File == p.file || strings.HasPrefix(f.File, p.file+"/") {
-			kept = append(kept, f)
-		}
-	}
-	return kept
-}
-
-// scopeNote counts what --file left out, so a narrowed count reads as one.
-func (p occurrencePage) scopeNote(files []types.SymbolOccurrenceFile, kept int) string {
-	if p.file == "" {
-		return ""
-	}
-	total := 0
-	for _, f := range files {
-		total += len(f.Occurrences)
-	}
-	return fmt.Sprintf("--file %s keeps %d of %d sites", p.file, kept, total)
-}
-
-// cut keeps the page's sites and drops a file left with none.
-func (p occurrencePage) cut(files []types.SymbolOccurrenceFile) (kept []types.SymbolOccurrenceFile, shown int) {
-	skip := p.offset
-	for _, f := range files {
-		sites := f.Occurrences[min(skip, len(f.Occurrences)):]
-		skip -= len(f.Occurrences) - len(sites)
-		if p.limit > 0 {
-			sites = sites[:min(p.limit-shown, len(sites))]
-		}
-		if len(sites) > 0 {
-			f.Occurrences = sites
-			kept = append(kept, f)
-			shown += len(sites)
-		}
-	}
-	return kept, shown
-}
-
-// note says what the page cut, and is empty when it cut nothing.
-func (p occurrencePage) note(shown, total int) string {
-	switch {
-	case shown == total:
-		return ""
-	case p.offset >= total:
-		return fmt.Sprintf("0 of %d sites; --offset %d is past the last site", total, p.offset)
-	case p.offset+shown < total:
-		return fmt.Sprintf("%d of %d sites; next: %s --limit %d --offset %d", shown, total, p.again, p.limit, p.offset+shown)
-	}
-	return fmt.Sprintf("%d of %d sites", shown, total)
 }
 
 // fillOccurrenceSources sets each occurrence's Source from the file under root.

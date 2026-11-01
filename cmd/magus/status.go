@@ -177,6 +177,15 @@ func loadSilentLeases(now time.Time) ([]guard.SilentLease, error) {
 	return guard.SilentLeases(root, loc.CacheDir, rows, now, guard.SilentLeaseAfter)
 }
 
+// statusNames is the identifier of each run the server is executing.
+func statusNames(r types.StatusSnapshot) []string {
+	names := make([]string, len(r.Runs))
+	for i, run := range r.Runs {
+		names[i] = run.Inv
+	}
+	return names
+}
+
 // printStatusWithSilent renders the snapshot, then the silent leases: appended to the text
 // form, a field of the structured ones.
 func printStatusWithSilent(w io.Writer, snapshot types.StatusSnapshot, silent []guard.SilentLease, silentErr error, opts output.Options, compact bool) error {
@@ -187,6 +196,8 @@ func printStatusWithSilent(w io.Writer, snapshot types.StatusSnapshot, silent []
 			report.SilentLeasesError = silentErr.Error()
 		}
 		return emitFormatted(opts, report)
+	case outputName:
+		return emitNames(w, statusNames(snapshot))
 	}
 	if err := writeStatus(w, snapshot, opts, 0, compact); err != nil {
 		return err
@@ -244,6 +255,8 @@ func writeStatus(w io.Writer, r types.StatusSnapshot, opts output.Options, animF
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, r)
+	case outputName:
+		return emitNames(w, statusNames(r))
 	default:
 		if compact {
 			printStatusCompact(w, r, time.Now())

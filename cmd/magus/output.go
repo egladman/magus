@@ -8,13 +8,17 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"text/template"
 
 	sprig "github.com/Masterminds/sprig/v3"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 )
 
@@ -140,6 +144,15 @@ func emitItemNames[T any](out io.Writer, items []T, name func(T) string) error {
 	return emitNames(out, names)
 }
 
+// emitRecord renders every format but text: v in a structured one, names
+// under -o name. Taking names here means a command cannot forget -o name.
+func emitRecord(opts output.Options, v any, names []string) error {
+	if opts.Format == outputName {
+		return emitNames(os.Stdout, names)
+	}
+	return emitFormatted(opts, v)
+}
+
 // outputWriter renders json, yaml, jsonl and template through magus's one JSON codec,
 // so -o json and a template see the same wire form every other byte magus writes has.
 var outputWriter = output.Writer{
@@ -211,3 +224,123 @@ func templateJoin(list any, sep string) string {
 	}
 	return strings.Join(parts, sep)
 }
+
+// commandsWithoutOutput names the verbs that render nothing structured, keyed by the
+// name they hand commandParse.
+//
+// -o is bound into EVERY FlagSet (bindDisplayFlags), because it is a global flag that
+// may precede or follow the subcommand. A verb that never consults it therefore accepted
+// `-o json`, printed prose, and exited 0: the accepted-and-ignored failure that costs
+// most in a pipe, since the caller's parse fails somewhere else entirely.
+//
+// Declared rather than derived: deriving it needs a check AFTER the verb has had its
+// chance to consult -o, which is a post-dispatch hook this file cannot reach. A wrong
+// entry here is loud rather than silent (the verb's own `-o json` tests fail), which is
+// what makes the list safe to keep by hand.
+var commandsWithoutOutput = map[string]bool{
+	"affected --bisect":           true,
+	"agent harness install":       true,
+	"agent install":               true,
+	"agent starter":               true,
+	"broker":                      true,
+	"broker stop":                 true,
+	"buzz":                        true,
+	"buzz lsp":                    true,
+	"completion":                  true,
+	"config cache export":         true,
+	"config cache import":         true,
+	"config cache prune":          true,
+	"config console token create": true,
+	"config console token ls":     true,
+	"config console token revoke": true,
+	"config history dedup":        true,
+	"config history import":       true,
+	"config history passed":       true,
+	"config mcp connector create": true,
+	"config mcp connector ls":     true,
+	"config mcp connector revoke": true,
+	"config set":                  true,
+	"config token generate":       true,
+	"config token print":          true,
+	"config token revoke":         true,
+	"config token status":         true,
+	"graph build":                 true,
+	"graph pull":                  true,
+	"graph push":                  true,
+	"init":                        true,
+	"job watch":                   true,
+	"man install":                 true,
+	"mcp":                         true,
+	"notes capture":               true,
+	"notes edit":                  true,
+	"queue apply":                 true,
+	"queue gate":                  true,
+	"queue ls":                    true,
+	"queue plan":                  true,
+	"queue validate":              true,
+	"self install-shorthand":      true,
+	"self place":                  true,
+	"self update":                 true,
+	"server prune-preserved":      true,
+	"server reload":               true,
+	"server rotate-activities":    true,
+	"server rotate-logs":          true,
+	"server start":                true,
+	"server stop":                 true,
+	"vcs merge-driver":            true,
+	"vcs resolve":                 true,
+	"watch":                       true,
+}
+
+// checkOutputSupported rejects -o on a verb that renders nothing structured. Usage-class
+// (exit 2): the flag was never going to do anything, so failing before the work happens
+// is the whole point.
+//
+// It asks the FlagSet whether -o was typed on THIS invocation rather than reading
+// global.output, which is ambient: bindDisplayFlags seeds each flag's default from the
+// live global. A value left there by an earlier dispatch on the same process (one
+// adopted run in the server, one testscript command) would otherwise fail the next
+// command for a flag nobody passed it.
+func checkOutputSupported(name string, fs *flag.FlagSet) error {
+	if !commandsWithoutOutput[name] {
+		return nil
+	}
+	if !flagWasSet(fs, "output") && !flagWasSet(fs, "o") {
+		return nil
+	}
+	return exit.Usagef("magus %s: -o is not supported by this command", name)
+}
+
+// refuseOutputOnPath is checkOutputSupported for what commandParse never sees:
+// a -o before the verb, and a verb with a FlagSet of its own.
+// It runs once per process, so output is what this invocation typed.
+func refuseOutputOnPath(output string, args []string) error {
+	if output == "" {
+		return nil
+	}
+	path := commandPath(args)
+	if !commandsWithoutOutput[path] {
+		return nil
+	}
+	return exit.Usagef("magus %s: -o is not supported by this command", path)
+}
+
+// commandPath is the deepest command args name in the tree, such as
+// "config cache prune". Flags and words no child answers to are skipped.
+func commandPath(args []string) string {
+	var path []string
+	children := commands.Root.Children
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		i := slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == arg })
+		if i < 0 {
+			continue
+		}
+		path = append(path, arg)
+		children = children[i].Children
+	}
+	return strings.Join(path, " ")
+}
+

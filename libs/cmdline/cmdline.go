@@ -88,6 +88,10 @@ type Flag struct {
 	// AliasOf names the flag this one is a second spelling of (-t for --test). Both
 	// keep their help line, and the generated binder binds them to one variable.
 	AliasOf string
+
+	// Group is the heading -h prints this flag under, such as a mode's usage
+	// line. Empty prints it first, under no heading.
+	Group string
 }
 
 // Operand is a word a command dispatches on, such as a target name.

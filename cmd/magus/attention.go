@@ -232,12 +232,8 @@ func attentionDispose(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if opts.Format == outputName {
-		fmt.Println(req.ID)
-		return nil
-	}
 	if opts.Format != outputText {
-		return emitFormatted(opts, req)
+		return emitRecord(opts, req, []string{req.ID})
 	}
 	fmt.Fprintf(os.Stdout, "disposed %s, open %s, raised by %s from invocation %s\n",
 		req.ID,

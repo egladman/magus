@@ -911,6 +911,11 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// `magus run build --concurrency 4` silently ran at the default width, and every
 	// other generated config flag was dead in that position too.
 	bindGlobalsAfterSubcommand(rest)
+	if err := refuseOutputOnPath(global.output, rest); err != nil {
+		stopFlags()
+		slog.ErrorContext(rootCtx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
+		return startupResult{cleanup: cleanup}, exit.Usage
+	}
 	if err := errors.Join(finalizeConfig(), refuseInheritedSandboxWeakened(globalCfg.Sandbox.Mode)); err != nil {
 		stopFlags()
 		slog.ErrorContext(rootCtx, "invalid configuration from flags", attr.Notice(""), attr.Component("magus"), attr.Error(err))

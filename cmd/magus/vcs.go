@@ -1135,11 +1135,10 @@ func vcsLsFilesCommand(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	switch opts.Format {
-	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, list)
+	if opts.Format == outputText {
+		return emitNames(os.Stdout, list.Files)
 	}
-	return emitNames(os.Stdout, list.Files)
+	return emitRecord(opts, list, list.Files)
 }
 
 // lsFilesFacts gathers what the selection reads about each dirty path.

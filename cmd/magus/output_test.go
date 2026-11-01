@@ -3,15 +3,27 @@ package main
 import (
 	"bytes"
 	"flag"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
+	"maps"
 	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -548,4 +560,257 @@ func TestOutputDestinationSilentTee(t *testing.T) {
 			assert.Equal(t, record, string(got), "the tee file always holds the record")
 		})
 	}
+}
+
+// outputFormatsSuite pins docs/reference/output-formats.md: a command with a
+// record renders every format, and a command without one refuses -o.
+// A command's formats live in its Go, so the suite reads the package's source.
+type outputFormatsSuite struct {
+	suite.Suite
+	funcs    map[string]*ast.FuncDecl
+	parsedAt map[string]string // a FlagSet's name, or its literal prefix, to its func
+}
+
+func TestOutputFormatsSuite(t *testing.T) { suite.Run(t, new(outputFormatsSuite)) }
+
+func (s *outputFormatsSuite) SetupSuite() {
+	paths, err := filepath.Glob("*.go")
+	s.Require().NoError(err)
+	s.funcs, s.parsedAt = map[string]*ast.FuncDecl{}, map[string]string{}
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		s.Require().NoError(err)
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
+				// reach goes by name, so a func outranks a method.
+				if fn.Recv == nil || s.funcs[fn.Name.Name] == nil {
+					s.funcs[fn.Name.Name] = fn
+				}
+				s.recordParses(fn)
+			}
+		}
+	}
+}
+
+func (s *outputFormatsSuite) recordParses(fn *ast.FuncDecl) {
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return true
+		}
+		switch sel := call.Fun.(type) {
+		case *ast.Ident:
+			if sel.Name != "commandParse" {
+				return true
+			}
+		case *ast.SelectorExpr:
+			if sel.Sel.Name != "NewFlagSet" {
+				return true
+			}
+		default:
+			return true
+		}
+		if name, ok := leadingString(call.Args[0]); ok {
+			s.parsedAt[name] = fn.Name.Name
+		}
+		return true
+	})
+}
+
+// leadingString is expr's string literal, or the one a concatenation opens.
+func leadingString(expr ast.Expr) (string, bool) {
+	switch e := expr.(type) {
+	case *ast.BinaryExpr:
+		return leadingString(e.X)
+	case *ast.BasicLit:
+		text, err := strconv.Unquote(e.Value)
+		return text, err == nil
+	}
+	return "", false
+}
+
+// handler finds the func that parses a leaf's flags.
+func (s *outputFormatsSuite) handler(leaf string) (string, bool) {
+	words := strings.Fields(leaf)
+	for i, word := range words[1:] {
+		words[i+1] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	if camel := strings.Join(words, ""); len(words) > 1 && s.funcs[camel] != nil {
+		return camel, true
+	}
+	for _, name := range []string{leaf, leaf + "s", strings.TrimSuffix(leaf, "s")} {
+		if fn, ok := s.parsedAt[name]; ok {
+			return fn, true
+		}
+	}
+	for name, fn := range s.parsedAt {
+		if strings.HasSuffix(name, " ") && strings.HasPrefix(leaf+" ", name) {
+			return fn, true
+		}
+	}
+	parent, _, ok := cutLastWord(leaf)
+	if !ok {
+		return "", false
+	}
+	return s.handler(parent)
+}
+
+func cutLastWord(path string) (rest, last string, ok bool) {
+	i := strings.LastIndex(path, " ")
+	if i < 0 {
+		return "", "", false
+	}
+	return path[:i], path[i+1:], true
+}
+
+// reach is every func of this package fn names, directly or through another.
+func (s *outputFormatsSuite) reach(fn string) map[string]bool {
+	seen := map[string]bool{fn: true}
+	for queue := []string{fn}; len(queue) > 0; queue = queue[1:] {
+		ast.Inspect(s.funcs[queue[0]], func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if ok && s.funcs[id.Name] != nil && !seen[id.Name] {
+				seen[id.Name] = true
+				queue = append(queue, id.Name)
+			}
+			return true
+		})
+	}
+	return seen
+}
+
+func (s *outputFormatsSuite) TestEveryLeafRendersEveryFormatOrRefusesThem() {
+	cmdline.Walk(commands.Root, func(leaf string, c cmdline.Command) {
+		if len(c.Children) > 0 || commandsWithoutOutput[leaf] {
+			return
+		}
+		fn, ok := s.handler(leaf)
+		if !s.True(ok, "no commandParse or FlagSet is named %q: name one, or add it to commandsWithoutOutput", leaf) {
+			return
+		}
+		reached := s.reach(fn)
+		s.True(reached["writeFormatted"], "%s reaches no structured printer from %s: render a record or add it to commandsWithoutOutput", leaf, fn)
+		s.True(reached["emitNames"], "%s reaches no -o name printer from %s", leaf, fn)
+	})
+}
+
+func (s *outputFormatsSuite) TestEveryRefusalNamesAVerbThatExists() {
+	inTree := map[string]bool{}
+	cmdline.Walk(commands.Root, func(leaf string, _ cmdline.Command) { inTree[leaf] = true })
+	for _, verb := range slices.Sorted(maps.Keys(commandsWithoutOutput)) {
+		name := strings.Split(verb, " --")[0]
+		_, parsed := s.handler(name)
+		s.True(inTree[name] || parsed, "commandsWithoutOutput names %q, which nothing parses", verb)
+	}
+}
+
+func (s *outputFormatsSuite) TestNoFormatSwitchFallsThroughToText() {
+	for name, fn := range s.funcs {
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			sw, ok := n.(*ast.SwitchStmt)
+			if !ok || !isFormatField(sw.Tag) {
+				return true
+			}
+			var structured, named, fallback bool
+			for _, stmt := range sw.Body.List {
+				clause := stmt.(*ast.CaseClause)
+				fallback = fallback || clause.List == nil
+				for _, expr := range clause.List {
+					id, ok := expr.(*ast.Ident)
+					structured = structured || ok && id.Name == "outputJSON"
+					named = named || ok && id.Name == "outputName"
+				}
+			}
+			s.False(structured && !named && !fallback, "%s switches on -o with json and no name arm or default", name)
+			return true
+		})
+	}
+}
+
+func isFormatField(expr ast.Expr) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	return ok && sel.Sel.Name == "Format"
+}
+
+func (s *outputFormatsSuite) TestAFuncThatRendersARecordAlsoHandlesName() {
+	// emitRunResult's callers switch on -o name first.
+	exempt := map[string]bool{"emitFormatted": true, "emitRecord": true, "emitRunResult": true}
+	for name, fn := range s.funcs {
+		var renders, names bool
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok {
+				renders = renders || id.Name == "emitFormatted" || id.Name == "writeFormatted"
+				names = names || id.Name == "outputName" || id.Name == "emitRecord"
+			}
+			return true
+		})
+		s.False(renders && !names && !exempt[name], "%s renders a record and never decides -o name; use emitRecord", name)
+	}
+}
+
+func (s *outputFormatsSuite) TestNoCommandRefusesAFormatByName() {
+	for name, fn := range s.funcs {
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			s.False(ok && strings.Contains(lit.Value, "-o %s is not supported"), "%s refuses a format by name", name)
+			return true
+		})
+	}
+}
+
+func (s *outputFormatsSuite) TestOutputBeforeTheVerbIsRefused() {
+	err := refuseOutputOnPath("json", []string{"server", "stop"})
+	s.Equal(exit.Usage, exit.Code(err))
+	s.ErrorContains(err, "magus server stop: -o is not supported")
+}
+
+func (s *outputFormatsSuite) TestOutputOnAVerbWithARecordPasses() {
+	s.NoError(refuseOutputOnPath("json", []string{"--root", ".", "where", "x"}))
+}
+
+func (s *outputFormatsSuite) TestNoOutputPasses() {
+	s.NoError(refuseOutputOnPath("", []string{"server", "stop"}))
+}
+
+func (s *outputFormatsSuite) TestCommandPathStopsAtTheDeepestChild() {
+	s.Equal("config cache prune", commandPath([]string{"config", "--x", "cache", "prune", "a"}))
+	s.Equal("refs", commandPath([]string{"refs", "--", "config"}))
+}
+
+func (s *outputFormatsSuite) TestEmitRecordRendersEveryFormat() {
+	record := whereOutput{Workspace: "/w", Count: 1, Matches: []whereMatch{{Path: "a"}}}
+	render := func(format string) string {
+		opts, err := output.Parse(format)
+		s.Require().NoError(err)
+		return captureStdout(s.T(), func() {
+			s.Require().NoError(emitRecord(opts, record, []string{"a"}))
+		})
+	}
+	s.Contains(render("json"), `"workspace": "/w"`)
+	s.Contains(render("yaml"), "workspace: /w")
+	s.Contains(render("jsonl"), `"path":"a"`)
+	s.Equal("a\n", render("name"))
+	s.Equal("yes a", render(`template={{if gt .count 0.0}}yes{{end}}{{range .matches}} {{.path}}{{end}}`))
+}
+
+func (s *outputFormatsSuite) TestHelpPrintsGroupsAndExamplesFromTheTree() {
+	var buf bytes.Buffer
+	fs := flag.NewFlagSet("refs", flag.ContinueOnError)
+	fs.SetOutput(&buf)
+	flaggen.BindRefs(fs)
+	printOwnDefaults(fs)
+	got := buf.String()
+	s.Contains(got, "Every site: magus refs <symbol> --occurrences [<path>...]\n  --limit int\n")
+	s.Contains(got, "Search text with no index: magus refs --text <pattern> [<path>...]")
+	s.Contains(got, "Examples:\n  magus refs Open\n")
+	s.NotContains(got, "--file")
+}
+
+func (s *outputFormatsSuite) TestHelpPointsAtTheReference() {
+	s.Contains(outputFormatHelp, "docs/reference/output-formats.md")
+	_, err := os.Stat("../../docs/reference/output-formats.md")
+	s.NoError(err)
 }
