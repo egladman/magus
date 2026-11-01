@@ -156,16 +156,16 @@ type configCacheImportOutput struct {
 }
 
 type configCacheSpellRow struct {
-	Spell       string           `json:"spell,omitempty"`
+	Spell       string            `json:"spell,omitempty"`
 	Outcome     spellCacheOutcome `json:"outcome"`
-	Key         string           `json:"key"`
-	Exact       bool             `json:"exact"`
-	Files       int              `json:"files"`
-	Bytes       int64            `json:"bytes"`
-	Transferred int64            `json:"transferred"`
-	Skipped     int              `json:"skipped"`
-	Refused     []string         `json:"refused,omitempty"`
-	Dirs        []string         `json:"dirs,omitempty"`
+	Key         string            `json:"key"`
+	Exact       bool              `json:"exact"`
+	Files       int               `json:"files"`
+	Bytes       int64             `json:"bytes"`
+	Transferred int64             `json:"transferred"`
+	Skipped     int               `json:"skipped"`
+	Refused     []string          `json:"refused,omitempty"`
+	Dirs        []string          `json:"dirs,omitempty"`
 }
 
 // spellCacheOutcome is what a remote import did for one spell.

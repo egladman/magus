@@ -556,7 +556,6 @@ func TestIntegrationHolderMergesItsBranchesOnEveryPath(t *testing.T) {
 	assert.False(t, mergesBase("done-a", "", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
 }
 
-
 // standingWorker is a worker row on a checkout its fork made.
 type standingWorker struct {
 	suite.Suite
