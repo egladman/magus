@@ -319,7 +319,7 @@ func (s *RepeatsSuite) write(n int, worker string) SessionCall {
 }
 
 func (s *RepeatsSuite) TestOneCallWithOneAnswerFormsARunWithItsTurnsAndToolTime() {
-	got := Repeats([]SessionCall{s.poll(0, "", "c", "r"), s.poll(5, "", "c", "r"), s.poll(9, "", "c", "r")})
+	got := repeats([]SessionCall{s.poll(0, "", "c", "r"), s.poll(5, "", "c", "r"), s.poll(9, "", "c", "r")})
 	s.Equal([]RepeatRun{{
 		Tool: "Bash", CallDigest: "c", ResultDigest: "r", Count: 3,
 		First: s.start, Last: s.start.Add(9 * time.Second), ToolMs: 300, SpanMs: 9000,
@@ -327,38 +327,39 @@ func (s *RepeatsSuite) TestOneCallWithOneAnswerFormsARunWithItsTurnsAndToolTime(
 }
 
 func (s *RepeatsSuite) TestAChangedAnswerStartsANewRun() {
-	got := Repeats([]SessionCall{s.poll(0, "", "c", "r1"), s.poll(1, "", "c", "r1"), s.poll(2, "", "c", "r2")})
-	s.Require().Len(got, 1)
-	s.Equal("r1", got[0].ResultDigest)
-	s.Equal(2, got[0].Count)
+	got := repeats([]SessionCall{s.poll(0, "", "c", "r1"), s.poll(1, "", "c", "r1"), s.poll(2, "", "c", "r2")})
+	s.Equal([]RepeatRun{{
+		Tool: "Bash", CallDigest: "c", ResultDigest: "r1", Count: 2,
+		First: s.start, Last: s.start.Add(time.Second), ToolMs: 200, SpanMs: 1000,
+	}}, got)
 }
 
 func (s *RepeatsSuite) TestAWriteByTheSameWorkerEndsTheRun() {
-	got := Repeats([]SessionCall{s.poll(0, "w", "c", "r"), s.write(1, "w"), s.poll(2, "w", "c", "r")})
+	got := repeats([]SessionCall{s.poll(0, "w", "c", "r"), s.write(1, "w"), s.poll(2, "w", "c", "r")})
 	s.Empty(got)
 }
 
 func (s *RepeatsSuite) TestAnotherWorkersWriteLeavesTheRunAlone() {
-	got := Repeats([]SessionCall{s.poll(0, "w1", "c", "r"), s.write(1, "w2"), s.poll(2, "w1", "c", "r")})
+	got := repeats([]SessionCall{s.poll(0, "w1", "c", "r"), s.write(1, "w2"), s.poll(2, "w1", "c", "r")})
 	s.Require().Len(got, 1)
 	s.Equal("w1", got[0].Worker)
 }
 
 func (s *RepeatsSuite) TestTwoWorkersRunningTheSameCallAreNotARepeat() {
-	got := Repeats([]SessionCall{s.poll(0, "w1", "c", "r"), s.poll(1, "w2", "c", "r")})
+	got := repeats([]SessionCall{s.poll(0, "w1", "c", "r"), s.poll(1, "w2", "c", "r")})
 	s.Empty(got)
 }
 
 func (s *RepeatsSuite) TestAnUnobservedDigestJoinsNoRun() {
 	noResult := s.poll(0, "", "c", "")
 	noCall := s.poll(1, "", "", "r")
-	s.Empty(Repeats([]SessionCall{noResult, noResult, noCall, noCall}))
+	s.Empty(repeats([]SessionCall{noResult, noResult, noCall, noCall}))
 }
 
 func (s *RepeatsSuite) TestRowsWithoutToolTimeAreNotCounted() {
 	pre := s.poll(0, "", "c", "r")
 	pre.ToolMs = 0
-	s.Empty(Repeats([]SessionCall{pre, pre}))
+	s.Empty(repeats([]SessionCall{pre, pre}))
 }
 
 func (s *RepeatsSuite) TestForSessionCarriesWorkerDigestsAndTheUnobservedNote() {
@@ -374,9 +375,9 @@ func (s *RepeatsSuite) TestForSessionCarriesWorkerDigestsAndTheUnobservedNote() 
 	s.Equal("w1", got.Calls[0].Worker)
 	s.Equal([]string{"result"}, got.Calls[2].Unobserved)
 	s.Require().Len(got.Repeats, 1)
-	s.Equal(2, got.Repeats[0].Count)
-	s.Equal(int64(100), got.Repeats[0].ToolMs)
-	s.Equal("w1", got.Repeats[0].Worker)
+	run := got.Repeats[0]
+	run.First, run.Last, run.SpanMs = time.Time{}, time.Time{}, 0
+	s.Equal(RepeatRun{Worker: "w1", Thread: "unknown", Tool: "Bash", CallDigest: "c", ResultDigest: "r", Count: 2, ToolMs: 100}, run)
 }
 
 func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {
