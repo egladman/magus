@@ -241,7 +241,7 @@ type Step struct {
 	// serves every platform. Resolved from the target's declaration or its spells';
 	// false (the default) keys the platform. See types.PlatformSensitivity.
 	// IncludeOS and IncludeArch select which host facts key this step. Separate
-	// because they move independently; see config.CacheInclude.
+	// because they move independently; see config.Cache's Include.
 	IncludeOS   bool
 	IncludeArch bool
 	// Stamps are files a tool writes when its work completes, relative to WorkspaceRoot

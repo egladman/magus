@@ -198,8 +198,9 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 			for _, h := range entry.Hooks {
 				// One magus command per hook: a shell around it is logic no template
 				// carries and no reader downloads. The claude-code spell's checkout-first
-				// prefix is the one exception, and only verbatim.
-				command := h.Command
+				// prefix is the one exception, and only verbatim. The harness marker on a
+				// hook a spell owns is the other.
+				command := strings.TrimSuffix(h.Command, " # magus:harness")
 				if rest, ok := strings.CutPrefix(command, checkoutMagusPrefix); ok {
 					command = "magus " + rest
 				}
