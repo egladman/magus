@@ -12,6 +12,7 @@ namespace exampletypedresults;
 
 import "flags";
 import "magus";
+import "result";
 import "std";
 
 import "assert";
@@ -23,56 +24,51 @@ final EFFECT = "read";
 final USAGE = "usage: magus buzz hack/dev/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]";
 final HELP = "cost: needs the code index\n{USAGE}";
 
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
-
 // fileLines classifies paths the way `magus describe file` does: owning project and role.
-export fun fileLines(paths: [str]) > Result::<[str]> {
+export fun fileLines(paths: [str]) > result\Result::<[str]> {
     try {
         final report: magus\FileReport = magus\describe.file(paths);
         final lines = mut [<str>];
         foreach (f in report.files) {
             lines.append("{f.path}: project {f.project}, {f.role}");
         }
-        return Result::<[str]>{ value = lines };
+        return result\ok::<[str]>(lines);
     } catch (err: any) {
-        return Result::<[str]>{ error = "example-typed-results: describe the files: {err}" };
+        return result\caught::<[str]>(err, doing: "example-typed-results: describe the files");
     }
 }
 
 // queryLines are a knowledge-graph search's matches. Read the verdict before trusting an
 // empty list: `unknown` means part of the workspace had no index to search.
-export fun queryLines(terms: str) > Result::<[str]> {
+export fun queryLines(terms: str) > result\Result::<[str]> {
     try {
         final q: magus\QueryResult = magus\query(terms, opts: magus\QueryOptions{ limit = 5 });
         final lines = mut ["{q.matchCount} matches ({q.answer.verdict.value})"];
         foreach (m in q.matches) {
             lines.append("  {m.kind} {m.label}");
         }
-        return Result::<[str]>{ value = lines };
+        return result\ok::<[str]>(lines);
     } catch (err: any) {
-        return Result::<[str]>{ error = "example-typed-results: query {terms}: {err}" };
+        return result\caught::<[str]>(err, doing: "example-typed-results: query {terms}");
     }
 }
 
 // refsLines are where a code symbol is defined and how widely it is used.
-export fun refsLines(symbol: str) > Result::<[str]> {
+export fun refsLines(symbol: str) > result\Result::<[str]> {
     try {
         final r: magus\RefsResult = magus\refs(symbol, opts: magus\RefsOptions{ limit = 5 });
         final lines = mut ["{r.label}: {r.refCount} references in {r.fileCount} files ({r.answer.verdict.value})"];
         foreach (d in r.defs) {
             lines.append("  defined in {d.file}:{d.lines.join(",")}");
         }
-        return Result::<[str]>{ value = lines };
+        return result\ok::<[str]>(lines);
     } catch (err: any) {
-        return Result::<[str]>{ error = "example-typed-results: refs {symbol}: {err}" };
+        return result\caught::<[str]>(err, doing: "example-typed-results: refs {symbol}");
     }
 }
 
 // jobLines count the job store's rows by state, and the write paths the declared ones hold.
-export fun jobLines() > Result::<[str]> {
+export fun jobLines() > result\Result::<[str]> {
     try {
         final list: magus\JobList = magus\job.list();
         final byState = mut {<str: int>};
@@ -90,9 +86,9 @@ export fun jobLines() > Result::<[str]> {
         foreach (line in declared) {
             lines.append(line);
         }
-        return Result::<[str]>{ value = lines };
+        return result\ok::<[str]>(lines);
     } catch (err: any) {
-        return Result::<[str]>{ error = "example-typed-results: list the jobs: {err}" };
+        return result\caught::<[str]>(err, doing: "example-typed-results: list the jobs");
     }
 }
 
@@ -116,7 +112,7 @@ export fun main(args: [str]) > void !> any {
     sections.append(jobLines());
     foreach (s in sections) {
         if (s.error != null) {
-            throw s.error!;
+            throw s.error!.message;
         }
         std\print("");
         foreach (line in s.value!) {

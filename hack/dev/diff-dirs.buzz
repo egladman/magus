@@ -15,6 +15,7 @@ import "diff";
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "sort";
 import "std";
 
@@ -27,11 +28,6 @@ final HELP = "cost: grows with tree size\n{USAGE}";
 // never content either side authored.
 final PRUNED = {".git": true, ".magus": true, "node_modules": true};
 
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
-
 export object Change {
     path: str,
     // side is "a" or "b" for a file only that side has, "both" for one that differs.
@@ -40,16 +36,16 @@ export object Change {
 }
 
 // files returns every file under root outside the pruned directories, root-relative.
-export fun files(root: str) > Result::<[str]> {
+export fun files(root: str) > result\Result::<[str]> {
     final acc = mut [<str>];
     final walked = walkInto(root, rel: "", acc: acc);
     if (walked.error != null) {
-        return Result::<[str]>{ error = walked.error };
+        return result\Result::<[str]>{ error = walked.error };
     }
-    return Result::<[str]>{ value = acc };
+    return result\ok::<[str]>(acc);
 }
 
-fun walkInto(root: str, rel: str, acc: mut [str]) > Result::<bool> {
+fun walkInto(root: str, rel: str, acc: mut [str]) > result\Result::<bool> {
     final dir = if (rel == "") root else "{root}/{rel}";
     try {
         foreach (name in fs\listDir(dir)) {
@@ -64,13 +60,13 @@ fun walkInto(root: str, rel: str, acc: mut [str]) > Result::<bool> {
             }
         }
     } catch (err: any) {
-        return Result::<bool>{ error = "diff-dirs: list {dir}: {err}" };
+        return result\caught::<bool>(err, doing: "diff-dirs: list {dir}");
     }
-    return Result::<bool>{ value = true };
+    return result\ok::<bool>(true);
 }
 
 // compare reports each of paths that differs between a and b, in path order.
-export fun compare(a: str, b: str, paths: [str]) > Result::<[Change]> {
+export fun compare(a: str, b: str, paths: [str]) > result\Result::<[Change]> {
     final changes = mut [<Change>];
     try {
         foreach (p in sort\strings(paths)) {
@@ -88,9 +84,9 @@ export fun compare(a: str, b: str, paths: [str]) > Result::<[Change]> {
             }
         }
     } catch (err: any) {
-        return Result::<[Change]>{ error = "diff-dirs: compare {a} with {b}: {err}" };
+        return result\caught::<[Change]>(err, doing: "diff-dirs: compare {a} with {b}");
     }
-    return Result::<[Change]>{ value = changes };
+    return result\ok::<[Change]>(changes);
 }
 
 // union is every path either side holds, once.
@@ -127,11 +123,11 @@ export fun main(args: [str]) > void !> any {
     if (a == "" or b == "" or !fs\isDir(a) or !fs\isDir(b)) {
         throw "diff-dirs: --a and --b each name a directory\n{USAGE}";
     }
-    final result = diffDirs(a, b: b);
-    if (result.error != null) {
-        throw result.error!;
+    final diffed = diffDirs(a, b: b);
+    if (diffed.error != null) {
+        throw diffed.error!.message;
     }
-    final report = result.value!;
+    final report = diffed.value!;
     std\print("read-only");
     foreach (c in report.changes) {
         std\print(render(c));
@@ -150,16 +146,16 @@ export object Report {
 }
 
 // diffDirs compares every file under a and b that is not a declared output.
-export fun diffDirs(a: str, b: str) > Result::<Report> {
+export fun diffDirs(a: str, b: str) > result\Result::<Report> {
     final kept = mut [<str>];
     var outputs = 0;
     final inA = files(a);
     if (inA.error != null) {
-        return Result::<Report>{ error = inA.error };
+        return result\Result::<Report>{ error = inA.error };
     }
     final inB = files(b);
     if (inB.error != null) {
-        return Result::<Report>{ error = inB.error };
+        return result\Result::<Report>{ error = inB.error };
     }
     final all = union(inA.value!, b: inB.value!);
     if (all.len() > 0) {
@@ -172,14 +168,14 @@ export fun diffDirs(a: str, b: str) > Result::<Report> {
                 }
             }
         } catch (err: any) {
-            return Result::<Report>{ error = "diff-dirs: describe the files: {err}" };
+            return result\caught::<Report>(err, doing: "diff-dirs: describe the files");
         }
     }
     final changes = compare(a, b: b, paths: kept);
     if (changes.error != null) {
-        return Result::<Report>{ error = changes.error };
+        return result\Result::<Report>{ error = changes.error };
     }
-    return Result::<Report>{ value = Report{ changes = changes.value!, compared = kept.len(), outputs = outputs } };
+    return result\ok::<Report>(Report{ changes = changes.value!, compared = kept.len(), outputs = outputs });
 }
 
 object Dirs {
@@ -187,7 +183,7 @@ object Dirs {
     b: str,
 }
 
-fun fixture() > Result::<Dirs> {
+fun fixture() > result\Result::<Dirs> {
     try {
         final root = fs\tempDir("diff-dirs-");
         final layout = {
@@ -201,9 +197,9 @@ fun fixture() > Result::<Dirs> {
             fs\mkdirAll(fs\dirname("{root}/{p}"));
             fs\writeFile("{root}/{p}", content: body);
         }
-        return Result::<Dirs>{ value = Dirs{ a = "{root}/a", b = "{root}/b" } };
+        return result\ok::<Dirs>(Dirs{ a = "{root}/a", b = "{root}/b" });
     } catch (err: any) {
-        return Result::<Dirs>{ error = "diff-dirs: build the fixture: {err}" };
+        return result\caught::<Dirs>(err, doing: "diff-dirs: build the fixture");
     }
 }
 

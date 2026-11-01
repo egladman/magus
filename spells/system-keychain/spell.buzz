@@ -33,6 +33,7 @@ import "magus/spell";
 
 import "os";
 import "proc";
+import "result";
 
 export fun mgs_getName() > str { return "system-keychain"; }
 
@@ -56,10 +57,17 @@ fun has(haystack: str, needle: str) > bool {
 // it, because the CLIs find the item by service alone and an account in the reference
 // would make one machine's entry unreadable on another.
 export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //nolint:no-throw // magus reads a raise as an unresolved secret
-    final ref = req.ref;
-    if (ref == "") {
+    final read = readSecret(req.ref);
+    if (read.error -> e) {
         //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw "system-keychain: no reference given";
+        throw e.message;
+    }
+    return read.value!;
+}
+
+fun readSecret(ref: str) > result\Result::<Secret> {
+    if (ref == "") {
+        return result\fail::<Secret>("system-keychain: no reference given");
     }
     final platform = os\platform()[0];
     if (platform == "darwin") {
@@ -68,72 +76,72 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //no
     if (platform == "linux") {
         return from_secret_tool(ref);
     }
-    //nolint:no-throw // magus reads a raise as an unresolved secret
-    throw "system-keychain: not implemented on " + platform + " yet; export " + ref
-        + " in the environment and select the environment provider instead";
+    return result\fail::<Secret>("system-keychain: not implemented on " + platform + " yet; export " + ref
+        + " in the environment and select the environment provider instead");
 }
 
 // from_security reads the macOS keychain. `-w` prints the password alone to stdout with
 // a trailing newline; magus trims captured output. quiet is not optional: that stdout
 // IS the secret, and without it the value is echoed to the console and into the run
 // log magus persists.
-fun from_security(ref: str) > Secret !> any { //nolint:no-throw // magus reads a raise as an unresolved secret
+fun from_security(ref: str) > result\Result::<Secret> {
     try {
         _ = proc\which("security");
     } catch (e) {
-        //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw "system-keychain: the `security` CLI is not on PATH";
+        return result\fail::<Secret>("system-keychain: the `security` CLI is not on PATH");
     }
 
-    final res = proc\exec("security", args: ["find-generic-password", "-s", ref, "-w"], dir: ".",
-        opts: proc\ExecOptions{allowFailure = true, quiet = true});
-    if (res["code"] != 0) {
-        final err = "{res["stderr"]}";
-        if (has(err, "could not be found")) {
-            //nolint:no-throw // magus reads a raise as an unresolved secret
-            throw "system-keychain: no generic password is stored under service " + ref + ". Store one with\n"
-                + "  security add-generic-password -a \"$USER\" -s " + ref + " -w\n"
-                + "which prompts for the value and never echoes it.";
+    try {
+        final res = proc\exec("security", args: ["find-generic-password", "-s", ref, "-w"], dir: ".",
+            opts: proc\ExecOptions{allowFailure = true, quiet = true});
+        if (res["code"] != 0) {
+            final err = "{res["stderr"]}";
+            if (has(err, needle: "could not be found")) {
+                return result\fail::<Secret>("system-keychain: no generic password is stored under service " + ref + ". Store one with\n"
+                    + "  security add-generic-password -a \"$USER\" -s " + ref + " -w\n"
+                    + "which prompts for the value and never echoes it.");
+            }
+            // Headless (no window to prompt in), a dismissed prompt, and a locked keychain
+            // are the three refusals `security` words differently; the remedy is the same.
+            if (has(err, needle: "User interaction is not allowed") or has(err, needle: "User canceled") or has(err, needle: "keychain is locked")) {
+                return result\fail::<Secret>("system-keychain: access to " + ref + " was refused; unlock the login keychain, or answer "
+                    + "Always Allow when the keychain asks about `security`.");
+            }
+            return result\fail::<Secret>("system-keychain: `security find-generic-password -s " + ref + " -w` failed: " + err.trim());
         }
-        // Headless (no window to prompt in), a dismissed prompt, and a locked keychain
-        // are the three refusals `security` words differently; the remedy is the same.
-        if (has(err, "User interaction is not allowed") or has(err, "User canceled") or has(err, "keychain is locked")) {
-            //nolint:no-throw // magus reads a raise as an unresolved secret
-            throw "system-keychain: access to " + ref + " was refused; unlock the login keychain, or answer "
-                + "Always Allow when the keychain asks about `security`.";
-        }
-        //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw "system-keychain: `security find-generic-password -s " + ref + " -w` failed: " + err.trim();
-    }
 
-    final value = "{res["stdout"]}";
-    if (value == "") {
-        //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw "system-keychain: " + ref + " resolved to an empty value; store it again with a non-empty password";
+        final value = "{res["stdout"]}";
+        if (value == "") {
+            return result\fail::<Secret>("system-keychain: " + ref + " resolved to an empty value; store it again with a non-empty password");
+        }
+        return result\ok::<Secret>(Secret{ value = value });
+    } catch (err: any) {
+        return result\caught::<Secret>(err, doing: "system-keychain: `security find-generic-password -s " + ref + " -w`");
     }
-    return Secret{ value = value };
 }
 
 // from_secret_tool reads the Secret Service on Linux. `lookup` prints the matching
 // secret alone and exits non-zero, printing nothing, when no item carries the
 // attribute; quiet for the same reason as above. Written to the `secret-tool` manual
 // and not exercised by this repository's own checks, which run on macOS.
-fun from_secret_tool(ref: str) > Secret !> any { //nolint:no-throw // magus reads a raise as an unresolved secret
+fun from_secret_tool(ref: str) > result\Result::<Secret> {
     try {
         _ = proc\which("secret-tool");
     } catch (e) {
-        //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw "system-keychain: the `secret-tool` CLI is not on PATH; it ships as libsecret-tools (Debian, Ubuntu) or libsecret (Fedora, Arch)";
+        return result\fail::<Secret>("system-keychain: the `secret-tool` CLI is not on PATH; it ships as libsecret-tools (Debian, Ubuntu) or libsecret (Fedora, Arch)");
     }
 
-    final res = proc\exec("secret-tool", args: ["lookup", "service", ref], dir: ".",
-        opts: proc\ExecOptions{allowFailure = true, quiet = true});
-    final value = "{res["stdout"]}";
-    if (res["code"] != 0 or value == "") {
-        //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw "system-keychain: no secret is stored under service " + ref + ". Store one with\n"
-            + "  secret-tool store --label=" + ref + " service " + ref + "\n"
-            + "which prompts for the value and never echoes it.";
+    try {
+        final res = proc\exec("secret-tool", args: ["lookup", "service", ref], dir: ".",
+            opts: proc\ExecOptions{allowFailure = true, quiet = true});
+        final value = "{res["stdout"]}";
+        if (res["code"] != 0 or value == "") {
+            return result\fail::<Secret>("system-keychain: no secret is stored under service " + ref + ". Store one with\n"
+                + "  secret-tool store --label=" + ref + " service " + ref + "\n"
+                + "which prompts for the value and never echoes it.");
+        }
+        return result\ok::<Secret>(Secret{ value = value });
+    } catch (err: any) {
+        return result\caught::<Secret>(err, doing: "system-keychain: `secret-tool lookup service " + ref + "`");
     }
-    return Secret{ value = value };
 }

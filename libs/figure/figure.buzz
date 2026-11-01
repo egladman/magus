@@ -33,16 +33,12 @@
 // from the page's `--magus-diagram-*` properties.
 namespace figure;
 
+import "result";
 import "std";
 import "assert";
 import "magus";
 
 // Result is what the private layers return. Exported calls raise it.
-object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
-
 // escapeSvg makes s safe as SVG text or as a double-quoted attribute value.
 fun escapeSvg(s: str) > str {
     return s.replace("&", with: "&amp;").replace("\"", with: "&quot;").replace("<", with: "&lt;").replace(">", with: "&gt;");
@@ -1128,10 +1124,10 @@ fun edgeStroke(kind: str) > Paint {
 // box face; a boundary goes under them because crossing it is what a connector is for.
 //
 // Style is optional: renderSvg(d, palette) draws the design system as shipped.
-fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > Result::<str> {
+fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > result\Result::<str> {
     final errs = validate(d);
     if (errs.len() > 0) {
-        return Result::<str>{ error = "diagram \"{d.id}\": " + errs.join("; ") };
+        return result\fail::<str>("diagram \"{d.id}\": " + errs.join("; "));
     }
 
     // A heading gets its own band and the content is translated beneath it, so authored
@@ -1180,11 +1176,11 @@ fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > Result::<str> {
     parts.append(renderLegend(d, p, s));
     parts.append("</g>");
     parts.append("</svg>");
-    return Result::<str>{ value = parts.join("") };
+    return result\ok::<str>(parts.join(""));
 }
 
 // drawn is the SVG, or "threw" when the render failed.
-fun drawn(r: Result::<str>) > str {
+fun drawn(r: result\Result::<str>) > str {
     return r.value ?? "threw";
 }
 
@@ -2423,7 +2419,7 @@ object Sketch {
     fun diagram() > Diagram !> str { //nolint:no-throw // the exported call raises
         final laid = layoutFlow(this);
         if (laid.error -> e) {
-            throw e; //nolint:no-throw // the exported call raises
+            throw e.message; //nolint:no-throw // the exported call raises
         }
         return laid.value!;
     }
@@ -2432,7 +2428,7 @@ object Sketch {
         final d = this.diagram();
         final drawnSvg = renderSvg(d, p: p, s: s);
         if (drawnSvg.error -> e) {
-            throw e; //nolint:no-throw // the exported call raises
+            throw e.message; //nolint:no-throw // the exported call raises
         }
         return drawnSvg.value!;
     }
@@ -5061,14 +5057,14 @@ fun layoutFindings(found: [Fault]) > [str] {
     return msgs;
 }
 
-fun layoutFlow(declared: Sketch) > Result::<Diagram> {
+fun layoutFlow(declared: Sketch) > result\Result::<Diagram> {
     final f = compose(declared);
     final structural = compositionFindings(declared);
     foreach (msg in declarationFindings(f)) { structural.append(msg); }
-    if (structural.len() > 0) { return Result::<Diagram>{ error = voiced(f.id, found: structural) }; }
+    if (structural.len() > 0) { return result\fail::<Diagram>(voiced(f.id, found: structural)); }
     final pl = plan(f);
     final contradictions = constraintFindings(f, pl: pl);
-    if (contradictions.len() > 0) { return Result::<Diagram>{ error = voiced(f.id, found: contradictions) }; }
+    if (contradictions.len() > 0) { return result\fail::<Diagram>(voiced(f.id, found: contradictions)); }
     // A label with no spot clear of every stroke sits in a gap its channels crowd; each gap
     // the connector spans grows by WidenStep and the figure is placed again. Past MaxWiden
     // rounds the label is the author's finding.
@@ -5077,14 +5073,14 @@ fun layoutFlow(declared: Sketch) > Result::<Diagram> {
     while (round <= MaxWiden) {
         final found: mut [str] = mut [<str>];
         final d = place(f, pl: pl, found: found, widen: widen);
-        if (found.len() > 0) { return Result::<Diagram>{ error = voiced(f.id, found: found) }; }
+        if (found.len() > 0) { return result\fail::<Diagram>(voiced(f.id, found: found)); }
         final wrong = faults(d);
         var crowded = 0;
         foreach (fault in wrong) {
             if (fault.rule == "label") { crowded = crowded + 1; }
         }
-        if (wrong.len() == 0) { return Result::<Diagram>{ value = d }; }
-        if (crowded < wrong.len() or round == MaxWiden) { return Result::<Diagram>{ error = voiced(f.id, found: layoutFindings(wrong)) }; }
+        if (wrong.len() == 0) { return result\ok::<Diagram>(d); }
+        if (crowded < wrong.len() or round == MaxWiden) { return result\fail::<Diagram>(voiced(f.id, found: layoutFindings(wrong))); }
         foreach (fault in wrong) {
             var li = 0;
             while (li < f.edges.len()) {
@@ -5103,7 +5099,7 @@ fun layoutFlow(declared: Sketch) > Result::<Diagram> {
         }
         round = round + 1;
     }
-    return Result::<Diagram>{ value = Diagram{} };
+    return result\ok::<Diagram>(Diagram{});
 }
 
 fun lookupNode(d: Diagram, id: str) > Node {
@@ -6512,24 +6508,24 @@ export enum<str> Theme { page, light, dark }
 export fun without(dirs: [magus\Dir], drop: [magus\Dir]) > [magus\Dir] !> str { //nolint:no-throw // the exported call raises
     final left = dropped(dirs, drop: drop);
     if (left.error -> e) {
-        throw e; //nolint:no-throw // the exported call raises
+        throw e.message; //nolint:no-throw // the exported call raises
     }
     return left.value!;
 }
 
-fun dropped(dirs: [magus\Dir], drop: [magus\Dir]) > Result::<[magus\Dir]> {
+fun dropped(dirs: [magus\Dir], drop: [magus\Dir]) > result\Result::<[magus\Dir]> {
     if (notDirs(dirs, call: "without") -> bad) {
-        return Result::<[magus\Dir]>{ error = bad };
+        return result\fail::<[magus\Dir]>(bad);
     }
     if (notDirs(drop, call: "without(drop:)") -> bad) {
-        return Result::<[magus\Dir]>{ error = bad };
+        return result\fail::<[magus\Dir]>(bad);
     }
     final held: mut {str: bool} = mut {<str: bool>};
     foreach (d in dirs) { held[d.path] = true; }
     final gone: mut {str: bool} = mut {<str: bool>};
     foreach (d in drop) {
         if (held[d.path] == null) {
-            return Result::<[magus\Dir]>{ error = "without drops {quote(d.path)}, which dirs does not hold; take it out of drop:" };
+            return result\fail::<[magus\Dir]>("without drops {quote(d.path)}, which dirs does not hold; take it out of drop:");
         }
         gone[d.path] = true;
     }
@@ -6537,7 +6533,7 @@ fun dropped(dirs: [magus\Dir], drop: [magus\Dir]) > Result::<[magus\Dir]> {
     foreach (d in dirs) {
         if (gone[d.path] == null) { kept.append(d); }
     }
-    return Result::<[magus\Dir]>{ value = kept };
+    return result\ok::<[magus\Dir]>(kept);
 }
 
 // recordPath is a Dir's path, or empty when d is not a Dir record. The checker lets any
@@ -6810,7 +6806,7 @@ export object Figure {
     fun diagram() > Diagram !> str { //nolint:no-throw // the exported call raises
         final laid = laidOut(this);
         if (laid.error -> e) {
-            throw e; //nolint:no-throw // the exported call raises
+            throw e.message; //nolint:no-throw // the exported call raises
         }
         return laid.value!;
     }
@@ -6911,14 +6907,14 @@ export fun draw(f: Figure, theme: Theme, anchorHref: str = "") > str !> str { //
     }
     final d = laidOut(f);
     if (d.error -> e) {
-        throw e; //nolint:no-throw // the exported call raises
+        throw e.message; //nolint:no-throw // the exported call raises
     }
     var p = pagePalette();
     if (theme == Theme.light) { p = lightPalette(); }
     if (theme == Theme.dark) { p = darkPalette(); }
     final painted = renderSvg(d.value!, p: p, s: Style{ anchorHref = anchorHref });
     if (painted.error -> e) {
-        throw e; //nolint:no-throw // the exported call raises
+        throw e.message; //nolint:no-throw // the exported call raises
     }
     if (theme == Theme.page) { return painted.value!; }
     return XmlDeclaration + painted.value!;
@@ -6936,14 +6932,14 @@ export fun nodeFact(n: Node) > str {
     return "node {n.id} {n.role.value} {n.label} / {n.sub} symbol {n.symbol} {n.signature ?? "unknown"}";
 }
 
-fun laidOut(fig: Figure) > Result::<Diagram> {
+fun laidOut(fig: Figure) > result\Result::<Diagram> {
     final lowest = lowered(fig);
     if (lowest.error -> e) {
-        return Result::<Diagram>{ error = e };
+        return result\Result::<Diagram>{ error = e };
     }
     final laid = layoutFlow(lowest.value!);
     if (laid.error -> e) {
-        return Result::<Diagram>{ error = revoiced(e) };
+        return result\fail::<Diagram>(revoiced(e.message));
     }
     return laid;
 }
@@ -7197,7 +7193,7 @@ object Derived {
 
 // lowered checks the figure against its records and turns it into the flow the layout
 // places, or raises every finding at once.
-fun lowered(fig: Figure) > Result::<Sketch> {
+fun lowered(fig: Figure) > result\Result::<Sketch> {
     final found: mut [str] = mut [<str>];
     final records: mut {str: magus\Dir} = mut {<str: magus\Dir>};
     final actorRecords: mut {str: Actor} = mut {<str: Actor>};
@@ -7453,9 +7449,9 @@ fun lowered(fig: Figure) > Result::<Sketch> {
     if (found.len() > 0) {
         final lines: mut [str] = mut [<str>];
         foreach (msg in found) { lines.append("figure {quote(fig.id)}: {msg}"); }
-        return Result::<Sketch>{ error = lines.join("\n") };
+        return result\fail::<Sketch>(lines.join("\n"));
     }
-    return Result::<Sketch>{ value = f };
+    return result\ok::<Sketch>(f);
 }
 
 // foldPair records the graph edge from directory src to dst as an edge between the boxes

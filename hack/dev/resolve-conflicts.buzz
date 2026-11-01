@@ -16,6 +16,7 @@ namespace resolveconflicts;
 import "diff";
 import "flags";
 import "fs";
+import "result";
 import "std";
 
 import "assert";
@@ -27,11 +28,6 @@ final USAGE = "usage: magus buzz hack/dev/resolve-conflicts.buzz -- --file <path
 final HELP = "cost: none; reads and writes one file\n{USAGE}";
 
 final SIDES = ["ours", "theirs", "both", "base"];
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 export object Hunk {
     index: int,
@@ -91,7 +87,7 @@ fun label(line: str) > str {
 
 // parse splits text into its plain runs and conflict hunks.
 // A marker out of order or an open hunk is an error: resolving half guesses.
-export fun parse(text: str) > Result::<Conflicted> {
+export fun parse(text: str) > result\Result::<Conflicted> {
     final lines = text.split("\n");
     final plain = mut [<[str]>];
     final hunks = mut [<Hunk>];
@@ -116,12 +112,12 @@ export fun parse(text: str) > Result::<Conflicted> {
                 hasBase = false;
                 theirs = mut [<str>];
             } else if (marker != "") {
-                return Result::<Conflicted>{ error = "line {i + 1}: a {marker} marker outside any conflict" };
+                return result\fail::<Conflicted>("line {i + 1}: a {marker} marker outside any conflict");
             } else {
                 run.append(line);
             }
         } else if (marker == "start") {
-            return Result::<Conflicted>{ error = "line {i + 1}: a conflict opens inside the conflict at line {start}" };
+            return result\fail::<Conflicted>("line {i + 1}: a conflict opens inside the conflict at line {start}");
         } else if (state == "ours" and marker == "base") {
             state = "base";
             hasBase = true;
@@ -135,7 +131,7 @@ export fun parse(text: str) > Result::<Conflicted> {
                 ours = ours, base = if (hasBase) base else null, baseLabel = baseLabel, theirs = theirs });
             state = "plain";
         } else if (marker != "") {
-            return Result::<Conflicted>{ error = "line {i + 1}: a {marker} marker out of order in the conflict at line {start}" };
+            return result\fail::<Conflicted>("line {i + 1}: a {marker} marker out of order in the conflict at line {start}");
         } else if (state == "ours") {
             ours.append(line);
         } else if (state == "base") {
@@ -145,19 +141,19 @@ export fun parse(text: str) > Result::<Conflicted> {
         }
     }
     if (state != "plain") {
-        return Result::<Conflicted>{ error = "the conflict at line {start} never closes" };
+        return result\fail::<Conflicted>("the conflict at line {start} never closes");
     }
     plain.append(run);
-    return Result::<Conflicted>{ value = Conflicted{ plain = plain, hunks = hunks } };
+    return result\ok::<Conflicted>(Conflicted{ plain = plain, hunks = hunks });
 }
 
 // chosen is the lines hunk h resolves to under c.
-fun chosen(h: Hunk, c: Choice) > Result::<[str]> {
+fun chosen(h: Hunk, c: Choice) > result\Result::<[str]> {
     if (c.side == "ours") {
-        return Result::<[str]>{ value = h.ours };
+        return result\ok::<[str]>(h.ours);
     }
     if (c.side == "theirs") {
-        return Result::<[str]>{ value = h.theirs };
+        return result\ok::<[str]>(h.theirs);
     }
     if (c.side == "both") {
         final both = mut [<str>];
@@ -167,18 +163,18 @@ fun chosen(h: Hunk, c: Choice) > Result::<[str]> {
         foreach (l in h.theirs) {
             both.append(l);
         }
-        return Result::<[str]>{ value = both };
+        return result\ok::<[str]>(both);
     }
     if (c.side == "base") {
         if (h.base -> base) {
-            return Result::<[str]>{ value = base };
+            return result\ok::<[str]>(base);
         }
-        return Result::<[str]>{ error = "hunk {h.index} has no base section; merge with conflictstyle diff3 to get one" };
+        return result\fail::<[str]>("hunk {h.index} has no base section; merge with conflictstyle diff3 to get one");
     }
     if (c.side == "text") {
-        return Result::<[str]>{ value = c.text };
+        return result\ok::<[str]>(c.text);
     }
-    return Result::<[str]>{ error = "hunk {h.index}: unknown choice {c.side}" };
+    return result\fail::<[str]>("hunk {h.index}: unknown choice {c.side}");
 }
 
 // render writes the hunk back as git wrote it, for a hunk no choice names.
@@ -205,60 +201,60 @@ fun render(h: Hunk) > [str] {
 // It errors on a choice for a missing hunk and on an empty result.
 // It errors when the markers left are not the hunks left unchosen, so text
 // carrying marker lines is never staged as resolved.
-export fun settle(c: Conflicted, choices: {int: Choice}) > Result::<str> {
+export fun settle(c: Conflicted, choices: {int: Choice}) > result\Result::<str> {
     foreach (n, _ in choices) {
         if (n < 1 or n > c.hunks.len()) {
-            return Result::<str>{ error = "there is no hunk {n}; the file has {c.hunks.len()}" };
+            return result\fail::<str>("there is no hunk {n}; the file has {c.hunks.len()}");
         }
     }
-    final result = mut [<str>];
+    final kept = mut [<str>];
     var open = 0;
     foreach (i, h in c.hunks) {
         foreach (l in c.plain[i]) {
-            result.append(l);
+            kept.append(l);
         }
         if (choices[h.index] -> choice) {
             final lines = chosen(h, c: choice);
             if (lines.error != null) {
-                return Result::<str>{ error = lines.error };
+                return result\Result::<str>{ error = lines.error };
             }
             foreach (l in lines.value!) {
-                result.append(l);
+                kept.append(l);
             }
         } else {
             open = open + 1;
             foreach (l in render(h)) {
-                result.append(l);
+                kept.append(l);
             }
         }
     }
     foreach (l in c.plain[c.hunks.len()]) {
-        result.append(l);
+        kept.append(l);
     }
-    final text = result.join("\n");
+    final text = kept.join("\n");
     if (text.trim() == "") {
-        return Result::<str>{ error = "the result is empty; nothing was written" };
+        return result\fail::<str>("the result is empty; nothing was written");
     }
     final left = parse(text);
     if (left.error != null or left.value!.hunks.len() != open) {
-        return Result::<str>{ error = "the result carries conflict markers beyond the {open} hunk(s) left unchosen; a chosen side or text holds marker lines" };
+        return result\fail::<str>("the result carries conflict markers beyond the {open} hunk(s) left unchosen; a chosen side or text holds marker lines");
     }
-    return Result::<str>{ value = text };
+    return result\ok::<str>(text);
 }
 
 // parseChoices reads --take <n|all>=<side> and --text <n>=<file> into one choice per hunk.
 // A later --take or --text for the same hunk replaces the earlier one.
-export fun parseChoices(takes: [str], texts: [str], hunks: int) > Result::<{int: Choice}> {
+export fun parseChoices(takes: [str], texts: [str], hunks: int) > result\Result::<{int: Choice}> {
     final picked = mut {<int: Choice>};
     foreach (t in takes) {
         final eq = t.indexOf("=");
         if (eq == null) {
-            return Result::<{int: Choice}>{ error = "--take {t}: want <n>=<side>" };
+            return result\fail::<{int: Choice}>("--take {t}: want <n>=<side>");
         }
         final which = t.sub(0, len: eq!);
         final side = t.sub(eq! + 1);
         if (SIDES.indexOf(side) == null) {
-            return Result::<{int: Choice}>{ error = "--take {t}: the side is one of {SIDES.join(", ")}" };
+            return result\fail::<{int: Choice}>("--take {t}: the side is one of {SIDES.join(", ")}");
         }
         if (which == "all") {
             for (var n = 1; n <= hunks; n = n + 1) {
@@ -268,31 +264,31 @@ export fun parseChoices(takes: [str], texts: [str], hunks: int) > Result::<{int:
         }
         final n = std\parseInt(which);
         if (n == null) {
-            return Result::<{int: Choice}>{ error = "--take {t}: {which} is not a hunk number" };
+            return result\fail::<{int: Choice}>("--take {t}: {which} is not a hunk number");
         }
         picked[n!] = Choice{ side = side };
     }
     foreach (t in texts) {
         final eq = t.indexOf("=");
         if (eq == null) {
-            return Result::<{int: Choice}>{ error = "--text {t}: want <n>=<file>" };
+            return result\fail::<{int: Choice}>("--text {t}: want <n>=<file>");
         }
         final n = std\parseInt(t.sub(0, len: eq!));
         if (n == null) {
-            return Result::<{int: Choice}>{ error = "--text {t}: {t.sub(0, len: eq!)} is not a hunk number" };
+            return result\fail::<{int: Choice}>("--text {t}: {t.sub(0, len: eq!)} is not a hunk number");
         }
         var body = "";
         try {
             body = fs\readFile(t.sub(eq! + 1));
         } catch (err: any) {
-            return Result::<{int: Choice}>{ error = "--text {t}: {err}" };
+            return result\caught::<{int: Choice}>(err, doing: "--text {t}");
         }
         if (body.endsWith("\n")) {
             body = body.sub(0, len: body.len() - 1);
         }
         picked[n!] = Choice{ side = "text", text = body.split("\n") };
     }
-    return Result::<{int: Choice}>{ value = picked };
+    return result\ok::<{int: Choice}>(picked);
 }
 
 // listing is the report for a file no choice was given for.
@@ -318,7 +314,7 @@ export fun listing(file: str, c: Conflicted) > [str] {
 
 // writeKeepingMode swaps content in for file through a temp file and a rename in file's own
 // directory, then restores the permission bits the temp file did not carry.
-fun writeKeepingMode(file: str, content: str) > Result::<bool> {
+fun writeKeepingMode(file: str, content: str) > result\Result::<bool> {
     try {
         final mode = fs\stat(file).mode;
         fs\writeFileAtomic(file, content: content);
@@ -326,9 +322,9 @@ fun writeKeepingMode(file: str, content: str) > Result::<bool> {
             fs\chmod(file, mode: mode);
         }
     } catch (err: any) {
-        return Result::<bool>{ error = "resolve-conflicts: write {file}: {err}" };
+        return result\caught::<bool>(err, doing: "resolve-conflicts: write {file}");
     }
-    return Result::<bool>{ value = true };
+    return result\ok::<bool>(true);
 }
 
 export fun main(args: [str]) > void !> any {
@@ -347,7 +343,7 @@ export fun main(args: [str]) > void !> any {
     final before = fs\readFile(file);
     final split = parse(before);
     if (split.error != null) {
-        throw "resolve-conflicts: {file}: {split.error!}";
+        throw "resolve-conflicts: {file}: {split.error!.message}";
     }
     final c = split.value!;
     if (c.hunks.len() == 0) {
@@ -363,12 +359,12 @@ export fun main(args: [str]) > void !> any {
     }
     final picked = parseChoices(takes, texts: texts, hunks: c.hunks.len());
     if (picked.error != null) {
-        throw picked.error!;
+        throw picked.error!.message;
     }
     final choices = picked.value!;
     final settled = settle(c, choices: choices);
     if (settled.error != null) {
-        throw "resolve-conflicts: {file}: {settled.error!}";
+        throw "resolve-conflicts: {file}: {settled.error!.message}";
     }
     final after = settled.value!;
     final left = c.hunks.len() - choices.len();
@@ -378,7 +374,7 @@ export fun main(args: [str]) > void !> any {
     } else {
         final written = writeKeepingMode(file, content: after);
         if (written.error != null) {
-            throw written.error!;
+            throw written.error!.message;
         }
         final next = if (left == 0) "; stage it with `git add {file}`" else "; {left} hunk(s) left";
         std\print("resolved {choices.len()} of {c.hunks.len()} hunk(s) in {file}{next}");
@@ -391,11 +387,11 @@ final TWO_SIDED = "package x\n<<<<<<< HEAD\nours one\n=======\ntheirs one\n>>>>>
 final DIFF3 = "a\n<<<<<<< HEAD\nmine\n||||||| merged common ancestors\nold\n=======\nyours\n>>>>>>> topic\nz\n";
 
 fun raised(text: str, choices: {int: Choice}) > str {
-    return settle(parse(text).value!, choices: choices).error ?? "";
+    return settle(parse(text).value!, choices: choices).error?.message ?? "";
 }
 
 fun parseRaised(text: str) > str {
-    return parse(text).error ?? "";
+    return parse(text).error?.message ?? "";
 }
 
 test "parse finds each hunk, its sides and its labels" {

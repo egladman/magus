@@ -77,7 +77,7 @@ export fun proofread_build(ctx: magus\Context, args: [str]) > void !> any {
     go["go-build"](ctx, {"args": ["-trimpath", "-o", proofread\binary, "./" + proofread\command]});
     final digest = proofread\inputs(".");
     if (digest.error -> e) {
-        throw e;
+        throw e.message;
     }
     fs\writeFile(proofread\inputsFile, content: digest.value! + "\n");
 }

@@ -4,6 +4,7 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "std";
 import "strings";
 import "time";
@@ -17,11 +18,6 @@ final HELP = "cost: none; reads this repository's feedback store\n{USAGE}\n"
 
 // ORDER ranks verdicts: a missing refusal first, then a wrong one, then missing advice.
 final ORDER = ["should-deny", "wrong-deny", "should-advise", "fine"];
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 export object Item {
     id: str,
@@ -172,7 +168,7 @@ export fun main(args: [str]) > void !> any {
 }
 
 // marksFromJSONL reads a fixture store: one TrailMark per line, as the store writes it.
-export fun marksFromJSONL(text: str) > Result::<[TrailMark]> {
+export fun marksFromJSONL(text: str) > result\Result::<[TrailMark]> {
     try {
         final marks = mut [<TrailMark>];
         foreach (line in strings\lines(text)) {
@@ -190,17 +186,17 @@ export fun marksFromJSONL(text: str) > Result::<[TrailMark]> {
                 at = std\toInt(m["at"] ?? 0), examples = examples,
             });
         }
-        return Result::<[TrailMark]>{ value = marks };
+        return result\ok::<[TrailMark]>(marks);
     } catch (err: any) {
-        return Result::<[TrailMark]>{ error = "count-feedback: read marks: {err}" };
+        return result\caught::<[TrailMark]>(err, doing: "count-feedback: read marks");
     }
 }
 
-fun fixture() > Result::<[TrailMark]> {
+fun fixture() > result\Result::<[TrailMark]> {
     try {
         return marksFromJSONL(fs\readFile("hack/testdata/feedback-marks.jsonl"));
     } catch (err: any) {
-        return Result::<[TrailMark]>{ error = "count-feedback: read the fixture: {err}" };
+        return result\caught::<[TrailMark]>(err, doing: "count-feedback: read the fixture");
     }
 }
 

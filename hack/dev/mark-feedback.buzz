@@ -3,6 +3,7 @@ namespace markfeedback;
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "std";
 import "strings";
 import "hack/dev/show-feedback" as show;
@@ -16,20 +17,15 @@ final HELP = "cost: reads the session's trails the way show-feedback does; with 
 
 final VERDICTS = ["should-deny", "should-advise", "wrong-deny", "fine"];
 
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
-
 // plan resolves each label (C3) or id (fb...) against the report's rows and builds the
 // marks to store. A label names a position in this report only; the mark carries the
 // row's id, so it outlives the position.
-export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > Result::<[TrailMark]> {
+export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > result\Result::<[TrailMark]> {
     if (VERDICTS.indexOf(verdict) == null) {
-        return Result::<[TrailMark]>{ error = "mark-feedback: --verdict is one of {VERDICTS.join(", ")}, not `{verdict}`\n{USAGE}" };
+        return result\fail::<[TrailMark]>("mark-feedback: --verdict is one of {VERDICTS.join(", ")}, not `{verdict}`\n{USAGE}");
     }
     if (refs.len() == 0) {
-        return Result::<[TrailMark]>{ error = "mark-feedback: name at least one row by its label (C3) or id\n{USAGE}" };
+        return result\fail::<[TrailMark]>("mark-feedback: name at least one row by its label (C3) or id\n{USAGE}");
     }
     final marks = mut [<TrailMark>];
     foreach (ref in refs) {
@@ -44,7 +40,7 @@ export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > Result::
             foreach (row in r.rows) {
                 labels.append(row.label);
             }
-            return Result::<[TrailMark]>{ error = "mark-feedback: {ref} is not a row of session {r.session} in this window; its rows are {labels.join(" ")}" };
+            return result\fail::<[TrailMark]>("mark-feedback: {ref} is not a row of session {r.session} in this window; its rows are {labels.join(" ")}");
         }
         final row = found!;
         marks.append(TrailMark{
@@ -52,7 +48,7 @@ export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > Result::
             session = r.session, at = 0, examples = row.examples,
         });
     }
-    return Result::<[TrailMark]>{ value = marks };
+    return result\ok::<[TrailMark]>(marks);
 }
 
 fun planLine(m: TrailMark, r: show\Report) > str {
@@ -77,12 +73,12 @@ export fun main(args: [str]) > void !> any {
     final verdict = parsed.values["--verdict"] ?? "";
     final read = show\report(parsed.values["--session"] ?? "", since: parsed.values["--since"] ?? "", through: parsed.values["--until"] ?? "");
     if (read.error != null) {
-        throw read.error!;
+        throw read.error!.message;
     }
     final r = read.value!;
     final planned = plan(r, refs: parsed.positionals, verdict: verdict, note: parsed.values["--note"] ?? "");
     if (planned.error != null) {
-        throw planned.error!;
+        throw planned.error!.message;
     }
     final marks = planned.value!;
     final apply = parsed.values["--apply"] != null;
@@ -102,15 +98,15 @@ export fun main(args: [str]) > void !> any {
     }
 }
 
-fun fixture() > Result::<show\Report> {
+fun fixture() > result\Result::<show\Report> {
     try {
         final trail = show\trailFromJSON(fs\readFile("hack/testdata/feedback-trail.json"));
         if (trail.error != null) {
-            return Result::<show\Report>{ error = trail.error };
+            return result\Result::<show\Report>{ error = trail.error };
         }
-        return Result::<show\Report>{ value = show\fold(trail.value!, marks: [<TrailMark>]) };
+        return result\ok::<show\Report>(show\fold(trail.value!, marks: [<TrailMark>]));
     } catch (err: any) {
-        return Result::<show\Report>{ error = "mark-feedback: read the fixture: {err}" };
+        return result\caught::<show\Report>(err, doing: "mark-feedback: read the fixture");
     }
 }
 
@@ -132,8 +128,8 @@ test "an id resolves like its label, including a shape that ran once and has no 
 }
 
 test "an unknown label or verdict is refused, naming what exists" {
-    final refused = plan(fixture().value!, refs: ["C9"], verdict: "fine", note: "").error ?? "";
+    final refused = plan(fixture().value!, refs: ["C9"], verdict: "fine", note: "").error?.message ?? "";
     assert\equal(refused, want: "mark-feedback: C9 is not a row of session s-fixture in this window; its rows are A1 A2 B1 C1 C2 D1", message: "label");
-    final badVerdict = plan(fixture().value!, refs: ["C1"], verdict: "bad", note: "").error ?? "";
+    final badVerdict = plan(fixture().value!, refs: ["C1"], verdict: "bad", note: "").error?.message ?? "";
     assert\equal(badVerdict.startsWith("mark-feedback: --verdict is one of should-deny"), want: true, message: "verdict");
 }

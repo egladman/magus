@@ -12,6 +12,7 @@ namespace reclaimdiskspace;
 import "flags";
 import "fs";
 import "os";
+import "result";
 import "std";
 import "time";
 import "vcs";
@@ -20,21 +21,16 @@ import "magus/reclaimdisk" as reclaim;
 
 import "assert";
 
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
-
-fun trimCaches(fence: double) > Result::<str> {
+fun trimCaches(fence: double) > result\Result::<str> {
     final said = mut [<str>];
     try {
         foreach (t in reclaim\trimDeclared(fence, deadline: 0.0)) {
             said.append(reclaim\trimLine(t, fence: fence) ?? "{t.name} holds {reclaim\size(std\toInt(t.afterBytes / 1024))}, within its {t.trimMb} MiB budget");
         }
     } catch (err: any) {
-        return Result::<str>{ error = "reclaim-disk-space: trim the caches: {err}" };
+        return result\caught::<str>(err, doing: "reclaim-disk-space: trim the caches");
     }
-    return Result::<str>{ value = said.join("; ") };
+    return result\ok::<str>(said.join("; "));
 }
 
 final SUMMARY = "free disk by removing finished worktrees and trimming spell caches to their budgets";
@@ -43,7 +39,7 @@ final SERVES = ["rule:worktree-remove -- --caches", "rule:cache-clear -- --cache
 final USAGE = "usage: magus buzz hack/dev/reclaim-disk-space.buzz -- [--keep-recent <duration>] [--base <rev>] [--caches] [--keep-within <hours>] [-o json] [--apply]";
 final HELP = "the prompt hook, `magus job fork` and `magus run` start one bounded reclaim on their own; run this to see what it left for you\ncost: a git status and rev-list per worktree, one lsof and a du per removable worktree; --apply removes worktrees and merged agent branches, --caches also trims each cache to the budget its spell declares\n{USAGE}";
 
-fun encode(s: reclaim\Survey, items: [reclaim\Item], applied: bool, keepRecent: str, trimmed: str) > Result::<str> {
+fun encode(s: reclaim\Survey, items: [reclaim\Item], applied: bool, keepRecent: str, trimmed: str) > result\Result::<str> {
     final rows = items.map(fun (i: int, it: reclaim\Item) > {str: any} => {
         "kind": it.kind, "name": it.name, "class": it.class, "reasons": it.reasons, "keys": it.keys, "kib": it.kib,
         "caches": it.caches.map(fun (j: int, c: reclaim\Cache) > {str: any} => {"path": c.path, "kind": c.kind, "kib": c.kib}),
@@ -53,11 +49,11 @@ fun encode(s: reclaim\Survey, items: [reclaim\Item], applied: bool, keepRecent: 
     final by = mut {<str: any>};
     foreach (k, v in t.keptBy) { by[k] = v; }
     try {
-        return Result::<str>{ value = serialize\jsonEncode(serialize\Boxed.init({"root": s.root, "base": s.base, "keep_recent": keepRecent, "applied": applied, "caches": trimmed,
+        return result\ok::<str>(serialize\jsonEncode(serialize\Boxed.init({"root": s.root, "base": s.base, "keep_recent": keepRecent, "applied": applied, "caches": trimmed,
             "items": rows, "totals": {"worktrees": t.worktrees, "removable_worktrees": t.removableWorktrees, "removable_kib": t.removableKiB,
-                "branches": t.branches, "kept": t.kept, "kept_by": by}})) };
+                "branches": t.branches, "kept": t.kept, "kept_by": by}})));
     } catch (err: any) {
-        return Result::<str>{ error = "reclaim-disk-space: encode the plan: {err}" };
+        return result\caught::<str>(err, doing: "reclaim-disk-space: encode the plan");
     }
 }
 
@@ -97,7 +93,7 @@ export fun main(args: [str]) > void !> any {
     if (caches and applied) {
         final trim = trimCaches(fence);
         if (trim.error != null) {
-            throw trim.error!;
+            throw trim.error!.message;
         }
         trimmed = trim.value!;
     } else if (caches) {
@@ -107,7 +103,7 @@ export fun main(args: [str]) > void !> any {
     if (format == "json") {
         final encoded = encode(s, items: items, applied: applied, keepRecent: keepRecent, trimmed: trimmed);
         if (encoded.error != null) {
-            throw encoded.error!;
+            throw encoded.error!.message;
         }
         std\print(encoded.value!);
         return;
@@ -127,7 +123,7 @@ export object Fixture {
     cwds: [reclaim\Cwd],
 }
 
-fun fixture() > Result::<Fixture> {
+fun fixture() > result\Result::<Fixture> {
     try {
         final doc = serialize\jsonDecode(fs\readFile("hack/testdata/reclaim-disk-space.json"));
         final observed = mut [<reclaim\Observed>];
@@ -147,18 +143,18 @@ fun fixture() > Result::<Fixture> {
         }
         final lsof = mut [<str>];
         foreach (l in doc.q("lsof").listValue()) { lsof.append(l.stringValue()); }
-        return Result::<Fixture>{ value = Fixture{ main = doc.q("main").stringValue(), own = doc.q("own").stringValue(), now = std\toDouble(doc.q("now").integerValue()),
+        return result\ok::<Fixture>(Fixture{ main = doc.q("main").stringValue(), own = doc.q("own").stringValue(), now = std\toDouble(doc.q("now").integerValue()),
             keepRecent = time\parseDuration(doc.q("keep_recent").stringValue()), observed = observed, want = want, leases = leases,
-            cwds = reclaim\parseCwds(lsof.join("\n")) } };
+            cwds = reclaim\parseCwds(lsof.join("\n")) });
     } catch (err: any) {
-        return Result::<Fixture>{ error = "reclaim-disk-space: read the fixture: {err}" };
+        return result\caught::<Fixture>(err, doing: "reclaim-disk-space: read the fixture");
     }
 }
 
-fun classified() > Result::<{str: reclaim\Item}> {
+fun classified() > result\Result::<{str: reclaim\Item}> {
     final read = fixture();
     if (read.error != null) {
-        return Result::<{str: reclaim\Item}>{ error = read.error };
+        return result\Result::<{str: reclaim\Item}>{ error = read.error };
     }
     final f = read.value!;
     final byPath = mut {<str: reclaim\Item>};
@@ -169,9 +165,9 @@ fun classified() > Result::<{str: reclaim\Item}> {
             byPath[o.path] = reclaim\classify(o, main: f.main, own: f.own, leases: leases, pids: pids, now: f.now, keepRecent: f.keepRecent, shown: o.path);
         }
     } catch (err: any) {
-        return Result::<{str: reclaim\Item}>{ error = "reclaim-disk-space: classify the fixture: {err}" };
+        return result\caught::<{str: reclaim\Item}>(err, doing: "reclaim-disk-space: classify the fixture");
     }
-    return Result::<{str: reclaim\Item}>{ value = byPath };
+    return result\ok::<{str: reclaim\Item}>(byPath);
 }
 
 test "each fixture worktree gets the class its row expects" {

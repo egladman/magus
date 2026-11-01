@@ -1,3 +1,4 @@
+import "result";
 import "std";
 import "fs";
 import "magus";
@@ -113,7 +114,7 @@ fun buzzDocDecl(m: Miner) > void {
     }
     final functions = sources\nodes("function");
     if (functions.error -> e) {
-        m.c.faults.append(e);
+        m.c.faults.append(e.message);
         return;
     }
     foreach (n in functions.value!) {
@@ -152,10 +153,10 @@ fun capitalize(s: str) > str {
 
 // documentedBy maps each node of kind to the doc page an extracted `documents` edge
 // names; an inferred edge only says a page mentions the node.
-fun documentedBy(kind: str) > holdout\Result::<{str: str}> {
+fun documentedBy(kind: str) > result\Result::<{str: str}> {
     final found = sources\everyNode(kind, perMatch: 8);
     if (found.error -> e) {
-        return holdout\Result::<{str: str}>{ error = e };
+        return result\Result::<{str: str}>{ error = e };
     }
     final pages: mut {str: str} = mut {};
     foreach (e in found.value!.links) {
@@ -166,7 +167,7 @@ fun documentedBy(kind: str) > holdout\Result::<{str: str}> {
             }
         }
     }
-    return holdout\Result::<{str: str}>{ value = pages };
+    return result\ok::<{str: str}>(pages);
 }
 
 // A host method's section on its module's reference page (generated from the
@@ -174,12 +175,12 @@ fun documentedBy(kind: str) > holdout\Result::<{str: str}> {
 fun hostModules(m: Miner) > void {
     final documented = documentedBy("module");
     if (documented.error -> e) {
-        m.c.faults.append(e);
+        m.c.faults.append(e.message);
         return;
     }
     final methods = sources\nodes("method");
     if (methods.error -> e) {
-        m.c.faults.append(e);
+        m.c.faults.append(e.message);
         return;
     }
     final pages = documented.value!;
@@ -404,12 +405,12 @@ fun camel(label: str) > str {
 fun spellOps(m: Miner) > void {
     final documented = documentedBy("spell");
     if (documented.error -> e) {
-        m.c.faults.append(e);
+        m.c.faults.append(e.message);
         return;
     }
     final opNodes = sources\nodes("op");
     if (opNodes.error -> e) {
-        m.c.faults.append(e);
+        m.c.faults.append(e.message);
         return;
     }
     final pages = documented.value!;
@@ -492,7 +493,7 @@ fun figureApi(m: Miner) > void {
     final page = "docs/reference/buzz/figure.md";
     final functions = sources\nodes("function");
     if (functions.error -> e) {
-        m.c.faults.append(e);
+        m.c.faults.append(e.message);
         return;
     }
     foreach (n in functions.value!) {
@@ -534,14 +535,14 @@ fun attrValues(svg: str, attr: str) > [str] {
 // figures reads each drawn figure's claim off its light SVG: the title, the desc, the
 // dirs its boxes anchor (kept only when the graph holds that dir) and the docs
 // sections a <!--diagram:ID--> marker embeds it in.
-export fun figures(c: sources\Snapshot) > holdout\Result::<[{str: any}]> {
+export fun figures(c: sources\Snapshot) > result\Result::<[{str: any}]> {
     final dirNodes = sources\nodes("dir");
     if (dirNodes.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     final svgs = sources\figureSvgs(c.root);
     if (svgs.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     final dirs: mut {str: bool} = mut {};
     foreach (d in dirNodes.value!) {
@@ -580,7 +581,7 @@ export fun figures(c: sources\Snapshot) > holdout\Result::<[{str: any}]> {
         try {
             svg = fs\readFile(p);
         } catch (err: any) {
-            return holdout\Result::<[{str: any}]>{ error = "pairs: read {p}: {err}" };
+            return result\caught::<[{str: any}]>(err, doing: "pairs: read {p}");
         }
         final anchors: mut [str] = mut [];
         foreach (a in attrValues(svg, attr: "data-anchor")) {
@@ -613,7 +614,7 @@ export fun figures(c: sources\Snapshot) > holdout\Result::<[{str: any}]> {
             "fold": holdout\figureFold(id),
         });
     }
-    return holdout\Result::<[{str: any}]>{ value = found };
+    return result\ok::<[{str: any}]>(found);
 }
 
 // A figure's builder function (its title, desc and the dirs it draws) against each
@@ -655,7 +656,7 @@ fun figurePairs(m: Miner, figs: [{str: any}]) > void {
 
 // write mines every pair source into target, sorted by source, query and doc, and
 // returns the count per source and split.
-export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > holdout\Result::<{str: int}> {
+export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > result\Result::<{str: int}> {
     final m = mut Miner{c = c, pairs = mut [], seen = mut {}};
     final refs = refsByTarget(c);
     goDocDecl(m);
@@ -679,7 +680,7 @@ export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > holdout
         return a.doc < b.doc;
     });
     if (c.faults.len() > 0) {
-        return holdout\Result::<{str: int}>{ error = c.faults[0] };
+        return result\fail::<{str: int}>(c.faults[0]);
     }
     try {
         final lines: mut [str] = mut [];
@@ -691,9 +692,9 @@ export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > holdout
             counts[key] = (counts[key] ?? 0) + 1;
         }
         fs\writeFile(target, content: lines.join("\n") + "\n");
-        return holdout\Result::<{str: int}>{ value = counts };
+        return result\ok::<{str: int}>(counts);
     } catch (err: any) {
-        return holdout\Result::<{str: int}>{ error = "pairs: write {target}: {err}" };
+        return result\caught::<{str: int}>(err, doing: "pairs: write {target}");
     }
 }
 

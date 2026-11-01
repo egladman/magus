@@ -15,6 +15,7 @@ namespace summarizetranscript;
 import "encoding/json";
 import "flags";
 import "fs";
+import "result";
 import "std";
 
 import "assert";
@@ -26,11 +27,6 @@ final HELP = "cost: grows with transcript size\n{USAGE}";
 // with, and the short form a repeat carries.
 final RULE_URL = std\pattern(`/rules/([a-z0-9-]+)/`);
 final DENIED_AGAIN = std\pattern(`denied again \[([a-z0-9-]+)\]`);
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 export object Call {
     tool: str,
@@ -92,7 +88,7 @@ export fun suggestedCommand(text: str) > str {
 }
 
 // read folds a transcript into its calls, in the order they were made, and its tokens.
-export fun read(file: str) > Result::<Session> {
+export fun read(file: str) > result\Result::<Session> {
     final calls = mut [<mut Call>];
     final byId = mut {<str: int>};
     final counted = mut {<str: bool>};
@@ -101,7 +97,7 @@ export fun read(file: str) > Result::<Session> {
     try {
         lines = fs\readLines(file);
     } catch (err: any) {
-        return Result::<Session>{ error = "summarize-transcript: read {file}: {err}" };
+        return result\caught::<Session>(err, doing: "summarize-transcript: read {file}");
     }
     foreach (line in lines) {
         var rec: any = null;
@@ -130,7 +126,7 @@ export fun read(file: str) > Result::<Session> {
                 try {
                     text = if (input["command"] is str) input["command"] else json\stringify(input);
                 } catch (err: any) {
-                    return Result::<Session>{ error = "summarize-transcript: encode a call of {file}: {err}" };
+                    return result\caught::<Session>(err, doing: "summarize-transcript: encode a call of {file}");
                 }
                 byId[block["id"] ?? ""] = calls.len();
                 calls.append(mut Call{ tool = block["name"] ?? "", text = text });
@@ -144,7 +140,7 @@ export fun read(file: str) > Result::<Session> {
             }
         }
     }
-    return Result::<Session>{ value = Session{ calls = calls, tokens = tokens } };
+    return result\ok::<Session>(Session{ calls = calls, tokens = tokens });
 }
 
 // countLines renders a count per key, largest first, ties by key.
@@ -201,12 +197,12 @@ export fun summarize(s: Session) > [str] {
 }
 
 // matches counts, per tool, the calls whose text matches pattern.
-export fun matches(s: Session, pattern: str) > Result::<[str]> {
+export fun matches(s: Session, pattern: str) > result\Result::<[str]> {
     var p = std\pattern("");
     try {
         p = std\pattern(pattern);
     } catch (err: any) {
-        return Result::<[str]>{ error = "summarize-transcript: --match is not a pattern: {err}" };
+        return result\caught::<[str]>(err, doing: "summarize-transcript: --match is not a pattern");
     }
     final perTool = mut {<str: int>};
     var total = 0;
@@ -216,7 +212,7 @@ export fun matches(s: Session, pattern: str) > Result::<[str]> {
             total = total + 1;
         }
     }
-    return Result::<[str]>{ value = ["{total} of {s.calls.len()} tool calls match {pattern}"] + countLines(perTool) };
+    return result\ok::<[str]>(["{total} of {s.calls.len()} tool calls match {pattern}"] + countLines(perTool));
 }
 
 export fun main(args: [str]) > void !> any {
@@ -232,7 +228,7 @@ export fun main(args: [str]) > void !> any {
     foreach (file in parsed.positionals) {
         final read = read(file);
         if (read.error != null) {
-            throw read.error!;
+            throw read.error!.message;
         }
         final s = read.value!;
         std\print("");
@@ -241,7 +237,7 @@ export fun main(args: [str]) > void !> any {
         if (parsed.values["--match"] != null) {
             final found = matches(s, pattern: parsed.values["--match"]!);
             if (found.error != null) {
-                throw found.error!;
+                throw found.error!.message;
             }
             lines = found.value!;
         }

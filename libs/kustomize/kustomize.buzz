@@ -13,6 +13,7 @@
 // name: kustomize appends a content hash, which would move the figure on every edit.
 namespace kustomize;
 
+import "result";
 import "std";
 import "fs";
 import "vcs";
@@ -70,34 +71,29 @@ final POD_TEMPLATES: {str: [str]} = {
 export fun build(dir: str) > [Resource] !> any { //nolint:no-throw // callers catch the refusal that names the field
     final r = built(dir);
     if (r.error -> e) {
-        throw e; //nolint:no-throw // callers catch the refusal that names the field
+        throw e.message; //nolint:no-throw // callers catch the refusal that names the field
     }
     return r.value!;
 }
 
-object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
-
-fun built(dir: str) > Result::<[Resource]> {
+fun built(dir: str) > result\Result::<[Resource]> {
     try {
         final found = kustomizationFile(dir);
         if (found.error -> e) {
-            return Result::<[Resource]>{ error = e };
+            return result\Result::<[Resource]>{ error = e };
         }
         final file = found.value!;
         final k = (yaml\parse(fs\readFile(file)) as? {str: any}) ?? {<str: any>};
         foreach (key, value in k) {
             if (KNOWN_FIELDS.indexOf(key) == null) {
-                return Result::<[Resource]>{ error = "{file}: field \"{key}\" is not read by libs/kustomize; drop it or teach the reader" };
+                return result\fail::<[Resource]>("{file}: field \"{key}\" is not read by libs/kustomize; drop it or teach the reader");
             }
         }
         var objects = mut [<Resource>];
         foreach (entry in strings(k["resources"]) + strings(k["bases"])) {
             final loaded = load(dir, entry: entry, file: file);
             if (loaded.error -> e) {
-                return Result::<[Resource]>{ error = e };
+                return result\Result::<[Resource]>{ error = e };
             }
             foreach (r in loaded.value!) {
                 objects.append(r);
@@ -107,41 +103,41 @@ fun built(dir: str) > Result::<[Resource]> {
         foreach (g in maps(k["configMapGenerator"])) {
             final made = generate(dir, entry: g, kind: "ConfigMap", options: genOptions, file: file);
             if (made.error -> e) {
-                return Result::<[Resource]>{ error = e };
+                return result\Result::<[Resource]>{ error = e };
             }
             objects.append(made.value!);
         }
         foreach (g in maps(k["secretGenerator"])) {
             final made = generate(dir, entry: g, kind: "Secret", options: genOptions, file: file);
             if (made.error -> e) {
-                return Result::<[Resource]>{ error = e };
+                return result\Result::<[Resource]>{ error = e };
             }
             objects.append(made.value!);
         }
         if (duplicate(objects) -> twice) {
-            return Result::<[Resource]>{ error = twice };
+            return result\fail::<[Resource]>(twice);
         }
 
         var stack: [Resource] = objects;
         final merges = patchList(dir, k: k, field: "patchesStrategicMerge", file: file);
         if (merges.error -> e) {
-            return Result::<[Resource]>{ error = e };
+            return result\Result::<[Resource]>{ error = e };
         }
         foreach (p in merges.value!) {
             final applied = applyPatch(stack, patch: p);
             if (applied.error -> e) {
-                return Result::<[Resource]>{ error = e };
+                return result\Result::<[Resource]>{ error = e };
             }
             stack = applied.value!;
         }
         final plain = patchList(dir, k: k, field: "patches", file: file);
         if (plain.error -> e) {
-            return Result::<[Resource]>{ error = e };
+            return result\Result::<[Resource]>{ error = e };
         }
         foreach (p in plain.value!) {
             final applied = applyPatch(stack, patch: p);
             if (applied.error -> e) {
-                return Result::<[Resource]>{ error = e };
+                return result\Result::<[Resource]>{ error = e };
             }
             stack = applied.value!;
         }
@@ -155,7 +151,7 @@ fun built(dir: str) > Result::<[Resource]> {
             final selectors = (set["includeSelectors"] as? bool) ?? false;
             final templates = (set["includeTemplates"] as? bool) ?? false;
             if (set.hasKey("fields")) {
-                return Result::<[Resource]>{ error = "{file}: labels[].fields is not read by libs/kustomize" };
+                return result\fail::<[Resource]>("{file}: labels[].fields is not read by libs/kustomize");
             }
             stack = stack.map(fun (i: int, r: Resource) > Resource => labeled(r, pairs: pairs, selectors: selectors, templates: selectors or templates));
         }
@@ -167,21 +163,21 @@ fun built(dir: str) > Result::<[Resource]> {
         }
         final jsonPatches = patchList(dir, k: k, field: "patchesJson6902", file: file);
         if (jsonPatches.error -> e) {
-            return Result::<[Resource]>{ error = e };
+            return result\Result::<[Resource]>{ error = e };
         }
         foreach (p in jsonPatches.value!) {
             final applied = applyPatch(stack, patch: p);
             if (applied.error -> e) {
-                return Result::<[Resource]>{ error = e };
+                return result\Result::<[Resource]>{ error = e };
             }
             stack = applied.value!;
         }
         foreach (image in maps(k["images"])) {
             stack = stack.map(fun (i: int, r: Resource) > Resource => retagged(r, image: image));
         }
-        return Result::<[Resource]>{ value = stack };
+        return result\ok::<[Resource]>(stack);
     } catch (err: any) {
-        return Result::<[Resource]>{ error = "{err}" };
+        return result\caught::<[Resource]>(err);
     }
 }
 
@@ -194,25 +190,25 @@ export fun manifests(objects: [Resource]) > str !> any { //nolint:no-throw // ca
     return docs.join("---\n");
 }
 
-fun kustomizationFile(dir: str) > Result::<str> {
+fun kustomizationFile(dir: str) > result\Result::<str> {
     try {
         foreach (name in KUSTOMIZATION_FILES) {
             final candidate = fs\join(dir, name);
             if (fs\isFile(candidate)) {
-                return Result::<str>{ value = candidate };
+                return result\ok::<str>(candidate);
             }
         }
     } catch (err: any) {
-        return Result::<str>{ error = "{err}" };
+        return result\caught::<str>(err);
     }
-    return Result::<str>{ error = "{dir}: no kustomization.yaml" };
+    return result\fail::<str>("{dir}: no kustomization.yaml");
 }
 
 // load reads one resources entry: a directory is a nested kustomization, a file holds one
 // or more objects.
-fun load(dir: str, entry: str, file: str) > Result::<[Resource]> {
+fun load(dir: str, entry: str, file: str) > result\Result::<[Resource]> {
     if (entry.indexOf("://") != null or entry.startsWith("github.com/")) {
-        return Result::<[Resource]>{ error = "{file}: remote resource \"{entry}\" is not read by libs/kustomize" };
+        return result\fail::<[Resource]>("{file}: remote resource \"{entry}\" is not read by libs/kustomize");
     }
     try {
         final path = fs\join(dir, entry);
@@ -222,27 +218,27 @@ fun load(dir: str, entry: str, file: str) > Result::<[Resource]> {
         final objects = mut [<Resource>];
         final docs = documents(fs\readFile(path), origin: path);
         if (docs.error -> e) {
-            return Result::<[Resource]>{ error = e };
+            return result\Result::<[Resource]>{ error = e };
         }
         foreach (doc in docs.value!) {
             final m = doc as? {str: any};
             if (m == null) {
-                return Result::<[Resource]>{ error = "{path}: a document is not a mapping" };
+                return result\fail::<[Resource]>("{path}: a document is not a mapping");
             }
             final r = Resource{ doc = m!, origin = path };
             if (r.kind() == "" or r.name() == "") {
-                return Result::<[Resource]>{ error = "{path}: an object without kind or metadata.name" };
+                return result\fail::<[Resource]>("{path}: an object without kind or metadata.name");
             }
             objects.append(Resource{ doc = m!, origin = path, names = [r.name()] });
         }
-        return Result::<[Resource]>{ value = objects };
+        return result\ok::<[Resource]>(objects);
     } catch (err: any) {
-        return Result::<[Resource]>{ error = "{err}" };
+        return result\caught::<[Resource]>(err);
     }
 }
 
 // documents splits a YAML stream on its `---` lines; yaml\parse reads one document.
-fun documents(source: str, origin: str) > Result::<[any]> {
+fun documents(source: str, origin: str) > result\Result::<[any]> {
     final docs = mut [<any>];
     final chunk = mut [<str>];
     try {
@@ -263,9 +259,9 @@ fun documents(source: str, origin: str) > Result::<[any]> {
             chunk.append(line);
         }
     } catch (err: any) {
-        return Result::<[any]>{ error = "{err}" };
+        return result\caught::<[any]>(err);
     }
-    return Result::<[any]>{ value = docs };
+    return result\ok::<[any]>(docs);
 }
 
 test "documents splits a stream and skips empty ones" {
@@ -285,20 +281,20 @@ fun duplicate(objects: [Resource]) > str? {
 }
 
 // generate builds a ConfigMap or Secret from a generator entry. The name carries no hash.
-fun generate(dir: str, entry: {str: any}, kind: str, options: {str: any}, file: str) > Result::<Resource> {
+fun generate(dir: str, entry: {str: any}, kind: str, options: {str: any}, file: str) > result\Result::<Resource> {
     final name = text(entry["name"]);
     if (name == "") {
-        return Result::<Resource>{ error = "{file}: a {kind} generator has no name" };
+        return result\fail::<Resource>("{file}: a {kind} generator has no name");
     }
     final behavior = text(entry["behavior"]);
     if (behavior != "" and behavior != "create") {
-        return Result::<Resource>{ error = "{file}: generator {name}: behavior \"{behavior}\" is not read by libs/kustomize" };
+        return result\fail::<Resource>("{file}: generator {name}: behavior \"{behavior}\" is not read by libs/kustomize");
     }
     final data = mut {<str: any>};
     foreach (literal in strings(entry["literals"])) {
         final eq = literal.indexOf("=");
         if (eq == null) {
-            return Result::<Resource>{ error = "{file}: generator {name}: literal \"{literal}\" has no =" };
+            return result\fail::<Resource>("{file}: generator {name}: literal \"{literal}\" has no =");
         }
         data[literal.sub(0, len: eq!)] = literal.sub(eq! + 1);
     }
@@ -315,7 +311,7 @@ fun generate(dir: str, entry: {str: any}, kind: str, options: {str: any}, file: 
             }
         }
     } catch (err: any) {
-        return Result::<Resource>{ error = "{err}" };
+        return result\caught::<Resource>(err);
     }
     final encoded = mut {<str: any>};
     foreach (key, value in data) {
@@ -343,7 +339,7 @@ fun generate(dir: str, entry: {str: any}, kind: str, options: {str: any}, file: 
     if (kind == "Secret") {
         doc["type"] = if (text(entry["type"]) != "") text(entry["type"]) else "Opaque";
     }
-    return Result::<Resource>{ value = Resource{ doc = doc, origin = "{file}: {kind} generator {name}", names = [name] } };
+    return result\ok::<Resource>(Resource{ doc = doc, origin = "{file}: {kind} generator {name}", names = [name] });
 }
 
 // Patch is one patch to apply: ops for JSON6902, or a mapping to merge.
@@ -354,7 +350,7 @@ object Patch {
     merge: {str: any}? = null,
 }
 
-fun patchList(dir: str, k: {str: any}, field: str, file: str) > Result::<[Patch]> {
+fun patchList(dir: str, k: {str: any}, field: str, file: str) > result\Result::<[Patch]> {
     final found = mut [<Patch>];
     try {
         foreach (i, entry in lists(k[field])) {
@@ -371,37 +367,37 @@ fun patchList(dir: str, k: {str: any}, field: str, file: str) > Result::<[Patch]
                     source = text(m["patch"]);
                 }
                 if (m.hasKey("options")) {
-                    return Result::<[Patch]>{ error = "{origin}: patch options are not read by libs/kustomize" };
+                    return result\fail::<[Patch]>("{origin}: patch options are not read by libs/kustomize");
                 }
             }
             if (source.trim() == "") {
-                return Result::<[Patch]>{ error = "{origin}: an empty patch" };
+                return result\fail::<[Patch]>("{origin}: an empty patch");
             }
             final docs = documents(source, origin: origin);
             if (docs.error -> e) {
-                return Result::<[Patch]>{ error = e };
+                return result\Result::<[Patch]>{ error = e };
             }
             foreach (doc in docs.value!) {
                 if (doc as? [any] -> ops) {
                     if (target == null) {
-                        return Result::<[Patch]>{ error = "{origin}: a JSON6902 patch needs a target" };
+                        return result\fail::<[Patch]>("{origin}: a JSON6902 patch needs a target");
                     }
                     found.append(Patch{ origin = origin, target = target, ops = ops });
                 } else if (doc as? {str: any} -> m) {
                     found.append(Patch{ origin = origin, target = target, merge = m });
                 } else {
-                    return Result::<[Patch]>{ error = "{origin}: a patch is neither a list of operations nor a mapping" };
+                    return result\fail::<[Patch]>("{origin}: a patch is neither a list of operations nor a mapping");
                 }
             }
         }
     } catch (err: any) {
-        return Result::<[Patch]>{ error = "{err}" };
+        return result\caught::<[Patch]>(err);
     }
-    return Result::<[Patch]>{ value = found };
+    return result\ok::<[Patch]>(found);
 }
 
 // applyPatch applies p to every object its target selects; a patch selecting nothing raises.
-fun applyPatch(objects: [Resource], patch: Patch) > Result::<[Resource]> {
+fun applyPatch(objects: [Resource], patch: Patch) > result\Result::<[Resource]> {
     var target = patch.target;
     if (target == null) {
         final m = patch.merge!;
@@ -409,7 +405,7 @@ fun applyPatch(objects: [Resource], patch: Patch) > Result::<[Resource]> {
     }
     foreach (key, value in target!) {
         if (["group", "version", "kind", "name", "namespace"].indexOf(key) == null) {
-            return Result::<[Resource]>{ error = "{patch.origin}: target.{key} is not read by libs/kustomize" };
+            return result\fail::<[Resource]>("{patch.origin}: target.{key} is not read by libs/kustomize");
         }
     }
     var hits = 0;
@@ -425,26 +421,26 @@ fun applyPatch(objects: [Resource], patch: Patch) > Result::<[Resource]> {
             foreach (op in ops) {
                 final done = applyOp(doc, op: op, origin: patch.origin);
                 if (done.error -> e) {
-                    return Result::<[Resource]>{ error = e };
+                    return result\Result::<[Resource]>{ error = e };
                 }
                 doc = done.value!;
             }
         } else {
             if (refusedDrawn(r.kind(), patch: patch.merge!, origin: patch.origin) -> why) {
-                return Result::<[Resource]>{ error = why };
+                return result\fail::<[Resource]>(why);
             }
             final merged = mergeValue(doc, patch: patch.merge!, origin: patch.origin);
             if (merged.error -> e) {
-                return Result::<[Resource]>{ error = e };
+                return result\Result::<[Resource]>{ error = e };
             }
             doc = (merged.value as? {str: any})!;
         }
         patched.append(Resource{ doc = doc, origin = r.origin, names = r.names });
     }
     if (hits == 0) {
-        return Result::<[Resource]>{ error = "{patch.origin}: the target selects no object in the build" };
+        return result\fail::<[Resource]>("{patch.origin}: the target selects no object in the build");
     }
-    return Result::<[Resource]>{ value = patched };
+    return result\ok::<[Resource]>(patched);
 }
 
 fun selects(target: {str: any}, r: Resource) > bool {
@@ -560,13 +556,13 @@ test "a strategic-merge patch on a drawn field is refused, a resources patch is 
 // mergeValue is a strategic merge narrowed to what plain data can say: mappings merge
 // recursively, null deletes a key, a list of named mappings merges by name, any other list
 // is replaced. A $patch or $setElementOrder directive raises.
-fun mergeValue(base: any, patch: any, origin: str) > Result::<any> {
+fun mergeValue(base: any, patch: any, origin: str) > result\Result::<any> {
     if (patch as? {str: any} -> p) {
         final b = (base as? {str: any}) ?? {<str: any>};
         final next: mut {str: any} = b.cloneMutable();
         foreach (key, value in p) {
             if (key.startsWith("$")) {
-                return Result::<any>{ error = "{origin}: the {key} directive is not read by libs/kustomize" };
+                return result\fail::<any>("{origin}: the {key} directive is not read by libs/kustomize");
             }
             if (value == null) {
                 next.remove(key);
@@ -578,7 +574,7 @@ fun mergeValue(base: any, patch: any, origin: str) > Result::<any> {
                 next[key] = inner.value;
             }
         }
-        return Result::<any>{ value = next };
+        return result\ok::<any>(next);
     }
     if (patch as? [any] -> items) {
         if (base as? [any] -> existing) {
@@ -601,11 +597,11 @@ fun mergeValue(base: any, patch: any, origin: str) > Result::<any> {
                         next.append(item);
                     }
                 }
-                return Result::<any>{ value = next };
+                return result\ok::<any>(next);
             }
         }
     }
-    return Result::<any>{ value = patch };
+    return result\ok::<any>(patch);
 }
 
 fun allNamed(items: [any]) > bool {
@@ -625,121 +621,121 @@ test "a merge keeps siblings and merges named list items" {
 }
 
 // applyOp applies one RFC 6902 operation.
-fun applyOp(doc: {str: any}, op: any, origin: str) > Result::<{str: any}> {
+fun applyOp(doc: {str: any}, op: any, origin: str) > result\Result::<{str: any}> {
     final m = op as? {str: any};
     if (m == null) {
-        return Result::<{str: any}>{ error = "{origin}: an operation is not a mapping" };
+        return result\fail::<{str: any}>("{origin}: an operation is not a mapping");
     }
     final kind = text(m!["op"]);
     final at = pointer(text(m!["path"]), origin: origin);
     if (at.error -> e) {
-        return Result::<{str: any}>{ error = e };
+        return result\Result::<{str: any}>{ error = e };
     }
     final path = at.value!;
     var built: any = doc;
     if (kind == "add" or kind == "replace") {
         if (!m!.hasKey("value")) {
-            return Result::<{str: any}>{ error = "{origin}: {kind} {m!["path"]} has no value" };
+            return result\fail::<{str: any}>("{origin}: {kind} {m!["path"]} has no value");
         }
         final edited = edit(doc, segs: path, op: kind, value: m!["value"], origin: origin);
         if (edited.error -> e) {
-            return Result::<{str: any}>{ error = e };
+            return result\Result::<{str: any}>{ error = e };
         }
         built = edited.value;
     } else if (kind == "remove") {
         final edited = edit(doc, segs: path, op: kind, value: null, origin: origin);
         if (edited.error -> e) {
-            return Result::<{str: any}>{ error = e };
+            return result\Result::<{str: any}>{ error = e };
         }
         built = edited.value;
     } else if (kind == "copy" or kind == "move") {
         final fromAt = pointer(text(m!["from"]), origin: origin);
         if (fromAt.error -> e) {
-            return Result::<{str: any}>{ error = e };
+            return result\Result::<{str: any}>{ error = e };
         }
         final source = fromAt.value!;
         final found = valueAt(doc, segs: source, origin: origin);
         if (found.error -> e) {
-            return Result::<{str: any}>{ error = e };
+            return result\Result::<{str: any}>{ error = e };
         }
         if (kind == "move") {
             final removed = edit(built, segs: source, op: "remove", value: null, origin: origin);
             if (removed.error -> e) {
-                return Result::<{str: any}>{ error = e };
+                return result\Result::<{str: any}>{ error = e };
             }
             built = removed.value;
         }
         final added = edit(built, segs: path, op: "add", value: found.value, origin: origin);
         if (added.error -> e) {
-            return Result::<{str: any}>{ error = e };
+            return result\Result::<{str: any}>{ error = e };
         }
         built = added.value;
     } else if (kind == "test") {
         final found = valueAt(doc, segs: path, origin: origin);
         if (found.error -> e) {
-            return Result::<{str: any}>{ error = e };
+            return result\Result::<{str: any}>{ error = e };
         }
         try {
             if (yaml\stringify(found.value) != yaml\stringify(m!["value"])) {
-                return Result::<{str: any}>{ error = "{origin}: test {m!["path"]} failed" };
+                return result\fail::<{str: any}>("{origin}: test {m!["path"]} failed");
             }
         } catch (err: any) {
-            return Result::<{str: any}>{ error = "{err}" };
+            return result\caught::<{str: any}>(err);
         }
     } else {
-        return Result::<{str: any}>{ error = "{origin}: unknown operation \"{kind}\"" };
+        return result\fail::<{str: any}>("{origin}: unknown operation \"{kind}\"");
     }
-    final result = built as? {str: any};
-    if (result == null) {
-        return Result::<{str: any}>{ error = "{origin}: an operation replaced the whole object" };
+    final fields = built as? {str: any};
+    if (fields == null) {
+        return result\fail::<{str: any}>("{origin}: an operation replaced the whole object");
     }
-    return Result::<{str: any}>{ value = result! };
+    return result\ok::<{str: any}>(fields!);
 }
 
-fun pointer(path: str, origin: str) > Result::<[str]> {
+fun pointer(path: str, origin: str) > result\Result::<[str]> {
     if (!path.startsWith("/")) {
-        return Result::<[str]>{ error = "{origin}: \"{path}\" is not a JSON pointer" };
+        return result\fail::<[str]>("{origin}: \"{path}\" is not a JSON pointer");
     }
     final segs = mut [<str>];
     foreach (raw in path.sub(1).split("/")) {
         segs.append(raw.replace("~1", with: "/").replace("~0", with: "~"));
     }
-    return Result::<[str]>{ value = segs };
+    return result\ok::<[str]>(segs);
 }
 
-fun valueAt(doc: any, segs: [str], origin: str) > Result::<any> {
+fun valueAt(doc: any, segs: [str], origin: str) > result\Result::<any> {
     var cur = doc;
     foreach (seg in segs) {
         if (cur as? {str: any} -> m) {
             if (!m.hasKey(seg)) {
-                return Result::<any>{ error = "{origin}: no value at {segs.join("/")}" };
+                return result\fail::<any>("{origin}: no value at {segs.join("/")}");
             }
             cur = m[seg];
         } else if (cur as? [any] -> items) {
             final i = index(seg, len: items.len(), origin: origin);
             if (i.error -> e) {
-                return Result::<any>{ error = e };
+                return result\Result::<any>{ error = e };
             }
             cur = items[i.value!];
         } else {
-            return Result::<any>{ error = "{origin}: no value at {segs.join("/")}" };
+            return result\fail::<any>("{origin}: no value at {segs.join("/")}");
         }
     }
-    return Result::<any>{ value = cur };
+    return result\ok::<any>(cur);
 }
 
-fun index(seg: str, len: int, origin: str) > Result::<int> {
+fun index(seg: str, len: int, origin: str) > result\Result::<int> {
     final i = std\parseInt(seg);
     if (i == null or i! < 0 or i! >= len) {
-        return Result::<int>{ error = "{origin}: index {seg} is out of range" };
+        return result\fail::<int>("{origin}: index {seg} is out of range");
     }
-    return Result::<int>{ value = i! };
+    return result\ok::<int>(i!);
 }
 
 // edit returns doc with op applied at segs, copying each container on the way down.
-fun edit(doc: any, segs: [str], op: str, value: any, origin: str) > Result::<any> {
+fun edit(doc: any, segs: [str], op: str, value: any, origin: str) > result\Result::<any> {
     if (segs.len() == 0) {
-        return Result::<any>{ error = "{origin}: an operation on the whole object" };
+        return result\fail::<any>("{origin}: an operation on the whole object");
     }
     final seg = segs[0];
     final last = segs.len() == 1;
@@ -747,7 +743,7 @@ fun edit(doc: any, segs: [str], op: str, value: any, origin: str) > Result::<any
         final next: mut {str: any} = m.cloneMutable();
         if (!last) {
             if (!m.hasKey(seg)) {
-                return Result::<any>{ error = "{origin}: no value at {seg}" };
+                return result\fail::<any>("{origin}: no value at {seg}");
             }
             final inner = edit(m[seg], segs: segs.sub(1), op: op, value: value, origin: origin);
             if (inner.error -> e) {
@@ -757,20 +753,20 @@ fun edit(doc: any, segs: [str], op: str, value: any, origin: str) > Result::<any
         } else if (op == "add") {
             next[seg] = value;
         } else if (!m.hasKey(seg)) {
-            return Result::<any>{ error = "{origin}: {op} of {seg}, which is not there" };
+            return result\fail::<any>("{origin}: {op} of {seg}, which is not there");
         } else if (op == "replace") {
             next[seg] = value;
         } else {
             next.remove(seg);
         }
-        return Result::<any>{ value = next };
+        return result\ok::<any>(next);
     }
     if (doc as? [any] -> items) {
         final next: mut [any] = items.cloneMutable();
         if (!last) {
             final at = index(seg, len: items.len(), origin: origin);
             if (at.error -> e) {
-                return Result::<any>{ error = e };
+                return result\Result::<any>{ error = e };
             }
             final inner = edit(items[at.value!], segs: segs.sub(1), op: op, value: value, origin: origin);
             if (inner.error -> e) {
@@ -782,25 +778,25 @@ fun edit(doc: any, segs: [str], op: str, value: any, origin: str) > Result::<any
         } else if (op == "add") {
             final at = index(seg, len: items.len() + 1, origin: origin);
             if (at.error -> e) {
-                return Result::<any>{ error = e };
+                return result\Result::<any>{ error = e };
             }
             next.insert(at.value!, value: value);
         } else if (op == "replace") {
             final at = index(seg, len: items.len(), origin: origin);
             if (at.error -> e) {
-                return Result::<any>{ error = e };
+                return result\Result::<any>{ error = e };
             }
             next[at.value!] = value;
         } else {
             final at = index(seg, len: items.len(), origin: origin);
             if (at.error -> e) {
-                return Result::<any>{ error = e };
+                return result\Result::<any>{ error = e };
             }
             next.remove(at.value!);
         }
-        return Result::<any>{ value = next };
+        return result\ok::<any>(next);
     }
-    return Result::<any>{ error = "{origin}: {seg} is inside a scalar" };
+    return result\fail::<any>("{origin}: {seg} is inside a scalar");
 }
 
 test "JSON6902 add, replace, remove, move and test" {
@@ -1171,7 +1167,7 @@ fun policy(d: Drawing, f: mut figure\Figure, np: Resource, workloads: [Resource]
             foreach (peer in peers) {
                 final found = peerActors(d, f: f, peer: (peer as? {str: any}) ?? {<str: any>}, np: np, workloads: workloads);
                 if (found.error -> e) {
-                    return e;
+                    return e.message;
                 }
                 foreach (a in found.value!) {
                     ends.append(a);
@@ -1198,22 +1194,22 @@ fun policy(d: Drawing, f: mut figure\Figure, np: Resource, workloads: [Resource]
     return null;
 }
 
-fun peerActors(d: Drawing, f: mut figure\Figure, peer: {str: any}, np: Resource, workloads: [Resource]) > Result::<[figure\Actor]> {
+fun peerActors(d: Drawing, f: mut figure\Figure, peer: {str: any}, np: Resource, workloads: [Resource]) > result\Result::<[figure\Actor]> {
     if (dig(peer, path: ["ipBlock", "cidr"]) as? str -> cidr) {
         final except = lists(dig(peer, path: ["ipBlock", "except"]));
         final sub = if (except.len() > 0) "except " + strings(except).join(", ") else "";
-        return Result::<[figure\Actor]>{ value = [external(d, name: cidr, sub: sub, look: figure\Look.external)] };
+        return result\ok::<[figure\Actor]>([external(d, name: cidr, sub: sub, look: figure\Look.external)]);
     }
     foreach (sel in ["podSelector", "namespaceSelector"]) {
         if (dig(peer, path: [sel, "matchExpressions"]) != null) {
-            return Result::<[figure\Actor]>{ error = "{np.origin}: {sel}.matchExpressions is not read by libs/kustomize" };
+            return result\fail::<[figure\Actor]>("{np.origin}: {sel}.matchExpressions is not read by libs/kustomize");
         }
     }
     final pods = (dig(peer, path: ["podSelector", "matchLabels"]) as? {str: any}) ?? {<str: any>};
     if (!peer.hasKey("namespaceSelector")) {
         final local = workloads.filter(fun (i: int, w: Resource) > bool => w.ns() == np.ns() and matches(pods, labels: templateLabels(w)));
         if (local.len() > 0) {
-            return Result::<[figure\Actor]>{ value = local.map(fun (i: int, w: Resource) > figure\Actor => actorNamed(d, r: w)) };
+            return result\ok::<[figure\Actor]>(local.map(fun (i: int, w: Resource) > figure\Actor => actorNamed(d, r: w)));
         }
     }
     final nsLabels = (dig(peer, path: ["namespaceSelector", "matchLabels"]) as? {str: any}) ?? {<str: any>};
@@ -1223,7 +1219,7 @@ fun peerActors(d: Drawing, f: mut figure\Figure, peer: {str: any}, np: Resource,
         else if (nsLabels.len() == 0) "any namespace"
         else pairsText(nsLabels);
     final who = if (pods.len() == 0) "all pods" else pods.values().map(fun (i: int, v: any) > str => text(v)).join(",");
-    return Result::<[figure\Actor]>{ value = [external(d, name: "{ns}/{who}", sub: pairsText(pods), look: figure\Look.external)] };
+    return result\ok::<[figure\Actor]>([external(d, name: "{ns}/{who}", sub: pairsText(pods), look: figure\Look.external)]);
 }
 
 fun allowLabel(ports: [any]) > str {
@@ -1399,7 +1395,7 @@ fun named(objects: [Resource], kind: str) > Resource? {
 
 fun buildError(kustomization: str) > str {
     try {
-        return built(staged(kustomization, files: ["app.yaml"])).error ?? "";
+        return built(staged(kustomization, files: ["app.yaml"])).error?.message ?? "";
     } catch (e: str) {
         return e;
     }

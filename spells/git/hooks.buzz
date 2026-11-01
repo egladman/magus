@@ -17,6 +17,7 @@
 // change it with rw. `magus run --dry-run` forks and writes nothing.
 import "fs";
 import "magus";
+import "result";
 import "std";
 import "vcs";
 
@@ -51,11 +52,6 @@ object Step {
 object Layout {
     hooksDir: str = "",
     prefix: str = "",
-}
-
-object Result::<T> {
-    value: T? = null,
-    error: str? = null,
 }
 
 // shimScript returns the script a shim runs, or null when body is not a shim install wrote.
@@ -95,64 +91,64 @@ export fun shim(hook: str, script: str, include: str) > str {
 export fun hooksIn(dir: str) > [str] !> any { //nolint:no-throw // install raises its refusals before writing
     final found = declaredHooks(dir);
     if (found.error -> e) {
-        throw e; //nolint:no-throw // install raises its refusals before writing
+        throw e.message; //nolint:no-throw // install raises its refusals before writing
     }
     return found.value!;
 }
 
-fun declaredHooks(dir: str) > Result::<[str]> {
+fun declaredHooks(dir: str) > result\Result::<[str]> {
     try {
-        if (!fs\isDir(dir)) { return Result::<[str]>{ error = "git hooks: {dir} is not a directory" }; }
+        if (!fs\isDir(dir)) { return result\fail::<[str]>("git hooks: {dir} is not a directory"); }
         var hooks = mut [<str>];
         foreach (entry in fs\listDir(dir)) {
             if (!entry.endsWith(".buzz")) { continue; }
             final hook = entry.sub(0, len: entry.len() - ".buzz".len());
             if (hookNames().indexOf(hook) == null) {
-                return Result::<[str]>{ error = "git hooks: {dir}/{entry}: `{hook}` is not a git hook name (see githooks(5))" };
+                return result\fail::<[str]>("git hooks: {dir}/{entry}: `{hook}` is not a git hook name (see githooks(5))");
             }
             hooks.append(hook);
         }
-        if (hooks.len() == 0) { return Result::<[str]>{ error = "git hooks: {dir} holds no <hook>.buzz file" }; }
-        return Result::<[str]>{ value = hooks };
+        if (hooks.len() == 0) { return result\fail::<[str]>("git hooks: {dir} holds no <hook>.buzz file"); }
+        return result\ok::<[str]>(hooks);
     } catch (err: any) {
-        return Result::<[str]>{ error = "git hooks: list {dir}: {err}" };
+        return result\caught::<[str]>(err, doing: "git hooks: list {dir}");
     }
 }
 
 // scriptDir joins the calling project's prefix to dir, refusing a dir that could name
 // a script outside the checkout.
-fun scriptDir(at: Layout, dir: str) > Result::<str> {
+fun scriptDir(at: Layout, dir: str) > result\Result::<str> {
     if (dir == "" or dir.startsWith("/") or dir.startsWith("..") or dir.indexOf("/..") != null) {
-        return Result::<str>{ error = "git hooks: dir must be a path inside the project, got `{dir}`" };
+        return result\fail::<str>("git hooks: dir must be a path inside the project, got `{dir}`");
     }
     var clean = dir;
     if (clean.endsWith("/")) { clean = clean.sub(0, len: clean.len() - 1); }
-    return Result::<str>{ value = at.prefix + clean };
+    return result\ok::<str>(at.prefix + clean);
 }
 
 // --git-path rather than .git/hooks: it follows core.hooksPath and a linked worktree's
 // common directory. Absolute, so the path does not depend on where the target runs.
-fun layout() > Result::<Layout> {
+fun layout() > result\Result::<Layout> {
     try {
         final backend = vcs\name();
         if (backend != "git") {
-            return Result::<Layout>{ error = "git hooks: only git runs git hooks, and this checkout's VCS is `{backend}`" };
+            return result\fail::<Layout>("git hooks: only git runs git hooks, and this checkout's VCS is `{backend}`");
         }
         final revParse = vcs\cmd(["rev-parse", "--path-format=absolute", "--git-path", "hooks", "--show-prefix"],
             opts: vcs\CommandOptions{quiet = true}).stdout;
         final lines = revParse.split("\n");
         var prefix = "";
         if (lines.len() > 1) { prefix = lines[1]; }
-        return Result::<Layout>{ value = Layout{hooksDir = lines[0], prefix = prefix} };
+        return result\ok::<Layout>(Layout{hooksDir = lines[0], prefix = prefix});
     } catch (err: any) {
-        return Result::<Layout>{ error = "git hooks: locate the hooks directory: {err}" };
+        return result\caught::<Layout>(err, doing: "git hooks: locate the hooks directory");
     }
 }
 
-fun installSteps(at: Layout, dir: str) > Result::<[Step]> {
+fun installSteps(at: Layout, dir: str) > result\Result::<[Step]> {
     final scripts = scriptDir(at, dir: dir);
     if (scripts.error -> e) {
-        return Result::<[Step]>{ error = e };
+        return result\Result::<[Step]>{ error = e };
     }
     final base = scripts.value!;
     var include = at.prefix;
@@ -160,7 +156,7 @@ fun installSteps(at: Layout, dir: str) > Result::<[Step]> {
     var steps = mut [<Step>];
     final listed = declaredHooks(dir);
     if (listed.error -> e) {
-        return Result::<[Step]>{ error = e };
+        return result\Result::<[Step]>{ error = e };
     }
     final declared = listed.value!;
     try {
@@ -174,23 +170,23 @@ fun installSteps(at: Layout, dir: str) > Result::<[Step]> {
             }
             final have = fs\readFile(path);
             if (shimScript(have) == null) {
-                return Result::<[Step]>{ error = "git hooks: {path} exists and magus did not write it; delete it, or call {script} from it" };
+                return result\fail::<[Step]>("git hooks: {path} exists and magus did not write it; delete it, or call {script} from it");
             }
             if (have != want) {
                 steps.append(Step{hook = hook, path = path, body = want, change = Change.replace});
             }
         }
     } catch (err: any) {
-        return Result::<[Step]>{ error = "git hooks: read the installed hooks: {err}" };
+        return result\caught::<[Step]>(err, doing: "git hooks: read the installed hooks");
     }
     final removals = removeSteps(at, dir: dir);
     if (removals.error -> e) {
-        return Result::<[Step]>{ error = e };
+        return result\Result::<[Step]>{ error = e };
     }
     foreach (step in undeclared(removals.value!, declared: declared)) {
         steps.append(step);
     }
-    return Result::<[Step]>{ value = steps };
+    return result\ok::<[Step]>(steps);
 }
 
 // undeclared keeps the removals for shims whose <hook>.buzz is gone from the dir, so
@@ -202,10 +198,10 @@ fun undeclared(removals: [Step], declared: [str]) > [Step] {
 
 // removeSteps finds shims by their marker rather than by listing dir, so a shim whose
 // script was deleted or renamed is still found and removed.
-fun removeSteps(at: Layout, dir: str) > Result::<[Step]> {
+fun removeSteps(at: Layout, dir: str) > result\Result::<[Step]> {
     final scripts = scriptDir(at, dir: dir);
     if (scripts.error -> e) {
-        return Result::<[Step]>{ error = e };
+        return result\Result::<[Step]>{ error = e };
     }
     final base = scripts.value! + "/";
     var steps = mut [<Step>];
@@ -219,9 +215,9 @@ fun removeSteps(at: Layout, dir: str) > Result::<[Step]> {
             }
         }
     } catch (err: any) {
-        return Result::<[Step]>{ error = "git hooks: read {at.hooksDir}: {err}" };
+        return result\caught::<[Step]>(err, doing: "git hooks: read {at.hooksDir}");
     }
-    return Result::<[Step]>{ value = steps };
+    return result\ok::<[Step]>(steps);
 }
 
 fun summary(steps: [Step]) > str {
@@ -237,14 +233,14 @@ fun summary(steps: [Step]) > str {
 
 // The shim is written beside its destination and renamed into place with the exec bit
 // already set, so git never finds the hook present but not runnable.
-fun apply(ctx: magus\Context, steps: [Step]) > Result::<bool> {
+fun apply(ctx: magus\Context, steps: [Step]) > result\Result::<bool> {
     if (steps.len() == 0) {
         magus\log.info("git hooks: nothing to change");
-        return Result::<bool>{ value = true };
+        return result\ok::<bool>(true);
     }
     if (!ctx.hasCharm("rw")) {
-        return Result::<bool>{ error = "git hooks: {steps.len()} change(s) pending; rerun with the rw charm to make them:\n  "
-            + summary(steps) };
+        return result\fail::<bool>("git hooks: {steps.len()} change(s) pending; rerun with the rw charm to make them:\n  "
+            + summary(steps));
     }
     try {
         foreach (step in steps) {
@@ -259,22 +255,22 @@ fun apply(ctx: magus\Context, steps: [Step]) > Result::<bool> {
             fs\rename(tmp, dst: step.path);
         }
     } catch (err: any) {
-        return Result::<bool>{ error = "git hooks: write the hooks: {err}" };
+        return result\caught::<bool>(err, doing: "git hooks: write the hooks");
     }
     magus\log.info("git hooks:\n  " + summary(steps));
-    return Result::<bool>{ value = true };
+    return result\ok::<bool>(true);
 }
 
 // A dry run forks nothing, so rev-parse prints nothing and git's hooks directory is
 // unknown; report the declared hooks instead of planning against a guessed path.
-fun reportedDryRun(at: Layout, dir: str) > Result::<bool> {
-    if (at.hooksDir != "") { return Result::<bool>{ value = false }; }
+fun reportedDryRun(at: Layout, dir: str) > result\Result::<bool> {
+    if (at.hooksDir != "") { return result\ok::<bool>(false); }
     final listed = declaredHooks(dir);
     if (listed.error -> e) {
-        return Result::<bool>{ error = e };
+        return result\Result::<bool>{ error = e };
     }
     magus\log.info("git hooks: dry run; would reconcile {listed.value!.join(", ")} from {dir}");
-    return Result::<bool>{ value = true };
+    return result\ok::<bool>(true);
 }
 
 // install writes a shim for every <hook>.buzz in dir, relative to the calling project,
@@ -286,21 +282,21 @@ fun reportedDryRun(at: Layout, dir: str) > Result::<bool> {
 export fun install(ctx: magus\Context, dir: str) > void !> any { //nolint:no-throw // a target calls it and install raises its refusals
     final located = layout();
     if (located.error -> e) {
-        throw e; //nolint:no-throw // a target calls it and install raises its refusals
+        throw e.message; //nolint:no-throw // a target calls it and install raises its refusals
     }
     final at = located.value!;
     final dry = reportedDryRun(at, dir: dir);
     if (dry.error -> e) {
-        throw e; //nolint:no-throw // a target calls it and install raises its refusals
+        throw e.message; //nolint:no-throw // a target calls it and install raises its refusals
     }
     if (dry.value!) { return; }
     final steps = installSteps(at, dir: dir);
     if (steps.error -> e) {
-        throw e; //nolint:no-throw // a target calls it and install raises its refusals
+        throw e.message; //nolint:no-throw // a target calls it and install raises its refusals
     }
     final applied = apply(ctx, steps: steps.value!);
     if (applied.error -> e) {
-        throw e; //nolint:no-throw // a target calls it and install raises its refusals
+        throw e.message; //nolint:no-throw // a target calls it and install raises its refusals
     }
 }
 
@@ -308,21 +304,21 @@ export fun install(ctx: magus\Context, dir: str) > void !> any { //nolint:no-thr
 export fun remove(ctx: magus\Context, dir: str) > void !> any { //nolint:no-throw // a target calls it and remove raises its refusals
     final located = layout();
     if (located.error -> e) {
-        throw e; //nolint:no-throw // a target calls it and remove raises its refusals
+        throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
     }
     final at = located.value!;
     final dry = reportedDryRun(at, dir: dir);
     if (dry.error -> e) {
-        throw e; //nolint:no-throw // a target calls it and remove raises its refusals
+        throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
     }
     if (dry.value!) { return; }
     final steps = removeSteps(at, dir: dir);
     if (steps.error -> e) {
-        throw e; //nolint:no-throw // a target calls it and remove raises its refusals
+        throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
     }
     final applied = apply(ctx, steps: steps.value!);
     if (applied.error -> e) {
-        throw e; //nolint:no-throw // a target calls it and remove raises its refusals
+        throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
     }
 }
 

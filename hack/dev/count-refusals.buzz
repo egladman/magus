@@ -15,17 +15,13 @@ namespace countrefusals;
 import "encoding/json";
 import "flags";
 import "magus";
+import "result";
 import "std";
 
 import "assert";
 
 final USAGE = "usage: magus buzz hack/dev/count-refusals.buzz";
 final HELP = "cost: none\n{USAGE}";
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 export object Rule {
     name: str,
@@ -37,7 +33,7 @@ export object Rule {
 
 // byRule folds the brief's feedback, one row per rule and tool, into one row per rule,
 // most refused first.
-export fun byRule(brief: str) > Result::<[Rule]> {
+export fun byRule(brief: str) > result\Result::<[Rule]> {
     try {
         final rows = mut {<str: mut Rule>};
         foreach (f in json\parse(brief)["feedback"] ?? []) {
@@ -55,11 +51,9 @@ export fun byRule(brief: str) > Result::<[Rule]> {
         foreach (_, r in rows) {
             all.append(r);
         }
-        return Result::<[Rule]>{
-            value = all.sort(fun (a: Rule, b: Rule) > bool => a.denied > b.denied or (a.denied == b.denied and a.name < b.name)),
-        };
+        return result\ok::<[Rule]>(all.sort(fun (a: Rule, b: Rule) > bool => a.denied > b.denied or (a.denied == b.denied and a.name < b.name)));
     } catch (err: any) {
-        return Result::<[Rule]>{ error = "count-refusals: read the brief: {err}" };
+        return result\caught::<[Rule]>(err, doing: "count-refusals: read the brief");
     }
 }
 
@@ -82,7 +76,7 @@ export fun main(args: [str]) > void !> any {
     }
     final rules = refusals();
     if (rules.error != null) {
-        throw rules.error!;
+        throw rules.error!.message;
     }
     std\print("read-only");
     foreach (line in render(rules.value!)) {
@@ -91,11 +85,11 @@ export fun main(args: [str]) > void !> any {
 }
 
 // refusals are this checkout's recurring refusals, one row per rule.
-export fun refusals() > Result::<[Rule]> {
+export fun refusals() > result\Result::<[Rule]> {
     try {
         return byRule(magus\cmd("session", args: ["--brief", "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout);
     } catch (err: any) {
-        return Result::<[Rule]>{ error = "count-refusals: magus session: {err}" };
+        return result\caught::<[Rule]>(err, doing: "count-refusals: magus session");
     }
 }
 

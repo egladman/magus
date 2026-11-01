@@ -1,3 +1,4 @@
+import "result";
 import "std";
 import "fs";
 import "math";
@@ -11,19 +12,19 @@ import "holdout";
 
 // relativize keeps machine paths out of the committed log: a path under the cache root
 // is logged relative to it, and any other path as given.
-export fun relativize(root: str, file: str) > holdout\Result::<str> {
+export fun relativize(root: str, file: str) > result\Result::<str> {
     try {
         final rel = path\rel(path\abs(root), target: path\abs(file)) catch "..";
         if (rel.startsWith("..")) {
-            return holdout\Result::<str>{ value = file };
+            return result\ok::<str>(file);
         }
-        return holdout\Result::<str>{ value = rel };
+        return result\ok::<str>(rel);
     } catch (err: any) {
-        return holdout\Result::<str>{ error = "runlog: relativize {file}: {err}" };
+        return result\caught::<str>(err, doing: "runlog: relativize {file}");
     }
 }
 
-fun nonBlank(path: str) > holdout\Result::<[str]> {
+fun nonBlank(path: str) > result\Result::<[str]> {
     try {
         final kept: mut [str] = mut [];
         foreach (line in fs\readLines(path)) {
@@ -31,33 +32,33 @@ fun nonBlank(path: str) > holdout\Result::<[str]> {
                 kept.append(line);
             }
         }
-        return holdout\Result::<[str]>{ value = kept };
+        return result\ok::<[str]>(kept);
     } catch (err: any) {
-        return holdout\Result::<[str]>{ error = "runlog: read {path}: {err}" };
+        return result\caught::<[str]>(err, doing: "runlog: read {path}");
     }
 }
 
-fun logged(target: str, key: str, value: str) > holdout\Result::<bool> {
+fun logged(target: str, key: str, value: str) > result\Result::<bool> {
     try {
         if (!fs\exists(target)) {
-            return holdout\Result::<bool>{ value = false };
+            return result\ok::<bool>(false);
         }
         final lines = nonBlank(target);
         if (lines.error -> e) {
-            return holdout\Result::<bool>{ error = e };
+            return result\Result::<bool>{ error = e };
         }
         foreach (line in lines.value!) {
             final row: {str: any} = json\parse(line);
             if (row[key] -> v) {
                 if ("{v}" == value) {
-                    return holdout\Result::<bool>{ value = true };
+                    return result\ok::<bool>(true);
                 }
             }
         }
     } catch (err: any) {
-        return holdout\Result::<bool>{ error = "runlog: parse {target}: {err}" };
+        return result\caught::<bool>(err, doing: "runlog: parse {target}");
     }
-    return holdout\Result::<bool>{ value = false };
+    return result\ok::<bool>(false);
 }
 
 fun count(row: {str: any}, key: str) > int {
@@ -69,33 +70,33 @@ fun count(row: {str: any}, key: str) > int {
 
 // appendTexts appends the line `embed texts` wrote to dir's texts-run.json, unless the
 // log already holds a run over the same texts.
-export fun appendTexts(dir: str, target: str) > holdout\Result::<bool> {
+export fun appendTexts(dir: str, target: str) > result\Result::<bool> {
     try {
         final line = fs\readFile(fs\join(dir, name: "texts-run.json")).trim();
         final row: {str: any} = json\parse(line);
         final digest = "{row["texts_sha256"]}";
         final seen = logged(target, key: "texts_sha256", value: digest);
         if (seen.error -> e) {
-            return holdout\Result::<bool>{ error = e };
+            return result\Result::<bool>{ error = e };
         }
         if (seen.value!) {
             std\print("texts {digest}: already recorded");
-            return holdout\Result::<bool>{ value = true };
+            return result\ok::<bool>(true);
         }
         fs\appendFile(target, content: line + "\n");
-        return holdout\Result::<bool>{ value = true };
+        return result\ok::<bool>(true);
     } catch (err: any) {
-        return holdout\Result::<bool>{ error = "runlog: appendTexts {dir}: {err}" };
+        return result\caught::<bool>(err, doing: "runlog: appendTexts {dir}");
     }
 }
 
 // summarize totals a teacher manifest. A shard encoded twice counts once, by its later
 // record, as the trainer reads it. The run id is the manifest's directory name, which
 // the teacher derives from the run spec.
-export fun summarize(manifest: str) > holdout\Result::<{str: any}> {
+export fun summarize(manifest: str) > result\Result::<{str: any}> {
     final records = nonBlank(manifest);
     if (records.error -> e) {
-        return holdout\Result::<{str: any}>{ error = e };
+        return result\Result::<{str: any}>{ error = e };
     }
     try {
         var spec: {str: any}? = null;
@@ -108,7 +109,7 @@ export fun summarize(manifest: str) > holdout\Result::<{str: any}> {
             } else if (spec != null and kind == "shard") {
                 shards[count(r, key: "shard")] = r;
             } else {
-                return holdout\Result::<{str: any}>{ error = "{manifest}: unexpected \"{kind}\" record" };
+                return result\fail::<{str: any}>("{manifest}: unexpected \"{kind}\" record");
             }
         }
         if (spec -> s) {
@@ -122,7 +123,7 @@ export fun summarize(manifest: str) > holdout\Result::<{str: any}> {
                     seconds = seconds + std\toDouble(secs);
                 }
             }
-            return holdout\Result::<{str: any}>{ value = {
+            return result\ok::<{str: any}>({
                 "kind": "teacher",
                 "run": fs\basename(fs\dirname(manifest)),
                 "teacher": s["model"] ?? "",
@@ -136,20 +137,20 @@ export fun summarize(manifest: str) > holdout\Result::<{str: any}> {
                 "tokens": tokens,
                 "seconds": math\round(seconds, places: 1),
                 "manifest_sha256": crypto\sha256Hex(fs\readFile(manifest)),
-            } };
+            });
         }
     } catch (err: any) {
-        return holdout\Result::<{str: any}>{ error = "runlog: summarize {manifest}: {err}" };
+        return result\caught::<{str: any}>(err, doing: "runlog: summarize {manifest}");
     }
-    return holdout\Result::<{str: any}>{ error = "{manifest} holds no run record" };
+    return result\fail::<{str: any}>("{manifest} holds no run record");
 }
 
 // recordTeacher appends the state of the teacher run under cache that embedded texts at
 // maxLen with model. Exactly one run may match.
-export fun recordTeacher(cache: str, model: str, texts: str, maxLen: int, target: str) > holdout\Result::<bool> {
+export fun recordTeacher(cache: str, model: str, texts: str, maxLen: int, target: str) > result\Result::<bool> {
     final texted = nonBlank(texts);
     if (texted.error -> e) {
-        return holdout\Result::<bool>{ error = e };
+        return result\Result::<bool>{ error = e };
     }
     try {
         final digest = crypto\sha256File(texts);
@@ -159,7 +160,7 @@ export fun recordTeacher(cache: str, model: str, texts: str, maxLen: int, target
         foreach (m in fs\glob(fs\join(cache, name: "teacher/{model}/*/manifest.jsonl"))) {
             final summed = summarize(m.value);
             if (summed.error -> e) {
-                return holdout\Result::<bool>{ error = e };
+                return result\Result::<bool>{ error = e };
             }
             final l = summed.value!;
             if (l["texts_sha256"] == digest and l["max_len"] == maxLen) {
@@ -168,16 +169,16 @@ export fun recordTeacher(cache: str, model: str, texts: str, maxLen: int, target
             }
         }
         if (found.len() != 1) {
-            return holdout\Result::<bool>{ error = "{found.len()} {model} runs under {cache} embedded {texts} at max-len {maxLen}, want 1: {found}" };
+            return result\fail::<bool>("{found.len()} {model} runs under {cache} embedded {texts} at max-len {maxLen}, want 1: {found}");
         }
         final rows = count(line, key: "rows");
         final textsFile = relativize(cache, file: texts);
         if (textsFile.error -> e) {
-            return holdout\Result::<bool>{ error = e };
+            return result\Result::<bool>{ error = e };
         }
         final manifestFile = relativize(cache, file: found[0]);
         if (manifestFile.error -> e) {
-            return holdout\Result::<bool>{ error = e };
+            return result\Result::<bool>{ error = e };
         }
         final done = line.cloneMutable();
         done["texts"] = n;
@@ -187,30 +188,30 @@ export fun recordTeacher(cache: str, model: str, texts: str, maxLen: int, target
         final manifest = "{done["manifest"]}";
         final seen = logged(target, key: "manifest_sha256", value: "{done["manifest_sha256"]}");
         if (seen.error -> e) {
-            return holdout\Result::<bool>{ error = e };
+            return result\Result::<bool>{ error = e };
         }
         if (seen.value!) {
             std\print("{manifest}: already recorded");
-            return holdout\Result::<bool>{ value = true };
+            return result\ok::<bool>(true);
         }
         fs\appendFile(target, content: json\stringify(done) + "\n");
         final seconds = std\toDouble(done["seconds"]);
         final tokens = count(done, key: "tokens");
         final rate = if (seconds > 0.0) math\round(std\toDouble(tokens) / seconds) else 0.0;
         std\print("{manifest}: {rows} of {n} texts in {done["shards"]} shards, {tokens} tokens, {seconds}s encoding ({rate} tokens/s); manifest sha256 {done["manifest_sha256"]}");
-        return holdout\Result::<bool>{ value = true };
+        return result\ok::<bool>(true);
     } catch (err: any) {
-        return holdout\Result::<bool>{ error = "runlog: recordTeacher {texts}: {err}" };
+        return result\caught::<bool>(err, doing: "runlog: recordTeacher {texts}");
     }
 }
 
-fun writeManifest(path: str, records: [str]) > holdout\Result::<bool> {
+fun writeManifest(path: str, records: [str]) > result\Result::<bool> {
     try {
         fs\mkdirAll(fs\dirname(path));
         fs\writeFile(path, content: records.join("\n") + "\n");
-        return holdout\Result::<bool>{ value = true };
+        return result\ok::<bool>(true);
     } catch (err: any) {
-        return holdout\Result::<bool>{ error = "runlog: write {path}: {err}" };
+        return result\caught::<bool>(err, doing: "runlog: write {path}");
     }
 }
 
@@ -250,7 +251,7 @@ test "recordTeacher logs a run once and counts a re-encoded shard by its later r
     std\assert(std\toDouble(last["seconds"]) == 1.8, message: "seconds sum to one decimal");
 
     final refused = recordTeacher(cache, model: "M", texts: texts, maxLen: 512, target: runs);
-    std\assert((refused.error ?? "").indexOf("0 M runs") != null, message: "no run at max-len 512");
+    std\assert((refused.error?.message ?? "").indexOf("0 M runs") != null, message: "no run at max-len 512");
 }
 
 test "appendTexts logs a texts run once" {

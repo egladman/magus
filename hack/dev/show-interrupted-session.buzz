@@ -18,6 +18,7 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "std";
 import "vcs";
 
@@ -28,11 +29,6 @@ final HELP = "cost: none\n{USAGE}";
 
 // REPLIES is how many of the agent's last messages are shown.
 final REPLIES = 3;
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 export object Session {
     host: str,
@@ -58,20 +54,20 @@ export object Checkout {
 
 // pick chooses the session to show from `magus session ls -o json`: the one with id, else
 // the newest of host (any host when ""), whose checkout is one of trees but not here.
-export fun pick(listing: str, trees: [str], here: str, host: str, id: str) > Result::<Session> {
+export fun pick(listing: str, trees: [str], here: str, host: str, id: str) > result\Result::<Session> {
     var best: Session? = null;
     var bestAt = "";
     var doc: any = null;
     try {
         doc = json\parse(listing);
     } catch (err: any) {
-        return Result::<Session>{ error = "show-interrupted-session: the session listing is not JSON: {err}" };
+        return result\caught::<Session>(err, doing: "show-interrupted-session: the session listing is not JSON");
     }
     foreach (c in doc["checkpoints"] ?? []) {
         final s = Session{ host = c["host"] ?? "", id = c["host_session"] ?? "", transcript = c["transcript"] ?? "", workspace = c["workspace"] ?? "" };
         if (id != "") {
             if (s.id == id) {
-                return Result::<Session>{ value = s };
+                return result\ok::<Session>(s);
             }
             continue;
         }
@@ -84,14 +80,14 @@ export fun pick(listing: str, trees: [str], here: str, host: str, id: str) > Res
             bestAt = at;
         }
     }
-    return Result::<Session>{ value = best };
+    return result\ok::<Session>(best);
 }
 
-fun parseRecord(line: str) > Result::<any> {
+fun parseRecord(line: str) > result\Result::<any> {
     try {
-        return Result::<any>{ value = json\parse(line) };
+        return result\ok::<any>(json\parse(line));
     } catch (err: any) {
-        return Result::<any>{ error = "show-interrupted-session: a transcript line is not JSON: {err}" };
+        return result\caught::<any>(err, doing: "show-interrupted-session: a transcript line is not JSON");
     }
 }
 
@@ -118,7 +114,7 @@ fun takeLast(items: [str], n: int) > [str] {
 
 // readClaude reads a Claude Code transcript. A usage limit or API failure ends it with a
 // synthetic assistant record carrying isApiErrorMessage and the HTTP status.
-export fun readClaude(lines: [str]) > Result::<Transcript> {
+export fun readClaude(lines: [str]) > result\Result::<Transcript> {
     var cwd = "";
     final asks = mut [<str>];
     final replies = mut [<str>];
@@ -126,7 +122,7 @@ export fun readClaude(lines: [str]) > Result::<Transcript> {
     foreach (line in lines) {
         final record = parseRecord(line);
         if (record.error != null) {
-            return Result::<Transcript>{ error = record.error };
+            return result\Result::<Transcript>{ error = record.error };
         }
         final rec = record.value!;
         if (cwd == "" and rec["cwd"] != null) {
@@ -147,12 +143,12 @@ export fun readClaude(lines: [str]) > Result::<Transcript> {
             ending = "the last record is the agent's message: it may have been waiting on the person";
         }
     }
-    return Result::<Transcript>{ value = Transcript{ cwd = cwd, asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending } };
+    return result\ok::<Transcript>(Transcript{ cwd = cwd, asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending });
 }
 
 // readCodex reads a Codex rollout. A task ends with task_complete, whose error says why it
 // stopped early, and an error event can come before it.
-export fun readCodex(lines: [str]) > Result::<Transcript> {
+export fun readCodex(lines: [str]) > result\Result::<Transcript> {
     var cwd = "";
     final asks = mut [<str>];
     final replies = mut [<str>];
@@ -160,7 +156,7 @@ export fun readCodex(lines: [str]) > Result::<Transcript> {
     foreach (line in lines) {
         final record = parseRecord(line);
         if (record.error != null) {
-            return Result::<Transcript>{ error = record.error };
+            return result\Result::<Transcript>{ error = record.error };
         }
         final rec = record.value!;
         final p = rec["payload"];
@@ -191,19 +187,19 @@ export fun readCodex(lines: [str]) > Result::<Transcript> {
             }
         }
     }
-    return Result::<Transcript>{ value = Transcript{ cwd = cwd, asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending } };
+    return result\ok::<Transcript>(Transcript{ cwd = cwd, asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending });
 }
 
 // readCursor reads a Cursor agent transcript, which records roles and text but no ending
 // and no working directory: the checkout comes from the session's record.
-export fun readCursor(lines: [str]) > Result::<Transcript> {
+export fun readCursor(lines: [str]) > result\Result::<Transcript> {
     final asks = mut [<str>];
     final replies = mut [<str>];
     var ending = "no ending recorded";
     foreach (line in lines) {
         final record = parseRecord(line);
         if (record.error != null) {
-            return Result::<Transcript>{ error = record.error };
+            return result\Result::<Transcript>{ error = record.error };
         }
         final rec = record.value!;
         final text = contentText(rec["message"]?["content"]);
@@ -218,15 +214,15 @@ export fun readCursor(lines: [str]) > Result::<Transcript> {
             ending = "the last record is the agent's message";
         }
     }
-    return Result::<Transcript>{ value = Transcript{ asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending } };
+    return result\ok::<Transcript>(Transcript{ asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending });
 }
 
-export fun readTranscript(host: str, file: str) > Result::<Transcript> {
+export fun readTranscript(host: str, file: str) > result\Result::<Transcript> {
     var lines = [<str>];
     try {
         lines = fs\readLines(file);
     } catch (err: any) {
-        return Result::<Transcript>{ error = "show-interrupted-session: read {file}: {err}" };
+        return result\caught::<Transcript>(err, doing: "show-interrupted-session: read {file}");
     }
     if (host == "codex") {
         return readCodex(lines);
@@ -237,7 +233,7 @@ export fun readTranscript(host: str, file: str) > Result::<Transcript> {
     return readClaude(lines);
 }
 
-fun git(dir: str, args: [str]) > Result::<[str]> {
+fun git(dir: str, args: [str]) > result\Result::<[str]> {
     final kept = mut [<str>];
     try {
         foreach (line in vcs\cmd(args, opts: vcs\CommandOptions{ dir = dir, quiet = true }).stdout.split("\n")) {
@@ -246,35 +242,35 @@ fun git(dir: str, args: [str]) > Result::<[str]> {
             }
         }
     } catch (err: any) {
-        return Result::<[str]>{ error = "show-interrupted-session: git {args.join(" ")} in {dir}: {err}" };
+        return result\caught::<[str]>(err, doing: "show-interrupted-session: git {args.join(" ")} in {dir}");
     }
-    return Result::<[str]>{ value = kept };
+    return result\ok::<[str]>(kept);
 }
 
 // checkoutState reads a checkout without writing to it.
-export fun checkoutState(path: str) > Result::<Checkout> {
+export fun checkoutState(path: str) > result\Result::<Checkout> {
     var present = false;
     try {
         present = fs\isDir(path);
     } catch (err: any) {
-        return Result::<Checkout>{ error = "show-interrupted-session: stat {path}: {err}" };
+        return result\caught::<Checkout>(err, doing: "show-interrupted-session: stat {path}");
     }
     if (!present) {
-        return Result::<Checkout>{ value = Checkout{ path = path, dirty = [<str>], unpushed = [<str>], gone = true } };
+        return result\ok::<Checkout>(Checkout{ path = path, dirty = [<str>], unpushed = [<str>], gone = true });
     }
     final branch = git(path, args: ["rev-parse", "--abbrev-ref", "HEAD"]);
     if (branch.error != null) {
-        return Result::<Checkout>{ error = branch.error };
+        return result\Result::<Checkout>{ error = branch.error };
     }
     final dirty = git(path, args: ["--no-optional-locks", "status", "--porcelain"]);
     if (dirty.error != null) {
-        return Result::<Checkout>{ error = dirty.error };
+        return result\Result::<Checkout>{ error = dirty.error };
     }
     final unpushed = git(path, args: ["log", "--oneline", "-20", "HEAD", "--not", "--remotes"]);
     if (unpushed.error != null) {
-        return Result::<Checkout>{ error = unpushed.error };
+        return result\Result::<Checkout>{ error = unpushed.error };
     }
-    return Result::<Checkout>{ value = Checkout{ path = path, branch = branch.value!.join(""), dirty = dirty.value!, unpushed = unpushed.value! } };
+    return result\ok::<Checkout>(Checkout{ path = path, branch = branch.value!.join(""), dirty = dirty.value!, unpushed = unpushed.value! });
 }
 
 // handoff is what a person runs to carry the checkout's work here. It is printed, never
@@ -303,7 +299,7 @@ export object Report {
 }
 
 // show finds the session and reads its transcript and checkout.
-export fun show(host: str, id: str) > Result::<Report> {
+export fun show(host: str, id: str) > result\Result::<Report> {
     final trees = mut [<str>];
     var root = "";
     var listing = "";
@@ -311,11 +307,11 @@ export fun show(host: str, id: str) > Result::<Report> {
         root = vcs\root();
         listing = magus\cmd("session", args: ["ls", "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout;
     } catch (err: any) {
-        return Result::<Report>{ error = "show-interrupted-session: list the sessions: {err}" };
+        return result\caught::<Report>(err, doing: "show-interrupted-session: list the sessions");
     }
     final worktrees = git(root, args: ["worktree", "list", "--porcelain"]);
     if (worktrees.error != null) {
-        return Result::<Report>{ error = worktrees.error };
+        return result\Result::<Report>{ error = worktrees.error };
     }
     foreach (line in worktrees.value!) {
         if (line.startsWith("worktree ")) {
@@ -324,22 +320,22 @@ export fun show(host: str, id: str) > Result::<Report> {
     }
     final picked = pick(listing, trees: trees, here: root, host: host, id: id);
     if (picked.error != null) {
-        return Result::<Report>{ error = picked.error };
+        return result\Result::<Report>{ error = picked.error };
     }
     final s = picked.value;
     if (s == null) {
-        return Result::<Report>{ error = "show-interrupted-session: no recorded session matches; `magus session ls` lists them, and a host is recorded only where its hooks are wired (`magus describe harness`)" };
+        return result\fail::<Report>("show-interrupted-session: no recorded session matches; `magus session ls` lists them, and a host is recorded only where its hooks are wired (`magus describe harness`)");
     }
     final t = readTranscript(s!.host, file: s!.transcript);
     if (t.error != null) {
-        return Result::<Report>{ error = t.error };
+        return result\Result::<Report>{ error = t.error };
     }
     final dir = if (s!.workspace != "") s!.workspace else t.value!.cwd;
     final checkout = checkoutState(dir);
     if (checkout.error != null) {
-        return Result::<Report>{ error = checkout.error };
+        return result\Result::<Report>{ error = checkout.error };
     }
-    return Result::<Report>{ value = Report{ session = s!, transcript = t.value!, checkout = checkout.value! } };
+    return result\ok::<Report>(Report{ session = s!, transcript = t.value!, checkout = checkout.value! });
 }
 
 export fun render(r: Report) > [str] {
@@ -380,7 +376,7 @@ export fun main(args: [str]) > void !> any {
     }
     final shown = show(host, id: parsed.values["--session"] ?? "");
     if (shown.error != null) {
-        throw shown.error!;
+        throw shown.error!.message;
     }
     foreach (line in render(shown.value!)) {
         std\print(line);

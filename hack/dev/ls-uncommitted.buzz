@@ -10,6 +10,7 @@ namespace lsuncommitted;
 
 import "flags";
 import "magus";
+import "result";
 import "sort";
 import "std";
 import "vcs";
@@ -18,11 +19,6 @@ import "assert";
 
 final USAGE = "usage: magus buzz hack/dev/ls-uncommitted.buzz";
 final HELP = "cost: grows with tree size\n{USAGE}";
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 export object Entry {
     path: str,
@@ -63,7 +59,7 @@ export fun render(entries: [Entry]) > [str] {
     return lines;
 }
 
-export fun uncommitted() > Result::<[Entry]> {
+export fun uncommitted() > result\Result::<[Entry]> {
     final entries = mut [<Entry>];
     try {
         final paths = mut [<str>];
@@ -71,15 +67,15 @@ export fun uncommitted() > Result::<[Entry]> {
             paths.append(p.value);
         }
         if (paths.len() == 0) {
-            return Result::<[Entry]>{ value = entries };
+            return result\ok::<[Entry]>(entries);
         }
         foreach (f in magus\describe.file(paths).files) {
             entries.append(Entry{ path = f.path, project = f.project, role = f.role });
         }
     } catch (err: any) {
-        return Result::<[Entry]>{ error = "ls-uncommitted: read the working tree: {err}" };
+        return result\caught::<[Entry]>(err, doing: "ls-uncommitted: read the working tree");
     }
-    return Result::<[Entry]>{ value = entries };
+    return result\ok::<[Entry]>(entries);
 }
 
 export fun main(args: [str]) > void !> any {
@@ -94,7 +90,7 @@ export fun main(args: [str]) > void !> any {
     std\print("read-only");
     final found = uncommitted();
     if (found.error != null) {
-        throw found.error!;
+        throw found.error!.message;
     }
     final entries = found.value!;
     if (entries.len() == 0) {

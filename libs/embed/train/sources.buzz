@@ -1,3 +1,4 @@
+import "result";
 import "std";
 import "fs";
 import "vcs";
@@ -39,7 +40,7 @@ export object Snapshot {
             this.cache[path] = read;
             return read;
         } catch (err: any) {
-            this.faults.append("sources: read {path}: {err}");
+            this.faults.append(result\caught::<bool>(err, doing: "sources: read {path}").error!.message);
             return [<str>];
         }
     }
@@ -100,10 +101,10 @@ fun inDotDir(path: str) > bool {
     return false;
 }
 
-fun trackedPaths() > holdout\Result::<[str]> {
+fun trackedPaths() > result\Result::<[str]> {
     try {
         if (vcs\name() != "git") {
-            return holdout\Result::<[str]>{ error = "sources: lists the tree with git ls-files; this checkout is {vcs\name()}" };
+            return result\fail::<[str]>("sources: lists the tree with git ls-files; this checkout is {vcs\name()}");
         }
         final listing = vcs\cmd(["-c", "core.quotepath=off", "ls-files", "--full-name", "--", ":/"], opts: vcs\CommandOptions{quiet = true}).stdout;
         final keep: mut [str] = mut [];
@@ -116,26 +117,26 @@ fun trackedPaths() > holdout\Result::<[str]> {
             }
         }
         _ = keep.sort(fun (a: str, b: str) > bool => a < b);
-        return holdout\Result::<[str]>{ value = keep };
+        return result\ok::<[str]>(keep);
     } catch (err: any) {
-        return holdout\Result::<[str]>{ error = "sources: list tracked files: {err}" };
+        return result\caught::<[str]>(err, doing: "sources: list tracked files");
     }
 }
 
-export fun everyNode(kind: str, perMatch: int) > holdout\Result::<magus\QueryResult> {
+export fun everyNode(kind: str, perMatch: int) > result\Result::<magus\QueryResult> {
     try {
         final probe: magus\QueryResult = magus\query("kind={kind}", opts: magus\QueryOptions{limit = 1, budget = 1});
-        return holdout\Result::<magus\QueryResult>{ value = magus\query("kind={kind}", opts: magus\QueryOptions{limit = probe.matchCount, budget = probe.matchCount * perMatch + 1000}) };
+        return result\ok::<magus\QueryResult>(magus\query("kind={kind}", opts: magus\QueryOptions{limit = probe.matchCount, budget = probe.matchCount * perMatch + 1000}));
     } catch (err: any) {
-        return holdout\Result::<magus\QueryResult>{ error = "sources: query kind={kind}: {err}" };
+        return result\caught::<magus\QueryResult>(err, doing: "sources: query kind={kind}");
     }
 }
 
 // nodes is every graph node of kind, sorted by id.
-export fun nodes(kind: str) > holdout\Result::<[magus\KnowledgeNode]> {
+export fun nodes(kind: str) > result\Result::<[magus\KnowledgeNode]> {
     final all = everyNode(kind, perMatch: 4);
     if (all.error -> e) {
-        return holdout\Result::<[magus\KnowledgeNode]>{ error = e };
+        return result\Result::<[magus\KnowledgeNode]>{ error = e };
     }
     final found: mut [magus\KnowledgeNode] = mut [];
     foreach (n in all.value!.nodes) {
@@ -144,20 +145,20 @@ export fun nodes(kind: str) > holdout\Result::<[magus\KnowledgeNode]> {
         }
     }
     _ = found.sort(fun (a: magus\KnowledgeNode, b: magus\KnowledgeNode) > bool => a.id < b.id);
-    return holdout\Result::<[magus\KnowledgeNode]>{ value = found };
+    return result\ok::<[magus\KnowledgeNode]>(found);
 }
 
 // figureSvgs is every drawn figure's light SVG under root, sorted.
-export fun figureSvgs(root: str) > holdout\Result::<[str]> {
+export fun figureSvgs(root: str) > result\Result::<[str]> {
     try {
         final paths: mut [str] = mut [];
         foreach (p in fs\glob(fs\join(root, name: "docs/assets/gen/diagram-*-light.svg"))) {
             paths.append(p.value);
         }
         _ = paths.sort(fun (a: str, b: str) > bool => a < b);
-        return holdout\Result::<[str]>{ value = paths };
+        return result\ok::<[str]>(paths);
     } catch (err: any) {
-        return holdout\Result::<[str]>{ error = "sources: list figures under {root}: {err}" };
+        return result\caught::<[str]>(err, doing: "sources: list figures under {root}");
     }
 }
 
@@ -170,10 +171,10 @@ export fun figureId(svg: str) > str {
 // outputLinks pairs each generated page among kept with every tracked file an extracted
 // `documents` edge says it documents: the source it was generated from. A generated page
 // with no such edge, and every generated Go file, stays in the group its path starts in.
-fun outputLinks(generated: {str: bool}, kept: {str: bool}) > holdout\Result::<[[str]]> {
+fun outputLinks(generated: {str: bool}, kept: {str: bool}) > result\Result::<[[str]]> {
     final found = everyNode("doc", perMatch: 8);
     if (found.error -> e) {
-        return holdout\Result::<[[str]]>{ error = e };
+        return result\Result::<[[str]]>{ error = e };
     }
     final q = found.value!;
     final links: mut [[str]] = mut [];
@@ -193,18 +194,18 @@ fun outputLinks(generated: {str: bool}, kept: {str: bool}) > holdout\Result::<[[
         }
     }
     _ = links.sort(fun (a: [str], b: [str]) > bool => if (a[0] == b[0]) a[1] < b[1] else a[0] < b[0]);
-    return holdout\Result::<[[str]]>{ value = links };
+    return result\ok::<[[str]]>(links);
 }
 
 // load reads the tracked tree and the symbol index, and deals the provenance groups. It
 // refuses a partial index: a project the index could not read would silently drop its
 // pairs.
-export fun load() > holdout\Result::<Snapshot> {
+export fun load() > result\Result::<Snapshot> {
     try {
         final root = vcs\root();
         final tracked = trackedPaths();
         if (tracked.error -> e) {
-            return holdout\Result::<Snapshot>{ error = e };
+            return result\Result::<Snapshot>{ error = e };
         }
         final paths = tracked.value!;
         final described = magus\describe.file(paths);
@@ -226,14 +227,14 @@ export fun load() > holdout\Result::<Snapshot> {
         final figures: mut {str: bool} = mut {};
         final svgs = figureSvgs(root);
         if (svgs.error -> e) {
-            return holdout\Result::<Snapshot>{ error = e };
+            return result\Result::<Snapshot>{ error = e };
         }
         foreach (svg in svgs.value!) {
             figures[figureId(svg)] = true;
         }
         final linked = outputLinks(generated, kept: keptSet);
         if (linked.error -> e) {
-            return holdout\Result::<Snapshot>{ error = e };
+            return result\Result::<Snapshot>{ error = e };
         }
         final split = holdout\deal(kept, generated: generated, figures: figures, links: linked.value!);
         final files: mut [SourceFile] = mut [];
@@ -258,11 +259,11 @@ export fun load() > holdout\Result::<Snapshot> {
         final digest = magus\symbolIndexDigest();
         final missing = buildableGaps(digest.gaps);
         if (!digest.indexed or missing > 0) {
-            return holdout\Result::<Snapshot>{ error = "sources: the symbol index is missing or partial ({missing} gaps); run `magus graph build`" };
+            return result\fail::<Snapshot>("sources: the symbol index is missing or partial ({missing} gaps); run `magus graph build`");
         }
         final everySymbol = everyNode("symbol", perMatch: 4);
         if (everySymbol.error -> e) {
-            return holdout\Result::<Snapshot>{ error = e };
+            return result\Result::<Snapshot>{ error = e };
         }
         final q = everySymbol.value!;
         final symbols: mut [magus\KnowledgeNode] = mut [];
@@ -290,7 +291,7 @@ export fun load() > holdout\Result::<Snapshot> {
         foreach (k, v in byFile) {
             frozen[k] = v;
         }
-        return holdout\Result::<Snapshot>{ value = Snapshot{
+        return result\ok::<Snapshot>(Snapshot{
             root = root,
             files = files,
             byPath = byPath,
@@ -299,9 +300,9 @@ export fun load() > holdout\Result::<Snapshot> {
             refLinks = refLinks,
             cache = mut {},
             faults = mut [],
-        } };
+        });
     } catch (err: any) {
-        return holdout\Result::<Snapshot>{ error = "sources: load: {err}" };
+        return result\caught::<Snapshot>(err, doing: "sources: load");
     }
 }
 
@@ -473,7 +474,7 @@ export fun sectionSpan(c: Snapshot, path: str, label: str, level: int) > str {
 // Each names the declaration it was read from. The sets read holdout files too, since the
 // shipped table must know the whole product's names; `embed texts` records how many forced
 // tokens only holdout files hold.
-fun literalSet(c: Snapshot, name: str, file: str) > holdout\Result::<{str: any}> {
+fun literalSet(c: Snapshot, name: str, file: str) > result\Result::<{str: any}> {
     foreach (s in c.symbolsByFile[file] ?? []) {
         if (s.label == name and s.attrs["symbol_kind"] == "Variable") {
             final start = spanLine(s.source);
@@ -488,10 +489,10 @@ fun literalSet(c: Snapshot, name: str, file: str) > holdout\Result::<{str: any}>
                     tokens.append(q);
                 }
             }
-            return holdout\Result::<{str: any}>{ value = {"ref": "{file}:{start}-{end}", "symbol": s.id, "tokens": uniqueSorted(tokens)} };
+            return result\ok::<{str: any}>({"ref": "{file}:{start}-{end}", "symbol": s.id, "tokens": uniqueSorted(tokens)});
         }
     }
-    return holdout\Result::<{str: any}>{ error = "sources: {file} declares no variable {name}; the forced set lost its source of truth" };
+    return result\fail::<{str: any}>("sources: {file} declares no variable {name}; the forced set lost its source of truth");
 }
 
 fun withField(key: str, value: str, record: {str: any}) > {str: any} {
@@ -534,21 +535,21 @@ export fun buzzName(signature: str) > str {
     return signature.sub(slash + 1, len: paren - slash - 1);
 }
 
-fun forcedSets(c: Snapshot) > holdout\Result::<[{str: any}]> {
+fun forcedSets(c: Snapshot) > result\Result::<[{str: any}]> {
     final sets: mut [{str: any}] = mut [];
     final keywords = literalSet(c, name: "keywords", file: "libs/gopherbuzz/token/token.go");
     if (keywords.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     sets.append(withField("set", value: "buzz-keywords", record: keywords.value!));
     final reserved = literalSet(c, name: "reservedIdents", file: "libs/gopherbuzz/parser.go");
     if (reserved.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     sets.append(withField("set", value: "buzz-reserved", record: reserved.value!));
     final builtins = literalSet(c, name: "builtinMethodNames", file: "libs/gopherbuzz/vm/operators.go");
     if (builtins.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     sets.append(withField("set", value: "buzz-builtin-methods", record: builtins.value!));
 
@@ -560,7 +561,7 @@ fun forcedSets(c: Snapshot) > holdout\Result::<[{str: any}]> {
     }
     final functions = nodes("function");
     if (functions.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     foreach (n in functions.value!) {
         if (n.id.startsWith("function:libs/gopherbuzz/std/") and n.attrs["exported"] == "true") {
@@ -572,14 +573,14 @@ fun forcedSets(c: Snapshot) > holdout\Result::<[{str: any}]> {
     final host: mut [str] = mut [];
     final modules = nodes("module");
     if (modules.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     foreach (m in modules.value!) {
         host.append(m.label);
     }
     final methods = nodes("method");
     if (methods.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     foreach (m in methods.value!) {
         final name = buzzName(m.attrs["buzz"] ?? "");
@@ -592,7 +593,7 @@ fun forcedSets(c: Snapshot) > holdout\Result::<[{str: any}]> {
     final codes: mut [str] = mut [];
     final diagnostics = nodes("diagnostic");
     if (diagnostics.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     foreach (d in diagnostics.value!) {
         codes.append(d.label);
@@ -609,21 +610,21 @@ fun forcedSets(c: Snapshot) > holdout\Result::<[{str: any}]> {
     final names: mut [str] = mut [];
     final spells = nodes("spell");
     if (spells.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     foreach (s in spells.value!) {
         names.append(s.label);
     }
     final ops = nodes("op");
     if (ops.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     foreach (o in ops.value!) {
         names.append(o.label);
     }
     final docs = nodes("doc");
     if (docs.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     foreach (d in docs.value!) {
         final prefix = "doc:docs/reference/manpage/magus-";
@@ -637,41 +638,41 @@ fun forcedSets(c: Snapshot) > holdout\Result::<[{str: any}]> {
     sets.append({"set": "graph-names", "ref": "kind=spell kind=op docs/reference/manpage", "tokens": uniqueSorted(names)});
     final charms = labels("charm");
     if (charms.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     sets.append({"set": "charm-names", "ref": "kind=charm", "tokens": charms.value!});
     final context = contextMembers(c);
     if (context.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     sets.append(withField("set", value: "magus-context", record: context.value!));
     final targets = labels("target");
     if (targets.error -> e) {
-        return holdout\Result::<[{str: any}]>{ error = e };
+        return result\Result::<[{str: any}]>{ error = e };
     }
     sets.append({"set": "target-names", "ref": "kind=target", "tokens": targets.value!});
-    return holdout\Result::<[{str: any}]>{ value = sets };
+    return result\ok::<[{str: any}]>(sets);
 }
 
-fun labels(kind: str) > holdout\Result::<[str]> {
+fun labels(kind: str) > result\Result::<[str]> {
     final all = nodes(kind);
     if (all.error -> e) {
-        return holdout\Result::<[str]>{ error = e };
+        return result\Result::<[str]>{ error = e };
     }
     final found: mut [str] = mut [];
     foreach (n in all.value!) {
         found.append(n.label);
     }
     if (found.len() == 0) {
-        return holdout\Result::<[str]>{ error = "sources: the graph holds no {kind} node, so the forced set would be empty" };
+        return result\fail::<[str]>("sources: the graph holds no {kind} node, so the forced set would be empty");
     }
-    return holdout\Result::<[str]>{ value = uniqueSorted(found) };
+    return result\ok::<[str]>(uniqueSorted(found));
 }
 
 // contextMembers is every object and member name the Buzz declaration in
 // MagusContextSource gives magus\Context and magus\Exec: the names a target body calls
 // on ctx, read from the raw string up to its closing backtick.
-fun contextMembers(c: Snapshot) > holdout\Result::<{str: any}> {
+fun contextMembers(c: Snapshot) > result\Result::<{str: any}> {
     final file = "internal/spell/builtins.go";
     foreach (s in c.symbolsByFile[file] ?? []) {
         if (s.label != "MagusContextSource") {
@@ -687,7 +688,7 @@ fun contextMembers(c: Snapshot) > holdout\Result::<{str: any}> {
                 final tick = t.indexOf("`") ?? t.len();
                 t = t.sub(tick + 1, len: t.len() - tick - 1).trim();
             } else if (t == "`") {
-                return holdout\Result::<{str: any}>{ value = {"ref": "{file}:{start}-{n}", "symbol": s.id, "tokens": uniqueSorted(names)} };
+                return result\ok::<{str: any}>({"ref": "{file}:{start}-{n}", "symbol": s.id, "tokens": uniqueSorted(names)});
             }
             if (t.startsWith("export object ")) {
                 names.append(t.sub(14, len: t.len() - 14).split(" ")[0]);
@@ -698,9 +699,9 @@ fun contextMembers(c: Snapshot) > holdout\Result::<{str: any}> {
             }
             n = n + 1;
         }
-        return holdout\Result::<{str: any}>{ error = "sources: {file}:{start} opens MagusContextSource but no line closes it with a backtick" };
+        return result\fail::<{str: any}>("sources: {file}:{start} opens MagusContextSource but no line closes it with a backtick");
     }
-    return holdout\Result::<{str: any}>{ error = "sources: {file} declares no MagusContextSource; the forced set lost its source of truth" };
+    return result\fail::<{str: any}>("sources: {file} declares no MagusContextSource; the forced set lost its source of truth");
 }
 
 // The approved downloads, pinned by the HF revision and the LFS sha256 the hub serves.
@@ -745,10 +746,10 @@ fun inputs() > [{str: any}] {
 // write emits gen/sources.jsonl: the pinned downloads, the forced vocabulary sets, the
 // figures and every source file, each line tagged by kind and sorted within it. A
 // file's sha256 pins the blob every pairs.jsonl span indexes into.
-export fun write(c: Snapshot, figures: [{str: any}], target: str) > holdout\Result::<{str: int}> {
+export fun write(c: Snapshot, figures: [{str: any}], target: str) > result\Result::<{str: int}> {
     final sets = forcedSets(c);
     if (sets.error -> e) {
-        return holdout\Result::<{str: int}>{ error = e };
+        return result\Result::<{str: int}>{ error = e };
     }
     try {
         final lines: mut [str] = mut [];
@@ -778,11 +779,11 @@ export fun write(c: Snapshot, figures: [{str: any}], target: str) > holdout\Resu
             counts[key] = (counts[key] ?? 0) + 1;
         }
         if (c.faults.len() > 0) {
-            return holdout\Result::<{str: int}>{ error = c.faults[0] };
+            return result\fail::<{str: int}>(c.faults[0]);
         }
         fs\writeFile(target, content: lines.join("\n") + "\n");
-        return holdout\Result::<{str: int}>{ value = counts };
+        return result\ok::<{str: int}>(counts);
     } catch (err: any) {
-        return holdout\Result::<{str: int}>{ error = "sources: write {target}: {err}" };
+        return result\caught::<{str: int}>(err, doing: "sources: write {target}");
     }
 }

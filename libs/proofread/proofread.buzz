@@ -1,13 +1,9 @@
 namespace proofread;
 
+import "result";
 import "std";
 import "fs";
 import "crypto";
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 // proofread as `magus run proofread-build libs/proofread` leaves it, relative to
 // home, the module it is built in: its main package, the linked binary, and the digest of
@@ -30,7 +26,7 @@ export final attribution = "internal/wordclass/ATTRIBUTION";
 // module: its go.mod and go.sum, the non-test Go of the packages it builds, the tagger
 // model wordclass embeds, and the labeled cases internal/calibrate embeds.
 // proofread-build hashes this list and the guard rehashes it, so neither can drift from the other.
-export fun sources(dir: str) > Result::<[str]> {
+export fun sources(dir: str) > result\Result::<[str]> {
     try {
         final found = mut ["go.mod", "go.sum"];
         foreach (pkg in PACKAGES) {
@@ -51,28 +47,28 @@ export fun sources(dir: str) > Result::<[str]> {
                 found.append("internal/calibrate/cases/{name}");
             }
         }
-        return Result::<[str]>{ value = found };
+        return result\ok::<[str]>(found);
     } catch (err: any) {
-        return Result::<[str]>{ error = "list the sources of {dir}: {err}" };
+        return result\caught::<[str]>(err, doing: "list the sources of {dir}");
     }
 }
 
 // inputs digests sources by path and content, so an added or renamed file changes it as
 // much as an edit does. A file's mtime plays no part: a cached proofread-build replays an
 // identical binary without touching it.
-export fun inputs(dir: str) > Result::<str> {
+export fun inputs(dir: str) > result\Result::<str> {
     final listed = sources(dir);
     if (listed.error -> e) {
-        return Result::<str>{ error = e };
+        return result\Result::<str>{ error = e };
     }
     try {
         final lines = mut [<str>];
         foreach (path in listed.value!) {
             lines.append("{path} {crypto\sha256File("{dir}/{path}")}");
         }
-        return Result::<str>{ value = crypto\sha256Hex(lines.join("\n")) };
+        return result\ok::<str>(crypto\sha256Hex(lines.join("\n")));
     } catch (err: any) {
-        return Result::<str>{ error = "hash the sources of {dir}: {err}" };
+        return result\caught::<str>(err, doing: "hash the sources of {dir}");
     }
 }
 

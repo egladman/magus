@@ -14,6 +14,7 @@ namespace renamesymbol;
 import "encoding/json";
 import "flags";
 import "magus";
+import "result";
 import "std";
 
 import "assert";
@@ -23,11 +24,6 @@ final SERVES = ["rule:sed-in-place", "rule:interpreter-rewrite"];
 
 final USAGE = "usage: magus buzz hack/dev/rename-symbol.buzz -- --symbol <name> --to <new> [--apply]";
 final HELP = "cost: needs the code index\n{USAGE}";
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 export object Site {
     path: str,
@@ -44,17 +40,17 @@ export object Plan {
     sites: [Site],
 }
 
-export fun parsePlan(doc: str) > Result::<Plan> {
+export fun parsePlan(doc: str) > result\Result::<Plan> {
     try {
         final v = json\parse(doc);
         final sites = mut [<Site>];
         foreach (s in v["sites"] ?? []) {
             sites.append(Site{ path = s["path"], line = std\toInt(s["start"]["line"]), column = std\toInt(s["start"]["column"]) });
         }
-        return Result::<Plan>{ value = Plan{ oldName = v["from"] ?? "", newName = v["to"] ?? "", applied = v["applied"] ?? false,
-            files = std\toInt(v["file_count"] ?? 0), sites = sites } };
+        return result\ok::<Plan>(Plan{ oldName = v["from"] ?? "", newName = v["to"] ?? "", applied = v["applied"] ?? false,
+            files = std\toInt(v["file_count"] ?? 0), sites = sites });
     } catch (err: any) {
-        return Result::<Plan>{ error = "rename-symbol: read the rename plan: {err}" };
+        return result\caught::<Plan>(err, doing: "rename-symbol: read the rename plan");
     }
 }
 
@@ -75,19 +71,19 @@ export fun render(p: Plan) > [str] {
 
 // checkIndex fails unless the index can answer for the symbol. A stale index
 // misses the sites written since it was built.
-export fun checkIndex(verdict: str, reason: str, stale: [str]) > Result::<bool> {
+export fun checkIndex(verdict: str, reason: str, stale: [str]) > result\Result::<bool> {
     if (verdict == "unknown") {
-        return Result::<bool>{ error = "the code index cannot answer: {reason}" };
+        return result\fail::<bool>("the code index cannot answer: {reason}");
     }
     if (stale.len() > 0) {
-        return Result::<bool>{ error = "the code index is older than the tree in {stale.join(", ")}" };
+        return result\fail::<bool>("the code index is older than the tree in {stale.join(", ")}");
     }
-    return Result::<bool>{ value = true };
+    return result\ok::<bool>(true);
 }
 
 // indexRaised is the error checkIndex returned, or "" when the index answers.
 fun indexRaised(verdict: str, reason: str, stale: [str]) > str {
-    return checkIndex(verdict, reason: reason, stale: stale).error ?? "";
+    return checkIndex(verdict, reason: reason, stale: stale).error?.message ?? "";
 }
 
 export fun main(args: [str]) > void !> any {
@@ -106,7 +102,7 @@ export fun main(args: [str]) > void !> any {
     }
     final plan = rename(symbol, newName: to, apply: parsed.values["--apply"] != null);
     if (plan.error != null) {
-        throw plan.error!;
+        throw plan.error!.message;
     }
     foreach (line in render(plan.value!)) {
         std\print(line);
@@ -116,19 +112,19 @@ export fun main(args: [str]) > void !> any {
 // rename renames symbol to newName at every verified occurrence, or with apply false only
 // reports where it would. It raises when the index cannot answer for the symbol, and with
 // each file's reason when `refs --rename` refuses.
-export fun rename(symbol: str, newName: str, apply: bool) > Result::<Plan> {
+export fun rename(symbol: str, newName: str, apply: bool) > result\Result::<Plan> {
     var r: magus\RefsResult? = null;
     try {
         r = magus\refs(symbol);
     } catch (err: any) {
-        return Result::<Plan>{ error = "rename-symbol: look up {symbol}: {err}" };
+        return result\caught::<Plan>(err, doing: "rename-symbol: look up {symbol}");
     }
     final indexed = checkIndex(r!.answer.verdict.value, reason: r!.answer.reason.value, stale: r!.answer.staleIndexes);
     if (indexed.error != null) {
-        return Result::<Plan>{ error = "rename-symbol: {indexed.error!}; rebuild it with `magus graph build`, then run this again" };
+        return result\fail::<Plan>("rename-symbol: {indexed.error!.message}; rebuild it with `magus graph build`, then run this again");
     }
     if (r!.defs.len() == 0) {
-        return Result::<Plan>{ error = "rename-symbol: nothing in this workspace defines {symbol}" };
+        return result\fail::<Plan>("rename-symbol: nothing in this workspace defines {symbol}");
     }
     // The resolved id, not the name typed: a bare name the index resolved once must not
     // resolve differently between the dry run and the write.
@@ -143,7 +139,7 @@ export fun rename(symbol: str, newName: str, apply: bool) > Result::<Plan> {
         doc = magus\cmd("refs", args: argv, opts: magus\CommandOptions{ quiet = true }).stdout;
     } catch (e) {
         final text = if (e is {str: any}) e["message"] ?? "{e}" else "{e}";
-        return Result::<Plan>{ error = "rename-symbol: {withoutWarnings(text)}" };
+        return result\fail::<Plan>("rename-symbol: {withoutWarnings(text)}");
     }
     return parsePlan(doc);
 }

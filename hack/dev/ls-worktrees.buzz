@@ -13,6 +13,7 @@ namespace lsworktrees;
 
 import "flags";
 import "magus";
+import "result";
 import "std";
 import "vcs";
 import "magus/reclaimdisk" as reclaim;
@@ -21,11 +22,6 @@ import "assert";
 
 final USAGE = "usage: magus buzz hack/dev/ls-worktrees.buzz -- [--dirty]";
 final HELP = "cost: grows with the number of worktrees\n{USAGE}";
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 export object Row {
     path: str,
@@ -59,7 +55,7 @@ export fun render(rows: [Row]) > [str] {
 }
 
 // jobsByCheckout is each checkout's newest job, as "<id> (<state>)".
-fun jobsByCheckout() > Result::<{str: str}> {
+fun jobsByCheckout() > result\Result::<{str: str}> {
     final newest = mut {<str: int>};
     final label = mut {<str: str>};
     try {
@@ -71,18 +67,18 @@ fun jobsByCheckout() > Result::<{str: str}> {
             }
         }
     } catch (err: any) {
-        return Result::<{str: str}>{ error = "ls-worktrees: list the jobs: {err}" };
+        return result\caught::<{str: str}>(err, doing: "ls-worktrees: list the jobs");
     }
-    return Result::<{str: str}>{ value = label };
+    return result\ok::<{str: str}>(label);
 }
 
 // worktrees is a row per worktree of this repository, main first; with dirtyOnly, only
 // those holding uncommitted files or gone from disk.
-export fun worktrees(dirtyOnly: bool) > Result::<[Row]> {
+export fun worktrees(dirtyOnly: bool) > result\Result::<[Row]> {
     final found = mut [<Row>];
     final jobs = jobsByCheckout();
     if (jobs.error != null) {
-        return Result::<[Row]>{ error = jobs.error };
+        return result\Result::<[Row]>{ error = jobs.error };
     }
     try {
         final root = vcs\root();
@@ -95,9 +91,9 @@ export fun worktrees(dirtyOnly: bool) > Result::<[Row]> {
             }
         }
     } catch (err: any) {
-        return Result::<[Row]>{ error = "ls-worktrees: list the worktrees: {err}" };
+        return result\caught::<[Row]>(err, doing: "ls-worktrees: list the worktrees");
     }
-    return Result::<[Row]>{ value = found };
+    return result\ok::<[Row]>(found);
 }
 
 export fun main(args: [str]) > void !> any {
@@ -114,7 +110,7 @@ export fun main(args: [str]) > void !> any {
     }
     final rows = worktrees(parsed.values["--dirty"] != null);
     if (rows.error != null) {
-        throw rows.error!;
+        throw rows.error!.message;
     }
     std\print("read-only");
     foreach (line in render(rows.value!)) {

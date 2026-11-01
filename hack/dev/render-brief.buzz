@@ -4,6 +4,7 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "std";
 
 import "assert";
@@ -17,11 +18,6 @@ final HELP = "cost: two job-store reads\n{USAGE}\n\n"
 // range a binary accepts.
 final RESULT_SCHEMA = 2;
 final WORD ="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/:=,+@%-";
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 export object Deny {
     path: str,
@@ -98,12 +94,12 @@ export fun checkCommand(check: any?, validation: str) > str {
 
 // parseDescribed reads `magus describe job <id> -o json`: the row, plus the deny paths the
 // workspace derives for it (generated files, other leases, shared build inputs).
-export fun parseDescribed(described: str) > Result::<Terms> {
+export fun parseDescribed(described: str) > result\Result::<Terms> {
     var doc: any = null;
     try {
         doc = json\parse(described);
     } catch (err: any) {
-        return Result::<Terms>{ error = "render-brief: the job row is not JSON: {err}" };
+        return result\caught::<Terms>(err, doing: "render-brief: the job row is not JSON");
     }
     final j = doc["job"] ?? {<str: any>};
     final deny = mut [<Deny>];
@@ -125,7 +121,7 @@ export fun parseDescribed(described: str) > Result::<Terms> {
     foreach (d in j["depends_on"] ?? []) {
         deps.append(Dependency{ job = d, state = "" });
     }
-    return Result::<Terms>{ value = Terms{
+    return result\ok::<Terms>(Terms{
         id = j["id"] ?? "",
         criteria = j["criteria"] ?? "",
         checkpoint = j["checkpoint"] ?? "",
@@ -137,7 +133,7 @@ export fun parseDescribed(described: str) > Result::<Terms> {
         overlaps = [<Overlap>],
         check = check,
         gates = gates,
-    } };
+    });
 }
 
 // withNeighbours fills each dependency's state and the overlaps naming t.id, read off the
@@ -272,13 +268,13 @@ fun resultTemplate(t: Terms) > [str] {
 // brief renders t as the worker's complete instructions. extra is appended verbatim under
 // its own heading, "" for none. A row a worker cannot finish is an error: no
 // check, or no write paths on a job that is not read-only.
-export fun brief(t: Terms, extra: str) > Result::<str> {
+export fun brief(t: Terms, extra: str) > result\Result::<str> {
     if (t.check == "") {
-        return Result::<str>{ error = "render-brief: job {t.id} names no check, so the brief cannot say when the work is done; "
-            + "give the row one (`./magus job fork` with --check) before handing it out" };
+        return result\fail::<str>("render-brief: job {t.id} names no check, so the brief cannot say when the work is done; "
+            + "give the row one (`./magus job fork` with --check) before handing it out");
     }
     if (!t.readOnly and t.writePaths.len() == 0) {
-        return Result::<str>{ error = "render-brief: job {t.id} is not read-only and has no write paths, so every write its worker makes is refused" };
+        return result\fail::<str>("render-brief: job {t.id} is not read-only and has no write paths, so every write its worker makes is refused");
     }
     final text = mut [
         "# Job {t.id}",
@@ -395,31 +391,31 @@ export fun brief(t: Terms, extra: str) > Result::<str> {
         text.append("");
         text.append(extra.trim());
     }
-    return Result::<str>{ value = text.join("\n") + "\n" };
+    return result\ok::<str>(text.join("\n") + "\n");
 }
 
 // fetchTerms reads job's terms and neighbours through the magus module.
-export fun fetchTerms(job: str) > Result::<Terms> {
+export fun fetchTerms(job: str) > result\Result::<Terms> {
     var described = "";
     var listing = "";
     try {
         described = magus\cmd("describe", args: ["job", job, "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout;
         listing = magus\cmd("ls", args: ["jobs", "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout;
     } catch (err: any) {
-        return Result::<Terms>{ error = "render-brief: read job {job}: {err}" };
+        return result\caught::<Terms>(err, doing: "render-brief: read job {job}");
     }
     final terms = parseDescribed(described);
     if (terms.error != null) {
         return terms;
     }
     if (terms.value!.id != job) {
-        return Result::<Terms>{ error = "render-brief: `magus describe job {job}` returned no row for it" };
+        return result\fail::<Terms>("render-brief: `magus describe job {job}` returned no row for it");
     }
     try {
         final listed = json\parse(listing);
-        return Result::<Terms>{ value = withNeighbours(terms.value!, states: jobStates(listed), overlaps: parseOverlaps(job, listed: listed)) };
+        return result\ok::<Terms>(withNeighbours(terms.value!, states: jobStates(listed), overlaps: parseOverlaps(job, listed: listed)));
     } catch (err: any) {
-        return Result::<Terms>{ error = "render-brief: the job list is not JSON: {err}" };
+        return result\caught::<Terms>(err, doing: "render-brief: the job list is not JSON");
     }
 }
 
@@ -440,16 +436,16 @@ export fun main(args: [str]) > void !> any {
     final extra = if (extraPath == "") "" else fs\readFile(extraPath);
     final terms = fetchTerms(job);
     if (terms.error != null) {
-        throw terms.error!;
+        throw terms.error!.message;
     }
     final text = brief(terms.value!, extra: extra);
     if (text.error != null) {
-        throw text.error!;
+        throw text.error!.message;
     }
     std\print(text.value!.trim());
 }
 
-fun golden() > Result::<Terms> {
+fun golden() > result\Result::<Terms> {
     try {
         final described = fs\readFile("hack/testdata/render-brief-row.json");
         final listed = json\parse(fs\readFile("hack/testdata/render-brief-jobs.json"));
@@ -457,9 +453,9 @@ fun golden() > Result::<Terms> {
         if (terms.error != null) {
             return terms;
         }
-        return Result::<Terms>{ value = withNeighbours(terms.value!, states: jobStates(listed), overlaps: parseOverlaps(terms.value!.id, listed: listed)) };
+        return result\ok::<Terms>(withNeighbours(terms.value!, states: jobStates(listed), overlaps: parseOverlaps(terms.value!.id, listed: listed)));
     } catch (err: any) {
-        return Result::<Terms>{ error = "render-brief: read the fixture: {err}" };
+        return result\caught::<Terms>(err, doing: "render-brief: read the fixture");
     }
 }
 

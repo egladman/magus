@@ -10,6 +10,7 @@
 // was done under it from the job store and the mandate.
 namespace mandatescript;
 
+import "result";
 import "std";
 import "fs";
 import "proc";
@@ -21,11 +22,6 @@ import "./hack/policy/mandate" as mandate;
 final USAGE = "usage: magus buzz hack/dev/issue-mandate.buzz -- issue --until HH:MM --tolerance <tier> --rows a,b | revoke | report";
 
 final dayMs = 86400000;
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 // reserved is what a mandate keeps for the person, printed back at issue.
 final reserved = [
@@ -79,67 +75,67 @@ export fun nextAt(minutes: int, now: int, offset: int) > int {
     return at;
 }
 
-fun localOffset() > Result::<int> {
+fun localOffset() > result\Result::<int> {
     try {
         final printed = proc\exec("date", args: ["+%z"], opts: proc\ExecOptions{ quiet = true }).stdout;
         if (parseOffset(printed) -> offset) {
-            return Result::<int>{ value = offset };
+            return result\ok::<int>(offset);
         }
-        return Result::<int>{ error = "mandate: `date +%z` printed {printed.trim()}, which is no UTC offset; the end time cannot be placed" };
+        return result\fail::<int>("mandate: `date +%z` printed {printed.trim()}, which is no UTC offset; the end time cannot be placed");
     } catch (err: any) {
-        return Result::<int>{ error = "mandate: run date: {err}" };
+        return result\caught::<int>(err, doing: "mandate: run date");
     }
 }
 
-fun mandateFile(root: str) > Result::<str> {
+fun mandateFile(root: str) > result\Result::<str> {
     try {
         if (mandate\mandateFile(root) -> file) {
-            return Result::<str>{ value = file };
+            return result\ok::<str>(file);
         }
     } catch (err: any) {
-        return Result::<str>{ error = "mandate: find the repository directory of {root}: {err}" };
+        return result\caught::<str>(err, doing: "mandate: find the repository directory of {root}");
     }
-    return Result::<str>{ error = "mandate: {root} is not a git checkout, so there is no repository directory to keep the mandate in" };
+    return result\fail::<str>("mandate: {root} is not a git checkout, so there is no repository directory to keep the mandate in");
 }
 
-fun append(root: str, m: mandate\Mandate) > Result::<bool> {
+fun append(root: str, m: mandate\Mandate) > result\Result::<bool> {
     final file = mandateFile(root);
     if (file.error != null) {
-        return Result::<bool>{ error = file.error };
+        return result\Result::<bool>{ error = file.error };
     }
     try {
         fs\mkdirAll(fs\dirname(file.value!));
         fs\appendFile(file.value!, content: mandate\encodeMandate(m) + "\n");
     } catch (err: any) {
-        return Result::<bool>{ error = "mandate: write {file.value!}: {err}" };
+        return result\caught::<bool>(err, doing: "mandate: write {file.value!}");
     }
-    return Result::<bool>{ value = true };
+    return result\ok::<bool>(true);
 }
 
-fun issue(root: str, args: [str]) > Result::<bool> {
+fun issue(root: str, args: [str]) > result\Result::<bool> {
     try {
         final parsed = flags\parse(args, switches: [<str>], valued: ["--until", "--tolerance", "--rows", "--tokens"]);
         if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-            return Result::<bool>{ error = "mandate issue: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}" };
+            return result\fail::<bool>("mandate issue: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}");
         }
         if (parsed.values["--tokens"] != null) {
-            return Result::<bool>{ error = "mandate issue: --tokens is refused: magus counts no session tokens, so no budget could be obeyed; the end time is the cap" };
+            return result\fail::<bool>("mandate issue: --tokens is refused: magus counts no session tokens, so no budget could be obeyed; the end time is the cap");
         }
         final clock = parsed.values["--until"] ?? "";
         final minutes = parseClock(clock);
         if (minutes == null) {
-            return Result::<bool>{ error = "mandate issue: --until takes the local end time as HH:MM, and got {shown(clock)}\n{USAGE}" };
+            return result\fail::<bool>("mandate issue: --until takes the local end time as HH:MM, and got {shown(clock)}\n{USAGE}");
         }
         final tolerance = parsed.values["--tolerance"] ?? "";
         if (mandate\tiers.indexOf(tolerance) == null) {
-            return Result::<bool>{ error = "mandate issue: --tolerance takes one of {mandate\tiers.join(", ")}, and got {shown(tolerance)}" };
+            return result\fail::<bool>("mandate issue: --tolerance takes one of {mandate\tiers.join(", ")}, and got {shown(tolerance)}");
         }
         if (mandate\rank(tolerance) > mandate\rank(mandate\ceiling)) {
-            return Result::<bool>{ error = "mandate issue: --tolerance {tolerance} is above this repository's ceiling, {mandate\ceiling} (hack/policy/mandate.buzz)" };
+            return result\fail::<bool>("mandate issue: --tolerance {tolerance} is above this repository's ceiling, {mandate\ceiling} (hack/policy/mandate.buzz)");
         }
         final named = (parsed.values["--rows"] ?? "").split(",").filter(fun (index: int, id: str) > bool => id.trim() != "");
         if (named.len() == 0) {
-            return Result::<bool>{ error = "mandate issue: --rows names the plan's job rows, comma-separated; a mandate with none has nothing to carry out" };
+            return result\fail::<bool>("mandate issue: --rows names the plan's job rows, comma-separated; a mandate with none has nothing to carry out");
         }
         final jobs = mandate\rows(magus\job.list().jobs);
         final missing = named.filter(fun (index: int, id: str) > bool {
@@ -151,15 +147,15 @@ fun issue(root: str, args: [str]) > Result::<bool> {
             return true;
         });
         if (missing.len() > 0) {
-            return Result::<bool>{ error = "mandate issue: the job store holds no row {missing.join(", ")}; `job apply` the plan before the mandate is issued" };
+            return result\fail::<bool>("mandate issue: the job store holds no row {missing.join(", ")}; `job apply` the plan before the mandate is issued");
         }
         final now = mandate\now();
         if (mandate\inForce(mandate\loadMandate(root), now: now)) {
-            return Result::<bool>{ error = "mandate issue: a mandate is already in force; `magus buzz hack/dev/issue-mandate.buzz -- revoke` ends it first" };
+            return result\fail::<bool>("mandate issue: a mandate is already in force; `magus buzz hack/dev/issue-mandate.buzz -- revoke` ends it first");
         }
         final offset = localOffset();
         if (offset.error != null) {
-            return Result::<bool>{ error = offset.error };
+            return result\Result::<bool>{ error = offset.error };
         }
         final ends = nextAt(minutes!, now: now, offset: offset.value!);
         final appended = append(root, m: mandate\Mandate{ action = "issue", at = now, endClock = clock, ends = ends, tolerance = tolerance, rows = named });
@@ -174,36 +170,36 @@ fun issue(root: str, args: [str]) > Result::<bool> {
         foreach (r in reserved) {
             std\print("  - {r}");
         }
-        return Result::<bool>{ value = true };
+        return result\ok::<bool>(true);
     } catch (err: any) {
-        return Result::<bool>{ error = "mandate issue: {err}" };
+        return result\caught::<bool>(err, doing: "mandate issue");
     }
 }
 
-fun revoke(root: str) > Result::<bool> {
+fun revoke(root: str) > result\Result::<bool> {
     try {
         final now = mandate\now();
         if (!mandate\inForce(mandate\loadMandate(root), now: now)) {
             std\print("no mandate is in force; nothing to revoke");
-            return Result::<bool>{ value = true };
+            return result\ok::<bool>(true);
         }
         final appended = append(root, m: mandate\Mandate{ action = "revoke", at = now });
         if (appended.error != null) {
             return appended;
         }
         std\print("mandate revoked");
-        return Result::<bool>{ value = true };
+        return result\ok::<bool>(true);
     } catch (err: any) {
-        return Result::<bool>{ error = "mandate revoke: {err}" };
+        return result\caught::<bool>(err, doing: "mandate revoke");
     }
 }
 
-fun report(root: str) > Result::<bool> {
+fun report(root: str) > result\Result::<bool> {
     var last: mandate\Mandate? = null;
     var issued: mandate\Mandate? = null;
     final file = mandateFile(root);
     if (file.error != null) {
-        return Result::<bool>{ error = file.error };
+        return result\Result::<bool>{ error = file.error };
     }
     foreach (line in (fs\readFile(file.value!) catch "").split("\n")) {
         if (mandate\parseMandate(line) -> m) {
@@ -215,7 +211,7 @@ fun report(root: str) > Result::<bool> {
     }
     if (issued == null) {
         std\print("no mandate was ever issued in this repository");
-        return Result::<bool>{ value = true };
+        return result\ok::<bool>(true);
     }
     final terms = issued!;
     try {
@@ -242,9 +238,9 @@ fun report(root: str) > Result::<bool> {
             "a grant a held row needs: `./magus job grant <job> <rule>`",
             "hook wiring: the root magusfile registers `magus\\guard.stop(agentpolicy\\judgeStop);`",
         ]);
-        return Result::<bool>{ value = true };
+        return result\ok::<bool>(true);
     } catch (err: any) {
-        return Result::<bool>{ error = "mandate report: {err}" };
+        return result\caught::<bool>(err, doing: "mandate report");
     }
 }
 
@@ -297,7 +293,7 @@ export fun main(args: [str]) > void !> any {
     }
     final root = vcs\root();
     final rest = args.sub(1);
-    var done = Result::<bool>{ value = true };
+    var done = result\ok::<bool>(true);
     if (args[0] == "issue") {
         done = issue(root, args: rest);
     } else if (args[0] == "revoke") {
@@ -308,7 +304,7 @@ export fun main(args: [str]) > void !> any {
         throw "mandate: unknown subcommand {args[0]}\n{USAGE}";
     }
     if (done.error != null) {
-        throw done.error!;
+        throw done.error!.message;
     }
 }
 

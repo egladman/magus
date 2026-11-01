@@ -75,7 +75,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("gen");
     final loaded = sources\load();
     if (loaded.error -> e) {
-        throw e;
+        throw e.message;
     }
     final c = loaded.value!;
     final paths: mut [str] = mut [];
@@ -84,19 +84,19 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     }
     final held = holdout\write(paths, target: fs\join("gen", name: "holdout.jsonl"));
     if (held.error -> e) {
-        throw e;
+        throw e.message;
     }
     final figs = pairs\figures(c);
     if (figs.error -> e) {
-        throw e;
+        throw e.message;
     }
     final files = sources\write(c, figures: figs.value!, target: fs\join("gen", name: "sources.jsonl"));
     if (files.error -> e) {
-        throw e;
+        throw e.message;
     }
     final mined = pairs\write(c, figs: figs.value!, target: fs\join("gen", name: "pairs.jsonl"));
     if (mined.error -> e) {
-        throw e;
+        throw e.message;
     }
     std\print("source files {files.value!}; holdout files {held.value!}; pairs {mined.value!}");
 }
@@ -123,7 +123,7 @@ export fun vocab(ctx: magus\Context, args: [str]) > void !> any {
         "-eval", fs\join(cache, name: "bench"), "-no-eval", "judged-queries", "-skip", "fineweb-edu/sample/10BT/013_00000.parquet"]});
     final appended = runlog\appendTexts(dir, target: "runs.jsonl");
     if (appended.error -> e) {
-        throw e;
+        throw e.message;
     }
     fs\mkdirAll("gen");
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "vocab", "-texts", fs\join(dir, name: "texts.jsonl"),
@@ -150,7 +150,7 @@ export fun teacher(ctx: magus\Context, args: [str]) > void !> any {
         go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "teacher"] + run + args});
         final recorded = runlog\recordTeacher(cache, model: model, texts: fs\join(cache, "training", name), maxLen: 256, target: "runs.jsonl");
         if (recorded.error -> e) {
-            throw e;
+            throw e.message;
         }
     }
 }

@@ -23,6 +23,7 @@
 import "magus/spell";
 
 import "proc";
+import "result";
 // "onepassword", not "op": a spell's registered name has to stand alone - it is what
 // `magus describe spells` and every diagnostic show, with no directory around it to
 // supply the context. `op` is the binary, not the product.
@@ -58,10 +59,17 @@ final SCHEME = "op://";
 // it - but by way of the classified throws below, not proc\exec's own raise, which
 // allow_failure deliberately turns off so the exit code can be inspected first.
 export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //nolint:no-throw // magus reads a raise as an unresolved secret
-    final ref = req.ref;
-    if (ref == "") {
+    final read = readSecret(req.ref);
+    if (read.error -> e) {
         //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw "onepassword: no reference given";
+        throw e.message;
+    }
+    return read.value!;
+}
+
+fun readSecret(ref: str) > result\Result::<Secret> {
+    if (ref == "") {
+        return result\fail::<Secret>("onepassword: no reference given");
     }
 
     var uri = ref;
@@ -72,11 +80,10 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //no
     try {
         _ = proc\which("op");
     } catch (e) {
-        //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw "onepassword: the `op` CLI is not on PATH.\n"
+        return result\fail::<Secret>("onepassword: the `op` CLI is not on PATH.\n"
             + "  mise:     mise use -g op\n"
             + "  homebrew: brew install 1password-cli\n"
-            + "  other:    https://developer.1password.com/docs/cli/get-started/";
+            + "  other:    https://developer.1password.com/docs/cli/get-started/");
     }
 
     // quiet is not optional here, and is the one line in this file to copy without
@@ -90,30 +97,30 @@ export fun resolve_secret(target: Target, req: SecretRef) > Secret !> any { //no
     // secret provider for the first time hits "not installed", "not signed in", or
     // "wrong path", and a message naming which one and what to type is the difference
     // between a five-second fix and an afternoon.
-    final res = proc\exec("op", args: ["read", uri], dir: ".",
-        opts: proc\ExecOptions{allowFailure = true, quiet = true});
-    if (res["code"] != 0) {
-        final err = "{res["stderr"]}";
-        if (has(err, "not signed in") or has(err, "no active session")) {
-            //nolint:no-throw // magus reads a raise as an unresolved secret
-            throw "onepassword: not signed in. Run `op signin`, or for an unattended run "
-                + "set OP_SERVICE_ACCOUNT_TOKEN.\n  reference: " + uri;
+    try {
+        final res = proc\exec("op", args: ["read", uri], dir: ".",
+            opts: proc\ExecOptions{allowFailure = true, quiet = true});
+        if (res["code"] != 0) {
+            final err = "{res["stderr"]}";
+            if (has(err, needle: "not signed in") or has(err, needle: "no active session")) {
+                return result\fail::<Secret>("onepassword: not signed in. Run `op signin`, or for an unattended run "
+                    + "set OP_SERVICE_ACCOUNT_TOKEN.\n  reference: " + uri);
+            }
+            if (has(err, needle: "isn't an item") or has(err, needle: "not found")) {
+                return result\fail::<Secret>("onepassword: " + uri + " does not resolve to an item field. Check the "
+                    + "vault, item and field names - `op item list --vault <vault>` lists them.");
+            }
+            return result\fail::<Secret>("onepassword: `op read " + uri + "` failed: " + err.trim());
         }
-        if (has(err, "isn't an item") or has(err, "not found")) {
-            //nolint:no-throw // magus reads a raise as an unresolved secret
-            throw "onepassword: " + uri + " does not resolve to an item field. Check the "
-                + "vault, item and field names - `op item list --vault <vault>` lists them.";
-        }
-        //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw "onepassword: `op read " + uri + "` failed: " + err.trim();
-    }
 
-    final value = "{res["stdout"]}";
-    if (value == "") {
-        //nolint:no-throw // magus reads a raise as an unresolved secret
-        throw "onepassword: " + uri + " resolved to an empty value; check the item and field names";
+        final value = "{res["stdout"]}";
+        if (value == "") {
+            return result\fail::<Secret>("onepassword: " + uri + " resolved to an empty value; check the item and field names");
+        }
+        return result\ok::<Secret>(Secret{ value = value });
+    } catch (err: any) {
+        return result\caught::<Secret>(err, doing: "onepassword: `op read " + uri + "`");
     }
-    return Secret{ value = value };
 }
 
 export fun mgs_getTools() > {str: Tool} {

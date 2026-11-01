@@ -5,6 +5,7 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "std";
 import "strings";
 import "time";
@@ -28,11 +29,6 @@ final HEADINGS = [
     "passed with no rule, by the shape of each program a line ran: the guard candidates",
     "served nexts not taken: rule and the shape of the command it served",
 ];
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 // Row is one labelled line of the report. id is stable across pages, sessions and
 // re-renders: a digest of section and key, never the row's position.
@@ -220,12 +216,12 @@ export fun rows(t: Trail, marks: [TrailMark]) > [Row] {
 }
 
 // report reads the session and folds it into rows.
-export fun report(session: str, since: str, through: str) > Result::<Report> {
+export fun report(session: str, since: str, through: str) > result\Result::<Report> {
     try {
         final t = magus\trail.read({"session": session, "since": since, "until": through});
-        return Result::<Report>{ value = fold(t, marks: magus\trail.marks()) };
+        return result\ok::<Report>(fold(t, marks: magus\trail.marks()));
     } catch (err: any) {
-        return Result::<Report>{ error = "show-feedback: read the trail: {err}" };
+        return result\caught::<Report>(err, doing: "show-feedback: read the trail");
     }
 }
 
@@ -271,7 +267,7 @@ fun sectionCount(r: Report, section: str) > int {
     return n;
 }
 
-fun rowLine(row: Row) > Result::<str> {
+fun rowLine(row: Row) > result\Result::<str> {
     final what = if (row.shape != "" and row.section == "unguarded") row.shape else row.key;
     var tail = "{row.agents} agent" + (if (row.agents == 1) "" else "s");
     if (row.section == "refused" and row.offered > 0) {
@@ -284,19 +280,19 @@ fun rowLine(row: Row) > Result::<str> {
         if (row.mark != "") {
             line = line + "  [marked {row.mark}" + (if (row.note != "") ": {row.note}" else "") + "]";
         }
-        return Result::<str>{ value = line };
+        return result\ok::<str>(line);
     } catch (err: any) {
-        return Result::<str>{ error = "show-feedback: pad row {row.label}: {err}" };
+        return result\caught::<str>(err, doing: "show-feedback: pad row {row.label}");
     }
 }
 
 // page renders one page of r: the header, the rows that fall on it under their section
 // headings, and the command that reads the next page (or, on the last, what to do next).
-export fun page(r: Report, n: int, size: int = PAGE) > Result::<[str]> {
+export fun page(r: Report, n: int, size: int = PAGE) > result\Result::<[str]> {
     final pages = (r.rows.len() + size - 1) / size;
     final total = if (pages == 0) 1 else pages;
     if (n < 1 or n > total) {
-        return Result::<[str]>{ error = "show-feedback: page {n} does not exist; this report has {total}" };
+        return result\fail::<[str]>("show-feedback: page {n} does not exist; this report has {total}");
     }
     final lines = mut [
         "read-only: guard feedback for session {r.session} ({r.host}), {stamp(r.start)} to {stamp(r.end)}, {r.calls} calls from {r.checkouts} checkouts; page {n} of {total}",
@@ -317,7 +313,7 @@ export fun page(r: Report, n: int, size: int = PAGE) > Result::<[str]> {
         }
         final line = rowLine(row);
         if (line.error != null) {
-            return Result::<[str]>{ error = line.error };
+            return result\Result::<[str]>{ error = line.error };
         }
         lines.append(line.value!);
         foreach (e in row.examples) {
@@ -332,7 +328,7 @@ export fun page(r: Report, n: int, size: int = PAGE) > Result::<[str]> {
     } else {
         lines.append("figure: magus buzz hack/dev/show-session-figure.buzz -- --session {r.session} [-o svg]");
     }
-    return Result::<[str]>{ value = lines };
+    return result\ok::<[str]>(lines);
 }
 
 fun rowsJSON(rows: [Row]) > [{str: any}] {
@@ -376,7 +372,7 @@ export fun main(args: [str]) > void !> any {
     }
     final read = report(parsed.values["--session"] ?? "", since: parsed.values["--since"] ?? "", through: parsed.values["--until"] ?? "");
     if (read.error != null) {
-        throw read.error!;
+        throw read.error!.message;
     }
     final r = read.value!;
     if (r.session == "") {
@@ -388,7 +384,7 @@ export fun main(args: [str]) > void !> any {
     }
     final shown = page(r, n: n!);
     if (shown.error != null) {
-        throw shown.error!;
+        throw shown.error!.message;
     }
     foreach (line in shown.value!) {
         std\print(line);
@@ -397,7 +393,7 @@ export fun main(args: [str]) > void !> any {
 
 // trailFromJSON reads a fixture: a Trail spelled as JSON, the shape -o json of
 // magus\trail.read would print.
-export fun trailFromJSON(text: str) > Result::<Trail> {
+export fun trailFromJSON(text: str) > result\Result::<Trail> {
     try {
         final raw = json\parse(text);
         final obs = mut [<TrailObservation>];
@@ -424,29 +420,29 @@ export fun trailFromJSON(text: str) > Result::<Trail> {
         foreach (c in raw["checkouts"] ?? []) {
             checkouts.append(c);
         }
-        return Result::<Trail>{ value = Trail{
+        return result\ok::<Trail>(Trail{
             session = raw["session"] ?? "", host = raw["host"] ?? "", start = std\toInt(raw["start"] ?? 0), end = std\toInt(raw["end"] ?? 0),
             checkouts = checkouts, observations = obs, spawns = spawns,
-        } };
+        });
     } catch (err: any) {
-        return Result::<Trail>{ error = "show-feedback: read the trail fixture: {err}" };
+        return result\caught::<Trail>(err, doing: "show-feedback: read the trail fixture");
     }
 }
 
 final FIXTURE = "hack/testdata/feedback-trail.json";
 
-fun fixtureReport() > Result::<Report> {
+fun fixtureReport() > result\Result::<Report> {
     try {
         final trail = trailFromJSON(fs\readFile(FIXTURE));
         if (trail.error != null) {
-            return Result::<Report>{ error = trail.error };
+            return result\Result::<Report>{ error = trail.error };
         }
-        return Result::<Report>{ value = fold(trail.value!, marks: [
+        return result\ok::<Report>(fold(trail.value!, marks: [
             TrailMark{ id = rowID("unguarded", key: "grep -rn <arg>"), section = magus\TrailSection.unguarded, key = "grep -rn <arg>",
                 verdict = magus\TrailVerdict.shouldDeny, note = "use magus refs", session = "s-old", at = 1 },
-        ]) };
+        ]));
     } catch (err: any) {
-        return Result::<Report>{ error = "show-feedback: read {FIXTURE}: {err}" };
+        return result\caught::<Report>(err, doing: "show-feedback: read {FIXTURE}");
     }
 }
 
@@ -476,7 +472,7 @@ test "every page but the last ends with the command for the next one" {
     final second = page(r, n: 2, size: 4).value!;
     assert\equal(second.indexOf("C  passed with no rule, by the shape of each program a line ran: the guard candidates (continued)") != null, want: true, message: "continued heading");
     assert\equal(second[second.len() - 1].startsWith("figure: "), want: true, message: "last page names the figure");
-    assert\equal(page(r, n: 3, size: 4).error, want: "show-feedback: page 3 does not exist; this report has 2", message: "past the end");
+    assert\equal(page(r, n: 3, size: 4).error?.message, want:"show-feedback: page 3 does not exist; this report has 2", message: "past the end");
 }
 
 test "a refusal whose next ran counts as followed, one that did not is a next not taken" {

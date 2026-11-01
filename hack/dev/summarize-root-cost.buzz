@@ -16,6 +16,7 @@ namespace rootcost;
 import "encoding/json";
 import "flags";
 import "magus";
+import "result";
 import "std";
 
 import "assert";
@@ -25,11 +26,6 @@ final HELP = "cost: none\n{USAGE}";
 
 // PROFILES is the order shadow verdicts print in, least to most refusing.
 final PROFILES = ["light", "standard", "strict"];
-
-export object Result::<T> {
-    value: T? = null,
-    error: str? = null,
-}
 
 export object Rollup {
     sessions: int,
@@ -56,7 +52,7 @@ fun count(items: {str: int}, key: str) > int {
 
 // fold reads each `magus session show -o json` document into one rollup. A document with
 // no cost section is a session an older magus loaded and is not counted.
-export fun fold(shows: [str]) > Result::<Rollup> {
+export fun fold(shows: [str]) > result\Result::<Rollup> {
     var sessions = 0;
     var withContext = 0;
     var withDelegable = 0;
@@ -78,7 +74,7 @@ export fun fold(shows: [str]) > Result::<Rollup> {
         try {
             doc = json\parse(text);
         } catch (err: any) {
-            return Result::<Rollup>{ error = "summarize-root-cost: a session document is not JSON: {err}" };
+            return result\caught::<Rollup>(err, doing: "summarize-root-cost: a session document is not JSON");
         }
         final cost = doc["cost"];
         if (cost == null) {
@@ -154,7 +150,7 @@ export fun fold(shows: [str]) > Result::<Rollup> {
         }
     }
 
-    return Result::<Rollup>{ value = Rollup{
+    return result\ok::<Rollup>(Rollup{
         sessions = sessions,
         withContext = withContext,
         maxPeak = maxPeak,
@@ -171,7 +167,7 @@ export fun fold(shows: [str]) > Result::<Rollup> {
         shadow = shadow,
         priced = priced,
         usd = usd,
-    } };
+    });
 }
 
 // money renders dollars to the cent.
@@ -226,14 +222,14 @@ export fun render(r: Rollup) > [str] {
 }
 
 // sessionIds lists the host sessions `magus session ls` knows, each once.
-export fun sessionIds(listing: str) > Result::<[str]> {
+export fun sessionIds(listing: str) > result\Result::<[str]> {
     final seen = mut {<str: bool>};
     final ids = mut [<str>];
     var doc: any = null;
     try {
         doc = json\parse(listing);
     } catch (err: any) {
-        return Result::<[str]>{ error = "summarize-root-cost: the session listing is not JSON: {err}" };
+        return result\caught::<[str]>(err, doing: "summarize-root-cost: the session listing is not JSON");
     }
     foreach (c in doc["checkpoints"] ?? []) {
         final id = c["host_session"] ?? "";
@@ -242,7 +238,7 @@ export fun sessionIds(listing: str) > Result::<[str]> {
             ids.append(id);
         }
     }
-    return Result::<[str]>{ value = ids };
+    return result\ok::<[str]>(ids);
 }
 
 export fun main(args: [str]) > void !> any {
@@ -262,7 +258,7 @@ export fun main(args: [str]) > void !> any {
     final shows = mut [<str>];
     final ids = sessionIds(listing);
     if (ids.error != null) {
-        throw ids.error!;
+        throw ids.error!.message;
     }
     foreach (id in ids.value!) {
         final shown = magus\cmd("session", args: ["show", id, "-o", "json"], opts: magus\CommandOptions{ quiet = true, allowFailure = true });
@@ -272,7 +268,7 @@ export fun main(args: [str]) > void !> any {
     }
     final rollup = fold(shows);
     if (rollup.error != null) {
-        throw rollup.error!;
+        throw rollup.error!.message;
     }
     std\print("read-only");
     foreach (line in render(rollup.value!)) {
