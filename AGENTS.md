@@ -85,7 +85,7 @@ saying it, delete it here.
   (`types/enums.go`).
 - A type a magusfile or script reads lives in `types/`, not behind an alias.
 - Language changes in `libs/gopherbuzz/` match upstream Buzz.
-- magus is pre-1.0, so a break may be made, deliberately: rename, remove or change a
+- magus is pre-1.0, so a break may be made deliberately. Rename, remove or change a
   name, flag or format without a migration path, and record the break
   ([A deliberate break never merges red](docs/design/principles/a-deliberate-break-never-merges-red.md)).
   Add no compat shim, dual reader, fallback for
@@ -122,8 +122,8 @@ saying it, delete it here.
 - CLI flags, config keys, help, completions and man pages are generated from one
   source: the command tree (`internal/commands`) plus `internal/config/config.go`.
   Never bind a flag by hand, write a second parser or hand-print help.
-- TypeScript and Buzz return errors as values: a function returns one Result
-  `{value, error}` (`types.Result` and its generated mirrors). Only the
+- TypeScript and Buzz return errors as values: one Result
+  `{value, error}` (`types.Result` and its generated mirrors); Buzz imports it with `import "result"`. Only the
   top-level entry throws, plus TypeScript's `unreachable(x: never)`; no
   `Promise.reject`, no `!>` below a Buzz `main`, no throwing helper. Catch a
   throwing boundary (`fetch`, `JSON.parse`, `fs\`, `proc\`, a library) where it
