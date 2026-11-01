@@ -637,4 +637,3 @@ func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events
 	}
 	return nil
 }
-
