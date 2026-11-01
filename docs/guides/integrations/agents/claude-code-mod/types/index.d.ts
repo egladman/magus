@@ -176,7 +176,6 @@ declare module 'claude-code' {
   interface PluginState {
     magus: {
       report: Report | null
-      dismissed: string | null
       tab: Tab
       listing: Listing | null
       runs: RunRow[] | null
@@ -191,8 +190,6 @@ declare module 'claude-code' {
       heldFor: number
       spend: Spend
       ratesError: string | null
-      // Bumped on a timer so the countdown in the band and status line redraws.
-      tick: number
       budget: BudgetRead | null
       budgetError: string | null
     }

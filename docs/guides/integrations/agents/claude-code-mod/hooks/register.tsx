@@ -1,4 +1,4 @@
-import type { AgentSpawnInput, EngineInterface, ProcessRunResult, Register, TurnUsage } from 'claude-code'
+import type { AgentSpawnInput, EngineInterface, ProcessRunResult, Register, RenderSurface, TurnUsage } from 'claude-code'
 
 import type { AgentRow, CacheState, Filter, Report, Spend, Tab, Ttl } from '../types'
 import {
@@ -12,11 +12,10 @@ import {
   parseRuns,
   socketFromStatus,
 } from './api'
-import { budgetStatus, capacityText, holderText, parseBudget, recentRefusal, refusalText, runsMagus, waiterText } from './budget'
+import { capacityText, holderText, parseBudget, refusalText, runsMagus, waiterText } from './budget'
 import {
   budgetNotice,
   cacheNotice,
-  cacheStatus,
   formatTokens,
   formatUsd,
   frontmatterModel,
@@ -25,7 +24,6 @@ import {
   parseRates,
   priceStepNotice,
   pricedModel,
-  rateAgeDays,
   requestUsd,
   sessionUsd,
   spawnRefusal,
@@ -35,7 +33,7 @@ import {
   totalTokens,
 } from './cost'
 import type { RateTable, Usage } from './cost'
-import { assess, signature, statusText } from './health'
+import { assess, inBand, statusText } from './health'
 import type { BinaryInfo, Probe, ServerInfo } from './health'
 import { DEFAULT_RATES } from './rates'
 import { MagusError, fail, fromPromise, ok, type Result } from './result'
@@ -49,15 +47,12 @@ const HEALTH_POLL_MS = 120_000
 const JOBS_POLL_MS = 15_000
 const RUNS_POLL_MS = 5_000
 const WATCH_POLL_MS = 3_000
-const TICK_MS = 30_000
 const BUDGET_POLL_MS = 15_000
 // A magus run claims its budget after it starts, so a read this long in shows its claim.
 const BUDGET_AFTER_START_MS = 3_000
 const MAX_LINES = 300
 
 const REPORT = { plugin: 'magus', key: 'report' } as const
-// The signature of the issue set the person hid; the band returns when the set changes.
-const DISMISSED = { plugin: 'magus', key: 'dismissed' } as const
 const TAB = { plugin: 'magus', key: 'tab' } as const
 const LISTING = { plugin: 'magus', key: 'listing' } as const
 const RUNS = { plugin: 'magus', key: 'runs' } as const
@@ -71,7 +66,6 @@ const CACHE = { plugin: 'magus', key: 'cache' } as const
 const HELD_FOR = { plugin: 'magus', key: 'heldFor' } as const
 const SPEND = { plugin: 'magus', key: 'spend' } as const
 const RATES_ERROR = { plugin: 'magus', key: 'ratesError' } as const
-const TICK = { plugin: 'magus', key: 'tick' } as const
 const BUDGET = { plugin: 'magus', key: 'budget' } as const
 const BUDGET_ERROR = { plugin: 'magus', key: 'budgetError' } as const
 
@@ -224,22 +218,10 @@ async function readBudgetOnce($: EngineInterface): Promise<void> {
 
 // ---------- status line ----------
 
-// One entry for the whole mod, which the engine labels with the mod's name: the health
-// issues, the build budget, the cache countdown and the session's spend, or nothing when
-// there is none.
+// One entry, labeled with the mod's name: the health issues, or nothing while healthy.
 async function refreshStatus($: EngineInterface): Promise<void> {
   const { value: report = null } = await $.state.get(REPORT)
-  const { value: cache = null } = await $.state.get(CACHE)
-  const { value: spend = NO_SPEND } = await $.state.get(SPEND)
-  const { value: budget = null } = await $.state.get(BUDGET)
-  const parts = [
-    report ? statusText(report.issues) : undefined,
-    budgetStatus(budget),
-    cacheStatus(cache, await $.clock.now()),
-    spendStatus(spend, settings.sessionBudgetUsd),
-  ]
-  const text = parts.filter(Boolean).join(' · ')
-  $.ui.status(text || undefined)
+  $.ui.status((report ? statusText(report.issues) : undefined) || undefined)
 }
 
 // ---------- cost ----------
@@ -306,10 +288,6 @@ async function recordAgentUsage($: EngineInterface, agentId: string, usage: Turn
   const row = rows.find(r => r.agentId === agentId)
   if (!row) return
   const tokens = row.tokens + totalTokens(u)
-  const budget = settings.subagentTokenBudget
-  if (budget > 0 && row.tokens <= budget && tokens > budget) {
-    $.ui.toast(`Subagent "${row.description}" passed its ${formatTokens(budget)}-token budget (${formatTokens(tokens)}).`)
-  }
   await $.state.set(
     AGENTS,
     rows.map(r => (r.agentId === agentId ? { ...r, tokens, usd: usd === null || r.usd === null ? null : r.usd + usd } : r)),
@@ -398,6 +376,12 @@ async function rpc($: EngineInterface, procedure: string, body: unknown): Promis
   return ok(r.text)
 }
 
+// A toast says what happened: the copy can fail on a remote client or with no clipboard.
+async function copyFix($: EngineInterface, text: string, surface: RenderSurface | undefined): Promise<void> {
+  const copied = await $.ui.copy({ text, surface })
+  $.ui.toast(copied.isCopied ? `Copied: ${text}` : `Not copied (${copied.reason}). Run: ${text}`)
+}
+
 async function isPaneOpen($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(p => p.id === PANE)
 }
@@ -450,13 +434,6 @@ async function pollWatch($: EngineInterface): Promise<void> {
   if (await isPaneOpen($)) await loadWatch($)
 }
 
-async function tick($: EngineInterface): Promise<void> {
-  const { value: cache = null } = await $.state.get(CACHE)
-  if (cache === null) return
-  await $.state.set(TICK, await $.clock.now())
-  await refreshStatus($)
-}
-
 async function showTab($: EngineInterface, tab: Tab): Promise<void> {
   await $.state.set(TAB, tab)
   if (tab === 'jobs') await loadJobs($)
@@ -500,7 +477,6 @@ export const register: Register = (on, options) => {
     $.clock.every(JOBS_POLL_MS, () => void pollJobs($))
     $.clock.every(RUNS_POLL_MS, () => void pollRuns($))
     $.clock.every(WATCH_POLL_MS, () => void pollWatch($))
-    $.clock.every(TICK_MS, () => void tick($))
     scheduleBudget($)
     $.clock.every(BUDGET_POLL_MS, () => void readBudget($))
     return next(e)
@@ -592,7 +568,6 @@ export const register: Register = (on, options) => {
     const model = isGated ? await spawnModel($, e).catch(() => null) : null
     const over = model === null ? null : overSpawnCap(rates, model, cap)
     if (over && settings.spawnGate === 'deny') return { deny: spawnRefusal(over, cap, e.fork) }
-    if (over) $.ui.toast(spawnWarning(over, cap))
 
     const r = await next(e)
     // An unreadable definition leaves the model unknown until the engine resolves it. The
@@ -620,46 +595,17 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    await $.state.get(TICK)
     const { value: report = null } = await $.state.get(REPORT)
-    const { value: hidden = null } = await $.state.get(DISMISSED)
-    const { value: cache = null } = await $.state.get(CACHE)
     const { value: ratesError = null } = await $.state.get(RATES_ERROR)
-    // Read so each budget poll redraws the band, which is what ends a refusal's window.
-    const { value: budget = null } = await $.state.get(BUDGET)
-    const now = await $.clock.now()
 
-    const issues = report && report.issues.length && hidden !== signature(report.issues) ? report.issues : []
-    const notice = cacheNotice(cache, now, settings.cacheWarnMs, settings.gateMinTokens, rates)
-    const ageDays = rateAgeDays(rates, now)
-    const staleRates = notice !== null && ageDays !== null && ageDays > settings.ratesStaleDays
-    const board = budget?.budget ?? null
-    const refused = recentRefusal(board, now)
-    if (issues.length === 0 && notice === null && ratesError === null && refused === null) return next(e)
+    const issues = report ? inBand(report.issues) : []
+    if (issues.length === 0 && ratesError === null) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
-    const room = Math.max(1, e.props.maxRows - 1)
-    const shown = issues.slice(0, room)
-    const holders = refused !== null ? refused.holders.slice(0, 3) : []
+    const shown = issues.slice(0, Math.max(1, e.props.maxRows - 1))
 
     return (
       <Box flexDirection="column">
-        {refused !== null ? (
-          <Text key="refused" color="red" wrap="truncate-end">
-            ✖ {refusalText(refused, board, now)}
-          </Text>
-        ) : null}
-        {holders.map(holder => (
-          <Text key={`holder-${holder.pid}-${holder.target}-${holder.since}`} dimColor wrap="truncate-end">
-            {'  '}held by {holderText(holder, now)}
-          </Text>
-        ))}
-        {notice !== null ? (
-          <Text key="cache" color={notice.isExpired ? 'red' : 'yellow'} wrap="truncate-end">
-            ⏳ {notice.text}
-            {staleRates ? ` Rates checked ${ageDays} days ago.` : ''}
-          </Text>
-        ) : null}
         {ratesError !== null ? (
           <Text key="rates" color="red" wrap="truncate-end">
             ✖ {ratesError}
@@ -676,20 +622,11 @@ export const register: Register = (on, options) => {
               <Button
                 key={`copy-${i.id}`}
                 label="Copy fix"
-                onPress={p => {
-                  void $.ui.copy({ text: i.fix ?? '', surface: p.surface })
-                  $.ui.toast(`Copied: ${i.fix}`)
-                }}
+                onPress={p => void copyFix($, i.fix ?? '', p.surface)}
               />
             ) : null}
           </Box>
         ))}
-        {issues.length ? (
-          <Box gap={1}>
-            <Button key="recheck" label="Recheck" onPress={() => scheduleHealth($)} />
-            <Button key="hide" label="Hide" onPress={() => void $.state.set(DISMISSED, signature(issues))} />
-          </Box>
-        ) : null}
       </Box>
     )
   })
@@ -729,13 +666,11 @@ export const register: Register = (on, options) => {
 
     if (tab === 'agents') {
       const { value: agents = [] } = await $.state.get(AGENTS)
-      const budget = settings.subagentTokenBudget
       return (
         <Box flexDirection="column">
           {header}
           {agents.length === 0 ? <Text dimColor>No subagents spawned in this session yet.</Text> : null}
           {agents.map(a => {
-            const over = budget > 0 && a.tokens > budget
             return (
               <Box key={`agent-${a.agentId}`} gap={1}>
                 <Text color={a.finishedAt === 0 ? 'cyan' : a.outcome === 'answer' ? 'green' : 'yellow'}>
@@ -753,7 +688,6 @@ export const register: Register = (on, options) => {
                     .filter(Boolean)
                     .join(' · ')}
                 </Text>
-                {over ? <Text color="yellow">over {formatTokens(budget)} budget</Text> : null}
                 {a.jobs.length ? (
                   <Button
                     key={`agent-job-${a.agentId}`}
@@ -806,7 +740,7 @@ export const register: Register = (on, options) => {
           {b?.refused.length ? <Text bold>Refused on this machine</Text> : null}
           {(b?.refused ?? []).map(r => (
             <Text key={`refused-${r.at}-${r.pid}-${r.target}`} color="red" wrap="truncate-end">
-              ✖ {refusalText(r, null, now)}
+              ✖ {refusalText(r, now)}
               {r.holders.length ? ` · held by ${r.holders.map(h => [h.owner, `pid ${h.pid}`].filter(Boolean).join(' ')).join(', ')}` : ''}
             </Text>
           ))}

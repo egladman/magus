@@ -161,13 +161,6 @@ export function cacheNotice(
   return { isExpired, usd, text }
 }
 
-// The cache's part of the status line; undefined before any response.
-export function cacheStatus(cache: CacheState | null, now: number): string | undefined {
-  const left = cacheRemainingMs(cache, now)
-  if (left === null) return undefined
-  return left > 0 ? `cache ${formatDuration(left)}` : 'cache expired'
-}
-
 export type StepNotice = { isPast: boolean; text: string }
 
 // The price step the next request meets, or null while the context is more than marginTokens
@@ -249,11 +242,6 @@ export function budgetNotice(s: Spend, budgetUsd: number): string | null {
 
 export function totalTokens(u: Usage): number {
   return u.input + u.output + u.cacheRead + u.cacheCreation
-}
-
-export function rateAgeDays(table: RateTable, now: number): number | null {
-  const t = Date.parse(table.checked)
-  return Number.isFinite(t) ? Math.floor((now - t) / 86_400_000) : null
 }
 
 export function formatTokens(n: number): string {

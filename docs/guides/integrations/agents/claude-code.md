@@ -602,41 +602,47 @@ From a local checkout, `claude plugin marketplace add <checkout> --scope local` 
 
 It adds these to a session:
 
-- A status line entry and a band above the prompt that name a magus problem with the
-  command that fixes it: no binary, a borrowed or stale `./magus`, a stopped daemon,
-  a daemon running another version, or an MCP endpoint that is not serving.
+- A status line entry that names a magus problem: no binary, a stopped daemon, a
+  daemon running another version, or an MCP endpoint that is not serving. The band
+  above the prompt draws only the two that nothing else will say, a guard that fails
+  open and a daemon on another version, with a Copy fix button that says when the
+  copy did not reach a clipboard. A stale or borrowed `./magus` is not drawn: the
+  guard names the rebuild to the agent.
 - A pane, opened with `/magus`, of the job tree, recent runs, and the session's
   subagents. It reads the daemon's Connect API over its unix socket, the same
   services the console uses, so it needs `magus server start` and holds no token.
-- Prompt-cache warnings: a countdown before the cache expires, and a warning or a
-  held prompt when you submit after it has, priced from a rates table you can
-  replace through the mod's `ratesFile` setting.
-- Cost gates, each priced from the same table and each off, `warn` (a toast) or a
-  stronger step, `warn` by default. The price step gate acts when the context the
-  next prompt re-sends is at or within `priceStepMarginTokens` of a model's
-  prompt-size price step, past which every request costs more, and `confirm` holds
-  the prompt once and suggests `/compact`. The subagent gate checks the model a
-  spawn runs on against `spawnMaxInputUsdPerMTok` (2 by default, Sonnet's input
-  rate; 0 turns it off); `deny` refuses the spawn before it starts and points to
-  the read-only `magus-scout` agent or `model: haiku`. The budget gate acts once
-  the session's spend passes `sessionBudgetUsd` (0 by default, which is off), and
-  `confirm` holds the prompt once.
-- The session's spend, main conversation and subagents together, in the status line
-  and at the top of the pane.
+- A warning or a held prompt when you submit after the prompt cache has expired,
+  priced from a rates table you can replace through the mod's `ratesFile` setting.
+  There is no countdown: the moment that matters is the submit.
+- Cost gates, each priced from the same table. The cache and price step gates are
+  `off`, `warn` (a toast) or `confirm`, `warn` by default. The price step gate acts
+  when the context the next prompt re-sends is at or within `priceStepMarginTokens`
+  of a model's prompt-size price step, past which every request costs more, and
+  `confirm` holds the prompt once and suggests `/compact`. The subagent gate is `off`
+  or `deny`, `off` by default: `deny` checks the model a spawn runs on against
+  `spawnMaxInputUsdPerMTok` (2 by default, Sonnet's input rate; 0 turns it off) and
+  refuses the spawn before it starts, pointing to the read-only `magus-scout` agent
+  or `model: haiku`. The budget gate acts once the session's spend passes
+  `sessionBudgetUsd` (0 by default, which is off), and `confirm` holds the prompt
+  once. A subagent's token count is shown, never flagged: context size is not billed
+  cost.
+- The session's spend, main conversation and subagents together, at the top of the
+  pane.
 - The machine build budget, read from `magus status -o json` every 15 seconds and
-  around each Bash call that runs magus: `budget 8/10 slots, 8.7/23.5 GiB` in the
-  status line, and each holder's pid, target, slots, memory, age and checkout on the
-  pane's Budget tab. When a magus run in the session fails with
-  [MGS3009](../../../reference/codes/sandbox/MGS3009.md), a band above the prompt names
-  it and who holds the budget for five minutes, and the Budget tab keeps the refusal.
+  around each Bash call that runs magus: each holder's pid, target, slots, memory,
+  age and checkout, the callers waiting for a seat, and the
+  [MGS3009](../../../reference/codes/sandbox/MGS3009.md) refusals, on the pane's
+  Budget tab. Nothing about it reaches the status line or the band: an agent reads
+  a refusal and retries.
 
-Every threshold is a setting in `/config`: `cacheGate`, `cacheWarnMinutes`,
-`gateMinTokens`, `cacheTtl`, `priceStepGate`, `priceStepMarginTokens`, `spawnGate`,
-`spawnMaxInputUsdPerMTok`, `sessionBudgetUsd`, `budgetGate`, `subagentTokenBudget`,
-`ratesFile` and `ratesStaleDays`. The mod reads a spawn's model from the call, then
+Every threshold is a setting in `/config`: `cacheGate`, `gateMinTokens`, `cacheTtl`,
+`priceStepGate`, `priceStepMarginTokens`, `spawnGate`, `spawnMaxInputUsdPerMTok`,
+`sessionBudgetUsd`, `budgetGate` and `ratesFile`. A `spawnGate` of `warn`, and the
+settings `cacheWarnMinutes`, `subagentTokenBudget` and `ratesStaleDays`, are gone.
+The mod reads a spawn's model from the call, then
 the agent's definition file under `.claude/agents`, then
 `CLAUDE_CODE_SUBAGENT_MODEL`, then the session; a built-in or plugin agent it cannot
-read is judged after it starts, by a toast alone. The mod uses the early-access Claude
+read is judged after it starts, by a toast alone in `deny` mode. The mod uses the early-access Claude
 Code plugin API, so a Claude Code update can change what it needs.
 
 A workspace can register the marketplace and turn the mod on for everyone who opens

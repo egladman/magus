@@ -9,12 +9,6 @@
       "description": "What happens when you submit after the prompt cache expired: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
       "default": "warn"
     },
-    "cacheWarnMinutes": {
-      "type": "number",
-      "title": "Cache warning window (minutes)",
-      "description": "Show the band above the prompt once this little time is left on the cache.",
-      "default": 2
-    },
     "gateMinTokens": {
       "type": "number",
       "title": "Gate threshold (tokens)",
@@ -42,8 +36,8 @@
     "spawnGate": {
       "type": "string",
       "title": "Subagent cost gate",
-      "description": "What happens when a subagent would run on a model whose input rate is over the cap below: off, warn (a toast), or deny (refuses the spawn and names a cheaper route).",
-      "default": "warn"
+      "description": "What happens when a subagent would run on a model whose input rate is over the cap below: off or deny (refuses the spawn and names a cheaper route).",
+      "default": "off"
     },
     "spawnMaxInputUsdPerMTok": {
       "type": "number",
@@ -63,23 +57,11 @@
       "description": "What happens when you submit after the session's spend passed the budget: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
       "default": "warn"
     },
-    "subagentTokenBudget": {
-      "type": "number",
-      "title": "Subagent token budget",
-      "description": "Flag a subagent once its input, output and cache tokens pass this. 0 turns it off.",
-      "default": 100000
-    },
     "ratesFile": {
       "type": "string",
       "title": "Rates file",
       "description": "Absolute path to your own rates JSON (same shape as the mod's rates.json). Empty uses the mod's.",
       "default": ""
-    },
-    "ratesStaleDays": {
-      "type": "number",
-      "title": "Rates age warning (days)",
-      "description": "Say so when the rates file's checked date is older than this.",
-      "default": 60
     }
   },
   "author": {

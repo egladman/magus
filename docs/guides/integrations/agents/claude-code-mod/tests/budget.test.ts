@@ -1,15 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import {
-  budgetStatus,
-  holderText,
-  parseBudget,
-  recentRefusal,
-  REFUSAL_SHOW_MS,
-  refusalText,
-  runsMagus,
-  waiterText,
-} from '../hooks/budget'
+import { holderText, parseBudget, refusalText, runsMagus, waiterText } from '../hooks/budget'
 
 const SINCE = '2026-10-24T09:40:55Z'
 const AT = Date.parse(SINCE)
@@ -126,12 +117,6 @@ describe('parseBudget', () => {
 describe('render', () => {
   const budget = parseBudget(STATUS).value ?? null
 
-  test('the status line names slots and memory in GiB', async () => {
-    expect(budgetStatus({ budget, readAt: 0 })).toBe('budget 8/10 slots, 8.7/23.5 GiB')
-    expect(budgetStatus({ budget: null, readAt: 0 })).toBe('budget idle')
-    expect(budgetStatus(null)).toBeUndefined()
-  })
-
   test('a holder line names pid, target, owner, slots, memory, age and checkout', async () => {
     const lines = (budget?.holders ?? []).map(h => holderText(h, AT + 3 * 60_000))
     expect(lines).toEqual([
@@ -162,15 +147,10 @@ describe('refusals', () => {
     expect(runsMagus('grep magus-run notes.md')).toBe(false)
   })
 
-  test('the band shows the newest broker refusal inside its window, with the budget', async () => {
+  test('the Budget tab names a refusal and whether it ever fits', async () => {
     const r = budget?.refused[0]
-    expect(recentRefusal(budget, AT + REFUSAL_SHOW_MS)).toBe(r)
-    expect(recentRefusal(budget, AT + REFUSAL_SHOW_MS + 1)).toBeNull()
-    expect(recentRefusal(null, AT)).toBeNull()
-    if (r === undefined) return
-    expect(refusalText(r, budget, AT + 2 * 60_000)).toBe(
-      'MGS3009 refused ci for spawned by root, pid 30100, in magus-b 2m ago: budget 8/10 slots, 8.7/23.5 GiB',
-    )
-    expect(refusalText({ ...r, fits: false, owner: '', dir: '' }, null, AT)).toBe('MGS3009 refused ci (never fits) for pid 30100 0s ago')
+    if (r === undefined) throw new Error('the fixture holds one refusal')
+    expect(refusalText(r, AT + 2 * 60_000)).toBe('MGS3009 refused ci for spawned by root, pid 30100, in magus-b 2m ago')
+    expect(refusalText({ ...r, fits: false, owner: '', dir: '' }, AT)).toBe('MGS3009 refused ci (never fits) for pid 30100 0s ago')
   })
 })
