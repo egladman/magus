@@ -503,6 +503,22 @@ func TestListDescriptors(t *testing.T) {
 	assert.Equal(t, "build:rw", got[1].Target, "the repro target (charm suffix) is preserved verbatim")
 }
 
+// A narrowed, failed or other-project run is not a full test. A charm suffix
+// does not stop one counting.
+func TestLastFullTestIsTheNewestPassedRootTest(t *testing.T) {
+	s := NewOutputStore(t.TempDir())
+	assert.Equal(t, job.FullTest{}, s.LastFullTest(), "an empty store has no full test")
+
+	want := mustPersist(t, s, "full", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test:rw", TimestampMs: 100, Revision: "abc"})
+	mustPersist(t, s, "old", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test", TimestampMs: 50, Revision: "older"})
+	mustPersist(t, s, "failed", []byte("no\n"), OutputDescriptor{Project: ".", Target: "test", TimestampMs: 200, Revision: "f", Failed: true})
+	mustPersist(t, s, "narrow", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test", TimestampMs: 300, Revision: "n", ExtraArgs: []string{"-run", "X"}})
+	mustPersist(t, s, "project", []byte("ok\n"), OutputDescriptor{Project: "docs", Target: "test", TimestampMs: 400, Revision: "p"})
+	mustPersist(t, s, "build", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "build", TimestampMs: 500, Revision: "b"})
+
+	assert.Equal(t, job.FullTest{Ref: want, Revision: "abc"}, s.LastFullTest())
+}
+
 // TestListDescriptorsEmpty: a store with nothing persisted returns nil, so the browser shows an
 // empty tree rather than erroring.
 func TestListDescriptorsEmpty(t *testing.T) {

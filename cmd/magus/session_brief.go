@@ -141,13 +141,11 @@ type sessionBrief struct {
 	Recent []briefSession `json:"recent,omitempty"`
 }
 
-// briefUnintegrated counts finished branches off the base, against the thresholds at which a
-// fork advises and refuses; Unknown says why they could not be counted.
+// briefUnintegrated counts finished branches off the base. Unknown says why
+// they could not be counted.
 type briefUnintegrated struct {
 	Count    int      `json:"count"`
 	Branches []string `json:"branches,omitempty"`
-	AdviseAt int      `json:"advise_at"`
-	RefuseAt int      `json:"refuse_at"`
 	Unknown  string   `json:"unknown,omitempty"`
 }
 
@@ -926,7 +924,7 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 // unintegratedBranches counts the finished branches waiting off this checkout's revision,
 // nil when none wait. A count that could not be read says why rather than reading as zero.
 func unintegratedBranches(ctx context.Context, root string) *briefUnintegrated {
-	out := &briefUnintegrated{AdviseAt: globalCfg.Jobs.IntegrateAdviseAt, RefuseAt: globalCfg.Jobs.IntegrateRefuseAt}
+	out := &briefUnintegrated{}
 	store, err := openJobs(ctx, root, jobOpen{})
 	if err != nil {
 		out.Unknown = err.Error()
@@ -957,11 +955,8 @@ func (b sessionBrief) writeUnintegrated(s *strings.Builder) {
 		briefLine(s, "finished branches off the base: unknown, %s", u.Unknown)
 		return
 	}
-	briefLine(s, "finished branches off the base: %d (a fork advises at %d, refuses at %d): %s",
-		u.Count, u.AdviseAt, u.RefuseAt, strings.Join(u.Branches, ", "))
-	if u.Count >= u.AdviseAt {
-		briefLine(s, "  integrate them: `%s` with a record naming them in integrates", hint.JobFork.With("--stdin", "--checkout", "<dir>"))
-	}
+	briefLine(s, "finished branches off the base: %d: %s", u.Count, strings.Join(u.Branches, ", "))
+	briefLine(s, "  integrate them: `%s` with a record naming them in integrates", hint.JobFork.With("--stdin", "--checkout", "<dir>"))
 }
 
 func (b sessionBrief) writeJobs(s *strings.Builder) {

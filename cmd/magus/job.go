@@ -410,6 +410,21 @@ func outputsIn(root string) job.AttemptResolver {
 	}
 }
 
+// reportForkFacts prints what a top-level fork leaves waiting. It never stops
+// the fork: a workspace's policy decides that, on magus\job.forkFacts.
+func reportForkFacts(ctx context.Context, store *job.Store, root string) {
+	rows, err := store.List()
+	if err != nil {
+		slog.InfoContext(ctx, "the work waiting off the base could not be counted", attr.Error(err), attr.Notice("note"))
+		return
+	}
+	var last job.FullTest
+	if dir, err := magus.ResolveCacheDir(root, cliOptions()...); err == nil {
+		last = cache.NewOutputStore(dir).LastFullTest()
+	}
+	slog.InfoContext(ctx, job.ForkFactsLine(job.ForkFacts(ctx, root, rows, last)), attr.Notice("note"))
+}
+
 // attemptIn is what the output store under cacheDir recorded about the run behind ref,
 // and only that store: an empty attempt for a ref it does not hold.
 func attemptIn(cacheDir, ref string) (types.JobAttempt, error) {
@@ -1373,15 +1388,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			slog.InfoContext(ctx, fmt.Sprintf("the workspace did not load (%s), so the job holds only the files its branches changed, and no declared output", jobWS.Unavailable), attr.Notice("note"))
 		}
 	case row.Parent == "":
-		advice, refuse, err := store.IntegrationAdvice(ctx, globalCfg.Jobs)
-		switch {
-		case err != nil:
-			slog.InfoContext(ctx, "finished branches waiting off the base could not be counted", attr.Error(err), attr.Notice("note"))
-		case refuse:
-			return exit.Usagef("magus job fork: %s", advice)
-		case advice != "":
-			slog.InfoContext(ctx, advice, attr.Notice("advice"))
-		}
+		reportForkFacts(ctx, store, root)
 	}
 	if row, err = forkCheckout(ctx, store, root, row); err != nil {
 		return err

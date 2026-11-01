@@ -49,6 +49,13 @@ func buildJob(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) 
 		}
 		return bindgen.ObjectJobUnmergedReport(report), nil
 	}))
+	ns.MapSet("forkFacts", directVal(obs, "magus.job.forkFacts", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		facts, err := std.MagusForkFactsJob(ctx, ffi.String(args, 0))
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return bindgen.ObjectJobForkFacts(facts), nil
+	}))
 	ns.MapSet("put", directVal(obs, "magus.job.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		put, err := job.DecodePut(ffi.AnyMap(args, 1))
 		if err != nil {

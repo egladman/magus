@@ -460,13 +460,10 @@ func briefClock() sessions.PromptCacheClock {
 func TestSessionBriefCountsFinishedBranchesOffTheBase(t *testing.T) {
 	t.Parallel()
 
-	var below strings.Builder
-	sessionBrief{Unintegrated: &briefUnintegrated{Count: 2, Branches: []string{"done-a", "done-b"}, AdviseAt: 5, RefuseAt: 10}}.writeUnintegrated(&below)
-	assert.Equal(t, "finished branches off the base: 2 (a fork advises at 5, refuses at 10): done-a, done-b\n", below.String())
-
-	var at strings.Builder
-	sessionBrief{Unintegrated: &briefUnintegrated{Count: 1, Branches: []string{"done-a"}, AdviseAt: 1, RefuseAt: 2}}.writeUnintegrated(&at)
-	assert.Contains(t, at.String(), fmt.Sprintf("integrate them: `%s`", hint.JobFork.With("--stdin", "--checkout", "<dir>")))
+	var waiting strings.Builder
+	sessionBrief{Unintegrated: &briefUnintegrated{Count: 2, Branches: []string{"done-a", "done-b"}}}.writeUnintegrated(&waiting)
+	assert.Contains(t, waiting.String(), "finished branches off the base: 2: done-a, done-b\n")
+	assert.Contains(t, waiting.String(), fmt.Sprintf("integrate them: `%s`", hint.JobFork.With("--stdin", "--checkout", "<dir>")))
 
 	var unknown strings.Builder
 	sessionBrief{Unintegrated: &briefUnintegrated{Unknown: "version control is disabled here"}}.writeUnintegrated(&unknown)

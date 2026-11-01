@@ -503,20 +503,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Jobs.MaxClaimProjects = n
 		}
 	}
-	if v := getenv("MAGUS_JOBS_INTEGRATE_ADVISE_AT"); v != "" {
-		if n, err := strconv.Atoi(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_JOBS_INTEGRATE_ADVISE_AT: %w", err))
-		} else {
-			cfg.Jobs.IntegrateAdviseAt = n
-		}
-	}
-	if v := getenv("MAGUS_JOBS_INTEGRATE_REFUSE_AT"); v != "" {
-		if n, err := strconv.Atoi(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_JOBS_INTEGRATE_REFUSE_AT: %w", err))
-		} else {
-			cfg.Jobs.IntegrateRefuseAt = n
-		}
-	}
 	if v := getenv("MAGUS_JOBS_MAX_CLAIMS"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_JOBS_MAX_CLAIMS: %w", err))

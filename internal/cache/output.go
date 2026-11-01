@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
@@ -472,6 +473,18 @@ func (s *OutputStore) ListDescriptors() []OutputDescriptor {
 	// most recent output.
 	sort.Slice(out, func(i, j int) bool { return newerDescriptor(out[i], out[j]) })
 	return out
+}
+
+// LastFullTest is the newest run that passed `test` on the workspace root
+// with no forwarded args. It reads this checkout's store only. An empty
+// result means the store holds none.
+func (s *OutputStore) LastFullTest() job.FullTest {
+	for _, d := range s.ListDescriptors() {
+		if bareTarget(d.Target) == "test" && d.Project == "." && !d.Failed && d.Spell == "" && len(d.ExtraArgs) == 0 && d.Revision != "" {
+			return job.FullTest{Ref: d.Ref, Revision: d.Revision}
+		}
+	}
+	return job.FullTest{}
 }
 
 // bareTarget strips the charm suffix reproTarget appends ("build:rw" -> "build"), so a

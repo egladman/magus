@@ -3741,6 +3741,22 @@ func ObjectJobUnmergedReport(v types.JobUnmergedReport) vm.Value {
 	return out
 }
 
+func ObjectJobForkFacts(v types.JobForkFacts) vm.Value {
+	out := vm.NewMap()
+	itemsFinishedBranches := make([]vm.Value, len(v.FinishedBranches))
+	for indexFinishedBranches := range v.FinishedBranches {
+		itemsFinishedBranches[indexFinishedBranches] = vm.StringValue(v.FinishedBranches[indexFinishedBranches])
+	}
+	out.MapSet("finishedBranches", vm.ListValue(itemsFinishedBranches))
+	out.MapSet("branchesUnknown", vm.StringValue(v.BranchesUnknown))
+	out.MapSet("integrateRecord", vm.StringValue(v.IntegrateRecord))
+	out.MapSet("commitsSinceTest", vm.IntValue(int64(v.CommitsSinceTest)))
+	out.MapSet("lastTestRef", vm.StringValue(v.LastTestRef))
+	out.MapSet("lastTestRevision", vm.StringValue(v.LastTestRevision))
+	out.MapSet("testUnknown", vm.StringValue(v.TestUnknown))
+	return out
+}
+
 func ObjectJobUnattributedWrite(v types.JobUnattributedWrite) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))

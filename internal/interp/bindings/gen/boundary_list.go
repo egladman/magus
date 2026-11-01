@@ -181,6 +181,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobDeferred", Zero: types.JobDeferred{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobDeferred(v.(types.JobDeferred)) }},
 	{Name: "JobDenial", Zero: types.JobDenial{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobDenial(v.(types.JobDenial)) }},
 	{Name: "JobEntry", Zero: types.JobEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobEntry(v.(types.JobEntry), enums) }},
+	{Name: "JobForkFacts", Zero: types.JobForkFacts{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobForkFacts(v.(types.JobForkFacts)) }},
 	{Name: "JobGateAttempt", Zero: types.JobGateAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobGateAttempt(v.(types.JobGateAttempt)) }},
 	{Name: "JobIntegration", Zero: types.JobIntegration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobIntegration(v.(types.JobIntegration)) }},
 	{Name: "JobList", Zero: types.JobList{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobList(v.(types.JobList), enums) }},

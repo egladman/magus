@@ -139,9 +139,11 @@ merges:
 - It regenerates declared outputs once, after the merges and before the full
   test run, so a drift test does not fail for nothing.
 
-magus counts the finished branches waiting off the base. From
-`jobs.integrate_advise_at` other forks are advised to integrate first, and from
-`jobs.integrate_refuse_at` they are refused.
+magus counts the finished branches waiting off the base and the commits since
+the last full test, and a top-level fork prints both. It refuses nothing on them.
+A guard rule can, by reading `magus\job.forkFacts`: magus's own repository refuses
+at a number in `hack/policy/spawn.buzz`, and a workspace with no such rule is told
+and never stopped.
 
 ## The guard enforces every boundary
 

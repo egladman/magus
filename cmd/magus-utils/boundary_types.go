@@ -365,6 +365,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobDeferred", Type: reflect.TypeFor[types.JobDeferred](), RuntimeObject: true},
 	{Name: "JobUnmerged", Type: reflect.TypeFor[types.JobUnmerged](), RuntimeObject: true},
 	{Name: "JobUnmergedReport", Type: reflect.TypeFor[types.JobUnmergedReport](), RuntimeObject: true},
+	{Name: "JobForkFacts", Type: reflect.TypeFor[types.JobForkFacts](), RuntimeObject: true},
 	{Name: "JobUnattributedWrite", Type: reflect.TypeFor[types.JobUnattributedWrite](), RuntimeObject: true},
 	// Leaf first: Origin.credential is a Credential, whose grant is a Grant.
 	{Name: "Grant", Type: reflect.TypeFor[types.Grant](), RuntimeObject: true},

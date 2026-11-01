@@ -814,6 +814,18 @@ var Magus = Module{
 					Extern:  true,
 				},
 				{
+					Name: "forkFacts",
+					Doc: "What a fork at workspace leaves waiting: finishedBranches, " +
+						"branchesUnknown, integrateRecord, commitsSinceTest, lastTestRef, " +
+						"lastTestRevision and testUnknown. Facts only: repo policy decides what " +
+						"they stop. It reads the version control per finished row, so call it for a " +
+						"fork line, not on every tool call.",
+					Args:    []Arg{{Name: "workspace", Type: TypeString}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "JobForkFacts"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
 					Name: "put",
 					Doc: "Record or advance one row, merging only the fields opts names: parent, " +
 						"criteria, checkpoint, write_paths, deny_paths, read_paths, depends_on, model, " +
@@ -2045,6 +2057,30 @@ func MagusUnmergedJob(ctx context.Context, workspace string) (types.JobUnmergedR
 		return types.JobUnmergedReport{}, err
 	}
 	return job.Unmerged(ctx, workspace, rows), nil
+}
+
+// MagusForkFactsJob backs magus\job.forkFacts. A rule reads the rows and the
+// output store the guard pinned.
+func MagusForkFactsJob(ctx context.Context, workspace string) (types.JobForkFacts, error) {
+	cacheDir := types.OutputCacheDirFromContext(ctx)
+	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
+		if snap.Err != nil {
+			return types.JobForkFacts{}, snap.Err
+		}
+		return job.ForkFacts(ctx, workspace, snap.Clone().Rows, cache.NewOutputStore(cacheDir).LastFullTest()), nil
+	}
+	if ws, ok := types.WorkspaceFromContext(ctx).(workspaceCacheDir); ok {
+		cacheDir = ws.CacheDir()
+	}
+	store, err := jobStoreFromContext(ctx, "job.forkFacts")
+	if err != nil {
+		return types.JobForkFacts{}, err
+	}
+	rows, err := store.List()
+	if err != nil {
+		return types.JobForkFacts{}, err
+	}
+	return job.ForkFacts(ctx, workspace, rows, cache.NewOutputStore(cacheDir).LastFullTest()), nil
 }
 
 // MagusPutJob backs magus\job.put: it merges the fields put sets into row id, through

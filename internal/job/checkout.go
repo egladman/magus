@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
@@ -841,6 +840,10 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 	if err != nil {
 		return nil, err
 	}
+	return unintegratedBranches(ctx, s.root, rows)
+}
+
+func unintegratedBranches(ctx context.Context, root string, rows []types.Job) ([]Unintegrated, error) {
 	var finished []types.Job
 	integrating := map[string]bool{}
 	for _, row := range rows {
@@ -850,7 +853,7 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 		switch {
 		case row.Integrating() && row.State == types.StatePass:
 		case row.State == types.StatePass || row.State == types.StateExited:
-			if ownTree(rows, s.root, row) {
+			if ownTree(rows, root, row) {
 				finished = append(finished, row)
 			}
 		}
@@ -858,11 +861,11 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 	if len(finished) == 0 {
 		return nil, nil
 	}
-	driver, why := resolveDriver(ctx, s.root)
+	driver, why := resolveDriver(ctx, root)
 	if driver == nil {
 		return nil, errors.New(why)
 	}
-	meta, err := driver.Metadata(ctx, s.root)
+	meta, err := driver.Metadata(ctx, root)
 	if err != nil {
 		return nil, fmt.Errorf("the checkout's revision: %w", err)
 	}
@@ -873,7 +876,7 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 			continue
 		}
 		// One read per job: a branch that does not resolve errs, and nothing says where its work is.
-		missing, err := driver.MissingCommits(ctx, s.root, meta.ID, branch)
+		missing, err := driver.MissingCommits(ctx, root, meta.ID, branch)
 		if err != nil || missing == 0 {
 			continue
 		}
@@ -882,36 +885,79 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 	return out, nil
 }
 
-// IntegrationAdvice is what a fork of anything but an integration job says about the
-// finished branches waiting off the base: "" below limits.IntegrateAdviseAt, and from there
-// a line naming each branch and the integration fork that takes them. refuse is true from
-// limits.IntegrateRefuseAt on, until an integration job names the branches. An unset
-// threshold, as in a config nothing loaded, never fires, like every unset jobs limit.
-func (s *Store) IntegrationAdvice(ctx context.Context, limits config.Jobs) (advice string, refuse bool, err error) {
-	if limits.IntegrateAdviseAt <= 0 {
-		return "", false, nil
-	}
-	waiting, err := s.UnintegratedBranches(ctx)
-	if err != nil || len(waiting) < limits.IntegrateAdviseAt {
-		return "", false, err
+// FullTest is the run [ForkFacts] counts commits from. An empty Ref means the
+// checkout's store holds no such run.
+type FullTest struct {
+	Ref      string
+	Revision string
+}
+
+// ForkFacts reads what a fork leaves waiting at root, from rows. It refuses
+// nothing, and a side it cannot read says why rather than reading as zero.
+func ForkFacts(ctx context.Context, root string, rows []types.Job, last FullTest) types.JobForkFacts {
+	facts := types.JobForkFacts{LastTestRef: last.Ref, LastTestRevision: last.Revision}
+	waiting, err := unintegratedBranches(ctx, root, rows)
+	if err != nil {
+		facts.BranchesUnknown = err.Error()
 	}
 	branches := make([]string, len(waiting))
-	named := make([]string, len(waiting))
 	for i, w := range waiting {
 		branches[i] = w.Branch
-		named[i] = fmt.Sprintf("%s (job %s, %d commit(s))", w.Branch, w.Job, w.Commits)
+		facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("%s (job %s, %d commit(s))", w.Branch, w.Job, w.Commits))
 	}
-	record, _ := json.Marshal(map[string]any{
-		"schema_version": types.JobSchemaVersion,
-		"id":             fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
-		"criteria":       "merge each finished branch with --no-ff, resolve, regenerate, and pass the check",
-		"integrates":     branches,
-		"check":          map[string]string{"target": "<target>", "project": "<project>"},
-	})
-	advice = fmt.Sprintf("%d finished branch(es) wait off the base (jobs.integrate_advise_at %d, jobs.integrate_refuse_at %d): %s. Integrate them first: echo '%s' | %s",
-		len(waiting), limits.IntegrateAdviseAt, limits.IntegrateRefuseAt, strings.Join(named, ", "), record,
-		hint.JobFork.With("--stdin", "--checkout", "<dir>"))
-	return advice, limits.IntegrateRefuseAt > 0 && len(waiting) >= limits.IntegrateRefuseAt, nil
+	if len(waiting) > 0 {
+		record, _ := json.Marshal(map[string]any{
+			"schema_version": types.JobSchemaVersion,
+			"id":             fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
+			"criteria":       "merge each finished branch with --no-ff, resolve, regenerate, and pass the check",
+			"integrates":     branches,
+			"check":          map[string]string{"target": "<target>", "project": "<project>"},
+		})
+		facts.IntegrateRecord = string(record)
+	}
+	facts.CommitsSinceTest, facts.TestUnknown = commitsSince(ctx, root, last)
+	return facts
+}
+
+func commitsSince(ctx context.Context, root string, last FullTest) (int, string) {
+	if last.Ref == "" {
+		return 0, "this checkout's output store holds no passed full test"
+	}
+	driver, why := resolveDriver(ctx, root)
+	if driver == nil {
+		return 0, why
+	}
+	meta, err := driver.Metadata(ctx, root)
+	if err != nil {
+		return 0, fmt.Sprintf("the checkout's revision: %s", err)
+	}
+	commits, err := driver.MissingCommits(ctx, root, last.Revision, meta.ID)
+	if err != nil {
+		return 0, fmt.Sprintf("the commits since %s: %s", last.Revision, err)
+	}
+	return commits, ""
+}
+
+// ForkFactsLine renders facts as the one line a fork prints.
+func ForkFactsLine(facts types.JobForkFacts) string {
+	var branches string
+	switch {
+	case facts.BranchesUnknown != "":
+		branches = "finished branches off the base: unknown, " + facts.BranchesUnknown
+	case len(facts.FinishedBranches) == 0:
+		branches = "0 finished branches off the base"
+	default:
+		branches = fmt.Sprintf("%d finished branch(es) off the base: %s", len(facts.FinishedBranches), strings.Join(facts.FinishedBranches, ", "))
+	}
+	commits := "commits since the last full test: unknown, " + facts.TestUnknown
+	if facts.TestUnknown == "" {
+		commits = fmt.Sprintf("%d commit(s) since the last full test (%s at %s)", facts.CommitsSinceTest, facts.LastTestRef, facts.LastTestRevision)
+	}
+	line := fmt.Sprintf("%s; %s", branches, commits)
+	if facts.IntegrateRecord != "" {
+		line += fmt.Sprintf(". Integrate them: echo '%s' | %s", facts.IntegrateRecord, hint.JobFork.With("--stdin", "--checkout", "<dir>"))
+	}
+	return line
 }
 
 // jobBranch is the branch row's work is on: the one its standing checkout has checked out,

@@ -469,6 +469,15 @@ var modules = []Module{
 		},
 	},
 	{
+		Name: "result",
+		Doc:  "A value or the Diagnostic that stopped it: Result, the Buzz form of types.Result, with ok, fail, and caught for what a catch hands back.",
+		Methods: []Method{
+			{Name: "ok", Doc: "ok is a Result holding value.", Sig: "result\\ok(value) -> Result::<T>"},
+			{Name: "fail", Doc: "fail is a Result carrying message and no code. A failure with a code", Sig: "result\\fail(message) -> Result::<T>"},
+			{Name: "caught", Doc: "caught is a Result carrying what a catch handed back: a str, a Diagnostic,", Sig: "result\\caught(err, [doing]) -> Result::<T>"},
+		},
+	},
+	{
 		Name: "semver",
 		Doc:  "Semantic version parsing and comparison (SemVer 2.0.0).",
 		Methods: []Method{

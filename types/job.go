@@ -1260,6 +1260,22 @@ type JobUnmergedReport struct {
 	Unknown string        `json:"unknown,omitempty" yaml:"unknown,omitempty"`
 }
 
+// JobForkFacts is what a fork leaves waiting: finished branches off the base
+// and commits since the last full test. It holds facts only, and repo policy
+// decides what they stop. BranchesUnknown and TestUnknown say why a side went
+// unread.
+type JobForkFacts struct {
+	// FinishedBranches names each as `<branch> (job <job>, <n> commit(s))`.
+	FinishedBranches []string `json:"finished_branches,omitempty" yaml:"finished_branches,omitempty"`
+	BranchesUnknown  string   `json:"branches_unknown,omitempty"  yaml:"branches_unknown,omitempty"`
+	// IntegrateRecord is the JSON job record an integration fork of them takes.
+	IntegrateRecord  string `json:"integrate_record,omitempty"   yaml:"integrate_record,omitempty"`
+	CommitsSinceTest int    `json:"commits_since_test"           yaml:"commits_since_test"`
+	LastTestRef      string `json:"last_test_ref,omitempty"      yaml:"last_test_ref,omitempty"`
+	LastTestRevision string `json:"last_test_revision,omitempty" yaml:"last_test_revision,omitempty"`
+	TestUnknown      string `json:"test_unknown,omitempty"       yaml:"test_unknown,omitempty"`
+}
+
 // Lines renders the report for a person, one line per fact, none when there
 // is nothing to say.
 func (r JobUnmergedReport) Lines() []string {

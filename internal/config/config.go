@@ -308,12 +308,6 @@ type Jobs struct {
 	// record refuses it as too broad (MGS3043). Default 1; zero or negative is an error.
 	// Workspace only, like StaleAfter.
 	MaxClaimProjects int `json:"max_claim_projects" yaml:"max_claim_projects" validate:"gt=0" merge:"written"`
-	// IntegrateAdviseAt is how many finished branches may wait off the base before a fork of
-	// anything but an integration job advises forking one. Default 5; workspace only.
-	IntegrateAdviseAt int `json:"integrate_advise_at" yaml:"integrate_advise_at" validate:"gt=0" merge:"written"`
-	// IntegrateRefuseAt is the count past which such a fork is refused until an integration
-	// job names the branches; it must exceed IntegrateAdviseAt. Default 10; workspace only.
-	IntegrateRefuseAt int `json:"integrate_refuse_at" yaml:"integrate_refuse_at" validate:"gtfield=IntegrateAdviseAt" merge:"written"`
 	// MaxClaims is the most proved claims any job may be given through its
 	// max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an
 	// error. Workspace only, like StaleAfter.
@@ -1195,7 +1189,7 @@ func Defaults() Config {
 		},
 		ShutdownGrace: DefaultShutdownGrace,
 		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
-		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, IntegrateAdviseAt: 5, IntegrateRefuseAt: 10, MaxClaims: 10},
+		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).
