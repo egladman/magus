@@ -401,7 +401,7 @@ fun bufAnswer(claims: {str: mut BufClaim}) > [DiscoveredProject] {
 // project, because buf build, lint and format run from that directory over every module
 // it holds. What buf would not see, and the buf.gen.yaml outputs only a generate target
 // can declare, come back as gaps.
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] {
     final claims = mut {<str: mut BufClaim>};
     claimLooseModules(claims, files: claimWorkspaces(claims, files: req.files));
     final roots = claims.clone();

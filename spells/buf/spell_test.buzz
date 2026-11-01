@@ -27,7 +27,7 @@ fun source(path: str) > DiscoveryFile {
     return DiscoveryFile{path = path};
 }
 
-fun discover(files: [DiscoveryFile]) > [DiscoveredProject] !> any {
+fun discover(files: [DiscoveryFile]) > [DiscoveredProject] {
     return buf\discover_projects(Target{}, req: DiscoveryQuery{root = "/repo", files = files});
 }
 
