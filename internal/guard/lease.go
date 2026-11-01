@@ -2948,7 +2948,7 @@ func declaresUpdate(project *types.Project, p string) bool {
 }
 
 // relocateFlag is the option each backend takes to run in another directory.
-var relocateFlag =map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", "jj": "-R"}
+var relocateFlag = map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", "jj": "-R"}
 
 // commitPathsRefusal grades what a commit carries against row's write paths.
 // A write is judged as it happens, and a generator run writes past them.
