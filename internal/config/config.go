@@ -485,7 +485,7 @@ type Cache struct {
 	// absence of the behavior: answering "can this run write?" meant parsing a double
 	// negative, and the CI snippet that used it read inverted from its own intent.
 	Write   CacheWrite   `json:"write" yaml:"write"`
-	Include CacheInclude `json:"include" yaml:"include"`
+	Include cacheInclude `json:"include" yaml:"include"`
 	SizeMB  int          `json:"size_mb" yaml:"size_mb" validate:"gte=0"` // disk cap in MB (binary); 0 = unlimited
 	Remote  CacheRemote  `json:"remote" yaml:"remote"`                    // settings specific to a shared remote cache backend
 }
@@ -507,24 +507,24 @@ type CacheRemoteWrite struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // when false, write the local tier but never the remote; unset writes the remote when the local tier is written and a signing key is held; true makes remote writes required
 }
 
-// CacheInclude selects which facts about the host enter every cache key.
+// cacheInclude selects which facts about the host enter every cache key.
 //
 // OS and architecture are separate because they move independently: a container image
 // built on linux/amd64 differs from linux/arm64 by ARCH alone, while a shell test suite
 // differs between macOS and linux by OS alone. One combined switch would make a target
 // that cares about one pay for both.
-type CacheInclude struct {
-	OS   CacheIncludeFlag `json:"os" yaml:"os"`
-	Arch CacheIncludeFlag `json:"arch" yaml:"arch"`
+type cacheInclude struct {
+	OS   cacheIncludeFlag `json:"os" yaml:"os"`
+	Arch cacheIncludeFlag `json:"arch" yaml:"arch"`
 }
 
-// CacheIncludeFlag is one host fact's switch. Both default to DISABLED, and neither
+// cacheIncludeFlag is one host fact's switch. Both default to DISABLED, and neither
 // holds correctness: Manifest.Platform refuses a cross-platform replay whatever these
 // say, so on one machine they are constants that discriminate nothing. Keeping them out
 // is what lets an output ref name the same run on every machine. Turn one on for a cache
 // shared across platforms, where one key per platform beats every platform colliding on
 // one key and taking the guard's miss.
-type CacheIncludeFlag struct {
+type cacheIncludeFlag struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // when true, this host property keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay
 }
 
@@ -871,15 +871,15 @@ type ConformanceConfig struct {
 	// a vendored or upstream-shaped tree. Generated output is always out.
 	Exclude []string `json:"exclude" yaml:"exclude"`
 	// Gates are the absolute noise gates of the conformance checks.
-	Gates ConformanceGatesConfig `json:"gates" yaml:"gates"`
+	Gates conformanceGatesConfig `json:"gates" yaml:"gates"`
 	// Checks is the policy per metric and population. A metric or population left out is
 	// not checked.
 	Checks map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig `json:"checks" yaml:"checks"`
 }
 
-// ConformanceGatesConfig is knowledge.conformance.gates: the cohort a convention needs before it
+// conformanceGatesConfig is knowledge.conformance.gates: the cohort a convention needs before it
 // binds a change, and how many findings are reported.
-type ConformanceGatesConfig struct {
+type conformanceGatesConfig struct {
 	MinCohort   int     `json:"min_cohort" yaml:"min_cohort" validate:"gte=1"`
 	MinShare    float64 `json:"min_share" yaml:"min_share" validate:"gte=0,lte=1"`
 	Bar         float64 `json:"bar" yaml:"bar" validate:"gte=0,lte=1"`
@@ -958,7 +958,7 @@ func conformanceDefaults() ConformanceConfig {
 	return ConformanceConfig{
 		MinSample: 30,
 		Step:      0.05,
-		Gates:     ConformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Gates:     conformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
 			types.ConformanceFileLines:    {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
 			types.ConformanceFuncLines:    {src: limit(99, 92), main: limit(99, 140), test: limit(99, 73)},

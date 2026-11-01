@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -520,6 +519,10 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		out.SourceBaseURL = deriveSourceBase(ctx, root)
 	}
 
+	return writeGraphExport(opts, out)
+}
+
+func writeGraphExport(opts output.Options, out types.KnowledgeGraphOutput) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
@@ -534,8 +537,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		}
 		return emitNames(os.Stdout, names)
 	}
-
-	printExportSummary(out)
+	knowledge.WriteSummary(os.Stdout, out)
 	return nil
 }
 
@@ -564,21 +566,6 @@ func graphExportUsage(fs *flag.FlagSet) {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 	printOwnDefaults(fs)
-}
-
-// printExportSummary is the text form: a routing summary, not a data dump.
-func printExportSummary(out types.KnowledgeGraphOutput) {
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("knowledge graph (schema v%d): %d nodes, %d edges\n\n", out.SchemaVersion, out.NodeCount, out.EdgeCount)
-	fmt.Println("nodes by kind:")
-	for _, kv := range countBy(len(out.Nodes), func(i int) string { return out.Nodes[i].Kind }) {
-		fmt.Printf("  %-11s %d\n", kv.key, kv.n)
-	}
-	fmt.Println("\nedges by relation:")
-	for _, kv := range countBy(len(out.Links), func(i int) string { return string(out.Links[i].Relation) }) {
-		fmt.Printf("  %-11s %d\n", kv.key, kv.n)
-	}
-	fmt.Println("\nRun with -o json (node-link) or -o graphml for the full graph.")
 }
 
 // outputSCIP is graph export's SCIP protobuf index, for code-intelligence tools.
@@ -820,26 +807,6 @@ func loadRefsGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config
 		return nil, err
 	}
 	return g, nil
-}
-
-type keyCount struct {
-	key string
-	n   int
-}
-
-// countBy tallies n items by the key each index maps to, returning counts sorted
-// by key for stable output.
-func countBy(n int, keyOf func(i int) string) []keyCount {
-	m := map[string]int{}
-	for i := 0; i < n; i++ {
-		m[keyOf(i)]++
-	}
-	out := make([]keyCount, 0, len(m))
-	for k, v := range m {
-		out = append(out, keyCount{k, v})
-	}
-	slices.SortFunc(out, func(a, b keyCount) int { return cmp.Compare(a.key, b.key) })
-	return out
 }
 
 // ---- project-DAG rendering shared by graph deps, run --graph, and affected --graph ----

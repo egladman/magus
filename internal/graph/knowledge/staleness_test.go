@@ -182,5 +182,5 @@ func TestOutrunDaysCountsCalendarDays(t *testing.T) {
 
 	// Prose newer than its subject goes negative, which annotateProseStaleness reads as
 	// current: it must not wrap to a large positive and report a petrified doc.
-	assert.Negative(t, outrunDays(late, late.Add(-5 * 24 * time.Hour)))
+	assert.Negative(t, outrunDays(late, late.Add(-5*24*time.Hour)))
 }
