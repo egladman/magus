@@ -14,7 +14,7 @@ parses it, runs the command, writes the file, refuses the call that breaks a
 rule and carries the result into the next turn. That something is the harness.
 The model proposes; the harness executes what the model proposes.
 
-## What people get wrong
+### What people get wrong
 
 ### The model does the work
 
@@ -84,7 +84,7 @@ gets "conflated with an agent framework, an SDK, an IDE plugin, or an
 orchestrator" ([arXiv 2606.10106](https://arxiv.org/abs/2606.10106)). A harness
 fixes the steps that have a right answer and leaves the plan to the model.
 
-## The layers
+### The layers
 
 Harnesses come in layers, listed here from the top, and each does what the one
 below it cannot:
@@ -113,7 +113,7 @@ at fixed layers: cost belongs to the person, who chooses the work and the tier
 table; security belongs to the outer harness, whose guard judges every call
 against declared outputs, leases and VCS state, whichever inner harness made it.
 
-## Records, not a loop over loops
+### Records, not a loop over loops
 
 Two inner harnesses can work under one outer harness at the same time, on the
 same repository, with the person above both. They never talk to each other, and
