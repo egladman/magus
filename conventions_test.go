@@ -198,8 +198,9 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 			for _, h := range entry.Hooks {
 				// One magus command per hook: a shell around it is logic no template
 				// carries and no reader downloads. The claude-code spell's checkout-first
-				// prefix is the one exception, and only verbatim.
-				command := h.Command
+				// prefix is the one exception, and only verbatim. The harness marker on a
+				// hook a spell owns is the other.
+				command := strings.TrimSuffix(h.Command, " # magus:harness")
 				if rest, ok := strings.CutPrefix(command, checkoutMagusPrefix); ok {
 					command = "magus " + rest
 				}
@@ -871,18 +872,16 @@ func TestVendoredHostSchemasMatchTheirRecordedDigest(t *testing.T) {
 // temp-file rename or takes an flock itself instead of calling internal/file. It only
 // shrinks: TestStoreMechanicsLiveInInternalFile fails on an entry whose site is gone.
 var storeMechanicsAllowed = map[string]string{
-	"internal/cache/artifact.go:copyBlob":                         "streams a blob into the CAS, hashing as it copies",
-	"internal/cache/snapshot.go:Cache.snapshotOne":                "streams a blob into the CAS, hashing as it copies",
-	"internal/maintenance/build_lock.go:AcquireGraphBuild":        "a graph build lock waits on the build it names and is held across a whole build",
-	"internal/maintenance/build_lock.go:AcquireMachineGraphBuild": "this machine's one build lock waits on the build it names and is held across a whole build",
-	"internal/maintenance/build_lock.go:TryGraphBuild":            "a graph build lock is held across a whole build, and a refused try names the holder",
-	"internal/maintenance/build_lock.go:TryMachineGraphBuild":     "this machine's one build lock is held across a whole build, and a refused try names the holder",
-	"internal/queue/verdicts.go:VerdictDir.WritePlan":             "publishes a directory, not a file",
-	"internal/queue/verdicts.go:VerdictDir.RecordWithBundle":      "publishes a directory, not a file",
-	"lock.go:projectLocker.acquire":                               "a project lock waits unbounded with a heartbeat: its holder is a build",
-	"lock.go:lockIsHeld":                                          "probes a project lock without holding it",
-	"internal/pipe/pipe.go:Gate":                                  "a project lock waits unbounded with a heartbeat: its holder is a build",
-	"pipe.go:projectLocker.publishHolds":                          "a project lock waits unbounded with a heartbeat: its holder is a build",
+	"internal/cache/artifact.go:copyBlob":                    "streams a blob into the CAS, hashing as it copies",
+	"internal/cache/snapshot.go:Cache.snapshotOne":           "streams a blob into the CAS, hashing as it copies",
+	"internal/maintenance/build_lock.go:AcquireGraphBuild":   "a graph build lock waits on the build it names and is held across a whole build",
+	"internal/maintenance/build_lock.go:TryGraphBuild":       "a graph build lock is held across a whole build, and a refused try names the holder",
+	"internal/queue/verdicts.go:VerdictDir.WritePlan":        "publishes a directory, not a file",
+	"internal/queue/verdicts.go:VerdictDir.RecordWithBundle": "publishes a directory, not a file",
+	"lock.go:projectLocker.acquire":                          "a project lock waits unbounded with a heartbeat: its holder is a build",
+	"lock.go:lockIsHeld":                                     "probes a project lock without holding it",
+	"internal/pipe/pipe.go:Gate":                             "a project lock waits unbounded with a heartbeat: its holder is a build",
+	"pipe.go:projectLocker.publishHolds":                     "a project lock waits unbounded with a heartbeat: its holder is a build",
 }
 
 // storeMechanicsSkipDirs are trees the rule does not govern. libs/, and any other directory

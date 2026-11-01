@@ -111,37 +111,37 @@ func ShortestForegroundMax(harnesses []HarnessDescriptor) (time.Duration, bool) 
 	return shortest, shortest > 0
 }
 
-// HarnessChannel is one place a host's hook reply can put text, as types.Limits.Channels
+// harnessChannel is one place a host's hook reply can put text, as types.Limits.Channels
 // names it. The names are the logger's: a display shows a record's message and drops its
 // why (internal/log/quiet), a capture keeps the whole record, and a notice is a line
 // addressed to the person (attr.Notice). Routing is decided where the reply is written,
 // as quiet.Wrap decides it at the display.
-type HarnessChannel string
+type harnessChannel string
 
 const (
-	// ChannelDisplay is read by the person and the agent alike: a deny reason, a thrown
+	// channelDisplay is read by the person and the agent alike: a deny reason, a thrown
 	// tool error. It gets a deny's verdict line.
-	ChannelDisplay HarnessChannel = "display"
-	// ChannelCapture is read by the agent alone: Claude Code's additionalContext, Cursor's
-	// agent_message. It gets the whole deny.
-	ChannelCapture HarnessChannel = "capture"
-	// ChannelNotice is read by the person alone: a systemMessage, Cursor's user_message.
-	ChannelNotice HarnessChannel = attr.NoticeKey
+	channelDisplay harnessChannel = "display"
+	// ChannelCapture is read by the agent alone, in the field a host keeps for
+	// context. It gets the whole deny.
+	ChannelCapture harnessChannel = "capture"
+	// channelNotice is read by the person alone: a systemMessage, Cursor's user_message.
+	channelNotice harnessChannel = attr.NoticeKey
 )
 
 // ParseHarnessChannels reads a harness's declared channels. An empty set, a repeat or a
 // name outside display, capture and notice is an error, since a reply routed on a guess
 // reaches the wrong reader.
-func ParseHarnessChannels(names []string) ([]HarnessChannel, error) {
+func ParseHarnessChannels(names []string) ([]harnessChannel, error) {
 	if len(names) == 0 {
 		return nil, fmt.Errorf("declares no channels: set limits.channels to the ones its hook replies reach, from %s, %s and %s",
-			ChannelDisplay, ChannelCapture, ChannelNotice)
+			channelDisplay, ChannelCapture, channelNotice)
 	}
-	out := make([]HarnessChannel, 0, len(names))
+	out := make([]harnessChannel, 0, len(names))
 	for _, name := range names {
-		c := HarnessChannel(name)
-		if c != ChannelDisplay && c != ChannelCapture && c != ChannelNotice {
-			return nil, fmt.Errorf("declares the unknown channel %q: the channels are %s, %s and %s", name, ChannelDisplay, ChannelCapture, ChannelNotice)
+		c := harnessChannel(name)
+		if c != channelDisplay && c != ChannelCapture && c != channelNotice {
+			return nil, fmt.Errorf("declares the unknown channel %q: the channels are %s, %s and %s", name, channelDisplay, ChannelCapture, channelNotice)
 		}
 		if slices.Contains(out, c) {
 			return nil, fmt.Errorf("declares the channel %s twice", name)
@@ -791,7 +791,7 @@ func pluginMissingReason(d HarnessDescriptor, enabled types.Setting, id string) 
 			source = repo
 		}
 	}
-	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere, and %s holds no cached %s); run once: claude plugin marketplace add %s (or trust the folder and start a session)",
+	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere, and %s holds no cached %s); run once: claude plugin marketplace add %s (or trust the folder and start a session)", //nolint:hostagnostic // only the host spell that has plugins sets enabledPlugins
 		id, enabled.Path, filepath.Join(claudePluginsRoot(), "installed_plugins.json"), filepath.Join(claudePluginsRoot(), "cache", marketplace, name), name, source)
 	if registered, err := claudeMarketplaceKnown(marketplace); err == nil && !registered {
 		reason += fmt.Sprintf(" (marketplace %s is not registered either)", marketplace)

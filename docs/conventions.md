@@ -419,7 +419,7 @@ tags: [design, <principle or judgment>, <topics>]
 - `order` sorts the page within its group, and `description` is the line the index in
   `docs/design.md` prints beside the title. `design-index-generate` rewrites that index
   from the front matter, so a new page appears there on the next `magus run generate docs`.
-- The argument comes before the first H2 and may carry H3s of its own.
+- The argument comes before Enforced by and may carry H2s of its own, not H3s.
 - The H2 sections are exactly Enforced by, Good, Bad and See also, in that order.
   Enforced by names the test, lint, guard rule or review step that holds the rule; a rule
   with nothing yet says so and is listed in `docs/design/strained.md`.

@@ -225,7 +225,7 @@ func attentionDispose(root string, args []string) error {
 		return disposeError(err, rest[0], dir)
 	}
 	if err := job.ReleaseRequestDisposed(context.Background(), root, req); err != nil {
-		slog.WarnContext(context.Background(), fmt.Sprintf("disposed %s, but its holder's row still carries it: %s", req.ID, err), attr.Unchecked())
+		slog.WarnContext(context.Background(), fmt.Sprintf("disposed %s, but its holder's row still carries it", req.ID), attr.Error(err), attr.Unchecked())
 	}
 
 	opts, err := outputOptionsOrDefault()

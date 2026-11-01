@@ -77,7 +77,7 @@ func dirtyReplacement(path string, m managedMarkers, body string, j stamp.Judge)
 		return stamp.Writer{}, false
 	}
 	head, rest, _ := strings.Cut(text[spans[0].start:spans[0].end], "\n")
-	if rest == body+m.end+"\n" || rest == body+m.end {
+	if strings.TrimSuffix(rest, "\n") == body+m.end {
 		return stamp.Writer{}, false
 	}
 	rec, ok := stamp.Parse(head)

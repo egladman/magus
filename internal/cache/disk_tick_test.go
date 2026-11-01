@@ -57,7 +57,7 @@ func (s *DiskFullSuite) TestAnUnreadableDiskNamesItselfInTheFullCause() {
 
 func (s *DiskFullSuite) TestZeroFloorIsOff() {
 	_, below, err := DiskBelow(s.dir, 0)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.False(below)
 }
 
@@ -86,11 +86,11 @@ func (s *DiskFullSuite) TestAFailedRunOnAHealthyDiskStaysQuiet() {
 func (s *DiskFullSuite) TestTailReadsOnlyTheEnd() {
 	p := filepath.Join(s.dir, "log")
 	s.Require().NoError(os.WriteFile(p, []byte(strings.Repeat("a", 100)+"tail"), 0o600))
-	s.Equal("tail", tailOf(p, 4))
+	s.Equal("tail", fileTail(p, 4))
 }
 
 func (s *DiskFullSuite) TestTailOfAMissingLogIsEmpty() {
-	s.Empty(tailOf(filepath.Join(s.dir, "absent"), 4))
+	s.Empty(fileTail(filepath.Join(s.dir, "absent"), 4))
 }
 
 type KickingAdmitterSuite struct {

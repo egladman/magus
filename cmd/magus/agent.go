@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -131,24 +132,7 @@ func agentInstallCommand(ctx context.Context, args []string) error {
 	}
 
 	if af.Tar {
-		if opts.Format != outputText {
-			return exit.Usagef("magus agent install --tar: -o is not supported, stdout is the archive")
-		}
-		if len(dests) > 1 {
-			return fmt.Errorf("agent install --tar: at most one destination path prefix is allowed (the path inside the tar archive)")
-		}
-		prefix := "."
-		if len(dests) == 1 {
-			prefix = dests[0]
-		}
-		body, err := agentSkills.SkillTar(prefix, form)
-		if err != nil {
-			return err
-		}
-		if _, err := os.Stdout.Write(body); err != nil {
-			return fmt.Errorf("agent install --tar: write stdout: %w", err)
-		}
-		return nil
+		return writeSkillTar(opts, dests, form)
 	}
 
 	if len(dests) == 0 {
@@ -186,6 +170,27 @@ func agentInstallCommand(ctx context.Context, args []string) error {
 	}
 	reportRemovedSkills(os.Stdout, removed, af.DryRun)
 	printAgentInstallNextSteps(ctx, af.Dir, written, changed, form, af.DryRun)
+	return nil
+}
+
+func writeSkillTar(opts output.Options, dests []string, form types.SkillForm) error {
+	if opts.Format != outputText {
+		return exit.Usagef("magus agent install --tar: -o is not supported, stdout is the archive")
+	}
+	if len(dests) > 1 {
+		return fmt.Errorf("agent install --tar: at most one destination path prefix is allowed (the path inside the tar archive)")
+	}
+	prefix := "."
+	if len(dests) == 1 {
+		prefix = dests[0]
+	}
+	body, err := agentSkills.SkillTar(prefix, form)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stdout.Write(body); err != nil {
+		return fmt.Errorf("agent install --tar: write stdout: %w", err)
+	}
 	return nil
 }
 

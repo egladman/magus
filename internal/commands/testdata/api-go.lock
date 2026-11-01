@@ -4539,7 +4539,6 @@ github.com/egladman/magus/types.RegisteredCheckout.LockReason field string
 github.com/egladman/magus/types.RegisteredCheckout.Locked field bool
 github.com/egladman/magus/types.RegisteredCheckout.Primary field bool
 github.com/egladman/magus/types.RegisteredCheckout.Root field string
-github.com/egladman/magus/types.ReindexRefusals func(err error) error
 github.com/egladman/magus/types.RelationAnnotates const RelationID = "annotates"
 github.com/egladman/magus/types.RelationAuthored const RelationID = "authored"
 github.com/egladman/magus/types.RelationCalls const RelationID = "calls"

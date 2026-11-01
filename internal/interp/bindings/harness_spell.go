@@ -75,7 +75,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	// A harness with no hooks prints nothing anyone reads, so it needs no channels.
 	if len(d.Hooks) > 0 || len(d.Limits.Channels) > 0 {
 		if _, err := agent.ParseHarnessChannels(d.Limits.Channels); err != nil {
-			return fail(fmt.Errorf("mgs_getLimits %w", err))
+			return fail(fmt.Errorf("mgs_getLimits: %w", err))
 		}
 	}
 	if d.Settings, _, err = callHarness[[]types.Setting](ctx, drv, "mgs_listSettings"); err != nil {

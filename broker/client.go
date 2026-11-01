@@ -565,7 +565,7 @@ func SocketPeer(ctx context.Context, addr string) (int, error) {
 		return 0, fmt.Errorf("broker: %w", err)
 	}
 	if peerErr != nil {
-		return 0, fmt.Errorf("broker: read the pid at %s: %w", ep, peerErr)
+		return 0, fmt.Errorf("read the pid at %s: %w", ep, peerErr)
 	}
 	return pid, nil
 }

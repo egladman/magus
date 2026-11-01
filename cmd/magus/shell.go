@@ -133,7 +133,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// Started here rather than in Judge, so loading the rules spends the same budget.
 	ctx, cancel := guard.WithHookDeadline(ctx)
 	defer cancel()
-	fset := flag.NewFlagSet("shell", flag.ContinueOnError)
+	fset := flag.NewFlagSet("shell", flag.ContinueOnError) //nolint:hostvocab // TestEveryLeafRendersEveryFormatOrRefusesThem requires the leaf name shell
 	// --observe is observation, not policy. A wrapper sets it for a tool that only
 	// LOOKS: no rule judges a read, so running the write rules over one would only
 	// ever manufacture a false advisory about editing a file the agent opened

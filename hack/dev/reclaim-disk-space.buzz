@@ -57,6 +57,16 @@ fun encode(s: reclaim\Survey, items: [reclaim\Item], applied: bool, keepRecent: 
     }
 }
 
+fun cachesNote(caches: bool, applied: bool, fence: double, keepWithin: str) > result\Result::<str> {
+    if (caches and applied) {
+        return trimCaches(fence);
+    }
+    if (caches) {
+        return result\ok::<str>("--apply trims each cache to the budget its spell declares, keeping files inside {keepWithin}");
+    }
+    return result\ok::<str>("");
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--apply", "--caches", "--help"], valued: ["--keep-recent", "--keep-within", "--base", "-o"]);
     if (parsed.values["--help"] != null) {
@@ -89,16 +99,11 @@ export fun main(args: [str]) > void !> any {
     final s = reclaim\survey(parsed.values["--base"] ?? vcs\base(), now: os\time(), keepRecent: keepMs, measure: true, deadline: 0.0);
     final planned = reclaim\rank(s.items);
     final items = if (applied) reclaim\apply(planned, root: s.root, deadline: 0.0) else planned;
-    var trimmed = "";
-    if (caches and applied) {
-        final trim = trimCaches(fence);
-        if (trim.error != null) {
-            throw trim.error!.message;
-        }
-        trimmed = trim.value!;
-    } else if (caches) {
-        trimmed = "--apply trims each cache to the budget its spell declares, keeping files inside {keepWithin}";
+    final cached = cachesNote(caches, applied: applied, fence: fence, keepWithin: keepWithin);
+    if (cached.error != null) {
+        throw cached.error!.message;
     }
+    final trimmed = cached.value!;
     // -o json prints the plan document alone, so a reader can parse the whole of stdout.
     if (format == "json") {
         final encoded = encode(s, items: items, applied: applied, keepRecent: keepRecent, trimmed: trimmed);

@@ -1871,11 +1871,7 @@ func MagusImpact(ctx context.Context, base string, opts types.MagusCommandOption
 
 // MagusHotspots returns the hotspots metric from the loaded workspace.
 func MagusHotspots(ctx context.Context, opts types.HistoryMetricsOptions) (types.Hotspots, error) {
-	a, err := historyMetricsFrom(ctx, "hotspots")
-	if err != nil {
-		return types.Hotspots{}, err
-	}
-	iopts, err := historyMetricsWindow(opts)
+	a, iopts, err := historyMetricsRequest(ctx, "hotspots", opts)
 	if err != nil {
 		return types.Hotspots{}, err
 	}
@@ -1886,11 +1882,7 @@ func MagusHotspots(ctx context.Context, opts types.HistoryMetricsOptions) (types
 
 // MagusAffinity returns the affinity metric from the loaded workspace.
 func MagusAffinity(ctx context.Context, opts types.HistoryMetricsOptions) (types.Affinity, error) {
-	a, err := historyMetricsFrom(ctx, "affinity")
-	if err != nil {
-		return types.Affinity{}, err
-	}
-	iopts, err := historyMetricsWindow(opts)
+	a, iopts, err := historyMetricsRequest(ctx, "affinity", opts)
 	if err != nil {
 		return types.Affinity{}, err
 	}
@@ -1899,11 +1891,7 @@ func MagusAffinity(ctx context.Context, opts types.HistoryMetricsOptions) (types
 
 // MagusOwnership returns the ownership metric from the loaded workspace.
 func MagusOwnership(ctx context.Context, opts types.HistoryMetricsOptions) (types.Ownership, error) {
-	a, err := historyMetricsFrom(ctx, "ownership")
-	if err != nil {
-		return types.Ownership{}, err
-	}
-	iopts, err := historyMetricsWindow(opts)
+	a, iopts, err := historyMetricsRequest(ctx, "ownership", opts)
 	if err != nil {
 		return types.Ownership{}, err
 	}
@@ -1912,11 +1900,7 @@ func MagusOwnership(ctx context.Context, opts types.HistoryMetricsOptions) (type
 
 // MagusTrend returns the trend metric from the loaded workspace.
 func MagusTrend(ctx context.Context, opts types.HistoryMetricsOptions) (types.Trend, error) {
-	a, err := historyMetricsFrom(ctx, "trend")
-	if err != nil {
-		return types.Trend{}, err
-	}
-	iopts, err := historyMetricsWindow(opts)
+	a, iopts, err := historyMetricsRequest(ctx, "trend", opts)
 	if err != nil {
 		return types.Trend{}, err
 	}
@@ -1925,7 +1909,7 @@ func MagusTrend(ctx context.Context, opts types.HistoryMetricsOptions) (types.Tr
 
 // MagusVolatility returns the volatility metric from the loaded workspace.
 func MagusVolatility(ctx context.Context) (types.Volatility, error) {
-	a, err := historyMetricsFrom(ctx, "volatility")
+	a, err := contextHistoryMetrics(ctx, "volatility")
 	if err != nil {
 		return types.Volatility{}, err
 	}
@@ -1934,7 +1918,7 @@ func MagusVolatility(ctx context.Context) (types.Volatility, error) {
 
 // MagusUnreferenced returns the unreferenced metric from the loaded workspace.
 func MagusUnreferenced(ctx context.Context) (types.Unreferenced, error) {
-	a, err := historyMetricsFrom(ctx, "unreferenced")
+	a, err := contextHistoryMetrics(ctx, "unreferenced")
 	if err != nil {
 		return types.Unreferenced{}, err
 	}
@@ -1943,7 +1927,7 @@ func MagusUnreferenced(ctx context.Context) (types.Unreferenced, error) {
 
 // MagusDuplication returns the duplication metric from the loaded workspace.
 func MagusDuplication(ctx context.Context) (types.Duplication, error) {
-	a, err := historyMetricsFrom(ctx, "duplication")
+	a, err := contextHistoryMetrics(ctx, "duplication")
 	if err != nil {
 		return types.Duplication{}, err
 	}
@@ -1952,7 +1936,7 @@ func MagusDuplication(ctx context.Context) (types.Duplication, error) {
 
 // MagusModelTiers returns the model-tiers metric from the loaded workspace.
 func MagusModelTiers(ctx context.Context) (types.ModelTiers, error) {
-	a, err := historyMetricsFrom(ctx, "modelTiers")
+	a, err := contextHistoryMetrics(ctx, "modelTiers")
 	if err != nil {
 		return types.ModelTiers{}, err
 	}
@@ -1961,14 +1945,14 @@ func MagusModelTiers(ctx context.Context) (types.ModelTiers, error) {
 
 // MagusGrouping returns the grouping metric from the loaded workspace.
 func MagusGrouping(ctx context.Context) (types.Grouping, error) {
-	a, err := historyMetricsFrom(ctx, "grouping")
+	a, err := contextHistoryMetrics(ctx, "grouping")
 	if err != nil {
 		return types.Grouping{}, err
 	}
 	return a.GroupingLens(ctx)
 }
 
-func historyMetricsFrom(ctx context.Context, member string) (types.HistoryMetrics, error) {
+func contextHistoryMetrics(ctx context.Context, member string) (types.HistoryMetrics, error) {
 	if a, ok := AnalyzerFromContext(ctx); ok {
 		return a, nil
 	}
@@ -1983,14 +1967,18 @@ func historyMetricsFrom(ctx context.Context, member string) (types.HistoryMetric
 	return a, nil
 }
 
-func historyMetricsWindow(opts types.HistoryMetricsOptions) (types.HistoryMetricsOptions, error) {
+func historyMetricsRequest(ctx context.Context, member string, opts types.HistoryMetricsOptions) (types.HistoryMetrics, types.HistoryMetricsOptions, error) {
+	a, err := contextHistoryMetrics(ctx, member)
+	if err != nil {
+		return nil, opts, err
+	}
 	switch {
 	case opts.Commits < 0:
-		return opts, fmt.Errorf("commits must not be negative, got %d", opts.Commits)
+		return nil, opts, fmt.Errorf("commits must not be negative, got %d", opts.Commits)
 	case opts.Commits == 0:
 		opts.Commits = 500
 	}
-	return opts, nil
+	return a, opts, nil
 }
 
 // workspaceCacheDir is the structural seam for the one capability

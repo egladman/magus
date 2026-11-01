@@ -5,7 +5,6 @@ namespace cursorAudit;
 import "encoding/json";
 import "fs";
 import "io";
-import "std";
 
 fun bump(m: mut {str: int}, key: str) > void {
     m[key] = (m[key] ?? 0) + 1;

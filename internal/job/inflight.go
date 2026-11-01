@@ -3,6 +3,7 @@ package job
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/types"
@@ -120,6 +121,29 @@ func changeAttention(ch types.InflightChange) types.InflightAttention {
 		return types.AttentionQueue
 	}
 	return types.AttentionNone
+}
+
+// InflightDetail is why a change is where it is: its place in the plan, and
+// the verdict's code and reason or the mark it shows. It names the partition
+// only when partitions exceeds one, and is "" with nothing to say.
+func InflightDetail(c types.InflightChange, partitions int) string {
+	var parts []string
+	if c.Position > 0 {
+		place := fmt.Sprintf("pos %d", c.Position)
+		if partitions > 1 {
+			place = fmt.Sprintf("partition %d pos %d", c.Partition, c.Position)
+		}
+		parts = append(parts, place)
+	}
+	switch {
+	case c.Code != "" && c.Reason != "":
+		parts = append(parts, fmt.Sprintf("%s: %s", c.Code, c.Reason))
+	case c.Code != "":
+		parts = append(parts, c.Code)
+	case c.Mark != "":
+		parts = append(parts, strings.ReplaceAll(c.Mark, "_", " "))
+	}
+	return strings.Join(parts, "  ")
 }
 
 // jobTree is the ids of lease's whole tree: its root ancestor and every row below it.

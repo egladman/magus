@@ -83,12 +83,12 @@ func requireCurrent(t *testing.T, root, id string) {
 func TestParseHarnessChannelsReadsEachDeclaredChannel(t *testing.T) {
 	got, err := ParseHarnessChannels([]string{"display", "capture", "notice"})
 	require.NoError(t, err)
-	assert.Equal(t, []HarnessChannel{ChannelDisplay, ChannelCapture, ChannelNotice}, got)
+	assert.Equal(t, []harnessChannel{channelDisplay, ChannelCapture, channelNotice}, got)
 }
 
 // The person-only channel is the logger's own notice key, so the two cannot drift apart.
 func TestTheNoticeChannelIsTheLoggersNoticeKey(t *testing.T) {
-	assert.Equal(t, attr.NoticeKey, string(ChannelNotice))
+	assert.Equal(t, attr.NoticeKey, string(channelNotice))
 }
 
 func TestParseHarnessChannelsRefusesAnEmptySet(t *testing.T) {

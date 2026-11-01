@@ -4000,3 +4000,29 @@ func (s *workerCheckReadsSuite) TestABriefMayTeachTheBuildToARowHoldingACheckout
 func (s *workerCheckReadsSuite) TestABriefMayNotTeachTheBuildToARowHoldingNoCheckout() {
 	s.True(s.briefed(testCheckLease(), s.ruled(), "./magus run go-build . --no-default-charms"))
 }
+
+type scriptRunDirsSuite struct {
+	suite.Suite
+}
+
+func TestScriptRunDirs(t *testing.T) { suite.Run(t, new(scriptRunDirsSuite)) }
+
+func (s *scriptRunDirsSuite) dirs(command string) []string {
+	var out []string
+	for _, d := range scriptRunDirs(command, DialectBash, shellDir{dir: "/w", known: true}, scriptRun{path: "./x.sh"}) {
+		out = append(out, d.dir)
+	}
+	return out
+}
+
+func (s *scriptRunDirsSuite) TestASameNamedScriptAtAnotherPathIsNotThisRun() {
+	s.Equal([]string{"/w"}, s.dirs("./x.sh && cd b && c/x.sh"))
+}
+
+func (s *scriptRunDirsSuite) TestTheSamePathAfterACdIsThisRunAgain() {
+	s.Equal([]string{"/w", "/w/b"}, s.dirs("./x.sh && cd b && ./x.sh"))
+}
+
+func (s *scriptRunDirsSuite) TestAWrappedCallKeepsTheNameMatch() {
+	s.Equal([]string{"/w", "/w/b"}, s.dirs("./x.sh && cd b && env c/x.sh"))
+}

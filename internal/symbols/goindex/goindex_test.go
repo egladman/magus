@@ -94,7 +94,7 @@ func (s *goindexSuite) index(pack string) *scip.Index {
 	return idx
 }
 
-func countOf(items []string, want string) int {
+func occurrences(items []string, want string) int {
 	n := 0
 	for _, item := range items {
 		if item == want {
@@ -269,7 +269,7 @@ func (s *goindexSuite) TestOtherBuildFindsAPackageTheHostExcludesWhole() {
 		paths = append(paths, d.RelativePath)
 	}
 	s.Contains(paths, "w/w.go")
-	s.Equal(1, countOf(paths, "c/c.go"), "c keeps the host's one document")
+	s.Equal(1, occurrences(paths, "c/c.go"), "c keeps the host's one document")
 }
 
 func (s *goindexSuite) TestAPackageTheHostExcludesWholeStaysOutWithoutABuild() {

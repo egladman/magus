@@ -132,21 +132,30 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 			if run[key] || listed[key] || slices.ContainsFunc(regenerated, func(o RegeneratedOutput) bool { return o.Target == label }) {
 				continue
 			}
-			sources, _ := targetSources(owned.visit.Project, v.Target)
-			source, _, ok := sourcedBy(sources, owned.files)
+			gate, ok := foundGate(owned, v.Target)
 			if !ok {
 				continue
 			}
 			listed[key] = true
-			found = append(found, unrunFound{
-				gate:  UnrunGate{Target: v.Target, Project: owned.visit.Project.Path, Source: source.String()},
-				visit: owned.visit,
-			})
+			found = append(found, gate)
 		}
 		return nil
 	})
 
 	return offeredGates(found, row, lookup, grade), undecided
+}
+
+// foundGate is the gate owned comes to when target reads one of its files.
+func foundGate(owned ownedGate, target string) (unrunFound, bool) {
+	sources, _ := targetSources(owned.visit.Project, target)
+	source, _, ok := sourcedBy(sources, owned.files)
+	if !ok {
+		return unrunFound{}, false
+	}
+	return unrunFound{
+		gate:  UnrunGate{Target: target, Project: owned.visit.Project.Path, Source: source.String()},
+		visit: owned.visit,
+	}, true
 }
 
 // undecidedOwners names each project owning a file v reads that cannot say

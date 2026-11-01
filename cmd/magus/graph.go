@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -166,13 +165,13 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		}
 		defer func() { _ = m.Close() }()
 		n, rerr := m.ReindexSymbols(ctx)
-		reindexed = int(n)
+		reindexed = n
 		slog.InfoContext(ctx, fmt.Sprintf("reindexed %d symbol index(es)", n), attr.Notice(""))
 		if rerr != nil {
 			// A missing or failing indexer must not block the domain-graph rebuild.
 			// Surface the actionable hints and carry on.
 			interactive.Hint(ctx, "some projects were not reindexed", attr.Error(rerr))
-			refused = types.ReindexRefusals(rerr)
+			refused = maintenance.ReindexRefusals(rerr)
 		}
 	}
 
@@ -201,7 +200,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		scriptsErr = errors.Join(scriptsErr, fmt.Errorf("magus graph build: left out of the graph: %s", strings.Join(errs, "; ")))
 	}
 	if opts.Format != outputText {
-		rec := graphBuildOutput{Nodes: int(out.NodeCount), Edges: int(out.EdgeCount), Reindexed: reindexed, Refused: refused != nil}
+		rec := graphBuildOutput{Nodes: out.NodeCount, Edges: out.EdgeCount, Reindexed: reindexed, Refused: refused != nil}
 		if err := emitRecord(opts, rec, []string{root}); err != nil {
 			scriptsErr = errors.Join(scriptsErr, err)
 		}
@@ -273,7 +272,7 @@ func acquireGraphBuild(ctx context.Context, root string) (release func() error, 
 	notices := noticeLines{ctx: ctx, level: slog.LevelInfo, label: "magus graph build", prefix: "magus graph build: "}
 	machine, behind, err := maintenance.AcquireMachineGraphBuild(ctx, me, notices, graphBuildPoll)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("magus graph build: %w", err)
 	}
 	store, waitedOn, err := maintenance.AcquireGraphBuild(ctx, dir, me, notices, graphBuildPoll)
 	if err != nil {
@@ -455,32 +454,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	var ef *flaggen.GraphExportFlags
 	pos, err := commandParse("graph export", args, func(fs *flag.FlagSet) {
 		ef = flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{URL: defaultExploreURL, Budget: knowledge.DefaultBudget})
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, types.KnowledgeGraphDefinition)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Emits the merged graph: -o json for the node-link form, -o graphml for")
-			fmt.Fprintln(os.Stderr, "GraphML (Gephi, yEd, and other graph viewers read both directly). The")
-			fmt.Fprintln(os.Stderr, "graph is cache-backed under <cache>/knowledge; only shards whose sources")
-			fmt.Fprintln(os.Stderr, "changed are rebuilt. -o scip writes the symbol index instead, as one binary")
-			fmt.Fprintln(os.Stderr, "SCIP index for code-intelligence tools: redirect it to a file.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--open sends the same graph to the interactive Graph Explorer instead of")
-			fmt.Fprintln(os.Stderr, "stdout. It never leaves your machine: by default it rides in the link's URL")
-			fmt.Fprintln(os.Stderr, "fragment (#data=...), which browsers never transmit; --serve hands it over an")
-			fmt.Fprintln(os.Stderr, "ephemeral 127.0.0.1 loopback server instead (no size limit). --targets opens")
-			fmt.Fprintln(os.Stderr, "the target dependency graph, and takes an optional project path to scope it.")
-			fmt.Fprintf(os.Stderr, "--follow keeps the view updating from the running server (%s);\n", hint.ServerStart)
-			fmt.Fprintln(os.Stderr, "with no mode flag and a reachable server it is chosen automatically.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
-			fmt.Fprintf(os.Stderr, "the engine behind `%s`. -o dot renders only with\n", hint.Query.String())
-			fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for that layout to be legible.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { graphExportUsage(fs) }
 	})
 	if err != nil {
 		return err
@@ -545,6 +519,10 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		out.SourceBaseURL = deriveSourceBase(ctx, root)
 	}
 
+	return writeGraphExport(opts, out)
+}
+
+func writeGraphExport(opts output.Options, out types.KnowledgeGraphOutput) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
@@ -559,20 +537,35 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		}
 		return emitNames(os.Stdout, names)
 	}
-
-	// text / wide: a routing summary, not a data dump (counts by kind and relation).
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("knowledge graph (schema v%d): %d nodes, %d edges\n\n", out.SchemaVersion, out.NodeCount, out.EdgeCount)
-	fmt.Println("nodes by kind:")
-	for _, kv := range countBy(len(out.Nodes), func(i int) string { return out.Nodes[i].Kind }) {
-		fmt.Printf("  %-11s %d\n", kv.key, kv.n)
-	}
-	fmt.Println("\nedges by relation:")
-	for _, kv := range countBy(len(out.Links), func(i int) string { return string(out.Links[i].Relation) }) {
-		fmt.Printf("  %-11s %d\n", kv.key, kv.n)
-	}
-	fmt.Println("\nRun with -o json (node-link) or -o graphml for the full graph.")
+	knowledge.WriteSummary(os.Stdout, out)
 	return nil
+}
+
+func graphExportUsage(fs *flag.FlagSet) {
+	fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, types.KnowledgeGraphDefinition)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Emits the merged graph: -o json for the node-link form, -o graphml for")
+	fmt.Fprintln(os.Stderr, "GraphML (Gephi, yEd, and other graph viewers read both directly). The")
+	fmt.Fprintln(os.Stderr, "graph is cache-backed under <cache>/knowledge; only shards whose sources")
+	fmt.Fprintln(os.Stderr, "changed are rebuilt. -o scip writes the symbol index instead, as one binary")
+	fmt.Fprintln(os.Stderr, "SCIP index for code-intelligence tools: redirect it to a file.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "--open sends the same graph to the interactive Graph Explorer instead of")
+	fmt.Fprintln(os.Stderr, "stdout. It never leaves your machine: by default it rides in the link's URL")
+	fmt.Fprintln(os.Stderr, "fragment (#data=...), which browsers never transmit; --serve hands it over an")
+	fmt.Fprintln(os.Stderr, "ephemeral 127.0.0.1 loopback server instead (no size limit). --targets opens")
+	fmt.Fprintln(os.Stderr, "the target dependency graph, and takes an optional project path to scope it.")
+	fmt.Fprintf(os.Stderr, "--follow keeps the view updating from the running server (%s);\n", hint.ServerStart)
+	fmt.Fprintln(os.Stderr, "with no mode flag and a reachable server it is chosen automatically.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
+	fmt.Fprintf(os.Stderr, "the engine behind `%s`. -o dot renders only with\n", hint.Query.String())
+	fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for that layout to be legible.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
 }
 
 // outputSCIP is graph export's SCIP protobuf index, for code-intelligence tools.
@@ -814,26 +807,6 @@ func loadRefsGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config
 		return nil, err
 	}
 	return g, nil
-}
-
-type keyCount struct {
-	key string
-	n   int
-}
-
-// countBy tallies n items by the key each index maps to, returning counts sorted
-// by key for stable output.
-func countBy(n int, keyOf func(i int) string) []keyCount {
-	m := map[string]int{}
-	for i := 0; i < n; i++ {
-		m[keyOf(i)]++
-	}
-	out := make([]keyCount, 0, len(m))
-	for k, v := range m {
-		out = append(out, keyCount{k, v})
-	}
-	slices.SortFunc(out, func(a, b keyCount) int { return cmp.Compare(a.key, b.key) })
-	return out
 }
 
 // ---- project-DAG rendering shared by graph deps, run --graph, and affected --graph ----

@@ -19,18 +19,18 @@ type source interface {
 	HistoryMetrics(ctx context.Context) (console.Board, error)
 }
 
-// Service implements HistoryMetricsServiceHandler over src.
-type Service struct {
+// service implements HistoryMetricsServiceHandler over src.
+type service struct {
 	src source
 }
 
 // NewService builds the HistoryMetricsService Connect handler reading from src.
-func NewService(src source) *Service { return &Service{src: src} }
+func NewService(src source) *service { return &service{src: src} }
 
-var _ historymetricsv1alpha1connect.HistoryMetricsServiceHandler = (*Service)(nil)
+var _ historymetricsv1alpha1connect.HistoryMetricsServiceHandler = (*service)(nil)
 
 // GetHistoryMetrics returns every metric field in one response.
-func (s *Service) GetHistoryMetrics(ctx context.Context, _ *connect.Request[hmv1.GetHistoryMetricsRequest]) (*connect.Response[hmv1.GetHistoryMetricsResponse], error) {
+func (s *service) GetHistoryMetrics(ctx context.Context, _ *connect.Request[hmv1.GetHistoryMetricsRequest]) (*connect.Response[hmv1.GetHistoryMetricsResponse], error) {
 	board, err := s.src.HistoryMetrics(ctx)
 	if err != nil {
 		if errors.Is(err, console.ErrNoWorkspace) {

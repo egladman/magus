@@ -87,7 +87,23 @@ export fun suggestedCommand(text: str) > str {
     return "";
 }
 
-// read folds a transcript into its calls, in the order they were made, and its tokens.
+fun addUsage(tokens: mut Tokens, usage: any) > void {
+    tokens.input = tokens.input + std\toInt(usage["input_tokens"] ?? 0);
+    tokens.output = tokens.output + std\toInt(usage["output_tokens"] ?? 0);
+    tokens.cacheRead = tokens.cacheRead + std\toInt(usage["cache_read_input_tokens"] ?? 0);
+    tokens.cacheWrite = tokens.cacheWrite + std\toInt(usage["cache_creation_input_tokens"] ?? 0);
+}
+
+// callText is a call's command when it has one, else its input as JSON.
+fun callText(input: any, file: str) > result\Result::<str> {
+    try {
+        return result\ok::<str>(if (input["command"] is str) input["command"] else json\stringify(input));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "summarize-transcript: encode a call of {file}");
+    }
+}
+
+// read folds a transcript into its calls, in order, and its tokens.
 export fun read(file: str) > result\Result::<Session> {
     final calls = mut [<mut Call>];
     final byId = mut {<str: int>};
@@ -113,23 +129,16 @@ export fun read(file: str) > result\Result::<Session> {
         final id = msg["id"] ?? "";
         if (rec["type"] == "assistant" and msg["usage"] != null and id != "" and counted[id] == null) {
             counted[id] = true;
-            final u = msg["usage"];
-            tokens.input = tokens.input + std\toInt(u["input_tokens"] ?? 0);
-            tokens.output = tokens.output + std\toInt(u["output_tokens"] ?? 0);
-            tokens.cacheRead = tokens.cacheRead + std\toInt(u["cache_read_input_tokens"] ?? 0);
-            tokens.cacheWrite = tokens.cacheWrite + std\toInt(u["cache_creation_input_tokens"] ?? 0);
+            addUsage(tokens, usage: msg["usage"]);
         }
         foreach (block in msg["content"] ?? []) {
             if (block["type"] == "tool_use") {
-                final input = block["input"];
-                var text = "";
-                try {
-                    text = if (input["command"] is str) input["command"] else json\stringify(input);
-                } catch (err: any) {
-                    return result\caught::<Session>(err, doing: "summarize-transcript: encode a call of {file}");
+                final text = callText(block["input"], file: file);
+                if (text.error != null) {
+                    return result\fail::<Session>(text.error!.message);
                 }
                 byId[block["id"] ?? ""] = calls.len();
-                calls.append(mut Call{ tool = block["name"] ?? "", text = text });
+                calls.append(mut Call{ tool = block["name"] ?? "", text = text.value! });
             } else if (block["type"] == "tool_result" and block["is_error"] == true) {
                 final at = byId[block["tool_use_id"] ?? ""];
                 final text = blockText(block["content"]);

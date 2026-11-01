@@ -9,7 +9,7 @@ tags: [glossary, insight-and-knowledge, history-metrics]
 
 The metrics magus derives over the graph and history (hotspots, affinity,
 ownership, trend, volatility, unreferenced). There is no umbrella report type:
-each metric is its own Buzz member (`magus\hotspots`, `magus\affinity`, …).
+each metric is its own Buzz member (`magus\hotspots`, `magus\affinity`, and others).
 
 ## Example
 

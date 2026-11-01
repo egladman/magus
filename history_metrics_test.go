@@ -17,9 +17,19 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestHistoryMetricsUseHistoryAndProjectLabels(t *testing.T) {
+type HistoryMetricsSuite struct {
+	suite.Suite
+	m    *Magus
+	root string
+}
+
+func TestHistoryMetricsSuite(t *testing.T) { suite.Run(t, new(HistoryMetricsSuite)) }
+
+func (s *HistoryMetricsSuite) SetupTest() {
+	t := s.T()
 	// A workspace named "magus" so the root display reads as "magus" rather
 	// than as the temp dir's auto-generated basename.
 	root := filepath.Join(t.TempDir(), "magus")
@@ -42,13 +52,18 @@ func TestHistoryMetricsUseHistoryAndProjectLabels(t *testing.T) {
 	reg.RegisterProject("docs", WithDependsOn("api"))
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
-	m := ws.(*Magus)
+	s.m = ws.(*Magus)
 	canonicalRoot, err := filepath.EvalSymlinks(root)
 	require.NoError(t, err)
+	s.root = canonicalRoot
+}
+
+func (s *HistoryMetricsSuite) TestAffinityUsesHistoryAndProjectLabels() {
+	t := s.T()
 	rootName := "magus"
 	opts := types.HistoryMetricsOptions{Commits: 10}
 
-	affinity, err := m.Affinity(context.Background(), opts)
+	affinity, err := s.m.Affinity(t.Context(), opts)
 	require.NoError(t, err)
 	assert.Equal(t, types.Affinity{
 		Definition: types.AffinityDefinition,
@@ -59,8 +74,13 @@ func TestHistoryMetricsUseHistoryAndProjectLabels(t *testing.T) {
 			{A: "api", AName: "api", B: "docs", BName: "docs", Count: 1},
 		},
 	}, affinity)
+}
 
-	ownership, err := m.Ownership(context.Background(), opts)
+func (s *HistoryMetricsSuite) TestOwnershipUsesHistoryAndProjectLabels() {
+	t := s.T()
+	rootName := "magus"
+	opts := types.HistoryMetricsOptions{Commits: 10}
+	ownership, err := s.m.Ownership(t.Context(), opts)
 	require.NoError(t, err)
 	assert.Equal(t, types.Ownership{
 		Definition: types.OwnershipDefinition,
@@ -71,8 +91,13 @@ func TestHistoryMetricsUseHistoryAndProjectLabels(t *testing.T) {
 			{Path: "docs", Name: "docs", Commits: 2, Authors: 2, Primary: "Ada", PrimaryShare: 50, LastCommit: historyMetricsTime(4)},
 		},
 	}, ownership)
+}
 
-	trend, err := m.Trend(context.Background(), opts)
+func (s *HistoryMetricsSuite) TestTrendUsesHistoryAndProjectLabels() {
+	t := s.T()
+	rootName := "magus"
+	opts := types.HistoryMetricsOptions{Commits: 10}
+	trend, err := s.m.Trend(t.Context(), opts)
 	require.NoError(t, err)
 	assert.Equal(t, types.Trend{
 		Definition: types.TrendDefinition,
@@ -83,8 +108,14 @@ func TestHistoryMetricsUseHistoryAndProjectLabels(t *testing.T) {
 			{Path: "api", Name: "api", Recent: 1, Earlier: 2, Delta: -1},
 		},
 	}, trend)
+}
 
-	hotspots, err := m.Hotspots(context.Background(), opts)
+func (s *HistoryMetricsSuite) TestHotspotsUseHistoryAndProjectLabels() {
+	t := s.T()
+	rootName := "magus"
+	canonicalRoot := s.root
+	opts := types.HistoryMetricsOptions{Commits: 10}
+	hotspots, err := s.m.Hotspots(t.Context(), opts)
 	require.NoError(t, err)
 	assert.Equal(t, types.Hotspots{
 		Definition: types.HotspotDefinition,

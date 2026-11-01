@@ -149,7 +149,8 @@ func TestMachineGraphBuildIsOnePlaceForEveryCheckout(t *testing.T) {
 	require.NotNil(t, busy)
 	assert.Equal(t, me.By, busy.By)
 
-	running, ok := RunningMachineGraphBuild()
+	running, ok, err := RunningMachineGraphBuild()
+	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, me.By, running.By)
 	assert.Equal(t, filepath.Join(state, "magus", "graph-build"), filepath.Dir(lock.holderPath))

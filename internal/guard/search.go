@@ -637,7 +637,7 @@ func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js sear
 	if js.stale {
 		behind = fmt.Sprintf(" The symbol index %s; refs refreshes it as it answers.", symbolIndexCause(moved))
 	}
-	v := ShellVerdict{Deny: d.Say + behind + textNote, Why: d.Why, Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
+	v := ShellVerdict{Deny: fmt.Sprintf("%s%s%s", d.Say, behind, textNote), Why: d.Why, Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
 	if !js.stale {
 		if answer, ok := treeSymbolAnswer(deps, dir, c, routes); ok {
 			// The answer stays inline with the verdict, since it is what the search was for;

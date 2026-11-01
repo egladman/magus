@@ -2,6 +2,7 @@ import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
 import "encoding/toml";
+import "result";
 
 export fun mgs_getName() > str { return "python"; }
 
@@ -450,9 +451,9 @@ object PyScan {
     loose: mut [str],
 }
 
-// pyScan sorts the query's files into a scan. It throws when core omits a pyproject.toml's
-// content.
-fun pyScan(req: DiscoveryQuery) > PyScan !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+// pyScan sorts the query's files into a scan. It fails when core omits a
+// pyproject.toml's content.
+fun pyScan(req: DiscoveryQuery) > result\Result::<PyScan> {
     final scan = PyScan{markersByDir = mut {}, locksByDir = mut {}, pyprojects = mut {}, parseErrors = mut {}, pyFiles = mut [], loose = mut []};
     foreach (file in req.files) {
         final base = baseOf(file.path);
@@ -465,14 +466,13 @@ fun pyScan(req: DiscoveryQuery) > PyScan !> any { //nolint:no-throw // magus rea
         }
         if (base == "pyproject.toml") {
             if (file.content == null) {
-                //nolint:no-throw // magus reads a raise as a failed discovery
-                throw "discover_projects: {file.path} arrived without content, though pyproject.toml is a literal glob";
+                return result\fail::<PyScan>("discover_projects: {file.path} arrived without content, though pyproject.toml is a literal glob");
             }
             try {
                 scan.pyprojects[dir] = toml\parse(file.content!) as? {str: any};
             } catch (err: any) {
                 scan.pyprojects[dir] = null;
-                scan.parseErrors[dir] = "{err}";
+                scan.parseErrors[dir] = result\caught::<PyScan>(err).error!.message;
             }
         } else if (base.endsWith(".py") and base != "setup.py") {
             scan.pyFiles.append(file.path);
@@ -481,7 +481,7 @@ fun pyScan(req: DiscoveryQuery) > PyScan !> any { //nolint:no-throw // magus rea
             scan.loose.append(file.path);
         }
     }
-    return scan;
+    return result\ok::<PyScan>(scan);
 }
 
 // pyOrphans is a member claim per directory of .py and requirements files no project owns.
@@ -515,7 +515,12 @@ fun pyOrphans(scan: PyScan, dirs: [str]) > [DiscoveredProject] {
 // every such directory join their owning project as members, each with a gap naming
 // what is missing. It throws when core omits a pyproject.toml's content.
 export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any { //nolint:no-throw // magus reads a raise as a failed discovery
-    final scan = pyScan(req);
+    final scanned = pyScan(req);
+    if (scanned.error -> err) {
+        //nolint:no-throw // magus reads a raise as a failed discovery
+        throw err.message;
+    }
+    final scan = scanned.value!;
     final dirs = sortedKeys(scan.markersByDir);
     final local = mut [<LocalProject>];
     foreach (dir in dirs) {

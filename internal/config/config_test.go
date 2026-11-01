@@ -75,16 +75,16 @@ func TestCacheIncludeDefaultsOff(t *testing.T) {
 
 func TestCacheIncludeExplicit(t *testing.T) {
 	t.Parallel()
-	on := Cache{Include: CacheInclude{
-		OS:   CacheIncludeFlag{Enabled: new(true)},
-		Arch: CacheIncludeFlag{Enabled: new(true)},
+	on := Cache{Include: cacheInclude{
+		OS:   cacheIncludeFlag{Enabled: new(true)},
+		Arch: cacheIncludeFlag{Enabled: new(true)},
 	}}
 	assert.True(t, on.IncludeOS())
 	assert.True(t, on.IncludeArch())
 
-	off := Cache{Include: CacheInclude{
-		OS:   CacheIncludeFlag{Enabled: new(false)},
-		Arch: CacheIncludeFlag{Enabled: new(false)},
+	off := Cache{Include: cacheInclude{
+		OS:   cacheIncludeFlag{Enabled: new(false)},
+		Arch: cacheIncludeFlag{Enabled: new(false)},
 	}}
 	assert.False(t, off.IncludeOS())
 	assert.False(t, off.IncludeArch())
@@ -144,7 +144,7 @@ func TestConformanceDefaults(t *testing.T) {
 	assert.Equal(t, ConformanceConfig{
 		MinSample: 30,
 		Step:      0.05,
-		Gates:     ConformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Gates:     conformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks:    c.Checks, // pinned below
 	}, c)
 
@@ -199,7 +199,7 @@ func TestConformanceOptions(t *testing.T) {
 		MinSample: 12,
 		Step:      0.1,
 		Exclude:   []string{"vendor/**"},
-		Gates:     ConformanceGatesConfig{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
+		Gates:     conformanceGatesConfig{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
 			types.ConformanceFileLines:  {types.ConformancePopTest: {Percentile: 99, Anchor: 1900}},
 			types.ConformanceDepFanout:  {types.ConformancePopSource: {Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}},
@@ -270,7 +270,7 @@ func TestConformanceLoadsFromYAML(t *testing.T) {
 	assert.Equal(t, ConformanceConfig{
 		MinSample: 10,
 		Step:      0.05,
-		Gates:     ConformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Gates:     conformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
 			types.ConformanceDepFanout: {types.ConformancePopSource: {Percentile: 90, Anchor: 20, Scopes: map[string]int{"cmd/tool": 31}}},
 		},

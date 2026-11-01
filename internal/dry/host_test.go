@@ -462,7 +462,7 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
     final _projects = magus\describe.project().projects;
     final _graph = magus\describe.graph().projects;
     final _index = magus\describe.graphMarkdown();
-    magus\insight();
+    magus\hotspots();
     final _state = magus\describe.tool().lifecycle.state;
 }
 `
@@ -686,12 +686,12 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 // op after the first read of it. The trailing marker is the assertion: it is only
 // traced if the body survived the whole chain.
 func TestRun_insightLensesAreShaped(t *testing.T) {
-	for _, lens := range []string{"hotspots.nodes", "affinity.pairs", "ownership.projects", "trend.projects", "volatility.targets", "modelTiers.rows"} {
+	for _, lens := range []string{"hotspots().nodes", "affinity().pairs", "ownership().projects", "trend().projects", "volatility().targets", "modelTiers().rows"} {
 		t.Run(lens, func(t *testing.T) {
 			src := fmt.Sprintf(`
 import "magus";
 export fun work(ctx: magus\Context, args: [str]) > void !> any {
-    magus\log.info("{magus\insight().%s.len()}");
+    magus\log.info("{magus\%s.len()}");
     magus\log.info("reached-the-end");
 }
 `, lens)

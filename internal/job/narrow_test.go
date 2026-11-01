@@ -329,7 +329,7 @@ func releaseRequests(t *testing.T, root string) []sessions.AttentionRequest {
 	require.NoError(t, err)
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
-	return slices.DeleteFunc(sessions.AttentionQueue(fold), func(r sessions.AttentionRequest) bool { return r.Source != ReleaseRequestSource })
+	return slices.DeleteFunc(sessions.AttentionQueue(fold), func(r sessions.AttentionRequest) bool { return r.Source != releaseRequestSource })
 }
 
 func (s *exitEvidenceSuite) TestOwedForAnyReasonButNoSeatIsRefused() {

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func daysAgo(n int) time.Time { return time.Now().UTC().AddDate(0, 0, -n) }
+func daysAgo(n int) time.Time { return time.Now().UTC().Add(-time.Duration(n) * 24 * time.Hour) }
 
 // proseShards builds a doc and a note, each pointing at one subject file.
 func proseShards() []Shard {
@@ -182,5 +182,5 @@ func TestOutrunDaysCountsCalendarDays(t *testing.T) {
 
 	// Prose newer than its subject goes negative, which annotateProseStaleness reads as
 	// current: it must not wrap to a large positive and report a petrified doc.
-	assert.Negative(t, outrunDays(late, late.AddDate(0, 0, -5)))
+	assert.Negative(t, outrunDays(late, late.Add(-5*24*time.Hour)))
 }

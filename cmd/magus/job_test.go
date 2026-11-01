@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -81,42 +82,6 @@ func TestJobReadsSkipTheWorkspacePreload(t *testing.T) {
 		{"describe", []string{"project", "."}, preload},
 	} {
 		assert.Equal(t, tc.want, resolveProfile(tc.sub, tc.args), "%s %v", tc.sub, tc.args)
-	}
-}
-
-func TestLedgerTreeOrderNestsChildrenUnderTheirParent(t *testing.T) {
-	t.Parallel()
-
-	got := jobTreeOrder([]types.Job{
-		leaseRow("plan", ""),
-		leaseRow("plan/core", "plan"),
-		leaseRow("other", ""),
-		leaseRow("plan/core/deep", "plan/core"),
-	})
-
-	assert.Equal(t, []jobTreeLine{
-		{lease: leaseRow("plan", ""), depth: 0},
-		{lease: leaseRow("plan/core", "plan"), depth: 1},
-		{lease: leaseRow("plan/core/deep", "plan/core"), depth: 2},
-		{lease: leaseRow("other", ""), depth: 0},
-	}, got)
-}
-
-// Every row reaches the reader. A parent that was cleared, and a cycle, both cost their
-// rows the indentation and nothing else.
-func TestLedgerTreeOrderKeepsUnrootedRows(t *testing.T) {
-	t.Parallel()
-
-	rows := []types.Job{
-		leaseRow("orphan", "cleared-parent"),
-		leaseRow("a", "b"),
-		leaseRow("b", "a"),
-	}
-	got := jobTreeOrder(rows)
-
-	require.Len(t, got, len(rows))
-	for _, r := range got {
-		assert.Zero(t, r.depth)
 	}
 }
 
@@ -466,18 +431,24 @@ func TestChainToGateTerminatesOnACycle(t *testing.T) {
 func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	t.Parallel()
 
-	flags := forkFlags{
-		criteria:   "the store is the enforcement point",
-		parent:     "adjacency",
-		checkpoint: "cf5509d09",
-		writePaths: listFlag{"internal/ledger", "types/lease.go"},
-		denyPaths:  listFlag{"MAGUS.md"},
-		readPaths:  listFlag{"internal/trail"},
-		dependsOn:  listFlag{"adj/guard"},
-		check:      "test internal/ledger",
-		model:      "principal",
-	}
-	flags.briefFormat = "buzz"
+	var (
+		bound types.Declaration
+		check string
+	)
+	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
+	bindForkSpec(flags, &bound, &check)
+	require.NoError(t, flags.Parse([]string{
+		"--criteria", "the store is the enforcement point",
+		"--parent", "adjacency",
+		"--checkpoint", "cf5509d09",
+		"--write-paths", "internal/ledger,types/lease.go",
+		"--deny-paths", "MAGUS.md",
+		"--read-paths", "internal/trail",
+		"--depends-on", "adj/guard",
+		"--check", "test internal/ledger",
+		"--model", "principal",
+		"--brief-format", "buzz",
+	}))
 	// The version is READ from the constant, not typed as a digit: this case is about the
 	// two doors agreeing on the FIELDS, and a fixture whose version fell behind would fail
 	// it at the version check instead, naming nothing it came here to compare.
@@ -497,7 +468,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	}`))
 	require.NoError(t, err)
 
-	fromFlags := flags.row("adj/store")
+	fromFlags := flagDeclaration(bound, "adj/store", check)
 	require.NoError(t, fromFlags.Validate())
 
 	var a, b types.Job
@@ -510,7 +481,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 // A brief format is one of the two, refused at fork rather than read as markdown later.
 func TestForkRefusesAnUnknownBriefFormat(t *testing.T) {
 	t.Parallel()
-	err := forkFlags{criteria: "c", briefFormat: "json"}.row("adj/store").Validate()
+	err := flagDeclaration(types.Declaration{Criteria: "c", BriefFormat: "json"}, "adj/store", "").Validate()
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `brief_format "json"`)
 }
@@ -1214,14 +1185,6 @@ func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	require.Error(t, jobApply(t.Context(), root, nil), "an apply naming no records is a usage error")
 }
 
-func TestSpecChangeNamesWhatBreaksGainedAndLost(t *testing.T) {
-	t.Parallel()
-
-	prev := types.Job{Breaks: []string{"legacy_key", "api.Open"}}
-	next := types.Job{Breaks: []string{"api.Open", "ledger.json"}}
-	assert.Equal(t, "breaks +ledger.json -legacy_key", specChange("breaks", prev, next))
-}
-
 // describe job reads the graph as built and job wait may build it. On a current index the
 // two grade a row alike; on a stale one describe builds nothing and leaves the symbol goal
 // ungraded, naming the rebuild.
@@ -1745,7 +1708,7 @@ func TestJobApplyHelpIsItsRegistryEntry(t *testing.T) {
 	var err error
 	help := captureStderr(t, func() { err = jobApply(t.Context(), "", []string{"-h"}) })
 	require.ErrorIs(t, err, flag.ErrHelp)
-	assert.Contains(t, help, "Usage: "+spec.Usage+"\n\n"+spec.Long+"\n")
+	assert.Contains(t, help, fmt.Sprintf("Usage: %s\n\n%s\n", spec.Usage, spec.Long))
 	assert.Contains(t, help, "  -f file\n")
 	assert.Contains(t, help, "  --[no-]fix (default: off)\n")
 }
@@ -2304,7 +2267,11 @@ type forkDeliverySuite struct {
 func TestForkDelivery(t *testing.T) { suite.Run(t, new(forkDeliverySuite)) }
 
 func (s *forkDeliverySuite) TestTheFlagReachesTheRecord() {
-	row := forkFlags{criteria: "c", delivery: types.DeliveryFold}.row("adj/store")
+	var bound types.Declaration
+	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
+	bindForkSpec(flags, &bound, new(string))
+	s.Require().NoError(flags.Parse([]string{"--criteria", "c", "--delivery", types.DeliveryFold}))
+	row := flagDeclaration(bound, "adj/store", "")
 	s.Require().NoError(row.Validate())
 	s.Equal(types.DeliveryFold, row.Delivery)
 }
@@ -2419,4 +2386,183 @@ func (s *ForkDiskFloorSuite) TestAnUnreadableDiskIsRefusedSayingSo() {
 
 func (s *ForkDiskFloorSuite) TestADiskAboveTheFloorPasses() {
 	s.NoError(refuseForkOnFullDisk(s.T().Context(), "false", s.root, filepath.Join(s.root, "new"), 1))
+}
+
+type jobApplyAddWritePathSuite struct {
+	suite.Suite
+	root  string
+	store *job.Store
+}
+
+func TestJobApplyAddWritePath(t *testing.T) { suite.Run(t, new(jobApplyAddWritePathSuite)) }
+
+func (s *jobApplyAddWritePathSuite) SetupTest() {
+	row := leaseRow("w", "")
+	row.State, row.WritePaths = types.StateRunning, []string{"a.go"}
+	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
+	row.Validation = row.Check.String()
+	root, cacheDir := execFixture(s.T(), row)
+	s.root = root
+	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
+}
+
+func (s *jobApplyAddWritePathSuite) apply(add ...string) []job.Applied {
+	rec, err := widenedDeclaration(s.store, "w", add)
+	s.Require().NoError(err)
+	applied, err := job.Apply(s.T().Context(), s.store, []types.Declaration{rec}, globalCfg.Jobs, nil, func() string { return "" }, false)
+	s.Require().NoError(err)
+	return applied
+}
+
+func (s *jobApplyAddWritePathSuite) TestARunningRowWidenedStaysRunningWithTheNewPath() {
+	before, err := s.store.List()
+	s.Require().NoError(err)
+	want := before[0]
+	want.WritePaths, want.Widenings = []string{"a.go", "b.go", "c.go"}, 1
+
+	applied := s.apply("b.go", "c.go")
+
+	s.Require().Len(applied, 1)
+	want.Validated, want.WriteProof = applied[0].Next.Validated, applied[0].Next.WriteProof
+	s.Equal(want, applied[0].Next)
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+	s.Equal(want, rows[0])
+}
+
+func (s *jobApplyAddWritePathSuite) TestAPathTheRowHoldsChangesNothing() {
+	applied := s.apply("a.go")
+
+	s.Require().Len(applied, 1)
+	s.Empty(applied[0].Changed)
+}
+
+func (s *jobApplyAddWritePathSuite) TestNamingRecordsAsWellIsAUsageError() {
+	s.Require().Error(jobApply(s.T().Context(), s.root, []string{"w", "--add-write-path", "b.go", "-f", "-"}))
+}
+
+func (s *jobApplyAddWritePathSuite) TestWithoutAnIdIsAUsageError() {
+	s.Require().Error(jobApply(s.T().Context(), s.root, []string{"--add-write-path", "b.go"}))
+}
+
+func (s *jobApplyAddWritePathSuite) TestAnUnknownJobIsAUsageError() {
+	_, err := widenedDeclaration(s.store, "nope", []string{"b.go"})
+
+	s.Require().Error(err)
+	s.Equal(exit.Usage, exit.Code(err))
+}
+
+type ForkJudgedPathSuite struct {
+	suite.Suite
+	store *job.Store
+}
+
+func TestForkJudgedPathSuite(t *testing.T) {
+	suite.Run(t, new(ForkJudgedPathSuite))
+}
+
+func (s *ForkJudgedPathSuite) SetupTest() {
+	root := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"}).Root()
+	s.store = job.NewStore(job.Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: root})
+}
+
+func (s *ForkJudgedPathSuite) seed(state types.JobState) {
+	_, err := s.store.Update(s.T().Context(), "w", func(u *types.Job) {
+		*u = types.Job{ID: "w", State: state, ReadOnly: true}
+	})
+	s.Require().NoError(err)
+}
+
+func (s *ForkJudgedPathSuite) TestALiveRowIsJudgedAsAnUpdate() {
+	s.seed(types.StateDeclared)
+	s.True(noteForkJudgedAsUpdate(s.T().Context(), s.store, "w"))
+}
+
+func (s *ForkJudgedPathSuite) TestAnEndedRowIsJudgedWhole() {
+	s.seed(types.StateNoReturn)
+	s.False(noteForkJudgedAsUpdate(s.T().Context(), s.store, "w"))
+}
+
+func (s *ForkJudgedPathSuite) TestAnUnknownRowIsJudgedWhole() {
+	s.False(noteForkJudgedAsUpdate(s.T().Context(), s.store, "nobody"))
+}
+
+type jobApplyFailureSuite struct {
+	suite.Suite
+}
+
+func TestJobApplyFailure(t *testing.T) { suite.Run(t, new(jobApplyFailureSuite)) }
+
+func (s *jobApplyFailureSuite) TestARecordFileThatWillNotOpenFailsWithItsChain() {
+	err := jobApply(s.T().Context(), s.T().TempDir(), []string{"-f", filepath.Join(s.T().TempDir(), "absent.jsonl")})
+
+	s.Require().ErrorIs(err, os.ErrNotExist)
+	s.Equal(exit.Failure, exit.Code(err))
+}
+
+type jobHelpSuite struct {
+	suite.Suite
+}
+
+func TestJobHelp(t *testing.T) { suite.Run(t, new(jobHelpSuite)) }
+
+func (s *jobHelpSuite) TestApplyHelpPrintsItsExamplesOnce() {
+	spec, known := commandAt("job apply")
+	s.Require().True(known)
+	s.Require().NotEmpty(spec.Examples)
+
+	var out bytes.Buffer
+	fs := flag.NewFlagSet("job apply", flag.ContinueOnError)
+	fs.SetOutput(&out)
+	printRegisteredHelp(fs)
+
+	s.Contains(out.String(), spec.Usage)
+	for _, ex := range spec.Examples {
+		s.Equal(1, strings.Count(out.String(), ex.Command), ex.Command)
+	}
+}
+
+func (s *jobHelpSuite) TestAHandBoundFlagReadsItsDocFromTheTree() {
+	doc := registeredFlagDoc("job apply", flaggen.FlagJobApplyAddWritePath)
+
+	s.Contains(doc, "A path to add to the job's write paths")
+}
+
+type lsJobsUnmergedSuite struct {
+	suite.Suite
+}
+
+func TestLsJobsUnmerged(t *testing.T) { suite.Run(t, new(lsJobsUnmergedSuite)) }
+
+func (s *lsJobsUnmergedSuite) TestTheNameFormatSkipsTheRead() {
+	s.Nil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, outputName))
+}
+
+func (s *lsJobsUnmergedSuite) TestEveryOtherFormatCarriesTheReport() {
+	s.NotNil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, outputText))
+	s.NotNil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, outputJSON))
+}
+
+type forkFactsReportSuite struct {
+	suite.Suite
+	logged bytes.Buffer
+}
+
+func TestForkFactsReport(t *testing.T) { suite.Run(t, new(forkFactsReportSuite)) }
+
+func (s *forkFactsReportSuite) SetupTest() {
+	s.logged.Reset()
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&s.logged, nil)))
+	s.T().Cleanup(func() { slog.SetDefault(prev) })
+}
+
+func (s *forkFactsReportSuite) TestAConfigThatWillNotLoadIsNamedInsteadOfAnEmptyStore() {
+	root := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{ not yaml\n"}).Root()
+	store := job.NewStore(job.Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: root})
+
+	reportForkFacts(s.T().Context(), store, root)
+
+	s.Contains(s.logged.String(), "the output store could not be located")
+	s.NotContains(s.logged.String(), "holds no passed full test")
 }

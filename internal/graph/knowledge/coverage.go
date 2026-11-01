@@ -277,7 +277,7 @@ func coverageGapError(gaps []string) error {
 		shown = shown[:5]
 	}
 	return fmt.Errorf("coverage profile omits %d director(ies) with indexed functions, e.g. %s: "+
-		"a narrower run wrote it; run `magus run test .` unnarrowed, or delete .magus/coverage.out",
+		"a narrower run wrote it, so run `magus run test .` unnarrowed or delete .magus/coverage.out",
 		len(gaps), strings.Join(shown, ", "))
 }
 

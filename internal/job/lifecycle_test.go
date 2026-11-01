@@ -355,19 +355,6 @@ func (s *rowKeepsItsPathsSuite) exit(loc Location, id string, result types.JobRe
 	return exited
 }
 
-// exitApplied files a result for appliedRow's job, whose check is `test .`.
-func (s *rowKeepsItsPathsSuite) exitApplied(loc Location) types.Job {
-	s.T().Helper()
-	result := passingResult()
-	result.Job, result.ChangedPaths = "w", []string{"a.go"}
-	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
-		return types.JobAttempt{Found: true, Ref: ref, Target: "test", Project: ".", TimestampMs: 9_999_999_999_999}, nil
-	}
-	exited, err := Exit(s.T().Context(), boundStore(loc, "w"), "w", &result, resolve)
-	s.Require().NoError(err)
-	return exited
-}
-
 func (s *rowKeepsItsPathsSuite) TestExitKeepsAPathTheResultDoesNotName() {
 	row := acceptRow()
 	loc := declared(s.T(), row)
@@ -381,63 +368,6 @@ func (s *rowKeepsItsPathsSuite) TestExitKeepsAPathTheResultDoesNotName() {
 	status, err := Wait(s.T().Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
 	s.Require().NoError(err)
 	s.True(status.Verified, status.Violations)
-}
-
-func (s *rowKeepsItsPathsSuite) TestWideningAppliedWhileRunningSurvivesExitAndRetake() {
-	store, loc := appliedRow(s.T(), "a.go", "b.go")
-	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go", "c.go")}, config.Jobs{}, nil, nil, false)
-	s.Require().NoError(err)
-	s.Require().Equal([]string{"a.go", "b.go", "c.go"}, applied[0].Next.WritePaths)
-
-	exited := s.exitApplied(loc)
-	s.Equal([]string{"a.go", "b.go", "c.go"}, exited.WritePaths)
-
-	retaken, err := NewStore(loc).Exec(s.T().Context(), "w")
-	s.Require().NoError(err)
-	s.Equal(types.StateRunning, retaken.State)
-	s.Equal([]string{"a.go", "b.go", "c.go"}, retaken.WritePaths)
-}
-
-func (s *rowKeepsItsPathsSuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
-	store, loc := appliedRow(s.T(), "a.go")
-	s.exitApplied(loc)
-
-	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
-	s.Require().NoError(err)
-
-	s.Equal([]string{"a.go", "b.go"}, applied[0].Next.WritePaths)
-	s.Equal(types.StateDeclared, applied[0].Next.State)
-}
-
-// narrowedAt plants w as an exit that cut b.go used to leave it.
-func (s *rowKeepsItsPathsSuite) narrowedAt(state types.JobState) *Store {
-	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
-	plant(s.T(), store, types.Job{
-		ID: "w", Criteria: "goal", WritePaths: []string{"a.go"}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
-		Releases: []types.JobRelease{{Path: "b.go", Digest: types.DigestAbsent, ReleasedAt: 1}},
-	})
-	rows, err := store.List()
-	s.Require().NoError(err)
-	s.Require().Len(rows[0].Releases, 1)
-	return store
-}
-
-func (s *rowKeepsItsPathsSuite) TestReapplyRestoresAPathAnExitCutFromAnExitedRow() {
-	applied, err := Apply(s.T().Context(), s.narrowedAt(types.StateExited), []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
-
-	s.Require().NoError(err)
-	s.Equal([]string{"a.go", "b.go"}, applied[0].Next.WritePaths)
-	s.Equal(types.StateDeclared, applied[0].Next.State)
-	s.Empty(applied[0].Next.Releases)
-}
-
-func (s *rowKeepsItsPathsSuite) TestReapplyRestoresAPathAnExitCutFromARunningRow() {
-	applied, err := Apply(s.T().Context(), s.narrowedAt(types.StateRunning), []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
-
-	s.Require().NoError(err)
-	s.Equal([]string{"a.go", "b.go"}, applied[0].Next.WritePaths)
-	s.Equal(types.StateRunning, applied[0].Next.State)
-	s.Empty(applied[0].Next.Releases)
 }
 
 func (s *rowKeepsItsPathsSuite) TestAbandonmentKeepsEveryPath() {

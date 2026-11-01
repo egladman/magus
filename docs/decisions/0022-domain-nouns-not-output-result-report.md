@@ -7,7 +7,7 @@ status: accepted
 date: 2026-11-01
 ---
 
-# ADR 0022: domain nouns, not Output / Result / Report
+# ADR 0022: domain nouns for answer types
 
 ## Context
 
@@ -49,15 +49,15 @@ Measured on this tree 2026-11-01: `Output` 25, `Report` 20, `Result` 9,
    map fields at the boundary. Collapsing the two layers is refused.
 5. **`Record` stays for one stored or listed entry** (`OutputRecord`,
    `CommitRecord`).
-6. **`KnowledgeAnswer` stays:** the verdict sidecar (`found` / `absent` /
+6. `KnowledgeAnswer` stays as the verdict sidecar (`found` / `absent` /
    `unknown`), not a metric payload.
 7. **`View` stays for console/API shapes that differ on purpose** (e.g. pointer
    vs value) when they are not a renamed product umbrella. Do not add a new
-   `*View` that only means “all the metrics.”
-8. **Wire board RPC:** `HistoryMetricsService.GetHistoryMetrics` with
+   `*View` that only means "all the metrics."
+8. The board RPC is `HistoryMetricsService.GetHistoryMetrics` with
    `GetHistoryMetricsRequest` / `GetHistoryMetricsResponse` in
    `magus.historymetrics.v1alpha1`. Nested fields are the domain metrics.
-9. **Majority-shape API (replacing precedents):** `Hold`, `Holds`, `Count`,
+9. The majority-shape API replaces precedents with `Hold`, `Holds`, `Count`,
    `Counts`; methods `magus\holds(family)` and `magus\counts(family)`.
 
 | Item | State |
@@ -68,7 +68,7 @@ Measured on this tree 2026-11-01: `Output` 25, `Report` 20, `Result` 9,
 | History metric `*Output` / `VolatilityReport` → domain nouns | done |
 | Delete `Insight` / `InsightReport` / `InsightView` umbrella; no `magus\insight` bundle | done |
 | Proto `insight` → `historymetrics`; nested nouns; `GetHistoryMetrics*Response` | done |
-| Lint: RPC I/O ends in Request/Response; nested not `*Output`/`*Report` on this surface | done |
+| Lint: RPC I/O ends in Request/Response; nested messages have no `*Output`/`*Report` suffix | done |
 | Action `*Result` renames when those files are touched | todo |
 | `magus\precedents` → `magus\holds` / `magus\counts` | todo |
 
@@ -118,7 +118,7 @@ Measured on this tree 2026-11-01: `Output` 25, `Report` 20, `Result` 9,
 
 ## Amendments
 
-### 2026-11-01 — Request/Response envelopes; no Insight umbrella
+### 2026-11-01: reply envelopes and independent metrics
 
 `Response` is the top-level protobuf RPC reply, not HTTP-only. Nested wire
 messages use domain nouns. `Insight` / `InsightReport` / `InsightView` and
