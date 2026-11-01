@@ -274,9 +274,9 @@ func brokerStop(ctx context.Context, args []string) error {
 	}
 	c, err := broker.Dial(ctx, broker.DefaultAddr())
 	if err != nil {
-		err = stopUnanswering(ctx, f.Services, err)
+		pid, err := stopUnanswering(ctx, f.Services, err)
 		if err == nil && opts.Format != outputText {
-			return emitRecord(opts, brokerStopOutput{Stopped: true}, []string{"broker"})
+			return emitRecord(opts, brokerStopOutput{Stopped: true, PID: pid}, []string{strconv.Itoa(pid)})
 		}
 		return err
 	}
@@ -287,7 +287,7 @@ func brokerStop(ctx context.Context, args []string) error {
 			return fmt.Errorf("broker stop: %w", err)
 		}
 		if opts.Format != outputText {
-			return emitRecord(opts, brokerStopOutput{Services: int(n)}, []string{"services"})
+			return emitRecord(opts, brokerStopOutput{Services: n}, []string{"services"})
 		}
 		slog.InfoContext(ctx, fmt.Sprintf("stopped %d hosted service(s); the broker is still running", n), attr.Notice(""), attr.Component("magus"))
 		return nil
@@ -325,32 +325,32 @@ var brokerDrainWait = stopTimeout
 // stopUnanswering stops whatever holds the broker socket when this build
 // cannot talk to it, as another build's broker refuses to. The kernel names
 // the holder.
-func stopUnanswering(ctx context.Context, services bool, dialErr error) error {
+func stopUnanswering(ctx context.Context, services bool, dialErr error) (int, error) {
 	addr := broker.DefaultAddr()
 	sock := strings.TrimPrefix(addr, "unix://")
 	pid, err := broker.SocketPeer(ctx, addr)
 	if errors.Is(err, broker.ErrUnavailable) {
 		slog.ErrorContext(ctx, "no broker is running", attr.Notice(""), attr.Component("magus"))
-		return exit.Reported(exit.Failure)
+		return 0, exit.Reported(exit.Failure)
 	}
 	if err != nil {
-		return unknownBrokerError(sock, err, dialErr)
+		return 0, unknownBrokerError(sock, err, dialErr)
 	}
 	if services {
-		return fmt.Errorf("broker stop --services: broker (pid %d) does not answer this build, which cannot ask it to stop only its services; `magus broker stop` stops it whole: %w", pid, dialErr)
+		return 0, fmt.Errorf("broker stop --services: broker (pid %d) does not answer this build, which cannot ask it to stop only its services, so `magus broker stop` stops it whole: %w", pid, dialErr)
 	}
 	command := processCommand(ctx, pid)
 	if !slices.Contains(strings.Fields(command), "broker") {
-		return fmt.Errorf("broker stop: pid %d (%s) holds %s and is no broker, so magus signalled nothing. Under systemd it is the socket unit: run `systemctl --user stop magus-broker.socket magus-broker.service`: %w",
+		return 0, fmt.Errorf("broker stop: pid %d (%s) holds %s and is no broker, so magus signalled nothing, and under systemd it is the socket unit, so run `systemctl --user stop magus-broker.socket magus-broker.service`: %w",
 			pid, cmp.Or(command, "command unreadable"), sock, dialErr)
 	}
-	return signalBrokerStop(ctx, pid, dialErr)
+	return pid, signalBrokerStop(ctx, pid, dialErr)
 }
 
 // unknownBrokerError says what to run when the kernel will not name the holder.
 func unknownBrokerError(sock string, err, dialErr error) error {
-	return fmt.Errorf("broker stop: something holds %s and does not answer this build, and its pid is unreadable here (%w). Run `lsof -U`, take the pid on the line naming that socket, then `kill -TERM <pid>`: %w",
-		sock, err, dialErr)
+	return fmt.Errorf("broker stop: something holds %s and does not answer this build, and its pid is unreadable here, so run `lsof -U`, take the pid on the line naming that socket, then `kill -TERM <pid>`: %w",
+		sock, fmt.Errorf("%w: %w", err, dialErr))
 }
 
 // signalBrokerStop sends pid SIGTERM, which every build's broker handles: the
@@ -360,8 +360,8 @@ func signalBrokerStop(ctx context.Context, pid int, dialErr error) error {
 	if err != nil {
 		return fmt.Errorf("broker stop: find broker (pid %d): %w", pid, err)
 	}
-	slog.InfoContext(ctx, fmt.Sprintf("broker (pid %d) does not answer this build (%v); sending it SIGTERM and waiting up to %s for it to drain",
-		pid, dialErr, brokerDrainWait), attr.Notice(""), attr.Component("magus"))
+	slog.InfoContext(ctx, fmt.Sprintf("broker (pid %d) does not answer this build; sending it SIGTERM and waiting up to %s for it to drain",
+		pid, brokerDrainWait), attr.Error(dialErr), attr.Notice(""), attr.Component("magus"))
 	for range 2 {
 		if err := p.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
 			return fmt.Errorf("broker stop: signal broker (pid %d): %w", pid, err)
@@ -371,7 +371,7 @@ func signalBrokerStop(ctx context.Context, pid int, dialErr error) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("broker stop: broker (pid %d) outlived two SIGTERMs, %s apart; run `kill -KILL %d`", pid, brokerDrainWait, pid)
+	return fmt.Errorf("broker stop: broker (pid %d) outlived two SIGTERMs, %s apart, so run `kill -KILL %d`", pid, brokerDrainWait, pid)
 }
 
 func waitProcessGone(ctx context.Context, procID int, bound time.Duration) bool {

@@ -125,7 +125,7 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 	}
 
 	if format.Format != outputText {
-		rec := affectedBisectOutput{Project: projectPath, Target: bf.Target, VCS: res.Name, Culprit: fmt.Sprint(culprit.ID), Info: fmt.Sprint(culprit.Info)}
+		rec := affectedBisectOutput{Project: projectPath, Target: bf.Target, VCS: res.Name, Culprit: culprit.ID, Info: culprit.Info}
 		return emitRecord(format, rec, []string{rec.Culprit})
 	}
 	fmt.Printf("suspected culprit: %s  %s\n", culprit.ID, culprit.Info)

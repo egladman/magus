@@ -167,18 +167,17 @@ func initCommand(ctx context.Context, root string, args []string) error {
 	logConfigInit(ctx, cfgPath, wrote)
 
 	if opts.Format != outputText {
-		return emitRecord(opts, initOutput{Config: cfgPath, Wrote: wrote, Local: isLocal, Workspace: true}, []string{cfgPath})
+		return emitRecord(opts, initOutput{Config: cfgPath, Wrote: wrote, Local: isLocal}, []string{cfgPath})
 	}
 	printInitNextSteps(ctx, cfgPath, true, isLocal)
 	return nil
 }
 
 type initOutput struct {
-	Config    string `json:"config"`
-	Wrote     bool   `json:"wrote"`
-	Global    bool   `json:"global"`
-	Local     bool   `json:"local"`
-	Workspace bool   `json:"workspace"`
+	Config string `json:"config"`
+	Wrote  bool   `json:"wrote"`
+	Global bool   `json:"global"`
+	Local  bool   `json:"local"`
 }
 
 // judgeDir is the directory whose repository orders this binary against the one that

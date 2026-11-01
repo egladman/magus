@@ -429,7 +429,14 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if opts.Format == outputText {
 		_, err = e.stdout.Write(doc.Bytes())
 	} else {
-		err = e.writeDocument(opts, doc.Bytes(), types.Changes{}, []string{f.Base})
+		names := make([]string, 0, len(changes.Changes)+len(changes.Unqueued))
+		for _, c := range changes.Changes {
+			names = append(names, c.ID)
+		}
+		for _, c := range changes.Unqueued {
+			names = append(names, c.ID)
+		}
+		err = e.writeDocument(opts, doc.Bytes(), types.Changes{}, names)
 	}
 	if err != nil {
 		return err
