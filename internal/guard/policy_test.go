@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
@@ -177,9 +178,18 @@ func TestAToolTimeRecordsTheToolsRunTimeAndJudgesNothing(t *testing.T) {
 	assert.Equal(t, decisionPass, v.Decision)
 	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
 	require.Len(t, commands, 1)
-	assert.Equal(t, int64(420), commands[0].DurationMs)
-	assert.Zero(t, commands[0].GuardMs)
-	assert.Equal(t, "Bash", commands[0].Action)
+	got := commands[0]
+	got.Ts, got.Workspace, got.Binary, got.BinaryVersion, got.Cwd = 0, "", "", "", ""
+	got.User, got.UID, got.RequestRef, got.ResponseRef = "", "", "", ""
+	got.RequestBytes, got.ResponseBytes = 0, 0
+	assert.Equal(t, trail.Event{
+		Kind:       trail.KindAgentCommand,
+		Origin:     types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "s1"},
+		Action:     "Bash",
+		Outcome:    trail.OutcomeOK,
+		DurationMs: 420,
+		Preview:    "observed",
+	}, got)
 }
 
 func TestAToolTimeKeepsTheDigestsItWasGiven(t *testing.T) {
@@ -189,9 +199,11 @@ func TestAToolTimeKeepsTheDigestsItWasGiven(t *testing.T) {
 
 	calls := trail.ForSession(cacheDir, "s1", 10).Calls
 	require.Len(t, calls, 1)
-	assert.Equal(t, "c1", calls[0].CallDigest)
-	assert.Equal(t, "r1", calls[0].ResultDigest)
-	assert.Empty(t, calls[0].Unobserved)
+	got := calls[0]
+	got.At = time.Time{}
+	assert.Equal(t, trail.SessionCall{Action: "Bash", ToolMs: 420, AgentFacts: types.AgentFacts{
+		CallDigest: "c1", ResultDigest: "r1", Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
+	}}, got)
 }
 
 func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {

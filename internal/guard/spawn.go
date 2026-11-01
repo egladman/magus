@@ -150,16 +150,6 @@ type pendingSpawn struct {
 	AgentType string `json:"agent_type,omitempty"`
 }
 
-// agentTypeKind keys the subagent type a child was spawned as, kept beside its spawn record.
-func agentTypeKind(agentID string) hint.MarkerKind {
-	return agentMarkerKind("agent-type-", agentID)
-}
-
-// agentTypeRecord is the body of an agentTypeKind marker.
-type agentTypeRecord struct {
-	Type string `json:"type"`
-}
-
 // recordPendingSpawn files a spawn that passed, for the start of the child it makes to be
 // joined to it. A host whose finished spawn already names the child never reads it.
 func recordPendingSpawn(facts hint.Gate, env hookRequest, spawner string, now time.Time) {
