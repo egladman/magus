@@ -10,7 +10,7 @@ fun source(file: str) > DiscoveryFile {
     return DiscoveryFile{path = file};
 }
 
-fun discover(files: [DiscoveryFile]) > [DiscoveredProject] !> any {
+fun discover(files: [DiscoveryFile]) > [DiscoveredProject] {
     return go\discover_projects(Target{}, req: DiscoveryQuery{root = "/repo", files = files});
 }
 

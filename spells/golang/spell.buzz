@@ -398,7 +398,7 @@ fun goScan(req: DiscoveryQuery) > mut GoScan {
 }
 
 // goWorkUses selects go.work's use list, when the root holds one whose content was passed.
-fun goWorkUses(scan: mut GoScan) > void !> any {
+fun goWorkUses(scan: mut GoScan) > void {
     if (scan.work -> found) {
         if (found.content -> content) {
             scan.workspaceMode = true;
@@ -420,7 +420,7 @@ fun goWorkUses(scan: mut GoScan) > void !> any {
 
 // goSelect picks the modules that form projects: go.work's use list, else every go.mod
 // outside the dirs ./... skips.
-fun goSelect(scan: mut GoScan) > void !> any {
+fun goSelect(scan: mut GoScan) > void {
     goWorkUses(scan);
     foreach (dir in goSortedKeys(scan.mods)) {
         final skipped = goSkippedSegment(dir);
@@ -470,7 +470,7 @@ fun goOrphans(claims: [DiscoveredProject], scan: GoScan) > [DiscoveredProject] {
 // discover_projects claims one project per Go module: go.work's use list when the root
 // holds one, else every go.mod outside the dirs ./... skips. It reads no .go content,
 // so whatever only content shows (build tags, go:generate) is reported per module.
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] {
     final scan = goScan(req);
     goSelect(scan);
     final parsed = mut {<str: GoModule>};
@@ -661,7 +661,7 @@ fun goRelative(dir: str, file: str) > str {
 
 // goReplaceDeps draws a dependency for each local replace in dir's module that names a
 // selected module, and a gap for one that cannot.
-fun goReplaceDeps(dir: str, module: GoModule, scan: GoScan, deps: mut [str], gaps: mut [DiscoveryGap]) > void !> any {
+fun goReplaceDeps(dir: str, module: GoModule, scan: GoScan, deps: mut [str], gaps: mut [DiscoveryGap]) > void {
     foreach (r in module.replaces) {
         if (!goIsLocal(r.to)) {
             continue;
@@ -723,7 +723,7 @@ fun goSpans(dir: str, scan: GoScan, gaps: mut [DiscoveryGap]) > [str] {
     return spans;
 }
 
-fun goClaim(dir: str, module: GoModule, scan: GoScan) > DiscoveredProject !> any {
+fun goClaim(dir: str, module: GoModule, scan: GoScan) > DiscoveredProject {
     final gaps = mut [<DiscoveryGap>];
     final deps = mut [<str>];
     if (!module.readable) {
