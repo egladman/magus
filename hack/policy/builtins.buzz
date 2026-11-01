@@ -36,6 +36,8 @@ export final BUILTINS: {str: any} = {
 //   buzz-unbriefed: six errors in one session, by an agent with this repository open
 //     throughout.
 //   chained-run: 2026-09-27, every such chain was `generate:rw docs` then `generate:rw .`.
+//   ambiguous-ci-word: the bare word "ci" names both the magus target and the
+//     host's CI/CD; an agent that assumes either burns a turn on the wrong gate.
 //   exit-status-echo: 2026-09-24, 508 lines ended this way against 2 denies, when only a
 //     bare trailing `echo $?` fired.
 //   filter-without-input: one such grep held a subagent for two hours. A recursive grep

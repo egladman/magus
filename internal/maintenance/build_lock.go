@@ -35,15 +35,45 @@ type GraphBuildHolder struct {
 	Store string `json:"store,omitempty"`
 }
 
-// MachineGraphBuildDir holds this machine's one build lock, taken by every
+// machineGraphBuildDir holds this machine's one build lock, taken by every
 // graph build, symbol refresh and background symbol index. Take it before a
 // store's lock, so two builds never each hold one and wait on the other.
-func MachineGraphBuildDir() (string, error) {
+func machineGraphBuildDir() (string, error) {
 	state, err := xdg.StateDir()
 	if err != nil {
 		return "", fmt.Errorf("maintenance: machine graph build lock: %w", err)
 	}
 	return filepath.Join(state, "magus", "graph-build"), nil
+}
+
+// AcquireMachineGraphBuild takes this machine's one build lock for me, waiting
+// as long as another build holds it. Callers never see where the lock lives.
+func AcquireMachineGraphBuild(ctx context.Context, me GraphBuildHolder, w io.Writer, every time.Duration) (*GraphBuildLock, *GraphBuildHolder, error) {
+	dir, err := machineGraphBuildDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	return AcquireGraphBuild(ctx, dir, me, w, every)
+}
+
+// TryMachineGraphBuild is AcquireMachineGraphBuild without the wait: when
+// another holds the lock it returns that holder and no lock.
+func TryMachineGraphBuild(me GraphBuildHolder, w io.Writer) (*GraphBuildLock, *GraphBuildHolder, error) {
+	dir, err := machineGraphBuildDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	return TryGraphBuild(dir, me, w)
+}
+
+// RunningMachineGraphBuild returns the build holding this machine's lock, ok
+// false when none is.
+func RunningMachineGraphBuild() (GraphBuildHolder, bool) {
+	dir, err := machineGraphBuildDir()
+	if err != nil {
+		return GraphBuildHolder{}, false
+	}
+	return RunningGraphBuild(dir)
 }
 
 func (h GraphBuildHolder) String() string {

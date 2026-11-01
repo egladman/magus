@@ -95,10 +95,11 @@ type GroupingRecord struct {
 	WideningsPerJob    *float64 `json:"widenings_per_job"    yaml:"widenings_per_job"`
 }
 
-// GroupingOutput is the grouping lens: one row per shape the recorded job outcomes cover,
+// Grouping is the grouping lens: one row per shape the recorded job outcomes cover,
 // in chained, split, solo order. Unclassified counts the jobs with write paths whose
 // projects could not be resolved when they ended, which no shape counts.
-type GroupingOutput struct {
+// ADR 0022: domain noun, not GroupingOutput.
+type Grouping struct {
 	Definition   string           `json:"definition"   yaml:"definition"`
 	MinSample    int              `json:"min_sample"   yaml:"min_sample"`
 	Unclassified int              `json:"unclassified" yaml:"unclassified"`

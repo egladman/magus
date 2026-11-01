@@ -243,7 +243,7 @@ func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []job.Te
 	if len(seeds) == 0 {
 		return nil
 	}
-	out, err := m.Affinity(ctx, types.InsightOptions{Commits: leaseAffinityCommits})
+	out, err := m.Affinity(ctx, types.HistoryMetricsOptions{Commits: leaseAffinityCommits})
 	if err != nil {
 		return nil
 	}

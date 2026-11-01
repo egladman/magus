@@ -677,9 +677,9 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 	// workspace with no history simply reports no churn rather than failing the diff.
 	// Files: true is required; without it the lens ranks PROJECTS and the per-file list is
 	// empty, so every file would silently report no churn.
-	if hot, herr := m.Hotspots(ctx, types.InsightOptions{Commits: diffHistoryCommits, Files: true}); herr == nil {
+	if hot, herr := m.Hotspots(ctx, types.HistoryMetricsOptions{Commits: diffHistoryCommits, Files: true}); herr == nil {
 		var projects []types.TrendEntry
-		if tr, terr := m.Trend(ctx, types.InsightOptions{Commits: diffHistoryCommits}); terr == nil {
+		if tr, terr := m.Trend(ctx, types.HistoryMetricsOptions{Commits: diffHistoryCommits}); terr == nil {
 			projects = tr.Projects
 		}
 		rev.AttachChurn(hot.Files, projects)
@@ -1995,7 +1995,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 
 	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
 	// sections of one report cannot describe two different windows of history.
-	if own, err := m.Ownership(ctx, types.InsightOptions{Commits: diffHistoryCommits}); err == nil {
+	if own, err := m.Ownership(ctx, types.HistoryMetricsOptions{Commits: diffHistoryCommits}); err == nil {
 		p.Ownership = listImpactOwners(own, rev.AffectedProjects)
 	}
 
@@ -2065,7 +2065,7 @@ func computeImpactReach(rev types.Diff) *impactReach {
 // Projects the lens has nothing to say about are DROPPED rather than listed with an empty
 // author: a project with no commits in the window has no owner to name, and a blank name
 // beside a path reads as a lookup that failed.
-func listImpactOwners(own types.OwnershipOutput, affected []types.ImpactProject) []impactOwner {
+func listImpactOwners(own types.Ownership, affected []types.ImpactProject) []impactOwner {
 	byPath := make(map[string]types.OwnershipEntry, len(own.Projects))
 	for _, e := range own.Projects {
 		byPath[e.Path] = e

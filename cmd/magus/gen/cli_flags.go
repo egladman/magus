@@ -661,8 +661,10 @@ const (
 	FlagShellCallBackground = "call-background"
 	// shell: --call-digest
 	FlagShellCallDigest = "call-digest"
-	// shell: --call-timeout-ms
-	FlagShellCallTimeoutMs = "call-timeout-ms"
+	// shell: --call-timeout
+	FlagShellCallTimeout = "call-timeout"
+	// shell: --duration
+	FlagShellDuration = "duration"
 	// shell: --event
 	FlagShellEvent = "event"
 	// shell: --lease
@@ -679,8 +681,6 @@ const (
 	FlagShellResultDigest = "result-digest"
 	// shell: --session
 	FlagShellSession = "session"
-	// shell: --tool-ms
-	FlagShellToolMs = "tool-ms"
 	// shell: --transcript
 	FlagShellTranscript = "transcript"
 	// shell: --transport
@@ -881,7 +881,7 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.BoolVar(&f.Step, FlagRunStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
 	cmdline.NegatedBoolVar(fs, &f.Step, FlagRunStep)
 	fs.StringVar(&f.Race, FlagRunRace, "", "Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time.")
-	fs.DurationVar(&f.Timeout, FlagRunTimeout, 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
+	cmdline.DurationVar(fs, &f.Timeout, FlagRunTimeout, 0, "m", "Abort if the run has not finished within this duration (e.g. 5m, 1h30m). Bare numbers are minutes.")
 	fs.BoolVar(&f.Stdin, FlagRunStdin, false, "Run the shards of a saved shard plan, the document affected --plan prints, read from stdin; the plan names the target and the projects")
 	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagRunStdin)
 	fs.StringVar(&f.Shard, FlagRunShard, "", "With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing")
@@ -936,7 +936,7 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	fs.BoolVar(&f.Step, FlagAffectedStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
 	cmdline.NegatedBoolVar(fs, &f.Step, FlagAffectedStep)
 	fs.StringVar(&f.Race, FlagAffectedRace, "", "Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time.")
-	fs.DurationVar(&f.Timeout, FlagAffectedTimeout, 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
+	cmdline.DurationVar(fs, &f.Timeout, FlagAffectedTimeout, 0, "m", "Abort if the run has not finished within this duration (e.g. 5m, 1h30m). Bare numbers are minutes.")
 	fs.BoolVar(&f.Graph, FlagAffectedGraph, false, "Render the dependency graph for the affected scope instead of executing")
 	cmdline.NegatedBoolVar(fs, &f.Graph, FlagAffectedGraph)
 	fs.BoolVar(&f.Upstream, FlagAffectedUpstream, false, "With --graph: show dependents instead of dependencies")
@@ -1025,22 +1025,22 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 
 // ShellFlags are the flags declared for `magus shell`.
 type ShellFlags struct {
-	Path           bool   // --[no-]path
-	Observe        bool   // --[no-]observe
-	Message        bool   // --[no-]message
-	Lease          string // --lease
-	AgentName      string // --agent-name
-	Transport      string // --transport
-	Session        string // --session
-	Agent          string // --agent
-	Transcript     string // --transcript
-	Event          string // --event
-	RendersAsk     bool   // --[no-]renders-ask
-	CallBackground bool   // --[no-]call-background
-	CallTimeoutMs  int    // --call-timeout-ms
-	ToolMs         int    // --tool-ms
-	CallDigest     string // --call-digest
-	ResultDigest   string // --result-digest
+	Path           bool          // --[no-]path
+	Observe        bool          // --[no-]observe
+	Message        bool          // --[no-]message
+	Lease          string        // --lease
+	AgentName      string        // --agent-name
+	Transport      string        // --transport
+	Session        string        // --session
+	Agent          string        // --agent
+	Transcript     string        // --transcript
+	Event          string        // --event
+	RendersAsk     bool          // --[no-]renders-ask
+	CallBackground bool          // --[no-]call-background
+	CallTimeout    time.Duration // --call-timeout
+	Duration       time.Duration // --duration
+	CallDigest     string        // --call-digest
+	ResultDigest   string        // --result-digest
 }
 
 // BindShell registers `magus shell`'s flags on fs and returns the destination.
@@ -1063,10 +1063,10 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	cmdline.NegatedBoolVar(fs, &f.RendersAsk, FlagShellRendersAsk)
 	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
 	cmdline.NegatedBoolVar(fs, &f.CallBackground, FlagShellCallBackground)
-	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
-	fs.IntVar(&f.ToolMs, FlagShellToolMs, 0, "Read the input as a tool's name and record how many milliseconds the host says it ran, without judging: the verdict is always pass")
-	fs.StringVar(&f.CallDigest, FlagShellCallDigest, "", "With --tool-ms, a fingerprint of the call the host ran, so a repeat of it can be counted; never the call's text")
-	fs.StringVar(&f.ResultDigest, FlagShellResultDigest, "", "With --tool-ms, a fingerprint of the call's result, so an equal answer can be told from a changed one; never the result's text. Absent means the host gave none, and the record says so")
+	cmdline.DurationVar(fs, &f.CallTimeout, FlagShellCallTimeout, 0, "ms", "The timeout the call gave its shell command (e.g. 10m, 600000ms); 0 or absent means the host's foreground default. Bare numbers are milliseconds.")
+	cmdline.DurationVar(fs, &f.Duration, FlagShellDuration, 0, "ms", "Read the input as a tool's name and record how long the host says it ran (e.g. 420ms), without judging: the verdict is always pass. Bare numbers are milliseconds.")
+	fs.StringVar(&f.CallDigest, FlagShellCallDigest, "", "With --duration, a fingerprint of the call the host ran, so a repeat of it can be counted; never the call's text")
+	fs.StringVar(&f.ResultDigest, FlagShellResultDigest, "", "With --duration, a fingerprint of the call's result, so an equal answer can be told from a changed one; never the result's text. Absent means the host gave none, and the record says so")
 	return &f
 }
 
@@ -1569,7 +1569,7 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	fs.BoolVar(&f.Stdin, FlagJobForkStdin, false, "Read one job as JSON on stdin instead of taking it from flags")
 	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagJobForkStdin)
 	fs.StringVar(&f.Criteria, FlagJobForkCriteria, "", "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares")
-	fs.DurationVar(&f.Timeout, FlagJobForkTimeout, 0, "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout")
+	cmdline.DurationVar(fs, &f.Timeout, FlagJobForkTimeout, 0, "m", "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout. Bare numbers are minutes.")
 	fs.StringVar(&f.Parent, FlagJobForkParent, "", "The job this one is forked from")
 	fs.StringVar(&f.Checkpoint, FlagJobForkCheckpoint, "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
 	fs.StringVar(&f.Check, FlagJobForkCheck, "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
@@ -1611,7 +1611,7 @@ type JobExecFlags struct {
 // BindJobExec registers `magus job exec`'s flags on fs and returns the destination.
 func BindJobExec(fs *flag.FlagSet) *JobExecFlags {
 	var f JobExecFlags
-	fs.DurationVar(&f.Timeout, FlagJobExecTimeout, 0, "Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline")
+	cmdline.DurationVar(fs, &f.Timeout, FlagJobExecTimeout, 0, "m", "Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline. Bare numbers are minutes.")
 	fs.IntVar(&f.Slots, FlagJobExecSlots, 1, "With --timeout: the machine budget slots the command takes while it runs")
 	return &f
 }
@@ -1717,7 +1717,7 @@ type JobGrantFlags struct {
 // BindJobGrant registers `magus job grant`'s flags on fs and returns the destination.
 func BindJobGrant(fs *flag.FlagSet) *JobGrantFlags {
 	var f JobGrantFlags
-	fs.DurationVar(&f.For, FlagJobGrantFor, 0, "End the grant after this long (e.g. 2h); unset, it lasts until the job ends")
+	cmdline.DurationVar(fs, &f.For, FlagJobGrantFor, 0, "h", "End the grant after this long (e.g. 2h); unset, it lasts until the job ends. Bare numbers are hours.")
 	fs.BoolVar(&f.Revoke, FlagJobGrantRevoke, false, "End the job's grant of the rule")
 	cmdline.NegatedBoolVar(fs, &f.Revoke, FlagJobGrantRevoke)
 	fs.StringVar(&f.Commit, FlagJobGrantCommit, "", "Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-ungated")
@@ -1921,7 +1921,7 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.StringVar(&f.StatusContext, FlagQueueApplyStatusContext, "merge-queue", "Commit status the queue posts; branch protection requires it")
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
 	cmdline.NegatedBoolVar(fs, &f.Once, FlagQueueApplyOnce)
-	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
+	cmdline.DurationVar(fs, &f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "s", "How often <source> is read while following it. Bare numbers are seconds.")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
 	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
 	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's regeneration `command`, run with no shell or credential: projects go ahead of its first `--`, files to rewrite on stdin. It runs only where the build tool proves the change misses its code; elsewhere apply checks the rest.")
@@ -1977,7 +1977,7 @@ type WatchFlags struct {
 // BindWatch registers `magus watch`'s flags on fs and returns the destination.
 func BindWatch(fs *flag.FlagSet) *WatchFlags {
 	var f WatchFlags
-	fs.DurationVar(&f.Debounce, FlagWatchDebounce, time.Duration(200000000), "Quiet window before emitting a batch")
+	cmdline.DurationVar(fs, &f.Debounce, FlagWatchDebounce, time.Duration(200000000), "ms", "Quiet window before emitting a batch. Bare numbers are milliseconds.")
 	fs.BoolVar(&f.Initial, FlagWatchInitial, true, "Emit an --all batch on startup before watching")
 	cmdline.NegatedBoolVar(fs, &f.Initial, FlagWatchInitial)
 	fs.BoolVar(&f.Null, FlagWatchNull, false, "NUL-separate paths; double-NUL between batches")
@@ -2002,7 +2002,7 @@ func BindEvents(fs *flag.FlagSet) *EventsFlags {
 	cmdline.NegatedBoolVar(fs, &f.Follow, FlagEventsFollow)
 	fs.StringVar(&f.Type, FlagEventsType, "", "Restrict to these event types (comma-separated); default is every type except target.output")
 	fs.IntVar(&f.Limit, FlagEventsLimit, 20, "Replay this many recent invocations before following; 0 replays nothing (only new events), negative replays every retained run")
-	fs.DurationVar(&f.Interval, FlagEventsInterval, time.Duration(250000000), "How often --follow polls the run log for new events")
+	cmdline.DurationVar(fs, &f.Interval, FlagEventsInterval, time.Duration(250000000), "ms", "How often --follow polls the run log for new events. Bare numbers are milliseconds.")
 	return &f
 }
 
@@ -2067,7 +2067,7 @@ type BrokerFlags struct {
 // BindBroker registers `magus broker`'s flags on fs and returns the destination.
 func BindBroker(fs *flag.FlagSet) *BrokerFlags {
 	var f BrokerFlags
-	fs.DurationVar(&f.IdleExit, FlagBrokerIdleExit, time.Duration(600000000000), "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive")
+	cmdline.DurationVar(fs, &f.IdleExit, FlagBrokerIdleExit, time.Duration(600000000000), "m", "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive. Bare numbers are minutes.")
 	fs.StringVar(&f.Log, FlagBrokerLog, "", "Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log")
 	return &f
 }
@@ -2099,8 +2099,8 @@ type StatusFlags struct {
 // BindStatus registers `magus status`'s flags on fs and returns the destination.
 func BindStatus(fs *flag.FlagSet) *StatusFlags {
 	var f StatusFlags
-	fs.DurationVar(&f.Watch, FlagStatusWatch, 0, "Poll and reprint at this interval (minimum 15s; 0 means one-shot)")
-	fs.DurationVar(&f.Watch, FlagStatusW, 0, "Short for --watch")
+	cmdline.DurationVar(fs, &f.Watch, FlagStatusWatch, 0, "s", "Poll and reprint at this interval (minimum 15s; 0 means one-shot). Bare numbers are seconds.")
+	cmdline.DurationVar(fs, &f.Watch, FlagStatusW, 0, "s", "Short for --watch")
 	fs.BoolVar(&f.Compact, FlagStatusCompact, false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
 	fs.BoolVar(&f.Compact, FlagStatusC, false, "Short for --compact")
 	cmdline.NegatedBoolVar(fs, &f.Compact, FlagStatusCompact)
@@ -2391,7 +2391,7 @@ type ConfigCachePruneFlags struct {
 // BindConfigCachePrune registers `magus config cache prune`'s flags on fs and returns the destination.
 func BindConfigCachePrune(fs *flag.FlagSet) *ConfigCachePruneFlags {
 	var f ConfigCachePruneFlags
-	fs.DurationVar(&f.OlderThan, FlagConfigCachePruneOlderThan, 0, "Remove entries older than this duration (e.g. 168h = 7 days)")
+	cmdline.DurationVar(fs, &f.OlderThan, FlagConfigCachePruneOlderThan, 0, "h", "Remove entries older than this duration (e.g. 168h = 7 days). Bare numbers are hours.")
 	fs.IntVar(&f.KeepLast, FlagConfigCachePruneKeepLast, 0, "Keep only the newest N entries, evict the rest (--remote only)")
 	fs.BoolVar(&f.Remote, FlagConfigCachePruneRemote, false, "Prune the configured remote backend instead of the local cache")
 	cmdline.NegatedBoolVar(fs, &f.Remote, FlagConfigCachePruneRemote)

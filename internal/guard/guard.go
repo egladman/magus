@@ -1058,6 +1058,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				refuse(denyArchitectureUnbriefed, reason)
 			}
 		}
+		if verdict.Decision != decisionDeny {
+			if reason := denyAmbiguousCIWord(facts, writeAssumesCIWord(input)); reason != "" {
+				refuse(denyRuleAmbiguousCIWord, reason)
+			}
+		}
 		// A script is judged by what running it would be judged by, and the write is the
 		// last moment that costs nothing to change. Its verdict is graded already.
 		if verdict.Decision != decisionDeny {
@@ -1198,6 +1203,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		}
 		if v.Deny == "" {
 			v = stronger(v, deps.grade(judgeHeredocWrites(ctx, deps, req, who, callDir, actingLease, input, shellD)))
+		}
+		if v.Deny == "" {
+			if reason := denyAmbiguousCIWord(facts, assumesCIWord(input)); reason != "" {
+				v = ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleAmbiguousCIWord},
+					Why: "The bare word \"ci\" names both the magus target and the host's CI/CD; picking either before the person clarifies is the assumption this rule stops."}
+			}
 		}
 		var unbriefed string
 		if structureProbe(input, location.workspace) {

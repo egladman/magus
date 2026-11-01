@@ -279,8 +279,8 @@ Never infer from empty result that nobody worked on file: equally means workspac
 
 {{if .Full}}- `--global` unions every workspace registered in config (`knowledge.workspaces`);
   IDs are namespaced per workspace (`web//spell:go`).{{else}}- `--global` unions every workspace registered in config (`knowledge.workspaces`); IDs namespaced per workspace (`web//spell:go`).{{end}}
-{{if .Full}}- `{{cmd "affected"}}`, `{{tool "client"}}` (`{{buzz "insight"}}`), and `{{cmd "describe"}}` sit beside the
-  graph. `{{cmd "graph export"}} -o json` dumps the whole graph for bulk analysis.{{else}}- `{{cmd "affected"}}`, `{{tool "client"}}` (`{{buzz "insight"}}`), `{{cmd "describe"}}` sit beside graph. `{{cmd "graph export"}} -o json` dumps whole graph for bulk analysis.{{end}}
+{{if .Full}}- `{{cmd "affected"}}`, `{{tool "client"}}` (`{{buzz "affinity"}}`), and `{{cmd "describe"}}` sit beside the
+  graph. `{{cmd "graph export"}} -o json` dumps the whole graph for bulk analysis.{{else}}- `{{cmd "affected"}}`, `{{tool "client"}}` (`{{buzz "affinity"}}`), `{{cmd "describe"}}` sit beside graph. `{{cmd "graph export"}} -o json` dumps whole graph for bulk analysis.{{end}}
 {{if .Full}}- To show a PR's domain impact, run `{{cmd "graph diff"}} --rev main -o markdown` for a
   CI comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
   that revision's files, or pass a `graph export -o json` baseline file instead.{{else}}- PR domain impact: `{{cmd "graph diff"}} --rev main -o markdown` for CI comment.{{end}}

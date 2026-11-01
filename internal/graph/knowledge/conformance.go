@@ -30,9 +30,9 @@ import (
 // answers unknown rather than an empty pass. A language with no BodyShape lexer
 // contributes no clone samples, and one with no package clause no main population. It
 // reads g only and writes nothing.
-func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput {
+func (g *Graph) Conformance(o types.ConformanceOptions) types.Conformance {
 	if !g.HasSymbols() {
-		return types.ConformanceOutput{Answer: types.ClassifyAnswer(false, types.ReasonSymbolIndexMissing, nil)}
+		return types.Conformance{Answer: types.ClassifyAnswer(false, types.ReasonSymbolIndexMissing, nil)}
 	}
 	samples := conformanceSamples(g, o)
 	loops, knobbed := sharedLoops(g, o)
@@ -41,7 +41,7 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 	maps.Copy(samples, aliasSamples(g, o))
 	groups := cloneGroups(g, o)
 
-	out := types.ConformanceOutput{Excluded: conformanceExcluded(g, o)}
+	out := types.Conformance{Excluded: conformanceExcluded(g, o)}
 	for _, key := range slices.SortedFunc(maps.Keys(samples), compareConformanceKeys) {
 		items := samples[key]
 		row := types.ConformanceRow{Key: key, N: len(items)}

@@ -107,15 +107,8 @@ func jobCommandSpec() cmdline.Command {
 // printJobVerbHelp prints a job verb's help from its registry entry,
 // so -h, the man page and the docs page read the same words.
 func printJobVerbHelp(fs *flag.FlagSet, verb string) {
-	children := jobCommandSpec().Children
-	spec := children[slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == verb })]
-	w := fs.Output()
-	fmt.Fprintf(w, "Usage: %s\n\n%s\n\n", spec.Usage, spec.Long)
-	fmt.Fprintln(w, "Example:")
-	for _, ex := range spec.Examples {
-		fmt.Fprintf(w, "  %s\n", ex.Command)
-	}
-	fmt.Fprintln(w, "\nFlags (global flags also accepted, see `magus -h`):")
+	commands.WriteChildHelp(fs.Output(), "job", verb)
+	fmt.Fprintln(fs.Output(), "\nFlags (global flags also accepted, see `magus -h`):")
 	printOwnDefaults(fs)
 }
 

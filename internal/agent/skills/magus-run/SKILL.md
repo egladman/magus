@@ -77,6 +77,9 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
 {{if .Full}}2. Verification is `ci`'s job, not a sequence you compose. `ci` is the one target
    name magus enforces: the command that composes the pipeline
    (typically generate, lint, build, test) in the order the magusfile declares.
+   Bare "ci" is also everyday shorthand for the host's CI/CD (GitHub Actions and
+   the rest). When the person says "ci" without naming one meaning, ask which; the
+   `ambiguous-ci-word` guard refuses a call that picks either until they clarify.
    - Run `{{cmd "run"}} ci <project>` for the project you are working in.
    - Run `{{cmd "affected"}} ci` as the final gate once the change is done; it runs the
      full pipeline over every project your change reaches, which is how you learn
@@ -88,6 +91,7 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
      pass. A check wired to the wrong path passes the same way.
    - Verify in place; never `git stash`/`reset` first (data-loss-prone and pointless: the tree is
      already what you want to verify).{{else}}2. Verification is `ci`'s job, not sequence you compose; `ci` is only target name magus enforces.
+   Bare "ci" also means host CI/CD (GitHub Actions, ...). Ambiguous -> ask which; `ambiguous-ci-word` refuses assuming either.
    - `{{cmd "run"}} ci <project>` for project you work in.
    - `{{cmd "affected"}} ci`: final gate once change done.
    - Never hand-run lint, format, test one at a time: re-derives order magusfile owns; forgotten step fails silently by omission.

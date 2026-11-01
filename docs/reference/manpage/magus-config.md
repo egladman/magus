@@ -63,8 +63,8 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 **--keep-last** *int*
 : Keep only the newest N entries, evict the rest (--remote only)
 
-**--older-than** *duration*
-: Remove entries older than this duration (e.g. 168h = 7 days)
+**--older-than** *value*
+: Remove entries older than this duration (e.g. 168h = 7 days). Bare numbers are hours.
 
 **--[no-]remote** (default: off)
 : Prune the configured remote backend instead of the local cache

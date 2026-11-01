@@ -19,7 +19,7 @@ import { createClient, type Client } from "@connectrpc/connect";
 import { StatusSchema, StatusService, type Status } from "@wire/status/v1alpha1/status_pb";
 import { MetricsService } from "@wire/metrics/v1alpha1/metrics_pb";
 import { ActivityService, Kind } from "@wire/activity/v1alpha1/activity_pb";
-import { InsightService } from "@wire/insight/v1alpha1/insight_pb";
+import { HistoryMetricsService } from "@wire/historymetrics/v1alpha1/historymetrics_pb";
 import { ToolService } from "@wire/tool/v1alpha1/tool_pb";
 import { mapTools } from "../tools/transport";
 import {
@@ -35,7 +35,7 @@ import {
   mapStatus,
   mapSnapshot,
   mapSample,
-  mapInsight,
+  mapHistoryMetrics,
   mapAgentActivity,
   type AgentEventWire,
   type DashboardState,
@@ -50,10 +50,8 @@ const RECONNECT_MS = 3000;
 // that window on a busy server - an agent mid-task easily produces a few hundred tool calls.
 const ACTIVITY_POLL_MS = 4000;
 const ACTIVITY_PAGE = 500;
-// Insight is an on-demand unary read (magus.insight.v1alpha1.InsightService.GetInsight), server-side
-// cached ~10s. Not on the status SSE: it is polled on a cadence, refetched on open and on a manual
-// refresh. The interval is the operator's configured refresh rate (getPollMs, default 20s - just
-// above the server cache TTL).
+// History metrics are an on-demand unary (GetHistoryMetrics), server-cached ~10s, polled
+// on the operator's refresh rate (getPollMs, default 20s).
 
 export interface TransportCallbacks {
   onStatusOpen(host: string): void;
@@ -78,9 +76,9 @@ export class DashboardTransport {
 
   private toolsHost: string | null = null;
   private toolsTimer: ReturnType<typeof setInterval> | null = null;
-  private insightHost: string | null = null;
-  private insightAbort: AbortController | null = null;
-  private insightTimer: ReturnType<typeof setInterval> | null = null;
+  private historyMetricsHost: string | null = null;
+  private historyMetricsAbort: AbortController | null = null;
+  private historyMetricsTimer: ReturnType<typeof setInterval> | null = null;
 
   // stopped is a permanent give-up latch. Once set (by stop()), no feed reschedules:
   // the status reconnect, the metrics retry, and the insight poll all bail while it is
@@ -105,7 +103,7 @@ export class DashboardTransport {
     this.disconnect();
     this.connectStatus(host);
     this.startMetrics(host);
-    this.startInsight(host);
+    this.startHistoryMetrics(host);
     this.startTools(host);
     this.startActivity(host);
     void this.fetchObservingSince(host);
@@ -121,7 +119,7 @@ export class DashboardTransport {
       this.statusRetry = null;
     }
     this.stopMetrics();
-    this.stopInsight();
+    this.stopHistoryMetrics();
     this.stopTools();
     this.stopActivity();
   }
@@ -253,10 +251,10 @@ export class DashboardTransport {
     }, RECONNECT_MS);
   }
 
-  // ---- insight (on-demand ConnectRPC poll) ---------------------------------
-  // A unary GetInsight against the validated loopback host, bearing the shared token
-  // and mapped into the store. Polled on a modest cadence since it is server-side
-  // cached; refetched immediately on connect and on a manual refresh.
+  // ---- history metrics (on-demand ConnectRPC poll) -------------------------
+  // A unary GetHistoryMetrics against the validated loopback host, bearing the
+  // shared token and mapped into the store. Polled on a modest cadence since it
+  // is server-side cached; refetched immediately on connect and on a manual refresh.
 
   // ---- activity trail poll -------------------------------------------------
   //
@@ -347,62 +345,62 @@ export class DashboardTransport {
     }
   }
 
-  private startInsight(host: string): void {
-    this.stopInsight();
-    this.insightHost = host;
+  private startHistoryMetrics(host: string): void {
+    this.stopHistoryMetrics();
+    this.historyMetricsHost = host;
     // Said HERE, not at construction: before a server is attached nothing is reading anything, and
     // seeding this in the initial state made six tiles claim a read was in progress on a dashboard
     // that had never connected.
-    this.store.set({ insightNote: "Reading history..." });
-    void this.fetchInsight();
-    this.insightTimer = setInterval(() => void this.fetchInsight(), getPollMs());
+    this.store.set({ historyMetricsNote: "Reading history..." });
+    void this.fetchHistoryMetrics();
+    this.historyMetricsTimer = setInterval(() => void this.fetchHistoryMetrics(), getPollMs());
   }
 
-  private stopInsight(): void {
+  private stopHistoryMetrics(): void {
     // Nothing will poll again, so leaving the in-progress note standing would keep asserting a read
     // that has stopped - the same lie this field exists to remove, one state further along.
-    if (this.insightHost) this.store.set({ insightNote: "Not connected." });
-    this.insightHost = null;
-    if (this.insightAbort) {
-      this.insightAbort.abort();
-      this.insightAbort = null;
+    if (this.historyMetricsHost) this.store.set({ historyMetricsNote: "Not connected." });
+    this.historyMetricsHost = null;
+    if (this.historyMetricsAbort) {
+      this.historyMetricsAbort.abort();
+      this.historyMetricsAbort = null;
     }
-    if (this.insightTimer) {
-      clearInterval(this.insightTimer);
-      this.insightTimer = null;
+    if (this.historyMetricsTimer) {
+      clearInterval(this.historyMetricsTimer);
+      this.historyMetricsTimer = null;
     }
   }
 
-  // refreshInsight forces an out-of-band refetch (the section's refresh button). Returns the
+  // refreshHistoryMetrics forces an out-of-band refetch (the section's refresh button). Returns the
   // fetch's promise, not fire-and-forget, so the button can show feedback for exactly the
   // duration of the click that asked for it - a background poll tick has no caller to tell.
-  refreshInsight(): Promise<void> {
-    return this.insightHost ? this.fetchInsight() : Promise.resolve();
+  refreshHistoryMetrics(): Promise<void> {
+    return this.historyMetricsHost ? this.fetchHistoryMetrics() : Promise.resolve();
   }
 
-  private async fetchInsight(): Promise<void> {
+  private async fetchHistoryMetrics(): Promise<void> {
     if (this.stopped || this.suspended) return;
-    const host = this.insightHost;
+    const host = this.historyMetricsHost;
     if (!host) return;
     // A tick that lands while the previous one is still running SKIPS rather than superseding it.
     // The history walk can outrun the poll interval (the floor is 2s), and aborting-and-restarting
     // every tick then means no request ever finishes: the tiles would sit on "Reading history..."
-    // for as long as the dashboard is open, which is a worse lie than stale numbers. stopInsight
+    // for as long as the dashboard is open, which is a worse lie than stale numbers. stopHistoryMetrics
     // still aborts, so teardown is unaffected.
-    if (this.insightAbort) return;
+    if (this.historyMetricsAbort) return;
     const ctrl = new AbortController();
-    this.insightAbort = ctrl;
+    this.historyMetricsAbort = ctrl;
     try {
-      const client = createClient(InsightService, createServerTransport(host, getLiveToken()));
-      const resp = await client.getInsight({}, { signal: ctrl.signal });
+      const client = createClient(HistoryMetricsService, createServerTransport(host, getLiveToken()));
+      const resp = await client.getHistoryMetrics({}, { signal: ctrl.signal });
       // The SUCCESS path needs the same guard as the catch. A superseded poll can still resolve if
       // its body was already buffered when the next tick aborted it, and writing here would both
       // overwrite the newer poll's insight and clear an error the newer poll had just recorded.
       if (ctrl.signal.aborted) return;
       this.store.set({
-        insight: mapInsight(resp),
-        insightNote: null,
-        insightUpdatedAt: Date.now(),
+        historyMetrics: mapHistoryMetrics(resp),
+        historyMetricsNote: null,
+        historyMetricsUpdatedAt: Date.now(),
       });
     } catch (e) {
       // A network blip or a server with no workspace (CodeUnavailable): leave the prior insight in
@@ -414,11 +412,11 @@ export class DashboardTransport {
       // shape for it (a fetch abort and a Connect Canceled do not look alike).
       if (ctrl.signal.aborted) return;
       const msg = e instanceof Error ? e.message : String(e);
-      this.store.set({ insightNote: "The server did not answer (" + msg + ")." });
+      this.store.set({ historyMetricsNote: "The server did not answer (" + msg + ")." });
     } finally {
-      // Releases the in-flight latch above. Guarded on identity so a poll that stopInsight already
+      // Releases the in-flight latch above. Guarded on identity so a poll that stopHistoryMetrics already
       // superseded cannot clear a NEWER poll's controller on its way out.
-      if (this.insightAbort === ctrl) this.insightAbort = null;
+      if (this.historyMetricsAbort === ctrl) this.historyMetricsAbort = null;
     }
   }
 

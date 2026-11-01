@@ -135,14 +135,24 @@ func TestTryGraphBuildNamesTheHolderAndTakesNothing(t *testing.T) {
 	require.NoError(t, lock.Release())
 }
 
-func TestMachineGraphBuildDirIsOnePlaceForEveryCheckout(t *testing.T) {
+func TestMachineGraphBuildIsOnePlaceForEveryCheckout(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
 
-	dir, err := MachineGraphBuildDir()
-
+	me := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the first"}
+	lock, _, err := TryMachineGraphBuild(me, &bytes.Buffer{})
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(state, "magus", "graph-build"), dir)
+	t.Cleanup(func() { _ = lock.Release() })
+
+	_, busy, err := TryMachineGraphBuild(GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &bytes.Buffer{})
+	require.NoError(t, err)
+	require.NotNil(t, busy)
+	assert.Equal(t, me.By, busy.By)
+
+	running, ok := RunningMachineGraphBuild()
+	require.True(t, ok)
+	assert.Equal(t, me.By, running.By)
+	assert.Equal(t, filepath.Join(state, "magus", "graph-build"), filepath.Dir(lock.holderPath))
 }
 
 func TestGraphBuildHolderRecordsItsStore(t *testing.T) {

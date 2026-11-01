@@ -82,8 +82,8 @@ plan renders more than once without being computed again.
 **--[no-]step** (default: off)
 : Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)
 
-**--timeout** *duration*
-: Abort if the run has not finished within this duration (e.g. 5m, 1h30m)
+**--timeout** *value*
+: Abort if the run has not finished within this duration (e.g. 5m, 1h30m). Bare numbers are minutes.
 
 **--[no-]upstream** (default: off)
 : With --graph: show dependents instead of dependencies

@@ -42,8 +42,8 @@ schema.
 **--[no-]follow** (default: off)
 : Keep streaming as events occur instead of exiting after the replay
 
-**--interval** *duration* (default: 250ms)
-: How often --follow polls the run log for new events
+**--interval** *value* (default: 250ms)
+: How often --follow polls the run log for new events. Bare numbers are milliseconds.
 
 **--limit** *int* (default: 20)
 : Replay this many recent invocations before following; 0 replays nothing (only new events), negative replays every retained run

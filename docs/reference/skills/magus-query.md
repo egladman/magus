@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 15719
-skill_short_bytes: 9255
+skill_full_bytes: 15720
+skill_short_bytes: 9256
 ---
 
 # magus-query
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `3929ff69d4a2` |
+| `skill-content` | `56389c3396fd` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -183,7 +183,7 @@ Never infer from empty result that nobody worked on file: equally means workspac
 ## Across workspaces, neighbors
 
 - `--global` unions every workspace registered in config (`knowledge.workspaces`); IDs namespaced per workspace (`web//spell:go`).
-- `magus affected`, `client` (`magus\insight`), `magus describe` sit beside graph. `magus graph export -o json` dumps whole graph for bulk analysis.
+- `magus affected`, `client` (`magus\affinity`), `magus describe` sit beside graph. `magus graph export -o json` dumps whole graph for bulk analysis.
 - PR domain impact: `magus graph diff --rev main -o markdown` for CI comment.
 
 ## Do not render graph yourself
@@ -470,7 +470,7 @@ workspace declares no adapter, the common case.
 
 - `--global` unions every workspace registered in config (`knowledge.workspaces`);
   IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `client` (`magus\insight`), and `magus describe` sit beside the
+- `magus affected`, `client` (`magus\affinity`), and `magus describe` sit beside the
   graph. `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a
   CI comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from

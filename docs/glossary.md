@@ -181,9 +181,9 @@ The queryable graph of a workspace's spells, targets, docs, and code relationshi
 
 The committed routing index at a workspace root, regenerated from the knowledge graph: it lists every node and points at the exact query for a given question, so it is the entry point an agent reads first. [MAGUS.md in full](glossary/magusmd.md).
 
-### Insight
+### History metrics
 
-The reports magus derives over the graph and history (hotspots, affinity, ownership, trend, volatility, unreferenced). [Insight in full](glossary/insight.md).
+The metrics magus derives over the graph and history (hotspots, affinity, ownership, trend, volatility, unreferenced). [History metrics in full](glossary/historymetrics.md).
 
 ### Hotspot
 

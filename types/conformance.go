@@ -226,12 +226,12 @@ func compareConformanceKeys(a, b ConformanceKey) int {
 	return cmp.Or(cmp.Compare(a.Metric, b.Metric), cmp.Compare(a.Population, b.Population), cmp.Compare(a.Scope, b.Scope))
 }
 
-// ConformanceOutput is the conformance lens: one row per key, and how many files Exclude hid,
+// Conformance is the conformance lens: one row per key, and how many files Exclude hid,
 // so a widened exclusion stays visible. Base and Ceilings are set when the caller names a base
 // revision: Base is the commit it resolved to, and Ceilings are the touched files whose count of
 // a checked metric's violations rose past their count there. Unmeasured are the touched files
 // only an external indexer reads, which hold no ceiling, each with why.
-type ConformanceOutput struct {
+type Conformance struct {
 	Definition string                  `json:"definition"           yaml:"definition"`
 	Rows       []ConformanceRow        `json:"rows"                 yaml:"rows"`
 	Excluded   int                     `json:"excluded"             yaml:"excluded"`
@@ -265,17 +265,18 @@ type ConformanceRow struct {
 	Violations []ConformanceItem `json:"violations" yaml:"violations"`
 }
 
-// Conformance is what a caller asks the conformance lens beyond the configured policy:
+// Ceiling is what a caller asks beyond the configured policy when judging a change:
 // Checks are the metrics held to a conformance ceiling, and Base the revision a touched
 // file's count of their violations may not rise above. Neither is set to measure only.
-type Conformance struct {
+// ADR 0022: the lens answer is Conformance; this is the ceiling ask, not a second Conformance.
+type Ceiling struct {
 	Checks []ConformanceMetric `json:"checks" yaml:"checks"`
 	Base   string              `json:"base"   yaml:"base"`
 }
 
 // Validate refuses a Base with no Checks, which would compare nothing, and a check that
 // names no metric.
-func (c Conformance) Validate() error {
+func (c Ceiling) Validate() error {
 	var errs []error
 	if c.Base != "" && len(c.Checks) == 0 {
 		errs = append(errs, fmt.Errorf("base %s: name the checks held to a conformance ceiling", c.Base))
@@ -302,7 +303,7 @@ type ConformanceCeiling struct {
 // metric is in checks is higher in head than in base, sorted by key, then file. A drop or a
 // file that holds as many as before passes. An item counts in every file it names: a clone
 // group in each member's file, and a dep-fanout package in every file directly inside it.
-func ConformanceCeilings(base, head ConformanceOutput, touched []string, checks []ConformanceMetric) []ConformanceCeiling {
+func ConformanceCeilings(base, head Conformance, touched []string, checks []ConformanceMetric) []ConformanceCeiling {
 	before := conformanceRowsByKey(base)
 	var out []ConformanceCeiling
 	for _, row := range head.Rows {
@@ -323,7 +324,7 @@ func ConformanceCeilings(base, head ConformanceOutput, touched []string, checks 
 	return out
 }
 
-func conformanceRowsByKey(out ConformanceOutput) map[ConformanceKey][]ConformanceItem {
+func conformanceRowsByKey(out Conformance) map[ConformanceKey][]ConformanceItem {
 	byKey := make(map[ConformanceKey][]ConformanceItem, len(out.Rows))
 	for _, row := range out.Rows {
 		byKey[row.Key] = row.Violations
@@ -348,10 +349,10 @@ func conformanceItemsIn(items []ConformanceItem, m ConformanceMetric, file strin
 	return out
 }
 
-// ImportAliasReport is how a workspace's packages are imported under other names. Indexed
+// ImportAliases is how a workspace's packages are imported under other names. Indexed
 // is false when no symbol index was read; Packages is then empty, never nil, because nobody
-// looked.
-type ImportAliasReport struct {
+// looked. ADR 0022: domain noun, not ImportAliasReport.
+type ImportAliases struct {
 	Indexed  bool         `json:"indexed"  yaml:"indexed"`
 	Packages []AliasFacts `json:"packages" yaml:"packages"`
 }

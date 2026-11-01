@@ -123,7 +123,7 @@ var inboundTypes = []string{
 	"PathOptions",
 	"QueryOptions",
 	"RefsOptions",
-	"InsightOptions",
+	"HistoryMetricsOptions",
 	"ExecOptions",
 	`magus\CommandOptions`,
 	`vcs\CommandOptions`,

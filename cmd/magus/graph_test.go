@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -18,7 +16,6 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/render"
-	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/scip-code/scip/bindings/go/scip"
@@ -293,43 +290,6 @@ func TestLiveBridgeReachable(t *testing.T) {
 	})
 }
 
-// graph build exited 0 when the root's reindex was refused by the run it was nested in,
-// and quiet hid the refusal, so the target that ran it read a stale index. A missing
-// indexer must still not fail the build.
-func TestGraphBuildFailsOnlyOnALockRefusal(t *testing.T) {
-	refusal := fmt.Errorf("magus: %w", types.DiagnosticErrorf(types.ProjectLockHeldByAncestor,
-		"project . is locked by the magus run this one is nested inside"))
-	missing := errors.New("docs: exit status 127; install scip-typescript")
-
-	require.NoError(t, reindexRefusals(missing), "a missing indexer stays a warning")
-
-	got := reindexRefusals(errors.Join(missing, refusal))
-	require.ErrorIs(t, got, types.ProjectLockHeldByAncestor)
-	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
-
-	require.ErrorIs(t, reindexRefusals(refusal), types.ProjectLockHeldByAncestor, "an unjoined refusal counts too")
-
-	full := types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting scip: this machine's build budget is full")
-	got = reindexRefusals(errors.Join(missing, full))
-	require.ErrorIs(t, got, types.MachineBudgetExhausted, "a full budget fails the build")
-	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
-}
-
-type GraphReindexPressureSuite struct {
-	suite.Suite
-}
-
-func TestGraphReindexPressureSuite(t *testing.T) { suite.Run(t, new(GraphReindexPressureSuite)) }
-
-func (s *GraphReindexPressureSuite) TestARefusedReindexExitsTempFail() {
-	short := types.ExitError{Code: exit.TempFail, Err: types.DiagnosticErrorf(types.MemoryPressureHigh, "not starting scip: this machine is short of memory")}
-	missing := errors.New("docs: exit status 127; install scip-typescript")
-	got := reindexRefusals(errors.Join(missing, short))
-	s.Require().ErrorIs(got, types.MemoryPressureHigh)
-	s.NotContains(got.Error(), "scip-typescript", "only the refusal fails the build")
-	s.Equal(exit.TempFail, exit.Code(got))
-}
-
 // GraphExportSCIPSuite pins `magus graph export -o scip`: the symbol index as SCIP, for
 // tools that read it, written only where a binary stream belongs.
 type GraphExportSCIPSuite struct {
@@ -386,10 +346,8 @@ func acquireBehindBuild(t *testing.T, store func(root string) string) *maintenan
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
-	dir, err := maintenance.MachineGraphBuildDir()
-	require.NoError(t, err)
 	ahead := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the build ahead", Store: store(root)}
-	lock, _, err := maintenance.AcquireGraphBuild(t.Context(), dir, ahead, io.Discard, time.Millisecond)
+	lock, _, err := maintenance.AcquireMachineGraphBuild(t.Context(), ahead, io.Discard, time.Millisecond)
 	require.NoError(t, err)
 
 	type result struct {

@@ -25,8 +25,8 @@ export fun serverShareFigure() > figure\Figure !> any {
         .box(server, label: "/api/v1/share", sub: "loopback + bearer", tag: "route")
         .box(lan, label: "LAN listener", sub: "15m, read-only token", tag: "ephemeral", focal: true)
         .actor(phone)
-        .box(served, label: "Shared read routes", sub: "events, insight, outputs, output", look: figure\Look.store)
-        .box(connectReads, label: "Shared Connect reads", sub: "status, activity, metrics, insight", look: figure\Look.store)
+        .box(served, label: "Shared read routes", sub: "events, history metrics, outputs, output", look: figure\Look.store)
+        .box(connectReads, label: "Shared Connect reads", sub: "status, activity, metrics, history metrics", look: figure\Look.store)
         .box(withheld, label: "Never on a share", sub: "graph, diff, plan, job, /mcp", look: figure\Look.optional)
         .edgesFromGraph()
         .hideEdges([server], dst: [withheld],
@@ -41,7 +41,7 @@ export fun serverShareFigure() > figure\Figure !> any {
         .legend(figure\Look.optional, label: "loopback only")
         .scope([lan])
         .scope(magus\layer("handler").dirs)
-        .except([magus\dir("internal/handler/activity"), magus\dir("internal/handler/insight"), magus\dir("internal/handler/metrics")],
+        .except([magus\dir("internal/handler/activity"), magus\dir("internal/handler/historymetrics"), magus\dir("internal/handler/metrics")],
             why: "shared read services, folded into the two shared boxes")
         .except([magus\dir("internal/handler/diff"), magus\dir("internal/handler/job"), magus\dir("internal/handler/mcp"), magus\dir("internal/handler/plan")],
             why: "loopback only, named in the never-on-a-share box")

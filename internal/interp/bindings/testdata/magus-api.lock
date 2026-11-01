@@ -1,4 +1,5 @@
 affected
+affinity
 attention
 bustCache
 cache
@@ -33,9 +34,11 @@ dir
 dirs
 diskReclaim
 doctor
+duplication
 explain
 fatal
 fileDiskAttention
+grouping
 guard
 guard.advise
 guard.allow
@@ -53,9 +56,9 @@ guard.write
 harness
 harness.provider
 hasCharm
+hotspots
 impact
 importGraph
-insight
 job
 job.clear
 job.exit
@@ -76,8 +79,10 @@ log.error
 log.hint
 log.info
 log.warn
+modelTiers
 neighborhood
 output
+ownership
 path
 precedents
 project
@@ -108,8 +113,11 @@ trail.marks
 trail.read
 trail.shape
 trail.shapes
+trend
+unreferenced
 vcs
 vcs.checkpoint
+volatility
 where
 workspace
 workspace.provider

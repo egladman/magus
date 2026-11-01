@@ -618,9 +618,9 @@ export fun dependenciesSection(d: magus\Diff, baseline: str) > result\Result::<S
 
 export fun coChangeSection(d: magus\Diff, deps: {str: [str]}) > result\Result::<Section> {
     try {
-        final report: magus\InsightReport = magus\insight();
+        final aff: magus\Affinity = magus\affinity();
         final items = mut [<str>];
-        foreach (p in report.affinity.pairs) {
+        foreach (p in aff.pairs) {
             final touched = d.seedProjects.indexOf(p.a) != null or d.seedProjects.indexOf(p.b) != null;
             final declared = (deps[p.a] ?? [<str>]).indexOf(p.b) != null or (deps[p.b] ?? [<str>]).indexOf(p.a) != null;
             if (touched and !declared) {

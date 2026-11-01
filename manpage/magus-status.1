@@ -24,7 +24,7 @@ its own it waits for a free slot. A claim larger than the whole budget exits
 .SH OPTIONS
 .RS
 .TP
-\fB\-W\fR \fIduration\fR
+\fB\-W\fR \fIvalue\fR
 Short for \-\-watch
 .TP
 \fB\-c\fR
@@ -45,8 +45,8 @@ Include the expensive symbol\-index freshness scan
 \fB\-\-[no\-]wait\fR (default: off)
 Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then, then reserves the seat for it until its first claim
 .TP
-\fB\-\-watch\fR \fIduration\fR
-Poll and reprint at this interval (minimum 15s; 0 means one\-shot)
+\fB\-\-watch\fR \fIvalue\fR
+Poll and reprint at this interval (minimum 15s; 0 means one\-shot). Bare numbers are seconds.
 .TP
 \fB\-\-workspace\fR \fIstring\fR
 Workspace root to check for readiness with \-\-probe=readiness (default: any loaded workspace)

@@ -13,7 +13,7 @@ const checkConformanceCeilingName = "conformance-ceiling"
 // slack shows here. Per-file counts need no upkeep: a change is held to its base revision's.
 // Advice, never a failure.
 func (r *runner) checkConformanceCeiling(_ []*types.Project) types.Check {
-	analyzer, ok := r.ws.(types.InsightAnalyzer)
+	analyzer, ok := r.ws.(types.HistoryMetrics)
 	if !ok {
 		return conformanceUnmeasured("this workspace exposes no conformance lens")
 	}
@@ -50,7 +50,7 @@ func conformanceUnmeasured(why string) types.Check {
 }
 
 // conformanceProposals is the check over out's rows: advice naming each anchor that can tighten.
-func (r *runner) conformanceProposals(out types.ConformanceOutput) types.Check {
+func (r *runner) conformanceProposals(out types.Conformance) types.Check {
 	checks := r.opts.cfg.Knowledge.Conformance.Checks
 	var details []string
 	for _, row := range out.Rows {

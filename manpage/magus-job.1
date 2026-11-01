@@ -123,8 +123,8 @@ Print the JSON schema a job must satisfy, and exit
 \fB\-\-[no\-]stdin\fR (default: off)
 Read one job as JSON on stdin instead of taking it from flags
 .TP
-\fB\-\-timeout\fR \fIduration\fR
-Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout
+\fB\-\-timeout\fR \fIvalue\fR
+Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout. Bare numbers are minutes.
 .TP
 \fB\-\-write\-paths\fR \fI<file>#<declaration>\fR
 A path this job may write, or <file>#<declaration> to claim one declaration of a file (a path holding a literal # is spelled `./a#b.md` or `a\(rs#b.md`); repeatable or comma\-separated
@@ -147,8 +147,8 @@ Make every edit a problem's fix names without judgment, as job fork \-\-fix does
 \fB\-\-slots\fR \fIint\fR (default: 1)
 With \-\-timeout: the machine budget slots the command takes while it runs
 .TP
-\fB\-\-timeout\fR \fIduration\fR
-Run the command after \-\- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline
+\fB\-\-timeout\fR \fIvalue\fR
+Run the command after \-\- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline. Bare numbers are minutes.
 .RE
 .SS job exit options
 .RS
@@ -207,8 +207,8 @@ Lapse the pause after this long (2h) or at this RFC3339 instant; unset, it holds
 \fB\-\-commit\fR \fIstring\fR
 Waive the push gate for this one commit instead of lowering a rule for a job; takes only push\-ungated
 .TP
-\fB\-\-for\fR \fIduration\fR
-End the grant after this long (e.g. 2h); unset, it lasts until the job ends
+\fB\-\-for\fR \fIvalue\fR
+End the grant after this long (e.g. 2h); unset, it lasts until the job ends. Bare numbers are hours.
 .TP
 \fB\-\-reason\fR \fIstring\fR
 Why the gate was skipped, recorded with the waiver; required with \-\-commit unless \-\-revoke

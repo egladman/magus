@@ -5212,7 +5212,7 @@ fun serverHttpTwin(observed: Observed = Observed{}) > mut Sketch {
 fun observedServerScope() > mut Sketch {
     final pkgs = [
         "internal/handler/activity", "internal/handler/attention", "internal/handler/diff",
-        "internal/handler/graph", "internal/handler/insight", "internal/handler/job",
+        "internal/handler/graph", "internal/handler/historymetrics", "internal/handler/job",
         "internal/handler/mcp", "internal/handler/memory", "internal/handler/metrics",
         "internal/handler/notes", "internal/handler/plan", "internal/handler/status",
         "internal/handler/token", "internal/handler/tool", "internal/handler/trailrpc",
@@ -5225,7 +5225,7 @@ fun observedServerScope() > mut Sketch {
         ["internal/server", "internal/handler/attention"],
         ["internal/server", "internal/handler/diff"],
         ["internal/server", "internal/handler/graph"],
-        ["internal/server", "internal/handler/insight"],
+        ["internal/server", "internal/handler/historymetrics"],
         ["internal/server", "internal/handler/job"],
         ["internal/server", "internal/handler/mcp"],
         ["internal/server", "internal/handler/memory"],
@@ -5827,7 +5827,7 @@ fun serverHttpObserved() > Observed {
             ObservedNode{ id = "pkg-internal-handler-attention", label = "internal/handler/attention", anchor = "internal/handler/attention" },
             ObservedNode{ id = "pkg-internal-handler-diff", label = "internal/handler/diff", anchor = "internal/handler/diff" },
             ObservedNode{ id = "pkg-internal-handler-graph", label = "internal/handler/graph", anchor = "internal/handler/graph" },
-            ObservedNode{ id = "pkg-internal-handler-insight", label = "internal/handler/insight", anchor = "internal/handler/insight" },
+            ObservedNode{ id = "pkg-internal-handler-historymetrics", label = "internal/handler/historymetrics", anchor = "internal/handler/historymetrics" },
             ObservedNode{ id = "pkg-internal-handler-job", label = "internal/handler/job", anchor = "internal/handler/job" },
             ObservedNode{ id = "pkg-internal-handler-mcp", label = "internal/handler/mcp", anchor = "internal/handler/mcp" },
             ObservedNode{ id = "pkg-internal-handler-memory", label = "internal/handler/memory", anchor = "internal/handler/memory" },
@@ -5849,7 +5849,7 @@ fun serverHttpObserved() > Observed {
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-attention" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-diff" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-graph" },
-            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-insight" },
+            ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-historymetrics" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-job" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-mcp" },
             ObservedEdge{ src = "pkg-internal-server", dst = "pkg-internal-handler-memory" },
@@ -5883,7 +5883,7 @@ fun serverHttpOmitting() > mut Sketch {
         .omit("internal/handler/activity", why: connect)
         .omit("internal/handler/attention", why: "a read route, inside the /api/v1 read views box")
         .omit("internal/handler/diff", why: "the diff and session routes, inside the review + plans box")
-        .omit("internal/handler/insight", why: "a read route and Connect service, inside the read views box")
+        .omit("internal/handler/historymetrics", why: "a read route and Connect service, inside the read views box")
         .omit("internal/handler/job", why: connect)
         .omit("internal/handler/memory", why: connect)
         .omit("internal/handler/notes", why: connect)

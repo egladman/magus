@@ -2037,13 +2037,13 @@ type Case struct {
 	Imports []string `json:"imports,omitempty"`
 }
 
-// PrecedentReport is magus\precedents' answer: the rows mined from the workspace's merged
-// symbol indexes, and the freshness of each declared index judged just before the read. An
-// index that is not up to date contributed nothing or something old, so a caller that gates
-// on the rows checks Indexes first.
-type PrecedentReport struct {
-	Precedents []Precedent         `json:"precedents"`
-	Indexes    []SymbolIndexStatus `json:"indexes"`
+// Holds is magus\holds' answer (today still served by magus\precedents): the majority shapes
+// the merged symbol indexes establish under the gates, and each declared index's freshness.
+// An index that is not up to date contributed nothing or something old, so a caller that
+// gates on the rows checks Indexes first. ADR 0022: domain noun, not PrecedentReport.
+type Holds struct {
+	Holds   []Precedent         `json:"holds"`
+	Indexes []SymbolIndexStatus `json:"indexes"`
 }
 
 // SymbolDecl is one declaration a symbol index holds, with its doc comment as written. It is
@@ -2065,11 +2065,11 @@ type SymbolDecl struct {
 	Doc string `json:"doc"`
 }
 
-// SymbolReport is magus\symbols' answer: every declaration in the workspace's merged symbol
+// Symbols is magus\symbols' answer: every declaration in the workspace's merged symbol
 // indexes, and the freshness of each declared index judged just before the read. An index
 // that is not up to date contributed nothing or something old, so a caller that gates on the
-// declarations checks Indexes first.
-type SymbolReport struct {
+// declarations checks Indexes first. ADR 0022: domain noun, not SymbolReport.
+type Symbols struct {
 	Symbols []SymbolDecl        `json:"symbols"`
 	Indexes []SymbolIndexStatus `json:"indexes"`
 }

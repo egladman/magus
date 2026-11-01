@@ -1650,7 +1650,7 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	}
 	refused := run("--call-background")
 	assert.Equal(t, []string{"deny", "worker-background-run"}, []string{refused.Decision, refused.Rule})
-	assert.Equal(t, "pass", run("--call-timeout-ms", "600000").Decision)
+	assert.Equal(t, "pass", run("--call-timeout", "10m").Decision)
 }
 
 func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
@@ -1662,7 +1662,7 @@ func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
 
 	var out bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader("Bash"), &out,
-		[]string{"--tool-ms", "420", "--call-digest", "c1", "--result-digest", "r1", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
+		[]string{"--duration", "420ms", "--call-digest", "c1", "--result-digest", "r1", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
 
 	calls := trail.ForSession(cacheDir, "s1", 10).Calls
 	require.Len(t, calls, 1)
@@ -1670,7 +1670,7 @@ func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
 	assert.Equal(t, "r1", calls[0].ResultDigest)
 }
 
-func TestShellToolMsRecordsTheToolAndPasses(t *testing.T) {
+func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	testkit.Isolate(t)
@@ -1679,7 +1679,7 @@ func TestShellToolMsRecordsTheToolAndPasses(t *testing.T) {
 
 	var out bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader("Bash"), &out,
-		[]string{"--tool-ms", "420", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
+		[]string{"--duration", "420ms", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
 	var v types.GuardJudgment
 	require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
 	assert.Equal(t, "pass", v.Decision)

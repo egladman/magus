@@ -1186,13 +1186,16 @@ export fun spell_lock(ctx: magus\Context, args: [str]) > void !> any {
     _ = magus\cmd("spell", args: ["lock"]);
 }
 
-// Logs counts from the insight report (hotspots, ownership, affinity, volatility).
+// Logs counts from the history metrics (hotspots, ownership, affinity, volatility).
 export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
-    final r = magus\insight();
-    magus\log.info("hotspots: {r.hotspots.files.len()} file(s) ranked by churn against complexity");
-    magus\log.info("ownership: {r.ownership.projects.len()} project(s) attributed");
-    magus\log.info("affinity: {r.affinity.pairs.len()} coupled project pair(s)");
-    magus\log.info("volatility: {r.volatility.targets.len()} target(s) with recorded run history");
+    final hot = magus\hotspots();
+    final own = magus\ownership();
+    final aff = magus\affinity();
+    final vol = magus\volatility();
+    magus\log.info("hotspots: {hot.files.len()} file(s) ranked by churn against complexity");
+    magus\log.info("ownership: {own.projects.len()} project(s) attributed");
+    magus\log.info("affinity: {aff.pairs.len()} coupled project pair(s)");
+    magus\log.info("volatility: {vol.targets.len()} target(s) with recorded run history");
 }
 
 // Regenerates every *-generate sibling, then gates on drift (scoped to cwd).

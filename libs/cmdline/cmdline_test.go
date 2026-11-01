@@ -33,7 +33,7 @@ func TestBindFlagsUsesEachKindsDefault(t *testing.T) {
 		{Name: "b", Kind: Bool, Default: true},
 		{Name: "s", Kind: String, Default: "x"},
 		{Name: "i", Kind: Int},
-		{Name: "d", Kind: Duration, Default: 5 * time.Second},
+		{Name: "d", Kind: Duration, Unit: "s", Default: 5 * time.Second},
 		{Name: "c", Kind: Custom},
 	}}
 	fs := flag.NewFlagSet("t", flag.ContinueOnError)

@@ -14,7 +14,7 @@ brief. The output is a decision aid, not a chronological commit dump.{{else}}Out
    git log --first-parent --merges --since="<window>" --format='%h %ad %s' --date=short
    ```
 
-{{if .Full}}   With no VCS merge history, say so. Use `{{tool "client"}}` (`{{buzz "insight"}}`) and read trend and hotspots for activity, but do not call that a merge summary.
+{{if .Full}}   With no VCS merge history, say so. Use `{{tool "client"}}` (`{{buzz "trend"}}`) and read trend and hotspots for activity, but do not call that a merge summary.
 3. List each candidate change's files, then classify them before reading:{{else}}   No VCS merge history -> say so.
 3. Each candidate change: list files, then classify before reading:{{end}}
 
@@ -35,13 +35,13 @@ brief. The output is a decision aid, not a chronological commit dump.{{else}}Out
    magus graph diff --rev <base> -o markdown
    ```
 
-{{if .Full}}5. Read affinity, ownership, or trend from `{{tool "client"}}` (`{{buzz "insight"}}`) only for
+{{if .Full}}5. Read affinity, ownership, or trend from `{{tool "client"}}` (`{{buzz "trend"}}`) only for
    context: hidden coupling, ownership risk, rising activity. They do not
    prove that a feature landed. Insight has no CLI verb; without MCP, read one lens
-   through `{{cmd "buzz"}}`:{{else}}5. `{{tool "client"}}` (`{{buzz "insight"}}`) affinity, ownership, trend: only context (hidden coupling, ownership risk, rising activity). No CLI verb; without MCP: one lens via `{{cmd "buzz"}}`:{{end}}
+   through `{{cmd "buzz"}}`:{{else}}5. `{{tool "client"}}` (`{{buzz "trend"}}`) affinity, ownership, trend: only context (hidden coupling, ownership risk, rising activity). No CLI verb; without MCP: one lens via `{{cmd "buzz"}}`:{{end}}
 
    ```sh
-   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().trend)); }'
+   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\trend())); }'
    ```
 
 {{if .Full}}## Write the brief{{else}}## Brief{{end}}

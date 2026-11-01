@@ -5066,16 +5066,16 @@ func decodeKnowledgeRefsOptions(v vm.Value, path string) (types.KnowledgeRefsOpt
 	return out, nil
 }
 
-// DecodeInsightOptions decodes a Buzz InsightOptions, an object instance or a map, into a types.InsightOptions.
-func DecodeInsightOptions(v vm.Value) (types.InsightOptions, error) {
-	return decodeInsightOptions(v, "insightOptions")
+// DecodeHistoryMetricsOptions decodes a Buzz HistoryMetricsOptions, an object instance or a map, into a types.HistoryMetricsOptions.
+func DecodeHistoryMetricsOptions(v vm.Value) (types.HistoryMetricsOptions, error) {
+	return decodeHistoryMetricsOptions(v, "historyMetricsOptions")
 }
 
-func decodeInsightOptions(v vm.Value, path string) (types.InsightOptions, error) {
-	var out types.InsightOptions
+func decodeHistoryMetricsOptions(v vm.Value, path string) (types.HistoryMetricsOptions, error) {
+	var out types.HistoryMetricsOptions
 	fields, ok := v.MapView()
 	if !ok {
-		return out, mismatch(path, "InsightOptions", v)
+		return out, mismatch(path, "HistoryMetricsOptions", v)
 	}
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
@@ -5105,7 +5105,7 @@ func decodeInsightOptions(v vm.Value, path string) (types.InsightOptions, error)
 			}
 			out.Files = bFiles
 		default:
-			return out, unknownMember(path, "InsightOptions", key)
+			return out, unknownMember(path, "HistoryMetricsOptions", key)
 		}
 	}
 	return out, nil

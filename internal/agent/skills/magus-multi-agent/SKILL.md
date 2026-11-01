@@ -51,7 +51,7 @@ enough to be worth one{{end}}.
 - A depends-on chain is ONE worker in sequence, not two workers in turn{{if .Full}}.
   Two is two loads for one unit of work, and the second starts by rediscovering
   what the first just learned{{end}}.
-- For the rest, read the grouping lens (`{{buzz "insight"}}` through `{{tool "client"}}`,
+- For the rest, read the grouping metric (`{{buzz "grouping"}}` through `{{tool "client"}}`,
   or `grouping history` in `{{cmd "describe job"}} <job>`) and weigh each measured shape
   against the others{{if .Full}}: chained, split and solo each report the load before a
   first write and the context, wall time and collisions per group{{end}}. It reports
@@ -308,8 +308,8 @@ Read the facts:
 - `claims[].target` names the target that regenerates a path. Generated outputs have
   one integration owner and are never hand-edited by workers.
 - `depends_on` carries the owner's direct edges.
-- Affinity stays with `{{tool "client"}}` (`{{buzz "insight"}}`, read affinity). Without MCP,
-  run `{{cmd "buzz"}} -e` printing `magus\insight().affinity`.
+- Affinity stays with `{{tool "client"}}` (`{{buzz "affinity"}}`). Without MCP,
+  run `{{cmd "buzz"}} -e` printing `magus\affinity()`.
 - Use `{{cmd "refs"}} <symbol>` when two jobs may touch the same API.
 
 A read-only job has no write set, so it is outside this analysis.

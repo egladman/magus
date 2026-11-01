@@ -12,18 +12,18 @@ import (
 )
 
 // conformanceWorkspace answers the conformance lens with a fixed output, reached the way the check
-// reaches it: by runtime assertion to types.InsightAnalyzer.
+// reaches it: by runtime assertion to types.HistoryMetrics.
 type conformanceWorkspace struct {
 	hotWorkspace
-	out types.ConformanceOutput
+	out types.Conformance
 	err error
 }
 
-func (c conformanceWorkspace) Conformance(context.Context) (types.ConformanceOutput, error) {
+func (c conformanceWorkspace) Conformance(context.Context) (types.Conformance, error) {
 	return c.out, c.err
 }
 
-var _ types.InsightAnalyzer = conformanceWorkspace{}
+var _ types.HistoryMetrics = conformanceWorkspace{}
 
 type conformanceCeilingSuite struct {
 	suite.Suite
@@ -64,7 +64,7 @@ func (s *conformanceCeilingSuite) TestALensErrorIsAFailureNamingTheCause() {
 
 func (s *conformanceCeilingSuite) TestAProposalNamesTheAnchorToLower() {
 	key := types.ConformanceKey{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}
-	got := s.check(conformanceWorkspace{out: types.ConformanceOutput{
+	got := s.check(conformanceWorkspace{out: types.Conformance{
 		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
 		Rows:   []types.ConformanceRow{{Key: key, Value: 92, Propose: 70}},
 	}})
@@ -77,7 +77,7 @@ func (s *conformanceCeilingSuite) TestAProposalNamesTheAnchorToLower() {
 
 func (s *conformanceCeilingSuite) TestNothingToTightenPasses() {
 	key := types.ConformanceKey{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}
-	got := s.check(conformanceWorkspace{out: types.ConformanceOutput{
+	got := s.check(conformanceWorkspace{out: types.Conformance{
 		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
 		Rows:   []types.ConformanceRow{{Key: key, Value: 92}},
 	}})

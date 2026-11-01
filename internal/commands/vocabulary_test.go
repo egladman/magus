@@ -99,6 +99,26 @@ func TestEveryColumnSpellsTheFlag(t *testing.T) {
 	}
 }
 
+// flagUnitSuffixes are quantity units that belong on the VALUE of a cmdline.Duration
+// flag (5m, 420ms), never as a suffix of the flag's name. An Int counted in that
+// unit (--tool-ms 420) is the anti-pattern this refuses.
+var flagUnitSuffixes = []string{
+	"-ms", "-ns", "-us", "-µs",
+	"-sec", "-secs", "-second", "-seconds",
+	"-min", "-mins", "-minute", "-minutes",
+	"-hr", "-hrs", "-hour", "-hours",
+}
+
+func TestNoFlagNameEncodesAUnit(t *testing.T) {
+	for _, name := range registryFlags() {
+		for _, unit := range flagUnitSuffixes {
+			if strings.HasSuffix(name, unit) {
+				t.Errorf("flag --%s encodes unit %q in its name: use cmdline.Duration and a unit-free name (e.g. --timeout 5m), not an Int counted in that unit", name, unit)
+			}
+		}
+	}
+}
+
 func camel(flag string) string {
 	words := strings.Split(flag, "-")
 	for i := 1; i < len(words); i++ {

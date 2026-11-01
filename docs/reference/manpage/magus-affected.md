@@ -117,8 +117,8 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 **--target** *string* (default: test)
 : With --bisect: magus target to bisect
 
-**--timeout** *duration*
-: Abort if the run has not finished within this duration (e.g. 5m, 1h30m)
+**--timeout** *value*
+: Abort if the run has not finished within this duration (e.g. 5m, 1h30m). Bare numbers are minutes.
 
 **--[no-]upstream** (default: off)
 : With --graph: show dependents instead of dependencies

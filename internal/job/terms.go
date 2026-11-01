@@ -64,7 +64,7 @@ type Terms struct {
 	// Grouping is the grouping lens over the groups that wrote in the lease's projects: what
 	// splitting or chaining work there cost before. Facts for the orchestrator, like
 	// Affinity; nil when it was not read.
-	Grouping *types.GroupingOutput `json:"grouping,omitempty" yaml:"grouping,omitempty"`
+	Grouping *types.Grouping `json:"grouping,omitempty" yaml:"grouping,omitempty"`
 	// Stage is where the workspace's releases stand, from its newest tag. The zero stage is
 	// unknown and renders nothing.
 	Stage types.ReleaseStage `json:"stage" yaml:"stage"`
@@ -125,7 +125,7 @@ type TermsFacts struct {
 	RegeneratedOutside   []RegeneratedOutput
 	UnrunGates           []UnrunGate
 	Affinity             []TermsAffinity
-	Grouping             *types.GroupingOutput
+	Grouping             *types.Grouping
 	Stage                types.ReleaseStage
 	DeletionCandidates   []types.UnreferencedEntry
 	ReferencedOutside    []ReferencedFile

@@ -140,16 +140,16 @@ func (s *ConformanceSuite) TestValidateReportsEveryProblem() {
 }
 
 func (s *ConformanceSuite) TestCeilingRequestWithChecksAndABaseIsValid() {
-	s.NoError(Conformance{Checks: []ConformanceMetric{ConformanceFuncLines}, Base: "origin/main"}.Validate())
+	s.NoError(Ceiling{Checks: []ConformanceMetric{ConformanceFuncLines}, Base: "origin/main"}.Validate())
 }
 
 func (s *ConformanceSuite) TestCeilingRequestRefusesABaseWithNoChecks() {
-	s.EqualError(Conformance{Base: "origin/main"}.Validate(),
+	s.EqualError(Ceiling{Base: "origin/main"}.Validate(),
 		"base origin/main: name the checks held to a conformance ceiling")
 }
 
 func (s *ConformanceSuite) TestCeilingRequestRefusesAnUnknownCheck() {
-	s.EqualError(Conformance{Checks: []ConformanceMetric{"lines"}}.Validate(),
+	s.EqualError(Ceiling{Checks: []ConformanceMetric{"lines"}}.Validate(),
 		"checks: metric lines: want one of "+conformanceMetricList)
 }
 
@@ -170,17 +170,17 @@ func (s *ConformanceSuite) TestCeilingsPassAFileWhoseCountHeldOrDropped() {
 
 func (s *ConformanceSuite) TestCeilingsJudgeOnlyTouchedFiles() {
 	head := ceilingOutput(funcLinesSource, "a.go#F")
-	s.Empty(ConformanceCeilings(ConformanceOutput{}, head, []string{"b.go"}, []ConformanceMetric{ConformanceFuncLines}))
+	s.Empty(ConformanceCeilings(Conformance{}, head, []string{"b.go"}, []ConformanceMetric{ConformanceFuncLines}))
 }
 
 func (s *ConformanceSuite) TestCeilingsJudgeOnlyTheChecks() {
 	head := ceilingOutput(funcLinesSource, "a.go#F")
-	s.Empty(ConformanceCeilings(ConformanceOutput{}, head, []string{"a.go"}, []ConformanceMetric{ConformanceFileLines}))
+	s.Empty(ConformanceCeilings(Conformance{}, head, []string{"a.go"}, []ConformanceMetric{ConformanceFileLines}))
 }
 
 func (s *ConformanceSuite) TestCeilingsCountACloneGroupInEachMembersFile() {
 	head := ceilingOutput(cloneSource, "a.go#F, b.go#G")
-	got := ConformanceCeilings(ConformanceOutput{}, head, []string{"a.go", "b.go"}, []ConformanceMetric{ConformanceCloneTokens})
+	got := ConformanceCeilings(Conformance{}, head, []string{"a.go", "b.go"}, []ConformanceMetric{ConformanceCloneTokens})
 	s.Len(got, 2)
 	s.Equal("a.go", got[0].File)
 	s.Equal("b.go", got[1].File)
@@ -188,17 +188,17 @@ func (s *ConformanceSuite) TestCeilingsCountACloneGroupInEachMembersFile() {
 
 func (s *ConformanceSuite) TestCeilingsCountAPackageInEveryFileDirectlyInside() {
 	head := ceilingOutput(depFanoutSource, "internal/a")
-	got := ConformanceCeilings(ConformanceOutput{}, head, []string{"internal/a/a.go", "internal/a/b/b.go"},
+	got := ConformanceCeilings(Conformance{}, head, []string{"internal/a/a.go", "internal/a/b/b.go"},
 		[]ConformanceMetric{ConformanceDepFanout})
 	s.Len(got, 1)
 	s.Equal("internal/a/a.go", got[0].File)
 }
 
 // ceilingOutput is a lens answer with one row for k holding a violation per id.
-func ceilingOutput(k ConformanceKey, ids ...string) ConformanceOutput {
+func ceilingOutput(k ConformanceKey, ids ...string) Conformance {
 	row := ConformanceRow{Key: k}
 	for _, id := range ids {
 		row.Violations = append(row.Violations, ConformanceItem{ID: id})
 	}
-	return ConformanceOutput{Rows: []ConformanceRow{row}}
+	return Conformance{Rows: []ConformanceRow{row}}
 }

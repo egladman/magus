@@ -120,7 +120,7 @@ func lensFixtureOptions() types.ConformanceOptions {
 	return o
 }
 
-func findConformanceRow(t *testing.T, out types.ConformanceOutput, m types.ConformanceMetric, p types.ConformancePopulation, scope string) types.ConformanceRow {
+func findConformanceRow(t *testing.T, out types.Conformance, m types.ConformanceMetric, p types.ConformancePopulation, scope string) types.ConformanceRow {
 	t.Helper()
 	for _, r := range out.Rows {
 		if r.Key == (types.ConformanceKey{Metric: m, Population: p, Scope: scope}) {

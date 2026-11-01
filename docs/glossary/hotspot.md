@@ -23,12 +23,12 @@ magus\log.info(magus\insightMarkdown());
 
 In the docs:
 
-- [FileHotspot](../reference/api/insight/v1alpha1/insight.md#filehotspot)
+- [FileHotspot](../reference/api/historymetrics/v1alpha1/historymetrics.md#filehotspot)
 
 <!-- END GLOSSARY USAGE -->
 
 ## See also
 
-- [Insight](../concepts/knowledge/insight.md)
-- [Insight](insight.md)
+- [History metrics](../concepts/knowledge/historymetrics.md)
+- [History metrics](historymetrics.md)
 - [Trend](trend.md)

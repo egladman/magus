@@ -18,7 +18,7 @@ every package.{{else}}Gather architecture evidence from magus: holds package imp
 | who calls this symbol | `{{cmd "explain"}} '<symbol id>'` | `called by` symbols and `referenced by` files |
 | what a file holds | `{{cmd "explain"}} <path/to/file>` | `defines (N)` |
 | which packages are central | `{{cmd "graph stats"}} --symbols --kind dir` | the `IN` column: fan-in |
-| how churned, owned or duplicated | `{{buzz "insight"}}()` | `hotspots`, `ownership`, `duplication` |
+| how churned, owned or duplicated | `{{buzz "hotspots"}}()` / `{{buzz "ownership"}}()` / `{{buzz "duplication"}}()` | each metric |
 | what breaks if I change a symbol | `{{cmd "refs"}} <symbol> --occurrences` | `N occurrence(s) in M file(s)` |
 | what a changeset reaches | `{{cmd "affected"}} --impact` | the seed and affected projects |{{else}}Question: run; read
 - what X imports; what imports X: `{{cmd "explain"}} dir:<path>`; `imports` and `imported by` edges
@@ -29,7 +29,7 @@ every package.{{else}}Gather architecture evidence from magus: holds package imp
 - who calls symbol: `{{cmd "explain"}} '<symbol id>'`; `called by` symbols, `referenced by` files
 - what file holds: `{{cmd "explain"}} <path/to/file>`; `defines (N)`
 - which packages central: `{{cmd "graph stats"}} --symbols --kind dir`; `IN` column: fan-in
-- how churned, owned, duplicated: `{{buzz "insight"}}()`; `hotspots`, `ownership`, `duplication`
+- how churned, owned, duplicated: `{{buzz "hotspots"}}()` / `{{buzz "ownership"}}()` / `{{buzz "duplication"}}()`
 - what breaks if I change symbol: `{{cmd "refs"}} <symbol> --occurrences`; `N occurrence(s) in M file(s)`
 - what changeset reaches: `{{cmd "affected"}} --impact`; seed and affected projects{{end}}
 
@@ -167,8 +167,8 @@ No layers declared -> say so; do not invent from directory names.{{end}}{{if .Fu
 {{if .Full}}- The `N nodes reach this` line on an `{{cmd "explain"}}` card saturates: a private
   helper with one caller reports over a thousand. It does not size a migration;
   `refs --occurrences` does.{{else}}- `N nodes reach this` line on `{{cmd "explain"}}` card saturates: one-caller private helper reports over a thousand. Does not size migration; `refs --occurrences` does.{{end}}
-{{if .Full}}- `affinity` in `{{buzz "insight"}}` pairs PROJECTS, so inside one project it sees
-  nothing.{{else}}- `affinity` in `{{buzz "insight"}}` pairs projects -> inside one project sees nothing.{{end}}
+{{if .Full}}- `{{buzz "affinity"}}` pairs PROJECTS, so inside one project it sees
+  nothing.{{else}}- `{{buzz "affinity"}}` pairs projects -> inside one project sees nothing.{{end}}
 {{if .Full}}- `hotspots` ranks generated files too. Run `{{cmd "describe file"}} <path>` before
   calling a hotspot a design problem.{{else}}- `hotspots` ranks generated files too: `{{cmd "describe file"}} <path>` before calling hotspot design problem.{{end}}
 {{if .Full}}- `kind=owner` exists only where the repo commits a CODEOWNERS file. Otherwise use
@@ -222,8 +222,8 @@ already does the job:
 {{else}}Before proposing new code, package, abstraction: show nothing does job already:{{end}}
 {{if .Full}}1. `{{cmd "query"}} "kind=symbol <name>"` for each name the new code would need. Try
    synonyms; a second implementation under another name is the common case.{{else}}1. `{{cmd "query"}} "kind=symbol <name>"` for each name new code would need. Try synonyms: duplicates under other names common.{{end}}
-{{if .Full}}2. Read the `duplication` lens of `{{buzz "insight"}}()`: functions that call the same
-   symbols in the same proportions, which is what copied logic looks like.{{else}}2. Read `duplication` lens of `{{buzz "insight"}}()`: functions calling same symbols, same proportions: copied logic.{{end}}
+{{if .Full}}2. Read `{{buzz "duplication"}}()`: functions that call the same
+   symbols in the same proportions, which is what copied logic looks like.{{else}}2. Read `{{buzz "duplication"}}()`: functions calling same symbols, same proportions: copied logic.{{end}}
 {{if .Full}}3. Place new code where the `imports` of `{{buzz "dir"}}` already cover what it
    needs, so the change adds no import edge.{{else}}3. Place new code where `imports` of `{{buzz "dir"}}` already cover its needs -> no new import edge.
 State observed convention in proposal, plus command showing it.{{end}}{{if .Full}}

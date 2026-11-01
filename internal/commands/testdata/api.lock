@@ -311,7 +311,8 @@ flag shell/agent
 flag shell/agent-name
 flag shell/call-background
 flag shell/call-digest
-flag shell/call-timeout-ms
+flag shell/call-timeout
+flag shell/duration
 flag shell/event
 flag shell/lease
 flag shell/message
@@ -325,7 +326,6 @@ flag shell/path
 flag shell/renders-ask
 flag shell/result-digest
 flag shell/session
-flag shell/tool-ms
 flag shell/transcript
 flag shell/transport
 flag status/W

@@ -263,65 +263,64 @@ func raiseOptions(cause any, url string) types.RaiseOptions {
 // recordingAnalyzer is a workspace that can answer the insight lenses, recording the
 // options it was handed so a test can prove they arrived.
 type recordingAnalyzer struct {
-	groupingLens types.GroupingOutput
+	groupingLens types.Grouping
 	types.WorkspaceRepository
-	got             types.InsightOptions
+	got             types.HistoryMetricsOptions
 	failTrend       bool
 	failConformance error
-	conformanceLens types.ConformanceOutput
+	conformanceLens types.Conformance
 }
 
-func (f *recordingAnalyzer) Hotspots(_ context.Context, o types.InsightOptions) (types.HotspotOutput, error) {
+func (f *recordingAnalyzer) Hotspots(_ context.Context, o types.HistoryMetricsOptions) (types.Hotspots, error) {
 	f.got = o
-	return types.HotspotOutput{Definition: "hot"}, nil
+	return types.Hotspots{Definition: "hot"}, nil
 }
-func (f *recordingAnalyzer) Affinity(context.Context, types.InsightOptions) (types.AffinityOutput, error) {
-	return types.AffinityOutput{}, nil
+func (f *recordingAnalyzer) Affinity(_ context.Context, o types.HistoryMetricsOptions) (types.Affinity, error) {
+	f.got = o
+	return types.Affinity{}, nil
 }
-func (f *recordingAnalyzer) Ownership(context.Context, types.InsightOptions) (types.OwnershipOutput, error) {
-	return types.OwnershipOutput{}, nil
+func (f *recordingAnalyzer) Ownership(context.Context, types.HistoryMetricsOptions) (types.Ownership, error) {
+	return types.Ownership{}, nil
 }
-func (f *recordingAnalyzer) Trend(context.Context, types.InsightOptions) (types.TrendOutput, error) {
+func (f *recordingAnalyzer) Trend(context.Context, types.HistoryMetricsOptions) (types.Trend, error) {
 	if f.failTrend {
-		return types.TrendOutput{}, errors.New("no history")
+		return types.Trend{}, errors.New("no history")
 	}
-	return types.TrendOutput{}, nil
+	return types.Trend{}, nil
 }
-func (f *recordingAnalyzer) Volatility(context.Context) (types.VolatilityReport, error) {
-	return types.VolatilityReport{}, errors.New("no run history")
+func (f *recordingAnalyzer) Volatility(context.Context) (types.Volatility, error) {
+	return types.Volatility{}, errors.New("no run history")
 }
-func (f *recordingAnalyzer) Unreferenced(context.Context) (types.UnreferencedOutput, error) {
-	return types.UnreferencedOutput{}, errors.New("no symbol index")
-}
-
-func (f *recordingAnalyzer) Duplication(context.Context) (types.DuplicationOutput, error) {
-	return types.DuplicationOutput{}, errors.New("no symbol index")
+func (f *recordingAnalyzer) Unreferenced(context.Context) (types.Unreferenced, error) {
+	return types.Unreferenced{}, errors.New("no symbol index")
 }
 
-func (f *recordingAnalyzer) Conformance(context.Context) (types.ConformanceOutput, error) {
+func (f *recordingAnalyzer) Duplication(context.Context) (types.Duplication, error) {
+	return types.Duplication{}, errors.New("no symbol index")
+}
+
+func (f *recordingAnalyzer) Conformance(context.Context) (types.Conformance, error) {
 	return f.conformanceLens, f.failConformance
 }
 
-func (f *recordingAnalyzer) ModelTierLens(context.Context) (types.ModelTierOutput, error) {
-	return types.ModelTierOutput{}, errors.New("no run history")
+func (f *recordingAnalyzer) ModelTierLens(context.Context) (types.ModelTiers, error) {
+	return types.ModelTiers{}, errors.New("no run history")
 }
 
-func (f *recordingAnalyzer) GroupingLens(context.Context) (types.GroupingOutput, error) {
+func (f *recordingAnalyzer) GroupingLens(context.Context) (types.Grouping, error) {
 	return f.groupingLens, nil
 }
 
-func TestInsightIsServedInProcess(t *testing.T) {
+func TestAffinityIsServedInProcess(t *testing.T) {
 	t.Parallel()
 
-	a := &recordingAnalyzer{groupingLens: types.GroupingOutput{Definition: types.GroupingDefinition}}
+	a := &recordingAnalyzer{}
 	ctx := types.WithWorkspace(t.Context(), a)
 
-	report, err := MagusInsight(ctx, types.InsightOptions{})
-	require.NoError(t, err, "a workspace that analyses answers here, with no subprocess")
-	assert.Equal(t, "hot", report.Hotspots.Definition)
-	assert.Equal(t, types.GroupingDefinition, report.Grouping.Definition, "the report carries the grouping lens")
-	assert.Equal(t, 500, a.got.Commits, "the window the removed subcommand defaulted to")
-	assert.True(t, a.got.Files, "the report always carries the per-file ranking")
+	got, err := MagusAffinity(ctx, types.HistoryMetricsOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, types.Affinity{}, got)
+	assert.Equal(t, 500, a.got.Commits)
 }
 
 // cannedToolReporter is a workspace that reports its tools, so magus\describe.tool() can be shown
@@ -349,61 +348,22 @@ func TestMagusToolsIsServedInProcess(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-// TestInsightNeedsAWorkspace pins the cost of removing the subcommand: there is no
-// longer a nested magus to fall back to, so a caller with no workspace on the
-// context is told so rather than silently getting a different answer.
-func TestInsightNeedsAWorkspace(t *testing.T) {
+func TestAffinityNeedsAWorkspace(t *testing.T) {
 	t.Parallel()
-
-	_, err := MagusInsight(t.Context(), types.InsightOptions{})
-	require.Error(t, err, "no workspace on the context is an error, not a fork")
-}
-
-// TestInsightMapsTheOptionsItTakes proves the window reaches the analyzer, rather
-// than only checking the record the caller passed.
-func TestInsightMapsTheOptionsItTakes(t *testing.T) {
-	t.Parallel()
-
-	a := &recordingAnalyzer{}
-	ctx := types.WithWorkspace(t.Context(), a)
-	_, err := MagusInsight(ctx, types.InsightOptions{Commits: 42, Since: "90d"})
-	require.NoError(t, err)
-	assert.Equal(t, types.InsightOptions{Commits: 42, Since: "90d", Files: true}, a.got) // Files defaults on, as the CLI did
-
-	_, err = MagusInsight(ctx, types.InsightOptions{Commits: -1})
-	require.ErrorContains(t, err, "commits must not be negative")
-}
-
-// TestInsightReportKeepsTheBestEffortSections pins the rule the CLI kept: a lens
-// whose source is missing omits its section rather than failing the whole report.
-func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
-	t.Parallel()
-
-	a := &recordingAnalyzer{}
-	report, err := buildInsightReport(t.Context(), a, types.InsightOptions{Commits: 500})
-	require.NoError(t, err, "volatility and unreferenced failing must not fail the report")
-	assert.Equal(t, "hot", report.Hotspots.Definition)
-
-	// A required lens failing IS an error: the four VCS lenses are the report.
-	a.failTrend = true
-	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
+	_, err := MagusAffinity(t.Context(), types.HistoryMetricsOptions{})
 	require.Error(t, err)
 }
 
-// TestInsightReportCarriesConformanceAndItsMisconfiguration pins that the conformance lens rides the
-// report, and that a configuration it cannot honor fails the report rather than hiding as a
-// clean section.
-func TestInsightReportCarriesConformanceAndItsMisconfiguration(t *testing.T) {
+func TestAffinityMapsTheOptionsItTakes(t *testing.T) {
 	t.Parallel()
-
-	a := &recordingAnalyzer{conformanceLens: types.ConformanceOutput{Definition: "conformance"}}
-	report, err := buildInsightReport(t.Context(), a, types.InsightOptions{})
+	a := &recordingAnalyzer{}
+	ctx := types.WithWorkspace(t.Context(), a)
+	_, err := MagusAffinity(ctx, types.HistoryMetricsOptions{Commits: 42, Since: "90d"})
 	require.NoError(t, err)
-	assert.Equal(t, "conformance", report.Conformance.Definition)
+	assert.Equal(t, types.HistoryMetricsOptions{Commits: 42, Since: "90d"}, a.got)
 
-	a.failConformance = errors.New("conformance: min_sample 0: want at least 1")
-	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
-	assert.ErrorContains(t, err, "min_sample")
+	_, err = MagusAffinity(ctx, types.HistoryMetricsOptions{Commits: -1})
+	require.ErrorContains(t, err, "commits must not be negative")
 }
 
 // ledgerWorkspace is a workspace that can back a job Store: it

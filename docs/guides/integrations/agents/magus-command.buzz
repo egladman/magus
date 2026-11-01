@@ -116,7 +116,7 @@
 // Where no prompt can happen it renders as a deny, never an allow.
 // promptBlocker names those cells. systemMessage tells the person why
 // and what to type at their terminal.
-// magus-guard-template: 35
+// magus-guard-template: 36
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
@@ -299,8 +299,8 @@ fun callFlags(event: any?) > [str] {
     if (timeout is int) { ms = timeout as int; }
     if (timeout is double) { ms = std\toInt(timeout as double); }
     if (ms > 0) {
-        facts.append("--call-timeout-ms");
-        facts.append("{ms}");
+        facts.append("--call-timeout");
+        facts.append("{ms}ms");
     }
     return facts;
 }

@@ -254,20 +254,20 @@ var boundaryTypes = []boundaryType{
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
 	{Name: "CleanReport", Type: reflect.TypeFor[types.CleanReport](), RuntimeObject: true},
-	// magus.insight's bundle, leaf-first. Element names are not uniform on purpose:
+	// History metrics, leaf-first. Element names are not uniform on purpose:
 	// *Entry only where the bare noun collides with the bundle's own name. These are
 	// public Buzz names magusfiles annotate with, so do not tidy them.
 	{Name: "Node", Type: reflect.TypeFor[types.Node](), RuntimeObject: true},
 	{Name: "FileHotspot", Type: reflect.TypeFor[types.FileHotspot](), RuntimeObject: true},
-	{Name: "Hotspots", Type: reflect.TypeFor[types.HotspotOutput](), RuntimeObject: true},
+	{Name: "Hotspots", Type: reflect.TypeFor[types.Hotspots](), RuntimeObject: true},
 	{Name: "CoChange", Type: reflect.TypeFor[types.CoChange](), RuntimeObject: true},
-	{Name: "Affinity", Type: reflect.TypeFor[types.AffinityOutput](), RuntimeObject: true},
+	{Name: "Affinity", Type: reflect.TypeFor[types.Affinity](), RuntimeObject: true},
 	{Name: "OwnershipEntry", Type: reflect.TypeFor[types.OwnershipEntry](), RuntimeObject: true},
-	{Name: "Ownership", Type: reflect.TypeFor[types.OwnershipOutput](), RuntimeObject: true},
+	{Name: "Ownership", Type: reflect.TypeFor[types.Ownership](), RuntimeObject: true},
 	{Name: "TrendEntry", Type: reflect.TypeFor[types.TrendEntry](), RuntimeObject: true},
-	{Name: "Trend", Type: reflect.TypeFor[types.TrendOutput](), RuntimeObject: true},
+	{Name: "Trend", Type: reflect.TypeFor[types.Trend](), RuntimeObject: true},
 	{Name: "VolatilityTarget", Type: reflect.TypeFor[types.VolatilityTarget](), RuntimeObject: true},
-	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},
+	{Name: "Volatility", Type: reflect.TypeFor[types.Volatility](), RuntimeObject: true},
 	// Graph reads, leaf-first. magus\query, explain, path, refs, and stats return these.
 	// KnowledgeGodNode.in is a Buzz keyword; the mirror emits it as a free identifier.
 	{Name: "KnowledgeTermScore", Type: reflect.TypeFor[types.KnowledgeTermScore](), RuntimeObject: true},
@@ -307,7 +307,7 @@ var boundaryTypes = []boundaryType{
 	// scoped to its module.
 	{Name: "QueryOptions", Type: reflect.TypeFor[types.KnowledgeQueryOptions]()},
 	{Name: "RefsOptions", Type: reflect.TypeFor[types.KnowledgeRefsOptions]()},
-	{Name: "InsightOptions", Type: reflect.TypeFor[types.InsightOptions]()},
+	{Name: "HistoryMetricsOptions", Type: reflect.TypeFor[types.HistoryMetricsOptions]()},
 	{Name: "ExecOptions", Type: reflect.TypeFor[types.ExecOptions]()},
 	{Name: "CommandOptions", Module: "magus", Type: reflect.TypeFor[types.MagusCommandOptions]()},
 	{Name: "CommandOptions", Module: "vcs", Type: reflect.TypeFor[types.VCSCommandOptions]()},
@@ -328,28 +328,25 @@ var boundaryTypes = []boundaryType{
 	{Name: "KnowledgeIndexCause", Type: reflect.TypeFor[types.KnowledgeIndexCause](), RuntimeObject: true},
 	{Name: "KnowledgeAnswer", Type: reflect.TypeFor[types.KnowledgeAnswer](), RuntimeObject: true},
 	{Name: "UnreferencedEntry", Type: reflect.TypeFor[types.UnreferencedEntry](), RuntimeObject: true},
-	{Name: "Unreferenced", Type: reflect.TypeFor[types.UnreferencedOutput](), RuntimeObject: true},
+	{Name: "Unreferenced", Type: reflect.TypeFor[types.Unreferenced](), RuntimeObject: true},
 	{Name: "DuplicationSite", Type: reflect.TypeFor[types.DuplicationSite](), RuntimeObject: true},
 	{Name: "DuplicationGroup", Type: reflect.TypeFor[types.DuplicationGroup](), RuntimeObject: true},
 	{Name: "DuplicationHistory", Type: reflect.TypeFor[types.DuplicationHistory](), RuntimeObject: true},
-	{Name: "Duplication", Type: reflect.TypeFor[types.DuplicationOutput](), RuntimeObject: true},
+	{Name: "Duplication", Type: reflect.TypeFor[types.Duplication](), RuntimeObject: true},
 	// The conformance lens, leaf first: ConformanceRow carries a ConformanceKey and [ConformanceItem], and
 	// Conformance carries [ConformanceRow], [ConformanceCeiling] and [ConformanceUnmeasured].
-	// InsightReport.conformance is a Conformance.
+	// Conformance rides the history-metrics board and magus\conformance.
 	{Name: "ConformanceKey", Type: reflect.TypeFor[types.ConformanceKey](), RuntimeObject: true},
 	{Name: "ConformanceItem", Type: reflect.TypeFor[types.ConformanceItem](), RuntimeObject: true},
 	{Name: "ConformanceCeiling", Type: reflect.TypeFor[types.ConformanceCeiling](), RuntimeObject: true},
 	{Name: "ConformanceUnmeasured", Type: reflect.TypeFor[types.ConformanceUnmeasured](), RuntimeObject: true},
 	{Name: "ConformanceRow", Type: reflect.TypeFor[types.ConformanceRow](), RuntimeObject: true},
-	{Name: "Conformance", Type: reflect.TypeFor[types.ConformanceOutput](), RuntimeObject: true},
-	// The model-tier lens: InsightReport.modelTiers is a ModelTierOutput, a list of records.
+	{Name: "Conformance", Type: reflect.TypeFor[types.Conformance](), RuntimeObject: true},
 	// There is deliberately no ModelTier object: that name is the workspace's own Buzz enum.
 	{Name: "ModelTierRecord", Type: reflect.TypeFor[types.ModelTierRecord](), RuntimeObject: true},
-	{Name: "ModelTierOutput", Type: reflect.TypeFor[types.ModelTierOutput](), RuntimeObject: true},
-	// The grouping lens: InsightReport.grouping is a Grouping, a list of records.
+	{Name: "ModelTiers", Type: reflect.TypeFor[types.ModelTiers](), RuntimeObject: true},
 	{Name: "GroupingRecord", Type: reflect.TypeFor[types.GroupingRecord](), RuntimeObject: true},
-	{Name: "Grouping", Type: reflect.TypeFor[types.GroupingOutput](), RuntimeObject: true},
-	{Name: "InsightReport", Type: reflect.TypeFor[types.InsightReport](), RuntimeObject: true},
+	{Name: "Grouping", Type: reflect.TypeFor[types.Grouping](), RuntimeObject: true},
 	{Name: "ImpactCoverage", Type: reflect.TypeFor[types.ImpactCoverage](), RuntimeObject: true},
 	{Name: "ImpactSymbol", Type: reflect.TypeFor[types.ImpactSymbol](), RuntimeObject: true},
 	{Name: "ImpactFileCoverage", Type: reflect.TypeFor[types.ImpactFileCoverage](), RuntimeObject: true},

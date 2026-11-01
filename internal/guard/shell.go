@@ -166,6 +166,9 @@ const (
 	denyRuleBriefCommand denyRuleName = "brief-command"
 	// Any graded call, shell line or write; see internal/guard/architecture.go.
 	denyArchitectureUnbriefed denyRuleName = "architecture-unbriefed"
+	// A graded call that picks magus `ci` or the host's CI/CD while the person's
+	// bare word "ci" is still unresolved; see internal/guard/ambiguous_ci_word.go.
+	denyRuleAmbiguousCIWord denyRuleName = "ambiguous-ci-word"
 	// A write turning vcs off, which removes the guard's approval authority; see
 	// internal/guard/write.go.
 	denyRuleVCSOffSwitch denyRuleName = "vcs-off-switch"

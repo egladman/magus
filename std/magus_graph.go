@@ -343,7 +343,7 @@ func reportMap(report any) (map[string]any, error) {
 // MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish
 // under knowledge.conformance's gates and dep-fanout ceilings, and each declared index's
 // freshness, judged as judgedGraph describes. Generated files are never counted. The answer
-// is a PrecedentReport as a map.
+// is a Holds as a map.
 func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 	ig, err := judgedGraph(ctx, "precedents")
 	if err != nil {
@@ -354,22 +354,22 @@ func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 		return nil, fmt.Errorf("magus\\precedents: %w", err)
 	}
 	conformance.Generated = ig.generated
-	return reportMap(types.PrecedentReport{
-		Precedents: ig.kg.Precedents(knowledge.PrecedentOptions{Generated: ig.generated, Conformance: conformance}),
-		Indexes:    ig.indexes,
+	return reportMap(types.Holds{
+		Holds:   ig.kg.Precedents(knowledge.PrecedentOptions{Generated: ig.generated, Conformance: conformance}),
+		Indexes: ig.indexes,
 	})
 }
 
 // conformanceReport is magus\conformance's answer: the lens beside the freshness of the indexes it
 // was drawn from, flattened so a script reads both as one map.
 type conformanceReport struct {
-	types.ConformanceOutput
+	types.Conformance
 	Indexes []types.SymbolIndexStatus `json:"indexes"`
 }
 
 // ceilingWorkspace is the part of *magus.Magus that judges a change against its base revision.
 type ceilingWorkspace interface {
-	ConformanceCeilings(ctx context.Context, c types.Conformance, head types.ConformanceOutput) (types.ConformanceOutput, error)
+	ConformanceCeilings(ctx context.Context, c types.Ceiling, head types.Conformance) (types.Conformance, error)
 	MeasureConformanceBase(ctx context.Context, base string) (string, error)
 }
 
@@ -396,9 +396,9 @@ func MagusConformanceBase(ctx context.Context, base string) (string, error) {
 // knowledge.conformance, and each declared index's freshness, judged as judgedGraph describes.
 // Generated files are never counted. With a base it adds the ceilings checks crossed since
 // it (ConformanceCeilings). It writes nothing in the workspace. The answer is a
-// ConformanceOutput with an indexes list, as a map.
+// Conformance with an indexes list, as a map.
 func MagusConformance(ctx context.Context, checks []string, base string) (map[string]any, error) {
-	c := types.Conformance{Base: base}
+	c := types.Ceiling{Base: base}
 	for _, m := range checks {
 		c.Checks = append(c.Checks, types.ConformanceMetric(m))
 	}
@@ -425,12 +425,12 @@ func MagusConformance(ctx context.Context, checks []string, base string) (map[st
 			return nil, fmt.Errorf("magus\\conformance: %w", err)
 		}
 	}
-	return reportMap(conformanceReport{ConformanceOutput: out, Indexes: ig.indexes})
+	return reportMap(conformanceReport{Conformance: out, Indexes: ig.indexes})
 }
 
 // MagusSymbols backs magus\symbols: every declaration in the merged symbol indexes with its
 // doc comment, and each declared index's freshness, judged as judgedGraph describes. Test and
-// generated files are never listed. The answer is a SymbolReport as a map.
+// generated files are never listed. The answer is a Symbols as a map.
 func MagusSymbols(ctx context.Context) (map[string]any, error) {
 	ig, err := judgedGraph(ctx, "symbols")
 	if err != nil {
@@ -441,7 +441,7 @@ func MagusSymbols(ctx context.Context) (map[string]any, error) {
 		// No symbols reads as an empty list, never null.
 		decls = []types.SymbolDecl{}
 	}
-	return reportMap(types.SymbolReport{Symbols: decls, Indexes: ig.indexes})
+	return reportMap(types.Symbols{Symbols: decls, Indexes: ig.indexes})
 }
 
 // MagusDir backs magus\dir: one workspace directory as a Dir. dir nodes for Go packages

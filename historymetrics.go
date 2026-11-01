@@ -1,0 +1,349 @@
+package magus
+
+import (
+	"context"
+	"fmt"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/ci/volatility"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/types"
+)
+
+// Both the magus\ Buzz module and the client MCP tool
+// reach these lenses through a runtime type assertion on types.HistoryMetrics. This
+// makes dropping or renaming one a COMPILE error here rather than a "workspace does
+// not support history-metric analysis" at the call site, which reads as a workspace problem.
+var _ types.HistoryMetrics = (*Magus)(nil)
+
+// historyMetricsScan defaults opts.Dir to the workspace root and runs the shared
+// history scan every history-metric lens aggregates from.
+func (m *Magus) historyMetricsScan(ctx context.Context, opts *types.HistoryMetricsOptions) ([]project.ScannedCommit, error) {
+	if opts.Dir == "" {
+		opts.Dir = m.ws.Root
+	}
+	return project.Scan(ctx, m.ws, opts.Dir, opts.Commits, opts.Since)
+}
+
+// Hotspots is the churn × complexity lens. The project view is the dependency graph
+// heat-colored by churn (with authors, recency, blast radius, and CI duration on each
+// node); --files ranks individual files by edit frequency weighted by complexity.
+func (m *Magus) Hotspots(ctx context.Context, opts types.HistoryMetricsOptions) (types.Hotspots, error) {
+	scan, err := m.historyMetricsScan(ctx, &opts)
+	if err != nil {
+		return types.Hotspots{}, err
+	}
+	g, err := m.Graph()
+	if err != nil {
+		return types.Hotspots{}, err
+	}
+	// Pull per-project CI duration onto the nodes (the "× CI cost" signal) when a
+	// history file is configured; best-effort, silently skipped when unavailable.
+	compose := []ComposeOption{WithGraphInput(g)}
+	if path := m.cfg.HistoryPath; path != "" {
+		var hist forecast.History
+		if err := hist.Load(ctx, path); err == nil {
+			compose = append(compose, WithGraphHistory(&hist, "ci"))
+		}
+	}
+	out := ComposeGraph(m, compose...)
+	stats := project.ProjectStats(scan)
+	for i := range out.Nodes {
+		st, ok := stats[out.Nodes[i].Path]
+		if !ok {
+			continue
+		}
+		out.Nodes[i].Churn = st.Commits
+		out.Nodes[i].Authors = st.Authors
+		if !st.Last.IsZero() {
+			last := st.Last
+			out.Nodes[i].LastCommit = &last
+		}
+	}
+	res := types.Hotspots{
+		Definition: types.HotspotDefinition,
+		Commits:    opts.Commits,
+		Since:      opts.Since,
+		Nodes:      out.Nodes,
+	}
+	if opts.Files {
+		res.Files = project.FileHotspots(scan, func(rel string) int {
+			return project.Complexity(filepath.Join(m.ws.Root, rel))
+		})
+	}
+	return res, nil
+}
+
+// Affinity is the temporal-coupling lens: projects that change together, with the
+// pairs that lack any declared dependency between them flagged as hidden affinity.
+func (m *Magus) Affinity(ctx context.Context, opts types.HistoryMetricsOptions) (types.Affinity, error) {
+	scan, err := m.historyMetricsScan(ctx, &opts)
+	if err != nil {
+		return types.Affinity{}, err
+	}
+	pairs := project.Affinity(scan)
+	declared := m.declaredDeps()
+	for i := range pairs {
+		pairs[i].AName = m.projectDisplayName(pairs[i].A)
+		pairs[i].BName = m.projectDisplayName(pairs[i].B)
+		if !declared[pairs[i].A][pairs[i].B] && !declared[pairs[i].B][pairs[i].A] {
+			pairs[i].Hidden = true
+		}
+	}
+	return types.Affinity{
+		Definition: types.AffinityDefinition,
+		Commits:    opts.Commits,
+		Since:      opts.Since,
+		Pairs:      pairs,
+	}, nil
+}
+
+func (m *Magus) projectDisplayName(path string) string {
+	if p := m.Get(path); p != nil {
+		return types.ProjectDisplayName(p.Path, p.Name, p.Dir)
+	}
+	return types.ProjectLabel(path, "")
+}
+
+// declaredDeps returns each project's direct dependency set (both directions are
+// looked up by the affinity lens to decide whether a co-change pair is hidden).
+func (m *Magus) declaredDeps() map[string]map[string]bool {
+	out := make(map[string]map[string]bool, len(m.ws.Projects))
+	for _, p := range m.All() {
+		set := make(map[string]bool, len(p.DependsOn))
+		for _, d := range p.DependsOn {
+			set[d] = true
+		}
+		out[p.Path] = set
+	}
+	return out
+}
+
+// Ownership is the knowledge-risk lens: author concentration, bus factor, and
+// abandonment (projects gone quiet in the recent half of the window).
+func (m *Magus) Ownership(ctx context.Context, opts types.HistoryMetricsOptions) (types.Ownership, error) {
+	scan, err := m.historyMetricsScan(ctx, &opts)
+	if err != nil {
+		return types.Ownership{}, err
+	}
+	projects := project.Ownership(scan, project.Midpoint(scan))
+	for i := range projects {
+		projects[i].Name = m.projectDisplayName(projects[i].Path)
+	}
+	return types.Ownership{
+		Definition: types.OwnershipDefinition,
+		Commits:    opts.Commits,
+		Since:      opts.Since,
+		Projects:   projects,
+	}, nil
+}
+
+// Volatility is the run-outcome lens: each (project, target) pair's recent pass/fail record
+// scored by its Wilson lower bound, flagged volatile at or above the configured threshold.
+// Unlike the git-history lenses it reads the shared runtime-history file (config.HistoryPath),
+// not a commit scan, so it is workspace-wide and takes no HistoryMetricsOptions window.
+func (m *Magus) Volatility(ctx context.Context) (types.Volatility, error) {
+	return volatility.BuildReport(ctx, m.cfg.HistoryPath, m.volatilityConfig())
+}
+
+// ModelTierLens is the job-history lens: what each model tier achieved on each kind of job,
+// from the outcomes the job store recorded in the history file. It reports; a person
+// changes a tier by editing the declaration or matrix the doctor check names.
+//
+// Not named ModelTiers, which is the accessor for the workspace's declaration. A workspace
+// with no recorded outcome gets no rows and the definition, not an error.
+func (m *Magus) ModelTierLens(ctx context.Context) (types.ModelTiers, error) {
+	out := types.ModelTiers{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}
+	if m.cfg.HistoryPath == "" {
+		return out, nil
+	}
+	var hist forecast.History
+	if err := hist.Load(ctx, m.cfg.HistoryPath); err != nil {
+		return types.ModelTiers{}, err
+	}
+	out.Rows = job.ModelTierRecords(hist.Jobs, m.ModelTiers(ctx))
+	return out, nil
+}
+
+// GroupingLens is the other job-history lens: what each grouping shape cost, over every
+// recorded outcome. A workspace with no history file has no outcome, so every shape is unknown.
+func (m *Magus) GroupingLens(ctx context.Context) (types.Grouping, error) {
+	var hist forecast.History
+	if m.cfg.HistoryPath != "" {
+		if err := hist.Load(ctx, m.cfg.HistoryPath); err != nil {
+			return types.Grouping{}, err
+		}
+	}
+	return job.GroupingRecords(hist.Jobs, nil), nil
+}
+
+// Unreferenced is the knowledge-graph lens: code symbols this workspace defines that
+// nothing in it names. Like Volatility it takes no window (it reads the graph, not a
+// commit scan), so it is workspace-wide.
+//
+// The result carries a coverage verdict alongside the list, and that pairing is the whole
+// design. A project whose symbol index was never built contributes no symbols, so its
+// unreferenced code would render as a clean report; without the verdict, the lens would
+// be most reassuring exactly where it knows least.
+func (m *Magus) Unreferenced(ctx context.Context) (types.Unreferenced, error) {
+	g, err := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	if err != nil {
+		return types.Unreferenced{}, err
+	}
+	syms := g.Unreferenced()
+	// Gaps matter whatever the list length: a long list from a half-indexed workspace is
+	// as misleading as an empty one, since the projects it omits are invisible either way.
+	gaps, probed := m.SymbolGaps(ctx)
+	var reason types.KnowledgeUnknownReason
+	if !probed {
+		reason = types.ReasonCoverageUnknown
+	}
+	return types.Unreferenced{
+		Definition: types.UnreferencedDefinition,
+		Symbols:    syms,
+		Answer:     types.ClassifyAnswer(len(syms) > 0, reason, gaps),
+	}, nil
+}
+
+// Duplication is the copied-logic lens, over the same symbol graph and under the same
+// coverage verdict as Unreferenced: a workspace half of whose projects were never indexed
+// shows half its duplication, and the answer says so rather than reading as clean.
+func (m *Magus) Duplication(ctx context.Context) (types.Duplication, error) {
+	g, err := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	if err != nil {
+		return types.Duplication{}, err
+	}
+	groups := g.Duplicates(m.cfg.Knowledge.Duplication.Options())
+	// History is evidence, not a precondition: a workspace with no readable VCS still gets
+	// every group, without the co-change counts.
+	opts := types.HistoryMetricsOptions{Commits: duplicationHistoryCommits}
+	if scan, err := m.historyMetricsScan(ctx, &opts); err == nil {
+		for i := range groups {
+			groups[i].History = duplicationHistory(groups[i], scan)
+		}
+	}
+	gaps, probed := m.SymbolGaps(ctx)
+	var reason types.KnowledgeUnknownReason
+	if !probed {
+		reason = types.ReasonCoverageUnknown
+	}
+	return types.Duplication{
+		Definition: types.DuplicationDefinition,
+		Groups:     groups,
+		Answer:     types.ClassifyAnswer(len(groups) > 0, reason, gaps),
+	}, nil
+}
+
+// duplicationHistoryCommits is the window co-change is counted over, the same one the
+// history-metrics scan defaults to.
+const duplicationHistoryCommits = 500
+
+// duplicationHistory counts how the files a group's members live in changed together over
+// scan, or nil when they all live in one file, where every commit touches all of them.
+func duplicationHistory(group types.DuplicationGroup, scan []project.ScannedCommit) *types.DuplicationHistory {
+	files := map[string]bool{}
+	for _, m := range group.Members {
+		if file, _, _ := strings.Cut(m.Source, ":"); file != "" {
+			files[file] = true
+		}
+	}
+	if len(files) < 2 {
+		return nil
+	}
+	h := &types.DuplicationHistory{Commits: len(scan)}
+	for _, c := range scan {
+		touched := 0
+		for _, f := range c.Files {
+			if files[f] {
+				touched++
+			}
+		}
+		switch {
+		case touched == len(files):
+			h.Together++
+		case touched > 0:
+			h.Apart++
+		}
+	}
+	return h
+}
+
+// Conformance is the code-shape lens: how large and how coupled the workspace's code is, one row
+// per metric and population, judged against the anchor knowledge.conformance configures. Like
+// Duplication it reads the symbol graph under the coverage verdict, so a half-indexed workspace
+// answers unknown instead of passing; unlike it, a configuration it cannot honor is an error.
+//
+// It proposes and never sets: a row's Propose is the tighter anchor a person may configure, and
+// nothing here reads a live percentile back as a limit.
+func (m *Magus) Conformance(ctx context.Context) (types.Conformance, error) {
+	opts, err := m.ConformanceOptions()
+	if err != nil {
+		return types.Conformance{}, fmt.Errorf("conformance: %w", err)
+	}
+	g, err := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	if err != nil {
+		return types.Conformance{}, err
+	}
+	if opts.Generated, err = m.declaredOutputs(ctx, g); err != nil {
+		return types.Conformance{}, fmt.Errorf("conformance: %w", err)
+	}
+	out := g.Conformance(opts)
+	out.Definition = types.ConformanceDefinition
+	if out.Answer.Verdict == types.VerdictUnknown {
+		return out, nil
+	}
+	gaps, probed := m.SymbolGaps(ctx)
+	var reason types.KnowledgeUnknownReason
+	if !probed {
+		reason = types.ReasonCoverageUnknown
+	}
+	out.Answer = types.ClassifyAnswer(len(out.Rows) > 0, reason, gaps)
+	return out, nil
+}
+
+// declaredOutputs is the set of workspace files g holds that a target declares as an output,
+// which no conformance population counts.
+func (m *Magus) declaredOutputs(ctx context.Context, g *knowledge.Graph) (map[string]bool, error) {
+	var files []string
+	for _, n := range g.Nodes() {
+		if n.Kind == types.KindFile {
+			files = append(files, n.Source)
+		}
+	}
+	slices.Sort(files)
+	entries, err := m.ClassifyFiles(ctx, slices.Compact(files))
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, e := range entries {
+		if e.Role == types.DiffRoleOutput {
+			out[e.Path] = true
+		}
+	}
+	return out, nil
+}
+
+// Trend is the rising/cooling lens: each project's churn in the recent vs earlier
+// half of the window.
+func (m *Magus) Trend(ctx context.Context, opts types.HistoryMetricsOptions) (types.Trend, error) {
+	scan, err := m.historyMetricsScan(ctx, &opts)
+	if err != nil {
+		return types.Trend{}, err
+	}
+	projects := project.Trend(scan)
+	for i := range projects {
+		projects[i].Name = m.projectDisplayName(projects[i].Path)
+	}
+	return types.Trend{
+		Definition: types.TrendDefinition,
+		Commits:    opts.Commits,
+		Since:      opts.Since,
+		Projects:   projects,
+	}, nil
+}

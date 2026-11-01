@@ -71,13 +71,9 @@ var errMachineBuildHeld = errors.New("another graph build holds this machine's b
 // of root, or answers errMachineBuildHeld naming the holder. It records no
 // store, so a graph build queued behind it still builds.
 func takeMachineBuildLock(root string) (*maintenance.GraphBuildLock, error) {
-	dir, err := maintenance.MachineGraphBuildDir()
-	if err != nil {
-		return nil, err
-	}
 	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the background symbol index of " + root}
 	notices := slog.NewLogLogger(slog.Default().Handler(), slog.LevelInfo).Writer()
-	lock, holder, err := maintenance.TryGraphBuild(dir, me, notices)
+	lock, holder, err := maintenance.TryMachineGraphBuild(me, notices)
 	if err != nil {
 		return nil, err
 	}

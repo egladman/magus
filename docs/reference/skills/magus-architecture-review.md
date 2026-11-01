@@ -3,8 +3,8 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Gather architecture evidence from the magus knowledge graph (package imports, layers, symbol callers, churn, ownership) instead of reading files."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 12444
-skill_short_bytes: 9253
+skill_full_bytes: 12429
+skill_short_bytes: 9229
 ---
 
 # magus-architecture-review
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `782d142fa230` |
+| `skill-content` | `57e9ecd61a93` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -69,7 +69,7 @@ Question: run; read
 - who calls symbol: `magus explain '<symbol id>'`; `called by` symbols, `referenced by` files
 - what file holds: `magus explain <path/to/file>`; `defines (N)`
 - which packages central: `magus graph stats --symbols --kind dir`; `IN` column: fan-in
-- how churned, owned, duplicated: `magus\insight()`; `hotspots`, `ownership`, `duplication`
+- how churned, owned, duplicated: `magus\hotspots()` / `magus\ownership()` / `magus\duplication()`
 - what breaks if I change symbol: `magus refs <symbol> --occurrences`; `N occurrence(s) in M file(s)`
 - what changeset reaches: `magus affected --impact`; seed and affected projects
 
@@ -166,7 +166,7 @@ Each: correct command in fast path.
 - `--kind dir` degree counts contained files too -> many-file directory ranks high on `OUT` alone. Read `IN` for fan-in.
 - `magus path` walks edges both directions: found path means connected, not dependent. Use `magus\neighborhood` with `direction`.
 - `N nodes reach this` line on `magus explain` card saturates: one-caller private helper reports over a thousand. Does not size migration; `refs --occurrences` does.
-- `affinity` in `magus\insight` pairs projects -> inside one project sees nothing.
+- `magus\affinity` pairs projects -> inside one project sees nothing.
 - `hotspots` ranks generated files too: `magus describe file <path>` before calling hotspot design problem.
 - `kind=owner` exists only where repo commits CODEOWNERS file; otherwise `ownership` lens: each project's primary author, `busFactor1`.
 - Free-text `magus query` does not search symbols; name `kind=symbol`. `relation=imports` matches nothing without `kind=dir`.
@@ -192,7 +192,7 @@ Merge only when importers all live inside own parent and nothing exported needs 
 
 Before proposing new code, package, abstraction: show nothing does job already:
 1. `magus query "kind=symbol <name>"` for each name new code would need. Try synonyms: duplicates under other names common.
-2. Read `duplication` lens of `magus\insight()`: functions calling same symbols, same proportions: copied logic.
+2. Read `magus\duplication()`: functions calling same symbols, same proportions: copied logic.
 3. Place new code where `imports` of `magus\dir` already cover its needs -> no new import edge.
 State observed convention in proposal, plus command showing it.
 
@@ -276,7 +276,7 @@ every package.
 | who calls this symbol | `magus explain '<symbol id>'` | `called by` symbols and `referenced by` files |
 | what a file holds | `magus explain <path/to/file>` | `defines (N)` |
 | which packages are central | `magus graph stats --symbols --kind dir` | the `IN` column: fan-in |
-| how churned, owned or duplicated | `magus\insight()` | `hotspots`, `ownership`, `duplication` |
+| how churned, owned or duplicated | `magus\hotspots()` / `magus\ownership()` / `magus\duplication()` | each metric |
 | what breaks if I change a symbol | `magus refs <symbol> --occurrences` | `N occurrence(s) in M file(s)` |
 | what a changeset reaches | `magus affected --impact` | the seed and affected projects |
 
@@ -400,7 +400,7 @@ Each of these has a correct command in the fast path.
 - The `N nodes reach this` line on an `magus explain` card saturates: a private
   helper with one caller reports over a thousand. It does not size a migration;
   `refs --occurrences` does.
-- `affinity` in `magus\insight` pairs PROJECTS, so inside one project it sees
+- `magus\affinity` pairs PROJECTS, so inside one project it sees
   nothing.
 - `hotspots` ranks generated files too. Run `magus describe file <path>` before
   calling a hotspot a design problem.
@@ -449,7 +449,7 @@ already does the job:
 
 1. `magus query "kind=symbol <name>"` for each name the new code would need. Try
    synonyms; a second implementation under another name is the common case.
-2. Read the `duplication` lens of `magus\insight()`: functions that call the same
+2. Read `magus\duplication()`: functions that call the same
    symbols in the same proportions, which is what copied logic looks like.
 3. Place new code where the `imports` of `magus\dir` already cover what it
    needs, so the change adds no import edge.

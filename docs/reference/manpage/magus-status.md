@@ -34,7 +34,7 @@ its own it waits for a free slot. A claim larger than the whole budget exits
 
 ## Options
 
-**-W** *duration*
+**-W** *value*
 : Short for --watch
 
 **-c**
@@ -55,8 +55,8 @@ its own it waits for a free slot. A claim larger than the whole budget exits
 **--[no-]wait** (default: off)
 : Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then, then reserves the seat for it until its first claim
 
-**--watch** *duration*
-: Poll and reprint at this interval (minimum 15s; 0 means one-shot)
+**--watch** *value*
+: Poll and reprint at this interval (minimum 15s; 0 means one-shot). Bare numbers are seconds.
 
 **--workspace** *string*
 : Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)

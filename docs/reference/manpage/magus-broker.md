@@ -55,8 +55,8 @@ the next one.
 
 ## Options
 
-**--idle-exit** *duration* (default: 10m0s)
-: Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive
+**--idle-exit** *value* (default: 10m0s)
+: Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive. Bare numbers are minutes.
 
 **--log** *string*
 : Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log

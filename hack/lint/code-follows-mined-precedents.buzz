@@ -49,7 +49,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any {
     final found = mut [<Finding>];
     final indexes: [any] = report["indexes"] ?? [<any>];
-    final rows: [any] = report["precedents"] ?? [<any>];
+    final rows: [any] = report["holds"] ?? [<any>];
     var judgeable = true;
     foreach (lang in LANGUAGES) {
         var declared = false;
@@ -150,7 +150,7 @@ fun report(indexes: [any], departures: [any]) > {str: any} {
     foreach (family in FAMILIES) {
         rows.append(row(family, departures: if (family == "err-sentinel-name") departures else [<any>]));
     }
-    return {"indexes": indexes, "precedents": rows};
+    return {"indexes": indexes, "holds": rows};
 }
 
 test "an unsanctioned departure is reported at its line" {
@@ -194,20 +194,20 @@ test "a stale index listing its changes fails at each one and still judges the r
 
 test "a family the index no longer establishes fails" {
     final r = report([fresh("go")], departures: [<any>]);
-    final rows: [any] = r["precedents"];
+    final rows: [any] = r["holds"];
     final kept = mut [<any>];
     foreach (p in rows) {
         if (p["family"] != "err-sentinel-name") {
             kept.append(p);
         }
     }
-    final got = judge({"indexes": r["indexes"], "precedents": kept}, sanctioned: {<str: str>});
+    final got = judge({"indexes": r["indexes"], "holds": kept}, sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "err-sentinel-name is missing");
 }
 
 test "every established row of a keyed family is held and an unestablished one is not" {
     final r = report([fresh("go")], departures: [<any>]);
-    final rows: [any] = r["precedents"];
+    final rows: [any] = r["holds"];
     final keyed = mut [<any>];
     foreach (p in rows) {
         keyed.append(p);
@@ -215,7 +215,7 @@ test "every established row of a keyed family is held and an unestablished one i
     keyed.append(row("ctx-first", departures: [{"node": "symbol:x/callValue().", "source": "vm/operators.go:1344"}]));
     keyed.append({"family": "ctx-first", "scope": {"language": "go"}, "established": false,
         "follow": 3.0, "cohort": 6.0, "departures": [{"node": "symbol:x/other().", "source": "vm/other.go:1"}]});
-    final got = judge({"indexes": r["indexes"], "precedents": keyed}, sanctioned: {<str: str>});
+    final got = judge({"indexes": r["indexes"], "holds": keyed}, sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "the second established row's departure, and not the loose row's");
     assert\equal(got[0].path, want: "vm/operators.go", message: got[0].message);
 }

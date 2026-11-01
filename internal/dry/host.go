@@ -293,7 +293,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("affected", vm.ListValue(nil))
 		return res, nil
 	}))
-	// The reports magus returns as domain types (doctor, insight, impact) fork a
+	// The reports magus returns as domain types (doctor, impact, history metrics) fork a
 	// real magus in the live host. Same rule as
 	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
 	// and friends resolve. Field names track the Buzz mirrors in
@@ -355,70 +355,43 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("files", vm.ListValue(nil))
 		return res, nil
 	}))
-	// insight nests a record per lens rather than a list, so each one is shaped
-	// too: a null lens would break `.ownership.projects` where an empty list does not.
-	m.MapSet("insight", function("magus.insight", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		stats := vm.NewMap()
-		stats.MapSet("definition", vm.StringValue(""))
-		stats.MapSet("nodeCount", vm.IntValue(0))
-		stats.MapSet("edgeCount", vm.IntValue(0))
-		stats.MapSet("gods", vm.ListValue(nil))
-		stats.MapSet("orphans", vm.ListValue(nil))
-		stats.MapSet("coverage", vm.ListValue(nil))
-		stats.MapSet("isolatedCount", vm.IntValue(0))
-		stats.MapSet("componentCount", vm.IntValue(0))
-		stats.MapSet("largestComponentSize", vm.IntValue(0))
-
-		// Volatility is shaped like every other lens rather than null. It reads as the
-		// "absent" case, but the mirror declares it non-optional (types.InsightReport
-		// carries a VolatilityReport by value), so the checker types
-		// `.volatility.targets` as always present while a null hands the run a member
-		// access on nothing, which aborts the target body mid-trace and still reports
-		// OK, the silent-truncation failure the shaped stubs above exist to avoid.
-		volatility := vm.NewMap()
-		volatility.MapSet("threshold", vm.FloatValue(0))
-		volatility.MapSet("targets", vm.ListValue(nil))
-
-		// Unreferenced carries a nested answer record, so the plain insightLens helper
-		// (definition + list fields) is not enough: a script reading
-		// `.unreferenced.answer.verdict` would hit a member access on nothing, which is
-		// the same silent truncation the shaped stubs exist to avoid.
-		answer := vm.NewMap()
-		answer.MapSet("verdict", vm.StringValue(""))
-		answer.MapSet("reason", vm.StringValue(""))
-		answer.MapSet("uncovered", vm.ListValue(nil))
-		unreferenced := vm.NewMap()
-		unreferenced.MapSet("definition", vm.StringValue(""))
-		unreferenced.MapSet("symbols", vm.ListValue(nil))
-		unreferenced.MapSet("answer", answer)
-
-		duplication := vm.NewMap()
-		duplication.MapSet("definition", vm.StringValue(""))
-		duplication.MapSet("groups", vm.ListValue(nil))
-		duplication.MapSet("answer", answer)
-
-		conformance := vm.NewMap()
-		conformance.MapSet("definition", vm.StringValue(""))
-		conformance.MapSet("rows", vm.ListValue(nil))
-		conformance.MapSet("stale", vm.ListValue(nil))
-		conformance.MapSet("excluded", vm.IntValue(0))
-		conformance.MapSet("answer", answer)
-
-		modelTiers := vm.NewMap()
-		modelTiers.MapSet("definition", vm.StringValue(""))
-		modelTiers.MapSet("rows", vm.ListValue(nil))
-
+	// History metrics are one shaped record each: a null would break
+	// `.ownership.projects` / `.volatility.targets` where an empty list does not.
+	m.MapSet("hotspots", function("magus.hotspots", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return historyMetric("nodes", "files"), nil
+	}))
+	m.MapSet("affinity", function("magus.affinity", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return historyMetric("pairs"), nil
+	}))
+	m.MapSet("ownership", function("magus.ownership", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return historyMetric("projects"), nil
+	}))
+	m.MapSet("trend", function("magus.trend", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return historyMetric("projects"), nil
+	}))
+	m.MapSet("volatility", function("magus.volatility", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
-		res.MapSet("hotspots", insightLens("nodes", "files"))
-		res.MapSet("affinity", insightLens("pairs"))
-		res.MapSet("ownership", insightLens("projects"))
-		res.MapSet("trend", insightLens("projects"))
-		res.MapSet("volatility", volatility)
-		res.MapSet("unreferenced", unreferenced)
-		res.MapSet("duplication", duplication)
-		res.MapSet("conformance", conformance)
-		res.MapSet("modelTiers", modelTiers)
-		res.MapSet("graphStats", stats)
+		res.MapSet("definition", vm.StringValue(""))
+		res.MapSet("threshold", vm.FloatValue(0))
+		res.MapSet("targets", vm.ListValue(nil))
+		return res, nil
+	}))
+	m.MapSet("unreferenced", function("magus.unreferenced", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return knowledgeMetric("symbols"), nil
+	}))
+	m.MapSet("duplication", function("magus.duplication", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return knowledgeMetric("groups"), nil
+	}))
+	m.MapSet("modelTiers", function("magus.modelTiers", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("definition", vm.StringValue(""))
+		res.MapSet("rows", vm.ListValue(nil))
+		return res, nil
+	}))
+	m.MapSet("grouping", function("magus.grouping", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("definition", vm.StringValue(""))
+		res.MapSet("rows", vm.ListValue(nil))
 		return res, nil
 	}))
 	m.MapSet("where", function("magus.where", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
@@ -626,9 +599,9 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 
 func retNull(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil }
 
-// insightLens shapes one VCS-history lens of magus.insight. All four share a
+// historyMetric shapes one VCS-backed history metric. All four share a
 // definition/commits/since header and differ only in which lists they carry.
-func insightLens(listKeys ...string) vm.Value {
+func historyMetric(listKeys ...string) vm.Value {
 	v := vm.NewMap()
 	v.MapSet("definition", vm.StringValue(""))
 	v.MapSet("commits", vm.IntValue(0))
@@ -636,6 +609,19 @@ func insightLens(listKeys ...string) vm.Value {
 	for _, k := range listKeys {
 		v.MapSet(k, vm.ListValue(nil))
 	}
+	return v
+}
+
+// knowledgeMetric shapes unreferenced/duplication: definition + list + answer.
+func knowledgeMetric(listKey string) vm.Value {
+	answer := vm.NewMap()
+	answer.MapSet("verdict", vm.StringValue(""))
+	answer.MapSet("reason", vm.StringValue(""))
+	answer.MapSet("uncovered", vm.ListValue(nil))
+	v := vm.NewMap()
+	v.MapSet("definition", vm.StringValue(""))
+	v.MapSet(listKey, vm.ListValue(nil))
+	v.MapSet("answer", answer)
 	return v
 }
 

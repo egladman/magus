@@ -172,8 +172,17 @@ func writeBinder(b *bytes.Buffer, command, constCommand string, flags []cmdline.
 			def = "d." + g.field
 		}
 		for _, name := range g.names {
+			usage := flagDoc(flags, name)
+			if g.primary.Kind == cmdline.Duration {
+				if name == g.primary.Name {
+					usage = cmdline.DurationUsage(g.primary)
+				}
+				fmt.Fprintf(b, "\tcmdline.DurationVar(fs, &f.%s, %s, %s, %q, %q)\n",
+					g.field, fmt.Sprintf("Flag%s%s", goIdent(constCommand), goIdent(name)), def, g.primary.Unit, usage)
+				continue
+			}
 			fmt.Fprintf(b, "\tfs.%sVar(&f.%s, %s, %s, %q)\n",
-				bindMethod(g.primary.Kind), g.field, fmt.Sprintf("Flag%s%s", goIdent(constCommand), goIdent(name)), def, flagDoc(flags, name))
+				bindMethod(g.primary.Kind), g.field, fmt.Sprintf("Flag%s%s", goIdent(constCommand), goIdent(name)), def, usage)
 		}
 		if g.primary.Kind == cmdline.Bool {
 			fmt.Fprintf(b, "\tcmdline.NegatedBoolVar(fs, &f.%s, Flag%s%s)\n", g.field, goIdent(constCommand), goIdent(g.primary.Name))
@@ -270,12 +279,19 @@ func groupAliases(command string, flags []cmdline.Flag) []aliasGroup {
 
 // flagDoc returns the help text declared for one flag name.
 func flagDoc(flags []cmdline.Flag, name string) string {
-	for _, f := range flags {
-		if f.Name == name {
-			return f.Doc
-		}
+	if f, ok := flagByName(flags, name); ok {
+		return f.Doc
 	}
 	return ""
+}
+
+func flagByName(flags []cmdline.Flag, name string) (cmdline.Flag, bool) {
+	for _, f := range flags {
+		if f.Name == name {
+			return f, true
+		}
+	}
+	return cmdline.Flag{}, false
 }
 
 func goType(k cmdline.Kind) string {

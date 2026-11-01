@@ -20,7 +20,7 @@ import (
 //
 // Provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache provider, `magus\ci.provider(<spell>)` a CI provider, `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret provider and the credentials read through it, `magus\harness.provider(<spell>)` an agent-host harness (many hosts; like workspace.provider, unlike cache.remote's one), and `magus\guard.shell(<rule>)` an additive shell-guard rule (strengthen-only), and `magus\guard.spawn(<fun>)` the one function the agent guard calls on every spawn and continuation (see [magus\guard.spawn](../guard-spawn.md)), and `magus\guard.command(<fun>)` the one function it calls on every agent shell command (see [magus\guard.command](../guard-command.md)), and `magus\guard.write(<fun>)` the one function it calls on every agent file write. Each provider takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 //
-// `import "magus"` is how you reach any of this. The namespace is an ordinary host module, like `fs` or `vcs`: without the import line `magus` is undefined, and the import is what attaches these signatures to your call sites. It resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `describe.project`, `affected`, `projectGraph`, `where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `importGraph`, `dir`, `dirs`, `layer`, `neighborhood`) and `output` all answer in-process, and so does `magus\job` (list, put, register, exit, wait, clear): the job store an orchestrating agent declares about work it handed out (see types.Job). The `magus job` CLI subcommand is a third write door onto the same rows: ls and describe read, fork declares a row, exec records a worker's landed base, and wait blocks on a dependency. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script: there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `doctor`, and the `magus\describe` methods that fork) work there either way and discover the workspace themselves.
+// `import "magus"` is how you reach any of this. The namespace is an ordinary host module, like `fs` or `vcs`: without the import line `magus` is undefined, and the import is what attaches these signatures to your call sites. It resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `describe.project`, `affected`, `projectGraph`, `where`, history metrics (`hotspots`, `affinity`, `ownership`, `trend`, `volatility`, `unreferenced`, `duplication`, `modelTiers`, `grouping`), the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `importGraph`, `dir`, `dirs`, `layer`, `neighborhood`) and `output` all answer in-process, and so does `magus\job` (list, put, register, exit, wait, clear): the job store an orchestrating agent declares about work it handed out (see types.Job). The `magus job` CLI subcommand is a third write door onto the same rows: ls and describe read, fork declares a row, exec records a worker's landed base, and wait blocks on a dependency. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script: there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `doctor`, and the `magus\describe` methods that fork) work there either way and discover the workspace themselves.
 func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -109,20 +109,100 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectExecResult(ret0), nil
 	}))
-	m.MapSet("insight", vm.DirectValue("magus.insight", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		var opts types.InsightOptions
+	m.MapSet("hotspots", vm.DirectValue("magus.hotspots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		var opts types.HistoryMetricsOptions
 		if ffi.Present(bzArgs, 0) {
-			x, err := ffi.Object("magus\\insight", "opts", bzArgs, 0, decode.DecodeInsightOptions)
+			x, err := ffi.Object("magus\\hotspots", "opts", bzArgs, 0, decode.DecodeHistoryMetricsOptions)
 			if err != nil {
 				return vm.Null, ffi.Error(err)
 			}
 			opts = x
 		}
-		ret0, err := std.MagusInsight(ctx, opts)
+		ret0, err := std.MagusHotspots(ctx, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectInsightReport(ret0, enums), nil
+		return ObjectHotspots(ret0), nil
+	}))
+	m.MapSet("affinity", vm.DirectValue("magus.affinity", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		var opts types.HistoryMetricsOptions
+		if ffi.Present(bzArgs, 0) {
+			x, err := ffi.Object("magus\\affinity", "opts", bzArgs, 0, decode.DecodeHistoryMetricsOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusAffinity(ctx, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectAffinity(ret0), nil
+	}))
+	m.MapSet("ownership", vm.DirectValue("magus.ownership", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		var opts types.HistoryMetricsOptions
+		if ffi.Present(bzArgs, 0) {
+			x, err := ffi.Object("magus\\ownership", "opts", bzArgs, 0, decode.DecodeHistoryMetricsOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusOwnership(ctx, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectOwnership(ret0), nil
+	}))
+	m.MapSet("trend", vm.DirectValue("magus.trend", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		var opts types.HistoryMetricsOptions
+		if ffi.Present(bzArgs, 0) {
+			x, err := ffi.Object("magus\\trend", "opts", bzArgs, 0, decode.DecodeHistoryMetricsOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusTrend(ctx, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectTrend(ret0), nil
+	}))
+	m.MapSet("volatility", vm.DirectValue("magus.volatility", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusVolatility(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectVolatility(ret0), nil
+	}))
+	m.MapSet("unreferenced", vm.DirectValue("magus.unreferenced", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusUnreferenced(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectUnreferenced(ret0, enums), nil
+	}))
+	m.MapSet("duplication", vm.DirectValue("magus.duplication", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusDuplication(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectDuplication(ret0, enums), nil
+	}))
+	m.MapSet("modelTiers", vm.DirectValue("magus.modelTiers", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusModelTiers(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectModelTiers(ret0, enums), nil
+	}))
+	m.MapSet("grouping", vm.DirectValue("magus.grouping", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusGrouping(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectGrouping(ret0, enums), nil
 	}))
 	m.MapSet("query", vm.DirectValue("magus.query", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		query := ffi.String(bzArgs, 0)

@@ -46,7 +46,7 @@ import { serverTile } from "./tiles/server";
 import { servicesTile } from "./tiles/services";
 import { configTile } from "./tiles/config";
 import { ganttTile } from "./tiles/gantt";
-import { insightSection } from "./tiles/insight";
+import { historyMetricsSection } from "./tiles/historymetrics";
 import { toolchainTile } from "./tiles/toolchain";
 import { mountAlertRail } from "./tiles/alerts";
 import { mountSplitHandle } from "./tiles/split";
@@ -387,7 +387,7 @@ function mountTiles(): void {
   //  6. per-target / remote / workspaces / services / config - the denser but still legible readouts.
   //  7. latency / buzz / sandbox / mcp - the heavy metric families, DEFAULT-COLLAPSED so
   //     they sit out of the way until asked (see each tile's Card defaultCollapsed).
-  //  8. insight section      - the VCS/run-outcome lenses (on-demand poll).
+  //  8. history-metrics section - the VCS/run-outcome lenses (on-demand poll).
   const pool = poolTile();
   const cacheStats = cacheStatsTile();
 
@@ -411,7 +411,7 @@ function mountTiles(): void {
   const sandbox = sandboxTile();
   const mcp = mcpTile();
   const toolchain = toolchainTile();
-  const insight = insightSection(() => transport.refreshInsight());
+  const historyMetrics = historyMetricsSection(() => transport.refreshHistoryMetrics());
 
   type BoardSection = "live" | "runtime" | "diagnostics" | "intelligence";
   type BigPictureMembership = "always" | "rotate" | "board";
@@ -428,7 +428,7 @@ function mountTiles(): void {
   // One composition list owns reading order, Big Picture membership and the board's column
   // spans. A tile never gets a mode-specific renderer; it only declares whether its existing
   // renderer is permanent, rotated, or board-only in the presentation layout.
-  const INSIGHT_SPANS = [6, 12, 6, 6, 6, 12] as const;
+  const HISTORY_METRICS_SPANS = [6, 12, 6, 6, 6, 12] as const;
   const boardTiles: BoardTile[] = [
     { tile: attention, section: "live", bigPicture: "always", span: 12 },
     { tile: jobs, section: "live", bigPicture: "always", span: 6 },
@@ -452,11 +452,11 @@ function mountTiles(): void {
     { tile: sandbox, section: "diagnostics", bigPicture: "board", span: 6 },
     { tile: mcp, section: "diagnostics", bigPicture: "board", span: 12 },
     { tile: toolchain, section: "intelligence", bigPicture: "board", span: 12 },
-    ...insight.tiles.map((tile, i) => ({
+    ...historyMetrics.tiles.map((tile, i) => ({
       tile,
       section: "intelligence" as const,
       bigPicture: "board" as const,
-      span: INSIGHT_SPANS[i] ?? 12,
+      span: HISTORY_METRICS_SPANS[i] ?? 12,
     })),
   ];
   for (const item of boardTiles) item.tile.el.dataset.span = String(item.span);
@@ -484,7 +484,7 @@ function mountTiles(): void {
   );
   for (const item of boardTiles) {
     if (item.section !== "intelligence") continue;
-    if (item.tile === toolchain) host.append(item.tile.el, insight.el);
+    if (item.tile === toolchain) host.append(item.tile.el, historyMetrics.el);
     else host.append(item.tile.el);
   }
 
@@ -497,7 +497,7 @@ function mountTiles(): void {
   host.append(split.el);
   boardDisposers = [() => alerts.destroy(), () => split.destroy()];
 
-  tiles = [header, insight, ...boardTiles.map((item) => item.tile)];
+  tiles = [header, historyMetrics, ...boardTiles.map((item) => item.tile)];
   boardOnlyTiles = new Set(
     boardTiles.filter((item) => item.bigPicture === "board").map((item) => item.tile),
   );
@@ -523,7 +523,7 @@ function mountTiles(): void {
   // Keep view visibility separate from tile state.
   const boardEls: HTMLElement[] = [
     ...boardTiles.map((item) => item.tile.el),
-    insight.el,
+    historyMetrics.el,
     ...[...host.querySelectorAll<HTMLElement>("[data-board-only]")],
   ];
   tileDisposers.push(

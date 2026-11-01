@@ -60,6 +60,46 @@ export enum<str> DiffReadState {
     unknown = "unknown",
 }
 
+export enum<str> DuplicationPlacement {
+    none = "",
+    member = "member",
+    dependency = "dependency",
+    newPackage = "new-package",
+    blocked = "blocked",
+    unknown = "unknown",
+}
+
+export enum<str> DuplicationShape {
+    none = "",
+    parameterize = "parameterize",
+    sharedCore = "shared-core",
+    siblingHelper = "sibling-helper",
+    leave = "leave",
+}
+
+export enum<str> SymbolIndexFreshness {
+    none = "",
+    upToDate = "up-to-date",
+    outOfDate = "out-of-date",
+    notIndexed = "not-indexed",
+    unvouched = "unvouched",
+}
+
+export enum<str> KnowledgeVerdict {
+    none = "",
+    found = "found",
+    absent = "absent",
+    unknown = "unknown",
+}
+
+export enum<str> KnowledgeUnknownReason {
+    none = "",
+    symbolIndexMissing = "symbol-index-missing",
+    symbolsNotLoaded = "symbols-not-loaded",
+    coverageUnknown = "coverage-unknown",
+    indexStale = "index-stale",
+}
+
 export enum<str> RelationID {
     none = "",
     dependsOn = "depends_on",
@@ -96,82 +136,6 @@ export enum<str> KnowledgeResolution {
     fuzzy = "fuzzy",
 }
 
-export enum<str> SymbolIndexFreshness {
-    none = "",
-    upToDate = "up-to-date",
-    outOfDate = "out-of-date",
-    notIndexed = "not-indexed",
-    unvouched = "unvouched",
-}
-
-export enum<str> KnowledgeVerdict {
-    none = "",
-    found = "found",
-    absent = "absent",
-    unknown = "unknown",
-}
-
-export enum<str> KnowledgeUnknownReason {
-    none = "",
-    symbolIndexMissing = "symbol-index-missing",
-    symbolsNotLoaded = "symbols-not-loaded",
-    coverageUnknown = "coverage-unknown",
-    indexStale = "index-stale",
-}
-
-export enum<str> DuplicationPlacement {
-    none = "",
-    member = "member",
-    dependency = "dependency",
-    newPackage = "new-package",
-    blocked = "blocked",
-    unknown = "unknown",
-}
-
-export enum<str> DuplicationShape {
-    none = "",
-    parameterize = "parameterize",
-    sharedCore = "shared-core",
-    siblingHelper = "sibling-helper",
-    leave = "leave",
-}
-
-export enum<str> ConformanceMetric {
-    none = "",
-    fileLines = "file-lines",
-    funcLines = "func-lines",
-    typeMethods = "type-methods",
-    fileSymbols = "file-symbols",
-    depFanout = "dep-fanout",
-    cloneTokens = "clone-tokens",
-    exportScope = "export-scope",
-    callSequence = "call-sequence",
-    sharedBody = "shared-body",
-    sharedReach = "shared-reach",
-    callerSpread = "caller-spread",
-    modeKnobs = "mode-knobs",
-    aliasShare = "alias-share",
-    nameClash = "name-clash",
-    mainLogic = "main-logic",
-    storePathExport = "store-path-export",
-    fileSplit = "file-split",
-}
-
-export enum<str> ConformancePopulation {
-    none = "",
-    source = "source",
-    main = "main",
-    test = "test",
-}
-
-export enum<str> JobKind {
-    check = "check",
-    symbol = "symbol",
-    paths = "paths",
-    script = "script",
-    prose = "prose",
-}
-
 export enum<str> GroupingShape {
     none = "",
     chained = "chained",
@@ -183,6 +147,14 @@ export enum<str> GroupingVerdict {
     none = "",
     measured = "measured",
     unknown = "unknown",
+}
+
+export enum<str> JobKind {
+    check = "check",
+    symbol = "symbol",
+    paths = "paths",
+    script = "script",
+    prose = "prose",
 }
 
 export enum<str> GuardDecision {
@@ -408,6 +380,29 @@ export object Affected {
     filesBySeed: {str: [str]} = {},
     affected: [str] = [],
     undeclaredBySeed: {str: [str]} = {},
+}
+
+export object HistoryMetricsOptions {
+    dir: str = "",
+    commits: int = 0,
+    since: str = "",
+    files: bool = false,
+}
+
+export object CoChange {
+    a: str = "",
+    aName: str = "",
+    b: str = "",
+    bName: str = "",
+    count: int = 0,
+    hidden: bool = false,
+}
+
+export object Affinity {
+    definition: str = "",
+    commits: int = 0,
+    since: str = "",
+    pairs: [CoChange] = [],
 }
 
 export object CommandOptions {
@@ -727,6 +722,78 @@ export object DoctorReport {
     summary: DoctorSummary = DoctorSummary{},
 }
 
+export object DuplicationSite {
+    id: str = "",
+    label: str = "",
+    source: str = "",
+    endLine: int = 0,
+    distinct: [str] = [],
+    callers: int = 0,
+    foreignFiles: int = 0,
+    tested: bool = false,
+}
+
+export object DuplicationHistory {
+    commits: int = 0,
+    together: int = 0,
+    apart: int = 0,
+}
+
+export object DuplicationGroup {
+    members: [DuplicationSite] = [],
+    score: double = 0.0,
+    shared: [str] = [],
+    packages: [str] = [],
+    placement: DuplicationPlacement = DuplicationPlacement.none,
+    home: str = "",
+    shape: DuplicationShape = DuplicationShape.none,
+    removable: int = 0,
+    siblings: bool = false,
+    history: DuplicationHistory? = null,
+}
+
+export object ProjectRef {
+    path: str = "",
+    name: str = "",
+    dir: str = "",
+}
+
+export object KnowledgeSymbolGap {
+    project: ProjectRef = ProjectRef{},
+    language: str = "",
+    state: SymbolIndexFreshness = SymbolIndexFreshness.none,
+    detail: str = "",
+    hint: str = "",
+    unindexable: bool = false,
+}
+
+export object KnowledgeTextPresence {
+    hits: int = 0,
+    files: int = 0,
+    sites: [str] = [],
+    more: int = 0,
+}
+
+export object KnowledgeIndexCause {
+    why: str = "",
+    fix: str = "",
+}
+
+export object KnowledgeAnswer {
+    verdict: KnowledgeVerdict = KnowledgeVerdict.none,
+    reason: KnowledgeUnknownReason = KnowledgeUnknownReason.none,
+    gaps: [KnowledgeSymbolGap] = [],
+    staleIndexes: [str] = [],
+    text: KnowledgeTextPresence? = null,
+    indexCause: KnowledgeIndexCause? = null,
+}
+
+export object Duplication {
+    definition: str = "",
+    groups: [DuplicationGroup] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
 export object KnowledgeNode {
     id: str = "",
     kind: str = "",
@@ -767,42 +834,28 @@ export object ExplainResult {
     publicAPIGap: str = "",
 }
 
-export object ImpactSymbol {
-    file: str = "",
-    symbol: str = "",
-    label: str = "",
-    refCount: int = 0,
-    fileCount: int = 0,
-    coverage: ImpactCoverage = ImpactCoverage{},
+export object GroupingRecord {
+    shape: GroupingShape = GroupingShape.none,
+    verdict: GroupingVerdict = GroupingVerdict.none,
+    jobs: int = 0,
+    groups: int = 0,
+    known: int = 0,
+    passLower: double? = null,
+    setupTokensMedian: int? = null,
+    setupShare: double? = null,
+    contextPerGroup: double? = null,
+    wallMsPerGroup: double? = null,
+    denialsPerJob: double? = null,
+    unattributedPerJob: double? = null,
+    reworkPerJob: double? = null,
+    wideningsPerJob: double? = null,
 }
 
-export object ImpactFileCoverage {
-    file: str = "",
-    coverage: ImpactCoverage = ImpactCoverage{},
-}
-
-export object Impact {
-    base: str = "",
-    changedFileCount: int = 0,
-    changedFiles: [str] = [],
-    seedProjects: [str] = [],
-    affectedProjects: [ImpactProject] = [],
-    changedSymbols: [ImpactSymbol] = [],
-    changedFileCoverage: [ImpactFileCoverage] = [],
-    notes: [str] = [],
-}
-
-export object ImportGraph {
-    indexed: bool = false,
-    packages: {str: [str]} = {},
-    languages: {str: str} = {},
-}
-
-export object InsightOptions {
-    dir: str = "",
-    commits: int = 0,
-    since: str = "",
-    files: bool = false,
+export object Grouping {
+    definition: str = "",
+    minSample: int = 0,
+    unclassified: int = 0,
+    rows: [GroupingRecord] = [],
 }
 
 export object Node {
@@ -836,209 +889,41 @@ export object Hotspots {
     files: [FileHotspot] = [],
 }
 
-export object CoChange {
-    a: str = "",
-    aName: str = "",
-    b: str = "",
-    bName: str = "",
-    count: int = 0,
-    hidden: bool = false,
-}
-
-export object Affinity {
-    definition: str = "",
-    commits: int = 0,
-    since: str = "",
-    pairs: [CoChange] = [],
-}
-
-export object OwnershipEntry {
-    path: str = "",
-    name: str = "",
-    commits: int = 0,
-    authors: int = 0,
-    primary: str = "",
-    primaryShare: int = 0,
-    busFactor1: bool = false,
-    stale: bool = false,
-    lastCommit: str = "",
-}
-
-export object Ownership {
-    definition: str = "",
-    commits: int = 0,
-    since: str = "",
-    projects: [OwnershipEntry] = [],
-}
-
-export object TrendEntry {
-    path: str = "",
-    name: str = "",
-    recent: int = 0,
-    earlier: int = 0,
-    delta: int = 0,
-}
-
-export object Trend {
-    definition: str = "",
-    commits: int = 0,
-    since: str = "",
-    projects: [TrendEntry] = [],
-}
-
-export object VolatilityTarget {
-    project: str = "",
-    target: str = "",
-    score: double = 0.0,
-    volatile: bool = false,
-    pass: int = 0,
-    fail: int = 0,
-    volatileCount: int = 0,
-    samples: int = 0,
-    lastPass: str = "",
-}
-
-export object Volatility {
-    threshold: double = 0.0,
-    targets: [VolatilityTarget] = [],
-}
-
-export object UnreferencedEntry {
-    id: str = "",
-    label: str = "",
-    source: str = "",
-    kind: str = "",
-    language: str = "",
-}
-
-export object ProjectRef {
-    path: str = "",
-    name: str = "",
-    dir: str = "",
-}
-
-export object KnowledgeSymbolGap {
-    project: ProjectRef = ProjectRef{},
-    language: str = "",
-    state: SymbolIndexFreshness = SymbolIndexFreshness.none,
-    detail: str = "",
-    hint: str = "",
-    unindexable: bool = false,
-}
-
-export object KnowledgeTextPresence {
-    hits: int = 0,
-    files: int = 0,
-    sites: [str] = [],
-    more: int = 0,
-}
-
-export object KnowledgeIndexCause {
-    why: str = "",
-    fix: str = "",
-}
-
-export object KnowledgeAnswer {
-    verdict: KnowledgeVerdict = KnowledgeVerdict.none,
-    reason: KnowledgeUnknownReason = KnowledgeUnknownReason.none,
-    gaps: [KnowledgeSymbolGap] = [],
-    staleIndexes: [str] = [],
-    text: KnowledgeTextPresence? = null,
-    indexCause: KnowledgeIndexCause? = null,
-}
-
-export object Unreferenced {
-    definition: str = "",
-    symbols: [UnreferencedEntry] = [],
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-}
-
-export object DuplicationSite {
-    id: str = "",
-    label: str = "",
-    source: str = "",
-    endLine: int = 0,
-    distinct: [str] = [],
-    callers: int = 0,
-    foreignFiles: int = 0,
-    tested: bool = false,
-}
-
-export object DuplicationHistory {
-    commits: int = 0,
-    together: int = 0,
-    apart: int = 0,
-}
-
-export object DuplicationGroup {
-    members: [DuplicationSite] = [],
-    score: double = 0.0,
-    shared: [str] = [],
-    packages: [str] = [],
-    placement: DuplicationPlacement = DuplicationPlacement.none,
-    home: str = "",
-    shape: DuplicationShape = DuplicationShape.none,
-    removable: int = 0,
-    siblings: bool = false,
-    history: DuplicationHistory? = null,
-}
-
-export object Duplication {
-    definition: str = "",
-    groups: [DuplicationGroup] = [],
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-}
-
-export object ConformanceKey {
-    metric: ConformanceMetric = ConformanceMetric.none,
-    population: ConformancePopulation = ConformancePopulation.none,
-    scope: str = "",
-}
-
-export object ConformanceItem {
-    id: str = "",
-    source: str = "",
-    measure: int = 0,
-    home: str = "",
-    unshared: bool = false,
-    rename: str = "",
-}
-
-export object ConformanceRow {
-    key: ConformanceKey = ConformanceKey{},
-    n: int = 0,
-    p50: int = 0,
-    p90: int = 0,
-    p95: int = 0,
-    p99: int = 0,
-    live: int = 0,
-    value: int = 0,
-    propose: int = 0,
-    violations: [ConformanceItem] = [],
-}
-
-export object ConformanceCeiling {
-    key: ConformanceKey = ConformanceKey{},
+export object ImpactSymbol {
     file: str = "",
-    base: int = 0,
-    head: int = 0,
-    violations: [ConformanceItem] = [],
+    symbol: str = "",
+    label: str = "",
+    refCount: int = 0,
+    fileCount: int = 0,
+    coverage: ImpactCoverage = ImpactCoverage{},
 }
 
-export object ConformanceUnmeasured {
+export object ImpactFileCoverage {
     file: str = "",
-    language: str = "",
-    reason: str = "",
+    coverage: ImpactCoverage = ImpactCoverage{},
 }
 
-export object Conformance {
-    definition: str = "",
-    rows: [ConformanceRow] = [],
-    excluded: int = 0,
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
+export object Impact {
     base: str = "",
-    ceilings: [ConformanceCeiling] = [],
-    unmeasured: [ConformanceUnmeasured] = [],
+    changedFileCount: int = 0,
+    changedFiles: [str] = [],
+    seedProjects: [str] = [],
+    affectedProjects: [ImpactProject] = [],
+    changedSymbols: [ImpactSymbol] = [],
+    changedFileCoverage: [ImpactFileCoverage] = [],
+    notes: [str] = [],
+}
+
+export object ImportGraph {
+    indexed: bool = false,
+    packages: {str: [str]} = {},
+    languages: {str: str} = {},
+}
+
+export object Layer {
+    name: str = "",
+    declared: [str] = [],
+    dirs: [Dir] = [],
 }
 
 export object ModelTierRecord {
@@ -1062,52 +947,9 @@ export object ModelTierRecord {
     notRetryable: int = 0,
 }
 
-export object ModelTierOutput {
+export object ModelTiers {
     definition: str = "",
     rows: [ModelTierRecord] = [],
-}
-
-export object GroupingRecord {
-    shape: GroupingShape = GroupingShape.none,
-    verdict: GroupingVerdict = GroupingVerdict.none,
-    jobs: int = 0,
-    groups: int = 0,
-    known: int = 0,
-    passLower: double? = null,
-    setupTokensMedian: int? = null,
-    setupShare: double? = null,
-    contextPerGroup: double? = null,
-    wallMsPerGroup: double? = null,
-    denialsPerJob: double? = null,
-    unattributedPerJob: double? = null,
-    reworkPerJob: double? = null,
-    wideningsPerJob: double? = null,
-}
-
-export object Grouping {
-    definition: str = "",
-    minSample: int = 0,
-    unclassified: int = 0,
-    rows: [GroupingRecord] = [],
-}
-
-export object InsightReport {
-    hotspots: Hotspots = Hotspots{},
-    affinity: Affinity = Affinity{},
-    ownership: Ownership = Ownership{},
-    trend: Trend = Trend{},
-    volatility: Volatility = Volatility{},
-    unreferenced: Unreferenced = Unreferenced{},
-    duplication: Duplication = Duplication{},
-    conformance: Conformance = Conformance{},
-    modelTiers: ModelTierOutput = ModelTierOutput{},
-    grouping: Grouping = Grouping{},
-}
-
-export object Layer {
-    name: str = "",
-    declared: [str] = [],
-    dirs: [Dir] = [],
 }
 
 export object NeighborhoodOptions {
@@ -1152,6 +994,25 @@ export object OutputRecord {
     failed: bool = false,
     durationMs: int = 0,
     output: str = "",
+}
+
+export object OwnershipEntry {
+    path: str = "",
+    name: str = "",
+    commits: int = 0,
+    authors: int = 0,
+    primary: str = "",
+    primaryShare: int = 0,
+    busFactor1: bool = false,
+    stale: bool = false,
+    lastCommit: str = "",
+}
+
+export object Ownership {
+    definition: str = "",
+    commits: int = 0,
+    since: str = "",
+    projects: [OwnershipEntry] = [],
 }
 
 export object PathOptions {
@@ -1316,6 +1177,52 @@ export object SymbolIndexDigest {
     indexed: bool = false,
     projects: [str] = [],
     gaps: [KnowledgeSymbolGap] = [],
+}
+
+export object TrendEntry {
+    path: str = "",
+    name: str = "",
+    recent: int = 0,
+    earlier: int = 0,
+    delta: int = 0,
+}
+
+export object Trend {
+    definition: str = "",
+    commits: int = 0,
+    since: str = "",
+    projects: [TrendEntry] = [],
+}
+
+export object UnreferencedEntry {
+    id: str = "",
+    label: str = "",
+    source: str = "",
+    kind: str = "",
+    language: str = "",
+}
+
+export object Unreferenced {
+    definition: str = "",
+    symbols: [UnreferencedEntry] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object VolatilityTarget {
+    project: str = "",
+    target: str = "",
+    score: double = 0.0,
+    volatile: bool = false,
+    pass: int = 0,
+    fail: int = 0,
+    volatileCount: int = 0,
+    samples: int = 0,
+    lastPass: str = "",
+}
+
+export object Volatility {
+    threshold: double = 0.0,
+    targets: [VolatilityTarget] = [],
 }
 
 export object GuardVerdict {
@@ -2413,6 +2320,7 @@ export object Trail {
 }
 
 export extern fun affected(base: str = "") > Affected !> any;
+export extern fun affinity(opts: HistoryMetricsOptions? = null) > Affinity !> any;
 export extern fun attention(args: [str], opts: CommandOptions? = null) > {str: any} !> any;
 export extern fun bustCache(projectPath: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
@@ -2427,16 +2335,20 @@ export extern fun dir(path: str) > Dir !> any;
 export extern fun dirs(glob: str, opts: DirsOptions? = null) > [Dir] !> any;
 export extern fun diskReclaim() > DiskReclaim !> any;
 export extern fun doctor(args: [str], opts: CommandOptions? = null) > DoctorReport !> any;
+export extern fun duplication() > Duplication !> any;
 export extern fun explain(node: str) > ExplainResult !> any;
 export extern fun fatal(msg: str = "") > void;
 export extern fun fileDiskAttention(message: str) > void !> any;
+export extern fun grouping() > Grouping !> any;
 export extern fun hasCharm(name: str) > bool;
+export extern fun hotspots(opts: HistoryMetricsOptions? = null) > Hotspots !> any;
 export extern fun impact(base: str = "", opts: CommandOptions? = null) > Impact !> any;
 export extern fun importGraph() > ImportGraph !> any;
-export extern fun insight(opts: InsightOptions? = null) > InsightReport !> any;
 export extern fun layer(name: str) > Layer !> any;
+export extern fun modelTiers() > ModelTiers !> any;
 export extern fun neighborhood(focus: str, opts: NeighborhoodOptions? = null) > NeighborhoodResult !> any;
 export extern fun output(ref: str) > OutputRecord !> any;
+export extern fun ownership(opts: HistoryMetricsOptions? = null) > Ownership !> any;
 export extern fun path(node: str, to: str, opts: PathOptions? = null) > PathResult !> any;
 export extern fun precedents() > {str: any} !> any;
 export extern fun project(config: any, opts: any = null) > void;
@@ -2450,6 +2362,9 @@ export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
 export extern fun stats(kind: str = "") > KnowledgeStats !> any;
 export extern fun symbolIndexDigest() > SymbolIndexDigest !> any;
 export extern fun symbols() > {str: any} !> any;
+export extern fun trend(opts: HistoryMetricsOptions? = null) > Trend !> any;
+export extern fun unreferenced() > Unreferenced !> any;
+export extern fun volatility() > Volatility !> any;
 export extern fun where(dir: str) > str !> any;
 // Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this module hard to read.
 export object log {

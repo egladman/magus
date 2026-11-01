@@ -168,7 +168,7 @@ func (s *ThresholdSuite) TestPastLeavesAMetricWithItsOwnCheckToThatCheck() {
 			Violations: []types.ConformanceItem{{ID: item, Measure: 9}},
 		}
 	}
-	out := types.ConformanceOutput{Rows: []types.ConformanceRow{row(types.ConformanceFuncLines)}}
+	out := types.Conformance{Rows: []types.ConformanceRow{row(types.ConformanceFuncLines)}}
 	for m := range ownCheck {
 		out.Rows = append(out.Rows, row(m))
 	}

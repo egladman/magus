@@ -1,0 +1,60 @@
+// One-shot: tally this checkout's guard trail by preview/action/outcome.
+// Cost: reads .magus/activity/events.jsonl; writes nothing.
+namespace cursorAudit;
+
+import "encoding/json";
+import "fs";
+import "io";
+import "std";
+
+fun bump(m: mut {str: int}, key: str) > void {
+    m[key] = (m[key] ?? 0) + 1;
+}
+
+fun main(_args: [str]) > void {
+    final text = fs\readFile(".magus/activity/events.jsonl") catch "";
+    final actions = mut {<str: int>};
+    final previews = mut {<str: int>};
+    final outcomes = mut {<str: int>};
+    final kinds = mut {<str: int>};
+    var total = 0;
+    var denyPreview = 0;
+    var advisePreview = 0;
+    var grepish = 0;
+    var shellish = 0;
+    var queryish = 0;
+    foreach (line in text.split("\n")) {
+        if (line == "") { continue; }
+        final ev = json\parse(line) catch null;
+        if (ev == null) { continue; }
+        total += 1;
+        final kind = if (ev["kind"] is str) ev["kind"] as str else "";
+        final action = if (ev["action"] is str) ev["action"] as str else "";
+        final preview = if (ev["preview"] is str) ev["preview"] as str else "";
+        final outcome = if (ev["outcome"] is str) ev["outcome"] as str else "";
+        bump(kinds, key: kind);
+        bump(actions, key: action);
+        bump(outcomes, key: outcome);
+        if (preview != "") { bump(previews, key: preview); }
+        if (preview == "guard: deny") { denyPreview += 1; }
+        if (preview == "guard: advise") { advisePreview += 1; }
+        if (preview.indexOf("Grep") != null or preview.indexOf("grep") != null or preview.startsWith("rg ")) {
+            grepish += 1;
+        }
+        if (action == "shell" or preview.startsWith("rg ") or preview.startsWith("ls ") or preview.startsWith("find ")) {
+            shellish += 1;
+        }
+        if (preview.indexOf("magus query") != null or preview.indexOf("magus refs") != null or preview.indexOf("magus explain") != null) {
+            queryish += 1;
+        }
+    }
+    io\stdout.write("total={total} deny_preview={denyPreview} advise_preview={advisePreview} grepish={grepish} shellish={shellish} queryish={queryish}\n") catch void;
+    io\stdout.write("kinds:\n") catch void;
+    foreach (k, n in kinds) { io\stdout.write("  {k}={n}\n") catch void; }
+    io\stdout.write("actions:\n") catch void;
+    foreach (k, n in actions) { io\stdout.write("  {k}={n}\n") catch void; }
+    io\stdout.write("outcomes:\n") catch void;
+    foreach (k, n in outcomes) { io\stdout.write("  {k}={n}\n") catch void; }
+    io\stdout.write("previews:\n") catch void;
+    foreach (k, n in previews) { io\stdout.write("  {k}={n}\n") catch void; }
+}

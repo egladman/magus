@@ -62,6 +62,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocConflictCommit},
 	{doc: ruleDocSpawnUnbriefed},
 	{doc: ruleDocBuzzUnbriefed},
+	{doc: ruleDocAmbiguousCIWord},
 	{doc: ruleDocArchitectureUnbriefed},
 	{doc: ruleDocPushUngated},
 	{doc: ruleDocHumanOnly},
@@ -357,6 +358,16 @@ var ruleDocArchitectureUnbriefed = types.RuleDoc{
 		"A load counts for the agent that made it: a subagent in that session loads the skill itself, and a parent's load does not brief its child. Load Skill(magus-architecture-review), or its -full twin, once and the agent's later calls pass. " +
 		"It stands down on a host whose wiring does not report skill loads, where nothing could ever clear it; the new-directory advisory still speaks there. " +
 		"Every agent is asked alike, a shipped read-only type included: its render denies the host's write tools and keeps the Skill tool.",
+}
+
+var ruleDocAmbiguousCIWord = types.RuleDoc{
+	Name:    string(denyRuleAmbiguousCIWord),
+	Catches: "a call that picks magus `ci` or the host's CI/CD while the person's bare word \"ci\" is still unresolved",
+	Why: "The bare word \"ci\" names two different things in a magus workspace: the reserved `ci` target (often reached as `magus affected ci`), and the host's CI/CD run (GitHub Actions, GitLab CI, and the rest). " +
+		"An agent that assumes either burns a turn on the wrong gate, then another clarifying with the person. " +
+		"A message the person submits with bare \"ci\" and no disambiguator marks the session; the next call that runs `magus run ci` / `magus affected ci`, a host CI CLI (`gh run`, `act`, ...), or touches a workflow path is refused until they say which. " +
+		"A clarifying message (\"affected ci\", \"github actions\", \"the gate\", \"CI/CD\") resolves the mark and later calls pass. " +
+		"It is not a skill-load rule: the remedy is to ask, not to read a skill first.",
 }
 
 var ruleDocPushUngated = types.RuleDoc{

@@ -118,7 +118,7 @@ func toolLine(t hint.ToolName, desc string) string {
 // TestServerInstructionsNameRealMembers holds each to a declared member.
 var clientMembers = []string{
 	"describe", "query", "explain", "path", "refs", "stats", "where",
-	"affected", "impact", "run", "clean", "output", "insight", "doctor", "job", "vcs",
+	"affected", "impact", "run", "clean", "output", "hotspots", "affinity", "ownership", "trend", "volatility", "doctor", "job", "vcs",
 }
 
 // member renders one magus\ member as a script calls it.

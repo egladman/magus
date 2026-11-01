@@ -31,7 +31,7 @@ import (
 	diagramhandler "github.com/egladman/magus/internal/handler/diagram"
 	diffhandler "github.com/egladman/magus/internal/handler/diff"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
-	insighthandler "github.com/egladman/magus/internal/handler/insight"
+	hmhandler "github.com/egladman/magus/internal/handler/historymetrics"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
 	"github.com/egladman/magus/internal/handler/mcp"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
@@ -54,7 +54,7 @@ import (
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/historymetrics/v1alpha1/historymetricsv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1/metricsv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1/notesv1alpha1connect"
@@ -298,7 +298,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// identical read logic.
 			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
-			insightH := insighthandler.NewHandler(svc, log)
+			historyMetricsH := hmhandler.NewHandler(svc, log)
 			patchH := diffhandler.NewPatchHandler(svc, log)
 			contextH := diffhandler.NewContextHandler(opts.Magus.Root(), svc, log)
 			// The server-wide session store, constructed by the caller so the console routes
@@ -356,7 +356,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			diagramsH := diagramhandler.NewHandler(diagramWorkspace{opts.Magus}, log)
 			f.api(diagramhandler.Path, diagramsH)
 			f.api(diagramhandler.Path+"/", diagramsH)
-			f.api("/api/v1/insight", insightH)
+			f.api("/api/v1/history-metrics", historyMetricsH)
 			f.api("/api/v1/diff/patch", patchH)
 			f.api("/api/v1/diff/context", contextH)
 			f.api("/api/v1/diff", diffH)
@@ -373,8 +373,8 @@ func (s *Server) Serve(ctx context.Context) error {
 			// guarded per link by the share token and held to the same Needs as here. It is a
 			// subset of the loopback routes: NO /api/v1/graph, NO /mcp, NO JobService.
 			shareGuarded := map[string]share.Route{
-				"/api/v1/events":  {Handler: eventsH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/events")},
-				"/api/v1/insight": {Handler: insightH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/insight")},
+				"/api/v1/events":          {Handler: eventsH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/events")},
+				"/api/v1/history-metrics": {Handler: historyMetricsH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/history-metrics")},
 			}
 
 			// Derived-metrics Connect service for the /dashboard. Mounted only when the
@@ -450,16 +450,11 @@ func (s *Server) Serve(ctx context.Context) error {
 			f.service(toolPath, toolConnectHandler)
 			bridgeLog.InfoContext(ctx, "tool service mounted", slog.String("path", toolPath))
 
-			// Insight Connect service: the typed twin of the JSON /api/v1/insight route, reading
-			// the SAME cached scan through the same console service. The console dashboard reads
-			// it here; the JSON route stays mounted above for its documented non-console callers.
-			// Same cross-origin guards as the other read services, and read-only, so it joins the
-			// share read routes too: the LAN "share to phone" dashboard renders insight, and it
-			// reaches it over this route now rather than the JSON one.
-			insightPath, insightConnectHandler := insightv1alpha1connect.NewInsightServiceHandler(insighthandler.NewService(svc), connectReadMax)
-			f.service(insightPath, insightConnectHandler)
-			shareGuarded[insightPath] = serviceRoute(insightPath, insightConnectHandler)
-			bridgeLog.InfoContext(ctx, "insight service mounted", slog.String("path", insightPath))
+			// Typed twin of JSON /api/v1/history-metrics; same Board via the console service.
+			hmPath, hmConnectHandler := historymetricsv1alpha1connect.NewHistoryMetricsServiceHandler(hmhandler.NewService(svc), connectReadMax)
+			f.service(hmPath, hmConnectHandler)
+			shareGuarded[hmPath] = serviceRoute(hmPath, hmConnectHandler)
+			bridgeLog.InfoContext(ctx, "history metrics service mounted", slog.String("path", hmPath))
 
 			// Viewer Connect service: the typed twin of the JSON run-browser routes this
 			// replaced (/api/v1/outputs, /output, /runs, /run; retired in 7ce1896d4, see

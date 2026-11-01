@@ -79,7 +79,7 @@ func aliasOptions() types.ConformanceOptions {
 	}
 }
 
-func aliasFacts(t *testing.T, r types.ImportAliasReport, dir string) types.AliasFacts {
+func aliasFacts(t *testing.T, r types.ImportAliases, dir string) types.AliasFacts {
 	t.Helper()
 	i := slices.IndexFunc(r.Packages, func(f types.AliasFacts) bool { return f.Dir == dir })
 	require.GreaterOrEqual(t, i, 0, dir)

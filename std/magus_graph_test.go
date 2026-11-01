@@ -273,10 +273,10 @@ func TestPrecedentsAreJudgedByTheWorkspacesConformance(t *testing.T) {
 	require.NoError(t, err)
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report types.PrecedentReport
+	var report types.Holds
 	require.NoError(t, json.Unmarshal(b, &report))
-	require.Len(t, report.Precedents, 1)
-	assert.False(t, report.Precedents[0].Established, "six cases are under the workspace's cohort gate of seven")
+	require.Len(t, report.Holds, 1)
+	assert.False(t, report.Holds[0].Established, "six cases are under the workspace's cohort gate of seven")
 
 	ws.conformanceErr = errors.New("conformance.json: line 1: schema 2: want 1")
 	_, err = MagusPrecedents(types.WithWorkspace(t.Context(), ws))
@@ -342,10 +342,10 @@ func TestPrecedentsReportRowsBesideIndexFreshness(t *testing.T) {
 	require.NoError(t, err)
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report types.PrecedentReport
+	var report types.Holds
 	require.NoError(t, json.Unmarshal(b, &report))
-	assert.Equal(t, types.PrecedentReport{
-		Precedents: []types.Precedent{{
+	assert.Equal(t, types.Holds{
+		Holds: []types.Precedent{{
 			Family: types.PrecedentErrSentinelName, Scope: types.PrecedentScope{Language: "go"}, Key: types.PrecedentKey{Prefix: "err"},
 			Follow: 5, Cohort: 6, Share: 5.0 / 6, Established: true, Cited: cited,
 			Departures: []types.Case{{Node: bad, Source: "internal/a/z.go:4"}},
@@ -373,7 +373,7 @@ func TestPrecedentsFreshenEveryIndexBeforeJudgingIt(t *testing.T) {
 	assert.True(t, ws.readAfter, "freshness is read after the freshen, so it judges the rebuilt index")
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report types.PrecedentReport
+	var report types.Holds
 	require.NoError(t, json.Unmarshal(b, &report))
 	stale.Detail = "docs changed\nscip-buzz is not on PATH"
 	assert.Equal(t, []types.SymbolIndexStatus{fresh, stale}, report.Indexes,
@@ -408,9 +408,9 @@ func TestSymbolsBesideIndexFreshness(t *testing.T) {
 	assert.Equal(t, []string{"indexes", "symbols"}, slices.Sorted(maps.Keys(got)), "keyed as the JSON is")
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report types.SymbolReport
+	var report types.Symbols
 	require.NoError(t, json.Unmarshal(b, &report))
-	assert.Equal(t, types.SymbolReport{
+	assert.Equal(t, types.Symbols{
 		Symbols: []types.SymbolDecl{{
 			Node: open, Source: "internal/a/open.go:3", Language: "go", Name: "Open",
 			Kind: "function", Doc: "Open reads the file.",

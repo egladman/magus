@@ -226,7 +226,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   ([worker-background-run](../../../reference/rules/worker-background-run.md)). A
   worker that backgrounds its check ends its turn with the run pending and parks there,
   and nobody is told the result. The wiring reports what the call asked of the host
-  (`--call-background`, `--call-timeout-ms`), and a `magus run` or `magus affected` by a
+  (`--call-background`, `--call-timeout`), and a `magus run` or `magus affected` by a
   worker under a live lease that does not integrate the checkout is refused when the host would
   run it in the background. A wiring that reports nothing leaves the rule silent.
 - **A backgrounded shell command with nothing to end it**

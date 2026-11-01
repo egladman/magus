@@ -41,7 +41,7 @@ var tool = cmdline.Command{
 				Name: "cache", Short: "the cache",
 				Children: []cmdline.Command{{
 					Name: "prune", Short: "prune it",
-					Flags: []cmdline.Flag{{Name: "older-than", Kind: cmdline.Duration, Doc: "Prune entries older than this"}},
+					Flags: []cmdline.Flag{{Name: "older-than", Kind: cmdline.Duration, Unit: "h", Doc: "Prune entries older than this"}},
 				}},
 			}},
 		},

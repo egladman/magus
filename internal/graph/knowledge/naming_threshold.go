@@ -99,7 +99,7 @@ var ownCheck = map[types.ConformanceMetric]string{
 // thresholdPast finds the subjects among the violations of out, past a metric no other check
 // owns. A clone group is one violation naming its members, so a subject in a group is past the
 // clone-tokens value.
-func thresholdPast(out types.ConformanceOutput, byItem map[string]*namingDecl) []thresholdHit {
+func thresholdPast(out types.Conformance, byItem map[string]*namingDecl) []thresholdHit {
 	var hits []thresholdHit
 	for _, row := range out.Rows {
 		if _, owned := ownCheck[row.Key.Metric]; owned {
@@ -118,7 +118,7 @@ func thresholdPast(out types.ConformanceOutput, byItem map[string]*namingDecl) [
 
 // thresholdMeasures is the measure of every item past its value in out, per key, a clone
 // group's under each member.
-func thresholdMeasures(out types.ConformanceOutput) map[types.ConformanceKey]map[string]int {
+func thresholdMeasures(out types.Conformance) map[types.ConformanceKey]map[string]int {
 	measures := map[types.ConformanceKey]map[string]int{}
 	for _, row := range out.Rows {
 		for _, v := range row.Violations {

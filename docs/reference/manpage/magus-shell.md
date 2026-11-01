@@ -93,10 +93,13 @@ not block every tool call.
 : The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused
 
 **--call-digest** *string*
-: With --tool-ms, a fingerprint of the call the host ran, so a repeat of it can be counted; never the call's text
+: With --duration, a fingerprint of the call the host ran, so a repeat of it can be counted; never the call's text
 
-**--call-timeout-ms** *int*
-: The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default
+**--call-timeout** *value*
+: The timeout the call gave its shell command (e.g. 10m, 600000ms); 0 or absent means the host's foreground default. Bare numbers are milliseconds.
+
+**--duration** *value*
+: Read the input as a tool's name and record how long the host says it ran (e.g. 420ms), without judging: the verdict is always pass. Bare numbers are milliseconds.
 
 **--event** *string*
 : The host's hook event name (e.g. PreToolUse)
@@ -117,13 +120,10 @@ not block every tool call.
 : This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
 
 **--result-digest** *string*
-: With --tool-ms, a fingerprint of the call's result, so an equal answer can be told from a changed one; never the result's text. Absent means the host gave none, and the record says so
+: With --duration, a fingerprint of the call's result, so an equal answer can be told from a changed one; never the result's text. Absent means the host gave none, and the record says so
 
 **--session** *string*
 : The host's own session id for this invocation
-
-**--tool-ms** *int*
-: Read the input as a tool's name and record how many milliseconds the host says it ran, without judging: the verdict is always pass
 
 **--transcript** *string*
 : Path to the host's own log of this session, recorded as a pointer; magus never opens it
@@ -172,6 +172,12 @@ printf '%s' 'go build ./...' | magus shell
 
 ```sh
 printf '%s' 'internal/cache/output.go' | magus shell --observe
+```
+
+*Record how long a tool ran*
+
+```sh
+printf '%s' 'Bash' | magus shell --duration 420ms
 ```
 
 *Grade a write as a lease*

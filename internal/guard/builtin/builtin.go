@@ -269,6 +269,7 @@ var profiles = map[types.GuardProfile]map[string]Setting{
 // refuses. A workspace that wants a rule softer sets it to advise or off by name.
 var defaults = map[string]decision{
 	// Recoverable: the served command answers what the refused one asked.
+	"ambiguous-ci-word":      Deny,
 	"architecture-unbriefed": Deny,
 	"brief-command":          Deny,
 	"brief-plain-commands":   Deny,

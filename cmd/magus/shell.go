@@ -172,7 +172,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// failed guard as no verdict and fails open, so an environment magus knows is wrong
 	// would disarm every rule for the session. --observe and --message carry no verdict to
 	// deny.
-	if refusal, _ := ctx.Value(envRefusalKey{}).(error); refusal != nil && !sf.Observe && !sf.Message && sf.ToolMs == 0 {
+	if refusal, _ := ctx.Value(envRefusalKey{}).(error); refusal != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
@@ -194,7 +194,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// so a host that blocks on 2 fails closed in both cases. --observe and --message are
 	// exempt because they carry no verdict: there is nothing to fail closed about, and
 	// the documented contract is that they always exit 0.
-	if readError != nil && !sf.Observe && !sf.Message && sf.ToolMs == 0 {
+	if readError != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
@@ -244,8 +244,8 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		RendersAsk: sf.RendersAsk,
 		// The call's own word on how the host runs it.
 		CallBackground: sf.CallBackground,
-		CallTimeout:    time.Duration(sf.CallTimeoutMs) * time.Millisecond,
-		ToolMs:         int64(sf.ToolMs),
+		CallTimeout:    sf.CallTimeout,
+		ToolMs:         sf.Duration.Milliseconds(),
 		CallDigest:     sf.CallDigest,
 		ResultDigest:   sf.ResultDigest,
 	}
@@ -253,7 +253,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// --observe and --message carry no verdict, so they log it.
 	limits, known, refusal := applyHostFacts(ctx, &req)
 	if refusal != nil {
-		if !sf.Observe && !sf.Message && sf.ToolMs == 0 {
+		if !sf.Observe && !sf.Message && sf.Duration == 0 {
 			verdict := types.GuardJudgment{
 				SchemaVersion: agent.GuardSchemaVersion,
 				Decision:      "deny",

@@ -346,19 +346,19 @@ func RuntimeFromContext(ctx context.Context) *Runtime {
 }
 
 // BuildReport reads the runtime-history file at path, scores every recorded (project, target)
-// pair against cfg, and returns a deterministic VolatilityReport sorted by (project, target).
+// pair against cfg, and returns a deterministic Volatility sorted by (project, target).
 // It is the single home for the volatility lens' compute so the console server read and the
 // volatility lens stay byte-identical. An empty path yields an empty report
 // carrying just the configured threshold (no error): "no history configured yet" is a valid
 // empty state, not a failure. A read/decode error on a configured path is returned.
-func BuildReport(ctx context.Context, path string, cfg Config) (types.VolatilityReport, error) {
-	report := types.VolatilityReport{Threshold: cfg.Threshold}
+func BuildReport(ctx context.Context, path string, cfg Config) (types.Volatility, error) {
+	report := types.Volatility{Threshold: cfg.Threshold}
 	if path == "" {
 		return report, nil
 	}
 	var hist forecast.History
 	if err := hist.Load(ctx, path); err != nil {
-		return types.VolatilityReport{}, err
+		return types.Volatility{}, err
 	}
 	rt := NewRuntime(&hist, path, cfg, nil, false) // report-only: reads history, never retries
 	for project, targets := range hist.Projects {

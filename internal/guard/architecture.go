@@ -65,11 +65,18 @@ func asksArchitecture(message string) bool {
 // person's words are not something to answer with an advisory, and the rule that reads the
 // mark speaks on the model's next call instead.
 func recordMessageTopics(facts hint.Gate, message string) bool {
-	if facts.Session() == "" || !asksArchitecture(message) {
+	marked := false
+	if facts.Session() == "" {
 		return false
 	}
-	facts.MarkFired(topicArchitecture)
-	return facts.AlreadyFired(topicArchitecture)
+	if asksArchitecture(message) {
+		facts.MarkFired(topicArchitecture)
+		marked = facts.AlreadyFired(topicArchitecture)
+	}
+	if recordAmbiguousCIWord(facts, message) {
+		marked = true
+	}
+	return marked
 }
 
 // denyArchitectureWithoutSkill is architecture-unbriefed: the verdict for a graded call by

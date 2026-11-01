@@ -29,11 +29,11 @@ import (
 // (a test double, or a provider-supplied workspace that models projects without git
 // history). Both report false here; the caller's message names the first, which is the one
 // a reader can act on.
-func AnalyzerFromContext(ctx context.Context) (types.InsightAnalyzer, bool) {
+func AnalyzerFromContext(ctx context.Context) (types.HistoryMetrics, bool) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil, false
 	}
-	a, ok := ws.(types.InsightAnalyzer)
+	a, ok := ws.(types.HistoryMetrics)
 	return a, ok
 }

@@ -172,7 +172,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 			// A missing or failing indexer must not block the domain-graph rebuild.
 			// Surface the actionable hints and carry on.
 			interactive.Hint(ctx, "some projects were not reindexed", attr.Error(rerr))
-			refused = reindexRefusals(rerr)
+			refused = types.ReindexRefusals(rerr)
 		}
 	}
 
@@ -247,26 +247,6 @@ func writeGuardIndexes(ctx context.Context, root string) error {
 	return nil
 }
 
-// reindexRefusals is the part of a reindex failure that fails `graph build`: each project
-// refused because the run this one is nested inside holds its lock (MGS3007), or because the
-// machine's build budget could not seat the indexer (MGS3009). A missing indexer is the
-// machine's state and stays a warning. A refusal means the index it wanted stayed stale, and
-// an exit 0 under magus\cmd's quiet hid that. Nil when nothing was refused.
-// A machine short of memory (MGS3053) refuses the same way.
-func reindexRefusals(err error) error {
-	errs := []error{err}
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		errs = joined.Unwrap()
-	}
-	var refused []error
-	for _, e := range errs {
-		if errors.Is(e, types.ProjectLockHeldByAncestor) || errors.Is(e, types.MachineBudgetExhausted) || errors.Is(e, types.MemoryPressureHigh) {
-			refused = append(refused, e)
-		}
-	}
-	return errors.Join(refused...)
-}
-
 const (
 	// graphBuildPoll is how often a waiting graph build retries.
 	graphBuildPoll = 250 * time.Millisecond
@@ -286,16 +266,12 @@ func acquireGraphBuild(ctx context.Context, root string) (release func() error, 
 	if err != nil {
 		return nil, nil, fmt.Errorf("magus graph build: %w", err)
 	}
-	machineDir, err := maintenance.MachineGraphBuildDir()
-	if err != nil {
-		return nil, nil, fmt.Errorf("magus graph build: %w", err)
-	}
 	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build` in " + wsRoot, Store: dir}
 	if proc.IsJob(ctx) {
 		me.By = "the server's sync-graph job in " + wsRoot
 	}
 	notices := noticeLines{ctx: ctx, level: slog.LevelInfo, label: "magus graph build", prefix: "magus graph build: "}
-	machine, behind, err := maintenance.AcquireGraphBuild(ctx, machineDir, me, notices, graphBuildPoll)
+	machine, behind, err := maintenance.AcquireMachineGraphBuild(ctx, me, notices, graphBuildPoll)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -252,7 +252,7 @@ var guardInputs = []string{"command", "path", "mcp"}
 // magus-command.buzz asks only under default, acceptEdits and auto.
 // cursor-hook.buzz renders an ask only on beforeShellExecution and
 // beforeMCPExecution. A 34 copy can let either run with no prompt.
-const GuardTemplateVersion = 35
+const GuardTemplateVersion = 36
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

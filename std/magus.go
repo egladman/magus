@@ -66,7 +66,8 @@ var Magus = Module{
 		"import is what attaches these signatures to your call sites. It resolves in a " +
 		"`magus buzz` script as well as in a magusfile, and a " +
 		"script run inside a workspace reads that workspace: `describe.project`, `affected`, `projectGraph`, " +
-		"`where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `importGraph`, " +
+		"`where`, history metrics (`hotspots`, `affinity`, `ownership`, `trend`, `volatility`, `unreferenced`, " +
+		"`duplication`, `modelTiers`, `grouping`), the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `importGraph`, " +
 		"`dir`, `dirs`, `layer`, `neighborhood`) " +
 		"and `output` all answer in-process, and so does `magus\\job` (list, put, " +
 		"register, exit, wait, clear): the job store an orchestrating agent declares about work it handed " +
@@ -152,14 +153,79 @@ var Magus = Module{
 			Impl:    MagusRun,
 		},
 		{
-			Name: "insight",
-			Doc:  "Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes an InsightOptions (commits, default 500; since; dir; files for file rather than project hotspots) and renders nothing - presentation is the caller's job. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.",
+			Name: "hotspots",
+			Doc:  "Churn × complexity ranking: {definition, commits, since, nodes, files}. Annotate `> Hotspots`. Project nodes by default; files always included (edit frequency weighted by complexity). Takes HistoryMetricsOptions (commits, default 500; since; dir). Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "InsightOptions"},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "HistoryMetricsOptions"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "InsightReport"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Hotspots"}},
 			Raises:  true,
-			Impl:    MagusInsight,
+			Impl:    MagusHotspots,
+		},
+		{
+			Name: "affinity",
+			Doc:  "Projects that change together (temporal coupling): {definition, commits, since, pairs}. Annotate `> Affinity`. Hidden pairs co-change with no declared dependency. Takes HistoryMetricsOptions (commits, default 500; since; dir). Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "HistoryMetricsOptions"},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Affinity"}},
+			Raises:  true,
+			Impl:    MagusAffinity,
+		},
+		{
+			Name: "ownership",
+			Doc:  "Author concentration per project: {definition, commits, since, projects}. Annotate `> Ownership`. Primary author share, bus-factor-1, and stale (quiet in the recent half). Takes HistoryMetricsOptions (commits, default 500; since; dir). Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "HistoryMetricsOptions"},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Ownership"}},
+			Raises:  true,
+			Impl:    MagusOwnership,
+		},
+		{
+			Name: "trend",
+			Doc:  "Rising vs cooling projects across the window's halves: {definition, commits, since, projects}. Annotate `> Trend`. Takes HistoryMetricsOptions (commits, default 500; since; dir). Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args: []Arg{
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "HistoryMetricsOptions"},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Trend"}},
+			Raises:  true,
+			Impl:    MagusTrend,
+		},
+		{
+			Name:    "volatility",
+			Doc:     "Run-outcome flakiness: {definition, threshold, targets}. Annotate `> Volatility`. Workspace-wide; takes no options. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Volatility"}},
+			Raises:  true,
+			Impl:    MagusVolatility,
+		},
+		{
+			Name:    "unreferenced",
+			Doc:     "Symbols nothing in the workspace names: {definition, symbols, answer}. Annotate `> Unreferenced`. Workspace-wide SCIP read; takes no options. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Unreferenced"}},
+			Raises:  true,
+			Impl:    MagusUnreferenced,
+		},
+		{
+			Name:    "duplication",
+			Doc:     "Functions that call the same workspace symbols in the same proportions: {definition, groups, answer}. Annotate `> Duplication`. Workspace-wide SCIP read; takes no options. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Duplication"}},
+			Raises:  true,
+			Impl:    MagusDuplication,
+		},
+		{
+			Name:    "modelTiers",
+			Doc:     "Recorded outcomes per (model tier, job kind): {definition, rows}. Annotate `> ModelTiers`. Workspace-wide; takes no options. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ModelTiers"}},
+			Raises:  true,
+			Impl:    MagusModelTiers,
+		},
+		{
+			Name:    "grouping",
+			Doc:     "How jobs partitioned work: {definition, rows}. Annotate `> Grouping`. Workspace-wide; takes no options. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Grouping"}},
+			Raises:  true,
+			Impl:    MagusGrouping,
 		},
 		{
 			Name: "query",
@@ -1803,52 +1869,106 @@ func MagusImpact(ctx context.Context, base string, opts types.MagusCommandOption
 	return runMagusJSON[types.ImpactResult](ctx, "affected", args, opts)
 }
 
-// MagusInsight returns every insight lens as one typed report, read straight off
-// the loaded workspace. An agent asks for one lens by returning that field from
-// the client tool.
-//
-// This is the one magus\* method that does NOT fork a nested magus, and the difference is
-// the point: analytics are a pure read of a workspace magus has already loaded, so paying
-// a process, a second workspace load, and a JSON round trip to ask it a question about
-// itself was cost with nothing bought. See std/workspace.go for how it reaches the API
-// across an import cycle that used to make forking the only option.
-func MagusInsight(ctx context.Context, opts types.InsightOptions) (types.InsightReport, error) {
-	a, err := insightAnalyzer(ctx, "insight")
+// MagusHotspots returns the hotspots metric from the loaded workspace.
+func MagusHotspots(ctx context.Context, opts types.HistoryMetricsOptions) (types.Hotspots, error) {
+	a, err := historyMetricsFrom(ctx, "hotspots")
 	if err != nil {
-		return types.InsightReport{}, err
+		return types.Hotspots{}, err
 	}
-	iopts, err := insightWindow(opts)
+	iopts, err := historyMetricsWindow(opts)
 	if err != nil {
-		return types.InsightReport{}, err
+		return types.Hotspots{}, err
 	}
-	report, err := buildInsightReport(ctx, a, iopts)
-	if err != nil {
-		return types.InsightReport{}, err
-	}
-	// Best effort like volatility: a history file that does not read omits the section.
-	if tiers, terr := a.ModelTierLens(ctx); terr == nil {
-		report.ModelTiers = tiers
-	}
-	if grouping, gerr := a.GroupingLens(ctx); gerr == nil {
-		report.Grouping = grouping
-	}
-	return report, nil
+	// Always include the per-file ranking; agents read .files without a separate flag.
+	iopts.Files = true
+	return a.Hotspots(ctx, iopts)
 }
 
-// insightAnalyzer resolves the workspace that will answer the lenses.
-//
-// It ERRORS rather than forking. The `magus insight` subcommand it used to fall back
-// to is gone: the analysis was always the workspace's own, the CLI only rendered it,
-// and keeping a subcommand alive as an implementation detail of a host method is the
-// sprawl this removal is about. The cost is that a bare `magus buzz` script with no
-// workspace cannot ask, the same limit every other in-process verb here has.
-//
-// member names the caller so MGS1022 points at the method the author actually wrote.
-//
-// AnalyzerFromContext first: it is the seam a `magus buzz` script run inside a
-// workspace arrives through, so checking only the workspace value would raise
-// MGS1022 on a script that does have one to read.
-func insightAnalyzer(ctx context.Context, member string) (types.InsightAnalyzer, error) {
+// MagusAffinity returns the affinity metric from the loaded workspace.
+func MagusAffinity(ctx context.Context, opts types.HistoryMetricsOptions) (types.Affinity, error) {
+	a, err := historyMetricsFrom(ctx, "affinity")
+	if err != nil {
+		return types.Affinity{}, err
+	}
+	iopts, err := historyMetricsWindow(opts)
+	if err != nil {
+		return types.Affinity{}, err
+	}
+	return a.Affinity(ctx, iopts)
+}
+
+// MagusOwnership returns the ownership metric from the loaded workspace.
+func MagusOwnership(ctx context.Context, opts types.HistoryMetricsOptions) (types.Ownership, error) {
+	a, err := historyMetricsFrom(ctx, "ownership")
+	if err != nil {
+		return types.Ownership{}, err
+	}
+	iopts, err := historyMetricsWindow(opts)
+	if err != nil {
+		return types.Ownership{}, err
+	}
+	return a.Ownership(ctx, iopts)
+}
+
+// MagusTrend returns the trend metric from the loaded workspace.
+func MagusTrend(ctx context.Context, opts types.HistoryMetricsOptions) (types.Trend, error) {
+	a, err := historyMetricsFrom(ctx, "trend")
+	if err != nil {
+		return types.Trend{}, err
+	}
+	iopts, err := historyMetricsWindow(opts)
+	if err != nil {
+		return types.Trend{}, err
+	}
+	return a.Trend(ctx, iopts)
+}
+
+// MagusVolatility returns the volatility metric from the loaded workspace.
+func MagusVolatility(ctx context.Context) (types.Volatility, error) {
+	a, err := historyMetricsFrom(ctx, "volatility")
+	if err != nil {
+		return types.Volatility{}, err
+	}
+	return a.Volatility(ctx)
+}
+
+// MagusUnreferenced returns the unreferenced metric from the loaded workspace.
+func MagusUnreferenced(ctx context.Context) (types.Unreferenced, error) {
+	a, err := historyMetricsFrom(ctx, "unreferenced")
+	if err != nil {
+		return types.Unreferenced{}, err
+	}
+	return a.Unreferenced(ctx)
+}
+
+// MagusDuplication returns the duplication metric from the loaded workspace.
+func MagusDuplication(ctx context.Context) (types.Duplication, error) {
+	a, err := historyMetricsFrom(ctx, "duplication")
+	if err != nil {
+		return types.Duplication{}, err
+	}
+	return a.Duplication(ctx)
+}
+
+// MagusModelTiers returns the model-tiers metric from the loaded workspace.
+func MagusModelTiers(ctx context.Context) (types.ModelTiers, error) {
+	a, err := historyMetricsFrom(ctx, "modelTiers")
+	if err != nil {
+		return types.ModelTiers{}, err
+	}
+	return a.ModelTierLens(ctx)
+}
+
+// MagusGrouping returns the grouping metric from the loaded workspace.
+func MagusGrouping(ctx context.Context) (types.Grouping, error) {
+	a, err := historyMetricsFrom(ctx, "grouping")
+	if err != nil {
+		return types.Grouping{}, err
+	}
+	return a.GroupingLens(ctx)
+}
+
+func historyMetricsFrom(ctx context.Context, member string) (types.HistoryMetrics, error) {
 	if a, ok := AnalyzerFromContext(ctx); ok {
 		return a, nil
 	}
@@ -1856,18 +1976,14 @@ func insightAnalyzer(ctx context.Context, member string) (types.InsightAnalyzer,
 	if ws == nil {
 		return nil, errorNoWorkspace(member)
 	}
-	a, ok := ws.(types.InsightAnalyzer)
+	a, ok := ws.(types.HistoryMetrics)
 	if !ok {
 		return nil, errors.New("this workspace cannot analyze history")
 	}
 	return a, nil
 }
 
-// insightWindow fills the defaults of the window a Buzz caller asked for: a zero Commits
-// is the 500 the CLI scans. A negative count is an error rather than a silent default.
-// The report always carries the per-file ranking, as the CLI's did.
-func insightWindow(opts types.InsightOptions) (types.InsightOptions, error) {
-	opts.Files = true
+func historyMetricsWindow(opts types.HistoryMetricsOptions) (types.HistoryMetricsOptions, error) {
 	switch {
 	case opts.Commits < 0:
 		return opts, fmt.Errorf("commits must not be negative, got %d", opts.Commits)
@@ -1875,49 +1991,6 @@ func insightWindow(opts types.InsightOptions) (types.InsightOptions, error) {
 		opts.Commits = 500
 	}
 	return opts, nil
-}
-
-// buildInsightReport assembles the whole report from the six lenses.
-//
-// The four VCS lenses are required; volatility and unreferenced are best-effort: a
-// history read that fails should omit a section rather than fail the whole report,
-// and a workspace with no symbol index yields an empty list carrying an unknown
-// verdict, which is a useful section rather than an error.
-func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts types.InsightOptions) (types.InsightReport, error) {
-	hot, err := a.Hotspots(ctx, iopts)
-	if err != nil {
-		return types.InsightReport{}, err
-	}
-	aff, err := a.Affinity(ctx, iopts)
-	if err != nil {
-		return types.InsightReport{}, err
-	}
-	own, err := a.Ownership(ctx, iopts)
-	if err != nil {
-		return types.InsightReport{}, err
-	}
-	tr, err := a.Trend(ctx, iopts)
-	if err != nil {
-		return types.InsightReport{}, err
-	}
-	report := types.InsightReport{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr}
-	if vr, verr := a.Volatility(ctx); verr == nil {
-		report.Volatility = vr
-	}
-	if ur, uerr := a.Unreferenced(ctx); uerr == nil {
-		report.Unreferenced = ur
-	}
-	if dr, derr := a.Duplication(ctx); derr == nil {
-		report.Duplication = dr
-	}
-	// Not best-effort like its siblings: the lens fails only on a configuration it cannot
-	// honor, and a report that hid that would read as a conforming workspace.
-	cr, err := a.Conformance(ctx)
-	if err != nil {
-		return types.InsightReport{}, err
-	}
-	report.Conformance = cr
-	return report, nil
 }
 
 // workspaceCacheDir is the structural seam for the one capability

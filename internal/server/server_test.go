@@ -523,9 +523,9 @@ func TestServeConsoleAllowedOriginCORS(t *testing.T) {
 	assert.Equal(t, siteOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, "true", resp.Header.Get("Access-Control-Allow-Private-Network"))
 
-	// Viewer remount of /api/v1/insight must share the same posture (longer
+	// Viewer remount of /api/v1/history-metrics must share the same posture (longer
 	// pattern wins over /api/).
-	req, err = http.NewRequestWithContext(ctx, http.MethodOptions, base+"/api/v1/insight", nil)
+	req, err = http.NewRequestWithContext(ctx, http.MethodOptions, base+"/api/v1/history-metrics", nil)
 	require.NoError(t, err)
 	req.Header.Set("Origin", siteOrigin)
 	req.Header.Set("Access-Control-Request-Method", "GET")

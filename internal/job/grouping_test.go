@@ -23,7 +23,7 @@ func worked(job string, ended, durationMs, setup, contextTokens int64, projects 
 	}
 }
 
-func shapeRow(t *testing.T, out types.GroupingOutput, shape types.GroupingShape) types.GroupingRecord {
+func shapeRow(t *testing.T, out types.Grouping, shape types.GroupingShape) types.GroupingRecord {
 	t.Helper()
 	for _, r := range out.Rows {
 		if r.Shape == shape {

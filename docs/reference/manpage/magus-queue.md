@@ -167,8 +167,8 @@ apply report what would merge and call nothing on the provider.
 **--facts** *command*
 : command and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
 
-**--interval** *duration* (default: 10s)
-: How often \<source\> is read while following it
+**--interval** *value* (default: 10s)
+: How often \<source\> is read while following it. Bare numbers are seconds.
 
 **--[no-]once** (default: off)
 : Apply what \<source\> holds now and stop, rather than following it until it is complete

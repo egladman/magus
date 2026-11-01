@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27021
-skill_short_bytes: 21251
+skill_full_bytes: 27002
+skill_short_bytes: 21232
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `bd920a34e847` |
+| `skill-content` | `e4bf9bd4fd73` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -100,7 +100,7 @@ Disjoint write sets LICENSE parallelism; they do not require it. Every worker ca
 a fixed load before it reads a line of the diff.
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn.
-- For the rest, read the grouping lens (`magus\insight` through `client`,
+- For the rest, read the grouping metric (`magus\grouping` through `client`,
   or `grouping history` in `magus describe job <job>`) and weigh each measured shape
   against the others. It reports
   and never decides.
@@ -293,8 +293,8 @@ Read the facts:
 - `claims[].target` names the target that regenerates a path. Generated outputs have
   one integration owner and are never hand-edited by workers.
 - `depends_on` carries the owner's direct edges.
-- Affinity stays with `client` (`magus\insight`, read affinity). Without MCP,
-  run `magus buzz -e` printing `magus\insight().affinity`.
+- Affinity stays with `client` (`magus\affinity`). Without MCP,
+  run `magus buzz -e` printing `magus\affinity()`.
 - Use `magus refs <symbol>` when two jobs may touch the same API.
 
 A read-only job has no write set, so it is outside this analysis.
@@ -520,7 +520,7 @@ enough to be worth one.
 - A depends-on chain is ONE worker in sequence, not two workers in turn.
   Two is two loads for one unit of work, and the second starts by rediscovering
   what the first just learned.
-- For the rest, read the grouping lens (`magus\insight` through `client`,
+- For the rest, read the grouping metric (`magus\grouping` through `client`,
   or `grouping history` in `magus describe job <job>`) and weigh each measured shape
   against the others: chained, split and solo each report the load before a
   first write and the context, wall time and collisions per group. It reports
@@ -761,8 +761,8 @@ Read the facts:
 - `claims[].target` names the target that regenerates a path. Generated outputs have
   one integration owner and are never hand-edited by workers.
 - `depends_on` carries the owner's direct edges.
-- Affinity stays with `client` (`magus\insight`, read affinity). Without MCP,
-  run `magus buzz -e` printing `magus\insight().affinity`.
+- Affinity stays with `client` (`magus\affinity`). Without MCP,
+  run `magus buzz -e` printing `magus\affinity()`.
 - Use `magus refs <symbol>` when two jobs may touch the same API.
 
 A read-only job has no write set, so it is outside this analysis.

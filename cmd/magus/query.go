@@ -813,6 +813,20 @@ func takeRefreshLock(ctx context.Context, dir string, me maintenance.GraphBuildH
 	return lock, err
 }
 
+// takeMachineRefreshLock is takeRefreshLock for this machine's one build lock.
+func takeMachineRefreshLock(ctx context.Context, me maintenance.GraphBuildHolder, verb string, detached bool) (*maintenance.GraphBuildLock, error) {
+	notices := noticeLines{ctx: ctx, level: slog.LevelInfo, label: verb, prefix: "magus graph build: "}
+	if !detached {
+		lock, _, err := maintenance.AcquireMachineGraphBuild(ctx, me, notices, graphBuildPoll)
+		return lock, err
+	}
+	lock, holder, err := maintenance.TryMachineGraphBuild(me, notices)
+	if holder != nil {
+		slog.InfoContext(ctx, fmt.Sprintf("%s holds the refresh lock, so this refresh stops", holder), attr.Notice(verb))
+	}
+	return lock, err
+}
+
 // refreshIndexesNow is `--refresh`: it waits for a refresh already running,
 // brings the stale indexes up to the tree, and says on stderr what that cost.
 // What stays behind it names at error level, and the read still answers.
@@ -836,12 +850,8 @@ func refreshIndexesNow(ctx context.Context, root, verb string) bool {
 	if err != nil {
 		return failed(err)
 	}
-	machineDir, err := maintenance.MachineGraphBuildDir()
-	if err != nil {
-		return failed(err)
-	}
 	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of " + wsRoot, Store: storeDir}
-	machine, err := takeRefreshLock(ctx, machineDir, me, verb, detached)
+	machine, err := takeMachineRefreshLock(ctx, me, verb, detached)
 	if err != nil {
 		return failed(err)
 	}
@@ -894,12 +904,7 @@ func refreshInBackground(ctx context.Context, root string, ans types.KnowledgeAn
 		slog.ErrorContext(ctx, why, attr.Notice("magus"))
 		return &types.KnowledgeIndexCause{Why: why, Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
 	}
-	machineDir, err := maintenance.MachineGraphBuildDir()
-	if err != nil {
-		slog.ErrorContext(ctx, "could not start a background refresh", attr.Notice("magus"), attr.Error(err))
-		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
-	}
-	if holder, running := maintenance.RunningGraphBuild(machineDir); running {
+	if holder, running := maintenance.RunningMachineGraphBuild(); running {
 		return &types.KnowledgeIndexCause{Why: fmt.Sprintf("this answer comes from the index as it stands, and this read started no refresh: a machine runs one at a time, and %s is running", holder), Fix: fix}
 	}
 	started, err := startRefresh(dir)

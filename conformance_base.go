@@ -38,35 +38,35 @@ const baseMeasureVersion = "3"
 // there. It reads the measure MeasureConformanceBase kept and never measures one itself; a base
 // with none is an error naming that step. A touched file only an external indexer reads is
 // listed in Unmeasured.
-func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Conformance, head types.ConformanceOutput) (types.ConformanceOutput, error) {
+func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head types.Conformance) (types.Conformance, error) {
 	if err := c.Validate(); err != nil {
-		return types.ConformanceOutput{}, fmt.Errorf("conformance: %w", err)
+		return types.Conformance{}, fmt.Errorf("conformance: %w", err)
 	}
 	if c.Base == "" {
 		return head, nil
 	}
 	v, commit, err := m.conformanceBaseCommit(ctx, c.Base)
 	if err != nil {
-		return types.ConformanceOutput{}, err
+		return types.Conformance{}, err
 	}
 	touched, err := v.ChangedFiles(ctx, m.ws.Root, c.Base)
 	if err != nil {
-		return types.ConformanceOutput{}, fmt.Errorf("conformance: files changed since %s: %w", c.Base, err)
+		return types.Conformance{}, fmt.Errorf("conformance: files changed since %s: %w", c.Base, err)
 	}
 	plan, err := m.baseIndexPlan(ctx, m.ws.Root)
 	if err != nil {
-		return types.ConformanceOutput{}, err
+		return types.Conformance{}, err
 	}
 	entry, err := m.conformanceEntry(ctx, commit, plan)
 	if err != nil {
-		return types.ConformanceOutput{}, err
+		return types.Conformance{}, err
 	}
 	base, ok, err := readConformanceEntry(entry)
 	if err != nil {
-		return types.ConformanceOutput{}, err
+		return types.Conformance{}, err
 	}
 	if !ok {
-		return types.ConformanceOutput{}, fmt.Errorf("conformance: no measure of base %s under this workspace's configuration, "+
+		return types.Conformance{}, fmt.Errorf("conformance: no measure of base %s under this workspace's configuration, "+
 			"which magus\\conformanceBase measures and `magus run conformance-base .` runs here", commit)
 	}
 	judged := touched[:0:0]
@@ -163,17 +163,17 @@ func (m *Magus) conformanceBaseCommit(ctx context.Context, base string) (types.V
 }
 
 // readConformanceEntry is the measure kept at entry, and false when none is.
-func readConformanceEntry(entry string) (types.ConformanceOutput, bool, error) {
+func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 	raw, err := os.ReadFile(entry)
 	if errors.Is(err, os.ErrNotExist) {
-		return types.ConformanceOutput{}, false, nil
+		return types.Conformance{}, false, nil
 	}
 	if err != nil {
-		return types.ConformanceOutput{}, false, fmt.Errorf("conformance: read %s: %w", entry, err)
+		return types.Conformance{}, false, fmt.Errorf("conformance: read %s: %w", entry, err)
 	}
-	var out types.ConformanceOutput
+	var out types.Conformance
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return types.ConformanceOutput{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
+		return types.Conformance{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
 	}
 	return out, true, nil
 }
@@ -335,18 +335,18 @@ func indexBase(ctx context.Context, tree, pack string, b baseIndex) ([]types.Kno
 
 // measureTree indexes tree with plan's in-process indexers and measures it under this
 // workspace's policy. A source an indexer cannot read fails, naming it.
-func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan) (types.ConformanceOutput, error) {
+func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan) (types.Conformance, error) {
 	syms := map[string][]types.KnowledgeSymbol{}
 	for i, b := range plan.indexes {
 		parsed, err := indexBase(ctx, tree, filepath.Join(tree, ".magus", "conformance", fmt.Sprintf("%d.pack", i)), b)
 		if err != nil {
-			return types.ConformanceOutput{}, fmt.Errorf("%s %s index: %w", b.project, b.language, err)
+			return types.Conformance{}, fmt.Errorf("%s %s index: %w", b.project, b.language, err)
 		}
 		syms[b.project] = append(syms[b.project], parsed...)
 	}
 	graph, err := m.TargetGraph(ctx)
 	if err != nil {
-		return types.ConformanceOutput{}, err
+		return types.Conformance{}, err
 	}
 	g := knowledge.NewGraph()
 	// The tree walk gives every file its node and line count, as the head graph's does, so a
@@ -357,15 +357,15 @@ func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan
 	}
 	opts, err := m.ConformanceOptions()
 	if err != nil {
-		return types.ConformanceOutput{}, err
+		return types.Conformance{}, err
 	}
 	if opts.Generated, err = m.declaredOutputs(ctx, g); err != nil {
-		return types.ConformanceOutput{}, err
+		return types.Conformance{}, err
 	}
 	out := g.Conformance(opts)
 	out.Definition = types.ConformanceDefinition
 	if out.Answer.Verdict == types.VerdictUnknown {
-		return types.ConformanceOutput{}, errors.New("the in-process indexers read no symbols, so no ceiling can be judged against it")
+		return types.Conformance{}, errors.New("the in-process indexers read no symbols, so no ceiling can be judged against it")
 	}
 	return out, nil
 }

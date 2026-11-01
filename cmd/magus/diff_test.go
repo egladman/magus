@@ -566,7 +566,7 @@ func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
 // blast radius is not this changeset's problem, and a project the lens cannot name an owner
 // for is dropped rather than listed with a blank one, which reads as a lookup that failed.
 func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
-	own := types.OwnershipOutput{Projects: []types.OwnershipEntry{
+	own := types.Ownership{Projects: []types.OwnershipEntry{
 		{Path: "root", Primary: "alice", PrimaryShare: 72, Authors: 4},
 		{Path: "unrelated", Primary: "carol", PrimaryShare: 51, Authors: 9},
 		{Path: "docs", Authors: 0},

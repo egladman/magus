@@ -1307,7 +1307,7 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 // recoverableRules are the compiled rules a caller recovers from by running the command the
 // refusal names. They deny by default (ADR 0013), and a workspace may set one to advise.
 var recoverableRules = []string{
-	"architecture-unbriefed", "brief-command", "brief-plain-commands", "buzz-unbriefed", "chained-run",
+	"ambiguous-ci-word", "architecture-unbriefed", "brief-command", "brief-plain-commands", "buzz-unbriefed", "chained-run",
 	"exit-status-echo", "filter-without-input", "grep-reader", "interpreter-rewrite", "interpreter-script", "magus-timeout",
 	"monitor-duplicate", "monitor-pile", "output-pipe", "output-redirect", "raw-tool", "read-navigation",
 	"read-paging", "search-translation", "sed-in-place", "sibling-checkout",

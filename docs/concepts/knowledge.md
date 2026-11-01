@@ -241,7 +241,7 @@ surgically instead of loading the whole file.
 **Where does risk concentrate?**
 
 ```sh
-# client tool, one field of magus\insight():
+# client tool, e.g. magus\hotspots():
 #   hotspots    churn x complexity per project, with blast radius
 #   affinity    projects that change together: hidden coupling
 #   ownership   author concentration and bus factor
@@ -265,7 +265,7 @@ or cross it with `insight hotspots` to rank high-churn, low-coverage code first.
 **What may be unused?** The graph offers scoped candidates, not a generic
 "dead code" verdict. `magus graph stats` reports structural orphans such as a
 declared spell no target uses. Where the symbol index is available,
-`magus\insight().unreferenced`, through the `client` tool, reports code symbols with no indexed
+`magus\unreferenced()`, through the `client` tool, reports code symbols with no indexed
 cross-file reference.
 
 Neither result proves that something is safe to delete. Entry points, external

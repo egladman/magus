@@ -3,8 +3,8 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 6577
-skill_short_bytes: 3606
+skill_full_bytes: 6565
+skill_short_bytes: 3596
 ---
 
 # magus-change-summary
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `073970f8aea0` |
+| `skill-content` | `043ad5151300` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -84,10 +84,10 @@ Output: short, evidence-backed brief.
    magus graph diff --rev <base> -o markdown
    ```
 
-5. `client` (`magus\insight`) affinity, ownership, trend: only context (hidden coupling, ownership risk, rising activity). No CLI verb; without MCP: one lens via `magus buzz`:
+5. `client` (`magus\trend`) affinity, ownership, trend: only context (hidden coupling, ownership risk, rising activity). No CLI verb; without MCP: one lens via `magus buzz`:
 
    ```sh
-   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().trend)); }'
+   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\trend())); }'
    ```
 
 ## Brief
@@ -173,7 +173,7 @@ brief. The output is a decision aid, not a chronological commit dump.
    git log --first-parent --merges --since="<window>" --format='%h %ad %s' --date=short
    ```
 
-   With no VCS merge history, say so. Use `client` (`magus\insight`) and read trend and hotspots for activity, but do not call that a merge summary.
+   With no VCS merge history, say so. Use `client` (`magus\trend`) and read trend and hotspots for activity, but do not call that a merge summary.
 3. List each candidate change's files, then classify them before reading:
 
    ```sh
@@ -192,13 +192,13 @@ brief. The output is a decision aid, not a chronological commit dump.
    magus graph diff --rev <base> -o markdown
    ```
 
-5. Read affinity, ownership, or trend from `client` (`magus\insight`) only for
+5. Read affinity, ownership, or trend from `client` (`magus\trend`) only for
    context: hidden coupling, ownership risk, rising activity. They do not
    prove that a feature landed. Insight has no CLI verb; without MCP, read one lens
    through `magus buzz`:
 
    ```sh
-   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().trend)); }'
+   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\trend())); }'
    ```
 
 ## Write the brief

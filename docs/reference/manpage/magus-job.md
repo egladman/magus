@@ -133,8 +133,8 @@ them and magus describe job prints one job's terms.
 **--[no-]stdin** (default: off)
 : Read one job as JSON on stdin instead of taking it from flags
 
-**--timeout** *duration*
-: Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout
+**--timeout** *value*
+: Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout. Bare numbers are minutes.
 
 **--write-paths** *\<file\>#\<declaration\>*
 : A path this job may write, or \<file\>#\<declaration\> to claim one declaration of a file (a path holding a literal # is spelled \`./a#b.md\` or \`a\\#b.md\`); repeatable or comma-separated
@@ -155,8 +155,8 @@ them and magus describe job prints one job's terms.
 **--slots** *int* (default: 1)
 : With --timeout: the machine budget slots the command takes while it runs
 
-**--timeout** *duration*
-: Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline
+**--timeout** *value*
+: Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline. Bare numbers are minutes.
 
 ### job exit options
 
@@ -208,8 +208,8 @@ them and magus describe job prints one job's terms.
 **--commit** *string*
 : Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-ungated
 
-**--for** *duration*
-: End the grant after this long (e.g. 2h); unset, it lasts until the job ends
+**--for** *value*
+: End the grant after this long (e.g. 2h); unset, it lasts until the job ends. Bare numbers are hours.
 
 **--reason** *string*
 : Why the gate was skipped, recorded with the waiver; required with --commit unless --revoke

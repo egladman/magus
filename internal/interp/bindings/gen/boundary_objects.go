@@ -439,7 +439,7 @@ func ObjectFileHotspot(v types.FileHotspot) vm.Value {
 	return out
 }
 
-func ObjectHotspotOutput(v types.HotspotOutput) vm.Value {
+func ObjectHotspots(v types.Hotspots) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
@@ -468,7 +468,7 @@ func ObjectCoChange(v types.CoChange) vm.Value {
 	return out
 }
 
-func ObjectAffinityOutput(v types.AffinityOutput) vm.Value {
+func ObjectAffinity(v types.Affinity) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
@@ -499,7 +499,7 @@ func ObjectOwnershipEntry(v types.OwnershipEntry) vm.Value {
 	return out
 }
 
-func ObjectOwnershipOutput(v types.OwnershipOutput) vm.Value {
+func ObjectOwnership(v types.Ownership) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
@@ -522,7 +522,7 @@ func ObjectTrendEntry(v types.TrendEntry) vm.Value {
 	return out
 }
 
-func ObjectTrendOutput(v types.TrendOutput) vm.Value {
+func ObjectTrend(v types.Trend) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
@@ -553,7 +553,7 @@ func ObjectVolatilityTarget(v types.VolatilityTarget) vm.Value {
 	return out
 }
 
-func ObjectVolatilityReport(v types.VolatilityReport) vm.Value {
+func ObjectVolatility(v types.Volatility) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("threshold", vm.FloatValue(float64(v.Threshold)))
 	itemsTargets := make([]vm.Value, len(v.Targets))
@@ -640,7 +640,7 @@ func ObjectKnowledgeAnswer(v types.KnowledgeAnswer, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectUnreferencedOutput(v types.UnreferencedOutput, enums ffi.EnumCases) vm.Value {
+func ObjectUnreferenced(v types.Unreferenced, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	itemsSymbols := make([]vm.Value, len(v.Symbols))
@@ -708,7 +708,7 @@ func ObjectDuplicationGroup(v types.DuplicationGroup, enums ffi.EnumCases) vm.Va
 	return out
 }
 
-func ObjectDuplicationOutput(v types.DuplicationOutput, enums ffi.EnumCases) vm.Value {
+func ObjectDuplication(v types.Duplication, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	itemsGroups := make([]vm.Value, len(v.Groups))
@@ -717,90 +717,6 @@ func ObjectDuplicationOutput(v types.DuplicationOutput, enums ffi.EnumCases) vm.
 	}
 	out.MapSet("groups", vm.ListValue(itemsGroups))
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
-	return out
-}
-
-func ObjectConformanceKey(v types.ConformanceKey, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("metric", enums.Case("ConformanceMetric", string(v.Metric)))
-	out.MapSet("population", enums.Case("ConformancePopulation", string(v.Population)))
-	out.MapSet("scope", vm.StringValue(v.Scope))
-	return out
-}
-
-func ObjectConformanceItem(v types.ConformanceItem) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("id", vm.StringValue(v.ID))
-	out.MapSet("source", vm.StringValue(v.Source))
-	out.MapSet("measure", vm.IntValue(int64(v.Measure)))
-	out.MapSet("home", vm.StringValue(v.Home))
-	out.MapSet("unshared", vm.BoolValue(v.Unshared))
-	out.MapSet("rename", vm.StringValue(v.Rename))
-	return out
-}
-
-func ObjectConformanceRow(v types.ConformanceRow, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("key", ObjectConformanceKey(v.Key, enums))
-	out.MapSet("n", vm.IntValue(int64(v.N)))
-	out.MapSet("p50", vm.IntValue(int64(v.P50)))
-	out.MapSet("p90", vm.IntValue(int64(v.P90)))
-	out.MapSet("p95", vm.IntValue(int64(v.P95)))
-	out.MapSet("p99", vm.IntValue(int64(v.P99)))
-	out.MapSet("live", vm.IntValue(int64(v.Live)))
-	out.MapSet("value", vm.IntValue(int64(v.Value)))
-	out.MapSet("propose", vm.IntValue(int64(v.Propose)))
-	itemsViolations := make([]vm.Value, len(v.Violations))
-	for indexViolations := range v.Violations {
-		itemsViolations[indexViolations] = ObjectConformanceItem(v.Violations[indexViolations])
-	}
-	out.MapSet("violations", vm.ListValue(itemsViolations))
-	return out
-}
-
-func ObjectConformanceCeiling(v types.ConformanceCeiling, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("key", ObjectConformanceKey(v.Key, enums))
-	out.MapSet("file", vm.StringValue(v.File))
-	out.MapSet("base", vm.IntValue(int64(v.Base)))
-	out.MapSet("head", vm.IntValue(int64(v.Head)))
-	itemsViolations := make([]vm.Value, len(v.Violations))
-	for indexViolations := range v.Violations {
-		itemsViolations[indexViolations] = ObjectConformanceItem(v.Violations[indexViolations])
-	}
-	out.MapSet("violations", vm.ListValue(itemsViolations))
-	return out
-}
-
-func ObjectConformanceUnmeasured(v types.ConformanceUnmeasured) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("file", vm.StringValue(v.File))
-	out.MapSet("language", vm.StringValue(v.Language))
-	out.MapSet("reason", vm.StringValue(v.Reason))
-	return out
-}
-
-func ObjectConformanceOutput(v types.ConformanceOutput, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("definition", vm.StringValue(v.Definition))
-	itemsRows := make([]vm.Value, len(v.Rows))
-	for indexRows := range v.Rows {
-		itemsRows[indexRows] = ObjectConformanceRow(v.Rows[indexRows], enums)
-	}
-	out.MapSet("rows", vm.ListValue(itemsRows))
-	out.MapSet("excluded", vm.IntValue(int64(v.Excluded)))
-	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
-	out.MapSet("base", vm.StringValue(v.Base))
-	itemsCeilings := make([]vm.Value, len(v.Ceilings))
-	for indexCeilings := range v.Ceilings {
-		itemsCeilings[indexCeilings] = ObjectConformanceCeiling(v.Ceilings[indexCeilings], enums)
-	}
-	out.MapSet("ceilings", vm.ListValue(itemsCeilings))
-	itemsUnmeasured := make([]vm.Value, len(v.Unmeasured))
-	for indexUnmeasured := range v.Unmeasured {
-		itemsUnmeasured[indexUnmeasured] = ObjectConformanceUnmeasured(v.Unmeasured[indexUnmeasured])
-	}
-	out.MapSet("unmeasured", vm.ListValue(itemsUnmeasured))
 	return out
 }
 
@@ -835,7 +751,7 @@ func ObjectModelTierRecord(v types.ModelTierRecord, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectModelTierOutput(v types.ModelTierOutput, enums ffi.EnumCases) vm.Value {
+func ObjectModelTiers(v types.ModelTiers, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	itemsRows := make([]vm.Value, len(v.Rows))
@@ -901,7 +817,7 @@ func ObjectGroupingRecord(v types.GroupingRecord, enums ffi.EnumCases) vm.Value 
 	return out
 }
 
-func ObjectGroupingOutput(v types.GroupingOutput, enums ffi.EnumCases) vm.Value {
+func ObjectGrouping(v types.Grouping, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	out.MapSet("minSample", vm.IntValue(int64(v.MinSample)))
@@ -911,21 +827,6 @@ func ObjectGroupingOutput(v types.GroupingOutput, enums ffi.EnumCases) vm.Value 
 		itemsRows[indexRows] = ObjectGroupingRecord(v.Rows[indexRows], enums)
 	}
 	out.MapSet("rows", vm.ListValue(itemsRows))
-	return out
-}
-
-func ObjectInsightReport(v types.InsightReport, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("hotspots", ObjectHotspotOutput(v.Hotspots))
-	out.MapSet("affinity", ObjectAffinityOutput(v.Affinity))
-	out.MapSet("ownership", ObjectOwnershipOutput(v.Ownership))
-	out.MapSet("trend", ObjectTrendOutput(v.Trend))
-	out.MapSet("volatility", ObjectVolatilityReport(v.Volatility))
-	out.MapSet("unreferenced", ObjectUnreferencedOutput(v.Unreferenced, enums))
-	out.MapSet("duplication", ObjectDuplicationOutput(v.Duplication, enums))
-	out.MapSet("conformance", ObjectConformanceOutput(v.Conformance, enums))
-	out.MapSet("modelTiers", ObjectModelTierOutput(v.ModelTiers, enums))
-	out.MapSet("grouping", ObjectGroupingOutput(v.Grouping, enums))
 	return out
 }
 
@@ -3658,6 +3559,90 @@ func ObjectMCPTool(v types.MCPTool) vm.Value {
 	return out
 }
 
+func ObjectConformanceKey(v types.ConformanceKey, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("metric", enums.Case("ConformanceMetric", string(v.Metric)))
+	out.MapSet("population", enums.Case("ConformancePopulation", string(v.Population)))
+	out.MapSet("scope", vm.StringValue(v.Scope))
+	return out
+}
+
+func ObjectConformanceItem(v types.ConformanceItem) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StringValue(v.ID))
+	out.MapSet("source", vm.StringValue(v.Source))
+	out.MapSet("measure", vm.IntValue(int64(v.Measure)))
+	out.MapSet("home", vm.StringValue(v.Home))
+	out.MapSet("unshared", vm.BoolValue(v.Unshared))
+	out.MapSet("rename", vm.StringValue(v.Rename))
+	return out
+}
+
+func ObjectConformanceCeiling(v types.ConformanceCeiling, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("key", ObjectConformanceKey(v.Key, enums))
+	out.MapSet("file", vm.StringValue(v.File))
+	out.MapSet("base", vm.IntValue(int64(v.Base)))
+	out.MapSet("head", vm.IntValue(int64(v.Head)))
+	itemsViolations := make([]vm.Value, len(v.Violations))
+	for indexViolations := range v.Violations {
+		itemsViolations[indexViolations] = ObjectConformanceItem(v.Violations[indexViolations])
+	}
+	out.MapSet("violations", vm.ListValue(itemsViolations))
+	return out
+}
+
+func ObjectConformanceUnmeasured(v types.ConformanceUnmeasured) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("file", vm.StringValue(v.File))
+	out.MapSet("language", vm.StringValue(v.Language))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	return out
+}
+
+func ObjectConformanceRow(v types.ConformanceRow, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("key", ObjectConformanceKey(v.Key, enums))
+	out.MapSet("n", vm.IntValue(int64(v.N)))
+	out.MapSet("p50", vm.IntValue(int64(v.P50)))
+	out.MapSet("p90", vm.IntValue(int64(v.P90)))
+	out.MapSet("p95", vm.IntValue(int64(v.P95)))
+	out.MapSet("p99", vm.IntValue(int64(v.P99)))
+	out.MapSet("live", vm.IntValue(int64(v.Live)))
+	out.MapSet("value", vm.IntValue(int64(v.Value)))
+	out.MapSet("propose", vm.IntValue(int64(v.Propose)))
+	itemsViolations := make([]vm.Value, len(v.Violations))
+	for indexViolations := range v.Violations {
+		itemsViolations[indexViolations] = ObjectConformanceItem(v.Violations[indexViolations])
+	}
+	out.MapSet("violations", vm.ListValue(itemsViolations))
+	return out
+}
+
+func ObjectConformance(v types.Conformance, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StringValue(v.Definition))
+	itemsRows := make([]vm.Value, len(v.Rows))
+	for indexRows := range v.Rows {
+		itemsRows[indexRows] = ObjectConformanceRow(v.Rows[indexRows], enums)
+	}
+	out.MapSet("rows", vm.ListValue(itemsRows))
+	out.MapSet("excluded", vm.IntValue(int64(v.Excluded)))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
+	out.MapSet("base", vm.StringValue(v.Base))
+	itemsCeilings := make([]vm.Value, len(v.Ceilings))
+	for indexCeilings := range v.Ceilings {
+		itemsCeilings[indexCeilings] = ObjectConformanceCeiling(v.Ceilings[indexCeilings], enums)
+	}
+	out.MapSet("ceilings", vm.ListValue(itemsCeilings))
+	itemsUnmeasured := make([]vm.Value, len(v.Unmeasured))
+	for indexUnmeasured := range v.Unmeasured {
+		itemsUnmeasured[indexUnmeasured] = ObjectConformanceUnmeasured(v.Unmeasured[indexUnmeasured])
+	}
+	out.MapSet("unmeasured", vm.ListValue(itemsUnmeasured))
+	return out
+}
+
 func ObjectStatusTargetRun(v types.StatusTargetRun, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StringValue(v.Project))
@@ -5908,7 +5893,7 @@ func ObjectKnowledgeRefsOptions(v types.KnowledgeRefsOptions) vm.Value {
 	return out
 }
 
-func ObjectInsightOptions(v types.InsightOptions) vm.Value {
+func ObjectHistoryMetricsOptions(v types.HistoryMetricsOptions) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("dir", vm.StringValue(v.Dir))
 	out.MapSet("commits", vm.IntValue(int64(v.Commits)))

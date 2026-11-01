@@ -49,7 +49,7 @@ Every route under the console's `/api/v1/` prefix, enumerated:
 | `GET /api/v1/graph?level=projects` | Project skeleton only: project nodes + project edges                                                                               |
 | `GET /api/v1/graph?select=<terms>` | Scoped neighborhood (same query engine as `magus query`)                                                                           |
 | `GET /api/v1/events`               | SSE stream: `event: graph` when the workspace graph changes                                                                        |
-| `GET /api/v1/insight`              | Every [insight lens](../concepts/knowledge/insight.md): hotspots, affinity, ownership, trend, volatility                           |
+| `HistoryMetricsService/GetHistoryMetrics` | Every [history metric](../concepts/knowledge/historymetrics.md): hotspots, affinity, ownership, trend, volatility (Connect)        |
 | `GET /api/v1/diff`                 | Working-tree changes annotated with role, blast radius, changed-symbol reach, and coverage ([`magus diff`](manpage/magus-diff.md)) |
 | `GET /api/v1/diff/patch`           | The same changes as one unified patch, without the annotation (much cheaper)                                                       |
 | `GET /api/v1/diff/context`         | Supporting context for a changed symbol (callers, definitions) beyond the patch itself                                             |

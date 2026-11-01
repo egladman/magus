@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 15309
-skill_short_bytes: 8937
+skill_full_bytes: 15555
+skill_short_bytes: 9064
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `e1c3311b4e0d` |
+| `skill-content` | `fb52861ea405` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -88,6 +88,7 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
    - `magus affected list`: set; `magus affected <target>`: run it.
    - Silence with `-s`. Do not stop; do not drop to raw language tool.
 2. Verification is `ci`'s job, not sequence you compose; `ci` is only target name magus enforces.
+   Bare "ci" also means host CI/CD (GitHub Actions, ...). Ambiguous -> ask which; `ambiguous-ci-word` refuses assuming either.
    - `magus run ci <project>` for project you work in.
    - `magus affected ci`: final gate once change done.
    - Never hand-run lint, format, test one at a time: re-derives order magusfile owns; forgotten step fails silently by omission.
@@ -295,6 +296,9 @@ VCS.
 2. Verification is `ci`'s job, not a sequence you compose. `ci` is the one target
    name magus enforces: the command that composes the pipeline
    (typically generate, lint, build, test) in the order the magusfile declares.
+   Bare "ci" is also everyday shorthand for the host's CI/CD (GitHub Actions and
+   the rest). When the person says "ci" without naming one meaning, ask which; the
+   `ambiguous-ci-word` guard refuses a call that picks either until they clarify.
    - Run `magus run ci <project>` for the project you are working in.
    - Run `magus affected ci` as the final gate once the change is done; it runs the
      full pipeline over every project your change reaches, which is how you learn

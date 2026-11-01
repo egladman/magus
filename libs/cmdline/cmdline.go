@@ -92,6 +92,10 @@ type Flag struct {
 	// Group is the heading -h prints this flag under, such as a mode's usage
 	// line. Empty prints it first, under no heading.
 	Group string
+
+	// Unit is what a bare number means on a Duration flag (ms, s, m, h). Required
+	// there so help can name it; empty on every other Kind.
+	Unit string
 }
 
 // Operand is a word a command dispatches on, such as a target name.
@@ -158,7 +162,18 @@ func (c Command) BindFlags(fs *flag.FlagSet) {
 		case Int:
 			fs.Int(f.Name, TypedDefault[int](f), f.Doc)
 		case Duration:
-			fs.Duration(f.Name, TypedDefault[time.Duration](f), f.Doc)
+			unit, usage := f.Unit, f.Doc
+			if f.AliasOf == "" {
+				usage = DurationUsage(f)
+			} else if unit == "" {
+				for _, p := range c.Flags {
+					if p.Name == f.AliasOf {
+						unit = p.Unit
+						break
+					}
+				}
+			}
+			DurationVar(fs, new(time.Duration), f.Name, TypedDefault[time.Duration](f), unit, usage)
 		default:
 			panic(fmt.Sprintf("cmdline: flag --%s has unknown kind %s", f.Name, string(f.Kind)))
 		}
@@ -186,6 +201,15 @@ func checkFlags(command string, flags []Flag) error {
 	}
 	var errs error
 	for _, f := range flags {
+		if f.Kind == Duration && f.AliasOf == "" && f.Unit == "" {
+			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s is a Duration with no Unit: declare the unit bare numbers take (ms, s, m, h), so help can name it", command, f.Name))
+		}
+		if f.Kind != Duration && f.Unit != "" {
+			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s sets Unit %q on a %s flag: Unit is only for Duration", command, f.Name, f.Unit, f.Kind))
+		}
+		if f.Kind == Duration && f.Unit != "" && unitPhrase[f.Unit] == "" {
+			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s Unit %q is not one of ns, us, µs, ms, s, m, h", command, f.Name, f.Unit))
+		}
 		if f.Kind != Bool {
 			continue
 		}

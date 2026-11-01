@@ -73,7 +73,7 @@ github.com/egladman/magus.ListSpells func(ctx context.Context) ([]github.com/egl
 github.com/egladman/magus.Magus type struct
 github.com/egladman/magus.Magus.Affected method(ptr) func(ctx context.Context, base string) (*github.com/egladman/magus/types.AffectedResult, error)
 github.com/egladman/magus.Magus.AffectedFromPaths method(ptr) func(ctx context.Context, paths []string) (*github.com/egladman/magus/types.AffectedResult, error)
-github.com/egladman/magus.Magus.Affinity method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.InsightOptions) (github.com/egladman/magus/types.AffinityOutput, error)
+github.com/egladman/magus.Magus.Affinity method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Affinity, error)
 github.com/egladman/magus.Magus.All method(ptr) func() []*github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.ApplySandbox method(ptr) func(ctx context.Context) (context.Context, error)
 github.com/egladman/magus.Magus.AssessChange method(ptr) func(ctx context.Context, target string, o AssessOptions) (github.com/egladman/magus/types.RiskReport, error)
@@ -95,8 +95,8 @@ github.com/egladman/magus.Magus.CleanOutputs method(ptr) func(ctx context.Contex
 github.com/egladman/magus.Magus.Close method(ptr) func() error
 github.com/egladman/magus.Magus.ComputeTargetKey method(ptr) func(ctx context.Context, projectPath string, target string, charms []string) (key string, lines []string, err error)
 github.com/egladman/magus.Magus.ConcurrencyNudge method(ptr) func() string
-github.com/egladman/magus.Magus.Conformance method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ConformanceOutput, error)
-github.com/egladman/magus.Magus.ConformanceCeilings method(ptr) func(ctx context.Context, c github.com/egladman/magus/types.Conformance, head github.com/egladman/magus/types.ConformanceOutput) (github.com/egladman/magus/types.ConformanceOutput, error)
+github.com/egladman/magus.Magus.Conformance method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.Conformance, error)
+github.com/egladman/magus.Magus.ConformanceCeilings method(ptr) func(ctx context.Context, c github.com/egladman/magus/types.Ceiling, head github.com/egladman/magus/types.Conformance) (github.com/egladman/magus/types.Conformance, error)
 github.com/egladman/magus.Magus.ConformanceOptions method(ptr) func() (github.com/egladman/magus/types.ConformanceOptions, error)
 github.com/egladman/magus.Magus.Context method(ptr) func(parent context.Context) context.Context
 github.com/egladman/magus.Magus.ContextWithSecrets method(ptr) func(ctx context.Context) context.Context
@@ -106,7 +106,7 @@ github.com/egladman/magus.Magus.DiffAgainst method(ptr) func(ctx context.Context
 github.com/egladman/magus.Magus.DiffTUIEnabled method(ptr) func() bool
 github.com/egladman/magus.Magus.DiffWith method(ptr) func(ctx context.Context, paths []string, opts github.com/egladman/magus/types.DiffOptions) (github.com/egladman/magus/types.Diff, error)
 github.com/egladman/magus.Magus.DiskReclaim method(ptr) func() (github.com/egladman/magus/types.DiskReclaim, error)
-github.com/egladman/magus.Magus.Duplication method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.DuplicationOutput, error)
+github.com/egladman/magus.Magus.Duplication method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.Duplication, error)
 github.com/egladman/magus.Magus.EvaluateProjects method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.EvaluatedProjectsOutput, error)
 github.com/egladman/magus.Magus.EvaluateTarget method(ptr) func(ctx context.Context, t github.com/egladman/magus/types.Target) ([]github.com/egladman/magus/types.EvaluatedTarget, error)
 github.com/egladman/magus.Magus.ExpandAffected method(ptr) func(ctx context.Context, target string, baseRef string) (targets []github.com/egladman/magus/types.Target, source string, fellBack bool, err error)
@@ -120,9 +120,9 @@ github.com/egladman/magus.Magus.FindOutputProducer method(ptr) func(absPath stri
 github.com/egladman/magus.Magus.FreshenSymbolIndexes method(ptr) func(ctx context.Context) error
 github.com/egladman/magus.Magus.Get method(ptr) func(path string) *github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.Graph method(ptr) func() (*github.com/egladman/magus/types.Graph, error)
-github.com/egladman/magus.Magus.GroupingLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.GroupingOutput, error)
+github.com/egladman/magus.Magus.GroupingLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.Grouping, error)
 github.com/egladman/magus.Magus.HeldLocks method(ptr) func() []github.com/egladman/magus/types.StatusLock
-github.com/egladman/magus.Magus.Hotspots method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.InsightOptions) (github.com/egladman/magus/types.HotspotOutput, error)
+github.com/egladman/magus.Magus.Hotspots method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Hotspots, error)
 github.com/egladman/magus.Magus.IdentifyRef method(ptr) func(ctx context.Context, ref string) ([]github.com/egladman/magus/types.RefMatch, error)
 github.com/egladman/magus.Magus.ImportCache method(ptr) func(ctx context.Context, r io.Reader) error
 github.com/egladman/magus.Magus.InvocationByID method(ptr) func(inv string) (Invocation, error)
@@ -140,7 +140,7 @@ github.com/egladman/magus.Magus.MeasureConformanceBase method(ptr) func(ctx cont
 github.com/egladman/magus.Magus.MetricsCollector method(ptr) func() (*MetricsCollector, bool)
 github.com/egladman/magus.Magus.MetricsSnapshot method(ptr) func(ctx context.Context) ([]byte, error)
 github.com/egladman/magus.Magus.ModelRows method(ptr) func(ctx context.Context) func() []github.com/egladman/magus/types.ModelPricing
-github.com/egladman/magus.Magus.ModelTierLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ModelTierOutput, error)
+github.com/egladman/magus.Magus.ModelTierLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ModelTiers, error)
 github.com/egladman/magus.Magus.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
 github.com/egladman/magus.Magus.ModelTiers method(ptr) func(ctx context.Context) *github.com/egladman/magus/types.ModelTierSet
 github.com/egladman/magus.Magus.OutputAttempts method(ptr) func(ctx context.Context, ref string) ([]OutputDescriptor, error)
@@ -149,7 +149,7 @@ github.com/egladman/magus.Magus.OutputByRefRemote method(ptr) func(ctx context.C
 github.com/egladman/magus.Magus.OutputDescriptorByRef method(ptr) func(ctx context.Context, ref string) (OutputDescriptor, error)
 github.com/egladman/magus.Magus.OutputKeyInputs method(ptr) func(ctx context.Context, ref string) ([]string, error)
 github.com/egladman/magus.Magus.OutputRecordByRef method(ptr) func(ctx context.Context, ref string) (github.com/egladman/magus/types.StoredOutput, error)
-github.com/egladman/magus.Magus.Ownership method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.InsightOptions) (github.com/egladman/magus/types.OwnershipOutput, error)
+github.com/egladman/magus.Magus.Ownership method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Ownership, error)
 github.com/egladman/magus.Magus.PayloadByRef method(ptr) func(ctx context.Context, ref string) ([]byte, error)
 github.com/egladman/magus.Magus.PipeWaits method(ptr) func() []github.com/egladman/magus/types.StatusPipeWait
 github.com/egladman/magus.Magus.Plan method(ptr) func(ctx context.Context, target string, opts PlanOptions) (github.com/egladman/magus/types.ShardPlan, error)
@@ -184,10 +184,10 @@ github.com/egladman/magus.Magus.SymbolsOccurrences method(ptr) func(ctx context.
 github.com/egladman/magus.Magus.TailLog method(ptr) func(projectPath string, target string) (logPath string, err error)
 github.com/egladman/magus.Magus.TargetGraph method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.TargetGraphOutput, error)
 github.com/egladman/magus.Magus.Tools method(ptr) func(ctx context.Context, projects ...string) (github.com/egladman/magus/types.ToolReport, error)
-github.com/egladman/magus.Magus.Trend method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.InsightOptions) (github.com/egladman/magus/types.TrendOutput, error)
-github.com/egladman/magus.Magus.Unreferenced method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.UnreferencedOutput, error)
+github.com/egladman/magus.Magus.Trend method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Trend, error)
+github.com/egladman/magus.Magus.Unreferenced method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.Unreferenced, error)
 github.com/egladman/magus.Magus.VCSOptions method(ptr) func() github.com/egladman/magus/types.VCSOptions
-github.com/egladman/magus.Magus.Volatility method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.VolatilityReport, error)
+github.com/egladman/magus.Magus.Volatility method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.Volatility, error)
 github.com/egladman/magus.Magus.WatchKnowledgeGraph method(ptr) func(ctx context.Context) (func(), error)
 github.com/egladman/magus.Magus.WatchSymbolIndexing method(ptr) func(ctx context.Context) (func(), error)
 github.com/egladman/magus.Magus.Where method(ptr) func(dir string) (*github.com/egladman/magus/types.Project, bool)
@@ -346,7 +346,7 @@ github.com/egladman/magus/libs/testkit/register.ReviewSpell func(tb github.com/e
 github.com/egladman/magus/libs/testkit/register.Spell func(tb github.com/egladman/magus/libs/testkit.TB, name string, opts ...github.com/egladman/magus/spells.Option) string
 github.com/egladman/magus/std.All func() []Module
 github.com/egladman/magus/std.AllSource func() []SourceModule
-github.com/egladman/magus/std.AnalyzerFromContext func(ctx context.Context) (github.com/egladman/magus/types.InsightAnalyzer, bool)
+github.com/egladman/magus/std.AnalyzerFromContext func(ctx context.Context) (github.com/egladman/magus/types.HistoryMetrics, bool)
 github.com/egladman/magus/std.Archive var Module
 github.com/egladman/magus/std.ArchiveCompress func(ctx context.Context, src string, dest string, opts github.com/egladman/magus/types.ArchiveOptions) (github.com/egladman/magus/types.CompressResult, error)
 github.com/egladman/magus/std.ArchiveList func(ctx context.Context, src string, opts github.com/egladman/magus/types.ArchiveOptions) ([]github.com/egladman/magus/types.ArchiveEntry, error)
@@ -520,6 +520,7 @@ github.com/egladman/magus/std.MCPTool.Params field []MCPParam
 github.com/egladman/magus/std.Magus var Module
 github.com/egladman/magus/std.MagusAbandonJob func(ctx context.Context, id string) (github.com/egladman/magus/types.Job, error)
 github.com/egladman/magus/std.MagusAffected func(ctx context.Context, base string) (github.com/egladman/magus/types.AffectedResult, error)
+github.com/egladman/magus/std.MagusAffinity func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Affinity, error)
 github.com/egladman/magus/std.MagusAttention func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (map[string]any, error)
 github.com/egladman/magus/std.MagusBustCache func(ctx context.Context, projectPath string) error
 github.com/egladman/magus/std.MagusClean func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.CleanReport, error)
@@ -548,19 +549,23 @@ github.com/egladman/magus/std.MagusDir func(ctx context.Context, dir string) (gi
 github.com/egladman/magus/std.MagusDirs func(ctx context.Context, glob string, opts github.com/egladman/magus/types.DirsOptions) ([]github.com/egladman/magus/types.Dir, error)
 github.com/egladman/magus/std.MagusDiskReclaim func(ctx context.Context) (github.com/egladman/magus/types.DiskReclaim, error)
 github.com/egladman/magus/std.MagusDoctor func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.DoctorReport, error)
+github.com/egladman/magus/std.MagusDuplication func(ctx context.Context) (github.com/egladman/magus/types.Duplication, error)
 github.com/egladman/magus/std.MagusExitJob func(ctx context.Context, id string, result github.com/egladman/magus/types.JobResult) (github.com/egladman/magus/types.Job, error)
 github.com/egladman/magus/std.MagusExplain func(ctx context.Context, node string) (github.com/egladman/magus/types.KnowledgeExplainOutput, error)
 github.com/egladman/magus/std.MagusFileDiskAttention func(ctx context.Context, message string) error
 github.com/egladman/magus/std.MagusForkFactsJob func(ctx context.Context, workspace string) (github.com/egladman/magus/types.JobForkFacts, error)
+github.com/egladman/magus/std.MagusGrouping func(ctx context.Context) (github.com/egladman/magus/types.Grouping, error)
 github.com/egladman/magus/std.MagusHasCharm func(ctx context.Context, name string) (bool, error)
+github.com/egladman/magus/std.MagusHotspots func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Hotspots, error)
 github.com/egladman/magus/std.MagusImpact func(ctx context.Context, base string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ImpactResult, error)
 github.com/egladman/magus/std.MagusImportGraph func(ctx context.Context) (github.com/egladman/magus/types.ImportGraph, error)
-github.com/egladman/magus/std.MagusInsight func(ctx context.Context, opts github.com/egladman/magus/types.InsightOptions) (github.com/egladman/magus/types.InsightReport, error)
 github.com/egladman/magus/std.MagusJobSchema func(_ context.Context) (map[string]any, error)
 github.com/egladman/magus/std.MagusLayer func(ctx context.Context, name string) (github.com/egladman/magus/types.Layer, error)
 github.com/egladman/magus/std.MagusListJob func(ctx context.Context) (github.com/egladman/magus/types.JobList, error)
+github.com/egladman/magus/std.MagusModelTiers func(ctx context.Context) (github.com/egladman/magus/types.ModelTiers, error)
 github.com/egladman/magus/std.MagusNeighborhood func(ctx context.Context, focus string, opts github.com/egladman/magus/types.KnowledgeNeighborhoodOptions) (github.com/egladman/magus/types.KnowledgeNeighborhoodOutput, error)
 github.com/egladman/magus/std.MagusOutput func(ctx context.Context, ref string) (github.com/egladman/magus/types.OutputRecord, error)
+github.com/egladman/magus/std.MagusOwnership func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Ownership, error)
 github.com/egladman/magus/std.MagusPath func(ctx context.Context, node string, to string, opts github.com/egladman/magus/types.KnowledgePathOptions) (github.com/egladman/magus/types.KnowledgePathOutput, error)
 github.com/egladman/magus/std.MagusPrecedents func(ctx context.Context) (map[string]any, error)
 github.com/egladman/magus/std.MagusProjectGraph func(ctx context.Context) (github.com/egladman/magus/types.GraphView, error)
@@ -577,8 +582,11 @@ github.com/egladman/magus/std.MagusSymbols func(ctx context.Context) (map[string
 github.com/egladman/magus/std.MagusTrailMark func(ctx context.Context, mark map[string]any) (github.com/egladman/magus/types.TrailMark, error)
 github.com/egladman/magus/std.MagusTrailMarks func(ctx context.Context) ([]github.com/egladman/magus/types.TrailMark, error)
 github.com/egladman/magus/std.MagusTrailRead func(ctx context.Context, opts github.com/egladman/magus/types.TrailReadOptions) (github.com/egladman/magus/types.Trail, error)
+github.com/egladman/magus/std.MagusTrend func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Trend, error)
 github.com/egladman/magus/std.MagusUnmergedJob func(ctx context.Context, workspace string) (github.com/egladman/magus/types.JobUnmergedReport, error)
+github.com/egladman/magus/std.MagusUnreferenced func(ctx context.Context) (github.com/egladman/magus/types.Unreferenced, error)
 github.com/egladman/magus/std.MagusVCSCheckpoint func(ctx context.Context) (github.com/egladman/magus/types.VCSCheckpoint, error)
+github.com/egladman/magus/std.MagusVolatility func(ctx context.Context) (github.com/egladman/magus/types.Volatility, error)
 github.com/egladman/magus/std.MagusWaitJob func(ctx context.Context, id string, result *github.com/egladman/magus/types.JobResult) (github.com/egladman/magus/types.JobStatus, error)
 github.com/egladman/magus/std.MagusWhere func(ctx context.Context, dir string) (string, error)
 github.com/egladman/magus/std.Markdown var Module
@@ -810,12 +818,12 @@ github.com/egladman/magus/types.AffectedResult.FilesBySeed field map[string][]st
 github.com/egladman/magus/types.AffectedResult.Seed field []string
 github.com/egladman/magus/types.AffectedResult.UndeclaredBySeed field map[string][]string
 github.com/egladman/magus/types.AffectedSetUncomputable const DiagnosticCode = "MGS1010"
+github.com/egladman/magus/types.Affinity type struct
+github.com/egladman/magus/types.Affinity.Commits field int "json:\"commits\"    yaml:\"commits\""
+github.com/egladman/magus/types.Affinity.Definition field string "json:\"definition\" yaml:\"definition\""
+github.com/egladman/magus/types.Affinity.Pairs field []CoChange "json:\"pairs\"      yaml:\"pairs\""
+github.com/egladman/magus/types.Affinity.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
 github.com/egladman/magus/types.AffinityDefinition const untyped string = "Affinity is how often projects change in the same commit (temporal coupling). A hidden pair has affinity without either declaring a dependency on the other - a candidate architectural smell."
-github.com/egladman/magus/types.AffinityOutput type struct
-github.com/egladman/magus/types.AffinityOutput.Commits field int "json:\"commits\"    yaml:\"commits\""
-github.com/egladman/magus/types.AffinityOutput.Definition field string "json:\"definition\" yaml:\"definition\""
-github.com/egladman/magus/types.AffinityOutput.Pairs field []CoChange "json:\"pairs\"      yaml:\"pairs\""
-github.com/egladman/magus/types.AffinityOutput.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
 github.com/egladman/magus/types.AgentBilling type string
 github.com/egladman/magus/types.AgentBilling.MarshalText method func() ([]byte, error)
 github.com/egladman/magus/types.AgentBilling.String method func() string
@@ -1108,6 +1116,10 @@ github.com/egladman/magus/types.Case.Imports field []string "json:\"imports,omit
 github.com/egladman/magus/types.Case.Node field string "json:\"node\""
 github.com/egladman/magus/types.Case.Source field string "json:\"source\""
 github.com/egladman/magus/types.CauseText func(err error) string
+github.com/egladman/magus/types.Ceiling type struct
+github.com/egladman/magus/types.Ceiling.Base field string "json:\"base\"   yaml:\"base\""
+github.com/egladman/magus/types.Ceiling.Checks field []ConformanceMetric "json:\"checks\" yaml:\"checks\""
+github.com/egladman/magus/types.Ceiling.Validate method func() error
 github.com/egladman/magus/types.CeilingExceededError func(ctx context.Context, err error, target string, ceiling time.Duration, elapsed time.Duration) error
 github.com/egladman/magus/types.Chain type []ChainStep
 github.com/egladman/magus/types.Chain.Needs method func(refs ...string) Chain
@@ -1357,9 +1369,13 @@ github.com/egladman/magus/types.ConflictResolver.KeepIncoming imethod func(ctx c
 github.com/egladman/magus/types.ConflictResolver.MarkResolved imethod func(ctx context.Context, root string, paths []string) error
 github.com/egladman/magus/types.ConflictResolver.RemoveConflicts imethod func(ctx context.Context, root string, paths []string) error
 github.com/egladman/magus/types.Conformance type struct
-github.com/egladman/magus/types.Conformance.Base field string "json:\"base\"   yaml:\"base\""
-github.com/egladman/magus/types.Conformance.Checks field []ConformanceMetric "json:\"checks\" yaml:\"checks\""
-github.com/egladman/magus/types.Conformance.Validate method func() error
+github.com/egladman/magus/types.Conformance.Answer field KnowledgeAnswer "json:\"answer\"               yaml:\"answer\""
+github.com/egladman/magus/types.Conformance.Base field string "json:\"base,omitempty\"       yaml:\"base,omitempty\""
+github.com/egladman/magus/types.Conformance.Ceilings field []ConformanceCeiling "json:\"ceilings,omitempty\"   yaml:\"ceilings,omitempty\""
+github.com/egladman/magus/types.Conformance.Definition field string "json:\"definition\"           yaml:\"definition\""
+github.com/egladman/magus/types.Conformance.Excluded field int "json:\"excluded\"             yaml:\"excluded\""
+github.com/egladman/magus/types.Conformance.Rows field []ConformanceRow "json:\"rows\"                 yaml:\"rows\""
+github.com/egladman/magus/types.Conformance.Unmeasured field []ConformanceUnmeasured "json:\"unmeasured,omitempty\" yaml:\"unmeasured,omitempty\""
 github.com/egladman/magus/types.ConformanceAliasShare const ConformanceMetric = "alias-share"
 github.com/egladman/magus/types.ConformanceCallSequence const ConformanceMetric = "call-sequence"
 github.com/egladman/magus/types.ConformanceCallerSpread const ConformanceMetric = "caller-spread"
@@ -1369,7 +1385,7 @@ github.com/egladman/magus/types.ConformanceCeiling.File field string "json:\"fil
 github.com/egladman/magus/types.ConformanceCeiling.Head field int "json:\"head\"       yaml:\"head\""
 github.com/egladman/magus/types.ConformanceCeiling.Key field ConformanceKey "json:\"key\"        yaml:\"key\""
 github.com/egladman/magus/types.ConformanceCeiling.Violations field []ConformanceItem "json:\"violations\" yaml:\"violations\""
-github.com/egladman/magus/types.ConformanceCeilings func(base ConformanceOutput, head ConformanceOutput, touched []string, checks []ConformanceMetric) []ConformanceCeiling
+github.com/egladman/magus/types.ConformanceCeilings func(base Conformance, head Conformance, touched []string, checks []ConformanceMetric) []ConformanceCeiling
 github.com/egladman/magus/types.ConformanceCloneTokens const ConformanceMetric = "clone-tokens"
 github.com/egladman/magus/types.ConformanceDefinition const untyped string = "Conformance measures how big and how coupled the workspace's code is, one row per metric and population: file lines, function lines, methods per type, top-level declarations per file, workspace imports per package, token count of bodies that share a shape, and exported symbols nothing outside their package uses. Each row gives the live percentiles, the configured anchor a check enforces, and the files, symbols or clone groups past it. Propose is the live percentile when it has fallen at least the configured step below the anchor on a large enough sample, and never otherwise: nothing here enforces a live percentile, since a threshold that follows the code loosens as the code grows. The lens proposes; a person configures the anchor, and nothing here edits it. Asked for a base revision, it adds the conformance ceilings a change crossed: each changed file whose count of a checked metric's violations rose past its count at the base. No count is stored. Generated and excluded files belong to no population, and excluded counts the files the configured exclusions hid. An index that is missing or stale answers unknown, never a pass."
 github.com/egladman/magus/types.ConformanceDepFanout const ConformanceMetric = "dep-fanout"
@@ -1416,14 +1432,6 @@ github.com/egladman/magus/types.ConformanceOptions.Limits field map[ConformanceK
 github.com/egladman/magus/types.ConformanceOptions.MinSample field int
 github.com/egladman/magus/types.ConformanceOptions.Step field float64
 github.com/egladman/magus/types.ConformanceOptions.Validate method func() error
-github.com/egladman/magus/types.ConformanceOutput type struct
-github.com/egladman/magus/types.ConformanceOutput.Answer field KnowledgeAnswer "json:\"answer\"               yaml:\"answer\""
-github.com/egladman/magus/types.ConformanceOutput.Base field string "json:\"base,omitempty\"       yaml:\"base,omitempty\""
-github.com/egladman/magus/types.ConformanceOutput.Ceilings field []ConformanceCeiling "json:\"ceilings,omitempty\"   yaml:\"ceilings,omitempty\""
-github.com/egladman/magus/types.ConformanceOutput.Definition field string "json:\"definition\"           yaml:\"definition\""
-github.com/egladman/magus/types.ConformanceOutput.Excluded field int "json:\"excluded\"             yaml:\"excluded\""
-github.com/egladman/magus/types.ConformanceOutput.Rows field []ConformanceRow "json:\"rows\"                 yaml:\"rows\""
-github.com/egladman/magus/types.ConformanceOutput.Unmeasured field []ConformanceUnmeasured "json:\"unmeasured,omitempty\" yaml:\"unmeasured,omitempty\""
 github.com/egladman/magus/types.ConformancePopMain const ConformancePopulation = "main"
 github.com/egladman/magus/types.ConformancePopSource const ConformancePopulation = "source"
 github.com/egladman/magus/types.ConformancePopTest const ConformancePopulation = "test"
@@ -1977,6 +1985,10 @@ github.com/egladman/magus/types.DriftResultRecord.Files field []Path
 github.com/egladman/magus/types.DriftResultRecord.Message field string
 github.com/egladman/magus/types.DriftResultRecord.URL field string
 github.com/egladman/magus/types.DriftWarn const DriftPolicy = "warn"
+github.com/egladman/magus/types.Duplication type struct
+github.com/egladman/magus/types.Duplication.Answer field KnowledgeAnswer "json:\"answer\"     yaml:\"answer\""
+github.com/egladman/magus/types.Duplication.Definition field string "json:\"definition\" yaml:\"definition\""
+github.com/egladman/magus/types.Duplication.Groups field []DuplicationGroup "json:\"groups\"     yaml:\"groups\""
 github.com/egladman/magus/types.DuplicationDefinition const untyped string = "Duplication ranks pairs of functions that call the same workspace symbols in the same proportions, weighting each shared callee by how rare it is, which is what copied logic looks like from the call graph. It reads the SCIP-backed knowledge graph, so it compares every indexed language the same way and parses no source. It sees only calls to symbols this workspace DEFINES: logic duplicated entirely in standard-library or dependency calls leaves both functions with empty call sets and is invisible here. A measurement, not a verdict - two functions can share a shape on purpose, so read both before folding them."
 github.com/egladman/magus/types.DuplicationGroup type struct
 github.com/egladman/magus/types.DuplicationGroup.History field *DuplicationHistory "json:\"history,omitempty\" yaml:\"history,omitempty\""
@@ -1999,10 +2011,6 @@ github.com/egladman/magus/types.DuplicationOptions.MinCallees field int
 github.com/egladman/magus/types.DuplicationOptions.MinScore field float64
 github.com/egladman/magus/types.DuplicationOptions.MinShared field int
 github.com/egladman/magus/types.DuplicationOptions.MinSpanRatio field float64
-github.com/egladman/magus/types.DuplicationOutput type struct
-github.com/egladman/magus/types.DuplicationOutput.Answer field KnowledgeAnswer "json:\"answer\"     yaml:\"answer\""
-github.com/egladman/magus/types.DuplicationOutput.Definition field string "json:\"definition\" yaml:\"definition\""
-github.com/egladman/magus/types.DuplicationOutput.Groups field []DuplicationGroup "json:\"groups\"     yaml:\"groups\""
 github.com/egladman/magus/types.DuplicationPlacement type string
 github.com/egladman/magus/types.DuplicationShape type string
 github.com/egladman/magus/types.DuplicationSite type struct
@@ -2349,15 +2357,15 @@ github.com/egladman/magus/types.GraphView.Nodes field []string
 github.com/egladman/magus/types.GreenRun type struct
 github.com/egladman/magus/types.GreenRun.Commit field string
 github.com/egladman/magus/types.GreenRun.Run field string
+github.com/egladman/magus/types.Grouping type struct
+github.com/egladman/magus/types.Grouping.Definition field string "json:\"definition\"   yaml:\"definition\""
+github.com/egladman/magus/types.Grouping.MinSample field int "json:\"min_sample\"   yaml:\"min_sample\""
+github.com/egladman/magus/types.Grouping.Rows field []GroupingRecord "json:\"rows\"         yaml:\"rows\""
+github.com/egladman/magus/types.Grouping.Unclassified field int "json:\"unclassified\" yaml:\"unclassified\""
 github.com/egladman/magus/types.GroupingChained const GroupingShape = "chained"
 github.com/egladman/magus/types.GroupingDefinition const untyped string = "Grouping reads job history, not git: each recorded job is chained (one worker whose write paths reach two or more projects), split (two or more jobs forked under one attempt of one parent) or solo. Per shape it sets the context a worker loaded before its first write and the context, wall time, denials and unattributed writes per group beside the pass rate. It is observational: jobs were not assigned to a shape at random, and bigger work is split more often, so it reports what each shape cost here and never which to choose; a person writes that rule. A shape with fewer than the minimum sample of groups, or with most trails rotated away, is unknown."
 github.com/egladman/magus/types.GroupingMeasured const GroupingVerdict = "measured"
 github.com/egladman/magus/types.GroupingMinSample const untyped int = 5
-github.com/egladman/magus/types.GroupingOutput type struct
-github.com/egladman/magus/types.GroupingOutput.Definition field string "json:\"definition\"   yaml:\"definition\""
-github.com/egladman/magus/types.GroupingOutput.MinSample field int "json:\"min_sample\"   yaml:\"min_sample\""
-github.com/egladman/magus/types.GroupingOutput.Rows field []GroupingRecord "json:\"rows\"         yaml:\"rows\""
-github.com/egladman/magus/types.GroupingOutput.Unclassified field int "json:\"unclassified\" yaml:\"unclassified\""
 github.com/egladman/magus/types.GroupingRecord type struct
 github.com/egladman/magus/types.GroupingRecord.ContextPerGroup field *float64 "json:\"context_per_group\"  yaml:\"context_per_group\""
 github.com/egladman/magus/types.GroupingRecord.DenialsPerJob field *float64 "json:\"denials_per_job\"    yaml:\"denials_per_job\""
@@ -2493,12 +2501,32 @@ github.com/egladman/magus/types.HarnessWrite const HarnessChangeOp = "write"
 github.com/egladman/magus/types.HasCharm func(ctx context.Context, charm string) bool
 github.com/egladman/magus/types.HasClaim func(entry string) bool
 github.com/egladman/magus/types.HasInvocationAncestor func(ctx context.Context, pid int, id string) bool
+github.com/egladman/magus/types.HistoryMetrics type interface
+github.com/egladman/magus/types.HistoryMetrics.Affinity imethod func(ctx context.Context, opts HistoryMetricsOptions) (Affinity, error)
+github.com/egladman/magus/types.HistoryMetrics.Conformance imethod func(ctx context.Context) (Conformance, error)
+github.com/egladman/magus/types.HistoryMetrics.Duplication imethod func(ctx context.Context) (Duplication, error)
+github.com/egladman/magus/types.HistoryMetrics.GroupingLens imethod func(ctx context.Context) (Grouping, error)
+github.com/egladman/magus/types.HistoryMetrics.Hotspots imethod func(ctx context.Context, opts HistoryMetricsOptions) (Hotspots, error)
+github.com/egladman/magus/types.HistoryMetrics.ModelTierLens imethod func(ctx context.Context) (ModelTiers, error)
+github.com/egladman/magus/types.HistoryMetrics.Ownership imethod func(ctx context.Context, opts HistoryMetricsOptions) (Ownership, error)
+github.com/egladman/magus/types.HistoryMetrics.Trend imethod func(ctx context.Context, opts HistoryMetricsOptions) (Trend, error)
+github.com/egladman/magus/types.HistoryMetrics.Unreferenced imethod func(ctx context.Context) (Unreferenced, error)
+github.com/egladman/magus/types.HistoryMetrics.Volatility imethod func(ctx context.Context) (Volatility, error)
+github.com/egladman/magus/types.HistoryMetricsDefinition const untyped string = "History metrics show where a codebase's attention and risk concentrate. Four metrics read VCS history: hotspots (churn x complexity), affinity (projects that change together), ownership (author concentration and bus factor), and trend (rising vs cooling). Volatility reads run-outcome history; unreferenced and duplication read the knowledge graph; model tiers read job history. There is no umbrella type: each metric is its own answer."
+github.com/egladman/magus/types.HistoryMetricsOptions type struct
+github.com/egladman/magus/types.HistoryMetricsOptions.Commits field int
+github.com/egladman/magus/types.HistoryMetricsOptions.Dir field string
+github.com/egladman/magus/types.HistoryMetricsOptions.Files field bool
+github.com/egladman/magus/types.HistoryMetricsOptions.Since field string
 github.com/egladman/magus/types.HistoryQuery type struct
 github.com/egladman/magus/types.HistoryQuery.FirstParent field bool
 github.com/egladman/magus/types.HistoryQuery.Limit field int
 github.com/egladman/magus/types.HistoryQuery.Paths field []string
 github.com/egladman/magus/types.HolderServer const JobHolder = "server"
 github.com/egladman/magus/types.HolderSession const JobHolder = "session"
+github.com/egladman/magus/types.Holds type struct
+github.com/egladman/magus/types.Holds.Holds field []Precedent "json:\"holds\""
+github.com/egladman/magus/types.Holds.Indexes field []SymbolIndexStatus "json:\"indexes\""
 github.com/egladman/magus/types.HookBinding type struct
 github.com/egladman/magus/types.HookBinding.Adapter field string "json:\"adapter,omitempty\""
 github.com/egladman/magus/types.HookBinding.Harness field string "json:\"harness,omitempty\""
@@ -2529,12 +2557,12 @@ github.com/egladman/magus/types.HookPointSubagentStop const HookPoint = "subagen
 github.com/egladman/magus/types.HookPoints func() []HookPoint
 github.com/egladman/magus/types.HostNotAllowed const DiagnosticCode = "MGS9007"
 github.com/egladman/magus/types.HotspotDefinition const untyped string = "Hotspots are files (or projects) where edit frequency meets complexity - the prime refactoring targets: code both churned often and hard to understand."
-github.com/egladman/magus/types.HotspotOutput type struct
-github.com/egladman/magus/types.HotspotOutput.Commits field int "json:\"commits\"    yaml:\"commits\""
-github.com/egladman/magus/types.HotspotOutput.Definition field string "json:\"definition\" yaml:\"definition\""
-github.com/egladman/magus/types.HotspotOutput.Files field []FileHotspot "json:\"files,omitempty\" yaml:\"files,omitempty\""
-github.com/egladman/magus/types.HotspotOutput.Nodes field []Node "json:\"nodes\"      yaml:\"nodes\""
-github.com/egladman/magus/types.HotspotOutput.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
+github.com/egladman/magus/types.Hotspots type struct
+github.com/egladman/magus/types.Hotspots.Commits field int "json:\"commits\"    yaml:\"commits\""
+github.com/egladman/magus/types.Hotspots.Definition field string "json:\"definition\" yaml:\"definition\""
+github.com/egladman/magus/types.Hotspots.Files field []FileHotspot "json:\"files,omitempty\" yaml:\"files,omitempty\""
+github.com/egladman/magus/types.Hotspots.Nodes field []Node "json:\"nodes\"      yaml:\"nodes\""
+github.com/egladman/magus/types.Hotspots.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
 github.com/egladman/magus/types.Hunks func(path string, old []byte, new []byte, driver DiffDriver) ([]RegionChange, bool)
 github.com/egladman/magus/types.IgnorePattern type struct
 github.com/egladman/magus/types.IgnorePattern.Pattern field string "json:\"pattern\" yaml:\"pattern\" validate:\"required\""
@@ -2717,9 +2745,9 @@ github.com/egladman/magus/types.ImpactSymbol.Label field string "json:\"label,om
 github.com/egladman/magus/types.ImpactSymbol.RefCount field int "json:\"ref_count\"  yaml:\"ref_count\""
 github.com/egladman/magus/types.ImpactSymbol.Symbol field string "json:\"symbol\"     yaml:\"symbol\""
 github.com/egladman/magus/types.ImportAlias func(lines [][]byte, line int, language string) string
-github.com/egladman/magus/types.ImportAliasReport type struct
-github.com/egladman/magus/types.ImportAliasReport.Indexed field bool "json:\"indexed\"  yaml:\"indexed\""
-github.com/egladman/magus/types.ImportAliasReport.Packages field []AliasFacts "json:\"packages\" yaml:\"packages\""
+github.com/egladman/magus/types.ImportAliases type struct
+github.com/egladman/magus/types.ImportAliases.Indexed field bool "json:\"indexed\"  yaml:\"indexed\""
+github.com/egladman/magus/types.ImportAliases.Packages field []AliasFacts "json:\"packages\" yaml:\"packages\""
 github.com/egladman/magus/types.ImportGraph type struct
 github.com/egladman/magus/types.ImportGraph.Indexed field bool "json:\"indexed\""
 github.com/egladman/magus/types.ImportGraph.Languages field map[string]string "json:\"languages\""
@@ -2767,42 +2795,6 @@ github.com/egladman/magus/types.InputRef.Glob field string "json:\"glob\" yaml:\
 github.com/egladman/magus/types.InputRef.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
 github.com/egladman/magus/types.InputRef.Rooted method func(projectPath string) Glob
 github.com/egladman/magus/types.InsecureTokenPermissions const DiagnosticCode = "MGS9002"
-github.com/egladman/magus/types.InsightAnalyzer type interface
-github.com/egladman/magus/types.InsightAnalyzer.Affinity imethod func(ctx context.Context, opts InsightOptions) (AffinityOutput, error)
-github.com/egladman/magus/types.InsightAnalyzer.Conformance imethod func(ctx context.Context) (ConformanceOutput, error)
-github.com/egladman/magus/types.InsightAnalyzer.Duplication imethod func(ctx context.Context) (DuplicationOutput, error)
-github.com/egladman/magus/types.InsightAnalyzer.GroupingLens imethod func(ctx context.Context) (GroupingOutput, error)
-github.com/egladman/magus/types.InsightAnalyzer.Hotspots imethod func(ctx context.Context, opts InsightOptions) (HotspotOutput, error)
-github.com/egladman/magus/types.InsightAnalyzer.ModelTierLens imethod func(ctx context.Context) (ModelTierOutput, error)
-github.com/egladman/magus/types.InsightAnalyzer.Ownership imethod func(ctx context.Context, opts InsightOptions) (OwnershipOutput, error)
-github.com/egladman/magus/types.InsightAnalyzer.Trend imethod func(ctx context.Context, opts InsightOptions) (TrendOutput, error)
-github.com/egladman/magus/types.InsightAnalyzer.Unreferenced imethod func(ctx context.Context) (UnreferencedOutput, error)
-github.com/egladman/magus/types.InsightAnalyzer.Volatility imethod func(ctx context.Context) (VolatilityReport, error)
-github.com/egladman/magus/types.InsightDefinition const untyped string = "Insight shows where a codebase's attention and risk concentrate. Four lenses read VCS history: hotspots (churn x complexity, the prime refactoring targets), affinity (projects that change together, and whether a dependency edge explains it), ownership (author concentration and bus factor), and trend (rising vs cooling activity). A fifth lens, volatility, reads run-outcome history instead: targets whose pass/fail record flaps (a Wilson-scored flakiness signal). A sixth, unreferenced, reads the knowledge graph: code symbols nothing else in the workspace names. A model-tier lens reads job history: what each model tier achieved on each kind of job."
-github.com/egladman/magus/types.InsightOptions type struct
-github.com/egladman/magus/types.InsightOptions.Commits field int
-github.com/egladman/magus/types.InsightOptions.Dir field string
-github.com/egladman/magus/types.InsightOptions.Files field bool
-github.com/egladman/magus/types.InsightOptions.Since field string
-github.com/egladman/magus/types.InsightReport type struct
-github.com/egladman/magus/types.InsightReport.Affinity field AffinityOutput "json:\"affinity\"    yaml:\"affinity\""
-github.com/egladman/magus/types.InsightReport.Conformance field ConformanceOutput "json:\"conformance\" yaml:\"conformance\""
-github.com/egladman/magus/types.InsightReport.Duplication field DuplicationOutput "json:\"duplication\" yaml:\"duplication\""
-github.com/egladman/magus/types.InsightReport.Grouping field GroupingOutput "json:\"grouping\" yaml:\"grouping\""
-github.com/egladman/magus/types.InsightReport.Hotspots field HotspotOutput "json:\"hotspots\"    yaml:\"hotspots\""
-github.com/egladman/magus/types.InsightReport.ModelTiers field ModelTierOutput "json:\"model_tiers\" yaml:\"model_tiers\""
-github.com/egladman/magus/types.InsightReport.Ownership field OwnershipOutput "json:\"ownership\"   yaml:\"ownership\""
-github.com/egladman/magus/types.InsightReport.Trend field TrendOutput "json:\"trend\"       yaml:\"trend\""
-github.com/egladman/magus/types.InsightReport.Unreferenced field UnreferencedOutput "json:\"unreferenced\" yaml:\"unreferenced\""
-github.com/egladman/magus/types.InsightReport.Volatility field VolatilityReport "json:\"volatility\"  yaml:\"volatility\""
-github.com/egladman/magus/types.InsightView type struct
-github.com/egladman/magus/types.InsightView.Affinity field AffinityOutput "json:\"affinity\"   yaml:\"affinity\""
-github.com/egladman/magus/types.InsightView.Conformance field *ConformanceOutput "json:\"conformance\" yaml:\"conformance\""
-github.com/egladman/magus/types.InsightView.Hotspots field HotspotOutput "json:\"hotspots\"   yaml:\"hotspots\""
-github.com/egladman/magus/types.InsightView.ModelTiers field *ModelTierOutput "json:\"model_tiers\" yaml:\"model_tiers\""
-github.com/egladman/magus/types.InsightView.Ownership field OwnershipOutput "json:\"ownership\"  yaml:\"ownership\""
-github.com/egladman/magus/types.InsightView.Trend field TrendOutput "json:\"trend\"      yaml:\"trend\""
-github.com/egladman/magus/types.InsightView.Volatility field *VolatilityReport "json:\"volatility\" yaml:\"volatility\""
 github.com/egladman/magus/types.Inspector type interface
 github.com/egladman/magus/types.Inspector.ClassifyFiles imethod func(ctx context.Context, paths []string) ([]FileEntry, error)
 github.com/egladman/magus/types.Inspector.EvaluateProjects imethod func(ctx context.Context) (EvaluatedProjectsOutput, error)
@@ -3992,9 +3984,6 @@ github.com/egladman/magus/types.ModelTierDeclaration.Site field string
 github.com/egladman/magus/types.ModelTierDeclaration.Skills field []SkillVariant
 github.com/egladman/magus/types.ModelTierDeclarationUnusable const DiagnosticCode = "MGS1052"
 github.com/egladman/magus/types.ModelTierMatrix type func(ctx context.Context, req ModelTierRequest) (*JobModelTier, error)
-github.com/egladman/magus/types.ModelTierOutput type struct
-github.com/egladman/magus/types.ModelTierOutput.Definition field string "json:\"definition\" yaml:\"definition\""
-github.com/egladman/magus/types.ModelTierOutput.Rows field []ModelTierRecord "json:\"rows\"       yaml:\"rows\""
 github.com/egladman/magus/types.ModelTierRecord type struct
 github.com/egladman/magus/types.ModelTierRecord.ChecksPerJob field float64 "json:\"checks_per_job\"    yaml:\"checks_per_job\""
 github.com/egladman/magus/types.ModelTierRecord.Fail field int "json:\"fail\"              yaml:\"fail\""
@@ -4050,6 +4039,9 @@ github.com/egladman/magus/types.ModelTierSource.Values method func() []string
 github.com/egladman/magus/types.ModelTierSourceDefault const ModelTierSource = "default"
 github.com/egladman/magus/types.ModelTierSourceMatrix const ModelTierSource = "matrix"
 github.com/egladman/magus/types.ModelTierSourceRow const ModelTierSource = "row"
+github.com/egladman/magus/types.ModelTiers type struct
+github.com/egladman/magus/types.ModelTiers.Definition field string "json:\"definition\" yaml:\"definition\""
+github.com/egladman/magus/types.ModelTiers.Rows field []ModelTierRecord "json:\"rows\"       yaml:\"rows\""
 github.com/egladman/magus/types.ModelTiersDefinition const untyped string = "Model tiers reads job history, not git: each (model tier, job kind) pair's recorded outcomes. A tier's pass rate is scored by its Wilson lower bound, set beside how many checks, re-forks, rework rounds (a worker sent more work after it handed back) and widenings (write paths added to a taken job) its jobs took, and what they cost. It reports what each tier achieved; changing a tier is a person editing the declaration or matrix it names."
 github.com/egladman/magus/types.ModuleDefinition const untyped string = "A module is a magus standard-library namespace a magusfile imports for host capabilities - filesystem, exec, vcs, crypto, http, and more. Import each under its bare name (import \"fs\", then fs\\glob(...)); magus layers these methods onto Buzz's own stdlib. The magus forms are sandbox-aware; some methods also exist in Buzz's own stdlib."
 github.com/egladman/magus/types.ModuleEntry type struct
@@ -4218,6 +4210,11 @@ github.com/egladman/magus/types.OutputRefMalformed const DiagnosticCode = "MGS80
 github.com/egladman/magus/types.OutputRefMissing const DiagnosticCode = "MGS8001"
 github.com/egladman/magus/types.OutputReplayedFromAnotherCheckout const DiagnosticCode = "MGS8005"
 github.com/egladman/magus/types.OwedNoSeat const untyped string = "no seat"
+github.com/egladman/magus/types.Ownership type struct
+github.com/egladman/magus/types.Ownership.Commits field int "json:\"commits\"    yaml:\"commits\""
+github.com/egladman/magus/types.Ownership.Definition field string "json:\"definition\" yaml:\"definition\""
+github.com/egladman/magus/types.Ownership.Projects field []OwnershipEntry "json:\"projects\"   yaml:\"projects\""
+github.com/egladman/magus/types.Ownership.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
 github.com/egladman/magus/types.OwnershipDefinition const untyped string = "Ownership shows author concentration: who touches each project most, how many distinct authors it has (bus factor), and whether it has gone quiet (abandonment risk)."
 github.com/egladman/magus/types.OwnershipEntry type struct
 github.com/egladman/magus/types.OwnershipEntry.Authors field int "json:\"authors\"                yaml:\"authors\""
@@ -4230,11 +4227,6 @@ github.com/egladman/magus/types.OwnershipEntry.Path field string "json:\"path\" 
 github.com/egladman/magus/types.OwnershipEntry.Primary field string "json:\"primary\"                yaml:\"primary\""
 github.com/egladman/magus/types.OwnershipEntry.PrimaryShare field int "json:\"primary_share\"          yaml:\"primary_share\""
 github.com/egladman/magus/types.OwnershipEntry.Stale field bool "json:\"stale,omitempty\"        yaml:\"stale,omitempty\""
-github.com/egladman/magus/types.OwnershipOutput type struct
-github.com/egladman/magus/types.OwnershipOutput.Commits field int "json:\"commits\"    yaml:\"commits\""
-github.com/egladman/magus/types.OwnershipOutput.Definition field string "json:\"definition\" yaml:\"definition\""
-github.com/egladman/magus/types.OwnershipOutput.Projects field []OwnershipEntry "json:\"projects\"   yaml:\"projects\""
-github.com/egladman/magus/types.OwnershipOutput.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
 github.com/egladman/magus/types.ParseCheckpointToken func(token string) (revision string, digest string)
 github.com/egladman/magus/types.ParseClaimEvidence func(because string) (ClaimEvidence, error)
 github.com/egladman/magus/types.ParseGlobs func(declared []string) ([]Glob, error)
@@ -4328,9 +4320,6 @@ github.com/egladman/magus/types.PrecedentKey.To field string "json:\"to,omitempt
 github.com/egladman/magus/types.PrecedentKey.Type field string "json:\"type,omitempty\""
 github.com/egladman/magus/types.PrecedentParamNameByType const PrecedentFamily = "param-name-by-type"
 github.com/egladman/magus/types.PrecedentParamOrder const PrecedentFamily = "param-order"
-github.com/egladman/magus/types.PrecedentReport type struct
-github.com/egladman/magus/types.PrecedentReport.Indexes field []SymbolIndexStatus "json:\"indexes\""
-github.com/egladman/magus/types.PrecedentReport.Precedents field []Precedent "json:\"precedents\""
 github.com/egladman/magus/types.PrecedentScope type struct
 github.com/egladman/magus/types.PrecedentScope.Language field string "json:\"language,omitempty\""
 github.com/egladman/magus/types.PrecedentScope.Layers field []string "json:\"layers,omitempty\""
@@ -4550,6 +4539,7 @@ github.com/egladman/magus/types.RegisteredCheckout.LockReason field string
 github.com/egladman/magus/types.RegisteredCheckout.Locked field bool
 github.com/egladman/magus/types.RegisteredCheckout.Primary field bool
 github.com/egladman/magus/types.RegisteredCheckout.Root field string
+github.com/egladman/magus/types.ReindexRefusals func(err error) error
 github.com/egladman/magus/types.RelationAnnotates const RelationID = "annotates"
 github.com/egladman/magus/types.RelationAuthored const RelationID = "authored"
 github.com/egladman/magus/types.RelationCalls const RelationID = "calls"
@@ -5240,12 +5230,12 @@ github.com/egladman/magus/types.SymbolOccurrenceMismatch const SymbolOccurrenceS
 github.com/egladman/magus/types.SymbolOccurrenceStatus type string
 github.com/egladman/magus/types.SymbolOccurrenceUnreadable const SymbolOccurrenceStatus = "unreadable"
 github.com/egladman/magus/types.SymbolOccurrenceVerified const SymbolOccurrenceStatus = "verified"
-github.com/egladman/magus/types.SymbolReport type struct
-github.com/egladman/magus/types.SymbolReport.Indexes field []SymbolIndexStatus "json:\"indexes\""
-github.com/egladman/magus/types.SymbolReport.Symbols field []SymbolDecl "json:\"symbols\""
 github.com/egladman/magus/types.SymbolScope type struct
 github.com/egladman/magus/types.SymbolScope.Loaded method func() bool
 github.com/egladman/magus/types.SymbolScope.Ref method func() string
+github.com/egladman/magus/types.Symbols type struct
+github.com/egladman/magus/types.Symbols.Indexes field []SymbolIndexStatus "json:\"indexes\""
+github.com/egladman/magus/types.Symbols.Symbols field []SymbolDecl "json:\"symbols\""
 github.com/egladman/magus/types.SymbolsMentioning func(ref string) SymbolScope
 github.com/egladman/magus/types.Target type struct
 github.com/egladman/magus/types.Target.Advisory field bool "json:\"advisory,omitempty\" buzz:\"advisory\""
@@ -5550,6 +5540,11 @@ github.com/egladman/magus/types.TreeMerger.MergeTrees imethod func(ctx context.C
 github.com/egladman/magus/types.TreeReporter type interface
 github.com/egladman/magus/types.TreeReporter.DiffTrees imethod func(ctx context.Context, root string, a string, b string) ([]string, error)
 github.com/egladman/magus/types.TreeReporter.TreeID imethod func(ctx context.Context, root string, rev string) (string, error)
+github.com/egladman/magus/types.Trend type struct
+github.com/egladman/magus/types.Trend.Commits field int "json:\"commits\"    yaml:\"commits\""
+github.com/egladman/magus/types.Trend.Definition field string "json:\"definition\" yaml:\"definition\""
+github.com/egladman/magus/types.Trend.Projects field []TrendEntry "json:\"projects\"   yaml:\"projects\""
+github.com/egladman/magus/types.Trend.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
 github.com/egladman/magus/types.TrendDefinition const untyped string = "Trend compares the recent and earlier halves of the window: a positive delta is a rising hotspot (accelerating activity), a negative one is cooling."
 github.com/egladman/magus/types.TrendEntry type struct
 github.com/egladman/magus/types.TrendEntry.Delta field int "json:\"delta\"   yaml:\"delta\""
@@ -5558,11 +5553,6 @@ github.com/egladman/magus/types.TrendEntry.Label method func() string
 github.com/egladman/magus/types.TrendEntry.Name field string "json:\"name\"    yaml:\"name\""
 github.com/egladman/magus/types.TrendEntry.Path field string "json:\"path\"    yaml:\"path\""
 github.com/egladman/magus/types.TrendEntry.Recent field int "json:\"recent\"  yaml:\"recent\""
-github.com/egladman/magus/types.TrendOutput type struct
-github.com/egladman/magus/types.TrendOutput.Commits field int "json:\"commits\"    yaml:\"commits\""
-github.com/egladman/magus/types.TrendOutput.Definition field string "json:\"definition\" yaml:\"definition\""
-github.com/egladman/magus/types.TrendOutput.Projects field []TrendEntry "json:\"projects\"   yaml:\"projects\""
-github.com/egladman/magus/types.TrendOutput.Since field string "json:\"since,omitempty\" yaml:\"since,omitempty\""
 github.com/egladman/magus/types.TrimReport type struct
 github.com/egladman/magus/types.TrimReport.AfterBytes field int64
 github.com/egladman/magus/types.TrimReport.BeforeBytes field int64
@@ -5590,6 +5580,10 @@ github.com/egladman/magus/types.UnknownTarget const DiagnosticCode = "MGS1006"
 github.com/egladman/magus/types.UnmatchableSourceGlob const DiagnosticCode = "MGS1029"
 github.com/egladman/magus/types.UnorderedSameStepWrite const DiagnosticCode = "MGS4008"
 github.com/egladman/magus/types.UnreachedFootprintDecl const DiagnosticCode = "MGS1004"
+github.com/egladman/magus/types.Unreferenced type struct
+github.com/egladman/magus/types.Unreferenced.Answer field KnowledgeAnswer "json:\"answer\"     yaml:\"answer\""
+github.com/egladman/magus/types.Unreferenced.Definition field string "json:\"definition\" yaml:\"definition\""
+github.com/egladman/magus/types.Unreferenced.Symbols field []UnreferencedEntry "json:\"symbols\"    yaml:\"symbols\""
 github.com/egladman/magus/types.UnreferencedDefinition const untyped string = "Unreferenced lists code symbols the workspace defines and nothing in it names: no call from another symbol, and no file outside the one defining them. It reads the SCIP-backed knowledge graph, not git. This is a measurement, not a verdict - reflection, interface dispatch, build tags, generated call sites, and any consumer outside this workspace are all invisible to it, so read each entry before deleting anything."
 github.com/egladman/magus/types.UnreferencedEntry type struct
 github.com/egladman/magus/types.UnreferencedEntry.ID field string "json:\"id\"                 yaml:\"id\""
@@ -5597,10 +5591,6 @@ github.com/egladman/magus/types.UnreferencedEntry.Kind field string "json:\"kind
 github.com/egladman/magus/types.UnreferencedEntry.Label field string "json:\"label\"              yaml:\"label\""
 github.com/egladman/magus/types.UnreferencedEntry.Language field string "json:\"language,omitempty\" yaml:\"language,omitempty\""
 github.com/egladman/magus/types.UnreferencedEntry.Source field string "json:\"source,omitempty\"   yaml:\"source,omitempty\""
-github.com/egladman/magus/types.UnreferencedOutput type struct
-github.com/egladman/magus/types.UnreferencedOutput.Answer field KnowledgeAnswer "json:\"answer\"     yaml:\"answer\""
-github.com/egladman/magus/types.UnreferencedOutput.Definition field string "json:\"definition\" yaml:\"definition\""
-github.com/egladman/magus/types.UnreferencedOutput.Symbols field []UnreferencedEntry "json:\"symbols\"    yaml:\"symbols\""
 github.com/egladman/magus/types.UnregisteredDep type struct
 github.com/egladman/magus/types.UnregisteredDep.Consumer field string
 github.com/egladman/magus/types.UnregisteredDep.Dep field string
@@ -5744,10 +5734,10 @@ github.com/egladman/magus/types.VerdictComment const ReviewVerdict = "comment"
 github.com/egladman/magus/types.VerdictFound const KnowledgeVerdict = "found"
 github.com/egladman/magus/types.VerdictRequestChanges const ReviewVerdict = "request_changes"
 github.com/egladman/magus/types.VerdictUnknown const KnowledgeVerdict = "unknown"
+github.com/egladman/magus/types.Volatility type struct
+github.com/egladman/magus/types.Volatility.Targets field []VolatilityTarget "json:\"targets\"   yaml:\"targets\""
+github.com/egladman/magus/types.Volatility.Threshold field float64 "json:\"threshold\" yaml:\"threshold\""
 github.com/egladman/magus/types.VolatilityDefinition const untyped string = "Volatility reads run-outcome history, not git: each (project, target) pair's recent pass/fail/volatile record scored by its Wilson lower bound. A pair at or above the configured threshold is flagged volatile - a flakiness signal, the prime stabilization targets."
-github.com/egladman/magus/types.VolatilityReport type struct
-github.com/egladman/magus/types.VolatilityReport.Targets field []VolatilityTarget "json:\"targets\"   yaml:\"targets\""
-github.com/egladman/magus/types.VolatilityReport.Threshold field float64 "json:\"threshold\" yaml:\"threshold\""
 github.com/egladman/magus/types.VolatilityTarget type struct
 github.com/egladman/magus/types.VolatilityTarget.Fail field int "json:\"fail\"                yaml:\"fail\""
 github.com/egladman/magus/types.VolatilityTarget.LastPass field time.Time "json:\"last_pass,omitempty\" yaml:\"last_pass,omitempty\""

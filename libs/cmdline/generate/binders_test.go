@@ -319,7 +319,7 @@ func TestWriteBinderEmitsParsableGo(t *testing.T) {
 	b.WriteString("package flaggen\n\nimport (\n\t\"flag\"\n\t\"time\"\n)\n\n")
 	b.WriteString("const (\n\tFlagDemoTimeout = \"timeout\"\n\tFlagDemoName = \"name\"\n\tFlagDemoDepth = \"depth\"\n)\n")
 	writeBinder(&b, "demo", "demo", []cmdline.Flag{
-		{Name: "timeout", Kind: cmdline.Duration, Default: 90 * time.Second, Doc: "Give up after this long"},
+		{Name: "timeout", Kind: cmdline.Duration, Unit: "s", Default: 90 * time.Second, Doc: "Give up after this long"},
 		{Name: "name", Kind: cmdline.String, Default: "main", Doc: "Which one"},
 		{Name: "depth", Kind: cmdline.Int, Doc: "How deep"},
 	})
@@ -341,6 +341,7 @@ func TestBindersRefusesWhatTheConventionForbids(t *testing.T) {
 	}{
 		{"a bool named no-x", cmdline.Flag{Name: "no-cache", Kind: cmdline.Bool, Default: false}, "declare the positive name"},
 		{"a bool with no default", cmdline.Flag{Name: "cache", Kind: cmdline.Bool}, "bool with no Default"},
+		{"a Duration with no Unit", cmdline.Flag{Name: "timeout", Kind: cmdline.Duration}, "no Unit"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

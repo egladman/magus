@@ -552,7 +552,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
 
 // ---- dashboard insight (VCS lenses) ----------------------------------------
 
-// ScenarioInsight mirrors the dashboard's InsightView but carries commit/pass instants as epoch
+// ScenarioHistoryMetrics mirrors HistoryMetricsBoard but carries commit/pass instants as epoch
 // ms (lastCommitMs / lastPassMs) rather than pre-formatted date strings, so dashboard/demo.ts
 // renders them relative to `now` instead of hard-coding literal dates.
 //
@@ -560,7 +560,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
 // libs/authkit/claims.go is the edit that broke both downstream consumers, so it leads churn AND
 // blast radius; the two files it co-changes with are exactly the two that failed; and
 // services/identity:test leads volatility because it is the target that failed and then passed.
-export interface ScenarioInsight {
+export interface ScenarioHistoryMetrics {
   commits: number;
   hotspots: {
     name: string;
@@ -604,7 +604,7 @@ export interface ScenarioInsight {
   };
 }
 
-export function scenarioInsight(now: number): ScenarioInsight {
+export function scenarioInsight(now: number): ScenarioHistoryMetrics {
   const at = (min: number): number => now - min * MIN;
   return {
     commits: 214,

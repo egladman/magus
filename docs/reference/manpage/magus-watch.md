@@ -31,8 +31,8 @@ trigger a full initial build in the downstream magus affected --stdin.
 **--backend** *string* (default: fsnotify)
 : Notification backend: fsnotify, poll, or auto (probes fsnotify, falls back to poll)
 
-**--debounce** *duration* (default: 200ms)
-: Quiet window before emitting a batch
+**--debounce** *value* (default: 200ms)
+: Quiet window before emitting a batch. Bare numbers are milliseconds.
 
 **--ignore** *string*
 : Ignore pattern; repeatable. Form: type=\<glob|regex|literal\>,pattern=\<value\>

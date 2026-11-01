@@ -24,7 +24,7 @@ import type {
   Sandbox,
   Sample as ProtoSample,
 } from "@wire/metrics/v1alpha1/metrics_pb";
-import type { Insight } from "@wire/insight/v1alpha1/insight_pb";
+import type { GetHistoryMetricsResponse } from "@wire/historymetrics/v1alpha1/historymetrics_pb";
 import type { ConnState } from "../../lib/server";
 
 // ---- formatters ------------------------------------------------------------
@@ -709,12 +709,12 @@ export function mapSample(s: ProtoSample): SampleView {
   };
 }
 
-// ---- insight view-model (magus.insight.v1alpha1) ---------------------------------
-// InsightService.GetInsight returns the six lenses as a generated proto message, so
-// this axis has no hand-written wire shape: mapInsight folds magus.insight.v1alpha1.Insight
-// into the camelCase view-models the tiles read. Times are google.protobuf.Timestamp
-// with a zero time.Time mapped to UNSET at the server boundary, so an absent time is
-// simply an absent field rather than the year-0001 sentinel the JSON route emitted.
+// ---- history-metrics board (magus.historymetrics.v1alpha1) ------------------------
+// GetHistoryMetrics returns the metrics as a generated proto message, so this axis has
+// no hand-written wire shape: mapHistoryMetrics folds the response into the camelCase
+// view-models the tiles read. Times are google.protobuf.Timestamp with a zero time.Time
+// mapped to UNSET at the server boundary, so an absent time is simply an absent field
+// rather than the year-0001 sentinel the JSON route emitted.
 
 // fmtDate renders a wire Timestamp as a local date, blank when unset.
 export function fmtDate(ts: Timestamp | undefined): string {
@@ -842,8 +842,9 @@ export interface ToolsView {
   lifecycle: LifecycleView;
 }
 
-export interface InsightView {
-  commits: number; // the git-history window shared by the four VCS lenses
+// Board payload for the history-metrics poll: per-metric view-models, not an Insight product.
+export interface HistoryMetricsBoard {
+  commits: number; // the git-history window shared by the four VCS metrics
   hotspots: HotspotNodeView[];
   hotspotFiles: FileHotspotView[];
   affinity: AffinityPairView[];
@@ -854,7 +855,7 @@ export interface InsightView {
   modelTiers: ModelTierView | null;
 }
 
-export function mapInsight(w: Insight): InsightView {
+export function mapHistoryMetrics(w: GetHistoryMetricsResponse): HistoryMetricsBoard {
   return {
     commits: w.hotspots?.commits ?? 0,
     hotspots: (w.hotspots?.nodes ?? []).map((n) => ({
@@ -1079,7 +1080,7 @@ export function mapAgentActivity(events: AgentEventWire[], now: number): AgentAc
 
 // ---- the store shape -------------------------------------------------------
 // One value published on every tick. Slices are filled independently: `status`
-// arrives on the SSE frame, `metrics`/`samples` on the Connect stream, `insight`
+// arrives on the SSE frame, `metrics`/`samples` on the Connect stream, `historyMetrics`
 // on a polled Connect unary read. Tiles read only the slice they render.
 // `liveHost` deep-links running calls into live logs.
 
@@ -1089,17 +1090,15 @@ export interface DashboardState {
   status: StatusView | null;
   metrics: MetricsView | null;
   samples: SampleView[];
-  insight: InsightView | null;
-  // Why the insight lenses have no data, or null when they do. A tile with `insight === null` cannot
-  // tell "the server has not answered yet" from "it answered and the window is empty", and the two
-  // want opposite copy: the first is unknown, the second is a measured absence.
-  // "Note" and not "Error": most of its values are not errors. It carries not-connected, reading,
-  // and failed alike - whatever the reason there is nothing to show. transport.ts owns every
-  // transition; nothing else writes it.
-  insightNote: string | null;
-  // When the insight lenses last actually answered (epoch ms), so the reader can tell a fresh
-  // read from a stale one without pressing Refresh to find out. null until the first success.
-  insightUpdatedAt: number | null;
+  historyMetrics: HistoryMetricsBoard | null;
+  // Why the history metrics have no data, or null when they do. A tile with
+  // `historyMetrics === null` cannot tell "the server has not answered yet" from "it answered
+  // and the window is empty", and the two want opposite copy: the first is unknown, the second
+  // is a measured absence. "Note" and not "Error": most of its values are not errors. It carries
+  // not-connected, reading, and failed alike. transport.ts owns every transition.
+  historyMetricsNote: string | null;
+  // When the history metrics last answered (epoch ms). null until the first success.
+  historyMetricsUpdatedAt: number | null;
   tools: ToolsView | null;
   // Agent traffic seen in the recent window (mapAgentActivity). null until the activity poll has
   // produced a frame, or when the server serves no trail.
@@ -1126,11 +1125,11 @@ export function initialState(): DashboardState {
     status: null,
     metrics: null,
     samples: [],
-    insight: null,
+    historyMetrics: null,
     // Not "Reading history..." - at construction no server is attached and nothing is reading.
-    // startInsight sets that once a poll actually begins.
-    insightNote: "Not connected.",
-    insightUpdatedAt: null,
+    // startHistoryMetrics sets that once a poll actually begins.
+    historyMetricsNote: "Not connected.",
+    historyMetricsUpdatedAt: null,
     tools: null,
     agents: null,
     logLines: [],
