@@ -2566,6 +2566,7 @@ not a call.
 
 import "io";
 import "flags";
+import "fs";
 import "encoding/json";
 import "proc";
 import "std";
@@ -2627,6 +2628,14 @@ fun relativeTo(path: str, root: str) > str {
     return path;
 }
 
+// fileWorkspace is the workspace an absolute path lies in, else session.
+// A subagent's cwd is the session's checkout while it writes in its own.
+fun fileWorkspace(path: str, session: str) > str {
+    if (!path.startsWith("/")) { return session; }
+    final found = hook\workspaceRootAt(fs\dirname(path));
+    return if (found != "") found else session;
+}
+
 // embedded reports whether the engine loads rel in embedded mode: a magusfile and the
 // spells, magusfiles and hack scripts beside it.
 fun embedded(rel: str) > bool {
@@ -2666,11 +2675,12 @@ fun checkAll(bin: str, written: [str], root: str) > [str] {
     }
     final failures = mut [<str>];
     foreach (path in buzz) {
-        final rel = relativeTo(path, root: root);
+        final fileRoot = fileWorkspace(path, session: root);
+        final rel = relativeTo(path, root: fileRoot);
         final check = mut ["buzz", "--check"];
         if (embedded(rel)) { check.append("--embedded"); }
         check.append(rel);
-        final dir = if (root != "") root else ".";
+        final dir = if (fileRoot != "") fileRoot else ".";
         var result: proc\ExecResult? = null;
         var raised = "";
         try {
@@ -2714,6 +2724,14 @@ test "the engine's own Buzz is checked embedded and everything else strict" {
     std\assert(embedded("spells/harness/codex/spell.buzz") and embedded("hack/dev/a.buzz") and embedded("magusfiles/a.buzz"), message: "spells and scripts");
     std\assert(!embedded("docs/guides/integrations/agents/magus-command.buzz"), message: "a standalone script is strict");
     std\assert(relativeTo("/r/spells/a.buzz", root: "/r") == "spells/a.buzz", message: "under the root");
+}
+
+test "a written file is read against its own workspace, not the session's" {
+    final spell = "{hook\workspaceRoot()}/spells/golang/spell.buzz";
+    final rel = relativeTo(spell, root: fileWorkspace(spell, session: "/elsewhere"));
+    std\assert(embedded(rel), message: rel);
+    std\assert(fileWorkspace("spells/a.buzz", session: "/elsewhere") == "/elsewhere", message: "a relative path stays the session's");
+    std\assert(fileWorkspace("/nowhere/a.buzz", session: "/elsewhere") == "/elsewhere", message: "no workspace above the path");
 }
 
 test "no runnable magus blocks with a reason naming the binary" {

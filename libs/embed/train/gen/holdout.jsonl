@@ -418,6 +418,7 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/job_notes.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_workspace.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/job_workspace_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/journal_hook.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/journal_hook_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/list.go"}
