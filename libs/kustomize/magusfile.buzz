@@ -3,6 +3,7 @@ import "magus";
 import "fs";
 import "proc";
 import "../../hack/magusfile/index" as index;
+import "./kustomize" as kustomize;
 
 magus\project({
     // No spell claims .buzz, YAML or JSON, so this line declares them sources.
@@ -51,10 +52,12 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
         }
         throw "lint: buzz --check reported {found.len()} diagnostic(s)";
     }
+    // Write in this process: a child buzz would open its own sandbox and MGS2002
+    // the temp path the parent created.
     final scratch = fs\tempDir("kubeconform-");
     foreach (i, dir in KUSTOMIZATIONS) {
         final manifest = fs\join(scratch, name: "build-{i}.yaml");
-        _ = magus\cmd("buzz", args: ["manifests.buzz", dir, manifest], opts: magus\CommandOptions{quiet = true});
+        fs\writeFile(manifest, content: kustomize\manifests(kustomize\build(dir)));
         _ = proc\exec("kubeconform", args: ["-strict", "-summary", "-schema-location", SCHEMAS, manifest]);
     }
     fs\removeAll(scratch);
