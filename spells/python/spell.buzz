@@ -452,7 +452,7 @@ object PyScan {
 
 // pyScan sorts the query's files into a scan. It throws when core omits a pyproject.toml's
 // content.
-fun pyScan(req: DiscoveryQuery) > PyScan {
+fun pyScan(req: DiscoveryQuery) > PyScan !> any {
     final scan = PyScan{markersByDir = mut {}, locksByDir = mut {}, pyprojects = mut {}, parseErrors = mut {}, pyFiles = mut [], loose = mut []};
     foreach (file in req.files) {
         final base = baseOf(file.path);
@@ -513,7 +513,7 @@ fun pyOrphans(scan: PyScan, dirs: [str]) > [DiscoveredProject] {
 // setup.py or setup.cfg. Python sources, requirements files and a Pipfile outside
 // every such directory join their owning project as members, each with a gap naming
 // what is missing. It throws when core omits a pyproject.toml's content.
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] {
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
     final scan = pyScan(req);
     final dirs = sortedKeys(scan.markersByDir);
     final local = mut [<LocalProject>];
