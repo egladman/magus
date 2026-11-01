@@ -1,10 +1,12 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/proc/spawn"
@@ -168,13 +170,16 @@ func (r ExecRunner) bringUp(ctx context.Context, s spells.Service) (Handle, erro
 	if err := c.Run(); err != nil {
 		// One probe: a real failure must not sit out the ready timeout.
 		reprobeCtx, stopReprobe := context.WithTimeout(ctx, r.readyTimeout())
-		ready := exec.CommandContext(reprobeCtx, s.Readiness.Bin, s.Readiness.Args...).Run() == nil
+		var probeStderr bytes.Buffer
+		reprobe := exec.CommandContext(reprobeCtx, s.Readiness.Bin, s.Readiness.Args...)
+		reprobe.Stderr = &probeStderr
+		ready := reprobe.Run() == nil
 		stopReprobe()
 		if ready {
 			fmt.Fprintf(os.Stderr, "service: start %q failed (%v) but it is ready; adopting it\n", s.Start.Bin, err)
 			return Adopted, nil
 		}
-		return nil, fmt.Errorf("service: start %q: %w", s.Start.Bin, err)
+		return nil, fmt.Errorf("service: start %q: %w; readiness %q still fails: %s", s.Start.Bin, err, s.Readiness.Bin, strings.TrimSpace(probeStderr.String()))
 	}
 	h := &startedHandle{stop: s.Stop}
 	if err := r.waitReady(ctx, s.Readiness); err != nil {

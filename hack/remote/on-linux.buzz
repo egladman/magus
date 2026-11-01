@@ -351,6 +351,20 @@ fun podman(args: [str]) > ExecResult !> any {
     return proc\exec("podman", args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
 }
 
+// anyRunning reads `podman machine list --format json`.
+export fun anyRunning(machines: str) > bool !> any {
+    foreach (m in serialize\jsonDecode(machines).listValue()) {
+        if (m.q(["Running"]).booleanValue()) { return true; }
+    }
+    return false;
+}
+
+// wedged is the refusal for a machine listed running that podman cannot reach.
+// `podman machine start` says "already running" there, so a start cannot help.
+export fun wedged(stderr: str) > str {
+    return "the podman machine says it is running, but `podman info` cannot reach it: {stderr}; `podman machine stop`, then `podman machine start`, restarts it";
+}
+
 // reach returns "" when podman can be asked to run containers, else the refusal carrying the
 // command that fixes it. A stopped machine is not a refusal: hold starts it.
 fun reach(hostOS: str) > str !> any {
@@ -362,8 +376,13 @@ fun reach(hostOS: str) > str !> any {
     }
     if (hostOS != "linux") {
         final machines = podman(["machine", "list", "--format", "json"]);
-        if (machines.ok and serialize\jsonDecode(machines.stdout).listValue().len() == 0) {
+        if (!machines.ok) { return ""; }
+        if (serialize\jsonDecode(machines.stdout).listValue().len() == 0) {
             return "podman has no machine to run Linux in; run `podman machine init --now`";
+        }
+        if (anyRunning(machines.stdout)) {
+            final probe = podman(["info"]);
+            if (!probe.ok) { return wedged(probe.stderr); }
         }
         return "";
     }
@@ -704,12 +723,22 @@ test "the machine note says whether magus started the machine and when it stops"
         want: "podman machine: started for this script, stops when it ends", message: "in-process");
 }
 
+test "anyRunning reads the machine list's Running field" {
+    assert\equal(anyRunning(`[{"Name": "a", "Running": false}, {"Name": "b", "Running": true}]`), want: true, message: "one running");
+    assert\equal(anyRunning(`[{"Name": "a", "Running": false}]`), want: false, message: "none running");
+}
+
+test "a wedged machine's refusal carries the probe's words and the restart" {
+    assert\equal(wedged("cannot connect"),
+        want: "the podman machine says it is running, but `podman info` cannot reach it: cannot connect; `podman machine stop`, then `podman machine start`, restarts it",
+        message: "refusal");
+}
+
 test "live: a command's exit status crosses unchanged" {
     final host = os\platform();
     final why = reach(host[0]);
     if (why != "") {
-        std\print("skip: {why}");
-        return;
+        assert\skip(why);
     }
     // A stub stands in for magus: building one is a nested magus run, which a test under
     // buzz-test cannot start, and `sh -c` never calls it.
