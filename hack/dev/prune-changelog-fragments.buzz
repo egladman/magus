@@ -603,39 +603,43 @@ fun liveProbe() > result\Result::<Probe> {
             }
             return result\ok::<[Line]?>(blames[key]);
         },
-        symbols = fun (commit: str, lines: {str: [Line]}) > result\Result::<[str]?> {
-            try {
-                final d = magus\diff(opts: magus\DiffOptions{ patch = symbolPatch(lines) });
-                final found = mut [<str>];
-                var covered = false;
-                foreach (f in d.files) {
-                    if (f.visibility != "unknown") { covered = true; }
-                    foreach (s in f.symbols) {
-                        if (found.indexOf(s.id) == null) { found.append(s.id); }
-                    }
-                }
-                if (!covered) { return result\ok::<[str]?>(null); }
-                return result\ok::<[str]?>(found);
-            } catch (err: any) {
-                return result\caught::<[str]?>(err, doing: "map the lines of {commit} onto the symbol index");
-            }
-        },
-        // One magus\diff over a line in each file: its visibility reads unknown exactly where no
-        // symbol index covers the file. magus\explain answers the same per path, but loads
-        // the whole symbol graph again on every call.
-        indexed = fun (paths: [str]) > result\Result::<{str: bool}> {
-            try {
-                final probeLines = mut {<str: [Line]>};
-                foreach (p in paths) { probeLines[p] = [Line{ commit = "", line = 1, text = "" }]; }
-                final d = magus\diff(opts: magus\DiffOptions{ patch = symbolPatch(probeLines) });
-                final covered = mut {<str: bool>};
-                foreach (f in d.files) { covered[f.path] = f.visibility != "unknown"; }
-                return result\ok::<{str: bool}>(covered);
-            } catch (err: any) {
-                return result\caught::<{str: bool}>(err, doing: "ask the symbol index which files it covers");
-            }
-        },
+        symbols = symbolsTouched,
+        indexed = filesIndexed,
     });
+}
+
+fun symbolsTouched(commit: str, lines: {str: [Line]}) > result\Result::<[str]?> {
+    try {
+        final d = magus\diff(opts: magus\DiffOptions{ patch = symbolPatch(lines) });
+        final found = mut [<str>];
+        var covered = false;
+        foreach (f in d.files) {
+            if (f.visibility != "unknown") { covered = true; }
+            foreach (s in f.symbols) {
+                if (found.indexOf(s.id) == null) { found.append(s.id); }
+            }
+        }
+        if (!covered) { return result\ok::<[str]?>(null); }
+        return result\ok::<[str]?>(found);
+    } catch (err: any) {
+        return result\caught::<[str]?>(err, doing: "map the lines of {commit} onto the symbol index");
+    }
+}
+
+// One magus\diff over a line in each file: its visibility reads unknown exactly where no
+// symbol index covers the file. magus\explain answers the same per path, but loads
+// the whole symbol graph again on every call.
+fun filesIndexed(paths: [str]) > result\Result::<{str: bool}> {
+    try {
+        final probeLines = mut {<str: [Line]>};
+        foreach (p in paths) { probeLines[p] = [Line{ commit = "", line = 1, text = "" }]; }
+        final d = magus\diff(opts: magus\DiffOptions{ patch = symbolPatch(probeLines) });
+        final covered = mut {<str: bool>};
+        foreach (f in d.files) { covered[f.path] = f.visibility != "unknown"; }
+        return result\ok::<{str: bool}>(covered);
+    } catch (err: any) {
+        return result\caught::<{str: bool}>(err, doing: "ask the symbol index which files it covers");
+    }
 }
 
 // parseFragment splits a fragment into its group heading and its entry lines. The grammar

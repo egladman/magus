@@ -586,6 +586,35 @@ fun requirePolicyLoads(dir: str) > result\Result::<bool> {
     }
 }
 
+fun conflictsByLayer(dir: str, found: [Conflict], merged: [str]) > result\Result::<[Conflict]> {
+    final annotated = mut [<Conflict>];
+    foreach (c in found) {
+        final ours = mut [<str>];
+        foreach (o in c.ours) {
+            final brought = fromLayer(dir, commit: o, merged: merged);
+            if (brought.error -> err) { return result\Result::<[Conflict]>{ error = err }; }
+            ours.append(brought.value!);
+        }
+        annotated.append(Conflict{ path = c.path, ours = ours, theirs = c.theirs });
+    }
+    return result\ok::<[Conflict]>(annotated);
+}
+
+// sealMerge commits a merge settle left open and returns the layer's reason.
+fun sealMerge(dir: str, settled: [str]) > result\Result::<str> {
+    final merging = gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
+    if (merging.error -> err) { return result\Result::<str>{ error = err }; }
+    if (merging.value!) {
+        final committed = git(dir, args: ["commit", "--no-edit", "--no-verify"]);
+        if (committed.error -> err) { return result\Result::<str>{ error = err }; }
+    }
+    final head = git(dir, args: ["rev-parse", "--short", "HEAD"]);
+    if (head.error -> err) { return result\Result::<str>{ error = err }; }
+    final said = mut ["merged as {head.value!}"];
+    foreach (line in settled) { said.append(line); }
+    return result\ok::<str>(said.join("\n"));
+}
+
 // mergeLayers merges each layer of s, in order, into the detached tree at dir. It stops at
 // the first source conflict, aborting that merge so the tree holds only the layers before
 // it; the conflicting layer says why and every later one stays planned. It returns the
@@ -615,34 +644,18 @@ export fun mergeLayers(dir: str, s: stack\BranchStack, into: str, settle: fun (d
                 if (foundRun.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
                 final found = foundRun.value!;
                 if (found.len() > 0) {
-                    final annotated = mut [<Conflict>];
-                    foreach (c in found) {
-                        final ours = mut [<str>];
-                        foreach (o in c.ours) {
-                            final brought = fromLayer(dir, commit: o, merged: merged);
-                            if (brought.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
-                            ours.append(brought.value!);
-                        }
-                        annotated.append(Conflict{ path = c.path, ours = ours, theirs = c.theirs });
-                    }
+                    final annotated = conflictsByLayer(dir, found: found, merged: merged);
+                    if (annotated.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
                     final aborted = git(dir, args: ["merge", "--abort"]);
                     if (aborted.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
                     status = "conflict";
-                    reason = conflictReason(l.branch, into: into, found: annotated);
+                    reason = conflictReason(l.branch, into: into, found: annotated.value!);
                     stopped = l.branch;
                 } else {
-                    final merging = gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
-                    if (merging.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
-                    if (merging.value!) {
-                        final committed = git(dir, args: ["commit", "--no-edit", "--no-verify"]);
-                        if (committed.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
-                    }
+                    final sealed = sealMerge(dir, settled: settled);
+                    if (sealed.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
                     merged.append(l.branch);
-                    final head = git(dir, args: ["rev-parse", "--short", "HEAD"]);
-                    if (head.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
-                    final said = mut ["merged as {head.value!}"];
-                    foreach (line in settled) { said.append(line); }
-                    reason = said.join("\n");
+                    reason = sealed.value!;
                 }
             }
         }
@@ -866,6 +879,38 @@ fun readSource(path: str) > result\Result::<str> {
     }
 }
 
+fun plannedFromStack(root: str, values: {str: str}) > result\Result::<stack\BranchStack> {
+    if (values["--base"] != null) { return result\fail::<stack\BranchStack>("merge-job-branches: a stack names its own base, so --base is not taken with --stack"); }
+    final source = readSource(values["--stack"]!);
+    if (source.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
+    var s = stack\BranchStack{ base = "", layers = [<stack\StackLayer>] };
+    try {
+        s = stack\orderLayers(stack\readStack(source.value!));
+    } catch (err: any) {
+        return result\caught::<stack\BranchStack>(err, doing: "merge-job-branches: read the stack");
+    }
+    final storeRun = storeRows();
+    if (storeRun.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
+    final rows = storeRun.value!;
+    final resolved = mut [<str>];
+    final layers = mut [<stack\StackLayer>];
+    foreach (l in s.layers) {
+        final named = requireBranch(root, branch: l.branch);
+        if (named.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
+        resolved.append(named.value!);
+        var check = l.check;
+        var goals = l.goals;
+        if (l.job != "" and check == "" and goals.len() == 0) {
+            final row = rowNamed(rows, id: l.job);
+            if (row != null) { check = row!.check; goals = row!.goals; }
+        }
+        layers.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
+            declarations = l.declarations, check = check, goals = goals, status = "planned", reason = l.reason });
+    }
+    nameResolved(resolved, values: values);
+    return result\ok::<stack\BranchStack>(stack\BranchStack{ schema = s.schema, base = s.base, layers = layers });
+}
+
 // planned resolves the source the flags name into an ordered stack, every branch checked
 // to exist.
 fun planned(root: str, values: {str: str}) > result\Result::<stack\BranchStack> {
@@ -876,37 +921,10 @@ fun planned(root: str, values: {str: str}) > result\Result::<stack\BranchStack> 
     if (given.len() != 1) {
         return result\fail::<stack\BranchStack>("merge-job-branches: name the branches one way, with --jobs, --branches or --stack\n{USAGE}");
     }
-    final resolved = mut [<str>];
     if (values["--stack"] != null) {
-        if (values["--base"] != null) { return result\fail::<stack\BranchStack>("merge-job-branches: a stack names its own base, so --base is not taken with --stack"); }
-        final source = readSource(values["--stack"]!);
-        if (source.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
-        var s = stack\BranchStack{ base = "", layers = [<stack\StackLayer>] };
-        try {
-            s = stack\orderLayers(stack\readStack(source.value!));
-        } catch (err: any) {
-            return result\caught::<stack\BranchStack>(err, doing: "merge-job-branches: read the stack");
-        }
-        final storeRun = storeRows();
-        if (storeRun.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
-        final rows = storeRun.value!;
-        final layers = mut [<stack\StackLayer>];
-        foreach (l in s.layers) {
-            final named = requireBranch(root, branch: l.branch);
-            if (named.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
-            resolved.append(named.value!);
-            var check = l.check;
-            var goals = l.goals;
-            if (l.job != "" and check == "" and goals.len() == 0) {
-                final row = rowNamed(rows, id: l.job);
-                if (row != null) { check = row!.check; goals = row!.goals; }
-            }
-            layers.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
-                declarations = l.declarations, check = check, goals = goals, status = "planned", reason = l.reason });
-        }
-        nameResolved(resolved, values: values);
-        return result\ok::<stack\BranchStack>(stack\BranchStack{ schema = s.schema, base = s.base, layers = layers });
+        return plannedFromStack(root, values: values);
     }
+    final resolved = mut [<str>];
     var base = "";
     try {
         base = values["--base"] ?? vcs\base();

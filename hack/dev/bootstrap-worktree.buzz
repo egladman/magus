@@ -347,6 +347,26 @@ fun rowOf(run: fun (args: [str]) > result\Result::<str>, job: str) > result\Resu
     return parseRow(described.value!);
 }
 
+fun heldElsewhere(run: fun (args: [str]) > result\Result::<str>, job: str, execError: result\Diagnostic) > result\Result::<Row> {
+    final heldRow = rowOf(run, job: job);
+    if (heldRow.error -> err) {
+        return result\Result::<Row>{ error = err };
+    }
+    final held = heldRow.value!;
+    if (held.state != "running") {
+        return result\Result::<Row>{ error = execError };
+    }
+    // ./magus is placed and the lease is where it belongs. Raising here
+    // exited 1 on a success, so callers learned to ignore the exit status.
+    try {
+        io\stderr.write("bootstrap-worktree: placed ./magus; job {job} is running, its lease held by its holder in {held.checkoutRoot}, "
+            + "so this session took no lease and built no graph. The exec said: {execError.message}\n");
+    } catch (err: any) {
+        return result\caught::<Row>(err, doing: "bootstrap-worktree: write to stderr");
+    }
+    return result\ok::<Row>(Row{ id = "", state = held.state, checkpoint = held.checkpoint, reportedBase = held.reportedBase, baseVerdict = held.baseVerdict, checkoutRoot = held.checkoutRoot });
+}
+
 // claimThenIndex takes the job's lease, refuses a row unfit for root, and only then builds the
 // graph: the lease records the base, so an edit made while the graph builds lands after it.
 // run executes a magus subcommand and returns its output. When the exec fails on a running
@@ -355,23 +375,7 @@ fun rowOf(run: fun (args: [str]) > result\Result::<str>, job: str) > result\Resu
 export fun claimThenIndex(run: fun (args: [str]) > result\Result::<str>, root: str, job: str, main: str, trackedClean: fun () > result\Result::<bool>, detach: fun (checkpoint: str) > result\Result::<bool>) > result\Result::<Row> {
     final took = run(["job", "exec", job]);
     if (took.error -> e) {
-        final heldRow = rowOf(run, job: job);
-        if (heldRow.error -> err) {
-            return result\Result::<Row>{ error = err };
-        }
-        final held = heldRow.value!;
-        if (held.state != "running") {
-            return result\Result::<Row>{ error = e };
-        }
-        // ./magus is placed and the lease is where it belongs. Raising here exited 1 on a
-        // success, which taught callers to ignore this script's exit status.
-        try {
-            io\stderr.write("bootstrap-worktree: placed ./magus; job {job} is running, its lease held by its holder in {held.checkoutRoot}, "
-                + "so this session took no lease and built no graph. The exec said: {e.message}\n");
-        } catch (err: any) {
-            return result\caught::<Row>(err, doing: "bootstrap-worktree: write to stderr");
-        }
-        return result\ok::<Row>(Row{ id = "", state = held.state, checkpoint = held.checkpoint, reportedBase = held.reportedBase, baseVerdict = held.baseVerdict, checkoutRoot = held.checkoutRoot });
+        return heldElsewhere(run, job: job, execError: e);
     }
     foreach (line in took.value!.split("\n")) {
         if (line.trim() != "") {
@@ -446,6 +450,25 @@ export fun render(row: Row, root: str) > [str] {
     ];
 }
 
+fun sourceChecked(values: {str: str}, root: str) > result\Result::<str> {
+    final source = values["--from"] ?? "";
+    final built = values["--build-from"] ?? "";
+    if (built == "") {
+        return result\ok::<str>(source);
+    }
+    if (source != "" and source != built) {
+        return result\fail::<str>("bootstrap-worktree: --from and --build-from name different checkouts\n{USAGE}");
+    }
+    if (values["--check"] != null) {
+        return result\fail::<str>("bootstrap-worktree: --check writes nothing, so it cannot build; use --from\n{USAGE}");
+    }
+    final compiled = buildFrom(built, root: root);
+    if (compiled.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    return result\ok::<str>(built);
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--help", "--check"], valued: ["--job", "--from", "--build-from"]);
     if (parsed.values["--help"] != null) {
@@ -456,21 +479,11 @@ export fun main(args: [str]) > void !> any {
         throw "bootstrap-worktree: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final root = vcs\root();
-    var source = parsed.values["--from"] ?? "";
-    final built = parsed.values["--build-from"] ?? "";
-    if (built != "") {
-        if (source != "" and source != built) {
-            throw "bootstrap-worktree: --from and --build-from name different checkouts\n{USAGE}";
-        }
-        source = built;
-        if (parsed.values["--check"] != null) {
-            throw "bootstrap-worktree: --check writes nothing, so it cannot build; use --from\n{USAGE}";
-        }
-        final compiled = buildFrom(source, root: root);
-        if (compiled.error -> err) {
-            throw err.message;
-        }
+    final chosen = sourceChecked(parsed.values, root: root);
+    if (chosen.error -> err) {
+        throw err.message;
     }
+    final source = chosen.value!;
     if (parsed.values["--check"] != null) {
         if (source == "") {
             throw "bootstrap-worktree: --check needs --from, the checkout whose ./magus to judge\n{USAGE}";
