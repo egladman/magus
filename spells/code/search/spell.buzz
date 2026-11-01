@@ -670,7 +670,7 @@ fun references(h: Hit, opts: Options) > Section !> any {
 }
 
 // nodeAround lists a domain node's edges by relation, the way magus explain does.
-fun nodeAround(h: Hit, opts: Options) > [Section] !> any {
+fun nodeAround(h: Hit, opts: Options) > [Section] {
     final card: magus\ExplainResult? = magus\explain(h.id) catch null;
     if (card == null) {
         return [Section{ name = "edges", verdict = UNKNOWN, note = "magus explain could not resolve {h.id}" }];
