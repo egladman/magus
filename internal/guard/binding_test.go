@@ -2,12 +2,16 @@ package guard
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -137,6 +141,98 @@ func (s *ExitedHolderBindingSuite) TestExecOfANewJobAfterOwnExitRebinds() {
 	v := s.judge("./magus job exec next-job", false)
 	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
 	s.Equal(job.Binding{Job: "next-job"}, boundJob(s.who, s.at))
+}
+
+func (s *ExitedHolderBindingSuite) TestRootSessionsOwnExitReleasesTheBinding() {
+	root := hookAttribution{Host: s.who.Host, Session: s.who.Session}
+	bindCaller(s.T(), s.ctx, root, heldJob)
+	releaseOnEnd(s.at, root, "./magus job exit held-job --stdin")
+	s.Equal(job.Binding{}, boundJob(root, s.at))
+}
+
+func (s *ExitedHolderBindingSuite) TestRootSessionsExitSchemaKeepsTheBinding() {
+	root := hookAttribution{Host: s.who.Host, Session: s.who.Session}
+	bindCaller(s.T(), s.ctx, root, heldJob)
+	releaseOnEnd(s.at, root, "./magus job exit held-job --schema")
+	s.Equal(job.Binding{Job: heldJob}, boundJob(root, s.at))
+}
+
+// BindOnExecSuite pins that a binding follows an exec the store would take.
+type BindOnExecSuite struct {
+	suite.Suite
+	ctx   context.Context
+	at    location
+	who   hookAttribution
+	store *job.Store
+	here  string
+}
+
+func TestBindOnExecSuite(t *testing.T) {
+	suite.Run(t, new(BindOnExecSuite))
+}
+
+func (s *BindOnExecSuite) SetupTest() {
+	elsewhere := s.T().TempDir()
+	s.here = s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(s.here, "magus.yaml"), []byte("{}\n"), 0o644))
+	var err error
+	s.here, err = workspace.FindRoot(s.here)
+	s.Require().NoError(err)
+	ended := types.EndReasonSessionEnded
+	rows := []types.Job{
+		{ID: "owned-elsewhere", State: types.StateDeclared, Worktree: &types.JobWorktree{Root: elsewhere, Made: true}},
+		{ID: "held-elsewhere", State: types.StateRunning, CheckoutRoot: elsewhere, Registered: 1},
+		{ID: "passed", State: types.StatePass, CheckoutRoot: s.here, Registered: 1},
+		{ID: "free", State: types.StateDeclared},
+		{ID: "paused", State: types.StateDeclared, Paused: 1},
+		{ID: "stopped-here", State: types.StateRunning, CheckoutRoot: s.here, Registered: 1, HolderStopped: 1},
+		{ID: "ended-here", State: types.StateNoReturn, EndReason: ended, CheckoutRoot: s.here, Registered: 1},
+		{ID: "ended-elsewhere", State: types.StateNoReturn, EndReason: ended, CheckoutRoot: elsewhere, Registered: 1},
+	}
+	s.ctx, _ = fleetFixture(s.T())
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: rows})
+	s.at = hookLocation(s.ctx, Dependencies{})
+	s.who = hookAttribution{Host: "claude-code", Session: "8f2c6a1e"}
+	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: s.at.cacheDir, Root: s.at.workspace})
+}
+
+func (s *BindOnExecSuite) bind(id string) job.Binding {
+	bindOnExec(s.ctx, s.at, s.who, fmt.Sprintf("cd %s && ./magus job exec %s", s.here, id))
+	return s.store.Binding(s.who.caller())
+}
+
+func (s *BindOnExecSuite) TestARowOwnedElsewhereDoesNotBind() {
+	s.Equal(job.Binding{}, s.bind("owned-elsewhere"))
+}
+
+func (s *BindOnExecSuite) TestARowHeldElsewhereDoesNotBind() {
+	s.Equal(job.Binding{}, s.bind("held-elsewhere"))
+}
+
+func (s *BindOnExecSuite) TestAPassedRowDoesNotBind() {
+	s.Equal(job.Binding{}, s.bind("passed"))
+}
+
+func (s *BindOnExecSuite) TestAPausedRowDoesNotBind() {
+	s.Equal(job.Binding{}, s.bind("paused"))
+}
+
+func (s *BindOnExecSuite) TestARowEndedWithItsSessionElsewhereDoesNotBind() {
+	s.Equal(job.Binding{}, s.bind("ended-elsewhere"))
+}
+
+func (s *BindOnExecSuite) TestAFreeRowBinds() {
+	s.Equal(job.Binding{Job: "free"}, s.bind("free"))
+}
+
+// Decision 250: a stop keeps the row running, so its holder retakes it.
+func (s *BindOnExecSuite) TestAStoppedRowRetakenHereBinds() {
+	s.Equal(job.Binding{Job: "stopped-here"}, s.bind("stopped-here"))
+}
+
+// Exec takes the row back, though it reads terminal until the line runs.
+func (s *BindOnExecSuite) TestARowEndedWithItsSessionHereBinds() {
+	s.Equal(job.Binding{Job: "ended-here"}, s.bind("ended-here"))
 }
 
 // The cost decision 127 accepted: still bound, the exited holder's fork

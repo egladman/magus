@@ -84,14 +84,7 @@ func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 				here = abs
 			}
 		}
-		// A row that ended only because its holder's session did is taken back by a
-		// session resuming that work in the same checkout.
-		resumed := cur.EndedWithSession() && (cur.CheckoutRoot == "" || cur.CheckoutRoot == here)
-		if cur.State.Terminal() && !resumed {
-			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take,"+
-				" `%s` lists the live ones", id, cur.State, hint.LsJobs)
-		}
-		if moved != nil && cur.CheckoutRoot == "" && cur.Worktree.Standing() && !cur.Worktree.Made {
+		if moved != nil && cur.CheckoutRoot == "" && cur.Worktree.Standing() && !cur.Worktree.Made && !cur.State.Terminal() {
 			switch compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(base, full)) {
 			case types.BaseMatch, types.BaseRevisionMatch, types.BaseUnknown:
 				cur.Worktree = moved
@@ -100,23 +93,15 @@ func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 					id, cur.Worktree.Root, here, checkpointRevision(cur.Checkpoint), checkpointRevision(base))}
 			}
 		}
-		if err := WrongCheckout(*cur, here); err != nil {
+		if err := execRefusal(*cur, here); err != nil {
 			return err
 		}
 		// An exited row taken again where it was taken is its holder sent back to work: it
 		// edits its paths again, so it claims them again. Exited is not terminal, so ADR
 		// 0013 lets the holder's own exec reopen it.
 		reopened := cur.State == types.StateExited && cur.CheckoutRoot != "" && cur.CheckoutRoot == here
-		if resumed || reopened {
+		if cur.State.Terminal() || reopened {
 			cur.State = types.StateRunning
-		}
-		// Held means running: an exec moves a declared row there. A declared row may carry a
-		// checkout already, the forker's or one a hook recorded before anyone took the job,
-		// and it is still the forker's to hand out, not a holder's to keep.
-		if cur.State == types.StateRunning && cur.CheckoutRoot != "" && cur.CheckoutRoot != here {
-			return heldError{fmt.Sprintf("job: %s is held in %s (%s, updated %s ago), and wait grades the checkout that holds it,"+
-				" its holder gives it up with `%s`, and whoever forked it then hands it out again with `%s`",
-				id, cur.CheckoutRoot, cur.State, updatedAgo(*cur), hint.JobExit.With(id), hint.JobApply)}
 		}
 		cur.ReportedBase = base
 		cur.BaseVerdict = compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(base, full))
@@ -134,6 +119,37 @@ func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 func rebindsAdopted(prev, row types.Job) bool {
 	return prev.CheckoutRoot == "" && prev.Worktree.Standing() && !prev.Worktree.Made &&
 		row.Worktree.Standing() && !row.Worktree.Made && !samePath(prev.Worktree.Root, row.Worktree.Root)
+}
+
+// execRefusal is why Exec refuses row in the checkout here, nil for none.
+func execRefusal(row types.Job, here string) error {
+	// A session resuming that work in the same checkout takes it back.
+	resumed := row.EndedWithSession() && (row.CheckoutRoot == "" || row.CheckoutRoot == here)
+	if row.State.Terminal() && !resumed {
+		return fmt.Errorf("job: %s already ended %s, so there is nothing left to take,"+
+			" `%s` lists the live ones", row.ID, row.State, hint.LsJobs)
+	}
+	if err := WrongCheckout(row, here); err != nil {
+		return err
+	}
+	// Held means running. A declared row may carry a checkout already,
+	// and it is still the forker's to hand out, not a holder's to keep.
+	if row.State == types.StateRunning && row.CheckoutRoot != "" && row.CheckoutRoot != here {
+		return heldError{fmt.Sprintf("job: %s is held in %s (%s, updated %s ago), and wait grades the checkout that holds it,"+
+			" its holder gives it up with `%s`, and whoever forked it then hands it out again with `%s`",
+			row.ID, row.CheckoutRoot, row.State, updatedAgo(row), hint.JobExit.With(row.ID), hint.JobApply)}
+	}
+	return nil
+}
+
+// ExecRefusal is why [Store.Exec] in the checkout here would refuse row.
+// The guard asks before it binds a caller. An adopted checkout nobody
+// took may move to here, which only Exec settles, so it refuses nothing.
+func (s *Store) ExecRefusal(row types.Job, here string) error {
+	if row.CheckoutRoot == "" && row.Worktree.Standing() && !row.Worktree.Made {
+		row.Worktree = nil
+	}
+	return execRefusal(row, here)
 }
 
 // untakenElsewhere is this checkout adopted for row, when nobody has taken row and its fork

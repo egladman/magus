@@ -1,15 +1,18 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"path"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/types"
 )
@@ -134,6 +137,9 @@ func execFlagTakesValue(name string) bool {
 //
 // Whether the caller may take the job is decided before this runs: denyLeaseScopedRebind
 // refuses another job while the one it holds is still declared or running.
+//
+// An exec the store will refuse binds nobody. A row ended with
+// its session reads terminal here, and the exec takes it back.
 func bindOnExec(ctx context.Context, at location, who hookAttribution, command string) {
 	id := execTarget(command)
 	if !types.ValidJobID(id) {
@@ -144,13 +150,20 @@ func bindOnExec(ctx context.Context, at location, who hookAttribution, command s
 		return
 	}
 	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == id })
-	if i < 0 || !rows[i].State.Live() {
+	if i < 0 || rows[i].PausedAt(time.Now().Unix()) {
 		return
 	}
 	if who.caller().Identified() && at.workspace == "" {
 		return
 	}
 	store := job.NewStore(at.jobs())
+	if here, placed := execCheckout(command, at); placed {
+		if store.ExecRefusal(rows[i], here) != nil {
+			return
+		}
+	} else if !rows[i].State.Live() {
+		return
+	}
 	if store.Bound(who.caller()) != id {
 		_ = store.Bind(who.caller(), id)
 	}
@@ -164,9 +177,31 @@ func bindOnExec(ctx context.Context, at location, who hookAttribution, command s
 	}
 }
 
+// execCheckout is the workspace a line's `job exec` runs in. placed is false
+// when the line cannot say, such as a cd through a variable.
+func execCheckout(command string, at location) (string, bool) {
+	calls, ok := locateCalls(command, DialectBash, cmp.Or(at.dir, at.workspace), isMagusInvocation, false)
+	if !ok {
+		return "", false
+	}
+	for _, c := range calls {
+		if !hint.JobExec.MatchedBy(magusSubcommandWords(c.inv.Args)) {
+			continue
+		}
+		dir, placed := magusCallDir(c)
+		if !placed {
+			return "", false
+		}
+		root, err := workspace.FindRoot(dir)
+		return root, err == nil
+	}
+	return at.workspace, at.workspace != ""
+}
+
 // releaseOnEnd unbinds the caller from each job `job wait` or `job rm` ends,
-// before the command runs. An exited row still grades its holder's writes,
-// so `job exit` keeps the binding.
+// before the command runs. An exited row still grades a worker's writes, so
+// its `job exit` keeps the binding. A root session goes back to orchestrating,
+// so its own exit releases.
 func releaseOnEnd(at location, who hookAttribution, command string) {
 	if who.caller().Identified() && at.workspace == "" {
 		return
@@ -175,6 +210,10 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 	if !ok {
 		return
 	}
+	verbs := []hint.Command{hint.JobWait, hint.JobRm}
+	if who.Session != "" && who.Agent == "" {
+		verbs = append(verbs, hint.JobExit)
+	}
 	var store *job.Store
 	for _, c := range cmds {
 		// A help, schema or dry-run read ends nothing.
@@ -182,7 +221,7 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 			continue
 		}
 		words := magusSubcommandWords(c.Args)
-		for _, verb := range []hint.Command{hint.JobWait, hint.JobRm} {
+		for _, verb := range verbs {
 			if !verb.MatchedBy(words) {
 				continue
 			}
