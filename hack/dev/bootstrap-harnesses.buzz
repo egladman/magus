@@ -5,6 +5,7 @@ import "flags";
 import "fs";
 import "magus";
 import "merge";
+import "result";
 import "std";
 import "vcs";
 
@@ -19,63 +20,76 @@ final HELP = "cost: a skill install and one plan read per harness\n{USAGE}\n\n"
     + "guard policy differs from HEAD: only committed, reviewed wiring is installed. Writes host config.";
 final GUARDED = ["spells/harness", "docs/guides/integrations/agents", "hack/policy"];
 
-export fun refuseDirty(dirty: [str]) > void !> any {
+export fun refuseDirty(dirty: [str]) > result\Result::<bool> {
     if (dirty.len() > 0) {
-        throw "harness-sync: REFUSED; {dirty.join(", ")} differ from HEAD, and only committed wiring is installed; commit or revert them, then rerun";
+        return result\fail::<bool>("harness-sync: REFUSED; {dirty.join(", ")} differ from HEAD, and only committed wiring is installed; commit or revert them, then rerun");
     }
+    return result\ok::<bool>(true);
 }
 
-fun dirtyGuarded() > [str] !> any {
-    final paths = mut [<str>];
-    foreach (file in vcs\status(GUARDED).files) {
-        paths.append(file.value);
+fun dirtyGuarded() > result\Result::<[str]> {
+    try {
+        final paths = mut [<str>];
+        foreach (file in vcs\status(GUARDED).files) {
+            paths.append(file.value);
+        }
+        return result\ok::<[str]>(paths);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "harness-sync: read the status of the guarded paths");
     }
-    return paths;
 }
 
 // loadedHarnesses are the ids of the harnesses this workspace loads.
 // A harness is a spell anyone registers, so there is no list to keep.
-fun loadedHarnesses() > [str] !> any {
-    final names = magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{ quiet = true }).stdout.trim();
-    return if (names == "") [<str>] else names.split("\n");
+fun loadedHarnesses() > result\Result::<[str]> {
+    try {
+        final names = magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{ quiet = true }).stdout.trim();
+        return result\ok::<[str]>(if (names == "") [<str>] else names.split("\n"));
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "harness-sync: list the loaded harnesses");
+    }
 }
 
 // pickHarnesses is every loaded harness, or the one --id names. An id no
 // loaded harness has is refused, listing the ones there are.
-export fun pickHarnesses(id: str?, loaded: [str]) > [str] !> any {
+export fun pickHarnesses(id: str?, loaded: [str]) > result\Result::<[str]> {
     if (id == null) {
-        return loaded;
+        return result\ok::<[str]>(loaded);
     }
     if (loaded.indexOf(id!) == null) {
-        throw "harness-sync: --id {id!} names no harness this workspace loads; one of {loaded.join(", ")}";
+        return result\fail::<[str]>("harness-sync: --id {id!} names no harness this workspace loads; one of {loaded.join(", ")}");
     }
-    return [id!];
+    return result\ok::<[str]>([id!]);
 }
 
 // applyPlan writes what plan says each file lacks under root and returns one line per file it changed.
 // A merge that reproduces the file on disk writes nothing, so a rerun reports no change.
-export fun applyPlan(plan: magus\HarnessPlan, root: str) > [str] !> any {
-    final lines = mut [<str>];
-    final names = plan.files.keys().cloneMutable();
-    names.sort(fun (a: str, b: str) > bool => a < b);
-    foreach (name in names) {
-        final file = plan.files[name]!;
-        final target = fs\join(root, name: name);
-        final present = fs\exists(target);
-        var text = file.content;
-        if (text == "") {
-            final base = if (present) fs\readFile(target) else "\{}";
-            text = merge\json(base, overlay: json\stringify(file.fragment));
+export fun applyPlan(plan: magus\HarnessPlan, root: str) > result\Result::<[str]> {
+    try {
+        final lines = mut [<str>];
+        final names = plan.files.keys().cloneMutable();
+        names.sort(fun (a: str, b: str) > bool => a < b);
+        foreach (name in names) {
+            final file = plan.files[name]!;
+            final target = fs\join(root, name: name);
+            final present = fs\exists(target);
+            var text = file.content;
+            if (text == "") {
+                final base = if (present) fs\readFile(target) else "\{}";
+                text = merge\json(base, overlay: json\stringify(file.fragment));
+            }
+            if (present and fs\readFile(target) == text) {
+                continue;
+            }
+            fs\mkdirAll(fs\dirname(target));
+            fs\writeFileAtomic(target, content: text);
+            final verb = if (present) "merged" else "created";
+            lines.append("{verb} {name} ({plan.id})");
         }
-        if (present and fs\readFile(target) == text) {
-            continue;
-        }
-        fs\mkdirAll(fs\dirname(target));
-        fs\writeFileAtomic(target, content: text);
-        final verb = if (present) "merged" else "created";
-        lines.append("{verb} {name} ({plan.id})");
+        return result\ok::<[str]>(lines);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "harness-sync: apply the plan of {plan.id}");
     }
-    return lines;
 }
 
 export fun main(args: [str]) > void !> any {
@@ -87,9 +101,24 @@ export fun main(args: [str]) > void !> any {
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "harness-sync: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
-    refuseDirty(dirtyGuarded());
+    final dirty = dirtyGuarded();
+    if (dirty.error -> err) {
+        throw err.message;
+    }
+    final refused = refuseDirty(dirty.value!);
+    if (refused.error -> err) {
+        throw err.message;
+    }
     final id = parsed.values["--id"];
-    final ids = pickHarnesses(id, loaded: loadedHarnesses());
+    final loaded = loadedHarnesses();
+    if (loaded.error -> err) {
+        throw err.message;
+    }
+    final picked = pickHarnesses(id, loaded: loaded.value!);
+    if (picked.error -> err) {
+        throw err.message;
+    }
+    final ids = picked.value!;
     final install = mut ["harness", "install"];
     if (id != null) {
         install.append("--id");
@@ -98,7 +127,11 @@ export fun main(args: [str]) > void !> any {
     _ = magus\cmd("agent", args: install, opts: magus\CommandOptions{ quiet = true });
     final lines = mut [<str>];
     foreach (each in ids) {
-        foreach (line in applyPlan(magus\describe.harness(each), root: ".")) {
+        final applied = applyPlan(magus\describe.harness(each), root: ".");
+        if (applied.error -> err) {
+            throw err.message;
+        }
+        foreach (line in applied.value!) {
             lines.append(line);
         }
     }
@@ -110,26 +143,16 @@ fun plan(files: {str: magus\HarnessFile}) > magus\HarnessPlan {
 }
 
 test "a dirty spell path is refused, naming the files" {
-    var said = "";
-    try {
-        refuseDirty(["spells/harness/codex/spell.buzz", "hack/policy/guard.buzz"]);
-    } catch (e: str) {
-        said = e;
-    }
+    final said = refuseDirty(["spells/harness/codex/spell.buzz", "hack/policy/guard.buzz"]).error!.message;
     assert\isTrue(said.indexOf("spells/harness/codex/spell.buzz, hack/policy/guard.buzz differ from HEAD") != null, message: said);
-    refuseDirty([<str>]);
+    assert\isTrue(refuseDirty([<str>]).error == null, message: "a clean tree");
 }
 
 test "an --id no loaded harness has is refused, listing the loaded ones" {
-    var said = "";
-    try {
-        _ = pickHarnesses("cursr", loaded: ["claude-code", "cursor"]);
-    } catch (e: str) {
-        said = e;
-    }
+    final said = pickHarnesses("cursr", loaded: ["claude-code", "cursor"]).error!.message;
     assert\equal(said, want: "harness-sync: --id cursr names no harness this workspace loads; one of claude-code, cursor", message: said);
-    assert\equal(pickHarnesses("cursor", loaded: ["claude-code", "cursor"]), want: ["cursor"], message: "a loaded id");
-    assert\equal(pickHarnesses(null, loaded: ["claude-code", "cursor"]), want: ["claude-code", "cursor"], message: "every one");
+    assert\equal(pickHarnesses("cursor", loaded: ["claude-code", "cursor"]).value!, want: ["cursor"], message: "a loaded id");
+    assert\equal(pickHarnesses(null, loaded: ["claude-code", "cursor"]).value!, want: ["claude-code", "cursor"], message: "every one");
 }
 
 test "a fragment is merged into an existing file and a content file is written whole" {
@@ -140,7 +163,7 @@ test "a fragment is merged into an existing file and a content file is written w
     final lines = applyPlan(plan({
         ".claude/settings.json": magus\HarnessFile{ exists = true, fragment = fragment },
         "AGENTS.md": magus\HarnessFile{ exists = false, content = "rules\n" },
-    }), root: root);
+    }), root: root).value!;
     assert\equal(lines, want: ["merged .claude/settings.json (claude-code)", "created AGENTS.md (claude-code)"], message: "lines");
     final merged: {str: any} = json\parse(fs\readFile(fs\join(root, name: ".claude/settings.json")));
     assert\equal(std\toInt(merged["keep"]), want: 1, message: "kept");
@@ -152,7 +175,7 @@ test "a fragment is merged into an existing file and a content file is written w
 test "a fragment for a new file creates it and its directory" {
     final root = fs\tempDir("harness-sync");
     final fragment: {str: any} = json\parse("\{\"a\": 1\}");
-    final lines = applyPlan(plan({".cursor/hooks.json": magus\HarnessFile{ exists = false, fragment = fragment }}), root: root);
+    final lines = applyPlan(plan({".cursor/hooks.json": magus\HarnessFile{ exists = false, fragment = fragment }}), root: root).value!;
     assert\equal(lines, want: ["created .cursor/hooks.json (claude-code)"], message: "created");
     assert\equal(fs\readFile(fs\join(root, name: ".cursor/hooks.json")), want: "\{\n  \"a\": 1\n}\n", message: "indented");
     fs\removeAll(root);
@@ -165,7 +188,7 @@ test "a second run changes nothing" {
         "x.json": magus\HarnessFile{ exists = false, fragment = fragment },
         "y.md": magus\HarnessFile{ exists = false, content = "y\n" },
     };
-    assert\equal(applyPlan(plan(files), root: root).len(), want: 2, message: "first run");
-    assert\equal(applyPlan(plan(files), root: root), want: [<str>], message: "second run");
+    assert\equal(applyPlan(plan(files), root: root).value!.len(), want: 2, message: "first run");
+    assert\equal(applyPlan(plan(files), root: root).value!, want: [<str>], message: "second run");
     fs\removeAll(root);
 }
