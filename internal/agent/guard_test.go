@@ -98,7 +98,7 @@ var hookConfigExemptions = map[string]map[string]string{
 	"codex": {
 		"magus-tool-time": "no codex hook schema under testdata/hosts/codex carries a tool duration, and the " +
 			"recorder writes nothing for an event without one",
-		"magus-session":"SessionStart hands a codex hook no env file and reads back only additionalContext " +
+		"magus-session": "SessionStart hands a codex hook no env file and reads back only additionalContext " +
 			"(testdata/hosts/codex/session-start.command.{input,output}.schema.json), so no hook can put the " +
 			"checkout root on PATH for later shell commands",
 		"magus-observe": "Codex has no read tool: a file is read through a shell command, which the command " +
