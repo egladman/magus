@@ -55,8 +55,7 @@ func (s *integratedDirectorySuite) TestDirectoryABranchReplacesWithASymlinkPasse
 func (s *integratedDirectorySuite) TestDirectoryTheBranchKeepsIsRefused() {
 	ps := mergedDirectoryProblems(s.T().Context(), s.store, s.row("skills/a", "shared/a"), []string{"replaces-dir"})
 
-	s.Require().Len(ps, 1)
-	s.Equal(types.WritePathIsDirectory, ps[0].Code)
+	s.Equal([]types.DiagnosticCode{types.WritePathIsDirectory}, codes(ps))
 	s.Equal("write_paths[1]", ps[0].Field, "the index of the entry as the record wrote it")
 }
 
@@ -352,7 +351,7 @@ func TestValidateMergePermitsLintOnlyByItsExactSubject(t *testing.T) {
 	assert.Contains(t, codes(got.Permitted), types.GateNotRun)
 }
 
-func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {
+func TestResolveMergeAddsALintGoalAndSaysSo(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
@@ -384,8 +383,28 @@ func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {
 	assert.Empty(t, note)
 
 	row, note = resolve(declare("docs/notes.md"))
-	assert.Empty(t, row.Goals, "no Go source, no lint goal")
+	assert.Empty(t, row.Goals, "no file lint declares it reads, no lint goal")
 	assert.Empty(t, note)
+}
+
+func TestResolveMergeAddsALintGoalForAnyLanguageLintReads(t *testing.T) {
+	t.Parallel()
+
+	root, projects := regeneratedWorkspace(t)
+	top := projects[0]
+	top.MagusfileTargets = []string{"ci", "lint", "test"}
+	top.TargetInputs["lint"] = []types.InputRef{{Glob: "**/*.ts"}}
+	top.TargetChains = map[string][]types.ChainStep{"ci": {{Target: "lint"}, {Target: "test"}}}
+	s := NewStore(tempLocation(t, root)).InWorkspace(Workspace{Projects: projects})
+
+	merged, err := resolveMerge(t.Context(), s, nil, "w", func(u *types.Job) { u.WritePaths, u.Check = []string{"web/app.ts"}, forkCheck() }, nil)
+	require.NoError(t, err)
+	var row types.Job
+	merged(&row)
+
+	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
+	assert.Equal(t, []string{"web/app.ts"}, row.Goals[i].Check.Args)
 }
 
 func TestFilesInScopesANestedProjectsLintToItsOwnFiles(t *testing.T) {

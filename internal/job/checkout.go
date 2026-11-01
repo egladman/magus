@@ -718,9 +718,9 @@ func claimingRows(rows []types.Job) []types.Job {
 // revision answered. A branch the version control cannot resolve is an error, never an
 // empty set: a merge of nothing would read the same as a merge that changed nothing.
 func IntegrationWritePaths(ctx context.Context, root, checkpoint string, branches []string) (paths []string, base string, err error) {
-	driver, ranges, err := rangeDriver(ctx, root)
-	if err != nil {
-		return nil, "", err
+	driver, why := resolveDriver(ctx, root)
+	if driver == nil {
+		return nil, "", errors.New(why)
 	}
 	if base = checkpointRevision(checkpoint); base == "" {
 		meta, err := driver.Metadata(ctx, root)
@@ -731,12 +731,12 @@ func IntegrationWritePaths(ctx context.Context, root, checkpoint string, branche
 	}
 	seen := map[string]bool{}
 	for _, branch := range branches {
-		changed, err := ranges.RangeFiles(ctx, root, base, branch, nil)
+		changed, err := driver.RangeFiles(ctx, root, base, branch, nil)
 		if err != nil {
 			return nil, "", fmt.Errorf("branch %s: %w", branch, err)
 		}
 		for _, p := range changed {
-			if p = path.Clean(filepath.ToSlash(strings.TrimSpace(p))); p != "." && !seen[p] {
+			if p = cleanPath(p); p != "." && !seen[p] {
 				seen[p] = true
 				paths = append(paths, p)
 			}
@@ -767,20 +767,6 @@ func IntegrationOutputs(ws Workspace, paths []string) (write, soft []string) {
 	}
 	slices.Sort(soft)
 	return slices.Concat(paths, soft), soft
-}
-
-// rangeDriver is the version control answering at root as the range reader it must be, or
-// why it cannot read one.
-func rangeDriver(ctx context.Context, root string) (types.VCSDriver, types.RangeReporter, error) {
-	driver, why := resolveDriver(ctx, root)
-	if driver == nil {
-		return nil, nil, errors.New(why)
-	}
-	ranges, ok := driver.(types.RangeReporter)
-	if !ok {
-		return nil, nil, fmt.Errorf("%s reads no revision range, so no branch can be compared with the checkout", driver.Name())
-	}
-	return driver, ranges, nil
 }
 
 // IntegrationOverlaps names, for an integration row, each live job holding one of its write
@@ -872,9 +858,9 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 	if len(finished) == 0 {
 		return nil, nil
 	}
-	driver, ranges, err := rangeDriver(ctx, s.root)
-	if err != nil {
-		return nil, err
+	driver, why := resolveDriver(ctx, s.root)
+	if driver == nil {
+		return nil, errors.New(why)
 	}
 	meta, err := driver.Metadata(ctx, s.root)
 	if err != nil {
@@ -887,7 +873,7 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 			continue
 		}
 		// One read per job: a branch that does not resolve errs, and nothing says where its work is.
-		missing, err := ranges.MissingCommits(ctx, s.root, meta.ID, branch)
+		missing, err := driver.MissingCommits(ctx, s.root, meta.ID, branch)
 		if err != nil || missing == 0 {
 			continue
 		}

@@ -98,7 +98,7 @@ func (s *resultShapeSuite) row() types.Job {
 }
 
 func (s *resultShapeSuite) TestTheShapeDecodesAsAResult() {
-	shape, _, _ := strings.Cut(ResultShape(s.row()), "\nA check")
+	shape, _, _ := strings.Cut(resultShape(s.row()), "\nA check")
 	got, err := DecodeResult(strings.NewReader(shape))
 	s.Require().NoError(err)
 	s.Equal("w", got.Job)
@@ -106,7 +106,7 @@ func (s *resultShapeSuite) TestTheShapeDecodesAsAResult() {
 }
 
 func (s *resultShapeSuite) TestTheShapeNamesTheOwedForm() {
-	s.Contains(ResultShape(s.row()), `"owed": "no seat"`)
+	s.Contains(resultShape(s.row()), `"owed": "no seat"`)
 }
 
 func (s *resultShapeSuite) TestEveryGoalPrintsItsCommand() {
@@ -127,7 +127,7 @@ func (s *resultShapeSuite) TestFiledRunsNameTheirAttempt() {
 func (s *resultShapeSuite) TestRewroteOutsideNamesOnlyDeclaredOutputsPastTheLease() {
 	project := &types.Project{Path: "docs", TargetOutputs: map[string][]types.OutputRef{"gen": {{Glob: "gen/*.json"}, {Glob: "gen/*.svg"}}}}
 	row := types.Job{WritePaths: []string{"docs/gen/*.svg"}}
-	got := RewroteOutside(row, []*types.Project{project}, "gen", []string{"docs/gen/a.json", "docs/gen/a.svg", "docs/page.md"})
+	got := rewroteOutside(row, []*types.Project{project}, "gen", []string{"docs/gen/a.json", "docs/gen/a.svg", "docs/page.md"})
 	s.Equal([]string{"docs/gen/a.json"}, got)
 }
 

@@ -555,6 +555,85 @@ func (s *landedSuite) TestARowWithNoBranchOrCheckoutSaysSoInANote() {
 	s.Contains(strings.Join(notes, "\n"), "the write paths graded changed_paths alone")
 }
 
+// failingRange reads every range but the one from line.
+type failingRange struct {
+	types.VCSDriver
+	line string
+}
+
+func (d failingRange) RangeFiles(ctx context.Context, dir, base, head string, opts []string) ([]string, error) {
+	if base == d.line {
+		return nil, errors.New("signal: killed")
+	}
+	return d.VCSDriver.RangeFiles(ctx, dir, base, head, opts)
+}
+
+func (s *landedSuite) TestALineThatResolvesAndCannotBeReadLeavesTheBranchUnknown() {
+	s.commitOwn("a.go", "package a // own\n")
+	driver, why := resolveDriver(s.T().Context(), s.wt.Root())
+	s.Require().NotNil(driver, why)
+
+	landed, known, reason := landedSince(s.T().Context(), failingRange{driver, s.row.Parent}, s.wt.Root(), s.row.Checkpoint, s.row)
+
+	s.False(known)
+	s.Empty(landed)
+	s.Contains(reason, "signal: killed")
+}
+
+func (s *landedSuite) TestADeletionOnBothSidesIsNotTheBranchsOwn() {
+	s.commitOwn("a.go", "package a // own\n")
+	s.wt.Git("rm", "-q", "out.txt")
+	s.wt.Git("commit", "-q", "-m", "drop out")
+	s.repo.Git("rm", "-q", "out.txt")
+	s.repo.Git("commit", "-q", "-m", "drop out on the parent")
+	driver, why := resolveDriver(s.T().Context(), s.wt.Root())
+	s.Require().NotNil(driver, why)
+
+	landed, known, reason := landedSince(s.T().Context(), driver, s.wt.Root(), s.row.Checkpoint, s.row)
+
+	s.True(known, reason)
+	s.Equal([]string{"a.go"}, landed)
+}
+
+func (s *landedSuite) contentLanded() int {
+	driver, why := resolveDriver(s.T().Context(), s.wt.Root())
+	s.Require().NotNil(driver, why)
+	head, err := driver.FindCommit(s.T().Context(), s.wt.Root(), "")
+	s.Require().NoError(err)
+	target, err := driver.FindCommit(s.T().Context(), s.repo.Root(), "")
+	s.Require().NoError(err)
+	return contentLanded(s.T().Context(), driver, s.row, head, s.repo.Root(), target)
+}
+
+func (s *landedSuite) TestADeletionOnBothSidesHasLanded() {
+	s.wt.Git("rm", "-q", "out.txt")
+	s.wt.Git("commit", "-q", "-m", "drop out")
+	s.repo.Git("rm", "-q", "out.txt")
+	s.repo.Git("commit", "-q", "-m", "squash")
+
+	s.Equal(1, s.contentLanded())
+}
+
+func (s *landedSuite) TestAnUncommittedDeletionHasNotLanded() {
+	s.wt.Git("rm", "-q", "out.txt")
+	s.repo.Git("rm", "-q", "out.txt")
+	s.repo.Git("commit", "-q", "-m", "squash")
+
+	s.Zero(s.contentLanded())
+}
+
+func (s *landedSuite) TestALineThatDoesNotResolveBroughtNothingIn() {
+	s.commitOwn("a.go", "package a // own\n")
+	s.row.DependsOn = []string{"no-such-branch"}
+	driver, why := resolveDriver(s.T().Context(), s.wt.Root())
+	s.Require().NotNil(driver, why)
+
+	landed, known, reason := landedSince(s.T().Context(), driver, s.wt.Root(), s.row.Checkpoint, s.row)
+
+	s.True(known, reason)
+	s.Equal([]string{"a.go"}, landed)
+}
+
 // overlapFixture is two checkouts of one repository, job a taken in root and job b in
 // other.
 type overlapFixture struct {

@@ -5,7 +5,9 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -59,6 +61,8 @@ type Observed struct {
 	LandedReason string
 	// changedFiles are what a file-scoped goal's run must have read: rowFiles.
 	changedFiles []string
+	// namedFiles says which goal arguments name a file: see [namedFiles].
+	namedFiles map[string]bool
 	// Present are the paths that exist in the tree right now, and PresentKnown says
 	// somebody looked. Separate from Changed because they answer different questions: a
 	// file can exist and be untouched, or be deleted and therefore changed.
@@ -544,7 +548,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " "), gate.Check))
 		}
 		if gate.Kind == types.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(gate.Check) &&
-			narrowedFiles(gate.Check, attemptByGate[gate.ID]) {
+			narrowedFiles(gate.Check, attemptByGate[gate.ID], seen.namedFiles) {
 			v.Notes = append(v.Notes, fmt.Sprintf("goal %q was graded on output ref %q, a run over the files this job changed: `-- %s`",
 				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " ")))
 		}
@@ -729,7 +733,7 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 		status.Violations = append(status.Violations, fmt.Sprintf("no run is recorded for output ref %q", status.OutputRef))
 		return status
 	}
-	status.Scope = runScope(gate.Check, attempt)
+	status.Scope = runScope(gate.Check, attempt, seen.namedFiles)
 	if row.Created > 0 {
 		// Compared in whole seconds, the resolution the declaration is stamped in: a run in
 		// the declaring second cannot be ordered against it either way, and a check run
@@ -754,12 +758,12 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under lease %q, not this job's lease %q, so it is another job's evidence",
 			status.OutputRef, attempt.Lease, row.ID))
 	}
-	if !ranOver(gate.Check, attempt, seen.DefaultCharms, seen.changedFiles) {
+	if !ranOver(gate.Check, attempt, seen.DefaultCharms, seen.changedFiles, seen.namedFiles) {
 		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run%s",
-			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms), leftOut(gate.Check, attempt, seen.changedFiles)))
+			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms), leftOut(gate.Check, attempt, seen.changedFiles, seen.namedFiles)))
 	}
 	if attempt.Failed {
-		status.Violations = append(status.Violations, runFailed(status.OutputRef, gate.Check))
+		status.Violations = append(status.Violations, runFailed(status.OutputRef, gate.Check, seen.namedFiles))
 	}
 	status.Verified = len(status.Violations) == 0
 	return status
@@ -815,8 +819,8 @@ func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 // ranOver is ranCheck for a job that changed the files in changed. A
 // file-scoped check judges only the files it is handed, so its list is graded
 // against changed and never compared verbatim.
-func ranOver(c types.LeaseCheck, a types.JobAttempt, defaults, changed []string) bool {
-	if fileScoped(c) && onlyFiles(a.ExtraArgs) && len(changed) > 0 {
+func ranOver(c types.LeaseCheck, a types.JobAttempt, defaults, changed []string, named map[string]bool) bool {
+	if fileScoped(c, named) && onlyFiles(a.ExtraArgs) && len(changed) > 0 {
 		if len(unreadFiles(c, a, changed)) > 0 {
 			return false
 		}
@@ -827,8 +831,9 @@ func ranOver(c types.LeaseCheck, a types.JobAttempt, defaults, changed []string)
 
 // fileScoped reports whether c's args name the files it judges. Lint reads
 // them that way with or without a list. A script's args are its argv, and a
-// package argument does not scope go-test.
-func fileScoped(c types.LeaseCheck) bool {
+// package argument does not scope go-test. Any other target's args must each
+// be in named, or an argument like an environment name reads as a file list.
+func fileScoped(c types.LeaseCheck, named map[string]bool) bool {
 	if c.Script != "" || runsGoTest(c) {
 		return false
 	}
@@ -837,7 +842,40 @@ func fileScoped(c types.LeaseCheck) bool {
 		target = unqualified
 	}
 	name, _ := splitCharms(target)
-	return name == lintTarget || onlyFiles(c.Args)
+	if name == lintTarget {
+		return true
+	}
+	return onlyFiles(c.Args) && !slices.ContainsFunc(c.Args, func(arg string) bool {
+		return !named[path.Join(c.Project, arg)]
+	})
+}
+
+// namedFiles holds each goal argument that names a file, as a path from tree.
+// That is a regular file there now, or one of changed, so a deletion counts.
+// It stats, so a caller reads it before the store's lock.
+func namedFiles(tree string, goals []types.Goal, changed []string) map[string]bool {
+	touched := make(map[string]bool, len(changed))
+	for _, p := range changed {
+		touched[cleanPath(p)] = true
+	}
+	named := map[string]bool{}
+	for _, g := range goals {
+		if g.Kind != types.GoalKindCheck || g.Check.Script != "" {
+			continue
+		}
+		for _, arg := range g.Check.Args {
+			p := path.Join(g.Check.Project, arg)
+			if !filepath.IsLocal(filepath.FromSlash(p)) {
+				continue
+			}
+			if touched[p] {
+				named[p] = true
+			} else if info, err := os.Stat(filepath.Join(tree, filepath.FromSlash(p))); err == nil && info.Mode().IsRegular() {
+				named[p] = true
+			}
+		}
+	}
+	return named
 }
 
 // onlyFiles reports whether args are paths and nothing else.
@@ -854,8 +892,8 @@ func unreadFiles(c types.LeaseCheck, a types.JobAttempt, changed []string) []str
 }
 
 // leftOut says which changed files a's narrowed run of c did not read, or "".
-func leftOut(c types.LeaseCheck, a types.JobAttempt, changed []string) string {
-	if !fileScoped(c) || !onlyFiles(a.ExtraArgs) {
+func leftOut(c types.LeaseCheck, a types.JobAttempt, changed []string, named map[string]bool) string {
+	if !fileScoped(c, named) || !onlyFiles(a.ExtraArgs) {
 		return ""
 	}
 	unread := unreadFiles(c, a, changed)
@@ -867,17 +905,17 @@ func leftOut(c types.LeaseCheck, a types.JobAttempt, changed []string) string {
 
 // runFailed is the violation of a failed run. A file-scoped check's findings in
 // other files are not this job's.
-func runFailed(ref string, c types.LeaseCheck) string {
+func runFailed(ref string, c types.LeaseCheck, named map[string]bool) string {
 	failed := fmt.Sprintf("the run behind output ref %q failed, so its check did not pass", ref)
-	if fileScoped(c) {
+	if fileScoped(c, named) {
 		return failed + ": a finding in a file this job did not change is not this job's, so run it over the files it changed"
 	}
 	return failed
 }
 
 // narrowedFiles reports whether a ran file-scoped c over another list of files.
-func narrowedFiles(c types.LeaseCheck, a types.JobAttempt) bool {
-	return fileScoped(c) && onlyFiles(a.ExtraArgs) && !slices.Equal(a.ExtraArgs, c.Args)
+func narrowedFiles(c types.LeaseCheck, a types.JobAttempt, named map[string]bool) bool {
+	return fileScoped(c, named) && onlyFiles(a.ExtraArgs) && !slices.Equal(a.ExtraArgs, c.Args)
 }
 
 // scopedRun reports whether a ran c's go test with other -run or -skip patterns and the
@@ -892,8 +930,8 @@ func scopedRun(c types.LeaseCheck, a types.JobAttempt) bool {
 // runScope is the `--` args a's go test of c narrowed with, as `-- <args>`: a -run, a -skip
 // or a package argument. It is "" for any other run, which ran every package and test c
 // names.
-func runScope(c types.LeaseCheck, a types.JobAttempt) string {
-	if narrowedFiles(c, a) {
+func runScope(c types.LeaseCheck, a types.JobAttempt, named map[string]bool) string {
+	if narrowedFiles(c, a, named) {
 		return fmt.Sprintf("-- %s", strings.Join(a.ExtraArgs, " "))
 	}
 	if !runsGoTest(c) || len(a.ExtraArgs) == 0 {

@@ -475,9 +475,14 @@ func (s *Store) Enter(ctx context.Context, id, rel string) (types.Job, error) {
 	return s.Update(ctx, id, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
 }
 
+// cleanPath is a path a version control or a person named, as a slash path.
+func cleanPath(p string) string {
+	return path.Clean(filepath.ToSlash(strings.TrimSpace(p)))
+}
+
 // entryPath cleans the path an entry names, refusing one that is not workspace-relative.
 func entryPath(rel string) (string, error) {
-	clean := path.Clean(filepath.ToSlash(strings.TrimSpace(rel)))
+	clean := cleanPath(rel)
 	if clean == "." || path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
 		return "", fmt.Errorf("job: enter %q: name one workspace-relative path inside the job's write paths", rel)
 	}
@@ -737,6 +742,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// as no_return gets from what the row had become, and a pass its holder's result made.
 		// A row brought back to life has none.
 		row.EndReason = prev.EndReason
+		row.Landed = prev.Landed && !row.State.Live()
 		switch {
 		case row.State.Live():
 			row.EndReason = ""

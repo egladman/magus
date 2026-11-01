@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -197,8 +196,8 @@ func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) {
 // work landed when every path the checkout's diff since the checkpoint shows reads the
 // same at the row's checkout HEAD as at the base, and differs at HEAD from the row's
 // checkpoint: a path equal at HEAD and checkpoint is uncommitted, so HEAD says nothing
-// about it. A path that reads at neither side (a deletion, or a checkout already removed)
-// leaves the row unproven.
+// about it. A path deleted at both HEAD and the base reads the same (see
+// [vcs.DifferingPaths]).
 //
 // The diff is read, never the result's changed_paths: a result naming the part of the work
 // that landed would otherwise end the job while the rest has not.
@@ -226,7 +225,7 @@ func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
 	if paths == 0 {
 		return ""
 	}
-	return fmt.Sprintf(landedReasonPrefix+"on %s at %s: the %d changed path(s) at %s in %s read the same there",
+	return fmt.Sprintf("its work landed on %s at %s: the %d changed path(s) at %s in %s read the same there",
 		res.Base, shortRevision(base), paths, shortRevision(head), row.CheckoutRoot)
 }
 
@@ -256,7 +255,7 @@ func (s *Store) landedInIntegration(ctx context.Context, row types.Job, rows []t
 			continue
 		}
 		if paths := contentLanded(ctx, driver, row, head, into.CheckoutRoot, tip); paths > 0 {
-			return fmt.Sprintf(landedReasonPrefix+"in integration job %s at %s: the %d changed path(s) at %s in %s read the same there",
+			return fmt.Sprintf("its work landed in integration job %s at %s: the %d changed path(s) at %s in %s read the same there",
 				into.ID, shortRevision(tip), paths, shortRevision(head), row.CheckoutRoot)
 		}
 	}
@@ -274,24 +273,16 @@ func contentLanded(ctx context.Context, driver types.VCSDriver, row types.Job, h
 	if err != nil || len(paths) == 0 {
 		return 0
 	}
-	for _, changed := range paths {
-		p := path.Clean(filepath.ToSlash(strings.TrimSpace(changed)))
-		ours, err := driver.ReadFileAt(ctx, row.CheckoutRoot, head.ID, p)
-		if err != nil {
-			return 0
-		}
-		if theirs, err := driver.ReadFileAt(ctx, targetRoot, target.ID, p); err != nil || theirs != ours {
-			return 0
-		}
-		if before, err := driver.ReadFileAt(ctx, row.CheckoutRoot, checkpoint, p); err == nil && before == ours {
-			return 0
-		}
+	off, err := vcs.DifferingPaths(ctx, driver, targetRoot, head.ID, target.ID, paths)
+	if err != nil || len(off) > 0 {
+		return 0
+	}
+	committed, err := vcs.DifferingPaths(ctx, driver, row.CheckoutRoot, checkpoint, head.ID, paths)
+	if err != nil || len(committed) < len(paths) {
+		return 0
 	}
 	return len(paths)
 }
-
-// landedReasonPrefix opens the end_reason of a row a landing probe ended.
-const landedReasonPrefix = "its work landed "
 
 // Unmerged reports what the branch checked out at root does not hold, for job
 // trees forked from root. Content counts as well as ancestry, so a squash or a
@@ -310,16 +301,16 @@ func Unmerged(ctx context.Context, root string, rows []types.Job) types.JobUnmer
 			report.Rows = append(report.Rows, unanswered(rows, row, row.Result.FollowUps, "its result defers this and no row carries it")...)
 			report.Risks = append(report.Risks, unanswered(rows, row, row.Result.UnresolvedRisks, "its result names this risk and no row carries it")...)
 		}
-		if !row.ReadOnly && !row.State.Editing() && (row.Result != nil || row.State.Terminal()) && !strings.HasPrefix(row.EndReason, landedReasonPrefix) {
+		if !row.ReadOnly && !row.State.Editing() && (row.Result != nil || row.State.Terminal()) && !row.Landed {
 			work = append(work, row)
 		}
 	}
 	if len(work) == 0 {
 		return report
 	}
-	driver, ranges, err := rangeDriver(ctx, root)
-	if err != nil {
-		report.Unknown = err.Error()
+	driver, why := resolveDriver(ctx, root)
+	if driver == nil {
+		report.Unknown = why
 		return report
 	}
 	branch, err := driver.Ref(ctx, root)
@@ -337,8 +328,8 @@ func Unmerged(ctx context.Context, root string, rows []types.Job) types.JobUnmer
 		return report
 	}
 	report.Branch = branch
-	read := unmergedRead{driver: driver, ranges: ranges, root: root, branch: branch, tip: meta.ID, now: time.Now().Unix()}
-	read.run(ctx, work)
+	read := unmergedRead{driver: driver, root: root, branch: branch, tip: meta.ID, now: time.Now().Unix()}
+	read.run(ctx, rows, work)
 	for _, row := range work {
 		report.Rows = append(report.Rows, read.facts(rows, row)...)
 	}
@@ -407,7 +398,6 @@ type unmergedRow struct {
 // unmergedRead answers [Unmerged] for one branch of one checkout.
 type unmergedRead struct {
 	driver    types.VCSDriver
-	ranges    types.RangeReporter
 	root      string
 	branch    string
 	tip       string
@@ -421,8 +411,9 @@ type unmergedRead struct {
 }
 
 // run answers every row in work from the stored facts, then asks the version
-// control about what moved: unseen heads first, then the oldest answers.
-func (r *unmergedRead) run(ctx context.Context, work []types.Job) {
+// control about what moved: unseen heads first, then the oldest answers. rows
+// says which stored answers still have a row.
+func (r *unmergedRead) run(ctx context.Context, rows, work []types.Job) {
 	ctx, cancel := context.WithTimeout(ctx, unmergedBudget)
 	defer cancel()
 	path := unmergedFactsPath(r.root)
@@ -452,7 +443,19 @@ func (r *unmergedRead) run(ctx context.Context, work []types.Job) {
 			r.stale++
 		}
 	}
-	writeUnmergedFacts(path, stored, next)
+	writeUnmergedFacts(path, stored, next, func(f unmergedFact) bool {
+		return slices.ContainsFunc(rows, func(row types.Job) bool { return row.ID == f.ID }) && r.branchStands(f.Branch)
+	})
+}
+
+// branchStands reports branch as the one read or one still listed. A backend
+// that lists none leaves every branch standing.
+func (r *unmergedRead) branchStands(branch string) bool {
+	if r.branches == nil || branch == r.branch {
+		return true
+	}
+	_, listed := r.branches[branch]
+	return listed
 }
 
 // ask checks due in order until the budget ends, and returns what to store.
@@ -593,7 +596,7 @@ func (r *unmergedRead) holds(ctx context.Context, f *unmergedFact) (bool, int, e
 			return true, 0, nil
 		}
 	}
-	missing, err := r.ranges.MissingCommits(ctx, r.root, r.tip, f.Head)
+	missing, err := r.driver.MissingCommits(ctx, r.root, r.tip, f.Head)
 	if err != nil {
 		return false, 0, err
 	}
@@ -700,9 +703,20 @@ func readUnmergedFacts(path string) storedUnmergedFacts {
 }
 
 // writeUnmergedFacts appends next, or rewrites to the latest per row once the
-// file is [file.CompactDue]. A failed write only costs the stored answers.
-func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string]unmergedFact) {
-	if path == "" || len(next) == 0 {
+// file is [file.CompactDue] or an answer keep refuses drops out. A failed write
+// only costs the stored answers.
+func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string]unmergedFact, keep func(unmergedFact) bool) {
+	if path == "" {
+		return
+	}
+	dropped := false
+	for key, f := range stored.facts {
+		if !keep(f) {
+			delete(stored.facts, key)
+			dropped = true
+		}
+	}
+	if !dropped && len(next) == 0 {
 		return
 	}
 	var changed [][]byte
@@ -713,7 +727,7 @@ func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string
 			changed = append(changed, line)
 		}
 	}
-	if !stored.partial && !file.CompactDue(stored.lines+len(changed), len(stored.facts)) {
+	if !dropped && !stored.partial && !file.CompactDue(stored.lines+len(changed), len(stored.facts)) {
 		_ = file.AppendLines(path, changed, 0o644)
 		return
 	}

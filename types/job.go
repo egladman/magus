@@ -849,6 +849,9 @@ type Job struct {
 	// LeftUnmerged is the stated reason the row's work stays off the merge
 	// branch. It exempts the row's work and its deferred items.
 	LeftUnmerged string `json:"left_unmerged,omitempty" yaml:"left_unmerged,omitempty"`
+	// Landed says a landing probe ended the row because its work reads the same
+	// on the base or in an integration. EndReason says where, for a person.
+	Landed bool `json:"landed,omitempty" yaml:"landed,omitempty"`
 	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
 	// MachineClaim. In (0,1]; zero reads as DefaultJobWeight.
 	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`

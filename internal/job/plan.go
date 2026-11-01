@@ -572,9 +572,9 @@ func emptyResult(r types.JobResult) bool {
 		len(r.GateEvidence) == 0 && len(r.UnresolvedRisks) == 0
 }
 
-// ResultShape is the result row's holder files, as JSON naming the row's
+// resultShape is the result row's holder files, as JSON naming the row's
 // goals, then how a check the machine would not seat is filed.
-func ResultShape(row types.Job) string {
+func resultShape(row types.Job) string {
 	shape := types.JobResult{
 		Schema:          types.Schema{Version: types.JobResultSchemaVersion},
 		Job:             row.ID,
@@ -601,13 +601,13 @@ func ResultShape(row types.Job) string {
 		encoded, types.OwedNoSeat)
 }
 
-// FiledShape is [ResultShape] for the row named id, or where to read the
+// FiledShape is [resultShape] for the row named id, or where to read the
 // schema when no row has that name.
 func FiledShape(store *Store, id string) string {
 	rows, err := store.List()
 	if err == nil {
 		if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
-			return ResultShape(rows[i])
+			return resultShape(rows[i])
 		}
 	}
 	return fmt.Sprintf("`%s` prints the schema", hint.JobExit.With("--schema"))
@@ -622,7 +622,7 @@ func RenderGoalCommands(out io.Writer, row types.Job) {
 			fmt.Fprintf(out, "  %s: %s\n", goal.ID, goal.Check)
 		}
 	}
-	fmt.Fprintf(out, "the result `%s` reads\n%s\n", hint.JobExit.With(row.ID, "--stdin"), ResultShape(row))
+	fmt.Fprintf(out, "the result `%s` reads\n%s\n", hint.JobExit.With(row.ID, "--stdin"), resultShape(row))
 }
 
 // RenderFiled writes the run each output ref of a filed result resolved to.
@@ -644,9 +644,9 @@ func RenderFiled(out io.Writer, row types.Job) {
 	}
 }
 
-// RewroteOutside is each of dirty, the checkout's uncommitted paths, that a
+// rewroteOutside is each of dirty, the checkout's uncommitted paths, that a
 // declared output of target matches and row's write paths do not hold, sorted.
-func RewroteOutside(row types.Job, projects []*types.Project, target string, dirty []string) []string {
+func rewroteOutside(row types.Job, projects []*types.Project, target string, dirty []string) []string {
 	var out []string
 	for _, p := range dirty {
 		if _, held := matching(row.WritePaths, p); held {
@@ -663,7 +663,7 @@ func RewroteOutside(row types.Job, projects []*types.Project, target string, dir
 	return out
 }
 
-// LeaseRewrites is [RewroteOutside] for a run of target on projects, under the
+// LeaseRewrites is [rewroteOutside] for a run of target on projects, under the
 // lease acting on ctx. No lease rewrites nothing. An error means the checkout's
 // changes or the lease's row could not be read.
 func LeaseRewrites(ctx context.Context, loc Location, target string, projects []*types.Project) (lease string, paths []string, err error) {
@@ -691,7 +691,7 @@ func LeaseRewrites(ctx context.Context, loc Location, target string, projects []
 	if err != nil {
 		return lease, nil, err
 	}
-	return lease, RewroteOutside(rows[i], projects, target, dirty), nil
+	return lease, rewroteOutside(rows[i], projects, target, dirty), nil
 }
 
 // RenderGates writes a gate report one gate per line, each unmet one followed by why, then

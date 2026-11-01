@@ -1310,43 +1310,81 @@ func (s *narrowedRunSuite) TestNestedProjectReadsItsOwnFiles() {
 	c := types.LeaseCheck{Target: "lint", Project: "libs/x", Args: []string{"a.go", "b.go"}}
 	run := types.JobAttempt{Found: true, Target: "lint", Project: "libs/x", ExtraArgs: []string{"a.go"}}
 
-	s.True(ranOver(c, run, nil, []string{"libs/x/a.go", "cli/other.go"}), "a file outside the project is not this goal's")
-	s.False(ranOver(c, run, nil, []string{"libs/x/b.go"}))
+	s.True(ranOver(c, run, nil, []string{"libs/x/a.go", "cli/other.go"}, nil), "a file outside the project is not this goal's")
+	s.False(ranOver(c, run, nil, []string{"libs/x/b.go"}, nil))
 }
 
 func (s *narrowedRunSuite) TestCheckOverFilesGetsTheSameAnswer() {
 	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "b.go"}}
 	run := types.JobAttempt{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
 
-	s.True(ranOver(c, run, nil, []string{"a.go"}))
+	s.True(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go", "b.go")(c)))
+}
+
+// named writes files into a checkout and answers [namedFiles] over a check.
+func (s *narrowedRunSuite) named(files ...string) func(types.LeaseCheck, ...string) map[string]bool {
+	tree := s.T().TempDir()
+	for _, f := range files {
+		s.Require().NoError(os.WriteFile(filepath.Join(tree, f), nil, 0o644))
+	}
+	return func(c types.LeaseCheck, changed ...string) map[string]bool {
+		return namedFiles(tree, []types.Goal{{Kind: types.GoalKindCheck, Check: c}}, changed)
+	}
+}
+
+func (s *narrowedRunSuite) TestAnArgumentNamingNoFileIsComparedVerbatim() {
+	c := types.LeaseCheck{Target: "deploy-check", Project: ".", Args: []string{"staging"}}
+	run := types.JobAttempt{Found: true, Target: "deploy-check", Project: ".", ExtraArgs: []string{"a.go"}}
+
+	s.False(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go")(c, "a.go")))
+}
+
+func (s *narrowedRunSuite) TestAFileTheRowDeletedStillNamesAFile() {
+	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "gone.go"}}
+	run := types.JobAttempt{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
+
+	s.True(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go")(c, "gone.go")))
+}
+
+func (s *narrowedRunSuite) TestADirectoryIsNotAFile() {
+	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"pkg"}}
+	run := types.JobAttempt{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"pkg/a.go"}}
+
+	s.False(ranOver(c, run, nil, []string{"pkg/a.go"}, s.named()(c)))
+}
+
+func (s *narrowedRunSuite) TestAnArgumentResolvesAgainstItsProject() {
+	c := types.LeaseCheck{Target: "format", Project: "libs/x", Args: []string{"a.go"}}
+
+	s.Equal(map[string]bool{"libs/x/a.go": true}, s.named()(c, "libs/x/a.go"))
 }
 
 func (s *narrowedRunSuite) TestNoArgCheckThatIsNotLintStaysWhole() {
 	vet := types.LeaseCheck{Target: "go-vet", Project: "."}
 	narrowed := types.JobAttempt{Found: true, Target: "go-vet", Project: ".", ExtraArgs: []string{"a.go"}}
 
-	s.False(ranOver(vet, narrowed, nil, []string{"a.go"}))
+	s.False(ranOver(vet, narrowed, nil, []string{"a.go"}, nil))
 }
 
 func (s *narrowedRunSuite) TestRunWithAFlagIsAnotherRun() {
 	c := types.LeaseCheck{Target: "lint", Project: ".", Args: []string{"a.go"}}
 	run := types.JobAttempt{Found: true, Target: "lint", Project: ".", ExtraArgs: []string{"--fix", "a.go"}}
 
-	s.False(ranOver(c, run, nil, []string{"a.go"}))
+	s.False(ranOver(c, run, nil, []string{"a.go"}, nil))
 }
 
 func (s *narrowedRunSuite) TestScriptArgsStayItsArgv() {
 	c := types.LeaseCheck{Script: "probes/key.buzz", Args: []string{"a.go", "b.go"}}
 	run := types.JobAttempt{Found: true, Target: "buzz probes/key.buzz", Project: ".", ExtraArgs: []string{"a.go"}}
 
-	s.False(ranOver(c, run, nil, []string{"a.go"}))
+	s.False(ranOver(c, run, nil, []string{"a.go"}, nil))
 }
 
 func (s *narrowedRunSuite) TestPackageArgumentDoesNotScopeGoTest() {
 	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "./other"}}
 	run := types.JobAttempt{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"./pkg"}}
 
-	s.False(ranOver(c, run, nil, []string{"pkg/a.go"}))
+	s.False(ranOver(c, run, nil, []string{"pkg/a.go"}, nil))
 }
 
 func (s *narrowedRunSuite) TestRowFilesPreferWhatLanded() {

@@ -175,24 +175,14 @@ func permitBut(ps types.JobProblems, deviations []types.Deviation) (kept, permit
 	return append(kept, lintKept...), append(permitted, lintPermitted...)
 }
 
-// lintGoals is a lint goal per project whose lint reads Go source the row writes and which
-// nothing runs: a worker checking only go-test leaves lint findings for the integrator.
-// The goal skips default charms so lint reports instead of rewriting the worker's tree.
-//
-// The goal passes the written files after `--`, relative to the goal's project, so lint
-// judges only them: a finding in a file the worker may not write is not the worker's to
-// meet, and full lint belongs to integration. Files rather than the write paths' globs,
-// because a shell expands a glob the worker pastes.
-// A soft path stays out: nobody asked for it, and the grade reads it once the
-// row changes it ([ranOver]).
+// lintGoals is a lint goal per project whose lint reads a file the row writes
+// and nothing runs. It only reports, and over the written files alone: a
+// finding elsewhere is not the worker's. See [ranOver] for a soft path.
 func lintGoals(root string, row types.Job, ws Workspace) []types.Goal {
 	if row.ReadOnly || len(row.WritePaths) == 0 || ws.Unavailable != "" {
 		return nil
 	}
 	written := slices.DeleteFunc(writtenFiles(root, row), func(f string) bool { return slices.Contains(row.SoftPaths, f) })
-	if !slices.ContainsFunc(written, func(f string) bool { return path.Ext(f) == ".go" }) {
-		return nil
-	}
 	slices.Sort(written)
 	var goals []types.Goal
 	for _, g := range UnrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored)) {
