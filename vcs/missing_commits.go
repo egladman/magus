@@ -1,12 +1,9 @@
 package vcs
 
 import (
+	"cmp"
 	"context"
-	"errors"
 	"fmt"
-	"path"
-	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -15,8 +12,7 @@ import (
 // workReader is what missingCommits reads, which every backend answers.
 type workReader interface {
 	types.RangeReporter
-	types.TreeReporter
-	types.RevisionFileReader
+	contentReader
 }
 
 // missingCommits is MissingCommits for every backend. It merges nothing, so
@@ -91,15 +87,27 @@ func carriesAll(theirs, ours map[string]bool) bool {
 }
 
 // changedLines is what c changed against its first parent, without the hunk
-// positions and context a replay shifts.
+// positions, context and similarity a replay shifts. A binary's patch says
+// nothing but its blob ids. One with none carries c's id, so none matches it.
 func changedLines(ctx context.Context, r workReader, dir string, c types.Commit) (map[string]bool, error) {
 	diff, err := r.RangeDiff(ctx, dir, c.Parents[0], c.ID, nil)
 	if err != nil {
 		return nil, err
 	}
 	lines := map[string]bool{}
+	blobs := ""
 	for line := range strings.Lines(diff) {
-		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") || strings.HasPrefix(line, "Binary") {
+		switch {
+		case strings.HasPrefix(line, "diff "):
+			blobs = ""
+			lines[line] = true
+		case strings.HasPrefix(line, "index "):
+			blobs = line
+		case strings.HasPrefix(line, "Binary"), strings.HasPrefix(line, "GIT binary patch"):
+			lines[cmp.Or(blobs, c.ID)+line] = true
+		case line == "\n", strings.HasPrefix(line, " "), strings.HasPrefix(line, "@@"), strings.HasPrefix(line, "\\"),
+			strings.HasPrefix(line, "similarity index"), strings.HasPrefix(line, "dissimilarity index"):
+		default:
 			lines[line] = true
 		}
 	}
@@ -108,43 +116,14 @@ func changedLines(ctx context.Context, r workReader, dir string, c types.Commit)
 
 // contentOnBranch reports whether every file head changed since it diverged
 // reads the same at branch. A squash of several branches holds no commit of
-// any of them. A path neither side holds reads the same, and a path only one
-// side can read, or a tree diff that fails, leaves it unproven.
+// any of them. See [DifferingPaths] for what reads the same.
 func contentOnBranch(ctx context.Context, r workReader, dir, branch, head string) bool {
 	paths, err := r.RangeFiles(ctx, dir, branch, head, nil)
 	if err != nil {
 		return false
 	}
-	if len(paths) == 0 {
-		return true
-	}
-	// One call against a read per file: a wide branch took seconds.
-	differ, err := r.DiffTrees(ctx, dir, branch, head)
-	if err == nil {
-		return !slices.ContainsFunc(paths, func(changed string) bool {
-			return slices.Contains(differ, cleanPath(changed))
-		})
-	}
-	var declined *types.VCSUnsupportedError
-	if !errors.As(err, &declined) {
-		return false
-	}
-	for _, changed := range paths {
-		p := cleanPath(changed)
-		ours, oursErr := r.ReadFileAt(ctx, dir, head, p)
-		theirs, theirsErr := r.ReadFileAt(ctx, dir, branch, p)
-		if ctx.Err() != nil {
-			return false
-		}
-		if (oursErr != nil) != (theirsErr != nil) || ours != theirs {
-			return false
-		}
-	}
-	return true
-}
-
-func cleanPath(p string) string {
-	return path.Clean(filepath.ToSlash(strings.TrimSpace(p)))
+	differ, err := DifferingPaths(ctx, r, dir, branch, head, paths)
+	return err == nil && len(differ) == 0
 }
 
 // replayIdentity reads a fixup as the commit it folds into.

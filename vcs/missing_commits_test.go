@@ -190,3 +190,69 @@ func (s *missingCommitsSuite) TestAnUnknownRevisionIsAnError() {
 
 	s.Error(err)
 }
+
+func (s *missingCommitsSuite) missingOn(branch string) int {
+	got, err := gitVCS{}.MissingCommits(s.T().Context(), s.repo.Root(), s.main, branch)
+	s.Require().NoError(err)
+	return got
+}
+
+// onBranch runs commit on a new branch off main, then returns to main.
+func (s *missingCommitsSuite) onBranch(name string, commit func()) {
+	s.repo.Git("switch", "-q", "-c", name, s.main)
+	commit()
+	s.repo.Git("switch", "-q", s.main)
+}
+
+func (s *missingCommitsSuite) TestAPureRenameSharingASubjectIsMissing() {
+	s.onBranch("moved", func() {
+		s.repo.Git("mv", "lock", "moved-lock")
+		s.repo.Git("commit", "-q", "-m", "tidy")
+	})
+	s.repo.Commit("tidy", map[string]string{"other.txt": "unrelated\n"})
+
+	s.Equal(1, s.missingOn("moved"))
+}
+
+func (s *missingCommitsSuite) TestAModeChangeSharingASubjectIsMissing() {
+	s.onBranch("runnable", func() {
+		s.Require().NoError(os.Chmod(filepath.Join(s.repo.Root(), "lock"), 0o755))
+		s.repo.Git("add", "lock")
+		s.repo.Git("commit", "-q", "-m", "tidy")
+	})
+	s.repo.Commit("tidy", map[string]string{"other.txt": "unrelated\n"})
+
+	s.Equal(1, s.missingOn("runnable"))
+}
+
+func (s *missingCommitsSuite) TestADifferentEditOfABinarySharingASubjectIsMissing() {
+	s.onBranch("art", func() { s.repo.Commit("add art", map[string]string{"art.bin": "\x00ours"}) })
+	s.repo.Commit("add art", map[string]string{"art.bin": "\x00theirs"})
+
+	s.Equal(1, s.missingOn("art"))
+}
+
+func (s *missingCommitsSuite) TestAReplayOfABinaryIsHeldAfterTheBranchEditedIt() {
+	s.onBranch("art", func() { s.repo.Commit("add art", map[string]string{"art.bin": "\x00ours"}) })
+	s.repo.Git("cherry-pick", "art")
+	s.repo.Commit("redraw", map[string]string{"art.bin": "\x00redrawn"})
+
+	s.Zero(s.missingOn("art"))
+}
+
+// idlessBinaries reports every binary as hg and sl can, with no blob ids.
+type idlessBinaries struct{ gitVCS }
+
+func (idlessBinaries) RangeDiff(context.Context, string, string, string, []string) (string, error) {
+	return "diff --git a/art.bin b/art.bin\nBinary file art.bin has changed\n", nil
+}
+
+func (s *missingCommitsSuite) TestABinaryWithNoBlobIDsMatchesNoOtherCommit() {
+	ours := types.Commit{ID: "ours", Parents: []string{"p"}}
+	theirs := types.Commit{ID: "theirs", Parents: []string{"p"}}
+
+	held, err := heldByCopy(s.T().Context(), idlessBinaries{}, s.repo.Root(), ours, []types.Commit{theirs})
+
+	s.Require().NoError(err)
+	s.False(held)
+}
