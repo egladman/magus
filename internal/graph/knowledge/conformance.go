@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"path"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -180,7 +181,8 @@ func cloneGroups(g *Graph, o types.ConformanceOptions) [][]types.ConformanceItem
 
 // exportScope is every Go exported top-level symbol, in a package under an internal
 // directory or in a main package, that no non-test file outside its package directory
-// references, in ID order. Methods are out of scope, since an interface may need them
+// references, in ID order. reachedExports counts use with no name.
+// Methods are out of scope, since an interface may need them
 // exported, and so is a module's root package, whose exports are its API.
 func exportScope(g *Graph, o types.ConformanceOptions) []types.ConformanceItem {
 	var out []types.ConformanceItem
@@ -541,8 +543,10 @@ type conformanceExport struct {
 
 func (x *conformanceIndex) exports() []conformanceExport {
 	dirs := x.packageDirs(true)
+	syms := x.symbols()
+	reached, enums := x.reachedExports(syms, dirs)
 	var out []conformanceExport
-	for _, s := range x.symbols() {
+	for _, s := range syms {
 		ns := s.node.Attrs[attrNamespace]
 		dir, placed := dirs[ns]
 		if s.pop == types.ConformancePopTest || !placed || s.node.Attrs[attrLanguage] != "go" || len(s.local) != 1 ||
@@ -553,13 +557,102 @@ func (x *conformanceIndex) exports() []conformanceExport {
 			continue
 		}
 		item := types.ConformanceItem{ID: s.itemID, Source: s.node.Source, Measure: 1}
-		if x.g.usedOutside(s.id, dir) > 0 {
+		enum, grouped := localConstType(s.node.Attrs[AttrSignature])
+		if x.g.usedOutside(s.id, dir) > 0 || reached[ns+s.local[0].Name] || grouped && enums[ns+enum] {
 			item.Measure = 0
 		}
 		out = append(out, conformanceExport{item: item, pop: s.pop})
 	}
 	slices.SortFunc(out, func(a, b conformanceExport) int { return cmp.Compare(a.item.ID, b.item.ID) })
 	return out
+}
+
+// reachedExports is what readers use without naming it, by namespace and name.
+// reached: types with a member read outside, or in a read symbol's signature.
+// enums: types with a constant read outside. Their constants are one unit.
+func (x *conformanceIndex) reachedExports(syms []conformanceSymbol, dirs map[string]string) (reached, enums map[string]bool) {
+	reached, enums = map[string]bool{}, map[string]bool{}
+	for _, s := range syms {
+		ns := s.node.Attrs[attrNamespace]
+		dir, placed := dirs[ns]
+		if !placed || s.pop == types.ConformancePopTest || s.node.Attrs[attrLanguage] != "go" || !x.readOutside(s.id, dir) {
+			continue
+		}
+		if len(s.local) == 2 {
+			reached[ns+s.local[0].Name] = true
+		}
+		sig := s.node.Attrs[AttrSignature]
+		for _, name := range signatureTypes(sig) {
+			reached[ns+name] = true
+		}
+		if enum, ok := localConstType(sig); ok {
+			enums[ns+enum] = true
+		}
+	}
+	return reached, enums
+}
+
+// readOutside reports a measured file outside dir referencing id. A test
+// proves no consumer, and a generated binder only follows the declaration.
+func (x *conformanceIndex) readOutside(id, dir string) bool {
+	for _, e := range x.g.in[id] {
+		if e.Relation != types.RelationReferences {
+			continue
+		}
+		ref := strings.TrimPrefix(e.Source, types.KindFile+":")
+		if pop, ok := x.population(ref); ok && pop != types.ConformancePopTest && path.Dir(ref) != dir {
+			return true
+		}
+	}
+	return false
+}
+
+// signatureTypes are the exported names of its own package a rendered
+// declaration uses as types. A qualified name belongs to another package.
+func signatureTypes(sig string) []string {
+	var text string
+	if params, result, ok := goFuncParts(sig); ok {
+		parts := []string{result}
+		for _, p := range params {
+			parts = append(parts, p.Type)
+		}
+		text = strings.Join(parts, " ")
+	} else {
+		text = declaredType(sig)
+	}
+	var out []string
+	for _, word := range signatureWord.FindAllString(text, -1) {
+		if !strings.Contains(word, ".") && exportedName(word) {
+			out = append(out, word)
+		}
+	}
+	return out
+}
+
+// signatureWord matches an identifier, package-qualified or not.
+var signatureWord = regexp.MustCompile(`[\pL_][\pL\pN_.]*`)
+
+// declaredType is the type scip-go renders after a field, constant or variable
+// name, and "" for any other rendering. A constant's value follows " = ".
+func declaredType(sig string) string {
+	for _, prefix := range []string{"struct field ", "const ", "var "} {
+		if rest, ok := strings.CutPrefix(sig, prefix); ok {
+			_, typ, _ := strings.Cut(rest, " ")
+			typ, _, _ = strings.Cut(typ, " = ")
+			return typ
+		}
+	}
+	return ""
+}
+
+// localConstType is the type of a constant typed from its own package.
+// One of time.Duration, say, belongs to no group.
+func localConstType(sig string) (string, bool) {
+	if !strings.HasPrefix(sig, "const ") {
+		return "", false
+	}
+	typ := declaredType(sig)
+	return typ, typ != "" && !strings.Contains(typ, ".") && exportedName(typ)
 }
 
 func exportedName(name string) bool {
