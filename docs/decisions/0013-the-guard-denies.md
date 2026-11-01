@@ -152,14 +152,14 @@ A deny needs a remedy the actor can reach, and a row that ended when its worker'
 left neither of them one: the worker's answer arrived with its row gone. Every host that
 reports a subagent's stop lets the parent continue that subagent, so the stop was a pause.
 
-| Item                                                                                                                                                                                         | State     |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| A subagent's stop stamps the row `holder_stopped` and ends nothing; the holder's next hook call clears the stamp. A host whose stop names no agent, Cursor, never stamps                     | done      |
-| `SessionEnd`, `magus job exit`, the deadline and `magus job prune` still end a row, and `magus job exec` still takes back a row a `SessionEnd` ended                                         | done      |
-| This repository's stop rule reads a stamped row as no running worker: it refuses the root's stop once, bounded by `stop_hook_active`, and names no tool                                      | done      |
-| A stop older than `SilentLeaseAfter` (30 minutes) is a dead holder, so a later job's write claims its path; a holder back before the take keeps it, since clearing the stamp moves `Updated` | done      |
-| magus names no host's message tool                                                                                                                                                           | done      |
-| One end-to-end scenario per host, a child that stops with a question and is continued; no real host has run it yet, since a person runs it                                                  | built     |
+| Item                                                                                                                                                                                         | State |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| A subagent's stop stamps the row `holder_stopped` and ends nothing; the holder's next hook call clears the stamp. A host whose stop names no agent, Cursor, never stamps                     | done  |
+| `SessionEnd`, `magus job exit`, the deadline and `magus job prune` still end a row, and `magus job exec` still takes back a row a `SessionEnd` ended                                         | done  |
+| This repository's stop rule reads a stamped row as no running worker: it refuses the root's stop once, bounded by `stop_hook_active`, and names no tool                                      | done  |
+| A stop older than `SilentLeaseAfter` (30 minutes) is a dead holder, so a later job's write claims its path; a holder back before the take keeps it, since clearing the stamp moves `Updated` | done  |
+| magus names no host's message tool                                                                                                                                                           | done  |
+| One end-to-end scenario per host, a child that stops with a question and is continued; no real host has run it yet, since a person runs it                                                   | built |
 
 A dead worker holds its paths for those 30 minutes, which is what ending the row at the stop
 avoided. A later fork over them records `overlapping` and is not refused, unless the holder
