@@ -11,7 +11,7 @@ List where an ingested code symbol is defined and referenced
 
 ## Synopsis
 
-**magus** refs \<symbol\> [flags]
+**magus** refs \<symbol\> [\<path\>...] [flags]
 
 ## Description
 
@@ -47,9 +47,9 @@ says so. Blocks number their lines and mark the matched one with \>.
 --skip-lines pages through it; a cut block prints the lines shown, the total
 and the next command.
 
---file keeps the --occurrences sites at or under a workspace-relative path.
---limit and --offset page them by site; a cut page prints the total and the
-next command.
+A trailing path keeps the plain list or the --occurrences sites at or under it,
+as it scopes --text, and a path that does not exist is an error. --limit and
+--offset page the sites; a cut page prints the total and the next command.
 
 --text switches to that other question on purpose: a literal substring
 search with no symbol index and no graph, printed as path:line:text like
@@ -83,14 +83,11 @@ nothing. The inverse is the same command with the two names swapped.
 **--[no-]definition** (default: off)
 : Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed
 
-**--file** *string*
-: With --occurrences, keep the sites at or under this workspace-relative path, and say how many of the total it kept
-
 **--[no-]generated** (default: on)
 : In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely
 
-**--limit** *| head*
-: Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What | head would do, without losing the count or the exit code
+**--limit** *int*
+: Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What piping to head would do, without losing the count or the exit code
 
 **--lines** *string*
 : Print the range A:B counted from each match: 0 is the match however long, -1 the line above it, 1 the line below, as --lines=-5:-1. Implies --source; takes none of --context, --before, --after
@@ -175,10 +172,10 @@ magus refs Open --occurrences --before 5 --after 4
 magus refs Open --occurrences --limit 5 --offset 5
 ```
 
-*The sites in one file*
+*The sites under one path*
 
 ```sh
-magus refs Open --occurrences --file magus.go --context 2
+magus refs Open internal/guard --occurrences --context 2
 ```
 
 *Raw text search, no index needed*

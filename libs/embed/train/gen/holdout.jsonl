@@ -180,6 +180,7 @@
 {"group":"file:changes/unreleased/lease-row-one-resolver.md","path":"changes/unreleased/lease-row-one-resolver.md"}
 {"group":"file:changes/unreleased/libs-xdg.md","path":"changes/unreleased/libs-xdg.md"}
 {"group":"file:changes/unreleased/lifecycle-provider-console.md","path":"changes/unreleased/lifecycle-provider-console.md"}
+{"group":"file:changes/unreleased/lint-goal-grades-what-the-row-changed.md","path":"changes/unreleased/lint-goal-grades-what-the-row-changed.md"}
 {"group":"file:changes/unreleased/log-format-jsonl-refused.md","path":"changes/unreleased/log-format-jsonl-refused.md"}
 {"group":"file:changes/unreleased/magus-affected-plan-prints-affected-unbounded.md","path":"changes/unreleased/magus-affected-plan-prints-affected-unbounded.md"}
 {"group":"file:changes/unreleased/magus-multi-agent-integrate-reference.md","path":"changes/unreleased/magus-multi-agent-integrate-reference.md"}
@@ -293,6 +294,7 @@
 {"group":"file:changes/unreleased/stop-advice-said-once.md","path":"changes/unreleased/stop-advice-said-once.md"}
 {"group":"file:changes/unreleased/stores-helpers-session-load.md","path":"changes/unreleased/stores-helpers-session-load.md"}
 {"group":"file:changes/unreleased/stores-migrate-fs-remote.md","path":"changes/unreleased/stores-migrate-fs-remote.md"}
+{"group":"file:changes/unreleased/subagent-stop-pauses-the-row.md","path":"changes/unreleased/subagent-stop-pauses-the-row.md"}
 {"group":"file:changes/unreleased/surface-names.md","path":"changes/unreleased/surface-names.md"}
 {"group":"file:changes/unreleased/termcast-shots.md","path":"changes/unreleased/termcast-shots.md"}
 {"group":"file:changes/unreleased/test-shell-loops-end.md","path":"changes/unreleased/test-shell-loops-end.md"}
@@ -300,6 +302,7 @@
 {"group":"file:changes/unreleased/tool-rules-on-the-server.md","path":"changes/unreleased/tool-rules-on-the-server.md"}
 {"group":"file:changes/unreleased/tool-with-no-version-fails-run-as-mgs3035.md","path":"changes/unreleased/tool-with-no-version-fails-run-as-mgs3035.md"}
 {"group":"file:changes/unreleased/toolchain-releases-eol-unknown.md","path":"changes/unreleased/toolchain-releases-eol-unknown.md"}
+{"group":"file:changes/unreleased/trail-records-worker-and-result.md","path":"changes/unreleased/trail-records-worker-and-result.md"}
 {"group":"file:changes/unreleased/typed-provider-calls.md","path":"changes/unreleased/typed-provider-calls.md"}
 {"group":"file:changes/unreleased/types-doctorcheck-types-check-doctorcheckstatus-checkstatus.md","path":"changes/unreleased/types-doctorcheck-types-check-doctorcheckstatus-checkstatus.md"}
 {"group":"file:changes/unreleased/types-polish-graph.md","path":"changes/unreleased/types-polish-graph.md"}
@@ -455,6 +458,7 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/race.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/race_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/refs.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/refs_scope.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/refs_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/registry.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/registry_test.go"}
@@ -509,7 +513,6 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/text_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/timeout.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/vcs.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/vcs_resolve_failures_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/vcs_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/verbosity.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/verbosity_test.go"}

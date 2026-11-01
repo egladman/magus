@@ -260,7 +260,6 @@ flag refs/after
 flag refs/before
 flag refs/context
 flag refs/definition
-flag refs/file
 flag refs/generated
 flag refs/limit
 flag refs/lines
@@ -313,6 +312,7 @@ flag session/since
 flag shell/agent
 flag shell/agent-name
 flag shell/call-background
+flag shell/call-digest
 flag shell/call-timeout-ms
 flag shell/event
 flag shell/lease
@@ -325,6 +325,7 @@ flag shell/no-renders-ask
 flag shell/observe
 flag shell/path
 flag shell/renders-ask
+flag shell/result-digest
 flag shell/session
 flag shell/tool-ms
 flag shell/transcript

@@ -1244,11 +1244,17 @@ exits 0.
 // An event with no duration records nothing.
 // The HOST_*_PATH variables retarget a field, as in magus-observe.buzz.
 //
+// It also sends digests of the call (HOST_INPUT_PATH) and of its result
+// (HOST_RESULT_PATH), never the text. A host that sends no result gets no
+// digest, and magus records the result as unobserved. HOST_AGENT_PATH names
+// the subagent, which tells a worker from its parent.
+//
 // magus-guard-template: 35
 
 import "std";
 import "io";
 import "flags";
+import "crypto";
 import "encoding/json";
 import "proc";
 import "lib/hook" as hook;
@@ -1268,6 +1274,22 @@ fun milliseconds(event: any?, dotPath: str) > int {
     if (value == null or ms < 0) { return 0; }
     if (ms == 0) { return 1; }
     return ms;
+}
+
+final DIGEST_HEX_CHARS = 16;
+
+// A string is hashed as written, anything else as its JSON.
+fun digestOf(event: any?, dotPath: str) > str {
+    final value = hook\dig(event, dotPath: dotPath);
+    if (value == null) { return ""; }
+    var text = "";
+    if (value is str) {
+        text = value as str;
+    } else {
+        text = json\stringify(value) catch "";
+    }
+    if (text == "") { return ""; }
+    return crypto\sha256Hex(text).sub(0, len: DIGEST_HEX_CHARS);
 }
 
 fun warn(message: str) > void {
@@ -1317,13 +1339,25 @@ fun main(args: [str]) > void {
         return;
     }
 
-    _ = proc\exec(bin, args: [
+    final args = mut [
         "shell", "--tool-ms", "{ms}",
         "--agent-name", agentName,
         "--session", session,
+        "--agent", field(event, dotPath: hook\envOr("HOST_AGENT_PATH", fallback: "agent_id")),
         "--transcript", field(event, dotPath: hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path")),
         "--event", "PostToolUse",
-    ], dir: cwd, opts: proc\ExecOptions{quiet = true, allowFailure = true, stdin = tool}) catch void;
+    ];
+    final call = digestOf(event, dotPath: hook\envOr("HOST_INPUT_PATH", fallback: "tool_input"));
+    if (call != "") {
+        args.append("--call-digest");
+        args.append(call);
+    }
+    final result = digestOf(event, dotPath: hook\envOr("HOST_RESULT_PATH", fallback: "tool_response"));
+    if (result != "") {
+        args.append("--result-digest");
+        args.append(result);
+    }
+    _ = proc\exec(bin, args: args, dir: cwd, opts: proc\ExecOptions{quiet = true, allowFailure = true, stdin = tool}) catch void;
 }
 ```
 

@@ -825,14 +825,17 @@ github.com/egladman/magus/types.AgentBillingMetered const AgentBilling = "metere
 github.com/egladman/magus/types.AgentBillingQuota const AgentBilling = "quota"
 github.com/egladman/magus/types.AgentFacts type struct
 github.com/egladman/magus/types.AgentFacts.Billing field AgentBilling "json:\"billing,omitempty\""
+github.com/egladman/magus/types.AgentFacts.CallDigest field string "json:\"call_digest,omitempty\""
 github.com/egladman/magus/types.AgentFacts.ContextModel field string "json:\"context_model,omitempty\""
 github.com/egladman/magus/types.AgentFacts.ContextTokens field int64 "json:\"context_tokens,omitzero\""
 github.com/egladman/magus/types.AgentFacts.DelegableClass field DelegableClass "json:\"delegable_class,omitempty\""
 github.com/egladman/magus/types.AgentFacts.Orchestration field Orchestration "json:\"orchestration,omitempty\""
 github.com/egladman/magus/types.AgentFacts.ResultChars field *int "json:\"result_chars,omitempty\""
+github.com/egladman/magus/types.AgentFacts.ResultDigest field string "json:\"result_digest,omitempty\""
 github.com/egladman/magus/types.AgentFacts.Shadow field map[GuardProfile]GuardDecision "json:\"shadow,omitempty\""
 github.com/egladman/magus/types.AgentFacts.Thread field AgentThread "json:\"thread,omitempty\""
 github.com/egladman/magus/types.AgentFacts.ThreadFrom field ThreadSource "json:\"thread_from,omitempty\""
+github.com/egladman/magus/types.AgentFacts.Unobserved field []string "json:\"unobserved,omitempty\""
 github.com/egladman/magus/types.AgentFile type struct
 github.com/egladman/magus/types.AgentFile.Content field string "json:\"content\""
 github.com/egladman/magus/types.AgentFile.Hint field string "json:\"hint,omitempty\""
@@ -2853,6 +2856,7 @@ github.com/egladman/magus/types.Job.Generation field int "json:\"generation,omit
 github.com/egladman/magus/types.Job.Goals field []Goal "json:\"goals,omitempty\" yaml:\"goals,omitempty\""
 github.com/egladman/magus/types.Job.HardPaths method func() []string
 github.com/egladman/magus/types.Job.Holder field JobHolder "json:\"holder,omitempty\" yaml:\"holder,omitempty\""
+github.com/egladman/magus/types.Job.HolderStopped field int64 "json:\"holder_stopped,omitempty\" yaml:\"holder_stopped,omitempty\""
 github.com/egladman/magus/types.Job.ID field string "json:\"id\" yaml:\"id\""
 github.com/egladman/magus/types.Job.Integrates field []string "json:\"integrates,omitempty\" yaml:\"integrates,omitempty\""
 github.com/egladman/magus/types.Job.Integrating method func() bool

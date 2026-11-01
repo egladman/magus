@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 26995
-skill_short_bytes: 21225
+skill_full_bytes: 27021
+skill_short_bytes: 21251
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `30a41a06a46b` |
+| `skill-content` | `bd920a34e847` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -388,7 +388,7 @@ any cap the user set for the tree. Require the worker to:
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
 - never wait for the build budget, `magus status --wait` included. When a full budget refuses its check, it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `magus job wait` passes that result and the integration runs the check;
-- never exit its row or report back while it waits on a reply from you: an answer that lands after the row ended reaches nobody.
+- never exit its row while it waits on a reply from you: ending its turn with the question as its final text leaves the row open and the worker resumable.
 
 End every brief with the step that files the result, as the worker's LAST act before
 it reports back. A brief that leaves it out gets a prose report and a row that never
@@ -868,7 +868,7 @@ any cap the user set for the tree. Require the worker to:
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
 - never wait for the build budget, `magus status --wait` included. When a full budget refuses its check, it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `magus job wait` passes that result and the integration runs the check;
-- never exit its row or report back while it waits on a reply from you: an answer that lands after the row ended reaches nobody.
+- never exit its row while it waits on a reply from you: ending its turn with the question as its final text leaves the row open and the worker resumable.
 
 End every brief with the step that files the result, as the worker's LAST act before
 it reports back. A brief that leaves it out gets a prose report and a row that never

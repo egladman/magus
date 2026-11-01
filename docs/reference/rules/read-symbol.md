@@ -1,16 +1,16 @@
 ---
-title: "read-symbol: a bounded read inside one indexed declaration, which refs --definition --source prints checked"
-description: "An advisory by default: it explains, and blocks nothing, on a bounded read inside one indexed declaration, which refs --definition --source prints checked."
+title: "read-symbol: a bounded read inside one indexed declaration, which refs --source prints checked"
+description: "An advisory by default: it explains, and blocks nothing, on a bounded read inside one indexed declaration, which refs --source prints checked."
 tags: [guard, rules, read-symbol, advise]
 ---
 
 # read-symbol
 
-An advisory by default: it explains, and blocks nothing, on a bounded read inside one indexed declaration, which refs --definition --source prints checked.
+An advisory by default: it explains, and blocks nothing, on a bounded read inside one indexed declaration, which refs --source prints checked.
 
 ## What it catches
 
-A bounded read inside one indexed declaration, which refs --definition --source prints checked.
+A bounded read inside one indexed declaration, which refs --source prints checked.
 
 ## Why
 

@@ -131,7 +131,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [new-source-dir](new-source-dir.md)                     | a new file that opens a directory, which is a boundary rather than a file                       |
 | [precedent-search](precedent-search.md)                 | a hunt for one distinctive name, which refs answers with verified sites                         |
 | [push-gate](push-gate.md)                               | a push or `gh pr create` the run log cannot prove ungated; names the gate                       |
-| [read-symbol](read-symbol.md)                           | a bounded read inside one indexed declaration, which refs --definition --source prints checked  |
+| [read-symbol](read-symbol.md)                           | a bounded read inside one indexed declaration, which refs --source prints checked               |
 | [regen-source](regen-source.md)                         | a hand edit to a file a target regenerates                                                      |
 | [release-requested](release-requested.md)               | a job holding write paths another fork was refused for, with a release request open             |
 | [revert-classify](revert-classify.md)                   | a revert that has not classified what it is reverting                                           |

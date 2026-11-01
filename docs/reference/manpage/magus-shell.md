@@ -92,6 +92,9 @@ not block every tool call.
 **--[no-]call-background** (default: off)
 : The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused
 
+**--call-digest** *string*
+: With --tool-ms, a fingerprint of the call the host ran, so a repeat of it can be counted; never the call's text
+
 **--call-timeout-ms** *int*
 : The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default
 
@@ -112,6 +115,9 @@ not block every tool call.
 
 **--[no-]renders-ask** (default: off)
 : This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
+
+**--result-digest** *string*
+: With --tool-ms, a fingerprint of the call's result, so an equal answer can be told from a changed one; never the result's text. Absent means the host gave none, and the record says so
 
 **--session** *string*
 : The host's own session id for this invocation
