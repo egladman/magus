@@ -362,6 +362,11 @@ func splitNUL(s string) []string {
 	return out
 }
 
+// MissingCommits implements types.RangeReporter; see missingCommits.
+func (v gitVCS) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+	return missingCommits(ctx, v, dir, branch, head)
+}
+
 // RangeCommits implements types.RangeReporter by listing ids with `rev-list` and
 // resolving each through FindCommit, the one commit parser. paths run from the top level,
 // literally, so a path RangeFiles returned narrows to exactly that path.

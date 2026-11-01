@@ -351,6 +351,11 @@ func (v saplingVCS) RangeFiles(ctx context.Context, dir, base, head string, path
 	return hgRangeFiles(ctx, "sl", root, base, head, paths)
 }
 
+// MissingCommits implements types.RangeReporter; see missingCommits.
+func (v saplingVCS) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+	return missingCommits(ctx, v, dir, branch, head)
+}
+
 // RangeCommits implements types.RangeReporter; see hgRangeCommits.
 func (v saplingVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
 	return hgRangeCommits(ctx, v, "sl", dir, base, head, paths)

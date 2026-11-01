@@ -2088,6 +2088,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapRangeReporter, "RangeDiff", func(d types.VCSDriver, dir string) error { return errOf(d.RangeDiff(ctx, dir, "-x", "-x", nil)) }},
 		{types.CapRangeReporter, "RangeFiles", func(d types.VCSDriver, dir string) error { return errOf(d.RangeFiles(ctx, dir, "-x", "-x", nil)) }},
 		{types.CapRangeReporter, "RangeCommits", func(d types.VCSDriver, dir string) error { return errOf(d.RangeCommits(ctx, dir, "-x", "-x", nil)) }},
+		{types.CapRangeReporter, "MissingCommits", func(d types.VCSDriver, dir string) error { return errOf(d.MissingCommits(ctx, dir, "-x", "-x")) }},
 		{types.CapRegionReporter, "Regions", func(d types.VCSDriver, dir string) error {
 			return errOf(d.Regions(ctx, dir, "-x", []types.FileChange{{Path: "x"}}))
 		}},
@@ -2300,6 +2301,24 @@ func TestParityRangeCommitsNewestFirstWithParents(t *testing.T) {
 		require.NoErrorf(t, err, "%s scoped RangeCommits", b.name)
 		require.Lenf(t, scoped, 1, "%s: paths did not narrow the commits", b.name)
 		assert.Equal(t, "head edits root", scoped[0].Subject)
+	})
+}
+
+func TestParityMissingCommits(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir, root, base, head := forkedRange(t, b)
+		ctx := t.Context()
+
+		missing, err := b.drv.MissingCommits(ctx, dir, base, head)
+		require.NoErrorf(t, err, "%s MissingCommits", b.name)
+		assert.Equalf(t, 2, missing, "%s: head's two commits are off base", b.name)
+
+		missing, err = b.drv.MissingCommits(ctx, dir, head, root)
+		require.NoErrorf(t, err, "%s MissingCommits of an ancestor", b.name)
+		assert.Zerof(t, missing, "%s: head descends from root", b.name)
+
+		_, err = b.drv.MissingCommits(ctx, dir, base, "no-such-revision")
+		assert.Errorf(t, err, "%s: an unknown revision is an error", b.name)
 	})
 }
 

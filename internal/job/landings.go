@@ -371,9 +371,6 @@ const unmergedBudget = 3 * time.Second
 // unmergedRowBudget stops one wide row spending a whole read, every read.
 const unmergedRowBudget = time.Second
 
-// unmergedHistory is how far back the branch is searched for a replayed commit.
-const unmergedHistory = 3000
-
 // unmergedFactsFile holds each row's answer beside jobs.jsonl, one line per
 // answer. A row's last line for a branch is its entry.
 const unmergedFactsFile = "unmerged-facts.jsonl"
@@ -413,12 +410,10 @@ type unmergedRead struct {
 	root      string
 	branch    string
 	tip       string
-	tipTree   string
 	now       int64
 	checkouts map[string]string
 	branches  map[string]string
 	rows      map[string]*unmergedRow
-	onTip     map[string]bool
 	unread    int
 	stale     int
 }
@@ -487,9 +482,6 @@ func boolRank(b bool) int {
 // readHeads reads every checkout's and branch's head in one call each. Left
 // empty, each row reads its own.
 func (r *unmergedRead) readHeads(ctx context.Context) {
-	if tree, err := r.driver.TreeID(ctx, r.root, r.tip); err == nil {
-		r.tipTree = tree
-	}
 	if listed, err := r.driver.RegisteredCheckouts(ctx, r.root); err == nil {
 		r.checkouts = make(map[string]string, len(listed))
 		for _, co := range listed {
@@ -580,58 +572,18 @@ func (r *unmergedRead) check(ctx context.Context, rr *unmergedRow, row types.Job
 }
 
 // holds reports whether the branch has f's head, and else how many commits it
-// lacks. A merge that changes nothing proves a replay or a squash whose files
-// the branch went on to change. Whole-file content answers the rest.
+// lacks. A stored answer stands while the branch keeps the tip it was read at.
 func (r *unmergedRead) holds(ctx context.Context, f *unmergedFact) (bool, int, error) {
 	if f.Merged && f.Tip != "" {
 		if kept, err := r.driver.IsAncestor(ctx, r.root, f.Tip, r.tip); err == nil && kept {
 			return true, 0, nil
 		}
 	}
-	// A row whose merge outran its budget would outrun it every read.
-	if r.tipTree != "" && f.CutAt == 0 {
-		merged, err := r.driver.MergeTrees(ctx, r.root, types.TreeMerge{Ours: r.tip, Theirs: f.Head})
-		if err == nil && len(merged.Conflicts) == 0 && merged.Tree == r.tipTree {
-			return true, 0, nil
-		}
-	}
-	commits, err := r.ranges.RangeCommits(ctx, r.root, r.tip, f.Head, nil)
+	missing, err := r.ranges.MissingCommits(ctx, r.root, r.tip, f.Head)
 	if err != nil {
 		return false, 0, err
 	}
-	if len(commits) == 0 || changesOnBase(ctx, r.driver, r.ranges, r.root, r.tip, f.Head) {
-		return true, 0, nil
-	}
-	left := r.notReplayed(ctx, commits)
-	return left == 0, left, nil
-}
-
-// notReplayed counts the commits the branch holds no copy of, by author and
-// subject. A cherry-pick or an autosquash keeps both, and the branch may have
-// rewritten the lines since. A merge commit carries no work of its own.
-func (r *unmergedRead) notReplayed(ctx context.Context, commits []types.Commit) int {
-	if r.onTip == nil {
-		r.onTip = map[string]bool{}
-		log, err := r.driver.History(ctx, r.root, types.HistoryQuery{Limit: unmergedHistory})
-		if err != nil {
-			return len(commits)
-		}
-		for _, c := range log {
-			r.onTip[replayIdentity(c)] = true
-		}
-	}
-	left := 0
-	for _, c := range commits {
-		if len(c.Parents) < 2 && !r.onTip[replayIdentity(c)] {
-			left++
-		}
-	}
-	return left
-}
-
-// replayIdentity reads a fixup as the commit it folds into.
-func replayIdentity(c types.Commit) string {
-	return fmt.Sprintf("%s\x00%s", c.Author.Email, strings.TrimPrefix(c.Subject, "fixup! "))
+	return missing == 0, missing, nil
 }
 
 // facts is what row's work leaves off the branch: uncommitted paths, commits,
@@ -774,24 +726,7 @@ func (s *Store) Settle(ctx context.Context, records []types.Declaration, dryRun 
 	if err != nil {
 		return nil, err
 	}
-	var errs []error
-	for _, rec := range records {
-		if !rec.Settles() {
-			errs = append(errs, fmt.Errorf("%s declares a spec, and a record settling a row applies with others settling rows only", rec.ID))
-			continue
-		}
-		if err := rec.Validate(); err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
-		if i < 0 {
-			errs = append(errs, fmt.Errorf("nothing declares job %s, so nothing settles", rec.ID))
-			continue
-		}
-		errs = append(errs, settleErrors(rows, rows[i], rec)...)
-	}
-	if err := errors.Join(errs...); err != nil {
+	if err := checkSettles(rows, records); err != nil {
 		return nil, err
 	}
 	settled := make([]types.Job, 0, len(records))
@@ -818,6 +753,27 @@ func (s *Store) Settle(ctx context.Context, records []types.Declaration, dryRun 
 		settled = append(settled, row)
 	}
 	return settled, nil
+}
+
+func checkSettles(rows []types.Job, records []types.Declaration) error {
+	var errs []error
+	for _, rec := range records {
+		if !rec.Settles() {
+			errs = append(errs, fmt.Errorf("%s declares a spec, and a record settling a row applies with others settling rows only", rec.ID))
+			continue
+		}
+		if err := rec.Validate(); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
+		if i < 0 {
+			errs = append(errs, fmt.Errorf("nothing declares job %s, so nothing settles", rec.ID))
+			continue
+		}
+		errs = append(errs, settleErrors(rows, rows[i], rec)...)
+	}
+	return errors.Join(errs...)
 }
 
 // settleErrors refuses an answer naming an item the result lacks or a row

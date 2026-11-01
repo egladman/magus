@@ -295,6 +295,27 @@ func (s *unmergedSuite) TestAReplayedBranchIsMergedAfterTheBranchWentOnToChangeI
 	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows)
 }
 
+func (s *unmergedSuite) TestAReadRunsNoMergeDriverAndLeavesNoTempFile() {
+	called := filepath.Join(s.T().TempDir(), "driver-called")
+	s.repo.Git("config", "merge.magus.driver", fmt.Sprintf("touch %q; exit 9", called))
+	s.repo.Commit("shared", map[string]string{
+		".gitattributes": "shared.lock merge=magus\n",
+		"shared.lock":    "1\n2\n3\n4\n5\n6\n7\n8\n9\n",
+	})
+	s.repo.Git("switch", "-q", "-c", "w", s.main)
+	s.repo.Commit("edit top", map[string]string{"shared.lock": "one\n2\n3\n4\n5\n6\n7\n8\n9\n"})
+	s.repo.Git("switch", "-q", s.main)
+	s.repo.Commit("edit bottom", map[string]string{"shared.lock": "1\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
+
+	got := s.unmerged(types.Job{ID: "w", State: types.StatePass})
+
+	s.Require().Len(got.Rows, 1)
+	s.NoFileExists(called)
+	leftovers, err := filepath.Glob(filepath.Join(s.repo.Root(), ".merge_file_*"))
+	s.Require().NoError(err)
+	s.Empty(leftovers)
+}
+
 func (s *unmergedSuite) TestAReplayedCommitIsMergedAfterTheBranchRewroteItsLine() {
 	s.repo.Git("switch", "-q", "-c", "w", s.main)
 	s.repo.Commit("write the line", map[string]string{"line.txt": "first\n"})

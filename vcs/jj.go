@@ -434,6 +434,11 @@ func (v jjVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []s
 	return splitLines([]byte(out)), nil
 }
 
+// MissingCommits implements types.RangeReporter; see missingCommits.
+func (v jjVCS) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+	return missingCommits(ctx, v, dir, branch, head)
+}
+
 // RangeCommits implements types.RangeReporter. jj's base..head is git's: ancestors of
 // head that are not ancestors of base, and `jj log` lists newest first.
 func (v jjVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {

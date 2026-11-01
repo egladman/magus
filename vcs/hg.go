@@ -812,6 +812,11 @@ func (v hgVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []s
 	return hgRangeFiles(ctx, "hg", dir, base, head, paths)
 }
 
+// MissingCommits implements types.RangeReporter; see missingCommits.
+func (v hgVCS) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+	return missingCommits(ctx, v, dir, branch, head)
+}
+
 // RangeCommits implements types.RangeReporter; see hgRangeCommits.
 func (v hgVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
 	return hgRangeCommits(ctx, v, "hg", dir, base, head, paths)

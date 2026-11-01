@@ -851,6 +851,10 @@ type RangeReporter interface {
 	// those with more than one parent. paths, when non-empty, keeps only the commits that
 	// changed one of those literal repository-relative paths.
 	RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]Commit, error)
+	// MissingCommits counts head's commits branch lacks a copy of, by ancestry,
+	// content or author and subject. Reverted work reads as held; a rewritten
+	// squash later edited reads as missing.
+	MissingCommits(ctx context.Context, dir, branch, head string) (int, error)
 }
 
 // RegionReporter is the capability to say where inside each file a change landed: the

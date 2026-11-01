@@ -846,8 +846,8 @@ func ownTree(rows []types.Job, root string, row types.Job) bool {
 //   - a branch any integration job names, whatever that job's state: a merge that failed
 //     is retried by another integration job, not by counting the branch again;
 //   - an integration job's own branch once the job passed;
-//   - a branch whose changes are on the base by content (see [changesOnBase]), as a squash
-//     merge leaves them with no commit of the branch an ancestor.
+//   - a branch the checkout holds a copy of ([types.RangeReporter]), as a
+//     squash or replay leaves it with no commit an ancestor.
 //
 // An error means no range could be read at all: a gap read as zero would hide the backlog.
 func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error) {
@@ -887,45 +887,13 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 			continue
 		}
 		// One read per job: a branch that does not resolve errs, and nothing says where its work is.
-		commits, err := ranges.RangeCommits(ctx, s.root, meta.ID, branch, nil)
-		if err != nil || len(commits) == 0 || changesOnBase(ctx, driver, ranges, s.root, meta.ID, branch) {
+		missing, err := ranges.MissingCommits(ctx, s.root, meta.ID, branch)
+		if err != nil || missing == 0 {
 			continue
 		}
-		out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: len(commits)})
+		out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: missing})
 	}
 	return out, nil
-}
-
-// changesOnBase reports whether every file branch changed since it diverged from base reads
-// the same at branch as at base. Content, not ancestry or patch identity: a squash merge of
-// several branches holds no commit of any of them and no patch equal to one. A file either
-// side cannot read, a deletion among them, leaves it unproven.
-func changesOnBase(ctx context.Context, driver types.VCSDriver, ranges types.RangeReporter, root, base, branch string) bool {
-	tip, err := driver.FindCommit(ctx, root, branch)
-	if err != nil {
-		return false
-	}
-	paths, err := ranges.RangeFiles(ctx, root, base, tip.ID, nil)
-	if err != nil || len(paths) == 0 {
-		return false
-	}
-	// One call against a read per file: a wide branch took seconds.
-	if differ, err := driver.DiffTrees(ctx, root, base, tip.ID); err == nil {
-		return !slices.ContainsFunc(paths, func(changed string) bool {
-			return slices.Contains(differ, path.Clean(filepath.ToSlash(strings.TrimSpace(changed))))
-		})
-	}
-	for _, changed := range paths {
-		p := path.Clean(filepath.ToSlash(strings.TrimSpace(changed)))
-		ours, err := driver.ReadFileAt(ctx, root, tip.ID, p)
-		if err != nil {
-			return false
-		}
-		if theirs, err := driver.ReadFileAt(ctx, root, base, p); err != nil || theirs != ours {
-			return false
-		}
-	}
-	return true
 }
 
 // IntegrationAdvice is what a fork of anything but an integration job says about the
