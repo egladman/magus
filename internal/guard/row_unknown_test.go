@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
@@ -81,6 +82,48 @@ func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
 	for _, line := range []string{"./build.sh", "./magus run go-build .", "git commit -m x"} {
 		assert.True(t, denyUnknownRowMembers(ctx, deps, row.ID, line).refused(), line)
 	}
+}
+
+// RowUnknownVCSLinesSuite pins that a VCS line replaces no judge: the later
+// rules would grade it on only the members they know.
+type RowUnknownVCSLinesSuite struct {
+	suite.Suite
+	ctx context.Context
+	row types.Job
+}
+
+func TestRowUnknownVCSLinesSuite(t *testing.T) {
+	suite.Run(t, new(RowUnknownVCSLinesSuite))
+}
+
+func (s *RowUnknownVCSLinesSuite) SetupTest() {
+	s.row = narrowLease()
+	s.ctx, _ = fleetFixture(s.T(), s.row)
+	plantUnknownMember(s.T(), s.ctx, s.row.ID, "narrows_paths")
+}
+
+func (s *RowUnknownVCSLinesSuite) refused(line string) bool {
+	return denyUnknownRowMembers(s.ctx, Dependencies{}, s.row.ID, line).refused()
+}
+
+func (s *RowUnknownVCSLinesSuite) TestAPickIsRefused() {
+	s.True(s.refused("git cherry-pick f1980cc5c"))
+}
+
+func (s *RowUnknownVCSLinesSuite) TestAddingAWorktreeIsRefused() {
+	s.True(s.refused("git worktree add ../elsewhere"))
+}
+
+func (s *RowUnknownVCSLinesSuite) TestAbortingAMergeIsRefused() {
+	s.True(s.refused("git merge --abort"))
+}
+
+func (s *RowUnknownVCSLinesSuite) TestContinuingARebaseIsRefused() {
+	s.True(s.refused("git rebase --continue"))
+}
+
+func (s *RowUnknownVCSLinesSuite) TestAFastForwardStillPasses() {
+	s.False(s.refused("git merge --ff-only f1980cc5c"))
 }
 
 func TestRowUnknownPassesARowItCanRead(t *testing.T) {
