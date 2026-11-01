@@ -16,6 +16,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/result"
 	"github.com/egladman/magus/std"
 )
 
@@ -201,6 +202,7 @@ func InstallClient(ctx context.Context, sess *buzz.Session, out io.Writer) error
 	if err := sess.Provide(env, hostModuleBinds(clientHostModules())...); err != nil {
 		return err
 	}
+	sess.SetModuleDecls(result.ModulePath, result.Source)
 	sess.SetNativeModule("magus", assembleMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptMode, clientWithheld...))
 	return spell.DeclareMagusTypes(sess, func(member string) bool { return !slices.Contains(clientWithheld, member) })
 }

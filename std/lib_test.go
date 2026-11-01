@@ -31,6 +31,20 @@ func TestDiskModulesRegisterWhereTheHookCanImportThem(t *testing.T) {
 	assert.Equal(t, "magus/reclaimdisk", reclaim.ImportPath())
 }
 
+func TestResultRegistersWhereAHookCanImportIt(t *testing.T) {
+	got, ok := GetSource("result")
+	require.True(t, ok, "result is in std/lib.go's sourceBuiltin")
+	assert.Equal(t, "result", got.ImportPath(), "a hook may import nothing under magus/")
+
+	methods, err := describeSource(got)
+	require.NoError(t, err)
+	names := make([]string, 0, len(methods))
+	for _, m := range methods {
+		names = append(names, m.Name)
+	}
+	assert.Equal(t, []string{"ok", "fail", "caught"}, names)
+}
+
 func TestModelTiersRegistersTheDefaultDeclaration(t *testing.T) {
 	got, ok := GetSource("modeltiers")
 	require.True(t, ok, "modeltiers is in std/lib.go's sourceBuiltin")

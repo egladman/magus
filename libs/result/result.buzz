@@ -1,0 +1,55 @@
+// Diagnostic and Result match types.Diagnostic and types.Result, and
+// cmd/magus-utils/types_test.go holds them to what the generator renders. They
+// live here because a module re-exports nothing it imports.
+export object Diagnostic {
+    code: str = "",
+    message: str = "",
+    url: str = "",
+    fix: str = "",
+}
+
+export object Result::<T> {
+    value: T? = null,
+    error: Diagnostic? = null,
+}
+
+// ok is a Result holding value.
+export fun ok::<T>(value: T) > Result::<T> {
+    return Result::<T>{ value = value };
+}
+
+// fail is a Result carrying message and no code. A failure with a code
+// builds the Diagnostic itself.
+export fun fail::<T>(message: str) > Result::<T> {
+    return Result::<T>{ error = Diagnostic{ message = message } };
+}
+
+// caught is a Result carrying what a catch handed back: a str, a Diagnostic,
+// or the map a host error crosses as. doing prefixes the message when given.
+// Interpolating the caught value instead prints a host error's map syntax.
+export fun caught::<T>(err: any, doing: str = "") > Result::<T> {
+    final d = narrowed(err);
+    final message = if (doing != "") "{doing}: {d.message}" else d.message;
+    return Result::<T>{ error = Diagnostic{ code = d.code, message = message, url = d.url, fix = d.fix } };
+}
+
+fun narrowed(err: any) > Diagnostic {
+    if (err is str) {
+        final message: str = err;
+        return Diagnostic{ message = message };
+    }
+    if (err is Diagnostic) {
+        final d: Diagnostic = err;
+        return d;
+    }
+    if (err is {str: any}) {
+        final fields: {str: any} = err;
+        return Diagnostic{
+            code = "{fields["code"] ?? ""}",
+            message = "{fields["message"] ?? ""}",
+            url = "{fields["url"] ?? ""}",
+            fix = "{fields["fix"] ?? ""}",
+        };
+    }
+    return Diagnostic{ message = "{err}" };
+}

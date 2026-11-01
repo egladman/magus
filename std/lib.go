@@ -4,6 +4,7 @@ import (
 	_ "embed"
 
 	figuresrc "github.com/egladman/magus/libs/figure"
+	resultsrc "github.com/egladman/magus/libs/result"
 )
 
 // The Buzz-implemented half of the standard library. Each source is embedded and
@@ -53,5 +54,10 @@ var sourceBuiltin = []SourceModule{
 		Path:   "magus/reclaimdisk",
 		Doc:    "Plan and take back the disk a repository's git worktrees and merged agent branches hold, never a dirty, unpushed, leased, busy or locked worktree; tick is the one decider every disk trigger calls, and trims only what a spell gives a budget.",
 		Source: reclaimDiskSource,
+	},
+	{
+		Name:   resultsrc.ModulePath,
+		Doc:    "A value or the Diagnostic that stopped it: Result, the Buzz form of types.Result, with ok, fail, and caught for what a catch hands back.",
+		Source: resultsrc.Source,
 	},
 }

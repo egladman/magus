@@ -244,9 +244,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "VCSCheckpoint", Type: reflect.TypeFor[types.VCSCheckpoint](), RuntimeObject: true},
 	// A thrown error's shape, and also returned: Diff.conformanceError is one.
 	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic](), RuntimeObject: true, TS: true},
-	// Must follow Diagnostic: Result.err is one. Not a RuntimeObject: the encoder is
-	// generated per concrete Go type, and the placeholder T is none; a host method
-	// returning Result[X] is what brings that instance's encoder.
+	// Must follow Diagnostic: Result.error is one. Not a RuntimeObject: the
+	// encoder is generated per concrete Go type, and the placeholder T is none;
+	// a host method returning Result[X] is what brings that instance's encoder.
 	{Name: "Result", Type: reflect.TypeFor[types.Result[buzzgen.T]](), TS: true},
 	{Name: "DiffUncovered", Type: reflect.TypeFor[types.DiffUncovered](), RuntimeObject: true},
 	{Name: "DiffUnread", Type: reflect.TypeFor[types.DiffUnread](), RuntimeObject: true},

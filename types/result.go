@@ -1,9 +1,9 @@
 package types
 
 // Result is a value or the Diagnostic that stopped it, as it crosses a language
-// boundary: the Buzz mirror is `Result::<T>` and the TypeScript one a union narrowed
-// on `error`. Go code inside the module returns (T, error) and builds a Result only
-// where the value leaves Go.
+// boundary. The Buzz mirror is `result\Result::<T>` in libs/result; the
+// TypeScript one is a union narrowed on `error`. Go code inside the module
+// returns (T, error) and builds a Result only where the value leaves Go.
 //
 // Exactly one side is meaningful: Error nil means Value holds the answer, and Error
 // non-nil means Value is T's zero and carries nothing.

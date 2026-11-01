@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/result"
 	"github.com/egladman/magus/spells"
 )
 
@@ -220,6 +221,7 @@ func compileBuiltin(ctx context.Context, src string) (spells.Descriptor, error) 
 	sess.SetModuleDecls(CharmModulePath, CharmModuleSource)
 	sess.SetModuleDecls(HarnessModulePath, HarnessModuleSource)
 	sess.SetModuleDecls(LintModulePath, LintModuleSource)
+	sess.SetModuleDecls(result.ModulePath, result.Source)
 	declareParseModules(sess)
 	var unresolved string
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {

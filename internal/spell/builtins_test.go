@@ -100,6 +100,30 @@ func TestBuiltinSessionRefusesHostImports(t *testing.T) {
 	assert.False(t, errors.As(err, new(hostImportError)), "a type error is a broken spell: %v", err)
 }
 
+// A spell returning Results stays built-in: the module is no host import.
+func TestBuiltinSpellSharesTheResultModule(t *testing.T) {
+	spec, err := compileBuiltin(t.Context(), `import "magus/spell";
+import "result";
+
+fun versionOf(text: str) > result\Result::<str> {
+    if (text == "") {
+        return result\fail::<str>("no version in the output");
+    }
+    return result\ok::<str>(text);
+}
+
+export fun mgs_getName() > str {
+    final version = versionOf("fixture");
+    if (version.error -> err) {
+        return err.message;
+    }
+    return version.value!;
+}
+`)
+	require.NoError(t, err)
+	assert.Equal(t, "fixture", spec.Name)
+}
+
 // BenchmarkLoadShipped is the startup cost every workspace-loading process pays for
 // the built-in registry.
 func BenchmarkLoadShipped(b *testing.B) {
