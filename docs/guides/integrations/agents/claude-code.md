@@ -604,7 +604,7 @@ It adds these to a session:
 
 - A status line entry that names a magus problem: no binary, a stopped daemon, a
   daemon running another version, or an MCP endpoint that is not serving. The band
-  above the prompt draws only the two that nothing else will say, a guard that fails
+  above the prompt draws only the two that nothing else says, a guard that fails
   open and a daemon on another version, with a Copy fix button that says when the
   copy did not reach a clipboard. A stale or borrowed `./magus` is not drawn: the
   guard names the rebuild to the agent.

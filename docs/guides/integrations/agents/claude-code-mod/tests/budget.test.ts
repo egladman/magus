@@ -149,7 +149,8 @@ describe('refusals', () => {
 
   test('the Budget tab names a refusal and whether it ever fits', async () => {
     const r = budget?.refused[0]
-    if (r === undefined) throw new Error('the fixture holds one refusal')
+    expect(r).toBeDefined()
+    if (r === undefined) return
     expect(refusalText(r, AT + 2 * 60_000)).toBe('MGS3009 refused ci for spawned by root, pid 30100, in magus-b 2m ago')
     expect(refusalText({ ...r, fits: false, owner: '', dir: '' }, AT)).toBe('MGS3009 refused ci (never fits) for pid 30100 0s ago')
   })
