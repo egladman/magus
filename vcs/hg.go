@@ -819,7 +819,7 @@ func (v hgVCS) MissingCommits(ctx context.Context, dir, branch, head string) (in
 
 // RangeCommits implements types.RangeReporter; see hgRangeCommits.
 func (v hgVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
-	return hgRangeCommits(ctx, v, "hg", dir, base, head, paths)
+	return hgRangeCommits(ctx, "hg", dir, base, head, paths)
 }
 
 // IsAncestor implements types.AncestryReporter; see hgIsAncestor.

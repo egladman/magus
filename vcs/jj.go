@@ -445,13 +445,13 @@ func (v jjVCS) RangeCommits(ctx context.Context, dir, base, head string, paths [
 	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
-	args := append([]string{"log", "-r", fmt.Sprintf("%s..%s", base, head), "--no-graph", "-T", `commit_id ++ "\n"`},
+	args := append([]string{"log", "-r", fmt.Sprintf("%s..%s", base, head), "--no-graph", "-T", jjCommitTemplate + ` ++ "\0"`},
 		jjRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, "jj", args...)
 	if err != nil {
 		return nil, fmt.Errorf("jj log %s..%s: %w", base, head, err)
 	}
-	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+	return parseCommits(out), nil
 }
 
 // jjRootPaths spells repository-relative paths as literal root: filesets after `--`, or

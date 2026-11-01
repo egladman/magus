@@ -350,6 +350,62 @@ func (s *unmergedSuite) TestAReadPastItsDeadlineNamesWhatItLeftAndTheNextCarries
 	s.Len(s.unmerged(row).Rows, 1)
 }
 
+// slowMissing answers MissingCommits after took, or gives up with its context.
+type slowMissing struct {
+	types.RangeReporter
+	took time.Duration
+}
+
+func (r slowMissing) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+	select {
+	case <-time.After(r.took):
+		return r.RangeReporter.MissingCommits(ctx, dir, branch, head)
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+func (s *unmergedSuite) readWith(ctx context.Context, took time.Duration, work ...types.Job) *unmergedRead {
+	driver, ranges, err := rangeDriver(ctx, s.repo.Root())
+	s.Require().NoError(err)
+	meta, err := driver.Metadata(ctx, s.repo.Root())
+	s.Require().NoError(err)
+	r := &unmergedRead{
+		driver: driver, ranges: slowMissing{ranges, took},
+		root: s.repo.Root(), branch: s.main, tip: meta.ID, now: time.Now().Unix(),
+	}
+	r.run(ctx, work)
+	return r
+}
+
+func (s *unmergedSuite) TestARowOverItsRowBudgetAnswersOnTheReadAfterItWasCut() {
+	s.branch("w")
+	row := types.Job{ID: "w", State: types.StateExited, Result: &types.JobResult{ChangedPaths: []string{"w.txt"}}}
+	took := unmergedRowBudget + 200*time.Millisecond
+
+	s.Equal(1, s.readWith(s.T().Context(), took, row).unread, "the first read cuts it at the row budget")
+
+	second := s.readWith(s.T().Context(), took, row)
+	s.Empty(second.unknown(), "the next read lets it spend what is left")
+	s.Equal(1, second.rows["w"].fact.Commits)
+}
+
+func (s *unmergedSuite) TestARowARepeatedReadCutsIsNamedAsCutBefore() {
+	head := s.repo.Git("rev-parse", s.branch("w"))
+	row := types.Job{ID: "w", State: types.StateExited, Result: &types.JobResult{ChangedPaths: []string{"w.txt"}}}
+	line, err := json.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head, CutAt: 1})
+	s.Require().NoError(err)
+	path := unmergedFactsPath(s.repo.Root())
+	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+	s.Require().NoError(file.AppendLines(path, [][]byte{line}, 0o644))
+	spent, cancel := context.WithTimeout(s.T().Context(), time.Second)
+	defer cancel()
+
+	got := s.readWith(spent, time.Minute, row).unknown()
+
+	s.Contains(got, "1 of those a read had already cut")
+}
+
 func (s *unmergedSuite) TestAStoredMergeIsReadInsteadOfAskingAgain() {
 	head := s.repo.Git("rev-parse", s.branch("w"))
 	line, err := json.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head, Tip: s.repo.Git("rev-parse", "HEAD"), Merged: true, MergedAt: time.Now().Unix()})

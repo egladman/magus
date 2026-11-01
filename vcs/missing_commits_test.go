@@ -2,7 +2,12 @@ package vcs
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -86,6 +91,31 @@ func (s *missingCommitsSuite) TestNoDriverRunsAndNoTempFileAppears() {
 	leftovers, err := filepath.Glob(filepath.Join(s.repo.Root(), ".merge_file_*"))
 	s.Require().NoError(err)
 	s.Empty(leftovers)
+}
+
+func (s *missingCommitsSuite) TestABranchFarAheadCostsNoGitCallPerCommit() {
+	for i := range 5 {
+		s.repo.Commit(fmt.Sprintf("ahead %d", i), map[string]string{"ahead.txt": strconv.Itoa(i)})
+	}
+	real, err := exec.LookPath("git")
+	s.Require().NoError(err)
+	shim := s.T().TempDir()
+	calls := filepath.Join(shim, "calls")
+	script := fmt.Sprintf("#!/bin/sh\necho \"$*\" >> %q\nexec %q \"$@\"\n", calls, real)
+	s.Require().NoError(os.WriteFile(filepath.Join(shim, "git"), []byte(script), 0o755))
+	s.T().Setenv("PATH", fmt.Sprintf("%s%c%s", shim, os.PathListSeparator, os.Getenv("PATH")))
+
+	s.Equal(1, s.missing())
+
+	logged, err := os.ReadFile(calls)
+	s.Require().NoError(err)
+	logs := 0
+	for line := range strings.Lines(string(logged)) {
+		if slices.Contains(strings.Fields(line), "log") {
+			logs++
+		}
+	}
+	s.Equal(2, logs, "one log per side of the range:\n%s", logged)
 }
 
 func (s *missingCommitsSuite) TestAnUnknownRevisionIsAnError() {

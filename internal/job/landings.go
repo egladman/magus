@@ -369,6 +369,7 @@ func unanswered(rows []types.Job, row types.Job, items []string, why string) []t
 const unmergedBudget = 3 * time.Second
 
 // unmergedRowBudget stops one wide row spending a whole read, every read.
+// A row a read already cut may spend what is left, or it never answers.
 const unmergedRowBudget = time.Second
 
 // unmergedFactsFile holds each row's answer beside jobs.jsonl, one line per
@@ -416,6 +417,7 @@ type unmergedRead struct {
 	rows      map[string]*unmergedRow
 	unread    int
 	stale     int
+	recut     int
 }
 
 // run answers every row in work from the stored facts, then asks the version
@@ -439,26 +441,7 @@ func (r *unmergedRead) run(ctx context.Context, work []types.Job) {
 		x, y := r.rows[a.ID], r.rows[b.ID]
 		return cmp.Or(cmp.Compare(x.fact.CutAt, y.fact.CutAt), cmp.Compare(boolRank(x.seen), boolRank(y.seen)), cmp.Compare(x.fact.MergedAt, y.fact.MergedAt))
 	})
-	next := map[string]unmergedFact{}
-	for _, row := range due {
-		if ctx.Err() != nil {
-			break
-		}
-		rr := r.rows[row.ID]
-		one, done := context.WithTimeout(ctx, unmergedRowBudget)
-		r.check(one, rr, row)
-		done()
-		switch {
-		case rr.headErr != nil:
-		case rr.dirtyDue || rr.mergedDue:
-			cut := rr.fact
-			cut.CutAt = r.now
-			next[row.ID] = cut
-		case rr.unread == "" && rr.rangeErr == "":
-			rr.fact.CutAt = 0
-			next[row.ID] = rr.fact
-		}
-	}
+	next := r.ask(ctx, due)
 	for _, row := range due {
 		rr := r.rows[row.ID]
 		switch {
@@ -470,6 +453,37 @@ func (r *unmergedRead) run(ctx context.Context, work []types.Job) {
 		}
 	}
 	writeUnmergedFacts(path, stored, next)
+}
+
+// ask checks due in order until the budget ends, and returns what to store.
+func (r *unmergedRead) ask(ctx context.Context, due []types.Job) map[string]unmergedFact {
+	next := map[string]unmergedFact{}
+	for _, row := range due {
+		if ctx.Err() != nil {
+			break
+		}
+		rr := r.rows[row.ID]
+		one, done := ctx, context.CancelFunc(func() {})
+		if rr.fact.CutAt == 0 {
+			one, done = context.WithTimeout(ctx, unmergedRowBudget)
+		}
+		r.check(one, rr, row)
+		done()
+		switch {
+		case rr.headErr != nil:
+		case rr.dirtyDue || rr.mergedDue:
+			if rr.fact.CutAt != 0 {
+				r.recut++
+			}
+			cut := rr.fact
+			cut.CutAt = r.now
+			next[row.ID] = cut
+		case rr.unread == "" && rr.rangeErr == "":
+			rr.fact.CutAt = 0
+			next[row.ID] = rr.fact
+		}
+	}
+	return next
 }
 
 func boolRank(b bool) int {
@@ -634,6 +648,9 @@ func (r *unmergedRead) unknown() string {
 	}
 	if r.stale > 0 {
 		parts = append(parts, fmt.Sprintf("%d row(s) keep their answer from an older commit of %s", r.stale, r.branch))
+	}
+	if r.recut > 0 {
+		parts = append(parts, fmt.Sprintf("%d of those a read had already cut, so they may need longer than %s", r.recut, unmergedBudget))
 	}
 	return strings.Join(parts, "; ")
 }

@@ -367,9 +367,8 @@ func (v gitVCS) MissingCommits(ctx context.Context, dir, branch, head string) (i
 	return missingCommits(ctx, v, dir, branch, head)
 }
 
-// RangeCommits implements types.RangeReporter by listing ids with `rev-list` and
-// resolving each through FindCommit, the one commit parser. paths run from the top level,
-// literally, so a path RangeFiles returned narrows to exactly that path.
+// RangeCommits implements types.RangeReporter in one `git log`. paths run from
+// the top level, literally, so a path RangeFiles returned narrows to just that.
 func (v gitVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
 	if err := checkRequiredRev(base, head); err != nil {
 		return nil, err
@@ -378,12 +377,12 @@ func (v gitVCS) RangeCommits(ctx context.Context, dir, base, head string, paths 
 	if err != nil {
 		return nil, err
 	}
-	args := append([]string{"rev-list", fmt.Sprintf("%s..%s", base, head), "--"}, paths...)
+	args := append([]string{"log", "--format=" + gitCommitFormat + "%x00", fmt.Sprintf("%s..%s", base, head), "--"}, paths...)
 	out, err := gitOutput(ctx, at, gitOpts{Literal: true}, args...)
 	if err != nil {
-		return nil, fmt.Errorf("git rev-list %s..%s: %w", base, head, err)
+		return nil, fmt.Errorf("git log %s..%s: %w", base, head, err)
 	}
-	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+	return parseCommits(out), nil
 }
 
 // FastForward implements types.CheckoutFastForwarder.
