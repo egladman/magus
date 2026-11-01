@@ -56,7 +56,7 @@ func integratedBranchChanging(ctx context.Context, checkout string, me types.Job
 		return ""
 	}
 	for _, branch := range me.Integrates {
-		if names, err := gitNames(ctx, checkout, "diff", "--name-only", rev+"..."+branch, "--", rel); err == nil && len(names) > 0 {
+		if names, err := gitNames(ctx, checkout, "diff", "--name-only", fmt.Sprintf("%s...%s", rev, branch), "--", rel); err == nil && len(names) > 0 {
 			return branch
 		}
 	}

@@ -75,18 +75,18 @@ func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
 		"git merge --ff-only f1980cc5c",
 		"./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /work/job",
 		"./magus buzz hack/dev/bootstrap-checkout.buzz -- --here",
-		"export BAGGAGE=magus.lease=" + row.ID + "; ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here",
-		"export BAGGAGE=magus.lease=" + row.ID + " && ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here",
-		"BAGGAGE=magus.lease=" + row.ID + " ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here",
+		fmt.Sprintf("export BAGGAGE=magus.lease=%s; ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", row.ID),
+		fmt.Sprintf("export BAGGAGE=magus.lease=%s && ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", row.ID),
+		fmt.Sprintf("BAGGAGE=magus.lease=%s ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", row.ID),
 		ward.BootstrapCommand,
 	} {
 		assert.False(t, denyUnknownRowMembers(ctx, deps, row.ID, line).refused(), line)
 	}
 	for _, line := range []string{
 		"./build.sh", "./magus run go-build .", "git commit -m x",
-		"export BAGGAGE=magus.lease=" + row.ID + "; ./build.sh",
+		fmt.Sprintf("export BAGGAGE=magus.lease=%s; ./build.sh", row.ID),
 		"export FOO=1; ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here",
-		"export BAGGAGE=magus.lease=" + row.ID + "; ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here; ./build.sh",
+		fmt.Sprintf("export BAGGAGE=magus.lease=%s; ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here; ./build.sh", row.ID),
 	} {
 		assert.True(t, denyUnknownRowMembers(ctx, deps, row.ID, line).refused(), line)
 	}

@@ -688,9 +688,9 @@ func denyUngradedRewrite(ctx context.Context, deps Dependencies, actingLease, co
 		return denial{}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` rewrites files in a process that cannot see your session, so lease %s would not grade them; start the line with `export %s=%s;`.",
-			elideCommand(command), actingLease, envHookLease, actingLease),
-		Why: "A hook shares no environment with the process it lets run, and the guard rewrites no command, so the line carries the claim. " +
+		Say: fmt.Sprintf("magus workspace: lease %s would not grade what `%s` rewrites; start the line with `export %s=%s;`.",
+			actingLease, elideCommand(command), envHookLease, actingLease),
+		Why: "The process cannot see your session. A hook shares no environment with the process it lets run, and the guard rewrites no command, so the line carries the claim. " +
 			"The process then grades each file against the lease's row, a dry run included.",
 	}
 }
