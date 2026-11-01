@@ -315,7 +315,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 		if err := queue.WriteCapabilities(&doc, f.Base, caps); err != nil {
 			return err
 		}
-		return e.writeDocument(opts, doc.Bytes(), []string{f.Base})
+		return e.writeDocument(opts, doc.Bytes(), queue.CapabilitiesDoc{}, []string{f.Base})
 	}
 	if err := caps.Check(); err != nil {
 		return fmt.Errorf("%s: %w", types.SchemaCapabilities, err)
@@ -522,20 +522,26 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 		if err := queue.WriteReviews(&doc, report); err != nil {
 			return err
 		}
-		return e.writeDocument(opts, doc.Bytes(), []string{f.Base})
+		return e.writeDocument(opts, doc.Bytes(), types.ReviewReport{}, []string{f.Base})
 	}
 	return queue.WriteReviewLines(e.stdout, report)
 }
 
 // writeDocument renders one schema document the queue package encoded.
 // Json and jsonl keep its bytes: a provider's workflow reads that one line.
-func (e *queueEnv) writeDocument(opts output.Options, doc []byte, names []string) error {
+// shape is the document's type, which a bare -o template lists, since a
+// decoded document has lost its field types.
+func (e *queueEnv) writeDocument(opts output.Options, doc []byte, shape any, names []string) error {
 	switch opts.Format {
 	case outputJSON, outputJSONL:
 		_, err := e.stdout.Write(doc)
 		return err
 	case outputName:
 		return emitNames(e.stdout, names)
+	case output.Template:
+		if opts.Template == "" {
+			return writeFormatted(e.stdout, opts, shape)
+		}
 	}
 	var record map[string]any
 	if err := json.Unmarshal(doc, &record); err != nil {

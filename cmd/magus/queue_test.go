@@ -463,6 +463,14 @@ func TestQueueDescribeRendersATemplate(t *testing.T) {
 	assert.Equal(t, "main:mergequeue.capabilities/v1", string(out))
 }
 
+func TestQueueDescribeBareTemplateListsTheDocumentsFields(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "-o", "template", "--status-context", "", "--provider", "local.buzz", "--base", "main")
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "required_approvals")
+}
+
 func TestQueueDescribeRendersItsBaseAsAName(t *testing.T) {
 	withOutput(t, "")
 	f := newSetupFixture(t)
