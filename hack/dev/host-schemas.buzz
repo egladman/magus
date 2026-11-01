@@ -36,6 +36,11 @@ import "assert";
 final SOURCES = "testdata/hosts/SOURCES.md";
 final DIR = "testdata/hosts";
 
+export object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
 // code reads a column the table quotes in backticks, which is every path and URL.
 // Split rather than replace because this file runs WITHOUT --embedded, so strict mode
 // applies and a two-argument method call is the form that does not parse.
@@ -68,10 +73,16 @@ export object Bundle {
 // REPORTS, never writes. The bundle is minified JavaScript and the schema is a reading of
 // it, so there is nothing to regenerate: a moved digest means a person re-reads the
 // validator. That is why this has no fetch arm while the published rows above do.
-export fun bundles() > [Bundle] !> any {
+export fun bundles() > Result::<[Bundle]> {
     final rows = mut [<Bundle>];
     var inTable = false;
-    foreach (line in fs\readFile(SOURCES).split("\n")) {
+    var text = "";
+    try {
+        text = fs\readFile(SOURCES);
+    } catch (err: any) {
+        return Result::<[Bundle]>{ error = "host-schemas: read {SOURCES}: {err}" };
+    }
+    foreach (line in text.split("\n")) {
         if (line.startsWith("## Upstream artifacts")) { inTable = true; continue; }
         // Any later heading ends the table; without this the parser walks the rest of the
         // file and reads a prose backtick as a row.
@@ -99,13 +110,16 @@ export fun bundles() > [Bundle] !> any {
             name = scope[1];
         }
         final tarball = "https://registry.npmjs.org/" + pkg + "/-/" + name + "-" + version + ".tgz";
-        rows.append(Bundle{ pkg = pkg, version = version, inner = inner, recorded = recorded,
-            digest = digestInsideTarball(tarball, inner: inner, marker: marker) });
+        final digest = digestInsideTarball(tarball, inner: inner, marker: marker);
+        if (digest.error != null) {
+            return Result::<[Bundle]>{ error = digest.error };
+        }
+        rows.append(Bundle{ pkg = pkg, version = version, inner = inner, recorded = recorded, digest = digest.value! });
     }
     if (rows.len() == 0) {
-        throw "host-schemas: {SOURCES} has no Upstream artifacts table, so no derived row's source is watched";
+        return Result::<[Bundle]>{ error = "host-schemas: {SOURCES} has no Upstream artifacts table, so no derived row's source is watched" };
     }
-    return rows;
+    return Result::<[Bundle]>{ value = rows };
 }
 
 // SLICE is how much of the file after the marker gets digested.
@@ -136,24 +150,29 @@ final SLICE = 2048;
 //
 // `package/` is the prefix npm gives every entry, so the recorded path stays the one a
 // reader sees in the published package rather than carrying that prefix around.
-fun digestInsideTarball(url: str, inner: str, marker: str) > str !> any {
-    final tgz = fs\tempFile("magus-upstream");
-    fs\writeFile(tgz, content: http\get(url, opts: http\Options{ fail = true }).body);
-    final body = archive\readFile(tgz, name: "package/" + inner);
-    fs\remove(tgz);
+fun digestInsideTarball(url: str, inner: str, marker: str) > Result::<str> {
+    var body = "";
+    try {
+        final tgz = fs\tempFile("magus-upstream");
+        fs\writeFile(tgz, content: http\get(url, opts: http\Options{ fail = true }).body);
+        body = archive\readFile(tgz, name: "package/" + inner);
+        fs\remove(tgz);
+    } catch (err: any) {
+        return Result::<str>{ error = "host-schemas: read {inner} from {url}: {err}" };
+    }
 
     final at = body.indexOf(marker);
     // Loud, because this is the one way a slice can go quietly wrong. A renamed
     // declaration or a reordered chunk leaves the marker absent, and digesting some other
     // window would report a match against a region nobody chose.
     if (at == null) {
-        throw "host-schemas: {url} carries {inner} but not \"{marker}\"; the declaration moved, so the recorded marker is stale and nothing was checked";
+        return Result::<str>{ error = "host-schemas: {url} carries {inner} but not \"{marker}\"; the declaration moved, so the recorded marker is stale and nothing was checked" };
     }
     var end = at + SLICE;
     if (end > body.len()) {
         end = body.len();
     }
-    return crypto\sha256Hex(body.sub(at, len: end - at));
+    return Result::<str>{ value = crypto\sha256Hex(body.sub(at, len: end - at)) };
 }
 
 // Schema is one row of the provenance table. recorded and digest, what the table records
@@ -170,10 +189,16 @@ export object Schema {
 
 // schemas re-fetches every `published` row and, when write holds, replaces each vendored
 // file whose bytes moved. It never edits SOURCES; the new digest is on the returned row.
-export fun schemas(write: bool) > [Schema] !> any {
+export fun schemas(write: bool) > Result::<[Schema]> {
     final rows = mut [<Schema>];
     var checked = 0;
-    foreach (line in fs\readFile(SOURCES).split("\n")) {
+    var text = "";
+    try {
+        text = fs\readFile(SOURCES);
+    } catch (err: any) {
+        return Result::<[Schema]>{ error = "host-schemas: read {SOURCES}: {err}" };
+    }
+    foreach (line in text.split("\n")) {
         // The upstream table below has the same row shape and different columns, so this
         // loop has to stop where it starts or it reads a package name as a file path.
         if (line.startsWith("## Upstream artifacts")) { break; }
@@ -192,12 +217,21 @@ export fun schemas(write: bool) > [Schema] !> any {
         }
 
         final recorded = code(cells, index: 5);
-        final body = http\get(url, opts: http\Options{ fail = true }).body;
+        var body = "";
+        try {
+            body = http\get(url, opts: http\Options{ fail = true }).body;
+        } catch (err: any) {
+            return Result::<[Schema]>{ error = "host-schemas: fetch {url}: {err}" };
+        }
         final digest = crypto\sha256Hex(body);
         checked = checked + 1;
         final moved = digest != recorded;
         if (moved and write) {
-            fs\writeFile(DIR + "/" + file, content: body);
+            try {
+                fs\writeFile(DIR + "/" + file, content: body);
+            } catch (err: any) {
+                return Result::<[Schema]>{ error = "host-schemas: write {DIR}/{file}: {err}" };
+            }
         }
         rows.append(Schema{ file = file, origin = origin, url = url, recorded = recorded, digest = digest, wrote = moved and write });
     }
@@ -205,9 +239,9 @@ export fun schemas(write: bool) > [Schema] !> any {
     // A table that matched no row means the format changed under this parser, and a
     // silent zero would read exactly like a clean run.
     if (checked == 0) {
-        throw "host-schemas: {SOURCES} named no published row, so nothing was checked";
+        return Result::<[Schema]>{ error = "host-schemas: {SOURCES} named no published row, so nothing was checked" };
     }
-    return rows;
+    return Result::<[Schema]>{ value = rows };
 }
 
 final usage = "usage: magus buzz hack/dev/host-schemas.buzz -- <step>\n"
@@ -218,28 +252,36 @@ final HELP = "cost: network; fetch also writes testdata/hosts\n{usage}";
 
 // parse returns the step args name, or "--help". Neither step is a default, and neither
 // takes a flag.
-export fun parse(args: [str]) > str !> any {
-    final parsed = flags\parse(args, switches: ["--help"], valued: [<str>]);
-    if (parsed.values["--help"] != null) {
-        return "--help";
+export fun parse(args: [str]) > Result::<str> {
+    try {
+        final parsed = flags\parse(args, switches: ["--help"], valued: [<str>]);
+        if (parsed.values["--help"] != null) {
+            return Result::<str>{ value = "--help" };
+        }
+        // flags\parse returns undeclared words in order; the step is the first.
+        final words = parsed.unknown + parsed.positionals;
+        if (words.len() == 0) {
+            return Result::<str>{ error = "host-schemas: no step given\n{usage}" };
+        }
+        final step = words[0];
+        if (step != "verify" and step != "fetch") {
+            return Result::<str>{ error = "host-schemas: unknown step \"{step}\"\n{usage}" };
+        }
+        if (words.len() > 1) {
+            return Result::<str>{ error = "host-schemas: {step} does not take {words.sub(1).join(" ")}\n{usage}" };
+        }
+        return Result::<str>{ value = step };
+    } catch (err: any) {
+        return Result::<str>{ error = "host-schemas: read the arguments: {err}" };
     }
-    // flags\parse hands back undeclared words in order, so the step is the first of them.
-    final words = parsed.unknown + parsed.positionals;
-    if (words.len() == 0) {
-        throw "host-schemas: no step given\n{usage}";
-    }
-    final step = words[0];
-    if (step != "verify" and step != "fetch") {
-        throw "host-schemas: unknown step \"{step}\"\n{usage}";
-    }
-    if (words.len() > 1) {
-        throw "host-schemas: {step} does not take {words.sub(1).join(" ")}\n{usage}";
-    }
-    return step;
 }
 
 export fun main(args: [str]) > void !> any {
-    final step = parse(args);
+    final chosen = parse(args);
+    if (chosen.error != null) {
+        throw chosen.error!;
+    }
+    final step = chosen.value!;
     if (step == "--help") {
         std\print(HELP);
         return;
@@ -248,7 +290,11 @@ export fun main(args: [str]) > void !> any {
 
     var checked = 0;
     var moved = 0;
-    foreach (s in schemas(write)) {
+    final fetched = schemas(write);
+    if (fetched.error != null) {
+        throw fetched.error!;
+    }
+    foreach (s in fetched.value!) {
         if (s.origin != "published") {
             std\print("skip {s.file}: {s.origin}, so {s.url} has no bytes to diff; re-read it by hand");
             continue;
@@ -271,7 +317,11 @@ export fun main(args: [str]) > void !> any {
     // published schema from upstream bytes, and an upstream bundle has none to rewrite
     // from. A moved bundle is read by a person.
     var upstreamMoved = 0;
-    foreach (b in bundles()) {
+    final watched = bundles();
+    if (watched.error != null) {
+        throw watched.error!;
+    }
+    foreach (b in watched.value!) {
         if (b.digest == b.recorded) {
             std\print("same {b.pkg}@{b.version} {b.inner}");
             continue;
@@ -296,14 +346,9 @@ export fun main(args: [str]) > void !> any {
     std\print("checked {checked} published schema(s) and every upstream bundle; all match what {SOURCES} records");
 }
 
-// refusal is the message parse throws for args, or "" when it accepts them.
+// refusal is the error parse returns for args, or "" when it accepts them.
 fun refusal(args: [str]) > str {
-    try {
-        _ = parse(args);
-    } catch (e) {
-        return "{e}";
-    }
-    return "";
+    return parse(args).error ?? "";
 }
 
 test "a bare run names no step, so it neither verifies nor writes" {
@@ -315,12 +360,12 @@ test "an unknown step is refused with the usage line" {
 }
 
 test "verify and fetch are the steps, and neither takes a flag" {
-    assert\equal(parse(["verify"]), want: "verify", message: "verify");
-    assert\equal(parse(["fetch"]), want: "fetch", message: "fetch");
+    assert\equal(parse(["verify"]).value!, want: "verify", message: "verify");
+    assert\equal(parse(["fetch"]).value!, want: "fetch", message: "fetch");
     assert\equal(refusal(["fetch", "--force"]), want: "host-schemas: fetch does not take --force\n" + usage, message: "a flag");
 }
 
 test "--help names the cost and runs no step" {
-    assert\equal(parse(["--help"]), want: "--help", message: "help");
+    assert\equal(parse(["--help"]).value!, want: "--help", message: "help");
     assert\isTrue(HELP.startsWith("cost: "), message: "the first line is the cost");
 }
