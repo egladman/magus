@@ -3309,6 +3309,84 @@ func (_c *MockVCSDriver_Metadata_Call) RunAndReturn(run func(ctx context.Context
 	return _c
 }
 
+// MissingCommits provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) MissingCommits(ctx context.Context, dir string, branch string, head string) (int, error) {
+	ret := _mock.Called(ctx, dir, branch, head)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MissingCommits")
+	}
+
+	var r0 int
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (int, error)); ok {
+		return returnFunc(ctx, dir, branch, head)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) int); ok {
+		r0 = returnFunc(ctx, dir, branch, head)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = returnFunc(ctx, dir, branch, head)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_MissingCommits_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MissingCommits'
+type MockVCSDriver_MissingCommits_Call struct {
+	*mock.Call
+}
+
+// MissingCommits is a helper method to define mock.On call
+//   - ctx context.Context
+//   - dir string
+//   - branch string
+//   - head string
+func (_e *MockVCSDriver_Expecter) MissingCommits(ctx interface{}, dir interface{}, branch interface{}, head interface{}) *MockVCSDriver_MissingCommits_Call {
+	return &MockVCSDriver_MissingCommits_Call{Call: _e.mock.On("MissingCommits", ctx, dir, branch, head)}
+}
+
+func (_c *MockVCSDriver_MissingCommits_Call) Run(run func(ctx context.Context, dir string, branch string, head string)) *MockVCSDriver_MissingCommits_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_MissingCommits_Call) Return(n int, err error) *MockVCSDriver_MissingCommits_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_MissingCommits_Call) RunAndReturn(run func(ctx context.Context, dir string, branch string, head string) (int, error)) *MockVCSDriver_MissingCommits_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Name provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) Name() string {
 	ret := _mock.Called()

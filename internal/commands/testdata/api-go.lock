@@ -4475,6 +4475,7 @@ github.com/egladman/magus/types.RaiseOptions type struct
 github.com/egladman/magus/types.RaiseOptions.Cause field any
 github.com/egladman/magus/types.RaiseOptions.URL field string
 github.com/egladman/magus/types.RangeReporter type interface
+github.com/egladman/magus/types.RangeReporter.MissingCommits imethod func(ctx context.Context, dir string, branch string, head string) (int, error)
 github.com/egladman/magus/types.RangeReporter.RangeCommits imethod func(ctx context.Context, dir string, base string, head string, paths []string) ([]Commit, error)
 github.com/egladman/magus/types.RangeReporter.RangeDiff imethod func(ctx context.Context, dir string, base string, head string, paths []string) (string, error)
 github.com/egladman/magus/types.RangeReporter.RangeFiles imethod func(ctx context.Context, dir string, base string, head string, paths []string) ([]string, error)
