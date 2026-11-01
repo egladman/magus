@@ -1,8 +1,10 @@
 package settle
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
@@ -27,7 +30,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 // gen/regenerated.txt behind if that target ever ran.
 func mergeDriverWorkspace(t *testing.T) (*magus.Magus, string) {
 	t.Helper()
-	return openMergeDriverWorkspace(t, testkit.NewWorkspace(t))
+	return openMergeDriverWorkspace(t, testkit.NewRepository(t, nil).Workspace)
 }
 
 // openMergeDriverWorkspace is mergeDriverWorkspace over ws, for a test that needs the
@@ -196,7 +199,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 // through merge_low_risk, and declares gen/** an output its generate target rebuilds.
 func autoResolveWorkspace(t *testing.T) *magus.Magus {
 	t.Helper()
-	ws := testkit.NewWorkspace(t)
+	ws := testkit.NewRepository(t, nil).Workspace
 	ws.Magusfile(`import "magus";
 
 magus\project({"merge_low_risk": ["fixtures/**"]})
@@ -354,12 +357,75 @@ func TestMergeDriverRecordsOwedRegeneration(t *testing.T) {
 	}, owed, "two kept files of one target owe one run")
 }
 
+type keptOutputSuite struct{ suite.Suite }
+
+func TestKeptOutput(t *testing.T) { suite.Run(t, new(keptOutputSuite)) }
+
+// sides are a declared output's driver files, each side having changed it.
+func (s *keptOutputSuite) sides() (base, ours, theirs string) {
+	return mergeSides(s.T(), "a\nx\nz\n", "a\nx1\nz\n", "a\nx2\nz\n")
+}
+
+func (s *keptOutputSuite) TestKeepingASideWarnsWhichFileWhatDroppedAndTheCommand() {
+	m, _ := mergeDriverWorkspace(s.T())
+	base, ours, theirs := s.sides()
+	var logged bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(previous)
+
+	s.Require().NoError(settleFile(s.T(), m, []string{base, ours, theirs, "7", "gen/catalog.md"}))
+
+	s.Contains(logged.String(), "gen/catalog.md")
+	s.Contains(logged.String(), "dropped theirs")
+	s.Contains(logged.String(), "vcs resolve")
+	s.Equal("a\nx1\nz\n", readFile(s.T(), ours))
+}
+
+func (s *keptOutputSuite) TestOffGitAGeneratedFileStaysConflictedWithMarkers() {
+	m, _ := openMergeDriverWorkspace(s.T(), testkit.NewWorkspace(s.T()))
+	base, ours, theirs := s.sides()
+
+	err := settleFile(s.T(), m, []string{base, ours, theirs, "7", "gen/catalog.md"})
+
+	s.Require().ErrorContains(err, "only git records a regeneration")
+	s.Contains(readFile(s.T(), ours), "<<<<<<<")
+}
+
+func (s *keptOutputSuite) TestOffGitASeparateOutputKeepsItsOwnMarkers() {
+	m, _ := openMergeDriverWorkspace(s.T(), testkit.NewWorkspace(s.T()))
+	base, ours, theirs := s.sides()
+	output := filepath.Join(s.T().TempDir(), "output")
+	s.Require().NoError(os.WriteFile(output, []byte("jj's markers\n"), 0o644))
+
+	s.Require().Error(settleFile(s.T(), m, []string{base, ours, theirs, "7", "gen/catalog.md", output}))
+
+	s.Equal("jj's markers\n", readFile(s.T(), output))
+}
+
+func (s *keptOutputSuite) TestARecordThatCannotBeWrittenLeavesMarkers() {
+	m, root := mergeDriverWorkspace(s.T())
+	record, err := vcs.OwedRegenerationPath(s.T().Context(), root)
+	s.Require().NoError(err)
+	s.Require().NoError(os.WriteFile(record, []byte("not json"), 0o644))
+	base, ours, theirs := s.sides()
+
+	err = settleFile(s.T(), m, []string{base, ours, theirs, "7", "gen/catalog.md"})
+
+	s.Require().ErrorContains(err, "cannot be recorded")
+	s.Contains(readFile(s.T(), ours), "<<<<<<<")
+}
+
 // snapshotTree records every file under root by relative path and contents, so a test can
 // assert the whole working tree is unchanged rather than guessing which paths to check.
 func snapshotTree(t *testing.T, root string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
 	require.NoError(t, filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		// The driver's record of what it owes lives in the git dir.
+		if err == nil && d.IsDir() && d.Name() == ".git" {
+			return filepath.SkipDir
+		}
 		if err != nil || d.IsDir() {
 			return err
 		}

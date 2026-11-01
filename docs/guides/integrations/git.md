@@ -290,6 +290,12 @@ what git has staged, which is how the first version of this driver stopped every
 target that rebuilds the file, and the file itself, in `magus-owed-regeneration.json` in
 the worktree's git directory. Fifty kept files of one target are one entry.
 
+The driver exits 0, so git prints only `Auto-merging` and a cherry-pick or a clean merge
+commits at once, and that commit lacks the other side's change until the regeneration
+runs. For each kept file the driver warns on standard error, naming the file, the side
+it dropped and `magus vcs resolve`. If the record cannot be written, it keeps nothing:
+the file stays conflicted, with markers, for `magus vcs resolve` to settle.
+
 No hook runs the regeneration. `magus vcs resolve` with nothing conflicted does: it
 reads the record, runs each target it names, stages what the runs rewrote, and clears
 the record. All the projects of one target share a single
@@ -314,8 +320,8 @@ git commit -m 'regenerate after merging done-a and done-b'
 regeneration, naming each owed target and `magus vcs resolve`, since a check passed in
 that tree passed against output nobody rebuilt.
 
-Under Mercurial, Sapling and jj the driver logs the command to run before committing,
-and `magus vcs resolve` runs it. The merge queue merges trees without a checkout and
+Under Mercurial, Sapling and jj there is no record, so a generated file stays conflicted
+until `magus vcs resolve` settles it. The merge queue merges trees without a checkout and
 regenerates each candidate through its own hook, and the registration refresh a queue
 candidate cannot write is skipped, not reported.
 

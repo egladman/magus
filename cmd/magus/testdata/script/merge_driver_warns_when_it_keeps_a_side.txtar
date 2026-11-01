@@ -1,0 +1,51 @@
+# A cherry-pick of a generated file both sides changed exits 0 and commits with our side
+# kept: git itself prints only Auto-merging. The driver says what it dropped and which
+# command settles it, and that command rebuilds the file from the picked source.
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git checkout -b main
+
+env XDG_CONFIG_HOME=$WORK/xdg
+exec magus init --vcs git
+exec git add magusfile.buzz .gitattributes src.txt gen/flags.txt
+exec git commit -m initial
+
+exec git checkout -b other
+cp src.other.txt src.txt
+cp src.other.txt gen/flags.txt
+exec git commit -am other-side
+
+exec git checkout main
+cp main.flags.txt gen/flags.txt
+exec git commit -am main-side
+
+exec git cherry-pick other
+stderr 'dropped theirs.*path=gen/flags.txt.*vcs resolve'
+cmp gen/flags.txt main.flags.txt
+
+exec magus vcs resolve
+cmp gen/flags.txt src.other.txt
+exec git status --porcelain --untracked-files=no
+stdout '^M  gen/flags.txt$'
+
+-- magusfile.buzz --
+import "magus";
+import "fs";
+
+magus\project({"name": "acme-root"});
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["gen/**"]);
+    fs\writeFile("gen/flags.txt", fs\readFile("src.txt"));
+}
+-- src.txt --
+a
+-- src.other.txt --
+a
+b
+-- gen/flags.txt --
+a
+-- main.flags.txt --
+z

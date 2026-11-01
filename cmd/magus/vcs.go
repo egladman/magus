@@ -137,10 +137,10 @@ func mergeDriverUsage() error {
 	fmt.Fprintln(os.Stderr, "vcs.auto_resolve opts in. git, hg and Sapling invoke it during a merge, and")
 	fmt.Fprintf(os.Stderr, "`%s` runs it through `jj resolve` on jj. An opted-in file\n", hint.VCSResolve.String())
 	fmt.Fprintln(os.Stderr, "is merged when every region both sides changed is low risk, and otherwise")
-	fmt.Fprintln(os.Stderr, "left with conflict markers. A declared output keeps the current version")
-	fmt.Fprintln(os.Stderr, "instead of writing conflict markers. On git it records the regeneration it owes,")
-	fmt.Fprintf(os.Stderr, "and `%s` runs it once the merge, rebase, cherry-pick or\n", hint.VCSResolve.String())
-	fmt.Fprintln(os.Stderr, "revert has the whole tree.")
+	fmt.Fprintln(os.Stderr, "left with conflict markers. On git a declared output keeps the current version,")
+	fmt.Fprintln(os.Stderr, "warns that the other side's change is gone, and records the regeneration it owes;")
+	fmt.Fprintf(os.Stderr, "`%s` runs it once the merge, rebase, cherry-pick or revert\n", hint.VCSResolve.String())
+	fmt.Fprintln(os.Stderr, "has the whole tree. With no record, a declared output is left conflicted too.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "You do not run this by hand. Wire it once per clone with `%s`.\n", hint.Init.String())
 	fmt.Fprintln(os.Stderr, "git calls it as:  magus vcs merge-driver %O %A %B %L %P")
@@ -696,13 +696,13 @@ func runRebuildTargets(run func(args []string) error, rebuild map[string][]strin
 	if len(failed) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%d of %d target(s) failed:\n%w", len(failed), len(rebuild), errors.Join(failed...))
+	return fmt.Errorf("%d of %d target(s) failed: %w", len(failed), len(rebuild), errors.Join(failed...))
 }
 
 // stageFailed names the stages that did not run. Each reads the conflicts the
 // failed one was to settle.
 func stageFailed(err error, notRun ...string) error {
-	return fmt.Errorf("%w\nnot run because of it: %s", err, strings.Join(notRun, ", "))
+	return fmt.Errorf("%w: not run because of it: %s", err, strings.Join(notRun, ", "))
 }
 
 func reportResolution(plan settle.Plan, dryRun bool) {
