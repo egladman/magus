@@ -496,7 +496,7 @@ return figure\draw(figure\of("t").actor(a).actor(b).flowAcross(a, dst: b).unscop
 }
 
 func TestPlaygroundSourceModules(t *testing.T) {
-	assert.Equal(t, []string{"figure"}, PlaygroundSourceModules())
+	assert.Equal(t, []string{"figure", "result"}, PlaygroundSourceModules())
 }
 
 const actorFigureJSON = `{
