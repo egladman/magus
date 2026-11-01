@@ -588,7 +588,8 @@ func (r *unmergedRead) holds(ctx context.Context, f *unmergedFact) (bool, int, e
 			return true, 0, nil
 		}
 	}
-	if r.tipTree != "" {
+	// A row whose merge outran its budget would outrun it every read.
+	if r.tipTree != "" && f.CutAt == 0 {
 		merged, err := r.driver.MergeTrees(ctx, r.root, types.TreeMerge{Ours: r.tip, Theirs: f.Head})
 		if err == nil && len(merged.Conflicts) == 0 && merged.Tree == r.tipTree {
 			return true, 0, nil
