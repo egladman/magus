@@ -135,6 +135,10 @@ func (declines[N]) FastForward(context.Context, string, string) error {
 	return decline[N](types.CapCheckoutFastForwarder)
 }
 
+func (declines[N]) BranchHeads(context.Context, string) (map[string]string, error) {
+	return nil, decline[N](types.CapBranchHeadReporter)
+}
+
 func (declines[N]) IsAncestor(context.Context, string, string, string) (bool, error) {
 	return false, decline[N](types.CapAncestryReporter)
 }

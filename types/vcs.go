@@ -177,6 +177,7 @@ type VCSDriver interface {
 	GeneratedPathReporter
 	CheckoutProvisioner
 	CheckoutFastForwarder
+	BranchHeadReporter
 	CheckoutLister
 	CheckoutReporter
 	RevisionFetcher
@@ -436,6 +437,7 @@ const (
 	CapGeneratedPathReporter VCSCapability = "GeneratedPathReporter"
 	CapCheckoutProvisioner   VCSCapability = "CheckoutProvisioner"
 	CapCheckoutFastForwarder VCSCapability = "CheckoutFastForwarder"
+	CapBranchHeadReporter    VCSCapability = "BranchHeadReporter"
 	CapCheckoutLister        VCSCapability = "CheckoutLister"
 	CapCheckoutReporter      VCSCapability = "CheckoutReporter"
 	CapRevisionFetcher       VCSCapability = "RevisionFetcher"
@@ -1147,6 +1149,13 @@ type CheckoutFastForwarder interface {
 	// It moves nothing when rev does not descend from the head
 	// or a local change would be lost.
 	FastForward(ctx context.Context, root, rev string) error
+}
+
+// BranchHeadReporter reads every local branch in one call, for a caller
+// that would otherwise spend a subprocess per branch.
+type BranchHeadReporter interface {
+	// BranchHeads maps each local branch of root's repository to its full id.
+	BranchHeads(ctx context.Context, root string) (map[string]string, error)
 }
 
 // CheckoutProvisioner is the capability to create, list and remove secondary checkouts

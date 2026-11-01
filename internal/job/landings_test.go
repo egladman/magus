@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -280,6 +282,55 @@ func (s *unmergedSuite) TestASquashedBranchIsMergedByContent() {
 	s.repo.Commit("squash", map[string]string{"w.txt": "w\n"})
 
 	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows)
+}
+
+func (s *unmergedSuite) TestAReplayedBranchIsMergedAfterTheBranchWentOnToChangeItsFile() {
+	s.repo.Commit("shared", map[string]string{"shared.txt": "1\n2\n3\n4\n5\n6\n7\n8\n9\n"})
+	s.repo.Git("switch", "-q", "-c", "w", s.main)
+	s.repo.Commit("edit top", map[string]string{"shared.txt": "one\n2\n3\n4\n5\n6\n7\n8\n9\n"})
+	s.repo.Git("switch", "-q", s.main)
+	s.repo.Git("cherry-pick", "w")
+	s.repo.Commit("edit bottom", map[string]string{"shared.txt": "one\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
+
+	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows)
+}
+
+func (s *unmergedSuite) TestAReadPastItsDeadlineNamesWhatItLeftAndTheNextCarriesOn() {
+	s.branch("w")
+	row := types.Job{ID: "w", State: types.StateExited, Result: &types.JobResult{ChangedPaths: []string{"w.txt"}}}
+	spent, cancel := context.WithCancel(s.T().Context())
+	cancel()
+
+	got := Unmerged(spent, s.repo.Root(), []types.Job{row})
+
+	if got.Unknown == "" {
+		s.Fail("a read that answered nothing must say so", "%+v", got)
+	}
+	s.Empty(got.Rows, "nothing is claimed of a row it did not read")
+	s.Len(s.unmerged(row).Rows, 1)
+}
+
+func (s *unmergedSuite) TestAStoredMergeIsReadInsteadOfAskingAgain() {
+	head := s.repo.Git("rev-parse", s.branch("w"))
+	line, err := json.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head, Tip: s.repo.Git("rev-parse", "HEAD"), Merged: true, MergedAt: time.Now().Unix()})
+	s.Require().NoError(err)
+	path := unmergedFactsPath(s.repo.Root())
+	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+	s.Require().NoError(file.AppendLines(path, [][]byte{line}, 0o644))
+
+	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows)
+}
+
+func (s *unmergedSuite) TestAStoredMergeOfAnOlderHeadStandsForNothing() {
+	head := s.repo.Git("rev-parse", s.branch("w"))
+	s.Empty(s.unmerged(types.Job{ID: "other", State: types.StatePass}).Rows)
+	line, err := json.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head + "0", Tip: s.repo.Git("rev-parse", "HEAD"), Merged: true})
+	s.Require().NoError(err)
+	path := unmergedFactsPath(s.repo.Root())
+	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+	s.Require().NoError(file.AppendLines(path, [][]byte{line}, 0o644))
+
+	s.Len(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows, 1)
 }
 
 func (s *unmergedSuite) TestARowEndedWithWorkOnItsBranchAndNoStatedReasonCounts() {

@@ -392,6 +392,21 @@ func (v gitVCS) FastForward(ctx context.Context, root, rev string) error {
 	return nil
 }
 
+// BranchHeads implements types.BranchHeadReporter.
+func (v gitVCS) BranchHeads(ctx context.Context, root string) (map[string]string, error) {
+	listed, err := gitOutput(ctx, root, gitOpts{}, "for-each-ref", "--format=%(objectname) %(refname:lstrip=2)", "refs/heads/")
+	if err != nil {
+		return nil, fmt.Errorf("git for-each-ref: %w", err)
+	}
+	heads := map[string]string{}
+	for _, line := range splitLines([]byte(listed)) {
+		if id, branch, ok := strings.Cut(line, " "); ok {
+			heads[branch] = id
+		}
+	}
+	return heads, nil
+}
+
 // IsAncestor implements types.AncestryReporter. merge-base's exit 1 is its answer "no";
 // every other failure is it declining to answer (an unknown revision, or a shallow clone
 // missing the history that would decide).
