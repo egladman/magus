@@ -715,8 +715,8 @@ func (m *Magus) ReindexSymbols(ctx context.Context) (int, error) {
 }
 
 const (
-	// Covers a cold index of a large repository, which a plain read
-	// never waits on: it answers now and refreshes in the background.
+	// SymbolRefreshBudget covers a cold index of a large repository. A plain
+	// read never waits on it: it answers now and refreshes in the background.
 	SymbolRefreshBudget = 3 * time.Minute
 	// How long past the budget `--refresh` waits for a run to honor
 	// cancellation before it answers anyway.

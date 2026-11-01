@@ -612,7 +612,8 @@ func (x *conformanceIndex) readOutside(id, dir string) bool {
 func signatureTypes(sig string) []string {
 	var text string
 	if params, result, ok := goFuncParts(sig); ok {
-		parts := []string{result}
+		parts := make([]string, 0, 1+len(params))
+		parts = append(parts, result)
 		for _, p := range params {
 			parts = append(parts, p.Type)
 		}
