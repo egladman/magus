@@ -13,6 +13,7 @@ import "magus/charm";
 import "encoding/json";
 import "encoding/yaml";
 import "path";
+import "result";
 
 export fun mgs_getName() > str { return "typescript"; }
 
@@ -476,7 +477,7 @@ fun gap(file: str, why: str) > DiscoveryGap {
     return DiscoveryGap{file = file, why = why};
 }
 
-fun parsePackage(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > NodePackage !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+fun parsePackage(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > result\Result::<NodePackage> {
     if (file.content -> content) {
         final parsed: any = json\parse(content) catch null;
         if (!(parsed is {str: any})) {
@@ -484,15 +485,14 @@ fun parsePackage(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > NodePackage !>
         }
         final manifest = asMap(parsed);
         final name = manifest["name"];
-        return NodePackage{
+        return result\ok::<NodePackage>(NodePackage{
             dir = dirOf(file.path),
             file = file.path,
             manifest = manifest,
             name = if (name is str) "{name}" else "",
-        };
+        });
     }
-    //nolint:no-throw // magus reads a raise as a failed discovery
-    throw "discover_projects: {file.path} arrived without content; package.json is a literal-basename glob, so discovery owes its content";
+    return result\fail::<NodePackage>("discover_projects: {file.path} arrived without content; package.json is a literal-basename glob, so discovery owes its content");
 }
 
 fun normalizePattern(pattern: str) > str {
@@ -523,75 +523,88 @@ fun workspaceOf(pkg: NodePackage, gaps: mut [DiscoveryGap]) > NodeWorkspace? {
     return null;
 }
 
-fun parsePnpmWorkspace(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > NodeWorkspace? !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+fun parsePnpmWorkspace(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > result\Result::<NodeWorkspace?> {
     if (file.content -> content) {
         final parsed: any = yaml\parse(content) catch null;
         if (parsed == null) {
             // An empty file, or one holding only settings: a workspace of the root alone.
-            return NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = [<str>], pnpm = true};
+            return result\ok::<NodeWorkspace?>(NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = [<str>], pnpm = true});
         }
         if (!(parsed is {str: any})) {
             gaps.append(gap(file.path, why: "not a YAML mapping, so no member was read"));
-            return null;
+            return result\ok::<NodeWorkspace?>(null);
         }
         final declared = asMap(parsed)["packages"];
         if (declared == null) {
-            return NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = [<str>], pnpm = true};
+            return result\ok::<NodeWorkspace?>(NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = [<str>], pnpm = true});
         }
         if (asStrings(declared) -> patterns) {
-            return NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = patterns, pnpm = true};
+            return result\ok::<NodeWorkspace?>(NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = patterns, pnpm = true});
         }
         gaps.append(gap(file.path, why: "packages: not a list of globs, so no member was read"));
-        return null;
+        return result\ok::<NodeWorkspace?>(null);
     }
-    //nolint:no-throw // magus reads a raise as a failed discovery
-    throw "discover_projects: {file.path} arrived without content; pnpm-workspace.yaml is a literal-basename glob, so discovery owes its content";
+    return result\fail::<NodeWorkspace?>("discover_projects: {file.path} arrived without content; pnpm-workspace.yaml is a literal-basename glob, so discovery owes its content");
 }
 
-fun isMember(ws: NodeWorkspace, dir: str) > bool !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+fun isMember(ws: NodeWorkspace, dir: str) > result\Result::<bool> {
     if (dir == ws.root or !isUnder(ws.root, file: dir)) {
-        return false;
+        return result\ok::<bool>(false);
     }
     final rel = relativeTo(ws.root, file: dir);
     var included = false;
-    foreach (raw in ws.patterns) {
-        if (raw.startsWith("!")) {
-            if (path\matches(normalizePattern(raw.sub(1)), path: rel)) {
-                return false;
+    try {
+        foreach (raw in ws.patterns) {
+            if (raw.startsWith("!")) {
+                if (path\matches(normalizePattern(raw.sub(1)), path: rel)) {
+                    return result\ok::<bool>(false);
+                }
+            } else if (path\matches(normalizePattern(raw), path: rel)) {
+                included = true;
             }
-        } else if (path\matches(normalizePattern(raw), path: rel)) {
-            included = true;
         }
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
-    return included;
+    return result\ok::<bool>(included);
 }
 
 // The workspace a package installs under: the one it roots, else the nearest one whose
 // globs name it.
-fun owningWorkspace(pkg: NodePackage, workspaces: [NodeWorkspace]) > NodeWorkspace? !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+fun owningWorkspace(pkg: NodePackage, workspaces: [NodeWorkspace]) > result\Result::<NodeWorkspace?> {
     var best: NodeWorkspace? = null;
     foreach (ws in workspaces) {
         if (ws.root == pkg.dir) {
-            return ws;
+            return result\ok::<NodeWorkspace?>(ws);
         }
-        if (isMember(ws, dir: pkg.dir) and (best == null or ws.root.len() > best!.root.len())) {
+        final member = isMember(ws, dir: pkg.dir);
+        if (member.error -> err) {
+            return result\Result::<NodeWorkspace?>{ error = err };
+        }
+        if (member.value! and (best == null or ws.root.len() > best!.root.len())) {
             best = ws;
         }
     }
-    return best;
+    return result\ok::<NodeWorkspace?>(best);
 }
 
-fun inWorkspace(pkg: NodePackage, ws: NodeWorkspace) > bool !> any { //nolint:no-throw // magus reads a raise as a failed discovery
-    return pkg.dir == ws.root or isMember(ws, dir: pkg.dir);
-}
-
-fun packageNamed(name: str, ws: NodeWorkspace, packages: [NodePackage]) > NodePackage? !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+fun packageNamed(name: str, ws: NodeWorkspace, packages: [NodePackage]) > result\Result::<NodePackage?> {
     foreach (other in packages) {
-        if (other.name == name and inWorkspace(other, ws: ws)) {
-            return other;
+        if (other.name != name) {
+            continue;
+        }
+        if (other.dir == ws.root) {
+            return result\ok::<NodePackage?>(other);
+        }
+        final member = isMember(ws, dir: other.dir);
+        if (member.error -> err) {
+            return result\Result::<NodePackage?>{ error = err };
+        }
+        if (member.value!) {
+            return result\ok::<NodePackage?>(other);
         }
     }
-    return null;
+    return result\ok::<NodePackage?>(null);
 }
 
 fun packageAt(dir: str, packages: [NodePackage]) > NodePackage? {
@@ -603,7 +616,7 @@ fun packageAt(dir: str, packages: [NodePackage]) > NodePackage? {
     return null;
 }
 
-fun dependsOn(pkg: NodePackage, ws: NodeWorkspace?, packages: [NodePackage], gaps: mut [DiscoveryGap]) > [str] !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+fun dependsOn(pkg: NodePackage, ws: NodeWorkspace?, packages: [NodePackage], gaps: mut [DiscoveryGap]) > result\Result::<[str]> {
     final deps = mut {<str: bool>};
     foreach (field in LINKED_DEPENDENCY_FIELDS) {
         final declared = asMap(pkg.manifest[field]);
@@ -616,7 +629,11 @@ fun dependsOn(pkg: NodePackage, ws: NodeWorkspace?, packages: [NodePackage], gap
             var linked: NodePackage? = null;
             if (range.startsWith("workspace:")) {
                 if (ws -> workspace) {
-                    linked = packageNamed(name, ws: workspace, packages: packages);
+                    final named = packageNamed(name, ws: workspace, packages: packages);
+                    if (named.error -> err) {
+                        return result\Result::<[str]>{ error = err };
+                    }
+                    linked = named.value;
                 }
                 if (linked == null) {
                     gaps.append(gap(pkg.file, why: "{field}.{name}: {range} names no package in this workspace"));
@@ -629,7 +646,10 @@ fun dependsOn(pkg: NodePackage, ws: NodeWorkspace?, packages: [NodePackage], gap
                 }
             } else if (ws -> workspace) {
                 final member = packageNamed(name, ws: workspace, packages: packages);
-                if (member -> sibling) {
+                if (member.error -> err) {
+                    return result\Result::<[str]>{ error = err };
+                }
+                if (member.value -> sibling) {
                     if (workspace.pnpm) {
                         gaps.append(gap(pkg.file, why: "{field}.{name}: names the workspace package in {sibling.dir}, but pnpm links a version range only under link-workspace-packages; write workspace:{range} to make it an edge"));
                     } else {
@@ -644,7 +664,7 @@ fun dependsOn(pkg: NodePackage, ws: NodeWorkspace?, packages: [NodePackage], gap
             }
         }
     }
-    return sortedKeys(deps);
+    return result\ok::<[str]>(sortedKeys(deps));
 }
 
 fun hasDependency(pkg: NodePackage, name: str) > bool {
@@ -708,10 +728,10 @@ fun buildTarget(pkg: NodePackage, owned: [str], targets: mut {str: [str]}, gaps:
 }
 
 // testTarget wires vitest or node --test, and gaps a test runner no op runs.
-fun testTarget(pkg: NodePackage, owned: [str], targets: mut {str: [str]}, gaps: mut [DiscoveryGap]) > void !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+fun testTarget(pkg: NodePackage, owned: [str], targets: mut {str: [str]}, gaps: mut [DiscoveryGap]) > result\Result::<bool> {
     if (hasDependency(pkg, name: "vitest")) {
         targets["test"] = ["vitest"];
-        return;
+        return result\ok::<bool>(true);
     }
     var unwired = false;
     foreach (runner in UNWIRED_TEST_RUNNERS) {
@@ -721,31 +741,39 @@ fun testTarget(pkg: NodePackage, owned: [str], targets: mut {str: [str]}, gaps: 
         }
     }
     if (unwired) {
-        return;
+        return result\ok::<bool>(true);
     }
     var nodeTests = false;
     var tsTests: str? = null;
-    foreach (file in owned) {
-        final rel = relativeTo(pkg.dir, file: file);
-        if (path\matchesAny(NODE_TEST_PATTERNS, path: rel)) {
-            nodeTests = true;
-        } else if (tsTests == null and path\matchesAny(TS_TEST_PATTERNS, path: rel)) {
-            tsTests = file;
+    try {
+        foreach (file in owned) {
+            final rel = relativeTo(pkg.dir, file: file);
+            if (path\matchesAny(NODE_TEST_PATTERNS, path: rel)) {
+                nodeTests = true;
+            } else if (tsTests == null and path\matchesAny(TS_TEST_PATTERNS, path: rel)) {
+                tsTests = file;
+            }
         }
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
     if (nodeTests) {
         targets["test"] = ["node-test"];
     } else if (tsTests -> file) {
         gaps.append(gap(file, why: "a test file with no vitest dependency and no name node --test finds by default, so no test was wired"));
     }
+    return result\ok::<bool>(true);
 }
 
-fun targetsOf(pkg: NodePackage, owned: [str], gaps: mut [DiscoveryGap]) > {str: [str]} !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+fun targetsOf(pkg: NodePackage, owned: [str], gaps: mut [DiscoveryGap]) > result\Result::<{str: [str]}> {
     final targets = mut {<str: [str]>};
     lintFormatTargets(pkg, targets: targets);
     buildTarget(pkg, owned: owned, targets: targets, gaps: gaps);
-    testTarget(pkg, owned: owned, targets: targets, gaps: gaps);
-    return targets;
+    final wired = testTarget(pkg, owned: owned, targets: targets, gaps: gaps);
+    if (wired.error -> err) {
+        return result\Result::<{str: [str]}>{ error = err };
+    }
+    return result\ok::<{str: [str]}>(targets);
 }
 
 // NodeScan is what discover_projects read of the query: every package, each one's parse
@@ -759,12 +787,16 @@ object NodeScan {
 
 // nodeScan parses each pnpm-workspace.yaml, then each package.json and the workspaces field
 // pnpm does not own.
-fun nodeScan(req: DiscoveryQuery) > NodeScan !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+fun nodeScan(req: DiscoveryQuery) > result\Result::<NodeScan> {
     final scan = NodeScan{packages = mut [], gapsByFile = mut {}, workspaces = mut [], workspaceGaps = mut []};
     final pnpmRoots = mut {<str: bool>};
     foreach (file in req.files) {
         if (baseOf(file.path) == "pnpm-workspace.yaml") {
-            if (parsePnpmWorkspace(file, gaps: scan.workspaceGaps) -> ws) {
+            final parsed = parsePnpmWorkspace(file, gaps: scan.workspaceGaps);
+            if (parsed.error -> err) {
+                return result\Result::<NodeScan>{ error = err };
+            }
+            if (parsed.value -> ws) {
                 scan.workspaces.append(ws);
                 pnpmRoots[ws.root] = true;
             }
@@ -775,7 +807,11 @@ fun nodeScan(req: DiscoveryQuery) > NodeScan !> any { //nolint:no-throw // magus
             continue;
         }
         final gaps = mut [<DiscoveryGap>];
-        final pkg = parsePackage(file, gaps: gaps);
+        final parsed = parsePackage(file, gaps: gaps);
+        if (parsed.error -> err) {
+            return result\Result::<NodeScan>{ error = err };
+        }
+        final pkg = parsed.value!;
         if (pnpmRoots[pkg.dir] ?? false) {
             if (pkg.manifest["workspaces"] != null) {
                 gaps.append(gap(pkg.file, why: "workspaces: pnpm reads its members from pnpm-workspace.yaml, so this field was ignored"));
@@ -786,36 +822,51 @@ fun nodeScan(req: DiscoveryQuery) > NodeScan !> any { //nolint:no-throw // magus
         scan.packages.append(pkg);
         scan.gapsByFile[pkg.file] = gaps;
     }
-    return scan;
+    return result\ok::<NodeScan>(scan);
 }
 
 // unmatchedGlobs gaps each workspace glob that matches no package.json.
-fun unmatchedGlobs(scan: NodeScan) > void !> any { //nolint:no-throw // magus reads a raise as a failed discovery
-    foreach (ws in scan.workspaces) {
-        foreach (raw in ws.patterns) {
-            if (raw.startsWith("!")) {
-                continue;
-            }
-            var matched = false;
-            foreach (pkg in scan.packages) {
-                if (pkg.dir != ws.root and isUnder(ws.root, file: pkg.dir)
-                    and path\matches(normalizePattern(raw), path: relativeTo(ws.root, file: pkg.dir))) {
-                    matched = true;
+fun unmatchedGlobs(scan: NodeScan) > result\Result::<bool> {
+    try {
+        foreach (ws in scan.workspaces) {
+            foreach (raw in ws.patterns) {
+                if (raw.startsWith("!")) {
+                    continue;
+                }
+                var matched = false;
+                foreach (pkg in scan.packages) {
+                    if (pkg.dir != ws.root and isUnder(ws.root, file: pkg.dir)
+                        and path\matches(normalizePattern(raw), path: relativeTo(ws.root, file: pkg.dir))) {
+                        matched = true;
+                    }
+                }
+                if (!matched) {
+                    scan.workspaceGaps.append(gap(ws.file, why: "workspace glob {raw} matches no package.json"));
                 }
             }
-            if (!matched) {
-                scan.workspaceGaps.append(gap(ws.file, why: "workspace glob {raw} matches no package.json"));
-            }
         }
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
+    return result\ok::<bool>(true);
 }
 
 // nodeClaim claims one package with the files it owns.
-fun nodeClaim(pkg: NodePackage, scan: NodeScan, owned: [str]) > DiscoveredProject !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+fun nodeClaim(pkg: NodePackage, scan: NodeScan, owned: [str]) > result\Result::<DiscoveredProject> {
     final gaps = scan.gapsByFile[pkg.file]!.cloneMutable();
     final ws = owningWorkspace(pkg, workspaces: scan.workspaces);
-    final deps = dependsOn(pkg, ws: ws, packages: scan.packages, gaps: gaps);
-    final targets = targetsOf(pkg, owned: owned, gaps: gaps);
+    if (ws.error -> err) {
+        return result\Result::<DiscoveredProject>{ error = err };
+    }
+    final deps = dependsOn(pkg, ws: ws.value, packages: scan.packages, gaps: gaps);
+    if (deps.error -> err) {
+        return result\Result::<DiscoveredProject>{ error = err };
+    }
+    final wired = targetsOf(pkg, owned: owned, gaps: gaps);
+    if (wired.error -> err) {
+        return result\Result::<DiscoveredProject>{ error = err };
+    }
+    final targets = wired.value!;
     foreach (script in sortedKeys(asMap(pkg.manifest["scripts"]))) {
         gaps.append(gap(pkg.file, why: "scripts.{script}: meaning unknown, so it was not wired; a package.json script never runs as a target"));
     }
@@ -827,16 +878,21 @@ fun nodeClaim(pkg: NodePackage, scan: NodeScan, owned: [str]) > DiscoveredProjec
             gaps.append(wsGap);
         }
     }
-    return DiscoveredProject{path = pkg.dir, role = DiscoveryRole.project, name = pkg.name, dependsOn = deps,
-        targets = targets, notInferred = gaps};
+    return result\ok::<DiscoveredProject>(DiscoveredProject{path = pkg.dir, role = DiscoveryRole.project, name = pkg.name, dependsOn = deps.value!,
+        targets = targets, notInferred = gaps});
 }
 
-// discover_projects claims one project per package.json. Workspace globs from
-// pnpm-workspace.yaml or package.json workspaces decide which packages link by name.
-// Every package.json script is reported, never wired: its meaning is the project's.
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any { //nolint:no-throw // magus reads a raise as a failed discovery
-    final scan = nodeScan(req);
-    unmatchedGlobs(scan);
+// nodeClaims is every package's claim, sorted by path.
+fun nodeClaims(req: DiscoveryQuery) > result\Result::<[DiscoveredProject]> {
+    final scanned = nodeScan(req);
+    if (scanned.error -> err) {
+        return result\Result::<[DiscoveredProject]>{ error = err };
+    }
+    final scan = scanned.value!;
+    final globs = unmatchedGlobs(scan);
+    if (globs.error -> err) {
+        return result\Result::<[DiscoveredProject]>{ error = err };
+    }
     final owned = mut {<str: mut [str]>};
     foreach (file in req.files) {
         if (ownerOf(file.path, packages: scan.packages) -> dir) {
@@ -848,8 +904,25 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
     }
     final claims = mut [<DiscoveredProject>];
     foreach (pkg in scan.packages) {
-        claims.append(nodeClaim(pkg, scan: scan, owned: owned[pkg.dir] ?? [<str>]));
+        final claim = nodeClaim(pkg, scan: scan, owned: owned[pkg.dir] ?? [<str>]);
+        if (claim.error -> err) {
+            return result\Result::<[DiscoveredProject]>{ error = err };
+        }
+        claims.append(claim.value!);
     }
     _ = claims.sort(fun (left: DiscoveredProject, right: DiscoveredProject) > bool => left.path < right.path);
-    return claims;
+    return result\ok::<[DiscoveredProject]>(claims);
+}
+
+// discover_projects claims one project per package.json. Workspace globs from
+// pnpm-workspace.yaml or package.json workspaces decide which packages link by
+// name. Every package.json script is reported, never wired: its meaning is the
+// project's.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any { //nolint:no-throw // magus reads a raise as a failed discovery
+    final claims = nodeClaims(req);
+    if (claims.error -> err) {
+        //nolint:no-throw // magus reads a raise as a failed discovery
+        throw err.message;
+    }
+    return claims.value!;
 }
