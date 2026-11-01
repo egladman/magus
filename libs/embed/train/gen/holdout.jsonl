@@ -1004,7 +1004,7 @@
 {"group":"dir:hack/lint","path":"hack/lint/skills-generate-declares-every-shipped-skill.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/support.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/symbol-docs-follow-proofread-rules.buzz"}
-{"group":"dir:hack/lint","path":"hack/lint/testlayout-pairing-has-no-exemptions.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/testpairing-pairing-has-no-exemptions.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/tool-descriptions-follow-proofread-rules.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/trusted-jobs-restore-no-actions-cache.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/typescript-never-throws.buzz"}
