@@ -371,6 +371,9 @@ const unmergedBudget = 3 * time.Second
 // unmergedRowBudget stops one wide row spending a whole read, every read.
 const unmergedRowBudget = time.Second
 
+// unmergedHistory is how far back the branch is searched for a replayed commit.
+const unmergedHistory = 3000
+
 // unmergedFactsFile holds each row's answer beside jobs.jsonl, one line per
 // answer. A row's last line for a branch is its entry.
 const unmergedFactsFile = "unmerged-facts.jsonl"
@@ -415,6 +418,7 @@ type unmergedRead struct {
 	checkouts map[string]string
 	branches  map[string]string
 	rows      map[string]*unmergedRow
+	onTip     map[string]bool
 	unread    int
 	stale     int
 }
@@ -597,7 +601,36 @@ func (r *unmergedRead) holds(ctx context.Context, f *unmergedFact) (bool, int, e
 	if len(commits) == 0 || changesOnBase(ctx, r.driver, r.ranges, r.root, r.tip, f.Head) {
 		return true, 0, nil
 	}
-	return false, len(commits), nil
+	left := r.notReplayed(ctx, commits)
+	return left == 0, left, nil
+}
+
+// notReplayed counts the commits the branch holds no copy of, by author and
+// subject. A cherry-pick or an autosquash keeps both, and the branch may have
+// rewritten the lines since. A merge commit carries no work of its own.
+func (r *unmergedRead) notReplayed(ctx context.Context, commits []types.Commit) int {
+	if r.onTip == nil {
+		r.onTip = map[string]bool{}
+		log, err := r.driver.History(ctx, r.root, types.HistoryQuery{Limit: unmergedHistory})
+		if err != nil {
+			return len(commits)
+		}
+		for _, c := range log {
+			r.onTip[replayIdentity(c)] = true
+		}
+	}
+	left := 0
+	for _, c := range commits {
+		if len(c.Parents) < 2 && !r.onTip[replayIdentity(c)] {
+			left++
+		}
+	}
+	return left
+}
+
+// replayIdentity reads a fixup as the commit it folds into.
+func replayIdentity(c types.Commit) string {
+	return c.Author.Email + "\x00" + strings.TrimPrefix(c.Subject, "fixup! ")
 }
 
 // facts is what row's work leaves off the branch: uncommitted paths, commits,

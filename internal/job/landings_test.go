@@ -295,6 +295,25 @@ func (s *unmergedSuite) TestAReplayedBranchIsMergedAfterTheBranchWentOnToChangeI
 	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows)
 }
 
+func (s *unmergedSuite) TestAReplayedCommitIsMergedAfterTheBranchRewroteItsLine() {
+	s.repo.Git("switch", "-q", "-c", "w", s.main)
+	s.repo.Commit("write the line", map[string]string{"line.txt": "first\n"})
+	s.repo.Git("switch", "-q", s.main)
+	s.repo.Git("cherry-pick", "w")
+	s.repo.Commit("rewrite the line", map[string]string{"line.txt": "second\n"})
+
+	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows)
+}
+
+func (s *unmergedSuite) TestACommitThatOnlySharesItsSubjectWithAnotherAuthorIsNotReplayed() {
+	s.repo.Git("switch", "-q", "-c", "w", s.main)
+	s.repo.Commit("write the line", map[string]string{"line.txt": "first\n"})
+	s.repo.Git("switch", "-q", s.main)
+	s.repo.Git("-c", "user.email=other@example.com", "commit", "-q", "--allow-empty", "-m", "write the line")
+
+	s.Len(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows, 1)
+}
+
 func (s *unmergedSuite) TestAReadPastItsDeadlineNamesWhatItLeftAndTheNextCarriesOn() {
 	s.branch("w")
 	row := types.Job{ID: "w", State: types.StateExited, Result: &types.JobResult{ChangedPaths: []string{"w.txt"}}}
