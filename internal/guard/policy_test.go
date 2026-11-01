@@ -182,6 +182,30 @@ func TestAToolTimeRecordsTheToolsRunTimeAndJudgesNothing(t *testing.T) {
 	assert.Equal(t, "Bash", commands[0].Action)
 }
 
+func TestAToolTimeKeepsTheDigestsItWasGiven(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+
+	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", ResultDigest: "r1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
+
+	calls := trail.ForSession(cacheDir, "s1", 10).Calls
+	require.Len(t, calls, 1)
+	assert.Equal(t, "c1", calls[0].CallDigest)
+	assert.Equal(t, "r1", calls[0].ResultDigest)
+	assert.Empty(t, calls[0].Unobserved)
+}
+
+func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+
+	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
+	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
+
+	calls := trail.ForSession(cacheDir, "s1", 10).Calls
+	require.Len(t, calls, 2)
+	assert.Equal(t, []string{"call", "result"}, calls[0].Unobserved)
+	assert.Equal(t, []string{"result"}, calls[1].Unobserved)
+}
+
 func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	deps := Dependencies{Policy: func() PolicyState { return PolicyState{Digest: "d9", ShellRules: 1} }}

@@ -1653,6 +1653,23 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	assert.Equal(t, "pass", run("--call-timeout-ms", "600000").Decision)
 }
 
+func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{}
+	testkit.Isolate(t)
+	root, cacheDir := t.TempDir(), t.TempDir()
+	ctx := guard.WithLocation(t.Context(), cacheDir, root, "")
+
+	var out bytes.Buffer
+	require.NoError(t, shellStdin(ctx, strings.NewReader("Bash"), &out,
+		[]string{"--tool-ms", "420", "--call-digest", "c1", "--result-digest", "r1", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
+
+	calls := trail.ForSession(cacheDir, "s1", 10).Calls
+	require.Len(t, calls, 1)
+	assert.Equal(t, "c1", calls[0].CallDigest)
+	assert.Equal(t, "r1", calls[0].ResultDigest)
+}
+
 func TestShellToolMsRecordsTheToolAndPasses(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
