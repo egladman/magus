@@ -6,7 +6,7 @@ fun manifest(file: str, content: str) > DiscoveryFile {
     return DiscoveryFile{ path = file, content = content };
 }
 
-fun discover(files: [DiscoveryFile]) > [DiscoveredProject] !> any {
+fun discover(files: [DiscoveryFile]) > [DiscoveredProject] {
     return rust\discover_projects(Target{}, req: DiscoveryQuery{ root = "/repo", files = files });
 }
 

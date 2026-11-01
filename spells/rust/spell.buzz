@@ -497,7 +497,7 @@ fun crateClaim(crate: Crate, scan: CargoScan, workspaces: [CargoWorkspace]) > Di
 // crates its path dependencies (and inherited workspace path dependencies) point at. A
 // virtual workspace manifest is claimed with no targets: running cargo across its
 // members there would repeat each member's own targets.
-export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] {
     final scan = cargoScan(req);
     final workspaces = cargoWorkspaces(scan.parsed);
     foreach (crate in scan.parsed) {
