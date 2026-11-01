@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -73,7 +74,7 @@ func (s *FollowCheckpointSuite) TestACheckpointThatLeavesCommitsBehindIsRefused(
 	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "the job's own")
 	mine := s.head()
 	_, err := s.fork(newer)
-	s.Require().ErrorContains(err, "does not descend")
+	s.Require().ErrorContains(err, "stays at")
 	s.Equal(mine, s.head())
 }
 
@@ -90,6 +91,78 @@ func (s *FollowCheckpointSuite) TestAnUnknownCheckpointIsRefused() {
 	_, err := s.fork("0123456789abcdef0123456789abcdef01234567")
 	s.Require().ErrorContains(err, "cannot find")
 	s.Equal(s.start, s.head())
+}
+
+// JJFollowCheckpointSuite holds a jj checkout, whose head is usually an
+// empty commit on top of the revision it stands at.
+type JJFollowCheckpointSuite struct {
+	suite.Suite
+	store *Store
+	root  string
+	row   types.Job
+}
+
+func TestJJFollowCheckpointSuite(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not available")
+	}
+	suite.Run(t, new(JJFollowCheckpointSuite))
+}
+
+func (s *JJFollowCheckpointSuite) jj(dir string, args ...string) string {
+	cmd := exec.Command("jj", append([]string{"--config", "user.name=t", "--config", "user.email=t@example.com"}, args...)...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	s.Require().NoError(err, "jj %v", args)
+	return strings.TrimSpace(string(out))
+}
+
+// commit closes a new file at dir's working copy, returning that commit.
+func (s *JJFollowCheckpointSuite) commit(dir, name string) string {
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, name), []byte(name+"\n"), 0o644))
+	s.jj(dir, "commit", "-m", name)
+	return s.parent(dir)
+}
+
+func (s *JJFollowCheckpointSuite) parent(dir string) string {
+	return s.jj(dir, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+}
+
+func (s *JJFollowCheckpointSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.jj(s.root, "git", "init")
+	base := s.commit(s.root, "a.txt")
+	s.store = NewStore(Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: s.root})
+	dir := filepath.Join(s.T().TempDir(), "w1")
+	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", dir, base, "")
+	s.Require().NoError(err)
+	s.Require().True(made)
+	seed(s.T(), s.store, types.Job{ID: "w1", State: types.StateDeclared, WritePaths: []string{"a.txt"}})
+	s.row, err = s.store.RecordWorktree(s.T().Context(), "w1", wt)
+	s.Require().NoError(err)
+}
+
+func (s *JJFollowCheckpointSuite) fork(checkpoint string) (types.JobWorktree, error) {
+	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", s.row.Worktree.Root, checkpoint, "")
+	s.False(made)
+	return wt, err
+}
+
+func (s *JJFollowCheckpointSuite) TestAHeldCheckoutFastForwardsToADescendant() {
+	newer := s.commit(s.root, "b.txt")
+	wt, err := s.fork(newer)
+	s.Require().NoError(err)
+	s.Equal(newer, wt.Base)
+	s.Equal(newer, s.parent(wt.Root))
+}
+
+func (s *JJFollowCheckpointSuite) TestACheckpointThatLeavesCommitsBehindIsRefused() {
+	newer := s.commit(s.root, "b.txt")
+	mine := s.commit(s.row.Worktree.Root, "c.txt")
+	_, err := s.fork(newer)
+	s.Require().ErrorContains(err, "stays at")
+	s.Equal(mine, s.parent(s.row.Worktree.Root))
 }
 
 func TestAdoptingAtAnAncestorOfTheHeadStaysAtTheHead(t *testing.T) {
