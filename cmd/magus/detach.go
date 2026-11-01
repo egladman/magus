@@ -46,7 +46,7 @@ func newDetachedLog(now time.Time) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create %s: %w", dir, err)
 	}
-	f, err := os.CreateTemp(dir, now.Format("20060102T150405")+"-*.log")
+	f, err := os.CreateTemp(dir, now.UTC().Format("20060102T150405Z")+"-*.log")
 	if err != nil {
 		return "", fmt.Errorf("create a log in %s: %w", dir, err)
 	}

@@ -308,7 +308,7 @@ func tokenTable(toks []auth.Token) error {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tID\tCLASS\tGRANT\tCREATED\tEXPIRES")
 	for _, t := range toks {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Kind, t.Grant, t.Created.Format("2006-01-02"), t.Expires.Format("2006-01-02"))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Kind, t.Grant, t.Created.UTC().Format("2006-01-02"), t.Expires.UTC().Format("2006-01-02"))
 	}
 	return tw.Flush()
 }
