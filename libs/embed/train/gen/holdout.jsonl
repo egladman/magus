@@ -72,6 +72,7 @@
 {"group":"file:changes/unreleased/cache-drift-gate-verifies-outputs.md","path":"changes/unreleased/cache-drift-gate-verifies-outputs.md"}
 {"group":"file:changes/unreleased/cache-keys-the-binary.md","path":"changes/unreleased/cache-keys-the-binary.md"}
 {"group":"file:changes/unreleased/cache-skips-sibling-outputs.md","path":"changes/unreleased/cache-skips-sibling-outputs.md"}
+{"group":"file:changes/unreleased/ceilings-in-refs-query-job.md","path":"changes/unreleased/ceilings-in-refs-query-job.md"}
 {"group":"file:changes/unreleased/checkout-reporter.md","path":"changes/unreleased/checkout-reporter.md"}
 {"group":"file:changes/unreleased/ci-asks-for-whole-machine-explicitly.md","path":"changes/unreleased/ci-asks-for-whole-machine-explicitly.md"}
 {"group":"file:changes/unreleased/ci-gates-in-the-queue-box.md","path":"changes/unreleased/ci-gates-in-the-queue-box.md"}
@@ -144,6 +145,7 @@
 {"group":"file:changes/unreleased/guard-stale-binary-denies.md","path":"changes/unreleased/guard-stale-binary-denies.md"}
 {"group":"file:changes/unreleased/guard-stale-binary.md","path":"changes/unreleased/guard-stale-binary.md"}
 {"group":"file:changes/unreleased/guard-stops-folding-the-store-the-trail-says-where.md","path":"changes/unreleased/guard-stops-folding-the-store-the-trail-says-where.md"}
+{"group":"file:changes/unreleased/guard-times-out-on-large-picks.md","path":"changes/unreleased/guard-times-out-on-large-picks.md"}
 {"group":"file:changes/unreleased/guard-unread-command.md","path":"changes/unreleased/guard-unread-command.md"}
 {"group":"file:changes/unreleased/hack-script-names.md","path":"changes/unreleased/hack-script-names.md"}
 {"group":"file:changes/unreleased/harness-doctor-hook-bindings.md","path":"changes/unreleased/harness-doctor-hook-bindings.md"}
@@ -251,6 +253,7 @@
 {"group":"file:changes/unreleased/renderedskills-takes-form-not-variant.md","path":"changes/unreleased/renderedskills-takes-form-not-variant.md"}
 {"group":"file:changes/unreleased/repeated-guard-deny-one-line-ref.md","path":"changes/unreleased/repeated-guard-deny-one-line-ref.md"}
 {"group":"file:changes/unreleased/result-type.md","path":"changes/unreleased/result-type.md"}
+{"group":"file:changes/unreleased/review-1-rest-2.md","path":"changes/unreleased/review-1-rest-2.md"}
 {"group":"file:changes/unreleased/review-merged-while-reading.md","path":"changes/unreleased/review-merged-while-reading.md"}
 {"group":"file:changes/unreleased/review-reading-mark.md","path":"changes/unreleased/review-reading-mark.md"}
 {"group":"file:changes/unreleased/review-thread.md","path":"changes/unreleased/review-thread.md"}
@@ -450,6 +453,7 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/probe_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/query.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/query_contact.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/query_output.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/query_output_stdin.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/query_output_stdin_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/query_test.go"}
@@ -459,7 +463,6 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/race.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/race_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/refs.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/refs_scope.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/refs_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/registry.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/registry_test.go"}

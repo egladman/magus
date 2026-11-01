@@ -59,6 +59,7 @@ insight
 job
 job.clear
 job.exit
+job.forkFacts
 job.list
 job.modelTier
 job.modelTiers

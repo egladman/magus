@@ -551,6 +551,7 @@ github.com/egladman/magus/std.MagusDoctor func(ctx context.Context, args []strin
 github.com/egladman/magus/std.MagusExitJob func(ctx context.Context, id string, result github.com/egladman/magus/types.JobResult) (github.com/egladman/magus/types.Job, error)
 github.com/egladman/magus/std.MagusExplain func(ctx context.Context, node string) (github.com/egladman/magus/types.KnowledgeExplainOutput, error)
 github.com/egladman/magus/std.MagusFileDiskAttention func(ctx context.Context, message string) error
+github.com/egladman/magus/std.MagusForkFactsJob func(ctx context.Context, workspace string) (github.com/egladman/magus/types.JobForkFacts, error)
 github.com/egladman/magus/std.MagusHasCharm func(ctx context.Context, name string) (bool, error)
 github.com/egladman/magus/std.MagusImpact func(ctx context.Context, base string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ImpactResult, error)
 github.com/egladman/magus/std.MagusImportGraph func(ctx context.Context) (github.com/egladman/magus/types.ImportGraph, error)
@@ -2861,6 +2862,7 @@ github.com/egladman/magus/types.Job.ID field string "json:\"id\" yaml:\"id\""
 github.com/egladman/magus/types.Job.Integrates field []string "json:\"integrates,omitempty\" yaml:\"integrates,omitempty\""
 github.com/egladman/magus/types.Job.Integrating method func() bool
 github.com/egladman/magus/types.Job.Integration field *JobIntegration "json:\"integration,omitempty\" yaml:\"integration,omitempty\""
+github.com/egladman/magus/types.Job.Landed field bool "json:\"landed,omitempty\" yaml:\"landed,omitempty\""
 github.com/egladman/magus/types.Job.LastRun field *JobRun "json:\"last_run,omitempty\" yaml:\"last_run,omitempty\""
 github.com/egladman/magus/types.Job.LeftUnmerged field string "json:\"left_unmerged,omitempty\" yaml:\"left_unmerged,omitempty\""
 github.com/egladman/magus/types.Job.MaxAttempts field int "json:\"max_attempts,omitempty\" yaml:\"max_attempts,omitempty\""
@@ -2960,6 +2962,14 @@ github.com/egladman/magus/types.JobEntry.At field int64 "json:\"at\" yaml:\"at\"
 github.com/egladman/magus/types.JobEntry.By field Origin "json:\"by\" yaml:\"by\""
 github.com/egladman/magus/types.JobEntry.Consumed field int64 "json:\"consumed,omitempty\" yaml:\"consumed,omitempty\""
 github.com/egladman/magus/types.JobEntry.Path field string "json:\"path\" yaml:\"path\""
+github.com/egladman/magus/types.JobForkFacts type struct
+github.com/egladman/magus/types.JobForkFacts.BranchesUnknown field string "json:\"branches_unknown,omitempty\"  yaml:\"branches_unknown,omitempty\""
+github.com/egladman/magus/types.JobForkFacts.CommitsSinceTest field int "json:\"commits_since_test\"           yaml:\"commits_since_test\""
+github.com/egladman/magus/types.JobForkFacts.FinishedBranches field []string "json:\"finished_branches,omitempty\" yaml:\"finished_branches,omitempty\""
+github.com/egladman/magus/types.JobForkFacts.IntegrateRecord field string "json:\"integrate_record,omitempty\"   yaml:\"integrate_record,omitempty\""
+github.com/egladman/magus/types.JobForkFacts.LastTestRef field string "json:\"last_test_ref,omitempty\"      yaml:\"last_test_ref,omitempty\""
+github.com/egladman/magus/types.JobForkFacts.LastTestRevision field string "json:\"last_test_revision,omitempty\" yaml:\"last_test_revision,omitempty\""
+github.com/egladman/magus/types.JobForkFacts.TestUnknown field string "json:\"test_unknown,omitempty\"       yaml:\"test_unknown,omitempty\""
 github.com/egladman/magus/types.JobForkLimitExceeded const DiagnosticCode = "MGS3042"
 github.com/egladman/magus/types.JobGateAttempt type struct
 github.com/egladman/magus/types.JobGateAttempt.Attempt field JobAttempt "json:\"attempt\" yaml:\"attempt\""
