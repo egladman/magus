@@ -821,12 +821,15 @@ func printJobTree(out io.Writer, report types.JobList) {
 			fmt.Fprintf(out, "  %s: requires %s\n", r.Job, strings.Join(r.Lacks, ", "))
 		}
 	}
+	printJobOverlaps(out, report.Overlaps)
+}
 
-	if len(report.Overlaps) == 0 {
+func printJobOverlaps(out io.Writer, overlaps []types.JobOverlap) {
+	if len(overlaps) == 0 {
 		return
 	}
 	fmt.Fprintln(out, "\noverlaps")
-	for _, o := range report.Overlaps {
+	for _, o := range overlaps {
 		fmt.Fprintf(out, "  %s and %s claim common ground\n", o.JobA, o.JobB)
 		fmt.Fprintf(out, "    %s: %s\n", o.JobA, strings.Join(o.PathsA, ", "))
 		fmt.Fprintf(out, "    %s: %s\n", o.JobB, strings.Join(o.PathsB, ", "))
