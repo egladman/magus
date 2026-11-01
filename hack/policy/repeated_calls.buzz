@@ -1,0 +1,115 @@
+// Which repeated calls of a session are worth a person's attention.
+// Run as `./magus buzz hack/policy/repeated_calls.buzz -- <session-id>`.
+//
+// Shipped Go folds the facts; every figure here is this repository's own and a
+// guess. STUDY.md in plans/repeated-poll-2026-10-31 measured these at 100
+// percent precision on 19 series and 13 percent recall. It only reports.
+
+import "std";
+import "io";
+import "proc";
+import "encoding/json";
+
+export object Policy {
+    // GUESS: the study's strict form.
+    repeats: int = 3,
+    // GUESS: a longer gap is a new question, not a poll.
+    windowSeconds: int = 600,
+    // GUESS: host tool names whose repeat can be a poll.
+    tools: [str] = ["Bash", "Read", "Grep", "Glob", "BashOutput", "TaskOutput"],
+    // Call digests of a sanctioned wait. None are known yet.
+    exemptCalls: [str] = [<str>],
+}
+
+// Run is one record of `session show -o json` under cost.repeats.
+export object Run {
+    worker: str,
+    tool: str,
+    callDigest: str,
+    count: int,
+    spanMs: int,
+    toolMs: int,
+}
+
+// The facts hold only runs with one answer and no write by the same thread
+// between, so those two conditions are already met.
+export fun matches(run: Run, policy: Policy) > bool {
+    if (run.count < policy.repeats) { return false; }
+    if (run.spanMs > policy.windowSeconds * 1000) { return false; }
+    if (policy.tools.indexOf(run.tool) == null) { return false; }
+    return policy.exemptCalls.indexOf(run.callDigest) == null;
+}
+
+fun asInt(value: any?) > int {
+    if (value == null) { return 0; }
+    if (value is int) { return value as int; }
+    if (value is double) { return std\toInt(value as double); }
+    return 0;
+}
+
+fun asStr(value: any?) > str {
+    if (value == null) { return ""; }
+    return (value as? str) ?? "";
+}
+
+fun parseRuns(doc: any?) > [Run] {
+    final found = mut [<Run>];
+    final root = doc as? {str: any};
+    if (root == null) { return found; }
+    final cost = root!["cost"] as? {str: any};
+    if (cost == null) { return found; }
+    final runs = cost!["repeats"] as? [any];
+    if (runs == null) { return found; }
+    foreach (item in runs!) {
+        final record = item as? {str: any};
+        if (record == null) { continue; }
+        found.append(Run{
+            worker = asStr(record!["worker"]),
+            tool = asStr(record!["tool"]),
+            callDigest = asStr(record!["call_digest"]),
+            count = asInt(record!["count"]),
+            spanMs = asInt(record!["span_ms"]),
+            toolMs = asInt(record!["tool_ms"]),
+        });
+    }
+    return found;
+}
+
+fun main(args: [str]) > void !> any {
+    if (args.len() != 1) {
+        io\stderr.write("usage: repeated_calls.buzz -- <session-id>\n");
+        return;
+    }
+    final shown = proc\exec("./magus", args: ["session", "show", args[0], "-o", "json"],
+        opts: proc\ExecOptions{quiet = true});
+    final policy = Policy{};
+    var turns = 0;
+    var ms = 0;
+    var found = 0;
+    foreach (run in parseRuns(json\parse(shown.stdout))) {
+        if (!matches(run, policy: policy)) { continue; }
+        found = found + 1;
+        turns = turns + run.count - 1;
+        ms = ms + run.toolMs;
+        final who = if (run.worker == "") "main thread" else "worker {run.worker}";
+        std\print("{run.tool} x{run.count} in {run.spanMs / 1000}s by {who}, call {run.callDigest}");
+    }
+    std\print("{found} run(s) of {policy.repeats} or more, {turns} repeat turn(s), {ms}ms tool time");
+}
+
+test "a run meets the policy at its count, window and tool" {
+    final policy = Policy{};
+    final run = Run{ worker = "", tool = "Bash", callDigest = "a", count = 3, spanMs = 1000, toolMs = 10 };
+    std\assert(matches(run, policy: policy), message: "the strict form");
+    std\assert(!matches(Run{ worker = "", tool = "Bash", callDigest = "a", count = 2, spanMs = 1000, toolMs = 10 }, policy: policy), message: "too few");
+    std\assert(!matches(Run{ worker = "", tool = "Bash", callDigest = "a", count = 3, spanMs = 700000, toolMs = 10 }, policy: policy), message: "outside the window");
+    std\assert(!matches(Run{ worker = "", tool = "Edit", callDigest = "a", count = 3, spanMs = 1000, toolMs = 10 }, policy: policy), message: "unlisted tool");
+    std\assert(!matches(run, policy: Policy{ exemptCalls = ["a"] }), message: "exempt call");
+}
+
+test "records parse from session show json" {
+    final doc = json\parse(`{"cost":{"repeats":[{"worker":"w","tool":"Bash","call_digest":"d","count":4,"span_ms":2000,"tool_ms":8}]}}`) catch null;
+    final runs = parseRuns(doc);
+    std\assert(runs.len() == 1 and runs[0].count == 4 and runs[0].worker == "w", message: "one run");
+    std\assert(parseRuns(null).len() == 0, message: "no document, no runs");
+}

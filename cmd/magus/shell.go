@@ -244,6 +244,8 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		CallBackground: sf.CallBackground,
 		CallTimeout:    time.Duration(sf.CallTimeoutMs) * time.Millisecond,
 		ToolMs:         int64(sf.ToolMs),
+		CallDigest:     sf.CallDigest,
+		ResultDigest:   sf.ResultDigest,
 	}
 	// A misnamed host is refused, never judged as another.
 	// --observe and --message carry no verdict, so they log it.

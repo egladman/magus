@@ -39,10 +39,11 @@ const (
 	costAdvisories  costSection = "advisories"
 	costShadow      costSection = "shadow"
 	costDollars     costSection = "dollars"
+	costRepeats     costSection = "repeats"
 )
 
 // costSections are the sections in the order they print.
-var costSections = []costSection{costRootContext, costDelegable, costSpawns, costAdvisories, costShadow, costDollars}
+var costSections = []costSection{costRootContext, costDelegable, costSpawns, costAdvisories, costShadow, costDollars, costRepeats}
 
 // label is how the text view names s.
 func (s costSection) label() string { return strings.ReplaceAll(string(s), "_", " ") }
@@ -74,6 +75,7 @@ type sessionCost struct {
 	Advisories  *advisoryOutcome       `json:"advisories,omitempty"`
 	Shadow      []shadowTally          `json:"shadow,omitempty"`
 	Dollars     *dollarEstimate        `json:"dollars,omitempty"`
+	Repeats     []trail.RepeatRun      `json:"repeats,omitempty"`
 	NotMeasured map[costSection]string `json:"not_measured,omitempty"`
 }
 
@@ -216,6 +218,10 @@ func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
 	c.Dollars = est
 	if est == nil {
 		c.NotMeasured[costDollars] = why
+	}
+	c.Repeats = tr.Repeats
+	if !slices.ContainsFunc(calls, func(call trail.SessionCall) bool { return call.ToolMs > 0 && call.ResultDigest != "" }) {
+		c.NotMeasured[costRepeats] = "no tool-time row carried a result digest, so a repeated answer cannot be told from a changed one"
 	}
 	if len(c.NotMeasured) == 0 {
 		c.NotMeasured = nil
@@ -405,6 +411,22 @@ func renderCost(w io.Writer, c *sessionCost) {
 	} else {
 		line(costDollars, "")
 	}
+	line(costRepeats, repeatsText(c.Repeats))
+}
+
+// repeatsText states the runs as facts. No threshold applies: that is policy's.
+func repeatsText(runs []trail.RepeatRun) string {
+	if len(runs) == 0 {
+		return "none"
+	}
+	most, turns := 0, 0
+	var ms int64
+	for _, run := range runs {
+		most = max(most, run.Count)
+		turns += run.Count - 1
+		ms += run.ToolMs
+	}
+	return fmt.Sprintf("%d run(s) of one call with one answer, longest %d, %d repeat turn(s), %dms tool time", len(runs), most, turns, ms)
 }
 
 func modelSuffix(models []string) string {

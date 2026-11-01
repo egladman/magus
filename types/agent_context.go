@@ -199,6 +199,13 @@ type AgentFacts struct {
 	// ResultChars is the size of the call's result in characters, nil when it was not
 	// observed, which is every record made before the call ran.
 	ResultChars *int `json:"result_chars,omitempty"`
+	// CallDigest and ResultDigest fingerprint the call and its result as the
+	// post-call hook delivered them. Neither is the text.
+	CallDigest   string `json:"call_digest,omitempty"`
+	ResultDigest string `json:"result_digest,omitempty"`
+	// Unobserved names the digests the hook could not give: "call" or "result".
+	// An absent digest never reads as equal to another.
+	Unobserved []string `json:"unobserved,omitempty"`
 	// Shadow is what each guard profile would have decided for the call, whichever one is
 	// in force, so a level can be judged from the calls it would have changed.
 	Shadow map[GuardProfile]GuardDecision `json:"shadow,omitempty"`

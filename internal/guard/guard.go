@@ -589,6 +589,8 @@ type Request struct {
 	// CallTimeout is the one the call gave its shell command, zero when it named none. An
 	// envelope's timeout fills it when it is zero.
 	CallTimeout time.Duration
+	// CallDigest and ResultDigest fingerprint a ToolMs record's call, result.
+	CallDigest, ResultDigest string
 	// ToolMs records how long the tool named by Input ran, as the host
 	// reports it. Nothing is judged. Zero means no such record.
 	ToolMs int64
@@ -664,7 +666,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	}
 	if req.ToolMs > 0 {
 		if !req.DryRun {
-			appendToolTime(ctx, hookLocation(ctx, deps), who, input, req.ToolMs)
+			appendToolTime(ctx, hookLocation(ctx, deps), who, input, req)
 		}
 		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	}
@@ -2521,13 +2523,27 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	trail.AppendAgentCommand(ctx, location.cacheDir, command)
 }
 
-// appendToolTime records how long a host says tool ran. Best-effort like
-// appendHookActivity, and it carries no verdict.
-func appendToolTime(ctx context.Context, location location, who hookAttribution, tool string, ms int64) {
+// appendToolTime records how long a host says tool ran, and its digests.
+// Best-effort and verdictless, like appendHookActivity.
+// A digest the host did not give is named in Unobserved, not left empty.
+func appendToolTime(ctx context.Context, location location, who hookAttribution, tool string, req Request) {
 	if location.cacheDir == "" {
 		return
 	}
+	lease, _ := resolveActingLease(who, location, "")
+	thread, from := callerThread(location.cacheDir, who, lease)
+	facts := types.AgentFacts{
+		Thread: thread, ThreadFrom: from,
+		CallDigest: req.CallDigest, ResultDigest: req.ResultDigest,
+	}
+	if req.CallDigest == "" {
+		facts.Unobserved = append(facts.Unobserved, "call")
+	}
+	if req.ResultDigest == "" {
+		facts.Unobserved = append(facts.Unobserved, "result")
+	}
 	trail.AppendAgentCommand(ctx, location.cacheDir, trail.AgentCommand{
+		AgentFacts: facts,
 		EntryPoint: trail.EntryPointFromContext(ctx),
 		Workspace:  location.workspace,
 		Host:       who.Host,
@@ -2536,7 +2552,7 @@ func appendToolTime(ctx context.Context, location location, who hookAttribution,
 		Transcript: who.Transcript,
 		Event:      who.Event,
 		Tool:       tool,
-		ToolMs:     ms,
+		ToolMs:     req.ToolMs,
 	})
 }
 
