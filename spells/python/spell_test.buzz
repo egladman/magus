@@ -10,11 +10,11 @@ fun source(path: str) > DiscoveryFile {
     return DiscoveryFile{path = path};
 }
 
-fun discover(files: [DiscoveryFile]) > [DiscoveredProject] !> any {
+fun discover(files: [DiscoveryFile]) > [DiscoveredProject] {
     return python\discover_projects(Target{}, req: DiscoveryQuery{root = "/w", files = files});
 }
 
-fun claimAt(claims: [DiscoveredProject], path: str) > DiscoveredProject !> str {
+fun claimAt(claims: [DiscoveredProject], path: str) > DiscoveredProject {
     foreach (claim in claims) {
         if (claim.path == path) {
             return claim;
