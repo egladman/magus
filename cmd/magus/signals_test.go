@@ -366,6 +366,22 @@ func TestServerHangupReloadsAndTermStops(t *testing.T) {
 	assert.False(t, proc.SocketLive(t.Context(), addr))
 }
 
+// stopBroker stops the broker a run started and waits for its process to exit.
+// The broker can leave its socket first, so the caller names it by pid.
+func stopBroker(t *testing.T, pid *int) {
+	t.Helper()
+	ctx := context.Background()
+	if c, err := broker.Dial(ctx, broker.DefaultAddr()); err == nil {
+		_ = c.Shutdown(ctx)
+		_ = c.Close()
+	}
+	if *pid == 0 {
+		return
+	}
+	assert.Eventually(t, func() bool { return errors.Is(syscall.Kill(*pid, 0), syscall.ESRCH) },
+		lifecycleBound, 10*time.Millisecond, "the broker the run started never exited")
+}
+
 // TestDetachRunsAsItsOwnSessionWithABrokerAndNoServer runs `magus run --detach` for real.
 // The detached run must be its own session leader, write to the log it named, hold its
 // claim on the broker like any run, and neither need nor start a server. Its step blocks
@@ -374,16 +390,16 @@ func TestDetachRunsAsItsOwnSessionWithABrokerAndNoServer(t *testing.T) {
 	stateDir := brokerEnv(t)
 	t.Setenv("MAGUS_BROKER", "best-effort")
 	t.Setenv("MAGUS_SERVER_ADDRESS", "")
+	// A run's disk sampler outlives it and writes to the state dir.
+	t.Setenv("MAGUS_DISK_SAMPLE_EVERY", "0")
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Cleanup(func() {
-		if c, err := broker.Dial(t.Context(), broker.DefaultAddr()); err == nil {
-			_ = c.Shutdown(t.Context())
-			_ = c.Close()
-		}
-	})
 
 	wsDir := testkit.NewWorkspace(t)
 	ws := wsDir.Root()
+	// The run's broker lives in the workspace. Cleanups run last in, first out,
+	// so this stops it before the TempDir goes.
+	var brokerPID int
+	t.Cleanup(func() { stopBroker(t, &brokerPID) })
 	gate := filepath.Join(t.TempDir(), "gate")
 	require.NoError(t, unix.Mkfifo(gate, 0o600))
 	done := filepath.Join(t.TempDir(), "done")
@@ -418,6 +434,7 @@ export fun block(ctx: magus\Context, args: [str]) > void !> any {
 		}
 		for _, h := range st.Capacity.Holders {
 			if h.PID == pid {
+				brokerPID = st.PID
 				return true
 			}
 		}
