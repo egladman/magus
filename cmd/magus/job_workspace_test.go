@@ -23,7 +23,10 @@ func TestUnloadedWorkspaceSuite(t *testing.T) {
 }
 
 func (s *UnloadedWorkspaceSuite) SetupTest() {
-	s.root = s.T().TempDir()
+	root, err := filepath.EvalSymlinks(s.T().TempDir())
+	s.Require().NoError(err)
+	s.root = root
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus.yaml"), []byte("{}\n"), 0o644))
 }
 
 func (s *UnloadedWorkspaceSuite) placeBinary() string {
@@ -34,17 +37,31 @@ func (s *UnloadedWorkspaceSuite) placeBinary() string {
 
 func (s *UnloadedWorkspaceSuite) TestAStaleLoadNamesTheCheckoutsOwnBinary() {
 	own := s.placeBinary()
-	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root)
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, "/elsewhere/magus")
 	s.Contains(got, types.WorkspaceNeedsNewerMagus.Error())
-	s.Contains(got, fmt.Sprintf("`%s job apply`", own))
+	s.Contains(got, fmt.Sprintf("rerun the command with `%s`", own))
+	s.NotContains(got, "job apply")
+}
+
+func (s *UnloadedWorkspaceSuite) TestAStaleLoadByThatVeryBinaryNamesNone() {
+	own := s.placeBinary()
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, own)
+	s.Equal(types.WorkspaceNeedsNewerMagus.Error(), got)
+}
+
+func (s *UnloadedWorkspaceSuite) TestAStaleLoadWithANonExecutableFileNamesNone() {
+	own := s.placeBinary()
+	s.Require().NoError(os.Chmod(own, 0o644))
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, "/elsewhere/magus")
+	s.Equal(types.WorkspaceNeedsNewerMagus.Error(), got)
 }
 
 func (s *UnloadedWorkspaceSuite) TestAStaleLoadWithNoBinaryNamesNone() {
-	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root)
+	got := workspaceLoadFailure(types.WorkspaceNeedsNewerMagus, s.root, "/elsewhere/magus")
 	s.Equal(types.WorkspaceNeedsNewerMagus.Error(), got)
 }
 
 func (s *UnloadedWorkspaceSuite) TestAnotherFailureNamesNoBinary() {
 	s.placeBinary()
-	s.Equal("a typo", workspaceLoadFailure(errors.New("a typo"), s.root))
+	s.Equal("a typo", workspaceLoadFailure(errors.New("a typo"), s.root, "/elsewhere/magus"))
 }
