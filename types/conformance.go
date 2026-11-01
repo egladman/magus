@@ -243,6 +243,7 @@ type ConformanceOutput struct {
 
 // ConformanceUnmeasured is a touched file the base was not measured for: its language and why.
 type ConformanceUnmeasured struct {
+	// File is the project's directory when the project is new at head.
 	File     string `json:"file"     yaml:"file"`
 	Language string `json:"language" yaml:"language"`
 	Reason   string `json:"reason"   yaml:"reason"`

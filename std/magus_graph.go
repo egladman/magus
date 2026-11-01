@@ -584,16 +584,9 @@ func MagusOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
 	if !cache.LooksLikeRef(ref) {
 		return types.OutputRecord{}, fmt.Errorf("magus\\output: %q is not an output ref (expected out<hex>, such as out1a2b3c)", ref)
 	}
-	cacheDir := types.OutputCacheDirFromContext(ctx)
-	if ws := types.WorkspaceFromContext(ctx); ws != nil {
-		cd, ok := ws.(workspaceCacheDir)
-		if !ok {
-			return types.OutputRecord{}, errors.New("magus\\output: this workspace has no cache directory")
-		}
-		cacheDir = cd.CacheDir()
-	}
-	if cacheDir == "" {
-		return types.OutputRecord{}, errorNoWorkspace("output")
+	cacheDir, err := checkoutCacheDir(ctx, "output")
+	if err != nil {
+		return types.OutputRecord{}, err
 	}
 	data, desc, err := cache.NewOutputStore(cacheDir).ByRef(ref)
 	if errors.Is(err, fs.ErrNotExist) {

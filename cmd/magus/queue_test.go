@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus"
@@ -149,6 +150,7 @@ func TestParseQueueSource(t *testing.T) {
 
 // A misuse is refused before anything is opened: the mock expects no call.
 func TestQueueMisuseIsAUsageError(t *testing.T) {
+	withOutput(t, "")
 	f := newQueueFixture(t, "", "")
 	for name, args := range map[string][]string{
 		"no subcommand":            {},
@@ -170,7 +172,7 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 		"a zero depth":             {"plan", "--provider", "github", "--out", "p", "--depth", "0"},
 		"validate without a gate":  {"validate", "--stdin", "--verdicts", "v"},
 		"validate without --stdin": {"validate", "--gate", "true", "--verdicts", "v"},
-		"-o where nothing renders": {"ls", "--provider", "github", "--base", "main", "-o", "json"},
+		"-o where nothing renders": {"plan", "--provider", "github", "--out", "p", "-o", "json"},
 		"reviews without a change": {"reviews", "--provider", "github", "--base", "main"},
 		"reviews without a base":   {"reviews", "--provider", "github", "--change", "7"},
 		"reviews with an operand":  {"reviews", "--provider", "github", "--base", "main", "--change", "7", "extra"},
@@ -271,6 +273,24 @@ func TestQueueLsPrintsTheProvidersChangesAsOneLine(t *testing.T) {
 	require.Len(t, got.Changes, 1)
 	assert.Equal(t, "https://example.invalid/acme/widgets.git", got.Changes[0].Repo, "the provider names the repository from the remote's URL")
 	assert.Equal(t, "https://example.invalid/acme/widgets.git", got.RemoteURL)
+}
+
+type QueueLsNamesSuite struct {
+	suite.Suite
+}
+
+func TestQueueLsNamesSuite(t *testing.T) {
+	suite.Run(t, new(QueueLsNamesSuite))
+}
+
+func (s *QueueLsNamesSuite) TestItPrintsTheChangesItLists() {
+	withOutput(s.T(), "")
+	change := fmt.Sprintf("[{\"id\": \"1\", \"repo\": req.remoteURL, \"head\": \"%s\", \"base\": \"main\", \"method\": \"squash\", \"fork\": false}]", queueHead("1"))
+	f := newQueueFixture(s.T(), change, "")
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
+	out, err := f.run(s.T(), "", "ls", "-o", "name", "--provider", "local.buzz", "--base", "main")
+	s.Require().NoError(err)
+	s.Equal("1\n", string(out))
 }
 
 func withOutput(t *testing.T, format string) {

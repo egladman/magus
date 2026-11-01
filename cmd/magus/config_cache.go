@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -10,9 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 )
 
 // cacheNotice reports the outcome of a `magus config cache <verb>` run.
@@ -153,11 +156,39 @@ type configCacheImportOutput struct {
 }
 
 type configCacheSpellRow struct {
-	Spell   string `json:"spell,omitempty"`
-	Key     string `json:"key"`
-	Files   int    `json:"files"`
-	Bytes   int64  `json:"bytes"`
-	Skipped int    `json:"skipped"`
+	Spell       string           `json:"spell,omitempty"`
+	Outcome     spellCacheOutcome `json:"outcome"`
+	Key         string           `json:"key"`
+	Exact       bool             `json:"exact"`
+	Files       int              `json:"files"`
+	Bytes       int64            `json:"bytes"`
+	Transferred int64            `json:"transferred"`
+	Skipped     int              `json:"skipped"`
+	Refused     []string         `json:"refused,omitempty"`
+	Dirs        []string         `json:"dirs,omitempty"`
+}
+
+// spellCacheOutcome is what a remote import did for one spell.
+type spellCacheOutcome string
+
+const (
+	spellCacheRestored spellCacheOutcome = "restored"
+	spellCacheCold     spellCacheOutcome = "cold"
+	spellCacheInactive spellCacheOutcome = "inactive"
+)
+
+func newSpellCacheRow(s magus.SpellCache) configCacheSpellRow {
+	outcome := spellCacheRestored
+	switch {
+	case s.Inactive:
+		outcome = spellCacheInactive
+	case s.Key == "":
+		outcome = spellCacheCold
+	}
+	return configCacheSpellRow{
+		Spell: s.Spell, Outcome: outcome, Key: s.Key, Exact: s.Exact, Files: s.Files, Bytes: s.Bytes,
+		Transferred: s.Transferred, Skipped: s.Skipped, Refused: s.Refused, Dirs: s.Dirs,
+	}
 }
 
 func configCacheExport(ctx context.Context, root string, args []string) error {
@@ -196,23 +227,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 	}
 
 	if ef.Remote {
-		saved, err := m.SaveSpellCaches(ctx)
-		for _, s := range saved {
-			switch {
-			case s.Present:
-				cacheNotice(ctx, "export", fmt.Sprintf("%s is already stored; nothing to do", s.Key))
-			case s.Key != "":
-				cacheNotice(ctx, "export", fmt.Sprintf("stored %s: %d files, %s, %s uploaded, %d unused entries left out; %s",
-					s.Key, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " ")))
-			}
-		}
-		if err != nil {
-			return fmt.Errorf("config cache export: %w", err)
-		}
-		if len(saved) == 0 {
-			cacheNotice(ctx, "export", "no spell this workspace resolves declares a cache; nothing to store")
-		}
-		return nil
+		return configCacheExportRemote(ctx, m)
 	}
 
 	if ef.To == "" {
@@ -274,43 +289,7 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 	}
 
 	if imf.Remote {
-		// Each refusal is already logged as cache.spell_cache.refused.
-		restored, err := m.RestoreSpellCaches(ctx)
-		if opts.Format != outputText {
-			if err != nil {
-				return fmt.Errorf("config cache import: %w", err)
-			}
-			rec := configCacheImportOutput{Remote: true, Spells: []configCacheSpellRow{}}
-			var names []string
-			for _, s := range restored {
-				rec.Spells = append(rec.Spells, configCacheSpellRow{Spell: s.Spell, Key: s.Key, Files: int(s.Files), Bytes: int64(s.Bytes), Skipped: int(s.Skipped)})
-				names = append(names, s.Spell)
-			}
-			rec.Restored = len(restored) > 0
-			return emitRecord(opts, rec, names)
-		}
-		for _, s := range restored {
-			switch {
-			case s.Inactive:
-				cacheNotice(ctx, "import", fmt.Sprintf("the remote backend is not active here; %s builds start cold", s.Spell))
-			case s.Key == "":
-				cacheNotice(ctx, "import", fmt.Sprintf("no verified %s cache bundle in the remote tier for the last week (%d refused); builds start cold", s.Spell, len(s.Refused)))
-			default:
-				match := "these lockfiles"
-				if !s.Exact {
-					match = "other lockfiles, same tools"
-				}
-				cacheNotice(ctx, "import", fmt.Sprintf("restored %s (%s): %d files, %s, %s downloaded, %d already present; %s",
-					s.Key, match, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " ")))
-			}
-		}
-		if err != nil {
-			return fmt.Errorf("config cache import: %w", err)
-		}
-		if len(restored) == 0 {
-			cacheNotice(ctx, "import", "no spell this workspace resolves declares a cache; nothing to restore")
-		}
-		return nil
+		return configCacheImportRemote(ctx, m, opts)
 	}
 
 	r := io.Reader(os.Stdin)
@@ -330,6 +309,72 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 		return emitRecord(opts, configCacheImportOutput{Restored: true, Spells: []configCacheSpellRow{}}, []string{"local"})
 	}
 	cacheNotice(ctx, "import", "restored cache")
+	return nil
+}
+
+// configCacheImportRemote restores the spells' caches. Each refusal is already
+// logged as cache.spell_cache.refused.
+func configCacheImportRemote(ctx context.Context, m *magus.Magus, opts output.Options) error {
+	restored, err := m.RestoreSpellCaches(ctx)
+	if opts.Format != outputText {
+		rec := configCacheImportOutput{Remote: true, Spells: []configCacheSpellRow{}}
+		names := make([]string, 0, len(restored))
+		for _, s := range restored {
+			row := newSpellCacheRow(s)
+			rec.Spells = append(rec.Spells, row)
+			names = append(names, s.Spell)
+			rec.Restored = rec.Restored || row.Outcome == spellCacheRestored
+		}
+		if emitErr := emitRecord(opts, rec, names); emitErr != nil {
+			return errors.Join(emitErr, err)
+		}
+		if err != nil {
+			return fmt.Errorf("config cache import: %w", err)
+		}
+		return nil
+	}
+	for _, s := range restored {
+		switch {
+		case s.Inactive:
+			cacheNotice(ctx, "import", fmt.Sprintf("the remote backend is not active here; %s builds start cold", s.Spell))
+		case s.Key == "":
+			cacheNotice(ctx, "import", fmt.Sprintf("no verified %s cache bundle in the remote tier for the last week (%d refused); builds start cold", s.Spell, len(s.Refused)))
+		default:
+			match := "these lockfiles"
+			if !s.Exact {
+				match = "other lockfiles, same tools"
+			}
+			cacheNotice(ctx, "import", fmt.Sprintf("restored %s (%s): %d files, %s, %s downloaded, %d already present; %s",
+				s.Key, match, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " ")))
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("config cache import: %w", err)
+	}
+	if len(restored) == 0 {
+		cacheNotice(ctx, "import", "no spell this workspace resolves declares a cache; nothing to restore")
+	}
+	return nil
+}
+
+// configCacheExportRemote stores the spells' caches in the remote tier.
+func configCacheExportRemote(ctx context.Context, m *magus.Magus) error {
+	saved, err := m.SaveSpellCaches(ctx)
+	for _, s := range saved {
+		switch {
+		case s.Present:
+			cacheNotice(ctx, "export", fmt.Sprintf("%s is already stored; nothing to do", s.Key))
+		case s.Key != "":
+			cacheNotice(ctx, "export", fmt.Sprintf("stored %s: %d files, %s, %s uploaded, %d unused entries left out; %s",
+				s.Key, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " ")))
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("config cache export: %w", err)
+	}
+	if len(saved) == 0 {
+		cacheNotice(ctx, "export", "no spell this workspace resolves declares a cache; nothing to store")
+	}
 	return nil
 }
 

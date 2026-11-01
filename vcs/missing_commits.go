@@ -35,12 +35,13 @@ func missingCommits(ctx context.Context, r workReader, dir, branch, head string)
 		id := replayIdentity(c)
 		copies[id] = append(copies[id], c)
 	}
+	lines := newCommitLines(r, dir)
 	missing := 0
 	for _, c := range commits {
 		if len(c.Parents) > 1 {
 			continue
 		}
-		held, err := heldByCopy(ctx, r, dir, c, copies[replayIdentity(c)])
+		held, err := heldByCopy(ctx, lines, c, copies[replayIdentity(c)])
 		if err != nil {
 			return 0, err
 		}
@@ -54,11 +55,11 @@ func missingCommits(ctx context.Context, r workReader, dir, branch, head string)
 // heldByCopy reports a candidate carrying every line c changed. Author and
 // subject alone repeat across unrelated commits. Only a subject match pays for
 // the diffs. A rewritten copy reads as not held, the side that loses no work.
-func heldByCopy(ctx context.Context, r workReader, dir string, c types.Commit, candidates []types.Commit) (bool, error) {
+func heldByCopy(ctx context.Context, lines *commitLines, c types.Commit, candidates []types.Commit) (bool, error) {
 	if len(candidates) == 0 || len(c.Parents) == 0 {
 		return false, nil
 	}
-	ours, err := changedLines(ctx, r, dir, c)
+	ours, err := lines.of(ctx, c)
 	if err != nil {
 		return false, err
 	}
@@ -66,7 +67,7 @@ func heldByCopy(ctx context.Context, r workReader, dir string, c types.Commit, c
 		if len(candidate.Parents) == 0 {
 			continue
 		}
-		theirs, err := changedLines(ctx, r, dir, candidate)
+		theirs, err := lines.of(ctx, candidate)
 		if err != nil {
 			return false, err
 		}
@@ -75,6 +76,30 @@ func heldByCopy(ctx context.Context, r workReader, dir string, c types.Commit, c
 		}
 	}
 	return false, nil
+}
+
+// commitLines keeps each commit's changed lines for one missingCommits call,
+// since commits sharing a subject compare against each other.
+type commitLines struct {
+	r    workReader
+	dir  string
+	read map[string]map[string]bool
+}
+
+func newCommitLines(r workReader, dir string) *commitLines {
+	return &commitLines{r: r, dir: dir, read: map[string]map[string]bool{}}
+}
+
+func (l *commitLines) of(ctx context.Context, c types.Commit) (map[string]bool, error) {
+	if lines, ok := l.read[c.ID]; ok {
+		return lines, nil
+	}
+	lines, err := changedLines(ctx, l.r, l.dir, c)
+	if err != nil {
+		return nil, err
+	}
+	l.read[c.ID] = lines
+	return lines, nil
 }
 
 func carriesAll(theirs, ours map[string]bool) bool {

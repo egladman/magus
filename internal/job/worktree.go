@@ -144,31 +144,42 @@ func (s *Store) followCheckpoint(ctx context.Context, id string, wt types.JobWor
 	if digest != "" {
 		return wt, fmt.Errorf("job: %s's checkpoint %s carries uncommitted changes, which %s cannot move to: commit them, then fork at the commit", id, checkpoint, wt.Root)
 	}
-	dirty, err := drv.DirtyFiles(ctx, wt.Root, nil)
+	if err := refuseUncommitted(ctx, drv, id, wt.Root, head.ID, target.ID); err != nil {
+		return wt, err
+	}
+	contained, err := drv.IsAncestor(ctx, wt.Root, target.ID, head.ID)
 	if err != nil {
-		return wt, fmt.Errorf("job: the status of %s, the checkout of %s, cannot be read: %w", wt.Root, id, err)
+		return wt, fmt.Errorf("job: whether %.12s holds %.12s, the checkpoint of %s, cannot be read: %w", head.ID, target.ID, id, err)
 	}
-	dirty = slices.DeleteFunc(dirty, func(p string) bool { return p == binaryName })
-	if len(dirty) > 0 {
-		return wt, fmt.Errorf("job: %s's checkout %s stays at %.12s, not its checkpoint %.12s: %d path(s) in it hold uncommitted work (%s), so commit or drop them, then fork again",
-			id, wt.Root, head.ID, target.ID, len(dirty), listPaths(dirty))
-	}
-	descends, err := drv.IsAncestor(ctx, wt.Root, head.ID, target.ID)
-	if err != nil {
-		return wt, fmt.Errorf("job: whether %.12s descends from %.12s, the head of %s, cannot be read: %w", target.ID, head.ID, wt.Root, err)
-	}
-	if !descends {
-		if contained, err := drv.IsAncestor(ctx, wt.Root, target.ID, head.ID); err == nil && contained && adopting {
+	if contained {
+		if adopting {
 			return wt, nil
 		}
-		return wt, fmt.Errorf("job: %s's checkout %s stays at %.12s: its checkpoint %.12s does not descend from that head, so moving there would leave commits behind. Fork at a descendant of the head, or end the job so its next fork makes a new checkout",
+		return wt, fmt.Errorf("job: %s's checkout %s stays at %.12s: its checkpoint %.12s is behind that head, so moving there would leave commits behind: fork at a descendant of the head, or end the job so its next fork makes a new checkout",
 			id, wt.Root, head.ID, target.ID)
 	}
+	// Only the driver knows its head: jj's is usually the parent of an empty @.
 	if err := drv.FastForward(ctx, wt.Root, target.ID); err != nil {
-		return wt, fmt.Errorf("job: fast-forwarding %s, the checkout of %s, to its checkpoint %.12s: %w", wt.Root, id, target.ID, err)
+		return wt, fmt.Errorf("job: %s's checkout %s stays at %.12s, not its checkpoint %.12s, so fork at a descendant of the head, or end the job so its next fork makes a new checkout: %w",
+			id, wt.Root, head.ID, target.ID, err)
 	}
 	wt.Base = target.ID
 	return wt, nil
+}
+
+// refuseUncommitted keeps a checkout holding work at its head. Its own ./magus
+// is not work.
+func refuseUncommitted(ctx context.Context, drv types.VCSDriver, id, root, head, target string) error {
+	dirty, err := drv.DirtyFiles(ctx, root, nil)
+	if err != nil {
+		return fmt.Errorf("job: the status of %s, the checkout of %s, cannot be read: %w", root, id, err)
+	}
+	dirty = slices.DeleteFunc(dirty, func(p string) bool { return p == binaryName })
+	if len(dirty) > 0 {
+		return fmt.Errorf("job: %s's checkout %s stays at %.12s, not its checkpoint %.12s: %d path(s) in it hold uncommitted work (%s), so commit or drop them, then fork again",
+			id, root, head, target, len(dirty), listPaths(dirty))
+	}
+	return nil
 }
 
 // CheckoutHead is the revision the checkout at dir has checked out, "" when dir

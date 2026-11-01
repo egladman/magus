@@ -2059,18 +2059,35 @@ func MagusUnmergedJob(ctx context.Context, workspace string) (types.JobUnmergedR
 	return job.Unmerged(ctx, workspace, rows), nil
 }
 
+// checkoutCacheDir is the cache directory of the workspace on ctx, or the one
+// a guard pinned. A rule has no workspace, and an unpinned store is an error.
+func checkoutCacheDir(ctx context.Context, member string) (string, error) {
+	cacheDir := types.OutputCacheDirFromContext(ctx)
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		cd, ok := ws.(workspaceCacheDir)
+		if !ok {
+			return "", fmt.Errorf("magus\\%s: this workspace has no cache directory", member)
+		}
+		cacheDir = cd.CacheDir()
+	}
+	if cacheDir == "" {
+		return "", errorNoWorkspace(member)
+	}
+	return cacheDir, nil
+}
+
 // MagusForkFactsJob backs magus\job.forkFacts. A rule reads the rows and the
 // output store the guard pinned.
 func MagusForkFactsJob(ctx context.Context, workspace string) (types.JobForkFacts, error) {
-	cacheDir := types.OutputCacheDirFromContext(ctx)
+	cacheDir, err := checkoutCacheDir(ctx, "job.forkFacts")
+	if err != nil {
+		return types.JobForkFacts{}, err
+	}
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
 			return types.JobForkFacts{}, snap.Err
 		}
 		return job.ForkFacts(ctx, workspace, snap.Clone().Rows, cache.NewOutputStore(cacheDir).LastFullTest()), nil
-	}
-	if ws, ok := types.WorkspaceFromContext(ctx).(workspaceCacheDir); ok {
-		cacheDir = ws.CacheDir()
 	}
 	store, err := jobStoreFromContext(ctx, "job.forkFacts")
 	if err != nil {

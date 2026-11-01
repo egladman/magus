@@ -161,7 +161,7 @@ func graphPush(ctx context.Context, root string, args []string) error {
 type graphRegistryOutput struct {
 	Ref    string `json:"ref"`
 	Table  bool   `json:"table"`
-	Done   bool   `json:"done"`
+	Pushed bool   `json:"pushed,omitempty"`
 	Shards int    `json:"shards"`
 	Bytes  int    `json:"bytes"`
 	Path   string `json:"path,omitempty"`
@@ -207,7 +207,7 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) (graph
 		return none, fmt.Errorf("graph push: %w", err)
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pushed %s (%d shards, %d bytes)", dest, len(layers)-1, size), attr.Notice(""))
-	return graphRegistryOutput{Ref: dest.String(), Done: true, Shards: len(layers) - 1, Bytes: size}, nil
+	return graphRegistryOutput{Ref: dest.String(), Pushed: true, Shards: len(layers) - 1, Bytes: size}, nil
 }
 
 // graphLayers is the published artifact's content: the knowledge store's routing manifest,
@@ -358,7 +358,7 @@ func graphPull(ctx context.Context, root string, args []string) error {
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pulled %s into %s (%d bytes)", src, out, len(raw)), attr.Notice(""))
 	if opts.Format != outputText {
-		return emitRecord(opts, graphRegistryOutput{Ref: src.String(), Done: true, Bytes: len(raw), Path: out}, []string{src.String()})
+		return emitRecord(opts, graphRegistryOutput{Ref: src.String(), Bytes: len(raw), Path: out}, []string{src.String()})
 	}
 	return nil
 }
@@ -397,7 +397,7 @@ func tablePush(ctx context.Context, repo, user string) (graphRegistryOutput, err
 	if err != nil {
 		return none, fmt.Errorf("graph push -table: %w", err)
 	}
-	rec := graphRegistryOutput{Ref: dest.String(), Table: true, Done: pushed, Path: path}
+	rec := graphRegistryOutput{Ref: dest.String(), Table: true, Pushed: pushed, Path: path}
 	if !pushed {
 		slog.InfoContext(ctx, fmt.Sprintf("kept %s, already published with the pinned table", dest), attr.Notice(""))
 		return rec, nil
@@ -426,7 +426,7 @@ func tablePull(ctx context.Context, repo string) (graphRegistryOutput, error) {
 		return none, fmt.Errorf("graph pull -table: %w", err)
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pulled %s into %s", src, path), attr.Notice(""))
-	return graphRegistryOutput{Ref: src.String(), Table: true, Done: true, Path: path}, nil
+	return graphRegistryOutput{Ref: src.String(), Table: true, Path: path}, nil
 }
 
 // pullMergedGraph fetches every shard the artifact names and merges them into the

@@ -658,7 +658,7 @@ func serverStop(ctx context.Context, args []string) error {
 		return fmt.Errorf("server stop: server (pid %d) on %s did not stop within %s", st.ParentPID, addr, stopTimeout)
 	}
 	if opts.Format != outputText {
-		return emitRecord(opts, serverStopOutput{Stopped: true, PID: int(st.ParentPID), Address: addr}, []string{addr})
+		return emitRecord(opts, serverStopOutput{Stopped: true, PID: st.ParentPID, Address: addr}, []string{addr})
 	}
 	if st.ParentPID != 0 {
 		slog.InfoContext(ctx, fmt.Sprintf("stopped server (pid %d)", st.ParentPID), attr.Notice(""), attr.Component("magus"))
@@ -770,15 +770,16 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		return fmt.Errorf("magus job run: no job named %q, run `%s` to list them", name, hint.JobRun)
 	}
 	addr := resolveServerAddr("")
-	report := func(outcome, invocation string) error {
+	report := func(rec jobRunOutput) error {
 		if opts.Format == outputText {
 			return nil
 		}
-		return emitRecord(opts, jobRunOutput{Job: name, Outcome: outcome, Invocation: invocation}, []string{name})
+		rec.Job = name
+		return emitRecord(opts, rec, []string{name})
 	}
 	if !proc.SocketLive(ctx, addr) {
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncNoServer})
-		return report("no-server", "") // no server: quietly do nothing so a checkout hook is never delayed
+		return report(jobRunOutput{Outcome: "no-server"}) // no server: quietly do nothing so a checkout hook is never delayed
 	}
 	argv := entry.Argv
 	if name == job.NameCheckDrift {
@@ -790,7 +791,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		// trigger (hook, RPC, or manual submit) will catch up.
 		slog.With(attr.Component("server job")).DebugContext(ctx, "submit failed", slog.String("job", name), attr.Error(err))
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncRefused, Detail: err.Error()})
-		return report("refused", "")
+		return report(jobRunOutput{Outcome: "refused", Detail: err.Error()})
 	}
 	if inv == "" { // the server coalesced this into an already-running job of the same kind
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncCoalesced})
@@ -804,7 +805,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		if inv == "" {
 			outcome = "coalesced"
 		}
-		return report(outcome, fmt.Sprint(inv))
+		return report(jobRunOutput{Outcome: outcome, Invocation: inv})
 	}
 	printJobWatchHint(ctx)
 	return nil
@@ -814,6 +815,7 @@ type jobRunOutput struct {
 	Job        string `json:"job"`
 	Outcome    string `json:"outcome"`
 	Invocation string `json:"invocation,omitempty"`
+	Detail     string `json:"detail,omitempty"`
 }
 
 // recordSyncRequest leaves what a sync-graph submit did where a later not-indexed verdict
@@ -1021,10 +1023,7 @@ func serverPrunePreserved(ctx context.Context, root string, args []string) error
 	slog.InfoContext(ctx, "pruned preserved captures",
 		slog.Int("dropped", len(dropped)), slog.String("vcs", res.Name))
 	if opts.Format != outputText {
-		names := make([]string, 0, len(dropped))
-		for _, d := range dropped {
-			names = append(names, fmt.Sprint(d))
-		}
+		names := append(make([]string, 0, len(dropped)), dropped...)
 		return emitRecord(opts, serverPrunePreservedOutput{VCS: res.Name, Dropped: names}, names)
 	}
 	return nil
@@ -1165,7 +1164,7 @@ func serverReload(ctx context.Context, args []string) error {
 		return fmt.Errorf("server reload: %w", err)
 	}
 	if opts.Format != outputText {
-		return emitRecord(opts, serverReloadOutput{Running: true, Dropped: int(dropped), Busy: int(busy)}, []string{addr})
+		return emitRecord(opts, serverReloadOutput{Running: true, Dropped: dropped, Busy: busy}, []string{addr})
 	}
 	switch {
 	case dropped == 0 && busy == 0:

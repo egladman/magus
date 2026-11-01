@@ -884,6 +884,31 @@ func TestOutputReadsTheStoreAGuardPinned(t *testing.T) {
 	require.ErrorIs(t, err, types.MagusfileOnlyMember, "the pin opens the output store and no other member")
 }
 
+// With no store, "no passed full test" claims a read nobody made.
+func (s *stdSuite) TestForkFactsRefusesPinnedRowsWithNoPinnedStore() {
+	ctx := job.WithSnapshot(s.T().Context(), job.Snapshot{})
+	_, err := MagusForkFactsJob(ctx, s.T().TempDir())
+	s.Require().ErrorIs(err, types.MagusfileOnlyMember)
+}
+
+func (s *stdSuite) TestForkFactsRefusesAWorkspaceWithNoCacheDirectory() {
+	ctx := job.WithSnapshot(types.WithWorkspace(s.T().Context(), checkoutWorkspace{}), job.Snapshot{})
+	_, err := MagusForkFactsJob(ctx, s.T().TempDir())
+	s.Require().ErrorContains(err, "this workspace has no cache directory")
+}
+
+func (s *stdSuite) TestForkFactsReadsThePinnedStore() {
+	cacheDir := s.T().TempDir()
+	ctx := job.WithSnapshot(types.WithOutputCacheDir(s.T().Context(), cacheDir), job.Snapshot{})
+	desc, err := cache.NewOutputStore(cacheDir).Persist(ctx, strings.Repeat("ef", 32),
+		[]byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test", Revision: "abc"})
+	s.Require().NoError(err)
+
+	facts, err := MagusForkFactsJob(ctx, s.T().TempDir())
+	s.Require().NoError(err)
+	s.Equal(desc.Ref, facts.LastTestRef)
+}
+
 // checkoutWorkspace is a workspace rooted at this package's own checkout.
 type checkoutWorkspace struct {
 	types.WorkspaceRepository
