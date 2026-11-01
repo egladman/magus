@@ -154,4 +154,3 @@ func (p occurrencePage) note(shown, total int) string {
 	}
 	return fmt.Sprintf("%d of %d sites", shown, total)
 }
-

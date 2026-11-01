@@ -8,15 +8,15 @@ tags: [cli, output, json, yaml, jsonl, template, go template, scripting]
 
 Every magus command that prints a record takes the same `-o` values:
 
-| `-o`                     | prints                                                             |
-| ------------------------ | ------------------------------------------------------------------ |
-| `text` (the default)     | the human form, which is allowed to change                         |
-| `json`                   | the record, indented                                               |
-| `yaml`                   | the record as YAML                                                 |
-| `jsonl`                  | the record's list, one JSON value per line                         |
-| `name`                   | each entry's identifier, one per line                              |
+| `-o`                     | prints                                                               |
+| ------------------------ | -------------------------------------------------------------------- |
+| `text` (the default)     | the human form, which is allowed to change                           |
+| `json`                   | the record, indented                                                 |
+| `yaml`                   | the record as YAML                                                   |
+| `jsonl`                  | the record's list, one JSON value per line                           |
+| `name`                   | each entry's identifier, one per line                                |
 | `template=<go-template>` | the record through a [Go template](https://pkg.go.dev/text/template) |
-| `template`               | the fields a template can read, with their types                   |
+| `template`               | the fields a template can read, with their types                     |
 
 A few commands add a format of their own, such as `-o dot` on `graph deps`. A command
 with no record, such as `server stop`, refuses `-o` with exit 2 before it does anything,

@@ -343,4 +343,3 @@ func commandPath(args []string) string {
 	}
 	return strings.Join(path, " ")
 }
-
