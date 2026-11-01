@@ -169,7 +169,7 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 			assert.Less(t, time.Since(start), 2*time.Second)
 			assert.Equal(t, verdictWithRule(c.decision, string(advisoryUnfinished)), unworded(v))
 			if c.decision == decisionDeny {
-				assert.Contains(t, v.Reason, "the guard's judgment did not finish within 7s. A call that changes state is denied rather than let through unjudged; retry it.")
+				assert.Contains(t, v.Reason, "the guard's judgment did not finish within 7s. A call that changes state is denied rather than let through unjudged. A retry passes only if judging costs less this time, such as on a less loaded machine; if it lapses twice, report it rather than repeat it.")
 			} else {
 				assert.Equal(t, unjudgedNote(), v.Context)
 			}
@@ -411,6 +411,35 @@ func TestJudgeWithinAnswersAWriteWhoseWorkspaceOpenStalls(t *testing.T) {
 	assert.Less(t, time.Since(start), hookBudget)
 	assert.NotEqual(t, string(advisoryUnfinished), v.Rule, "judged, not lapsed")
 	assert.Equal(t, int32(1), opens.Load(), "one stalled open per judgment")
+}
+
+// A pick grades each file it writes, and each file another checkout's
+// job holds asks for this checkout's projects. Opens must not follow the
+// file count.
+func TestJudgeOpensAWorkspaceOnceForALargePick(t *testing.T) {
+	r := newWorktreeRepository(t)
+	for i := range 23 {
+		name := fmt.Sprintf("pkg/f%d.go", i)
+		require.NoError(t, os.MkdirAll(filepath.Join(r.main, "pkg"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(r.main, name), []byte("x\n"), 0o644))
+		r.git(r.main, "add", "--", name)
+	}
+	r.git(r.main, "commit", "-q", "-m", "write 23 files")
+	r.git(r.main, "branch", "picked")
+
+	wt, sibling := r.add("lease-job"), r.add("sibling")
+	worker := narrowLease()
+	worker.Parent, worker.CheckoutRoot, worker.WritePaths = "orchestrator", wt, []string{"pkg/**"}
+	holder := types.Job{ID: "sibling", Criteria: "hold the package", WritePaths: []string{"pkg/**"}, State: types.StateRunning, Registered: 1, CheckoutRoot: sibling}
+	ctx, _ := fleetFixture(t, worker, holder)
+
+	opens := map[string]int{}
+	deps := Dependencies{Inspect: func(_ context.Context, root string) (types.WorkspaceRepository, error) {
+		opens[root]++
+		return nil, errors.New("no workspace")
+	}}
+	Judge(ctx, deps, Request{Input: "git cherry-pick picked", Dir: wt, Lease: worker.ID, Host: "claude-code", Session: "s1"})
+	assert.Equal(t, 1, opens[wt], "opens by root: %v", opens)
 }
 
 // inertBenchRules is a root magusfile with one rule of each kind a hook loads, so the judged

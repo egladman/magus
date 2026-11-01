@@ -218,6 +218,8 @@ type Dependencies struct {
 	worker bool
 	// revisions memoizes revision for one judgment; Judge fills it, nil reads every time.
 	revisions *revisionMemo
+	// opens keeps each root's open; Judge fills it, nil opens every time.
+	opens *workspaceOpens
 }
 
 // workingDir is where a relative path on the judged line resolves. The hook process's cwd
@@ -237,13 +239,49 @@ var errNoDependency = errors.New("guard: the caller supplied no resolver for thi
 // inspect opens the workspace at root, "" for the one the hook runs in, as a boundedPhase:
 // an open costs seconds on an idle machine and more on a loaded one. An open that does not
 // answer in time answers its error, which every rule reads as a workspace it could not open.
+// A root opens once in a judgment: rules ask per file.
 func (d Dependencies) inspect(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 	if d.Inspect == nil {
 		return nil, errNoDependency
 	}
-	return boundedPhase(ctx, phaseInspect, func(open context.Context) (types.WorkspaceRepository, error) {
+	if kept, ok := d.opens.kept(root); ok {
+		return kept.ws, kept.err
+	}
+	ws, err := boundedPhase(ctx, phaseInspect, func(open context.Context) (types.WorkspaceRepository, error) {
 		return d.Inspect(open, root)
 	})
+	d.opens.keep(root, workspaceOpen{ws, err})
+	return ws, err
+}
+
+type workspaceOpen struct {
+	ws  types.WorkspaceRepository
+	err error
+}
+
+// workspaceOpens holds each root one judgment opened. A nil one keeps nothing.
+type workspaceOpens struct {
+	mu     sync.Mutex
+	byRoot map[string]workspaceOpen
+}
+
+func (o *workspaceOpens) kept(root string) (workspaceOpen, bool) {
+	if o == nil {
+		return workspaceOpen{}, false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	got, ok := o.byRoot[root]
+	return got, ok
+}
+
+func (o *workspaceOpens) keep(root string, got workspaceOpen) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.byRoot[root] = got
 }
 
 // targetPolicies is TargetPolicies as a boundedPhase of its own: a read that does not
@@ -655,6 +693,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	ctx = withPhaseLog(ctx, deps.RuleLoad)
 	judgmentPhases(ctx).settle(deps)
 	deps.revisions = &revisionMemo{current: map[string]string{}}
+	deps.opens = &workspaceOpens{byRoot: map[string]workspaceOpen{}}
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}

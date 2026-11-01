@@ -3318,6 +3318,9 @@ func mergeRefusal(operand, base string, row types.Job) string {
 	if deps := slices.DeleteFunc(slices.Clone(row.DependsOn), func(d string) bool { return d == "" }); len(deps) > 0 {
 		accepts = append(accepts, "a depends_on branch: "+strings.Join(deps, ", "))
 	}
+	if row.Integrating() {
+		accepts = append(accepts, "a branch it integrates, merged by name: "+strings.Join(row.Integrates, ", "))
+	}
 	const moves = " To move this checkout to any other commit, run `git merge --ff-only <commit id>`."
 	switch len(accepts) {
 	case 1:

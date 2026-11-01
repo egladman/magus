@@ -761,7 +761,8 @@ func lapseReason(call judgedCall, l ruleLapse, dryRun bool) string {
 			call.what, l.what(), dryRunBudget, hookBudget)
 	}
 	return fmt.Sprintf("magus ran out of time judging %s: %s. "+
-		"A call that changes state is denied rather than let through unjudged; retry it. "+
+		"A call that changes state is denied rather than let through unjudged. "+
+		"A retry passes only if judging costs less this time, such as on a less loaded machine; if it lapses twice, report it rather than repeat it. "+
 		"The guard answers within %s, inside the host's hook timeout, "+
 		"because a hook the host cuts off is a call it runs with no rule applied.",
 		call.what, l.what(), hookBudget)
