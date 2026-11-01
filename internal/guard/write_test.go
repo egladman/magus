@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
@@ -106,7 +105,7 @@ func (s *deviationAuthorSuite) TestARemoveDoesNotExcuseAWriteOnTheSameLine() {
 func (s *deviationAuthorSuite) ledgerPatch() (dir, file string) {
 	dir = s.T().TempDir()
 	file = filepath.Join(dir, "line.diff")
-	s.Require().NoError(os.WriteFile(file, []byte(gitDiffOf("proto/a.deviations.jsonl")), 0o644))
+	s.Require().NoError(os.WriteFile(file, []byte(gitDiffTouching("proto/a.deviations.jsonl")), 0o644))
 	return dir, file
 }
 
@@ -116,16 +115,16 @@ func (s *deviationAuthorSuite) TestAnUnleasedPatchOfALedgerIsRefused() {
 		"git apply " + file,
 		"git apply line.diff",
 		"git apply < line.diff",
-		"cat " + file + " | git apply",
+		fmt.Sprintf("cat %s | git apply", file),
 		"patch -p1 -i " + file,
-		"sh -c 'git apply " + file + "'",
+		fmt.Sprintf("sh -c 'git apply %s'", file),
 	} {
 		s.Contains(denyDeviationCommand(dir, line, DialectBash), "a.deviations.jsonl", line)
 	}
 }
 
 func (s *deviationAuthorSuite) TestAHeredocPatchOfALedgerIsRefused() {
-	line := "git apply <<'EOF'\n" + gitDiffOf("a.deviations.jsonl") + "EOF"
+	line := fmt.Sprintf("git apply <<'EOF'\n%sEOF", gitDiffTouching("a.deviations.jsonl"))
 	s.NotEmpty(denyDeviationCommand("", line, DialectBash))
 }
 
@@ -141,7 +140,7 @@ func (s *deviationAuthorSuite) TestCheckingALedgerPatchReads() {
 
 func (s *deviationAuthorSuite) TestAPatchOfAnotherFilePasses() {
 	dir := s.T().TempDir()
-	s.Require().NoError(os.WriteFile(filepath.Join(dir, "other.diff"), []byte(gitDiffOf("notes.md")), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "other.diff"), []byte(gitDiffTouching("notes.md")), 0o644))
 	s.Empty(denyDeviationCommand(dir, "git apply other.diff", DialectBash))
 }
 
@@ -152,7 +151,7 @@ func (s *deviationAuthorSuite) TestAPipedPatchNamesNoLedger() {
 func (s *deviationAuthorSuite) TestAShellScriptPatchingALedgerIsRefused() {
 	dir, file := s.ledgerPatch()
 	script := filepath.Join(dir, "add.sh")
-	s.Require().NoError(os.WriteFile(script, []byte("#!/bin/sh\ngit apply "+file+"\n"), 0o755))
+	s.Require().NoError(os.WriteFile(script, fmt.Appendf(nil, "#!/bin/sh\ngit apply %s\n", file), 0o755))
 	s.NotEmpty(denyDeviationCommand(dir, "sh add.sh", DialectBash))
 }
 
@@ -168,7 +167,7 @@ func (s *deviationAuthorSuite) TestInlineBuzzWritesAreRefused() {
 		`fs\appendFile("a.deviations.jsonl", content: "x");`,
 		`fs\copyFile("other", dst: "a.deviations.jsonl");`,
 	} {
-		s.NotEmpty(denyDeviationCommand("", "magus buzz -e '"+program+"'", DialectBash), program)
+		s.NotEmpty(denyDeviationCommand("", fmt.Sprintf("magus buzz -e '%s'", program), DialectBash), program)
 	}
 }
 
@@ -192,50 +191,13 @@ func (s *deviationAuthorSuite) TestAShellLineReachesTheRuleWithNoLease() {
 func (s *deviationAuthorSuite) TestAnEditReachesTheRuleWithNoLease() {
 	payload := `{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"a.deviations.jsonl","old_string":"","new_string":"x"}}`
 	got := Judge(s.T().Context(), testDependencies(), Request{Input: payload})
-	s.Equal(decisionDeny, got.Decision)
-	s.Equal(string(denyRuleDeviationAuthor), got.Rule)
+	got.Reason, got.Next = "", nil
+	s.Equal(types.GuardJudgment{SchemaVersion: got.SchemaVersion, Decision: decisionDeny, Rule: string(denyRuleDeviationAuthor)}, got)
 }
 
 func (s *deviationAuthorSuite) TestTheRuleSaysItIsASeatbelt() {
 	s.Contains(ruleDocDeviationAuthor.Why, "seatbelt")
 	s.Contains(ruleDocDeviationAuthor.Why, "the root included")
-}
-
-// TestAdviseInstalledSkillWrite pins the discriminator: the STAMP decides, not
-// the path. Both files below sit in the same directory under a magus-* name,
-// and only one of them is magus's to overwrite.
-func TestAdviseInstalledSkillWrite(t *testing.T) {
-	dir := t.TempDir()
-	write := func(rel, body string) string {
-		path := filepath.Join(dir, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
-		return path
-	}
-
-	installed := write(".claude/skills/magus-run/SKILL.md", "---\nname: magus-run\nmetadata:\n  source: magus\n---\n\n# Running work\n")
-	got := adviseInstalledSkillWrite(installed)
-	assert.Contains(t, got.Say, "INSTALLED skill")
-	assert.Contains(t, got.Why, "magus-workspace-rules")
-
-	// A workspace's own skill lives in the same directory and must draw silence:
-	// telling an author their hand-written file is generated is worse than
-	// saying nothing.
-	local := write(".claude/skills/"+agent.LocalSkillName+"/SKILL.md", "---\nname: "+agent.LocalSkillName+"\nmetadata:\n  source: workspace\n---\n\n# Our rules\n")
-	assert.Empty(t, adviseInstalledSkillWrite(local))
-
-	// The embedded SOURCE an installed copy is generated from carries no frontmatter, and
-	// its prose may quote the stamp; only the frontmatter is the stamp.
-	source := write("internal/agent/skills/magus-workspace-rules/SKILL.md",
-		"# Adapting the agent integration\n\nIf a file's frontmatter says `source: magus`, it is not yours.\n\nsource: magus\n")
-	assert.Empty(t, adviseInstalledSkillWrite(source))
-	quoted := write(".claude/skills/team-rules/SKILL.md", "---\nname: team-rules\n---\n\nsource: magus\n")
-	assert.Empty(t, adviseInstalledSkillWrite(quoted), "a stamp in the body is prose")
-
-	// Not a skill file, not in a skill directory, and not there at all.
-	assert.Empty(t, adviseInstalledSkillWrite(write(".claude/skills/magus-run/README.md", "source: magus")))
-	assert.Empty(t, adviseInstalledSkillWrite(write("docs/SKILL.md", "source: magus")))
-	assert.Empty(t, adviseInstalledSkillWrite(filepath.Join(dir, ".claude", "skills", "magus-vcs-hygiene", "SKILL.md")))
 }
 
 // fleetFixture stands up a workspace root and a lease ledger holding leases, and

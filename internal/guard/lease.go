@@ -527,7 +527,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 			commands[i] = fmt.Sprintf("`%s`", checkCommand(c))
 		}
 		if buildsCheckoutBinary(judge.workspace, r) {
-			if leavesBuildToRule(deps, r) && ownsCheckout(ctx, deps, at, at.workspace) {
+			if judge.leavesBuildToRule(r) && ownsCheckout(ctx, deps, at, at.workspace) {
 				continue
 			}
 			return denial{
@@ -615,6 +615,8 @@ type rowJudge struct {
 	others func() []types.Job
 	// ignored asks the VCS at root which paths it ignores, for job.RegeneratedOutside.
 	ignored func() func([]string) []string
+	// commandRuled reports a command rule on either side of the policy.
+	commandRuled func() bool
 }
 
 func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
@@ -635,6 +637,7 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 		composes: sync.OnceValue(func() func(target, project string) bool {
 			return checksCompose(graph, checks)
 		}),
+		commandRuled: sync.OnceValue(func() bool { return holdsCommandRule(ctx, deps) }),
 	}
 }
 
@@ -1376,22 +1379,35 @@ func buildsCheckoutBinary(workspace func() (types.WorkspaceRepository, error), r
 	return runRelinks(types.IndexTargetPolicies(ws), r)
 }
 
-// leavesBuildToRule reports a build the workspace's command rule answers
-// next, in hack/policy/builds.buzz. That rule misses a charm or another
-// project, and no loaded rule answers nothing, so those stay refused here.
-func leavesBuildToRule(deps Dependencies, r targetRun) bool {
+// leavesBuildToRule reports a build the workspace's command rule answers next.
+// A charm, another project, or no rule on either side stays refused here. A
+// rule that raises or runs out of time is denied when asked.
+func (j rowJudge) leavesBuildToRule(r targetRun) bool {
 	_, t, err := r.parse()
 	if err != nil || len(t.Charms) > 0 || !slices.Equal(runProjects(r), []string{"."}) {
 		return false
 	}
-	return deps.CommandRule != nil || deps.ApprovedCommandRule != nil
+	return j.commandRuled()
+}
+
+// holdsCommandRule reports a command rule on either side. The approved side is
+// always wired, so only resolving it says whether it holds one.
+func holdsCommandRule(ctx context.Context, deps Dependencies) bool {
+	if deps.CommandRule != nil {
+		return true
+	}
+	if deps.ApprovedCommandRule == nil {
+		return false
+	}
+	rule, err := deps.ApprovedCommandRule(ctx)
+	return err == nil && rule != nil
 }
 
 // runsOffCheck reports a run a brief may teach though no check permits it.
 // A brief has no checkout yet, so the row's standing one stands in for it.
 func (j rowJudge) runsOffCheck(r targetRun) bool {
 	if buildsCheckoutBinary(j.workspace, r) {
-		return leavesBuildToRule(j.deps, r) && j.row.Worktree.Standing()
+		return j.leavesBuildToRule(r) && j.row.Worktree.Standing()
 	}
 	return readsOwnProjects(r, j.row)
 }
@@ -2537,9 +2553,6 @@ func validationNamesGate(validation string) bool {
 // own branch, in the checkout its lease was taken in, adds to that tree without moving
 // anything the orchestrator reads. So is an init that creates a repository outside the
 // checkout, and the verbs after it on the same line inside that repository.
-//
-// The command is parsed before the ledger is read: every tool call under a bound lease
-// reaches this rule, and most of them are not version control.
 func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" || helpOnlyLine(command, DialectBash) {
 		return ""
@@ -2547,6 +2560,13 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	if reason := denyLeaseScriptVCS(ctx, deps, actingLease, command, 0); reason != "" {
 		return reason
 	}
+	return denyLeaseLineVCS(ctx, deps, actingLease, command)
+}
+
+// denyLeaseLineVCS judges the verbs typed on the line, a script's body being
+// one such line. It parses before reading the ledger: every call under a bound
+// lease reaches this rule, and most are not version control.
+func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	cmds, ok := ParseCommands(command)
 	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return workerVCSOp(c) != "" || workerVCSMovesRefs(c) }) {
 		return ""
@@ -2879,8 +2899,9 @@ type vcsSite struct {
 	stagedOnLine []string
 	// stagedUnread is why such an add cannot be read before the line runs.
 	stagedUnread string
-	// regenerated reports a path an integrating row regenerates.
-	regenerated func(path string) bool
+	// regenerated opens the workspace naming what an integrating row
+	// regenerates.
+	regenerated func() (func(path string) bool, error)
 }
 
 // workerVCSRefusal is the one decision behind lease-vcs, shared by the shell rule and
@@ -2923,20 +2944,23 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 
 // integrationRegenerates reports what a row naming Integrates may commit
 // beyond its write paths: every path a target declares writing. Regenerating
-// them is that row's work. The workspace opens only when a path needs it.
-func integrationRegenerates(ctx context.Context, deps Dependencies, row types.Job) func(string) bool {
+// them is that row's work. The workspace opens once, and only when a path needs
+// it: an open costs seconds.
+func integrationRegenerates(ctx context.Context, deps Dependencies, row types.Job) func() (func(string) bool, error) {
 	if len(row.Integrates) == 0 {
 		return nil
 	}
-	return func(p string) bool {
+	return sync.OnceValues(func() (func(string) bool, error) {
 		ws, err := deps.inspect(ctx, row.CheckoutRoot)
 		if err != nil {
-			return false
+			return nil, err
 		}
-		return slices.ContainsFunc(ws.All(), func(project *types.Project) bool {
-			return project != nil && (declaresOutput(project, p) || declaresUpdate(project, p))
-		})
-	}
+		return func(p string) bool {
+			return slices.ContainsFunc(ws.All(), func(project *types.Project) bool {
+				return project != nil && (declaresOutput(project, p) || declaresUpdate(project, p))
+			})
+		}, nil
+	})
 }
 
 func declaresOutput(project *types.Project, p string) bool {
@@ -2984,7 +3008,10 @@ func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Jo
 	if err != nil {
 		return fmt.Sprintf("What it commits cannot be read: %v.", err)
 	}
-	outside := pathsOutsideLease(row, slices.Concat(paths, site.stagedOnLine), site)
+	outside, err := pathsOutsideLease(row, slices.Concat(paths, site.stagedOnLine), site)
+	if err != nil {
+		return regeneratedUnread(outside, err)
+	}
 	if len(outside) == 0 {
 		return ""
 	}
@@ -2995,18 +3022,29 @@ func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Jo
 
 // pathsOutsideLease is the sorted paths row may not commit: outside its write
 // paths, not one magus maintains, and not one an integrating row regenerates.
-func pathsOutsideLease(row types.Job, paths []string, site vcsSite) []string {
+// An error says that last part could not be read, for the paths it returns.
+func pathsOutsideLease(row types.Job, paths []string, site vcsSite) ([]string, error) {
 	var outside []string
 	for _, p := range paths {
 		if _, held, _ := declarationCovering(row.WritePaths, p); !held && !types.IsMagusMaintained(p) && !slices.Contains(outside, p) {
 			outside = append(outside, p)
 		}
 	}
-	if len(outside) > 0 && site.regenerated != nil {
-		outside = slices.DeleteFunc(outside, site.regenerated)
-	}
 	slices.Sort(outside)
-	return outside
+	if len(outside) == 0 || site.regenerated == nil {
+		return outside, nil
+	}
+	regenerates, err := site.regenerated()
+	if err != nil {
+		return outside, err
+	}
+	return slices.DeleteFunc(outside, regenerates), nil
+}
+
+// regeneratedUnread refuses an integrating row's paths beyond its write paths
+// when the workspace naming the regenerated ones did not open.
+func regeneratedUnread(outside []string, err error) string {
+	return fmt.Sprintf("It writes %s beyond the lease's write paths, and which of them a target regenerates cannot be read: %v.", strings.Join(outside, " "), err)
 }
 
 // pickPathsRefusal grades a cherry-pick's commits as a commit's paths are
@@ -3024,7 +3062,10 @@ func pickPathsRefusal(ctx context.Context, row types.Job, inv hint.Invocation, r
 	if err != nil {
 		return ""
 	}
-	outside := pathsOutsideLease(row, paths, site)
+	outside, err := pathsOutsideLease(row, paths, site)
+	if err != nil {
+		return regeneratedUnread(outside, err)
+	}
 	if len(outside) == 0 {
 		return ""
 	}
@@ -3033,47 +3074,101 @@ func pickPathsRefusal(ctx context.Context, row types.Job, inv hint.Invocation, r
 }
 
 // denyLeaseScriptVCS judges each shell script the line runs by its lines, since
-// a script hides every verb from a rule reading the line. One not on disk yet
-// cannot be read, so it is refused.
+// a script hides every verb from a rule reading the line. A script that cannot
+// be read, or that nests past the bound, is refused: scripts calling each other
+// never reach a last line to judge.
 func denyLeaseScriptVCS(ctx context.Context, deps Dependencies, lease, command string, depth int) string {
-	if depth > writeScanDepth {
+	d := effectiveDialect(deps.ShellDialect)
+	runs := scriptRuns(command, d)
+	if len(runs) == 0 {
 		return ""
 	}
+	if _, live := actingLiveLease(ctx, deps, lease); !live {
+		return ""
+	}
+	if depth > writeScanDepth {
+		return fmt.Sprintf("magus workspace: these scripts nest deeper than %d calls, or call each other, so what they run cannot be read. Run the innermost one in a call of its own.", writeScanDepth)
+	}
 	cwd, _ := deps.workingDir()
-	for _, run := range scriptRuns(command, effectiveDialect(deps.ShellDialect)) {
-		file := run.path
-		if !filepath.IsAbs(file) {
-			if cwd == "" {
-				continue
-			}
-			file = filepath.Join(cwd, file)
-		}
-		body, read := readScript(file)
-		lang := run.lang
-		if lang == scriptNone {
-			lang = detectScriptLang(file, body)
-		}
-		if lang != scriptShell {
+	judged := map[scriptRun]bool{}
+	for _, run := range runs {
+		if judged[run] {
 			continue
 		}
-		if !read {
-			if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
-				continue
+		judged[run] = true
+		for _, at := range scriptRunDirs(command, d, cwd, run) {
+			if reason := denyScriptRunVCS(ctx, deps, lease, run, at, depth); reason != "" {
+				return reason
 			}
-			if _, live := actingLiveLease(ctx, deps, lease); !live {
-				continue
-			}
-			return fmt.Sprintf("magus workspace: this line runs %s, not on disk yet, so it cannot be read. Write the script first, then run it in a call of its own.", run.path)
-		}
-		reason := denyLeaseScriptVCS(ctx, deps, lease, body, depth+1)
-		if reason == "" {
-			reason = denyLeaseScopedVCS(ctx, deps, lease, body)
-		}
-		if reason != "" {
-			return fmt.Sprintf("`%s`: %s\nJudged from the content of %s, which this line runs: a script gets the verdict its lines would get typed.", run.path, reason, run.path)
 		}
 	}
 	return ""
+}
+
+// denyScriptRunVCS judges one script run from at, the directory its relative
+// paths and its own lines resolve against.
+func denyScriptRunVCS(ctx context.Context, deps Dependencies, lease string, run scriptRun, at shellDir, depth int) string {
+	file := run.path
+	if !filepath.IsAbs(file) {
+		if !at.known {
+			if run.lang != scriptNone && run.lang != scriptShell {
+				return ""
+			}
+			return fmt.Sprintf("magus workspace: this line runs %s from a directory only running the line can reveal. Name the script by its absolute path, or cd to a literal path.", run.path)
+		}
+		if at.dir == "" {
+			return ""
+		}
+		file = filepath.Join(at.dir, file)
+	}
+	body, read := readScript(file)
+	lang := run.lang
+	if lang == scriptNone {
+		lang = detectScriptLang(file, body)
+	}
+	if lang != scriptShell {
+		return ""
+	}
+	if !read {
+		if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
+			return ""
+		}
+		return fmt.Sprintf("magus workspace: this line runs %s, not on disk yet, so it cannot be read. Write the script first, then run it in a call of its own.", run.path)
+	}
+	if helpOnlyLine(body, DialectBash) {
+		return ""
+	}
+	deps.callDir = at.dir
+	reason := denyLeaseScriptVCS(ctx, deps, lease, body, depth+1)
+	if reason == "" {
+		reason = denyLeaseLineVCS(ctx, deps, lease, body)
+	}
+	if reason == "" {
+		return ""
+	}
+	return fmt.Sprintf("`%s`: %s\nJudged from the content of %s, which this line runs: a script gets the verdict its lines would get typed.", run.path, reason, run.path)
+}
+
+// scriptRunDirs are the directories the line runs run from, in order. A call
+// the walk cannot reach, as in a command substitution, runs from cwd only on a
+// line that never moves.
+func scriptRunDirs(command string, d Dialect, cwd string, run scriptRun) []shellDir {
+	calls, ok := locateCalls(command, d, cwd, func(c hint.Invocation) bool {
+		if c.Name == path.Base(run.path) {
+			return true
+		}
+		named, ok := parseScriptRun(slices.Concat([]string{c.Name}, c.Args))
+		return ok && named.path == run.path
+	}, false)
+	if ok && len(calls) > 0 {
+		dirs := make([]shellDir, len(calls))
+		for i, c := range calls {
+			dirs[i] = c.at
+		}
+		return dirs
+	}
+	cmds, _ := ParseCommandsDialect(command, d)
+	return []shellDir{{dir: cwd, known: !slices.ContainsFunc(cmds, changesDir)}}
 }
 
 // committedPaths lists what a commit with these arguments records, from dir.
@@ -3121,7 +3216,10 @@ func gitCommitSelection(args []string) (all bool, named []string) {
 		switch {
 		case a == "--":
 			return all, append(named, args[i+1:]...)
-		case a == "--all", strings.HasPrefix(a, "--pathspec-from-file"):
+		case a == "--pathspec-from-file":
+			all = true
+			i++
+		case a == "--all", strings.HasPrefix(a, "--pathspec-from-file="):
 			all = true
 		case slices.Contains(gitCommitValued, a):
 			i++

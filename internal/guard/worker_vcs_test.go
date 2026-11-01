@@ -1,11 +1,14 @@
 package guard
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -114,6 +117,125 @@ func (s *commitGradeRoutesSuite) TestAScriptNotOnDiskIsRefusedWithTheRoute() {
 
 func (s *commitGradeRoutesSuite) TestAProgramThatIsNotAShellScriptIsLeftAlone() {
 	s.Empty(s.deny(s.script("tool", "\x7fELF")))
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptCallingItselfIsRefusedAtTheBound() {
+	script := filepath.Join(s.dir, "self.sh")
+	s.script("self.sh", fmt.Sprintf("sh %s\n", script))
+	s.Contains(s.deny("sh "+script), "nest deeper than")
+}
+
+func (s *commitGradeRoutesSuite) TestTwoScriptsCallingEachOtherAreRefusedAtTheBound() {
+	first, second := filepath.Join(s.dir, "first.sh"), filepath.Join(s.dir, "second.sh")
+	s.script("first.sh", fmt.Sprintf("sh %s\n", second))
+	s.script("second.sh", fmt.Sprintf("sh %s\n", first))
+	s.Contains(s.deny("sh "+first), "nest deeper than")
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptCallingItselfTwiceUnderADeadLeasePasses() {
+	script := filepath.Join(s.dir, "self.sh")
+	s.script("self.sh", fmt.Sprintf("sh %s\nsh %s\n", script, script))
+	s.Empty(denyLeaseScopedVCS(s.ctx, Dependencies{callDir: s.dir}, "no-such-lease", "sh "+script))
+}
+
+func (s *commitGradeRoutesSuite) TestAVerbInANestedScriptIsRefused() {
+	inner := s.script("inner.sh", "git rebase main\n")
+	outer := s.script("outer.sh", fmt.Sprintf("sh %s\n", inner))
+	s.Contains(s.deny("sh "+outer), "`git rebase` stays with the orchestrator")
+}
+
+// scriptIn writes an executable script in a subdirectory of the checkout.
+func (s *commitGradeRoutesSuite) scriptIn(dir, name, body string) {
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.dir, dir), 0o755))
+	s.script(filepath.Join(dir, name), body)
+}
+
+func (s *commitGradeRoutesSuite) TestACdBeforeAScriptFindsItThere() {
+	s.scriptIn("tools", "ok.sh", "git status --short\n")
+	s.Empty(s.deny("cd tools && ./ok.sh"))
+}
+
+func (s *commitGradeRoutesSuite) TestACdBeforeAScriptJudgesTheOneItRuns() {
+	s.script("run.sh", "git status --short\n")
+	s.scriptIn("tools", "run.sh", "git rebase main\n")
+	s.Contains(s.deny("cd tools && ./run.sh"), "`git rebase` stays with the orchestrator")
+	s.Empty(s.deny("./run.sh"))
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptRunsItsOwnRelativeCallsFromTheCd() {
+	s.scriptIn("tools", "outer.sh", "./inner.sh\n")
+	s.scriptIn("tools", "inner.sh", "git rebase main\n")
+	s.Contains(s.deny("cd tools && ./outer.sh"), "`git rebase` stays with the orchestrator")
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptNameIsJudgedInEachDirectoryItRuns() {
+	s.script("run.sh", "git status --short\n")
+	s.scriptIn("tools", "run.sh", "git rebase main\n")
+	s.Contains(s.deny("./run.sh && cd tools && ./run.sh"), "`git rebase` stays with the orchestrator")
+}
+
+func (s *commitGradeRoutesSuite) TestARelativeScriptAfterAnUnknownCdIsRefused() {
+	s.script("ok.sh", "git status --short\n")
+	s.Contains(s.deny(`cd "$WHERE" && ./ok.sh`), "from a directory only running the line can reveal")
+}
+
+func (s *commitGradeRoutesSuite) TestAnAbsoluteScriptAfterAnUnknownCdIsRead() {
+	script := s.script("ok.sh", "git status --short\n")
+	s.Empty(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)))
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptInASubstitutionRunsFromTheCallDirectory() {
+	s.script("ok.sh", "git status --short\n")
+	s.Empty(s.deny("x=$(./ok.sh)"))
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptInASubstitutionAfterACdIsRefused() {
+	s.scriptIn("tools", "ok.sh", "git status --short\n")
+	s.Contains(s.deny("cd tools && x=$(./ok.sh)"), "from a directory only running the line can reveal")
+}
+
+func (s *commitGradeRoutesSuite) TestATwoWordPathspecFileCommitIsGraded() {
+	s.write("a.txt")
+	s.script("list.txt", "a.txt\n")
+	s.Contains(s.deny("git commit --pathspec-from-file list.txt -m done"), "It commits a.txt")
+}
+
+func (s *commitGradeRoutesSuite) TestAPathspecFileWithEqualsCommitIsGraded() {
+	s.write("a.txt")
+	s.script("list.txt", "a.txt\n")
+	s.Contains(s.deny("git commit --pathspec-from-file=list.txt -m done"), "It commits a.txt")
+}
+
+// integrating commits three paths no write path holds, as an integrating row.
+func (s *commitGradeRoutesSuite) integrating(inspect func(context.Context, string) (types.WorkspaceRepository, error)) string {
+	s.write("docs/one.json")
+	s.write("docs/two.json")
+	s.write("docs/three.json")
+	s.repo.git(s.dir, "add", "docs")
+	row := s.worker
+	row.Integrates = []string{"other"}
+	ctx, _ := fleetFixture(s.T(), row)
+	return denyLeaseScopedVCS(ctx, Dependencies{callDir: s.dir, Inspect: inspect}, row.ID, "git commit -m done")
+}
+
+func (s *commitGradeRoutesSuite) TestAnIntegrationCommitOpensTheWorkspaceOnce() {
+	opens := 0
+	project := &types.Project{Path: ".", TargetOutputs: map[string][]types.OutputRef{"gen": {{Glob: "docs/*.json"}}}}
+	ws := typestest.NewMockWorkspaceRepository(s.T())
+	ws.EXPECT().All().Return([]*types.Project{project}).Maybe()
+	s.Empty(s.integrating(func(context.Context, string) (types.WorkspaceRepository, error) {
+		opens++
+		return ws, nil
+	}))
+	s.Equal(1, opens)
+}
+
+func (s *commitGradeRoutesSuite) TestAnIntegrationCommitThatCannotOpenTheWorkspaceSaysSo() {
+	got := s.integrating(func(context.Context, string) (types.WorkspaceRepository, error) {
+		return nil, errors.New("the magusfile raised")
+	})
+	s.Contains(got, "which of them a target regenerates cannot be read: the magusfile raised")
+	s.NotContains(got, "It commits")
 }
 
 func TestMergesBase(t *testing.T) {

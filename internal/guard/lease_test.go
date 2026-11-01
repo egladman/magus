@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -3231,7 +3232,7 @@ func (s *PatchWriteSuite) patchFile(body string) string {
 	return p
 }
 
-func gitDiffOf(file string) string {
+func gitDiffTouching(file string) string {
 	return fmt.Sprintf("diff --git a/%[1]s b/%[1]s\n--- a/%[1]s\n+++ b/%[1]s\n@@ -1 +1 @@\n-old\n+new\n", file)
 }
 
@@ -3240,34 +3241,34 @@ func (s *PatchWriteSuite) deny(command string) string {
 }
 
 func (s *PatchWriteSuite) TestGitApplyOfARevokedPathIsRefused() {
-	s.Contains(s.deny("git apply "+s.patchFile(gitDiffOf("internal/ledger/store.go"))), "lease-a")
+	s.Contains(s.deny("git apply "+s.patchFile(gitDiffTouching("internal/ledger/store.go"))), "lease-a")
 }
 
 func (s *PatchWriteSuite) TestGitApplyOfAnUndeclaredPathIsRefused() {
-	s.Contains(s.deny("git apply "+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+	s.Contains(s.deny("git apply "+s.patchFile(gitDiffTouching("docs/notes.md"))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestGitApplyInsideTheWritePathsPasses() {
-	s.Empty(s.deny("git apply " + s.patchFile(gitDiffOf("cmd/magus/a.go"))))
+	s.Empty(s.deny("git apply " + s.patchFile(gitDiffTouching("cmd/magus/a.go"))))
 }
 
 func (s *PatchWriteSuite) TestOneFileOutsideRefusesTheWholePatch() {
-	body := gitDiffOf("cmd/magus/a.go") + gitDiffOf("docs/notes.md")
+	body := gitDiffTouching("cmd/magus/a.go") + gitDiffTouching("docs/notes.md")
 	s.Contains(s.deny("git apply "+s.patchFile(body)), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestGitApplyCheckOnlyReads() {
-	p := s.patchFile(gitDiffOf("docs/notes.md"))
+	p := s.patchFile(gitDiffTouching("docs/notes.md"))
 	s.Empty(s.deny("git apply --check " + p))
 	s.Empty(s.deny("git apply --stat " + p))
 }
 
 func (s *PatchWriteSuite) TestGitApplyCheckWithApplyWrites() {
-	s.Contains(s.deny("git apply --check --apply "+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+	s.Contains(s.deny("git apply --check --apply "+s.patchFile(gitDiffTouching("docs/notes.md"))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestGitApplyDirectoryIsPrepended() {
-	s.Contains(s.deny("git apply --directory=docs "+s.patchFile(gitDiffOf("notes.md"))), "docs/notes.md")
+	s.Contains(s.deny("git apply --directory=docs "+s.patchFile(gitDiffTouching("notes.md"))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestGitApplyStripCountIsRead() {
@@ -3291,31 +3292,31 @@ func (s *PatchWriteSuite) TestHunkLinesSpelledLikeHeadersAreNotPaths() {
 }
 
 func (s *PatchWriteSuite) TestGitDashCPlacesTheRepository() {
-	p := s.patchFile(gitDiffOf("internal/ledger/store.go"))
+	p := s.patchFile(gitDiffTouching("internal/ledger/store.go"))
 	s.deps.callDir = s.T().TempDir()
 	s.Contains(s.deny(fmt.Sprintf("git -C %s apply %s", s.root, p)), "lease-a")
 }
 
 func (s *PatchWriteSuite) TestACdPlacesARelativePatchFile() {
-	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "change.diff"), []byte(gitDiffOf("docs/notes.md")), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "change.diff"), []byte(gitDiffTouching("docs/notes.md")), 0o644))
 	s.deps.callDir = s.T().TempDir()
 	s.Contains(s.deny(fmt.Sprintf("cd %s && git apply change.diff", s.root)), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestANestedShellIsRead() {
-	s.Contains(s.deny(fmt.Sprintf("sh -c 'git apply %s'", s.patchFile(gitDiffOf("docs/notes.md")))), "docs/notes.md")
+	s.Contains(s.deny(fmt.Sprintf("sh -c 'git apply %s'", s.patchFile(gitDiffTouching("docs/notes.md")))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestAHeredocPatchIsRead() {
-	s.Contains(s.deny("git apply <<'EOF'\n"+gitDiffOf("docs/notes.md")+"EOF"), "docs/notes.md")
+	s.Contains(s.deny(fmt.Sprintf("git apply <<'EOF'\n%sEOF", gitDiffTouching("docs/notes.md"))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestARedirectedPatchIsRead() {
-	s.Contains(s.deny("git apply < "+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+	s.Contains(s.deny("git apply < "+s.patchFile(gitDiffTouching("docs/notes.md"))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestACatPipedPatchIsRead() {
-	s.Contains(s.deny("cat "+s.patchFile(gitDiffOf("docs/notes.md"))+" | git apply"), "docs/notes.md")
+	s.Contains(s.deny(fmt.Sprintf("cat %s | git apply", s.patchFile(gitDiffTouching("docs/notes.md")))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestAPatchFromACommandIsRefusedAsUnread() {
@@ -3327,41 +3328,41 @@ func (s *PatchWriteSuite) TestAnExpandedPatchFileIsRefusedAsUnread() {
 }
 
 func (s *PatchWriteSuite) TestAPatchFileThatIsNotThereIsRefusedAsUnread() {
-	s.Contains(s.deny("git diff > "+filepath.Join(s.T().TempDir(), "p.diff")+" && git apply p.diff"), "cannot read")
+	s.Contains(s.deny(fmt.Sprintf("git diff > %s && git apply p.diff", filepath.Join(s.T().TempDir(), "p.diff"))), "cannot read")
 }
 
 func (s *PatchWriteSuite) TestPatchInputFlagIsRead() {
-	s.Contains(s.deny("patch -p1 -i "+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+	s.Contains(s.deny("patch -p1 -i "+s.patchFile(gitDiffTouching("docs/notes.md"))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestPatchBundledFlagsAreRead() {
-	s.Contains(s.deny("patch -Np1 --input="+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+	s.Contains(s.deny("patch -Np1 --input="+s.patchFile(gitDiffTouching("docs/notes.md"))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestPatchFromStdinIsRead() {
-	s.Contains(s.deny("patch -p1 < "+s.patchFile(gitDiffOf("docs/notes.md"))), "docs/notes.md")
+	s.Contains(s.deny("patch -p1 < "+s.patchFile(gitDiffTouching("docs/notes.md"))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestPatchDirectoryPlacesThePaths() {
-	s.Contains(s.deny("patch -p1 -d docs -i "+s.patchFile(gitDiffOf("notes.md"))), "docs/notes.md")
+	s.Contains(s.deny("patch -p1 -d docs -i "+s.patchFile(gitDiffTouching("notes.md"))), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestPatchNamedOriginalIsTheWrittenFile() {
-	p := s.patchFile(gitDiffOf("cmd/magus/a.go"))
+	p := s.patchFile(gitDiffTouching("cmd/magus/a.go"))
 	s.Contains(s.deny("patch docs/notes.md "+p), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestPatchOutputFlagIsTheWrittenFile() {
-	p := s.patchFile(gitDiffOf("cmd/magus/a.go"))
+	p := s.patchFile(gitDiffTouching("cmd/magus/a.go"))
 	s.Contains(s.deny("patch -p1 -o docs/notes.md -i "+p), "docs/notes.md")
 }
 
 func (s *PatchWriteSuite) TestPatchDryRunOnlyReads() {
-	s.Empty(s.deny("patch --dry-run -p1 -i " + s.patchFile(gitDiffOf("docs/notes.md"))))
+	s.Empty(s.deny("patch --dry-run -p1 -i " + s.patchFile(gitDiffTouching("docs/notes.md"))))
 }
 
 func (s *PatchWriteSuite) TestAnUnleasedSessionIsNotGraded() {
-	p := s.patchFile(gitDiffOf("docs/notes.md"))
+	p := s.patchFile(gitDiffTouching("docs/notes.md"))
 	s.Empty(denyWriteOutsideLease(s.ctx, s.deps, "", "git apply "+p))
 }
 
@@ -3462,7 +3463,7 @@ func (s *CherryPickWriteSuite) TestACdPlacesTheRepository() {
 }
 
 func (s *CherryPickWriteSuite) TestANestedShellIsGraded() {
-	s.Contains(s.deny("sh -c 'git cherry-pick "+s.commit("docs/notes.md")+"'"), "docs/notes.md")
+	s.Contains(s.deny(fmt.Sprintf("sh -c 'git cherry-pick %s'", s.commit("docs/notes.md"))), "docs/notes.md")
 }
 
 func (s *CherryPickWriteSuite) TestAnExpandedRevisionIsRefusedAsUnread() {
@@ -3740,43 +3741,43 @@ func (s *ScratchWorkspaceSuite) runIn(dir string) denial {
 	return denyLeaseCheckout(s.ctx, s.deps, s.row.ID, fmt.Sprintf("./magus -C %s run go-test .", dir))
 }
 
-func (s *ScratchWorkspaceSuite) TestAnotherRepositoryUnderTheMagusTmpDirPasses() {
+func (s *ScratchWorkspaceSuite) TestAnotherRepositoryUnderTheMagusTempDirPasses() {
 	dir := s.workspace("rake-review-nospell")
 	s.Require().NoError(os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
 	s.Empty(s.runIn(dir))
 }
 
-func (s *ScratchWorkspaceSuite) TestADirectoryInNoRepositoryUnderTheMagusTmpDirPasses() {
+func (s *ScratchWorkspaceSuite) TestADirectoryInNoRepositoryUnderTheMagusTempDirPasses() {
 	dir := s.workspace("plain")
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, "magus.yaml"), nil, 0o644))
 	s.Empty(s.runIn(dir))
 }
 
-func (s *ScratchWorkspaceSuite) TestAnotherCheckoutOfThisRepositoryUnderTheMagusTmpDirIsRefused() {
+func (s *ScratchWorkspaceSuite) TestAnotherCheckoutOfThisRepositoryUnderTheMagusTempDirIsRefused() {
 	dir := s.workspace("sibling")
 	s.linkSibling(dir, "sibling")
 	s.True(s.runIn(dir).refused())
 }
 
-func (s *ScratchWorkspaceSuite) TestADirectoryOutsideTheMagusTmpDirIsRefused() {
+func (s *ScratchWorkspaceSuite) TestADirectoryOutsideTheMagusTempDirIsRefused() {
 	other := markedWorkspace(s.T())
 	s.Require().NoError(os.MkdirAll(filepath.Join(other, ".git"), 0o755))
 	s.True(s.runIn(other).refused())
 }
 
-func (s *ScratchWorkspaceSuite) TestTheMagusTmpDirItselfIsRefused() {
+func (s *ScratchWorkspaceSuite) TestTheMagusTempDirItselfIsRefused() {
 	s.Require().NoError(os.MkdirAll(s.scratch, 0o755))
 	s.True(s.runIn(s.scratch).refused())
 }
 
-func (s *ScratchWorkspaceSuite) TestAWriteInAnotherRepositoryUnderTheMagusTmpDirPasses() {
+func (s *ScratchWorkspaceSuite) TestAWriteInAnotherRepositoryUnderTheMagusTempDirPasses() {
 	dir := s.workspace("written")
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
 	s.Require().NoError(os.MkdirAll(filepath.Join(dir, ".git"), 0o755))
 	s.Empty(denyOtherCheckout(s.held, s.row.ID, filepath.Join(dir, "main.go")).Decision)
 }
 
-func (s *ScratchWorkspaceSuite) TestAWriteInASiblingCheckoutUnderTheMagusTmpDirIsRefused() {
+func (s *ScratchWorkspaceSuite) TestAWriteInASiblingCheckoutUnderTheMagusTempDirIsRefused() {
 	dir := s.workspace("written-sibling")
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
 	s.linkSibling(dir, "written-sibling")
@@ -3871,6 +3872,33 @@ func (s *workerCheckReadsSuite) TestABuildInAnOwnedCheckoutIsLeftToTheWorkspaceR
 func (s *workerCheckReadsSuite) TestABuildWithNoWorkspaceRuleIsRefused() {
 	got := s.judgedInCheckout(testCheckLease(), composingWorkspace(s.T()), "./magus run go-build .")
 	s.Contains(got.Say, workerBuildVerdict)
+}
+
+// approved is a workspace whose only command rule is what resolved answers.
+func (s *workerCheckReadsSuite) approved(rule workspace.CommandRule, err error) Dependencies {
+	deps := composingWorkspace(s.T())
+	deps.ApprovedCommandRule = func(context.Context) (workspace.CommandRule, error) { return rule, err }
+	return deps
+}
+
+func (s *workerCheckReadsSuite) TestABuildWithNoRuleOnEitherSideIsRefused() {
+	got := s.judgedInCheckout(testCheckLease(), s.approved(nil, nil), "./magus run go-build .")
+	s.Contains(got.Say, workerBuildVerdict)
+}
+
+func (s *workerCheckReadsSuite) TestABuildWhoseApprovedRuleCannotResolveIsRefused() {
+	got := s.judgedInCheckout(testCheckLease(), s.approved(nil, errors.New("no approved tree")), "./magus run go-build .")
+	s.Contains(got.Say, workerBuildVerdict)
+}
+
+func (s *workerCheckReadsSuite) TestABuildIsLeftToARuleOnlyTheApprovedSideHolds() {
+	s.Empty(s.judgedInCheckout(testCheckLease(), s.approved((&commandRuleProbe{}).rule(), nil), "./magus run go-build ."))
+}
+
+func (s *workerCheckReadsSuite) TestABriefMayNotTeachTheBuildWithNoRuleOnEitherSide() {
+	row := testCheckLease()
+	row.Worktree = &types.JobWorktree{Root: s.T().TempDir(), Source: s.T().TempDir()}
+	s.True(s.briefed(row, s.approved(nil, nil), "./magus run go-build ."))
 }
 
 func (s *workerCheckReadsSuite) TestABuildInACheckoutTheJobDoesNotOwnNamesThePlacement() {

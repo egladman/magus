@@ -1,14 +1,53 @@
 package guard
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
+
+// TestAdviseInstalledSkillWrite pins the discriminator: the STAMP decides, not
+// the path. Both files below sit in the same directory under a magus-* name,
+// and only one of them is magus's to overwrite.
+func TestAdviseInstalledSkillWrite(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, body string) string {
+		path := filepath.Join(dir, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+		return path
+	}
+
+	installed := write(".claude/skills/magus-run/SKILL.md", "---\nname: magus-run\nmetadata:\n  source: magus\n---\n\n# Running work\n")
+	got := adviseInstalledSkillWrite(installed)
+	assert.Contains(t, got.Say, "INSTALLED skill")
+	assert.Contains(t, got.Why, "magus-workspace-rules")
+
+	// A workspace's own skill must draw silence: calling a hand-written file
+	// generated is worse than saying nothing.
+	local := write(fmt.Sprintf(".claude/skills/%s/SKILL.md", agent.LocalSkillName), fmt.Sprintf("---\nname: %s\nmetadata:\n  source: workspace\n---\n\n# Our rules\n", agent.LocalSkillName))
+	assert.Empty(t, adviseInstalledSkillWrite(local))
+
+	// An embedded source has no frontmatter, and its prose may quote the stamp.
+	source := write("internal/agent/skills/magus-workspace-rules/SKILL.md",
+		"# Adapting the agent integration\n\nIf a file's frontmatter says `source: magus`, it is not yours.\n\nsource: magus\n")
+	assert.Empty(t, adviseInstalledSkillWrite(source))
+	quoted := write(".claude/skills/team-rules/SKILL.md", "---\nname: team-rules\n---\n\nsource: magus\n")
+	assert.Empty(t, adviseInstalledSkillWrite(quoted), "a stamp in the body is prose")
+
+	// Not a skill file, not in a skill directory, and not there at all.
+	assert.Empty(t, adviseInstalledSkillWrite(write(".claude/skills/magus-run/README.md", "source: magus")))
+	assert.Empty(t, adviseInstalledSkillWrite(write("docs/SKILL.md", "source: magus")))
+	assert.Empty(t, adviseInstalledSkillWrite(filepath.Join(dir, ".claude", "skills", "magus-vcs-hygiene", "SKILL.md")))
+}
 
 // TestSymbolSearchRefusesWhateverTheIndexState pins the condition the deny
 // rests on. A current index that defines the name refuses with refs. A stale
