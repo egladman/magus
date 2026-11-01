@@ -73,16 +73,32 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("docs/assets/gen/diagram-*-light.svg")]);
     ctx.writesFiles(["gen/sources.jsonl", "gen/holdout.jsonl", "gen/pairs.jsonl"]);
     fs\mkdirAll("gen");
-    final c = sources\load();
+    final loaded = sources\load();
+    if (loaded.error -> e) {
+        throw e;
+    }
+    final c = loaded.value!;
     final paths: mut [str] = mut [];
     foreach (f in c.files) {
         paths.append(f.path);
     }
     final held = holdout\write(paths, target: fs\join("gen", name: "holdout.jsonl"));
+    if (held.error -> e) {
+        throw e;
+    }
     final figs = pairs\figures(c);
-    final files = sources\write(c, figures: figs, target: fs\join("gen", name: "sources.jsonl"));
-    final mined = pairs\write(c, figs: figs, target: fs\join("gen", name: "pairs.jsonl"));
-    std\print("source files {files}; holdout files {held}; pairs {mined}");
+    if (figs.error -> e) {
+        throw e;
+    }
+    final files = sources\write(c, figures: figs.value!, target: fs\join("gen", name: "sources.jsonl"));
+    if (files.error -> e) {
+        throw e;
+    }
+    final mined = pairs\write(c, figs: figs.value!, target: fs\join("gen", name: "pairs.jsonl"));
+    if (mined.error -> e) {
+        throw e;
+    }
+    std\print("source files {files.value!}; holdout files {held.value!}; pairs {mined.value!}");
 }
 
 // Downloads every input inputs.jsonl pins, verifying each sha256. Args after -- name
@@ -105,7 +121,10 @@ export fun vocab(ctx: magus\Context, args: [str]) > void !> any {
     final dir = fs\join(cache, name: "training");
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "texts", "-cache", cache, "-out", dir,
         "-eval", fs\join(cache, name: "bench"), "-no-eval", "judged-queries", "-skip", "fineweb-edu/sample/10BT/013_00000.parquet"]});
-    runlog\appendTexts(dir, target: "runs.jsonl");
+    final appended = runlog\appendTexts(dir, target: "runs.jsonl");
+    if (appended.error -> e) {
+        throw e;
+    }
     fs\mkdirAll("gen");
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "vocab", "-texts", fs\join(dir, name: "texts.jsonl"),
         "-forced", fs\join(dir, name: "forced.txt"), "-out", fs\join(dir, name: "tokens.jsonl"),
@@ -129,7 +148,10 @@ export fun teacher(ctx: magus\Context, args: [str]) > void !> any {
     foreach (name in ["tokens.jsonl", "texts.jsonl"]) {
         final run = ["-cache", cache, "-max-len", "256", "-texts", fs\join(cache, "training", name), "-model", model];
         go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "teacher"] + run + args});
-        runlog\recordTeacher(cache, model: model, texts: fs\join(cache, "training", name), maxLen: 256, target: "runs.jsonl");
+        final recorded = runlog\recordTeacher(cache, model: model, texts: fs\join(cache, "training", name), maxLen: 256, target: "runs.jsonl");
+        if (recorded.error -> e) {
+            throw e;
+        }
     }
 }
 
