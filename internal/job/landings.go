@@ -368,6 +368,9 @@ func unanswered(rows []types.Job, row types.Job, items []string, why string) []t
 // has seven seconds, and a row past this waits for the next read.
 const unmergedBudget = 3 * time.Second
 
+// unmergedRowBudget stops one wide row spending a whole read, every read.
+const unmergedRowBudget = time.Second
+
 // unmergedFactsFile holds each row's answer beside jobs.jsonl, one line per
 // answer. A row's last line for a branch is its entry.
 const unmergedFactsFile = "unmerged-facts.jsonl"
@@ -386,6 +389,8 @@ type unmergedFact struct {
 	Merged   bool     `json:"merged,omitempty"`
 	Commits  int      `json:"commits,omitempty"`
 	MergedAt int64    `json:"merged_at,omitempty"`
+	// CutAt is when a read gave up on the row. The next starts elsewhere.
+	CutAt int64 `json:"cut_at,omitempty"`
 }
 
 // unmergedRow is one row during one read.
@@ -433,7 +438,7 @@ func (r *unmergedRead) run(ctx context.Context, work []types.Job) {
 	}
 	slices.SortStableFunc(due, func(a, b types.Job) int {
 		x, y := r.rows[a.ID], r.rows[b.ID]
-		return cmp.Or(cmp.Compare(boolRank(x.seen), boolRank(y.seen)), cmp.Compare(x.fact.MergedAt, y.fact.MergedAt))
+		return cmp.Or(cmp.Compare(x.fact.CutAt, y.fact.CutAt), cmp.Compare(boolRank(x.seen), boolRank(y.seen)), cmp.Compare(x.fact.MergedAt, y.fact.MergedAt))
 	})
 	next := map[string]unmergedFact{}
 	for _, row := range due {
@@ -441,8 +446,17 @@ func (r *unmergedRead) run(ctx context.Context, work []types.Job) {
 			break
 		}
 		rr := r.rows[row.ID]
-		r.check(ctx, rr, row)
-		if !rr.dirtyDue && !rr.mergedDue && rr.unread == "" && rr.rangeErr == "" {
+		one, done := context.WithTimeout(ctx, unmergedRowBudget)
+		r.check(one, rr, row)
+		done()
+		switch {
+		case rr.headErr != nil:
+		case rr.dirtyDue || rr.mergedDue:
+			cut := rr.fact
+			cut.CutAt = r.now
+			next[row.ID] = cut
+		case rr.unread == "" && rr.rangeErr == "":
+			rr.fact.CutAt = 0
 			next[row.ID] = rr.fact
 		}
 	}

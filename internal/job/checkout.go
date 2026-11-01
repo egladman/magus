@@ -909,6 +909,12 @@ func changesOnBase(ctx context.Context, driver types.VCSDriver, ranges types.Ran
 	if err != nil || len(paths) == 0 {
 		return false
 	}
+	// One call against a read per file: a wide branch took seconds.
+	if differ, err := driver.DiffTrees(ctx, root, base, tip.ID); err == nil {
+		return !slices.ContainsFunc(paths, func(changed string) bool {
+			return slices.Contains(differ, path.Clean(filepath.ToSlash(strings.TrimSpace(changed))))
+		})
+	}
 	for _, changed := range paths {
 		p := path.Clean(filepath.ToSlash(strings.TrimSpace(changed)))
 		ours, err := driver.ReadFileAt(ctx, root, tip.ID, p)
