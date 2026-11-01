@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/spells"
 )
@@ -176,10 +178,10 @@ func (r ExecRunner) bringUp(ctx context.Context, s spells.Service) (Handle, erro
 		ready := reprobe.Run() == nil
 		stopReprobe()
 		if ready {
-			fmt.Fprintf(os.Stderr, "service: start %q failed (%v) but it is ready; adopting it\n", s.Start.Bin, err)
+			slog.InfoContext(ctx, fmt.Sprintf("service: start %q failed (%v) but it is ready; adopting it", s.Start.Bin, err), attr.Notice("note"))
 			return Adopted, nil
 		}
-		return nil, fmt.Errorf("service: start %q: %w; readiness %q still fails: %s", s.Start.Bin, err, s.Readiness.Bin, strings.TrimSpace(probeStderr.String()))
+		return nil, fmt.Errorf("service: start %q: %w, and readiness %q still fails: %s", s.Start.Bin, err, s.Readiness.Bin, strings.TrimSpace(probeStderr.String()))
 	}
 	h := &startedHandle{stop: s.Stop}
 	if err := r.waitReady(ctx, s.Readiness); err != nil {
