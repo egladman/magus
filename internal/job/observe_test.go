@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestPathsGateReadsTheDiffAndNotTheReport is the whole point of the kind: the holder's
@@ -416,6 +417,142 @@ func TestVerifyGatesReportsTheSymbolDeltaAndGradesNothingOnIt(t *testing.T) {
 	wantWith.LeftUnreferenced = []string{"helper (api/x.go:9)", "old (api/y.go:3)"}
 	wantWith.SymbolDeltaKnown = true
 	assert.Equal(t, wantWith, with, "the delta changes no verdict or violation")
+}
+
+// landedSuite pins job wait's grade of what a row's branch committed.
+type landedSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	wt   *testkit.Repo
+	row  types.Job
+}
+
+func TestLanded(t *testing.T) { suite.Run(t, new(landedSuite)) }
+
+func (s *landedSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"a.go": "package a\n", "out.txt": "seed\n"})
+	checkpoint := s.repo.Head()
+	s.wt = s.repo.AddWorktree("job")
+	s.row = types.Job{
+		ID: "job", Created: 1, Parent: strings.TrimSpace(s.repo.Git("branch", "--show-current")),
+		WritePaths: []string{"a.go"}, Checkpoint: checkpoint, CheckoutRoot: s.wt.Root(),
+		Worktree: &types.JobWorktree{Root: s.wt.Root()},
+	}
+}
+
+func (s *landedSuite) commitOwn(file, body string) {
+	s.wt.Write(file, body)
+	s.wt.Git("add", "--", file)
+	s.wt.Git("commit", "-q", "-m", "own "+file)
+}
+
+func (s *landedSuite) violations() string {
+	seen, err := CheckpointObserver(s.repo.Root(), nil)(s.T().Context(), s.row)
+	s.Require().NoError(err)
+	rep := types.JobResult{Job: s.row.ID, ChangedPaths: []string{"a.go"}}
+	return strings.Join(VerifyGates(s.row, rep, types.JobAttempt{}, nil, []types.Job{s.row}, seen).Violations, "\n")
+}
+
+func (s *landedSuite) TestAPathTheResultLeavesOutIsGraded() {
+	s.commitOwn("a.go", "package a // own\n")
+	s.commitOwn("out.txt", "own\n")
+	got := s.violations()
+	s.Contains(got, `the branch committed "out.txt"`)
+	s.Contains(got, "ask your orchestrator to widen the row")
+}
+
+func (s *landedSuite) TestAPathTheLeaseHoldsPasses() {
+	s.commitOwn("a.go", "package a // own\n")
+	s.NotContains(s.violations(), "the branch committed")
+}
+
+func (s *landedSuite) TestADeniedPathTheResultLeavesOutIsGraded() {
+	s.row.WritePaths = []string{"a.go", "out.txt"}
+	s.row.DenyPaths = []string{"out.txt"}
+	s.commitOwn("a.go", "package a // own\n")
+	s.commitOwn("out.txt", "own\n")
+	s.Contains(s.violations(), `changed path "out.txt" is one the job is denied`)
+}
+
+func (s *landedSuite) TestAnUncommittedFileIsNotTheBranchs() {
+	s.commitOwn("a.go", "package a // own\n")
+	s.wt.Write("out.txt", "regenerated\n")
+	s.NotContains(s.violations(), "the branch committed")
+}
+
+func (s *landedSuite) TestAMergeOfTheParentIsNotTheRows() {
+	s.commitOwn("a.go", "package a // own\n")
+	s.repo.Commit("parent", map[string]string{"out.txt": "parent\n"})
+	s.wt.Git("merge", "-q", "--no-edit", s.row.Parent)
+	s.NotContains(s.violations(), "the branch committed")
+}
+
+func (s *landedSuite) TestAFastForwardOntoTheParentIsNotTheRows() {
+	s.repo.Commit("parent", map[string]string{"out.txt": "parent\n"})
+	s.wt.Git("merge", "-q", "--ff-only", s.row.Parent)
+	s.commitOwn("a.go", "package a // own\n")
+	s.NotContains(s.violations(), "the branch committed")
+}
+
+func (s *landedSuite) TestASquashOfTheParentIsNotTheRows() {
+	s.commitOwn("a.go", "package a // own\n")
+	s.repo.Commit("parent", map[string]string{"out.txt": "parent\n"})
+	s.wt.Git("merge", "-q", "--squash", s.row.Parent)
+	s.wt.Git("commit", "-q", "-m", "squash")
+	s.NotContains(s.violations(), "the branch committed")
+}
+
+func (s *landedSuite) TestAMergesOwnEditIsTheRows() {
+	s.commitOwn("a.go", "package a // own\n")
+	s.repo.Commit("parent", map[string]string{"b.txt": "parent\n"})
+	s.wt.Git("merge", "-q", "--no-ff", "--no-commit", s.row.Parent)
+	s.wt.Write("out.txt", "hidden\n")
+	s.wt.Git("add", "--", "out.txt")
+	s.wt.Git("commit", "-q", "-m", "merged")
+	s.Contains(s.violations(), `the branch committed "out.txt"`)
+}
+
+func (s *landedSuite) TestAPathTheBranchPutBackIsNotGraded() {
+	s.commitOwn("a.go", "package a // own\n")
+	s.commitOwn("out.txt", "own\n")
+	s.commitOwn("out.txt", "seed\n")
+	s.NotContains(s.violations(), "the branch committed")
+}
+
+func (s *landedSuite) TestAStackRewrittenOnItsOwnBranchIsGradedByItsResult() {
+	s.commitOwn("a.go", "package a // own\n")
+	checkpoint := checkpointRevision(s.row.Checkpoint)
+	s.wt.Git("switch", "-q", "--detach", checkpoint)
+	s.commitOwn("a.go", "package a // rewritten\n")
+	s.wt.Git("switch", "-q", "-C", s.row.ID)
+	s.NotContains(s.violations(), "the branch committed")
+}
+
+func (s *landedSuite) TestASiblingsCommitsMovedOntoTheBranchAreGraded() {
+	sibling := s.repo.AddWorktree("sibling")
+	sibling.Write("out.txt", "sibling\n")
+	sibling.Git("add", "--", "out.txt")
+	sibling.Git("commit", "-q", "-m", "sibling")
+	s.wt.Git("switch", "-q", "--detach", sibling.Head())
+	s.wt.Git("switch", "-q", "-C", s.row.ID)
+	s.Contains(s.violations(), `the branch committed "out.txt"`)
+}
+
+func (s *landedSuite) TestAnIntegrationRowIsNotRead() {
+	s.commitOwn("out.txt", "own\n")
+	s.row.Integrates = []string{"other"}
+	seen, err := CheckpointObserver(s.repo.Root(), nil)(s.T().Context(), s.row)
+	s.Require().NoError(err)
+	s.False(seen.LandedKnown)
+}
+
+func (s *landedSuite) TestARowWithNoBranchOrCheckoutSaysSoInANote() {
+	s.row.ID, s.row.Worktree = "elsewhere", nil
+	seen, err := CheckpointObserver(s.repo.Root(), nil)(s.T().Context(), s.row)
+	s.Require().NoError(err)
+	rep := types.JobResult{Job: s.row.ID, ChangedPaths: []string{"a.go"}}
+	notes := VerifyGates(s.row, rep, types.JobAttempt{}, nil, []types.Job{s.row}, seen).Notes
+	s.Contains(strings.Join(notes, "\n"), "the write paths graded changed_paths alone")
 }
 
 // overlapFixture is two checkouts of one repository, job a taken in root and job b in

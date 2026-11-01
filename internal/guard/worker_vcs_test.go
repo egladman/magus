@@ -2,12 +2,119 @@ package guard
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// commitGradeRoutesSuite pins the routes a commit took around its path grade.
+type commitGradeRoutesSuite struct {
+	commitPathsSuite
+}
+
+func TestCommitGradeRoutes(t *testing.T) { suite.Run(t, new(commitGradeRoutesSuite)) }
+
+func (s *commitGradeRoutesSuite) script(name, body string) string {
+	p := filepath.Join(s.dir, name)
+	s.Require().NoError(os.WriteFile(p, []byte(body), 0o755))
+	return p
+}
+
+func (s *commitGradeRoutesSuite) TestAPickOutsideTheWritePathsIsRefusedAndNamesTheRoute() {
+	picked := s.repo.commitFiles(s.repo.main, map[string]string{"gen.json": "x\n"})
+	got := s.deny("git cherry-pick " + picked)
+	s.Contains(got, "this commit carries paths outside lease")
+	s.Contains(got, "It picks commits writing gen.json")
+	s.Contains(got, "git checkout <commit> -- <path>")
+}
+
+func (s *commitGradeRoutesSuite) TestAPickThroughTheVCSCommandIsGraded() {
+	picked := s.repo.commitFiles(s.repo.main, map[string]string{"gen.json": "x\n"})
+	err := vcsCommandRefusal(s.ctx, s.worker, "git", []string{"cherry-pick", picked}, s.dir, nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "It picks commits writing gen.json")
+}
+
+func (s *commitGradeRoutesSuite) TestAPickInsideTheWritePathsPasses() {
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.repo.main, "cmd/magus"), 0o755))
+	picked := s.repo.commitFiles(s.repo.main, map[string]string{"cmd/magus/x.go": "x\n"})
+	s.Empty(s.deny("git cherry-pick " + picked))
+}
+
+func (s *commitGradeRoutesSuite) TestAPickFromStandardInputIsRefusedThroughTheVCSCommand() {
+	err := vcsCommandRefusal(s.ctx, s.worker, "git", []string{"cherry-pick", "--stdin"}, s.dir, nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "Name each commit in the call")
+}
+
+func (s *commitGradeRoutesSuite) TestContinuingAPickPasses() {
+	s.Empty(s.deny("git cherry-pick --continue"))
+}
+
+func (s *commitGradeRoutesSuite) TestAnIntegrationRowPicksWhatItsWritePathsCover() {
+	picked := s.repo.commitFiles(s.repo.main, map[string]string{"gen.json": "x\n"})
+	row := s.worker
+	row.WritePaths = append(row.WritePaths, "gen.json")
+	row.Integrates = []string{"other"}
+	ctx, _ := fleetFixture(s.T(), row)
+	s.Empty(denyLeaseScopedVCS(ctx, Dependencies{callDir: s.dir}, row.ID, "git cherry-pick "+picked))
+}
+
+func (s *commitGradeRoutesSuite) TestAPipedPathspecBesideACommitNamesTheTwoCalls() {
+	got := s.deny("printf 'docs/gen.json\\n' | git add --pathspec-from-file=- && git commit -m done")
+	s.Contains(got, "cannot be read before the line runs")
+	s.Contains(got, "then commit in the next")
+}
+
+func (s *commitGradeRoutesSuite) TestThePipedRemedyAloneStillStages() {
+	s.Empty(s.deny("magus vcs ls-files -o name | git add --pathspec-from-file=-"))
+}
+
+func (s *commitGradeRoutesSuite) TestAPathspecFileOnDiskIsRead() {
+	s.write("docs/gen.json")
+	s.script("list", "docs/gen.json\n")
+	s.Contains(s.deny("git add --pathspec-from-file=list && git commit -m done"), "It commits docs/gen.json")
+}
+
+func (s *commitGradeRoutesSuite) TestAPathspecFileTheLineWritesIsRefused() {
+	s.Contains(s.deny("git add --pathspec-from-file=later && git commit -m done"), "then commit in the next")
+}
+
+func (s *commitGradeRoutesSuite) TestABranchForceTypedIsRefused() {
+	s.Contains(s.deny(fmt.Sprintf("git branch -f %s HEAD~1", s.worker.ID)), "`git branch` stays with the orchestrator")
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptHidingABranchForceIsRefused() {
+	script := s.script("fold.sh", fmt.Sprintf("#!/bin/bash\ngit branch -f %s HEAD\n", s.worker.ID))
+	for _, line := range []string{"bash " + script, "sh " + script, script, "bash fold.sh"} {
+		got := s.deny(line)
+		s.Contains(got, "`git branch` stays with the orchestrator", line)
+		s.Contains(got, "a script gets the verdict its lines would get typed", line)
+	}
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptHidingARebaseIsRefused() {
+	script := s.script("fold.sh", "git rebase main\n")
+	s.Contains(s.deny("bash "+script), "`git rebase` stays with the orchestrator")
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptTheWorkerMayRunPasses() {
+	script := s.script("ok.sh", "git status --short\ngit log -1\n")
+	s.Empty(s.deny("bash " + script))
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptNotOnDiskIsRefusedWithTheRoute() {
+	s.Contains(s.deny("bash missing.sh"), "Write the script first, then run it in a call of its own")
+}
+
+func (s *commitGradeRoutesSuite) TestAProgramThatIsNotAShellScriptIsLeftAlone() {
+	s.Empty(s.deny(s.script("tool", "\x7fELF")))
+}
 
 func TestMergesBase(t *testing.T) {
 	row := types.Job{DependsOn: []string{"worker-a", "worker-b"}}
@@ -189,33 +296,33 @@ func TestLandingRowMovesItsCheckout(t *testing.T) {
 		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), "in place: %q", command)
 	}
 	for _, command := range []string{
-		"git -C " + wt + " merge --ff-only " + rev,
-		"git -C " + wt + " commit -m done",
-		"cd " + wt + " && git merge --ff-only " + rev,
+		fmt.Sprintf("git -C %s merge --ff-only %s", wt, rev),
+		fmt.Sprintf("git -C %s commit -m done", wt),
+		fmt.Sprintf("cd %s && git merge --ff-only %s", wt, rev),
 	} {
 		assert.Empty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command), "pointed at its own checkout: %q", command)
 	}
 
 	elsewhere := fmt.Sprintf("It commits in %s, and the lease was taken in %s.", r.main, wt)
 	assert.Contains(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git merge --ff-only "+rev), elsewhere)
-	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, "git -C "+r.main+" merge --ff-only "+rev), elsewhere)
-	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, "cd "+r.main+" && git merge --ff-only "+rev), elsewhere)
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, fmt.Sprintf("git -C %s merge --ff-only %s", r.main, rev)), elsewhere)
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, fmt.Sprintf("cd %s && git merge --ff-only %s", r.main, rev)), elsewhere)
 
 	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
 	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git merge --ff-only "+rev), "the base branch")
 
 	for _, command := range []string{
-		"git -C " + wt + " merge --ff-only other-job",
-		"git -C " + wt + " merge " + rev,
-		"git -C " + wt + " merge --no-ff " + rev,
-		"git -C " + wt + " merge --ff-only --no-ff " + rev,
-		"git -C " + wt + " merge --ff-only --squash " + rev,
-		"git -C " + wt + " merge --ff-only -s ours " + rev,
-		"git -C " + wt + " merge --ff-only " + rev + " a1b2c3d",
-		"git -C " + wt + " reset --hard " + rev,
-		"git -C " + wt + " branch -f lease-job " + rev,
-		"git -C " + wt + " update-ref refs/heads/lease-job " + rev,
-		"git -C " + wt + " --work-tree=../x merge --ff-only " + rev,
+		fmt.Sprintf("git -C %s merge --ff-only other-job", wt),
+		fmt.Sprintf("git -C %s merge %s", wt, rev),
+		fmt.Sprintf("git -C %s merge --no-ff %s", wt, rev),
+		fmt.Sprintf("git -C %s merge --ff-only --no-ff %s", wt, rev),
+		fmt.Sprintf("git -C %s merge --ff-only --squash %s", wt, rev),
+		fmt.Sprintf("git -C %s merge --ff-only -s ours %s", wt, rev),
+		fmt.Sprintf("git -C %s merge --ff-only %s a1b2c3d", wt, rev),
+		fmt.Sprintf("git -C %s reset --hard %s", wt, rev),
+		fmt.Sprintf("git -C %s branch -f lease-job %s", wt, rev),
+		fmt.Sprintf("git -C %s update-ref refs/heads/lease-job %s", wt, rev),
+		fmt.Sprintf("git -C %s --work-tree=../x merge --ff-only %s", wt, rev),
 	} {
 		assert.NotEmpty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command), "%q", command)
 	}

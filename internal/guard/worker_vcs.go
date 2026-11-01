@@ -151,6 +151,15 @@ func mergesBase(operand, base string, row types.Job) bool {
 	return base != "" && (operand == base || operand == "origin/"+path.Base(base))
 }
 
+// pickOperands is the revisions a `git cherry-pick` names; false for any other.
+func pickOperands(inv hint.Invocation) (revs []string, ok bool) {
+	sub, rest := vcsSubcommand(inv)
+	if inv.Name != "git" || sub != "cherry-pick" {
+		return nil, false
+	}
+	return patchFlags(rest, "mX", cherryPickLongValued, func(string, string) {}, func(string) {}), true
+}
+
 // commitID reports a full or abbreviated hexadecimal object name, as `magus version` prints a
 // build's commit.
 func commitID(s string) bool {

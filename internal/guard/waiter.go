@@ -371,7 +371,7 @@ func readRefusal(rest *bufio.Reader) (time.Time, types.DiagnosticCode, bool) {
 		line, err := rest.ReadBytes('\n')
 		var ev journal.Event
 		// The byte search before decoding keeps a log full of output cheap.
-		if slices.ContainsFunc(refusalCodes, func(code types.DiagnosticCode) bool { return bytes.Contains(line, []byte(`"`+code+`"`)) }) &&
+		if slices.ContainsFunc(refusalCodes, func(code types.DiagnosticCode) bool { return bytes.Contains(line, fmt.Appendf(nil, `"%s"`, code)) }) &&
 			json.Unmarshal(line, &ev) == nil && ev.Kind == journal.KindResult &&
 			slices.Contains(refusalCodes, types.DiagnosticCode(ev.DiagnosticCode)) {
 			return time.UnixMilli(ev.Ts), types.DiagnosticCode(ev.DiagnosticCode), true
@@ -474,8 +474,7 @@ func BudgetFull(s types.MachineSnapshot, now time.Time) string {
 			text += ", has held its seat " + now.Sub(h.Since).Round(time.Second).String()
 		}
 	}
-	return fmt.Sprintf("%s. A seat frees as each run ends: wait for one (`%s` shows the pool) before starting a worker, since a worker whose check finds no seat reports and stops.",
-		text, hint.Status.With("--watch=15s"))
+	return text + ". A seat frees as each run ends: hold this worker until the completion notice of work you already started arrives, since a worker whose check finds no seat reports and stops."
 }
 
 // holdsNoBuildSeat reports whether the worker for row can never take a build seat: it writes

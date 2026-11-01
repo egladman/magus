@@ -52,6 +52,11 @@ type Observed struct {
 	// ChangedRevision is the bare revision Changed was read from, for a caller that reads
 	// more of the same diff; ChangedFrom may carry prose around it.
 	ChangedRevision string
+	// Landed are the paths the job's own branch committed (see landedSince).
+	// LandedReason says why an observer that looked could not read them.
+	Landed       []string
+	LandedKnown  bool
+	LandedReason string
 	// Present are the paths that exist in the tree right now, and PresentKnown says
 	// somebody looked. Separate from Changed because they answer different questions: a
 	// file can exist and be untouched, or be deleted and therefore changed.
@@ -429,7 +434,16 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		v.Violations = append(v.Violations, diffViolations(row, rep, seen)...)
 		v.Violations = append(v.Violations, claimViolations(row, seen, v.FootprintUnclaimed)...)
 	}
-	v.Violations = append(v.Violations, denyViolations(row, rep, seen)...)
+	unnamed := unnamedLanded(rep, seen)
+	if !row.Integrating() {
+		v.Violations = append(v.Violations, landedViolations(row, unnamed, seen)...)
+		if seen.ChangedKnown && !seen.LandedKnown && seen.LandedReason != "" {
+			v.Notes = append(v.Notes, fmt.Sprintf("what the branch committed could not be read (%s), so the write paths graded changed_paths alone", seen.LandedReason))
+		}
+	}
+	graded := rep
+	graded.ChangedPaths = slices.Concat(rep.ChangedPaths, unnamed)
+	v.Violations = append(v.Violations, denyViolations(row, graded, seen)...)
 	var live []string
 	for _, d := range types.JobDescendants(declared, row.ID) {
 		if d.State.Live() {
@@ -619,6 +633,26 @@ func sortedCopy(in []string) []string {
 	return slices.Compact(out)
 }
 
+// unnamedLanded are the paths the branch committed that no claim covers.
+func unnamedLanded(rep types.JobResult, seen Observed) []string {
+	return slices.DeleteFunc(slices.Clone(seen.Landed), func(p string) bool {
+		return slices.ContainsFunc(rep.ChangedPaths, func(claim string) bool { return covers(claim, p) })
+	})
+}
+
+// landedViolations grades what the branch committed and the result leaves out.
+func landedViolations(row types.Job, unnamed []string, seen Observed) []string {
+	var out []string
+	for _, p := range unnamed {
+		if _, ok := matching(row.WritePaths, p); ok || types.IsMagusMaintained(p) {
+			continue
+		}
+		out = append(out, fmt.Sprintf("the branch committed %q since %s, the result leaves it out, and it is %s (%s): take it off the branch, or ask your orchestrator to widen the row",
+			p, cmp.Or(seen.ChangedFrom, "the job's checkpoint"), outsideWritePaths, strings.Join(row.WritePaths, ", ")))
+	}
+	return out
+}
+
 // diffViolations holds a writing job's claim to what magus observed since its checkpoint:
 // every claimed path is in the diff, and something in the diff is inside the write paths.
 // A diff nobody could read fails, since a claim checked against nothing is an attestation.
@@ -704,7 +738,6 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 	if why, ok := seen.Stale[attemptKey(attempt)]; ok {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q predates the job's last write: it proves the work only if %s", status.OutputRef, why))
 	}
-	// A script check needs this job's own lease.
 	if gate.Check.Script != "" && !seen.anyLease && attempt.Lease == "" {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under no lease, so it is not this job's evidence: record the script under lease %q",
 			status.OutputRef, row.ID))

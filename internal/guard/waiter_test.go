@@ -305,7 +305,8 @@ func TestBudgetFullSaysHowFullAndWhatHoldsIt(t *testing.T) {
 	assert.Contains(t, full, "the build budget is full (mem ")
 	assert.NotContains(t, full, "slots", "only the half that is spent")
 	assert.Contains(t, full, "held by 1 run(s); the oldest, go-test . in /w/a, has held its seat 1m30s")
-	assert.Contains(t, full, hint.Status.With("--watch=15s"))
+	assert.Contains(t, full, "hold this worker until the completion notice of work you already started arrives")
+	assert.NotContains(t, full, "--watch", "a worker is refused a watch")
 }
 
 func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
@@ -869,8 +870,9 @@ func (s *WaitRemedySuite) TestBusyWaitOnAMeasuredRunServesItBounded() {
 	v := s.evaluate("until ./magus run test .; do sleep 30; done")
 	s.Equal(denyRuleBusyWait, v.Rule.Name)
 	s.Require().Len(v.Next, 1)
-	s.Equal([]string{"./magus", "job", "exec", "--timeout", "8m", "--", "./magus", "run", "test", "."}, v.Next[0].Argv)
-	s.Equal("./magus job exec --timeout 8m -- ./magus run test .", v.Next[0].Run)
+	s.Equal(hint.NextForDenyRemedy(string(denyRuleBusyWait),
+		[]string{"./magus", "job", "exec", "--timeout", "8m", "--", "./magus", "run", "test", "."},
+		"run it in the background: the host announces it when it ends, and job exec stops it at the bound."), v.Next[0])
 	s.Contains(v.Lead, "`test` last ran 5m0s here, and 8m leaves half again")
 	s.Contains(v.Deny, "<command>", "the deny stays whole for a reader the remedy is dropped for")
 }

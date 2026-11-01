@@ -2544,6 +2544,9 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	if actingLease == "" || helpOnlyLine(command, DialectBash) {
 		return ""
 	}
+	if reason := denyLeaseScriptVCS(ctx, deps, actingLease, command, 0); reason != "" {
+		return reason
+	}
 	cmds, ok := ParseCommands(command)
 	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return workerVCSOp(c) != "" || workerVCSMovesRefs(c) }) {
 		return ""
@@ -2617,7 +2620,9 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 			continue
 		}
 		if c.inv.Name == "git" && recordsCommit(c.inv) && unlocated == "" {
-			site.stagedOnLine = lineStagedPaths(ctx, cmds, cmp.Or(site.dir, me.CheckoutRoot))
+			site.stagedOnLine, site.stagedUnread = lineStagedPaths(ctx, cmds, cmp.Or(site.dir, me.CheckoutRoot))
+		}
+		if _, picks := pickOperands(c.inv); picks || recordsCommit(c.inv) {
 			site.regenerated = integrationRegenerates(ctx, deps, me)
 		}
 		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
@@ -2872,6 +2877,8 @@ type vcsSite struct {
 	gitDir string
 	// stagedOnLine is what an earlier `git add` on the shell line stages.
 	stagedOnLine []string
+	// stagedUnread is why such an add cannot be read before the line runs.
+	stagedUnread string
 	// regenerated reports a path an integrating row regenerates.
 	regenerated func(path string) bool
 }
@@ -2904,6 +2911,9 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	why, base := commitRefusal(ctx, opts, row, inv.Name, site)
 	if operand, merge := workerMerge(inv); why == "" && merge && operand != "" && !mergesBase(operand, base, row) {
 		why = mergeRefusal(operand, base, row)
+	}
+	if why == "" {
+		why = site.stagedUnread
 	}
 	if why == "" {
 		return vcsRefusal{op: op, kind: vcsOpOutside, why: commitPathsRefusal(ctx, opts, row, inv, site)}
@@ -2954,6 +2964,9 @@ var relocateFlag = map[string]string{"git": "-C", "hg": "--cwd", "sl": "--cwd", 
 // A write is judged as it happens, and a generator run writes past them.
 // A merge's commit is exempt: it carries the base it merged.
 func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite) string {
+	if revs, picks := pickOperands(inv); picks {
+		return pickPathsRefusal(ctx, row, inv, revs, site)
+	}
 	sub, rest := vcsSubcommand(inv)
 	if sub != "commit" && sub != "ci" {
 		return ""
@@ -2971,8 +2984,20 @@ func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Jo
 	if err != nil {
 		return fmt.Sprintf("What it commits cannot be read: %v.", err)
 	}
+	outside := pathsOutsideLease(row, slices.Concat(paths, site.stagedOnLine), site)
+	if len(outside) == 0 {
+		return ""
+	}
+	list := strings.Join(outside, " ")
+	return fmt.Sprintf("It commits %s, outside the lease's write paths (%s). Unstage them with `git restore --staged -- %s` and file them owed: the integrator regenerates an output, and your orchestrator widens the row for anything else.",
+		list, strings.Join(row.WritePaths, ", "), list)
+}
+
+// pathsOutsideLease is the sorted paths row may not commit: outside its write
+// paths, not one magus maintains, and not one an integrating row regenerates.
+func pathsOutsideLease(row types.Job, paths []string, site vcsSite) []string {
 	var outside []string
-	for _, p := range slices.Concat(paths, site.stagedOnLine) {
+	for _, p := range paths {
 		if _, held, _ := declarationCovering(row.WritePaths, p); !held && !types.IsMagusMaintained(p) && !slices.Contains(outside, p) {
 			outside = append(outside, p)
 		}
@@ -2980,13 +3005,75 @@ func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Jo
 	if len(outside) > 0 && site.regenerated != nil {
 		outside = slices.DeleteFunc(outside, site.regenerated)
 	}
+	slices.Sort(outside)
+	return outside
+}
+
+// pickPathsRefusal grades a cherry-pick's commits as a commit's paths are
+// graded, for vcs\cmd too, which lease-write never sees. A revision git
+// cannot read lands nothing; on a shell line lease-write refuses it.
+func pickPathsRefusal(ctx context.Context, row types.Job, inv hint.Invocation, revs []string, site vcsSite) string {
+	_, rest := vcsSubcommand(inv)
+	if anyFlag(rest, "", "--stdin") {
+		return "It reads its commits from standard input, which cannot be listed before it runs. Name each commit in the call."
+	}
+	if len(revs) == 0 {
+		return ""
+	}
+	paths, err := pickedPaths(ctx, cmp.Or(site.dir, row.CheckoutRoot), revs)
+	if err != nil {
+		return ""
+	}
+	outside := pathsOutsideLease(row, paths, site)
 	if len(outside) == 0 {
 		return ""
 	}
-	slices.Sort(outside)
-	list := strings.Join(outside, " ")
-	return fmt.Sprintf("It commits %s, outside the lease's write paths (%s). Unstage them with `git restore --staged -- %s` and file them owed: the integrator regenerates an output, and your orchestrator widens the row for anything else.",
-		list, strings.Join(row.WritePaths, ", "), list)
+	return fmt.Sprintf("It picks commits writing %s, outside the lease's write paths (%s). Take only the paths you hold with `git checkout <commit> -- <path>` and commit them, or file the rest owed: the integrator regenerates an output, and your orchestrator widens the row for anything else.",
+		strings.Join(outside, " "), strings.Join(row.WritePaths, ", "))
+}
+
+// denyLeaseScriptVCS judges each shell script the line runs by its lines, since
+// a script hides every verb from a rule reading the line. One not on disk yet
+// cannot be read, so it is refused.
+func denyLeaseScriptVCS(ctx context.Context, deps Dependencies, lease, command string, depth int) string {
+	if depth > writeScanDepth {
+		return ""
+	}
+	cwd, _ := deps.workingDir()
+	for _, run := range scriptRuns(command, effectiveDialect(deps.ShellDialect)) {
+		file := run.path
+		if !filepath.IsAbs(file) {
+			if cwd == "" {
+				continue
+			}
+			file = filepath.Join(cwd, file)
+		}
+		body, read := readScript(file)
+		lang := run.lang
+		if lang == scriptNone {
+			lang = detectScriptLang(file, body)
+		}
+		if lang != scriptShell {
+			continue
+		}
+		if !read {
+			if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if _, live := actingLiveLease(ctx, deps, lease); !live {
+				continue
+			}
+			return fmt.Sprintf("magus workspace: this line runs %s, not on disk yet, so it cannot be read. Write the script first, then run it in a call of its own.", run.path)
+		}
+		reason := denyLeaseScriptVCS(ctx, deps, lease, body, depth+1)
+		if reason == "" {
+			reason = denyLeaseScopedVCS(ctx, deps, lease, body)
+		}
+		if reason != "" {
+			return fmt.Sprintf("`%s`: %s\nJudged from the content of %s, which this line runs: a script gets the verdict its lines would get typed.", run.path, reason, run.path)
+		}
+	}
+	return ""
 }
 
 // committedPaths lists what a commit with these arguments records, from dir.
@@ -3060,18 +3147,25 @@ func gitCommitSelection(args []string) (all bool, named []string) {
 
 // lineStagedPaths is what the line's own `git add` calls stage, read with a
 // dry run from dir, since a hook runs before they do. An add that would fail
-// stages nothing.
-func lineStagedPaths(ctx context.Context, cmds []hint.Invocation, dir string) []string {
-	var out []string
+// stages nothing. unread says why a pathspec list cannot be read: it arrives on
+// a pipe, or the line writes it first.
+func lineStagedPaths(ctx context.Context, cmds []hint.Invocation, dir string) (out []string, unread string) {
 	for _, c := range cmds {
 		sub, rest := vcsSubcommand(c)
 		if c.Name != "git" || sub != "add" {
 			continue
 		}
+		listed := anyFlag(rest, "", "--pathspec-from-file")
+		if listed && (slices.Contains(rest, "--pathspec-from-file=-") || slices.Contains(rest, "-")) {
+			return out, stagedListUnread
+		}
 		cmd := exec.CommandContext(ctx, "git", append([]string{"add", "--dry-run"}, rest...)...)
 		cmd.Dir = dir
 		stdout, err := cmd.Output()
 		if err != nil {
+			if listed {
+				return out, stagedListUnread
+			}
 			continue
 		}
 		for _, line := range strings.Split(string(stdout), "\n") {
@@ -3080,8 +3174,12 @@ func lineStagedPaths(ctx context.Context, cmds []hint.Invocation, dir string) []
 			}
 		}
 	}
-	return out
+	return out, ""
 }
+
+// stagedListUnread refuses a commit beside an add reading a pathspec list.
+var stagedListUnread = fmt.Sprintf("The `git add --pathspec-from-file` on this line reads a list that cannot be read before the line runs, so what the commit carries cannot be graded. Stage in one call (`%s | git add --pathspec-from-file=-`), then commit in the next, where the index can be read.",
+	hint.VCSLsFiles.With("-o", "name"))
 
 // refMoveRefusal places a call that moves HEAD, a ref or the index like a commit: in another
 // checkout of the repository it moves that checkout's state, and a repository of its own
@@ -3900,8 +3998,8 @@ func denyPatchOutsideLease(ctx context.Context, deps Dependencies, me types.Job,
 	writes, unread := patchWrites(command, 0, d, start, home)
 	if len(unread) > 0 {
 		return denial{
-			Say: fmt.Sprintf("magus workspace: this line applies a patch from %s, which the guard cannot read, so nothing shows it stays inside lease %s's write paths; write the patch to a file, then apply that file in a call of its own.",
-				strings.Join(unread, ", "), me.ID),
+			Say: fmt.Sprintf("magus workspace: the guard cannot read a patch from %s: write the patch to a file, then apply that file in a call of its own.",
+				strings.Join(unread, ", ")),
 			Why: fmt.Sprintf("The files a patch writes are named only inside it, so lease-write reads it. A pipe from another command, a word the shell expands, and a file the line itself creates cannot be read before the line runs. `%s` shows what the job holds.", hint.DescribeJob.With(me.ID)),
 		}.full()
 	}
@@ -3924,8 +4022,8 @@ func denyPickOutsideLease(ctx context.Context, deps Dependencies, me types.Job, 
 	writes, unread := pickWrites(ctx, command, d, start, home)
 	if len(unread) > 0 {
 		return denial{
-			Say: fmt.Sprintf("magus workspace: this line cherry-picks from %s, which the guard cannot list, so nothing shows it stays inside lease %s's write paths; make the commit exist first, then pick it by name in a call of its own.",
-				strings.Join(unread, ", "), me.ID),
+			Say: fmt.Sprintf("magus workspace: the guard cannot list a cherry-pick from %s: make the commit exist first, then pick it by name in a call of its own.",
+				strings.Join(unread, ", ")),
 			Why: fmt.Sprintf("The files a commit writes are named only by the commit, so lease-write asks git for them before the line runs. A word the shell expands, a commit the line itself makes, and a revision git cannot read cannot be listed then. `%s` shows what the job holds.", hint.DescribeJob.With(me.ID)),
 		}.full()
 	}
