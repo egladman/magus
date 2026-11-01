@@ -2458,6 +2458,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
                     "docs/guides/integrations/agents/magusfile.buzz",
                     "libs/conventions/magusfile.buzz", "libs/proofread/magusfile.buzz",
+                    "libs/result/magusfile.buzz", "libs/result/result.buzz", "libs/result/*.go",
                    // proofread's staleness check hashes the labeled cases the binary embeds.
                     "libs/proofread/internal/calibrate/cases/*.txtar", "libs/proofread/proofread.buzz",
                     "libs/proofread/testdata/*.css",

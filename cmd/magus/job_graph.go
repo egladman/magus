@@ -906,7 +906,7 @@ func drawPlanFigure(ctx context.Context, rec figure.Figure) (string, error) {
 	if err := bindings.RegisterMagusRecordTypes(sess); err != nil {
 		return "", err
 	}
-	sess.SetModuleDecls("magus/figure", figure.Source)
+	figure.DeclareModules(sess)
 	svg, err := figure.Draw(ctx, sess, rec, "")
 	if err != nil {
 		return "", err

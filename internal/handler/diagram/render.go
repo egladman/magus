@@ -440,7 +440,7 @@ func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, erro
 	if err := bindings.RegisterMagusRecordTypes(sess); err != nil {
 		return Figure{}, err
 	}
-	sess.SetModuleDecls("magus/figure", figure.Source)
+	figure.DeclareModules(sess)
 
 	svg, err := figure.Draw(ctx, sess, buildFigure(g, desc, anchorHref), anchorHref)
 	var refused *figure.Findings

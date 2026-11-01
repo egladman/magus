@@ -284,7 +284,8 @@ func plainSession(ctx context.Context, out io.Writer) (*buzz.Session, error) {
 
 // playgroundSourceModules are the Buzz-implemented std modules the playground resolves,
 // each vetted by hand: figure imports magus only for its record types and calls no host function.
-var playgroundSourceModules = []string{"figure"}
+// result imports nothing, and figure imports it.
+var playgroundSourceModules = []string{"figure", "result"}
 
 // PlaygroundSourceModules names the Buzz-implemented modules the playground resolves, beside
 // the host modules PlaygroundHostModules names.
