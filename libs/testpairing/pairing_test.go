@@ -29,7 +29,7 @@ func TestPairing(t *testing.T) {
 // analysistest reads `// want` only from loaded files, so this asserts on the
 // diagnostics it returns and discards the "unexpected diagnostic" errors those
 // produce.
-func TestPairingIgnoredFiles(t *testing.T) {
+func TestIgnoredFiles(t *testing.T) {
 	results := analysistest.Run(discard{}, analysistest.TestData(), Pairing, "tagged")
 
 	var reported []string
@@ -59,7 +59,7 @@ func (discard) Errorf(string, ...any) {}
 
 // TestPairingMessages pins the decision for each name against a fixed listing,
 // including the order the checks run in.
-func TestPairingMessages(t *testing.T) {
+func TestMessages(t *testing.T) {
 	sources := map[string]bool{
 		"resolver":              true,
 		"resolver_cache_purego": true,
@@ -111,7 +111,7 @@ func TestPairingMessages(t *testing.T) {
 
 // TestPairingUnreadableDirectory pins that a directory the analyzer cannot list
 // reports every test file as unpaired rather than failing or staying silent.
-func TestPairingUnreadableDirectory(t *testing.T) {
+func TestUnreadableDirectory(t *testing.T) {
 	sources := sourceNames(filepath.Join(t.TempDir(), "absent"))
 	if got := pairing("widget_test.go", sources); !strings.HasPrefix(got, "widget_test.go has no source file") {
 		t.Errorf("pairing over an unreadable directory = %q", got)
