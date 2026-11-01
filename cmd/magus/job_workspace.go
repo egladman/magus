@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/ward"
 )
 
 // jobWorkspace is the workspace at root as a job record's validation reads it, loaded once.
@@ -16,11 +18,21 @@ func jobWorkspace(ctx context.Context, root string) job.Workspace {
 	m, err := loadMagus(ctx, root)
 	switch {
 	case err != nil:
-		return job.Workspace{Unavailable: err.Error()}
+		return job.Workspace{Unavailable: workspaceLoadFailure(err, root)}
 	case root != "" && filepath.Clean(m.Root()) != filepath.Clean(root):
 		return job.Workspace{Unavailable: fmt.Sprintf("the loaded workspace is %s, not %s", m.Root(), root)}
 	case len(m.All()) == 0:
 		return job.Workspace{Unavailable: fmt.Sprintf("the workspace at %s lists no projects", m.Root())}
 	}
 	return job.Workspace{Projects: m.All(), Ignored: job.VCSIgnored(ctx, m.Root())}
+}
+
+// workspaceLoadFailure is err's text. A binary too old for root also names
+// root's own ./magus, the newer binary that can widen a row there.
+func workspaceLoadFailure(err error, root string) string {
+	own := filepath.Join(root, "magus")
+	if info, statErr := os.Stat(own); root == "" || statErr != nil || !info.Mode().IsRegular() || !ward.IsStaleBinary(err) {
+		return err.Error()
+	}
+	return fmt.Sprintf("%s\nThis checkout's own build loads it: rerun with `%s job apply`", err, own)
 }
