@@ -631,7 +631,7 @@ func (r *unmergedRead) notReplayed(ctx context.Context, commits []types.Commit) 
 
 // replayIdentity reads a fixup as the commit it folds into.
 func replayIdentity(c types.Commit) string {
-	return c.Author.Email + "\x00" + strings.TrimPrefix(c.Subject, "fixup! ")
+	return fmt.Sprintf("%s\x00%s", c.Author.Email, strings.TrimPrefix(c.Subject, "fixup! "))
 }
 
 // facts is what row's work leaves off the branch: uncommitted paths, commits,
@@ -686,7 +686,7 @@ func (r *unmergedRead) unknown() string {
 	return strings.Join(parts, "; ")
 }
 
-func unmergedKey(id, branch string) string { return id + "\x00" + branch }
+func unmergedKey(id, branch string) string { return fmt.Sprintf("%s\x00%s", id, branch) }
 
 // unmergedFactsPath is "" when no state dir answers, which only costs the
 // stored answers.
