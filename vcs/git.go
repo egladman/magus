@@ -2935,7 +2935,13 @@ func revFileOutput(cmd *exec.Cmd, what string) (string, error) {
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	message := strings.ToLower(errBuf.String())
+	// Mercurial can report a missing path on stderr while exiting successfully.
+	if strings.Contains(message, "no such file in rev") || strings.Contains(message, "no such path:") || strings.Contains(message, "does not exist in") || strings.Contains(message, "exists on disk, but not in") {
+		return "", fmt.Errorf("%s: %w", what, errors.Join(ErrObjectMissing, err))
+	}
+	if err != nil {
 		return "", fmt.Errorf("%s: %w", what, withOutput(err, errBuf.String()))
 	}
 	return out.String(), nil

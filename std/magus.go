@@ -2144,11 +2144,15 @@ func MagusForkFactsJob(ctx context.Context, workspace string) (types.JobForkFact
 	if err != nil {
 		return types.JobForkFacts{}, err
 	}
+	last, err := cache.NewOutputStore(cacheDir).LastFullTest()
+	if err != nil {
+		return types.JobForkFacts{}, err
+	}
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
 			return types.JobForkFacts{}, snap.Err
 		}
-		return job.ForkFacts(ctx, workspace, snap.Clone().Rows, cache.NewOutputStore(cacheDir).LastFullTest()), nil
+		return job.ForkFacts(ctx, workspace, snap.Clone().Rows, last), nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.forkFacts")
 	if err != nil {
@@ -2158,7 +2162,7 @@ func MagusForkFactsJob(ctx context.Context, workspace string) (types.JobForkFact
 	if err != nil {
 		return types.JobForkFacts{}, err
 	}
-	return job.ForkFacts(ctx, workspace, rows, cache.NewOutputStore(cacheDir).LastFullTest()), nil
+	return job.ForkFacts(ctx, workspace, rows, last), nil
 }
 
 // MagusPutJob backs magus\job.put: it merges the fields put sets into row id, through

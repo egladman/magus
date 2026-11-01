@@ -139,7 +139,9 @@ func TestKeyInputsFileInvisibleToAttemptScanners(t *testing.T) {
 	attempts, err := s.Attempts(ref)
 	require.NoError(t, err)
 	require.Len(t, attempts, 1, "the file is not an attempt")
-	assert.Len(t, s.ListDescriptors(), 1, "the file is not a descriptor")
+	descs, err := s.ListDescriptors()
+	require.NoError(t, err)
+	assert.Len(t, descs, 1, "the file is not a descriptor")
 }
 
 // TestClassDigests: lines fold into one digest per label class, first-appearance

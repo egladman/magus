@@ -367,6 +367,8 @@ func changedFields(prev, next types.Job) []string {
 	add("deny_paths", !slices.Equal(prev.DenyPaths, next.DenyPaths))
 	add("read_paths", !slices.Equal(prev.ReadPaths, next.ReadPaths))
 	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
+	add("integrates", !slices.Equal(prev.Integrates, next.Integrates))
+	add("soft_paths", !slices.Equal(prev.SoftPaths, next.SoftPaths))
 	add("breaks", !slices.Equal(prev.Breaks, next.Breaks))
 	add("model", prev.Model != next.Model)
 	add("follows", prev.Follows != next.Follows)

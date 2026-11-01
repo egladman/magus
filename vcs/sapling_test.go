@@ -448,6 +448,8 @@ func TestSlObjectBatchReadsCommittedFiles(t *testing.T) {
 	}
 	_, err = batch.Read("no/such.buzz")
 	require.ErrorIs(t, err, ErrObjectMissing)
+	_, err = (saplingVCS{}).ReadFileAt(t.Context(), dir, ".", "no/such.buzz")
+	require.ErrorIs(t, err, ErrObjectMissing)
 	got, err := batch.Read("a.buzz")
 	require.NoError(t, err)
 	assert.Equal(t, "one\n", got)

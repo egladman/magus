@@ -196,11 +196,10 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	if refused != nil {
 		scriptsErr = errors.Join(scriptsErr, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused))
 	}
-	if errs := knowledge.ShardErrors(config.CacheDir(root, globalCfg)); len(errs) > 0 {
-		scriptsErr = errors.Join(scriptsErr, fmt.Errorf("magus graph build: left out of the graph: %s", strings.Join(errs, "; ")))
-	}
+	omitted := knowledge.ShardErrors(config.CacheDir(root, globalCfg))
+	scriptsErr = errors.Join(scriptsErr, graphBuildShardFailure(ctx, omitted))
 	if opts.Format != outputText {
-		rec := graphBuildOutput{Nodes: out.NodeCount, Edges: out.EdgeCount, Reindexed: reindexed, Refused: refused != nil}
+		rec := graphBuildOutput{Nodes: out.NodeCount, Edges: out.EdgeCount, Reindexed: reindexed, Refused: refused != nil, OmittedShards: omitted}
 		if err := emitRecord(opts, rec, []string{root}); err != nil {
 			scriptsErr = errors.Join(scriptsErr, err)
 		}
@@ -209,10 +208,11 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 }
 
 type graphBuildOutput struct {
-	Nodes     int  `json:"nodes"`
-	Edges     int  `json:"edges"`
-	Reindexed int  `json:"reindexed"`
-	Refused   bool `json:"refused"`
+	Nodes         int      `json:"nodes"`
+	Edges         int      `json:"edges"`
+	Reindexed     int      `json:"reindexed"`
+	Refused       bool     `json:"refused"`
+	OmittedShards []string `json:"omitted_shards,omitempty"`
 }
 
 // skipIndex says what was not written and why, and answers nil: an index a hook reads is
@@ -1354,6 +1354,23 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return exit.Reported(exit.Failure)
+	}
+	return nil
+}
+
+// A narrowed test leaves coverage incomplete without invalidating the refreshed symbols.
+// Keep that gap visible, while a corrupt profile or any other shard failure still fails.
+func graphBuildShardFailure(ctx context.Context, omitted []string) error {
+	var failed []string
+	for _, message := range omitted {
+		if strings.HasPrefix(message, "@coverage: coverage profile omits ") {
+			interactive.Hint(ctx, "graph refreshed without complete coverage", attr.Error(errors.New(message)))
+			continue
+		}
+		failed = append(failed, message)
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("magus graph build: left out of the graph: %s", strings.Join(failed, "; "))
 	}
 	return nil
 }

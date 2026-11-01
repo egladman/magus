@@ -1381,3 +1381,21 @@ func (s *reapplySuite) reappliedIs(from, to types.JobState) {
 	want.Validation, want.Validated, want.WriteProof = next.Validation, next.Validated, next.WriteProof
 	s.Equal(want, next)
 }
+
+func (s *appliedChangeLinesSuite) TestIntegratesIsAReportedSpecChange() {
+	prev := types.Job{ID: "integration"}
+	next := prev.Clone()
+	next.Integrates = []string{"worker"}
+	a := Applied{Prev: prev, Next: next, Changed: specChanges(prev, next)}
+	s.Equal([]string{"integrates"}, a.Changed)
+	s.Equal([]string{"integrates +worker"}, a.ChangeLines())
+}
+
+func (s *appliedChangeLinesSuite) TestSoftPathsIsAReportedSpecChange() {
+	prev := types.Job{ID: "integration", SoftPaths: []string{"old.go"}}
+	next := prev.Clone()
+	next.SoftPaths = []string{"new.go"}
+	a := Applied{Prev: prev, Next: next, Changed: specChanges(prev, next)}
+	s.Equal([]string{"soft_paths"}, a.Changed)
+	s.Equal([]string{"soft_paths +new.go -old.go"}, a.ChangeLines())
+}

@@ -484,3 +484,20 @@ func TestGraphBuildSeatRefusesWhatTheWholeBudgetCannotSeat(t *testing.T) {
 	require.ErrorIs(t, err, types.MachineBudgetExhausted)
 	assert.Empty(t, seats.awaited, "no wait admits it")
 }
+
+type graphBuildShardSuite struct{ suite.Suite }
+
+func TestGraphBuildShard(t *testing.T) { suite.Run(t, new(graphBuildShardSuite)) }
+
+func (s *graphBuildShardSuite) TestNarrowedCoverageDoesNotFailASymbolRefresh() {
+	s.NoError(graphBuildShardFailure(s.T().Context(), []string{"@coverage: coverage profile omits 2 director(ies): run test unnarrowed"}))
+}
+
+func (s *graphBuildShardSuite) TestAnInvalidCoverageProfileStillFails() {
+	s.ErrorContains(graphBuildShardFailure(s.T().Context(), []string{"@coverage: invalid coverage mode"}), "invalid coverage mode")
+}
+
+func (s *graphBuildShardSuite) TestAnotherShardFailureIsNotHiddenByPartialCoverage() {
+	err := graphBuildShardFailure(s.T().Context(), []string{"@coverage: coverage profile omits 2 director(ies)", "@symbols: index unreadable"})
+	s.ErrorContains(err, "@symbols: index unreadable")
+}

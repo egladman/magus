@@ -440,12 +440,15 @@ func (s *OutputStore) LatestRefsByTarget() []OutputDescriptor {
 // LatestRefsByTarget, which collapses to the single newest run per target, this keeps every retained
 // execution (the store holds keep-last-K per cache key), so a target's recent history is browsable.
 // The REPRO target is preserved verbatim (with any charm suffix) so a run's exact invocation stays
-// visible; the caller collapses to the bare name for grouping if it wants. Best-effort: an absent or
-// unreadable store, or an undecodable descriptor, yields fewer entries, never an error.
-func (s *OutputStore) ListDescriptors() []OutputDescriptor {
+// visible; the caller collapses to the bare name for grouping if it wants. An absent store
+// is empty; an unreadable store or malformed descriptor is an error.
+func (s *OutputStore) ListDescriptors() ([]OutputDescriptor, error) {
 	keys, err := os.ReadDir(s.outputsDir())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("list output store: %w", err)
 	}
 	var out []OutputDescriptor
 	for _, k := range keys {
@@ -454,16 +457,25 @@ func (s *OutputStore) ListDescriptors() []OutputDescriptor {
 		}
 		dir := filepath.Join(s.outputsDir(), k.Name())
 		files, err := os.ReadDir(dir)
-		if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
 			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("list output key %s: %w", k.Name(), err)
 		}
 		for _, f := range files {
 			if !strings.HasSuffix(f.Name(), descExt) {
 				continue
 			}
 			d, err := readDescriptor(filepath.Join(dir, f.Name()))
-			if err != nil || d.Ref == "" {
+			if errors.Is(err, fs.ErrNotExist) {
 				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("read output descriptor %s: %w", f.Name(), err)
+			}
+			if d.Ref == "" {
+				return nil, fmt.Errorf("output descriptor %s has no ref", f.Name())
 			}
 			out = append(out, d)
 		}
@@ -472,20 +484,24 @@ func (s *OutputStore) ListDescriptors() []OutputDescriptor {
 	// stable regardless of directory-iteration order), so the browser's default top-of-list is the
 	// most recent output.
 	sort.Slice(out, func(i, j int) bool { return newerDescriptor(out[i], out[j]) })
-	return out
+	return out, nil
 }
 
 // LastFullTest is the newest run that passed `test` on the workspace root
 // with no forwarded args and nothing uncommitted, so its revision is what it
 // tested. It reads this checkout's store only. An empty result means the store
 // holds none.
-func (s *OutputStore) LastFullTest() job.FullTest {
-	for _, d := range s.ListDescriptors() {
+func (s *OutputStore) LastFullTest() (job.FullTest, error) {
+	descs, err := s.ListDescriptors()
+	if err != nil {
+		return job.FullTest{}, err
+	}
+	for _, d := range descs {
 		if bareTarget(d.Target) == "test" && d.Project == "." && !d.Failed && !d.Dirty && d.Spell == "" && len(d.ExtraArgs) == 0 && d.Revision != "" {
-			return job.FullTest{Ref: d.Ref, Revision: d.Revision}
+			return job.FullTest{Ref: d.Ref, Revision: d.Revision}, nil
 		}
 	}
-	return job.FullTest{}
+	return job.FullTest{}, nil
 }
 
 // bareTarget strips the charm suffix reproTarget appends ("build:rw" -> "build"), so a

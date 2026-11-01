@@ -39,7 +39,7 @@ func (f cannedPlanSource) StatusSnapshot(context.Context) types.StatusSnapshot {
 // real store returns).
 type cannedPlanOutputs []cache.OutputDescriptor
 
-func (f cannedPlanOutputs) ListDescriptors() []cache.OutputDescriptor { return f }
+func (f cannedPlanOutputs) ListDescriptors() ([]cache.OutputDescriptor, error) { return f, nil }
 
 // planFixture is a two-project workspace exercising all three edge kinds: a same-project
 // dependency (ci -> build), a cross-project target import (app:build -> libs/api:test), and

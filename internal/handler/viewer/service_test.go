@@ -82,7 +82,7 @@ type storedOutputs struct {
 	body  []byte
 }
 
-func (f *storedOutputs) ListDescriptors() []cache.OutputDescriptor { return f.descs }
+func (f *storedOutputs) ListDescriptors() ([]cache.OutputDescriptor, error) { return f.descs, nil }
 
 func (f *storedOutputs) ByRef(string) ([]byte, cache.OutputDescriptor, error) {
 	return f.body, cache.OutputDescriptor{}, nil

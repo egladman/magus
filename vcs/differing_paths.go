@@ -3,6 +3,7 @@ package vcs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path"
 	"path/filepath"
 	"slices"
@@ -21,7 +22,7 @@ type contentReader interface {
 // dir's repository, cleaned and in order. A path neither holds reads the same,
 // and a path one side holds differs. A backend declining the tree diff reads
 // each path, which cannot see a mode change. An error means no answer: the
-// tree diff failed or ctx ended.
+// tree diff or a file read failed, or ctx ended.
 func DifferingPaths(ctx context.Context, r contentReader, dir, a, b string, paths []string) ([]string, error) {
 	if len(paths) == 0 {
 		return nil, nil
@@ -45,6 +46,12 @@ func DifferingPaths(ctx context.Context, r contentReader, dir, a, b string, path
 		theirs, theirsErr := r.ReadFileAt(ctx, dir, b, p)
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+		if oursErr != nil && !errors.Is(oursErr, ErrObjectMissing) {
+			return nil, fmt.Errorf("read %s at %s: %w", p, a, oursErr)
+		}
+		if theirsErr != nil && !errors.Is(theirsErr, ErrObjectMissing) {
+			return nil, fmt.Errorf("read %s at %s: %w", p, b, theirsErr)
 		}
 		if (oursErr != nil) != (theirsErr != nil) || ours != theirs {
 			out = append(out, p)

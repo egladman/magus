@@ -128,6 +128,8 @@ func (a Applied) ChangeLines() []string {
 		"deny_paths":  {a.Prev.DenyPaths, a.Next.DenyPaths},
 		"read_paths":  {a.Prev.ReadPaths, a.Next.ReadPaths},
 		"depends_on":  {a.Prev.DependsOn, a.Next.DependsOn},
+		"integrates":  {a.Prev.Integrates, a.Next.Integrates},
+		"soft_paths":  {a.Prev.SoftPaths, a.Next.SoftPaths},
 		"breaks":      {a.Prev.Breaks, a.Next.Breaks},
 		"goals":       {goalIDs(a.Prev.Goals), goalIDs(a.Next.Goals)},
 	}

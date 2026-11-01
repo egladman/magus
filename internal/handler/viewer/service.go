@@ -171,7 +171,10 @@ func (s *Service) StreamEvents(ctx context.Context, req *connect.Request[viewerv
 
 // ListOutputs returns the stored runs' descriptors, newest first.
 func (s *Service) ListOutputs(_ context.Context, req *connect.Request[viewerv1.ListOutputsRequest]) (*connect.Response[viewerv1.ListOutputsResponse], error) {
-	all := s.outputs.ListDescriptors()
+	all, err := s.outputs.ListDescriptors()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
 
 	from, to, next, err := page(len(all), req.Msg.GetPageToken(), int(req.Msg.GetPageSize()))
 	if err != nil {

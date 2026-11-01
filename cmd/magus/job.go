@@ -421,11 +421,11 @@ func reportForkFacts(ctx context.Context, store *job.Store, root string) {
 	var last job.FullTest
 	dir, dirErr := magus.ResolveCacheDir(root, cliOptions()...)
 	if dirErr == nil {
-		last = cache.NewOutputStore(dir).LastFullTest()
+		last, dirErr = cache.NewOutputStore(dir).LastFullTest()
 	}
 	facts := job.ForkFacts(ctx, root, rows, last)
 	if dirErr != nil {
-		facts.TestUnknown = fmt.Sprintf("the output store could not be located: %s", dirErr)
+		facts.TestUnknown = fmt.Sprintf("the output store could not be read: %s", dirErr)
 	}
 	slog.InfoContext(ctx, job.ForkFactsLine(facts), attr.Notice("note"))
 }

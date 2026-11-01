@@ -2,6 +2,8 @@ package vcs
 
 import (
 	"context"
+	"fmt"
+	"io/fs"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -71,4 +73,45 @@ func (s *differingPathsSuite) TestNoPathsAsksNothing() {
 
 	s.Require().NoError(err)
 	s.Empty(got)
+}
+
+type unreadableRevision struct {
+	treeless
+	revision string
+}
+
+func (r unreadableRevision) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
+	if r.revision == "" || rev == r.revision {
+		return "", fmt.Errorf("read revision: %w", fs.ErrPermission)
+	}
+	return r.gitVCS.ReadFileAt(ctx, root, rev, path)
+}
+
+func (s *differingPathsSuite) TestTwoFailedReadsDoNotProveEqualContent() {
+	got, err := DifferingPaths(s.T().Context(), unreadableRevision{}, s.repo.Root(), s.a, s.b, []string{"same.txt"})
+	s.ErrorIs(err, fs.ErrPermission)
+	s.Nil(got)
+}
+
+func (s *differingPathsSuite) TestAFailedEarlierReadDoesNotProveADeletion() {
+	got, err := DifferingPaths(s.T().Context(), unreadableRevision{revision: s.a}, s.repo.Root(), s.a, s.b, []string{"same.txt"})
+	s.ErrorIs(err, fs.ErrPermission)
+	s.Nil(got)
+}
+
+func (s *differingPathsSuite) TestAFailedLaterReadDoesNotProveAnAddition() {
+	got, err := DifferingPaths(s.T().Context(), unreadableRevision{revision: s.b}, s.repo.Root(), s.a, s.b, []string{"same.txt"})
+	s.ErrorIs(err, fs.ErrPermission)
+	s.Nil(got)
+}
+
+func (s *differingPathsSuite) TestAMissingRevisionPathHasATypedError() {
+	_, err := (gitVCS{}).ReadFileAt(s.T().Context(), s.repo.Root(), s.a, "on-neither.txt")
+	s.ErrorIs(err, ErrObjectMissing)
+}
+
+func (s *differingPathsSuite) TestAnInvalidRevisionIsNotAMissingPath() {
+	_, err := (gitVCS{}).ReadFileAt(s.T().Context(), s.repo.Root(), "not-a-revision", "same.txt")
+	s.Error(err)
+	s.NotErrorIs(err, ErrObjectMissing)
 }
