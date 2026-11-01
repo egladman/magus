@@ -268,15 +268,26 @@ func brokerStop(ctx context.Context, args []string) error {
 	}); err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	c, err := broker.Dial(ctx, broker.DefaultAddr())
 	if err != nil {
-		return stopUnanswering(ctx, f.Services, err)
+		err = stopUnanswering(ctx, f.Services, err)
+		if err == nil && opts.Format != outputText {
+			return emitRecord(opts, brokerStopOutput{Stopped: true}, []string{"broker"})
+		}
+		return err
 	}
 	defer func() { _ = c.Close() }()
 	if f.Services {
 		n, err := c.StopServices(ctx)
 		if err != nil {
 			return fmt.Errorf("broker stop: %w", err)
+		}
+		if opts.Format != outputText {
+			return emitRecord(opts, brokerStopOutput{Services: int(n)}, []string{"services"})
 		}
 		slog.InfoContext(ctx, fmt.Sprintf("stopped %d hosted service(s); the broker is still running", n), attr.Notice(""), attr.Component("magus"))
 		return nil
@@ -294,8 +305,17 @@ func brokerStop(ctx context.Context, args []string) error {
 	} else if err != nil {
 		return fmt.Errorf("broker stop: %w", err)
 	}
+	if opts.Format != outputText {
+		return emitRecord(opts, brokerStopOutput{Stopped: true, PID: st.PID}, []string{strconv.Itoa(st.PID)})
+	}
 	slog.InfoContext(ctx, fmt.Sprintf("stopped broker (pid %d)", st.PID), attr.Notice(""), attr.Component("magus"))
 	return nil
+}
+
+type brokerStopOutput struct {
+	Stopped  bool `json:"stopped"`
+	PID      int  `json:"pid"`
+	Services int  `json:"services"`
 }
 
 // brokerDrainWait is how long a signalled broker gets per SIGTERM. A var so a

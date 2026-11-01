@@ -62,23 +62,38 @@ func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args [
 	if lease != "" {
 		return fmt.Errorf("magus agent harness install: bound job %q cannot change a harness skill tree", lease)
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	text := opts.Format == outputText
 	ids, ctx, err := resolveHarnessIDs(ctx, rootOverride, *id)
 	if err != nil {
 		return fmt.Errorf("magus agent harness install: %w", err)
 	}
+	rec := agentHarnessInstallOutput{DryRun: globalCfg.DryRun, Harnesses: []agentHarnessInstallResult{}}
 	for _, harnessID := range ids {
 		skills, err := agent.LoadHarnessSkills(ctx, root, harnessID)
 		if err != nil {
 			return fmt.Errorf("magus agent harness install: %w", err)
 		}
+		result := agentHarnessInstallResult{ID: harnessID, Skills: []string{}, Removed: []string{}}
 		for _, path := range skills.Paths {
-			if err := installHarnessSkillPath(ctx, root, path, skills.Form, globalCfg.DryRun); err != nil {
+			written, removed, err := installHarnessSkillPath(ctx, root, path, skills.Form, globalCfg.DryRun, text)
+			if err != nil {
 				return err
 			}
+			result.Skills = append(result.Skills, written...)
+			result.Removed = append(result.Removed, removed...)
 		}
 		changed, err := agent.InstallHarnessTools(ctx, root, harnessID, globalCfg.DryRun)
 		if err != nil {
 			return fmt.Errorf("magus agent harness install: %w", err)
+		}
+		result.Tools = nonNil(changed)
+		rec.Harnesses = append(rec.Harnesses, result)
+		if !text {
+			continue
 		}
 		verb := "wrote"
 		if globalCfg.DryRun {
@@ -88,6 +103,9 @@ func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args [
 			fmt.Fprintf(os.Stdout, "%s %s tool rows: %s\n", verb, harnessID, p)
 		}
 	}
+	if !text {
+		return emitRecord(opts, rec, ids)
+	}
 	return nil
 }
 
@@ -96,25 +114,27 @@ func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args [
 // asking, so what it writes and what it deletes is the only thing standing
 // between a person and a skill that left without being named. Same wording as
 // `magus agent install`, which reports the same two lists.
-func installHarnessSkillPath(ctx context.Context, root, path string, form types.SkillForm, dryRun bool) error {
+func installHarnessSkillPath(ctx context.Context, root, path string, form types.SkillForm, dryRun, text bool) (written, removed []string, err error) {
 	if dryRun {
 		planned, err := agentSkills.PlanSkillTree(root, path, form)
 		if err != nil {
-			return err
-		}
-		for _, file := range planned {
-			fmt.Fprintln(os.Stdout, file)
+			return nil, nil, err
 		}
 		stale, err := agentSkills.StaleSkillDirs(root, path, form)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
-		reportRemovedSkills(os.Stdout, stale, true)
-		return nil
+		if text {
+			for _, file := range planned {
+				fmt.Fprintln(os.Stdout, file)
+			}
+			reportRemovedSkills(os.Stdout, stale, true)
+		}
+		return planned, stale, nil
 	}
 	written, changed, err := agentSkills.WriteSkillTree(root, path, true, form)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	// Logged per file, so the line says whether this install moved that file's bytes.
 	// A reinstall that rewrites thirty unchanged files and one real update read the same
@@ -130,12 +150,26 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form types.
 		}
 		slog.With(attr.Component("agent harness install")).InfoContext(ctx, "wrote", slog.String("path", file))
 	}
-	removed, err := agentSkills.PruneSkillTree(root, path, form)
+	removed, err = agentSkills.PruneSkillTree(root, path, form)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	reportRemovedSkills(os.Stdout, removed, false)
-	return nil
+	if text {
+		reportRemovedSkills(os.Stdout, removed, false)
+	}
+	return written, removed, nil
+}
+
+type agentHarnessInstallOutput struct {
+	DryRun    bool                        `json:"dry_run"`
+	Harnesses []agentHarnessInstallResult `json:"harnesses"`
+}
+
+type agentHarnessInstallResult struct {
+	ID      string   `json:"id"`
+	Skills  []string `json:"skills"`
+	Removed []string `json:"removed"`
+	Tools   []string `json:"tools"`
 }
 
 // checkoutLease resolves the lease a CLI call acts under in root's checkout through

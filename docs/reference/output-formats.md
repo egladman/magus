@@ -18,9 +18,22 @@ Every magus command that prints a record takes the same `-o` values:
 | `template=<go-template>` | the record through a [Go template](https://pkg.go.dev/text/template) |
 | `template`               | the fields a template can read, with their types                     |
 
-A few commands add a format of their own, such as `-o dot` on `graph deps`. A command
-with no record, such as `server stop`, refuses `-o` with exit 2 before it does anything,
-wherever the flag is written. A format never falls back to another one.
+A few commands add a format of their own, such as `-o dot` on `graph deps`. A format never
+falls back to another one.
+
+A command that reports an outcome, such as `server stop` or `config set`, prints it as a
+record: what it did, where, and how much. Under `--dry-run` the record says what would
+happen.
+
+A command whose stdout is not a record refuses `-o` with exit 2 before it does anything,
+wherever the flag is written. These are the ones whose stdout is a document or a stream
+(`completion`, `agent starter`, `config cache export`, `queue plan`, `watch`), a
+server that runs until stopped (`server start`, `broker`, `mcp`), or a secret that `--tee`
+would copy into a file (`config token print`). `magus <command> -o json` tells you which
+kind you have: it either prints a record or exits 2.
+
+A few commands take `-o` only in some forms. `graph pull` needs `--out`, since stdout is the
+graph otherwise. `agent install --tar`, `init --dry-run` and `server stop --pools` refuse it.
 
 `--tee <file>` also appends the structured output to a file, and `-s` with `--tee` leaves
 stdout empty.

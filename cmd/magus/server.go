@@ -619,7 +619,14 @@ func serverStop(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	if tf.Pools {
+		if opts.Format != outputText {
+			return exit.Usagef("magus server stop --pools: -o is not supported")
+		}
 		return stopStalePools(ctx)
 	}
 
@@ -632,6 +639,12 @@ func serverStop(ctx context.Context, args []string) error {
 		return qerr
 	}
 	if qerr != nil {
+		if opts.Format != outputText {
+			if err := emitRecord(opts, serverStopOutput{Address: addr}, []string{}); err != nil {
+				return err
+			}
+			return exit.Reported(exit.Failure)
+		}
 		slog.ErrorContext(ctx, "no server is running at "+addr, attr.Notice(""), attr.Component("magus"))
 		return exit.Reported(exit.Failure)
 	}
@@ -644,12 +657,41 @@ func serverStop(ctx context.Context, args []string) error {
 	if err := waitSocketGone(ctx, addr, stopTimeout); err != nil {
 		return fmt.Errorf("server stop: server (pid %d) on %s did not stop within %s", st.ParentPID, addr, stopTimeout)
 	}
+	if opts.Format != outputText {
+		return emitRecord(opts, serverStopOutput{Stopped: true, PID: int(st.ParentPID), Address: addr}, []string{addr})
+	}
 	if st.ParentPID != 0 {
 		slog.InfoContext(ctx, fmt.Sprintf("stopped server (pid %d)", st.ParentPID), attr.Notice(""), attr.Component("magus"))
 	} else {
 		slog.InfoContext(ctx, "stopped server", attr.Notice(""), attr.Component("magus"))
 	}
 	return nil
+}
+
+type serverStopOutput struct {
+	Stopped bool   `json:"stopped"`
+	PID     int    `json:"pid"`
+	Address string `json:"address"`
+}
+
+type serverReloadOutput struct {
+	Running bool `json:"running"`
+	Dropped int  `json:"dropped"`
+	Busy    int  `json:"busy"`
+}
+
+type serverRotateOutput struct {
+	Removed    int   `json:"removed"`
+	FreedBytes int64 `json:"freed_bytes"`
+}
+
+type serverPrunePreservedOutput struct {
+	VCS     string   `json:"vcs"`
+	Dropped []string `json:"dropped"`
+}
+
+type serverRotateActivitiesOutput struct {
+	CacheDir string `json:"cache_dir"`
 }
 
 // stopTimeout bounds how long a stop waits to confirm a server or broker is gone after a
@@ -710,15 +752,33 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		jobRunUsage()
 		return nil
 	}
+	args, err := commandParse("job run", args, nil)
+	if err != nil {
+		return err
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		jobRunUsage()
+		return nil
+	}
 	name := args[0]
 	entry, ok := job.Lookup(name)
 	if !ok {
 		return fmt.Errorf("magus job run: no job named %q, run `%s` to list them", name, hint.JobRun)
 	}
 	addr := resolveServerAddr("")
+	report := func(outcome, invocation string) error {
+		if opts.Format == outputText {
+			return nil
+		}
+		return emitRecord(opts, jobRunOutput{Job: name, Outcome: outcome, Invocation: invocation}, []string{name})
+	}
 	if !proc.SocketLive(ctx, addr) {
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncNoServer})
-		return nil // no server: quietly do nothing so a checkout hook is never delayed
+		return report("no-server", "") // no server: quietly do nothing so a checkout hook is never delayed
 	}
 	argv := entry.Argv
 	if name == job.NameCheckDrift {
@@ -730,7 +790,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		// trigger (hook, RPC, or manual submit) will catch up.
 		slog.With(attr.Component("server job")).DebugContext(ctx, "submit failed", slog.String("job", name), attr.Error(err))
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncRefused, Detail: err.Error()})
-		return nil
+		return report("refused", "")
 	}
 	if inv == "" { // the server coalesced this into an already-running job of the same kind
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncCoalesced})
@@ -739,8 +799,21 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncSubmitted, Job: inv})
 		slog.InfoContext(ctx, fmt.Sprintf("submitted %s in the background (job %s)", name, inv), attr.Notice(""), attr.Component("magus"))
 	}
+	if opts.Format != outputText {
+		outcome := "submitted"
+		if inv == "" {
+			outcome = "coalesced"
+		}
+		return report(outcome, fmt.Sprint(inv))
+	}
 	printJobWatchHint(ctx)
 	return nil
+}
+
+type jobRunOutput struct {
+	Job        string `json:"job"`
+	Outcome    string `json:"outcome"`
+	Invocation string `json:"invocation,omitempty"`
 }
 
 // recordSyncRequest leaves what a sync-graph submit did where a later not-indexed verdict
@@ -859,11 +932,18 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 	}); err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return fmt.Errorf("server rotate-activities: %w", err)
 	}
 	trail.Rotate(m.CacheDir())
+	if opts.Format != outputText {
+		return emitRecord(opts, serverRotateActivitiesOutput{CacheDir: m.CacheDir()}, []string{m.CacheDir()})
+	}
 	return nil
 }
 
@@ -883,12 +963,19 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	}); err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return fmt.Errorf("server rotate-logs: %w", err)
 	}
 	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns, cache.DefaultMaxRunBytes, globalCfg.Server.Maintenance.RotateLogs)
 	slog.InfoContext(ctx, "rotated run-logs", slog.Int("removed", removed), slog.Int64("bytes_freed", freed))
+	if opts.Format != outputText {
+		return emitRecord(opts, serverRotateOutput{Removed: removed, FreedBytes: freed}, []string{m.CacheDir()})
+	}
 	return nil
 }
 
@@ -915,6 +1002,10 @@ func serverPrunePreserved(ctx context.Context, root string, args []string) error
 	}); err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return fmt.Errorf("server %s: %w", job.NamePrunePreserved, err)
@@ -929,6 +1020,13 @@ func serverPrunePreserved(ctx context.Context, root string, args []string) error
 	}
 	slog.InfoContext(ctx, "pruned preserved captures",
 		slog.Int("dropped", len(dropped)), slog.String("vcs", res.Name))
+	if opts.Format != outputText {
+		names := make([]string, 0, len(dropped))
+		for _, d := range dropped {
+			names = append(names, fmt.Sprint(d))
+		}
+		return emitRecord(opts, serverPrunePreservedOutput{VCS: res.Name, Dropped: names}, names)
+	}
 	return nil
 }
 
@@ -1042,6 +1140,10 @@ func serverReload(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 
 	// No server means nothing is holding a stale config: every one-shot command reads
 	// magus.yaml as it runs. Saying so and exiting 0 is the honest answer: this is "make
@@ -1051,6 +1153,9 @@ func serverReload(ctx context.Context, args []string) error {
 		if proc.ServerOutdated(qerr) {
 			return qerr
 		}
+		if opts.Format != outputText {
+			return emitRecord(opts, serverReloadOutput{}, []string{addr})
+		}
 		slog.InfoContext(ctx, "no server is running; every command already reads the current config", attr.Notice(""), attr.Component("magus"))
 		return nil
 	}
@@ -1058,6 +1163,9 @@ func serverReload(ctx context.Context, args []string) error {
 	dropped, busy, err := proc.ReloadConfig(ctx, addr)
 	if err != nil {
 		return fmt.Errorf("server reload: %w", err)
+	}
+	if opts.Format != outputText {
+		return emitRecord(opts, serverReloadOutput{Running: true, Dropped: int(dropped), Busy: int(busy)}, []string{addr})
 	}
 	switch {
 	case dropped == 0 && busy == 0:

@@ -125,8 +125,15 @@ func agentInstallCommand(ctx context.Context, args []string) error {
 		return fmt.Errorf("agent install --skill-form: %w", err)
 	}
 	dests := fset.Args()
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 
 	if af.Tar {
+		if opts.Format != outputText {
+			return exit.Usagef("magus agent install --tar: -o is not supported, stdout is the archive")
+		}
 		if len(dests) > 1 {
 			return fmt.Errorf("agent install --tar: at most one destination path prefix is allowed (the path inside the tar archive)")
 		}
@@ -167,6 +174,9 @@ func agentInstallCommand(ctx context.Context, args []string) error {
 		changed = append(changed, ch...)
 		removed = append(removed, r...)
 	}
+	if opts.Format != outputText {
+		return emitRecord(opts, agentInstallOutput{DryRun: af.DryRun, Written: nonNil(written), Changed: nonNil(changed), Removed: nonNil(removed)}, written)
+	}
 	for _, p := range written {
 		if af.DryRun {
 			slog.With(attr.Component("agent install")).InfoContext(ctx, "would write", slog.String("path", p))
@@ -177,6 +187,20 @@ func agentInstallCommand(ctx context.Context, args []string) error {
 	reportRemovedSkills(os.Stdout, removed, af.DryRun)
 	printAgentInstallNextSteps(ctx, af.Dir, written, changed, form, af.DryRun)
 	return nil
+}
+
+type agentInstallOutput struct {
+	DryRun  bool     `json:"dry_run"`
+	Written []string `json:"written"`
+	Changed []string `json:"changed"`
+	Removed []string `json:"removed"`
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // reportRemovedSkills prints one line per removal on stdout, so a delete shows at the

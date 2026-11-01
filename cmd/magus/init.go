@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/settle"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -87,8 +88,15 @@ func initCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	if inf.Global && inf.Local {
 		return fmt.Errorf("init: --global and --local are mutually exclusive")
+	}
+	if inf.DryRun && opts.Format != outputText {
+		return exit.Usagef("magus init: -o is not supported with --dry-run, the plan is prose")
 	}
 
 	// --root only ever scoped the merge-driver workspace load; the config write (the
@@ -118,6 +126,9 @@ func initCommand(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		logConfigInit(ctx, cfgPath, wrote)
+		if opts.Format != outputText {
+			return emitRecord(opts, initOutput{Config: cfgPath, Wrote: wrote, Global: true}, []string{cfgPath})
+		}
 		printInitNextSteps(ctx, cfgPath, false, false)
 		return nil
 	}
@@ -155,8 +166,19 @@ func initCommand(ctx context.Context, root string, args []string) error {
 	}
 	logConfigInit(ctx, cfgPath, wrote)
 
+	if opts.Format != outputText {
+		return emitRecord(opts, initOutput{Config: cfgPath, Wrote: wrote, Local: isLocal, Workspace: true}, []string{cfgPath})
+	}
 	printInitNextSteps(ctx, cfgPath, true, isLocal)
 	return nil
+}
+
+type initOutput struct {
+	Config    string `json:"config"`
+	Wrote     bool   `json:"wrote"`
+	Global    bool   `json:"global"`
+	Local     bool   `json:"local"`
+	Workspace bool   `json:"workspace"`
 }
 
 // judgeDir is the directory whose repository orders this binary against the one that

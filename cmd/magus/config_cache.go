@@ -85,6 +85,10 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 
 	if pf.Remote {
 		if pf.OlderThan <= 0 && pf.KeepLast <= 0 {
@@ -97,6 +101,9 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 		}
 		if err := m.PruneRemoteCache(ctx, pf.OlderThan, pf.KeepLast, pf.DryRun); err != nil {
 			return fmt.Errorf("magus config cache prune --remote: %w", err)
+		}
+		if opts.Format != outputText {
+			return emitRecord(opts, configCachePruneOutput{Remote: true, DryRun: pf.DryRun}, []string{"remote"})
 		}
 		cacheNotice(ctx, "prune", "remote prune complete")
 		return nil
@@ -121,12 +128,36 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus config cache prune: %w", err)
 	}
 
+	if opts.Format != outputText {
+		return emitRecord(opts, configCachePruneOutput{DryRun: pf.DryRun, Entries: n, FreedBytes: freed}, []string{"local"})
+	}
 	if pf.DryRun {
 		cacheNotice(ctx, "prune", fmt.Sprintf("would remove %d entries (%s)", n, fmtBytes(freed)))
 	} else {
 		cacheNotice(ctx, "prune", fmt.Sprintf("removed %d entries (%s freed)", n, fmtBytes(freed)))
 	}
 	return nil
+}
+
+type configCachePruneOutput struct {
+	Remote     bool  `json:"remote"`
+	DryRun     bool  `json:"dry_run"`
+	Entries    int   `json:"entries"`
+	FreedBytes int64 `json:"freed_bytes"`
+}
+
+type configCacheImportOutput struct {
+	Remote   bool                  `json:"remote"`
+	Restored bool                  `json:"restored"`
+	Spells   []configCacheSpellRow `json:"spells"`
+}
+
+type configCacheSpellRow struct {
+	Spell   string `json:"spell,omitempty"`
+	Key     string `json:"key"`
+	Files   int    `json:"files"`
+	Bytes   int64  `json:"bytes"`
+	Skipped int    `json:"skipped"`
 }
 
 func configCacheExport(ctx context.Context, root string, args []string) error {
@@ -229,6 +260,10 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	if imf.Remote && len(fs.Args()) > 0 {
 		return exit.Usagef("magus config cache import: --remote reads no file")
 	}
@@ -241,6 +276,19 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 	if imf.Remote {
 		// Each refusal is already logged as cache.spell_cache.refused.
 		restored, err := m.RestoreSpellCaches(ctx)
+		if opts.Format != outputText {
+			if err != nil {
+				return fmt.Errorf("config cache import: %w", err)
+			}
+			rec := configCacheImportOutput{Remote: true, Spells: []configCacheSpellRow{}}
+			var names []string
+			for _, s := range restored {
+				rec.Spells = append(rec.Spells, configCacheSpellRow{Spell: s.Spell, Key: s.Key, Files: int(s.Files), Bytes: int64(s.Bytes), Skipped: int(s.Skipped)})
+				names = append(names, s.Spell)
+			}
+			rec.Restored = len(restored) > 0
+			return emitRecord(opts, rec, names)
+		}
 		for _, s := range restored {
 			switch {
 			case s.Inactive:
@@ -277,6 +325,9 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 
 	if err := m.ImportCache(ctx, r); err != nil {
 		return fmt.Errorf("config cache import: %w", err)
+	}
+	if opts.Format != outputText {
+		return emitRecord(opts, configCacheImportOutput{Restored: true, Spells: []configCacheSpellRow{}}, []string{"local"})
 	}
 	cacheNotice(ctx, "import", "restored cache")
 	return nil

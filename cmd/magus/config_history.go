@@ -81,6 +81,10 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	if hf.History == "" {
 		return errors.New("magus config history passed: --history is required (or set history_path in magus.yaml)")
 	}
@@ -96,17 +100,23 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 	// anyway (it is inside the shipped action), and erroring would paint every run red
 	// for honoring its own configuration.
 	if !cfg.CI.RecordRuns {
+		if opts.Format != outputText {
+			return emitRecord(opts, configHistoryPassedOutput{Ref: hf.Ref, Commit: hf.Commit, Target: hf.Target, Status: string(st), HistoryPath: hf.History}, []string{hf.Ref})
+		}
 		slog.InfoContext(ctx, "config history passed: run log disabled by ci.record_runs; recording nothing",
 			slog.String("ref", hf.Ref), slog.String("commit", hf.Commit))
 		return nil
 	}
 
-	err := forecast.UpdateHistory(ctx, hf.History, func(h *forecast.History) error {
+	err = forecast.UpdateHistory(ctx, hf.History, func(h *forecast.History) error {
 		h.RecordRun(forecast.Run{Commit: hf.Commit, Ref: hf.Ref, Target: hf.Target, Status: st}, time.Now())
 		return nil
 	})
 	if err != nil {
 		return err
+	}
+	if opts.Format != outputText {
+		return emitRecord(opts, configHistoryPassedOutput{Recorded: true, Ref: hf.Ref, Commit: hf.Commit, Target: hf.Target, Status: string(st), HistoryPath: hf.History}, []string{hf.Ref})
 	}
 	slog.InfoContext(ctx, "config history run recorded",
 		slog.String("ref", hf.Ref),
@@ -115,6 +125,39 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 		slog.String("status", string(st)),
 		slog.String("history_path", hf.History))
 	return nil
+}
+
+type configHistoryPassedOutput struct {
+	Recorded    bool   `json:"recorded"`
+	Ref         string `json:"ref"`
+	Commit      string `json:"commit"`
+	Target      string `json:"target"`
+	Status      string `json:"status"`
+	HistoryPath string `json:"history_path"`
+}
+
+type configHistoryImportOutput struct {
+	Files       int    `json:"files"`
+	Projects    int    `json:"projects"`
+	HistoryPath string `json:"history_path"`
+}
+
+type configHistoryDedupOutput struct {
+	ReportFiles     int                      `json:"report_files"`
+	TotalMisses     int                      `json:"total_misses"`
+	UniqueKeys      int                      `json:"unique_keys"`
+	RedundantBuilds int                      `json:"redundant_builds"`
+	RedundantMs     int64                    `json:"redundant_ms"`
+	Approximate     bool                     `json:"approximate"`
+	Top             []configHistoryDedupItem `json:"top"`
+}
+
+type configHistoryDedupItem struct {
+	Project     string `json:"project"`
+	Target      string `json:"target"`
+	Hash        string `json:"hash"`
+	ExtraBuilds int    `json:"extra_builds"`
+	ExtraMs     int64  `json:"extra_ms"`
 }
 
 // runHistoryImport folds one or more runtime-history JSON files into --history
@@ -137,6 +180,10 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
 		return err
 	}
 	if imf.History == "" {
@@ -167,7 +214,7 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 		}
 	}
 	var projects int
-	err := forecast.UpdateHistory(ctx, imf.History, func(h *forecast.History) error {
+	err = forecast.UpdateHistory(ctx, imf.History, func(h *forecast.History) error {
 		for i := range loaded {
 			h.Merge(&loaded[i])
 		}
@@ -176,6 +223,9 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 	})
 	if err != nil {
 		return err
+	}
+	if opts.Format != outputText {
+		return emitRecord(opts, configHistoryImportOutput{Files: len(loaded), Projects: projects, HistoryPath: imf.History}, []string{imf.History})
 	}
 	slog.InfoContext(ctx, "config history import complete",
 		slog.Int("files", len(loaded)),
@@ -213,6 +263,10 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 		return err
 	}
 
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	reportPaths := fs.Args()
 	if len(reportPaths) == 0 {
 		return errors.New("magus config history dedup: pass at least one report path")
@@ -250,6 +304,19 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 		approxNote = " (approximate: some events missing hash field - upgrade magus to get exact dedup)"
 	}
 
+	if opts.Format != outputText {
+		rec := configHistoryDedupOutput{
+			ReportFiles: len(reportPaths), TotalMisses: res.TotalMisses, UniqueKeys: res.UniqueKeys,
+			RedundantBuilds: res.RedundantBuilds, RedundantMs: int64(res.RedundantMs), Approximate: res.Approx,
+			Top: []configHistoryDedupItem{},
+		}
+		names := []string{}
+		for _, e := range res.Top {
+			rec.Top = append(rec.Top, configHistoryDedupItem{Project: e.Project, Target: e.Target, Hash: e.Hash, ExtraBuilds: int(e.ExtraBuilds), ExtraMs: int64(e.ExtraMs)})
+			names = append(names, e.Project+":"+e.Target)
+		}
+		return emitRecord(opts, rec, names)
+	}
 	fmt.Printf("cross-shard dedup analysis%s\n", approxNote)
 	fmt.Printf("  report files:    %d\n", len(reportPaths))
 	fmt.Printf("  total misses:    %d\n", res.TotalMisses)

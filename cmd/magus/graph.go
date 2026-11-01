@@ -142,6 +142,10 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	if err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	release, waitedOn, err := acquireGraphBuild(ctx, root)
 	if err != nil {
 		return err
@@ -154,6 +158,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	}
 
 	var refused error
+	var reindexed int
 	if bf.Symbols {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
@@ -161,6 +166,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		}
 		defer func() { _ = m.Close() }()
 		n, rerr := m.ReindexSymbols(ctx)
+		reindexed = int(n)
 		slog.InfoContext(ctx, fmt.Sprintf("reindexed %d symbol index(es)", n), attr.Notice(""))
 		if rerr != nil {
 			// A missing or failing indexer must not block the domain-graph rebuild.
@@ -194,7 +200,20 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	if errs := knowledge.ShardErrors(config.CacheDir(root, globalCfg)); len(errs) > 0 {
 		scriptsErr = errors.Join(scriptsErr, fmt.Errorf("magus graph build: left out of the graph: %s", strings.Join(errs, "; ")))
 	}
+	if opts.Format != outputText {
+		rec := graphBuildOutput{Nodes: int(out.NodeCount), Edges: int(out.EdgeCount), Reindexed: reindexed, Refused: refused != nil}
+		if err := emitRecord(opts, rec, []string{root}); err != nil {
+			scriptsErr = errors.Join(scriptsErr, err)
+		}
+	}
 	return scriptsErr
+}
+
+type graphBuildOutput struct {
+	Nodes     int  `json:"nodes"`
+	Edges     int  `json:"edges"`
+	Reindexed int  `json:"reindexed"`
+	Refused   bool `json:"refused"`
 }
 
 // skipIndex says what was not written and why, and answers nil: an index a hook reads is

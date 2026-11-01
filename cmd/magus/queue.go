@@ -395,6 +395,10 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if err := queueRequired("ls", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
+	opts, err := output.Parse(global.output)
+	if err != nil {
+		return err
+	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
 		return err
@@ -418,7 +422,16 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 		At: started.Unix(), ElapsedMS: time.Since(started).Milliseconds(),
 	}
 	// One line, so a document on stdout is itself a JSONL record.
-	if err := queue.WriteChanges(e.stdout, changes); err != nil {
+	var doc bytes.Buffer
+	if err := queue.WriteChanges(&doc, changes); err != nil {
+		return err
+	}
+	if opts.Format == outputText {
+		_, err = e.stdout.Write(doc.Bytes())
+	} else {
+		err = e.writeDocument(opts, doc.Bytes(), types.Changes{}, []string{f.Base})
+	}
+	if err != nil {
 		return err
 	}
 	// Kept for every offline reader: ls jobs, describe job and magus\job.list.
