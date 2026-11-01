@@ -508,6 +508,32 @@ the three guard hooks. It is not a guard: it judges nothing, prints nothing, and
 exits 0 whatever happens. `magus session checkpoint --note "..."` writes the same
 record by hand, which is the form to reach for when you are the one stopping.
 
+## Watching free disk space
+
+Wire `UserPromptSubmit` to
+[`magus-reclaim-disk.buzz`](guard-templates.md#magus-reclaim-diskbuzz) and each
+turn costs one stat of the free-space store until a minute has passed. Past that
+it says what the store holds that nobody was told, and starts one detached tick
+that trims caches when free space runs low.
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-reclaim-disk.buzz -- --agent-name claude-code",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ## Judging the reply a turn ends with
 
 The spell does not wire this. The reply check judges your agent's replies against the
@@ -660,8 +686,8 @@ reads the marketplace only once the person trusts the folder. The settings do no
 install the mod: each person runs the line above once, or trusts the folder and
 starts a session, and until then the mod never appears. `magus agent harness verify
 claude-code-mod` and `magus doctor` count the mod as installed when
-`installed_plugins.json` lists it or when `cache/magus/magus/` holds a version
-directory, both under the `plugins` directory of `CLAUDE_CONFIG_DIR` (`~/.claude`
+`installed_plugins.json` lists it or when the cache directory for the `magus`
+plugin holds a version directory, both under the `plugins` directory of `CLAUDE_CONFIG_DIR` (`~/.claude`
 by default) or under `CLAUDE_CODE_PLUGIN_CACHE_DIR` when that is set. Claude Code
 caches a plugin from a relative-path marketplace without recording it, which the
 cache check covers. Verify fails naming the line above while the workspace enables
