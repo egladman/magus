@@ -138,12 +138,21 @@ linters:
     # types is the near-leaf domain package; see the rule below.
     - depguard
 
+    # A calendar step or a local zone makes a result depend on where and when it runs.
+    # Each kept site carries //nolint:forbidigo with its reason.
+    - forbidigo
+
     # A new init() fails lint. Each kept site carries //nolint:gochecknoinits with its
     # reason, which nolintlint requires, so adding one is a reviewable exception.
     # Generated protobuf code and test files are excluded by path below.
     - gochecknoinits
 
   settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^time\.Time\.AddDate$
+          msg: AddDate steps calendar days in the receiver's zone; use t.UTC().AddDate or Add(n*24*time.Hour)
     depguard:
       rules:
         # types/doc.go's contract: no filesystem, VCS, or process execution. What it
