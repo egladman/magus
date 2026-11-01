@@ -476,11 +476,12 @@ func (s *OutputStore) ListDescriptors() []OutputDescriptor {
 }
 
 // LastFullTest is the newest run that passed `test` on the workspace root
-// with no forwarded args. It reads this checkout's store only. An empty
-// result means the store holds none.
+// with no forwarded args and nothing uncommitted, so its revision is what it
+// tested. It reads this checkout's store only. An empty result means the store
+// holds none.
 func (s *OutputStore) LastFullTest() job.FullTest {
 	for _, d := range s.ListDescriptors() {
-		if bareTarget(d.Target) == "test" && d.Project == "." && !d.Failed && d.Spell == "" && len(d.ExtraArgs) == 0 && d.Revision != "" {
+		if bareTarget(d.Target) == "test" && d.Project == "." && !d.Failed && !d.Dirty && d.Spell == "" && len(d.ExtraArgs) == 0 && d.Revision != "" {
 			return job.FullTest{Ref: d.Ref, Revision: d.Revision}
 		}
 	}

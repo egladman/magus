@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -517,6 +518,22 @@ func TestLastFullTestIsTheNewestPassedRootTest(t *testing.T) {
 	mustPersist(t, s, "build", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "build", TimestampMs: 500, Revision: "b"})
 
 	assert.Equal(t, job.FullTest{Ref: want, Revision: "abc"}, s.LastFullTest())
+}
+
+type LastFullTestSuite struct {
+	suite.Suite
+}
+
+func TestLastFullTestSuite(t *testing.T) {
+	suite.Run(t, new(LastFullTestSuite))
+}
+
+func (s *LastFullTestSuite) TestARunOnADirtyTreeIsNotAFullTestOfItsRevision() {
+	store := NewOutputStore(s.T().TempDir())
+	clean := mustPersist(s.T(), store, "clean", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test", TimestampMs: 100, Revision: "abc"})
+	mustPersist(s.T(), store, "dirty", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test", TimestampMs: 200, Revision: "def", Dirty: true})
+
+	s.Equal(job.FullTest{Ref: clean, Revision: "abc"}, store.LastFullTest())
 }
 
 // TestListDescriptorsEmpty: a store with nothing persisted returns nil, so the browser shows an
