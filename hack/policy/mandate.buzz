@@ -121,7 +121,7 @@ export fun rows(jobs: [Job]) > [Row] {
             risks = j.result!.unresolvedRisks;
         }
         found.append(Row{ id = j.id, state = j.state, parent = j.parent, paused = j.paused != 0, dependsOn = j.dependsOn,
-            created = j.created, checkpoint = j.checkpoint, checkoutRoot = j.checkoutRoot, unresolvedRisks = risks });
+            created = j.created, checkpoint = j.checkpoint, checkoutRoot = j.checkoutRoot, unresolvedRisks = risks, holderStopped = j.holderStopped });
     }
     return found;
 }
