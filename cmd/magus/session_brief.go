@@ -568,23 +568,23 @@ func sessionJobTree(ctx context.Context, rows []types.Job, acting, root string, 
 	}
 	out := &briefJobTree{Root: acting}
 	// The root's own row is not in the tree, so its forks are the top level.
-	for _, line := range jobTreeOrder(withoutParent(tree, acting)) {
-		if line.lease.State == types.StateExited && line.lease.Rejection == nil {
-			out.Uncollected = append(out.Uncollected, line.lease.ID)
+	for _, line := range job.TreeOrder(withoutParent(tree, acting)) {
+		if line.Job.State == types.StateExited && line.Job.Rejection == nil {
+			out.Uncollected = append(out.Uncollected, line.Job.ID)
 		}
 		if len(out.Jobs) == briefMaxJobs {
 			out.More++
 			continue
 		}
-		job := briefTreeJob(ctx, rows, line.lease, vcsOpts)
-		job.Depth = line.depth
-		out.Jobs = append(out.Jobs, job)
+		brief := briefTreeJob(ctx, rows, line.Job, vcsOpts)
+		brief.Depth = line.Depth
+		out.Jobs = append(out.Jobs, brief)
 	}
 	return out
 }
 
-// withoutParent clears parent from rows' Parent, so jobTreeOrder places its children at
-// the top level rather than after a row the tree does not carry.
+// withoutParent clears parent from rows' Parent, so job.TreeOrder places its
+// children at the top level rather than after a row the tree does not carry.
 func withoutParent(rows []types.Job, parent string) []types.Job {
 	if parent == "" {
 		return rows

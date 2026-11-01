@@ -495,6 +495,9 @@ type shellDir struct {
 type locatedCall struct {
 	inv hint.Invocation
 	at  shellDir
+	// program is the word that named the program, as typed: inv.Name is its
+	// base. Empty for a call reached through a wrapper.
+	program string
 	// args are the call's words after the program, nil when the invocation was reached
 	// through a wrapper, whose arguments arrive only as rendered text.
 	args []*syntax.Word
@@ -642,7 +645,7 @@ func (w *callWalk) call(c *syntax.CallExpr, at shellDir) shellDir {
 		case changesDir(inv):
 			at.known = false
 		case w.match(inv):
-			w.calls = append(w.calls, locatedCall{inv: inv, at: at, args: args[1:]})
+			w.calls = append(w.calls, locatedCall{inv: inv, at: at, program: words[0], args: args[1:]})
 		}
 		return at
 	}
