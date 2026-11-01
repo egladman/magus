@@ -1708,7 +1708,7 @@ func TestJobApplyHelpIsItsRegistryEntry(t *testing.T) {
 	var err error
 	help := captureStderr(t, func() { err = jobApply(t.Context(), "", []string{"-h"}) })
 	require.ErrorIs(t, err, flag.ErrHelp)
-	assert.Contains(t, help, "Usage: "+spec.Usage+"\n\n"+spec.Long+"\n")
+	assert.Contains(t, help, fmt.Sprintf("Usage: %s\n\n%s\n", spec.Usage, spec.Long))
 	assert.Contains(t, help, "  -f file\n")
 	assert.Contains(t, help, "  --[no-]fix (default: off)\n")
 }
@@ -2415,15 +2415,19 @@ func (s *jobApplyAddWritePathSuite) apply(add ...string) []job.Applied {
 }
 
 func (s *jobApplyAddWritePathSuite) TestARunningRowWidenedStaysRunningWithTheNewPath() {
+	before, err := s.store.List()
+	s.Require().NoError(err)
+	want := before[0]
+	want.WritePaths, want.Widenings = []string{"a.go", "b.go", "c.go"}, 1
+
 	applied := s.apply("b.go", "c.go")
 
 	s.Require().Len(applied, 1)
-	s.Equal(types.StateRunning, applied[0].Next.State)
-	s.Equal([]string{"a.go", "b.go", "c.go"}, applied[0].Next.WritePaths)
+	want.Validated, want.WriteProof = applied[0].Next.Validated, applied[0].Next.WriteProof
+	s.Equal(want, applied[0].Next)
 	rows, err := s.store.List()
 	s.Require().NoError(err)
-	s.Equal(types.StateRunning, rows[0].State)
-	s.Equal([]string{"a.go", "b.go", "c.go"}, rows[0].WritePaths)
+	s.Equal(want, rows[0])
 }
 
 func (s *jobApplyAddWritePathSuite) TestAPathTheRowHoldsChangesNothing() {

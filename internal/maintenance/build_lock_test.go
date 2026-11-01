@@ -139,7 +139,7 @@ func TestMachineGraphBuildDirIsOnePlaceForEveryCheckout(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
 
-	dir, err := MachineGraphBuildDir()
+	dir, err := machineGraphBuildDir()
 
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(state, "magus", "graph-build"), dir)

@@ -935,7 +935,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 
 	// leaseBoundary took 12 s warm and most of 22 s cold, printing nothing.
 	waiting := time.AfterFunc(3*time.Second, func() {
-		fmt.Fprintf(os.Stderr, "magus describe job: loading the workspace and the knowledge graph for %s's terms, usually 10 to 25 s\n", row.ID)
+		slog.InfoContext(ctx, fmt.Sprintf("loading the workspace and the knowledge graph for %s's terms, usually 10 to 25 s", row.ID), attr.Notice("note"))
 	})
 	defer waiting.Stop()
 
@@ -1828,7 +1828,7 @@ func jobExecCommand(ctx context.Context, root string, pos []string, timeout time
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	// A magus under the command runs under the hold's claim. Ancestry
 	// alone: MAGUS_LEVEL would make a gate under the command act nested.
-	cmd.Env = append(os.Environ(), spawn.AncestorsEnvVar+"="+strings.Join(self, ","))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", spawn.AncestorsEnvVar, strings.Join(self, ",")))
 	broker.InOwnGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
@@ -2172,7 +2172,7 @@ func printJobWorktree(out io.Writer, row types.Job, built bool) {
 func noteForkJudgedAsUpdate(ctx context.Context, store *job.Store, id string) bool {
 	live, err := store.RowLive(id)
 	if err != nil {
-		slog.InfoContext(ctx, "whether "+id+" is live could not be read: "+err.Error(), attr.Notice("note"))
+		slog.InfoContext(ctx, fmt.Sprintf("whether %s is live could not be read", id), attr.Error(err), attr.Notice("note"))
 		return false
 	}
 	if live {
@@ -2201,10 +2201,10 @@ func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, 
 		return false, err
 	}
 	if placed != "" {
-		fmt.Fprintf(os.Stderr, "magus job fork: reused %s, already built at %.12s\n", placed, wt.Base)
+		slog.InfoContext(ctx, fmt.Sprintf("reused %s, already built at %.12s", placed, wt.Base), attr.Notice("note"))
 	}
 	if ws.Unavailable != "" {
-		fmt.Fprintf(os.Stderr, "magus job fork: the workspace did not load (%s), so every project's dependencies are installed\n", ws.Unavailable)
+		slog.InfoContext(ctx, fmt.Sprintf("the workspace did not load (%s), so every project's dependencies are installed", ws.Unavailable), attr.Notice("note"))
 		return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root)
 	}
 	var declared types.Job
@@ -2247,9 +2247,9 @@ func refuseForkOnFullDisk(ctx context.Context, exe, root, checkout string, floor
 	if !below {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "magus job fork: %d MiB free is below disk.critical_free_mb; reclaiming first, for at most %s\n", free>>20, reclaimOnForkTimeout)
+	slog.InfoContext(ctx, fmt.Sprintf("%d MiB free is below disk.critical_free_mb; reclaiming first, for at most %s", free>>20, reclaimOnForkTimeout), attr.Notice("note"))
 	if err := reclaimNow(ctx, exe, root); err != nil {
-		fmt.Fprintf(os.Stderr, "magus job fork: the reclaim stopped: %v\n", err)
+		slog.InfoContext(ctx, "the reclaim stopped", attr.Error(err), attr.Notice("note"))
 	}
 	free, below, err = cache.DiskBelow(root, floorBytes)
 	if err != nil {
@@ -2258,7 +2258,7 @@ func refuseForkOnFullDisk(ctx context.Context, exe, root, checkout string, floor
 	if !below {
 		return nil
 	}
-	return types.DiagnosticErrorf(types.DiskFull, "magus job fork: %d MiB free is still below disk.critical_free_mb after a reclaim, and a new checkout would fill it. `%s` lists what it left for you", free>>20, types.ReclaimDiskCommand)
+	return types.DiagnosticErrorf(types.DiskFull, "%d MiB free is still below disk.critical_free_mb after a reclaim, and a new checkout would fill it. `%s` lists what it left for you", free>>20, types.ReclaimDiskCommand)
 }
 
 func reclaimNow(ctx context.Context, exe, root string) error {

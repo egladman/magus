@@ -1666,8 +1666,11 @@ func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
 
 	calls := trail.ForSession(cacheDir, "s1", 10).Calls
 	require.Len(t, calls, 1)
-	assert.Equal(t, "c1", calls[0].CallDigest)
-	assert.Equal(t, "r1", calls[0].ResultDigest)
+	calls[0].At = time.Time{}
+	assert.Equal(t, trail.SessionCall{
+		Action: "Bash", ToolMs: 420,
+		AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ThreadFrom: types.ThreadInferred, CallDigest: "c1", ResultDigest: "r1"},
+	}, calls[0])
 }
 
 func TestShellToolMsRecordsTheToolAndPasses(t *testing.T) {
@@ -1687,8 +1690,9 @@ func TestShellToolMsRecordsTheToolAndPasses(t *testing.T) {
 	events, err := trail.ReadRecent(cacheDir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, int64(420), events[0].DurationMs)
-	assert.Equal(t, "Bash", events[0].Action)
+	event := events[0]
+	event.Ts, event.Origin, event.Workspace, event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = 0, types.Origin{}, "", "", "", 0, 0
+	assert.Equal(t, trail.Event{Kind: trail.KindAgentCommand, Action: "Bash", Outcome: trail.OutcomeOK, DurationMs: 420, Preview: "observed"}, event)
 }
 
 // denyRules is a magusfile whose spawn rule denies every spawn and whose command rule

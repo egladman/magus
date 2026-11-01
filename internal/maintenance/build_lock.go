@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/libs/xdg"
+	"github.com/egladman/magus/types"
 )
 
 const (
@@ -35,15 +36,63 @@ type GraphBuildHolder struct {
 	Store string `json:"store,omitempty"`
 }
 
-// MachineGraphBuildDir holds this machine's one build lock, taken by every
+// machineGraphBuildDir holds this machine's one build lock, taken by every
 // graph build, symbol refresh and background symbol index. Take it before a
 // store's lock, so two builds never each hold one and wait on the other.
-func MachineGraphBuildDir() (string, error) {
+func machineGraphBuildDir() (string, error) {
 	state, err := xdg.StateDir()
 	if err != nil {
 		return "", fmt.Errorf("maintenance: machine graph build lock: %w", err)
 	}
 	return filepath.Join(state, "magus", "graph-build"), nil
+}
+
+// AcquireMachineGraphBuild is [AcquireGraphBuild] on the machine's build lock.
+func AcquireMachineGraphBuild(ctx context.Context, me GraphBuildHolder, w io.Writer, every time.Duration) (*GraphBuildLock, *GraphBuildHolder, error) {
+	dir, err := machineGraphBuildDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	return AcquireGraphBuild(ctx, dir, me, w, every)
+}
+
+// TryMachineGraphBuild is [TryGraphBuild] on the machine's build lock.
+func TryMachineGraphBuild(me GraphBuildHolder, w io.Writer) (*GraphBuildLock, *GraphBuildHolder, error) {
+	dir, err := machineGraphBuildDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	return TryGraphBuild(dir, me, w)
+}
+
+// RunningMachineGraphBuild is [RunningGraphBuild] on the machine's build lock.
+// The error says the lock's place could not be resolved.
+func RunningMachineGraphBuild() (GraphBuildHolder, bool, error) {
+	dir, err := machineGraphBuildDir()
+	if err != nil {
+		return GraphBuildHolder{}, false, err
+	}
+	holder, running := RunningGraphBuild(dir)
+	return holder, running, nil
+}
+
+// ReindexRefusals is the part of a reindex failure that fails `graph build`:
+// each project refused for the outer run's lock (MGS3007), a full build budget
+// (MGS3009) or memory pressure (MGS3053). The index it wanted stayed stale,
+// and an exit 0 under magus\cmd's quiet hid that. A missing indexer stays a
+// warning. Nil when nothing was refused.
+func ReindexRefusals(err error) error {
+	errs := []error{err}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = joined.Unwrap()
+	}
+	var refused []error
+	for _, e := range errs {
+		if errors.Is(e, types.ProjectLockHeldByAncestor) || errors.Is(e, types.MachineBudgetExhausted) || errors.Is(e, types.MemoryPressureHigh) {
+			refused = append(refused, e)
+		}
+	}
+	return errors.Join(refused...)
 }
 
 func (h GraphBuildHolder) String() string {

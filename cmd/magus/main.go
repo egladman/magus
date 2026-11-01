@@ -1062,7 +1062,7 @@ func logForwardFallback(ctx context.Context, log *slog.Logger, err error) {
 		log.DebugContext(ctx, "proc forward not adopted; running locally", attr.Error(err))
 	case proc.NotAdopted(err):
 		log.WarnContext(ctx, types.FormatDiagnostic(types.PeerFromAnotherBuild,
-			"a magus server or pool parent from another build did not adopt this call; running locally. Restart it so it runs this build"),
+			"a magus server or pool parent from another build did not adopt this call, so it runs locally until that process restarts"),
 			attr.Error(err))
 	default:
 		log.WarnContext(ctx, "proc forward failed; running locally", attr.Error(err))

@@ -672,7 +672,7 @@ func (s *outputFormatsSuite) handler(leaf string) (string, bool) {
 		return "", false
 	}
 	for name := range s.reach(from, nil) {
-		if fn, ok := s.dispatchedTo(s.funcs[name], last); ok {
+		if fn, ok := s.caseFunc(s.funcs[name], last); ok {
 			return fn, true
 		}
 	}
@@ -726,8 +726,8 @@ func labelNames(expr ast.Expr, word string) bool {
 	return false
 }
 
-// dispatchedTo is the first func a case clause for word in fn names.
-func (s *outputFormatsSuite) dispatchedTo(fn *ast.FuncDecl, word string) (string, bool) {
+// caseFunc is the first func a case clause for word in fn names.
+func (s *outputFormatsSuite) caseFunc(fn *ast.FuncDecl, word string) (string, bool) {
 	var found string
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		clause, ok := n.(*ast.CaseClause)

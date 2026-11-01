@@ -798,15 +798,36 @@ func searchStoredIfStale(ctx context.Context, ws graphWorkspace, cfg config.Conf
 // detachedRefreshEnv marks the process startRefresh detached.
 const detachedRefreshEnv = "MAGUS_DETACHED_REFRESH"
 
-// takeRefreshLock takes the graph build lock in dir for a refresh. A
-// detached refresh never queues: a nil lock and nil error mean it should stop.
-func takeRefreshLock(ctx context.Context, dir string, me maintenance.GraphBuildHolder, verb string, detached bool) (*maintenance.GraphBuildLock, error) {
+// refreshLock is one graph build lock: the machine's or a store's.
+type refreshLock struct {
+	acquire func(context.Context, maintenance.GraphBuildHolder, io.Writer, time.Duration) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error)
+	try     func(maintenance.GraphBuildHolder, io.Writer) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error)
+}
+
+func machineRefreshLock() refreshLock {
+	return refreshLock{acquire: maintenance.AcquireMachineGraphBuild, try: maintenance.TryMachineGraphBuild}
+}
+
+func storeRefreshLock(dir string) refreshLock {
+	return refreshLock{
+		acquire: func(ctx context.Context, me maintenance.GraphBuildHolder, w io.Writer, every time.Duration) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error) {
+			return maintenance.AcquireGraphBuild(ctx, dir, me, w, every)
+		},
+		try: func(me maintenance.GraphBuildHolder, w io.Writer) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error) {
+			return maintenance.TryGraphBuild(dir, me, w)
+		},
+	}
+}
+
+// takeRefreshLock takes a graph build lock for a refresh. A detached refresh
+// never queues: a nil lock and nil error mean it should stop.
+func takeRefreshLock(ctx context.Context, take refreshLock, me maintenance.GraphBuildHolder, verb string, detached bool) (*maintenance.GraphBuildLock, error) {
 	notices := noticeLines{ctx: ctx, level: slog.LevelInfo, label: verb, prefix: "magus graph build: "}
 	if !detached {
-		lock, _, err := maintenance.AcquireGraphBuild(ctx, dir, me, notices, graphBuildPoll)
+		lock, _, err := take.acquire(ctx, me, notices, graphBuildPoll)
 		return lock, err
 	}
-	lock, holder, err := maintenance.TryGraphBuild(dir, me, notices)
+	lock, holder, err := take.try(me, notices)
 	if holder != nil {
 		slog.InfoContext(ctx, fmt.Sprintf("%s holds the refresh lock, so this refresh stops", holder), attr.Notice(verb))
 	}
@@ -836,12 +857,8 @@ func refreshIndexesNow(ctx context.Context, root, verb string) bool {
 	if err != nil {
 		return failed(err)
 	}
-	machineDir, err := maintenance.MachineGraphBuildDir()
-	if err != nil {
-		return failed(err)
-	}
 	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of " + wsRoot, Store: storeDir}
-	machine, err := takeRefreshLock(ctx, machineDir, me, verb, detached)
+	machine, err := takeRefreshLock(ctx, machineRefreshLock(), me, verb, detached)
 	if err != nil {
 		return failed(err)
 	}
@@ -849,7 +866,7 @@ func refreshIndexesNow(ctx context.Context, root, verb string) bool {
 		return true
 	}
 	defer func() { _ = machine.Release() }()
-	store, err := takeRefreshLock(ctx, storeDir, me, verb, detached)
+	store, err := takeRefreshLock(ctx, storeRefreshLock(storeDir), me, verb, detached)
 	if err != nil {
 		return failed(err)
 	}
@@ -894,12 +911,12 @@ func refreshInBackground(ctx context.Context, root string, ans types.KnowledgeAn
 		slog.ErrorContext(ctx, why, attr.Notice("magus"))
 		return &types.KnowledgeIndexCause{Why: why, Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
 	}
-	machineDir, err := maintenance.MachineGraphBuildDir()
+	holder, running, err := maintenance.RunningMachineGraphBuild()
 	if err != nil {
 		slog.ErrorContext(ctx, "could not start a background refresh", attr.Notice("magus"), attr.Error(err))
 		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
 	}
-	if holder, running := maintenance.RunningGraphBuild(machineDir); running {
+	if running {
 		return &types.KnowledgeIndexCause{Why: fmt.Sprintf("this answer comes from the index as it stands, and this read started no refresh: a machine runs one at a time, and %s is running", holder), Fix: fix}
 	}
 	started, err := startRefresh(dir)

@@ -307,13 +307,13 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 	if opts.Format != outputText {
 		rec := configHistoryDedupOutput{
 			ReportFiles: len(reportPaths), TotalMisses: res.TotalMisses, UniqueKeys: res.UniqueKeys,
-			RedundantBuilds: res.RedundantBuilds, RedundantMs: int64(res.RedundantMs), Approximate: res.Approx,
+			RedundantBuilds: res.RedundantBuilds, RedundantMs: res.RedundantMs, Approximate: res.Approx,
 			Top: []configHistoryDedupItem{},
 		}
 		names := []string{}
 		for _, e := range res.Top {
-			rec.Top = append(rec.Top, configHistoryDedupItem{Project: e.Project, Target: e.Target, Hash: e.Hash, ExtraBuilds: int(e.ExtraBuilds), ExtraMs: int64(e.ExtraMs)})
-			names = append(names, e.Project+":"+e.Target)
+			rec.Top = append(rec.Top, configHistoryDedupItem{Project: e.Project, Target: e.Target, Hash: e.Hash, ExtraBuilds: e.ExtraBuilds, ExtraMs: e.ExtraMs})
+			names = append(names, fmt.Sprintf("%s:%s", e.Project, e.Target))
 		}
 		return emitRecord(opts, rec, names)
 	}

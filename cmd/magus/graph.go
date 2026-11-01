@@ -166,13 +166,13 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		}
 		defer func() { _ = m.Close() }()
 		n, rerr := m.ReindexSymbols(ctx)
-		reindexed = int(n)
+		reindexed = n
 		slog.InfoContext(ctx, fmt.Sprintf("reindexed %d symbol index(es)", n), attr.Notice(""))
 		if rerr != nil {
 			// A missing or failing indexer must not block the domain-graph rebuild.
 			// Surface the actionable hints and carry on.
 			interactive.Hint(ctx, "some projects were not reindexed", attr.Error(rerr))
-			refused = reindexRefusals(rerr)
+			refused = maintenance.ReindexRefusals(rerr)
 		}
 	}
 
@@ -201,7 +201,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		scriptsErr = errors.Join(scriptsErr, fmt.Errorf("magus graph build: left out of the graph: %s", strings.Join(errs, "; ")))
 	}
 	if opts.Format != outputText {
-		rec := graphBuildOutput{Nodes: int(out.NodeCount), Edges: int(out.EdgeCount), Reindexed: reindexed, Refused: refused != nil}
+		rec := graphBuildOutput{Nodes: out.NodeCount, Edges: out.EdgeCount, Reindexed: reindexed, Refused: refused != nil}
 		if err := emitRecord(opts, rec, []string{root}); err != nil {
 			scriptsErr = errors.Join(scriptsErr, err)
 		}
@@ -247,26 +247,6 @@ func writeGuardIndexes(ctx context.Context, root string) error {
 	return nil
 }
 
-// reindexRefusals is the part of a reindex failure that fails `graph build`: each project
-// refused because the run this one is nested inside holds its lock (MGS3007), or because the
-// machine's build budget could not seat the indexer (MGS3009). A missing indexer is the
-// machine's state and stays a warning. A refusal means the index it wanted stayed stale, and
-// an exit 0 under magus\cmd's quiet hid that. Nil when nothing was refused.
-// A machine short of memory (MGS3053) refuses the same way.
-func reindexRefusals(err error) error {
-	errs := []error{err}
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		errs = joined.Unwrap()
-	}
-	var refused []error
-	for _, e := range errs {
-		if errors.Is(e, types.ProjectLockHeldByAncestor) || errors.Is(e, types.MachineBudgetExhausted) || errors.Is(e, types.MemoryPressureHigh) {
-			refused = append(refused, e)
-		}
-	}
-	return errors.Join(refused...)
-}
-
 const (
 	// graphBuildPoll is how often a waiting graph build retries.
 	graphBuildPoll = 250 * time.Millisecond
@@ -286,18 +266,14 @@ func acquireGraphBuild(ctx context.Context, root string) (release func() error, 
 	if err != nil {
 		return nil, nil, fmt.Errorf("magus graph build: %w", err)
 	}
-	machineDir, err := maintenance.MachineGraphBuildDir()
-	if err != nil {
-		return nil, nil, fmt.Errorf("magus graph build: %w", err)
-	}
 	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build` in " + wsRoot, Store: dir}
 	if proc.IsJob(ctx) {
 		me.By = "the server's sync-graph job in " + wsRoot
 	}
 	notices := noticeLines{ctx: ctx, level: slog.LevelInfo, label: "magus graph build", prefix: "magus graph build: "}
-	machine, behind, err := maintenance.AcquireGraphBuild(ctx, machineDir, me, notices, graphBuildPoll)
+	machine, behind, err := maintenance.AcquireMachineGraphBuild(ctx, me, notices, graphBuildPoll)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("magus graph build: %w", err)
 	}
 	store, waitedOn, err := maintenance.AcquireGraphBuild(ctx, dir, me, notices, graphBuildPoll)
 	if err != nil {
@@ -479,32 +455,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	var ef *flaggen.GraphExportFlags
 	pos, err := commandParse("graph export", args, func(fs *flag.FlagSet) {
 		ef = flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{URL: defaultExploreURL, Budget: knowledge.DefaultBudget})
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, types.KnowledgeGraphDefinition)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Emits the merged graph: -o json for the node-link form, -o graphml for")
-			fmt.Fprintln(os.Stderr, "GraphML (Gephi, yEd, and other graph viewers read both directly). The")
-			fmt.Fprintln(os.Stderr, "graph is cache-backed under <cache>/knowledge; only shards whose sources")
-			fmt.Fprintln(os.Stderr, "changed are rebuilt. -o scip writes the symbol index instead, as one binary")
-			fmt.Fprintln(os.Stderr, "SCIP index for code-intelligence tools: redirect it to a file.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--open sends the same graph to the interactive Graph Explorer instead of")
-			fmt.Fprintln(os.Stderr, "stdout. It never leaves your machine: by default it rides in the link's URL")
-			fmt.Fprintln(os.Stderr, "fragment (#data=...), which browsers never transmit; --serve hands it over an")
-			fmt.Fprintln(os.Stderr, "ephemeral 127.0.0.1 loopback server instead (no size limit). --targets opens")
-			fmt.Fprintln(os.Stderr, "the target dependency graph, and takes an optional project path to scope it.")
-			fmt.Fprintf(os.Stderr, "--follow keeps the view updating from the running server (%s);\n", hint.ServerStart)
-			fmt.Fprintln(os.Stderr, "with no mode flag and a reachable server it is chosen automatically.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
-			fmt.Fprintf(os.Stderr, "the engine behind `%s`. -o dot renders only with\n", hint.Query.String())
-			fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for that layout to be legible.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { graphExportUsage(fs) }
 	})
 	if err != nil {
 		return err
@@ -584,7 +535,39 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		return emitNames(os.Stdout, names)
 	}
 
-	// text / wide: a routing summary, not a data dump (counts by kind and relation).
+	printExportSummary(out)
+	return nil
+}
+
+func graphExportUsage(fs *flag.FlagSet) {
+	fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, types.KnowledgeGraphDefinition)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Emits the merged graph: -o json for the node-link form, -o graphml for")
+	fmt.Fprintln(os.Stderr, "GraphML (Gephi, yEd, and other graph viewers read both directly). The")
+	fmt.Fprintln(os.Stderr, "graph is cache-backed under <cache>/knowledge; only shards whose sources")
+	fmt.Fprintln(os.Stderr, "changed are rebuilt. -o scip writes the symbol index instead, as one binary")
+	fmt.Fprintln(os.Stderr, "SCIP index for code-intelligence tools: redirect it to a file.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "--open sends the same graph to the interactive Graph Explorer instead of")
+	fmt.Fprintln(os.Stderr, "stdout. It never leaves your machine: by default it rides in the link's URL")
+	fmt.Fprintln(os.Stderr, "fragment (#data=...), which browsers never transmit; --serve hands it over an")
+	fmt.Fprintln(os.Stderr, "ephemeral 127.0.0.1 loopback server instead (no size limit). --targets opens")
+	fmt.Fprintln(os.Stderr, "the target dependency graph, and takes an optional project path to scope it.")
+	fmt.Fprintf(os.Stderr, "--follow keeps the view updating from the running server (%s);\n", hint.ServerStart)
+	fmt.Fprintln(os.Stderr, "with no mode flag and a reachable server it is chosen automatically.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
+	fmt.Fprintf(os.Stderr, "the engine behind `%s`. -o dot renders only with\n", hint.Query.String())
+	fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for that layout to be legible.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
+}
+
+// printExportSummary is the text form: a routing summary, not a data dump.
+func printExportSummary(out types.KnowledgeGraphOutput) {
 	fmt.Printf("definition: %s\n\n", out.Definition)
 	fmt.Printf("knowledge graph (schema v%d): %d nodes, %d edges\n\n", out.SchemaVersion, out.NodeCount, out.EdgeCount)
 	fmt.Println("nodes by kind:")
@@ -596,7 +579,6 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		fmt.Printf("  %-11s %d\n", kv.key, kv.n)
 	}
 	fmt.Println("\nRun with -o json (node-link) or -o graphml for the full graph.")
-	return nil
 }
 
 // outputSCIP is graph export's SCIP protobuf index, for code-intelligence tools.

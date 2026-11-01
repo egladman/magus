@@ -301,16 +301,16 @@ func TestGraphBuildFailsOnlyOnALockRefusal(t *testing.T) {
 		"project . is locked by the magus run this one is nested inside"))
 	missing := errors.New("docs: exit status 127; install scip-typescript")
 
-	require.NoError(t, reindexRefusals(missing), "a missing indexer stays a warning")
+	require.NoError(t, maintenance.ReindexRefusals(missing), "a missing indexer stays a warning")
 
-	got := reindexRefusals(errors.Join(missing, refusal))
+	got := maintenance.ReindexRefusals(errors.Join(missing, refusal))
 	require.ErrorIs(t, got, types.ProjectLockHeldByAncestor)
 	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
 
-	require.ErrorIs(t, reindexRefusals(refusal), types.ProjectLockHeldByAncestor, "an unjoined refusal counts too")
+	require.ErrorIs(t, maintenance.ReindexRefusals(refusal), types.ProjectLockHeldByAncestor, "an unjoined refusal counts too")
 
 	full := types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting scip: this machine's build budget is full")
-	got = reindexRefusals(errors.Join(missing, full))
+	got = maintenance.ReindexRefusals(errors.Join(missing, full))
 	require.ErrorIs(t, got, types.MachineBudgetExhausted, "a full budget fails the build")
 	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
 }
@@ -324,7 +324,7 @@ func TestGraphReindexPressureSuite(t *testing.T) { suite.Run(t, new(GraphReindex
 func (s *GraphReindexPressureSuite) TestARefusedReindexExitsTempFail() {
 	short := types.ExitError{Code: exit.TempFail, Err: types.DiagnosticErrorf(types.MemoryPressureHigh, "not starting scip: this machine is short of memory")}
 	missing := errors.New("docs: exit status 127; install scip-typescript")
-	got := reindexRefusals(errors.Join(missing, short))
+	got := maintenance.ReindexRefusals(errors.Join(missing, short))
 	s.Require().ErrorIs(got, types.MemoryPressureHigh)
 	s.NotContains(got.Error(), "scip-typescript", "only the refusal fails the build")
 	s.Equal(exit.TempFail, exit.Code(got))
@@ -386,10 +386,8 @@ func acquireBehindBuild(t *testing.T, store func(root string) string) *maintenan
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
-	dir, err := maintenance.MachineGraphBuildDir()
-	require.NoError(t, err)
 	ahead := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the build ahead", Store: store(root)}
-	lock, _, err := maintenance.AcquireGraphBuild(t.Context(), dir, ahead, io.Discard, time.Millisecond)
+	lock, _, err := maintenance.AcquireMachineGraphBuild(t.Context(), ahead, io.Discard, time.Millisecond)
 	require.NoError(t, err)
 
 	type result struct {

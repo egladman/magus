@@ -2489,8 +2489,8 @@ func TestDialDiffBridgeCarriesAConsoleTokenAndRevokesIt(t *testing.T) {
 	require.NotNil(t, b)
 	cred, ok := auth.Verify(presented)
 	require.True(t, ok, "the token is live while the bridge is open")
-	assert.Equal(t, types.KindStored, cred.Kind)
-	assert.Equal(t, types.GrantConsole, cred.Grant)
+	cred.ID, cred.Name = "", ""
+	assert.Equal(t, types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, cred)
 
 	b.close()
 	_, ok = auth.Verify(presented)
