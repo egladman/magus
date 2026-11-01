@@ -44,6 +44,8 @@ import "vcs";
 import "proc";
 import "os";
 import "fs";
+import "assert";
+import "result";
 import "path";
 import "encoding/json";
 import "./hack/policy/helpers" as helpers;
@@ -2692,6 +2694,10 @@ test "unfinished work under Considerations is an unchecked GitHub task" {
 }
 
 test "the example a denial teaches passes proofread and this rule" {
+    final notRunnable = proofread\whyStale(proofread\home);
+    if (notRunnable != "") {
+        assert\skip("proofread is not built ({notRunnable}); run `{proofread\build}`");
+    }
     final lines = example.split("\n");
     final body = mut [<str>];
     foreach (i, l in lines) {
@@ -3116,12 +3122,38 @@ test "only a git commit is read, and -a reads the tracked changes too" {
     std\assert(asked.len() == 4 and asked[0] and !asked[1] and asked[2] and !asked[3], message: "{asked}");
 }
 
+// seedGit sets identity and signing by environment: a lease refuses
+// inline -c config. A failed git call is the Result's error.
+fun seedGit(dir: str, args: [str]) > result\Result::<bool> {
+    final failed = mut [<str>];
+    final env = {
+        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+        "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "commit.gpgsign", "GIT_CONFIG_VALUE_0": "false",
+    };
+    try {
+        os\withEnv(env, callback: fun () > void {
+            try {
+                _ = vcs\cmd(args, opts: vcs\CommandOptions{ dir = dir, quiet = true });
+            } catch (err: any) {
+                failed.append(result\caught::<bool>(err, doing: "git {args.join(" ")}").error!.message);
+            }
+        });
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "git {args.join(" ")}");
+    }
+    if (failed.len() > 0) {
+        return result\fail::<bool>(failed[0]);
+    }
+    return result\ok::<bool>(true);
+}
+
 test "committedReader reads the staged text and the text at HEAD" {
     final dir = fs\tempDir("committed-reader") catch "";
     std\assert(dir != "", message: "a temp dir");
     final git = fun (args: [str]) > void {
-        _ = vcs\cmd(["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"] + args,
-            opts: vcs\CommandOptions{ dir = dir, quiet = true }) catch null;
+        final r = seedGit(dir, args: args);
+        std\assert(r.error == null, message: if (r.error != null) r.error!.message else "");
     };
     git(["init", "-q"]);
     fs\writeFile("{dir}/a.go", content: "package a\n");
