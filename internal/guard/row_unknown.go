@@ -25,10 +25,21 @@ func denyUnknownRowMembers(ctx context.Context, deps Dependencies, actingLease, 
 	if !standing.declared {
 		return denial{}
 	}
-	if recoveryLine(command, effectiveDialect(deps.ShellDialect), actingLease, false, hookLocation(ctx, deps)) {
+	if replacesJudge(ctx, deps, actingLease, command) {
 		return denial{}
 	}
 	return unknownRowDenial(deps, standing.row)
+}
+
+// replacesJudge reports a worker's recovery line that gets a binary able to
+// read the row. A pick or an abort gets none, so an interrupted one waits for
+// the placement, which needs no clean tree.
+func replacesJudge(ctx context.Context, deps Dependencies, lease, command string) bool {
+	d := effectiveDialect(deps.ShellDialect)
+	if call, ok := soleCall(command, d); ok && vcsRecoveryLine(literalWords(call.Args)) {
+		return false
+	}
+	return recoveryLine(command, d, lease, false, hookLocation(ctx, deps))
 }
 
 // unknownRowDenial is the refusal for row, or none when this build declares every member

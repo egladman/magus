@@ -56,21 +56,18 @@ func (heldError) Unwrap() error { return ErrHeldElsewhere }
 // plan; a WORKER registering an id nothing declared was handed the wrong id, and a row
 // invented for it would bury that under a plausible-looking ledger entry.
 func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
-	base, err := s.CheckoutToken(ctx)
-	if err != nil {
-		return types.Job{}, fmt.Errorf("the checkout at %s reports no revision, so there is no base to record for %s,"+
-			" `%s` run there says why: %w", s.root, id, hint.VCSCheckpoint.With("-o name"), err)
-	}
-	// Resolved before the lock, since resolving runs the VCS; the row is read again under it.
-	var checkpoint string
-	var moved *types.JobWorktree
+	// Read before the lock, since it runs the VCS. The row is read again there.
+	var row types.Job
 	if f, err := s.read(); err == nil {
 		if i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == id }); i >= 0 {
-			checkpoint = f.Jobs[i].Checkpoint
-			moved = s.untakenElsewhere(ctx, f.Jobs[i])
+			row = f.Jobs[i]
 		}
 	}
-	full := s.fullRevisions(ctx, checkpoint, base)
+	facts, err := s.readExecFacts(ctx, id, row)
+	if err != nil {
+		return types.Job{}, err
+	}
+	base, full := facts.base, facts.full
 	return s.mutate(ctx, id, asExec, func(cur *types.Job, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("%w: %q, nothing declared it, so there is no checkpoint to exec against,"+
@@ -84,16 +81,7 @@ func (s *Store) Exec(ctx context.Context, id string) (types.Job, error) {
 				here = abs
 			}
 		}
-		if moved != nil && cur.CheckoutRoot == "" && cur.Worktree.Standing() && !cur.Worktree.Made && !cur.State.Terminal() {
-			switch compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(base, full)) {
-			case types.BaseMatch, types.BaseRevisionMatch, types.BaseUnknown:
-				cur.Worktree = moved
-			default:
-				return heldError{fmt.Sprintf("job: %s is bound to %s, a checkout its fork adopted, and nobody took it there, so it may be taken here in %s instead, once this checkout is at its checkpoint %s: it is at %s",
-					id, cur.Worktree.Root, here, checkpointRevision(cur.Checkpoint), checkpointRevision(base))}
-			}
-		}
-		if err := execRefusal(*cur, here); err != nil {
+		if err := execRefusal(cur, here, facts); err != nil {
 			return err
 		}
 		// An exited row taken again where it was taken is its holder sent back to work: it
@@ -121,15 +109,47 @@ func rebindsAdopted(prev, row types.Job) bool {
 		row.Worktree.Standing() && !row.Worktree.Made && !samePath(prev.Worktree.Root, row.Worktree.Root)
 }
 
+// execFacts is what taking a job reads from the checkout, ahead of any lock.
+type execFacts struct {
+	base  string
+	moved *types.JobWorktree
+	full  map[string]string
+}
+
+// readExecFacts reads them for row, the zero row when nothing declared id.
+func (s *Store) readExecFacts(ctx context.Context, id string, row types.Job) (execFacts, error) {
+	base, err := s.CheckoutToken(ctx)
+	if err != nil {
+		return execFacts{}, fmt.Errorf("the checkout at %s reports no revision, so there is no base to record for %s,"+
+			" `%s` run there says why: %w", s.root, id, hint.VCSCheckpoint.With("-o name"), err)
+	}
+	return execFacts{
+		base:  base,
+		moved: s.untakenElsewhere(ctx, row),
+		full:  s.fullRevisions(ctx, row.Checkpoint, base),
+	}, nil
+}
+
 // execRefusal is why Exec refuses row in the checkout here, nil for none.
-func execRefusal(row types.Job, here string) error {
+// An adopted checkout nobody took moves to here, on row, when here is at
+// the row's checkpoint.
+func execRefusal(row *types.Job, here string, facts execFacts) error {
+	if facts.moved != nil && row.CheckoutRoot == "" && row.Worktree.Standing() && !row.Worktree.Made && !row.State.Terminal() {
+		switch compareBase(withFullRevision(row.Checkpoint, facts.full), withFullRevision(facts.base, facts.full)) {
+		case types.BaseMatch, types.BaseRevisionMatch, types.BaseUnknown:
+			row.Worktree = facts.moved
+		default:
+			return heldError{fmt.Sprintf("job: %s is bound to %s, a checkout its fork adopted, and nobody took it there, so it may be taken here in %s instead, once this checkout is at its checkpoint %s: it is at %s",
+				row.ID, row.Worktree.Root, here, checkpointRevision(row.Checkpoint), checkpointRevision(facts.base))}
+		}
+	}
 	// A session resuming that work in the same checkout takes it back.
 	resumed := row.EndedWithSession() && (row.CheckoutRoot == "" || row.CheckoutRoot == here)
 	if row.State.Terminal() && !resumed {
 		return fmt.Errorf("job: %s already ended %s, so there is nothing left to take,"+
 			" `%s` lists the live ones", row.ID, row.State, hint.LsJobs)
 	}
-	if err := WrongCheckout(row, here); err != nil {
+	if err := WrongCheckout(*row, here); err != nil {
 		return err
 	}
 	// Held means running. A declared row may carry a checkout already,
@@ -137,19 +157,22 @@ func execRefusal(row types.Job, here string) error {
 	if row.State == types.StateRunning && row.CheckoutRoot != "" && row.CheckoutRoot != here {
 		return heldError{fmt.Sprintf("job: %s is held in %s (%s, updated %s ago), and wait grades the checkout that holds it,"+
 			" its holder gives it up with `%s`, and whoever forked it then hands it out again with `%s`",
-			row.ID, row.CheckoutRoot, row.State, updatedAgo(row), hint.JobExit.With(row.ID), hint.JobApply)}
+			row.ID, row.CheckoutRoot, row.State, updatedAgo(*row), hint.JobExit.With(row.ID), hint.JobApply)}
 	}
 	return nil
 }
 
 // ExecRefusal is why [Store.Exec] in the checkout here would refuse row.
-// The guard asks before it binds a caller. An adopted checkout nobody
-// took may move to here, which only Exec settles, so it refuses nothing.
-func (s *Store) ExecRefusal(row types.Job, here string) error {
-	if row.CheckoutRoot == "" && row.Worktree.Standing() && !row.Worktree.Made {
-		row.Worktree = nil
+// The guard asks before it binds a caller, so it reads that checkout as
+// Exec does.
+func (s *Store) ExecRefusal(ctx context.Context, row types.Job, here string) error {
+	config := s.storeConfig
+	config.root = here
+	facts, err := (&Store{storeConfig: config}).readExecFacts(ctx, row.ID, row)
+	if err != nil {
+		return err
 	}
-	return execRefusal(row, here)
+	return execRefusal(&row, here, facts)
 }
 
 // untakenElsewhere is this checkout adopted for row, when nobody has taken row and its fork

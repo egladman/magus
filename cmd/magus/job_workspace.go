@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/job"
@@ -18,7 +17,11 @@ func jobWorkspace(ctx context.Context, root string) job.Workspace {
 	m, err := loadMagus(ctx, root)
 	switch {
 	case err != nil:
-		return job.Workspace{Unavailable: workspaceLoadFailure(err, root)}
+		running, pathErr := runningBinaryPath()
+		if pathErr != nil {
+			return job.Workspace{Unavailable: err.Error()}
+		}
+		return job.Workspace{Unavailable: workspaceLoadFailure(err, root, running)}
 	case root != "" && filepath.Clean(m.Root()) != filepath.Clean(root):
 		return job.Workspace{Unavailable: fmt.Sprintf("the loaded workspace is %s, not %s", m.Root(), root)}
 	case len(m.All()) == 0:
@@ -28,11 +31,14 @@ func jobWorkspace(ctx context.Context, root string) job.Workspace {
 }
 
 // workspaceLoadFailure is err's text. A binary too old for root also names
-// root's own ./magus, the newer binary that can widen a row there.
-func workspaceLoadFailure(err error, root string) string {
-	own := filepath.Join(root, "magus")
-	if info, statErr := os.Stat(own); root == "" || statErr != nil || !info.Mode().IsRegular() || !ward.IsStaleBinary(err) {
+// root's own ./magus, unless running is that binary.
+func workspaceLoadFailure(err error, root, running string) string {
+	if !ward.IsStaleBinary(err) {
 		return err.Error()
 	}
-	return fmt.Sprintf("%s\nThis checkout's own build loads it: rerun with `%s job apply`", err, own)
+	own := checkoutBinary(root, running)
+	if own == "" {
+		return err.Error()
+	}
+	return fmt.Sprintf("%s\nThis checkout has its own build: rerun the command with `%s`", err, own)
 }

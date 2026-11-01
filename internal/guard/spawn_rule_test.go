@@ -1339,7 +1339,8 @@ func TestExecBindsTheCallersIdentity(t *testing.T) {
 	running := func(id string) types.Job {
 		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}, Registered: 1, ReportedBase: "77aa01c"}
 	}
-	ctx, _ := fleetFixture(t, running("session-job"), running("agent-job"), running("tool-job"))
+	ctx, root := fleetFixture(t, running("session-job"), running("agent-job"), running("tool-job"))
+	commitCheckout(t, root)
 
 	Judge(ctx, Dependencies{}, Request{Input: "magus job exec session-job", Host: "codex", Session: "s1"})
 	Judge(ctx, Dependencies{}, Request{Input: "magus --root . job exec agent-job", Host: "claude-code", Session: "s2", Agent: "a1"})

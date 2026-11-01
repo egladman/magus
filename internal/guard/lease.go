@@ -2610,8 +2610,7 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 		matches = func(c hint.Invocation) bool { return workerVCSOp(c) != "" || placed(c) || placedByWords(c) }
 	}
 	d := effectiveDialect(deps.ShellDialect)
-	cwd, _ := deps.workingDir()
-	calls, ok := locateCalls(command, d, cwd, matches, false)
+	calls, ok := locateCallsAt(command, d, deps.callShellDir(), matches, false)
 	if !ok {
 		unparsed := vcsRefusal{op: "commit", kind: vcsOpLands, why: "The line does not parse, so where it commits cannot be read."}
 		return workerVCSDenial(fmt.Sprintf("`%s`", command), unparsed, me, role)
@@ -3089,14 +3088,14 @@ func denyLeaseScriptVCS(ctx context.Context, deps Dependencies, lease, command s
 	if depth > writeScanDepth {
 		return fmt.Sprintf("magus workspace: these scripts nest deeper than %d calls, or call each other, so what they run cannot be read. Run the innermost one in a call of its own.", writeScanDepth)
 	}
-	cwd, _ := deps.workingDir()
+	start := deps.callShellDir()
 	judged := map[scriptRun]bool{}
 	for _, run := range runs {
 		if judged[run] {
 			continue
 		}
 		judged[run] = true
-		for _, at := range scriptRunDirs(command, d, cwd, run) {
+		for _, at := range scriptRunDirs(command, d, start, run) {
 			if reason := denyScriptRunVCS(ctx, deps, lease, run, at, depth); reason != "" {
 				return reason
 			}
@@ -3138,7 +3137,7 @@ func denyScriptRunVCS(ctx context.Context, deps Dependencies, lease string, run 
 	if helpOnlyLine(body, DialectBash) {
 		return ""
 	}
-	deps.callDir = at.dir
+	deps.callDir, deps.callDirUnread = at.dir, !at.known
 	reason := denyLeaseScriptVCS(ctx, deps, lease, body, depth+1)
 	if reason == "" {
 		reason = denyLeaseLineVCS(ctx, deps, lease, body)
@@ -3150,10 +3149,10 @@ func denyScriptRunVCS(ctx context.Context, deps Dependencies, lease string, run 
 }
 
 // scriptRunDirs are the directories the line runs run from, in order. A call
-// the walk cannot reach, as in a command substitution, runs from cwd only on a
-// line that never moves.
-func scriptRunDirs(command string, d Dialect, cwd string, run scriptRun) []shellDir {
-	calls, ok := locateCalls(command, d, cwd, func(c hint.Invocation) bool {
+// the walk cannot reach, as in a command substitution, runs from start only on
+// a line that never moves.
+func scriptRunDirs(command string, d Dialect, start shellDir, run scriptRun) []shellDir {
+	calls, ok := locateCallsAt(command, d, start, func(c hint.Invocation) bool {
 		if c.Name == path.Base(run.path) {
 			return true
 		}
@@ -3168,7 +3167,7 @@ func scriptRunDirs(command string, d Dialect, cwd string, run scriptRun) []shell
 		return dirs
 	}
 	cmds, _ := ParseCommandsDialect(command, d)
-	return []shellDir{{dir: cwd, known: !slices.ContainsFunc(cmds, changesDir)}}
+	return []shellDir{{dir: start.dir, known: start.known && !slices.ContainsFunc(cmds, changesDir)}}
 }
 
 // committedPaths lists what a commit with these arguments records, from dir.
