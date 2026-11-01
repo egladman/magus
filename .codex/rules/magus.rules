@@ -45,22 +45,22 @@ prefix_rule(
     justification = "magus: a person runs this target: launches paid Claude sessions, $0.05-$4 each by task budget_usd (pilot.manifest: 8 sessions), and a result is an average a person decides to pay for",
 )
 prefix_rule(
-    pattern = ["magus", "run", "hoste-2-e-test"],
+    pattern = ["magus", "run", "agent-harness-test"],
     decision = "prompt",
     justification = "magus: a person runs this target: drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
 )
 prefix_rule(
-    pattern = ["magus", "affected", "hoste-2-e-test"],
+    pattern = ["magus", "affected", "agent-harness-test"],
     decision = "prompt",
     justification = "magus: a person runs this target: drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
 )
 prefix_rule(
-    pattern = ["./magus", "run", "hoste-2-e-test"],
+    pattern = ["./magus", "run", "agent-harness-test"],
     decision = "prompt",
     justification = "magus: a person runs this target: drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
 )
 prefix_rule(
-    pattern = ["./magus", "affected", "hoste-2-e-test"],
+    pattern = ["./magus", "affected", "agent-harness-test"],
     decision = "prompt",
     justification = "magus: a person runs this target: drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
 )
