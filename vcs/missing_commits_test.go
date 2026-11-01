@@ -251,8 +251,36 @@ func (s *missingCommitsSuite) TestABinaryWithNoBlobIDsMatchesNoOtherCommit() {
 	ours := types.Commit{ID: "ours", Parents: []string{"p"}}
 	theirs := types.Commit{ID: "theirs", Parents: []string{"p"}}
 
-	held, err := heldByCopy(s.T().Context(), idlessBinaries{}, s.repo.Root(), ours, []types.Commit{theirs})
+	held, err := heldByCopy(s.T().Context(), newCommitLines(idlessBinaries{}, s.repo.Root()), ours, []types.Commit{theirs})
 
 	s.Require().NoError(err)
 	s.False(held)
+}
+
+// countedDiffs counts the diffs a call pays for.
+type countedDiffs struct {
+	gitVCS
+	diffs int
+}
+
+func (c *countedDiffs) RangeDiff(ctx context.Context, dir, from, to string, paths []string) (string, error) {
+	c.diffs++
+	return c.gitVCS.RangeDiff(ctx, dir, from, to, paths)
+}
+
+func (s *missingCommitsSuite) TestCommitsSharingASubjectDiffEachCommitOnce() {
+	s.onBranch("regen", func() {
+		s.repo.Commit("regenerate the docs", map[string]string{"a": "1\n"})
+		s.repo.Commit("regenerate the docs", map[string]string{"a": "2\n"})
+	})
+	s.repo.Commit("regenerate the docs", map[string]string{"b": "1\n"})
+	s.repo.Commit("regenerate the docs", map[string]string{"b": "2\n"})
+	s.repo.Commit("regenerate the docs", map[string]string{"b": "3\n"})
+
+	counted := &countedDiffs{}
+	missing, err := missingCommits(s.T().Context(), counted, s.repo.Root(), s.main, "regen")
+
+	s.Require().NoError(err)
+	s.Equal(2, missing)
+	s.Equal(5, counted.diffs)
 }
