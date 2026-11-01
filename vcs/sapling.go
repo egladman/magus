@@ -999,3 +999,9 @@ func (v saplingVCS) PrunePreserved(context.Context, string, time.Time) ([]string
 func (v saplingVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
 	return hgCommitPushed(ctx, "sl", dir, id)
 }
+
+// BranchHeads implements types.BranchHeadReporter over bookmarks, which is what
+// a Sapling branch is.
+func (v saplingVCS) BranchHeads(ctx context.Context, root string) (map[string]string, error) {
+	return hgHeads(ctx, "sl", root, "bookmarks", "-T", "{node} {bookmark}\n")
+}

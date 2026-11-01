@@ -41,6 +41,8 @@ func (jjName) name() string      { return "jj" }
 //     workspaces are registered checkouts too.
 //   - sl, CheckoutProvisioner: Sapling has no secondary checkout (see
 //     saplingVCS.IsSecondaryCheckout).
+//   - sl, CheckoutFastForwarder: with no secondary checkout, nothing holds one
+//     to move.
 //   - hg, sl and jj, the capabilities that combine revisions without a checkout: git's
 //     alone so far, though hg and Sapling have bundles, shares and commit, and jj has
 //     workspaces.
@@ -133,10 +135,6 @@ func (declines[N]) Drivers(context.Context, string, []string) (map[string]string
 
 func (declines[N]) FastForward(context.Context, string, string) error {
 	return decline[N](types.CapCheckoutFastForwarder)
-}
-
-func (declines[N]) BranchHeads(context.Context, string) (map[string]string, error) {
-	return nil, decline[N](types.CapBranchHeadReporter)
 }
 
 func (declines[N]) IsAncestor(context.Context, string, string, string) (bool, error) {

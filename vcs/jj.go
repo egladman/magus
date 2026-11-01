@@ -23,6 +23,48 @@ func (v jjVCS) Name() string     { return "jj" }
 func (v jjVCS) Claims() []string { return []string{".jj"} }
 func (v jjVCS) Base() string     { return "trunk()" }
 
+// FastForward implements types.CheckoutFastForwarder with `jj new`. An empty
+// working copy stands for its parent. One holding a change moves only to its
+// own descendant, so the change stays an ancestor.
+func (v jjVCS) FastForward(ctx context.Context, root, rev string) error {
+	if err := checkRequiredRevsetRef(rev); err != nil {
+		return err
+	}
+	empty, err := vcsOutput(ctx, root, "jj", "log", "-r", "@", "--no-graph", "-T", `if(empty, "empty")`)
+	if err != nil {
+		return fmt.Errorf("jj log -r @: %w", err)
+	}
+	head := "@"
+	if empty != "" {
+		head = "@-"
+	}
+	descends, err := v.IsAncestor(ctx, root, head, rev)
+	if err != nil {
+		return err
+	}
+	if !descends {
+		return fmt.Errorf("jj: %s does not descend from %s in %s", rev, head, root)
+	}
+	return runVCS(ctx, "jj", root, []string{"new", "--", rev})
+}
+
+// BranchHeads implements types.BranchHeadReporter over local bookmarks. A
+// conflicted bookmark has no one target, so it is not listed.
+func (v jjVCS) BranchHeads(ctx context.Context, root string) (map[string]string, error) {
+	listed, err := vcsOutputRaw(ctx, root, "jj", "bookmark", "list", "-T",
+		`if(!remote && normal_target, normal_target.commit_id() ++ " " ++ name ++ "\n")`)
+	if err != nil {
+		return nil, fmt.Errorf("jj bookmark list: %w", err)
+	}
+	heads := map[string]string{}
+	for _, line := range splitLines([]byte(listed)) {
+		if id, name, ok := strings.Cut(line, " "); ok {
+			heads[name] = id
+		}
+	}
+	return heads, nil
+}
+
 // ReviewCommand diffs @ against its parent. jj has no staging step at all, its working
 // copy being the change, so there is nothing to record before reading it back.
 func (v jjVCS) ReviewCommand() string { return "jj diff --stat" }
