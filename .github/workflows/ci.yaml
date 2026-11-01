@@ -756,8 +756,8 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      # scip-go and scip-typescript are pinned in mise.toml. Cache on pull requests only,
-      # as the shards restore it; this job holds no secret and no write token.
+      # External SCIP indexers still pinned in mise.toml (TypeScript). Cache on pull
+      # requests only, as the shards restore it; this job holds no secret and no write token.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
