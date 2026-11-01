@@ -22,6 +22,11 @@ final USAGE = "usage: magus buzz hack/dev/issue-mandate.buzz -- issue --until HH
 
 final dayMs = 86400000;
 
+export object Result::<T> {
+    value: T? = null,
+    error: str? = null,
+}
+
 // reserved is what a mandate keeps for the person, printed back at issue.
 final reserved = [
     "new scope: `job fork` of a row the mandate does not name, and any `job apply`",
@@ -74,93 +79,133 @@ export fun nextAt(minutes: int, now: int, offset: int) > int {
     return at;
 }
 
-fun localOffset() > int !> any {
-    final printed = proc\exec("date", args: ["+%z"], opts: proc\ExecOptions{ quiet = true }).stdout;
-    if (parseOffset(printed) -> offset) {
-        return offset;
-    }
-    throw "mandate: `date +%z` printed {printed.trim()}, which is no UTC offset; the end time cannot be placed";
-}
-
-fun mandateFile(root: str) > str !> any {
-    if (mandate\mandateFile(root) -> file) {
-        return file;
-    }
-    throw "mandate: {root} is not a git checkout, so there is no repository directory to keep the mandate in";
-}
-
-fun append(root: str, m: mandate\Mandate) > void !> any {
-    final file = mandateFile(root);
-    fs\mkdirAll(fs\dirname(file));
-    fs\appendFile(file, content: mandate\encodeMandate(m) + "\n");
-}
-
-fun issue(root: str, args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: [<str>], valued: ["--until", "--tolerance", "--rows", "--tokens"]);
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "mandate issue: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
-    }
-    if (parsed.values["--tokens"] != null) {
-        throw "mandate issue: --tokens is refused: magus counts no session tokens, so no budget could be obeyed; the end time is the cap";
-    }
-    final clock = parsed.values["--until"] ?? "";
-    final minutes = parseClock(clock);
-    if (minutes == null) {
-        throw "mandate issue: --until takes the local end time as HH:MM, and got {shown(clock)}\n{USAGE}";
-    }
-    final tolerance = parsed.values["--tolerance"] ?? "";
-    if (mandate\tiers.indexOf(tolerance) == null) {
-        throw "mandate issue: --tolerance takes one of {mandate\tiers.join(", ")}, and got {shown(tolerance)}";
-    }
-    if (mandate\rank(tolerance) > mandate\rank(mandate\ceiling)) {
-        throw "mandate issue: --tolerance {tolerance} is above this repository's ceiling, {mandate\ceiling} (hack/policy/mandate.buzz)";
-    }
-    final named = (parsed.values["--rows"] ?? "").split(",").filter(fun (index: int, id: str) > bool => id.trim() != "");
-    if (named.len() == 0) {
-        throw "mandate issue: --rows names the plan's job rows, comma-separated; a mandate with none has nothing to carry out";
-    }
-    final jobs = mandate\rows(magus\job.list().jobs);
-    final missing = named.filter(fun (index: int, id: str) > bool {
-        foreach (r in jobs) {
-            if (r.id == id) {
-                return false;
-            }
+fun localOffset() > Result::<int> {
+    try {
+        final printed = proc\exec("date", args: ["+%z"], opts: proc\ExecOptions{ quiet = true }).stdout;
+        if (parseOffset(printed) -> offset) {
+            return Result::<int>{ value = offset };
         }
-        return true;
-    });
-    if (missing.len() > 0) {
-        throw "mandate issue: the job store holds no row {missing.join(", ")}; `job apply` the plan before the mandate is issued";
-    }
-    final now = mandate\now();
-    if (mandate\inForce(mandate\loadMandate(root), now: now)) {
-        throw "mandate issue: a mandate is already in force; `magus buzz hack/dev/issue-mandate.buzz -- revoke` ends it first";
-    }
-    final ends = nextAt(minutes!, now: now, offset: localOffset());
-    append(root, m: mandate\Mandate{ action = "issue", at = now, endClock = clock, ends = ends, tolerance = tolerance, rows = named });
-    std\print("mandate in force until {clock} local ({(ends - now) / 60000} minutes from now)");
-    std\print("rows: {named.join(", ")} and the children forked from them");
-    std\print("tolerance: an unsettled job's work is integrated only at {tolerance} or below; above it, it is held for review");
-    std\print("stop condition: the end time passes, every mandated row is paused or done, or one refusal repeats {mandate\loopLimit} stops running");
-    std\print("reserved for you:");
-    foreach (r in reserved) {
-        std\print("  - {r}");
+        return Result::<int>{ error = "mandate: `date +%z` printed {printed.trim()}, which is no UTC offset; the end time cannot be placed" };
+    } catch (err: any) {
+        return Result::<int>{ error = "mandate: run date: {err}" };
     }
 }
 
-fun revoke(root: str) > void !> any {
-    final now = mandate\now();
-    if (!mandate\inForce(mandate\loadMandate(root), now: now)) {
-        std\print("no mandate is in force; nothing to revoke");
-        return;
+fun mandateFile(root: str) > Result::<str> {
+    try {
+        if (mandate\mandateFile(root) -> file) {
+            return Result::<str>{ value = file };
+        }
+    } catch (err: any) {
+        return Result::<str>{ error = "mandate: find the repository directory of {root}: {err}" };
     }
-    append(root, m: mandate\Mandate{ action = "revoke", at = now });
-    std\print("mandate revoked");
+    return Result::<str>{ error = "mandate: {root} is not a git checkout, so there is no repository directory to keep the mandate in" };
 }
 
-fun report(root: str) > void !> any {
+fun append(root: str, m: mandate\Mandate) > Result::<bool> {
+    final file = mandateFile(root);
+    if (file.error != null) {
+        return Result::<bool>{ error = file.error };
+    }
+    try {
+        fs\mkdirAll(fs\dirname(file.value!));
+        fs\appendFile(file.value!, content: mandate\encodeMandate(m) + "\n");
+    } catch (err: any) {
+        return Result::<bool>{ error = "mandate: write {file.value!}: {err}" };
+    }
+    return Result::<bool>{ value = true };
+}
+
+fun issue(root: str, args: [str]) > Result::<bool> {
+    try {
+        final parsed = flags\parse(args, switches: [<str>], valued: ["--until", "--tolerance", "--rows", "--tokens"]);
+        if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+            return Result::<bool>{ error = "mandate issue: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}" };
+        }
+        if (parsed.values["--tokens"] != null) {
+            return Result::<bool>{ error = "mandate issue: --tokens is refused: magus counts no session tokens, so no budget could be obeyed; the end time is the cap" };
+        }
+        final clock = parsed.values["--until"] ?? "";
+        final minutes = parseClock(clock);
+        if (minutes == null) {
+            return Result::<bool>{ error = "mandate issue: --until takes the local end time as HH:MM, and got {shown(clock)}\n{USAGE}" };
+        }
+        final tolerance = parsed.values["--tolerance"] ?? "";
+        if (mandate\tiers.indexOf(tolerance) == null) {
+            return Result::<bool>{ error = "mandate issue: --tolerance takes one of {mandate\tiers.join(", ")}, and got {shown(tolerance)}" };
+        }
+        if (mandate\rank(tolerance) > mandate\rank(mandate\ceiling)) {
+            return Result::<bool>{ error = "mandate issue: --tolerance {tolerance} is above this repository's ceiling, {mandate\ceiling} (hack/policy/mandate.buzz)" };
+        }
+        final named = (parsed.values["--rows"] ?? "").split(",").filter(fun (index: int, id: str) > bool => id.trim() != "");
+        if (named.len() == 0) {
+            return Result::<bool>{ error = "mandate issue: --rows names the plan's job rows, comma-separated; a mandate with none has nothing to carry out" };
+        }
+        final jobs = mandate\rows(magus\job.list().jobs);
+        final missing = named.filter(fun (index: int, id: str) > bool {
+            foreach (r in jobs) {
+                if (r.id == id) {
+                    return false;
+                }
+            }
+            return true;
+        });
+        if (missing.len() > 0) {
+            return Result::<bool>{ error = "mandate issue: the job store holds no row {missing.join(", ")}; `job apply` the plan before the mandate is issued" };
+        }
+        final now = mandate\now();
+        if (mandate\inForce(mandate\loadMandate(root), now: now)) {
+            return Result::<bool>{ error = "mandate issue: a mandate is already in force; `magus buzz hack/dev/issue-mandate.buzz -- revoke` ends it first" };
+        }
+        final offset = localOffset();
+        if (offset.error != null) {
+            return Result::<bool>{ error = offset.error };
+        }
+        final ends = nextAt(minutes!, now: now, offset: offset.value!);
+        final appended = append(root, m: mandate\Mandate{ action = "issue", at = now, endClock = clock, ends = ends, tolerance = tolerance, rows = named });
+        if (appended.error != null) {
+            return appended;
+        }
+        std\print("mandate in force until {clock} local ({(ends - now) / 60000} minutes from now)");
+        std\print("rows: {named.join(", ")} and the children forked from them");
+        std\print("tolerance: an unsettled job's work is integrated only at {tolerance} or below; above it, it is held for review");
+        std\print("stop condition: the end time passes, every mandated row is paused or done, or one refusal repeats {mandate\loopLimit} stops running");
+        std\print("reserved for you:");
+        foreach (r in reserved) {
+            std\print("  - {r}");
+        }
+        return Result::<bool>{ value = true };
+    } catch (err: any) {
+        return Result::<bool>{ error = "mandate issue: {err}" };
+    }
+}
+
+fun revoke(root: str) > Result::<bool> {
+    try {
+        final now = mandate\now();
+        if (!mandate\inForce(mandate\loadMandate(root), now: now)) {
+            std\print("no mandate is in force; nothing to revoke");
+            return Result::<bool>{ value = true };
+        }
+        final appended = append(root, m: mandate\Mandate{ action = "revoke", at = now });
+        if (appended.error != null) {
+            return appended;
+        }
+        std\print("mandate revoked");
+        return Result::<bool>{ value = true };
+    } catch (err: any) {
+        return Result::<bool>{ error = "mandate revoke: {err}" };
+    }
+}
+
+fun report(root: str) > Result::<bool> {
     var last: mandate\Mandate? = null;
     var issued: mandate\Mandate? = null;
-    foreach (line in (fs\readFile(mandateFile(root)) catch "").split("\n")) {
+    final file = mandateFile(root);
+    if (file.error != null) {
+        return Result::<bool>{ error = file.error };
+    }
+    foreach (line in (fs\readFile(file.value!) catch "").split("\n")) {
         if (mandate\parseMandate(line) -> m) {
             last = m;
             if (m.action == "issue") {
@@ -170,32 +215,37 @@ fun report(root: str) > void !> any {
     }
     if (issued == null) {
         std\print("no mandate was ever issued in this repository");
-        return;
+        return Result::<bool>{ value = true };
     }
     final terms = issued!;
-    final list = magus\job.list();
-    final jobs = mandate\rows(list.jobs);
-    final now = mandate\now();
-    if (last!.action == "revoke") {
-        std\print("the last mandate, until {terms.endClock} with tolerance {terms.tolerance}, was revoked");
-    } else {
-        final state = if (mandate\inForce(terms, now: now)) "in force" else "past its end time";
-        std\print("mandate until {terms.endClock}, {state}; tolerance {terms.tolerance}");
+    try {
+        final list = magus\job.list();
+        final jobs = mandate\rows(list.jobs);
+        final now = mandate\now();
+        if (last!.action == "revoke") {
+            std\print("the last mandate, until {terms.endClock} with tolerance {terms.tolerance}, was revoked");
+        } else {
+            final state = if (mandate\inForce(terms, now: now)) "in force" else "past its end time";
+            std\print("mandate until {terms.endClock}, {state}; tolerance {terms.tolerance}");
+        }
+        final blocked = mut [<str>];
+        foreach (b in list.blocked) {
+            blocked.append(b.job);
+        }
+        rowSections(jobs, terms: terms, blocked: blocked, now: now);
+        final attention = mandate\attentionFile(root) ?? "";
+        final filed = if (attention != "") (fs\readLines(attention) catch [<str>]) else [<str>];
+        section("attention", rows: filed);
+        section("left for you", rows: [
+            "push each integrated branch: `git push origin <branch>`",
+            "merge: `gh pr merge <n>` once its checks pass",
+            "a grant a held row needs: `./magus job grant <job> <rule>`",
+            "hook wiring: the root magusfile registers `magus\\guard.stop(agentpolicy\\judgeStop);`",
+        ]);
+        return Result::<bool>{ value = true };
+    } catch (err: any) {
+        return Result::<bool>{ error = "mandate report: {err}" };
     }
-    final blocked = mut [<str>];
-    foreach (b in list.blocked) {
-        blocked.append(b.job);
-    }
-    rowSections(jobs, terms: terms, blocked: blocked, now: now);
-    final attention = mandate\attentionFile(root) ?? "";
-    final filed = if (attention != "") (fs\readLines(attention) catch [<str>]) else [<str>];
-    section("attention", rows: filed);
-    section("left for you", rows: [
-        "push each integrated branch: `git push origin <branch>`",
-        "merge: `gh pr merge <n>` once its checks pass",
-        "a grant a held row needs: `./magus job grant <job> <rule>`",
-        "hook wiring: the root magusfile registers `magus\\guard.stop(agentpolicy\\judgeStop);`",
-    ]);
 }
 
 // rowSections prints the mandated rows held for review first, then integrated, then left.
@@ -247,14 +297,18 @@ export fun main(args: [str]) > void !> any {
     }
     final root = vcs\root();
     final rest = args.sub(1);
+    var done = Result::<bool>{ value = true };
     if (args[0] == "issue") {
-        issue(root, args: rest);
+        done = issue(root, args: rest);
     } else if (args[0] == "revoke") {
-        revoke(root);
+        done = revoke(root);
     } else if (args[0] == "report") {
-        report(root);
+        done = report(root);
     } else {
         throw "mandate: unknown subcommand {args[0]}\n{USAGE}";
+    }
+    if (done.error != null) {
+        throw done.error!;
     }
 }
 
