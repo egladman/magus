@@ -57,6 +57,31 @@ with whichever `go` leads `PATH`, which is how CI once built golangci-lint with 
 different toolchain than the one it analyzed with, and panicked. `mise install`
 gets you both binaries at the pinned versions.
 
+## Agent integrations
+
+After placing a source-built `./magus`, prepare the checkout with:
+
+```sh
+./magus buzz hack/dev/bootstrap-checkout.buzz -- --here
+```
+
+Bootstrap installs every harness declared in `magusfile.buzz`, including its
+skills, hooks, prompts and runtime assets. To refresh only these integrations:
+
+```sh
+./magus buzz hack/dev/bootstrap-harnesses.buzz
+```
+
+Commit canonical sources under `spells/harness/`, `hack/policy/`, and `.agents/`,
+plus the shared `AGENTS.md`. The installed `.claude/`, `.codex/`, `.cursor/`,
+`.opencode/` and `opencode.json` stay local and ignored. Existing personal config
+is merged; conflicting authored skill links or loop files are reported without
+being removed. Bootstrap refuses uncommitted canonical wiring.
+
+Repository installation does not activate a plugin in your user account. Follow
+the chosen host's guide for that step; `magus doctor` reports personal activation
+separately from missing repository files.
+
 ## Adding to the public interface
 
 magus promises that a magusfile which works today keeps working, and there is no

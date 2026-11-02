@@ -613,3 +613,30 @@ func TestReadFork(t *testing.T) {
 		})
 	}
 }
+
+func TestPackBoundsRuntimeAssets(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		size      int
+		wantError bool
+	}{
+		{"runtime larger than the former source-only limit", 9 << 20, false},
+		{"runtime exceeding the bounded archive", 16 << 20, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			packed, err := packFiles("harness", []string{"spell.buzz", "gen/runtime.wasm"}, func(name string) ([]byte, error) {
+				if name == "spell.buzz" {
+					return []byte("// harness"), nil
+				}
+				return make([]byte, tc.size), nil
+			})
+			if tc.wantError {
+				require.ErrorContains(t, err, "over the 16777216 byte cap")
+				assert.Nil(t, packed)
+				return
+			}
+			require.NoError(t, err)
+			assert.Greater(t, len(packed), 8<<20)
+		})
+	}
+}

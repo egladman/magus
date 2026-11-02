@@ -330,6 +330,13 @@ fun installProjects(h: Host, dir: str, install: str) > str !> any {
     return "installed the dependencies of {install}";
 }
 
+// Installing integrations is part of preparing a checkout, including when it
+// already has a current binary or no language dependencies need installation.
+fun installHarnesses(h: Host, dir: str) > str !> any {
+    _ = must(h.magus(dir, args: ["buzz", "hack/dev/bootstrap-harnesses.buzz"]), what: "magus buzz hack/dev/bootstrap-harnesses.buzz");
+    return "installed every declared harness";
+}
+
 // binaryAtHead reports whether dir's ./magus is a clean build of its HEAD.
 fun binaryAtHead(h: Host, dir: str) > bool !> any {
     final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
@@ -355,6 +362,7 @@ export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = 
     } else {
         did.append(installProjects(h, dir: dir, install: install));
     }
+    did.append(installHarnesses(h, dir: dir));
     if (restart) {
         did.append(startDaemon(h, dir: dir));
         final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
@@ -406,6 +414,7 @@ export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
         }
     }
     did.append(installDependencies(h, dir: dir));
+    did.append(installHarnesses(h, dir: dir));
     _ = must(h.magus(dir, args: ["graph", "build"]), what: "magus graph build");
     did.append("built the graph");
     _ = must(h.magus(dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
@@ -756,6 +765,7 @@ test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untrac
         "stopped the pool parents of other builds",
         "removed the stale untracked skill install .claude/skills/magus-run",
         "installed every project's dependencies",
+        "installed every declared harness",
         "built the graph",
         "generated the symbol digest",
         "built the proofread binary",
@@ -774,8 +784,9 @@ test "the build path stops the daemon, places the binary, seeds the index, then 
         "placed /c/magus",
         "seeded /c",
         "installed every project's dependencies",
+        "installed every declared harness",
     ], message: "did");
-    assert\equal(calls, want: ["git rev-parse HEAD", "magus version -o json", "magus server status", "magus server stop", "build /c", "seed /c", "magus run install /"], message: "order");
+    assert\equal(calls, want: ["git rev-parse HEAD", "magus version -o json", "magus server status", "magus server stop", "build /c", "seed /c", "magus run install /", "magus buzz hack/dev/bootstrap-harnesses.buzz"], message: "order");
 }
 
 test "the build path keeps a clean binary at HEAD and leaves the daemon alone" {
@@ -993,4 +1004,22 @@ test "explicit recovery permits a dirty tree without accepting another revision"
     assert\equal(versionMismatch(`{"commit":"abc123","version":"v0.5.0-dirty"}`, head: "abc123", recovery: true), want: "", message: "dirty recovery is explicit");
     final why = versionMismatch(`{"commit":"other","version":"v0.5.0-dirty"}`, head: "abc123", recovery: true);
     assert\equal(why.indexOf("not the checkout") != null, want: true, message: why);
+}
+
+test "a failed harness installation stops bootstrap before restarting the daemon" {
+    final calls = mut [<str>];
+    final h = stubHost({"magus buzz hack/dev/bootstrap-harnesses.buzz": Ran{code = 1, stderr = "local conflict"}}, stamps: {}, calls: calls);
+    var why = "";
+    try { _ = placeBinary(h, dir: "/c", restart: true, install: "none"); }
+    catch (err: any) { why = "{err}"; }
+    assert\isTrue(why.indexOf("local conflict") != null, message: "install failure is visible");
+    assert\equal(calls.indexOf("magus server start"), want: null, message: "no restart after partial bootstrap");
+}
+
+test "a current binary with no dependencies still installs every harness" {
+    final calls = mut [<str>];
+    final h = stubHost({"git rev-parse HEAD": Ran{stdout = "abc123\n"},
+        "magus version -o json": Ran{stdout = `{"commit":"abc123","version":"v0.5.0"}`}}, stamps: {}, calls: calls);
+    _ = placeBinary(h, dir: "/c", install: "none");
+    assert\equal(calls.filter(fun (index: int, line: str) > bool => line == "magus buzz hack/dev/bootstrap-harnesses.buzz").len(), want: 1, message: "exactly one complete installation");
 }

@@ -12,6 +12,8 @@
 namespace gates;
 
 import "fs";
+import "encoding/json";
+import "magus";
 import "io";
 // Aliased: engine/path.buzz already binds the name "path" to its own namespace.
 import "path" as filepath;
@@ -659,6 +661,8 @@ fun crosscheckFindings(root: str, docs: str, pages: [str]) > [str] !> any {
             found.append(f);
         }
     }
+    // OpenCode is installed from its harness assets, not copied from this guide.
+    templates["opencode"] = fs\readFile(root + "/spells/harness/opencode/spell.buzz");
     final guide = docs + "/guides/integrations/agents.md";
     foreach (f in guardParityFindings(templates, guide: fs\readFile(root + "/" + guide), guideFile: guide)) {
         found.append(f);
@@ -671,10 +675,15 @@ fun crosscheckFindings(root: str, docs: str, pages: [str]) > [str] !> any {
     foreach (f in rehydrateWiringFindings(hostPage, doc: fs\readFile(root + "/" + hostPage))) {
         found.append(f);
     }
-    // The shipped hook configs: the one this repository dogfoods and the one a reader copies.
-    foreach (configFile, page in {".claude/settings.json": "claude-code.md",
-            agentsRel + "/codex-hooks.json": "codex.md"}) {
-        foreach (f in hostWiringFindings(fs\readFile(root + "/" + configFile), configFile: configFile,
+    // Grade canonical wiring, never a developer's merged personal installation.
+    final hooks = mut {<str: any>};
+foreach (block in magus\describe.harness("claude-code").wired) {
+    if (block.key.startsWith("hooks.")) { hooks[block.key.sub(6)] = block.entries; }
+}
+    final configs = {"claude-code.md": json\stringify({"hooks": hooks}),
+        "codex.md": fs\readFile(agentsDir + "/codex-hooks.json")};
+    foreach (page, config in configs) {
+        foreach (f in hostWiringFindings(config, configFile: page,
                 page: agentsRel + "/" + page, doc: fs\readFile(agentsDir + "/" + page))) {
             found.append(f);
         }

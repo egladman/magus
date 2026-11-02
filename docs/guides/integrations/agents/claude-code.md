@@ -129,9 +129,9 @@ The catch-all replaced the per-tool entries, among them the `Edit|Write|Notebook
 entry that ran `magus-path.buzz`. A `.claude/settings.json` merged before that still
 carries them, and `magus describe harness claude-code` lists each as one to retire.
 
-This repository's own `.claude/settings.json` holds exactly what the spell prints,
-merged with the command `magus describe harness` prints beside it. The scripts are
-the glue; the harness only prints the fragments that name them. See
+This repository's bootstrap installs `.claude/settings.json` from the canonical
+harness spell, merging managed hooks with existing local settings. The installed
+file is ignored; the harness sources remain reviewed in version control. See
 [guard templates](guard-templates.md) for the files and the variables that adapt
 them.
 

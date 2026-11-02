@@ -152,11 +152,7 @@ magus\project({
         "mise.toml",
         "magus.yaml",
         "hack/docs/screenshot.mjs",
-        ".*/hooks.json",
-        ".codex/rules/*.rules",
-        "opencode.json",
-        // Claude Code keeps its hooks in settings.json, which the glob above misses.
-        ".claude/settings.json",
+        ".agents/loops/*.md",
         // The repository's Claude Code plugin marketplace; it lists the mod in
         // docs/guides/integrations/agents/claude-code-mod.
         ".claude-plugin/marketplace.json",
@@ -2541,14 +2537,14 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
     _ = magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 
-// Fails when a committed host config file lacks what its wired harness spell renders,
+// Fails when a local host installation lacks what its wired harness spell renders,
 // naming each file and the command that merges it. It only reads: magus never writes
 // host config. The reads are what `magus describe harness` plans from.
 export fun harness_drift(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["magusfile.buzz", "hack/magusfile/harness.buzz", "spells/harness/**/*.buzz",
                     ".claude/settings.json", ".cursor/hooks.json", ".codex/hooks.json",
                     ".codex/rules/*.rules", "opencode.json"]);
-    final plans = mut [<magus\HarnessPlan>];
+    final plans = mut [<magus\HarnessInstallation>];
     foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{quiet = true}).stdout.trim().split("\n")) {
         if (id != "") { plans.append(magus\describe.harness(id)); }
     }

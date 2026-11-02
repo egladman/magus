@@ -31,7 +31,7 @@ export fun stale(plans: [magus\HarnessInstallation]) > Drift {
     if (files.len() == 0) { return Drift{}; }
     return Drift{
         failure = "harness-drift: {files.join(", ")} lacks what its harness spell renders; "
-            + "run the merge logged above and commit the result",
+            + "run `magus buzz hack/dev/bootstrap-harnesses.buzz` to refresh the local installation",
         merges = merges.join("\n"),
     };
 }

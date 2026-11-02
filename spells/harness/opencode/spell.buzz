@@ -1,3 +1,8 @@
+// magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model pass=none ask=model
+// magus-guard-coverage: schema=2 host=opencode input=mcp deny=model advise=model pass=none ask=model
+// Coverage belongs to the canonical harness; the guide no longer ships a plugin template.
+
 // OpenCode's harness installs the plugin and its complete runtime through the generic
 // harness contract. JSON permissions remain declared separately by mgs_renderPrompts.
 

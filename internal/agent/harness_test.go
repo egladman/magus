@@ -1655,10 +1655,10 @@ func requireWired(t *testing.T, path, event, matcher, script string) wiredHook {
 func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t *testing.T) {
 	const reply, guard = "proofread-reply.buzz", "magus-command.buzz"
 
-	// The repository's own configs hand-write the reply check; the config magus ships does not.
+	// Bootstrap installs the canonical guard wiring; a personal reply hook is optional.
 	t.Run("claude-code", func(t *testing.T) {
 		config := dogfoodedHookConfig
-		requireWired(t, config, "Stop", "", reply)
+		requireWired(t, config, "Stop", "", guard)
 		requireWired(t, config, "UserPromptSubmit", "", guard)
 		requireWired(t, config, "PreToolUse", "*", guard)
 		requireWired(t, config, "SubagentStop", "", guard)
@@ -1687,8 +1687,7 @@ func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t
 
 	t.Run("cursor", func(t *testing.T) {
 		config := hostConfigFile["cursor"][0]
-		stop := requireWired(t, config, "stop", "", reply)
-		assert.Equal(t, "1", fmt.Sprint(stop.LoopLimit), "the reply check chains one followup at most")
+		requireWired(t, config, "stop", "", "cursor-hook.buzz")
 		requireWired(t, config, "beforeSubmitPrompt", "", "cursor-hook.buzz")
 		// The catch-all entry judges every tool, Task and Shell among them.
 		requireWired(t, config, "preToolUse", "*", "cursor-hook.buzz")

@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -114,6 +115,140 @@ func TestHarnessSpellsRenderEveryHookTheyList(t *testing.T) {
 	}
 	opencode := loadShippedHarness(t, "opencode")
 	assert.Equal(t, "skipped: opencode declares no config path", agentHookCheck(opencode).Reason)
+}
+
+type hookEntry struct {
+	Matcher string `json:"matcher"`
+	Hooks   []struct {
+		Command string `json:"command"`
+	} `json:"hooks"`
+}
+
+type hookSettings struct {
+	Hooks map[string][]hookEntry `json:"hooks"`
+}
+
+// renderHarnessHookConfig uses the production plan and installer over the descriptor
+// compiled from the canonical Buzz spell. Its empty temp root makes the resulting file
+// independent of whichever host wiring happens to be installed in this checkout.
+func renderHarnessHookConfig(t *testing.T, id string) (string, agent.HarnessDescriptor) {
+	t.Helper()
+	d := loadShippedHarness(t, id)
+	previous := agent.RegisterHarnessSpellLoader(func(_ context.Context, requested string) (agent.HarnessDescriptor, string, bool, error) {
+		return d, "spell:" + id, requested == id, nil
+	})
+	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(previous) })
+
+	root := t.TempDir()
+	ctx := agent.ContextWithWiredHarnesses(context.Background(), []string{id})
+	plan, err := agent.PlanHarness(ctx, root, id)
+	require.NoError(t, err)
+	_, err = agent.ApplyHarnessInstallation(ctx, root, plan, false)
+	require.NoError(t, err)
+	require.NotEmpty(t, d.Config.Path, "%s has no hook config", id)
+	return filepath.Join(root, d.Config.Path), d
+}
+
+func configJobs(t *testing.T, path string, declared []types.HookCommand) map[string]bool {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err, "read %s", path)
+	var cfg hookSettings
+	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+	require.NotEmpty(t, cfg.Hooks, "%s wires no events at all", path)
+
+	found := map[string]bool{}
+	for _, entries := range cfg.Hooks {
+		for _, entry := range entries {
+			for _, h := range entry.Hooks {
+				for _, hook := range declared {
+					name := strings.TrimSuffix(filepath.Base(hook.Script), ".buzz")
+					if name == "" || !strings.Contains(h.Command, name+".buzz") {
+						continue
+					}
+					if strings.Contains(entry.Matcher, "mcp__") {
+						name += " on mcp__magus__"
+					}
+					found[name] = true
+				}
+			}
+		}
+	}
+	require.NotEmpty(t, found, "%s recognizes no declared hook", path)
+	return found
+}
+
+var hookConfigExemptions = map[string]map[string]string{
+	"codex": {
+		"magus-duration": "no codex hook schema under testdata/hosts/codex carries a tool duration, and the " +
+			"recorder writes nothing for an event without one",
+		"magus-session": "SessionStart hands a codex hook no env file and reads back only additionalContext " +
+			"(testdata/hosts/codex/session-start.command.{input,output}.schema.json), so no hook can put the " +
+			"checkout root on PATH for later shell commands",
+		"magus-observe": "Codex has no read tool: a file is read through a shell command, which the command " +
+			"rules already judge, so no PreToolUse matcher exists for the read record to ride",
+	},
+}
+
+func TestShippedHookConfigsWireTheSameJobs(t *testing.T) {
+	wired := map[string]map[string]bool{}
+	paths := map[string]string{}
+	for _, id := range []string{"claude-code", "codex"} {
+		path, d := renderHarnessHookConfig(t, id)
+		paths[id] = path
+		wired[id] = configJobs(t, path, d.Hooks)
+	}
+
+	for host, templates := range wired {
+		for other, otherTemplates := range wired {
+			if other == host {
+				continue
+			}
+			for name := range otherTemplates {
+				if templates[name] {
+					continue
+				}
+				why, exempt := hookConfigExemptions[host][name]
+				assert.True(t, exempt,
+					"%s runs %s and %s does not.\n"+
+						"Wire it there too, or record why that host does without it in hookConfigExemptions.\n"+
+						"A host doing less than another is a decision; a host doing less than another with\n"+
+						"nothing saying so is the gap this gate exists to refuse.",
+					paths[other], name, paths[host])
+				if exempt {
+					t.Logf("%s does not run %s: %s", host, name, why)
+				}
+			}
+		}
+	}
+
+	for host, exemptions := range hookConfigExemptions {
+		for name := range exemptions {
+			assert.False(t, wired[host][name],
+				"hookConfigExemptions says %s does not run %s, but %s invokes it. Drop the exemption.",
+				host, name, paths[host])
+		}
+	}
+
+	// Every input reaches one glue through one entry: both spells wire every tool call
+	// to magus-command.buzz under the catch-all matcher, so no second entry judges it.
+	for host, path := range paths {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
+		var cfg hookSettings
+		require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+		var judging []string
+		for _, entry := range cfg.Hooks["PreToolUse"] {
+			for _, h := range entry.Hooks {
+				assert.NotContains(t, h.Command, "magus-path.buzz",
+					"%s: a write reaches the catch-all entry whole; a path entry judges it twice", host)
+				if strings.Contains(h.Command, "magus-command.buzz") {
+					judging = append(judging, entry.Matcher)
+				}
+			}
+		}
+		assert.Equal(t, []string{"*"}, judging, "%s: one PreToolUse entry runs the command glue, on every tool", host)
+	}
 }
 
 // agentHookCheck runs verify's hook check through VerifyHarness's own entry point: a
@@ -478,6 +613,18 @@ func readGlue(t *testing.T, name string) string {
 	return string(body)
 }
 
+// The OpenCode adapter is installed from Go/Wasm assets, not a guide template.
+func readOpenCodeRuntime(t *testing.T) string {
+	t.Helper()
+	var source strings.Builder
+	for _, path := range []string{"opencode/wasm/plugin.go", "opencode/runtime.go", "opencode/plugin.buzz"} {
+		body, err := os.ReadFile(path)
+		require.NoError(t, err)
+		source.Write(body)
+	}
+	return source.String()
+}
+
 // HookBindingCompletenessSuite holds every shipped harness to an answer at
 // every hook point. It extends TestShippedHookConfigsWireTheSameJobs from two
 // configs to every harness, keyed by point. A host whose glue is one script
@@ -541,7 +688,7 @@ func (s *HookBindingCompletenessSuite) TestAttachIsUnsupportedEverywhere() {
 // The plugin is not a rendered config, so nothing else holds it to the
 // hooks the opencode spell lists.
 func (s *HookBindingCompletenessSuite) TestTheOpenCodePluginRunsEveryHookItsSpellLists() {
-	plugin := readGlue(s.T(), "opencode-plugin.ts")
+	plugin := readOpenCodeRuntime(s.T())
 	for _, h := range s.loaded["opencode"].Hooks {
 		s.Contains(plugin, fmt.Sprintf("%q", h.Event), "the plugin handles no %s", h.Event)
 		if h.Script != "opencode-plugin" {
@@ -651,17 +798,14 @@ func (s *AdapterConformanceSuite) TestEveryBoundAdapterIsAShippedGlue() {
 				continue
 			}
 			for _, script := range strings.Split(b.Adapter, ", ") {
-				s.FileExists(filepath.Join(glueDir, glueFile(script)), "%s %s", id, b.Point)
+				if script == "opencode-plugin" {
+					s.FileExists("opencode/wasm/plugin.go", "%s %s", id, b.Point)
+				} else {
+					s.FileExists(filepath.Join(glueDir, script+".buzz"), "%s %s", id, b.Point)
+				}
 			}
 		}
 	}
-}
-
-func glueFile(script string) string {
-	if script == "opencode-plugin" {
-		return script + ".ts"
-	}
-	return script + ".buzz"
 }
 
 // judgedInput is the guard input a judging point hands magus, as the
@@ -687,6 +831,11 @@ func (s *AdapterConformanceSuite) TestEveryBoundJudgingPointDeclaresItsVerdictTr
 				declared[fmt.Sprintf("%s/%s", host, m[2])] = m[3] != "none"
 			}
 		}
+	}
+	canonical, err := os.ReadFile(filepath.Join("..", "..", "..", "spells", "harness", "opencode", "spell.buzz"))
+	s.Require().NoError(err)
+	for _, m := range coverageLine.FindAllStringSubmatch(string(canonical), -1) {
+		declared[fmt.Sprintf("%s/%s", m[1], m[2])] = m[3] != "none"
 	}
 	for id, d := range s.loaded {
 		table, err := agent.HookBindings(d)
@@ -719,7 +868,7 @@ func (s *AdapterConformanceSuite) TestEachHostsFailStanceIsTheOneDecided() {
 	for _, event := range []string{"preToolUse", "beforeShellExecution", "beforeMCPExecution"} {
 		s.True(entryFailsClosed(s.loaded["cursor"], event), "cursor's %s entry must fail closed", event)
 	}
-	s.Contains(readGlue(s.T(), "opencode-plugin.ts"), "${verdict.why}; refused.",
+	s.Contains(readOpenCodeRuntime(s.T()), `; refused.`,
 		"the plugin refuses a call no magus judged, and says so")
 }
 

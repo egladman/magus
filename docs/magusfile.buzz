@@ -437,9 +437,9 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["**/*.md", "lib/conventions.buzz", "lib/adr.buzz", "lib/design.buzz", "lib/crosscheck.buzz",
         "engine/gates.buzz", workspace\file("README.md"), workspace\file("CONTRIBUTING.md"),
         workspace\file("changes/unreleased/*.md"), workspace\file("internal/selfupdate/release-keys.json"),
-        workspace\file(".claude/settings.json"),
+        workspace\file("spells/harness/claude-code/*.buzz"), workspace\file("spells/harness/opencode/spell.buzz"),
         agents\file("cursor-hook.buzz"), agents\file("magus-*.buzz"), agents\file("codex-hooks.json"),
-        agents\file("opencode-plugin.ts")]);
+        workspace\file("spells/harness/opencode/plugins/magus.js")]);
     renderer\site_conventions(ROOT, docs: DOCS, files: args);
 }
 // lint runs conventions, typos, tsc and Biome, plus the lint of each project the site embeds.

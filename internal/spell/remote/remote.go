@@ -53,9 +53,9 @@ const (
 	entryFile      = "spell.buzz"
 )
 
-// maxSpell bounds a spell's packed size. A spell is Buzz source; megabytes of it is
-// not a spell.
-const maxSpell = 8 << 20
+// maxSpell bounds the uncompressed tar, including source and declared runtime
+// assets. The shipped Go/Wasm harness needs more than 8 MiB even with debug data stripped.
+const maxSpell = 16 << 20
 
 const fetchTimeout = 2 * time.Minute
 

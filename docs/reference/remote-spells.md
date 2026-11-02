@@ -119,6 +119,9 @@ publishes the digest the last one did, and the binary computes it from what it e
 
 ## Publish your own spell
 
+A spell archive is limited to 16 MiB of uncompressed tar data, including its
+source and runtime assets.
+
 A spell is a directory holding a `spell.buzz`, committed to a repository. Four verbs
 take it from there to a registry and back.
 

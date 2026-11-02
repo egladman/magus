@@ -16,7 +16,7 @@ So magus judges and informs; it does not transform. A guard verdict allows,
 advises or denies an action and gives its reason. It never rewrites the
 command, the prompt or the reply on the way through. The text an agent loads
 from magus (skills, MAGUS.md, the AGENTS.md section) is written ahead of time.
-It lives in version control, and people review it like code. Compression,
+Its canonical source lives in version control, and people review it like code. Compression,
 proofreading and regeneration happen to those files, never at session start and
 never per request. magus runs no proxy between an agent and its provider and no step
 that edits context in flight.
@@ -32,8 +32,9 @@ control no longer records what the model read.
 
 - A guard verdict has three outcomes, allow, advise and deny, and none of them
   carries a rewritten command.
-- Skills, MAGUS.md and the AGENTS.md section are files in version control.
-  Targets regenerate them, and the drift gate checks them.
+- Canonical skills, MAGUS.md and the AGENTS.md section are reviewed in version
+  control. Bootstrap installs host-specific copies from those sources; verification
+  checks the local installation.
 - [A record of refusals](../refusals.md) lists the proxy and the model adapter
   as not built.
 
