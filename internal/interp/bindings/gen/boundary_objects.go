@@ -2086,6 +2086,7 @@ func ObjectHint(v spells.Hint) vm.Value {
 
 func ObjectCommand(v spells.Command, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
+	out.MapSet("testSelection", vm.StringValue(v.TestSelection))
 	out.MapSet("bin", vm.StringValue(v.Bin))
 	itemsArgs := make([]vm.Value, len(v.Args))
 	for indexArgs := range v.Args {

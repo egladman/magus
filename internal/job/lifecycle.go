@@ -117,7 +117,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	changed := func() ([]string, map[string]bool) {
 		return rowFiles(tree, Observed{}, *result, store.generated), namedFiles(tree, goals, result.ChangedPaths)
 	}
-	if err := refuseWrongRun(rows[i], attempt, gateAttempts, workspaceDefaultCharms(tree), changed); err != nil {
+	if err := refuseWrongRun(rows[i], attempt, gateAttempts, workspaceDefaultCharms(tree), changed, store.testSelection()); err != nil {
 		return types.Job{}, err
 	}
 	return update(func(row *types.Job) {
@@ -157,19 +157,19 @@ func workspaceDefaultCharms(tree string) []string {
 // charm set included. A goal the row does not declare is left for the wait.
 // changed is what the result claims: exit reads no diff, and the wait does. It
 // loads the workspace, so only a run the check does not name verbatim asks.
-func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGateAttempt, defaults []string, changed func() ([]string, map[string]bool)) error {
+func refuseWrongRun(row types.Job, primary types.JobAttempt, gates []types.JobGateAttempt, defaults []string, changed func() ([]string, map[string]bool), selection testSelection) error {
 	goals := row.EffectiveGoals()
 	check := func(id string, attempt types.JobAttempt) error {
 		i := slices.IndexFunc(goals, func(g types.Goal) bool { return g.ID == id && g.Kind == types.GoalKindCheck })
-		if i < 0 || ranCheck(goals[i].Check, attempt, defaults) {
+		if i < 0 || ranCheck(goals[i].Check, attempt, defaults, selection) {
 			return nil
 		}
 		files, named := changed()
-		if ranOver(goals[i].Check, attempt, defaults, files, named) {
+		if ranOver(goals[i].Check, attempt, defaults, files, named, selection) {
 			return nil
 		}
 		return fmt.Errorf("job: goal %q cites output ref %q, which records `%s`, and its check runs `%s`%s: cite a run of that check, or file it as owed with no output_ref",
-			id, attempt.Ref, attempt, resolveCheck(goals[i].Check, defaults), leftOut(goals[i].Check, attempt, files, named))
+			id, attempt.Ref, attempt, resolveCheck(goals[i].Check, defaults), leftOut(goals[i].Check, attempt, files, named, selection))
 	}
 	if primary.Found {
 		if err := check(types.PrimaryGoalID, primary); err != nil {
@@ -258,6 +258,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 			return types.JobStatus{}, err
 		}
 	}
+	seen.TestSelection = store.testSelection()
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, jobs[i]), seen, ev.result, store.generated)
 	seen.namedFiles = namedFiles(WorkTree(store.root, jobs[i]), inheritGoals(jobs[i], jobs).EffectiveGoals(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
@@ -973,6 +974,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 			return types.JobStatus{}, err
 		}
 	}
+	seen.TestSelection = store.testSelection()
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, row), seen, ev.result, store.generated)
 	seen.namedFiles = namedFiles(WorkTree(store.root, row), row.EffectiveGoals(), slices.Concat(seen.Changed, ev.result.ChangedPaths))

@@ -40,6 +40,11 @@ type Observer func(ctx context.Context, row types.Job) (Observed, error)
 // gate that needed an observation nobody could make fails naming it, instead of passing
 // on an empty value.
 type Observed struct {
+	// TestSelection resolves the forwarded selector dialect from loaded dispatch
+	// metadata. The bool says the answer is known; nil or unknown keeps evidence
+	// arguments strict instead of guessing from a target name.
+	TestSelection func(types.LeaseCheck) (string, bool)
+
 	// Changed are the paths that actually differ from the job's checkpoint, as the
 	// CALLER computed them. The caller resolves it for the same reason it resolves an
 	// attempt: nothing here reads a VCS, a file or a graph while the store's lock is held.
@@ -542,13 +547,13 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		}
 		statusByGate[gate.ID] = verifyGate(row, gate, evidenceByGate[gate.ID], attemptByGate[gate.ID], seen)
 		if gate.Kind == types.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(gate.Check) &&
-			scopedRun(gate.Check, attemptByGate[gate.ID]) {
+			scopedRun(gate.Check, attemptByGate[gate.ID], seen.TestSelection) {
 			v.Notes = append(v.Notes, fmt.Sprintf("goal %q was graded on output ref %q, a run scoped with `-- %s`:"+
 				" -run and -skip select tests inside the packages `%s` runs, so it ran every package the check does",
 				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " "), gate.Check))
 		}
 		if gate.Kind == types.GoalKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(gate.Check) &&
-			narrowedFiles(gate.Check, attemptByGate[gate.ID], seen.namedFiles) {
+			narrowedFiles(gate.Check, attemptByGate[gate.ID], seen.namedFiles, seen.TestSelection) {
 			v.Notes = append(v.Notes, fmt.Sprintf("goal %q was graded on output ref %q, a run over the files this job changed: `-- %s`",
 				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " ")))
 		}
@@ -733,7 +738,7 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 		status.Violations = append(status.Violations, fmt.Sprintf("no run is recorded for output ref %q", status.OutputRef))
 		return status
 	}
-	status.Scope = runScope(gate.Check, attempt, seen.namedFiles)
+	status.Scope = runScope(gate.Check, attempt, seen.namedFiles, seen.TestSelection)
 	if row.Created > 0 {
 		// Compared in whole seconds, the resolution the declaration is stamped in: a run in
 		// the declaring second cannot be ordered against it either way, and a check run
@@ -758,12 +763,12 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q acted under lease %q, not this job's lease %q, so it is another job's evidence",
 			status.OutputRef, attempt.Lease, row.ID))
 	}
-	if !ranOver(gate.Check, attempt, seen.DefaultCharms, seen.changedFiles, seen.namedFiles) {
+	if !ranOver(gate.Check, attempt, seen.DefaultCharms, seen.changedFiles, seen.namedFiles, seen.TestSelection) {
 		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run%s",
-			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms), leftOut(gate.Check, attempt, seen.changedFiles, seen.namedFiles)))
+			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms), leftOut(gate.Check, attempt, seen.changedFiles, seen.namedFiles, seen.TestSelection)))
 	}
 	if attempt.Failed {
-		status.Violations = append(status.Violations, runFailed(status.OutputRef, gate.Check, seen.namedFiles))
+		status.Violations = append(status.Violations, runFailed(status.OutputRef, gate.Check, seen.namedFiles, seen.TestSelection))
 	}
 	status.Verified = len(status.Violations) == 0
 	return status
@@ -788,7 +793,7 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 // of a [scopedRun], which VerifyGates notes beside the grade. Nil args are not compared:
 // the run forwarded none, or its record predates the field, and either way it narrowed
 // nothing it can show.
-func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
+func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string, selection testSelection) bool {
 	if c.Script != "" {
 		// A recorded script stores its argv, so absent means empty.
 		if len(a.ExtraArgs) != len(c.Args) || (len(c.Args) > 0 && !slices.Equal(a.ExtraArgs, c.Args)) {
@@ -803,7 +808,7 @@ func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 		script, ran := strings.CutPrefix(a.Target, prefix)
 		return ran && path.Clean(script) == path.Clean(c.Script) && path.Clean(a.Project) == "."
 	}
-	if a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && !scopedRun(c, a) {
+	if a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && !scopedRun(c, a, selection) {
 		return false
 	}
 	spell, target, _ := strings.Cut(resolveCheck(c, defaults).Target, "::")
@@ -819,22 +824,22 @@ func ranCheck(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
 // ranOver is ranCheck for a job that changed the files in changed. A
 // file-scoped check judges only the files it is handed, so its list is graded
 // against changed and never compared verbatim.
-func ranOver(c types.LeaseCheck, a types.JobAttempt, defaults, changed []string, named map[string]bool) bool {
-	if fileScoped(c, named) && onlyFiles(a.ExtraArgs) && len(changed) > 0 {
+func ranOver(c types.LeaseCheck, a types.JobAttempt, defaults, changed []string, named map[string]bool, selection testSelection) bool {
+	if fileScoped(c, named, selection) && onlyFiles(a.ExtraArgs) && len(changed) > 0 {
 		if len(unreadFiles(c, a, changed)) > 0 {
 			return false
 		}
 		c.Args = a.ExtraArgs
 	}
-	return ranCheck(c, a, defaults)
+	return ranCheck(c, a, defaults, selection)
 }
 
 // fileScoped reports whether c's args name the files it judges. Lint reads
 // them that way with or without a list. A script's args are its argv, and a
 // package argument does not scope go-test. Any other target's args must each
 // be in named, or an argument like an environment name reads as a file list.
-func fileScoped(c types.LeaseCheck, named map[string]bool) bool {
-	if c.Script != "" || runsGoTest(c) {
+func fileScoped(c types.LeaseCheck, named map[string]bool, selection testSelection) bool {
+	if c.Script != "" || selection.goTests(c) || !selection.known(c) {
 		return false
 	}
 	target := c.Target
@@ -892,8 +897,8 @@ func unreadFiles(c types.LeaseCheck, a types.JobAttempt, changed []string) []str
 }
 
 // leftOut says which changed files a's narrowed run of c did not read, or "".
-func leftOut(c types.LeaseCheck, a types.JobAttempt, changed []string, named map[string]bool) string {
-	if !fileScoped(c, named) || !onlyFiles(a.ExtraArgs) {
+func leftOut(c types.LeaseCheck, a types.JobAttempt, changed []string, named map[string]bool, selection testSelection) string {
+	if !fileScoped(c, named, selection) || !onlyFiles(a.ExtraArgs) {
 		return ""
 	}
 	unread := unreadFiles(c, a, changed)
@@ -905,36 +910,36 @@ func leftOut(c types.LeaseCheck, a types.JobAttempt, changed []string, named map
 
 // runFailed is the violation of a failed run. A file-scoped check's findings in
 // other files are not this job's.
-func runFailed(ref string, c types.LeaseCheck, named map[string]bool) string {
+func runFailed(ref string, c types.LeaseCheck, named map[string]bool, selection testSelection) string {
 	failed := fmt.Sprintf("the run behind output ref %q failed, so its check did not pass", ref)
-	if fileScoped(c, named) {
+	if fileScoped(c, named, selection) {
 		return failed + ": a finding in a file this job did not change is not this job's, so run it over the files it changed"
 	}
 	return failed
 }
 
 // narrowedFiles reports whether a ran file-scoped c over another list of files.
-func narrowedFiles(c types.LeaseCheck, a types.JobAttempt, named map[string]bool) bool {
-	return fileScoped(c, named) && onlyFiles(a.ExtraArgs) && !slices.Equal(a.ExtraArgs, c.Args)
+func narrowedFiles(c types.LeaseCheck, a types.JobAttempt, named map[string]bool, selection testSelection) bool {
+	return fileScoped(c, named, selection) && onlyFiles(a.ExtraArgs) && !slices.Equal(a.ExtraArgs, c.Args)
 }
 
 // scopedRun reports whether a ran c's go test with other -run or -skip patterns and the
 // same args otherwise. Those flags select tests inside the packages go-test runs and leave
 // the package set alone (a package argument does not scope go-test either), so the run
 // covered every package the check covers. Target and project are ranCheck's to compare.
-func scopedRun(c types.LeaseCheck, a types.JobAttempt) bool {
-	return a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && runsGoTest(c) &&
+func scopedRun(c types.LeaseCheck, a types.JobAttempt, selection testSelection) bool {
+	return a.ExtraArgs != nil && !slices.Equal(a.ExtraArgs, c.Args) && selection.goTests(c) &&
 		slices.Equal(withoutTestSelection(a.ExtraArgs), withoutTestSelection(c.Args))
 }
 
 // runScope is the `--` args a's go test of c narrowed with, as `-- <args>`: a -run, a -skip
 // or a package argument. It is "" for any other run, which ran every package and test c
 // names.
-func runScope(c types.LeaseCheck, a types.JobAttempt, named map[string]bool) string {
-	if narrowedFiles(c, a, named) {
+func runScope(c types.LeaseCheck, a types.JobAttempt, named map[string]bool, selection testSelection) string {
+	if narrowedFiles(c, a, named, selection) {
 		return fmt.Sprintf("-- %s", strings.Join(a.ExtraArgs, " "))
 	}
-	if !runsGoTest(c) || len(a.ExtraArgs) == 0 {
+	if !selection.goTests(c) || len(a.ExtraArgs) == 0 {
 		return ""
 	}
 	if len(withoutTestSelection(a.ExtraArgs)) == len(a.ExtraArgs) && len(goTestPackages(a.ExtraArgs)) == 0 {
@@ -1331,7 +1336,7 @@ func WaitIntegration(ctx context.Context, store *Store, id string, rep types.Job
 				return types.JobIntegration{}, err
 			}
 		}
-		status := verifyGate(row, gate, ref, attempt, Observed{anyLease: true})
+		status := verifyGate(row, gate, ref, attempt, Observed{anyLease: true, TestSelection: store.testSelection()})
 		grade.Verified = grade.Verified && status.Verified
 		grade.Gates = append(grade.Gates, status)
 	}

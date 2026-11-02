@@ -6,6 +6,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestSpellOpKind covers OpKind's empty-default resolution and the IsService
@@ -106,4 +107,24 @@ func TestServiceValidate(t *testing.T) {
 			require.EqualError(t, err, tt.wantErr)
 		})
 	}
+}
+
+type commandSelectionSuite struct{ suite.Suite }
+
+func TestCommandSelection(t *testing.T) { suite.Run(t, new(commandSelectionSuite)) }
+func (s *commandSelectionSuite) TestGoDialectIsValid() {
+	s.NoError(Command{TestSelection: "go"}.Validate())
+}
+func (s *commandSelectionSuite) TestEmptyDeclaresNoSelector() { s.NoError(Command{}.Validate()) }
+func (s *commandSelectionSuite) TestUnknownDialectIsRejected() {
+	s.ErrorContains(Command{TestSelection: "g0"}.Validate(), `unsupported test_selection "g0"`)
+}
+func (s *commandSelectionSuite) TestDialectSurvivesJSON() {
+	original := Command{Bin: "go", Args: []string{"test"}, TestSelection: "go"}
+	data, err := json.Marshal(original)
+	s.Require().NoError(err)
+	s.Contains(string(data), `"test_selection":"go"`)
+	var decoded Command
+	s.Require().NoError(json.Unmarshal(data, &decoded))
+	s.Equal(original, decoded)
 }

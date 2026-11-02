@@ -59,7 +59,7 @@ func goTestCheck(args ...string) *types.LeaseCheck {
 // reads, each problem rendered as its message and fix on one line.
 func refuseNarrowedIn(root string, row types.Job) error {
 	var errs []error
-	for _, p := range narrowedTestProblems(&Store{storeConfig: storeConfig{root: root}}, row) {
+	for _, p := range narrowedTestProblems((&Store{storeConfig: storeConfig{root: root}}).InWorkspace(goCheckWorkspace(".")), row) {
 		if p.Code != types.JobCheckUnrunnable {
 			return fmt.Errorf("code %s, want %s", string(p.Code), string(types.JobCheckUnrunnable))
 		}
@@ -331,7 +331,7 @@ func TestForkAndApplyRefuseACheckThatLeavesOutATest(t *testing.T) {
 	narrow := goTestCheck("-run", "Alpha")
 	paths := []string{"pkg/a.go"}
 
-	s := tempStore(t, testRoot(t).Root())
+	s := tempStore(t, testRoot(t).Root()).InWorkspace(goCheckWorkspace("."))
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths, u.Check = paths, narrow }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "TestBeta", "a fork by merge, the tool's put")
 
@@ -361,7 +361,7 @@ func TestForkLetsARowThatAlreadyNarrowsTakeAnUnrelatedUpdate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	s := tempStore(t, testRoot(t).Root())
+	s := tempStore(t, testRoot(t).Root()).InWorkspace(goCheckWorkspace("."))
 	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
@@ -376,7 +376,7 @@ func TestForkGradesOnlyTheAddedWritePathsOfAnUpdate(t *testing.T) {
 	ctx := context.Background()
 	w := testRoot(t)
 	w.Write("other/o_test.go", "package other\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n")
-	s := tempStore(t, w.Root())
+	s := tempStore(t, w.Root()).InWorkspace(goCheckWorkspace("."))
 	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "other/o.go") }, config.Jobs{}, nil)
@@ -394,7 +394,7 @@ func TestNarrowedTestsAcceptAWritePackageScopedCheck(t *testing.T) {
 	t.Parallel()
 
 	root := testRoot(t).Root()
-	store := &Store{storeConfig: storeConfig{root: root}}
+	store := (&Store{storeConfig: storeConfig{root: root}}).InWorkspace(goCheckWorkspace("."))
 	refused := func(writePaths []string, args ...string) []string {
 		var out []string
 		for _, p := range narrowedTestProblems(store, types.Job{ID: "w", WritePaths: writePaths, Check: goTestCheck(args...)}) {

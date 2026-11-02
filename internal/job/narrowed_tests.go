@@ -30,9 +30,9 @@ import (
 // Pure path math: the packages are the directories of the .go write paths (globs
 // expanded), the tests are the top-level `func TestXxx(*testing.T)` declarations of the
 // _test.go files go test builds there (see [testNames]), and a pattern is read the way go
-// test reads it, by the first element of each top-level alternative. Only the go-test and
-// test targets are read (see [runsGoTest]): another tool's -run says nothing about Go
-// tests. A pattern that does not
+// test reads it, by the first element of each top-level alternative. Only resolved
+// ops declaring the Go test-selection dialect are read: another tool's -run says
+// nothing about Go tests. A pattern that does not
 // compile is left to go test, which refuses it itself. The paths are relative to the
 // store's workspace root; a nil store, or one with no root, has no tree to read.
 //
@@ -44,14 +44,14 @@ func narrowedTestProblems(store *Store, row types.Job) types.JobProblems {
 	}
 	var ps types.JobProblems
 	for _, g := range row.EffectiveGoals() {
-		if g.Kind != types.GoalKindCheck || scopedToWritePackages(store.root, g.Check, row.WritePaths) {
+		if g.Kind != types.GoalKindCheck || scopedToWritePackages(store.root, g.Check, row.WritePaths, store.testSelection()) {
 			continue
 		}
 		named := fmt.Sprintf("%s's check", row.ID)
 		if g.ID != types.PrimaryGoalID {
 			named = fmt.Sprintf("%s's goal %q", row.ID, g.ID)
 		}
-		if p, ok := narrowedCheckProblem(store.root, named, g.Check, row.WritePaths); ok {
+		if p, ok := narrowedCheckProblem(store.root, named, g.Check, row.WritePaths, store.testSelection()); ok {
 			p.Field = goalCheckField(row, g)
 			ps = append(ps, p)
 		}
@@ -61,8 +61,8 @@ func narrowedTestProblems(store *Store, row types.Job) types.JobProblems {
 
 // narrowedCheckProblem is [narrowedTestProblems] for one check, named as the problem names
 // it, and false when the check leaves no test out.
-func narrowedCheckProblem(root, named string, check types.LeaseCheck, writePaths []string) (types.JobProblem, bool) {
-	if !runsGoTest(check) {
+func narrowedCheckProblem(root, named string, check types.LeaseCheck, writePaths []string, selection testSelection) (types.JobProblem, bool) {
+	if !selection.goTests(check) {
 		return types.JobProblem{}, false
 	}
 	runArg, hasRun := goTestFlag(check.Args, "run")
@@ -122,28 +122,6 @@ func narrowedCheckProblem(root, named string, check types.LeaseCheck, writePaths
 			" so a break they would catch passes unchecked: %s", named, check.String(), strings.Join(packages, " and ")),
 		Fix: strings.Join(fixes, " and "),
 	}, true
-}
-
-// runsGoTest reports whether check's -run and -skip select Go tests: the go spell's go-test
-// op, or the workspace's test target, which forwards its `--` arguments to the go-test it
-// composes. Both are read so the same narrowing gets one answer whichever name the check
-// uses; a charm suffix does not change what the run selects.
-func runsGoTest(check types.LeaseCheck) bool {
-	if check.Script != "" {
-		return false
-	}
-	spell, target, qualified := strings.Cut(check.Target, "::")
-	if !qualified {
-		spell, target = "", check.Target
-	}
-	name, _, _ := strings.Cut(target, ":")
-	switch types.Normalize(name) {
-	case "go-test":
-		return spell == "" || spell == "go"
-	case "test":
-		return spell == ""
-	}
-	return false
 }
 
 // maxListedTests is how many test names the refusal prints per package, and maxPastedPattern
@@ -433,8 +411,8 @@ func isTestFunc(fn *ast.FuncDecl) bool {
 // scopedToWritePackages reports whether check is a go test naming exactly the packages of
 // writePaths: every package argument names one of them, `./dir` or `./dir/...`, and every
 // one of them is named.
-func scopedToWritePackages(root string, check types.LeaseCheck, writePaths []string) bool {
-	if root == "" || !runsGoTest(check) {
+func scopedToWritePackages(root string, check types.LeaseCheck, writePaths []string, selection testSelection) bool {
+	if root == "" || !selection.goTests(check) {
 		return false
 	}
 	patterns := goTestPackages(check.Args)

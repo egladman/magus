@@ -329,7 +329,7 @@ func workspaceProblems(ctx context.Context, store *Store, merged, judged types.J
 	if why != "" {
 		var unchecked []string
 		if slices.ContainsFunc(judged.EffectiveGoals(), func(g types.Goal) bool { return g.Kind == types.GoalKindCheck && g.Check.Target != "" }) {
-			unchecked = append(unchecked, "the check's project and target: "+why)
+			unchecked = append(unchecked, "the check's project, target and test-selection semantics: "+why)
 		}
 		if writes {
 			unchecked = append(unchecked,
@@ -340,6 +340,7 @@ func workspaceProblems(ctx context.Context, store *Store, merged, judged types.J
 		return nil, unchecked
 	}
 	ps, unchecked := checkTargetProblems(ws, judged)
+	unchecked = append(unchecked, uncheckedTestSelection(ws, judged)...)
 	ps = onRow(ps, judged, merged)
 	if !writes {
 		return ps, unchecked

@@ -270,7 +270,7 @@ fun golangCILint(target: Target) > Command {
 // bakes in this worktree's absolute path, so the cache can never hit from another
 // worktree at the same content.
 fun goTest(target: Target) > Command {
-    return Command{bin = "go", args = ["test", "-trimpath"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV, charms = {
+    return Command{testSelection = "go", bin = "go", args = ["test", "-trimpath"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV, charms = {
         "debug": append(["-v"]),
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};

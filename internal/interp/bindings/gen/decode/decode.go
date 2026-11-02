@@ -108,6 +108,12 @@ func decodeCommand(v vm.Value, path string) (spells.Command, error) {
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
+		case "testSelection":
+			sTestSelection, err := decodeString(item, path+".testSelection")
+			if err != nil {
+				return out, err
+			}
+			out.TestSelection = sTestSelection
 		case "bin":
 			sBin, err := decodeString(item, path+".bin")
 			if err != nil {

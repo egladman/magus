@@ -48,8 +48,12 @@ type Charm struct {
 // expand a variable magus itself set. See internal/interp/bindings' resolveRunnerRefs
 // for the resolution rule and its scope: it is NOT the process environment.
 type Command struct {
-	Bin  string   `json:"bin,omitempty"`
-	Args []string `json:"args,omitempty"`
+	// TestSelection names the dialect of forwarded test-selection arguments.
+	// A wrapper may inherit it only when its dispatch proves those args reach the
+	// op unchanged. Empty declares no selector; currently only "go" is supported.
+	TestSelection string   `json:"test_selection,omitempty"`
+	Bin           string   `json:"bin,omitempty"`
+	Args          []string `json:"args,omitempty"`
 	// DefaultArgs are trailing argv tokens the RUNNER appends only when the
 	// invocation passes no explicit args of its own; explicit call-site args
 	// replace them. `magus run <t> -- <extra>` forwarding is not explicit args:
@@ -162,6 +166,9 @@ type Command struct {
 // Validate rejects a Command whose fields contradict each other. Quiet without
 // Capture is an error: the output would stream nowhere and return nowhere.
 func (c Command) Validate() error {
+	if c.TestSelection != "" && c.TestSelection != "go" {
+		return fmt.Errorf("unsupported test_selection %q: supported dialect is go", c.TestSelection)
+	}
 	if c.Quiet && !c.Capture {
 		return errors.New("quiet without capture discards the output, set capture = true or drop quiet")
 	}
