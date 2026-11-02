@@ -29,7 +29,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { MagusGuard } from "../../../../spells/harness/opencode/plugins/magus.js";
+import { MagusGuard } from "./opencode-plugin.installed.ts";
 
 /** `bin` is argv[0] as the plugin spreads it; `argv` is everything after it. */
 type SpawnCall = { bin: string; argv: string[]; stdin: string };

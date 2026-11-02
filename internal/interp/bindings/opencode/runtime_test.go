@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -21,9 +19,7 @@ type runtimeSuite struct {
 
 func TestOpenCodeRuntime(t *testing.T) { suite.Run(t, new(runtimeSuite)) }
 func (s *runtimeSuite) SetupSuite() {
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "spells", "harness", "opencode", "plugin.buzz"))
-	s.Require().NoError(err)
-	s.source = string(data)
+	s.source = Plugin
 }
 func (s *runtimeSuite) open(invoke Invoke) *Runtime {
 	runtime, err := Open(context.Background(), s.source, invoke)

@@ -348,20 +348,13 @@ fun ld_flags() > str !> any {
         + " -X main.builtBy=" + built_by();
 }
 
-// Builds the plugin interpreter and its matching support file before native embedding.
+// Builds the OpenCode wasm runtime and its wasm_exec.js via go generate.
 export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["cmd/magus-opencode-wasm/*.go", "internal/interp/bindings/opencode/*.go",
+    ctx.readsFiles(["internal/interp/bindings/opencode/**/*.go", "internal/interp/bindings/opencode/plugin.buzz",
         "libs/gopherbuzz/**/*.go", "libs/gopherbuzz/go.mod", "libs/diagnostics/**/*.go",
-        "libs/diagnostics/go.mod", "go.mod", "go.sum", "go.work", "go.work.sum", "mise.toml", "spells/harness/opencode/plugin.buzz", "spells/harness/opencode/plugins/*.js", "spells/harness/opencode/probe.ts"]);
-    ctx.writesFiles(["cmd/magus-opencode-wasm/plugin.buzz", "spells/harness/opencode/magus/magus-opencode.wasm", "spells/harness/opencode/magus/wasm_exec.js"]);
-    fs\mkdirAll("spells/harness/opencode/magus");
-    fs\copyFile("spells/harness/opencode/plugin.buzz", "cmd/magus-opencode-wasm/plugin.buzz");
-    os\withEnv({"GOOS": "js", "GOARCH": "wasm"}, fun () > void !> any {
-        _ = proc\exec("go", ["build", "-trimpath", "-ldflags=-s -w", "-o",
-            "spells/harness/opencode/magus/magus-opencode.wasm", "./cmd/magus-opencode-wasm"], ".");
-    });
-    final goroot = proc\exec("go", ["env", "GOROOT"], ".").stdout.trim();
-    fs\copyFile(goroot + "/lib/wasm/wasm_exec.js", "spells/harness/opencode/magus/wasm_exec.js");
+        "libs/diagnostics/go.mod", "go.mod", "go.sum", "go.work", "go.work.sum", "mise.toml"]);
+    ctx.writesFiles(["spells/harness/opencode/gen/magus-opencode.wasm", "spells/harness/opencode/gen/wasm_exec.js"]);
+    _ = proc\exec("go", ["generate", "./internal/interp/bindings/opencode"]);
 }
 
 // Compiles the version-stamped magus binary.

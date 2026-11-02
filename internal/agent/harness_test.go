@@ -1448,7 +1448,7 @@ func TestShippedHostConfigsNameTheirHost(t *testing.T) {
 // magus does not render, so this is what keeps the two from drifting apart.
 func TestOpenCodePluginNamesTheSpellsHost(t *testing.T) {
 	name := harnessSpellName(t, "opencode")
-	body, err := os.ReadFile(filepath.Join("..", "..", "cmd", "magus-opencode-wasm", "plugin.go"))
+	body, err := os.ReadFile(filepath.Join("..", "..", "internal", "interp", "bindings", "opencode", "wasm", "plugin.go"))
 	require.NoError(t, err)
 	named := regexp.MustCompile(`"--agent-name",\s*"([^"-][^"]*)"`).FindAllStringSubmatch(string(body), -1)
 	require.NotEmpty(t, named, "the plugin passes no --agent-name literal; the matcher stopped matching")
