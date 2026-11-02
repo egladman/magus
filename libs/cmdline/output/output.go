@@ -236,9 +236,14 @@ func primaryField(rt reflect.Type) ([]int, error) {
 // writeTemplate executes a text/template body against v's -o json form: field names
 // are the json keys ({{.cache_key}}), not the Go field names, because -o json is the
 // output a reader authors a template against. v round-trips through the Codec, so
-// numbers arrive as float64. A missing key is an error rather than "<no value>".
+// numbers arrive as float64. json encodes a value with the same Codec.
+// A missing key is an error rather than "<no value>".
 func (wr Writer) writeTemplate(w io.Writer, v any, body string) error {
-	t, err := template.New("output").Funcs(wr.Funcs).Option("missingkey=error").Parse(body)
+	funcs := template.FuncMap{"json": func(value any) (string, error) {
+		encoded, err := wr.Codec.Marshal(value)
+		return string(encoded), err
+	}}
+	t, err := template.New("output").Funcs(funcs).Funcs(wr.Funcs).Option("missingkey=error").Parse(body)
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
 	}
