@@ -1281,7 +1281,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if row, err = stackedHead(ctx, root, row); err != nil {
-		return exit.Usagef("magus job fork: %s", err)
+		return exit.Usagef("magus job fork: %w", err)
 	}
 	if len(row.Integrates) > 0 {
 		if len(row.WritePaths) > 0 {
@@ -1410,7 +1410,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if v, verr := job.ValidateFork(ctx, store.Quiet(), row.ID, merge, globalCfg.Jobs, reader); verr == nil && len(v.Problems) > 0 {
 			return refuseFork(v)
 		}
-		return exit.Usagef("magus job fork: %s", err)
+		return exit.Usagef("magus job fork: %w", err)
 	}
 	var asked types.Job
 	row.Apply(&asked)
@@ -1492,23 +1492,23 @@ func stackedHead(ctx context.Context, root string, row types.Declaration) (types
 	if row.Delivery != types.DeliveryStacked || row.ParentHead != "" {
 		return row, nil
 	}
-	refuse := func(why string) error {
-		return fmt.Errorf("%s is stacked, and %s, so its pull request has no base: name parent_head in the record", row.ID, why)
+	refuse := func(why error) error {
+		return fmt.Errorf("%s is stacked, and %w, so its pull request has no base: name parent_head in the record", row.ID, why)
 	}
 	if root == "" {
-		return row, refuse("no workspace was found")
+		return row, refuse(errors.New("no workspace was found"))
 	}
 	opts := types.VCSOptions{Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef}
 	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil {
-		return row, refuse(err.Error())
+		return row, refuse(err)
 	}
 	meta, err := res.VCS.Metadata(ctx, root)
 	switch {
 	case err != nil:
-		return row, refuse(err.Error())
+		return row, refuse(err)
 	case meta.Ref == "":
-		return row, refuse(root + " is on no branch")
+		return row, refuse(fmt.Errorf("%s is on no branch", root))
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("%s is stacked on %s, the branch this checkout is on", row.ID, meta.Ref), attr.Notice("note"))
 	row.ParentHead = meta.Ref

@@ -19,15 +19,17 @@ const (
 	TempFail = 75
 )
 
-type usageError struct{ msg string }
+type usageError struct{ err error }
 
-func (e usageError) Error() string { return e.msg }
+func (e usageError) Error() string { return e.err.Error() }
+func (e usageError) Unwrap() error { return e.err }
 func (usageError) ExitCode() int   { return Usage }
 
 // Usagef returns a command-line misuse that exits Usage. Its message is what the
 // person fixes their invocation by; any usage text is the command's to print.
+// Like fmt.Errorf, it preserves error causes passed with %w.
 func Usagef(format string, a ...any) error {
-	return usageError{msg: fmt.Sprintf(format, a...)}
+	return usageError{err: fmt.Errorf(format, a...)}
 }
 
 type reported struct{ code int }
