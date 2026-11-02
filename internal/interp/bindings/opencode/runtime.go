@@ -15,9 +15,10 @@ import (
 )
 
 // The OpenCode harness spell ships ./wasm as js/wasm. The outputs are
-// committed because the spell embeds them.
+// committed because the spell embeds them. VCS stamping would change the asset
+// after every commit, even when its source is unchanged.
 //
-//go:generate env GOOS=js GOARCH=wasm go build -trimpath "-ldflags=-s -w" -o ../../../../spells/harness/opencode/gen/magus-opencode.wasm ./wasm
+//go:generate env GOOS=js GOARCH=wasm go build -buildvcs=false -trimpath "-ldflags=-s -w" -o ../../../../spells/harness/opencode/gen/magus-opencode.wasm ./wasm
 //go:generate cp $GOROOT/lib/wasm/wasm_exec.js ../../../../spells/harness/opencode/gen/wasm_exec.js
 
 const Version = 1
