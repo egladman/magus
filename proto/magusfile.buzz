@@ -70,7 +70,11 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
     buf["buf-format"](ctx);
 }
 
-export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
+// Job lint goals pass written files, including generated Go and config files.
+// Buf accepts one module input; lint the module so these paths cannot become inputs.
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    buf["buf-lint"](ctx, {"args": ["."]});
+}
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate, lint);
     ctx.readsFiles(["buf-breaking.deviations.jsonl", "**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"]);

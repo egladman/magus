@@ -12,4 +12,4 @@ Query: `magus query project=proto`
 | `format`         | format rewrites the .proto files with buf format, after generate refreshes the trees. |
 | `ci`             |                                                                                       |
 | `index-generate` | Renders MAGUS.md, this project's target catalog.                                      |
-| `lint`           |                                                                                       |
+| `lint`           | Job lint goals pass written files, including generated Go and config files.           |
