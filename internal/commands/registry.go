@@ -835,10 +835,11 @@ schema.`,
 }
 
 var watchCommand = cmdline.Command{
-	Name:        "watch",
-	Short:       "Emit changed file paths to stdout",
-	Description: "Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.",
-	Tags:        []string{"cli", "magus watch", "watch", "filesystem", "fsnotify", "continuous build"},
+	Name:               "watch",
+	UnstructuredOutput: true, // streams until interrupted
+	Short:              "Emit changed file paths to stdout",
+	Description:        "Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.",
+	Tags:               []string{"cli", "magus watch", "watch", "filesystem", "fsnotify", "continuous build"},
 	Long: `Watch the workspace for file-system changes and emit batches of changed
 repo-relative paths to stdout. Each path is on its own line; a blank line
 separates batches. This output format is compatible with git diff --name-only
@@ -1019,8 +1020,9 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					},
 				},
 				{
-					Name:  "export",
-					Short: "Write cache entries to an archive",
+					Name:               "export",
+					UnstructuredOutput: true, // stdout is the archive
+					Short:              "Write cache entries to an archive",
 					Flags: []cmdline.Flag{
 						{Name: "to", Kind: cmdline.String, Doc: "Write the archive to this file (default: stdout)"},
 						{Name: "remote", Kind: cmdline.Bool, Default: false, Doc: "Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive"},
@@ -1045,8 +1047,9 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					Short: "Manage connector tokens (mcp=write)",
 					Children: []cmdline.Command{
 						{
-							Name:  "create",
-							Short: "Mint a connector token",
+							Name:               "create",
+							UnstructuredOutput: true, // --tee would write the secret to a file
+							Short:              "Mint a connector token",
 							Flags: []cmdline.Flag{
 								{Name: "name", Kind: cmdline.String, Doc: "Name for this connector token (default: connector-N)"},
 								{Name: "expires", Kind: cmdline.String, Doc: "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)"},
@@ -1063,13 +1066,14 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 			Short: "Manage the operator token (every scope)",
 			Children: []cmdline.Command{
 				{
-					Name:  "generate",
-					Short: "Create the operator token",
+					Name:               "generate",
+					UnstructuredOutput: true, // --tee would write the secret to a file
+					Short:              "Create the operator token",
 					Flags: []cmdline.Flag{
 						{Name: "force", Kind: cmdline.Bool, Default: false, Doc: "Overwrite an existing token (rotation)"},
 					},
 				},
-				{Name: "print", Short: "Print the current operator token to stdout (denied to agent sessions)"},
+				{Name: "print", UnstructuredOutput: true, Short: "Print the current operator token to stdout (denied to agent sessions)"}, // --tee would write the secret to a file
 				{Name: "revoke", Short: "Delete the operator token (the server mints a fresh one on next start)"},
 				{Name: "status", Short: "Show whether an operator token exists and its fingerprint"},
 			},
@@ -1083,8 +1087,9 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					Short: "Manage console tokens",
 					Children: []cmdline.Command{
 						{
-							Name:  "create",
-							Short: "Mint a console token",
+							Name:               "create",
+							UnstructuredOutput: true, // --tee would write the secret to a file
+							Short:              "Mint a console token",
 							Flags: []cmdline.Flag{
 								{Name: "name", Kind: cmdline.String, Doc: "Name for this console token (default: console-N)"},
 								{Name: "expires", Kind: cmdline.String, Doc: "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)"},
@@ -1143,8 +1148,9 @@ Signals:
 	// by the command, absent from every man page.
 	Children: []cmdline.Command{
 		{
-			Name:  "start",
-			Short: "Start the server (auto-backgrounds by default; --foreground blocks)",
+			Name:               "start",
+			UnstructuredOutput: true, // runs the server, or detaches it
+			Short:              "Start the server (auto-backgrounds by default; --foreground blocks)",
 			Flags: []cmdline.Flag{
 				{Name: "foreground", Kind: cmdline.Bool, Default: false, Doc: "Run in the foreground and block, instead of auto-backgrounding"},
 			},
@@ -1195,10 +1201,11 @@ so a script can chain on it.`,
 }
 
 var brokerCommand = cmdline.Command{
-	Name:        "broker",
-	Short:       "The per-user process holding this host's capacity and shared services",
-	Description: "Check or stop the broker: the per-user process that holds this host's concurrency slots, declared memory and shared services, which a run starts on its own.",
-	Tags:        []string{"cli", "magus broker", "broker", "capacity", "memory_mb", "services", "concurrency"},
+	Name:               "broker",
+	UnstructuredOutput: true, // runs the broker in the foreground
+	Short:              "The per-user process holding this host's capacity and shared services",
+	Description:        "Check or stop the broker: the per-user process that holds this host's concurrency slots, declared memory and shared services, which a run starts on its own.",
+	Tags:               []string{"cli", "magus broker", "broker", "capacity", "memory_mb", "services", "concurrency"},
 	Long: `The broker holds this host's capacity: the concurrency slots and declared
 memory_mb every magus on it shares, and the services runs keep warm between
 them. Every run asks it before starting a step; a step that does not fit
@@ -1271,10 +1278,11 @@ the next one.`,
 }
 
 var mcpCommand = cmdline.Command{
-	Name:        "mcp",
-	Short:       "Serve MCP over stdio for the agent host that launched it",
-	Description: "Serve the MCP tools over stdin and stdout for the agent host that launched the process, against the workspace it was launched in, with no server and no token.",
-	Tags:        []string{"cli", "magus mcp", "mcp", "agent", "stdio"},
+	Name:               "mcp",
+	UnstructuredOutput: true, // serves MCP on stdio
+	Short:              "Serve MCP over stdio for the agent host that launched it",
+	Description:        "Serve the MCP tools over stdin and stdout for the agent host that launched the process, against the workspace it was launched in, with no server and no token.",
+	Tags:               []string{"cli", "magus mcp", "mcp", "agent", "stdio"},
 	Long: `Serve MCP over stdin and stdout, one JSON-RPC message per line, for the
 agent host that launched this process. It opens the workspace it is launched
 in and needs no server and no bearer token: the caller is the local process
@@ -1307,10 +1315,11 @@ magus release.`,
 }
 
 var completionCommand = cmdline.Command{
-	Name:        "completion",
-	Short:       "Print a shell completion script",
-	Description: "Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.",
-	Tags:        []string{"cli", "magus completion", "completion", "bash", "zsh", "fish", "powershell", "shell"},
+	Name:               "completion",
+	UnstructuredOutput: true, // stdout is the shell script
+	Short:              "Print a shell completion script",
+	Description:        "Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.",
+	Tags:               []string{"cli", "magus completion", "completion", "bash", "zsh", "fish", "powershell", "shell"},
 	Long: `Print a shell completion script to stdout. Every script registers both
 magus and the mgs shorthand.
 
@@ -1778,8 +1787,9 @@ base in yourself on the others, then run resolve.`,
 			},
 		},
 		{
-			Name:  "resolve",
-			Short: "Settle an in-progress merge's conflicted generated files, then regenerate once",
+			Name:               "resolve",
+			UnstructuredOutput: true, // reports through several prose paths
+			Short:              "Settle an in-progress merge's conflicted generated files, then regenerate once",
 			Flags: []cmdline.Flag{
 				{Name: "against", Kind: cmdline.String, Doc: "Merge this `ref` first, then settle what it conflicts with"},
 			},
@@ -1791,7 +1801,7 @@ base in yourself on the others, then run resolve.`,
 				{Name: "preserve", Kind: cmdline.Bool, Default: false, Doc: "Also capture the uncommitted work and print a handle that restores it"},
 			},
 		},
-		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
+		{Name: "merge-driver", UnstructuredOutput: true, Short: "The per-file merge driver git and hg invoke; you do not run this by hand"}, // git reads only the exit status
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Stage the dirty sources and nothing else", Command: "magus vcs ls-files -o name | git add --pathspec-from-file=-"},
@@ -1886,9 +1896,10 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 			}, queueCheckout...),
 		},
 		{
-			Name:  "plan",
-			Short: "Check approval, find stacks, drop what conflicts with the base, and partition by affected set",
-			Usage: "magus queue plan --provider <provider> --out <file> [flags]",
+			Name:               "plan",
+			UnstructuredOutput: true, // stdout is the provider's event stream
+			Short:              "Check approval, find stacks, drop what conflicts with the base, and partition by affected set",
+			Usage:              "magus queue plan --provider <provider> --out <file> [flags]",
 			Flags: append(append([]cmdline.Flag{
 				{Name: "changes", Kind: cmdline.String, Default: "-", Doc: "The mergequeue.changes/v1 `document`, or `-` for stdin"},
 				{Name: "provider", Kind: cmdline.String, Doc: "`provider` approval at each head is checked with"},
@@ -1898,9 +1909,10 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 			}, queueFacts...), queueCheckout...),
 		},
 		{
-			Name:  "validate",
-			Short: "Build and gate a candidate per change, writing each verdict the moment it is decided (read access only)",
-			Usage: "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json",
+			Name:               "validate",
+			UnstructuredOutput: true, // stdout is the provider's event stream
+			Short:              "Build and gate a candidate per change, writing each verdict the moment it is decided (read access only)",
+			Usage:              "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json",
 			Flags: append(append([]cmdline.Flag{
 				{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "Read the mergequeue.plan/v1 document from stdin; required"},
 				{Name: "gate", Kind: cmdline.String, Doc: "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first `--`; exit 0 is green"},
@@ -1912,8 +1924,9 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 			}, queueFacts...), queueCheckout...),
 		},
 		{
-			Name:  "gate",
-			Short: "Run a command in a checkout of HEAD boxed and sandboxed exactly as validate runs --gate in a candidate",
+			Name:               "gate",
+			UnstructuredOutput: true, // stdout is the provider's event stream
+			Short:              "Run a command in a checkout of HEAD boxed and sandboxed exactly as validate runs --gate in a candidate",
 			Long: `Check the commit HEAD names out into a box of its own under TMPDIR, with a
 private home and temporary directory, and run <command> there under the sandbox
 validate gives its --gate: the same box, the same environment and the same grants,
@@ -1940,9 +1953,10 @@ cache it withholds, is refused.`,
 			}, queueCheckout...),
 		},
 		{
-			Name:  "apply",
-			Short: "Rebuild and merge the green verdicts <source> holds as they arrive (holds the write credential; runs no change's code)",
-			Usage: "magus queue apply --provider <provider> --base <branch> [flags] <source>",
+			Name:               "apply",
+			UnstructuredOutput: true, // stdout is the provider's event stream
+			Short:              "Rebuild and merge the green verdicts <source> holds as they arrive (holds the write credential; runs no change's code)",
+			Usage:              "magus queue apply --provider <provider> --base <branch> [flags] <source>",
 			Flags: append(append([]cmdline.Flag{
 				{Name: "provider", Kind: cmdline.String, Doc: "`provider`: a built-in name (github) or a .buzz file"},
 				{Name: "base", Kind: cmdline.String, Doc: "`branch` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it"},
@@ -2445,9 +2459,10 @@ record when it refuses a write it can prove. It applies alone.`,
 			},
 		},
 		{
-			Name:        "watch",
-			Short:       "Follow what a job's holder is doing, until interrupted",
-			Description: "Print one line per event as it happens: files changed under the job's declared write paths, tool calls the guard observed under its lease, and the runs magus recorded against it, merged in time order.",
+			Name:               "watch",
+			UnstructuredOutput: true, // streams until the job ends
+			Short:              "Follow what a job's holder is doing, until interrupted",
+			Description:        "Print one line per event as it happens: files changed under the job's declared write paths, tool calls the guard observed under its lease, and the runs magus recorded against it, merged in time order.",
 			Long: `Follow one job's holder without asking it anything.
 
 The three sources are the filesystem, the guard's activity trail, and the job's
@@ -2754,11 +2769,12 @@ to declare where they live; with nothing declared the feature is inert.`,
 			},
 		},
 		{Name: "get", Short: "Show one note"},
-		{Name: "edit", Short: "Open one note in $VISUAL or $EDITOR"},
+		{Name: "edit", UnstructuredOutput: true, Short: "Open one note in $VISUAL or $EDITOR"}, // hands the terminal to an editor
 		{Name: "verify", Short: "Check malformed notes and anchors that no longer resolve"},
 		{
-			Name:  "capture",
-			Short: "Capture the review under way as a note: your own remarks plus any colleagues' comments",
+			Name:               "capture",
+			UnstructuredOutput: true, // reports through several prose paths
+			Short:              "Capture the review under way as a note: your own remarks plus any colleagues' comments",
 			Flags: []cmdline.Flag{
 				{Name: "title", Kind: cmdline.String, Doc: "Title for the note (defaults to naming the reviewed base)"},
 				{Name: "name", Kind: cmdline.String, Doc: "Note name (defaults to review-<patch digest>)"},
@@ -2782,10 +2798,11 @@ to declare where they live; with nothing declared the feature is inert.`,
 }
 
 var buzzCommand = cmdline.Command{
-	Name:        "buzz",
-	Short:       "Run a Buzz script",
-	Description: "Run Buzz from a REPL, a file, stdin, or an inline snippet, with the Buzz stdlib, every magus host module, and the magus namespace available.",
-	Tags:        []string{"cli", "magus buzz", "buzz", "scripting", "repl", "lsp"},
+	Name:               "buzz",
+	UnstructuredOutput: true, // runs a script whose output is its own
+	Short:              "Run a Buzz script",
+	Description:        "Run Buzz from a REPL, a file, stdin, or an inline snippet, with the Buzz stdlib, every magus host module, and the magus namespace available.",
+	Tags:               []string{"cli", "magus buzz", "buzz", "scripting", "repl", "lsp"},
 	Long: `Run Buzz source from a REPL, a file, stdin, or an inline snippet.
 
 With no argument on a terminal it opens a REPL with the magusfile at the
@@ -2841,7 +2858,7 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.`,
 	},
 	Usage: "magus buzz [-C dir] [file...|-|lsp] [flags]",
 	Children: []cmdline.Command{
-		{Name: "lsp", Short: "Language server over stdio (LSP)"},
+		{Name: "lsp", UnstructuredOutput: true, Short: "Language server over stdio (LSP)"}, // speaks LSP on stdio
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Open a REPL with the magusfile loaded", Command: "magus buzz"},
@@ -2902,7 +2919,7 @@ a pattern no graph verb fits.`,
 		{Name: "harness", Short: "Install skills for, or verify, harnesses wired in the magusfile", Children: []cmdline.Command{
 			{Name: "verify", Short: "Verify a descriptor and its configured hook file by actually probing the wired guard command", Flags: []cmdline.Flag{{Name: "id", Kind: cmdline.String, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},
 			{Name: "install", Short: "Install skill trees declared by a harness", Flags: []cmdline.Flag{{Name: "id", Kind: cmdline.String, Doc: "Harness ID; omit to install every magusfile-wired provider"}}}}},
-		{Name: "starter", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
+		{Name: "starter", UnstructuredOutput: true, Short: "Print a starter AGENTS.md to stdout; never writes a file"}, // stdout is the AGENTS.md text
 		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []cmdline.Flag{
 			{Name: "commands", Kind: cmdline.String, Doc: "File of shell commands, one per line; without it commands are read from stdin"},
 		}},

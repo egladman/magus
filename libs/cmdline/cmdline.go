@@ -17,6 +17,10 @@ type Command struct {
 	Long  string // DESCRIPTION body; plain text, paragraphs split on blank lines
 	Usage string // SYNOPSIS line, e.g. "magus run <target> [flags] [project...]"
 
+	// UnstructuredOutput means stdout belongs to a script, protocol, or terminal
+	// rather than the -o renderer. Each child declares its own value.
+	UnstructuredOutput bool
+
 	// Description is the docs page's meta description; empty falls back to Short.
 	Description string
 	// Tags are the docs page's search keywords; empty falls back to "cli, <program>

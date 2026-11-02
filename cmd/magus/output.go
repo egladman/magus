@@ -225,41 +225,16 @@ func templateJoin(list any, sep string) string {
 	return strings.Join(parts, sep)
 }
 
-// commandsWithoutOutput names the verbs that render nothing structured, keyed by the
-// name they hand commandParse.
-//
-// -o is bound into EVERY FlagSet (bindDisplayFlags), because it is a global flag that
-// may precede or follow the subcommand. A verb that never consults it therefore accepted
-// `-o json`, printed prose, and exited 0: the accepted-and-ignored failure that costs
-// most in a pipe, since the caller's parse fails somewhere else entirely.
-//
-// Declared rather than derived: deriving it needs a check AFTER the verb has had its
-// chance to consult -o, which is a post-dispatch hook this file cannot reach. A wrong
-// entry here is loud rather than silent (the verb's own `-o json` tests fail), which is
-// what makes the list safe to keep by hand.
-var commandsWithoutOutput = map[string]bool{
-	"agent starter":               true, // stdout is the AGENTS.md text
-	"broker":                      true, // runs the broker in the foreground
-	"buzz":                        true, // runs a script, whose output is its own
-	"buzz lsp":                    true, // speaks the language server protocol on stdio
-	"completion":                  true, // stdout is the shell script
-	"config cache export":         true, // stdout is the archive
-	"config console token create": true, // --tee would write the secret to a file
-	"config mcp connector create": true, // --tee would write the secret to a file
-	"config token generate":       true, // --tee would write the secret to a file
-	"config token print":          true, // --tee would write the secret to a file
-	"job watch":                   true, // streams until the job ends
-	"mcp":                         true, // serves MCP on stdio
-	"notes capture":               true, // reports through several prose paths
-	"notes edit":                  true, // hands the terminal to an editor
-	"queue apply":                 true, // stdout is the provider's event stream
-	"queue gate":                  true, // stdout is the provider's event stream
-	"queue plan":                  true, // stdout is the provider's event stream
-	"queue validate":              true, // stdout is the provider's event stream
-	"server start":                true, // runs the server, or detaches it
-	"vcs merge-driver":            true, // git calls it and reads only the exit status
-	"vcs resolve":                 true, // reports through several prose paths
-	"watch":                       true, // streams until interrupted
+// unstructuredCommand reads the declaration, so dispatch and flag parsing share
+// the command tree's decision about who owns stdout.
+func unstructuredCommand(name string) bool {
+	var raw bool
+	cmdline.Walk(commands.Root, func(path string, c cmdline.Command) {
+		if path == name {
+			raw = c.UnstructuredOutput
+		}
+	})
+	return raw
 }
 
 // checkOutputSupported rejects -o on a verb that renders nothing structured. Usage-class
@@ -272,7 +247,7 @@ var commandsWithoutOutput = map[string]bool{
 // adopted run in the server, one testscript command) would otherwise fail the next
 // command for a flag nobody passed it.
 func checkOutputSupported(name string, fs *flag.FlagSet) error {
-	if !commandsWithoutOutput[name] {
+	if !unstructuredCommand(name) {
 		return nil
 	}
 	if !flagWasSet(fs, "output") && !flagWasSet(fs, "o") {
@@ -289,7 +264,7 @@ func refuseOutputOnPath(output string, args []string) error {
 		return nil
 	}
 	path := commandPath(args)
-	if !commandsWithoutOutput[path] {
+	if !unstructuredCommand(path) {
 		return nil
 	}
 	return exit.Usagef("magus %s: -o is not supported by this command", path)

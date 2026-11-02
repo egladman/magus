@@ -8,7 +8,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
-	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -793,15 +792,15 @@ func (s *outputFormatsSuite) othersHandlers(leaf string) map[string]bool {
 
 func (s *outputFormatsSuite) TestEveryLeafRendersEveryFormatOrRefusesThem() {
 	cmdline.Walk(commands.Root, func(leaf string, c cmdline.Command) {
-		if len(c.Children) > 0 || commandsWithoutOutput[leaf] {
+		if len(c.Children) > 0 || c.UnstructuredOutput {
 			return
 		}
 		fn, ok := s.handler(leaf)
-		if !s.True(ok, "no commandParse or FlagSet is named %q: name one, or add it to commandsWithoutOutput", leaf) {
+		if !s.True(ok, "no commandParse or FlagSet is named %q: name one, or declare UnstructuredOutput on the command", leaf) {
 			return
 		}
 		reached := s.reach(fn, s.othersHandlers(leaf))
-		s.True(reached["writeFormatted"], "%s reaches no structured printer from %s: render a record or add it to commandsWithoutOutput", leaf, fn)
+		s.True(reached["writeFormatted"], "%s reaches no structured printer from %s: render a record or declare UnstructuredOutput on the command", leaf, fn)
 		s.True(reached["emitNames"], "%s reaches no -o name printer from %s", leaf, fn)
 	})
 }
@@ -861,14 +860,17 @@ func (s *outputFormatsSuite) TestASiblingsPrinterDoesNotReachALeaf() {
 	s.False(synthetic.reach("remover", map[string]bool{"lister": true})["lister"])
 }
 
-func (s *outputFormatsSuite) TestEveryRefusalNamesAVerbThatExists() {
-	inTree := map[string]bool{}
-	cmdline.Walk(commands.Root, func(leaf string, _ cmdline.Command) { inTree[leaf] = true })
-	for _, verb := range slices.Sorted(maps.Keys(commandsWithoutOutput)) {
-		name := strings.Split(verb, " --")[0]
-		_, parsed := s.handler(name)
-		s.True(inTree[name] || parsed, "commandsWithoutOutput names %q, which nothing parses", verb)
-	}
+func (s *outputFormatsSuite) TestEveryUnstructuredCommandRefusesOutput() {
+	cmdline.Walk(commands.Root, func(path string, c cmdline.Command) {
+		if !c.UnstructuredOutput {
+			return
+		}
+		s.Equal(exit.Usage, exit.Code(refuseOutputOnPath("json", strings.Fields(path))), path)
+		fs := flag.NewFlagSet(path, flag.ContinueOnError)
+		fs.String("o", "", "format")
+		s.Require().NoError(fs.Parse([]string{"-o", "json"}))
+		s.Equal(exit.Usage, exit.Code(checkOutputSupported(path, fs)), path)
+	})
 }
 
 func (s *outputFormatsSuite) TestNoFormatSwitchFallsThroughToText() {
