@@ -90,9 +90,12 @@ export fun installedSources(text: str) > result\Result::<Installed> {
             if (ids.indexOf(id) == null) { ids.append(id); }
             final skills: [str] = harness["skills"];
             foreach (file in skills) {
-                if (!relativePath(file) or !file.endsWith("/SKILL.md")) {
+                if (!relativePath(file)) {
                     return result\fail::<Installed>("harness-sync: installer returned an invalid skill path: {file}");
                 }
+                // The installer also reports skill reference files; only SKILL.md
+                // identifies the skill root, including when references are nested.
+                if (!file.endsWith("/SKILL.md")) { continue; }
                 final dir = fs\dirname(fs\dirname(file));
                 if (dir != ".agents/skills" and roots.indexOf(dir) == null) { roots.append(dir); }
             }
@@ -234,7 +237,7 @@ test "dirty committed wiring is refused" {
 }
 
 test "installed paths discover and deduplicate arbitrary skill roots" {
-    final parsed = installedSources(`{"harnesses":[{"id":"custom","skills":[".custom/deep/skills/x/SKILL.md",".custom/deep/skills/y/SKILL.md",".agents/skills/x/SKILL.md"]},{"id":"another","skills":[".custom/deep/skills/z/SKILL.md",".other/skills/x/SKILL.md"]}]}`);
+    final parsed = installedSources(`{"harnesses":[{"id":"custom","skills":[".custom/deep/skills/x/reference.md",".custom/deep/skills/x/reference/example.buzz",".custom/deep/skills/x/SKILL.md",".custom/deep/skills/y/SKILL.md",".agents/skills/x/SKILL.md"]},{"id":"another","skills":[".custom/deep/skills/z/SKILL.md",".other/skills/x/SKILL.md"]}]}`);
     assert\equal(parsed.value!.skillRoots, want: [".custom/deep/skills", ".other/skills"], message: "discovered roots");
 }
 
