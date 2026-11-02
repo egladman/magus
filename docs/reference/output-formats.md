@@ -35,8 +35,10 @@ kind you have: it either prints a record or exits 2.
 A few commands take `-o` only in some forms. `graph pull` needs `--out`, since stdout is the
 graph otherwise. `agent install --tar`, `init --dry-run` and `server stop --pools` refuse it.
 
-`--tee <file>` also appends the structured output to a file, and `-s` with `--tee` leaves
-stdout empty.
+`--tee <file>` also writes this invocation's structured output to a file, replacing
+previous contents on the first write. Streaming output keeps every record from the
+current invocation.
+`-s` with `--tee` leaves stdout empty.
 
 ## Templates
 

@@ -1026,3 +1026,66 @@ func (s *outputFormatsSuite) TestHelpPointsAtTheReference() {
 	_, err := os.Stat("../../docs/reference/output-formats.md")
 	s.NoError(err)
 }
+
+type teeReplacementSuite struct{ suite.Suite }
+
+func TestTeeReplacement(t *testing.T) { suite.Run(t, new(teeReplacementSuite)) }
+
+func (s *teeReplacementSuite) SetupTest() {
+	s.T().Cleanup(snapshotGlobals())
+	global = globalFlags{tee: filepath.Join(s.T().TempDir(), "run.jsonl")}
+	s.Require().NoError(os.WriteFile(global.tee, []byte("previous run\n"), 0o600))
+}
+
+func (s *teeReplacementSuite) contents() string {
+	s.T().Helper()
+	data, err := os.ReadFile(global.tee)
+	s.Require().NoError(err)
+	return string(data)
+}
+
+func (s *teeReplacementSuite) emit(record string) {
+	s.T().Helper()
+	var stdout bytes.Buffer
+	w, close, err := outputDestination(&stdout)
+	s.Require().NoError(err)
+	_, err = w.Write([]byte(record))
+	s.Require().NoError(err)
+	s.Require().NoError(close())
+	s.Equal(record, stdout.String())
+}
+
+func (s *teeReplacementSuite) TestARecordReplacesThePreviousRun() {
+	s.emit("first\n")
+	s.Equal("first\n", s.contents())
+}
+
+func (s *teeReplacementSuite) TestMultipleEmissionsKeepEveryRecordInTheRun() {
+	s.emit("first\n")
+	s.emit("second\n")
+	s.Equal("first\nsecond\n", s.contents())
+}
+
+func (s *teeReplacementSuite) TestParsingTheSameTeeForAnotherInvocationStartsFresh() {
+	s.emit("first run\n")
+	_, err := commandParse("version", []string{"--tee", global.tee}, nil)
+	s.Require().NoError(err)
+	s.emit("second run\n")
+	s.Equal("second run\n", s.contents())
+}
+
+func (s *teeReplacementSuite) TestLazyStreamReplacesOnceAndKeepsEveryWrite() {
+	file := &lazyFile{path: global.tee}
+	_, err := file.Write([]byte("first\n"))
+	s.Require().NoError(err)
+	_, err = file.Write([]byte("second\n"))
+	s.Require().NoError(err)
+	s.Require().NoError(file.Close())
+	s.Equal("first\nsecond\n", s.contents())
+}
+
+func (s *teeReplacementSuite) TestAnUnusedLazyStreamLeavesExistingContentsAlone() {
+	file := &lazyFile{path: global.tee}
+	s.Require().NoError(file.Close())
+	s.Equal("previous run\n", s.contents())
+}

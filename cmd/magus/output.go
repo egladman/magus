@@ -46,11 +46,25 @@ func outputDestination(out io.Writer) (io.Writer, func() error, error) {
 	if global.tee == "" {
 		return out, func() error { return nil }, nil
 	}
-	f, err := os.OpenFile(global.tee, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	f, err := openTeeFile(global.tee)
 	if err != nil {
 		return nil, nil, fmt.Errorf("--tee: %w", err)
 	}
 	return io.MultiWriter(structuredStdout(out), f), f.Close, nil
+}
+
+// A command may open several destinations while streaming records. Truncate only
+// the first, so a fresh invocation replaces the old capture without losing its own records.
+func openTeeFile(path string) (*os.File, error) {
+	flags := os.O_WRONLY | os.O_APPEND | os.O_CREATE
+	if global.teeInitialized != path {
+		flags |= os.O_TRUNC
+	}
+	f, err := os.OpenFile(path, flags, 0o644)
+	if err == nil {
+		global.teeInitialized = path
+	}
+	return f, err
 }
 
 // openSink builds the invocation's one sink for its -o format, over stdout (mirrored to
@@ -73,7 +87,7 @@ func openSink(ctx context.Context, opts output.Options) (*magus.Sink, func() err
 	return sink, func() error { return errors.Join(sink.Close(), tee.Close()) }, nil
 }
 
-// lazyFile opens path for appending on the first write, so a format that keeps stdout
+// lazyFile opens path on the first write, so a format that keeps stdout
 // empty leaves no --tee file behind. Not safe for concurrent writes.
 type lazyFile struct {
 	path string
@@ -83,7 +97,7 @@ type lazyFile struct {
 
 func (l *lazyFile) Write(p []byte) (int, error) {
 	if l.f == nil && l.err == nil {
-		l.f, l.err = os.OpenFile(l.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+		l.f, l.err = openTeeFile(l.path)
 	}
 	if l.err != nil {
 		return 0, fmt.Errorf("--tee: %w", l.err)

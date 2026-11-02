@@ -29,11 +29,12 @@ const (
 // globalFlags carries display/verbosity flags shared across the top-level and every subcommand FlagSet
 // (last write wins, so `magus -v ls` and `magus ls -v` are equivalent).
 type globalFlags struct {
-	output  string    // raw --output/-o value; parsed on demand
-	tee     string    // mirror structured output to this file in append-create mode
-	verbose verbosity // counted -v level
-	quiet   bool      // suppress progress; quiet wins over -v
-	silent  bool      // quiet + bounded failure dumps + bubbled notice lines
+	teeInitialized string    // the capture already replaced during this invocation
+	output         string    // raw --output/-o value; parsed on demand
+	tee            string    // mirror this invocation's structured output to this file
+	verbose        verbosity // counted -v level
+	quiet          bool      // suppress progress; quiet wins over -v
+	silent         bool      // quiet + bounded failure dumps + bubbled notice lines
 }
 
 var global globalFlags
@@ -64,7 +65,7 @@ func bindDisplayFlags(fs *flag.FlagSet) {
 func bindOutputFlags(fs *flag.FlagSet) {
 	fs.StringVar(&global.output, "output", global.output, outputFormatHelp)
 	fs.StringVar(&global.output, "o", global.output, "Short for --output")
-	fs.StringVar(&global.tee, "tee", global.tee, "Also write structured output (-o json|yaml|jsonl|template) to this file (append-create mode)")
+	fs.StringVar(&global.tee, "tee", global.tee, "Also write structured output (-o json|yaml|jsonl|template) to this file (replaces previous contents)")
 }
 
 func bindProgressFlags(fs *flag.FlagSet) {
@@ -89,6 +90,9 @@ func commandParse(name string, args []string, local func(*flag.FlagSet)) ([]stri
 	// full flag set (config + display + local) is known for value detection.
 	if err := fs.Parse(reorderFlagsFirst(fs, expandVerbosityArgs(args))); err != nil {
 		return nil, err
+	}
+	if flagWasSet(fs, "tee") {
+		global.teeInitialized = ""
 	}
 	applyDisplay()
 	if err := checkOutputSupported(name, fs); err != nil {
