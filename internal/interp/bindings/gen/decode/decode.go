@@ -3309,6 +3309,100 @@ func decodeHarnessConfig(v vm.Value, path string) (types.HarnessConfig, error) {
 	return out, nil
 }
 
+// DecodeHarnessAsset decodes a Buzz HarnessAsset, an object instance or a map, into a types.HarnessAsset.
+func DecodeHarnessAsset(v vm.Value) (types.HarnessAsset, error) {
+	return decodeHarnessAsset(v, "harnessAsset")
+}
+
+func decodeHarnessAsset(v vm.Value, path string) (types.HarnessAsset, error) {
+	var out types.HarnessAsset
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "HarnessAsset", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "path":
+			sPath, err := decodeString(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "source":
+			sSource, err := decodeString(item, path+".source")
+			if err != nil {
+				return out, err
+			}
+			out.Source = sSource
+		case "content":
+			sContent, err := decodeString(item, path+".content")
+			if err != nil {
+				return out, err
+			}
+			out.Content = sContent
+		default:
+			return out, unknownMember(path, "HarnessAsset", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeHarness decodes a Buzz Harness, an object instance or a map, into a types.Harness.
+func DecodeHarness(v vm.Value) (types.Harness, error) {
+	return decodeHarness(v, "harness")
+}
+
+func decodeHarness(v vm.Value, path string) (types.Harness, error) {
+	var out types.Harness
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Harness", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "config":
+			xConfig, err := decodeHarnessConfig(item, path+".config")
+			if err != nil {
+				return out, err
+			}
+			out.Config = xConfig
+		case "guard":
+			sGuard, err := decodeString(item, path+".guard")
+			if err != nil {
+				return out, err
+			}
+			out.Guard = sGuard
+		case "assets":
+			listAssets, err := decodeList(item, path+".assets", "[HarnessAsset]")
+			if err != nil {
+				return out, err
+			}
+			if len(listAssets) > 0 {
+				itemsAssets := make([]types.HarnessAsset, len(listAssets))
+				for indexAssets, itemAssets := range listAssets {
+					xAssetsItem, err := decodeHarnessAsset(itemAssets, fmt.Sprintf("%s[%d]", path+".assets", indexAssets))
+					if err != nil {
+						return out, err
+					}
+					itemsAssets[indexAssets] = xAssetsItem
+				}
+				out.Assets = itemsAssets
+			}
+		case "probe":
+			strsProbe, err := decodeStringList(item, path+".probe")
+			if err != nil {
+				return out, err
+			}
+			out.Probe = strsProbe
+		default:
+			return out, unknownMember(path, "Harness", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeHarnessSkills decodes a Buzz HarnessSkills, an object instance or a map, into a types.HarnessSkills.
 func DecodeHarnessSkills(v vm.Value) (types.HarnessSkills, error) {
 	return decodeHarnessSkills(v, "harnessSkills")

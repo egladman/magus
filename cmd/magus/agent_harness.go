@@ -71,6 +71,14 @@ func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args [
 	if err != nil {
 		return fmt.Errorf("magus agent harness install: %w", err)
 	}
+	plans := make(map[string]types.HarnessInstallation, len(ids))
+	for _, harnessID := range ids {
+		plan, err := agent.PlanHarness(ctx, root, harnessID)
+		if err != nil {
+			return fmt.Errorf("magus agent harness install: %w", err)
+		}
+		plans[harnessID] = plan
+	}
 	rec := agentHarnessInstallOutput{DryRun: globalCfg.DryRun, Harnesses: []agentHarnessInstallResult{}}
 	for _, harnessID := range ids {
 		skills, err := agent.LoadHarnessSkills(ctx, root, harnessID)
@@ -91,6 +99,24 @@ func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args [
 			return fmt.Errorf("magus agent harness install: %w", err)
 		}
 		result.Tools = nonNil(changed)
+		installed, err := agent.ApplyHarnessInstallation(ctx, root, plans[harnessID], globalCfg.DryRun)
+		if err != nil {
+			return fmt.Errorf("magus agent harness install: %w", err)
+		}
+		result.Files = nonNil(installed)
+		result.RestartRequired = plans[harnessID].Guard == "plugin" && len(installed) > 0
+		if text {
+			installVerb := "installed"
+			if globalCfg.DryRun {
+				installVerb = "would install"
+			}
+			for _, path := range installed {
+				fmt.Fprintf(os.Stdout, "%s %s: %s\n", installVerb, harnessID, path)
+			}
+			if result.RestartRequired {
+				fmt.Fprintf(os.Stdout, "restart %s to load the installed runtime\n", harnessID)
+			}
+		}
 		rec.Harnesses = append(rec.Harnesses, result)
 		if !text {
 			continue
@@ -166,10 +192,12 @@ type agentHarnessInstallOutput struct {
 }
 
 type agentHarnessInstallResult struct {
-	ID      string   `json:"id"`
-	Skills  []string `json:"skills"`
-	Removed []string `json:"removed"`
-	Tools   []string `json:"tools"`
+	ID              string   `json:"id"`
+	Skills          []string `json:"skills"`
+	Removed         []string `json:"removed"`
+	Tools           []string `json:"tools"`
+	Files           []string `json:"files"`
+	RestartRequired bool     `json:"restart_required"`
 }
 
 // checkoutLease resolves the lease a CLI call acts under in root's checkout through
@@ -220,7 +248,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 	if err != nil {
 		return fmt.Errorf("magus describe harness: %w", err)
 	}
-	plans := make([]types.HarnessPlan, 0, len(ids))
+	plans := make([]types.HarnessInstallation, 0, len(ids))
 	for _, harnessID := range ids {
 		plan, err := agent.PlanHarness(ctx, root, harnessID)
 		if err != nil {
@@ -240,7 +268,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 		}
 		return emitFormatted(opts, plans)
 	case outputName:
-		return emitItemNames(os.Stdout, plans, func(p types.HarnessPlan) string { return p.ID })
+		return emitItemNames(os.Stdout, plans, func(p types.HarnessInstallation) string { return p.ID })
 	}
 	for i, plan := range plans {
 		if i > 0 {
@@ -253,7 +281,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 	return nil
 }
 
-func writeHarnessPlan(w io.Writer, plan types.HarnessPlan) error {
+func writeHarnessPlan(w io.Writer, plan types.HarnessInstallation) error {
 	var err error
 	printf := func(format string, args ...any) {
 		if err == nil {
@@ -283,7 +311,7 @@ func writeHarnessPlan(w io.Writer, plan types.HarnessPlan) error {
 				printf("    %s %s: %s\n", change.Op, change.Key, value)
 			}
 		}
-		printf("merge it yourself (magus never writes host config):\n  %s\n", plan.Merge)
+		printf("apply the installation:\n  %s\n", plan.Merge)
 	}
 	for _, wired := range plan.Wired {
 		printf("wired in %s %s:\n", wired.File, wired.Key)
@@ -450,10 +478,10 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 func agentHarnessUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus agent harness <install|verify> [--id <harness-id>] [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Install the skill trees of, or verify, harnesses selected with magus\\harness.provider(<spell>).")
+	fmt.Fprintln(w, "Install the complete runtime and skills of, or verify, harnesses selected with magus\\harness.provider(<spell>).")
 	fmt.Fprintln(w, "verify runs the wired guard command against a synthetic event rather than trusting")
-	fmt.Fprintln(w, "its presence in the config. The host config itself is yours: `magus describe harness`")
-	fmt.Fprintln(w, "prints what to merge and the command that merges it, and magus never writes it.")
+	fmt.Fprintln(w, "its presence in the config. `magus describe harness`")
+	fmt.Fprintln(w, "prints the same installation that install applies, preserving unrelated settings.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Omit --id to act on every wired provider (several hosts are fine when you bounce")
 	fmt.Fprintln(w, "between LLM tools). Or pass --id for one spell.")

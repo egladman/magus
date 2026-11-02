@@ -264,9 +264,6 @@ func opencodeDriver() *hostDriver {
 		}
 	}
 	h.wire = func(t *testing.T, w *workspace) {
-		// The plugin the OpenCode guide says to save under .opencode/plugins/.
-		copyFile(t, checkoutPath(t, "docs/guides/integrations/agents/opencode-plugin.ts"),
-			filepath.Join(w.dir, ".opencode", "plugins", "magus.ts"), 0o644)
 		// The local server `magus describe harness opencode` describes in
 		// prose, merged into whatever opencode.json the harness merge wrote.
 		path := filepath.Join(w.dir, "opencode.json")

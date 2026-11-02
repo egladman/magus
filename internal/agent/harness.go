@@ -74,6 +74,9 @@ type HarnessDescriptor struct {
 	SchemaVersion  int                    `json:"schema_version"`
 	ID             string                 `json:"id"`
 	Display        HarnessDisplay         `json:"display"`
+	Guard          string                 `json:"guard,omitempty"`
+	Assets         []HarnessRuntimeAsset  `json:"assets,omitempty"`
+	Probe          []string               `json:"probe,omitempty"`
 	Config         types.HarnessConfig    `json:"config"`
 	Skills         types.HarnessSkills    `json:"skills"`
 	ManagedEntries []types.ManagedEntries `json:"managed_entries,omitempty"`
@@ -257,7 +260,7 @@ func wiredHarnessesFromContext(ctx context.Context) (ids []string, ok bool) {
 // LoadHarness resolves one validated descriptor, always from a harness spell:
 // there is no other source. When the context carries ContextWithWiredHarnesses,
 // a harness spell answers only if that id is wired; otherwise any registered
-// harness spell that exports mgs_getHarnessConfig answers (tests and callers that
+// harness spell that exports mgs_getHarness answers (tests and callers that
 // have not inspected the magusfile). A miss is an error either way.
 func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescriptor, source string, err error) {
 	if err = ctx.Err(); err != nil {
@@ -323,6 +326,9 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 	}
 	if d.Display.Name == "" {
 		return fmt.Errorf("display.name is required")
+	}
+	if err := validateHarnessRuntime(d); err != nil {
+		return err
 	}
 	if d.Config.Path != "" {
 		if filepath.IsAbs(d.Config.Path) || !isSafeRelativePath(d.Config.Path) {
@@ -427,18 +433,21 @@ func isSafeRelativePath(path string) bool {
 // another value, and a config that names no magus command are errors. MCP setup guidance is
 // carried as a hint only: magus never plans host MCP client config and never resolves its
 // secret ref.
-func PlanHarness(ctx context.Context, root, id string) (types.HarnessPlan, error) {
+func PlanHarness(ctx context.Context, root, id string) (types.HarnessInstallation, error) {
 	if err := ctx.Err(); err != nil {
-		return types.HarnessPlan{}, err
+		return types.HarnessInstallation{}, err
 	}
 	if root == "" {
-		return types.HarnessPlan{}, fmt.Errorf("workspace root is required")
+		return types.HarnessInstallation{}, fmt.Errorf("workspace root is required")
 	}
 	d, _, err := LoadHarness(ctx, root, id)
 	if err != nil {
-		return types.HarnessPlan{}, err
+		return types.HarnessInstallation{}, err
 	}
-	plan := types.HarnessPlan{ID: d.ID, Wired: []types.HarnessWired{}}
+	plan := types.HarnessInstallation{ID: d.ID, Guard: d.Guard, Wired: []types.HarnessWired{}}
+	if err := planHarnessAssets(root, d, &plan); err != nil {
+		return plan, err
+	}
 	if d.Config.Path != "" {
 		for _, group := range d.ManagedEntries {
 			plan.Wired = append(plan.Wired, types.HarnessWired{File: d.Config.Path, Key: strings.Join(group.Path, "."), Entries: group.Entries})
@@ -496,6 +505,9 @@ func PlanHarness(ctx context.Context, root, id string) (types.HarnessPlan, error
 	}
 	plan.MCPHint = hint
 	plan.Merge = harnessMergeCommand(d.ID, plan.Files)
+	if d.Guard == "plugin" && len(plan.Files) > 0 {
+		plan.Merge = "magus agent harness install --id " + d.ID
+	}
 	return plan, nil
 }
 
@@ -572,7 +584,7 @@ func fillConfigDefaults(config, defaults, fragment map[string]any, prefix []stri
 
 // addPlanFile records in p what path needs, folding it into what another source of the
 // same descriptor already asked of that file. A file needing nothing is left out.
-func addPlanFile(p *types.HarnessPlan, path string, file types.HarnessFile) error {
+func addPlanFile(p *types.HarnessInstallation, path string, file types.HarnessFile) error {
 	if len(file.Changes) == 0 {
 		return nil
 	}
@@ -584,7 +596,7 @@ func addPlanFile(p *types.HarnessPlan, path string, file types.HarnessFile) erro
 		p.Files[path] = file
 		return nil
 	}
-	if have.Content != "" || file.Content != "" {
+	if have.Content != "" || file.Content != "" || have.Bytes != nil || file.Bytes != nil {
 		return fmt.Errorf("%s: a descriptor may own a whole file or keys inside it, not both", path)
 	}
 	have.Fragment = mergeFragment(have.Fragment, file.Fragment)
@@ -887,6 +899,9 @@ func claudeMarketplaceKnown(name string) (bool, error) {
 
 func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, source string) (HarnessVerification, error) {
 	result := HarnessVerification{ID: d.ID, Descriptor: source}
+	if d.Guard == "plugin" {
+		return verifyHarnessPlugin(ctx, root, d, result)
+	}
 	if d.Config.Path == "" {
 		// A descriptor that names no config.path (skills-only) has wired no guard
 		// at all: validateHarnessDescriptor already refuses managed_entries

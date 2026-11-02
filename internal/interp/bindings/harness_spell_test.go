@@ -43,7 +43,7 @@ func harnessSource(t *testing.T, name, body string) string {
 		body += "\nexport fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }\n"
 	}
 	return register.Spell(t, name, spells.WithFuncSource(fmt.Sprintf("import \"magus/spell\";\n"+
-		"export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{}; }\n%s", body)))
+		"export fun mgs_getHarness() > Harness { return Harness{config = HarnessConfig{}, guard = \"\"}; }\n%s", body)))
 }
 
 func scoutInstructions(t *testing.T) string {
@@ -220,14 +220,14 @@ func TestHarnessSpellWithOnlyItsConfigLacksEveryOtherCapability(t *testing.T) {
 // for a host whose hook prompts; an omission used to decode as that same list.
 func TestAHarnessThatOmitsRenderPromptsIsRefused(t *testing.T) {
 	id := register.Spell(t, "no-prompts-test", spells.WithFuncSource(`import "magus/spell";
-export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{}; }`))
+export fun mgs_getHarness() > Harness { return Harness{config = HarnessConfig{}, guard = ""}; }`))
 	_, _, ok, err := loadHarnessFromSpell(context.Background(), id)
 	require.Error(t, err)
 	assert.False(t, ok)
 	assert.Contains(t, err.Error(), "mgs_renderPrompts")
 }
 
-// A spell that does not export mgs_getHarnessConfig is not a harness, and the loader says
+// A spell that does not export mgs_getHarness is not a harness, and the loader says
 // so with a miss rather than an error.
 func TestASpellWithoutTheConfigIsNoHarness(t *testing.T) {
 	id := register.Spell(t, "not-a-harness-test", spells.WithFuncSource(`export fun mgs_getName() > str { return "x"; }`))
@@ -238,10 +238,10 @@ func TestASpellWithoutTheConfigIsNoHarness(t *testing.T) {
 
 // An answer of the wrong shape is refused strictly, naming the function.
 func TestHarnessFunctionsDecodeStrictly(t *testing.T) {
-	id := register.Spell(t, "malformed-test", spells.WithFuncSource(`export fun mgs_getHarnessConfig() > any { return {"path": 3}; }`))
+	id := register.Spell(t, "malformed-test", spells.WithFuncSource(`export fun mgs_getHarness() > any { return {"path": 3}; }`))
 	_, _, _, err := loadHarnessFromSpell(context.Background(), id)
 	require.ErrorIs(t, err, errMalformedAnswer)
-	assert.Contains(t, err.Error(), "mgs_getHarnessConfig")
+	assert.Contains(t, err.Error(), "mgs_getHarness")
 }
 
 // TestHarnessPromptsAskBeforeAHumanOnlyRun pins that the native prompts of the hosts whose

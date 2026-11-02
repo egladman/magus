@@ -54,7 +54,7 @@ var ContractFuncs = []ContractFunc{
 // HarnessFuncs is every function of the harness contract, in the order
 // internal/spell's harnessContract declares them. Required marks each function a harness must export.
 var HarnessFuncs = []ContractFunc{
-	{Name: "mgs_getHarnessConfig", Field: "Config", Returns: "HarnessConfig", Params: "", Required: true, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncConfig(v) }},
+	{Name: "mgs_getHarness", Field: "Harness", Returns: "Harness", Params: "", Required: true, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncHarness(v) }},
 	{Name: "mgs_getSkills", Field: "Skills", Returns: "HarnessSkills", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncSkills(v) }},
 	{Name: "mgs_listEntries", Field: "Entries", Returns: "[ManagedEntries]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncEntries(v) }},
 	{Name: "mgs_listHooks", Field: "Hooks", Returns: "[HookCommand]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncHooks(v) }},
@@ -322,13 +322,13 @@ func decodeContractServices(v vm.Value) (map[string]spells.Service, error) {
 	return out, nil
 }
 
-func decodeHarnessFuncConfig(v vm.Value) (types.HarnessConfig, error) {
-	var out types.HarnessConfig
-	xConfig, err := decodeHarnessConfig(v, "mgs_getHarnessConfig")
+func decodeHarnessFuncHarness(v vm.Value) (types.Harness, error) {
+	var out types.Harness
+	xHarness, err := decodeHarness(v, "mgs_getHarness")
 	if err != nil {
 		return out, err
 	}
-	out = xConfig
+	out = xHarness
 	return out, nil
 }
 

@@ -2,6 +2,8 @@ package spells
 
 import (
 	"context"
+	"fmt"
+	"io/fs"
 	"maps"
 	"sort"
 	"strings"
@@ -57,6 +59,7 @@ type Spell struct {
 	scriptRunners       []Command
 
 	invoke      func(ctx context.Context, req InvokeRequest) (any, error)
+	assetFS     fs.FS
 	funcSource  string // Buzz source whose exports a provider op calls; "" for a spell with none
 	renderCmd   func(target string, charms []string) (cmd string, args []string, ok bool, err error)
 	explainCmd  func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)
@@ -556,4 +559,15 @@ func WithTools(tools map[string]Tool) Option {
 // execution, so this package never spawns anything itself.
 func WithVersionProber(fn func(ctx context.Context, cmd Command, dir string) (string, error)) Option {
 	return func(s *Spell) { s.probe = fn }
+}
+
+// WithAssets associates spell-relative runtime assets with a registered spell.
+func WithAssets(files fs.FS) Option { return func(s *Spell) { s.assetFS = files } }
+
+// ReadAsset reads one runtime file beside the spell's source.
+func (s *Spell) ReadAsset(name string) ([]byte, error) {
+	if s.assetFS == nil {
+		return nil, fmt.Errorf("spell %s has no asset filesystem", s.name)
+	}
+	return fs.ReadFile(s.assetFS, name)
 }

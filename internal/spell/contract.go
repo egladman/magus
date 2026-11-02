@@ -64,7 +64,7 @@ type Contract struct {
 type harnessContract struct {
 	// The workspace-local host JSON document the harness maintains, such as
 	// .cursor/hooks.json, and the defaults it sets there.
-	Config types.HarnessConfig `mgs:"mgs_getHarnessConfig,required"`
+	Harness types.Harness `mgs:"mgs_getHarness,required"`
 	// Where the host reads installed magus skills, and which form to install.
 	Skills types.HarnessSkills `mgs:"mgs_getSkills"`
 	// The host JSON fragments merged into the config, verbatim: magus does not rewrite a

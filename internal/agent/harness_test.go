@@ -47,7 +47,7 @@ func registerHarnessSpell(t *testing.T, id, body string) {
 // mergeHarness plans id and merges the plan into the files with the semantics of the printed
 // command, standing in for the person who runs it. cmd/magus's
 // TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the command itself.
-func mergeHarness(t *testing.T, root, id string) types.HarnessPlan {
+func mergeHarness(t *testing.T, root, id string) types.HarnessInstallation {
 	t.Helper()
 	plan, err := PlanHarness(context.Background(), root, id)
 	require.NoError(t, err)
@@ -1448,7 +1448,7 @@ func TestShippedHostConfigsNameTheirHost(t *testing.T) {
 // magus does not render, so this is what keeps the two from drifting apart.
 func TestOpenCodePluginNamesTheSpellsHost(t *testing.T) {
 	name := harnessSpellName(t, "opencode")
-	body, err := os.ReadFile(filepath.Join(hookTemplateDir, "opencode-plugin.ts"))
+	body, err := os.ReadFile(filepath.Join("..", "..", "cmd", "magus-opencode-wasm", "plugin.go"))
 	require.NoError(t, err)
 	named := regexp.MustCompile(`"--agent-name",\s*"([^"-][^"]*)"`).FindAllStringSubmatch(string(body), -1)
 	require.NotEmpty(t, named, "the plugin passes no --agent-name literal; the matcher stopped matching")

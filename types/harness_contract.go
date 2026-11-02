@@ -261,3 +261,20 @@ type ShippedAgent struct {
 	Model        string `json:"model,omitempty"`
 	ReadOnly     bool   `json:"read_only"`
 }
+
+// Harness declares the complete runtime installation a harness needs. No config path
+// means no JSON hook document; Guard states independently whether a plugin is required.
+type Harness struct {
+	Config HarnessConfig  `json:"config"`
+	Guard  string         `json:"guard"`
+	Assets []HarnessAsset `json:"assets,omitempty"`
+	Probe  []string       `json:"probe,omitempty"`
+}
+
+// HarnessAsset installs a file from the spell's directory, or an explicitly named
+// embedded asset (magus:<path>). Exactly one of Source and Content must be set.
+type HarnessAsset struct {
+	Path    string `json:"path"`
+	Source  string `json:"source,omitempty"`
+	Content string `json:"content,omitempty"`
+}

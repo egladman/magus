@@ -1,0 +1,130 @@
+// magus reclaim-disk hook: notices a disk filling up early and takes space back in small
+// chunks, without the daemon.
+//
+// Run it as `magus buzz -s magus-reclaim-disk.buzz`; see magus-command.buzz for why `-s`
+// is load-bearing. It imports diskwatch, which imports no magus module, and no spell, so
+// the workspace stays CLOSED: wire it to an event that fires every turn and a turn pays
+// one stat for it.
+//
+// A thin caller. A store written within the last minute ends the hook at that
+// stat. Past it, the hook says what the store holds that nobody was told, and
+// starts magus/reclaimdisk's tick detached. The tick decides and acts.
+//
+// Contract: prints the lines the store holds, written from what a tick really
+// did; otherwise nothing. It always exits 0. `--say stderr` sends them to
+// stderr, for a host that reads stdout as a verdict. Override:
+//
+//   __MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// REQUIRED argument: `-- --agent-name <host>`, which the configuration
+// `magus describe harness` prints puts on the command. Without it nothing is sampled and
+// MGS3024 goes to stderr.
+//
+// NO magus-guard-coverage line: it carries no verdict on any input.
+//
+// magus-guard-template: 36
+
+import "io";
+import "std";
+import "os";
+import "fs";
+import "flags";
+import "proc";
+import "encoding/json";
+import "diskwatch";
+import "lib/hook" as hook;
+
+final AGENT_NAME_FLAG = "--agent-name";
+final SAY_FLAG = "--say";
+
+fun warn(message: str) > void {
+    io\stderr.write("magus-reclaim-disk.buzz: {message}\n") catch void;
+}
+
+object Args {
+    agentName: str,
+    say: str,
+}
+
+fun readArgs(args: [str]) > Args {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG, SAY_FLAG]) catch null;
+    if (parsed == null) { return Args{ agentName = "", say = "stdout" }; }
+    foreach (word in parsed!.unknown + parsed!.positionals) {
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG} and {SAY_FLAG}. "
+            + "Fix the hook command in your host config.");
+    }
+    final say = parsed!.values[SAY_FLAG] ?? "stdout";
+    if (say != "stdout" and say != "stderr") {
+        warn("{SAY_FLAG} takes stdout or stderr, not \"{say}\"; saying it on stdout.");
+        return Args{ agentName = parsed!.values[AGENT_NAME_FLAG] ?? "", say = "stdout" };
+    }
+    return Args{ agentName = parsed!.values[AGENT_NAME_FLAG] ?? "", say = say };
+}
+
+fun lastWrite(store: str) > double? {
+    final info = fs\stat(store) catch null;
+    if (info == null) { return null; }
+    return info!.mtime;
+}
+
+// tickSnippet is the detached child's program. The cwd goes by flag, so nothing
+// an event carries reaches the source.
+fun tickSnippet() > str {
+    return "import \"os\"; import \"magus/reclaimdisk\" as reclaim; _ = reclaim\\tick(\".\", deadline: os\\time() + reclaim\\CHUNK_MS);";
+}
+
+// pending says what the store holds that nobody was told, and marks it told.
+fun pending(store: str, now: double) > str? !> any {
+    final samples = diskwatch\read(store);
+    final said = diskwatch\pendingLine(samples, now: now);
+    if (said != null) {
+        diskwatch\append(store, s: diskwatch\DiskSample{ at = now, path = "", action = "said" });
+    }
+    return said;
+}
+
+fun main(args: [str]) > void {
+    final a = readArgs(args);
+    if (a.agentName == "") {
+        warn("[MGS3024] this hook was not given --agent-name, so nothing was sampled. "
+            + "Merge what `magus describe harness` prints into the host's hook configuration; "
+            + "the commands it prints name the host.");
+        return;
+    }
+    final event = io\stdin.readAll() catch "";
+    var cwd = hook\field(json\parse(event) catch null, dotPath: "cwd");
+    if (cwd == "") { cwd = "."; }
+
+    final store = diskwatch\storePath() catch "";
+    if (store == "") { return; }
+    final now = os\time();
+    // The cheap path every turn takes: one stat, and nothing else, inside the floor.
+    if (!diskwatch\due(lastWrite(store), now: now, everyMs: diskwatch\FLOOR_MS)) { return; }
+
+    // An absent magus samples nothing: guessed thresholds are numbers
+    // nobody set.
+    final bin = hook\resolveBin(cwd: cwd);
+    if (bin == "" or !hook\isExecutable(bin)) {
+        final host = if (a.say == "stderr") "" else a.agentName;
+        final doc = json\parse(event) catch null;
+        io\stdout.write(hook\unrecordedNotice(bin, session: hook\field(doc, dotPath: "session_id"),
+            host: host, file: "magus-reclaim-disk.buzz", root: hook\workspaceRootAt(cwd))) catch void;
+        return;
+    }
+
+    var said: str? = null;
+    try {
+        said = pending(store, now: now);
+        _ = proc\exec(bin, args: ["buzz", "-C", cwd, "-e", tickSnippet()], opts: proc\ExecOptions{ detach = true });
+    } catch (e) {
+        warn("disk sample failed: {e}");
+        return;
+    }
+    if (said -> text) {
+        if (a.say == "stderr") {
+            io\stderr.write(text + "\n") catch void;
+        } else {
+            std\print(text);
+        }
+    }
+}

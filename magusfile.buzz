@@ -160,7 +160,7 @@ magus\project({
         // The repository's Claude Code plugin marketplace; it lists the mod in
         // docs/guides/integrations/agents/claude-code-mod.
         ".claude-plugin/marketplace.json",
-        "spells/harness/**/*.buzz",
+        "spells/harness/**/*.buzz", "spells/harness/**/*.js", "spells/harness/**/probe.ts",
         // No spell claims these, so a refresh would not invalidate the tests that read them.
         "testdata/hosts/**/*.json",
         // Per directory, not **/testdata/**: some testdata files are generate outputs.
@@ -348,9 +348,25 @@ fun ld_flags() > str !> any {
         + " -X main.builtBy=" + built_by();
 }
 
+// Builds the plugin interpreter and its matching support file before native embedding.
+export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["cmd/magus-opencode-wasm/*.go", "internal/interp/bindings/opencode/*.go",
+        "libs/gopherbuzz/**/*.go", "libs/gopherbuzz/go.mod", "libs/diagnostics/**/*.go",
+        "libs/diagnostics/go.mod", "go.mod", "go.sum", "go.work", "go.work.sum", "mise.toml", "spells/harness/opencode/plugin.buzz", "spells/harness/opencode/plugins/*.js", "spells/harness/opencode/probe.ts"]);
+    ctx.writesFiles(["cmd/magus-opencode-wasm/plugin.buzz", "spells/harness/opencode/magus/magus-opencode.wasm", "spells/harness/opencode/magus/wasm_exec.js"]);
+    fs\mkdirAll("spells/harness/opencode/magus");
+    fs\copyFile("spells/harness/opencode/plugin.buzz", "cmd/magus-opencode-wasm/plugin.buzz");
+    os\withEnv({"GOOS": "js", "GOARCH": "wasm"}, fun () > void !> any {
+        _ = proc\exec("go", ["build", "-trimpath", "-ldflags=-s -w", "-o",
+            "spells/harness/opencode/magus/magus-opencode.wasm", "./cmd/magus-opencode-wasm"], ".");
+    });
+    final goroot = proc\exec("go", ["env", "GOROOT"], ".").stdout.trim();
+    fs\copyFile(goroot + "/lib/wasm/wasm_exec.js", "spells/harness/opencode/magus/wasm_exec.js");
+}
+
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(gopherbuzz\build);
+    ctx.needs(gopherbuzz\build, opencode_runtime_generate);
     // The embedded spell type mirrors are an output, so the link must follow their
     // regeneration; ctx.readsFiles would replace the **/*.go footprint, not add to it.
     ctx.needs(spells_generate);

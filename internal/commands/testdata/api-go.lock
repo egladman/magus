@@ -534,7 +534,7 @@ github.com/egladman/magus/std.MagusDescribeEvaluatedTarget func(ctx context.Cont
 github.com/egladman/magus/std.MagusDescribeFile func(ctx context.Context, paths []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.FileReport, error)
 github.com/egladman/magus/std.MagusDescribeGraph func(ctx context.Context, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.TargetGraphOutput, error)
 github.com/egladman/magus/std.MagusDescribeGraphMarkdown func(ctx context.Context, projects []string, opts github.com/egladman/magus/types.MagusCommandOptions) (string, error)
-github.com/egladman/magus/std.MagusDescribeHarness func(ctx context.Context, id string) (github.com/egladman/magus/types.HarnessPlan, error)
+github.com/egladman/magus/std.MagusDescribeHarness func(ctx context.Context, id string) (github.com/egladman/magus/types.HarnessInstallation, error)
 github.com/egladman/magus/std.MagusDescribeMCPTool func(ctx context.Context, name string, opts github.com/egladman/magus/types.MagusCommandOptions) ([]github.com/egladman/magus/types.MCPTool, error)
 github.com/egladman/magus/std.MagusDescribeProject func(ctx context.Context) (github.com/egladman/magus/types.ProjectsOutput, error)
 github.com/egladman/magus/std.MagusDescribeRule func(ctx context.Context, name string, opts github.com/egladman/magus/types.MagusCommandOptions) ([]github.com/egladman/magus/types.RuleDoc, error)
@@ -2455,7 +2455,16 @@ github.com/egladman/magus/types.HTTPServerOptions type struct
 github.com/egladman/magus/types.HTTPServerOptions.Dir field string
 github.com/egladman/magus/types.HTTPServerOptions.Mounts field map[string]string
 github.com/egladman/magus/types.HTTPServerOptions.Port field int
+github.com/egladman/magus/types.Harness type struct
+github.com/egladman/magus/types.Harness.Assets field []HarnessAsset "json:\"assets,omitempty\""
+github.com/egladman/magus/types.Harness.Config field HarnessConfig "json:\"config\""
+github.com/egladman/magus/types.Harness.Guard field string "json:\"guard\""
+github.com/egladman/magus/types.Harness.Probe field []string "json:\"probe,omitempty\""
 github.com/egladman/magus/types.HarnessAdd const HarnessChangeOp = "add"
+github.com/egladman/magus/types.HarnessAsset type struct
+github.com/egladman/magus/types.HarnessAsset.Content field string "json:\"content,omitempty\""
+github.com/egladman/magus/types.HarnessAsset.Path field string "json:\"path\""
+github.com/egladman/magus/types.HarnessAsset.Source field string "json:\"source,omitempty\""
 github.com/egladman/magus/types.HarnessChange type struct
 github.com/egladman/magus/types.HarnessChange.Key field string "json:\"key,omitempty\""
 github.com/egladman/magus/types.HarnessChange.Op field HarnessChangeOp "json:\"op\""
@@ -2465,19 +2474,21 @@ github.com/egladman/magus/types.HarnessConfig type struct
 github.com/egladman/magus/types.HarnessConfig.Defaults field map[string]any "json:\"defaults,omitempty\""
 github.com/egladman/magus/types.HarnessConfig.Path field string "json:\"path\""
 github.com/egladman/magus/types.HarnessFile type struct
+github.com/egladman/magus/types.HarnessFile.Bytes field []byte "json:\"bytes\""
 github.com/egladman/magus/types.HarnessFile.Changes field []HarnessChange "json:\"changes\""
 github.com/egladman/magus/types.HarnessFile.Content field string "json:\"content,omitempty\""
 github.com/egladman/magus/types.HarnessFile.Exists field bool "json:\"exists\""
 github.com/egladman/magus/types.HarnessFile.Fragment field map[string]any "json:\"fragment,omitempty\""
+github.com/egladman/magus/types.HarnessInstallation type struct
+github.com/egladman/magus/types.HarnessInstallation.AgentHints field []string "json:\"agent_hints,omitempty\""
+github.com/egladman/magus/types.HarnessInstallation.Current method func() bool
+github.com/egladman/magus/types.HarnessInstallation.Files field map[string]HarnessFile "json:\"files,omitempty\""
+github.com/egladman/magus/types.HarnessInstallation.Guard field string "json:\"guard,omitempty\""
+github.com/egladman/magus/types.HarnessInstallation.ID field string "json:\"id\""
+github.com/egladman/magus/types.HarnessInstallation.MCPHint field string "json:\"mcp_hint,omitempty\""
+github.com/egladman/magus/types.HarnessInstallation.Merge field string "json:\"merge,omitempty\""
+github.com/egladman/magus/types.HarnessInstallation.Wired field []HarnessWired "json:\"wired\""
 github.com/egladman/magus/types.HarnessOwnedMarker const string = "# magus:harness"
-github.com/egladman/magus/types.HarnessPlan type struct
-github.com/egladman/magus/types.HarnessPlan.AgentHints field []string "json:\"agent_hints,omitempty\""
-github.com/egladman/magus/types.HarnessPlan.Current method func() bool
-github.com/egladman/magus/types.HarnessPlan.Files field map[string]HarnessFile "json:\"files,omitempty\""
-github.com/egladman/magus/types.HarnessPlan.ID field string "json:\"id\""
-github.com/egladman/magus/types.HarnessPlan.MCPHint field string "json:\"mcp_hint,omitempty\""
-github.com/egladman/magus/types.HarnessPlan.Merge field string "json:\"merge,omitempty\""
-github.com/egladman/magus/types.HarnessPlan.Wired field []HarnessWired "json:\"wired\""
 github.com/egladman/magus/types.HarnessReplace const HarnessChangeOp = "replace"
 github.com/egladman/magus/types.HarnessRetire const HarnessChangeOp = "retire"
 github.com/egladman/magus/types.HarnessSet const HarnessChangeOp = "set"

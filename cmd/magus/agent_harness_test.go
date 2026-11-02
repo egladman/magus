@@ -105,7 +105,7 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 // and never runs.
 func TestDescribeHarnessPrintsEachChangeAndTheMergeCommand(t *testing.T) {
 	var out bytes.Buffer
-	require.NoError(t, writeHarnessPlan(&out, types.HarnessPlan{
+	require.NoError(t, writeHarnessPlan(&out, types.HarnessInstallation{
 		ID: "claude-code",
 		Files: map[string]types.HarnessFile{
 			".claude/settings.json": {
@@ -134,11 +134,11 @@ register it
 `, out.String())
 
 	out.Reset()
-	require.NoError(t, writeHarnessPlan(&out, types.HarnessPlan{ID: "cursor"}))
+	require.NoError(t, writeHarnessPlan(&out, types.HarnessInstallation{ID: "cursor"}))
 	assert.Equal(t, "cursor harness: current\n", out.String())
 
 	out.Reset()
-	require.NoError(t, writeHarnessPlan(&out, types.HarnessPlan{
+	require.NoError(t, writeHarnessPlan(&out, types.HarnessInstallation{
 		ID: "claude-code",
 		Wired: []types.HarnessWired{{File: ".claude/settings.json", Key: "hooks.PreToolUse", Entries: []map[string]any{
 			{"matcher": "Bash", "hooks": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}}},
@@ -196,8 +196,8 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "script-host"; }
 
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = "hooks.json"};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = "hooks.json"}, guard = "hooks"};
 }
 
 export fun mgs_getSkills() > HarnessSkills {

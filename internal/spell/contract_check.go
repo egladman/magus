@@ -71,7 +71,7 @@ func checkContract(src string) error {
 // function. An omitted mgs_renderPrompts used to decode as an empty list, the same
 // bytes a host returns when its hook is the prompt.
 func checkHarnessExports(exported map[string]int) []string {
-	line, harness := exported["mgs_getHarnessConfig"]
+	line, harness := exported["mgs_getHarness"]
 	if !harness {
 		return nil
 	}

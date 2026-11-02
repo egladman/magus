@@ -136,7 +136,7 @@ func buildDescribe(sess *buzz.Session, obs buzz.DirectObserver, withheld []strin
 	})
 	bind("harness", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		out, err := std.MagusDescribeHarness(ctx, ffi.String(args, 0))
-		return bindgen.ObjectHarnessPlan(out, ffi.SessionEnums(ctx, sess, "magus")), err
+		return bindgen.ObjectHarnessInstallation(out, ffi.SessionEnums(ctx, sess, "magus")), err
 	})
 	bind("mcpTool", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		opts, err := describeOptions("mcpTool", args, 1)

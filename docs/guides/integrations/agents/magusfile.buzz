@@ -2,6 +2,7 @@
 // loads the plugin from source. cmd/magus/testdata/script/guard_templates.txtar runs the templates.
 
 import "magus";
+import "project/../../../.." as workspace;
 import "./lib/embed" as embed;
 import "../../../../hack/magusfile/drift" as drift;
 import "../../../../hack/magusfile/index" as index;
@@ -33,7 +34,7 @@ export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["
 
 // The schema directory, not its files: drift\expand walks it, so new schemas are covered.
 fun generatedOutputs() > [str] {
-    return ["guard-templates.md", "README.md", "../../../../testdata/hosts/cursor/gen"];
+    return ["guard-templates.md", "README.md", "../../../../testdata/hosts/cursor/gen", "../../../../spells/harness/opencode/runtime"];
 }
 
 // Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker
@@ -45,8 +46,23 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 
     ctx.needs(cursor_schemas_generate, index_generate);
     ctx.readsFiles(["guard-templates.md.tmpl", "*.buzz", "lib/*.buzz",
-                    "../../../../spells/harness/*/spell.buzz", "../../../../internal/spell/harness.buzz"]);
+                    "../../../../spells/harness/*/spell.buzz", "../../../../internal/spell/harness.buzz", "magus-observe.buzz", "magus-buzz-check.buzz", "magus-reclaim-disk.buzz", "lib/hook.buzz"]);
     ctx.writesFiles(["guard-templates.md", "README.md"]);
+    final assets = {
+        "../../../../spells/harness/opencode/runtime/magus-observe.buzz": "magus-observe.buzz",
+        "../../../../spells/harness/opencode/runtime/magus-buzz-check.buzz": "magus-buzz-check.buzz",
+        "../../../../spells/harness/opencode/runtime/magus-reclaim-disk.buzz": "magus-reclaim-disk.buzz",
+        "../../../../spells/harness/opencode/runtime/lib/hook.buzz": "lib/hook.buzz",
+    };
+    ctx.writesFiles(["guard-templates.md", "README.md", "../../../../spells/harness/opencode/runtime/magus-observe.buzz", "../../../../spells/harness/opencode/runtime/magus-buzz-check.buzz", "../../../../spells/harness/opencode/runtime/magus-reclaim-disk.buzz", "../../../../spells/harness/opencode/runtime/lib/hook.buzz"]);
+    foreach (dest, source in assets) {
+        final content = fs\readFile(source);
+        if (ctx.hasCharm("rw")) {
+            fs\writeFileAtomic(dest, content: content);
+        } else if ((fs\readFile(dest) catch "") != content) {
+            throw "generate: OpenCode runtime asset " + dest + " is stale; run magus run generate:rw docs/guides/integrations/agents";
+        }
+    }
     final tmpl = fs\readFile("guard-templates.md.tmpl");
     final files = mut {<str: str>};
     foreach (name in embed\embedNames(tmpl)) {
@@ -56,7 +72,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // A spell imported here is a handle, not its functions, so a script
     // at the root calls each harness spell's lists.
     final row = fun (alias: str, id: str, hooks: str) > str
-        => "bindings\\Harness\{id = \"{id}\", hooks = {hooks}, "
+        => "bindings\\HookMatrix\{id = \"{id}\", hooks = {hooks}, "
             + "unsupported = {alias}\\mgs_listUnsupportedHooks()\}";
     final listed = fun (alias: str, id: str) > str => row(alias, id: id, hooks: "{alias}\\mgs_listHooks()");
     final script = "import \"io\"; import \"magus/spell\"; "
@@ -140,7 +156,8 @@ fun checkBuzz() > void !> any {
 
 // test runs the OpenCode plugin's transport cases under node; the test supplies Bun.spawn.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(install);
+    ctx.needs(install, workspace\opencode_runtime_generate);
+    ctx.readsFiles(["*.ts", "*.json", "../../../../spells/harness/opencode/plugins/*.js", "../../../../spells/harness/opencode/magus/*"]);
     final run = mut ["--test"];
     foreach (t in fs\glob("*.test.ts")) { run.append(t.value); }
     _ = proc\exec("node", run, ".");

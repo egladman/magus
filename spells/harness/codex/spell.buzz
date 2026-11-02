@@ -184,8 +184,8 @@ export fun mgs_listEntries() > [ManagedEntries] {
     return codex_entries();
 }
 
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = ".codex/hooks.json"};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = ".codex/hooks.json"}, guard = "hooks"};
 }
 
 export fun mgs_getSkills() > HarnessSkills {
@@ -376,8 +376,8 @@ test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "codex", "id must match magus\\harness.provider wiring and --id");
 }
 
-test "mgs_getHarnessConfig names the Codex hooks file and mgs_getSkills .agents/skills" {
-    assert\equal(mgs_getHarnessConfig().path, ".codex/hooks.json", "workspace-relative host config path");
+test "mgs_getHarness names the Codex hooks file and mgs_getSkills .agents/skills" {
+    assert\equal(mgs_getHarness().config.path, ".codex/hooks.json", "workspace-relative host config path");
     assert\equal(mgs_getSkills().form.value, "both", "the short skills and their full twins");
     assert\equal(mgs_getSkills().paths.join(","), ".agents/skills", "Codex reads .agents/skills");
 }

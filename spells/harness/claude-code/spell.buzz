@@ -331,8 +331,8 @@ export fun mgs_listModels() > [ModelRow] {
 // The settings "env" object: Claude Code sets it on the session, so every Bash tool command
 // the agent runs inherits it (testdata/hosts/claude-code/settings.schema.json, "env").
 // MAGUS_LOG_SILENT=true is -s for every one of them; a value the person already set stays.
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = ".claude/settings.json", defaults = {"env": {"MAGUS_LOG_SILENT": "true"}}};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = ".claude/settings.json", defaults = {"env": {"MAGUS_LOG_SILENT": "true"}}}, guard = "hooks"};
 }
 
 export fun mgs_getSkills() > HarnessSkills {
@@ -493,8 +493,8 @@ test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "claude-code", "id must match magus\\harness.provider wiring and --id");
 }
 
-test "mgs_getHarnessConfig names Claude Code settings and makes every Bash tool command quiet" {
-    final cfg = mgs_getHarnessConfig();
+test "mgs_getHarness names Claude Code settings and makes every Bash tool command quiet" {
+    final cfg = mgs_getHarness().config;
     assert\equal(cfg.path, ".claude/settings.json", "workspace-relative host config path");
     final env = cfg.defaults["env"] as {str: any};
     assert\equal(env.len(), 1, "one variable, magus's own");

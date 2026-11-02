@@ -233,9 +233,9 @@ func (w *workspace) wireReplyCheck(t *testing.T, config, event string, entry map
 }
 
 // harnessPlan is what `magus describe harness` says after the merge, for the MCP hint.
-func (w *workspace) harnessPlan(t *testing.T, spell string) types.HarnessPlan {
+func (w *workspace) harnessPlan(t *testing.T, spell string) types.HarnessInstallation {
 	t.Helper()
-	var plan types.HarnessPlan
+	var plan types.HarnessInstallation
 	if err := json.Unmarshal([]byte(w.magus(t, "describe", "harness", spell, "-o", "json")), &plan); err != nil {
 		t.Fatalf("describe harness %s: %v", spell, err)
 	}

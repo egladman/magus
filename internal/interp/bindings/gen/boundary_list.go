@@ -150,7 +150,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "GuardVerdict", Zero: types.GuardVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGuardVerdict(v.(types.GuardVerdict), enums) }},
 	{Name: "HarnessChange", Zero: types.HarnessChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessChange(v.(types.HarnessChange), enums) }},
 	{Name: "HarnessFile", Zero: types.HarnessFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessFile(v.(types.HarnessFile), enums) }},
-	{Name: "HarnessPlan", Zero: types.HarnessPlan{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessPlan(v.(types.HarnessPlan), enums) }},
+	{Name: "HarnessInstallation", Zero: types.HarnessInstallation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectHarnessInstallation(v.(types.HarnessInstallation), enums)
+	}},
 	{Name: "HarnessWired", Zero: types.HarnessWired{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessWired(v.(types.HarnessWired)) }},
 	{Name: "Hotspots", Zero: types.Hotspots{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHotspots(v.(types.Hotspots)) }},
 	{Name: "Impact", Zero: types.ImpactResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactResult(v.(types.ImpactResult)) }},
