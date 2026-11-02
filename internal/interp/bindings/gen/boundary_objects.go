@@ -3500,6 +3500,11 @@ func ObjectHarnessChange(v types.HarnessChange, enums ffi.EnumCases) vm.Value {
 
 func ObjectHarnessFile(v types.HarnessFile, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
+	itemsBytes := make([]vm.Value, len(v.Bytes))
+	for indexBytes := range v.Bytes {
+		itemsBytes[indexBytes] = vm.IntValue(int64(v.Bytes[indexBytes]))
+	}
+	out.MapSet("bytes", vm.ListValue(itemsBytes))
 	out.MapSet("exists", vm.BoolValue(v.Exists))
 	mappedFragment := vm.NewMap()
 	for keyFragment, itemFragment := range v.Fragment {
@@ -3515,9 +3520,10 @@ func ObjectHarnessFile(v types.HarnessFile, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectHarnessPlan(v types.HarnessPlan, enums ffi.EnumCases) vm.Value {
+func ObjectHarnessInstallation(v types.HarnessInstallation, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
+	out.MapSet("guard", vm.StringValue(v.Guard))
 	mappedFiles := vm.NewMap()
 	for keyFiles, itemFiles := range v.Files {
 		mappedFiles.MapSet(keyFiles, ObjectHarnessFile(itemFiles, enums))
@@ -5497,6 +5503,31 @@ func ObjectHarnessConfig(v types.HarnessConfig) vm.Value {
 		mappedDefaults.MapSet(keyDefaults, ffi.AnyVal(itemDefaults))
 	}
 	out.MapSet("defaults", mappedDefaults)
+	return out
+}
+
+func ObjectHarnessAsset(v types.HarnessAsset) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("source", vm.StringValue(v.Source))
+	out.MapSet("content", vm.StringValue(v.Content))
+	return out
+}
+
+func ObjectHarness(v types.Harness) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("config", ObjectHarnessConfig(v.Config))
+	out.MapSet("guard", vm.StringValue(v.Guard))
+	itemsAssets := make([]vm.Value, len(v.Assets))
+	for indexAssets := range v.Assets {
+		itemsAssets[indexAssets] = ObjectHarnessAsset(v.Assets[indexAssets])
+	}
+	out.MapSet("assets", vm.ListValue(itemsAssets))
+	itemsProbe := make([]vm.Value, len(v.Probe))
+	for indexProbe := range v.Probe {
+		itemsProbe[indexProbe] = vm.StringValue(v.Probe[indexProbe])
+	}
+	out.MapSet("probe", vm.ListValue(itemsProbe))
 	return out
 }
 

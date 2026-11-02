@@ -6,8 +6,8 @@
 import "magus/spell";
 import "std";
 
-// Harness is one harness's two lists, as its spell returns them.
-export object Harness {
+// HookMatrix is one harness's two lists, as its spell returns them.
+export object HookMatrix {
     id: str,
     hooks: [HookCommand],
     unsupported: [HookBinding],
@@ -19,7 +19,7 @@ export final POINTS = [HookPoint.shell, HookPoint.edit, HookPoint.stop, HookPoin
 
 // cell is a harness's answer at point: the scripts bound there, or
 // "unsupported". A point with neither raises, as doctor fails it.
-export fun cell(h: Harness, point: HookPoint) > str !> str {
+export fun cell(h: HookMatrix, point: HookPoint) > str !> str {
     final scripts = mut [<str>];
     foreach (hook in h.hooks) {
         if (hook.points.indexOf(point) != null and scripts.indexOf(hook.script) == null) { scripts.append(hook.script); }
@@ -43,7 +43,7 @@ fun row(cells: [str], widths: [int]) > str {
 
 // table renders the matrix with every column padded to its widest cell, the
 // shape dprint leaves alone.
-export fun table(harnesses: [Harness]) > str !> str {
+export fun table(harnesses: [HookMatrix]) > str !> str {
     final rows = mut [<[str]>];
     final header = mut ["hook point"];
     foreach (h in harnesses) { header.append(h.id); }
@@ -91,7 +91,7 @@ fun linked(reason: str) > str {
 }
 
 // reasons lists each unsupported point with why, harness by harness.
-export fun reasons(harnesses: [Harness]) > str {
+export fun reasons(harnesses: [HookMatrix]) > str {
     final lines = mut [<str>];
     foreach (h in harnesses) {
         foreach (point in POINTS) {
@@ -110,7 +110,7 @@ test "a URL in a reason is linked; its sentence punctuation stays outside" {
 }
 
 // page is the whole README.md.
-export fun page(harnesses: [Harness]) > str !> str {
+export fun page(harnesses: [HookMatrix]) > str !> str {
     return "---\n"
         + "title: Hook bindings\n"
         + "description: Which glue each agent host runs at each hook point, and why a host that runs none says so.\n"

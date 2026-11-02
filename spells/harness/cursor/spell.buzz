@@ -164,8 +164,8 @@ export fun mgs_listEntries() > [ManagedEntries] {
 }
 
 // The hooks file and its version, set only where the file lacks it.
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = ".cursor/hooks.json", defaults = {"version": 1}};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = ".cursor/hooks.json", defaults = {"version": 1}}, guard = "hooks"};
 }
 
 // Cursor reads skills from .agents/skills, .cursor/skills and .claude/skills (probed on
@@ -279,8 +279,8 @@ test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "cursor", "id must match magus\\harness.provider wiring and --id");
 }
 
-test "mgs_getHarnessConfig names the Cursor hooks file and seeds version 1, and no env" {
-    final cfg = mgs_getHarnessConfig();
+test "mgs_getHarness names the Cursor hooks file and seeds version 1, and no env" {
+    final cfg = mgs_getHarness().config;
     assert\equal(cfg.path, ".cursor/hooks.json", "workspace-relative host config path");
     assert\equal("{cfg.defaults["version"]}", "1", "defaults merge on first create");
     assert\isTrue(cfg.defaults["env"] == null, "hooks.json gains no env key");

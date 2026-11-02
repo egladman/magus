@@ -65,7 +65,7 @@ func TestHarnessMCPPlanRendersTheStdioCommandTheSpellNames(t *testing.T) {
 }`)
 	plan, err := PlanHarness(context.Background(), t.TempDir(), "stdio-host")
 	require.NoError(t, err)
-	assert.Equal(t, types.HarnessPlan{
+	assert.Equal(t, types.HarnessInstallation{
 		ID:    "stdio-host",
 		Wired: []types.HarnessWired{},
 		MCPHint: "transport: stdio, ./magus mcp started per session in this checkout, so it serves this tree at this build\n" +

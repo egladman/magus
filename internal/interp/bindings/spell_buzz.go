@@ -91,7 +91,7 @@ func newBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.
 		return spells.Descriptor{}, nil, err
 	}
 	sp := spells.NewSpell(spec.Name, append(localSpellBaseOptions(spec),
-		spells.WithInvoker(newBuzzSpellInvoker(spec)), spells.WithFuncSource(src))...)
+		spells.WithInvoker(newBuzzSpellInvoker(spec)), spells.WithFuncSource(src), spells.WithAssets(os.DirFS(filepath.Dir(path))))...)
 	return spec, sp, nil
 }
 

@@ -4,6 +4,8 @@
 
 Up: [workspace index](../../../../MAGUS.md)
 
+Depends on: [(workspace root)](../../../../MAGUS.md)
+
 Query: `magus query project=docs/guides/integrations/agents`
 
 | Target                    | What it does                                                                                                      |

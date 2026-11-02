@@ -2041,6 +2041,7 @@ export object HarnessChange {
 }
 
 export object HarnessFile {
+    bytes: [int] = [],
     exists: bool = false,
     fragment: {str: any?} = {},
     content: str = "",
@@ -2053,8 +2054,9 @@ export object HarnessWired {
     entries: [{str: any?}] = [],
 }
 
-export object HarnessPlan {
+export object HarnessInstallation {
     id: str = "",
+    guard: str = "",
     files: {str: HarnessFile} = {},
     merge: str = "",
     mcpHint: str = "",
@@ -2451,7 +2453,7 @@ export object describe {
     static extern fun file(paths: [str], opts: CommandOptions? = null) > FileReport !> any;
     static extern fun graph(opts: CommandOptions? = null) > TargetGraph !> any;
     static extern fun graphMarkdown(projects: [str] = [<str>], opts: CommandOptions? = null) > str !> any;
-    static extern fun harness(id: str) > HarnessPlan !> any;
+    static extern fun harness(id: str) > HarnessInstallation !> any;
     static extern fun mcpTool(name: str = "", opts: CommandOptions? = null) > [MCPTool] !> any;
     static extern fun module(name: str = "") > [Module] !> any;
     static extern fun project() > Projects !> any;

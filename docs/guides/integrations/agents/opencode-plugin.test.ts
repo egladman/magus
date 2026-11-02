@@ -24,12 +24,12 @@
 // a built magus to run it locally; it skips loudly without one.
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { MagusGuard } from "./opencode-plugin.ts";
+import { MagusGuard } from "../../../../spells/harness/opencode/plugins/magus.js";
 
 /** `bin` is argv[0] as the plugin spreads it; `argv` is everything after it. */
 type SpawnCall = { bin: string; argv: string[]; stdin: string };
@@ -71,7 +71,10 @@ function stubBun(
       exited: Promise.resolve(0),
     };
   };
-  (globalThis as unknown as { Bun: unknown }).Bun = { spawn };
+  (globalThis as unknown as { Bun: unknown }).Bun = {
+    spawn,
+    file: (name: string) => ({ exists: async () => existsSync(name) }),
+  };
   return calls;
 }
 
@@ -653,7 +656,7 @@ const glue = (script: string): string[] => [
   "-C",
   "/work",
   "-s",
-  `docs/guides/integrations/agents/${script}.buzz`,
+  `.opencode/magus/runtime/${script}.buzz`,
   "--",
   "--agent-name",
   "opencode",
@@ -973,7 +976,7 @@ test("a root idle runs the disk hook, and its line reaches the next tool result 
       "-C",
       "/work",
       "-s",
-      "docs/guides/integrations/agents/magus-reclaim-disk.buzz",
+      ".opencode/magus/runtime/magus-reclaim-disk.buzz",
       "--",
       "--agent-name",
       "opencode",

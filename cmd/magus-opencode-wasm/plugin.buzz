@@ -1,0 +1,68 @@
+// Private ABI v1. Native Magus owns policy; this ordinary Buzz program owns
+// OpenCode's decision routing and per-call advisory bookkeeping.
+import "opencode";
+
+var pending: mut {str: str} = mut {};
+var pendingMCP: mut {str: str} = mut {};
+
+fun result(blocked: bool, reason: str, context: str, status: str, mcp: str) > {str: str} {
+    return {"block": "{blocked}", "reason": reason, "context": context, "status": status, "mcp": mcp};
+}
+
+fun decide(verdict: {str: str}, promptable: bool) > {str: str} {
+    final decision = verdict["decision"] ?? "unjudged";
+    if (decision == "pass") { return result(false, reason: "", context: "", status: "", mcp: "false"); }
+    if (decision == "advise") { return result(false, reason: "", context: verdict["context"] ?? "", status: "", mcp: "false"); }
+    if (decision == "ask" and promptable) { return result(false, reason: "", context: "", status: "", mcp: "false"); }
+    if (decision == "deny") { return result(true, reason: "[magus guard] {verdict["reason"] ?? "call denied"}", context: "", status: "", mcp: "false"); }
+    if (decision == "ask") {
+        return result(true, reason: "[magus guard] {verdict["reason"] ?? "approval required"}\n\nThis call needs the approval of the person you work for, and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push, or a plain magus run of a human-only target, reaches the prompt its own \"permission.bash\" entries configure, which magus describe harness opencode prints. Ask them to run it from their own terminal. If they saw no such message, relay this one to them verbatim.", context: "", status: "", mcp: "false");
+    }
+    return result(true, reason: "[magus guard] magus guard could not judge this call: {verdict["why"] ?? "unrecognized verdict"}; refused.\nInstall magus (https://eli.gladman.cc/magus/guides/setup/), build it from source (https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path.", context: "", status: "", mcp: "false");
+}
+
+fun permission(verdict: {str: str}) > {str: str} {
+    final decision = verdict["decision"] ?? "unjudged";
+    var status = "";
+    if (decision == "pass" or decision == "advise") { status = "allow"; }
+    if (decision == "ask") { status = "ask"; }
+    if (decision == "deny") { status = "deny"; }
+    return result(false, reason: "", context: "", status: status, mcp: "false");
+}
+
+export fun dispatch(event: {str: str}) > {str: str} {
+    final kind = event["kind"] ?? "";
+    final key = event["key"] ?? "";
+    if (kind == "decide") { return decide(event, promptable: event["promptable"] == "true"); }
+    if (kind == "permission-map") { return permission(event); }
+    if (kind == "remember") {
+        final advice = event["context"] ?? "";
+        if (advice != "") { pending[key] = advice; pendingMCP[key] = event["mcp"] ?? "false"; }
+        return result(false, reason: "", context: "", status: "", mcp: "false");
+    }
+    if (kind == "take") {
+        final advice = pending[key] ?? "";
+        final mcp = pendingMCP[key] ?? "false";
+        _ = pending.remove(key);
+        _ = pendingMCP.remove(key);
+        return result(false, reason: "", context: advice, status: "", mcp: mcp);
+    }
+    if (kind != "before" and kind != "permission") {
+        return result(true, reason: "[magus guard] unknown runtime event", context: "", status: "", mcp: "false");
+    }
+    final tool = event["tool"] ?? "";
+    var mode = "envelope";
+    var payload = event["args"] ?? `{}`;
+    if (tool == "bash") { mode = "command"; payload = event["command"] ?? ""; }
+    if (tool == "edit" or tool == "write") { mode = "path"; payload = event["path"] ?? ""; }
+    if (payload == "") { return result(false, reason: "", context: "", status: "", mcp: "false"); }
+    final verdict = opencode\judge(event, mode: mode, payload: payload);
+    if (kind == "permission") { return permission(verdict); }
+    final decision = decide(verdict, promptable: event["promptable"] == "true");
+    final advice = decision["context"] ?? "";
+    if (decision["block"] == "false" and advice != "") {
+        pending[key] = advice;
+        pendingMCP[key] = event["mcp"] ?? "false";
+    }
+    return decision;
+}

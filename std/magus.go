@@ -1165,7 +1165,7 @@ var Magus = Module{
 					Name:    "harness",
 					Doc:     "What the wired harness id's host config needs merged: {id, files, merge, mcpHint, wired}, files keyed by workspace path. magus never writes host config; the person runs merge. An empty or unknown id raises, naming the wired ids. Runs a nested magus.",
 					Args:    []Arg{{Name: "id", Type: TypeString}},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "HarnessPlan"}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "HarnessInstallation"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -1563,13 +1563,13 @@ func MagusDescribeRule(ctx context.Context, name string, opts types.MagusCommand
 
 // MagusDescribeHarness implements magus\describe.harness: the plan of the one wired harness
 // id names. An empty id is an error naming the wired ids, which a nested describe lists.
-func MagusDescribeHarness(ctx context.Context, id string) (types.HarnessPlan, error) {
+func MagusDescribeHarness(ctx context.Context, id string) (types.HarnessInstallation, error) {
 	if id != "" {
-		return runMagusJSON[types.HarnessPlan](ctx, "describe", []string{"harness", id}, types.MagusCommandOptions{})
+		return runMagusJSON[types.HarnessInstallation](ctx, "describe", []string{"harness", id}, types.MagusCommandOptions{})
 	}
-	plans, err := runMagusJSON[[]types.HarnessPlan](ctx, "describe", []string{"harness"}, types.MagusCommandOptions{})
+	plans, err := runMagusJSON[[]types.HarnessInstallation](ctx, "describe", []string{"harness"}, types.MagusCommandOptions{})
 	if err != nil {
-		return types.HarnessPlan{}, fmt.Errorf(`magus\describe.harness: no harness id named, and listing the wired ones failed: %w`, err)
+		return types.HarnessInstallation{}, fmt.Errorf(`magus\describe.harness: no harness id named, and listing the wired ones failed: %w`, err)
 	}
 	ids := make([]string, len(plans))
 	for i, p := range plans {
@@ -1579,7 +1579,7 @@ func MagusDescribeHarness(ctx context.Context, id string) (types.HarnessPlan, er
 	if wired == "" {
 		wired = "none"
 	}
-	return types.HarnessPlan{}, fmt.Errorf(`magus\describe.harness: name a harness id, one of the wired ones: %s`, wired)
+	return types.HarnessInstallation{}, fmt.Errorf(`magus\describe.harness: name a harness id, one of the wired ones: %s`, wired)
 }
 
 // MagusDescribeMCPTool implements magus\describe.mcpTool.

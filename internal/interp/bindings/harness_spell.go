@@ -3,6 +3,7 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"maps"
 	"slices"
 	"strings"
@@ -27,7 +28,7 @@ func init() { //nolint:gochecknoinits // internal/agent cannot link the Buzz VM;
 const harnessSchemaVersion = 2
 
 // loadHarnessFromSpell builds a HarnessDescriptor from the harness contract's functions on
-// the spell registered under id. Missing mgs_getHarnessConfig is a miss (ok=false).
+// the spell registered under id. Missing mgs_getHarness is a miss (ok=false).
 // Missing mgs_renderPrompts is an error: it used to decode as the empty list a
 // hook-prompting host returns. Any other omission is a capability the host lacks.
 func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
@@ -38,7 +39,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	fail := func(err error) (agent.HarnessDescriptor, string, bool, error) {
 		return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %w", id, err)
 	}
-	config, ok, err := callHarness[types.HarnessConfig](ctx, drv, "mgs_getHarnessConfig")
+	definition, ok, err := callHarness[types.Harness](ctx, drv, "mgs_getHarness")
 	if err != nil {
 		return fail(err)
 	}
@@ -49,7 +50,16 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 		SchemaVersion: harnessSchemaVersion,
 		ID:            id,
 		Display:       agent.HarnessDisplay{Name: displayName(id)},
-		Config:        config,
+		Config:        definition.Config,
+		Guard:         definition.Guard,
+		Probe:         slices.Clone(definition.Probe),
+	}
+	for _, asset := range definition.Assets {
+		content, err := harnessAssetContent(drv, asset)
+		if err != nil {
+			return fail(err)
+		}
+		d.Assets = append(d.Assets, agent.HarnessRuntimeAsset{Path: asset.Path, Content: content})
 	}
 	if d.Skills, _, err = callHarness[types.HarnessSkills](ctx, drv, "mgs_getSkills"); err != nil {
 		return fail(err)
@@ -346,4 +356,32 @@ func displayName(id string) string {
 		parts[i] = strings.ToUpper(p[:1]) + p[1:]
 	}
 	return strings.Join(parts, " ")
+}
+
+func harnessAssetContent(drv spells.Driver, asset types.HarnessAsset) ([]byte, error) {
+	if (asset.Source == "") == (asset.Content == "") {
+		return nil, fmt.Errorf("asset %s requires exactly one of source and content", asset.Path)
+	}
+	if asset.Source == "" {
+		return []byte(asset.Content), nil
+	}
+	name, embedded := strings.CutPrefix(asset.Source, "magus:")
+	if !fs.ValidPath(name) {
+		return nil, fmt.Errorf("asset %s has an invalid source %q", asset.Path, asset.Source)
+	}
+	var body []byte
+	var err error
+	if embedded {
+		body, err = fs.ReadFile(spells.Shipped(), name)
+	} else {
+		reader, ok := drv.(interface{ ReadAsset(string) ([]byte, error) })
+		if !ok {
+			return nil, fmt.Errorf("spell %s cannot read runtime assets", drv.Name())
+		}
+		body, err = reader.ReadAsset(name)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("asset %s: %w", asset.Path, err)
+	}
+	return body, nil
 }

@@ -20,8 +20,8 @@ export fun mgs_getName() > str { return "claude-code-mod"; }
 
 final SETTINGS_PATH = ".claude/settings.json";
 
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = ""};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = ""}, guard = "none"};
 }
 
 export fun mgs_getSkills() > HarnessSkills {

@@ -216,7 +216,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "HarnessWired", Type: reflect.TypeFor[types.HarnessWired](), RuntimeObject: true},
 	{Name: "HarnessChange", Type: reflect.TypeFor[types.HarnessChange](), RuntimeObject: true},
 	{Name: "HarnessFile", Type: reflect.TypeFor[types.HarnessFile](), RuntimeObject: true},
-	{Name: "HarnessPlan", Type: reflect.TypeFor[types.HarnessPlan](), RuntimeObject: true},
+	{Name: "HarnessInstallation", Type: reflect.TypeFor[types.HarnessInstallation](), RuntimeObject: true},
 	{Name: "MCPToolParam", Type: reflect.TypeFor[types.MCPToolParam](), RuntimeObject: true},
 	{Name: "MCPTool", Type: reflect.TypeFor[types.MCPTool](), RuntimeObject: true},
 	// magus.review's bundle, leaf-first. A Buzz advisor annotating `> Review` gets
@@ -388,6 +388,8 @@ var boundaryTypes = []boundaryType{
 	// spell's mgs_ functions return all but ShippedAgent, which magus hands
 	// mgs_renderAgents.
 	{Name: "HarnessConfig", Type: reflect.TypeFor[types.HarnessConfig]()},
+	{Name: "HarnessAsset", Type: reflect.TypeFor[types.HarnessAsset]()},
+	{Name: "Harness", Type: reflect.TypeFor[types.Harness]()},
 	{Name: "HarnessSkills", Type: reflect.TypeFor[types.HarnessSkills]()},
 	{Name: "HookCommand", Type: reflect.TypeFor[types.HookCommand]()},
 	{Name: "HookBinding", Type: reflect.TypeFor[types.HookBinding]()},

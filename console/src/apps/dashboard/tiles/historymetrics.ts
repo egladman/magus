@@ -174,7 +174,9 @@ function hotspotsTile(): Tile {
         return;
       }
       table.setUnresolved(null);
-      card.setNote(`${s.historyMetrics.hotspots.length} projects, ${s.historyMetrics.commits} commits`);
+      card.setNote(
+        `${s.historyMetrics.hotspots.length} projects, ${s.historyMetrics.commits} commits`,
+      );
       table.setRows(s.historyMetrics.hotspots);
     },
     destroy() {},

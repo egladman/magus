@@ -14,7 +14,7 @@ export object Drift {
 
 // stale reads plans as `magus describe harness` returns them. No plans at all is a
 // failure too, since the root wires every host it checks.
-export fun stale(plans: [magus\HarnessPlan]) > Drift {
+export fun stale(plans: [magus\HarnessInstallation]) > Drift {
     if (plans.len() == 0) {
         return Drift{ failure = "harness-drift: `magus describe harness` returned no harness; wire one with magus\\harness.provider(<spell>) in the root magusfile" };
     }
@@ -37,15 +37,15 @@ export fun stale(plans: [magus\HarnessPlan]) > Drift {
 }
 
 test "a current plan is not drift" {
-    final got = stale([magus\HarnessPlan{ id = "cursor" }]);
+    final got = stale([magus\HarnessInstallation{ id = "cursor" }]);
     assert\equal(got.failure, want: "", message: "no files means current");
     assert\equal(got.merges, want: "", message: "nothing to merge");
 }
 
 test "a drifted plan names each file and its merge command" {
     final plans = [
-        magus\HarnessPlan{ id = "cursor" },
-        magus\HarnessPlan{
+        magus\HarnessInstallation{ id = "cursor" },
+        magus\HarnessInstallation{
             id = "claude-code",
             files = {
                 ".claude/settings.json": magus\HarnessFile{ exists = true },
@@ -63,5 +63,5 @@ test "a drifted plan names each file and its merge command" {
 }
 
 test "no plans is a failure" {
-    assert\isTrue(stale([<magus\HarnessPlan>]).failure != "", message: "nothing wired cannot pass");
+    assert\isTrue(stale([<magus\HarnessInstallation>]).failure != "", message: "nothing wired cannot pass");
 }

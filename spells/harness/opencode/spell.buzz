@@ -1,16 +1,5 @@
-// OpenCode agent-host harness. Skills-only: OpenCode has no shell-command hook config file
-// Magus can merge. The guard rides a TypeScript plugin
-// (docs/guides/integrations/agents/opencode-plugin.ts), not a merged hook config.
-//
-//   import "spells/harness/opencode" as opencode
-//   magus\harness.provider(opencode)
-//
-// To adapt without modifying Magus source: copy this spell into the workspace, change only
-// the import path (keep provider), edit Buzz. `magus describe harness opencode` prints no
-// hook config, since the config path is empty, only the push and human-only run
-// permissions in opencode.json (mgs_renderPrompts); verify does not claim guard coverage
-// from a missing config, and reports the hook drift check skipped. See
-// magus-workspace-rules "Adapting a Buzz harness".
+// OpenCode's harness installs the plugin and its complete runtime through the generic
+// harness contract. JSON permissions remain declared separately by mgs_renderPrompts.
 
 import "magus/spell";
 import "magus/harness";
@@ -18,8 +7,22 @@ import "assert";
 
 export fun mgs_getName() > str { return "opencode"; }
 
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = ""};
+export fun mgs_getHarness() > Harness {
+    return Harness{
+        config = HarnessConfig{path = ""},
+        guard = "plugin",
+        assets = [
+            HarnessAsset{path = ".opencode/plugins/magus.js", source = "magus:harness/opencode/plugins/magus.js"},
+            HarnessAsset{path = ".opencode/magus/probe.ts", source = "magus:harness/opencode/probe.ts"},
+            HarnessAsset{path = ".opencode/magus/magus-opencode.wasm", source = "magus:harness/opencode/magus/magus-opencode.wasm"},
+            HarnessAsset{path = ".opencode/magus/wasm_exec.js", source = "magus:harness/opencode/magus/wasm_exec.js"},
+            HarnessAsset{path = ".opencode/magus/runtime/magus-observe.buzz", source = "magus:harness/opencode/runtime/magus-observe.buzz"},
+            HarnessAsset{path = ".opencode/magus/runtime/magus-buzz-check.buzz", source = "magus:harness/opencode/runtime/magus-buzz-check.buzz"},
+            HarnessAsset{path = ".opencode/magus/runtime/magus-reclaim-disk.buzz", source = "magus:harness/opencode/runtime/magus-reclaim-disk.buzz"},
+            HarnessAsset{path = ".opencode/magus/runtime/lib/hook.buzz", source = "magus:harness/opencode/runtime/lib/hook.buzz"},
+        ],
+        probe = ["node", ".opencode/magus/probe.ts"],
+    };
 }
 
 export fun mgs_getSkills() > HarnessSkills {
@@ -214,8 +217,10 @@ test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "opencode", "id must match magus\\harness.provider wiring and --id");
 }
 
-test "the harness is skills-only, under .opencode/skills" {
-    assert\equal(mgs_getHarnessConfig().path, "", "no host JSON for Magus to merge");
+test "the harness installs its plugin and runtime beside .opencode/skills" {
+    assert\equal(mgs_getHarness().config.path, "", "the plugin loads from its project directory");
+    assert\equal(mgs_getHarness().guard, "plugin", "no config path is not skills-only");
+    assert\equal(mgs_getHarness().assets.len(), 8, "plugin, probe and all runtime helpers");
     assert\equal(mgs_getSkills().paths.join(","), ".opencode/skills", "OpenCode reads .opencode/skills");
     assert\equal(mgs_getSkills().form.value, "both", "the short skills and their full twins");
 }
