@@ -4,6 +4,7 @@ package opencode
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,18 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
+// The OpenCode harness spell ships ./wasm as js/wasm. The outputs are
+// committed because the spell embeds them.
+//
+//go:generate env GOOS=js GOARCH=wasm go build -trimpath "-ldflags=-s -w" -o ../../../../spells/harness/opencode/gen/magus-opencode.wasm ./wasm
+//go:generate cp $GOROOT/lib/wasm/wasm_exec.js ../../../../spells/harness/opencode/gen/wasm_exec.js
+
 const Version = 1
+
+// Plugin is the Buzz program that routes OpenCode events in the wasm runtime.
+//
+//go:embed plugin.buzz
+var Plugin string
 
 type Invocation struct {
 	Args  []string `json:"args"`

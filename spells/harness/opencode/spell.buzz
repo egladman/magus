@@ -14,8 +14,8 @@ export fun mgs_getHarness() > Harness {
         assets = [
             HarnessAsset{path = ".opencode/plugins/magus.js", source = "magus:harness/opencode/plugins/magus.js"},
             HarnessAsset{path = ".opencode/magus/probe.ts", source = "magus:harness/opencode/probe.ts"},
-            HarnessAsset{path = ".opencode/magus/magus-opencode.wasm", source = "magus:harness/opencode/magus/magus-opencode.wasm"},
-            HarnessAsset{path = ".opencode/magus/wasm_exec.js", source = "magus:harness/opencode/magus/wasm_exec.js"},
+            HarnessAsset{path = ".opencode/magus/magus-opencode.wasm", source = "magus:harness/opencode/gen/magus-opencode.wasm"},
+            HarnessAsset{path = ".opencode/magus/wasm_exec.js", source = "magus:harness/opencode/gen/wasm_exec.js"},
             HarnessAsset{path = ".opencode/magus/runtime/magus-observe.buzz", source = "magus:harness/opencode/runtime/magus-observe.buzz"},
             HarnessAsset{path = ".opencode/magus/runtime/magus-buzz-check.buzz", source = "magus:harness/opencode/runtime/magus-buzz-check.buzz"},
             HarnessAsset{path = ".opencode/magus/runtime/magus-reclaim-disk.buzz", source = "magus:harness/opencode/runtime/magus-reclaim-disk.buzz"},

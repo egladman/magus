@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,12 +12,6 @@ import (
 
 	"github.com/egladman/magus/internal/interp/bindings/opencode"
 )
-
-// The runtime generation target copies the canonical harness program here before
-// building, so the installed module has no source-file loading dependency.
-//
-//go:embed plugin.buzz
-var pluginSource string
 
 func promise(work func() (any, error)) js.Value {
 	executor := js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -150,7 +143,7 @@ func main() {
 				return nil, errors.New("opencode: invalid directory, binary or timeout")
 			}
 			timeout := time.Duration(milliseconds) * time.Millisecond
-			runtime, err := opencode.Open(context.Background(), pluginSource, func(ctx context.Context, input opencode.Invocation) (opencode.Capture, error) {
+			runtime, err := opencode.Open(context.Background(), opencode.Plugin, func(ctx context.Context, input opencode.Invocation) (opencode.Capture, error) {
 				return invoke(ctx, directory, binary, input)
 			})
 			if err != nil {

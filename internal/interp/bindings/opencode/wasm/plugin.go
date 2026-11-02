@@ -722,7 +722,7 @@ func createPlugin(input js.Value) (any, error) {
 		binary = workspaceBinary(ctx)
 	}
 	p := &plugin{directory: directory, binary: binary, client: client, parents: make(map[string]string), followUps: make(map[string]string), background: make(map[string]bool), config: js.Null()}
-	runtime, err := opencode.Open(context.Background(), pluginSource, func(ctx context.Context, input opencode.Invocation) (opencode.Capture, error) {
+	runtime, err := opencode.Open(context.Background(), opencode.Plugin, func(ctx context.Context, input opencode.Invocation) (opencode.Capture, error) {
 		return invoke(ctx, directory, binary, input)
 	})
 	if err != nil {
