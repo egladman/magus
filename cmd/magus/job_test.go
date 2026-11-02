@@ -2566,3 +2566,126 @@ func (s *forkFactsReportSuite) TestAConfigThatWillNotLoadIsNamedInsteadOfAnEmpty
 	s.Contains(s.logged.String(), "the output store could not be located")
 	s.NotContains(s.logged.String(), "holds no passed full test")
 }
+
+type jobApplyContractSuite struct{ suite.Suite }
+
+func TestJobApplyContract(t *testing.T) { suite.Run(t, new(jobApplyContractSuite)) }
+
+func (s *jobApplyContractSuite) apply(root string, record types.Declaration) (string, error) {
+	s.T().Helper()
+	data, err := json.Marshal(record)
+	s.Require().NoError(err)
+	path := filepath.Join(s.T().TempDir(), "job.jsonl")
+	s.Require().NoError(os.WriteFile(path, append(data, '\n'), 0o600))
+	var applyErr error
+	out := captureStdout(s.T(), func() {
+		applyErr = jobApply(s.T().Context(), root, []string{"-f", path})
+	})
+	return out, applyErr
+}
+
+func (s *jobApplyContractSuite) integration(integrates ...string) (string, *job.Store, types.Declaration) {
+	s.T().Helper()
+	resetWorkspaceMemo(s.T())
+	row := leaseRow("integration", "")
+	row.WritePaths = []string{"magus.yaml"}
+	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
+	row.Validation = row.Check.String()
+	root, cacheDir := execFixture(s.T(), row)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
+	return root, store, types.Declaration{
+		Schema: types.Schema{Version: types.JobSchemaVersion}, ID: row.ID,
+		Model: row.Model, WritePaths: row.WritePaths, Check: row.Check, Integrates: integrates,
+	}
+}
+
+func (s *jobApplyContractSuite) stored(store *job.Store) types.Job {
+	s.T().Helper()
+	rows, err := store.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows, 1)
+	return rows[0]
+}
+
+func (s *jobApplyContractSuite) assertStored(store *job.Store, want types.Job) {
+	s.T().Helper()
+	got := s.stored(store)
+	// Each accepted apply stamps validation and appends a new store generation.
+	want.Validated, want.Generation = got.Validated, got.Generation
+	s.Equal(want, got)
+}
+
+func (s *jobApplyContractSuite) TestIntegratesIsReportedPersistedAndIdempotent() {
+	root, store, record := s.integration("worker")
+	want := s.stored(store)
+	want.Integrates = []string{"worker"}
+	out, err := s.apply(root, record)
+	s.Require().NoError(err)
+	s.Contains(out, "updated integration, still running:\n  integrates +worker\n")
+	s.assertStored(store, want)
+
+	out, err = s.apply(root, record)
+	s.Require().NoError(err)
+	s.Equal("unchanged integration\n", out)
+	s.assertStored(store, want)
+}
+
+func (s *jobApplyContractSuite) TestDryRunReportsIntegratesWithoutPersistingIt() {
+	root, store, record := s.integration("worker")
+	before := s.stored(store)
+	globalCfg.DryRun = true
+	out, err := s.apply(root, record)
+	s.Require().NoError(err)
+	s.Contains(out, "would update integration, still running:\n  integrates +worker\n")
+	s.Contains(out, "dry run: nothing written")
+	s.Equal(before, s.stored(store))
+}
+
+func (s *jobApplyContractSuite) TestOmittingIntegratesClearsTheStoredSpec() {
+	root, store, record := s.integration("worker")
+	_, err := s.apply(root, record)
+	s.Require().NoError(err)
+	want := s.stored(store)
+	want.Integrates, record.Integrates = nil, nil
+	out, err := s.apply(root, record)
+	s.Require().NoError(err)
+	s.Contains(out, "integrates -worker\n")
+	s.assertStored(store, want)
+}
+
+func (s *jobApplyContractSuite) TestAnUnknownSettlementExitsFailureAndWritesNothing() {
+	resetWorkspaceMemo(s.T())
+	root, cacheDir := execFixture(s.T())
+	_, err := s.apply(root, types.Declaration{
+		Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "absent",
+		LeftUnmerged: "superseded by another change",
+	})
+	s.Require().ErrorContains(err, "nothing declares job absent, so nothing settles")
+	s.Equal(exit.Failure, exit.Code(err))
+	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root}).List()
+	s.Require().NoError(err)
+	s.Empty(rows)
+}
+
+func (s *jobApplyContractSuite) TestAnInvalidFiledResultExitsUsageAndKeepsTheJob() {
+	root, store, _ := s.integration()
+	before, err := store.List()
+	s.Require().NoError(err)
+	writeStdin(s.T(), `{"schema_version":2,"unexpected":"field"}`)
+	err = jobExit(s.T().Context(), root, []string{"integration", "--stdin"})
+	s.Require().ErrorContains(err, "File this shape:")
+	s.Equal(exit.Usage, exit.Code(err))
+	after, err := store.List()
+	s.Require().NoError(err)
+	s.Equal(before, after)
+}
+
+func (s *jobApplyContractSuite) TestAMalformedRecordExitsUsage() {
+	resetWorkspaceMemo(s.T())
+	root, _ := execFixture(s.T())
+	path := filepath.Join(s.T().TempDir(), "broken.jsonl")
+	s.Require().NoError(os.WriteFile(path, []byte("{\n"), 0o600))
+	err := jobApply(s.T().Context(), root, []string{"-f", path})
+	s.Require().ErrorContains(err, "magus job apply:")
+	s.Equal(exit.Usage, exit.Code(err))
+}
