@@ -1,16 +1,16 @@
 ---
-title: "ambiguous-ci-word: a call that picks magus `ci` or the host's CI/CD while the person's bare word \"ci\" is still unresolved"
-description: "A deny rule by default: it refuses a call that picks magus `ci` or the host's CI/CD while the person's bare word \"ci\" is still unresolved, and names what to run instead."
+title: "ambiguous-ci-word: a call that picks magus `ci` or host CI/CD while the bare word \"ci\" is unresolved"
+description: "A deny rule by default: it refuses a call that picks magus `ci` or host CI/CD while the bare word \"ci\" is unresolved, and names what to run instead."
 tags: [guard, rules, ambiguous-ci-word, deny]
 ---
 
 # ambiguous-ci-word
 
-A deny rule by default: it refuses a call that picks magus `ci` or the host's CI/CD while the person's bare word "ci" is still unresolved, and names what to run instead.
+A deny rule by default: it refuses a call that picks magus `ci` or host CI/CD while the bare word "ci" is unresolved, and names what to run instead.
 
 ## What it catches
 
-A call that picks magus `ci` or the host's CI/CD while the person's bare word "ci" is still unresolved.
+A call that picks magus `ci` or host CI/CD while the bare word "ci" is unresolved.
 
 ## Why
 
