@@ -42,8 +42,8 @@ export object Entry {
 }
 
 export final ENTRIES = [
-    Entry{ path = "docs/guides/integrations/agents/opencode-plugin.ts", scope = "MagusGuard.apply",
-        why = "a throw from the plugin's hook is OpenCode's only way to stop a tool call" },
+    Entry{ path = "spells/harness/opencode/plugins/magus.js", scope = "MagusGuard",
+        why = "a throw from the plugin entry is OpenCode's only way to refuse to load the guard" },
 ];
 
 // Ceiling is one line of the count file, and the line it sits on.
