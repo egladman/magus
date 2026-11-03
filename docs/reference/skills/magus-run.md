@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 15555
-skill_short_bytes: 9064
+skill_full_bytes: 15582
+skill_short_bytes: 9073
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `fb52861ea405` |
+| `skill-content` | `784ed940daab` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -78,7 +78,7 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
    - `magus status --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
    - Hosts manage own connection; never start server for agent.
    - `client` (`magus\run`): run named projects, same arguments as `magus run`.
-   - `client` (`magus\affected`): projects VCS change touched; returns set, does not run it.
+   - `client` (`magus\change().affected`): projects VCS change touched; returns set, does not run it.
 
    `client` bounded at 10 minutes when called directly; host supporting MCP tasks can run it as task without bound.
    Long run (full `ci`, gate) -> CLI unless host runs `client` as task.
@@ -281,7 +281,7 @@ VCS.
      Do not make the connection a prerequisite for completing the work.
    - `client` (`magus\run`): run named projects, with the same arguments as `magus run` (or the cwd
      project). Use when you know which projects to run.
-   - `client` (`magus\affected`): the projects a VCS change touched. It
+   - `client` (`magus\change().affected`): the projects a VCS change touched. It
      returns the set and does not run it. The gate is `magus affected ci`.
 
    `client` is bounded at 10 minutes when called directly. A host that
@@ -341,7 +341,7 @@ magus affected test               # only projects affected by the VCS diff
 ```
 
 MCP equivalents: `client` (`magus\run`) with the arguments of `magus run`.
-`magus\affected` returns the affected project set and does not run it. `magus\impact` is why each project is in that set. `magus\where` answers which project contains a directory.
+`magus\change().affected` returns the affected project set and does not run it. `magus\change().impact` is why each project is in that set. `magus\where` answers which project contains a directory.
 
 WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
 hand-sequencing `magus run lint`, `format`, `test` to check your own work.

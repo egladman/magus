@@ -242,5 +242,5 @@ Then, any backend:{{end}}
 
 {{if .Full}}`{{cmd "affected"}} --explain <project>` shows the chain that put a project in the
 affected set, when the result surprises you. `{{tool "client"}}`
-(`{{buzz "impact"}}`) lists the changed files per seed project.{{else}}`{{cmd "affected"}} --explain <project>`: chain putting project in affected set.
-`{{tool "client"}}` (`{{buzz "impact"}}`): changed files per seed project.{{end}}
+(`{{buzz "change.impact"}}`) lists the changed files per seed project.{{else}}`{{cmd "affected"}} --explain <project>`: chain putting project in affected set.
+`{{tool "client"}}` (`{{buzz "change.impact"}}`): changed files per seed project.{{end}}

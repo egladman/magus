@@ -11,25 +11,25 @@ every package.{{else}}Gather architecture evidence from magus: holds package imp
 {{if .Full}}| question | run | read |
 | --- | --- | --- |
 | what does X import; what imports X | `{{cmd "explain"}} dir:<path>` | the `imports` and `imported by` edges |
-| what transitively depends on X | `{{buzz "neighborhood"}}` with `direction = "in"` (below) | `nodes`; `"out"` walks what X needs |
-| is there an import cycle; would A importing B make one | the `{{buzz "importGraph"}}` script below | `cycle edge` lines, or `B already reaches A: true` |
-| is this layer clean | `{{buzz "layer"}}("<name>")` | each covered Dir's `imports` against the layers it may use |
+| what transitively depends on X | `{{buzz "graph.neighborhood"}}` with `direction = "in"` (below) | `nodes`; `"out"` walks what X needs |
+| is there an import cycle; would A importing B make one | the `{{buzz "graph.imports"}}` script below | `cycle edge` lines, or `B already reaches A: true` |
+| is this layer clean | `{{buzz "graph.layer"}}("<name>")` | each covered Dir's `imports` against the layers it may use |
 | what already does this; where does new code belong | `{{cmd "query"}} "kind=symbol <name>"` | existing implementations and their files |
 | who calls this symbol | `{{cmd "explain"}} '<symbol id>'` | `called by` symbols and `referenced by` files |
 | what a file holds | `{{cmd "explain"}} <path/to/file>` | `defines (N)` |
 | which packages are central | `{{cmd "graph stats"}} --symbols --kind dir` | the `IN` column: fan-in |
-| how churned, owned or duplicated | `{{buzz "hotspots"}}()` / `{{buzz "ownership"}}()` / `{{buzz "duplication"}}()` | each metric |
+| how churned, owned or duplicated | `{{buzz "history.hotspots"}}()` / `{{buzz "history.ownership"}}()` / `{{buzz "graph.duplication"}}()` | each metric |
 | what breaks if I change a symbol | `{{cmd "refs"}} <symbol> --occurrences` | `N occurrence(s) in M file(s)` |
 | what a changeset reaches | `{{cmd "affected"}} --impact` | the seed and affected projects |{{else}}Question: run; read
 - what X imports; what imports X: `{{cmd "explain"}} dir:<path>`; `imports` and `imported by` edges
-- what transitively depends on X: `{{buzz "neighborhood"}}` with `direction = "in"` (below); `nodes`; `"out"` walks what X needs
-- import cycle; would A importing B make one: `{{buzz "importGraph"}}` script below; `cycle edge` lines, or `B already reaches A: true`
-- layer clean: `{{buzz "layer"}}("<name>")`; each covered Dir's `imports` against layers it may use
+- what transitively depends on X: `{{buzz "graph.neighborhood"}}` with `direction = "in"` (below); `nodes`; `"out"` walks what X needs
+- import cycle; would A importing B make one: `{{buzz "graph.imports"}}` script below; `cycle edge` lines, or `B already reaches A: true`
+- layer clean: `{{buzz "graph.layer"}}("<name>")`; each covered Dir's `imports` against layers it may use
 - what already does this; where new code belongs: `{{cmd "query"}} "kind=symbol <name>"`; existing implementations, files
 - who calls symbol: `{{cmd "explain"}} '<symbol id>'`; `called by` symbols, `referenced by` files
 - what file holds: `{{cmd "explain"}} <path/to/file>`; `defines (N)`
 - which packages central: `{{cmd "graph stats"}} --symbols --kind dir`; `IN` column: fan-in
-- how churned, owned, duplicated: `{{buzz "hotspots"}}()` / `{{buzz "ownership"}}()` / `{{buzz "duplication"}}()`
+- how churned, owned, duplicated: `{{buzz "history.hotspots"}}()` / `{{buzz "history.ownership"}}()` / `{{buzz "graph.duplication"}}()`
 - what breaks if I change symbol: `{{cmd "refs"}} <symbol> --occurrences`; `N occurrence(s) in M file(s)`
 - what changeset reaches: `{{cmd "affected"}} --impact`; seed and affected projects{{end}}
 
@@ -55,11 +55,11 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-{{if .Full}}`{{buzz "dir"}}("<path>")` is the same card as a record: `imports`, `importedBy`,
-`files`, `layer`, and `importsIndexed`. `{{buzz "dirs"}}("<glob>", opts:
+{{if .Full}}`{{buzz "graph.dir"}}("<path>")` is the same card as a record: `imports`, `importedBy`,
+`files`, `layer`, and `importsIndexed`. `{{buzz "graph.dirs"}}("<glob>", opts:
 magus\DirsOptions{ layer = "<name>" })` filters directories by layer, `language` or
-`depth`.{{else}}`{{buzz "dir"}}("<path>")`: same card as record: `imports`, `importedBy`, `files`, `layer`, `importsIndexed`.
-`{{buzz "dirs"}}("<glob>", opts: magus\DirsOptions{ layer = "<name>" })`: filters directories by layer, `language` or `depth`.{{end}}
+`depth`.{{else}}`{{buzz "graph.dir"}}("<path>")`: same card as record: `imports`, `importedBy`, `files`, `layer`, `importsIndexed`.
+`{{buzz "graph.dirs"}}("<glob>", opts: magus\DirsOptions{ layer = "<name>" })`: filters directories by layer, `language` or `depth`.{{end}}
 
 {{if .Full}}## Every structural claim carries its evidence{{else}}## Every claim carries evidence{{end}}
 
@@ -91,10 +91,10 @@ or opening each package in turn finds what you opened and misses the rest.{{end}
 
 {{if .Full}}## Cycles and layering{{else}}## Cycles, layering{{end}}
 
-{{if .Full}}There is no built-in cycle check. `{{buzz "importGraph"}}()` maps every package to
+{{if .Full}}There is no built-in cycle check. `{{buzz "graph.imports"}}()` maps every package to
 the packages it imports, which is enough. Save this as `cycles.buzz`. Run
 `{{cmd "buzz"}} cycles.buzz` to list every import edge that sits on a cycle. Run
-`{{cmd "buzz"}} cycles.buzz <A> <B>` to ask whether A importing B would close one.{{else}}No built-in cycle check; `{{buzz "importGraph"}}()` maps every package to its imports; enough.
+`{{cmd "buzz"}} cycles.buzz <A> <B>` to ask whether A importing B would close one.{{else}}No built-in cycle check; `{{buzz "graph.imports"}}()` maps every package to its imports; enough.
 Save `cycles.buzz`.
 `{{cmd "buzz"}} cycles.buzz`: lists every import edge on cycle.
 `{{cmd "buzz"}} cycles.buzz <A> <B>`: would A importing B close one.{{end}}
@@ -144,11 +144,11 @@ new home, and the new home imports whatever the code calls. Ask the two-argument
 form once per new edge. `refs --occurrences` lists the calling files,
 and so the packages a move touches.
 
-Layering is declared, never inferred. `{{buzz "layer"}}("<name>")` returns the Dirs a
+Layering is declared, never inferred. `{{buzz "graph.layer"}}("<name>")` returns the Dirs a
 declared layer covers, and raises naming the declared layers when the name is not
 one. With no layers declared, say so; do not invent them from directory names.{{else}}Move adds import edges: every caller of moved code imports new home; new home imports what code calls.
 Ask two-argument form once per new edge.
-Layering declared, never inferred. `{{buzz "layer"}}("<name>")` returns Dirs declared layer covers; raises naming declared layers when name is not one.
+Layering declared, never inferred. `{{buzz "graph.layer"}}("<name>")` returns Dirs declared layer covers; raises naming declared layers when name is not one.
 No layers declared -> say so; do not invent from directory names.{{end}}{{if .Full}}
 
 ## What only looks like an answer{{end}}
@@ -162,13 +162,13 @@ No layers declared -> say so; do not invent from directory names.{{end}}{{if .Fu
 {{if .Full}}- `--kind dir` degree counts contained files too, so a directory of many files
   ranks high on `OUT` alone. Read `IN` for fan-in.{{else}}- `--kind dir` degree counts contained files too -> many-file directory ranks high on `OUT` alone. Read `IN` for fan-in.{{end}}
 {{if .Full}}- `{{cmd "path"}}` walks edges in both directions. A found path says two nodes
-  connect, not that one depends on the other. Use `{{buzz "neighborhood"}}` with a
-  `direction`.{{else}}- `{{cmd "path"}}` walks edges both directions: found path means connected, not dependent. Use `{{buzz "neighborhood"}}` with `direction`.{{end}}
+  connect, not that one depends on the other. Use `{{buzz "graph.neighborhood"}}` with a
+  `direction`.{{else}}- `{{cmd "path"}}` walks edges both directions: found path means connected, not dependent. Use `{{buzz "graph.neighborhood"}}` with `direction`.{{end}}
 {{if .Full}}- The `N nodes reach this` line on an `{{cmd "explain"}}` card saturates: a private
   helper with one caller reports over a thousand. It does not size a migration;
   `refs --occurrences` does.{{else}}- `N nodes reach this` line on `{{cmd "explain"}}` card saturates: one-caller private helper reports over a thousand. Does not size migration; `refs --occurrences` does.{{end}}
-{{if .Full}}- `{{buzz "affinity"}}` pairs PROJECTS, so inside one project it sees
-  nothing.{{else}}- `{{buzz "affinity"}}` pairs projects -> inside one project sees nothing.{{end}}
+{{if .Full}}- `{{buzz "history.affinity"}}` pairs PROJECTS, so inside one project it sees
+  nothing.{{else}}- `{{buzz "history.affinity"}}` pairs projects -> inside one project sees nothing.{{end}}
 {{if .Full}}- `hotspots` ranks generated files too. Run `{{cmd "describe file"}} <path>` before
   calling a hotspot a design problem.{{else}}- `hotspots` ranks generated files too: `{{cmd "describe file"}} <path>` before calling hotspot design problem.{{end}}
 {{if .Full}}- `kind=owner` exists only where the repo commits a CODEOWNERS file. Otherwise use
@@ -196,10 +196,10 @@ The shapes worth flagging, most clearly wrong first:{{end}}
 
 {{if .Full}}| shape | why it is suspect | shown by |
 | --- | --- | --- |
-| imported only from inside its own subtree | it is a parent's implementation, not a boundary | every `importedBy` entry of `{{buzz "dir"}}("<path>")` sits under its parent |
+| imported only from inside its own subtree | it is a parent's implementation, not a boundary | every `importedBy` entry of `{{buzz "graph.dir"}}("<path>")` sits under its parent |
 | exactly one importer, and no encapsulation behind it | a file in the wrong place | one `importedBy` entry; `{{cmd "explain"}} <file>` shows what it defines |
 | single file, single exported symbol | the package name is a second name for one function | `files` is 1 on the Dir; `{{cmd "explain"}} <file>` |{{else}}Suspect shapes, clearest first (shape: why; shown by):
-- imported only from inside own subtree: parent's implementation, not boundary; every `importedBy` entry of `{{buzz "dir"}}("<path>")` under its parent
+- imported only from inside own subtree: parent's implementation, not boundary; every `importedBy` entry of `{{buzz "graph.dir"}}("<path>")` under its parent
 - exactly one importer, no encapsulation behind it: file in wrong place; one `importedBy` entry; `{{cmd "explain"}} <file>` shows definitions
 - single file, single exported symbol: package name just renames one function; `files` is 1 on Dir; `{{cmd "explain"}} <file>`{{end}}
 
@@ -222,10 +222,10 @@ already does the job:
 {{else}}Before proposing new code, package, abstraction: show nothing does job already:{{end}}
 {{if .Full}}1. `{{cmd "query"}} "kind=symbol <name>"` for each name the new code would need. Try
    synonyms; a second implementation under another name is the common case.{{else}}1. `{{cmd "query"}} "kind=symbol <name>"` for each name new code would need. Try synonyms: duplicates under other names common.{{end}}
-{{if .Full}}2. Read `{{buzz "duplication"}}()`: functions that call the same
-   symbols in the same proportions, which is what copied logic looks like.{{else}}2. Read `{{buzz "duplication"}}()`: functions calling same symbols, same proportions: copied logic.{{end}}
-{{if .Full}}3. Place new code where the `imports` of `{{buzz "dir"}}` already cover what it
-   needs, so the change adds no import edge.{{else}}3. Place new code where `imports` of `{{buzz "dir"}}` already cover its needs -> no new import edge.
+{{if .Full}}2. Read `{{buzz "graph.duplication"}}()`: functions that call the same
+   symbols in the same proportions, which is what copied logic looks like.{{else}}2. Read `{{buzz "graph.duplication"}}()`: functions calling same symbols, same proportions: copied logic.{{end}}
+{{if .Full}}3. Place new code where the `imports` of `{{buzz "graph.dir"}}` already cover what it
+   needs, so the change adds no import edge.{{else}}3. Place new code where `imports` of `{{buzz "graph.dir"}}` already cover its needs -> no new import edge.
 State observed convention in proposal, plus command showing it.{{end}}{{if .Full}}
 
 A suggestion that follows the workspace's own conventions costs less than

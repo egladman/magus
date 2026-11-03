@@ -43,7 +43,7 @@ The check is `<target> <project> [-- args]` with the `{{cmd "run"}}` implied (`"
 A record's check may name a Buzz script instead, `{"script": "<probe>.buzz"}`, which a
 run of `{{cmd "buzz"}} --record <probe>.buzz` satisfies.
 
-Fork with `{{tool "client"}}` (`{{buzz "job.put"}}`) from an agent, or `{{cmd "job fork"}}` from a
+Fork with `{{tool "client"}}` (`{{buzz "workspace.putJob"}}`) from an agent, or `{{cmd "job fork"}}` from a
 terminal{{if .Full}}: the same store and the same authorization either way, so a
 job forked by hand and one an agent forked are indistinguishable to everything that
 reads them{{end}}. A worker holding a lease forks its own units the same way, naming its
@@ -178,7 +178,7 @@ one file{{else}}. Widening is how two workers end up owning one file{{end}}.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker done writing a
 contested path announces the release at once, then carries on validating. It shrinks
-the job's `write_paths` with another `{{tool "client"}}` (`{{buzz "job.put"}}`) write, or messages
+the job's `write_paths` with another `{{tool "client"}}` (`{{buzz "workspace.putJob"}}`) write, or messages
 the orchestrator if the host supports it{{if .Full}}. A waiting job
 starts against the released file while the first is still running tests, which
 is most of a worker's lifetime; holding every path to exit serializes agents on
@@ -303,7 +303,7 @@ until every one verifies.
 
 - Goals are data: write them in the job record's `goals`, never as flags.
 - `{{cmd "job fork"}}` refuses a job that writes and declares neither a check nor a goal.
-- `{{tool "client"}}` (`{{buzz "job.put"}}`) takes the same `goals` array.
+- `{{tool "client"}}` (`{{buzz "workspace.putJob"}}`) takes the same `goals` array.
 
 A record on stdin declares a `paths` goal and two `symbol` goals:
 

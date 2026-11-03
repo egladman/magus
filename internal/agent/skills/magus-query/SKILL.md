@@ -59,24 +59,24 @@ Read it only as last resort: no server AND no CLI, or human asking what committe
 
 {{if .Full}}   | question                                      | MCP                                              | CLI                                |
    | --------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
-   | find and relate entities                      | `{{tool "client"}}` (`{{buzz "query"}}`)         | `{{cmd "query"}} "<terms>"`            |
-   | one node: its edges, provenance, blast radius | `{{tool "client"}}` (`{{buzz "explain"}}`)       | `{{cmd "explain"}} <node>`             |
-   | how do two nodes relate                       | `{{tool "client"}}` (`{{buzz "path"}}`)          | `{{cmd "path"}} <a> <b>`               |
-   | where risk concentrates                       | `{{tool "client"}}` (`{{buzz "stats"}}`)         | `{{cmd "graph stats"}}`                |
-   | where a code symbol is defined and used       | `{{tool "client"}}` (`{{buzz "refs"}}`)          | `{{cmd "refs"}} <symbol>`              |
+   | find and relate entities                      | `{{tool "client"}}` (`{{buzz "graph.query"}}`)         | `{{cmd "query"}} "<terms>"`            |
+   | one node: its edges, provenance, blast radius | `{{tool "client"}}` (`{{buzz "graph.explain"}}`)       | `{{cmd "explain"}} <node>`             |
+   | how do two nodes relate                       | `{{tool "client"}}` (`{{buzz "graph.path"}}`)          | `{{cmd "path"}} <a> <b>`               |
+   | where risk concentrates                       | `{{tool "client"}}` (`{{buzz "graph.stats"}}`)         | `{{cmd "graph stats"}}`                |
+   | where a code symbol is defined and used       | `{{tool "client"}}` (`{{buzz "graph.refs"}}`)          | `{{cmd "refs"}} <symbol>`              |
    | what a branch changed in the graph            | (export + diff) | `{{cmd "graph diff"}} <baseline.json>` |{{else}}   Question: MCP; CLI
-   - find and relate entities: `{{tool "client"}}` (`{{buzz "query"}}`); `{{cmd "query"}} "<terms>"`
-   - one node: edges, provenance, blast radius: `{{tool "client"}}` (`{{buzz "explain"}}`); `{{cmd "explain"}} <node>`
-   - how two nodes relate: `{{tool "client"}}` (`{{buzz "path"}}`); `{{cmd "path"}} <a> <b>`
-   - where risk concentrates: `{{tool "client"}}` (`{{buzz "stats"}}`); `{{cmd "graph stats"}}`
-   - where code symbol defined and used: `{{tool "client"}}` (`{{buzz "refs"}}`); `{{cmd "refs"}} <symbol>`
+   - find and relate entities: `{{tool "client"}}` (`{{buzz "graph.query"}}`); `{{cmd "query"}} "<terms>"`
+   - one node: edges, provenance, blast radius: `{{tool "client"}}` (`{{buzz "graph.explain"}}`); `{{cmd "explain"}} <node>`
+   - how two nodes relate: `{{tool "client"}}` (`{{buzz "graph.path"}}`); `{{cmd "path"}} <a> <b>`
+   - where risk concentrates: `{{tool "client"}}` (`{{buzz "graph.stats"}}`); `{{cmd "graph stats"}}`
+   - where code symbol defined and used: `{{tool "client"}}` (`{{buzz "graph.refs"}}`); `{{cmd "refs"}} <symbol>`
    - what branch changed in graph: (export + diff); `{{cmd "graph diff"}} <baseline.json>`{{end}}
 
-{{if .Full}}   Prefer these over grep and glob for anything in the magus domain. `{{buzz "refs"}}`
+{{if .Full}}   Prefer these over grep and glob for anything in the magus domain. `{{buzz "graph.refs"}}`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config). It
-   is the occurrence-shaped def/references answer, so use it over `{{buzz "query"}}` for a
+   is the occurrence-shaped def/references answer, so use it over `{{buzz "graph.query"}}` for a
    symbol's fan-in.{{else}}   Prefer these over grep and glob for anything in magus domain.
-   `{{buzz "refs"}}` needs workspace declaring SCIP index (`knowledge.symbols` in config).{{end}}
+   `{{buzz "graph.refs"}}` needs workspace declaring SCIP index (`knowledge.symbols` in config).{{end}}
 
 {{if .Full}}   Every empty result carries a verdict. Read it before concluding anything:
    - `absent`: magus searched every symbol index this workspace declares, and the
@@ -185,10 +185,10 @@ spelling, kept as a compat alias so old invocations still parse. Prefer `=`/`!=`
 
 {{if .Full}}A query returns ranked matches plus their neighborhood, bounded by `--budget`
 (default 50). For a large match set over MCP, pass `{limit, offset}` in the
-options of `{{buzz "query"}}` and raise `offset` by `limit` for the next page; `matchCount`
+options of `{{buzz "graph.query"}}` and raise `offset` by `limit` for the next page; `matchCount`
 stays the total, so you know when you have them all.{{else}}`:`/`-kind:op` spelling still parses (compat); prefer `=`/`!=`/`=~`.
 Query returns ranked matches plus neighborhood, bounded by `--budget` (default 50).
-Over MCP: page with `{limit, offset}` in `{{buzz "query"}}` options; `matchCount` stays total.{{end}}
+Over MCP: page with `{limit, offset}` in `{{buzz "graph.query"}}` options; `matchCount` stays total.{{end}}
 
 {{if .Full}}## Retrieving prose from the docs{{else}}## Prose from docs{{end}}
 
@@ -279,8 +279,8 @@ Never infer from empty result that nobody worked on file: equally means workspac
 
 {{if .Full}}- `--global` unions every workspace registered in config (`knowledge.workspaces`);
   IDs are namespaced per workspace (`web//spell:go`).{{else}}- `--global` unions every workspace registered in config (`knowledge.workspaces`); IDs namespaced per workspace (`web//spell:go`).{{end}}
-{{if .Full}}- `{{cmd "affected"}}`, `{{tool "client"}}` (`{{buzz "affinity"}}`), and `{{cmd "describe"}}` sit beside the
-  graph. `{{cmd "graph export"}} -o json` dumps the whole graph for bulk analysis.{{else}}- `{{cmd "affected"}}`, `{{tool "client"}}` (`{{buzz "affinity"}}`), `{{cmd "describe"}}` sit beside graph. `{{cmd "graph export"}} -o json` dumps whole graph for bulk analysis.{{end}}
+{{if .Full}}- `{{cmd "affected"}}`, `{{tool "client"}}` (`{{buzz "history.affinity"}}`), and `{{cmd "describe"}}` sit beside the
+  graph. `{{cmd "graph export"}} -o json` dumps the whole graph for bulk analysis.{{else}}- `{{cmd "affected"}}`, `{{tool "client"}}` (`{{buzz "history.affinity"}}`), `{{cmd "describe"}}` sit beside graph. `{{cmd "graph export"}} -o json` dumps whole graph for bulk analysis.{{end}}
 {{if .Full}}- To show a PR's domain impact, run `{{cmd "graph diff"}} --rev main -o markdown` for a
   CI comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
   that revision's files, or pass a `graph export -o json` baseline file instead.{{else}}- PR domain impact: `{{cmd "graph diff"}} --rev main -o markdown` for CI comment.{{end}}

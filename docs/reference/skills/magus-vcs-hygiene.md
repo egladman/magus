@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 11455
-skill_short_bytes: 6409
+skill_full_bytes: 11464
+skill_short_bytes: 6418
 ---
 
 # magus-vcs-hygiene
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `a4186ff710ca` |
+| `skill-content` | `4809b05952a8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -163,7 +163,7 @@ Then, any backend:
 2. Restore PER FILE, never whole-tree.
 
 `magus affected --explain <project>`: chain putting project in affected set.
-`client` (`magus\impact`): changed files per seed project.
+`client` (`magus\change().impact`): changed files per seed project.
 ````
 
 
@@ -387,7 +387,7 @@ Then, whatever the backend:
 
 `magus affected --explain <project>` shows the chain that put a project in the
 affected set, when the result surprises you. `client`
-(`magus\impact`) lists the changed files per seed project.
+(`magus\change().impact`) lists the changed files per seed project.
 ````
 
 

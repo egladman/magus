@@ -522,12 +522,19 @@ github.com/egladman/magus/std.Magus var Module
 github.com/egladman/magus/std.MagusAbandonJob func(ctx context.Context, id string) (github.com/egladman/magus/types.Job, error)
 github.com/egladman/magus/std.MagusAffected func(ctx context.Context, base string) (github.com/egladman/magus/types.AffectedResult, error)
 github.com/egladman/magus/std.MagusAffinity func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Affinity, error)
-github.com/egladman/magus/std.MagusAttention func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (map[string]any, error)
+github.com/egladman/magus/std.MagusAttention func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.AttentionList, error)
 github.com/egladman/magus/std.MagusBustCache func(ctx context.Context, projectPath string) error
+github.com/egladman/magus/std.MagusChangeAffected func(ctx context.Context, c github.com/egladman/magus/types.Change) (github.com/egladman/magus/types.AffectedResult, error)
+github.com/egladman/magus/std.MagusChangeConformance func(ctx context.Context, c github.com/egladman/magus/types.Change, checks []string) (github.com/egladman/magus/types.ConformanceReport, error)
+github.com/egladman/magus/std.MagusChangeDiff func(ctx context.Context, c github.com/egladman/magus/types.Change, opts github.com/egladman/magus/types.MagusDiffOptions) (github.com/egladman/magus/types.Diff, error)
+github.com/egladman/magus/std.MagusChangeImpact func(ctx context.Context, c github.com/egladman/magus/types.Change, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ImpactResult, error)
+github.com/egladman/magus/std.MagusChangeMergeBase func(ctx context.Context, c github.com/egladman/magus/types.Change) (string, error)
+github.com/egladman/magus/std.MagusChangeOpen func(ctx context.Context, base string, opts github.com/egladman/magus/types.ChangeOptions) (github.com/egladman/magus/types.Change, error)
+github.com/egladman/magus/std.MagusChangeTier func(ctx context.Context, c github.com/egladman/magus/types.Change, target string, opts github.com/egladman/magus/types.RiskOptions) (github.com/egladman/magus/types.RiskReport, error)
 github.com/egladman/magus/std.MagusClean func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.CleanReport, error)
 github.com/egladman/magus/std.MagusClearJob func(ctx context.Context) (int, error)
 github.com/egladman/magus/std.MagusCommand func(ctx context.Context, sub string, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
-github.com/egladman/magus/std.MagusConformance func(ctx context.Context, checks []string, base string) (map[string]any, error)
+github.com/egladman/magus/std.MagusConformance func(ctx context.Context, checks []string, base string) (github.com/egladman/magus/types.ConformanceReport, error)
 github.com/egladman/magus/std.MagusConformanceBase func(ctx context.Context, base string) (string, error)
 github.com/egladman/magus/std.MagusDescribeCharm func(ctx context.Context, name string, opts github.com/egladman/magus/types.MagusCommandOptions) ([]github.com/egladman/magus/types.CharmEntry, error)
 github.com/egladman/magus/std.MagusDescribeEvaluatedProject func(ctx context.Context, path string, opts github.com/egladman/magus/types.MagusCommandOptions) ([]github.com/egladman/magus/types.EvaluatedProject, error)
@@ -555,12 +562,37 @@ github.com/egladman/magus/std.MagusExitJob func(ctx context.Context, id string, 
 github.com/egladman/magus/std.MagusExplain func(ctx context.Context, node string) (github.com/egladman/magus/types.KnowledgeExplainOutput, error)
 github.com/egladman/magus/std.MagusFileDiskAttention func(ctx context.Context, message string) error
 github.com/egladman/magus/std.MagusForkFactsJob func(ctx context.Context, workspace string) (github.com/egladman/magus/types.JobForkFacts, error)
+github.com/egladman/magus/std.MagusGraphDeps func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.GraphView, error)
+github.com/egladman/magus/std.MagusGraphDir func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, path string) (github.com/egladman/magus/types.Dir, error)
+github.com/egladman/magus/std.MagusGraphDirs func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, glob string, opts github.com/egladman/magus/types.DirsOptions) ([]github.com/egladman/magus/types.Dir, error)
+github.com/egladman/magus/std.MagusGraphDuplication func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.Duplication, error)
+github.com/egladman/magus/std.MagusGraphExplain func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, node string) (github.com/egladman/magus/types.KnowledgeExplainOutput, error)
+github.com/egladman/magus/std.MagusGraphImports func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.ImportGraph, error)
+github.com/egladman/magus/std.MagusGraphLayer func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, name string) (github.com/egladman/magus/types.Layer, error)
+github.com/egladman/magus/std.MagusGraphNeighborhood func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, focus string, opts github.com/egladman/magus/types.KnowledgeNeighborhoodOptions) (github.com/egladman/magus/types.KnowledgeNeighborhoodOutput, error)
+github.com/egladman/magus/std.MagusGraphOpen func(ctx context.Context) (github.com/egladman/magus/types.SymbolIndexDigest, error)
+github.com/egladman/magus/std.MagusGraphPath func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, node string, to string, opts github.com/egladman/magus/types.KnowledgePathOptions) (github.com/egladman/magus/types.KnowledgePathOutput, error)
+github.com/egladman/magus/std.MagusGraphPrecedents func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.Holds, error)
+github.com/egladman/magus/std.MagusGraphQuery func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, query string, opts github.com/egladman/magus/types.KnowledgeQueryOptions) (github.com/egladman/magus/types.KnowledgeQueryOutput, error)
+github.com/egladman/magus/std.MagusGraphRefs func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, symbol string, opts github.com/egladman/magus/types.KnowledgeRefsOptions) (github.com/egladman/magus/types.KnowledgeRefsOutput, error)
+github.com/egladman/magus/std.MagusGraphStats func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, kind string) (github.com/egladman/magus/types.KnowledgeStats, error)
+github.com/egladman/magus/std.MagusGraphSymbols func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.Symbols, error)
+github.com/egladman/magus/std.MagusGraphUnreferenced func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.Unreferenced, error)
 github.com/egladman/magus/std.MagusGrouping func(ctx context.Context) (github.com/egladman/magus/types.Grouping, error)
 github.com/egladman/magus/std.MagusHasCharm func(ctx context.Context, name string) (bool, error)
+github.com/egladman/magus/std.MagusHistoryAffinity func(ctx context.Context, h github.com/egladman/magus/types.History) (github.com/egladman/magus/types.Affinity, error)
+github.com/egladman/magus/std.MagusHistoryHotspots func(ctx context.Context, h github.com/egladman/magus/types.History) (github.com/egladman/magus/types.Hotspots, error)
+github.com/egladman/magus/std.MagusHistoryOpen func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.History, error)
+github.com/egladman/magus/std.MagusHistoryOwnership func(ctx context.Context, h github.com/egladman/magus/types.History) (github.com/egladman/magus/types.Ownership, error)
+github.com/egladman/magus/std.MagusHistoryTrend func(ctx context.Context, h github.com/egladman/magus/types.History) (github.com/egladman/magus/types.Trend, error)
 github.com/egladman/magus/std.MagusHotspots func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Hotspots, error)
 github.com/egladman/magus/std.MagusImpact func(ctx context.Context, base string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ImpactResult, error)
 github.com/egladman/magus/std.MagusImportGraph func(ctx context.Context) (github.com/egladman/magus/types.ImportGraph, error)
+github.com/egladman/magus/std.MagusJobExit func(ctx context.Context, j github.com/egladman/magus/types.Job, result map[string]any) (github.com/egladman/magus/types.Job, error)
+github.com/egladman/magus/std.MagusJobOpen func(ctx context.Context, id string) (github.com/egladman/magus/types.Job, error)
+github.com/egladman/magus/std.MagusJobRegister func(ctx context.Context, j github.com/egladman/magus/types.Job) (github.com/egladman/magus/types.JobRegistration, error)
 github.com/egladman/magus/std.MagusJobSchema func(_ context.Context) (map[string]any, error)
+github.com/egladman/magus/std.MagusJobWait func(ctx context.Context, j github.com/egladman/magus/types.Job, result map[string]any) (github.com/egladman/magus/types.JobStatus, error)
 github.com/egladman/magus/std.MagusLayer func(ctx context.Context, name string) (github.com/egladman/magus/types.Layer, error)
 github.com/egladman/magus/std.MagusListJob func(ctx context.Context) (github.com/egladman/magus/types.JobList, error)
 github.com/egladman/magus/std.MagusModelTiers func(ctx context.Context) (github.com/egladman/magus/types.ModelTiers, error)
@@ -568,28 +600,46 @@ github.com/egladman/magus/std.MagusNeighborhood func(ctx context.Context, focus 
 github.com/egladman/magus/std.MagusOutput func(ctx context.Context, ref string) (github.com/egladman/magus/types.OutputRecord, error)
 github.com/egladman/magus/std.MagusOwnership func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Ownership, error)
 github.com/egladman/magus/std.MagusPath func(ctx context.Context, node string, to string, opts github.com/egladman/magus/types.KnowledgePathOptions) (github.com/egladman/magus/types.KnowledgePathOutput, error)
-github.com/egladman/magus/std.MagusPrecedents func(ctx context.Context) (map[string]any, error)
+github.com/egladman/magus/std.MagusPrecedents func(ctx context.Context) (github.com/egladman/magus/types.Holds, error)
 github.com/egladman/magus/std.MagusProjectGraph func(ctx context.Context) (github.com/egladman/magus/types.GraphView, error)
 github.com/egladman/magus/std.MagusPutJob func(ctx context.Context, id string, put github.com/egladman/magus/types.JobPut) (github.com/egladman/magus/types.Job, error)
 github.com/egladman/magus/std.MagusQuery func(ctx context.Context, query string, opts github.com/egladman/magus/types.KnowledgeQueryOptions) (github.com/egladman/magus/types.KnowledgeQueryOutput, error)
 github.com/egladman/magus/std.MagusRaise func(ctx context.Context, code github.com/egladman/magus/types.DiagnosticCodeRef, message string, opts github.com/egladman/magus/types.RaiseOptions) error
 github.com/egladman/magus/std.MagusRefs func(ctx context.Context, symbol string, opts github.com/egladman/magus/types.KnowledgeRefsOptions) (github.com/egladman/magus/types.KnowledgeRefsOutput, error)
 github.com/egladman/magus/std.MagusRegisterJob func(ctx context.Context, id string) (github.com/egladman/magus/types.Job, string, error)
-github.com/egladman/magus/std.MagusRiskAssess func(ctx context.Context, target string, opts map[string]any) (github.com/egladman/magus/types.RiskReport, error)
+github.com/egladman/magus/std.MagusRiskAssess func(ctx context.Context, target string, opts github.com/egladman/magus/types.RiskOptions) (github.com/egladman/magus/types.RiskReport, error)
 github.com/egladman/magus/std.MagusRun func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
+github.com/egladman/magus/std.MagusSessionMark func(ctx context.Context, _ github.com/egladman/magus/types.Session, mark map[string]any) (github.com/egladman/magus/types.TrailMark, error)
+github.com/egladman/magus/std.MagusSessionMarks func(ctx context.Context, _ github.com/egladman/magus/types.Session) ([]github.com/egladman/magus/types.TrailMark, error)
+github.com/egladman/magus/std.MagusSessionOpen func(ctx context.Context, opts github.com/egladman/magus/types.TrailReadOptions) (github.com/egladman/magus/types.Session, error)
+github.com/egladman/magus/std.MagusSessionTrail func(ctx context.Context, s github.com/egladman/magus/types.Session) (github.com/egladman/magus/types.Trail, error)
 github.com/egladman/magus/std.MagusStats func(ctx context.Context, kind string) (github.com/egladman/magus/types.KnowledgeStats, error)
 github.com/egladman/magus/std.MagusSymbolIndexDigest func(ctx context.Context) (github.com/egladman/magus/types.SymbolIndexDigest, error)
-github.com/egladman/magus/std.MagusSymbols func(ctx context.Context) (map[string]any, error)
+github.com/egladman/magus/std.MagusSymbols func(ctx context.Context) (github.com/egladman/magus/types.Symbols, error)
 github.com/egladman/magus/std.MagusTrailMark func(ctx context.Context, mark map[string]any) (github.com/egladman/magus/types.TrailMark, error)
 github.com/egladman/magus/std.MagusTrailMarks func(ctx context.Context) ([]github.com/egladman/magus/types.TrailMark, error)
 github.com/egladman/magus/std.MagusTrailRead func(ctx context.Context, opts github.com/egladman/magus/types.TrailReadOptions) (github.com/egladman/magus/types.Trail, error)
 github.com/egladman/magus/std.MagusTrend func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Trend, error)
 github.com/egladman/magus/std.MagusUnmergedJob func(ctx context.Context, workspace string) (github.com/egladman/magus/types.JobUnmergedReport, error)
 github.com/egladman/magus/std.MagusUnreferenced func(ctx context.Context) (github.com/egladman/magus/types.Unreferenced, error)
-github.com/egladman/magus/std.MagusVCSCheckpoint func(ctx context.Context) (github.com/egladman/magus/types.VCSCheckpoint, error)
 github.com/egladman/magus/std.MagusVolatility func(ctx context.Context) (github.com/egladman/magus/types.Volatility, error)
 github.com/egladman/magus/std.MagusWaitJob func(ctx context.Context, id string, result *github.com/egladman/magus/types.JobResult) (github.com/egladman/magus/types.JobStatus, error)
 github.com/egladman/magus/std.MagusWhere func(ctx context.Context, dir string) (string, error)
+github.com/egladman/magus/std.MagusWorkspaceAttention func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.AttentionList, error)
+github.com/egladman/magus/std.MagusWorkspaceBustCache func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, projectPath string) error
+github.com/egladman/magus/std.MagusWorkspaceClearJobs func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (int, error)
+github.com/egladman/magus/std.MagusWorkspaceDiagnoseDrift func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, outputs []string, inputs []string) (github.com/egladman/magus/types.DriftResult, error)
+github.com/egladman/magus/std.MagusWorkspaceDiskReclaim func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.DiskReclaim, error)
+github.com/egladman/magus/std.MagusWorkspaceFileDiskAttention func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, message string) error
+github.com/egladman/magus/std.MagusWorkspaceForkFacts func(ctx context.Context, w github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.JobForkFacts, error)
+github.com/egladman/magus/std.MagusWorkspaceGrouping func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.Grouping, error)
+github.com/egladman/magus/std.MagusWorkspaceJobs func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.JobList, error)
+github.com/egladman/magus/std.MagusWorkspaceOpen func(ctx context.Context, dir string) (github.com/egladman/magus/types.MagusWorkspace, error)
+github.com/egladman/magus/std.MagusWorkspacePutJob func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, id string, opts map[string]any) (github.com/egladman/magus/types.Job, error)
+github.com/egladman/magus/std.MagusWorkspaceSkills func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, opts github.com/egladman/magus/types.SkillsOptions) ([]github.com/egladman/magus/types.Skill, error)
+github.com/egladman/magus/std.MagusWorkspaceTierOutcomes func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.ModelTiers, error)
+github.com/egladman/magus/std.MagusWorkspaceUnmerged func(ctx context.Context, w github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.JobUnmergedReport, error)
+github.com/egladman/magus/std.MagusWorkspaceVolatility func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.Volatility, error)
 github.com/egladman/magus/std.Markdown var Module
 github.com/egladman/magus/std.MarkdownFrontmatter func(_ context.Context, source string) (string, error)
 github.com/egladman/magus/std.MarkdownSections func(_ context.Context, source string) ([]github.com/egladman/magus/types.MarkdownSection, error)
@@ -621,6 +671,7 @@ github.com/egladman/magus/std.MethodFuncName func(m Method) string
 github.com/egladman/magus/std.MethodImplementationPackage func(m Method) (importPath string, pkgIdent string)
 github.com/egladman/magus/std.MethodSource func(m Method, repoRoot string) string
 github.com/egladman/magus/std.Module type struct
+github.com/egladman/magus/std.Module.CallbackObjects field []string
 github.com/egladman/magus/std.Module.Doc field string
 github.com/egladman/magus/std.Module.Fields field []Field
 github.com/egladman/magus/std.Module.ImportPath method func() string
@@ -710,6 +761,7 @@ github.com/egladman/magus/std.SemverNext func(_ context.Context, v string) (gith
 github.com/egladman/magus/std.SemverParse func(_ context.Context, v string) (github.com/egladman/magus/types.SemverVersion, error)
 github.com/egladman/magus/std.SemverSatisfies func(_ context.Context, v string, constraint string) (bool, error)
 github.com/egladman/magus/std.SignEd25519 const untyped string = "ed25519"
+github.com/egladman/magus/std.SkillCatalog var func(ctx context.Context, opts github.com/egladman/magus/types.SkillsOptions) ([]github.com/egladman/magus/types.Skill, error)
 github.com/egladman/magus/std.Sort var Module
 github.com/egladman/magus/std.SortNatural func(_ context.Context, items []string) ([]string, error)
 github.com/egladman/magus/std.SortSemver func(_ context.Context, items []string) ([]string, error)
@@ -927,8 +979,28 @@ github.com/egladman/magus/types.ArtifactVersion.Short field string
 github.com/egladman/magus/types.ArtifactVersion.Size field int64
 github.com/egladman/magus/types.ArtifactVersion.Target field string
 github.com/egladman/magus/types.AttentionAuthor const InflightAttention = "author"
+github.com/egladman/magus/types.AttentionList type struct
+github.com/egladman/magus/types.AttentionList.Requests field []AttentionRequest "json:\"requests\""
+github.com/egladman/magus/types.AttentionList.Store field string "json:\"store\""
 github.com/egladman/magus/types.AttentionNone const InflightAttention = "none"
 github.com/egladman/magus/types.AttentionQueue const InflightAttention = "queue"
+github.com/egladman/magus/types.AttentionRequest type struct
+github.com/egladman/magus/types.AttentionRequest.Disposed field bool "json:\"disposed\""
+github.com/egladman/magus/types.AttentionRequest.DisposedBy field string "json:\"disposed_by,omitempty\""
+github.com/egladman/magus/types.AttentionRequest.DisposedMs field int64 "json:\"disposed_ms,omitempty\""
+github.com/egladman/magus/types.AttentionRequest.Disposes field int "json:\"disposes,omitempty\""
+github.com/egladman/magus/types.AttentionRequest.Files field []FileRef "json:\"files,omitempty\""
+github.com/egladman/magus/types.AttentionRequest.ID field string "json:\"id\""
+github.com/egladman/magus/types.AttentionRequest.Invocation field string "json:\"invocation\""
+github.com/egladman/magus/types.AttentionRequest.Lease field string "json:\"lease,omitempty\""
+github.com/egladman/magus/types.AttentionRequest.LeaseFrom field LeaseSource "json:\"lease_from,omitempty\""
+github.com/egladman/magus/types.AttentionRequest.Message field string "json:\"message\""
+github.com/egladman/magus/types.AttentionRequest.Note field string "json:\"note,omitempty\""
+github.com/egladman/magus/types.AttentionRequest.OpenedMs field int64 "json:\"opened_ms\""
+github.com/egladman/magus/types.AttentionRequest.Outcome field string "json:\"outcome\""
+github.com/egladman/magus/types.AttentionRequest.Severity field string "json:\"severity,omitempty\""
+github.com/egladman/magus/types.AttentionRequest.Source field string "json:\"source,omitempty\""
+github.com/egladman/magus/types.AttentionRequest.Where field string "json:\"where,omitempty\""
 github.com/egladman/magus/types.AttentionReview const InflightAttention = "review"
 github.com/egladman/magus/types.AttrBuildTags const untyped string = "build_tags"
 github.com/egladman/magus/types.AttrEndLine const untyped string = "end_line"
@@ -1157,9 +1229,18 @@ github.com/egladman/magus/types.ChainVisit.Key method func() string
 github.com/egladman/magus/types.ChainVisit.Project field *Project
 github.com/egladman/magus/types.ChainVisit.Target field string
 github.com/egladman/magus/types.ChainWalkFunc type func(v ChainVisit) error
+github.com/egladman/magus/types.Change type struct
+github.com/egladman/magus/types.Change.At field VCSCheckpoint "json:\"at\""
+github.com/egladman/magus/types.Change.Base field string "json:\"base\""
+github.com/egladman/magus/types.Change.Files field map[string]string "json:\"files\""
+github.com/egladman/magus/types.Change.Patch field string "json:\"patch\""
+github.com/egladman/magus/types.Change.Rev field string "json:\"rev\""
 github.com/egladman/magus/types.ChangeAdded const ChangeStatus = "added"
 github.com/egladman/magus/types.ChangeDeleted const ChangeStatus = "deleted"
 github.com/egladman/magus/types.ChangeModified const ChangeStatus = "modified"
+github.com/egladman/magus/types.ChangeOptions type struct
+github.com/egladman/magus/types.ChangeOptions.Patch field string "json:\"patch\""
+github.com/egladman/magus/types.ChangeOptions.Rev field string "json:\"rev\""
 github.com/egladman/magus/types.ChangeRenamed const ChangeStatus = "renamed"
 github.com/egladman/magus/types.ChangeStatus type string
 github.com/egladman/magus/types.CharmCD const untyped string = "cd"
@@ -1451,6 +1532,9 @@ github.com/egladman/magus/types.ConformancePopulation type string
 github.com/egladman/magus/types.ConformancePopulation.String method func() string
 github.com/egladman/magus/types.ConformancePopulation.Valid method func() bool
 github.com/egladman/magus/types.ConformancePopulation.Values method func() []string
+github.com/egladman/magus/types.ConformanceReport type struct
+github.com/egladman/magus/types.ConformanceReport.Conformance embedded Conformance
+github.com/egladman/magus/types.ConformanceReport.Indexes field []SymbolIndexStatus "json:\"indexes\""
 github.com/egladman/magus/types.ConformanceRow type struct
 github.com/egladman/magus/types.ConformanceRow.Key field ConformanceKey "json:\"key\"        yaml:\"key\""
 github.com/egladman/magus/types.ConformanceRow.Live field int "json:\"live\"       yaml:\"live\""
@@ -2524,6 +2608,12 @@ github.com/egladman/magus/types.HarnessWrite const HarnessChangeOp = "write"
 github.com/egladman/magus/types.HasCharm func(ctx context.Context, charm string) bool
 github.com/egladman/magus/types.HasClaim func(entry string) bool
 github.com/egladman/magus/types.HasInvocationAncestor func(ctx context.Context, pid int, id string) bool
+github.com/egladman/magus/types.History type struct
+github.com/egladman/magus/types.History.Commits field int "json:\"commits\""
+github.com/egladman/magus/types.History.Dir field string "json:\"dir\""
+github.com/egladman/magus/types.History.Files field bool "json:\"files\""
+github.com/egladman/magus/types.History.Options method func() HistoryMetricsOptions
+github.com/egladman/magus/types.History.Since field string "json:\"since\""
 github.com/egladman/magus/types.HistoryMetrics type interface
 github.com/egladman/magus/types.HistoryMetrics.Affinity imethod func(ctx context.Context, opts HistoryMetricsOptions) (Affinity, error)
 github.com/egladman/magus/types.HistoryMetrics.Conformance imethod func(ctx context.Context) (Conformance, error)
@@ -3123,6 +3213,9 @@ github.com/egladman/magus/types.JobReadOnly type struct
 github.com/egladman/magus/types.JobReadOnly.Job field string "json:\"job\"   yaml:\"job\""
 github.com/egladman/magus/types.JobReadOnly.Lacks field []string "json:\"lacks\" yaml:\"lacks\""
 github.com/egladman/magus/types.JobRecordInvalid const DiagnosticCode = "MGS3037"
+github.com/egladman/magus/types.JobRegistration type struct
+github.com/egladman/magus/types.JobRegistration.Advice field string "json:\"advice\""
+github.com/egladman/magus/types.JobRegistration.Job field Job "json:\"job\""
 github.com/egladman/magus/types.JobRejection type struct
 github.com/egladman/magus/types.JobRejection.At field int64 "json:\"at\"                            yaml:\"at\""
 github.com/egladman/magus/types.JobRejection.ObservedGeneration field int "json:\"observed_generation,omitzero\"  yaml:\"observed_generation,omitempty\""
@@ -3862,6 +3955,9 @@ github.com/egladman/magus/types.MagusDiffOptions.Patch field string
 github.com/egladman/magus/types.MagusDiffOptions.Rev field string
 github.com/egladman/magus/types.MagusNotImported const DiagnosticCode = "MGS1039"
 github.com/egladman/magus/types.MagusVersionFromContext func(ctx context.Context) string
+github.com/egladman/magus/types.MagusWorkspace type struct
+github.com/egladman/magus/types.MagusWorkspace.Dir field string "json:\"dir\""
+github.com/egladman/magus/types.MagusWorkspace.Root field string "json:\"root\""
 github.com/egladman/magus/types.MagusfileAPIRemoved const DiagnosticCode = "MGS1025"
 github.com/egladman/magus/types.MagusfileIsNotASpell const DiagnosticCode = "MGS1017"
 github.com/egladman/magus/types.MagusfileOnlyMember const DiagnosticCode = "MGS1022"
@@ -4702,7 +4798,7 @@ github.com/egladman/magus/types.RiskGateStep.Projects field []string "json:\"pro
 github.com/egladman/magus/types.RiskGateStep.Target field string "json:\"target\"             yaml:\"target\""
 github.com/egladman/magus/types.RiskMechanical const RiskTier = "mechanical"
 github.com/egladman/magus/types.RiskOptions type struct
-github.com/egladman/magus/types.RiskOptions.Base field string "json:\"base,omitempty\""
+github.com/egladman/magus/types.RiskOptions.Base field string "json:\"base,omitempty\" buzz:\"-\""
 github.com/egladman/magus/types.RiskOptions.Checkout field string "json:\"checkout,omitempty\""
 github.com/egladman/magus/types.RiskOptions.Paths field []string "json:\"paths,omitempty\""
 github.com/egladman/magus/types.RiskReport type struct
@@ -4808,6 +4904,11 @@ github.com/egladman/magus/types.ServiceState type string
 github.com/egladman/magus/types.ServiceState.String method func() string
 github.com/egladman/magus/types.ServiceState.Valid method func() bool
 github.com/egladman/magus/types.ServiceState.Values method func() []string
+github.com/egladman/magus/types.Session type struct
+github.com/egladman/magus/types.Session.Session field string "json:\"session\""
+github.com/egladman/magus/types.Session.Since field string "json:\"since\""
+github.com/egladman/magus/types.Session.TrailOptions method func() TrailReadOptions
+github.com/egladman/magus/types.Session.Until field string "json:\"until\""
 github.com/egladman/magus/types.Setting type struct
 github.com/egladman/magus/types.Setting.Key field []string "json:\"key\""
 github.com/egladman/magus/types.Setting.Path field string "json:\"path\""

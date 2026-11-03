@@ -3,8 +3,8 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 6565
-skill_short_bytes: 3596
+skill_full_bytes: 6611
+skill_short_bytes: 3632
 ---
 
 # magus-change-summary
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `043ad5151300` |
+| `skill-content` | `57196bb35292` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -76,7 +76,7 @@ Output: short, evidence-backed brief.
    ```
 
    Ignore generated outputs when identifying change.
-4. Source files -> projects, graph entities. Prefer MCP `client` (`magus\query`, `magus\explain`, `magus\describe.file`); else:
+4. Source files -> projects, graph entities. Prefer MCP `client` (`magus\graph().query`, `magus\graph().explain`, `magus\describe.file`); else:
 
    ```sh
    magus query "<project or feature terms>"
@@ -84,10 +84,10 @@ Output: short, evidence-backed brief.
    magus graph diff --rev <base> -o markdown
    ```
 
-5. `client` (`magus\trend`) affinity, ownership, trend: only context (hidden coupling, ownership risk, rising activity). No CLI verb; without MCP: one lens via `magus buzz`:
+5. `client` (`magus\history().trend`) affinity, ownership, trend: only context (hidden coupling, ownership risk, rising activity). No CLI verb; without MCP: one lens via `magus buzz`:
 
    ```sh
-   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\trend())); }'
+   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\history().trend())); }'
    ```
 
 ## Brief
@@ -173,7 +173,7 @@ brief. The output is a decision aid, not a chronological commit dump.
    git log --first-parent --merges --since="<window>" --format='%h %ad %s' --date=short
    ```
 
-   With no VCS merge history, say so. Use `client` (`magus\trend`) and read trend and hotspots for activity, but do not call that a merge summary.
+   With no VCS merge history, say so. Use `client` (`magus\history().trend`) and read trend and hotspots for activity, but do not call that a merge summary.
 3. List each candidate change's files, then classify them before reading:
 
    ```sh
@@ -184,7 +184,7 @@ brief. The output is a decision aid, not a chronological commit dump.
    Ignore generated outputs when identifying the change; trace them to their
    declared source and generator instead.
 4. Map the source files to projects and graph entities. Prefer MCP
-   `client` (`magus\query`, `magus\explain`, `magus\describe.file`); otherwise:
+   `client` (`magus\graph().query`, `magus\graph().explain`, `magus\describe.file`); otherwise:
 
    ```sh
    magus query "<project or feature terms>"
@@ -192,13 +192,13 @@ brief. The output is a decision aid, not a chronological commit dump.
    magus graph diff --rev <base> -o markdown
    ```
 
-5. Read affinity, ownership, or trend from `client` (`magus\trend`) only for
+5. Read affinity, ownership, or trend from `client` (`magus\history().trend`) only for
    context: hidden coupling, ownership risk, rising activity. They do not
    prove that a feature landed. Insight has no CLI verb; without MCP, read one lens
    through `magus buzz`:
 
    ```sh
-   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\trend())); }'
+   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\history().trend())); }'
    ```
 
 ## Write the brief

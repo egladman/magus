@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 15720
-skill_short_bytes: 9256
+skill_full_bytes: 15794
+skill_short_bytes: 9322
 ---
 
 # magus-query
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `56389c3396fd` |
+| `skill-content` | `fcfd43557334` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -80,15 +80,15 @@ Read it only as last resort: no server AND no CLI, or human asking what committe
    - Never start server only to unlock tool.
 
    Question: MCP; CLI
-   - find and relate entities: `client` (`magus\query`); `magus query "<terms>"`
-   - one node: edges, provenance, blast radius: `client` (`magus\explain`); `magus explain <node>`
-   - how two nodes relate: `client` (`magus\path`); `magus path <a> <b>`
-   - where risk concentrates: `client` (`magus\stats`); `magus graph stats`
-   - where code symbol defined and used: `client` (`magus\refs`); `magus refs <symbol>`
+   - find and relate entities: `client` (`magus\graph().query`); `magus query "<terms>"`
+   - one node: edges, provenance, blast radius: `client` (`magus\graph().explain`); `magus explain <node>`
+   - how two nodes relate: `client` (`magus\graph().path`); `magus path <a> <b>`
+   - where risk concentrates: `client` (`magus\graph().stats`); `magus graph stats`
+   - where code symbol defined and used: `client` (`magus\graph().refs`); `magus refs <symbol>`
    - what branch changed in graph: (export + diff); `magus graph diff <baseline.json>`
 
    Prefer these over grep and glob for anything in magus domain.
-   `magus\refs` needs workspace declaring SCIP index (`knowledge.symbols` in config).
+   `magus\graph().refs` needs workspace declaring SCIP index (`knowledge.symbols` in config).
 
    Every empty result carries verdict; read it before concluding anything:
    - `absent`: magus searched every symbol index workspace declares; thing not there.
@@ -142,7 +142,7 @@ Free-text terms plus field matchers. Matchers filter; free text RANKS. Matcher: 
 
 `:`/`-kind:op` spelling still parses (compat); prefer `=`/`!=`/`=~`.
 Query returns ranked matches plus neighborhood, bounded by `--budget` (default 50).
-Over MCP: page with `{limit, offset}` in `magus\query` options; `matchCount` stays total.
+Over MCP: page with `{limit, offset}` in `magus\graph().query` options; `matchCount` stays total.
 
 ## Prose from docs
 
@@ -183,7 +183,7 @@ Never infer from empty result that nobody worked on file: equally means workspac
 ## Across workspaces, neighbors
 
 - `--global` unions every workspace registered in config (`knowledge.workspaces`); IDs namespaced per workspace (`web//spell:go`).
-- `magus affected`, `client` (`magus\affinity`), `magus describe` sit beside graph. `magus graph export -o json` dumps whole graph for bulk analysis.
+- `magus affected`, `client` (`magus\history().affinity`), `magus describe` sit beside graph. `magus graph export -o json` dumps whole graph for bulk analysis.
 - PR domain impact: `magus graph diff --rev main -o markdown` for CI comment.
 
 ## Do not render graph yourself
@@ -271,16 +271,16 @@ unavailable too, or when a human explicitly asks what the committed index says.
 
    | question                                      | MCP                                              | CLI                                |
    | --------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
-   | find and relate entities                      | `client` (`magus\query`)         | `magus query "<terms>"`            |
-   | one node: its edges, provenance, blast radius | `client` (`magus\explain`)       | `magus explain <node>`             |
-   | how do two nodes relate                       | `client` (`magus\path`)          | `magus path <a> <b>`               |
-   | where risk concentrates                       | `client` (`magus\stats`)         | `magus graph stats`                |
-   | where a code symbol is defined and used       | `client` (`magus\refs`)          | `magus refs <symbol>`              |
+   | find and relate entities                      | `client` (`magus\graph().query`)         | `magus query "<terms>"`            |
+   | one node: its edges, provenance, blast radius | `client` (`magus\graph().explain`)       | `magus explain <node>`             |
+   | how do two nodes relate                       | `client` (`magus\graph().path`)          | `magus path <a> <b>`               |
+   | where risk concentrates                       | `client` (`magus\graph().stats`)         | `magus graph stats`                |
+   | where a code symbol is defined and used       | `client` (`magus\graph().refs`)          | `magus refs <symbol>`              |
    | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |
 
-   Prefer these over grep and glob for anything in the magus domain. `magus\refs`
+   Prefer these over grep and glob for anything in the magus domain. `magus\graph().refs`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config). It
-   is the occurrence-shaped def/references answer, so use it over `magus\query` for a
+   is the occurrence-shaped def/references answer, so use it over `magus\graph().query` for a
    symbol's fan-in.
 
    Every empty result carries a verdict. Read it before concluding anything:
@@ -384,7 +384,7 @@ spelling, kept as a compat alias so old invocations still parse. Prefer `=`/`!=`
 
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
 (default 50). For a large match set over MCP, pass `{limit, offset}` in the
-options of `magus\query` and raise `offset` by `limit` for the next page; `matchCount`
+options of `magus\graph().query` and raise `offset` by `limit` for the next page; `matchCount`
 stays the total, so you know when you have them all.
 
 ## Retrieving prose from the docs
@@ -470,7 +470,7 @@ workspace declares no adapter, the common case.
 
 - `--global` unions every workspace registered in config (`knowledge.workspaces`);
   IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `client` (`magus\affinity`), and `magus describe` sit beside the
+- `magus affected`, `client` (`magus\history().affinity`), and `magus describe` sit beside the
   graph. `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a
   CI comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from

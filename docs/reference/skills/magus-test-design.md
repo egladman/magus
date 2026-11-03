@@ -3,8 +3,8 @@ title: magus-test-design
 generated_from: internal/agent/skills/magus-test-design/SKILL.md
 description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior."
 tags: [agents, skills, magus-test-design]
-skill_full_bytes: 10491
-skill_short_bytes: 5390
+skill_full_bytes: 10515
+skill_short_bytes: 5414
 ---
 
 # magus-test-design
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `ac16ac3c57a3` |
+| `skill-content` | `9369f1d189a5` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -85,7 +85,7 @@ Observes evidence, recommends; does not choose test policy, enable service, crea
 
 4. Read scoped code, existing tests; find effects changing what lower boundary can prove: live process or runtime, filesystem, network, time, scheduler, durable storage, language boundary.
 
-Prefer `client` (`magus\describe.evaluatedTarget`, `magus\explain`, `magus\refs`, `magus\path`); else CLI above.
+Prefer `client` (`magus\describe.evaluatedTarget`, `magus\graph().explain`, `magus\graph().refs`, `magus\graph().path`); else CLI above.
 Do not start server only to review test design.
 `unknown` from `magus refs`: missing evidence, not proof of no callers; record it.
 Never infer tier from filename, existing mock, or target called `test`.
@@ -223,8 +223,8 @@ commit, or in CI.
    lower boundary can prove. Those include a live process or runtime, the filesystem,
    network, time, a scheduler, durable storage, or a language boundary.
 
-Prefer `client` (`magus\describe.evaluatedTarget`, `magus\explain`, `magus\refs`,
-`magus\path`); fall back to the CLI commands above. Do not start a server only to
+Prefer `client` (`magus\describe.evaluatedTarget`, `magus\graph().explain`, `magus\graph().refs`,
+`magus\graph().path`); fall back to the CLI commands above. Do not start a server only to
 review test design.
 
 An `unknown` from `magus refs` is missing evidence, not proof of no callers: record

@@ -211,13 +211,13 @@ var skillFuncs = template.FuncMap{
 		}
 		return fmt.Sprintf("[%s](%s)", code, types.CodeURL(c)), nil
 	},
-	// buzz renders a call into the magus host module: "query" is magus\query, and
+	// buzz renders a call into the magus host module: "graph.query" is magus\graph().query, and
 	// "harness.provider" is magus\harness.provider. These are the load-bearing lines
 	// a skill teaches, so a renamed method fails install rather than teaching a call
 	// that errors in the one place a reader cannot check it.
 	//
 	// The backslash is namespace access and the dot is member access on the object the
-	// namespace resolves to, which is why this walks Namespaces rather than Methods.
+	// namespace resolves to. Constructor methods are resolved through their returned object.
 	"buzz": func(call string) (string, error) {
 		space, method, nested := strings.Cut(call, ".")
 		for _, m := range hostmodules.All() {
@@ -242,6 +242,21 @@ var skillFuncs = template.FuncMap{
 					}
 				}
 				return "", fmt.Errorf(`no method %q on magus\%s`, method, space)
+			}
+			for _, constructor := range m.Methods {
+				if buzzMemberName(constructor) != space || len(constructor.Returns) != 1 {
+					continue
+				}
+				for _, object := range m.Objects {
+					if object.Name != constructor.Returns[0].Object {
+						continue
+					}
+					for _, decl := range object.Methods {
+						if buzzMemberName(decl) == method {
+							return fmt.Sprintf(`%s\%s().%s`, magusModule, space, method), nil
+						}
+					}
+				}
 			}
 			return "", fmt.Errorf(`no namespace %q on the %s module`, space, magusModule)
 		}

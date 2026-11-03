@@ -53,13 +53,13 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
      Do not make the connection a prerequisite for completing the work.
    - `{{tool "client"}}` (`{{buzz "run"}}`): run named projects, with the same arguments as `{{cmd "run"}}` (or the cwd
      project). Use when you know which projects to run.
-   - `{{tool "client"}}` (`{{buzz "affected"}}`): the projects a VCS change touched. It
+   - `{{tool "client"}}` (`{{buzz "change.affected"}}`): the projects a VCS change touched. It
      returns the set and does not run it. The gate is `{{cmd "affected"}} ci`.{{else}}1. Prefer MCP tools; call exposed tool directly. If missing or call fails -> CLI fallback below.
    - Do not gate that choice on `{{cmd "status"}} --probe=mcp`: tests loopback HTTP; host may use stdio or server Unix socket.
    - `{{cmd "status"}} --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
    - Hosts manage own connection; never start server for agent.
    - `{{tool "client"}}` (`{{buzz "run"}}`): run named projects, same arguments as `{{cmd "run"}}`.
-   - `{{tool "client"}}` (`{{buzz "affected"}}`): projects VCS change touched; returns set, does not run it.{{end}}
+   - `{{tool "client"}}` (`{{buzz "change.affected"}}`): projects VCS change touched; returns set, does not run it.{{end}}
 
 {{if .Full}}   `{{tool "client"}}` is bounded at 10 minutes when called directly. A host that
    supports MCP tasks can run it as a task without that bound. Send a long run (a
@@ -130,7 +130,7 @@ magus affected test               # only projects affected by the VCS diff
 ```
 {{if .Full}}
 MCP equivalents: `{{tool "client"}}` (`{{buzz "run"}}`) with the arguments of `{{cmd "run"}}`.
-`{{buzz "affected"}}` returns the affected project set and does not run it. `{{buzz "impact"}}` is why each project is in that set. `{{buzz "where"}}` answers which project contains a directory.
+`{{buzz "change.affected"}}` returns the affected project set and does not run it. `{{buzz "change.impact"}}` is why each project is in that set. `{{buzz "where"}}` answers which project contains a directory.
 {{end}}
 {{if .Full}}WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
 hand-sequencing `{{cmd "run"}} lint`, `format`, `test` to check your own work.

@@ -3,8 +3,8 @@ title: magus-diagram
 generated_from: internal/agent/skills/magus-diagram/SKILL.md
 description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module."
 tags: [agents, skills, magus-diagram]
-skill_full_bytes: 8186
-skill_short_bytes: 5782
+skill_full_bytes: 8250
+skill_short_bytes: 5846
 ---
 
 # magus-diagram
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `a193a1c0ab6a` |
+| `skill-content` | `e74476ea0010` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -82,9 +82,9 @@ import "magus";
 import "magus/figure";
 
 export fun serverHttpFigure() > figure\Figure !> any {
-    final guard = magus\dir("internal/httpx");
-    final mcp = magus\dir("internal/handler/mcp");
-    final handlers = magus\layer("handler").dirs;
+    final guard = magus\graph().dir("internal/httpx");
+    final mcp = magus\graph().dir("internal/handler/mcp");
+    final handlers = magus\graph().layer("handler").dirs;
     final agent = figure\external("AI agents", look: figure\Look.plain);
     return figure\of("server-http", title: "The HTTP routes")
         .box(guard, label: "Guard", focal: true)
@@ -96,8 +96,8 @@ export fun serverHttpFigure() > figure\Figure !> any {
 }
 ```
 
-- `magus\dir(path)`: raises MGS7005 on directory graph does not hold, naming nearest.
-- `magus\layer(name)`: raises MGS7006 on layer nothing declares.
+- `magus\graph().dir(path)`: raises MGS7005 on directory graph does not hold, naming nearest.
+- `magus\graph().layer(name)`: raises MGS7006 on layer nothing declares.
 - Typo fails figure at its line.
 - `.diagram()`: lays out, raises every finding at once.
 - `figure\draw(f, theme: figure\Theme.light)`: same, and paints.
@@ -105,13 +105,13 @@ export fun serverHttpFigure() > figure\Figure !> any {
 
 ## Boxes, groups, actors
 
-- `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)`: one directory; `symbol:` anchors it at `magus\refs` result
+- `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)`: one directory; `symbol:` anchors it at `magus\graph().refs` result
 - `.group(dirs, label:, ...)`: every directory in list of `magus\Dir` as one box
 - `figure\external(name, sub:, tag:, link:, look:)`: actor: person, vendor, step, Buzz file, decision
 
 Directories as records, never path strings:
-- `magus\layer("handler").dirs`: every directory declared layer covers.
-- `magus\dirs("internal/queue/*")`: every directory glob matches.
+- `magus\graph().layer("handler").dirs`: every directory declared layer covers.
+- `magus\graph().dirs("internal/queue/*")`: every directory glob matches.
 - `+` joins two lists.
 - `figure\without(dirs, drop: [...])` leaves some out; raises when one it drops is not there.
 
@@ -233,9 +233,9 @@ import "magus";
 import "magus/figure";
 
 export fun serverHttpFigure() > figure\Figure !> any {
-    final guard = magus\dir("internal/httpx");
-    final mcp = magus\dir("internal/handler/mcp");
-    final handlers = magus\layer("handler").dirs;
+    final guard = magus\graph().dir("internal/httpx");
+    final mcp = magus\graph().dir("internal/handler/mcp");
+    final handlers = magus\graph().layer("handler").dirs;
     final agent = figure\external("AI agents", look: figure\Look.plain);
     return figure\of("server-http", title: "The HTTP routes")
         .box(guard, label: "Guard", focal: true)
@@ -247,8 +247,8 @@ export fun serverHttpFigure() > figure\Figure !> any {
 }
 ```
 
-- `magus\dir(path)` raises MGS7005 on a directory the graph does not hold, naming
-  the nearest one. `magus\layer(name)` raises MGS7006 on a layer nothing declares.
+- `magus\graph().dir(path)` raises MGS7005 on a directory the graph does not hold, naming
+  the nearest one. `magus\graph().layer(name)` raises MGS7006 on a layer nothing declares.
   A typo fails the figure at the line that made it.
 - `.diagram()` lays it out and raises every finding at once;
   `figure\draw(f, theme: figure\Theme.light)` does the same and paints it.
@@ -263,14 +263,14 @@ bottom instead of left to right.
 
 | call | draws |
 | --- | --- |
-| `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)` | one directory; `symbol:` anchors it at a `magus\refs` result |
+| `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)` | one directory; `symbol:` anchors it at a `magus\graph().refs` result |
 | `.group(dirs, label:, ...)` | every directory in a list of `magus\Dir` as one box |
 | `figure\external(name, sub:, tag:, link:, look:)` | an actor: a person, a vendor, a step, a Buzz file, a decision |
 
 Take directories as records, never as path strings:
 
-- `magus\layer("handler").dirs` is every directory a declared layer covers.
-- `magus\dirs("internal/queue/*")` is every directory a glob matches.
+- `magus\graph().layer("handler").dirs` is every directory a declared layer covers.
+- `magus\graph().dirs("internal/queue/*")` is every directory a glob matches.
 - `+` joins two lists. `figure\without(dirs, drop: [...])` leaves some out, and
   raises when one it drops is not there.
 

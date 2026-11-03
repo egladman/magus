@@ -222,7 +222,7 @@ deliberately rebase it. Additive policy that is not host-shaped stays in
 A conformance ceiling holds each changed file to its count of violations at the base
 revision; no count is stored, so nothing needs pruning. The anchors in
 `knowledge.conformance.checks` are policy, and the code usually drifts tighter than them. Two
-readings name the slack: the rows of `{{buzz "conformance"}}()` with `propose` above zero, and
+readings name the slack: the rows of `{{buzz "change.conformance"}}()` with `propose` above zero, and
 `{{cmd "doctor"}}`'s `conformance-ceiling` check, which names each row's magus.yaml key.
 
 1. Edit only the key doctor names, to the proposed value.

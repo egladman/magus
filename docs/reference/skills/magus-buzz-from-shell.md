@@ -3,8 +3,8 @@ title: magus-buzz-from-shell
 generated_from: internal/agent/skills/magus-buzz-from-shell/SKILL.md
 description: "Rewrite a shell script as idiomatic Buzz, not a line-by-line port."
 tags: [agents, skills, magus-buzz-from-shell]
-skill_full_bytes: 15507
-skill_short_bytes: 13195
+skill_full_bytes: 15523
+skill_short_bytes: 13211
 ---
 
 # magus-buzz-from-shell
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `7bd24d0d0478` |
+| `skill-content` | `deb41fc81d7a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -125,7 +125,7 @@ shell: Buzz
 - `git ...`: `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for rest
 - `( cd d && tool )`: `proc\exec("tool", args: [...], dir: d)`
 - `a | b` across two real tools: `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })`
-- `magus ... -o json | jq`: `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records
+- `magus ... -o json | jq`: `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records
 - `magus run t p`: `ctx.needs(t)` inside target; `magus\run([...])` in script
 
 ## Pairs
@@ -559,7 +559,7 @@ assuming a row's call takes the arguments you expect.
 | `git ...` | `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for the rest |
 | `( cd d && tool )` | `proc\exec("tool", args: [...], dir: d)` |
 | `a \| b` across two real tools | `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })` |
-| `magus ... -o json \| jq` | `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records |
+| `magus ... -o json \| jq` | `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records |
 | `magus run t p` | `ctx.needs(t)` inside a target; `magus\run([...])` in a script |
 
 ## Pairs

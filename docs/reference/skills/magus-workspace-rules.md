@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent integration to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 12500
-skill_short_bytes: 8385
+skill_full_bytes: 12509
+skill_short_bytes: 8394
 ---
 
 # magus-workspace-rules
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `ffd1097817cd` |
+| `skill-content` | `6c37232f3cbe` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -185,7 +185,7 @@ Adapt one: declare override; change no import, no provider call.
 A conformance ceiling holds each changed file to its count of violations at the base
 revision; no count is stored, so nothing needs pruning. The anchors in
 `knowledge.conformance.checks` are policy, and the code usually drifts tighter than them. Two
-readings name the slack: the rows of `magus\conformance()` with `propose` above zero, and
+readings name the slack: the rows of `magus\change().conformance()` with `propose` above zero, and
 `magus doctor`'s `conformance-ceiling` check, which names each row's magus.yaml key.
 
 1. Edit only the key doctor names, to the proposed value.
@@ -423,7 +423,7 @@ deliberately rebase it. Additive policy that is not host-shaped stays in
 A conformance ceiling holds each changed file to its count of violations at the base
 revision; no count is stored, so nothing needs pruning. The anchors in
 `knowledge.conformance.checks` are policy, and the code usually drifts tighter than them. Two
-readings name the slack: the rows of `magus\conformance()` with `propose` above zero, and
+readings name the slack: the rows of `magus\change().conformance()` with `propose` above zero, and
 `magus doctor`'s `conformance-ceiling` check, which names each row's magus.yaml key.
 
 1. Edit only the key doctor names, to the proposed value.

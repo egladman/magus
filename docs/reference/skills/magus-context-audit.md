@@ -3,8 +3,8 @@ title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given for statements that contradict each other or no longer match the tools."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5889
-skill_short_bytes: 3464
+skill_full_bytes: 5899
+skill_short_bytes: 3474
 ---
 
 # magus-context-audit
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `8894fd268948` |
+| `skill-content` | `695d48a094e8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,7 +56,7 @@ magus agent install --tar | tar -xO -f - magus-context-audit/SKILL.md
 ````markdown
 # Auditing agent instructions
 
-Lens, like `magus\hotspots`: observes, ranks; does not gate.
+Lens, like `magus\history().hotspots`: observes, ranks; does not gate.
 Output: findings list human decides on, never automatic edit.
 Looks at text, not code: everything agent loads as authoritative, from sources magus does not own and cannot read in advance.
 Agent reads all of it in one window; cannot tell which line newer or which file wins.
@@ -135,7 +135,7 @@ magus agent install --tar | tar -xO -f - magus-context-audit-full/SKILL.md
 ````markdown
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus\hotspots`: it observes and ranks; it does not gate.
+This is a LENS, like `magus\history().hotspots`: it observes and ranks; it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
 It looks at the text, not code: everything an agent loads as
