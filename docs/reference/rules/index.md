@@ -151,7 +151,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [root-repeat](root-repeat.md)                           | a main thread running the same delegable command again with no write since                      |
 | [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                    |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at             |
-| [spawn-names-model](spawn-names-model.md)               | a main thread spawning a subagent without naming the model it runs on                           |
+| [spawn-names-model](spawn-names-model.md)               | a spawn omitting its model, or (at deny) using a model outside its row's tier                   |
 | [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                       |
 | [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                         |
 | [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it            |
