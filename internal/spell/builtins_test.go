@@ -629,8 +629,8 @@ func (s *discoveredSuite) TestDiscoverySpellsAreBuiltins() {
 	}
 }
 
-func TestDefineRecordsNamesTheRecordThatCannotRun(t *testing.T) {
-	_, err := defineRecords("export object Fine { n: int = 0, }\nexport object Broken { e: missing\\Thing? = null, }\n")
+func TestCompileRecordsNamesTheRecordThatCannotRun(t *testing.T) {
+	_, err := compileRecords("export object Fine { n: int = 0, }\nexport object Broken { e: missing\\Thing? = null, }\n")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "magus record Broken cannot be defined")
 	assert.Contains(t, err.Error(), "BZZ")
@@ -695,8 +695,13 @@ export fun base() > str !> any { return magus\Change{}.mergeBase(); }`))
 	s.Contains(got.AsString(), "mergeBase")
 }
 
-func (s *magusRecordMethodsSuite) TestAModuleWithoutAPrivateMemberIsRefused() {
-	_, err := s.session(vm.NewMap())
+func (s *magusRecordMethodsSuite) TestAModuleWithoutAPrivateMemberIsRefusedAtTheCall() {
+	sess, err := s.session(vm.NewMap())
+	s.Require().NoError(err)
+	s.Require().NoError(sess.Exec(s.T().Context(), `import "magus";
+export fun base() > str !> any { return magus\Change{}.mergeBase(); }`))
 
-	s.ErrorContains(err, "magus record methods: the magus module has no member")
+	_, err = sess.CallValue(s.T().Context(), sess.Exports()["base"], nil)
+
+	s.ErrorContains(err, "the magus module has no member")
 }

@@ -316,7 +316,7 @@ func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) 
 	}
 
 	sess.DeclareModuleTypes("magus", decls)
-	return defineMagusRecords(sess, decls)
+	return bindMagusRecords(sess, decls)
 }
 
 // filterMagusDecls removes unavailable native forwards and the generated record
@@ -338,7 +338,7 @@ func filterMagusDecls(decls string, implements func(string) bool) string {
 		}
 		if rest, ok := strings.CutPrefix(line, "    fun "); ok {
 			name, _, _ := strings.Cut(rest, "(")
-			if !implements("magus__" + object + "__" + name) {
+			if !implements(fmt.Sprintf("magus__%s__%s", object, name)) {
 				dropping = true
 				continue
 			}
@@ -377,12 +377,12 @@ type magusRecord struct {
 // declarations define. The module is native, so no import executes its declarations, and
 // `magus\DirsOptions{...}` would otherwise type-check and then fail with "unknown object
 // type". Sessions with no magus module share it.
-// Nothing binds its externs.
+// Each extern is a dispatchExtern.
 var magusRecords = sync.OnceValues(func() ([]magusRecord, error) {
-	return defineRecords(MagusDeclSource())
+	return compileRecords(MagusDeclSource())
 })
 
-func defineRecords(decls string) ([]magusRecord, error) {
+func compileRecords(decls string) ([]magusRecord, error) {
 	body, out, err := recordDecls(decls)
 	if err != nil {
 		return nil, err
@@ -390,6 +390,11 @@ func defineRecords(decls string) ([]magusRecord, error) {
 	// Never closed: every later session reads these values, and Close would
 	// release their heap slots out from under it.
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	for _, r := range out {
+		if r.extern {
+			sess.SetGlobal(r.name, dispatchExtern(r.name))
+		}
+	}
 	if err := sess.Exec(context.Background(), body); err != nil {
 		return nil, failingRecord(out, err)
 	}
@@ -478,29 +483,63 @@ func declRecord(stmt ast.Node) (magusRecord, bool) {
 	return magusRecord{}, false
 }
 
-// defineMagusRecords binds every magus record and enum under its bare name, which is
+// bindMagusRecords binds every magus record and enum under its bare name, which is
 // what `magus\T{...}` constructs at run time, and sets each enum on the magus module so
 // `magus\E.case` and an inferred `.case` argument resolve. A name the session already
 // binds keeps its binding, as a program's own type outranks a mirror in the checker.
 //
 // A declaration that does not run is an error. Annotate-only records
 // surfaced later as "has no definition to construct".
-func defineMagusRecords(sess *buzz.Session, decls string) error {
-	records, err := magusRecords()
-	if decls != MagusDeclSource() {
-		_, records, err = recordDecls(decls)
+//
+// The full declarations run once per process. Their methods find the calling
+// session's magus module at call time (dispatchExtern); a filtered set runs
+// again in each session.
+func bindMagusRecords(sess *buzz.Session, decls string) error {
+	mod, hasModule := sess.NativeModule("magus")
+	if decls == MagusDeclSource() {
+		records, err := magusRecords()
+		if err != nil {
+			return err
+		}
+		if hasModule {
+			sess.SetGlobal(magusModuleKey, mod)
+		}
+		bindRecords(sess, mod, hasModule, records)
+		return nil
 	}
+	_, records, err := recordDecls(decls)
 	if err != nil {
 		return err
 	}
-	mod, hasModule := sess.NativeModule("magus")
-	if hasModule || decls != MagusDeclSource() {
-		if records, err = sessionRecords(sess, mod, records); err != nil {
-			return err
-		}
+	if records, err = sessionRecords(sess, mod, records); err != nil {
+		return err
 	}
 	bindRecords(sess, mod, hasModule, records)
 	return nil
+}
+
+// magusModuleKey is the global that holds a session's magus module. The
+// shared record methods read it; no identifier can spell it.
+var magusModuleKey = buzz.QualifiedTypeKey("magus", "")
+
+// dispatchExtern is the private extern a shared record method calls. It runs
+// the member of the magus module held by the session making the call.
+func dispatchExtern(name string) vm.Value {
+	return vm.DirectValue(name, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		home := vm.HomeFromContext(ctx)
+		if home == nil {
+			return vm.Null, fmt.Errorf("magus record method %s: no session is running it", name)
+		}
+		mod, ok := home.Get(magusModuleKey)
+		if !ok {
+			return vm.Null, fmt.Errorf("magus record method %s: the session has no magus module", name)
+		}
+		member, ok := mod.MapGet(name)
+		if !ok {
+			return vm.Null, fmt.Errorf("magus record method %s: the magus module has no member %q", name, name)
+		}
+		return vm.CallDirect(ctx, member, args)
+	})
 }
 
 // sessionRecords runs the records again in a child of sess, so a method's
