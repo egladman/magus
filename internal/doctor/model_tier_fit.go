@@ -30,7 +30,7 @@ type modelTiered interface {
 
 // checkModelTierFit reports each (model tier, job kind) pair whose recorded jobs mostly did
 // not pass, and names the line a person would change: the declared default when the default
-// chose the tier, the function registered with magus\job.modelTier when the matrix did, the
+// chose the tier, the function registered with magus\modelTier when the matrix did, the
 // job's own model when a person named it.
 //
 // It only reports. A tier that fails one kind of job may be right for every other, and
@@ -119,7 +119,7 @@ func modelTierFitDetail(rec types.ModelTierRecord, set *types.ModelTierSet, outc
 		fixes = append(fixes, fmt.Sprintf("%d took the declared default: change the default in the model tier declaration at %s", n, set.Site()))
 	}
 	if n := chose[types.ModelTierSourceMatrix]; n > 0 {
-		matrix := "the function registered with magus\\job.modelTier"
+		matrix := "the function registered with magus\\modelTier"
 		if site := commonest(sites); site != "" {
 			matrix += " at " + site
 		}

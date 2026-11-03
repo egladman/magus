@@ -532,7 +532,7 @@ func (f forkedTier) refusal(host, model string) string {
 	}
 	alias, err := f.set.Alias(host, f.tier)
 	if err != nil {
-		return fmt.Sprintf("magus workspace: job %s was forked at model tier %s, and %v; add a %s entry to the hosts magus\\job.modelTiers declares, or spawn the job from a harness it maps.",
+		return fmt.Sprintf("magus workspace: job %s was forked at model tier %s, and %v; add a %s entry to the hosts magus\\modelTiers declares, or spawn the job from a harness it maps.",
 			f.job, f.record.Name, err, host)
 	}
 	spawned, ok := modelTierByExactID(f.set, host, model, f.rows)
