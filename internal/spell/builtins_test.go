@@ -598,11 +598,11 @@ func TestDeclareMagusTypesDropsUnimplementedExterns(t *testing.T) {
 	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
 	sess.SetNativeModule("magus", privateMembersModule(t))
-	require.NoError(t, DeclareMagusTypes(sess, func(member string) bool { return member != "affected" }))
+	require.NoError(t, DeclareMagusTypes(sess, func(member string) bool { return member != "change" }))
 	require.NoError(t, sess.Exec(t.Context(), `import "magus";
 fun kept(opts: magus\DirsOptions) > str { return opts.language; }`))
-	err := sess.Exec(t.Context(), `fun dropped() > any { return magus\change().affected(); }`)
-	assert.ErrorContains(t, err, `module magus has no member "affected"`)
+	err := sess.Exec(t.Context(), `fun dropped() > any !> any { return magus\change().affected(); }`)
+	assert.ErrorContains(t, err, `module magus has no member "change"`)
 }
 
 // A built-in may import a host module only when it computes over its arguments alone.

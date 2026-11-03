@@ -312,20 +312,50 @@ func MagusDeclSource() string {
 func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) error {
 	decls := MagusDeclSource()
 	if implements != nil {
-		var b strings.Builder
-		for line := range strings.SplitSeq(decls, "\n") {
-			if rest, ok := strings.CutPrefix(line, "export extern fun "); ok {
-				if name, _, _ := strings.Cut(rest, "("); !implements(name) {
-					continue
-				}
-			}
-			b.WriteString(line)
-			b.WriteByte('\n')
-		}
-		decls = b.String()
+		decls = filterMagusDecls(decls, implements)
 	}
+
 	sess.DeclareModuleTypes("magus", decls)
-	return defineMagusRecords(sess)
+	return defineMagusRecords(sess, decls)
+}
+
+// filterMagusDecls removes unavailable native forwards and the generated record
+// methods that call them. Generated forwards contain one call and a closing brace
+// on its own indented line; keeping the record's fields still lets pure hosts use it.
+func filterMagusDecls(decls string, implements func(string) bool) string {
+	var out strings.Builder
+	var object string
+	var dropping bool
+	for line := range strings.SplitSeq(decls, "\n") {
+		if rest, ok := strings.CutPrefix(line, "export object "); ok {
+			object, _, _ = strings.Cut(rest, " ")
+		}
+		if dropping {
+			if line == "    }" {
+				dropping = false
+			}
+			continue
+		}
+		if rest, ok := strings.CutPrefix(line, "    fun "); ok {
+			name, _, _ := strings.Cut(rest, "(")
+			if !implements("magus__" + object + "__" + name) {
+				dropping = true
+				continue
+			}
+		}
+		rest, extern := strings.CutPrefix(line, "export extern fun ")
+		if !extern {
+			rest, extern = strings.CutPrefix(line, "extern fun ")
+		}
+		if extern {
+			if name, _, _ := strings.Cut(rest, "("); !implements(name) {
+				continue
+			}
+		}
+		out.WriteString(line)
+		out.WriteByte('\n')
+	}
+	return out.String()
 }
 
 // IsMagusEnum reports whether name is an enum the magus declarations define.
@@ -439,7 +469,7 @@ func declRecord(stmt ast.Node) (magusRecord, bool) {
 	switch d := stmt.(type) {
 	case *ast.ObjectDecl:
 		return magusRecord{name: d.Name}, d.IsExported && !d.IsProtocol && len(d.StaticFields) == 0 &&
-			!slices.ContainsFunc(d.Methods, func(m *ast.FunDecl) bool { return m.IsStatic })
+			!slices.ContainsFunc(d.Methods, func(m *ast.FunDecl) bool { return m.IsStatic || m.IsExtern })
 	case *ast.EnumDecl:
 		return magusRecord{name: d.Name, enum: true}, d.IsExported
 	case *ast.FunDecl:
@@ -455,13 +485,16 @@ func declRecord(stmt ast.Node) (magusRecord, bool) {
 //
 // A declaration that does not run is an error. Annotate-only records
 // surfaced later as "has no definition to construct".
-func defineMagusRecords(sess *buzz.Session) error {
+func defineMagusRecords(sess *buzz.Session, decls string) error {
 	records, err := magusRecords()
+	if decls != MagusDeclSource() {
+		_, records, err = recordDecls(decls)
+	}
 	if err != nil {
 		return err
 	}
 	mod, hasModule := sess.NativeModule("magus")
-	if hasModule {
+	if hasModule || decls != MagusDeclSource() {
 		if records, err = sessionRecords(sess, mod, records); err != nil {
 			return err
 		}
