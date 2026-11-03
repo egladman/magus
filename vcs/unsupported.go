@@ -213,6 +213,10 @@ func (declines[N]) RemoveCheckout(context.Context, string, string) error {
 	return decline[N](types.CapCheckoutProvisioner)
 }
 
+func (declines[N]) DiscardCheckout(context.Context, string, string, string) error {
+	return decline[N](types.CapCheckoutProvisioner)
+}
+
 func (declines[N]) Checkouts(context.Context, string) ([]string, error) {
 	return nil, decline[N](types.CapCheckoutProvisioner)
 }

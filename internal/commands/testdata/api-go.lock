@@ -1214,6 +1214,7 @@ github.com/egladman/magus/types.CheckoutLister.OtherCheckouts imethod func(root 
 github.com/egladman/magus/types.CheckoutProvisioner type interface
 github.com/egladman/magus/types.CheckoutProvisioner.Checkouts imethod func(ctx context.Context, root string) ([]string, error)
 github.com/egladman/magus/types.CheckoutProvisioner.CreateCheckout imethod func(ctx context.Context, root string, dir string, rev string, branch string) error
+github.com/egladman/magus/types.CheckoutProvisioner.DiscardCheckout imethod func(ctx context.Context, root string, dir string, base string) error
 github.com/egladman/magus/types.CheckoutProvisioner.RemoveCheckout imethod func(ctx context.Context, root string, dir string) error
 github.com/egladman/magus/types.CheckoutProvisioner.StrandedRevisions imethod func(ctx context.Context, dir string, bases ...string) ([]string, error)
 github.com/egladman/magus/types.CheckoutReporter type interface

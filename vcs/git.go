@@ -3809,15 +3809,17 @@ func adoptBranch(ctx context.Context, root, branch, rev string) (bool, error) {
 
 // DiscardCheckout removes the checkout at dir, then the branch it stood on
 // when that branch still points at base. A branch that moved on stays.
-// hg and jj have no such branch, so they do not implement it.
 func (v gitVCS) DiscardCheckout(ctx context.Context, root, dir, base string) error {
-	branch, err := gitOutput(ctx, dir, gitOpts{Isolated: true}, "symbolic-ref", "--quiet", "--short", "HEAD")
-	if err != nil {
-		// A detached HEAD exits 1 and names no branch.
-		branch = ""
-	}
-	if err := v.RemoveCheckout(ctx, root, dir); err != nil || branch == "" {
+	// A detached HEAD prints HEAD, which no branch can be named.
+	branch, readErr := gitOutput(ctx, dir, gitOpts{Isolated: true}, "rev-parse", "--abbrev-ref", "HEAD")
+	if err := v.RemoveCheckout(ctx, root, dir); err != nil {
 		return err
+	}
+	if readErr != nil {
+		return fmt.Errorf("checkout %s removed but its branch may remain: %w", dir, readErr)
+	}
+	if branch == "HEAD" {
+		return nil
 	}
 	worktreeAdmin.Lock()
 	defer worktreeAdmin.Unlock()

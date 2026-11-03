@@ -1756,6 +1756,75 @@ func (_c *MockVCSDriver_DirtyFiles_Call) RunAndReturn(run func(ctx context.Conte
 	return _c
 }
 
+// DiscardCheckout provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) DiscardCheckout(ctx context.Context, root string, dir string, base string) error {
+	ret := _mock.Called(ctx, root, dir, base)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DiscardCheckout")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
+		r0 = returnFunc(ctx, root, dir, base)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockVCSDriver_DiscardCheckout_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DiscardCheckout'
+type MockVCSDriver_DiscardCheckout_Call struct {
+	*mock.Call
+}
+
+// DiscardCheckout is a helper method to define mock.On call
+//   - ctx context.Context
+//   - root string
+//   - dir string
+//   - base string
+func (_e *MockVCSDriver_Expecter) DiscardCheckout(ctx interface{}, root interface{}, dir interface{}, base interface{}) *MockVCSDriver_DiscardCheckout_Call {
+	return &MockVCSDriver_DiscardCheckout_Call{Call: _e.mock.On("DiscardCheckout", ctx, root, dir, base)}
+}
+
+func (_c *MockVCSDriver_DiscardCheckout_Call) Run(run func(ctx context.Context, root string, dir string, base string)) *MockVCSDriver_DiscardCheckout_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_DiscardCheckout_Call) Return(err error) *MockVCSDriver_DiscardCheckout_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockVCSDriver_DiscardCheckout_Call) RunAndReturn(run func(ctx context.Context, root string, dir string, base string) error) *MockVCSDriver_DiscardCheckout_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Drivers provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) Drivers(ctx context.Context, root string, paths []string) (map[string]string, error) {
 	ret := _mock.Called(ctx, root, paths)

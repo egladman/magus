@@ -114,8 +114,14 @@ func (v jjVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch string
 	return recordMadeCheckout(ctx, filepath.Join(root, ".jj"), checkoutRecord{Dir: filepath.Clean(dir), Resolved: realPath(dir), Name: name})
 }
 
-// RemoveCheckout implements types.CheckoutProvisioner: it forgets the workspace, which
-// leaves its commits in the store, then deletes the directory.
+// DiscardCheckout implements types.CheckoutProvisioner. A workspace is
+// named for the job, not a bookmark, so nothing is left to delete.
+func (v jjVCS) DiscardCheckout(ctx context.Context, root, dir, _ string) error {
+	return v.RemoveCheckout(ctx, root, dir)
+}
+
+// RemoveCheckout implements types.CheckoutProvisioner: it forgets the
+// workspace, which leaves its commits in the store, then deletes the directory.
 func (v jjVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	if !filepath.IsAbs(dir) {
 		return fmt.Errorf("vcs: checkout %q is not an absolute path", dir)

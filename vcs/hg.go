@@ -1316,8 +1316,14 @@ func hgRefuseTakenBookmark(ctx context.Context, root, name string) error {
 	return nil
 }
 
-// RemoveCheckout implements types.CheckoutProvisioner. A share owns nothing in its source,
-// so deleting its directory removes it.
+// DiscardCheckout implements types.CheckoutProvisioner. A share is made
+// on no bookmark, so removing it leaves nothing to delete.
+func (v hgVCS) DiscardCheckout(ctx context.Context, root, dir, _ string) error {
+	return v.RemoveCheckout(ctx, root, dir)
+}
+
+// RemoveCheckout implements types.CheckoutProvisioner. A share owns
+// nothing in its source, so deleting its directory removes it.
 func (v hgVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	if !filepath.IsAbs(dir) {
 		return fmt.Errorf("vcs: checkout %q is not an absolute path", dir)

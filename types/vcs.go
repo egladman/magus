@@ -1189,6 +1189,9 @@ type CheckoutProvisioner interface {
 	// remote-tracking ref reaches, and refuses the main checkout and any other; hg and jj
 	// refuse every one.
 	RemoveCheckout(ctx context.Context, root, dir string) error
+	// DiscardCheckout removes the checkout, then its branch while that
+	// still points at base. An unreadable branch is returned after.
+	DiscardCheckout(ctx context.Context, root, dir, base string) error
 	// Checkouts lists the checkouts CreateCheckout made, as absolute paths with symlinks
 	// resolved.
 	Checkouts(ctx context.Context, root string) ([]string, error)
