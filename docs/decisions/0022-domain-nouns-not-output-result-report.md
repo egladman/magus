@@ -1,5 +1,5 @@
 ---
-title: "ADR 0022: domain nouns, not Output / Result / Report"
+title: "ADR 0022: domain nouns for answer types"
 order: 22
 description: Answer types in types/ use domain nouns, not Output/Report/Result. Protobuf RPC envelopes use Request/Response only; nested wire messages match the domain nouns. No Insight umbrella type. Domain and protobuf stay separate packages.
 tags: [adr, decision, naming, types, go, knowledge, protobuf]
@@ -60,17 +60,17 @@ Measured on this tree 2026-11-01: `Output` 25, `Report` 20, `Result` 9,
 9. The majority-shape API replaces precedents with `Hold`, `Holds`, `Count`,
    `Counts`; methods `magus\holds(family)` and `magus\counts(family)`.
 
-| Item                                                                                       | State |
-| ------------------------------------------------------------------------------------------ | ----- |
-| This record; refuse new `*Output` / `*Report` answer types in review                       | done  |
-| `PrecedentReport` → `Holds`, `SymbolReport` → `Symbols`                                    | done  |
-| `ConformanceOutput` → `Conformance`; ceiling ask → `Ceiling`                               | done  |
-| History metric `*Output` / `VolatilityReport` → domain nouns                               | done  |
-| Delete `Insight` / `InsightReport` / `InsightView` umbrella; no `magus\insight` bundle     | done  |
-| Proto `insight` → `historymetrics`; nested nouns; `GetHistoryMetrics*Response`             | done  |
-| Lint: RPC I/O ends in Request/Response; nested messages have no `*Output`/`*Report` suffix | done  |
-| Action `*Result` renames when those files are touched                                      | todo  |
-| `magus\precedents` → `magus\holds` / `magus\counts`                                        | todo  |
+| Item                                                                                       | State   |
+| ------------------------------------------------------------------------------------------ | ------- |
+| This record; refuse new `*Output` / `*Report` answer types in review                       | done    |
+| `PrecedentReport` → `Holds`, `SymbolReport` → `Symbols`                                    | done    |
+| `ConformanceOutput` → `Conformance`; ceiling ask → `Ceiling`                               | done    |
+| History metric `*Output` / `VolatilityReport` → domain nouns                               | done    |
+| Delete `Insight` / `InsightReport` / `InsightView` umbrella; no `magus\insight` bundle     | done    |
+| Proto `insight` → `historymetrics`; nested nouns; `GetHistoryMetrics*Response`             | done    |
+| Lint: RPC I/O ends in Request/Response; nested messages have no `*Output`/`*Report` suffix | done    |
+| Action `*Result` renames when those files are touched                                      | planned |
+| `magus\precedents` → `magus\holds` / `magus\counts`                                        | planned |
 
 ### Principles checked
 

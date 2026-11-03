@@ -80,6 +80,11 @@ a pattern no graph verb fits.
 **--id** *string*
 : Harness ID; omit to install every magusfile-wired provider
 
+### agent harness link options
+
+**--[no-]stdin** (default: off)
+: Read destination-to-source links as JSON from stdin (required)
+
 ### agent adoption options
 
 **--commands** *string*
@@ -91,7 +96,7 @@ a pattern no graph verb fits.
 : Render the embedded skills and write or stream them into named destinations
 
 **harness**
-: Install skills for, or verify, harnesses wired in the magusfile
+: Install runtimes and skills, link sources, or verify harnesses
 
 **starter**
 : Print a starter AGENTS.md to stdout; never writes a file

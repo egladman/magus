@@ -2916,9 +2916,10 @@ a pattern no graph verb fits.`,
 	Usage: "magus agent <install|harness|starter|adoption> [flags]",
 	Children: []cmdline.Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
-		{Name: "harness", Short: "Install skills for, or verify, harnesses wired in the magusfile", Children: []cmdline.Command{
+		{Name: "harness", Short: "Install runtimes and skills, link sources, or verify harnesses", Children: []cmdline.Command{
 			{Name: "verify", Short: "Verify a descriptor and its configured hook file by actually probing the wired guard command", Flags: []cmdline.Flag{{Name: "id", Kind: cmdline.String, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},
-			{Name: "install", Short: "Install skill trees declared by a harness", Flags: []cmdline.Flag{{Name: "id", Kind: cmdline.String, Doc: "Harness ID; omit to install every magusfile-wired provider"}}}}},
+			{Name: "install", Short: "Install the runtime and skills declared by a harness", Flags: []cmdline.Flag{{Name: "id", Kind: cmdline.String, Doc: "Harness ID; omit to install every magusfile-wired provider"}}},
+			{Name: "link", Short: "Create workspace source links from a JSON plan on stdin", Flags: []cmdline.Flag{{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "Read destination-to-source links as JSON from stdin (required)"}}}}},
 		{Name: "starter", UnstructuredOutput: true, Short: "Print a starter AGENTS.md to stdout; never writes a file"}, // stdout is the AGENTS.md text
 		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []cmdline.Flag{
 			{Name: "commands", Kind: cmdline.String, Doc: "File of shell commands, one per line; without it commands are read from stdin"},

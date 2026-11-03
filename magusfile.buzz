@@ -109,7 +109,7 @@ final claudeID = magus\harness.provider(claude);
 _ = magus\harness.provider(claudeMod);
 final opencodeID = magus\harness.provider(opencode);
 
-magus\job.modelTiers(modeltiers\ModelTier, default: modeltiers\defaultTier,
+magus\job.modelTiers(modeltiers\ModelTier, default: modeltiers\ModelTier.economy,
     hosts: {
         cursorID: tierhost\cursor,
         codexID: tierhost\codex,

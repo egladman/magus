@@ -61,6 +61,18 @@ skill beside them.
 
 <!-- magus:skills:end -->
 
+## Delegation
+
+Before your first subagent spawn, read `.agents/skills/magus-multi-agent/SKILL.md` and
+follow its job, lease and validation rules. Start delegated jobs at the `economy`
+tier and name the model explicitly in every spawn. Economy covers mechanical edits,
+fixtures, docs, inventory and read-only evidence. Use `standard` for bounded
+implementation; use `principal` for architecture, ambiguous ownership, public APIs,
+migrations, security and integration. Move a job up only after it fails its criteria
+or its scope has a concrete higher-tier need; fork the same row at the higher tier.
+Never promote an automatic retry. Never downgrade the root integration pass or final
+release gate.
+
 ## This repository
 
 magus builds itself. Learn the layout from the graph (`magus ls`, `magus explain

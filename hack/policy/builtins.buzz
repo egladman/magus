@@ -7,6 +7,8 @@ namespace agentpolicy\builtins;
 // are what justified each deny here, kept where a workspace can reread them rather than
 // in the rule's shipped text.
 export final BUILTINS: {str: any} = {
+    // A delegated row's explicit host model must match the tier it records.
+    "spawn-names-model": {"decision": "deny"},
     // 120 lines is the p90 of a bounded read. 2026-09-26, 66,548 Bash reads: 8,394
     // dumped a whole Go, Buzz or Markdown file, and 3.6% of whole reads were followed by
     // an edit of that file.

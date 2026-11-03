@@ -30,13 +30,15 @@ func agentHarnessCommand(ctx context.Context, rootOverride string, args []string
 	switch args[0] {
 	case "install":
 		return agentHarnessInstallCommand(ctx, rootOverride, args[1:])
+	case "link":
+		return agentHarnessLinksCommand(ctx, rootOverride, args[1:])
 	case "verify":
 		return agentHarnessVerifyCommand(ctx, rootOverride, args[1:])
 	case "-h", "--help", "help":
 		agentHarnessUsage(os.Stdout)
 		return nil
 	default:
-		return exit.Usagef("magus agent harness: unknown subcommand %q (want install or verify; `magus describe harness` prints the host config to merge)", args[0])
+		return exit.Usagef("magus agent harness: unknown subcommand %q (want install, link, or verify)", args[0])
 	}
 }
 
@@ -476,12 +478,13 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 }
 
 func agentHarnessUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent harness <install|verify> [--id <harness-id>] [flags]")
+	fmt.Fprintln(w, "Usage: magus agent harness <install|link|verify> [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Install the complete runtime and skills of, or verify, harnesses selected with magus\\harness.provider(<spell>).")
+	fmt.Fprintln(w, "Install or verify harnesses selected with magus\\harness.provider(<spell>), or link workspace source paths from JSON on stdin.")
 	fmt.Fprintln(w, "verify runs the wired guard command against a synthetic event rather than trusting")
 	fmt.Fprintln(w, "its presence in the config. `magus describe harness`")
 	fmt.Fprintln(w, "prints the same installation that install applies, preserving unrelated settings.")
+	fmt.Fprintln(w, "link reads a destination-to-source JSON map from stdin and creates in-workspace symlinks after preflight.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Omit --id to act on every wired provider (several hosts are fine when you bounce")
 	fmt.Fprintln(w, "between LLM tools). Or pass --id for one spell.")

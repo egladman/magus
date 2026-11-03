@@ -431,18 +431,15 @@ func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]types.Guard
 	return out
 }
 
-// gradeMainSpawn judges a spawn by the main thread under the spawn cost rules: whether it
-// names a model, and whether that model is at the model tier its job was forked at. Tiers
-// compare by rank in the workspace's declaration, never by name or price; a spawn bound to
-// no row, or to a row forked with no declaration, has nothing to compare.
-func gradeMainSpawn(deps Dependencies, verdict types.GuardJudgment, env hookRequest, who hookAttribution, at location, lease string, titled spawnTitle) types.GuardJudgment {
-	if verdict.Decision == decisionDeny || !env.IsSpawn || lease != "" || at.cacheDir == "" {
+// gradeSpawnModel judges whether any spawning thread names a model, and whether a bound
+// spawn stays at the model tier its row was forked at. Tiers compare by rank in the
+// workspace's declaration, never by name or price; a spawn bound to no row, or to a row
+// forked with no declaration, has nothing to compare.
+func gradeSpawnModel(deps Dependencies, verdict types.GuardJudgment, env hookRequest, who hookAttribution, at location, lease string, titled spawnTitle) types.GuardJudgment {
+	if verdict.Decision == decisionDeny || !env.IsSpawn || at.cacheDir == "" {
 		return verdict
 	}
 	thread, from := callerThread(at.cacheDir, who, lease)
-	if thread != types.AgentThreadMain {
-		return verdict
-	}
 	var forked forkedTier
 	bound := false
 	if row, ok := titled(); ok {
@@ -463,7 +460,7 @@ func gradeMainSpawn(deps Dependencies, verdict types.GuardJudgment, env hookRequ
 			findings = append(findings, costFinding{rule: denyRuleSpawnNamesModel, deny: true, key: hint.MarkerKind(denyRuleSpawnNamesModel), say: say})
 		}
 	}
-	if s := deps.settingLookup(string(denyRuleSpawnAboveModelTier)); s.Decision != builtin.Off && bound {
+	if s := deps.settingLookup(string(denyRuleSpawnAboveModelTier)); s.Decision != builtin.Off && bound && lease == "" && thread == types.AgentThreadMain {
 		if say := forked.rankedAbove(host, env.DeclaredModel); say != "" {
 			findings = append(findings, costFinding{rule: denyRuleSpawnAboveModelTier, key: hint.MarkerKind(denyRuleSpawnAboveModelTier), say: say})
 		}

@@ -65,6 +65,8 @@ const (
 	FlagAgentAdoptionCommands = "commands"
 	// agent harness install: --id
 	FlagAgentHarnessInstallID = "id"
+	// agent harness link: --stdin
+	FlagAgentHarnessLinkStdin = "stdin"
 	// agent harness verify: --id
 	FlagAgentHarnessVerifyID = "id"
 	// agent: --dir
@@ -2264,6 +2266,19 @@ type AgentHarnessInstallFlags struct {
 func BindAgentHarnessInstall(fs *flag.FlagSet) *AgentHarnessInstallFlags {
 	var f AgentHarnessInstallFlags
 	fs.StringVar(&f.ID, FlagAgentHarnessInstallID, "", "Harness ID; omit to install every magusfile-wired provider")
+	return &f
+}
+
+// AgentHarnessLinkFlags are the flags declared for `magus agent harness link`.
+type AgentHarnessLinkFlags struct {
+	Stdin bool // --[no-]stdin
+}
+
+// BindAgentHarnessLink registers `magus agent harness link`'s flags on fs and returns the destination.
+func BindAgentHarnessLink(fs *flag.FlagSet) *AgentHarnessLinkFlags {
+	var f AgentHarnessLinkFlags
+	fs.BoolVar(&f.Stdin, FlagAgentHarnessLinkStdin, false, "Read destination-to-source links as JSON from stdin (required)")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagAgentHarnessLinkStdin)
 	return &f
 }
 

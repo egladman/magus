@@ -610,6 +610,57 @@ func TestSpawnNamesModelResolvesAHarnessRowsAlias(t *testing.T) {
 	assert.Contains(t, v.Reason, "this spawn runs opus, model tier principal (rank 2), and job scout was forked at economy (rank 0)")
 }
 
+func TestSpawnNamesModelAppliesToLeasedNestedSpawns(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		model      string
+		off        bool
+		decision   string
+		rule       string
+		reasonPart string
+	}{
+		{
+			name:       "missing model is denied",
+			decision:   decisionDeny,
+			rule:       string(denyRuleSpawnNamesModel),
+			reasonPart: "this spawn names no model",
+		},
+		{
+			name:       "principal model is denied for economy row",
+			model:      "opus",
+			decision:   decisionDeny,
+			rule:       string(denyRuleSpawnNamesModel),
+			reasonPart: "model tier principal (rank 2), and job scout was forked at economy (rank 0)",
+		},
+		{
+			name:     "economy model matches row",
+			model:    "haiku",
+			decision: decisionPass,
+		},
+		{
+			name:     "off keeps model omission allowed",
+			off:      true,
+			decision: decisionPass,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			set := testModelTiers(t, "claude-code")
+			ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+			deps := strictDeps(t)
+			deps.ModelTiers = func() *types.ModelTierSet { return set }
+			if tc.off {
+				deps.Builtins[string(denyRuleSpawnNamesModel)] = builtin.Setting{Decision: builtin.Off}
+			}
+			v := judgeLeasedNestedSpawn(ctx, t, deps, tc.model)
+			assert.Equal(t, tc.decision, v.Decision)
+			assert.Equal(t, tc.rule, v.Rule)
+			if tc.reasonPart != "" {
+				assert.Contains(t, v.Reason, tc.reasonPart)
+			}
+		})
+	}
+}
+
 func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 	if _, registered := project.DefaultSpellRegistry().Lookup("claude-code"); !registered {
 		t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell("claude-code") })
@@ -804,6 +855,22 @@ func judgeSpawn(ctx context.Context, t *testing.T, deps Dependencies, model stri
 	return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 		"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": input,
 	})})
+}
+
+func judgeLeasedNestedSpawn(ctx context.Context, t *testing.T, deps Dependencies, model string) types.GuardJudgment {
+	t.Helper()
+	who := hookAttribution{Host: "claude-code", Session: "s", Agent: "worker"}
+	require.True(t, recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.skillsKey()), multiAgentSkill.String()))
+	input := map[string]any{"description": "orchestrator/scout scout", "prompt": "Read internal/job and report."}
+	if model != "" {
+		input["model"] = model
+	}
+	return Judge(ctx, deps, Request{
+		Host: "claude-code", Session: "s", Agent: "worker", Lease: "scout", ObservesSkillLoads: true,
+		Input: hookJSON(t, map[string]any{
+			"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": input,
+		}),
+	})
 }
 
 // RootGroundworkSuite judges a root whose bound spawn proves it hands out a live row.

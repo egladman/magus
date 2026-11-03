@@ -319,7 +319,7 @@ sources:
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 35
+// magus-guard-template: 36
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=model
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human

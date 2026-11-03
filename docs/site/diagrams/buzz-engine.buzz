@@ -16,6 +16,8 @@ export fun buzzEngineFigure() > figure\Figure !> any {
     ];
     final engine = magus\dir("internal/interp");
     final bindings = magus\dir("internal/interp/bindings");
+    final opencode = magus\dir("internal/interp/bindings/opencode");
+    final opencodeWasm = magus\dir("internal/interp/bindings/opencode/wasm");
     final trampolines = magus\dir("internal/interp/bindings/gen");
     final hostModules = magus\dir("std");
     final buzzStdlib = magus\dir("libs/gopherbuzz/std");
@@ -32,6 +34,8 @@ export fun buzzEngineFigure() > figure\Figure !> any {
                 + "marked WASM, pure compute with no filesystem, process or network access, and "
                 + "records host calls instead of running them. Both also install the Buzz stdlib.")
         .box(bindings, label: "Host bindings", sub: "magus namespace, init()")
+        .box(opencode, label: "OpenCode binding", sub: "plugin, runtime")
+        .box(opencodeWasm, label: "OpenCode WASM", sub: "main, plugin")
         .box(engine, label: "Magusfile engine", sub: "load magusfiles, run targets")
         .group(pipeline, label: "gopherbuzz", sub: "lex, parse, check, compile, run")
         .box(trampolines, label: "Trampolines", sub: "every module, plus a WASM set")
@@ -43,12 +47,14 @@ export fun buzzEngineFigure() > figure\Figure !> any {
             why: "modules and bindings pass vm and gopherbuzz values; a program reaches the pipeline through the engine or the dry evaluator")
         .hideEdges([engine, bindings, dry], dst: [hostModules],
             why: "they read module descriptors and std.WithCwd; every module is wired through its trampoline")
-        .markEdge(engine, dst: session, label: "magusfile")
+        .markEdge(engine, dst: session)
         .markEdge(bindings, dst: engine, label: "init()")
-        .markEdge(bindings, dst: trampolines, label: "every module")
-        .markEdge(dry, dst: trampolines, label: "WASM set", stroke: figure\Stroke.focal)
-        .markEdge(dry, dst: session, label: "editor source")
+        .markEdge(bindings, dst: trampolines)
+        .markEdge(dry, dst: trampolines, stroke: figure\Stroke.focal)
+        .markEdge(dry, dst: session)
         .flowIn(playground, dst: dry, label: "runs")
+        .rank(dirs: [opencodeWasm, opencode, bindings])
+        .row(dirs: [dry, trampolines])
         .legend(figure\Look.focal, label: "the browser's subset")
         .scope(gopherbuzzPackages())
         .scope(goPackages("internal/interp/**"))

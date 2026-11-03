@@ -31,3 +31,7 @@ await assert.rejects(
   /magus-install-probe/,
 );
 assert.equal(asked, true, "the installed plugin must ask the guard before refusing");
+// The Go/Wasm runtime leaves work on Node's event loop after the plugin assertions
+// finish. The installed probe has a 10-second harness timeout, so exit only after
+// every assertion succeeds; any failure still reaches Node's nonzero path.
+process.stdout.write("opencode-probe: assertions passed\n", () => process.exit(0));
