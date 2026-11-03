@@ -131,11 +131,34 @@ export fun issuesAt(dir: str, packages: [str], files: [str]) > [str] !> any {
     final root = magus\describe.project().workspace;
     final bin = binary();
     final args = reportArgs(root, dir: dir, packages: packages);
-    var printed = "";
+    var run = proc\ExecResult{};
     os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, callback: fun () > void !> any {
-        printed = proc\exec(bin, args: args, dir: root + "/" + dir, opts: proc\ExecOptions{quiet = true}).stdout;
+        run = proc\exec(bin, args: args, dir: root + "/" + dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
     });
-    return issuesIn(printed, root: root, files: files);
+    return reportOf(run, root: root, dir: dir, packages: packages, files: files);
+}
+
+// reportOf reads a finished run. With --issues-exit-code 0, a non-zero exit
+// is a failure to lint, and stderr is its only account.
+fun reportOf(run: proc\ExecResult, root: str, dir: str, packages: [str], files: [str]) > [str] !> any {
+    if (!run.ok) {
+        final stderr = run.stderr.trim();
+        final named = packages.join(" ");
+        throw "golangci-lint exited {run.code} with no report: {stderr} (module {dir}, packages {named})";
+    }
+    return issuesIn(run.stdout, root: root, files: files);
+}
+
+test "a non-zero exit with no report raises with its code, stderr and module" {
+    final failed = proc\ExecResult{code = 7, stderr = "  config: unknown linter\n", ok = false};
+    var message = "";
+    try {
+        _ = reportOf(failed, root: "/w", dir: "libs/x", packages: ["./y"], files: ["libs/x/y/a.go"]);
+    } catch (err: any) {
+        message = "{err}";
+    }
+    assert\equal(message.indexOf("exited 7 with no report") != null, want: true, message: "the exit code is named");
+    assert\equal(message.indexOf("config: unknown linter (module libs/x, packages ./y)") != null, want: true, message: "stderr is trimmed and the module and packages are named");
 }
 
 test "Go files group by their nearest module, as packages relative to it" {
