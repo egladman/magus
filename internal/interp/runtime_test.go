@@ -281,7 +281,7 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	prev := buzzHostBindingsFn
 	buzzHostBindingsFn = func(_ context.Context, sess *buzz.Session, _ map[string]vm.Callable, _ map[string]vm.Value, _ bool) error {
 		sess.SetNativeModule("magus", vm.NewMap())
-		return spell.DeclareMagusTypes(sess, nil)
+		return spell.DeclareMagusTypes(sess, func(string) bool { return false })
 	}
 	t.Cleanup(func() { buzzHostBindingsFn = prev })
 	w := testkit.NewWorkspace(t)
