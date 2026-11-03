@@ -347,6 +347,7 @@ fun ld_flags() > str !> any {
 // Builds the OpenCode wasm runtime and its wasm_exec.js via go generate.
 export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["internal/interp/bindings/opencode/**/*.go", "internal/interp/bindings/opencode/plugin.buzz",
+        "internal/json/**/*.go",
         "libs/gopherbuzz/**/*.go", "libs/gopherbuzz/go.mod", "libs/diagnostics/**/*.go",
         "libs/diagnostics/go.mod", "go.mod", "go.sum", "go.work", "go.work.sum", "mise.toml"]);
     ctx.writesFiles(["spells/harness/opencode/gen/magus-opencode.wasm", "spells/harness/opencode/gen/wasm_exec.js"]);
