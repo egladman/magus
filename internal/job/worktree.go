@@ -107,7 +107,7 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 	if binary != "" && !BuildsItsOwnMagus(dir) {
 		placed, err := placeBinary(binary, dir)
 		if err != nil {
-			return types.JobWorktree{}, false, errors.Join(fmt.Errorf("placing %s in %s: %w", binary, dir, err), drv.RemoveCheckout(ctx, source, dir))
+			return types.JobWorktree{}, false, errors.Join(fmt.Errorf("placing %s in %s: %w", binary, dir, err), discardCheckout(ctx, drv, wt))
 		}
 		wt.Binary = placed
 	}
@@ -532,10 +532,23 @@ func (s *Store) LandingBootstrap(ctx context.Context, exe, checkpoint string) (s
 
 // DiscardWorktree removes a checkout [Store.ForkWorktree] just made for a fork that was then
 // refused, before anything ran in it.
+// Its branch goes too while it sits at the base.
 func (s *Store) DiscardWorktree(ctx context.Context, wt types.JobWorktree) error {
 	drv, why := resolveDriver(ctx, wt.Source)
 	if drv == nil {
 		return fmt.Errorf("job: the checkout %s stays, since %s", wt.Root, why)
+	}
+	return discardCheckout(ctx, drv, wt)
+}
+
+// checkoutDiscarder is a driver that also drops the branch a checkout stood on.
+type checkoutDiscarder interface {
+	DiscardCheckout(ctx context.Context, root, dir, base string) error
+}
+
+func discardCheckout(ctx context.Context, drv types.VCSDriver, wt types.JobWorktree) error {
+	if d, ok := drv.(checkoutDiscarder); ok {
+		return d.DiscardCheckout(ctx, wt.Source, wt.Root, wt.Base)
 	}
 	return drv.RemoveCheckout(ctx, wt.Source, wt.Root)
 }

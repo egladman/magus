@@ -709,3 +709,80 @@ func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {
 	require.NoError(t, err, "equal commits list nothing")
 	assert.Empty(t, inputs)
 }
+
+type ForkAgainSuite struct {
+	suite.Suite
+	store *Store
+	repo  *testkit.Repo
+	start string
+}
+
+func TestForkAgainSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(ForkAgainSuite))
+}
+
+func (s *ForkAgainSuite) SetupTest() {
+	s.store, _, s.repo = worktreeStore(s.T())
+	s.start = s.repo.Head()
+}
+
+func (s *ForkAgainSuite) fork(checkpoint string) (types.JobWorktree, error) {
+	wt, _, err := s.store.ForkWorktree(s.T().Context(), "w1", filepath.Join(s.T().TempDir(), "w1"), checkpoint, "")
+	return wt, err
+}
+
+func (s *ForkAgainSuite) branches() string {
+	return s.repo.Git("branch", "--list", "w1")
+}
+
+func (s *ForkAgainSuite) TestADiscardedForkLeavesNoBranchAndTheIdForksAgainAtANewerRev() {
+	wt, err := s.fork("")
+	s.Require().NoError(err)
+	s.Equal("w1", s.repo.Git("-C", wt.Root, "symbolic-ref", "--short", "HEAD"))
+	s.Require().NoError(s.store.DiscardWorktree(s.T().Context(), wt))
+	s.NoDirExists(wt.Root)
+	s.Empty(s.branches(), "the discarded checkout's branch is gone")
+
+	s.repo.Git("commit", "-q", "--allow-empty", "-m", "newer")
+	newer := s.repo.Head()
+	again, err := s.fork(newer)
+	s.Require().NoError(err)
+	s.Equal(newer, again.Base)
+}
+
+func (s *ForkAgainSuite) TestAStrandedBranchWithNoCommitsOfItsOwnMovesToTheNewRev() {
+	wt, err := s.fork("")
+	s.Require().NoError(err)
+	s.repo.Git("worktree", "remove", "--force", "--force", wt.Root)
+	s.Require().NotEmpty(s.branches(), "a failed removal elsewhere left the branch")
+
+	s.repo.Git("commit", "-q", "--allow-empty", "-m", "newer")
+	newer := s.repo.Head()
+	again, err := s.fork(newer)
+	s.Require().NoError(err)
+	s.Equal(newer, s.repo.Git("-C", again.Root, "rev-parse", "HEAD"))
+	s.Equal("w1", s.repo.Git("-C", again.Root, "symbolic-ref", "--short", "HEAD"))
+}
+
+func (s *ForkAgainSuite) TestABranchWithItsOwnCommitIsRefusedNamingItAndStays() {
+	wt, err := s.fork("")
+	s.Require().NoError(err)
+	s.repo.Git("-C", wt.Root, "commit", "-q", "--allow-empty", "-m", "the job's own work")
+	mine := s.repo.Git("rev-parse", "w1")
+	s.repo.Git("worktree", "remove", "--force", "--force", wt.Root)
+
+	s.repo.Git("commit", "-q", "--allow-empty", "-m", "newer")
+	_, err = s.fork(s.repo.Head())
+	s.Require().ErrorContains(err, "branch w1")
+	s.ErrorContains(err, "the job's own work")
+	s.Equal(mine, s.repo.Git("rev-parse", "w1"))
+}
+
+func (s *ForkAgainSuite) TestDiscardKeepsABranchThatMovedPastTheBase() {
+	wt, err := s.fork("")
+	s.Require().NoError(err)
+	s.repo.Git("-C", wt.Root, "commit", "-q", "--allow-empty", "-m", "the job's own work")
+	s.Require().NoError(s.store.DiscardWorktree(s.T().Context(), wt))
+	s.NotEmpty(s.branches())
+}

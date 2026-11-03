@@ -3762,29 +3762,74 @@ func recordCheckout(ctx context.Context, root, dir string) (*gitCheckout, error)
 	return co, nil
 }
 
-// branchAtRev reports whether branch exists and its tip is the commit rev resolves to.
-func branchAtRev(ctx context.Context, root, branch, rev string) (bool, error) {
+// branchTip is the commit branch points at, or "" when it does not exist.
+func branchTip(ctx context.Context, root, branch string) (string, error) {
 	ref := "refs/heads/" + branch
 	// for-each-ref answers an absent ref with no line rather than an exit status, so every
 	// error is a real one; its pattern also matches refs below ref, which are not ref.
 	refs, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "for-each-ref", "--format=%(refname) %(objectname)", ref)
 	if err != nil {
-		return false, fmt.Errorf("git for-each-ref %s: %w", ref, err)
+		return "", fmt.Errorf("git for-each-ref %s: %w", ref, err)
 	}
-	tip := ""
 	for _, line := range strings.Split(refs, "\n") {
 		if name, id, ok := strings.Cut(line, " "); ok && name == ref {
-			tip = id
+			return id, nil
 		}
 	}
-	if tip == "" {
-		return false, nil
+	return "", nil
+}
+
+// adoptBranch reports whether branch exists. It moves the branch to rev when
+// it holds nothing past rev. A branch with commits of its own is refused,
+// naming them, since moving it would strand them.
+func adoptBranch(ctx context.Context, root, branch, rev string) (bool, error) {
+	tip, err := branchTip(ctx, root, branch)
+	if err != nil || tip == "" {
+		return false, err
 	}
 	want, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "rev-parse", "--verify", rev+"^{commit}")
 	if err != nil {
 		return false, fmt.Errorf("git rev-parse %s: %w", rev, err)
 	}
-	return tip == want, nil
+	if tip == want {
+		return true, nil
+	}
+	own, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "rev-list", "--max-count=10", "--oneline", fmt.Sprintf("%s..%s", want, tip), "--")
+	if err != nil {
+		return false, fmt.Errorf("git rev-list %s..%s: %w", want, tip, err)
+	}
+	if own != "" {
+		return false, fmt.Errorf("vcs: branch %s holds commits that %s does not, so a fork onto it would strand them: rename or delete the branch once they are kept (%s)", branch, rev, strings.ReplaceAll(own, "\n", "; "))
+	}
+	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "branch", "--force", "--", branch, want); err != nil {
+		return false, fmt.Errorf("git branch --force %s %s: %w", branch, want, err)
+	}
+	return true, nil
+}
+
+// DiscardCheckout removes the checkout at dir, then the branch it stood on
+// when that branch still points at base. A branch that moved on stays.
+// hg and jj have no such branch, so they do not implement it.
+func (v gitVCS) DiscardCheckout(ctx context.Context, root, dir, base string) error {
+	branch, err := gitOutput(ctx, dir, gitOpts{Isolated: true}, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		// A detached HEAD exits 1 and names no branch.
+		branch = ""
+	}
+	if err := v.RemoveCheckout(ctx, root, dir); err != nil || branch == "" {
+		return err
+	}
+	worktreeAdmin.Lock()
+	defer worktreeAdmin.Unlock()
+	tip, err := branchTip(ctx, root, branch)
+	if err != nil || tip != base {
+		return err
+	}
+	// The old value makes the delete lose to a commit made since the read.
+	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "update-ref", "-d", "refs/heads/"+branch, tip); err != nil {
+		return fmt.Errorf("git update-ref -d %s: %w", branch, err)
+	}
+	return nil
 }
 
 // CreateCheckout implements types.CheckoutProvisioner with a linked worktree on a new
@@ -3847,7 +3892,7 @@ func worktreeOn(ctx context.Context, root, rev, branch string) ([]string, string
 	if branch == "" {
 		return []string{"--detach"}, rev, nil
 	}
-	reused, err := branchAtRev(ctx, root, branch, rev)
+	reused, err := adoptBranch(ctx, root, branch, rev)
 	if err != nil || reused {
 		return nil, branch, err
 	}
