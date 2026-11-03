@@ -14,7 +14,7 @@ exec magus watch -h
 stderr 'Usage: magus watch \[flags\]'
 stderr 'magus watch \| magus affected --stdin build'
 stderr '\-backend string'
-stderr '\-debounce duration'
+stderr '\-\-debounce value'
 stderr '\-ignore value'
 
 exec magus watch --help

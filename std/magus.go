@@ -752,7 +752,7 @@ var Magus = Module{
 		},
 		{
 			Name: "harness",
-			Doc:  "Agent-host harness selection. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarnessConfig, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.",
+			Doc:  "Agent-host harness selection. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarness, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.",
 			Methods: []Method{{
 				Name:    "provider",
 				Doc:     "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile. Returns the harness id, which keys the hosts map of magus\\job.modelTiers; a call that ignores it wires the harness all the same.",
