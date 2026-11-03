@@ -317,9 +317,7 @@ func Judge(ctx context.Context, invoke Invoke, invocation Invocation) Verdict {
 	}
 	var decision string
 	_ = json.Unmarshal(envelope["decision"], &decision)
-	var reason, advice *string
-	_ = json.Unmarshal(envelope["reason"], &reason)
-	_ = json.Unmarshal(envelope["context"], &advice)
+	reason, advice := stringMember(envelope, "reason"), stringMember(envelope, "context")
 	switch decision {
 	case "pass":
 		return Verdict{SchemaVersion: 1, Decision: decision}
@@ -341,4 +339,18 @@ func Judge(ctx context.Context, invoke Invoke, invocation Invocation) Verdict {
 		}
 	}
 	return Verdict{SchemaVersion: 1, Decision: "deny", Reason: "magus guard returned the decision " + label + ", which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs."}
+}
+
+// stringMember is nil unless key holds a JSON string, so a verdict missing its
+// reason or context is refused rather than read as empty.
+func stringMember(envelope map[string]json.RawMessage, key string) *string {
+	raw, ok := envelope[key]
+	if !ok || string(raw) == "null" {
+		return nil
+	}
+	var value string
+	if json.Unmarshal(raw, &value) != nil {
+		return nil
+	}
+	return &value
 }
