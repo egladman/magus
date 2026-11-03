@@ -30,13 +30,14 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "proc";
+import "result";
 import "std";
 import "vcs";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --gate-ready | --recover] [--install <p,q|none>]";
-final HELP = "cost: two Go compiles of magus in the checkout\n{USAGE}";
+final USAGE = "usage: magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --gate-ready | --recover | --onto <ref>] [--install <p,q|none>]";
+final HELP = "cost: two Go compiles of magus in the checkout\n{USAGE}\n\n--onto <ref> resumes work in a checkout made for something else: it fast-forwards the clean checkout onto <ref> (a dirty tree or a non-fast-forward refuses, and nothing is reset), places ./magus (built when it cannot load the tree), installs dependencies and every harness, ends running rows whose head is already in <ref>, then prunes rows nobody collected like `magus job prune`. It prints a line per thing done. It never fetches.\n--recover only places ./magus from a dirty tree: nothing moves and no row changes. --onto shares its daemon stop and build, and refuses a dirty tree.";
 final SUMMARY = "build ./magus in a checkout at its own revision";
 final SERVES = ["code:MGS1021 -- --checkout \{checkout}"];
 
@@ -427,6 +428,206 @@ export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
     return did;
 }
 
+fun gitRan(h: Host, dir: str, args: [str]) > result\Result::<Ran> {
+    try {
+        return result\ok::<Ran>(h.git(dir, args: args));
+    } catch (err: any) {
+        return result\caught::<Ran>(err, doing: "bootstrap-checkout: git {args.join(" ")}");
+    }
+}
+
+fun magusRan(h: Host, dir: str, args: [str]) > result\Result::<Ran> {
+    try {
+        return result\ok::<Ran>(h.magus(dir, args: args));
+    } catch (err: any) {
+        return result\caught::<Ran>(err, doing: "bootstrap-checkout: magus {args.join(" ")}");
+    }
+}
+
+// Row is a running job, with the checkout it works in and that checkout's base.
+export object Row {
+    id: str,
+    root: str,
+    base: str,
+}
+
+// runningRows are the rows of `magus ls jobs -o json` in state running.
+export fun runningRows(jobsJSON: str) > result\Result::<[Row]> {
+    try {
+        final jobs: [any] = json\parse(jobsJSON)["jobs"] ?? [];
+        final found = mut [<Row>];
+        foreach (job in jobs) {
+            final state: str = job["state"] ?? "";
+            if (state != "running") {
+                continue;
+            }
+            final id: str = job["id"] ?? "";
+            final root: str = job["checkout_root"] ?? "";
+            final worktree: {str: any} = job["worktree"] ?? {};
+            final base: str = worktree["base"] ?? "";
+            found.append(Row{ id = id, root = root, base = base });
+        }
+        return result\ok::<[Row]>(found);
+    } catch (err: any) {
+        return result\caught::<[Row]>(err, doing: "bootstrap-checkout: read `magus ls jobs -o json`");
+    }
+}
+
+// endMergedRows ends each running row whose HEAD is already in onto.
+// It returns the rows it left running, each with the reason.
+// A row at its base, an unreadable checkout and dir itself stay running.
+export fun endMergedRows(h: Host, dir: str, onto: str, did: mut [str]) > result\Result::<[str]> {
+    final listed = magusRan(h, dir: dir, args: ["ls", "jobs", "-o", "json"]);
+    if (listed.error -> err) {
+        return result\Result::<[str]>{ error = err };
+    }
+    if (listed.value!.code != 0) {
+        return result\fail::<[str]>("bootstrap-checkout: magus ls jobs -o json: exit {listed.value!.code}: {listed.value!.stderr}{listed.value!.stdout}");
+    }
+    final rows = runningRows(listed.value!.stdout);
+    if (rows.error -> err) {
+        return result\Result::<[str]>{ error = err };
+    }
+    final kept = mut [<str>];
+    foreach (row in rows.value!) {
+        if (row.root == "" or row.root == dir) {
+            kept.append("{row.id} (its checkout is this one or unknown)");
+            continue;
+        }
+        final head = gitRan(h, dir: row.root, args: ["rev-parse", "HEAD"]);
+        if (head.error -> err) {
+            return result\Result::<[str]>{ error = err };
+        }
+        final sha = head.value!.stdout.trim();
+        if (head.value!.code != 0 or sha == "") {
+            kept.append("{row.id} (its checkout {row.root} cannot be read)");
+            continue;
+        }
+        if (sha == row.base) {
+            kept.append("{row.id} (it has committed nothing yet)");
+            continue;
+        }
+        final inside = gitRan(h, dir: row.root, args: ["merge-base", "--is-ancestor", sha, onto]);
+        if (inside.error -> err) {
+            return result\Result::<[str]>{ error = err };
+        }
+        if (inside.value!.code == 1) {
+            kept.append("{row.id} (its head is not in the target yet)");
+            continue;
+        }
+        if (inside.value!.code != 0) {
+            return result\fail::<[str]>("bootstrap-checkout: git merge-base --is-ancestor {sha} {onto} in {row.root}: exit {inside.value!.code}: {inside.value!.stderr}");
+        }
+        final ended = endRow(h, dir: dir, id: row.id);
+        if (ended.error -> err) {
+            return result\Result::<[str]>{ error = err };
+        }
+        did.append("ended running row {row.id}: its head {sha.sub(0, len: 12)} is already in {onto}");
+    }
+    return result\ok::<[str]>(kept);
+}
+
+fun endRow(h: Host, dir: str, id: str) > result\Result::<bool> {
+    final ended = magusRan(h, dir: dir, args: ["job", "exit", id]);
+    if (ended.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    if (ended.value!.code != 0) {
+        return result\fail::<bool>("bootstrap-checkout: magus job exit {id}: exit {ended.value!.code}: {ended.value!.stderr}{ended.value!.stdout}");
+    }
+    return result\ok::<bool>(true);
+}
+
+// settleRows ends the merged running rows, then prunes like `magus job prune`.
+// Merged rows go first, so a prune that waited on them as ancestors passes.
+export fun settleRows(h: Host, dir: str, onto: str, did: mut [str]) > result\Result::<bool> {
+    final kept = endMergedRows(h, dir: dir, onto: onto, did: did);
+    if (kept.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final pruned = magusRan(h, dir: dir, args: ["job", "prune"]);
+    if (pruned.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    if (pruned.value!.code != 0) {
+        return result\fail::<bool>("bootstrap-checkout: magus job prune: exit {pruned.value!.code}: {pruned.value!.stderr}{pruned.value!.stdout}");
+    }
+    final said = lines(pruned.value!.stdout);
+    if (said.len() == 0) {
+        did.append("job prune: no row to end");
+    }
+    foreach (line in said) {
+        did.append("job prune: {line}");
+    }
+    foreach (why in kept.value!) {
+        did.append("left running: {why}");
+    }
+    return result\ok::<bool>(true);
+}
+
+// adopt fast-forwards a clean checkout onto onto, places ./magus, settles rows.
+// It never resets or discards. Each thing done lands in did, even on failure.
+export fun adopt(h: Host, dir: str, onto: str, did: mut [str], restart: bool = false, install: str = "") > result\Result::<bool> {
+    final status = gitRan(h, dir: dir, args: ["status", "--porcelain"]);
+    if (status.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    if (status.value!.code != 0) {
+        return result\fail::<bool>("bootstrap-checkout: git status --porcelain: exit {status.value!.code}: {status.value!.stderr}");
+    }
+    final dirty = dirtyRefusal(dir, porcelain: status.value!.stdout);
+    if (dirty != "") {
+        return result\fail::<bool>("{dirty}\nrefused: --onto moves nothing in a dirty tree");
+    }
+    final target = gitRan(h, dir: dir, args: ["rev-parse", "--verify", "{onto}^\{commit}"]);
+    if (target.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final ontoSha = target.value!.stdout.trim();
+    if (target.value!.code != 0 or ontoSha == "") {
+        return result\fail::<bool>("bootstrap-checkout: {onto} names no commit in {dir} (fetch it first; --onto never fetches)");
+    }
+    final head = gitRan(h, dir: dir, args: ["rev-parse", "HEAD"]);
+    if (head.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final moved = fastForward(h, dir: dir, onto: onto, ontoSha: ontoSha, headSha: head.value!.stdout.trim());
+    if (moved.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    did.append(moved.value!);
+    try {
+        foreach (line in placeBinary(h, dir: dir, restart: restart, install: install)) {
+            did.append(line);
+        }
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "bootstrap-checkout: place ./magus");
+    }
+    return settleRows(h, dir: dir, onto: ontoSha, did: did);
+}
+
+// fastForward refuses unless ontoSha descends from HEAD: it never discards.
+fun fastForward(h: Host, dir: str, onto: str, ontoSha: str, headSha: str) > result\Result::<str> {
+    if (headSha == ontoSha) {
+        return result\ok::<str>("already at {onto} ({ontoSha.sub(0, len: 12)})");
+    }
+    final ancestor = gitRan(h, dir: dir, args: ["merge-base", "--is-ancestor", "HEAD", ontoSha]);
+    if (ancestor.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    if (ancestor.value!.code != 0) {
+        return result\fail::<str>("bootstrap-checkout: {onto} is not a fast-forward of {dir}'s HEAD {headSha.sub(0, len: 12)}: refused, nothing was reset or discarded");
+    }
+    final moved = gitRan(h, dir: dir, args: ["merge", "--ff-only", ontoSha]);
+    if (moved.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    if (moved.value!.code != 0) {
+        return result\fail::<str>("bootstrap-checkout: git merge --ff-only {onto}: exit {moved.value!.code}: {moved.value!.stderr}{moved.value!.stdout}");
+    }
+    return result\ok::<str>("fast-forwarded {dir} from {headSha.sub(0, len: 12)} to {onto} ({ontoSha.sub(0, len: 12)})");
+}
+
 export fun liveHost() > Host {
     return Host{
         git = fun (dir: str, args: [str]) > Ran !> any {
@@ -560,7 +761,7 @@ fun build(dir: str, recovery: bool = false) > str !> any {
 }
 
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--help", "--here", "--restart", "--gate-ready", "--recover"], valued: ["--checkout", "--install"]);
+    final parsed = flags\parse(args, switches: ["--help", "--here", "--restart", "--gate-ready", "--recover"], valued: ["--checkout", "--install", "--onto"]);
     if (parsed.values["--help"] != null) {
         std\print(HELP);
         return;
@@ -577,6 +778,21 @@ export fun main(args: [str]) > void !> any {
     final dir = if (here) vcs\root() else checkout;
     final restart = parsed.values["--restart"] != null;
     final h = liveHost();
+    final onto = parsed.values["--onto"] ?? "";
+    if (onto != "") {
+        if (parsed.values["--recover"] != null or parsed.values["--gate-ready"] != null) {
+            throw "bootstrap-checkout: --onto cannot combine with --recover or --gate-ready";
+        }
+        final did = mut [<str>];
+        final adopted = adopt(h, dir: dir, onto: onto, did: did, restart: restart, install: parsed.values["--install"] ?? "");
+        foreach (line in did) {
+            std\print(line);
+        }
+        if (adopted.error -> err) {
+            throw err.message;
+        }
+        return;
+    }
     if (parsed.values["--recover"] != null) {
         if (restart or parsed.values["--gate-ready"] != null or parsed.values["--install"] != null) {
             throw "bootstrap-checkout: --recover cannot combine with --restart, --gate-ready or --install";
@@ -605,7 +821,7 @@ fun stubHost(answers: {str: Ran}, stamps: {str: str}, calls: mut [str]) > Host {
         git = fun (dir: str, args: [str]) > Ran !> any {
             final line = "git {args.join(" ")}";
             calls.append(line);
-            return answers[line] ?? Ran{};
+            return answers["{dir}: {line}"] ?? answers[line] ?? Ran{};
         },
         magus = fun (dir: str, args: [str]) > Ran !> any {
             final line = "magus {args.join(" ")}";
@@ -1022,4 +1238,112 @@ test "a current binary with no dependencies still installs every harness" {
         "magus version -o json": Ran{stdout = `{"commit":"abc123","version":"v0.5.0"}`}}, stamps: {}, calls: calls);
     _ = placeBinary(h, dir: "/c", install: "none");
     assert\equal(calls.filter(fun (index: int, line: str) > bool => line == "magus buzz hack/dev/bootstrap-harnesses.buzz").len(), want: 1, message: "exactly one complete installation");
+}
+
+final ROWS = `{"jobs":[{"id":"merged-work","state":"running","checkout_root":"/r","worktree":{"base":"b0"}},{"id":"done","state":"exited","checkout_root":"/x","worktree":{"base":"b0"}}]}`;
+
+fun adoptOf(answers: {str: Ran}, calls: mut [str], did: mut [str]) > result\Result::<bool> {
+    final h = stubHost(answers, stamps: {}, calls: calls);
+    return adopt(h, dir: "/c", onto: "feat", did: did, install: "none");
+}
+
+test "adopt refuses a dirty tree and moves nothing" {
+    final calls = mut [<str>];
+    final did = mut [<str>];
+    final res = adoptOf({"git status --porcelain": Ran{ stdout = " M a.go\n" }}, calls: calls, did: did);
+    assert\isTrue(res.error != null, message: "refused");
+    assert\isTrue(res.error!.message.indexOf("uncommitted change") != null, message: "names the reason");
+    assert\equal(calls.indexOf("git merge --ff-only bbb"), want: null, message: "no move");
+    assert\equal(did.len(), want: 0, message: "nothing done");
+}
+
+test "adopt refuses a move that is not a fast-forward and resets nothing" {
+    final calls = mut [<str>];
+    final did = mut [<str>];
+    final res = adoptOf({
+        "git rev-parse --verify feat^\{commit}": Ran{ stdout = "bbb\n" },
+        "git rev-parse HEAD": Ran{ stdout = "aaa\n" },
+        "git merge-base --is-ancestor HEAD bbb": Ran{ code = 1 },
+    }, calls: calls, did: did);
+    assert\isTrue(res.error != null, message: "refused");
+    assert\isTrue(res.error!.message.indexOf("not a fast-forward") != null, message: "names the reason");
+    assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("git merge --ff-only") or c.startsWith("git reset")).len(), want: 0, message: "no move");
+    assert\equal(calls.indexOf("build /c"), want: null, message: "no build");
+}
+
+test "adopt fast-forwards, places the binary, installs, then settles rows" {
+    final calls = mut [<str>];
+    final did = mut [<str>];
+    final res = adoptOf({
+        "git rev-parse --verify feat^\{commit}": Ran{ stdout = "bbbbbbbbbbbbbbbb\n" },
+        "git rev-parse HEAD": Ran{ stdout = "aaaaaaaaaaaaaaaa\n" },
+        "magus ls jobs -o json": Ran{ stdout = `{"jobs":[]}` },
+        "magus job prune": Ran{ stdout = "ended 2 job(s)\n" },
+    }, calls: calls, did: did);
+    assert\isTrue(res.error == null, message: "adopted");
+    assert\equal(did[0], want: "fast-forwarded /c from aaaaaaaaaaaa to feat (bbbbbbbbbbbb)", message: "moved");
+    assert\equal(did[did.len() - 1], want: "job prune: ended 2 job(s)", message: "pruned last");
+    assert\equal(calls.indexOf("git merge --ff-only bbbbbbbbbbbbbbbb") != null, want: true, message: "ff-only");
+    assert\equal(calls.indexOf("build /c") != null, want: true, message: "binary placed");
+    assert\equal(calls.indexOf("magus buzz hack/dev/bootstrap-harnesses.buzz") != null, want: true, message: "harnesses");
+}
+
+test "adopt at the target moves nothing and says so" {
+    final calls = mut [<str>];
+    final did = mut [<str>];
+    _ = adoptOf({
+        "git rev-parse --verify feat^\{commit}": Ran{ stdout = "bbbbbbbbbbbbbbbb\n" },
+        "git rev-parse HEAD": Ran{ stdout = "bbbbbbbbbbbbbbbb\n" },
+    }, calls: calls, did: did);
+    assert\equal(did[0], want: "already at feat (bbbbbbbbbbbb)", message: "said");
+    assert\equal(calls.indexOf("git merge --ff-only bbbbbbbbbbbbbbbb"), want: null, message: "no move");
+}
+
+test "a running row whose head is already in the target is ended" {
+    final calls = mut [<str>];
+    final did = mut [<str>];
+    final h = stubHost({
+        "magus ls jobs -o json": Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": Ran{ stdout = "h1h1h1h1h1h1h1h1\n" },
+    }, stamps: {}, calls: calls);
+    final kept = endMergedRows(h, dir: "/c", onto: "bbb", did: did);
+    assert\isTrue(kept.error == null, message: "settled");
+    assert\equal(kept.value!.len(), want: 0, message: "none left");
+    assert\equal(did, want: ["ended running row merged-work: its head h1h1h1h1h1h1 is already in bbb"], message: "said");
+    assert\equal(calls.indexOf("magus job exit merged-work") != null, want: true, message: "ended");
+    assert\equal(calls.indexOf("magus job exit done"), want: null, message: "exited rows are the prune's");
+}
+
+test "a running row not yet in the target, at its base, or unreadable stays running" {
+    final calls = mut [<str>];
+    final did = mut [<str>];
+    final notYet = stubHost({
+        "magus ls jobs -o json": Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": Ran{ stdout = "h1\n" },
+        "/r: git merge-base --is-ancestor h1 bbb": Ran{ code = 1 },
+    }, stamps: {}, calls: calls);
+    assert\equal(endMergedRows(notYet, dir: "/c", onto: "bbb", did: did).value!, want: ["merged-work (its head is not in the target yet)"], message: "not yet");
+    final atBase = stubHost({
+        "magus ls jobs -o json": Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": Ran{ stdout = "b0\n" },
+    }, stamps: {}, calls: calls);
+    assert\equal(endMergedRows(atBase, dir: "/c", onto: "bbb", did: did).value!, want: ["merged-work (it has committed nothing yet)"], message: "at base");
+    final gone = stubHost({
+        "magus ls jobs -o json": Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": Ran{ code = 128, stderr = "not a git repository" },
+    }, stamps: {}, calls: calls);
+    assert\equal(endMergedRows(gone, dir: "/c", onto: "bbb", did: did).value!, want: ["merged-work (its checkout /r cannot be read)"], message: "unreadable");
+    assert\equal(calls.indexOf("magus job exit merged-work"), want: null, message: "none ended");
+}
+
+test "a row that will not end fails loudly" {
+    final calls = mut [<str>];
+    final did = mut [<str>];
+    final h = stubHost({
+        "magus ls jobs -o json": Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": Ran{ stdout = "h1\n" },
+        "magus job exit merged-work": Ran{ code = 1, stderr = "holds uncommitted work" },
+    }, stamps: {}, calls: calls);
+    final res = endMergedRows(h, dir: "/c", onto: "bbb", did: did);
+    assert\isTrue(res.error != null and res.error!.message.indexOf("holds uncommitted work") != null, message: "named");
 }
