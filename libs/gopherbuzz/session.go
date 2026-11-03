@@ -1748,7 +1748,9 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 				// defines its objects and enums and redefines none of the native
 				// methods. The module value in hand is untouched, verified by calling
 				// a native method after this runs.
-				s.declareObjectTypes(boundName, src, prog)
+				if err := s.declareObjectTypes(boundName, resolvePath, src, prog, v); err != nil {
+					return ImportNative, err
+				}
 			}
 		}
 		if len(imp.Only) > 0 {
@@ -2160,33 +2162,14 @@ func (s *Session) declareEnumValues(mod vmpackage.Value, prog *ast.Program) {
 // of them able to build it: `magus/spell` spells write `Command{...}` freely,
 // while `http\HttpRetry{...}` threw.
 //
-// prog is src as collectImportedModule parsed it. Nothing is emitted for a source
-// with no exported object, which is most of them, so the common import runs nothing.
-func (s *Session) declareObjectTypes(boundName, src string, prog *ast.Program) {
-	// Only a source that is PURELY declarations may run. An exported function with
-	// a body is real code, and executing it flat-merges the name into the importing
-	// scope, which for a magusfile means magus reads it as a TARGET. Buzz's own
-	// io.buzz is exactly this shape (an `export object File` beside a real
-	// `export fun runFile`), and running it made every magusfile fail to load with
-	// MGS1008: target "runFile" must receive a magus\Context.
-	//
-	// An `extern` is safe by construction: it emits no code, which is what the
-	// generated declaration files are made of.
-	hasObject := false
-	for _, stmt := range prog.Stmts {
-		switch d := stmt.(type) {
-		case *ast.ObjectDecl:
-			if d.IsExported {
-				hasObject = true
-			}
-		case *ast.FunDecl:
-			if d.IsExported && !d.IsExtern {
-				return
-			}
-		}
+// prog is src as collectImportedModule parsed it; mod is the native value.
+// A source with no exported object runs nothing.
+func (s *Session) declareObjectTypes(boundName, resolvePath, src string, prog *ast.Program, mod vmpackage.Value) error {
+	if !declaresOnlyObjects(prog) {
+		return nil
 	}
-	if !hasObject {
-		return
+	if declaresObjectMethods(prog) {
+		return s.execObjectMethods(boundName, resolvePath, src, prog, mod)
 	}
 	// A FAILURE HERE IS NOT AN ERROR, and that is deliberate rather than lax.
 	//
@@ -2204,6 +2187,72 @@ func (s *Session) declareObjectTypes(boundName, src string, prog *ast.Program) {
 	if _, err := s.execImport(s.ctx, src); err == nil {
 		s.bindQualifiedTypes(boundName, prog)
 	}
+	return nil
+}
+
+// declaresOnlyObjects reports whether prog exports an object and no function
+// with a body. Running an exported body flat-merges it into the importer, where
+// a magusfile reads it as a target: io.buzz exports runFile beside File.
+func declaresOnlyObjects(prog *ast.Program) bool {
+	hasObject := false
+	for _, stmt := range prog.Stmts {
+		switch d := stmt.(type) {
+		case *ast.ObjectDecl:
+			hasObject = hasObject || d.IsExported
+		case *ast.FunDecl:
+			if d.IsExported && !d.IsExtern {
+				return false
+			}
+		}
+	}
+	return hasObject
+}
+
+// declaresObjectMethods reports whether an exported object in prog has a
+// method with a body, which only an executed source defines.
+func declaresObjectMethods(prog *ast.Program) bool {
+	for _, stmt := range prog.Stmts {
+		d, ok := stmt.(*ast.ObjectDecl)
+		if !ok || !d.IsExported {
+			continue
+		}
+		if slices.ContainsFunc(d.Methods, func(m *ast.FunDecl) bool { return !m.IsExtern }) {
+			return true
+		}
+	}
+	return false
+}
+
+// execObjectMethods runs a source whose objects carry methods. Its private
+// externs resolve to mod's members, as a module's own externs do upstream.
+// A failure is a load error, since every method would be undefined.
+func (s *Session) execObjectMethods(boundName, resolvePath, src string, prog *ast.Program, mod vmpackage.Value) error {
+	for _, stmt := range prog.Stmts {
+		d, ok := stmt.(*ast.FunDecl)
+		if !ok || !d.IsExtern || d.IsExported {
+			continue
+		}
+		member, has := mod.MapGet(d.Name)
+		if !has {
+			return bzz.Errorf(UnresolvedImport, "buzz: module %s: extern %q has no native member", resolvePath, d.Name)
+		}
+		s.bindPrivateExtern(d.Name, member)
+	}
+	if _, err := s.execImport(s.ctx, src); err != nil {
+		return bzz.Errorf(UnresolvedImport, "buzz: module %s: its object methods cannot load: %v", resolvePath, err)
+	}
+	s.bindQualifiedTypes(boundName, prog)
+	return nil
+}
+
+// bindPrivateExtern binds a module's private extern by its bare name, hidden
+// from the importer's checker like any other import-private name.
+func (s *Session) bindPrivateExtern(name string, member vmpackage.Value) {
+	s.env.Define(name, member)
+	if s.importPrivate == nil {
+		s.importPrivate = map[string]bool{}
+	}
+	s.importPrivate[name] = true
 }
 
 // bindQualifiedTypes binds each object prog exports under QualifiedTypeKey too: two

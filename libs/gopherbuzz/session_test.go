@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestImport_AliasKeepsAnExportThatShadowsTheImporter covers an aliased module
@@ -3003,4 +3004,85 @@ export extern fun exec(c: str) > ExecResult;`,
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `cannot assign str to int variable "_r"`)
 	})
+}
+
+// DeclExternsSuite covers upstream's Socket pattern on a native module: an
+// object method calls a private top-level extern of its own module.
+type DeclExternsSuite struct {
+	suite.Suite
+	ctx  context.Context
+	sess *Session
+}
+
+func TestDeclExterns(t *testing.T) {
+	suite.Run(t, new(DeclExternsSuite))
+}
+
+const boxDecls = `
+export object Box {
+    w: int = 0,
+    h: int = 1,
+
+    fun area() > int {
+        return Box__area(this);
+    }
+}
+
+extern fun Box__area(recv: Box) > int;
+`
+
+func (s *DeclExternsSuite) SetupTest() {
+	s.ctx = context.Background()
+	s.sess = NewSession(s.ctx, WithEmbedded())
+	mod := vm.NewMap()
+	mod.MapSet("Box__area", vm.DirectValue("Box__area", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		view, _ := args[0].MapView()
+		w, _ := view.MapGet("w")
+		h, _ := view.MapGet("h")
+		return vm.IntValue(w.AsInt() * h.AsInt()), nil
+	}))
+	s.sess.SetNativeModule("demo/shape", mod)
+}
+
+func (s *DeclExternsSuite) TearDownTest() {
+	_ = s.sess.Close()
+}
+
+func (s *DeclExternsSuite) TestAMethodCallsItsModulesPrivateExtern() {
+	s.sess.SetModuleDecls("demo/shape", boxDecls)
+	s.Require().NoError(s.sess.Exec(s.ctx, `
+import "demo/shape";
+final area = shape\Box{ w = 2, h = 3 }.area();
+`))
+	s.Equal(int64(6), s.sess.Globals()["area"].AsInt())
+}
+
+func (s *DeclExternsSuite) TestThePrivateExternStaysHiddenFromTheImporter() {
+	s.sess.SetModuleDecls("demo/shape", boxDecls)
+	err := s.sess.Exec(s.ctx, `
+import "demo/shape";
+final area = Box__area(shape\Box{});
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "Box__area")
+}
+
+func (s *DeclExternsSuite) TestMethodsThatCannotLoadAreALoadErrorNamingTheModule() {
+	s.sess.SetModuleDecls("demo/shape", `
+export object Box {
+    w: int = 0,
+
+    fun area() > int {
+        return Box__area(this);
+    }
+}
+
+extern fun Box__area(recv: Box) > Missing;
+`)
+	err := s.sess.Exec(s.ctx, `
+import "demo/shape";
+final b = shape\Box{};
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "demo/shape")
 }
