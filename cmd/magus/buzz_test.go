@@ -178,7 +178,8 @@ func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 
 const (
 	buzzVanillaScript = "import \"std\";\n\nfun main(args: [str]) > void {\n    std\\print(\"hi\");\n}\n"
-	buzzMemberScript  = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final p = magus\\describe.project();\n    std\\print(\"{p.projects.len()}\");\n}\n"
+	buzzUnmergedScript = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final r = magus\\workspace().unmerged();\n    std\\print(\"rows={r.rows.len()}\");\n}\n"
+	buzzMemberScript  ="import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final p = magus\\describe.project();\n    std\\print(\"{p.projects.len()}\");\n}\n"
 )
 
 // countWorkspaceOpens swaps buzzLoadWorkspace for open, counting its calls.
@@ -237,6 +238,29 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 
 	require.NoError(t, runErr)
 	assert.Equal(t, "1\n", stdout)
+	assert.Equal(t, 1, *opens)
+}
+
+// The stop policy reads magus\workspace().unmerged() from a hook script.
+func TestBuzzCmd_WorkspaceHandleReadsTheScriptsWorkspace(t *testing.T) {
+	root, script := buzzLazyWorkspace(t, buzzUnmergedScript)
+	var m *magus.Magus
+	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
+		var err error
+		m, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		return m, err
+	})
+	t.Cleanup(func() {
+		if m != nil {
+			_ = m.Close()
+		}
+	})
+
+	var runErr error
+	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
+
+	require.NoError(t, runErr)
+	assert.Equal(t, "rows=0\n", stdout)
 	assert.Equal(t, 1, *opens)
 }
 
