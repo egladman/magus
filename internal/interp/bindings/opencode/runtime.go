@@ -23,9 +23,8 @@ import (
 
 const Version = 1
 
-// Declarations is the opencode module the runtime session provides; a checker that
-// loads plugin.buzz outside that session declares it the same way.
-const Declarations = `export extern fun judge(event: {str: str}, mode: str, payload: str) > {str: str};`
+// declarations is the opencode module the runtime session provides.
+const declarations =`export extern fun judge(event: {str: str}, mode: str, payload: str) > {str: str};`
 
 // Plugin is the Buzz program that routes OpenCode events in the wasm runtime.
 //
@@ -114,13 +113,11 @@ func Open(ctx context.Context, source string, invoke Invoke) (*Runtime, error) {
 	}
 }
 
-func (r *Runtime) serve(ctx context.Context, source string, invoke Invoke, ready chan<- error) {
-	defer close(r.done)
-	sess := buzz.NewSession(ctx, buzz.WithoutFileImports(), buzz.WithoutFFI())
-	defer sess.Close()
-	module := buzz.Module{Name: "opencode", Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.DeclareModuleTypes("opencode", Declarations)
-		s.SetModuleDecls("opencode", Declarations)
+// module binds the opencode module plugin.buzz imports.
+func module(invoke Invoke) buzz.Module {
+	return buzz.Module{Name: "opencode", Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
+		s.DeclareModuleTypes("opencode", declarations)
+		s.SetModuleDecls("opencode", declarations)
 		mod := vm.NewMap()
 		mod.MapSet("judge", vm.DirectValue("opencode.judge", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
 			if len(args) != 3 {
@@ -131,44 +128,69 @@ func (r *Runtime) serve(ctx context.Context, source string, invoke Invoke, ready
 		s.SetNativeModule("opencode", mod)
 		return nil
 	}}
-	if err := sess.Provide(buzz.ModuleEnv{Ctx: ctx}, module); err != nil {
-		ready <- err
-		return
+}
+
+// newSession is the session plugin.buzz runs in; the caller owns Close.
+func newSession(ctx context.Context, invoke Invoke) (*buzz.Session, error) {
+	sess := buzz.NewSession(ctx, buzz.WithoutFileImports(), buzz.WithoutFFI())
+	if err := sess.Provide(buzz.ModuleEnv{Ctx: ctx}, module(invoke)); err != nil {
+		_ = sess.Close()
+		return nil, err
 	}
+	return sess, nil
+}
+
+func loadDispatch(ctx context.Context, sess *buzz.Session, source string) (vm.Value, error) {
 	if err := sess.Exec(ctx, source); err != nil {
-		ready <- fmt.Errorf("opencode: load plugin.buzz: %w", err)
-		return
+		return vm.Null, fmt.Errorf("opencode: load plugin.buzz: %w", err)
 	}
 	dispatch, ok := sess.Exports()["dispatch"]
 	if !ok || !dispatch.IsFun() {
-		ready <- errors.New("opencode: plugin.buzz must export dispatch")
+		return vm.Null, errors.New("opencode: plugin.buzz must export dispatch")
+	}
+	return dispatch, nil
+}
+
+func (r *Runtime) serve(ctx context.Context, source string, invoke Invoke, ready chan<- error) {
+	defer close(r.done)
+	sess, err := newSession(ctx, invoke)
+	if err != nil {
+		ready <- err
 		return
 	}
-	ready <- nil
+	defer sess.Close()
+	dispatch, err := loadDispatch(ctx, sess, source)
+	ready <- err
+	if err != nil {
+		return
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case req := <-r.requests:
-			callCtx, cancel := context.WithCancel(req.ctx)
-			stop := context.AfterFunc(ctx, cancel)
-			var result Result
-			var err error
-			if err = callCtx.Err(); err == nil {
-				var val vm.Value
-				val, err = sess.CallValue(callCtx, dispatch, []vm.Value{eventValue(req.event)})
-				if callCtx.Err() != nil {
-					err = callCtx.Err()
-				}
-				if err == nil {
-					result, err = decodeResult(val)
-				}
-			}
-			stop()
-			cancel()
-			req.reply <- response{result, err}
+			req.reply <- call(ctx, sess, dispatch, req)
 		}
 	}
+}
+
+// call runs one dispatch until the request or the runtime ends.
+func call(lifetime context.Context, sess *buzz.Session, dispatch vm.Value, req request) response {
+	callCtx, cancel := context.WithCancel(req.ctx)
+	defer cancel()
+	defer context.AfterFunc(lifetime, cancel)()
+	if err := callCtx.Err(); err != nil {
+		return response{err: err}
+	}
+	val, err := sess.CallValue(callCtx, dispatch, []vm.Value{eventValue(req.event)})
+	if callCtx.Err() != nil {
+		return response{err: callCtx.Err()}
+	}
+	if err != nil {
+		return response{err: err}
+	}
+	result, err := decodeResult(val)
+	return response{result, err}
 }
 
 func (r *Runtime) Dispatch(ctx context.Context, event Event) (Result, error) {
@@ -279,57 +301,86 @@ func judge(ctx context.Context, invoke Invoke, event vm.Value, mode, payload str
 // Judge preserves the native guard's verdict for lifecycle events whose result
 // is delivered through an SDK prompt rather than a tool rejection.
 func Judge(ctx context.Context, invoke Invoke, invocation Invocation) Verdict {
-	unjudged := func(why string) Verdict { return Verdict{Decision: "unjudged", Why: why} }
-	args, payload := invocation.Args, invocation.Input
-	capture, err := invoke(ctx, Invocation{Args: args, Input: payload})
+	capture, err := invokeWithLegacyRetry(ctx, invoke, invocation)
 	if err != nil {
-		return unjudged(err.Error())
+		return unjudgedVerdict(err.Error())
 	}
-	if strings.TrimSpace(capture.Stdout) == "" {
-		legacy := make([]string, 0, len(args))
-		for i := 0; i < len(args); i++ {
-			switch args[i] {
-			case "--agent-name", "--session", "--agent":
-				i++
-			case "--renders-ask":
-			default:
-				legacy = append(legacy, args[i])
-			}
-		}
-		capture, err = invoke(ctx, Invocation{Args: legacy, Input: payload})
-		if err != nil {
-			return unjudged(err.Error())
+	envelope, why := verdictEnvelope(capture.Stdout)
+	if why != "" {
+		return unjudgedVerdict(why)
+	}
+	return decideVerdict(envelope)
+}
+
+func unjudgedVerdict(why string) Verdict { return Verdict{Decision: "unjudged", Why: why} }
+
+// invokeWithLegacyRetry drops the newer flags when magus prints nothing.
+func invokeWithLegacyRetry(ctx context.Context, invoke Invoke, invocation Invocation) (Capture, error) {
+	capture, err := invoke(ctx, invocation)
+	if err != nil || strings.TrimSpace(capture.Stdout) != "" {
+		return capture, err
+	}
+	return invoke(ctx, Invocation{Args: legacyArgs(invocation.Args), Input: invocation.Input})
+}
+
+func legacyArgs(args []string) []string {
+	legacy := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--agent-name", "--session", "--agent":
+			i++
+		case "--renders-ask":
+		default:
+			legacy = append(legacy, args[i])
 		}
 	}
+	return legacy
+}
+
+// verdictEnvelope decodes stdout, or says why it is not a verdict.
+func verdictEnvelope(stdout string) (map[string]json.RawMessage, string) {
 	var envelope map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(capture.Stdout), &envelope); err != nil {
-		if json.Valid([]byte(capture.Stdout)) {
-			return unjudged("magus answered an unrecognized verdict shape")
+	if err := json.Unmarshal([]byte(stdout), &envelope); err != nil {
+		if json.Valid([]byte(stdout)) {
+			return nil, "magus answered an unrecognized verdict shape"
 		}
-		return unjudged("magus answered something that is not JSON")
+		return nil, "magus answered something that is not JSON"
 	}
+	return envelope, schemaMismatch(envelope)
+}
+
+func schemaMismatch(envelope map[string]json.RawMessage) string {
 	var schema float64
-	if envelope == nil || json.Unmarshal(envelope["schema_version"], &schema) != nil || string(envelope["schema_version"]) == "null" {
-		return unjudged("magus answered an unrecognized verdict shape")
+	raw := envelope["schema_version"]
+	if envelope == nil || json.Unmarshal(raw, &schema) != nil || string(raw) == "null" {
+		return "magus answered an unrecognized verdict shape"
 	}
 	if schema != 1 {
-		return unjudged(fmt.Sprintf("magus answered verdict schema %v, not 1; update this plugin from the magus docs", schema))
+		return fmt.Sprintf("magus answered verdict schema %v, not 1; update this plugin from the magus docs", schema)
 	}
+	return ""
+}
+
+func decideVerdict(envelope map[string]json.RawMessage) Verdict {
 	var decision string
 	_ = json.Unmarshal(envelope["decision"], &decision)
-	reason, advice := stringMember(envelope, "reason"), stringMember(envelope, "context")
+	verdict := Verdict{SchemaVersion: 1, Decision: decision}
+	ok := false
 	switch decision {
 	case "pass":
-		return Verdict{SchemaVersion: 1, Decision: decision}
+		return verdict
 	case "deny", "ask":
-		if reason != nil {
-			return Verdict{SchemaVersion: 1, Decision: decision, Reason: *reason}
-		}
+		verdict.Reason, ok = stringMember(envelope, "reason")
 	case "advise":
-		if advice != nil {
-			return Verdict{SchemaVersion: 1, Decision: decision, Context: *advice}
-		}
+		verdict.Context, ok = stringMember(envelope, "context")
 	}
+	if ok {
+		return verdict
+	}
+	return unknownDecision(envelope)
+}
+
+func unknownDecision(envelope map[string]json.RawMessage) Verdict {
 	label := "undefined"
 	if raw, ok := envelope["decision"]; ok {
 		var decoded any
@@ -341,16 +392,16 @@ func Judge(ctx context.Context, invoke Invoke, invocation Invocation) Verdict {
 	return Verdict{SchemaVersion: 1, Decision: "deny", Reason: "magus guard returned the decision " + label + ", which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs."}
 }
 
-// stringMember is nil unless key holds a JSON string, so a verdict missing its
-// reason or context is refused rather than read as empty.
-func stringMember(envelope map[string]json.RawMessage, key string) *string {
+// stringMember is false unless key holds a JSON string, so a verdict
+// missing its reason or context is refused rather than read as empty.
+func stringMember(envelope map[string]json.RawMessage, key string) (string, bool) {
 	raw, ok := envelope[key]
 	if !ok || string(raw) == "null" {
-		return nil
+		return "", false
 	}
 	var value string
 	if json.Unmarshal(raw, &value) != nil {
-		return nil
+		return "", false
 	}
-	return &value
+	return value, true
 }

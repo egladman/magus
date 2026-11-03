@@ -27,6 +27,14 @@ func (s *runtimeSuite) open(invoke Invoke) *Runtime {
 	s.T().Cleanup(func() { s.NoError(runtime.Close()) })
 	return runtime
 }
+// The workspace Buzz audit leaves plugin.buzz to this check: only this
+// session declares the opencode module it imports.
+func (s *runtimeSuite) TestPluginHasNoDiagnostics() {
+	sess, err := newSession(context.Background(), func(context.Context, Invocation) (Capture, error) { return Capture{}, nil })
+	s.Require().NoError(err)
+	defer func() { s.NoError(sess.Close()) }()
+	s.Empty(sess.Diagnostics(Plugin))
+}
 func (s *runtimeSuite) nativeVerdict(body string, expected Result, permission string) {
 	runtime := s.open(func(context.Context, Invocation) (Capture, error) { return Capture{Stdout: body}, nil })
 	event := Event{Kind: "before", Tool: "bash", Command: "git status", SessionID: "s", CallID: "c"}

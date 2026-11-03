@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/interp/bindings/opencode"
 	"github.com/egladman/magus/internal/interp/engine"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/sandbox"
@@ -615,6 +614,9 @@ var auditBundled = []string{
 	// own session, whose host module this package cannot build; that package's tests
 	// load github.buzz through it.
 	filepath.Join("internal", "queue", "provider"),
+	// plugin.buzz imports a module only the opencode runtime session
+	// provides; that package's tests check it there.
+	filepath.Join("internal", "interp", "bindings", "opencode"),
 }
 
 type bindingsSuite struct {
@@ -830,10 +832,6 @@ func auditCheck(t *testing.T, root string, c auditFile) []buzz.Diagnostic {
 		RegisterSpellDecls(sess)
 		RegisterMagusNamespace(ctx, sess)
 		DeclareMagusTypes(sess)
-	}
-	if strings.Contains(c.src, `import "opencode"`) {
-		sess.DeclareModuleTypes("opencode", opencode.Declarations)
-		sess.SetModuleDecls("opencode", opencode.Declarations)
 	}
 	defer func() { _ = sess.Close() }()
 
