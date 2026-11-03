@@ -81,20 +81,19 @@ var typedMagusMembers = map[string]string{
 	"describe workspaces": "describe.workspace",
 	"doctor":              "doctor",
 	"clean":               "clean",
-	"diff":                "diff",
-	"query":               "query",
+	"diff":                "change().diff",
+	"query":               "graph().query",
 	"query output":        "output",
-	"explain":             "explain",
-	"path":                "path",
-	"refs":                "refs",
-	"graph stats":         "stats",
-	"ls jobs":             "job.list",
+	"explain":             "graph().explain",
+	"path":                "graph().path",
+	"refs":                "graph().refs",
+	"graph stats":         "graph().stats",
+	"ls jobs":             "workspace().jobs",
 	"ls targets":          "describe.graph",
-	"job fork":            "job.put",
-	"job exit":            "job.exit",
-	"job wait":            "job.wait",
-	"vcs checkpoint":      "vcs.checkpoint",
-	"session attention":   "attention",
+	"job fork":            "workspace().putJob",
+	"job exit":            "job(id).exit",
+	"job wait":            "job(id).wait",
+	"session attention":   "workspace().attention",
 }
 
 // typedMagusMember is the magus\ member that answers `magus <args>`, or "" when none does.
@@ -132,9 +131,9 @@ func typedMagusMember(args []string) string {
 			return ""
 		}
 		if slices.Contains(rest, "--impact") {
-			return "impact"
+			return "change().impact"
 		}
-		return "affected"
+		return "change().affected"
 	}
 	return typedMagusMembers[sub]
 }

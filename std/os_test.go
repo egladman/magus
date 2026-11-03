@@ -812,15 +812,15 @@ func TestTypedMagusMember(t *testing.T) {
 		{[]string{"describe", "targets"}, "describe.target"},
 		{[]string{"describe", "target", "go-build", "-o", "json"}, "describe.evaluatedTarget"},
 		{[]string{"query", "output", "ref1"}, "output"},
-		{[]string{"query", "kind=spell"}, "query"},
+		{[]string{"query", "kind=spell"}, "graph().query"},
 		{[]string{"ls"}, "describe.project"},
 		{[]string{"ls", "-o", "json"}, "describe.project"},
 		{[]string{"ls", "targets"}, "describe.graph"},
-		{[]string{"ls", "jobs", "-o", "json"}, "job.list"},
-		{[]string{"affected", "--impact"}, "impact"},
-		{[]string{"affected", "--base", "main"}, "affected"},
-		{[]string{"vcs", "checkpoint", "-o", "name"}, "vcs.checkpoint"},
-		{[]string{"job", "fork", "--stdin"}, "job.put"},
+		{[]string{"ls", "jobs", "-o", "json"}, "workspace().jobs"},
+		{[]string{"affected", "--impact"}, "change().impact"},
+		{[]string{"affected", "--base", "main"}, "change().affected"},
+		{[]string{"vcs", "checkpoint", "-o", "name"}, ""},
+		{[]string{"job", "fork", "--stdin"}, "workspace().putJob"},
 		// No member answers these, so proc.exec is the right call and a warning is noise.
 		{[]string{"job", "exec", "tooling-gaps"}, ""},
 		{[]string{"describe", "job", "x"}, ""},
@@ -849,7 +849,23 @@ func TestTypedMagusMembersAreDeclared(t *testing.T) {
 			declared[fmt.Sprintf("%s.%s", ns.Name, CamelCase(m.Name))] = true
 		}
 	}
-	named := []string{"describe.project", "describe.target", "describe.evaluatedTarget", "affected", "impact"}
+	for _, root := range Magus.Methods {
+		for _, ret := range root.Returns {
+			for _, obj := range Magus.Objects {
+				if obj.Name != ret.Object {
+					continue
+				}
+				for _, method := range obj.Methods {
+					ctor := CamelCase(root.Name) + "()"
+					if root.Name == "job" {
+						ctor = "job(id)"
+					}
+					declared[ctor+"."+BuzzMethodName(method)] = true
+				}
+			}
+		}
+	}
+	named := []string{"describe.project", "describe.target", "describe.evaluatedTarget", "change().affected", "change().impact"}
 	for _, member := range typedMagusMembers {
 		named = append(named, member)
 	}
