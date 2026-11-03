@@ -2570,7 +2570,7 @@ func (s *forkFactsReportSuite) TestAConfigThatWillNotLoadIsNamedInsteadOfAnEmpty
 
 	reportForkFacts(s.T().Context(), store, root)
 
-	s.Contains(s.logged.String(), "the output store could not be located")
+	s.Contains(s.logged.String(), "the output store could not be read")
 	s.NotContains(s.logged.String(), "holds no passed full test")
 }
 
