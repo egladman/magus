@@ -342,6 +342,7 @@ var defaults = map[string]decision{
 	"sleep-poll":            Deny,
 	"spawn-duplicate":       Deny,
 	"spawn-unvalidated":     Deny,
+	"spawn-unisolated-row":  Deny,
 	"spawn-warm-worker":     Deny,
 	spawnAboveParentTier:    Deny,
 	"stale-binary":          Deny,

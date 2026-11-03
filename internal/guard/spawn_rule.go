@@ -245,11 +245,8 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	}
 	row, titled := spawnTitleJob(ctx, at, env.Spawn.Description)
 	if titled {
-		if row.Validated == 0 {
-			return refused(denyRuleSpawnUnvalidated, denySpawnUnvalidated(row)), ""
-		}
-		if d, warm := denyWarmSpawn(ctx, at, facts, row, env.Spawn.Description); warm {
-			return refused(denyRuleSpawnWarmWorker, d), ""
+		if rule, d, denied := denyTitledSpawn(ctx, at, facts, env, row); denied {
+			return refused(rule, d), ""
 		}
 	}
 	if spawnWaitsFires(env.Spawn.Description, env.Value) {
@@ -280,6 +277,43 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 		}
 	}
 	return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}, ""
+}
+
+const denyRuleSpawnUnisolatedRow denyRuleName = "spawn-unisolated-row"
+
+// denyTitledSpawn judges the row a spawn title names.
+func denyTitledSpawn(ctx context.Context, at location, facts hint.Gate, env hookRequest, row types.Job) (denyRuleName, denial, bool) {
+	if row.Validated == 0 {
+		return denyRuleSpawnUnvalidated, denySpawnUnvalidated(row), true
+	}
+	if d, shared := denyUnisolatedRow(env.Spawn.Isolated, row, at.workspace); shared {
+		return denyRuleSpawnUnisolatedRow, d, true
+	}
+	d, warm := denyWarmSpawn(ctx, at, facts, row, env.Spawn.Description)
+	return denyRuleSpawnWarmWorker, d, warm
+}
+
+// denyUnisolatedRow refuses host isolation for a writing row bound to
+// the spawner's own checkout.
+func denyUnisolatedRow(isolated bool, row types.Job, workspace string) (denial, bool) {
+	if !isolated || !rowSharesCheckout(row, workspace) {
+		return denial{}, false
+	}
+	return denial{
+		Say: fmt.Sprintf("job %s writes and has no checkout of its own, so its worker would edit %s even with host isolation: `%s` gives it one.",
+			row.ID, workspace, hint.JobFork.With(row.ID, "--checkout", "<dir>")),
+		Why: "`job exec` binds a row to the checkout it runs in. A row forked from this checkout without --checkout binds here, " +
+			"and the host's worktree isolation cannot move that binding, so the worker writes into this tree beside the spawner and its other workers.",
+	}, true
+}
+
+// rowSharesCheckout is true when a writing row's worker would take the
+// spawner's checkout.
+func rowSharesCheckout(row types.Job, workspace string) bool {
+	if row.ReadOnly {
+		return false
+	}
+	return !row.Worktree.Standing() || row.Worktree.Root == workspace
 }
 
 // spawnIsolated reports whether the child runs outside this checkout: the spawn asked for

@@ -122,6 +122,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocSpawnWaiter},
 	{doc: ruleDocSpawnDuplicate},
 	{doc: ruleDocSpawnUnvalidated},
+	{doc: ruleDocSpawnUnisolatedRow},
 	{doc: ruleDocSpawnWarmWorker},
 	{doc: ruleDocReleaseRequested, advisory: true, enrolled: true},
 	{doc: ruleDocCaptureFilter, advisory: true, enrolled: true},
@@ -979,6 +980,14 @@ var ruleDocSpawnUnplaced = types.RuleDoc{
 	Name:    string(advisorySpawnUnplaced),
 	Catches: "a subagent's first call that no waiting spawn names, which then runs under no lease",
 	Why:     "Advice, not a refusal: the caller may be no worker at all, and spawns wait for their child up to two minutes.",
+}
+
+var ruleDocSpawnUnisolatedRow = types.RuleDoc{
+	Name:    string(denyRuleSpawnUnisolatedRow),
+	Catches: "an isolated spawn for a writing job bound to the spawner's own checkout",
+	Why: "`magus job exec` binds a job to the checkout it runs in, and a job forked from the root's checkout without --checkout binds there. " +
+		"The host's worktree isolation cannot move that binding, so the worker edits the spawner's tree beside its other workers. " +
+		"Read-only jobs, jobs with a checkout of their own and spawns without isolation pass.",
 }
 
 var ruleDocSpawnUnvalidated = types.RuleDoc{
