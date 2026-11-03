@@ -30,7 +30,7 @@ import (
 const wantServerInstructions = `You are connected to a magus workspace.
 magus is a build orchestrator for multi-language monorepos.
 
-The workspace is the client tool: a Buzz program that imports "magus" and calls its members (magus\describe, magus\graph().query, magus\graph().explain, magus\graph().path, magus\graph().refs, magus\graph().stats, magus\where, magus\change().affected, magus\change().impact, magus\run, magus\clean, magus\output, magus\history().hotspots, magus\history().affinity, magus\history().ownership, magus\history().trend, magus\workspace().volatility, magus\doctor, magus\job, magus\vcs). Call magus\describe.module("magus") for the signatures. The tools below are the operations that module does not cover.
+The workspace is the client tool: a Buzz program that imports "magus" and calls its members (magus\describe, magus\graph().query, magus\graph().explain, magus\graph().path, magus\graph().refs, magus\graph().stats, magus\where, magus\change().affected, magus\change().impact, magus\run, magus\clean, magus\output, magus\history().hotspots, magus\history().affinity, magus\history().ownership, magus\history().trend, magus\workspace().volatility, magus\doctor, magus\job, magus\session). Call magus\describe.module("magus") for the signatures. The tools below are the operations that module does not cover.
 
   client                  - run Buzz against the magus client and return its value
   buzz                    - transform JSON with Buzz; no workspace access

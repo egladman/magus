@@ -92,6 +92,18 @@ func TestServerInstructionsNameRealMembers(t *testing.T) {
 	for _, ns := range std.Magus.Namespaces {
 		members[ns.Name] = true
 	}
+	for _, root := range std.Magus.Methods {
+		for _, ret := range root.Returns {
+			for _, object := range std.Magus.Objects {
+				if object.Name != ret.Object {
+					continue
+				}
+				for _, method := range object.Methods {
+					members[std.CamelCase(root.Name)+"()."+std.BuzzMethodName(method)] = true
+				}
+			}
+		}
+	}
 	for _, name := range clientMembers {
 		assert.Truef(t, members[name], "the instructions name magus\\%s, which std.Magus does not declare", name)
 	}
