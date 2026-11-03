@@ -341,18 +341,15 @@ func TestTemplatePartialsEndToEnd(t *testing.T) {
 // in context (the test harness) it is a no-op, so a clean run proves the binding
 // resolves.
 func TestMagusBustCacheReachable(t *testing.T) {
-	dir := t.TempDir()
-	writeMagusfile(t, dir, `
-import "magus";
-import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    magus\workspace().bustCache();
-    fs\writeFile("ran", "ok");
-}
-`)
-	if err := runTargetIn(t, dir, "build"); err != nil {
-		t.Fatalf("magus.bustCache() should be bound and a no-op without a cache: %v", err)
-	}
+	ctx := types.WithWorkspace(t.Context(), &jobNamespaceWorkspace{root: t.TempDir()})
+	sess := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = sess.Close() })
+	RegisterModules(ctx, sess)
+	RegisterMagusNamespace(ctx, sess)
+	require.NoError(t, DeclareMagusTypes(sess))
+	require.NoError(t, sess.Exec(ctx, `import "magus"; fun clearCache() > void !> any { magus\workspace().bustCache(); }`))
+	_, err := sess.CallValue(ctx, sess.GetGlobal("clearCache"), nil)
+	require.NoError(t, err)
 }
 
 // TestCtxlessTargetRejected pins the ctx-form contract: an exported magusfile function
@@ -1547,7 +1544,7 @@ func TestMirrorFieldsMatchEncoder(t *testing.T) {
 	}{
 		{"Tag", bindgen.ObjectVCSTag(types.VCSTag{})},
 		{"Affected", bindgen.ObjectAffectedResult(types.AffectedResult{})},
-		{"Graph", bindgen.ObjectGraphView(types.GraphView{})},
+		{"Deps", bindgen.ObjectGraphView(types.GraphView{})},
 		{"Projects", bindgen.ObjectProjectsOutput(types.ProjectsOutput{})},
 		{"ProjectEntry", bindgen.ObjectProjectEntry(types.ProjectEntry{})},
 		{"Module", bindgen.ObjectModuleEntry(types.ModuleEntry{})},

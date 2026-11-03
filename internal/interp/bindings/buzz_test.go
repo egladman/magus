@@ -387,7 +387,7 @@ func TestMagusAPILocked(t *testing.T) {
 // declares snake_case and the bound API exposes camelCase.
 func TestMagusAPIIsDeclared(t *testing.T) {
 	declared := map[string]bool{}
-	for _, m := range std.Magus.Methods {
+	for _, m := range append(std.Magus.Methods, std.Magus.ObjectExterns()...) {
 		declared[std.BuzzMethodName(m)] = true
 	}
 	for _, namespace := range std.Magus.Namespaces {

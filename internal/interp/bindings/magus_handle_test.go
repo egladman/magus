@@ -29,6 +29,9 @@ func execMagusScript(t *testing.T, ws types.WorkspaceRepository, src string) fun
 	t.Cleanup(func() { _ = sess.Close() })
 	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
+	if err := DeclareMagusTypes(sess); err != nil {
+		t.Fatal(err)
+	}
 	if err := sess.Exec(ctx, src); err != nil {
 		t.Fatal(err)
 	}

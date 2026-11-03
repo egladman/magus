@@ -38,7 +38,7 @@ import "magus";
 
 export fun summary() > str !> any {
     var picked = "";
-    foreach (s in magus\workspace().skills({"form": "full"})) {
+    foreach (s in magus\workspace().skills(magus\SkillsOptions{form = .full})) {
         if (s.source == "local" or s.name == "magus-query") {
             picked = picked + "{s.name} {s.source} {s.form} {s.current}\n";
         }
@@ -47,11 +47,12 @@ export fun summary() > str !> any {
 }
 
 export fun unknown() > void !> any {
-    magus\workspace().skills({"name": "acme-rule"});
+    magus\workspace().skills(magus\SkillsOptions{name = "acme-rule"});
 }
 
 export fun misspelledOption() > void !> any {
-    magus\workspace().skills({"nmae": "acme-rules"});
+    final opts: any = {"nmae": "acme-rules"};
+    magus\workspace().skills(opts);
 }
 `
 
@@ -61,6 +62,9 @@ func skillsSession(t *testing.T, ctx context.Context) *buzz.Session {
 	t.Cleanup(func() { _ = sess.Close() })
 	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
+	if err := DeclareMagusTypes(sess); err != nil {
+		t.Fatal(err)
+	}
 	require.NoError(t, sess.Exec(ctx, skillsScript))
 	return sess
 }
@@ -107,7 +111,7 @@ func TestSkillsThroughBuzzScript(t *testing.T) {
 	assert.ErrorContains(t, err, `no skill named "acme-rule", near matches: acme-rules`)
 
 	_, err = callSkills(t, ctx, sess, "misspelledOption")
-	assert.ErrorContains(t, err, `unknown option "nmae" (want name, form)`)
+	assert.ErrorContains(t, err, `skillsOptions: SkillsOptions has no member "nmae"`)
 }
 
 func TestSkillsNeedsAWorkspace(t *testing.T) {
