@@ -76,8 +76,15 @@ func TestOptionMapsStayStrictThroughBuzzScript(t *testing.T) {
 	require.NoError(t, sess.Exec(ctx, `
 import "magus";
 
-export fun trailTypo() > void !> any { magus\session({"sinse": "6h"}).trail(); }
-export fun trailNumber() > void !> any { magus\session({"session": 3}).trail(); }
+// any keeps invalid options at the runtime decoder boundary this test exercises.
+export fun trailTypo() > void !> any {
+    final opts: any = {"sinse": "6h"};
+    magus\session(opts).trail();
+}
+export fun trailNumber() > void !> any {
+    final opts: any = {"session": 3};
+    magus\session(opts).trail();
+}
 export fun putMistakes() > void !> any { magus\workspace().putJob("w", opts: {"passsed": true, "state": "passed"}); }
 `))
 	for name, want := range map[string][]string{
