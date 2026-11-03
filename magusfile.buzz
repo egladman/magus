@@ -2510,7 +2510,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
                     "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/xdg/**/*.go",
                     "libs/cmdline/**/*.go", "libs/embed/**/*.go", "libs/embed/train/**/*.go",
-                    "console/**/*.ts", "docs/**/*.ts",
+                    "**/*.ts", "console/**/*.ts", "docs/**/*.ts",
                     "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
                     "docs/guides/integrations/agents/**/*.tsx",
                     "**/*.js", "console/**/*.js", "docs/**/*.js",
