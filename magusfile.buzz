@@ -2341,7 +2341,9 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // hack/lint/run.buzz's tests run the binary proofread-build links, and
     // no-throw's run TypeScript from libs/textsearch/node_modules.
-    ctx.needs(proofreadlib\proofread_build, proofread_decisions_generate, textsearch\install);
+    // Graph-handle examples must refresh the index before their child processes take it.
+    ctx.needs(proofreadlib\proofread_build, proofread_decisions_generate, textsearch\install, symbol_digest_generate);
+    ctx.readsFiles(["gen/symbol-index.json"]);
     ctx.readsFiles(["spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/retro/*.buzz", "hack/retro/testdata/**", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/lint/*.mjs", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml", "hack/policy/gen/proofread-decisions.json", ".github/workflows/pr.yaml"]);

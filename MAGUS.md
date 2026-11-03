@@ -57,7 +57,7 @@ magus graph export -o json  # the whole graph
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                                                                   |
 | ---------- | -------: | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                                                         |
-| target     |     200+ | `magus query kind=target`     | `lint-rules`, `catalog-docs-generate`, `buzz-test`                                                                                                         |
+| target     |     200+ | `magus query kind=target`     | `lint-rules`, `buzz-test`, `catalog-docs-generate`                                                                                                         |
 | spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                                                                 |
 | op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-fmt`                                                                                                                            |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                                                            |

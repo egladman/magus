@@ -126,6 +126,10 @@ test "describe.file names a path's owning project and role" {
 }
 
 test "a query result carries its verdict beside its matches" {
-    final lines = queryLines("kind=spell go").value!;
+    final queried = queryLines("kind=spell go");
+    if (queried.error != null) {
+        throw queried.error!.message;
+    }
+    final lines = queried.value!;
     assert\equal(lines[0].endsWith("(found)"), want: true, message: lines[0]);
 }
