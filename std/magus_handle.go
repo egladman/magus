@@ -26,6 +26,9 @@ import (
 func MagusWorkspaceOpen(ctx context.Context, dir string) (types.MagusWorkspace, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
+		if job.HasSnapshot(ctx) {
+			return types.MagusWorkspace{Dir: dir}, nil
+		}
 		return types.MagusWorkspace{}, errorNoWorkspace("workspace")
 	}
 	if dir == "" {
