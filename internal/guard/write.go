@@ -756,7 +756,7 @@ func enterCall(id, rel string) string {
 
 // clientJobPut is a client tool script putting one key on row id.
 func clientJobPut(id, key, value string) string {
-	return fmt.Sprintf(`import "magus"; magus\job.put(%s, opts: {%q: %s});`, strconv.Quote(id), key, value)
+	return fmt.Sprintf(`import "magus"; magus\workspace().putJob(%s, opts: {%q: %s});`, strconv.Quote(id), key, value)
 }
 
 // entryIdle is how long a holder must go without a tool call before an entry into its
