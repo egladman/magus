@@ -62,46 +62,8 @@ func resolvedTestSelection(ws Workspace, check types.LeaseCheck) (string, bool) 
 	}
 	target, _, _ = strings.Cut(target, ":")
 	target = types.Normalize(target)
-	opSelection := func(spell, name string) (string, bool) {
-		for _, bound := range p.ResolvedSpells {
-			if bound.Name() != spell {
-				continue
-			}
-			op, ok := bound.Op(types.Normalize(name))
-			if !ok {
-				return "", false
-			}
-			return op.TestSelection, true
-		}
-		return "", false
-	}
 	if !qualified && slices.Contains(p.MagusfileTargets, target) {
-		if !slices.Contains(p.DispatchOnlyTargets, target) {
-			return "", false
-		}
-		uses := p.TargetSpellOps[target]
-		if len(uses) == 0 {
-			return "", false
-		}
-		dialect := ""
-		for _, use := range uses {
-			if len(use.Ops) == 0 {
-				return "", false
-			}
-			for _, name := range use.Ops {
-				found, known := opSelection(use.Spell, name)
-				if !known {
-					return "", false
-				}
-				if found != "" {
-					if dialect != "" && dialect != found {
-						return "", false
-					}
-					dialect = found
-				}
-			}
-		}
-		return dialect, true
+		return dispatchedSelection(p, target)
 	}
 	found, dialect := false, ""
 	for _, bound := range p.ResolvedSpells {
@@ -122,10 +84,61 @@ func resolvedTestSelection(ws Workspace, check types.LeaseCheck) (string, bool) 
 	return dialect, found
 }
 
-func uncheckedTestSelection(ws Workspace, row types.Job) []string {
+func opSelection(p *types.Project, spell, name string) (string, bool) {
+	for _, bound := range p.ResolvedSpells {
+		if bound.Name() != spell {
+			continue
+		}
+		op, ok := bound.Op(types.Normalize(name))
+		if !ok {
+			return "", false
+		}
+		return op.TestSelection, true
+	}
+	return "", false
+}
+
+// dispatchedSelection judges a target that only dispatches to spell ops.
+func dispatchedSelection(p *types.Project, target string) (string, bool) {
+	if !slices.Contains(p.DispatchOnlyTargets, target) {
+		return "", false
+	}
+	uses := p.TargetSpellOps[target]
+	if len(uses) == 0 {
+		return "", false
+	}
+	dialect := ""
+	for _, use := range uses {
+		if len(use.Ops) == 0 {
+			return "", false
+		}
+		for _, name := range use.Ops {
+			found, known := opSelection(p, use.Spell, name)
+			if !known {
+				return "", false
+			}
+			if found != "" {
+				if dialect != "" && dialect != found {
+					return "", false
+				}
+				dialect = found
+			}
+		}
+	}
+	return dialect, true
+}
+
+// uncheckedTestSelection skips a check already in refused: it cannot run.
+func uncheckedTestSelection(ws Workspace, row types.Job, refused types.JobProblems) []string {
 	var unchecked []string
 	for _, goal := range row.EffectiveGoals() {
 		if goal.Kind != types.GoalKindCheck || goal.Check.Script != "" {
+			continue
+		}
+		field := goalCheckField(row, goal)
+		if slices.ContainsFunc(refused, func(p types.JobProblem) bool {
+			return p.Code == types.JobCheckUnrunnable && strings.HasPrefix(p.Field, field+".")
+		}) {
 			continue
 		}
 		if _, known := resolvedTestSelection(ws, goal.Check); known {

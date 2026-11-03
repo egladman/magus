@@ -197,7 +197,7 @@ func (s *exitEvidenceSuite) exit(row types.Job, result types.JobResult, attempt 
 		attempt.TimestampMs = 9_999_999_999_999
 		return attempt, nil
 	}
-	return Exit(s.T().Context(), boundStore(declared(s.T(), row), row.ID), row.ID, &result, resolve)
+	return Exit(s.T().Context(), boundStore(declared(s.T(), row), row.ID).InWorkspace(goCheckWorkspace(".")), row.ID, &result, resolve)
 }
 
 func (s *exitEvidenceSuite) TestOwedGoalNeedsNoRef() {
@@ -279,7 +279,7 @@ func (s *exitEvidenceSuite) exitUnderDefaults(row types.Job, attempt types.JobAt
 		attempt.TimestampMs = 9_999_999_999_999
 		return attempt, nil
 	}
-	return Exit(s.T().Context(), boundStore(loc, row.ID), row.ID, &result, resolve)
+	return Exit(s.T().Context(), boundStore(loc, row.ID).InWorkspace(goCheckWorkspace(".")), row.ID, &result, resolve)
 }
 
 func (s *exitEvidenceSuite) TestRunUnderTheDefaultCharmsIsTheCheck() {

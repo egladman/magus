@@ -370,7 +370,7 @@ func (s *exitEvidenceSuite) TestNarrowedLintOverTheClaimedFilesIsFiled() {
 		resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
 			return types.JobAttempt{Found: true, Ref: ref, Project: ".", Target: "lint", ExtraArgs: args, TimestampMs: 9_999_999_999_999}, nil
 		}
-		return Exit(s.T().Context(), boundStore(loc, row.ID), row.ID, &result, resolve)
+		return Exit(s.T().Context(), boundStore(loc, row.ID).InWorkspace(goCheckWorkspace(".")), row.ID, &result, resolve)
 	}
 
 	_, err := exit("cmd/magus/ledger.go")

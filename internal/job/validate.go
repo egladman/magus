@@ -340,7 +340,7 @@ func workspaceProblems(ctx context.Context, store *Store, merged, judged types.J
 		return nil, unchecked
 	}
 	ps, unchecked := checkTargetProblems(ws, judged)
-	unchecked = append(unchecked, uncheckedTestSelection(ws, judged)...)
+	unchecked = append(unchecked, uncheckedTestSelection(ws, judged, ps)...)
 	ps = onRow(ps, judged, merged)
 	if !writes {
 		return ps, unchecked

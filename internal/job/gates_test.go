@@ -233,7 +233,14 @@ func (s *owningProjectGateSuite) TestAnOwnerWithUnresolvedSpellsIsNamedUnchecked
 }
 
 func (s *owningProjectGateSuite) TestAnOwnerWithResolvedTargetsIsNotNamed() {
-	v := s.validated(s.unresolvedStore(), &types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/a.go")
+	projects := s.workspace()
+	resolved := goCheckWorkspace("libs/buzz").Projects[0]
+	resolved.Sources = types.MustParseGlobs("**/*.go")
+	projects[1] = resolved
+	root := testkit.NewRepository(s.T(), map[string]string{"a.go": "package a\n"}).Root()
+	store := NewStore(tempLocation(s.T(), root)).InWorkspace(Workspace{Projects: projects})
+
+	v := s.validated(store, &types.LeaseCheck{Target: "test", Project: "libs/buzz"}, "libs/buzz/a.go")
 
 	s.Empty(v.Unchecked)
 }

@@ -88,7 +88,7 @@ func (s *testSelectionSuite) TestExplicitArgsWrapperIsUnknown() {
 	dialect, known := resolvedTestSelection(ws, check)
 	s.False(known)
 	s.Empty(dialect)
-	notes := uncheckedTestSelection(ws, types.Job{Check: &check})
+	notes := uncheckedTestSelection(ws, types.Job{Check: &check}, nil)
 	s.Require().Len(notes, 1)
 	s.Contains(notes[0], "recorded evidence arguments must match exactly")
 	selection := tempStore(s.T(), s.T().TempDir()).InWorkspace(ws).testSelection()
