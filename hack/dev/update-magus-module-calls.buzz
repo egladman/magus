@@ -6,7 +6,7 @@
 // A file already changed since HEAD gets only the rules a rewrite cannot
 // match again, so a second run changes nothing.
 //
-//	magus buzz hack/dev/rewrite-magus-module.buzz -- [--dry-run] [path...]
+//	magus buzz hack/dev/update-magus-module-calls.buzz -- [--dry-run] [path...]
 namespace rewritemagus;
 
 import "flags";
@@ -18,7 +18,7 @@ import "magus";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/rewrite-magus-module.buzz -- [--dry-run] [path...]";
+final USAGE = "usage: magus buzz hack/dev/update-magus-module-calls.buzz -- [--dry-run] [path...]";
 final HELP = "cost: reads every tracked .buzz, .md and Go file once\n{USAGE}";
 
 // Rule is how one old member reads after the regroup. An empty ctor is a
@@ -293,7 +293,7 @@ export fun skipped(path: str) > bool {
             return true;
         }
     }
-    return ["CHANGELOG.md", "AGENTS.md", "hack/dev/rewrite-magus-module.buzz", "std/magus_handle.go", "internal/interp/bindings/buzz.go"].indexOf(path) != null;
+    return ["CHANGELOG.md", "AGENTS.md", "hack/dev/update-magus-module-calls.buzz", "std/magus_handle.go", "internal/interp/bindings/buzz.go"].indexOf(path) != null;
 }
 
 fun candidate(path: str) > bool {
@@ -437,7 +437,7 @@ export fun rewriteTree(dryRun: bool, paths: [str]) > result\Result::<Report> {
             applyEdit(edit, outputs: outputs, dryRun: dryRun, report: report);
         }
     } catch (err: any) {
-        return result\caught::<Report>(err, doing: "rewrite-magus-module: rewrite the tree");
+        return result\caught::<Report>(err, doing: "update-magus-module-calls: rewrite the tree");
     }
     return result\ok::<Report>(report);
 }
@@ -449,7 +449,7 @@ export fun main(args: [str]) > void !> any {
         return;
     }
     if (parsed.unknown.len() > 0) {
-        throw "rewrite-magus-module: unknown {parsed.unknown.join(" ")}\n{USAGE}";
+        throw "update-magus-module-calls: unknown {parsed.unknown.join(" ")}\n{USAGE}";
     }
     final dryRun = parsed.values["--dry-run"] != null;
     std\print(if (dryRun) "dry run: writes nothing" else "writes the files it lists");
