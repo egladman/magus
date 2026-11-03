@@ -435,10 +435,11 @@ func recordDecls(src string) (string, []magusRecord, error) {
 }
 
 // declRecord is the record stmt declares, and false for one no session runs.
-func declRecord(stmt ast.Stmt) (magusRecord, bool) {
+func declRecord(stmt ast.Node) (magusRecord, bool) {
 	switch d := stmt.(type) {
 	case *ast.ObjectDecl:
-		return magusRecord{name: d.Name}, d.IsExported && !d.IsProtocol && len(d.StaticFields) == 0
+		return magusRecord{name: d.Name}, d.IsExported && !d.IsProtocol && len(d.StaticFields) == 0 &&
+			!slices.ContainsFunc(d.Methods, func(m *ast.FunDecl) bool { return m.IsStatic })
 	case *ast.EnumDecl:
 		return magusRecord{name: d.Name, enum: true}, d.IsExported
 	case *ast.FunDecl:

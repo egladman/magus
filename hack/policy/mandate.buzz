@@ -70,7 +70,7 @@ export object Assessed {
 // assess is id's proven tier: measure's report on the change in the job's own checkout since
 // the checkpoint it was handed. A row measure cannot reach, or a measure that raises, is full,
 // and its evidence says which, so an unmeasured job never reads as a measured tier.
-export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > RiskReport !> any) > Assessed {
+export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > TierReport !> any) > Assessed {
     final row = byId(jobs, id: id);
     if (row == null) {
         return Assessed{ tier = "full", evidence = ["{id}: full (no job row by that id, so nothing was measured)"] };
@@ -78,7 +78,7 @@ export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > RiskReport !> 
     if (row!.checkoutRoot == "" or row!.checkpoint == "") {
         return Assessed{ tier = "full", evidence = ["{id}: full (the row records no checkout or checkpoint to measure its change from)"] };
     }
-    var report = RiskReport{};
+    var report = TierReport{};
     try {
         report = measure(row!);
     } catch (e: any) {
@@ -92,12 +92,12 @@ export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > RiskReport !> 
 }
 
 // measured is assess's measure outside a test: the ci gate's tier for the job's change.
-export fun measured(row: Row) > RiskReport !> any {
-    return magus\change().tier("ci", opts: RiskOptions{ base = row.checkpoint, checkout = row.checkoutRoot });
+export fun measured(row: Row) > TierReport !> any {
+    return magus\change(row.checkpoint).tier("ci", opts: TierOptions{ checkout = row.checkoutRoot });
 }
 
 // evidenceLine renders e as `magus affected ci` prints it: `<path>: <tier> (<class>: <why>)`.
-fun evidenceLine(e: RiskEvidence) > str {
+fun evidenceLine(e: TierEvidence) > str {
     var subject = e.path;
     if (subject == "") {
         subject = "{e.project} {e.target}".trim();
@@ -798,16 +798,16 @@ test "an unsettled job above the tolerance is held for review and one at or belo
 test "a job's tier is measured in its checkout from its checkpoint, and anything unmeasured is full" {
     final measured = [Row{ id = "late", state = magus\JobState.pass, checkpoint = "abc", checkoutRoot = "/w/late" }, Row{ id = "bare", state = magus\JobState.pass }];
     final asked = mut [<str>];
-    final mechanical = fun (row: Row) > RiskReport !> any {
+    final mechanical = fun (row: Row) > TierReport !> any {
         asked.append("{row.checkoutRoot}@{row.checkpoint}");
-        return RiskReport{ tier = magus\Tier.mechanical, evidence = [RiskEvidence{ path = "x.go", tier = magus\Tier.mechanical, class = "comment", why = "comments only" }] };
+        return TierReport{ tier = magus\Tier.mechanical, evidence = [TierEvidence{ path = "x.go", tier = magus\Tier.mechanical, class = "comment", why = "comments only" }] };
     };
     final got = assess("late", jobs: measured, measure: mechanical);
     std\assert(got.tier == "mechanical" and asked.join(",") == "/w/late@abc", message: "measured in the job's checkout");
     std\assert(got.evidence.join("\n") == "x.go: mechanical (comment: comments only)", message: "evidence as affected ci prints it");
     std\assert(assess("bare", jobs: measured, measure: mechanical).tier == "full", message: "no checkout recorded");
     std\assert(assess("gone", jobs: measured, measure: mechanical).tier == "full", message: "no row");
-    final raises = fun (row: Row) > RiskReport !> any {
+    final raises = fun (row: Row) > TierReport !> any {
         throw "no workspace";
     };
     final raised = assess("late", jobs: measured, measure: raises);

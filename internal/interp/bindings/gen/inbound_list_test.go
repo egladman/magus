@@ -8,7 +8,6 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
-	"github.com/egladman/magus/libs/diagnostics"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"

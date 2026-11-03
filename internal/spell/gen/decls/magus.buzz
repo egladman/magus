@@ -27,141 +27,12 @@ export enum<str> Evidence {
     unknown = "unknown",
 }
 
-export enum<str> DiffWhyRelation {
-    none = "",
-    starts = "starts",
-    uses = "uses",
-    usedBy = "used_by",
-    implements = "implements",
-    implementedBy = "implemented_by",
-    continues = "continues",
-    continuedBy = "continued_by",
-    sameStep = "same_step",
-    tests = "tests",
-    generated = "generated",
-    unranked = "unranked",
-}
-
-export enum<str> DiffGroupKind {
-    none = "",
-    connected = "connected",
-    generated = "generated",
-    unranked = "unranked",
-}
-
-export enum<str> DiffUncoveredReason {
-    none = "",
-    noIndexer = "no-indexer",
-}
-
-export enum<str> DiffReadState {
-    none = "",
-    known = "known",
-    unknown = "unknown",
-}
-
-export enum<str> DuplicationPlacement {
-    none = "",
-    member = "member",
-    dependency = "dependency",
-    newPackage = "new-package",
-    blocked = "blocked",
-    unknown = "unknown",
-}
-
-export enum<str> DuplicationShape {
-    none = "",
-    parameterize = "parameterize",
-    sharedCore = "shared-core",
-    siblingHelper = "sibling-helper",
-    leave = "leave",
-}
-
 export enum<str> SymbolIndexFreshness {
     none = "",
     upToDate = "up-to-date",
     outOfDate = "out-of-date",
     notIndexed = "not-indexed",
     unvouched = "unvouched",
-}
-
-export enum<str> KnowledgeVerdict {
-    none = "",
-    found = "found",
-    absent = "absent",
-    unknown = "unknown",
-}
-
-export enum<str> KnowledgeUnknownReason {
-    none = "",
-    symbolIndexMissing = "symbol-index-missing",
-    symbolsNotLoaded = "symbols-not-loaded",
-    coverageUnknown = "coverage-unknown",
-    indexStale = "index-stale",
-}
-
-export enum<str> RelationID {
-    none = "",
-    dependsOn = "depends_on",
-    contains = "contains",
-    uses = "uses",
-    references = "references",
-    documents = "documents",
-    calls = "calls",
-    implements = "implements",
-    imports = "imports",
-    rationaleFor = "rationale_for",
-    emits = "emits",
-    owns = "owns",
-    defines = "defines",
-    produces = "produces",
-    consumes = "consumes",
-    authored = "authored",
-    annotates = "annotates",
-    depicts = "depicts",
-    coChanges = "co_changes",
-    splits = "splits",
-}
-
-export enum<str> EdgeDirection {
-    none = "",
-    outward = "out",
-    inward = "in",
-}
-
-export enum<str> KnowledgeResolution {
-    none = "",
-    id = "id",
-    path = "path",
-    fuzzy = "fuzzy",
-}
-
-export enum<str> GroupingShape {
-    none = "",
-    chained = "chained",
-    split = "split",
-    solo = "solo",
-}
-
-export enum<str> GroupingVerdict {
-    none = "",
-    measured = "measured",
-    unknown = "unknown",
-}
-
-export enum<str> JobKind {
-    check = "check",
-    symbol = "symbol",
-    paths = "paths",
-    script = "script",
-    prose = "prose",
-}
-
-export enum<str> GuardDecision {
-    none = "",
-    allow = "allow",
-    advise = "advise",
-    deny = "deny",
 }
 
 export enum<str> SkillVariant {
@@ -265,6 +136,237 @@ export enum<str> JobBaseVerdict {
     unknown = "unknown",
 }
 
+export enum<str> InflightAttention {
+    unset = "",
+    author = "author",
+    review = "review",
+    queue = "queue",
+    none = "none",
+}
+
+export enum<str> JobKind {
+    check = "check",
+    symbol = "symbol",
+    paths = "paths",
+    script = "script",
+    prose = "prose",
+}
+
+export enum<str> GroupingShape {
+    none = "",
+    chained = "chained",
+    split = "split",
+    solo = "solo",
+}
+
+export enum<str> GroupingVerdict {
+    none = "",
+    measured = "measured",
+    unknown = "unknown",
+}
+
+export enum<str> SkillForm {
+    none = "",
+    both = "both",
+    short = "short",
+    full = "full",
+}
+
+export enum<str> LeaseSource {
+    none = "",
+    flag = "flag",
+    agent = "agent",
+    marker = "marker",
+    contested = "contested",
+    env = "env",
+}
+
+export enum<str> RelationID {
+    none = "",
+    dependsOn = "depends_on",
+    contains = "contains",
+    uses = "uses",
+    references = "references",
+    documents = "documents",
+    calls = "calls",
+    implements = "implements",
+    imports = "imports",
+    rationaleFor = "rationale_for",
+    emits = "emits",
+    owns = "owns",
+    defines = "defines",
+    produces = "produces",
+    consumes = "consumes",
+    authored = "authored",
+    annotates = "annotates",
+    depicts = "depicts",
+    coChanges = "co_changes",
+    splits = "splits",
+}
+
+export enum<str> KnowledgeVerdict {
+    none = "",
+    found = "found",
+    absent = "absent",
+    unknown = "unknown",
+}
+
+export enum<str> KnowledgeUnknownReason {
+    none = "",
+    symbolIndexMissing = "symbol-index-missing",
+    symbolsNotLoaded = "symbols-not-loaded",
+    coverageUnknown = "coverage-unknown",
+    indexStale = "index-stale",
+}
+
+export enum<str> EdgeDirection {
+    none = "",
+    outward = "out",
+    inward = "in",
+}
+
+export enum<str> KnowledgeResolution {
+    none = "",
+    id = "id",
+    path = "path",
+    fuzzy = "fuzzy",
+}
+
+export enum<str> PrecedentFamily {
+    none = "",
+    depDirection = "dep-direction",
+    depFanout = "dep-fanout",
+    errSentinelName = "err-sentinel-name",
+    testPackageName = "test-package-name",
+    paramNameByType = "param-name-by-type",
+    paramOrder = "param-order",
+    ctxFirst = "ctx-first",
+    errorLast = "error-last",
+}
+
+export enum<str> DuplicationPlacement {
+    none = "",
+    member = "member",
+    dependency = "dependency",
+    newPackage = "new-package",
+    blocked = "blocked",
+    unknown = "unknown",
+}
+
+export enum<str> DuplicationShape {
+    none = "",
+    parameterize = "parameterize",
+    sharedCore = "shared-core",
+    siblingHelper = "sibling-helper",
+    leave = "leave",
+}
+
+export enum<str> Tier {
+    none = "",
+    trivial = "trivial",
+    mechanical = "mechanical",
+    scoped = "scoped",
+    full = "full",
+}
+
+export enum<str> DiffWhyRelation {
+    none = "",
+    starts = "starts",
+    uses = "uses",
+    usedBy = "used_by",
+    implements = "implements",
+    implementedBy = "implemented_by",
+    continues = "continues",
+    continuedBy = "continued_by",
+    sameStep = "same_step",
+    tests = "tests",
+    generated = "generated",
+    unranked = "unranked",
+}
+
+export enum<str> DiffGroupKind {
+    none = "",
+    connected = "connected",
+    generated = "generated",
+    unranked = "unranked",
+}
+
+export enum<str> DiffUncoveredReason {
+    none = "",
+    noIndexer = "no-indexer",
+}
+
+export enum<str> DiffReadState {
+    none = "",
+    known = "known",
+    unknown = "unknown",
+}
+
+export enum<str> ConformanceMetric {
+    none = "",
+    fileLines = "file-lines",
+    funcLines = "func-lines",
+    typeMethods = "type-methods",
+    fileSymbols = "file-symbols",
+    depFanout = "dep-fanout",
+    cloneTokens = "clone-tokens",
+    exportScope = "export-scope",
+    callSequence = "call-sequence",
+    sharedBody = "shared-body",
+    sharedReach = "shared-reach",
+    callerSpread = "caller-spread",
+    modeKnobs = "mode-knobs",
+    aliasShare = "alias-share",
+    nameClash = "name-clash",
+    mainLogic = "main-logic",
+    storePathExport = "store-path-export",
+    fileSplit = "file-split",
+}
+
+export enum<str> ConformancePopulation {
+    none = "",
+    source = "source",
+    main = "main",
+    test = "test",
+}
+
+export enum<str> ChangeStatus {
+    none = "",
+    added = "added",
+    modified = "modified",
+    deleted = "deleted",
+    renamed = "renamed",
+}
+
+export enum<str> RegionSide {
+    none = "",
+    old = "old",
+    new = "new",
+}
+
+export enum<str> TrailSection {
+    none = "",
+    refused = "refused",
+    advised = "advised",
+    unguarded = "unguarded",
+    nextNotTaken = "next-not-taken",
+}
+
+export enum<str> TrailVerdict {
+    none = "",
+    shouldDeny = "should-deny",
+    shouldAdvise = "should-advise",
+    wrongDeny = "wrong-deny",
+    fine = "fine",
+}
+
+export enum<str> GuardDecision {
+    none = "",
+    allow = "allow",
+    advise = "advise",
+    deny = "deny",
+}
+
 export enum<str> ContextSource {
     none = "",
     transcript = "transcript",
@@ -311,28 +413,6 @@ export enum<str> BriefRefKind {
     commit = "commit",
 }
 
-export enum<str> InflightAttention {
-    unset = "",
-    author = "author",
-    review = "review",
-    queue = "queue",
-    none = "none",
-}
-
-export enum<str> ChangeStatus {
-    none = "",
-    added = "added",
-    modified = "modified",
-    deleted = "deleted",
-    renamed = "renamed",
-}
-
-export enum<str> RegionSide {
-    none = "",
-    old = "old",
-    new = "new",
-}
-
 export enum<str> DriftPolicy {
     none = "",
     fail = "fail",
@@ -349,60 +429,51 @@ export enum<str> HarnessChangeOp {
     write = "write",
 }
 
-export enum<str> RiskTier {
-    none = "",
-    trivial = "trivial",
-    mechanical = "mechanical",
-    scoped = "scoped",
-    full = "full",
+export object ChangeOptions {
+    rev: str = "",
+    patch: str = "",
 }
 
-export enum<str> TrailSection {
-    none = "",
-    refused = "refused",
-    advised = "advised",
-    unguarded = "unguarded",
-    nextNotTaken = "next-not-taken",
+export object VCSCheckpoint {
+    revision: str = "",
+    branch: str = "",
+    dirty: bool = false,
+    patchDigest: str = "",
+    untrackedDigest: str = "",
+    vcs: str = "",
+    preserved: str = "",
 }
 
-export enum<str> TrailVerdict {
-    none = "",
-    shouldDeny = "should-deny",
-    shouldAdvise = "should-advise",
-    wrongDeny = "wrong-deny",
-    fine = "fine",
-}
-
-export object Affected {
+export object Change {
     base: str = "",
-    changed: [str] = [],
-    seed: [str] = [],
-    filesBySeed: {str: [str]} = {},
-    affected: [str] = [],
-    undeclaredBySeed: {str: [str]} = {},
-}
+    rev: str = "",
+    patch: str = "",
+    at: VCSCheckpoint = VCSCheckpoint{},
+    files: {str: str} = {},
 
-export object HistoryMetricsOptions {
-    dir: str = "",
-    commits: int = 0,
-    since: str = "",
-    files: bool = false,
-}
+    fun tier(target: str, opts: TierOptions? = null) > TierReport !> any {
+        return magus__Change__tier(this, target: target, opts: opts);
+    }
 
-export object CoChange {
-    a: str = "",
-    aName: str = "",
-    b: str = "",
-    bName: str = "",
-    count: int = 0,
-    hidden: bool = false,
-}
+    fun diff(opts: DiffOptions? = null) > Diff !> any {
+        return magus__Change__diff(this, opts: opts);
+    }
 
-export object Affinity {
-    definition: str = "",
-    commits: int = 0,
-    since: str = "",
-    pairs: [CoChange] = [],
+    fun impact(opts: CommandOptions? = null) > Impact !> any {
+        return magus__Change__impact(this, opts: opts);
+    }
+
+    fun affected() > Affected !> any {
+        return magus__Change__affected(this);
+    }
+
+    fun conformance(checks: [str] = [<str>]) > ConformanceReport !> any {
+        return magus__Change__conformance(this, checks: checks);
+    }
+
+    fun mergeBase() > str !> any {
+        return magus__Change__mergeBase(this);
+    }
 }
 
 export object CommandOptions {
@@ -426,43 +497,9 @@ export object ExecResult {
     ok: bool = false,
 }
 
-export object Path {
-    value: str = "",
-    base: str = "",
-    isDir: bool = false,
-}
-
-export object DriftResult {
-    drifted: bool = false,
-    code: str = "",
-    message: str = "",
-    url: str = "",
-    files: [Path] = [],
-}
-
 export object DiagnosticCode {
     code: str = "",
     origin: DiagnosticOrigin = DiagnosticOrigin.unknown,
-}
-
-export object DiffOptions {
-    root: str = "",
-    dir: str = "",
-    stdin: str = "",
-    quiet: bool = false,
-    allowFailure: bool = false,
-    @"from": str = "",
-    baseline: str = "",
-    rev: str = "",
-    patch: str = "",
-    minCohort: int = 0,
-    minShare: double = 0.0,
-}
-
-export object ImpactCoverage {
-    ratio: double = 0.0,
-    covered: int = 0,
-    total: int = 0,
 }
 
 export object Check {
@@ -472,241 +509,6 @@ export object Check {
     details: [str] = [],
     evidence: Evidence = Evidence.none,
     fix: [str] = [],
-}
-
-export object DiffPublicPath {
-    id: str = "",
-    qualified: str = "",
-    via: [str] = [],
-    boundary: str = "",
-}
-
-export object DiffSymbol {
-    id: str = "",
-    label: str = "",
-    refCount: int = 0,
-    fileCount: int = 0,
-    publicTo: [str] = [],
-    publicFileCount: int = 0,
-    publicBeyondWorkspace: bool = false,
-    change: str = "",
-    qualified: str = "",
-    signature: str = "",
-    baseSignature: str = "",
-    checks: [Check] = [],
-    publicThrough: [DiffPublicPath] = [],
-}
-
-export object DiffHunk {
-    index: int = 0,
-    digest: str = "",
-    oldStart: int = 0,
-    oldCount: int = 0,
-    newStart: int = 0,
-    newCount: int = 0,
-    declaration: str = "",
-    symbols: [str] = [],
-}
-
-export object DiffTouch {
-    host: str = "",
-    session: str = "",
-    transcript: str = "",
-    read: [str] = [],
-    ran: [str] = [],
-}
-
-export object DiffChurn {
-    commits: int = 0,
-    authors: int = 0,
-    score: int = 0,
-    rank: int = 0,
-    projectTrend: int = 0,
-}
-
-export object DiffThreadRef {
-    id: str = "",
-    hunk: int = 0,
-    line: int = 0,
-    comments: int = 0,
-    outdated: bool = false,
-}
-
-export object DiffFile {
-    path: str = "",
-    project: str = "",
-    role: str = "",
-    hint: str = "",
-    coverage: ImpactCoverage? = null,
-    symbols: [DiffSymbol] = [],
-    hunks: [DiffHunk] = [],
-    layout: [Check] = [],
-    visibility: str = "",
-    touches: [DiffTouch] = [],
-    readState: str = "",
-    churn: DiffChurn? = null,
-    noHistory: bool = false,
-    reach: int? = null,
-    threads: [DiffThreadRef] = [],
-}
-
-export object ImpactProject {
-    path: str = "",
-    seed: bool = false,
-    files: [str] = [],
-    undeclaredFiles: [str] = [],
-    spells: [str] = [],
-    targets: [str] = [],
-}
-
-export object ReleaseStage {
-    tag: str = "",
-    major: int = 0,
-}
-
-export object DiffAPI {
-    base: str = "",
-    floor: str = "",
-    likely: str = "",
-    added: int = 0,
-    removed: int = 0,
-    signature: int = 0,
-    body: int = 0,
-    stage: ReleaseStage = ReleaseStage{},
-}
-
-export object DiffHunkRef {
-    path: str = "",
-    index: int = 0,
-    digest: str = "",
-}
-
-export object DiffWhy {
-    relation: DiffWhyRelation = DiffWhyRelation.none,
-    step: int = 0,
-    symbol: str = "",
-    cycle: [str] = [],
-    text: str = "",
-}
-
-export object DiffStepHunk {
-    ref: DiffHunkRef = DiffHunkRef{},
-    label: str = "",
-    why: DiffWhy = DiffWhy{},
-}
-
-export object DiffStep {
-    number: int = 0,
-    hunks: [DiffStepHunk] = [],
-}
-
-export object DiffGroup {
-    kind: DiffGroupKind = DiffGroupKind.none,
-    label: str = "",
-    hunkCount: int = 0,
-    reach: int = 0,
-    steps: [DiffStep] = [],
-}
-
-export object DiffOrderCount {
-    hunkCount: int = 0,
-    placed: int = 0,
-    complete: bool = false,
-    repeated: [DiffHunkRef] = [],
-    missing: [DiffHunkRef] = [],
-    filesWithoutHunks: [str] = [],
-}
-
-export object DiffOrder {
-    groups: [DiffGroup] = [],
-    count: DiffOrderCount = DiffOrderCount{},
-}
-
-export object VCSCheckpoint {
-    revision: str = "",
-    branch: str = "",
-    dirty: bool = false,
-    patchDigest: str = "",
-    untrackedDigest: str = "",
-    vcs: str = "",
-    preserved: str = "",
-}
-
-export object DiffReviewed {
-    at: VCSCheckpoint = VCSCheckpoint{},
-    files: int = 0,
-}
-
-export object Diagnostic {
-    code: str = "",
-    message: str = "",
-    url: str = "",
-    fix: str = "",
-}
-
-export object DiffUncovered {
-    project: str = "",
-    reason: DiffUncoveredReason = DiffUncoveredReason.none,
-}
-
-export object DiffUnread {
-    readState: DiffReadState = DiffReadState.none,
-    reason: str = "",
-    hunks: int = 0,
-    unread: int = 0,
-}
-
-export object Diff {
-    base: str = "",
-    files: [DiffFile] = [],
-    seedProjects: [str] = [],
-    affectedProjects: [ImpactProject] = [],
-    notes: [str] = [],
-    api: DiffAPI? = null,
-    order: DiffOrder? = null,
-    reviewed: DiffReviewed = DiffReviewed{},
-    conformanceError: Diagnostic? = null,
-    uncovered: [DiffUncovered] = [],
-    unread: DiffUnread? = null,
-}
-
-export object DirCall {
-    dir: str = "",
-    transport: str = "",
-    marker: str = "",
-    source: str = "",
-}
-
-export object Dir {
-    path: str = "",
-    id: str = "",
-    layer: str = "",
-    language: str = "",
-    imports: [str] = [],
-    importedBy: [str] = [],
-    importsIndexed: bool = false,
-    calls: [DirCall] = [],
-    calledBy: [DirCall] = [],
-    children: [str] = [],
-    files: int = 0,
-}
-
-export object DirsOptions {
-    layer: str = "",
-    language: str = "",
-    depth: int = 0,
-}
-
-export object SpellCache {
-    spell: str = "",
-    env: str = "",
-    dir: str = "",
-    trimMb: int = 0,
-}
-
-export object DiskReclaim {
-    caches: [SpellCache] = [],
-    listCommand: str = "",
 }
 
 export object DoctorSummary {
@@ -720,36 +522,6 @@ export object DoctorReport {
     workspace: str = "",
     checks: [Check] = [],
     summary: DoctorSummary = DoctorSummary{},
-}
-
-export object DuplicationSite {
-    id: str = "",
-    label: str = "",
-    source: str = "",
-    endLine: int = 0,
-    distinct: [str] = [],
-    callers: int = 0,
-    foreignFiles: int = 0,
-    tested: bool = false,
-}
-
-export object DuplicationHistory {
-    commits: int = 0,
-    together: int = 0,
-    apart: int = 0,
-}
-
-export object DuplicationGroup {
-    members: [DuplicationSite] = [],
-    score: double = 0.0,
-    shared: [str] = [],
-    packages: [str] = [],
-    placement: DuplicationPlacement = DuplicationPlacement.none,
-    home: str = "",
-    shape: DuplicationShape = DuplicationShape.none,
-    removable: int = 0,
-    siblings: bool = false,
-    history: DuplicationHistory? = null,
 }
 
 export object ProjectRef {
@@ -767,473 +539,101 @@ export object KnowledgeSymbolGap {
     unindexable: bool = false,
 }
 
-export object KnowledgeTextPresence {
-    hits: int = 0,
-    files: int = 0,
-    sites: [str] = [],
-    more: int = 0,
-}
-
-export object KnowledgeIndexCause {
-    why: str = "",
-    fix: str = "",
-}
-
-export object KnowledgeAnswer {
-    verdict: KnowledgeVerdict = KnowledgeVerdict.none,
-    reason: KnowledgeUnknownReason = KnowledgeUnknownReason.none,
-    gaps: [KnowledgeSymbolGap] = [],
-    staleIndexes: [str] = [],
-    text: KnowledgeTextPresence? = null,
-    indexCause: KnowledgeIndexCause? = null,
-}
-
-export object Duplication {
-    definition: str = "",
-    groups: [DuplicationGroup] = [],
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-}
-
-export object KnowledgeNode {
-    id: str = "",
-    kind: str = "",
-    label: str = "",
-    doc: str = "",
-    source: str = "",
-    attrs: {str: str} = {},
-}
-
-export object EdgeRef {
-    relation: RelationID = RelationID.none,
-    direction: EdgeDirection = EdgeDirection.none,
-    other: str = "",
-    otherKind: str = "",
-    otherLabel: str = "",
-    provenance: str = "",
-    attrs: {str: str} = {},
-}
-
-export object PublicSymbol {
-    id: str = "",
-    label: str = "",
-    dir: str = "",
-    signature: str = "",
-    usedBy: int = 0,
-}
-
-export object ExplainResult {
-    definition: str = "",
-    schemaVersion: int = 0,
-    node: KnowledgeNode = KnowledgeNode{},
-    blastRadius: int = 0,
-    @"out": [EdgeRef] = [],
-    @"in": [EdgeRef] = [],
-    docsURL: str = "",
-    resolution: KnowledgeResolution = KnowledgeResolution.none,
-    publicAPI: [PublicSymbol] = [],
-    publicAPIGap: str = "",
-}
-
-export object GroupingRecord {
-    shape: GroupingShape = GroupingShape.none,
-    verdict: GroupingVerdict = GroupingVerdict.none,
-    jobs: int = 0,
-    groups: int = 0,
-    known: int = 0,
-    passLower: double? = null,
-    setupTokensMedian: int? = null,
-    setupShare: double? = null,
-    contextPerGroup: double? = null,
-    wallMsPerGroup: double? = null,
-    denialsPerJob: double? = null,
-    unattributedPerJob: double? = null,
-    reworkPerJob: double? = null,
-    wideningsPerJob: double? = null,
-}
-
-export object Grouping {
-    definition: str = "",
-    minSample: int = 0,
-    unclassified: int = 0,
-    rows: [GroupingRecord] = [],
-}
-
-export object Node {
-    path: str = "",
-    name: str = "",
-    spellName: str = "",
-    children: [str] = [],
-    dir: str = "",
-    blastRadius: int = 0,
-    durationMs: int = 0,
-    churn: int = 0,
-    authors: int = 0,
-    lastCommit: str? = null,
-}
-
-export object FileHotspot {
-    path: str = "",
-    commits: int = 0,
-    complexity: int = 0,
-    score: int = 0,
-    authors: int = 0,
-    lastCommit: str = "",
-    moves: int = 0,
-}
-
-export object Hotspots {
-    definition: str = "",
-    commits: int = 0,
-    since: str = "",
-    nodes: [Node] = [],
-    files: [FileHotspot] = [],
-}
-
-export object ImpactSymbol {
-    file: str = "",
-    symbol: str = "",
-    label: str = "",
-    refCount: int = 0,
-    fileCount: int = 0,
-    coverage: ImpactCoverage = ImpactCoverage{},
-}
-
-export object ImpactFileCoverage {
-    file: str = "",
-    coverage: ImpactCoverage = ImpactCoverage{},
-}
-
-export object Impact {
-    base: str = "",
-    changedFileCount: int = 0,
-    changedFiles: [str] = [],
-    seedProjects: [str] = [],
-    affectedProjects: [ImpactProject] = [],
-    changedSymbols: [ImpactSymbol] = [],
-    changedFileCoverage: [ImpactFileCoverage] = [],
-    notes: [str] = [],
-}
-
-export object ImportGraph {
-    indexed: bool = false,
-    packages: {str: [str]} = {},
-    languages: {str: str} = {},
-}
-
-export object Layer {
-    name: str = "",
-    declared: [str] = [],
-    dirs: [Dir] = [],
-}
-
-export object ModelTierRecord {
-    rank: int = 0,
-    modelTier: str = "",
-    kind: JobKind = JobKind.check,
-    jobs: int = 0,
-    pass: int = 0,
-    fail: int = 0,
-    noReturn: int = 0,
-    passLower: double = 0.0,
-    checksPerJob: double = 0.0,
-    forksPerID: double = 0.0,
-    reworkPerJob: double = 0.0,
-    wideningsPerJob: double = 0.0,
-    meanCostUSD: double? = null,
-    medianTokens: int? = null,
-    firstAttempts: int = 0,
-    firstPass: int = 0,
-    firstPassLower: double = 0.0,
-    notRetryable: int = 0,
-}
-
-export object ModelTiers {
-    definition: str = "",
-    rows: [ModelTierRecord] = [],
-}
-
-export object NeighborhoodOptions {
-    depth: int = 0,
-    relations: [RelationID] = [],
-    direction: EdgeDirection = EdgeDirection.none,
-    collapse: [str] = [],
-}
-
-export object KnowledgeEdge {
-    source: str = "",
-    target: str = "",
-    relation: RelationID = RelationID.none,
-    confidence: str = "",
-    score: double = 0.0,
-    provenance: str = "",
-    attrs: {str: str} = {},
-}
-
-export object KnowledgeFold {
-    prefix: str = "",
-    node: str = "",
-    folded: int = 0,
-}
-
-export object NeighborhoodResult {
-    definition: str = "",
-    schemaVersion: int = 0,
-    focus: str = "",
-    resolution: KnowledgeResolution = KnowledgeResolution.none,
-    options: NeighborhoodOptions = NeighborhoodOptions{},
-    nodes: [KnowledgeNode] = [],
-    links: [KnowledgeEdge] = [],
-    folds: [KnowledgeFold] = [],
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-}
-
-export object OutputRecord {
-    ref: str = "",
-    project: str = "",
-    target: str = "",
-    failed: bool = false,
-    durationMs: int = 0,
-    output: str = "",
-}
-
-export object OwnershipEntry {
-    path: str = "",
-    name: str = "",
-    commits: int = 0,
-    authors: int = 0,
-    primary: str = "",
-    primaryShare: int = 0,
-    busFactor1: bool = false,
-    stale: bool = false,
-    lastCommit: str = "",
-}
-
-export object Ownership {
-    definition: str = "",
-    commits: int = 0,
-    since: str = "",
-    projects: [OwnershipEntry] = [],
-}
-
-export object PathOptions {
-    relations: [RelationID] = [],
-}
-
-export object PathStep {
-    @"from": str = "",
-    to: str = "",
-    relation: RelationID = RelationID.none,
-    forward: bool = false,
-}
-
-export object PathResult {
-    definition: str = "",
-    schemaVersion: int = 0,
-    @"from": str = "",
-    to: str = "",
-    found: bool = false,
-    steps: [PathStep] = [],
-}
-
 export object Graph {
-    nodes: [str] = [],
-    dependsOn: {str: [str]} = {},
-    blastRadius: {str: int} = {},
-}
-
-export object QueryOptions {
-    budget: int = 0,
-    limit: int = 0,
-    offset: int = 0,
-}
-
-export object KnowledgeTermScore {
-    term: str = "",
-    field: str = "",
-    score: double = 0.0,
-}
-
-export object KnowledgeListRank {
-    list: str = "",
-    rank: int = 0,
-}
-
-export object KnowledgeMatchWhy {
-    matched: int = 0,
-    of: int = 0,
-    terms: [KnowledgeTermScore] = [],
-    lists: [KnowledgeListRank] = [],
-    seeds: [str] = [],
-    prior: double = 0.0,
-}
-
-export object Match {
-    id: str = "",
-    kind: str = "",
-    label: str = "",
-    score: int = 0,
-    why: KnowledgeMatchWhy? = null,
-    staleness: str = "",
-    outrunDays: int = 0,
-}
-
-export object KnowledgeRanking {
-    weights: str = "",
-    reader: [str] = [],
-    skipped: [str] = [],
-    note: str = "",
-}
-
-export object QueryResult {
-    definition: str = "",
-    schemaVersion: int = 0,
-    query: str = "",
-    budget: int = 0,
-    matchCount: int = 0,
-    offset: int = 0,
-    matches: [Match] = [],
-    nodes: [KnowledgeNode] = [],
-    links: [KnowledgeEdge] = [],
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-    ranking: KnowledgeRanking? = null,
-}
-
-export object RaiseOptions {
-    cause: any? = null,
-    url: str = "",
-}
-
-export object RefsOptions {
-    limit: int = 0,
-    offset: int = 0,
-}
-
-export object RefSite {
-    file: str = "",
-    count: int = 0,
-    lines: [int] = [],
-}
-
-export object RefsResult {
-    definition: str = "",
-    schemaVersion: int = 0,
-    symbol: str = "",
-    label: str = "",
-    fileCount: int = 0,
-    refCount: int = 0,
-    defs: [RefSite] = [],
-    refs: [RefSite] = [],
-    signature: str? = null,
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-}
-
-export object Skill {
-    name: str = "",
-    description: str = "",
-    source: str = "",
-    form: str = "",
-    body: str = "",
-    current: bool = false,
-}
-
-export object KnowledgeGodNode {
-    id: str = "",
-    kind: str = "",
-    label: str = "",
-    degree: int = 0,
-    @"in": int = 0,
-    @"out": int = 0,
-}
-
-export object KnowledgeOrphan {
-    id: str = "",
-    kind: str = "",
-    label: str = "",
-    reason: str = "",
-}
-
-export object KnowledgeDocCoverage {
-    kind: str = "",
-    total: int = 0,
-    documented: int = 0,
-    percent: int = 0,
-    undocumented: [str] = [],
-}
-
-export object KnowledgeStats {
-    definition: str = "",
-    nodeCount: int = 0,
-    edgeCount: int = 0,
-    gods: [KnowledgeGodNode] = [],
-    orphans: [KnowledgeOrphan] = [],
-    coverage: [KnowledgeDocCoverage] = [],
-    isolatedCount: int = 0,
-    componentCount: int = 0,
-    largestComponentSize: int = 0,
-}
-
-export object SymbolIndexDigest {
     digest: str = "",
     indexed: bool = false,
     projects: [str] = [],
     gaps: [KnowledgeSymbolGap] = [],
+
+    fun query(query: str, opts: QueryOptions? = null) > QueryResult !> any {
+        return magus__Graph__query(this, query: query, opts: opts);
+    }
+
+    fun explain(node: str) > ExplainResult !> any {
+        return magus__Graph__explain(this, node: node);
+    }
+
+    fun path(node: str, to: str, opts: PathOptions? = null) > PathResult !> any {
+        return magus__Graph__path(this, node: node, to: to, opts: opts);
+    }
+
+    fun refs(symbol: str, opts: RefsOptions? = null) > RefsResult !> any {
+        return magus__Graph__refs(this, symbol: symbol, opts: opts);
+    }
+
+    fun stats(kind: str = "") > KnowledgeStats !> any {
+        return magus__Graph__stats(this, kind: kind);
+    }
+
+    fun neighborhood(focus: str, opts: NeighborhoodOptions? = null) > NeighborhoodResult !> any {
+        return magus__Graph__neighborhood(this, focus: focus, opts: opts);
+    }
+
+    fun dir(path: str) > Dir !> any {
+        return magus__Graph__dir(this, path: path);
+    }
+
+    fun dirs(glob: str, opts: DirsOptions? = null) > [Dir] !> any {
+        return magus__Graph__dirs(this, glob: glob, opts: opts);
+    }
+
+    fun layer(name: str) > Layer !> any {
+        return magus__Graph__layer(this, name: name);
+    }
+
+    fun deps() > Deps !> any {
+        return magus__Graph__deps(this);
+    }
+
+    fun imports() > ImportGraph !> any {
+        return magus__Graph__imports(this);
+    }
+
+    fun symbols() > Symbols !> any {
+        return magus__Graph__symbols(this);
+    }
+
+    fun precedents() > Holds !> any {
+        return magus__Graph__precedents(this);
+    }
+
+    fun unreferenced() > Unreferenced !> any {
+        return magus__Graph__unreferenced(this);
+    }
+
+    fun duplication() > Duplication !> any {
+        return magus__Graph__duplication(this);
+    }
 }
 
-export object TrendEntry {
-    path: str = "",
-    name: str = "",
-    recent: int = 0,
-    earlier: int = 0,
-    delta: int = 0,
-}
-
-export object Trend {
-    definition: str = "",
+export object HistoryMetricsOptions {
+    dir: str = "",
     commits: int = 0,
     since: str = "",
-    projects: [TrendEntry] = [],
+    files: bool = false,
 }
 
-export object UnreferencedEntry {
-    id: str = "",
-    label: str = "",
-    source: str = "",
-    kind: str = "",
-    language: str = "",
-}
+export object History {
+    dir: str = "",
+    commits: int = 0,
+    since: str = "",
+    files: bool = false,
 
-export object Unreferenced {
-    definition: str = "",
-    symbols: [UnreferencedEntry] = [],
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-}
+    fun hotspots() > Hotspots !> any {
+        return magus__History__hotspots(this);
+    }
 
-export object VolatilityTarget {
-    project: str = "",
-    target: str = "",
-    score: double = 0.0,
-    volatile: bool = false,
-    pass: int = 0,
-    fail: int = 0,
-    volatileCount: int = 0,
-    samples: int = 0,
-    lastPass: str = "",
-}
+    fun affinity() > Affinity !> any {
+        return magus__History__affinity(this);
+    }
 
-export object Volatility {
-    threshold: double = 0.0,
-    targets: [VolatilityTarget] = [],
-}
+    fun ownership() > Ownership !> any {
+        return magus__History__ownership(this);
+    }
 
-export object GuardVerdict {
-    decision: GuardDecision = GuardDecision.none,
-    reason: str = "",
-    rule: str = "",
-}
-
-export object GuardBinary {
-    path: str = "",
-    stamp: str = "",
+    fun trend() > Trend !> any {
+        return magus__History__trend(this);
+    }
 }
 
 export object JobModelTier {
@@ -1531,6 +931,1253 @@ export object Job {
     lastRun: JobRun? = null,
     integration: JobIntegration? = null,
     waiterEvidence: JobIntegration? = null,
+
+    fun exit(result: {str: any} = {<str: any>}) > Job !> any {
+        return magus__Job__exit(this, result: result);
+    }
+
+    fun wait(result: {str: any} = {<str: any>}) > JobStatus !> any {
+        return magus__Job__wait(this, result: result);
+    }
+
+    fun register() > JobRegistration !> any {
+        return magus__Job__register(this);
+    }
+}
+
+export object OutputRecord {
+    ref: str = "",
+    project: str = "",
+    target: str = "",
+    failed: bool = false,
+    durationMs: int = 0,
+    output: str = "",
+}
+
+export object RaiseOptions {
+    cause: any? = null,
+    url: str = "",
+}
+
+export object SessionOptions {
+    session: str = "",
+    since: str = "",
+    @"until": str = "",
+}
+
+export object Session {
+    session: str = "",
+    since: str = "",
+    @"until": str = "",
+
+    fun trail() > Trail !> any {
+        return magus__Session__trail(this);
+    }
+
+    fun marks() > [TrailMark] !> any {
+        return magus__Session__marks(this);
+    }
+
+    fun mark(mark: TrailMark) > TrailMark !> any {
+        return magus__Session__mark(this, mark: mark);
+    }
+}
+
+export object Workspace {
+    root: str = "",
+    dir: str = "",
+
+    fun jobs() > JobList !> any {
+        return magus__Workspace__jobs(this);
+    }
+
+    fun putJob(id: str, opts: {str: any} = {<str: any>}) > Job !> any {
+        return magus__Workspace__putJob(this, id: id, opts: opts);
+    }
+
+    fun clearJobs() > int !> any {
+        return magus__Workspace__clearJobs(this);
+    }
+
+    fun forkFacts() > JobForkFacts !> any {
+        return magus__Workspace__forkFacts(this);
+    }
+
+    fun unmerged() > JobUnmergedReport !> any {
+        return magus__Workspace__unmerged(this);
+    }
+
+    fun tierOutcomes() > ModelTiers !> any {
+        return magus__Workspace__tierOutcomes(this);
+    }
+
+    fun grouping() > Grouping !> any {
+        return magus__Workspace__grouping(this);
+    }
+
+    fun volatility() > Volatility !> any {
+        return magus__Workspace__volatility(this);
+    }
+
+    fun skills(opts: SkillsOptions? = null) > [Skill] !> any {
+        return magus__Workspace__skills(this, opts: opts);
+    }
+
+    fun attention(args: [str], opts: CommandOptions? = null) > AttentionList !> any {
+        return magus__Workspace__attention(this, args: args, opts: opts);
+    }
+
+    fun fileDiskAttention(message: str) > void !> any {
+        magus__Workspace__fileDiskAttention(this, message: message);
+    }
+
+    fun diskReclaim() > DiskReclaim !> any {
+        return magus__Workspace__diskReclaim(this);
+    }
+
+    fun bustCache(projectPath: str = "") > void !> any {
+        magus__Workspace__bustCache(this, projectPath: projectPath);
+    }
+
+    fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any {
+        return magus__Workspace__diagnoseDrift(this, outputs: outputs, inputs: inputs);
+    }
+}
+
+export object JobOverlapFootprint {
+    verdict: str = "",
+    shared: [str] = [],
+    reason: str = "",
+}
+
+export object JobOverlap {
+    jobA: str = "",
+    jobB: str = "",
+    pathsA: [str] = [],
+    pathsB: [str] = [],
+    claims: str = "",
+    footprint: JobOverlapFootprint? = null,
+}
+
+export object JobBlock {
+    job: str = "",
+    on: str = "",
+    state: JobState = JobState.none,
+}
+
+export object JobReadOnly {
+    job: str = "",
+    lacks: [str] = [],
+}
+
+export object InflightNeighbour {
+    id: str = "",
+    evidence: str = "",
+    paths: [str] = [],
+    declarations: [str] = [],
+    units: [str] = [],
+    base: str = "",
+}
+
+export object InflightChange {
+    id: str = "",
+    title: str = "",
+    author: str = "",
+    head: str = "",
+    branch: str = "",
+    base: str = "",
+    fork: bool = false,
+    jobs: [str] = [],
+    intent: str = "",
+    mark: str = "",
+    decision: str = "",
+    code: str = "",
+    reason: str = "",
+    partition: int = 0,
+    position: int = 0,
+    below: str = "",
+    mine: bool = false,
+    attention: InflightAttention = InflightAttention.unset,
+    neighbours: [InflightNeighbour] = [],
+}
+
+export object InflightFetch {
+    provider: str = "",
+    host: str = "",
+    base: str = "",
+    tip: str = "",
+    at: int = 0,
+    elapsedMS: int = 0,
+}
+
+export object JobUnmerged {
+    job: str = "",
+    head: str = "",
+    item: str = "",
+    why: str = "",
+    remedy: str = "",
+}
+
+export object JobUnmergedReport {
+    branch: str = "",
+    rows: [JobUnmerged] = [],
+    risks: [JobUnmerged] = [],
+    unknown: str = "",
+}
+
+export object JobList {
+    jobs: [Job] = [],
+    overlaps: [JobOverlap] = [],
+    overdue: [str] = [],
+    orphans: [str] = [],
+    stale: [str] = [],
+    blocked: [JobBlock] = [],
+    readOnly: [JobReadOnly] = [],
+    changes: [InflightChange] = [],
+    fetched: InflightFetch? = null,
+    unproposed: [str] = [],
+    unmerged: JobUnmergedReport? = null,
+}
+
+export object JobForkFacts {
+    finishedBranches: [str] = [],
+    branchesUnknown: str = "",
+    integrateRecord: str = "",
+    commitsSinceTest: int = 0,
+    lastTestRef: str = "",
+    lastTestRevision: str = "",
+    testUnknown: str = "",
+}
+
+export object ModelTierRecord {
+    rank: int = 0,
+    modelTier: str = "",
+    kind: JobKind = JobKind.check,
+    jobs: int = 0,
+    pass: int = 0,
+    fail: int = 0,
+    noReturn: int = 0,
+    passLower: double = 0.0,
+    checksPerJob: double = 0.0,
+    forksPerID: double = 0.0,
+    reworkPerJob: double = 0.0,
+    wideningsPerJob: double = 0.0,
+    meanCostUSD: double? = null,
+    medianTokens: int? = null,
+    firstAttempts: int = 0,
+    firstPass: int = 0,
+    firstPassLower: double = 0.0,
+    notRetryable: int = 0,
+}
+
+export object ModelTiers {
+    definition: str = "",
+    rows: [ModelTierRecord] = [],
+}
+
+export object GroupingRecord {
+    shape: GroupingShape = GroupingShape.none,
+    verdict: GroupingVerdict = GroupingVerdict.none,
+    jobs: int = 0,
+    groups: int = 0,
+    known: int = 0,
+    passLower: double? = null,
+    setupTokensMedian: int? = null,
+    setupShare: double? = null,
+    contextPerGroup: double? = null,
+    wallMsPerGroup: double? = null,
+    denialsPerJob: double? = null,
+    unattributedPerJob: double? = null,
+    reworkPerJob: double? = null,
+    wideningsPerJob: double? = null,
+}
+
+export object Grouping {
+    definition: str = "",
+    minSample: int = 0,
+    unclassified: int = 0,
+    rows: [GroupingRecord] = [],
+}
+
+export object VolatilityTarget {
+    project: str = "",
+    target: str = "",
+    score: double = 0.0,
+    volatile: bool = false,
+    pass: int = 0,
+    fail: int = 0,
+    volatileCount: int = 0,
+    samples: int = 0,
+    lastPass: str = "",
+}
+
+export object Volatility {
+    threshold: double = 0.0,
+    targets: [VolatilityTarget] = [],
+}
+
+export object SkillsOptions {
+    name: str = "",
+    form: SkillForm = SkillForm.none,
+}
+
+export object Skill {
+    name: str = "",
+    description: str = "",
+    source: str = "",
+    form: str = "",
+    body: str = "",
+    current: bool = false,
+}
+
+export object FileRef {
+    value: str = "",
+    isDir: bool = false,
+}
+
+export object AttentionRequest {
+    id: str = "",
+    invocation: str = "",
+    openedMs: int = 0,
+    outcome: str = "",
+    severity: str = "",
+    source: str = "",
+    where: str = "",
+    lease: str = "",
+    leaseFrom: LeaseSource = LeaseSource.none,
+    files: [FileRef] = [],
+    message: str = "",
+    disposed: bool = false,
+    disposedMs: int = 0,
+    disposedBy: str = "",
+    note: str = "",
+    disposes: int = 0,
+}
+
+export object AttentionList {
+    requests: [AttentionRequest] = [],
+    store: str = "",
+}
+
+export object SpellCache {
+    spell: str = "",
+    env: str = "",
+    dir: str = "",
+    trimMb: int = 0,
+}
+
+export object DiskReclaim {
+    caches: [SpellCache] = [],
+    listCommand: str = "",
+}
+
+export object Path {
+    value: str = "",
+    base: str = "",
+    isDir: bool = false,
+}
+
+export object DriftResult {
+    drifted: bool = false,
+    code: str = "",
+    message: str = "",
+    url: str = "",
+    files: [Path] = [],
+}
+
+export object QueryOptions {
+    budget: int = 0,
+    limit: int = 0,
+    offset: int = 0,
+}
+
+export object KnowledgeTermScore {
+    term: str = "",
+    field: str = "",
+    score: double = 0.0,
+}
+
+export object KnowledgeListRank {
+    list: str = "",
+    rank: int = 0,
+}
+
+export object KnowledgeMatchWhy {
+    matched: int = 0,
+    of: int = 0,
+    terms: [KnowledgeTermScore] = [],
+    lists: [KnowledgeListRank] = [],
+    seeds: [str] = [],
+    prior: double = 0.0,
+}
+
+export object Match {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    score: int = 0,
+    why: KnowledgeMatchWhy? = null,
+    staleness: str = "",
+    outrunDays: int = 0,
+}
+
+export object KnowledgeNode {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    doc: str = "",
+    source: str = "",
+    attrs: {str: str} = {},
+}
+
+export object KnowledgeEdge {
+    source: str = "",
+    target: str = "",
+    relation: RelationID = RelationID.none,
+    confidence: str = "",
+    score: double = 0.0,
+    provenance: str = "",
+    attrs: {str: str} = {},
+}
+
+export object KnowledgeTextPresence {
+    hits: int = 0,
+    files: int = 0,
+    sites: [str] = [],
+    more: int = 0,
+}
+
+export object KnowledgeIndexCause {
+    why: str = "",
+    fix: str = "",
+}
+
+export object KnowledgeAnswer {
+    verdict: KnowledgeVerdict = KnowledgeVerdict.none,
+    reason: KnowledgeUnknownReason = KnowledgeUnknownReason.none,
+    gaps: [KnowledgeSymbolGap] = [],
+    staleIndexes: [str] = [],
+    text: KnowledgeTextPresence? = null,
+    indexCause: KnowledgeIndexCause? = null,
+}
+
+export object KnowledgeRanking {
+    weights: str = "",
+    reader: [str] = [],
+    skipped: [str] = [],
+    note: str = "",
+}
+
+export object QueryResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    query: str = "",
+    budget: int = 0,
+    matchCount: int = 0,
+    offset: int = 0,
+    matches: [Match] = [],
+    nodes: [KnowledgeNode] = [],
+    links: [KnowledgeEdge] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+    ranking: KnowledgeRanking? = null,
+}
+
+export object EdgeRef {
+    relation: RelationID = RelationID.none,
+    direction: EdgeDirection = EdgeDirection.none,
+    other: str = "",
+    otherKind: str = "",
+    otherLabel: str = "",
+    provenance: str = "",
+    attrs: {str: str} = {},
+}
+
+export object PublicSymbol {
+    id: str = "",
+    label: str = "",
+    dir: str = "",
+    signature: str = "",
+    usedBy: int = 0,
+}
+
+export object ExplainResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    node: KnowledgeNode = KnowledgeNode{},
+    blastRadius: int = 0,
+    @"out": [EdgeRef] = [],
+    @"in": [EdgeRef] = [],
+    docsURL: str = "",
+    resolution: KnowledgeResolution = KnowledgeResolution.none,
+    publicAPI: [PublicSymbol] = [],
+    publicAPIGap: str = "",
+}
+
+export object PathOptions {
+    relations: [RelationID] = [],
+}
+
+export object PathStep {
+    @"from": str = "",
+    to: str = "",
+    relation: RelationID = RelationID.none,
+    forward: bool = false,
+}
+
+export object PathResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    @"from": str = "",
+    to: str = "",
+    found: bool = false,
+    steps: [PathStep] = [],
+}
+
+export object RefsOptions {
+    limit: int = 0,
+    offset: int = 0,
+}
+
+export object RefSite {
+    file: str = "",
+    count: int = 0,
+    lines: [int] = [],
+}
+
+export object RefsResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    symbol: str = "",
+    label: str = "",
+    fileCount: int = 0,
+    refCount: int = 0,
+    defs: [RefSite] = [],
+    refs: [RefSite] = [],
+    signature: str? = null,
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object KnowledgeGodNode {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    degree: int = 0,
+    @"in": int = 0,
+    @"out": int = 0,
+}
+
+export object KnowledgeOrphan {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    reason: str = "",
+}
+
+export object KnowledgeDocCoverage {
+    kind: str = "",
+    total: int = 0,
+    documented: int = 0,
+    percent: int = 0,
+    undocumented: [str] = [],
+}
+
+export object KnowledgeStats {
+    definition: str = "",
+    nodeCount: int = 0,
+    edgeCount: int = 0,
+    gods: [KnowledgeGodNode] = [],
+    orphans: [KnowledgeOrphan] = [],
+    coverage: [KnowledgeDocCoverage] = [],
+    isolatedCount: int = 0,
+    componentCount: int = 0,
+    largestComponentSize: int = 0,
+}
+
+export object NeighborhoodOptions {
+    depth: int = 0,
+    relations: [RelationID] = [],
+    direction: EdgeDirection = EdgeDirection.none,
+    collapse: [str] = [],
+}
+
+export object KnowledgeFold {
+    prefix: str = "",
+    node: str = "",
+    folded: int = 0,
+}
+
+export object NeighborhoodResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    focus: str = "",
+    resolution: KnowledgeResolution = KnowledgeResolution.none,
+    options: NeighborhoodOptions = NeighborhoodOptions{},
+    nodes: [KnowledgeNode] = [],
+    links: [KnowledgeEdge] = [],
+    folds: [KnowledgeFold] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object DirCall {
+    dir: str = "",
+    transport: str = "",
+    marker: str = "",
+    source: str = "",
+}
+
+export object Dir {
+    path: str = "",
+    id: str = "",
+    layer: str = "",
+    language: str = "",
+    imports: [str] = [],
+    importedBy: [str] = [],
+    importsIndexed: bool = false,
+    calls: [DirCall] = [],
+    calledBy: [DirCall] = [],
+    children: [str] = [],
+    files: int = 0,
+}
+
+export object DirsOptions {
+    layer: str = "",
+    language: str = "",
+    depth: int = 0,
+}
+
+export object Layer {
+    name: str = "",
+    declared: [str] = [],
+    dirs: [Dir] = [],
+}
+
+export object Deps {
+    nodes: [str] = [],
+    dependsOn: {str: [str]} = {},
+    blastRadius: {str: int} = {},
+}
+
+export object ImportGraph {
+    indexed: bool = false,
+    packages: {str: [str]} = {},
+    languages: {str: str} = {},
+}
+
+export object SymbolDecl {
+    node: str = "",
+    source: str = "",
+    language: str = "",
+    name: str = "",
+    kind: str = "",
+    owner: str = "",
+    doc: str = "",
+}
+
+export object SymbolIndexStatus {
+    project: ProjectRef = ProjectRef{},
+    op: str = "",
+    language: str = "",
+    freshness: SymbolIndexFreshness = SymbolIndexFreshness.none,
+    detail: str = "",
+    changed: [str] = [],
+    changedCount: int = 0,
+}
+
+export object Symbols {
+    symbols: [SymbolDecl] = [],
+    indexes: [SymbolIndexStatus] = [],
+}
+
+export object PrecedentScope {
+    layers: [str] = [],
+    language: str = "",
+}
+
+export object PrecedentKey {
+    @"from": str = "",
+    to: str = "",
+    maxImports: int = 0,
+    prefix: str = "",
+    @"type": str = "",
+    name: str = "",
+    order: [str] = [],
+}
+
+export object Case {
+    node: str = "",
+    source: str = "",
+    imports: [str] = [],
+}
+
+export object Precedent {
+    family: PrecedentFamily = PrecedentFamily.none,
+    scope: PrecedentScope = PrecedentScope{},
+    key: PrecedentKey = PrecedentKey{},
+    follow: int = 0,
+    cohort: int = 0,
+    share: double = 0.0,
+    established: bool = false,
+    cited: [Case] = [],
+    departures: [Case] = [],
+}
+
+export object Holds {
+    holds: [Precedent] = [],
+    indexes: [SymbolIndexStatus] = [],
+}
+
+export object UnreferencedEntry {
+    id: str = "",
+    label: str = "",
+    source: str = "",
+    kind: str = "",
+    language: str = "",
+}
+
+export object Unreferenced {
+    definition: str = "",
+    symbols: [UnreferencedEntry] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object DuplicationSite {
+    id: str = "",
+    label: str = "",
+    source: str = "",
+    endLine: int = 0,
+    distinct: [str] = [],
+    callers: int = 0,
+    foreignFiles: int = 0,
+    tested: bool = false,
+}
+
+export object DuplicationHistory {
+    commits: int = 0,
+    together: int = 0,
+    apart: int = 0,
+}
+
+export object DuplicationGroup {
+    members: [DuplicationSite] = [],
+    score: double = 0.0,
+    shared: [str] = [],
+    packages: [str] = [],
+    placement: DuplicationPlacement = DuplicationPlacement.none,
+    home: str = "",
+    shape: DuplicationShape = DuplicationShape.none,
+    removable: int = 0,
+    siblings: bool = false,
+    history: DuplicationHistory? = null,
+}
+
+export object Duplication {
+    definition: str = "",
+    groups: [DuplicationGroup] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object TierOptions {
+    paths: [str] = [],
+    checkout: str = "",
+}
+
+export object TierEvidence {
+    path: str = "",
+    project: str = "",
+    target: str = "",
+    class: str = "",
+    tier: Tier = Tier.none,
+    why: str = "",
+    packages: [str] = [],
+}
+
+export object TierGateStep {
+    target: str = "",
+    projects: [str] = [],
+    op: str = "",
+    packages: [str] = [],
+    argv: [str] = [],
+}
+
+export object TierReport {
+    base: str = "",
+    target: str = "",
+    tier: Tier = Tier.none,
+    affected: [str] = [],
+    evidence: [TierEvidence] = [],
+    gate: [TierGateStep] = [],
+}
+
+export object DiffOptions {
+    root: str = "",
+    dir: str = "",
+    stdin: str = "",
+    quiet: bool = false,
+    allowFailure: bool = false,
+    @"from": str = "",
+    baseline: str = "",
+    rev: str = "",
+    patch: str = "",
+    minCohort: int = 0,
+    minShare: double = 0.0,
+}
+
+export object ImpactCoverage {
+    ratio: double = 0.0,
+    covered: int = 0,
+    total: int = 0,
+}
+
+export object DiffPublicPath {
+    id: str = "",
+    qualified: str = "",
+    via: [str] = [],
+    boundary: str = "",
+}
+
+export object DiffSymbol {
+    id: str = "",
+    label: str = "",
+    refCount: int = 0,
+    fileCount: int = 0,
+    publicTo: [str] = [],
+    publicFileCount: int = 0,
+    publicBeyondWorkspace: bool = false,
+    change: str = "",
+    qualified: str = "",
+    signature: str = "",
+    baseSignature: str = "",
+    checks: [Check] = [],
+    publicThrough: [DiffPublicPath] = [],
+}
+
+export object DiffHunk {
+    index: int = 0,
+    digest: str = "",
+    oldStart: int = 0,
+    oldCount: int = 0,
+    newStart: int = 0,
+    newCount: int = 0,
+    declaration: str = "",
+    symbols: [str] = [],
+}
+
+export object DiffTouch {
+    host: str = "",
+    session: str = "",
+    transcript: str = "",
+    read: [str] = [],
+    ran: [str] = [],
+}
+
+export object DiffChurn {
+    commits: int = 0,
+    authors: int = 0,
+    score: int = 0,
+    rank: int = 0,
+    projectTrend: int = 0,
+}
+
+export object DiffThreadRef {
+    id: str = "",
+    hunk: int = 0,
+    line: int = 0,
+    comments: int = 0,
+    outdated: bool = false,
+}
+
+export object DiffFile {
+    path: str = "",
+    project: str = "",
+    role: str = "",
+    hint: str = "",
+    coverage: ImpactCoverage? = null,
+    symbols: [DiffSymbol] = [],
+    hunks: [DiffHunk] = [],
+    layout: [Check] = [],
+    visibility: str = "",
+    touches: [DiffTouch] = [],
+    readState: str = "",
+    churn: DiffChurn? = null,
+    noHistory: bool = false,
+    reach: int? = null,
+    threads: [DiffThreadRef] = [],
+}
+
+export object ImpactProject {
+    path: str = "",
+    seed: bool = false,
+    files: [str] = [],
+    undeclaredFiles: [str] = [],
+    spells: [str] = [],
+    targets: [str] = [],
+}
+
+export object ReleaseStage {
+    tag: str = "",
+    major: int = 0,
+}
+
+export object DiffAPI {
+    base: str = "",
+    floor: str = "",
+    likely: str = "",
+    added: int = 0,
+    removed: int = 0,
+    signature: int = 0,
+    body: int = 0,
+    stage: ReleaseStage = ReleaseStage{},
+}
+
+export object DiffHunkRef {
+    path: str = "",
+    index: int = 0,
+    digest: str = "",
+}
+
+export object DiffWhy {
+    relation: DiffWhyRelation = DiffWhyRelation.none,
+    step: int = 0,
+    symbol: str = "",
+    cycle: [str] = [],
+    text: str = "",
+}
+
+export object DiffStepHunk {
+    ref: DiffHunkRef = DiffHunkRef{},
+    label: str = "",
+    why: DiffWhy = DiffWhy{},
+}
+
+export object DiffStep {
+    number: int = 0,
+    hunks: [DiffStepHunk] = [],
+}
+
+export object DiffGroup {
+    kind: DiffGroupKind = DiffGroupKind.none,
+    label: str = "",
+    hunkCount: int = 0,
+    reach: int = 0,
+    steps: [DiffStep] = [],
+}
+
+export object DiffOrderCount {
+    hunkCount: int = 0,
+    placed: int = 0,
+    complete: bool = false,
+    repeated: [DiffHunkRef] = [],
+    missing: [DiffHunkRef] = [],
+    filesWithoutHunks: [str] = [],
+}
+
+export object DiffOrder {
+    groups: [DiffGroup] = [],
+    count: DiffOrderCount = DiffOrderCount{},
+}
+
+export object DiffReviewed {
+    at: VCSCheckpoint = VCSCheckpoint{},
+    files: int = 0,
+}
+
+export object Diagnostic {
+    code: str = "",
+    message: str = "",
+    url: str = "",
+    fix: str = "",
+}
+
+export object DiffUncovered {
+    project: str = "",
+    reason: DiffUncoveredReason = DiffUncoveredReason.none,
+}
+
+export object DiffUnread {
+    readState: DiffReadState = DiffReadState.none,
+    reason: str = "",
+    hunks: int = 0,
+    unread: int = 0,
+}
+
+export object Diff {
+    base: str = "",
+    files: [DiffFile] = [],
+    seedProjects: [str] = [],
+    affectedProjects: [ImpactProject] = [],
+    notes: [str] = [],
+    api: DiffAPI? = null,
+    order: DiffOrder? = null,
+    reviewed: DiffReviewed = DiffReviewed{},
+    conformanceError: Diagnostic? = null,
+    uncovered: [DiffUncovered] = [],
+    unread: DiffUnread? = null,
+}
+
+export object ImpactSymbol {
+    file: str = "",
+    symbol: str = "",
+    label: str = "",
+    refCount: int = 0,
+    fileCount: int = 0,
+    coverage: ImpactCoverage = ImpactCoverage{},
+}
+
+export object ImpactFileCoverage {
+    file: str = "",
+    coverage: ImpactCoverage = ImpactCoverage{},
+}
+
+export object Impact {
+    base: str = "",
+    changedFileCount: int = 0,
+    changedFiles: [str] = [],
+    seedProjects: [str] = [],
+    affectedProjects: [ImpactProject] = [],
+    changedSymbols: [ImpactSymbol] = [],
+    changedFileCoverage: [ImpactFileCoverage] = [],
+    notes: [str] = [],
+}
+
+export object Affected {
+    base: str = "",
+    changed: [str] = [],
+    seed: [str] = [],
+    filesBySeed: {str: [str]} = {},
+    affected: [str] = [],
+    undeclaredBySeed: {str: [str]} = {},
+}
+
+export object ConformanceKey {
+    metric: ConformanceMetric = ConformanceMetric.none,
+    population: ConformancePopulation = ConformancePopulation.none,
+    scope: str = "",
+}
+
+export object ConformanceItem {
+    id: str = "",
+    source: str = "",
+    measure: int = 0,
+    home: str = "",
+    unshared: bool = false,
+    rename: str = "",
+}
+
+export object ConformanceRow {
+    key: ConformanceKey = ConformanceKey{},
+    n: int = 0,
+    p50: int = 0,
+    p90: int = 0,
+    p95: int = 0,
+    p99: int = 0,
+    live: int = 0,
+    value: int = 0,
+    propose: int = 0,
+    violations: [ConformanceItem] = [],
+}
+
+export object ConformanceCeiling {
+    key: ConformanceKey = ConformanceKey{},
+    file: str = "",
+    base: int = 0,
+    head: int = 0,
+    violations: [ConformanceItem] = [],
+}
+
+export object ConformanceUnmeasured {
+    file: str = "",
+    language: str = "",
+    reason: str = "",
+}
+
+export object ConformanceReport {
+    definition: str = "",
+    rows: [ConformanceRow] = [],
+    excluded: int = 0,
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+    base: str = "",
+    ceilings: [ConformanceCeiling] = [],
+    unmeasured: [ConformanceUnmeasured] = [],
+    indexes: [SymbolIndexStatus] = [],
+}
+
+export object Node {
+    path: str = "",
+    name: str = "",
+    spellName: str = "",
+    children: [str] = [],
+    dir: str = "",
+    blastRadius: int = 0,
+    durationMs: int = 0,
+    churn: int = 0,
+    authors: int = 0,
+    lastCommit: str? = null,
+}
+
+export object FileHotspot {
+    path: str = "",
+    commits: int = 0,
+    complexity: int = 0,
+    score: int = 0,
+    authors: int = 0,
+    lastCommit: str = "",
+    moves: int = 0,
+}
+
+export object Hotspots {
+    definition: str = "",
+    commits: int = 0,
+    since: str = "",
+    nodes: [Node] = [],
+    files: [FileHotspot] = [],
+}
+
+export object CoChange {
+    a: str = "",
+    aName: str = "",
+    b: str = "",
+    bName: str = "",
+    count: int = 0,
+    hidden: bool = false,
+}
+
+export object Affinity {
+    definition: str = "",
+    commits: int = 0,
+    since: str = "",
+    pairs: [CoChange] = [],
+}
+
+export object OwnershipEntry {
+    path: str = "",
+    name: str = "",
+    commits: int = 0,
+    authors: int = 0,
+    primary: str = "",
+    primaryShare: int = 0,
+    busFactor1: bool = false,
+    stale: bool = false,
+    lastCommit: str = "",
+}
+
+export object Ownership {
+    definition: str = "",
+    commits: int = 0,
+    since: str = "",
+    projects: [OwnershipEntry] = [],
+}
+
+export object TrendEntry {
+    path: str = "",
+    name: str = "",
+    recent: int = 0,
+    earlier: int = 0,
+    delta: int = 0,
+}
+
+export object Trend {
+    definition: str = "",
+    commits: int = 0,
+    since: str = "",
+    projects: [TrendEntry] = [],
+}
+
+export object FileChange {
+    path: str = "",
+    prevPath: str = "",
+    status: ChangeStatus = ChangeStatus.none,
+}
+
+export object RegionChange {
+    file: FileChange = FileChange{},
+    side: RegionSide = RegionSide.none,
+    lines: [int] = [],
+    declaration: str = "",
+    driver: str = "",
+}
+
+export object JobStatus {
+    job: str = "",
+    verified: bool = false,
+    violations: [str] = [],
+    unresolvedRisks: [str] = [],
+    command: str = "",
+    gates: [GateStatus] = [],
+    notes: [str] = [],
+    staleIndexes: [str] = [],
+    footprint: [RegionChange] = [],
+    footprintKnown: bool = false,
+    footprintReason: str = "",
+    footprintUnclaimed: [str] = [],
+    entries: [JobEntry] = [],
+    linesAdded: int = 0,
+    linesDeleted: int = 0,
+    undeclaredExports: [str] = [],
+    leftUnreferenced: [str] = [],
+    symbolDeltaKnown: bool = false,
+    observedGeneration: int = 0,
+    priorGeneration: int = 0,
+}
+
+export object JobRegistration {
+    job: Job = Job{},
+    advice: str = "",
+}
+
+export object TrailObservation {
+    at: int = 0,
+    agent: str = "",
+    lease: str = "",
+    tool: str = "",
+    command: str = "",
+    path: str = "",
+    decision: str = "",
+    rule: str = "",
+    nexts: [str] = [],
+    preauthorizedBy: str = "",
+    shape: str = "",
+    shapes: [str] = [],
+}
+
+export object TrailSpawn {
+    at: int = 0,
+    agent: str = "",
+    child: str = "",
+    lease: str = "",
+    model: str = "",
+}
+
+export object Trail {
+    session: str = "",
+    host: str = "",
+    start: int = 0,
+    end: int = 0,
+    checkouts: [str] = [],
+    observations: [TrailObservation] = [],
+    spawns: [TrailSpawn] = [],
+}
+
+export object TrailMark {
+    id: str = "",
+    section: TrailSection = TrailSection.none,
+    key: str = "",
+    rule: str = "",
+    verdict: TrailVerdict = TrailVerdict.none,
+    note: str = "",
+    session: str = "",
+    at: int = 0,
+    examples: [str] = [],
+}
+
+export object GuardVerdict {
+    decision: GuardDecision = GuardDecision.none,
+    reason: str = "",
+    rule: str = "",
+}
+
+export object GuardBinary {
+    path: str = "",
+    stamp: str = "",
 }
 
 export object ContextWindow {
@@ -1667,172 +2314,6 @@ export object Brief {
     why: str = "",
     decisions: [BriefDecision] = [],
     evidence: [BriefRef] = [],
-}
-
-export object JobForkFacts {
-    finishedBranches: [str] = [],
-    branchesUnknown: str = "",
-    integrateRecord: str = "",
-    commitsSinceTest: int = 0,
-    lastTestRef: str = "",
-    lastTestRevision: str = "",
-    testUnknown: str = "",
-}
-
-export object JobOverlapFootprint {
-    verdict: str = "",
-    shared: [str] = [],
-    reason: str = "",
-}
-
-export object JobOverlap {
-    jobA: str = "",
-    jobB: str = "",
-    pathsA: [str] = [],
-    pathsB: [str] = [],
-    claims: str = "",
-    footprint: JobOverlapFootprint? = null,
-}
-
-export object JobBlock {
-    job: str = "",
-    on: str = "",
-    state: JobState = JobState.none,
-}
-
-export object JobReadOnly {
-    job: str = "",
-    lacks: [str] = [],
-}
-
-export object InflightNeighbour {
-    id: str = "",
-    evidence: str = "",
-    paths: [str] = [],
-    declarations: [str] = [],
-    units: [str] = [],
-    base: str = "",
-}
-
-export object InflightChange {
-    id: str = "",
-    title: str = "",
-    author: str = "",
-    head: str = "",
-    branch: str = "",
-    base: str = "",
-    fork: bool = false,
-    jobs: [str] = [],
-    intent: str = "",
-    mark: str = "",
-    decision: str = "",
-    code: str = "",
-    reason: str = "",
-    partition: int = 0,
-    position: int = 0,
-    below: str = "",
-    mine: bool = false,
-    attention: InflightAttention = InflightAttention.unset,
-    neighbours: [InflightNeighbour] = [],
-}
-
-export object InflightFetch {
-    provider: str = "",
-    host: str = "",
-    base: str = "",
-    tip: str = "",
-    at: int = 0,
-    elapsedMS: int = 0,
-}
-
-export object JobUnmerged {
-    job: str = "",
-    head: str = "",
-    item: str = "",
-    why: str = "",
-    remedy: str = "",
-}
-
-export object JobUnmergedReport {
-    branch: str = "",
-    rows: [JobUnmerged] = [],
-    risks: [JobUnmerged] = [],
-    unknown: str = "",
-}
-
-export object JobList {
-    jobs: [Job] = [],
-    overlaps: [JobOverlap] = [],
-    overdue: [str] = [],
-    orphans: [str] = [],
-    stale: [str] = [],
-    blocked: [JobBlock] = [],
-    readOnly: [JobReadOnly] = [],
-    changes: [InflightChange] = [],
-    fetched: InflightFetch? = null,
-    unproposed: [str] = [],
-    unmerged: JobUnmergedReport? = null,
-}
-
-export object FileChange {
-    path: str = "",
-    prevPath: str = "",
-    status: ChangeStatus = ChangeStatus.none,
-}
-
-export object RegionChange {
-    file: FileChange = FileChange{},
-    side: RegionSide = RegionSide.none,
-    lines: [int] = [],
-    declaration: str = "",
-    driver: str = "",
-}
-
-export object JobStatus {
-    job: str = "",
-    verified: bool = false,
-    violations: [str] = [],
-    unresolvedRisks: [str] = [],
-    command: str = "",
-    gates: [GateStatus] = [],
-    notes: [str] = [],
-    staleIndexes: [str] = [],
-    footprint: [RegionChange] = [],
-    footprintKnown: bool = false,
-    footprintReason: str = "",
-    footprintUnclaimed: [str] = [],
-    entries: [JobEntry] = [],
-    linesAdded: int = 0,
-    linesDeleted: int = 0,
-    undeclaredExports: [str] = [],
-    leftUnreferenced: [str] = [],
-    symbolDeltaKnown: bool = false,
-    observedGeneration: int = 0,
-    priorGeneration: int = 0,
-}
-
-export object ModelTierRequest {
-    id: str = "",
-    parent: str = "",
-    criteria: str = "",
-    readOnly: bool = false,
-    check: LeaseCheck? = null,
-    goals: [Goal] = [],
-    kind: JobKind = JobKind.check,
-    writePaths: [str] = [],
-    writeProjects: [str] = [],
-    readPaths: [str] = [],
-    dependsOn: [str] = [],
-    writeFiles: int = 0,
-    parentRank: int? = null,
-    declaredRank: int? = null,
-    declaredModel: str = "",
-    history: [ModelTierRecord] = [],
-}
-
-export object ModelTierBounds {
-    maxLive: int = 0,
-    maxContext: int = 0,
 }
 
 export object CharmDeclaration {
@@ -2250,131 +2731,98 @@ export object ServiceLease {
     idle: str = "",
 }
 
-export object RiskOptions {
-    base: str = "",
-    paths: [str] = [],
-    checkout: str = "",
-}
-
-export object RiskEvidence {
-    path: str = "",
-    project: str = "",
-    target: str = "",
-    class: str = "",
-    tier: RiskTier = RiskTier.none,
-    why: str = "",
-    packages: [str] = [],
-}
-
-export object RiskGateStep {
-    target: str = "",
-    projects: [str] = [],
-    op: str = "",
-    packages: [str] = [],
-    argv: [str] = [],
-}
-
-export object RiskReport {
-    base: str = "",
-    target: str = "",
-    tier: RiskTier = RiskTier.none,
-    affected: [str] = [],
-    evidence: [RiskEvidence] = [],
-    gate: [RiskGateStep] = [],
-}
-
-export object TrailMark {
+export object ModelTierRequest {
     id: str = "",
-    section: TrailSection = TrailSection.none,
-    key: str = "",
-    rule: str = "",
-    verdict: TrailVerdict = TrailVerdict.none,
-    note: str = "",
-    session: str = "",
-    at: int = 0,
-    examples: [str] = [],
+    parent: str = "",
+    criteria: str = "",
+    readOnly: bool = false,
+    check: LeaseCheck? = null,
+    goals: [Goal] = [],
+    kind: JobKind = JobKind.check,
+    writePaths: [str] = [],
+    writeProjects: [str] = [],
+    readPaths: [str] = [],
+    dependsOn: [str] = [],
+    writeFiles: int = 0,
+    parentRank: int? = null,
+    declaredRank: int? = null,
+    declaredModel: str = "",
+    history: [ModelTierRecord] = [],
 }
 
-export object TrailObservation {
-    at: int = 0,
-    agent: str = "",
-    lease: str = "",
-    tool: str = "",
-    command: str = "",
-    path: str = "",
-    decision: str = "",
-    rule: str = "",
-    nexts: [str] = [],
-    preauthorizedBy: str = "",
-    shape: str = "",
-    shapes: [str] = [],
+export object ModelTierBounds {
+    maxLive: int = 0,
+    maxContext: int = 0,
 }
 
-export object TrailSpawn {
-    at: int = 0,
-    agent: str = "",
-    child: str = "",
-    lease: str = "",
-    model: str = "",
-}
+extern fun magus__Workspace__jobs(recv: Workspace) > JobList !> any;
+extern fun magus__Workspace__putJob(recv: Workspace, id: str, opts: {str: any} = {<str: any>}) > Job !> any;
+extern fun magus__Workspace__clearJobs(recv: Workspace) > int !> any;
+extern fun magus__Workspace__forkFacts(recv: Workspace) > JobForkFacts !> any;
+extern fun magus__Workspace__unmerged(recv: Workspace) > JobUnmergedReport !> any;
+extern fun magus__Workspace__tierOutcomes(recv: Workspace) > ModelTiers !> any;
+extern fun magus__Workspace__grouping(recv: Workspace) > Grouping !> any;
+extern fun magus__Workspace__volatility(recv: Workspace) > Volatility !> any;
+extern fun magus__Workspace__skills(recv: Workspace, opts: SkillsOptions? = null) > [Skill] !> any;
+extern fun magus__Workspace__attention(recv: Workspace, args: [str], opts: CommandOptions? = null) > AttentionList !> any;
+extern fun magus__Workspace__fileDiskAttention(recv: Workspace, message: str) > void !> any;
+extern fun magus__Workspace__diskReclaim(recv: Workspace) > DiskReclaim !> any;
+extern fun magus__Workspace__bustCache(recv: Workspace, projectPath: str = "") > void !> any;
+extern fun magus__Workspace__diagnoseDrift(recv: Workspace, outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
+extern fun magus__Graph__query(recv: Graph, query: str, opts: QueryOptions? = null) > QueryResult !> any;
+extern fun magus__Graph__explain(recv: Graph, node: str) > ExplainResult !> any;
+extern fun magus__Graph__path(recv: Graph, node: str, to: str, opts: PathOptions? = null) > PathResult !> any;
+extern fun magus__Graph__refs(recv: Graph, symbol: str, opts: RefsOptions? = null) > RefsResult !> any;
+extern fun magus__Graph__stats(recv: Graph, kind: str = "") > KnowledgeStats !> any;
+extern fun magus__Graph__neighborhood(recv: Graph, focus: str, opts: NeighborhoodOptions? = null) > NeighborhoodResult !> any;
+extern fun magus__Graph__dir(recv: Graph, path: str) > Dir !> any;
+extern fun magus__Graph__dirs(recv: Graph, glob: str, opts: DirsOptions? = null) > [Dir] !> any;
+extern fun magus__Graph__layer(recv: Graph, name: str) > Layer !> any;
+extern fun magus__Graph__deps(recv: Graph) > Deps !> any;
+extern fun magus__Graph__imports(recv: Graph) > ImportGraph !> any;
+extern fun magus__Graph__symbols(recv: Graph) > Symbols !> any;
+extern fun magus__Graph__precedents(recv: Graph) > Holds !> any;
+extern fun magus__Graph__unreferenced(recv: Graph) > Unreferenced !> any;
+extern fun magus__Graph__duplication(recv: Graph) > Duplication !> any;
+extern fun magus__Change__tier(recv: Change, target: str, opts: TierOptions? = null) > TierReport !> any;
+extern fun magus__Change__diff(recv: Change, opts: DiffOptions? = null) > Diff !> any;
+extern fun magus__Change__impact(recv: Change, opts: CommandOptions? = null) > Impact !> any;
+extern fun magus__Change__affected(recv: Change) > Affected !> any;
+extern fun magus__Change__conformance(recv: Change, checks: [str] = [<str>]) > ConformanceReport !> any;
+extern fun magus__Change__mergeBase(recv: Change) > str !> any;
+extern fun magus__History__hotspots(recv: History) > Hotspots !> any;
+extern fun magus__History__affinity(recv: History) > Affinity !> any;
+extern fun magus__History__ownership(recv: History) > Ownership !> any;
+extern fun magus__History__trend(recv: History) > Trend !> any;
+extern fun magus__Job__exit(recv: Job, result: {str: any} = {<str: any>}) > Job !> any;
+extern fun magus__Job__wait(recv: Job, result: {str: any} = {<str: any>}) > JobStatus !> any;
+extern fun magus__Job__register(recv: Job) > JobRegistration !> any;
+extern fun magus__Session__trail(recv: Session) > Trail !> any;
+extern fun magus__Session__marks(recv: Session) > [TrailMark] !> any;
+extern fun magus__Session__mark(recv: Session, mark: TrailMark) > TrailMark !> any;
 
-export object Trail {
-    session: str = "",
-    host: str = "",
-    start: int = 0,
-    end: int = 0,
-    checkouts: [str] = [],
-    observations: [TrailObservation] = [],
-    spawns: [TrailSpawn] = [],
-}
-
-export extern fun affected(base: str = "") > Affected !> any;
-export extern fun affinity(opts: HistoryMetricsOptions? = null) > Affinity !> any;
-export extern fun attention(args: [str], opts: CommandOptions? = null) > {str: any} !> any;
-export extern fun bustCache(projectPath: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
+export extern fun change(base: str = "", opts: ChangeOptions? = null) > Change !> any;
 export extern fun clean(args: [str], opts: CommandOptions? = null) > CleanReport !> any;
 export extern fun cmd(sub: str, args: [str], opts: CommandOptions? = null) > ExecResult !> any;
-export extern fun conformance(checks: [str] = [<str>], base: str = "") > {str: any} !> any;
-export extern fun conformanceBase(base: str) > str !> any;
-export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
 export extern fun diagnosticCode(text: str) > DiagnosticCode !> any;
-export extern fun diff(opts: DiffOptions? = null) > Diff !> any;
-export extern fun dir(path: str) > Dir !> any;
-export extern fun dirs(glob: str, opts: DirsOptions? = null) > [Dir] !> any;
-export extern fun diskReclaim() > DiskReclaim !> any;
 export extern fun doctor(args: [str], opts: CommandOptions? = null) > DoctorReport !> any;
-export extern fun duplication() > Duplication !> any;
-export extern fun explain(node: str) > ExplainResult !> any;
 export extern fun fatal(msg: str = "") > void;
-export extern fun fileDiskAttention(message: str) > void !> any;
-export extern fun grouping() > Grouping !> any;
+export extern fun graph() > Graph !> any;
 export extern fun hasCharm(name: str) > bool;
-export extern fun hotspots(opts: HistoryMetricsOptions? = null) > Hotspots !> any;
-export extern fun impact(base: str = "", opts: CommandOptions? = null) > Impact !> any;
-export extern fun importGraph() > ImportGraph !> any;
-export extern fun layer(name: str) > Layer !> any;
-export extern fun modelTiers() > ModelTiers !> any;
-export extern fun neighborhood(focus: str, opts: NeighborhoodOptions? = null) > NeighborhoodResult !> any;
+export extern fun history(opts: HistoryMetricsOptions? = null) > History !> any;
+export extern fun job(id: str) > Job !> any;
+export extern fun modelTier(matrix: fun (req: ModelTierRequest) > any !> any) > void;
+export extern fun modelTiers(tiers: any, default: any = null, hosts: any = null, bounds: any = null, skills: any = null) > void;
 export extern fun output(ref: str) > OutputRecord !> any;
-export extern fun ownership(opts: HistoryMetricsOptions? = null) > Ownership !> any;
-export extern fun path(node: str, to: str, opts: PathOptions? = null) > PathResult !> any;
-export extern fun precedents() > {str: any} !> any;
 export extern fun project(config: any, opts: any = null) > void;
-export extern fun projectGraph() > Graph !> any;
 export extern fun pry() > void;
-export extern fun query(query: str, opts: QueryOptions? = null) > QueryResult !> any;
 export extern fun raise(code: DiagnosticCode, message: str, opts: RaiseOptions? = null) > void !> any;
-export extern fun refs(symbol: str, opts: RefsOptions? = null) > RefsResult !> any;
 export extern fun run(args: [str], opts: CommandOptions? = null) > ExecResult !> any;
-export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
-export extern fun stats(kind: str = "") > KnowledgeStats !> any;
-export extern fun symbolIndexDigest() > SymbolIndexDigest !> any;
-export extern fun symbols() > {str: any} !> any;
-export extern fun trend(opts: HistoryMetricsOptions? = null) > Trend !> any;
-export extern fun unreferenced() > Unreferenced !> any;
-export extern fun volatility() > Volatility !> any;
+export extern fun session(opts: SessionOptions? = null) > Session !> any;
 export extern fun where(dir: str) > str !> any;
+export extern fun workspace(dir: str = "") > Workspace !> any;
+export extern fun workspaceProvider(spell: {str: any}) > void;
 // Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this module hard to read.
 export object log {
     static extern fun debug(msg: str = "", fields: {str: str} = {<str: str>}) > void;
@@ -2405,6 +2853,8 @@ export object guard {
     static extern fun deny(text: str, opts: {str: any} = {<str: any>}) > GuardVerdict;
     static extern fun once(key: str) > bool;
     static extern fun profile(level: str) > void;
+    static extern fun shape(command: str) > str;
+    static extern fun shapes(command: str) > [str];
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: fun (req: SpawnRequest) > GuardVerdict !> any) > void;
     static extern fun stop(rule: fun (req: StopRequest) > GuardVerdict !> any) > void;
@@ -2433,25 +2883,6 @@ export object lifecycle {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// Workspace-level declarations made from the root magusfile.
-export object workspace {
-    static extern fun provider(spell: {str: any}) > void;
-}
-
-// The declared job store: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the client MCP tool (magus\job) and `magus job` (fork, exec, exit, wait) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildJob), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
-export object job {
-    static extern fun clear() > int !> any;
-    static extern fun exit(id: str, result: {str: any} = {<str: any>}) > Job !> any;
-    static extern fun forkFacts(workspace: str) > JobForkFacts !> any;
-    static extern fun list() > JobList !> any;
-    static extern fun modelTier(matrix: fun (req: ModelTierRequest) > any !> any) > void;
-    static extern fun modelTiers(tiers: any, default: any = null, hosts: any = null, bounds: any = null, skills: any = null) > void;
-    static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
-    static extern fun register(id: str) > {str: any} !> any;
-    static extern fun unmerged(workspace: str) > JobUnmergedReport !> any;
-    static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
-}
-
 // Typed reads of what `magus describe <noun>` prints, one method per noun: `magus\describe.spell("go")` returns the Spell records `magus describe spell go -o json` carries. A method whose noun takes a name takes it as an optional SELECTOR and returns a collection either way, so detailing one reads `[0]`. A report that carries more than its collection (a file classification's overlaps, the tools' lifecycle state) comes back whole. The methods that fork a nested magus work from a `magus buzz` script with no workspace loaded; opts.root and opts.dir are as for magus\run. Bound by hand in internal/interp/bindings (buildDescribe): a Namespace's methods are Extern by construction. A noun with no method here is reached through magus\cmd("describe", [...]).
 export object describe {
     static extern fun charm(name: str = "", opts: CommandOptions? = null) > [CharmEntry] !> any;
@@ -2475,24 +2906,5 @@ export object describe {
 export object service {
     static extern fun acquire(spell: str, op: str) > ServiceLease !> any;
     static extern fun release(lease: ServiceLease) > void !> any;
-}
-
-// Facts about the workspace's version control that only magus computes. The `vcs` host module is the repository itself; this namespace is magus's reading of it. Bound by hand in internal/interp/bindings (buildVCS).
-export object vcs {
-    static extern fun checkpoint() > VCSCheckpoint !> any;
-}
-
-// The risk tier magus proves for a change, the one `affected ci` sizes its gate by. Bound by hand in internal/interp/bindings (buildRisk).
-export object risk {
-    static extern fun assess(target: str, opts: RiskOptions? = null) > RiskReport !> any;
-}
-
-// A session's guard record, read from the activity trail, and the verdicts a person gives its rows. Bound by hand in internal/interp/bindings (buildTrail).
-export object trail {
-    static extern fun mark(mark: TrailMark) > TrailMark !> any;
-    static extern fun marks() > [TrailMark] !> any;
-    static extern fun read(opts: {str: any} = {<str: any>}) > Trail !> any;
-    static extern fun shape(command: str) > str;
-    static extern fun shapes(command: str) > [str];
 }
 

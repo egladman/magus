@@ -628,9 +628,15 @@ func (e *decodeEmitter) listFile(entries []boundaryType, bindingsPkg string) ([]
 		fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/ffi"`)
 	}
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
-	// e.pkgs is exact here as well: every struct the decoders reach is an inbound entry,
-	// and every enum they reach is listed below.
-	b.WriteString(importLines(e.pkgs))
+	// Decoder-only scalar packages are not referenced by the type list.
+	pkgs := map[string]bool{}
+	for _, entry := range entries {
+		pkgs[typePackage(entry.Type).alias] = true
+	}
+	for _, en := range e.enums {
+		pkgs[typePackage(en.Type).alias] = true
+	}
+	b.WriteString(importLines(pkgs))
 	fmt.Fprintln(&b, ")")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "var inboundTypes = []inboundType{")
