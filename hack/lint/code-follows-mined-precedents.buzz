@@ -14,7 +14,7 @@ import "hack/lint/support" as support;
 // runs go vet alone), and these read every Go index. param-name-by-type and param-order stay advice: measured at 3e29af6ff they
 // establish 176 and 435 keys, most of them a local habit (a rune named r), with 144 and 76
 // departures.
-export final FAMILIES = ["ctx-first", "err-sentinel-name", "error-last", "test-package-name"];
+export final FAMILIES = [magus\PrecedentFamily.ctxFirst, magus\PrecedentFamily.errSentinelName, magus\PrecedentFamily.errorLast, magus\PrecedentFamily.testPackageName];
 
 // LANGUAGES are the indexes the rule judges. Buzz joins once CI installs scip-buzz; until
 // then a Buzz row would hold on one machine and not another.
@@ -47,19 +47,19 @@ export fun check(files: [Path]) > [Finding] !> any {
 }
 
 // judge is check over a magus\graph().precedents() report.
-export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any {
+export fun judge(report: magus\Holds, sanctioned: {str: str}) > [Finding] !> any {
     final found = mut [<Finding>];
-    final indexes: [any] = report["indexes"] ?? [<any>];
-    final rows: [any] = report["holds"] ?? [<any>];
+    final indexes = report.indexes;
+    final rows = report.holds;
     var judgeable = true;
     foreach (lang in LANGUAGES) {
         var declared = false;
         foreach (idx in indexes) {
-            if (idx["language"] != lang) {
+            if (idx.language != lang) {
                 continue;
             }
             declared = true;
-            final stale = support\staleness(idx, judging: "precedents");
+            final stale = support\staleness({"freshness": idx.freshness.value, "project": {"path": idx.project.path}, "language": idx.language, "detail": idx.detail, "changed": idx.changed, "changed_count": idx.changedCount}, judging: "precedents");
             judgeable = judgeable and stale.judgeable;
             foreach (f in stale.findings) {
                 found.append(f);
@@ -80,30 +80,30 @@ export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any 
         foreach (family in FAMILIES) {
             // A keyed family (a parameter type, a pair of names) makes a row per key, and each
             // established one is held.
-            final held = mut [<any>];
+            final held = mut [<magus\Precedent>];
             foreach (r in rows) {
-                if (r["family"] == family and r["scope"]["language"] == lang and r["established"] == true) {
+                if (r.family == family and r.scope.language == lang and r.established == true) {
                     held.append(r);
                 }
             }
             if (held.len() == 0) {
-                found.append(Finding{ path = ".", message = "the index establishes no {lang} {family} precedent to hold",
+                found.append(Finding{ path = ".", message = "the index establishes no {lang} {family.value} precedent to hold",
                     fix = "The miner or the index changed under this rule; read `magus\\graph().precedents()` before dropping the family." });
                 continue;
             }
             foreach (row in held) {
-                final follow = std\toInt(row["follow"]);
-                final cohort = std\toInt(row["cohort"]);
-                final departures: [any] = row["departures"] ?? [<any>];
+                final follow = row.follow;
+                final cohort = row.cohort;
+                final departures = row.departures;
                 foreach (d in departures) {
-                    final node: str = d["node"] ?? "";
+                    final node: str = d.node;
                     departed[node] = true;
                     if (sanctioned[node] != null) {
                         continue;
                     }
-                    final at = position(d["source"] ?? "");
+                    final at = position(d.source);
                     found.append(Finding{ path = at.path, line = at.line,
-                        message = "departs from the {family} precedent that {follow} of {cohort} {lang} cases follow: {node}",
+                        message = "departs from the {family.value} precedent that {follow} of {cohort} {lang} cases follow: {node}",
                         fix = "Follow it, or add the node to SANCTIONED in " + THIS + " with the reason it departs." });
                 }
             }
@@ -136,26 +136,26 @@ fun position(source: str) > Position {
         line = std\parseInt(source.sub(colon! + 1, len: source.len() - colon! - 1)) ?? 0 };
 }
 
-fun fresh(lang: str) > {str: any} {
-    return {"project": {"path": "."}, "language": lang, "freshness": "up-to-date"};
+fun fresh(lang: str) > magus\SymbolIndexStatus {
+    return magus\SymbolIndexStatus{ project = magus\ProjectRef{ path = "." }, language = lang, freshness = magus\SymbolIndexFreshness.upToDate };
 }
 
-fun row(family: str, departures: [any]) > {str: any} {
-    return {"family": family, "scope": {"language": "go"}, "established": true,
-        "follow": 85.0, "cohort": 86.0, "departures": departures};
+fun row(family: magus\PrecedentFamily, departures: [magus\Case]) > magus\Precedent {
+    return magus\Precedent{ family = family, scope = magus\PrecedentScope{ language = "go" }, established = true,
+        follow = 85, cohort = 86, departures = departures };
 }
 
 // report holds a row of every family, with departures under err-sentinel-name.
-fun report(indexes: [any], departures: [any]) > {str: any} {
-    final rows = mut [<any>];
+fun report(indexes: [magus\SymbolIndexStatus], departures: [magus\Case]) > magus\Holds {
+    final rows = mut [<magus\Precedent>];
     foreach (family in FAMILIES) {
-        rows.append(row(family, departures: if (family == "err-sentinel-name") departures else [<any>]));
+        rows.append(row(family, departures: if (family == magus\PrecedentFamily.errSentinelName) departures else [<magus\Case>]));
     }
-    return {"indexes": indexes, "holds": rows};
+    return magus\Holds{ indexes = indexes, holds = rows };
 }
 
 test "an unsanctioned departure is reported at its line" {
-    final d: {str: any} = {"node": "symbol:x/magusErr.", "source": "cmd/magus/helpers.go:107"};
+    final d = magus\Case{ node = "symbol:x/magusErr.", source = "cmd/magus/helpers.go:107" };
     final got = judge(report([fresh("go")], departures: [d]), sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "one departure");
     assert\equal(got[0].path, want: "cmd/magus/helpers.go", message: "file");
@@ -164,10 +164,10 @@ test "an unsanctioned departure is reported at its line" {
 }
 
 test "a sanctioned departure passes and a sanction that no longer departs fails" {
-    final d: {str: any} = {"node": "symbol:x/magusErr.", "source": "cmd/magus/helpers.go:107"};
+    final d = magus\Case{ node = "symbol:x/magusErr.", source = "cmd/magus/helpers.go:107" };
     final kept = judge(report([fresh("go")], departures: [d]), sanctioned: {"symbol:x/magusErr.": "a sync.Once memo slot"});
     assert\equal(kept.len(), want: 0, message: "sanctioned");
-    final stale = judge(report([fresh("go")], departures: [<any>]), sanctioned: {"symbol:x/magusErr.": "a sync.Once memo slot"});
+    final stale = judge(report([fresh("go")], departures: [<magus\Case>]), sanctioned: {"symbol:x/magusErr.": "a sync.Once memo slot"});
     assert\equal(stale.len(), want: 1, message: "the list only shrinks");
     assert\equal(stale[0].path, want: THIS, message: "points at the list");
     final bare = judge(report([fresh("go")], departures: [d]), sanctioned: {"symbol:x/magusErr.": " "});
@@ -175,18 +175,18 @@ test "a sanctioned departure passes and a sanction that no longer departs fails"
 }
 
 test "a stale or missing index fails instead of passing on what it lacks" {
-    final stale: {str: any} = {"project": {"path": "libs/x"}, "language": "go", "freshness": "out-of-date"};
-    final got = judge(report([fresh("go"), stale], departures: [<any>]), sanctioned: {<str: str>});
+    final stale = magus\SymbolIndexStatus{ project = magus\ProjectRef{ path = "libs/x" }, language = "go", freshness = magus\SymbolIndexFreshness.outOfDate };
+    final got = judge(report([fresh("go"), stale], departures: [<magus\Case>]), sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "the stale index");
     assert\equal(got[0].path, want: "libs/x", message: "names the project");
-    final none = judge(report([fresh("buzz")], departures: [<any>]), sanctioned: {<str: str>});
+    final none = judge(report([fresh("buzz")], departures: [<magus\Case>]), sanctioned: {<str: str>});
     assert\equal(none.len(), want: 1, message: "no go index at all");
 }
 
 test "a stale index listing its changes fails at each one and still judges the rest" {
-    final stale: {str: any} = {"project": {"path": "."}, "language": "go", "freshness": "out-of-date",
-        "changed": ["cmd/magus/edited.go"], "changed_count": 1.0};
-    final d: {str: any} = {"node": "symbol:x/magusErr.", "source": "cmd/magus/helpers.go:107"};
+    final stale = magus\SymbolIndexStatus{ project = magus\ProjectRef{ path = "." }, language = "go", freshness = magus\SymbolIndexFreshness.outOfDate,
+        changed = ["cmd/magus/edited.go"], changedCount = 1 };
+    final d = magus\Case{ node = "symbol:x/magusErr.", source = "cmd/magus/helpers.go:107" };
     final got = judge(report([stale], departures: [d]), sanctioned: {<str: str>});
     assert\equal(got.len(), want: 2, message: "the changed file and the departure");
     assert\equal(got[0].path, want: "cmd/magus/edited.go", message: "staleness at the file");
@@ -194,29 +194,29 @@ test "a stale index listing its changes fails at each one and still judges the r
 }
 
 test "a family the index no longer establishes fails" {
-    final r = report([fresh("go")], departures: [<any>]);
-    final rows: [any] = r["holds"];
-    final kept = mut [<any>];
+    final r = report([fresh("go")], departures: [<magus\Case>]);
+    final rows = r.holds;
+    final kept = mut [<magus\Precedent>];
     foreach (p in rows) {
-        if (p["family"] != "err-sentinel-name") {
+        if (p.family != magus\PrecedentFamily.errSentinelName) {
             kept.append(p);
         }
     }
-    final got = judge({"indexes": r["indexes"], "holds": kept}, sanctioned: {<str: str>});
+    final got = judge(magus\Holds{ indexes = r.indexes, holds = kept }, sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "err-sentinel-name is missing");
 }
 
 test "every established row of a keyed family is held and an unestablished one is not" {
-    final r = report([fresh("go")], departures: [<any>]);
-    final rows: [any] = r["holds"];
-    final keyed = mut [<any>];
+    final r = report([fresh("go")], departures: [<magus\Case>]);
+    final rows = r.holds;
+    final keyed = mut [<magus\Precedent>];
     foreach (p in rows) {
         keyed.append(p);
     }
-    keyed.append(row("ctx-first", departures: [{"node": "symbol:x/callValue().", "source": "vm/operators.go:1344"}]));
-    keyed.append({"family": "ctx-first", "scope": {"language": "go"}, "established": false,
-        "follow": 3.0, "cohort": 6.0, "departures": [{"node": "symbol:x/other().", "source": "vm/other.go:1"}]});
-    final got = judge({"indexes": r["indexes"], "holds": keyed}, sanctioned: {<str: str>});
+    keyed.append(row(magus\PrecedentFamily.ctxFirst, departures: [magus\Case{ node = "symbol:x/callValue().", source = "vm/operators.go:1344" }]));
+    keyed.append(magus\Precedent{ family = magus\PrecedentFamily.ctxFirst, scope = magus\PrecedentScope{ language = "go" }, established = false,
+        follow = 3, cohort = 6, departures = [magus\Case{ node = "symbol:x/other().", source = "vm/other.go:1" }] });
+    final got = judge(magus\Holds{ indexes = r.indexes, holds = keyed }, sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "the second established row's departure, and not the loose row's");
     assert\equal(got[0].path, want: "vm/operators.go", message: got[0].message);
 }
