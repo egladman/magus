@@ -101,7 +101,6 @@ export fun putMistakes() > void !> any { magus\workspace().putJob("w", opts: {"p
 	}
 }
 
-
 // magus\workspace().putJob writes a checkpoint, so it resolves one first.
 // A made-up revision raises, a real abbreviated one is stored in full.
 func TestJobPutResolvesItsCheckpointThroughBuzzScript(t *testing.T) {

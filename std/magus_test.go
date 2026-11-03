@@ -784,18 +784,18 @@ func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
 	ctx := t.Context()
 
 	calls := map[string]func() error{
-		"query":          func() error { _, err := MagusQuery(ctx, "x", types.KnowledgeQueryOptions{}); return err },
-		"explain":        func() error { _, err := MagusExplain(ctx, "x"); return err },
-		"path":           func() error { _, err := MagusPath(ctx, "x", "y", types.KnowledgePathOptions{}); return err },
-		"refs":           func() error { _, err := MagusRefs(ctx, "x", types.KnowledgeRefsOptions{}); return err },
-		"stats":          func() error { _, err := MagusStats(ctx, ""); return err },
-		"importGraph":    func() error { _, err := MagusImportGraph(ctx); return err },
-		"dir":            func() error { _, err := MagusDir(ctx, "x"); return err },
-		"dirs":           func() error { _, err := MagusDirs(ctx, "**", types.DirsOptions{}); return err },
-		"layer":          func() error { _, err := MagusLayer(ctx, "x"); return err },
-		"neighborhood":   func() error { _, err := MagusNeighborhood(ctx, "x", types.KnowledgeNeighborhoodOptions{}); return err },
-		"output":         func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
-		"change":         func() error { _, err := MagusChangeOpen(ctx, "", types.ChangeOptions{}); return err },
+		"query":        func() error { _, err := MagusQuery(ctx, "x", types.KnowledgeQueryOptions{}); return err },
+		"explain":      func() error { _, err := MagusExplain(ctx, "x"); return err },
+		"path":         func() error { _, err := MagusPath(ctx, "x", "y", types.KnowledgePathOptions{}); return err },
+		"refs":         func() error { _, err := MagusRefs(ctx, "x", types.KnowledgeRefsOptions{}); return err },
+		"stats":        func() error { _, err := MagusStats(ctx, ""); return err },
+		"importGraph":  func() error { _, err := MagusImportGraph(ctx); return err },
+		"dir":          func() error { _, err := MagusDir(ctx, "x"); return err },
+		"dirs":         func() error { _, err := MagusDirs(ctx, "**", types.DirsOptions{}); return err },
+		"layer":        func() error { _, err := MagusLayer(ctx, "x"); return err },
+		"neighborhood": func() error { _, err := MagusNeighborhood(ctx, "x", types.KnowledgeNeighborhoodOptions{}); return err },
+		"output":       func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
+		"change":       func() error { _, err := MagusChangeOpen(ctx, "", types.ChangeOptions{}); return err },
 	}
 	for member, call := range calls {
 		assert.ErrorIsf(t, call(), types.MagusfileOnlyMember, "magus\\%s", member)
@@ -1024,4 +1024,3 @@ func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 	tier.Reason = ""
 	assert.Equal(t, types.JobModelTier{Name: "principal", Rank: 2, Model: "opus", Skills: tier.Skills, Source: tier.Source, Site: tier.Site}, tier)
 }
-
