@@ -160,3 +160,19 @@ func TestUnplacedLocalDeclarationStillBindsItsName(t *testing.T) {
 	require.Equal(t, []string{"5:6"}, spots(doc, "scip-buzz buzz . . `main.buzz`/Level#"))
 	require.NotEmpty(t, warnings, "the unplaced headers are reported")
 }
+
+// TestGenericObjectLiteralTypeIsFoundBehindItsTypeArguments pins that a
+// literal with type arguments still records its type, though `>` precedes
+// the brace.
+func TestGenericObjectLiteralTypeIsFoundBehindItsTypeArguments(t *testing.T) {
+	idx, warnings, err := indexDir(filepath.Join("testdata", "generic-object-literal"))
+	require.NoError(t, err)
+	require.Empty(t, warnings)
+	for _, doc := range idx.Documents {
+		if doc.RelativePath == "main.buzz" {
+			require.Equal(t, []string{"3:8", "9:20", "10:21"}, spots(doc, "scip-buzz buzz . . `main.buzz`/Pair#"))
+			return
+		}
+	}
+	require.Fail(t, "no main.buzz document")
+}

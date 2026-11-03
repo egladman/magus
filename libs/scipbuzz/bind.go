@@ -812,17 +812,21 @@ func (w *walker) objectLit(n *ast.ObjectLit) {
 	if !ok {
 		return
 	}
-	if !w.s.isIdent(i-1, n.TypeName) {
+	name := i - 1
+	if k := w.s.kind(i - 1); k == token.Gt || k == token.Shr {
+		name = openAngle(w.s, i-1) - 3
+	}
+	if !w.s.isIdent(name, n.TypeName) {
 		w.warn("%d:%d: object literal type %s is not before its brace", n.Pos.Line, n.Pos.Col, n.TypeName)
 		return
 	}
 	if n.Namespace == "" {
 		if b := w.lookup(n.TypeName); b != nil && b.module == nil {
-			w.reference(i-1, b, 0)
+			w.reference(name, b, 0)
 		}
 		return
 	}
-	if w.s.kind(i-2) != token.Backslash || !w.s.isIdent(i-3, n.Namespace) {
+	if w.s.kind(name-1) != token.Backslash || !w.s.isIdent(name-2, n.Namespace) {
 		w.warn("%d:%d: object literal namespace %s is not before its type", n.Pos.Line, n.Pos.Col, n.Namespace)
 		return
 	}
@@ -830,8 +834,28 @@ func (w *walker) objectLit(n *ast.ObjectLit) {
 	if b == nil || b.module == nil {
 		return
 	}
-	w.reference(i-3, b, 0)
-	w.member(b.module, i-1)
+	w.reference(name-2, b, 0)
+	w.member(b.module, name)
+}
+
+// openAngle returns the index of the `<` matching the `>` or `>>` at i, or -1.
+// The scanner reads the `>>` closing nested type arguments as one token.
+func openAngle(s *stream, i int) int {
+	depth := 0
+	for ; i >= 0; i-- {
+		switch s.kind(i) {
+		case token.Gt:
+			depth++
+		case token.Shr:
+			depth += 2
+		case token.Lt:
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 // interp walks the expressions of an interpolated string, each in the stream of
