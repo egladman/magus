@@ -98,6 +98,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [spawn-duplicate](spawn-duplicate.md)                 | a spawn for a job that already has a worker                                                         |
 | [spawn-nested-waiter](spawn-nested-waiter.md)         | a subagent spawning a helper whose title or brief opening speaks of waiting or watching             |
 | [spawn-unbriefed](spawn-unbriefed.md)                 | a subagent spawned before the multi-agent skill loaded                                              |
+| [spawn-unisolated-row](spawn-unisolated-row.md)       | an isolated spawn for a writing job bound to the spawner's own checkout                             |
 | [spawn-unvalidated](spawn-unvalidated.md)             | a spawn for a job whose record was never validated                                                  |
 | [spawn-waiter](spawn-waiter.md)                       | a spawn whose child exists to wait on, poll or watch other work                                     |
 | [spawn-warm-worker](spawn-warm-worker.md)             | a fresh spawn for follow-up work while the worker that wrote the code is still warm                 |
@@ -144,6 +145,9 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [spawn-unplaced](spawn-unplaced.md)                     | a subagent's first call that no waiting spawn names, which then runs under no lease             |
 | [split-run](split-run.md)                               | the same target run again on a different project set, as a separate call                        |
 | [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                   |
+| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                       |
+| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                         |
+| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it            |
 | [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it              |
 | [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it         |
 | [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                           |
@@ -152,7 +156,4 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                    |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at             |
 | [spawn-names-model](spawn-names-model.md)               | a spawn omitting its model, or (at deny) using a model outside its row's tier                   |
-| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                       |
-| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                         |
-| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it            |
 | [stall](stall.md)                                       | a leased worker refused by something only the root can clear                                    |
