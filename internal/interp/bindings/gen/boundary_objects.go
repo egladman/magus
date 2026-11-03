@@ -2799,6 +2799,18 @@ func ObjectModuleMethodEntry(v types.ModuleMethodEntry) vm.Value {
 	return out
 }
 
+func ObjectModuleObjectEntry(v types.ModuleObjectEntry) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("doc", vm.StringValue(v.Doc))
+	itemsMethods := make([]vm.Value, len(v.Methods))
+	for indexMethods := range v.Methods {
+		itemsMethods[indexMethods] = ObjectModuleMethodEntry(v.Methods[indexMethods])
+	}
+	out.MapSet("methods", vm.ListValue(itemsMethods))
+	return out
+}
+
 func ObjectModuleEntry(v types.ModuleEntry) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StringValue(v.Name))
@@ -2813,6 +2825,11 @@ func ObjectModuleEntry(v types.ModuleEntry) vm.Value {
 		itemsMethods[indexMethods] = ObjectModuleMethodEntry(v.Methods[indexMethods])
 	}
 	out.MapSet("methods", vm.ListValue(itemsMethods))
+	itemsObjects := make([]vm.Value, len(v.Objects))
+	for indexObjects := range v.Objects {
+		itemsObjects[indexObjects] = ObjectModuleObjectEntry(v.Objects[indexObjects])
+	}
+	out.MapSet("objects", vm.ListValue(itemsObjects))
 	return out
 }
 

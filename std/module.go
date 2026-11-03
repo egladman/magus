@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 )
 
@@ -182,6 +183,43 @@ type Namespace struct {
 	Objects []string
 }
 
+// Object gives a boundary mirror methods that call Go: `digest.string()`.
+// Codegen emits each as a Buzz method that passes `this` to a private
+// top-level extern, upstream's Socket pattern.
+//
+// Each Impl takes the decoded record after ctx, as in
+// func(ctx context.Context, recv types.ImageDigest) (string, error), so Name
+// must be an inbound mirror with a generated decoder.
+type Object struct {
+	Name    string
+	Doc     string
+	Methods []Method
+}
+
+// Extern returns the private top-level member meth forwards to, such as
+// Digest__string, whose first argument is the record itself.
+func (o Object) Extern(meth Method) Method {
+	m := meth
+	m.Name = fmt.Sprintf("%s__%s", o.Name, o.MethodName(meth))
+	m.BuzzName = m.Name
+	m.Args = append([]Arg{{Name: "recv", Type: TypeAnyMap, Object: o.Name}}, meth.Args...)
+	return m
+}
+
+// Signature renders meth's Buzz call form on a record, as in
+// `Digest.string() -> string`, the way BuzzSignature renders a module member.
+func (o Object) Signature(meth Method) string {
+	return fmt.Sprintf("%s.%s(%s)%s", o.Name, o.MethodName(meth), strings.Join(argNames(meth), ", "), returnSuffix(meth))
+}
+
+// MethodName is meth's Buzz name on the record.
+func (o Object) MethodName(meth Method) string {
+	if meth.BuzzName != "" {
+		return meth.BuzzName
+	}
+	return CamelCase(meth.Name)
+}
+
 // Protocol is a Buzz `protocol` the module exports: a set of method signatures a
 // Buzz `object<P>` must implement. Declared here so moduledecls emits it beside the
 // free-function externs; CallMethod is how Go invokes a conforming object.
@@ -290,6 +328,8 @@ type Module struct {
 	Protocols []Protocol
 	// Namespaces are member groups the runtime assembles; see Namespace.
 	Namespaces []Namespace
+	// Objects are mirrors whose methods call Go; see Object.
+	Objects []Object
 	// WASM marks a module the browser playground can install: pure compute, with no
 	// process, filesystem, or network access. It is what
 	// internal/interp/bindings/gen's WASM capability is generated FROM.
@@ -350,6 +390,18 @@ func (m Module) ImportPath() string {
 	return m.Name
 }
 
+// ObjectExterns returns the private extern behind every object method, in
+// declaration order. Each is bound and validated like a top-level method.
+func (m Module) ObjectExterns() []Method {
+	var out []Method
+	for _, o := range m.Objects {
+		for _, meth := range o.Methods {
+			out = append(out, o.Extern(meth))
+		}
+	}
+	return out
+}
+
 // portable lists the modules every build carries, the wasm playground included.
 // The ones that need a process, the filesystem or the network are in
 // nativeModules, which the wasm build leaves empty.
@@ -376,7 +428,7 @@ func indexModules(mods []Module) map[string]Module {
 		if _, exists := idx[m.Name]; exists {
 			panic(fmt.Sprintf("host: duplicate module registration: %q", m.Name))
 		}
-		if err := validateModule(m); err != nil {
+		if err := ValidateModule(m); err != nil {
 			panic(fmt.Sprintf("host: module %q: %s", m.Name, err))
 		}
 		idx[m.Name] = m
@@ -389,7 +441,29 @@ func indexModules(mods []Module) map[string]Module {
 // packages call it directly (see std/encoding/register.go) because std cannot
 // list them without cycling back through std/encoding.
 func ValidateModule(m Module) error {
-	return validateModule(m)
+	if err := validateModule(m); err != nil {
+		return err
+	}
+	return validateObjects(m)
+}
+
+// validateObjects checks each object method's Impl as the extern it binds as,
+// with the record as its first argument after ctx.
+func validateObjects(m Module) error {
+	for _, o := range m.Objects {
+		if len(o.Methods) == 0 {
+			return fmt.Errorf("object %q declares no methods", o.Name)
+		}
+		for _, meth := range o.Methods {
+			if meth.Extern {
+				return fmt.Errorf("object %q method %q is Extern, an object method needs an Impl", o.Name, meth.Name)
+			}
+			if err := validateMethod(o.Extern(meth)); err != nil {
+				return fmt.Errorf("object %q method %q: %w", o.Name, meth.Name, err)
+			}
+		}
+	}
+	return nil
 }
 
 // Get returns the Module registered under name, or false if unknown.

@@ -7,6 +7,7 @@ import (
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestBuildModulesOutput_List covers the no-name list view: every module is
@@ -65,4 +66,29 @@ func TestDescribeAlias(t *testing.T) {
 		assert.Equal(t, describeAlias[p[0]], describeAlias[p[1]], "%q and %q resolve differently", p[0], p[1])
 		assert.Equal(t, p[0], describeAlias[p[0]], "canonical of %q should be itself", p[0])
 	}
+}
+
+type DescribeModuleObjectsSuite struct {
+	suite.Suite
+}
+
+func TestDescribeModuleObjects(t *testing.T) {
+	suite.Run(t, new(DescribeModuleObjectsSuite))
+}
+
+func (s *DescribeModuleObjectsSuite) TestTheDetailListsObjectMethods() {
+	out := hostmodules.Describe("image")
+	s.Require().Len(out, 1)
+	var b strings.Builder
+	printModuleDetail(&b, out[0])
+	s.Contains(b.String(), "\nobject methods (1):\n  Digest.string\n")
+	s.Contains(b.String(), "    Signature: Digest.string() -> string\n")
+}
+
+func (s *DescribeModuleObjectsSuite) TestAModuleWithoutObjectsPrintsNoSection() {
+	out := hostmodules.Describe("env")
+	s.Require().Len(out, 1)
+	var b strings.Builder
+	printModuleDetail(&b, out[0])
+	s.NotContains(b.String(), "object methods")
 }

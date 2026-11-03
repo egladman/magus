@@ -2090,11 +2090,18 @@ export object ModuleMethodEntry {
     buzzStdlib: str = "",
 }
 
+export object ModuleObjectEntry {
+    name: str = "",
+    doc: str = "",
+    methods: [ModuleMethodEntry] = [],
+}
+
 export object Module {
     name: str = "",
     doc: str = "",
     fields: [ModuleFieldEntry] = [],
     methods: [ModuleMethodEntry] = [],
+    objects: [ModuleObjectEntry] = [],
 }
 
 export object ProjectEntry {

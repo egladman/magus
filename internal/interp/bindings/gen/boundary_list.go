@@ -246,6 +246,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Module", Zero: types.ModuleEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleEntry(v.(types.ModuleEntry)) }},
 	{Name: "ModuleFieldEntry", Zero: types.ModuleFieldEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleFieldEntry(v.(types.ModuleFieldEntry)) }},
 	{Name: "ModuleMethodEntry", Zero: types.ModuleMethodEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleMethodEntry(v.(types.ModuleMethodEntry)) }},
+	{Name: "ModuleObjectEntry", Zero: types.ModuleObjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleObjectEntry(v.(types.ModuleObjectEntry)) }},
 	{Name: "NeighborhoodResult", Zero: types.KnowledgeNeighborhoodOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeNeighborhoodOutput(v.(types.KnowledgeNeighborhoodOutput), enums)
 	}},

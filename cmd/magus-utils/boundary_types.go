@@ -8,10 +8,12 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/egladman/magus/internal/hostmodules"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -177,6 +179,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Graph", Type: reflect.TypeFor[types.GraphView](), RuntimeObject: true},
 	{Name: "ModuleFieldEntry", Type: reflect.TypeFor[types.ModuleFieldEntry](), RuntimeObject: true},
 	{Name: "ModuleMethodEntry", Type: reflect.TypeFor[types.ModuleMethodEntry](), RuntimeObject: true},
+	{Name: "ModuleObjectEntry", Type: reflect.TypeFor[types.ModuleObjectEntry](), RuntimeObject: true},
 	{Name: "Module", Type: reflect.TypeFor[types.ModuleEntry](), RuntimeObject: true},
 	{Name: "ProjectEntry", Type: reflect.TypeFor[types.ProjectEntry](), RuntimeObject: true},
 	{Name: "Projects", Type: reflect.TypeFor[types.ProjectsOutput](), RuntimeObject: true},
@@ -405,11 +408,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "Setting", Type: reflect.TypeFor[types.Setting]()},
 	{Name: "Limits", Type: reflect.TypeFor[types.Limits]()},
 	// The image module's records, leaf first. The module namespaces them, so the Buzz names
-	// drop the Image prefix. Digest carries a hand-written string() so Buzz reads the OCI
-	// form without rejoining the fields; its encoder builds an instance for that.
+	// drop the Image prefix.
 	{Name: "Platform", Type: reflect.TypeFor[types.ImagePlatform](), RuntimeObject: true},
-	{Name: "Digest", Type: reflect.TypeFor[types.ImageDigest](), RuntimeObject: true,
-		Methods: "fun string() > str {\n        if (this.algorithm == \"\" and this.encoded == \"\") {\n            return \"\";\n        }\n        return \"{this.algorithm}:{this.encoded}\";\n    }"},
+	{Name: "Digest", Type: reflect.TypeFor[types.ImageDigest](), RuntimeObject: true},
 	{Name: "Descriptor", Type: reflect.TypeFor[types.ImageDescriptor](), RuntimeObject: true},
 	{Name: "Entry", Type: reflect.TypeFor[types.ImageEntry](), RuntimeObject: true},
 	{Name: "AddedLayer", Type: reflect.TypeFor[types.ImageAddedLayer](), RuntimeObject: true},
@@ -1126,10 +1127,6 @@ type boundaryType struct {
 	Module        string
 	Type          reflect.Type
 	RuntimeObject bool
-	// Methods is Buzz source for methods the mirror declares after its fields. A mirror
-	// with methods is encoded as an instance of the session's object, never a map: a map
-	// has no methods to dispatch.
-	Methods string
 	// TS marks a type tstypes also writes as TypeScript for the console and docs.
 	TS bool
 }
@@ -1157,14 +1154,26 @@ func buzzName(rt reflect.Type) string {
 	return rt.Name()
 }
 
-// hasMethods reports whether rt's mirror declares hand-written methods.
+// hasMethods reports whether a module declares methods on rt's mirror. Such a
+// mirror is encoded as an instance of the session's object, never a map: a map
+// has no methods to dispatch.
 func hasMethods(rt reflect.Type) bool {
-	for _, entry := range boundaryTypes {
-		if entry.Type == rt {
-			return entry.Methods != ""
+	for _, mod := range hostmodules.All() {
+		if _, ok := mirrorObject(mod, rt); ok {
+			return true
 		}
 	}
 	return false
+}
+
+// mirrorObject finds the std.Object mod declares on rt's mirror.
+func mirrorObject(mod std.Module, rt reflect.Type) (std.Object, bool) {
+	for _, o := range mod.Objects {
+		if entry, ok := boundaryTypeIn(mod.Name, o.Name); ok && entry.Type == rt {
+			return o, true
+		}
+	}
+	return std.Object{}, false
 }
 
 // boundaryTypeNamed finds an entry by its key: a bare name, or module\Name for one a

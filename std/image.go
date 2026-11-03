@@ -144,6 +144,20 @@ var Image = Module{
 			Impl:    ImageGoEnv,
 		},
 	},
+	Objects: []Object{{
+		Name: "Digest",
+		Methods: []Method{{
+			Name:    "string",
+			Doc:     "The digest as OCI writes it, \"sha256:<hex>\", and \"\" when unset.",
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    ImageDigestString,
+		}},
+	}},
+}
+
+// ImageDigestString is Digest.string() in Buzz.
+func ImageDigestString(_ context.Context, d types.ImageDigest) (string, error) {
+	return d.String(), nil
 }
 
 // ImageAssemble writes the image spec describes as a layout at dest. A dry run

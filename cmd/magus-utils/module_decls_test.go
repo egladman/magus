@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hostmodules"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"
 )
@@ -150,4 +151,53 @@ func (s *ModuleDeclsSuite) TestCollectEnumsDeclaresAnEnumScopedToTheModule() {
 	enums, err = collectEnums(std.Module{Name: "probe"}, nil)
 	s.Require().NoError(err)
 	s.Empty(enums, "another module declares no enum scoped to image")
+}
+
+func (s *ModuleDeclsSuite) TestAForwardingMethodPassesThisAndLabelsItsArguments() {
+	o := std.Object{Name: "Change"}
+	got, err := forwardingMethod(o, std.Method{
+		Name: "tier", Args: []std.Arg{{Name: "target", Type: std.TypeString}, {Name: "depth", Type: std.TypeInt}},
+		Returns: []std.Ret{{Type: std.TypeString}}, Raises: true,
+	})
+	s.Require().NoError(err)
+	s.Equal("\n    fun tier(target: str, depth: int) > str !> any {\n        return Change__tier(this, target: target, depth: depth);\n    }\n", got)
+}
+
+func (s *ModuleDeclsSuite) TestAVoidForwardingMethodReturnsNothing() {
+	got, err := forwardingMethod(std.Object{Name: "Change"}, std.Method{Name: "bust"})
+	s.Require().NoError(err)
+	s.Equal("\n    fun bust() > void {\n        Change__bust(this);\n    }\n", got)
+}
+
+func (s *ModuleDeclsSuite) TestAVariadicObjectMethodIsRefused() {
+	_, err := forwardingMethod(std.Object{Name: "Change"}, std.Method{
+		Name: "join", Args: []std.Arg{{Name: "parts", Type: std.TypeString, Variadic: true}},
+	})
+	s.ErrorContains(err, "variadic")
+}
+
+func (s *ModuleDeclsSuite) TestTheObjectExternIsDeclaredPrivate() {
+	src, err := renderRecordDecls(std.Image)
+	s.Require().NoError(err)
+	s.Contains(src, "\nextern fun Digest__string(recv: Digest) > str;\n")
+	s.Contains(src, "return Digest__string(this);")
+}
+
+// The image decls and the generated trampoline run together, as a magusfile
+// loads them: Digest.string() reaches Go through the private extern.
+func (s *ModuleDeclsSuite) TestDigestStringCallsGo() {
+	ctx := s.T().Context()
+	src, err := renderModuleDecls(std.Image)
+	s.Require().NoError(err)
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetNativeModule("image", bindgen.RegisterImage(ctx, sess))
+	sess.SetModuleDecls("image", src)
+	s.Require().NoError(sess.Exec(ctx, `
+import "image";
+final set = image\Digest{ algorithm = "sha256", encoded = "ab" }.string();
+final unset = image\Digest{}.string();
+`))
+	s.Equal("sha256:ab", sess.Globals()["set"].AsString())
+	s.Empty(sess.Globals()["unset"].AsString())
 }

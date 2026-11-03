@@ -129,10 +129,7 @@ export object Digest {
     encoded: str = "",
 
     fun string() > str {
-        if (this.algorithm == "" and this.encoded == "") {
-            return "";
-        }
-        return "{this.algorithm}:{this.encoded}";
+        return Digest__string(this);
     }
 }
 
@@ -208,6 +205,8 @@ export object Provenance {
     sourceRevision: str = "",
     dependencies: [Dependency] = [],
 }
+
+extern fun Digest__string(recv: Digest) > str;
 
 export extern fun assemble(spec: Spec, layout: str) > Layout !> any;
 export extern fun assembleIndex(layouts: [str], layout: str) > Layout !> any;

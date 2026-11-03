@@ -165,14 +165,74 @@ func renderRecordDecls(mod std.Module) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if entry.Methods != "" {
-			closing := bytes.LastIndex(out, []byte("}"))
-			if closing < 0 {
-				return "", fmt.Errorf("mirror %s: no closing brace to declare its methods before", name)
+		if o, ok := mirrorObject(mod, entry.Type); ok {
+			if out, err = withObjectMethods(out, o); err != nil {
+				return "", err
 			}
-			out = slices.Concat(out[:closing], fmt.Appendf(nil, "\n    %s\n", entry.Methods), out[closing:])
 		}
 		b.Write(out)
+		b.WriteByte('\n')
+	}
+	externs, err := objectExternDecls(mod)
+	if err != nil {
+		return "", err
+	}
+	b.WriteString(externs)
+	return b.String(), nil
+}
+
+// withObjectMethods inserts o's forwarding methods before the mirror's
+// closing brace.
+func withObjectMethods(mirror []byte, o std.Object) ([]byte, error) {
+	closing := bytes.LastIndex(mirror, []byte("}"))
+	if closing < 0 {
+		return nil, fmt.Errorf("mirror %s: no closing brace to declare its methods before", o.Name)
+	}
+	var methods bytes.Buffer
+	for _, meth := range o.Methods {
+		src, err := forwardingMethod(o, meth)
+		if err != nil {
+			return nil, fmt.Errorf("object %s: %s: %w", o.Name, meth.Name, err)
+		}
+		methods.WriteString(src)
+	}
+	return slices.Concat(mirror[:closing], methods.Bytes(), mirror[closing:]), nil
+}
+
+// forwardingMethod renders meth as a Buzz method that passes `this` and its
+// arguments, labeled, to the private extern o.Extern(meth) declares.
+func forwardingMethod(o std.Object, meth std.Method) (string, error) {
+	decl, err := externDecl(meth)
+	if err != nil {
+		return "", err
+	}
+	sig, isFun := strings.CutPrefix(strings.TrimSuffix(decl, ";\n"), "export extern ")
+	if !isFun {
+		return "", fmt.Errorf("a variadic argument cannot cross as a record method")
+	}
+	call := []string{"this"}
+	for _, a := range meth.Args {
+		call = append(call, fmt.Sprintf("%s: %s", a.Name, a.Name))
+	}
+	stmt := fmt.Sprintf("%s(%s);", o.Extern(meth).Name, strings.Join(call, ", "))
+	if len(meth.Returns) > 0 {
+		stmt = "return " + stmt
+	}
+	return fmt.Sprintf("\n    %s {\n        %s\n    }\n", sig, stmt), nil
+}
+
+// objectExternDecls declares the private extern behind every object method.
+// It carries no export: only the module's own forwarding methods call it.
+func objectExternDecls(mod std.Module) (string, error) {
+	var b strings.Builder
+	for _, m := range mod.ObjectExterns() {
+		decl, err := externDecl(m)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", m.Name, err)
+		}
+		b.WriteString(strings.TrimPrefix(decl, "export "))
+	}
+	if b.Len() > 0 {
 		b.WriteByte('\n')
 	}
 	return b.String(), nil
@@ -534,7 +594,7 @@ func collectMirrors(mod std.Module) ([]string, error) {
 		}
 		return nil
 	}
-	for _, m := range sortedMethods(mod) {
+	for _, m := range slices.Concat(sortedMethods(mod), mod.ObjectExterns()) {
 		if err := visitMethod(m); err != nil {
 			return nil, err
 		}
@@ -586,7 +646,7 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 		order = append(order, e)
 		return nil
 	}
-	for _, m := range sortedMethods(mod) {
+	for _, m := range slices.Concat(sortedMethods(mod), mod.ObjectExterns()) {
 		for _, a := range m.Args {
 			if err := add(a.Enum, m.Name); err != nil {
 				return nil, err

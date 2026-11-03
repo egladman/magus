@@ -173,5 +173,16 @@ func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.StringMapVal(ret0), nil
 	}))
+	m.MapSet("Digest__string", vm.DirectValue("image.Digest__string", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("image\\Digest__string", "recv", bzArgs, 0, decode.DecodeImageDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.ImageDigestString(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
 	return m
 }

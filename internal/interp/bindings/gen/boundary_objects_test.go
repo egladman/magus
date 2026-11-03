@@ -116,12 +116,23 @@ func TestObjectKeys(t *testing.T) {
 				Doc:     "version control",
 				Fields:  []types.ModuleFieldEntry{{Name: "name", Type: "string"}},
 				Methods: []types.ModuleMethodEntry{{Name: "commit", Buzz: "vcs.commit()"}},
+				Objects: []types.ModuleObjectEntry{{
+					Name:    "Change",
+					Methods: []types.ModuleMethodEntry{{Name: "Change.base", Buzz: "Change.base() -> string"}},
+				}},
 			})),
 			want: map[string]any{
 				"name":    "vcs",
 				"doc":     "version control",
 				"fields":  []any{map[string]any{"name": "name", "type": "string", "doc": ""}},
 				"methods": []any{map[string]any{"name": "commit", "doc": "", "buzz": "vcs.commit()", "buzzStdlib": ""}},
+				"objects": []any{map[string]any{
+					"name": "Change",
+					"doc":  "",
+					"methods": []any{map[string]any{
+						"name": "Change.base", "doc": "", "buzz": "Change.base() -> string", "buzzStdlib": "",
+					}},
+				}},
 			},
 		},
 	} {
@@ -139,6 +150,7 @@ func TestObjectModuleEntryEmptyLists(t *testing.T) {
 		"doc":     "",
 		"fields":  []any{},
 		"methods": []any{},
+		"objects": []any{},
 	}, objectMap(t, ObjectModuleEntry(types.ModuleEntry{Name: "fs"})))
 }
 

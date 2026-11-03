@@ -152,7 +152,7 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 	for _, f := range m.Fields {
 		emitBuzzField(&members, f, implPkg)
 	}
-	for _, meth := range m.Methods {
+	for _, meth := range slices.Concat(m.Methods, m.ObjectExterns()) {
 		// An Extern member has no Impl to wrap; internal/interp/bindings MapSets it
 		// onto the namespace at run time. It is declared, not trampolined.
 		if meth.Extern {
@@ -254,7 +254,7 @@ func resolveImplementationPackage(m std.Module) (importPath, pkgIdent string, er
 			return "", "", err
 		}
 	}
-	for _, meth := range m.Methods {
+	for _, meth := range slices.Concat(m.Methods, m.ObjectExterns()) {
 		if meth.Extern {
 			continue // no Impl, so no package to import
 		}
@@ -576,7 +576,7 @@ func buzzObjectName(t reflect.Type) string {
 func checkObjectDecls(mods []std.Module) error {
 	var problems []string
 	for _, mod := range mods {
-		for _, meth := range mod.Methods {
+		for _, meth := range slices.Concat(mod.Methods, mod.ObjectExterns()) {
 			if len(meth.Returns) != 1 || meth.Impl == nil {
 				continue
 			}

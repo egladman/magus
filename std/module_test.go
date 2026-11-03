@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestMain(m *testing.M) {
@@ -430,4 +431,73 @@ func TestStdAPILocked(t *testing.T) {
 			"%s was ADDED to the std API; regenerate the lock with "+
 				"`magus run magusfile-api-generate .`", n)
 	}
+}
+
+type covRecord struct{ N int }
+
+func covRecordMethod(_ context.Context, _ covRecord, _ string) (string, error) { return "", nil }
+
+// ObjectSuite covers std.Object: each method binds as a private extern that
+// takes the record first.
+type ObjectSuite struct {
+	suite.Suite
+}
+
+func TestObject(t *testing.T) {
+	suite.Run(t, new(ObjectSuite))
+}
+
+func (s *ObjectSuite) object() Object {
+	return Object{Name: "Rec", Methods: []Method{{
+		Name: "label_of", Args: []Arg{{Name: "prefix", Type: TypeString}},
+		Returns: []Ret{{Type: TypeString}}, Impl: covRecordMethod,
+	}}}
+}
+
+func (s *ObjectSuite) TestExternTakesTheRecordFirst() {
+	o := s.object()
+	ext := o.Extern(o.Methods[0])
+	// A func is never DeepEqual to another, so the Impl is compared by name.
+	s.Equal(MethodFuncName(o.Methods[0]), MethodFuncName(ext))
+	ext.Impl = nil
+	s.Equal(Method{
+		Name:     "Rec__labelOf",
+		BuzzName: "Rec__labelOf",
+		Args:     []Arg{{Name: "recv", Type: TypeAnyMap, Object: "Rec"}, {Name: "prefix", Type: TypeString}},
+		Returns:  []Ret{{Type: TypeString}},
+	}, ext)
+}
+
+func (s *ObjectSuite) TestSignatureNamesTheRecord() {
+	o := s.object()
+	s.Equal("Rec.labelOf(prefix) -> string", o.Signature(o.Methods[0]))
+}
+
+func (s *ObjectSuite) TestModuleListsEveryObjectExtern() {
+	mod := Module{Name: "covok", Objects: []Object{s.object()}}
+	externs := mod.ObjectExterns()
+	s.Require().Len(externs, 1)
+	s.Equal("Rec__labelOf", externs[0].Name)
+}
+
+func (s *ObjectSuite) TestAWellFormedObjectValidates() {
+	s.NoError(ValidateModule(Module{Name: "covok", Objects: []Object{s.object()}}))
+}
+
+func (s *ObjectSuite) TestAnImplementationWithoutTheRecordIsRefused() {
+	o := Object{Name: "Rec", Methods: []Method{{
+		Name: "f", Args: []Arg{{Name: "a", Type: TypeString}},
+		Returns: []Ret{{Type: TypeString}}, Impl: covImplementationStringString,
+	}}}
+	err := ValidateModule(Module{Name: "covbad", Objects: []Object{o}})
+	s.ErrorContains(err, `object "Rec" method "f"`)
+}
+
+func (s *ObjectSuite) TestAnExternObjectMethodIsRefused() {
+	o := Object{Name: "Rec", Methods: []Method{{Name: "f", Extern: true}}}
+	s.ErrorContains(ValidateModule(Module{Name: "covbad", Objects: []Object{o}}), "needs an Impl")
+}
+
+func (s *ObjectSuite) TestAnObjectWithNoMethodsIsRefused() {
+	s.ErrorContains(ValidateModule(Module{Name: "covbad", Objects: []Object{{Name: "Rec"}}}), "declares no methods")
 }
