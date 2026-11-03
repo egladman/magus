@@ -62,7 +62,7 @@ export fun waitOnNoReturn() > void !> any {
 	require.ErrorContains(t, err, "has filed no result")
 }
 
-// trail.read and job.put still take maps, decoded at the binding: an unknown key or a
+// session options and workspace.putJob take maps, decoded at the binding: an unknown key or a
 // value of the wrong type raises there, and a put's mistakes come back joined in one raise.
 func TestOptionMapsStayStrictThroughBuzzScript(t *testing.T) {
 	testkit.Isolate(t)
@@ -81,8 +81,8 @@ export fun trailNumber() > void !> any { magus\session({"session": 3}).trail(); 
 export fun putMistakes() > void !> any { magus\workspace().putJob("w", opts: {"passsed": true, "state": "passed"}); }
 `))
 	for name, want := range map[string][]string{
-		"trailTypo":   {`trail.read: unknown option "sinse"`},
-		"trailNumber": {`trail.read: opts.session is int64, want a string`},
+		"trailTypo":   {`sessionOptions: SessionOptions has no member "sinse"`},
+		"trailNumber": {`sessionOptions.session: want str, got int`},
 		"putMistakes": {"no field of a job row is named passsed", "state must be one of"},
 	} {
 		fn, ok := sess.Exports()[name]
