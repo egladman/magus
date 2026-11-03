@@ -599,6 +599,22 @@ func TestRootWorkClass(t *testing.T) {
 	}
 }
 
+func TestDrivesOnlyJobsKeepsWorkspaceWorkDistinct(t *testing.T) {
+	for _, tc := range []struct {
+		script string
+		want   bool
+	}{
+		{`import "magus"; magus\workspace().putJob("a");`, true},
+		{`import workspace from "magus"; workspace().jobs();`, true},
+		{`import "magus"; magus\workspace().skills();`, false},
+		{`import workspace from "magus"; workspace().bustCache();`, false},
+		{`import workspace from "magus"; final open = workspace; open().bustCache();`, false},
+		{`import "magus"; magus\workspace(magus\cmd("run", ["build"])).jobs();`, false},
+	} {
+		assert.Equal(t, tc.want, drivesOnlyJobs(tc.script), tc.script)
+	}
+}
+
 func TestNotesPath(t *testing.T) {
 	t.Parallel()
 	at, notes := orchestratorFixture(t)

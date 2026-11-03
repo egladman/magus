@@ -1047,7 +1047,7 @@ func integratesVCS(sub string, args []string) bool {
 	return integrationVerbs[sub]
 }
 
-// drivesOnlyJobs reports a Buzz script whose every reach outside itself is magus\job: it
+// drivesOnlyJobs reports a Buzz script whose every reach outside itself is a job-store method: it
 // imports magus alone and names no other member of it. A script that does not parse
 // reaches anything.
 func drivesOnlyJobs(script string) bool {
@@ -1056,6 +1056,7 @@ func drivesOnlyJobs(script string) bool {
 		return false
 	}
 	bound := map[string]bool{}
+	imported := map[string]bool{}
 	for _, stmt := range prog.Stmts {
 		imp, ok := stmt.(*ast.ImportStmt)
 		if !ok {
@@ -1065,26 +1066,54 @@ func drivesOnlyJobs(script string) bool {
 		case imp.Path != "magus" || imp.Alias == "_":
 			return false
 		case len(imp.Only) > 0:
-			if slices.ContainsFunc(imp.Only, func(n string) bool { return n != "job" }) {
+			for _, name := range imp.Only {
+				imported[name] = true
+			}
+			if slices.ContainsFunc(imp.Only, func(n string) bool { return n != "job" && n != "workspace" }) {
 				return false
 			}
 		default:
 			bound[cmp.Or(imp.Alias, "magus")] = true
 		}
 	}
+	reader := clientReader{bound: bound, only: imported}
 	only := true
-	for _, stmt := range prog.Stmts {
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			m, ok := n.(*ast.MemberExpr)
-			if !ok {
-				return only
+	var visit func(ast.Node) bool
+	visit = func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok {
+			if member, ok := reader.magusMember(call.Callee); ok && len(member) == 2 && member[0] == "workspace" {
+				switch member[1] {
+				case "jobs", "putJob", "clearJobs", "forkFacts", "unmerged", "tierOutcomes", "grouping":
+					for _, arg := range call.Args {
+						ast.Inspect(arg, visit)
+					}
+					if method, ok := call.Callee.(*ast.MemberExpr); ok {
+						if recv, ok := method.Object.(*ast.CallExpr); ok {
+							for _, arg := range recv.Args {
+								ast.Inspect(arg, visit)
+							}
+						}
+					}
+				default:
+					only = false
+				}
+				return false
 			}
+		}
+		if m, ok := n.(*ast.MemberExpr); ok {
 			if id, ok := m.Object.(*ast.IdentExpr); ok && m.Namespaced && bound[id.Name] && m.Name != "job" {
 				only = false
 			}
-			return only
-		})
+		}
+		if id, ok := n.(*ast.IdentExpr); ok && id.Name == "workspace" && imported[id.Name] {
+			only = false
+		}
+		return only
 	}
+	for _, stmt := range prog.Stmts {
+		ast.Inspect(stmt, visit)
+	}
+
 	return only
 }
 
