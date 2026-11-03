@@ -101,8 +101,8 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 }
 
 // TestDescribeHarnessPrintsEachChangeAndTheMergeCommand pins the text a person reads before
-// merging: every file, every entry it gains or loses, and the command, which magus prints
-// and never runs.
+// installing: every file, every entry it gains or loses, and the command.
+// Describe prints that command and never runs it.
 func TestDescribeHarnessPrintsEachChangeAndTheMergeCommand(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, writeHarnessPlan(&out, types.HarnessInstallation{
@@ -127,7 +127,7 @@ func TestDescribeHarnessPrintsEachChangeAndTheMergeCommand(t *testing.T) {
     retire hooks.Stop: {"command":"magus buzz -s old/magus-checkpoint.buzz"}
   .codex/rules/magus.rules (missing)
     write the whole file
-merge it yourself (magus never writes host config):
+apply the installation:
   merge-command
 mcp claude-code (user-owned; Magus does not write host MCP config):
 register it
@@ -352,13 +352,13 @@ for f in .claude/settings.json .codex/hooks.json .cursor/hooks.json; do
 done
 `
 
-// TestAgentHarnessHasNoWritingVerb pins that no verb writes host config: magus prints it
-// through `describe harness` and the person merges it.
+// TestAgentHarnessHasNoWritingVerb pins that apply and remove are gone.
+// Install, link and verify are the only verbs, and the error lists them.
 func TestAgentHarnessHasNoWritingVerb(t *testing.T) {
 	for _, verb := range []string{"apply", "remove"} {
 		err := agentHarnessCommand(context.Background(), t.TempDir(), []string{verb, "--id", "x"})
 		require.Error(t, err, verb)
 		assert.Contains(t, err.Error(), "unknown subcommand", verb)
-		assert.Contains(t, err.Error(), "magus describe harness", verb)
+		assert.Contains(t, err.Error(), "want install, link, or verify", verb)
 	}
 }
