@@ -704,7 +704,9 @@ var ruleDocLeaseRowUnknown = types.RuleDoc{
 	Why: "A row member this build does not declare may widen or narrow what the row permits, and the build cannot tell which, so judging as if the member were absent is a silent default. " +
 		"The refusal names each such member, the binary judging the call and its version, and the remedy: rebuild the ./magus the host hook runs and restart the daemon. " +
 		"Only the root can take that remedy, which ADR 0013 would make a notice; this rule denies anyway because a call the guard cannot judge has no safe default, and passing it would let an old binary approve what a newer row forbids. " +
-		"The hook does not switch to the job checkout's ./magus instead: the worker builds that binary, and the judge is never authored by the judged.",
+		"The spawn gate refuses a spawn bound to such a row, so the root meets the remedy before a worker does. " +
+		"For a call that still arrives, the hook hands a recovery line to the checkout's own ./magus when it was built at or after HEAD or the hook's binary. " +
+		"A row with no checkout, a read-only one, is told to stop and report the risk, since only the root can rebuild.",
 }
 
 var ruleDocLeaseUndeclared = types.RuleDoc{

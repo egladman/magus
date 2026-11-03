@@ -42,6 +42,19 @@ func replacesJudge(ctx context.Context, deps Dependencies, lease, command string
 	return recoveryLine(command, d, lease, false, hookLocation(ctx, deps))
 }
 
+// unknownRowSpawnDenial refuses a spawn bound to a row this build cannot read.
+// Only the root can rebuild, so no worker is handed the row.
+func unknownRowSpawnDenial(deps Dependencies, row types.Job) denial {
+	if len(row.Unknown) == 0 {
+		return denial{}
+	}
+	members := slices.Sorted(maps.Keys(row.Unknown))
+	return denial{
+		Say: fmt.Sprintf("magus workspace: %s (%s) cannot read %s on job %s's row, so a worker spawned on it would have every call denied; rebuild the ./magus the host hook runs (`%s`), then restart the daemon (`./magus server stop`, then `./magus server start`), and spawn again.",
+			cmp.Or(deps.Binary, "this magus"), cmp.Or(deps.BinaryVersion, "an unknown version"), strings.Join(members, ", "), row.ID, ward.BootstrapCommand),
+	}
+}
+
 // unknownRowDenial is the refusal for row, or none when this build declares every member
 // it carries.
 func unknownRowDenial(deps Dependencies, row types.Job) denial {
@@ -51,9 +64,19 @@ func unknownRowDenial(deps Dependencies, row types.Job) denial {
 	members := slices.Sorted(maps.Keys(row.Unknown))
 	binary := cmp.Or(deps.Binary, "this magus")
 	version := cmp.Or(deps.BinaryVersion, "an unknown version")
+	checkout := job.WorkingCheckout(row.CheckoutRoot, row)
+	if checkout == "" {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: %s (%s) cannot read %s on job %s's row, and this row has no checkout to build in; stop, and report it as an unresolved risk, since only the root can rebuild.",
+				binary, version, strings.Join(members, ", "), row.ID),
+			Why: fmt.Sprintf("A member this build does not know may widen or narrow what the row permits, and judging as if it were absent would be a guess. "+
+				"A row with no checkout holds nothing to build. The root rebuilds the ./magus the host hook runs (`%s`), then restarts the daemon (`./magus server stop`, then `./magus server start`).",
+				ward.BootstrapCommand),
+		}
+	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: %s (%s) cannot read %s on job %s's row; build this checkout's ./magus, alone on its line: `%s`.",
-			binary, version, strings.Join(members, ", "), row.ID, job.CheckoutBootstrap(cmp.Or(job.WorkingCheckout(row.CheckoutRoot, row), "<checkout>"))),
+			binary, version, strings.Join(members, ", "), row.ID, job.CheckoutBootstrap(checkout)),
 		Why: fmt.Sprintf("A member this build does not know may widen or narrow what the row permits, and judging as if it were absent would be a guess. "+
 			"The hook hands a call to a checkout's own ./magus when it was built at HEAD, after HEAD, or after the hook's binary. "+
 			"The holder of the job whose checkout this is builds one, alone on its line: `%s`. "+

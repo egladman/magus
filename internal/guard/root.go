@@ -443,6 +443,10 @@ func gradeSpawnModel(deps Dependencies, verdict types.GuardJudgment, env hookReq
 	var forked forkedTier
 	bound := false
 	if row, ok := titled(); ok {
+		if d := unknownRowSpawnDenial(deps, row); d.refused() {
+			verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, d.Say, string(denyRuleLeaseRowUnknown)
+			return verdict
+		}
 		forked, bound = boundModelTier(deps, row)
 	}
 	if bound && at.models != nil {
@@ -555,7 +559,7 @@ func (f forkedTier) rankedAbove(host, model string) string {
 	}
 	// Resolve found the host mapped, so Alias cannot fail here.
 	alias, _ := f.set.Alias(host, f.tier)
-	return fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above job %s's %s: spawn it on %s, or re-fork the row at the tier the work needs.",
+	return fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above job %s's %s: spawn it on %s, or change the row's tier with `magus job apply` and a changed `model`.",
 		model, spawned.Name(), spawned.Rank(), f.job, f.line(alias), alias)
 }
 

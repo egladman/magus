@@ -146,3 +146,79 @@ func TestRowUnknownPassesARowItCanRead(t *testing.T) {
 	require.Equal(t, decisionDeny, outside.Decision, "the other rules still judge the row")
 	assert.NotEqual(t, string(denyRuleLeaseRowUnknown), outside.Rule)
 }
+
+// RowUnknownReadOnlyCallerSuite pins the denial for a row with no checkout.
+type RowUnknownReadOnlyCallerSuite struct {
+	suite.Suite
+	ctx  context.Context
+	row  types.Job
+	deps Dependencies
+}
+
+func TestRowUnknownReadOnlyCallerSuite(t *testing.T) {
+	suite.Run(t, new(RowUnknownReadOnlyCallerSuite))
+}
+
+func (s *RowUnknownReadOnlyCallerSuite) SetupTest() {
+	s.row = types.Job{ID: "scout", ReadOnly: true, State: types.StateRunning, Registered: 1}
+	s.ctx, _ = fleetFixture(s.T(), s.row)
+	plantUnknownMember(s.T(), s.ctx, s.row.ID, "widens_paths")
+	s.deps = Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
+}
+
+func (s *RowUnknownReadOnlyCallerSuite) TestItTellsTheCallerToStopAndReportTheRisk() {
+	got := denyUnknownRowMembers(s.ctx, s.deps, s.row.ID, "magus describe job scout")
+	s.Require().True(got.refused())
+	s.Contains(got.Say, "widens_paths")
+	s.Contains(got.Say, "stop")
+	s.Contains(got.Say, "unresolved risk")
+	s.Contains(got.Say, "only the root can rebuild")
+}
+
+func (s *RowUnknownReadOnlyCallerSuite) TestItNamesNoCheckoutPlaceholder() {
+	got := denyUnknownRowMembers(s.ctx, s.deps, s.row.ID, "magus describe job scout")
+	s.NotContains(got.Say, "<checkout>")
+	s.NotContains(got.Why, "<checkout>")
+	s.NotContains(got.Say, "build this checkout")
+}
+
+func (s *RowUnknownReadOnlyCallerSuite) TestARowWithACheckoutStillNamesItsBootstrap() {
+	row := s.row
+	row.CheckoutRoot = "/work/job"
+	got := unknownRowDenial(s.deps, withUnknown(row, "widens_paths"))
+	s.Require().True(got.refused())
+	s.Contains(got.Say, "/work/job")
+}
+
+// The spawn gate refuses a row the hook cannot read before a worker meets it.
+func TestSpawnBoundToAnUnreadableRowIsDeniedWithTheRootsRemedy(t *testing.T) {
+	row := withUnknown(types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared}, "widens_paths")
+	titled := func() (types.Job, bool) { return row, true }
+	deps := Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
+	at := location{cacheDir: t.TempDir()}
+
+	got := gradeSpawnModel(deps, types.GuardJudgment{Decision: decisionPass}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
+		hookAttribution{Host: "claude-code", Session: "s"}, at, "", titled)
+
+	require.Equal(t, decisionDeny, got.Decision)
+	assert.Equal(t, string(denyRuleLeaseRowUnknown), got.Rule)
+	assert.Contains(t, got.Reason, "widens_paths")
+	assert.Contains(t, got.Reason, ward.BootstrapCommand)
+	assert.Contains(t, got.Reason, "server stop")
+}
+
+func TestSpawnBoundToAReadableRowIsNotDeniedForSkew(t *testing.T) {
+	row := types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared}
+	titled := func() (types.Job, bool) { return row, true }
+	at := location{cacheDir: t.TempDir()}
+
+	got := gradeSpawnModel(Dependencies{}, types.GuardJudgment{Decision: decisionPass}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
+		hookAttribution{Host: "claude-code", Session: "s"}, at, "", titled)
+
+	assert.NotEqual(t, decisionDeny, got.Decision)
+}
+
+func withUnknown(row types.Job, member string) types.Job {
+	row.Unknown = map[string]json.RawMessage{member: json.RawMessage(`true`)}
+	return row
+}
