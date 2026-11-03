@@ -123,6 +123,27 @@ func TestJSONEncodeWritesAnEnumCaseAsItsValue(t *testing.T) {
 	assert.JSONEq(t, `{"decision":"deny"}`, got)
 }
 
+func TestJSONEncodeWritesInstanceFieldsAtAnyDepth(t *testing.T) {
+	sess := buzz.NewSession(t.Context())
+	t.Cleanup(func() { _ = sess.Close() })
+	require.NoError(t, sess.Exec(t.Context(), `
+object Record {
+    n: int = 2,
+    next: any = null,
+    fun value() > int { return this.n; }
+}
+final r = Record{};
+final nested = [r];
+final cycle = mut Record{};
+cycle.next = cycle;
+`))
+	got, err := JSONEncode(sess.GetGlobal("nested"))
+	require.NoError(t, err)
+	assert.JSONEq(t, `[{"n":2,"next":null}]`, got)
+	_, err = JSONEncode(sess.GetGlobal("cycle"))
+	require.ErrorIs(t, err, errCircularReference)
+}
+
 func TestJSONDecodeValueKeepsIntegralNumbersInts(t *testing.T) {
 	v, err := JSONDecodeValue([]byte(`{"n":2,"f":1.5}`))
 	require.NoError(t, err)

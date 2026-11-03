@@ -280,6 +280,16 @@ func JSONEncode(v vm.Value) (string, error) {
 // Scalars still go through json.Marshal, so string escaping and number formatting
 // stay exactly as the standard library does them; only container ordering is ours.
 func encodeJSON(v vm.Value, buf *bytes.Buffer, path []vm.Value) error {
+	// A host record with methods crosses as an instance. Only its fields are
+	// data; retain the instance on the path because MapView allocates a map.
+	if !v.IsMap() {
+		if fields, ok := v.MapView(); ok {
+			if identityPathHas(path, v) {
+				return errCircularReference
+			}
+			return encodeJSON(fields, buf, append(path, v))
+		}
+	}
 	switch {
 	case v.IsList():
 		if identityPathHas(path, v) {
