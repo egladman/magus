@@ -42,7 +42,7 @@ In the code (`magus refs <name>` lists every site):
 - `magus-protodocs.service` (Go)
 - `activity.Service` (Go)
 - `graph.Service` (Go)
-- `insight.Service` (Go)
+- `historymetrics.service` (Go)
 - `job.Service` (Go)
 
 <!-- END GLOSSARY USAGE -->

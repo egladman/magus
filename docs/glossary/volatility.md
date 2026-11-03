@@ -31,11 +31,13 @@ In the docs:
 
 - [Volatility](../concepts/volatility.md#volatility)
 - [Volatility](../reference/api/historymetrics/v1alpha1/historymetrics.md#volatility)
+- [volatility](../reference/buzz/magus.md#volatility)
 - [volatility](../reference/config.md#volatility)
 
 In the code (`magus refs <name>` lists every site):
 
 - `config.Volatility` (Go)
+- `types.Volatility` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

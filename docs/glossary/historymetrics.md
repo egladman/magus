@@ -23,9 +23,11 @@ magus\log.info(magus\affinity().pairs.len().toString());
 
 In the docs:
 
-- [History metrics](../concepts/knowledge/historymetrics.md#history-metrics)
-- [Hotspot](hotspot.md)
-- [Affinity](affinity.md)
+- [GetHistoryMetrics](../reference/api/historymetrics/v1alpha1/historymetrics.md#gethistorymetrics)
+
+In the code (`magus refs <name>` lists every site):
+
+- `types.HistoryMetrics` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

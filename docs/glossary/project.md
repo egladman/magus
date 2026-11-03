@@ -41,6 +41,7 @@ In the code (`magus refs <name>` lists every site):
 
 - `dry.Project` (Go)
 - `types.Project` (Go)
+- `scipbuzz.Project` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

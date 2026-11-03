@@ -29,11 +29,11 @@ magus broker status
 In the docs:
 
 - [Relationship to the broker and the daemon](../concepts/concurrency.md#relationship-to-the-broker-and-the-daemon)
+- [2026-10-31: weight orders the broker's queue](../decisions/0001-bounded-concurrency-with-recursive-invocation.md#2026-10-31-weight-orders-the-brokers-queue)
 - [Slots stop being derived from memory under the broker](../decisions/0012-memory-claims-follow-a-measured-curve.md#slots-stop-being-derived-from-memory-under-the-broker)
 - [The broker holds one budget per machine](../guides/integrations/agents/orchestration.md#the-broker-holds-one-budget-per-machine)
 - [Supervising the broker](../guides/integrations/server.md#supervising-the-broker)
 - [Broker](../reference/api/status/v1alpha1/status.md#broker)
-- [MGS3022: no broker answered](../reference/codes/sandbox/MGS3022.md#mgs3022-no-broker-answered)
 
 <!-- END GLOSSARY USAGE -->
 

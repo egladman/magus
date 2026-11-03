@@ -56,6 +56,10 @@ In the docs:
 - [The outer harness stays outside](../design/judgment/the-outer-harness-stays-outside.md#the-outer-harness-stays-outside)
 - [A harness is not an agent thing](../design/principles/a-harness-is-not-an-agent-thing.md#a-harness-is-not-an-agent-thing)
 
+In the code (`magus refs <name>` lists every site):
+
+- `types.Harness` (Go)
+
 <!-- END GLOSSARY USAGE -->
 
 ## See also

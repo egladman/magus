@@ -28,6 +28,11 @@ magus\log.info(magus\insightMarkdown());
 In the docs:
 
 - [Ownership](../reference/api/historymetrics/v1alpha1/historymetrics.md#ownership)
+- [ownership](../reference/buzz/magus.md#ownership)
+
+In the code (`magus refs <name>` lists every site):
+
+- `types.Ownership` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

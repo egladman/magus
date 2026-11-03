@@ -29,7 +29,7 @@ In the code (`magus refs <name>` lists every site):
 - `edit.span` (Go)
 - `tty.Span` (Go)
 - `playground.Span` (Go)
-- `impact.Span` (Go)
+- `textbuf.span` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

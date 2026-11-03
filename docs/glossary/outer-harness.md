@@ -35,9 +35,7 @@ magus describe job docs-fix
 
 In the docs:
 
-- [The model proposes, the harness executes](../design/principles/the-model-proposes-the-harness-executes.md#the-model-proposes-the-harness-executes)
-- [Harness](harness.md#harness)
-- [Inner harness](inner-harness.md#inner-harness)
+- [The outer harness stays outside](../design/judgment/the-outer-harness-stays-outside.md#the-outer-harness-stays-outside)
 
 <!-- END GLOSSARY USAGE -->
 
