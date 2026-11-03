@@ -162,5 +162,5 @@ test "the figure library may name magus record types but not call the host" {
     final lines = mut [<int>];
     foreach (f in got) { lines.append(f.line); }
     assert\equal(lines, want: [6, 7], message: "the host calls, not the types, the comment or the string: {support\messages(got)}");
-    assert\equal(got[0].message, want: "the figure library calls magus\\graph().dirs; it takes graph records, it never reads the workspace", message: "names the member");
+    assert\equal(got[0].message, want: "the figure library calls magus\\graph; it takes graph records, it never reads the workspace", message: "names the member");
 }
