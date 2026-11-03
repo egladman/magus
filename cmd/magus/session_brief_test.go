@@ -213,7 +213,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	w.Magusfile("import \"magus\";\nimport \"spells/brief-host\" as host;\nmagus\\harness.provider(host);\n")
 	w.Write("spells/brief-host/spell.buzz", "import \"magus/spell\";\n"+
 		"export fun mgs_getName() > str { return \"brief-host\"; }\n"+
-		"export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{path = \"host/hooks.json\"}; }\n"+
+		"export fun mgs_getHarness() > Harness { return Harness{config = HarnessConfig{path = \"host/hooks.json\"}, guard = \"\"}; }\n"+
 		"export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }\n")
 	w.Write("AGENTS.md", "# rules\n")
 	fixture.WireHarness(t, agent.HarnessDescriptor{

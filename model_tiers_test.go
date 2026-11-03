@@ -19,8 +19,8 @@ const opusHostSpell = `import "magus/spell";
 
 export fun mgs_getName() > str { return "opus-host"; }
 
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = "hooks.json"};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = "hooks.json"}, guard = ""};
 }
 
 export fun mgs_getSkills() > HarnessSkills {
