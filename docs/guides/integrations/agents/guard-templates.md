@@ -526,18 +526,21 @@ fun recordMessage(bin: str, message: str, dir: str, session: str, host: str, att
 // printed, which is not necessarily what went wrong. WARN lines are dropped because a
 // config the binary is too old to parse warns BEFORE it fails, and that warning is a
 // symptom of the same staleness, not the error.
+final FAILURE_LINES = 12;
+
 fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     var version = "";
     final probe = proc\exec(guard.bin, args: ["version"], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
     if (probe != null) { version = hook\firstLine(probe!.stdout); }
     if (version == "") { version = "version unreadable"; }
 
-    var why = "";
+    final lines = mut [<str>];
     if (failed != null) {
         foreach (line in failed!.stderr.split("\n")) {
-            if (why == "" and line != "" and line.indexOf("WARN") == null) { why = line; }
+            if (line != "" and line.indexOf("WARN") == null and lines.len() < FAILURE_LINES) { lines.append(line); }
         }
     }
+    var why = lines.join("\n");
     if (why == "") { why = "it printed no error"; }
 
     return "magus guard could not judge this call: {guard.bin} ({version}) said: {why}";
@@ -545,8 +548,9 @@ fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
 
 // unjudgedReply answers a call no magus judged. Every event shows the person
 // systemMessage. A PreToolUse call that is not a read is refused. A
-// PermissionRequest leaves the decision to the person's own prompt.
-fun unjudgedReply(eventName: str, toolName: str, verdict: str, fix: str) > str {
+// PermissionRequest leaves the decision to the person's own prompt. The
+// bootstrap line passes: it is the fix the notice names.
+fun unjudgedReply(eventName: str, toolName: str, command: str, verdict: str, fix: str) > str {
     final text = "{verdict}\n{fix}";
     if (eventName == "Stop" or eventName == "SubagentStop") {
         return json\stringify({"systemMessage": text}) catch "";
@@ -555,7 +559,7 @@ fun unjudgedReply(eventName: str, toolName: str, verdict: str, fix: str) > str {
         return json\stringify({"systemMessage": text,
             "hookSpecificOutput": {"hookEventName": eventName}}) catch PERMISSION_NO_DECISION;
     }
-    if (eventName == "PostToolUse" or READ_TOOLS.indexOf(toolName) != null) {
+    if (eventName == "PostToolUse" or READ_TOOLS.indexOf(toolName) != null or hook\isBootstrap(command)) {
         final named = if (eventName == "PostToolUse") eventName else "PreToolUse";
         return json\stringify({"systemMessage": text,
             "hookSpecificOutput": {"hookEventName": named, "additionalContext": text}}) catch "";
@@ -704,7 +708,7 @@ fun main(args: [str]) > void {
     if (bin == "" or !hook\isExecutable(bin)) {
         final verdict = "magus guard could not judge this call: no magus binary was found";
         io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE",
-            fallback: unjudgedReply(eventName, toolName: toolName, verdict: verdict, fix: fix))) catch void;
+            fallback: unjudgedReply(eventName, toolName: toolName, command: commandLine, verdict: verdict, fix: fix))) catch void;
         return;
     }
 
@@ -763,7 +767,7 @@ fun main(args: [str]) > void {
     // workspace, half-written by a concurrent build, exits non-zero with empty output, and
     // printing that as a pass silently disables every rule with nothing anywhere saying so.
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-        final refused = unjudgedReply(eventName, toolName: toolName,
+        final refused = unjudgedReply(eventName, toolName: toolName, command: commandLine,
             verdict: failureNotice(guard, failed: result), fix: "Rebuild or update {bin}. {fix}");
         io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: refused)) catch void;
         return;
@@ -780,15 +784,25 @@ fun replyOf(text: str) > {str: any} {
 }
 
 test "an unjudged call that may change state is refused and told to the person" {
-    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", verdict: "v", fix: "f"));
+    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: "ls", verdict: "v", fix: "f"));
     final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
     std\assert(spec["permissionDecision"] == "deny", message: "{reply}");
     std\assert(spec["additionalContext"] == "f", message: "the agent reads the fix");
     std\assert(reply["systemMessage"] == "v\nf", message: "the person reads the verdict and the fix");
 }
 
+test "the bootstrap line alone passes an unjudged call" {
+    final line = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
+    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f"));
+    final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(spec["permissionDecision"] == null and reply["systemMessage"] == "v\nf", message: "{reply}");
+    final chained = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line + " && ls", verdict: "v", fix: "f"));
+    final chainedSpec: {str: any} = chained["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(chainedSpec["permissionDecision"] == "deny", message: "{chained}");
+}
+
 test "an unjudged read passes, and the person still hears of it" {
-    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Read", verdict: "v", fix: "f"));
+    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Read", command: "", verdict: "v", fix: "f"));
     final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
     std\assert(spec["permissionDecision"] == null, message: "{reply}");
     std\assert(reply["systemMessage"] == "v\nf", message: "{reply}");
@@ -796,13 +810,13 @@ test "an unjudged read passes, and the person still hears of it" {
 
 test "the lifecycle events carry the notice in their own dialect" {
     foreach (name in ["Stop", "SubagentStop"]) {
-        final reply = replyOf(unjudgedReply(name, toolName: "", verdict: "v", fix: "f"));
+        final reply = replyOf(unjudgedReply(name, toolName: "", command: "", verdict: "v", fix: "f"));
         std\assert(reply["systemMessage"] == "v\nf" and reply["hookSpecificOutput"] == null, message: "{name}: {reply}");
     }
-    final permission = replyOf(unjudgedReply("PermissionRequest", toolName: "Bash", verdict: "v", fix: "f"));
+    final permission = replyOf(unjudgedReply("PermissionRequest", toolName: "Bash", command: "", verdict: "v", fix: "f"));
     final spec: {str: any} = permission["hookSpecificOutput"] ?? {<str: any>};
     std\assert(spec["hookEventName"] == "PermissionRequest" and spec["decision"] == null, message: "{permission}");
-    final post = replyOf(unjudgedReply("PostToolUse", toolName: "Bash", verdict: "v", fix: "f"));
+    final post = replyOf(unjudgedReply("PostToolUse", toolName: "Bash", command: "", verdict: "v", fix: "f"));
     final postOut: {str: any} = post["hookSpecificOutput"] ?? {<str: any>};
     std\assert(postOut["hookEventName"] == "PostToolUse" and postOut["permissionDecision"] == null, message: "{post}");
 }
@@ -1829,7 +1843,7 @@ fun unloadableNotice(root: str, bin: str, why: str, fix: str) > str {
         if (why != "") { cause = "{bin} cannot load {root}: {why}"; }
     }
     return "the magus guard is not judging this session; {fix}.\n{cause}\n"
-        + "Every edit, spawn, push and state-changing command is denied until a magus loads the tree; reads, `git status` and the fix still run.";
+        + "Every edit, spawn, push and state-changing command is denied until a magus loads the tree; reads and the bootstrap line still run.";
 }
 
 fun contextReply(text: str) > str {

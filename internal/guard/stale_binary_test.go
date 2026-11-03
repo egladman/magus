@@ -446,6 +446,23 @@ func TestUnloadCause(t *testing.T) {
 	assert.Equal(t, unloadReason{}, unloadCause(stale, ""))
 }
 
+// UnloadCauseSuite pins which load failures only a different binary fixes.
+type UnloadCauseSuite struct {
+	suite.Suite
+}
+
+func TestUnloadCauseSuite(t *testing.T) {
+	suite.Run(t, new(UnloadCauseSuite))
+}
+
+func (s *UnloadCauseSuite) TestAnUnknownConfigKeyThisBuildPredatesIsStale() {
+	binary := testkit.NewWorkspace(s.T())
+	binary.WriteExecutable("magus", "#!/bin/sh\n")
+	err := types.DiagnosticErrorf(types.UnknownConfigKey,
+		"magus.yaml has a key this magus does not know:\n  - guard.newest  (line 4)")
+	s.Equal(unloadReason{Cause: unloadStale}, unloadCause(err, binary.Root()))
+}
+
 func TestDeclaresGuardRule(t *testing.T) {
 	root := t.TempDir()
 	assert.False(t, declaresGuardRule(root), "no magusfile")

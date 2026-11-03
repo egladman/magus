@@ -96,7 +96,7 @@ fun unloadableNotice(root: str, bin: str, why: str, fix: str) > str {
         if (why != "") { cause = "{bin} cannot load {root}: {why}"; }
     }
     return "the magus guard is not judging this session; {fix}.\n{cause}\n"
-        + "Every edit, spawn, push and state-changing command is denied until a magus loads the tree; reads, `git status` and the fix still run.";
+        + "Every edit, spawn, push and state-changing command is denied until a magus loads the tree; reads and the bootstrap line still run.";
 }
 
 fun contextReply(text: str) > str {

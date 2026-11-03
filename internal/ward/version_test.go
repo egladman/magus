@@ -12,7 +12,35 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// UnknownConfigKeySuite pins which MGS1040 failures a rebuild fixes.
+type UnknownConfigKeySuite struct {
+	suite.Suite
+}
+
+func TestUnknownConfigKeySuite(t *testing.T) {
+	suite.Run(t, new(UnknownConfigKeySuite))
+}
+
+func (s *UnknownConfigKeySuite) TestAKeyThisBuildPredatesIsStaleShaped() {
+	err := types.DiagnosticErrorf(types.UnknownConfigKey,
+		"magus.yaml has a key this magus does not know:\n  - guard.newest  (line 4)\n\nthis magus is older than the tree")
+	s.True(IsStaleBinary(err))
+}
+
+func (s *UnknownConfigKeySuite) TestASuggestedKeyIsATypoARebuildReportsAgain() {
+	err := types.DiagnosticErrorf(types.UnknownConfigKey,
+		"magus.yaml has a key this magus does not know:\n  - guard.lease  (line 4; did you mean %q?)", "guard.leases")
+	s.False(IsStaleBinary(err))
+}
+
+func (s *UnknownConfigKeySuite) TestARenamedKeyIsNotStaleShaped() {
+	err := types.DiagnosticErrorf(types.UnknownConfigKey,
+		"magus.yaml has a key this magus does not know:\n  - old  (line 2; renamed to %q)", "new")
+	s.False(IsStaleBinary(err))
+}
 
 func TestCheckRequiredVersion(t *testing.T) {
 	t.Run("a satisfied floor passes", func(t *testing.T) {

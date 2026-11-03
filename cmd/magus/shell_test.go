@@ -2575,7 +2575,49 @@ func (s *unjudgedHookSuite) TestCursorRefusesAndShowsThePersonTheFix() {
 	s.Contains(reply["user_message"], "Rebuild or update")
 }
 
-// The hook carries a copy of the bootstrap, since with no magus it cannot ask one.
+const glueBrokenMultiLineMagus = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\necho 'magus.yaml has keys this magus does not know:' >&2\necho '  - guard.newest  (line 4)' >&2\nexit 3\n"
+
+func (s *unjudgedHookSuite) bootstrapEvent(command string) string {
+	encoded, err := json.Marshal(command)
+	s.Require().NoError(err)
+	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":%s}}`, encoded)
+}
+
+func (s *unjudgedHookSuite) TestTheBootstrapLineAloneIsLetThroughAndTheNoticeStays() {
+	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent(ward.BootstrapCommand))
+	s.NotContains(reply["hookSpecificOutput"], "permissionDecision")
+	s.Contains(reply["systemMessage"], "could not judge this call")
+	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
+}
+
+func (s *unjudgedHookSuite) TestTheBootstrapLineWithAnotherCommandAfterItIsRefused() {
+	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent(ward.BootstrapCommand+" && git stash"))
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
+}
+
+func (s *unjudgedHookSuite) TestCursorLetsTheBootstrapLineThrough() {
+	encoded, err := json.Marshal(ward.BootstrapCommand)
+	s.Require().NoError(err)
+	reply := s.reply("cursor-hook.buzz", "cursor", fmt.Sprintf(`{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":%s,"cwd":"/tmp"}`, encoded))
+	s.Equal("allow", reply["permission"])
+	s.Contains(reply["user_message"], "could not judge this call")
+}
+
+func (s *unjudgedHookSuite) TestEveryLineOfTheLoadErrorReachesThePerson() {
+	body, _ := runGlue(s.T(), "magus-command.buzz", glueArrangement{label: "claude-code", host: "claude-code",
+		event: s.bootstrapEvent("git stash"), stub: glueBrokenMultiLineMagus})
+	reply, ok := glueDecode(s.T(), "claude-code", body).(map[string]any)
+	s.Require().True(ok, body)
+	s.Contains(reply["systemMessage"], "guard.newest")
+}
+
+func (s *unjudgedHookSuite) TestTheSessionStartTextPromisesNoGitStatus() {
+	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "magus-session.buzz"))
+	s.Require().NoError(err)
+	s.NotContains(string(body), "`git status` and the fix still run")
+}
+
+// The hook carries a copy of the bootstrap, since with no magus it cannot ask.
 func (s *unjudgedHookSuite) TestTheHookBootstrapIsWardsCommand() {
 	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "lib", "hook.buzz"))
 	s.Require().NoError(err)

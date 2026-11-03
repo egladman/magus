@@ -273,6 +273,12 @@ fun buildsMagus(root: str) > bool {
 // BOOTSTRAP is ward.BootstrapCommand: a hook with no magus cannot ask for it.
 // cmd/magus/shell_test.go pins the copy.
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
+// isBootstrap is a string comparison, so no second shell classifier exists
+// beside the Go judge.
+export fun isBootstrap(command: str) > bool {
+    return command.trim() == BOOTSTRAP;
+}
+
 final SETUP_URL = "https://eli.gladman.cc/magus/guides/setup/";
 
 // magusFix says how to get a runnable magus for root. A checkout of

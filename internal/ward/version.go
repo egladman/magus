@@ -332,6 +332,8 @@ func staleShaped(err error) bool {
 		switch d.Code {
 		case types.GuardRuleMisdeclared:
 			return strings.Contains(d.Msg, unknownBuiltinRule) && !strings.Contains(d.Msg, nearNameOffer)
+		case types.UnknownConfigKey:
+			return !strings.Contains(d.Msg, nearNameOffer) && !strings.Contains(d.Msg, renamedKeyOffer)
 		case buzzUndefinedType, buzzUnresolvedImport:
 			return true
 		}
@@ -346,6 +348,7 @@ func staleShaped(err error) bool {
 const (
 	unknownBuiltinRule = "unknown built-in rule"
 	nearNameOffer      = "did you mean"
+	renamedKeyOffer    = "renamed to"
 )
 
 // missingObjectMember matches the checker's complaint that an object lacks a member. It
