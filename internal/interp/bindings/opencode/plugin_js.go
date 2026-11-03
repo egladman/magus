@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-package opencode
+package opencode //nolint:hostagnostic // the package is named for the product it binds
 
 import (
 	"context"
