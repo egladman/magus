@@ -2404,7 +2404,7 @@ export object guard {
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
 }
 
-// Agent-host harness selection. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarnessConfig, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.
+// Agent-host harness selection. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarness, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.
 export object harness {
     static extern fun provider(spell: {str: any}) > str;
 }
