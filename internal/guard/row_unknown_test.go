@@ -172,7 +172,7 @@ func (s *RowUnknownReadOnlyCallerSuite) TestItTellsTheCallerToStopAndReportTheRi
 	s.Contains(got.Say, "widens_paths")
 	s.Contains(got.Say, "stop")
 	s.Contains(got.Say, "unresolved risk")
-	s.Contains(got.Say, "only the root can rebuild")
+	s.Contains(got.Why, "only the root can rebuild")
 }
 
 func (s *RowUnknownReadOnlyCallerSuite) TestItNamesNoCheckoutPlaceholder() {
@@ -204,7 +204,7 @@ func TestSpawnBoundToAnUnreadableRowIsDeniedWithTheRootsRemedy(t *testing.T) {
 	assert.Equal(t, string(denyRuleLeaseRowUnknown), got.Rule)
 	assert.Contains(t, got.Reason, "widens_paths")
 	assert.Contains(t, got.Reason, ward.BootstrapCommand)
-	assert.Contains(t, got.Reason, "server stop")
+	assert.Contains(t, got.Reason, "./magus server stop && ./magus server start")
 }
 
 func TestSpawnBoundToAReadableRowIsNotDeniedForSkew(t *testing.T) {
