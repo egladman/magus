@@ -200,11 +200,11 @@ func TestSpawnBoundToAnUnreadableRowIsDeniedWithTheRootsRemedy(t *testing.T) {
 	got := gradeSpawnModel(deps, types.GuardJudgment{Decision: decisionPass}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
 		hookAttribution{Host: "claude-code", Session: "s"}, at, "", titled)
 
-	require.Equal(t, decisionDeny, got.Decision)
-	assert.Equal(t, string(denyRuleLeaseRowUnknown), got.Rule)
 	assert.Contains(t, got.Reason, "widens_paths")
 	assert.Contains(t, got.Reason, ward.BootstrapCommand)
 	assert.Contains(t, got.Reason, "./magus server stop && ./magus server start")
+	got.Reason = ""
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseRowUnknown)}, got)
 }
 
 func TestSpawnBoundToAReadableRowIsNotDeniedForSkew(t *testing.T) {
