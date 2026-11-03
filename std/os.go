@@ -87,7 +87,6 @@ var typedMagusMembers = map[string]string{
 	"explain":             "explain",
 	"path":                "path",
 	"refs":                "refs",
-	"insight":             "insight",
 	"graph stats":         "stats",
 	"ls jobs":             "job.list",
 	"ls targets":          "describe.graph",
