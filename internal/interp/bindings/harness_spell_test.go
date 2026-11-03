@@ -617,7 +617,7 @@ func readGlue(t *testing.T, name string) string {
 func readOpenCodeRuntime(t *testing.T) string {
 	t.Helper()
 	var source strings.Builder
-	for _, path := range []string{"opencode/wasm/plugin.go", "opencode/runtime.go", "opencode/plugin.buzz"} {
+	for _, path := range []string{"opencode/plugin_js.go", "opencode/plugin.go", "opencode/runtime.go", "opencode/plugin.buzz"} {
 		body, err := os.ReadFile(path)
 		require.NoError(t, err)
 		source.Write(body)
@@ -799,7 +799,7 @@ func (s *AdapterConformanceSuite) TestEveryBoundAdapterIsAShippedGlue() {
 			}
 			for _, script := range strings.Split(b.Adapter, ", ") {
 				if script == "opencode-plugin" {
-					s.FileExists("opencode/wasm/plugin.go", "%s %s", id, b.Point)
+					s.FileExists("opencode/plugin_js.go", "%s %s", id, b.Point)
 				} else {
 					s.FileExists(filepath.Join(glueDir, script+".buzz"), "%s %s", id, b.Point)
 				}
