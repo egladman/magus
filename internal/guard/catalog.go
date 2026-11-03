@@ -62,7 +62,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocConflictCommit},
 	{doc: ruleDocSpawnUnbriefed},
 	{doc: ruleDocBuzzUnbriefed},
-	{doc: ruleDocAmbiguousCIWord},
+	{doc: ruleDocAmbiguousCiWord},
 	{doc: ruleDocArchitectureUnbriefed},
 	{doc: ruleDocPushUngated},
 	{doc: ruleDocHumanOnly},
@@ -360,9 +360,9 @@ var ruleDocArchitectureUnbriefed = types.RuleDoc{
 		"Every agent is asked alike, a shipped read-only type included: its render denies the host's write tools and keeps the Skill tool.",
 }
 
-var ruleDocAmbiguousCIWord = types.RuleDoc{
+var ruleDocAmbiguousCiWord = types.RuleDoc{
 	Name:    string(denyRuleAmbiguousCIWord),
-	Catches: "a call that picks magus `ci` or the host's CI/CD while the person's bare word \"ci\" is still unresolved",
+	Catches: "a call that picks magus `ci` or host CI/CD while the bare word \"ci\" is unresolved",
 	Why: "The bare word \"ci\" names two different things in a magus workspace: the reserved `ci` target (often reached as `magus affected ci`), and the host's CI/CD run (GitHub Actions, GitLab CI, and the rest). " +
 		"An agent that assumes either burns a turn on the wrong gate, then another clarifying with the person. " +
 		"A message the person submits with bare \"ci\" and no disambiguator marks the session; the next call that runs `magus run ci` / `magus affected ci`, a host CI CLI (`gh run`, `act`, ...), or touches a workflow path is refused until they say which. " +
