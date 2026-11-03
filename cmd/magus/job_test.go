@@ -1808,12 +1808,19 @@ func guideBlock(t *testing.T, script, section string) string {
 // A -run that leaves out a test of the write paths' package is refused at fork, listing
 // the tests and a pattern that covers them, and a check running the whole package passes.
 func TestJobForkRefusesACheckThatSkipsATestOfItsPackage(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := testkit.NewRepository(t, map[string]string{
+		"magus.yaml":     "{}\n",
+		"magusfile.buzz": "import \"magus\";\nimport \"magus/spell/go\";\n\nmagus\\project({\"spells\": [go]});\n",
+		"go.mod":         goModule,
+		"pkg/a.go":       "package pkg\n",
+		"pkg/a_test.go":  "package pkg\n\nimport \"testing\"\n\nfunc TestAlpha(t *testing.T) {}\nfunc TestBeta(t *testing.T) {}\n",
+	}).Root()
 	resetWorkspaceMemo(t)
-	root, cacheDir := execFixture(t)
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a.go"), []byte("package pkg\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a_test.go"),
-		[]byte("package pkg\n\nimport \"testing\"\n\nfunc TestAlpha(t *testing.T) {}\nfunc TestBeta(t *testing.T) {}\n"), 0o644))
+	t.Chdir(root)
+	root, cacheDir := seedJobStore(t, root)
 	fork := func(check string) error {
 		return jobFork(t.Context(), root, []string{"w", "--write-paths", "pkg/a.go", "--check", check})
 	}
