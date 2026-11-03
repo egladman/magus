@@ -725,7 +725,7 @@ fun leaseAt(root: str) > result\Result::<Lease> {
     }
 }
 
-fun hostReport(plan: magus\HarnessPlan, root: str, all: [Case]) > HostReport {
+fun hostReport(plan: magus\HarnessInstallation, root: str, all: [Case]) > HostReport {
     final keys = mut [<Wired>];
     foreach (w in plan.wired) {
         keys.append(Wired{ file = w.file, key = w.key });
@@ -743,15 +743,15 @@ fun hostReport(plan: magus\HarnessPlan, root: str, all: [Case]) > HostReport {
 }
 
 // plansOf is the plan of every harness describe harness names.
-fun plansOf() > result\Result::<[magus\HarnessPlan]> {
+fun plansOf() > result\Result::<[magus\HarnessInstallation]> {
     try {
-        final wired = mut [<magus\HarnessPlan>];
+        final wired = mut [<magus\HarnessInstallation>];
         foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{ quiet = true }).stdout.trim().split("\n")) {
             if (id != "") { wired.append(magus\describe.harness(id)); }
         }
-        return result\ok::<[magus\HarnessPlan]>(wired);
+        return result\ok::<[magus\HarnessInstallation]>(wired);
     } catch (err: any) {
-        return result\caught::<[magus\HarnessPlan]>(err, doing: "list the harnesses");
+        return result\caught::<[magus\HarnessInstallation]>(err, doing: "list the harnesses");
     }
 }
 
@@ -765,7 +765,7 @@ export fun check(root: str) > Report {
     }
     final all = cases(root, lease: lease);
     final hosts = mut [<HostReport>];
-    var plans = [<magus\HarnessPlan>];
+    var plans = [<magus\HarnessInstallation>];
     final planned = plansOf();
     if (planned.error -> err) {
         hosts.append(HostReport{ id = "describe harness", file = "", note = "",
