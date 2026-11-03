@@ -375,6 +375,7 @@ Full docs live at **[eli.gladman.cc/magus](https://eli.gladman.cc/magus/)**.[^do
 - Core concepts: [Targets](docs/concepts/targets.md), [Spells](docs/concepts/spells.md), [Charms](docs/concepts/charms.md), [Operations](docs/concepts/operations.md), [Services](docs/concepts/services.md)
 - Running at scale: [CI](docs/concepts/targets/ci.md), [CI providers](docs/concepts/ci/providers.md), [Daemon](docs/guides/integrations/server.md), [Remote caching](docs/concepts/cache/remote.md), [MCP](docs/guides/integrations/mcp.md), [Telemetry](docs/concepts/telemetry.md)
 - Reference: [Man pages](docs/reference/manpage/magus.md), [Standard library modules](docs/reference/buzz/index.md), [Testing](docs/guides/testing.md), [Debugging](docs/guides/debugging.md), [Output references](docs/concepts/cache/output-refs.md), [Tips and tricks](docs/guides/tips.md)
+- Design: [Design principles](docs/design.md). [A measure is not the goal](docs/design/principles/a-measure-is-not-the-goal.md) says what each gate measures and what it cannot, so a green gate reads as a floor and never a verdict.
 
 Inside a workspace, the entry point is the committed [`MAGUS.md`](https://github.com/egladman/magus/blob/main/MAGUS.md): a
 generated routing index of the workspace's projects, targets, and the exact
