@@ -177,9 +177,9 @@ func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 }
 
 const (
-	buzzVanillaScript = "import \"std\";\n\nfun main(args: [str]) > void {\n    std\\print(\"hi\");\n}\n"
+	buzzVanillaScript  = "import \"std\";\n\nfun main(args: [str]) > void {\n    std\\print(\"hi\");\n}\n"
 	buzzUnmergedScript = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final r = magus\\workspace().unmerged();\n    std\\print(\"rows={r.rows.len()}\");\n}\n"
-	buzzMemberScript  ="import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final p = magus\\describe.project();\n    std\\print(\"{p.projects.len()}\");\n}\n"
+	buzzMemberScript   = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final p = magus\\describe.project();\n    std\\print(\"{p.projects.len()}\");\n}\n"
 )
 
 // countWorkspaceOpens swaps buzzLoadWorkspace for open, counting its calls.
