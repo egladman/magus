@@ -508,6 +508,8 @@ func defineMagusRecords(sess *buzz.Session, decls string) error {
 // the same run: a field's default case is the one the session compares to.
 func sessionRecords(sess *buzz.Session, mod vm.Value, shared []magusRecord) ([]magusRecord, error) {
 	child := sess.NewChild()
+	// Close only ends its context: sess owns what it defined.
+	defer func() { _ = child.Close() }()
 	var body strings.Builder
 	out := slices.Clone(shared)
 	for _, r := range out {
