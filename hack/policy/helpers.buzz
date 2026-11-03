@@ -214,8 +214,9 @@ export fun vcsRequest(calls: [[str]]) > [Program] {
     return programs;
 }
 
-// JobRow is what the spawn rule reads of one job store row, copied out of magus\job.list
-// because a Buzz test cannot build the host's Job.
+// JobRow is what the spawn rule reads of one job store row.
+// It is copied out of magus\workspace().jobs().
+// A Buzz test cannot build the host's Job.
 export object JobRow {
     id: str,
     parent: str = "",

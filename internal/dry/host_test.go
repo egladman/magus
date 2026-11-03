@@ -455,14 +455,14 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
     magus\describe.module("go");
     magus\log.hint("h");
     magus\pry();
-    magus\bustCache();
-    magus\impact("main");
+    magus\workspace().bustCache();
+    magus\change("main").impact();
     magus\describe.file(["magusfile.buzz"]);
     final _spells = magus\describe.spell("go");
     final _projects = magus\describe.project().projects;
     final _graph = magus\describe.graph().projects;
     final _index = magus\describe.graphMarkdown();
-    magus\hotspots();
+    magus\history().hotspots();
     final _state = magus\describe.tool().lifecycle.state;
 }
 `

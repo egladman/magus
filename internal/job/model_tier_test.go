@@ -311,7 +311,7 @@ func TestAssignModelTierRefusesAMatrixThatIsWrong(t *testing.T) {
 		matrix countingMatrix
 		want   string
 	}{
-		{"it raises", countingMatrix{err: errors.New("magus\\job.modelTier: the matrix raised: boom")}, "boom"},
+		{"it raises", countingMatrix{err: errors.New("magus\\modelTier: the matrix raised: boom")}, "boom"},
 		{"a tier the declaration lacks", countingMatrix{answer: &types.JobModelTier{Name: "huge", Skills: types.SkillVariantFull, Reason: "r"}}, `"huge" is not a model tier`},
 		{"a rank the declaration disagrees with", countingMatrix{answer: &types.JobModelTier{Name: "economy", Rank: 2, Skills: types.SkillVariantFull, Reason: "r"}}, "ranks it 0"},
 		{"skills that are no variant", countingMatrix{answer: &types.JobModelTier{Name: "economy", Skills: "tiny", Reason: "r"}}, "the variants are"},
@@ -506,13 +506,13 @@ func TestStoreRefusesAForkPastAMaxLiveBound(t *testing.T) {
 func TestStoreFailsAForkWhoseMatrixFails(t *testing.T) {
 	t.Parallel()
 
-	matrix := countingMatrix{err: errors.New("magus\\job.modelTier: the matrix raised: boom")}
+	matrix := countingMatrix{err: errors.New("magus\\modelTier: the matrix raised: boom")}
 	s := tieredStore(t, tierSet(t), matrix.choose)
 	row := lease("a")
 	row.Model = ""
 	_, err := s.Update(t.Context(), "a", func(cur *types.Job) { *cur = row })
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "magus\\job.modelTier")
+	assert.ErrorContains(t, err, "magus\\modelTier")
 
 	rows, listErr := s.List()
 	require.NoError(t, listErr)

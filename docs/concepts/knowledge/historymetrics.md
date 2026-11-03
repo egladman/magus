@@ -18,14 +18,14 @@ Each metric is its own Buzz member on a workspace magus has already loaded:
 ```buzz
 import "magus";
 
-final hot = magus\hotspots();   // > Hotspots
-final aff = magus\affinity();   // > Affinity
-final own = magus\ownership();  // > Ownership
-final tr  = magus\trend();      // > Trend
+final hot = magus\history().hotspots();   // > Hotspots
+final aff = magus\history().affinity();   // > Affinity
+final own = magus\history().ownership();  // > Ownership
+final tr  = magus\history().trend();      // > Trend
 ```
 
 ```text
-# over the client tool, for an agent: return magus\hotspots()
+# over the client tool, for an agent: return magus\history().hotspots()
 ```
 
 The console board polls `HistoryMetricsService.GetHistoryMetrics` once for every
@@ -71,7 +71,7 @@ Each metric is its own answer type:
 - `conformance`: how large and how coupled the code is, measured over the same graph, one
   row per metric and population. Like `unreferenced` it takes no window, and a missing or
   stale symbol index answers `unknown`, never a pass. Read it through the report or
-  `magus\conformance()`, which also returns each symbol index's freshness.
+  `magus\change().conformance()`, which also returns each symbol index's freshness.
 
   A row has a metric: file lines, function lines, methods per type, top-level
   declarations per file, workspace imports per package, tokens in a body whose shape
@@ -93,17 +93,17 @@ Each metric is its own answer type:
   `magus.yaml`, and the commit is the review. Nothing here edits the configuration, and a
   policy it cannot honor is an error rather than a quiet fallback.
 
-  Asked for `checks` and a `base` revision, `magus\conformance(checks, base:)` also
+  Asked for `checks` and a `base` revision, `magus\change().conformance(checks)` also
   returns `ceilings`: each file changed since the base whose count of violations of a
   metric in `checks` rose past its count there, with both counts. This is the
   conformance ceiling. A drop is progress, and a file that holds as many as before
   passes, so violations that predate a change never fail it, and a file absent at the
-  base has a ceiling of 0. No count is stored in the workspace. `magus\conformanceBase(base)`
+  base has a ceiling of 0. No count is stored in the workspace. `magus\change(base).mergeBase()`
   exports the base and runs magus's in-process indexers (Go, Buzz, shell) over it with this
   workspace's configuration, as a library call that opens no second workspace and starts no
   run, so a count depends only on the base's bytes, today's policy and the indexer versions.
   The measure is kept in the user cache per commit, policy, indexer versions and magus build, where every
-  checkout on the machine reuses it. `magus\conformance` only reads it, and a base with none
+  checkout on the machine reuses it. `magus\change().conformance` only reads it, and a base with none
   is an error naming the step. A language only an external SCIP indexer reads has no base
   measure: each touched file of it is listed in `unmeasured` with its language and why, and
   holds no ceiling. A base source an in-process indexer cannot read is an error, never a pass.
@@ -126,7 +126,7 @@ Each metric is its own answer type:
 `commits` caps the scan by count; `since` bounds it by date (`90d`, `12w`, `6mo`,
 `1y`). A wider window is more history and a slower scan, so bound it to the question:
 recent hotspots want a short window, an ownership audit a long one. Both are options
-on `magus\hotspots` / `magus\affinity` / `magus\ownership` / `magus\trend`
+on `magus\history().hotspots` / `magus\history().affinity` / `magus\history().ownership` / `magus\history().trend`
 (`HistoryMetricsOptions`), and the console polls them together via
 `GetHistoryMetrics`.
 
@@ -137,7 +137,7 @@ deciding _what to work on_ rather than running work: picking a refactor target
 (hotspots), questioning an architecture (affinity), or planning ownership
 (ownership). Reading them from a magusfile target turns that into a recurring signal:
 this repo's own CI summary flags targets whose pass/fail record flaps, straight off
-`magus\volatility()`.
+`magus\workspace().volatility()`.
 
 ## See also
 

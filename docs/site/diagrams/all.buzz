@@ -177,8 +177,8 @@ test "a receipt counts the claims and records a finding" {
 // Naming follows the terminal recordings in assets/gen: the unsuffixed file is dark and
 // carries the <img> fallback, `-light` is the prefers-color-scheme: light source.
 export fun writeFigures(dir: str) > [str] !> any {
-    if (magus\symbolIndexDigest().indexed == false) {
-        throw "diagrams-generate needs the symbol index, and magus\\symbolIndexDigest() answered indexed=false; build it with `magus graph build`, then rerun";
+    if (magus\graph().indexed == false) {
+        throw "diagrams-generate needs the symbol index, and magus\\graph() answered indexed=false; build it with `magus graph build`, then rerun";
     }
     fs\mkdirAll(dir);
     final expected: mut {str: bool} = mut {<str: bool>};
@@ -321,7 +321,7 @@ test "a comment marker and a picture are replaced, an unrelated picture is not" 
 fun unknownMarkers(figures: [figure\Figure]) > [str] !> any {
     final known: mut {str: bool} = mut {<str: bool>};
     foreach (f in figures) { known[f.id] = true; }
-    final result: QueryResult = magus\query("kind=marker family=diagram", opts: magus\QueryOptions{limit = 10000});
+    final result: QueryResult = magus\graph().query("kind=marker family=diagram", opts: magus\QueryOptions{limit = 10000});
     final marked: mut [DiagramMarker] = mut [<DiagramMarker>];
     foreach (n in result.nodes) {
         marked.append(DiagramMarker{ source = n.source, args = n.attrs["args"] ?? "" });

@@ -89,7 +89,7 @@ cp <magus-checkout>/spells/experimental/nx/spell.buzz spells/nx.buzz
 import "magus";
 import "spells/nx";
 
-magus\workspace.provider(nx);
+magus\workspaceProvider(nx);
 ```
 
 That is the whole file. It declares no targets of its own: every target in the

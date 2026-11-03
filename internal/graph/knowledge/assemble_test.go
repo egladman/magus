@@ -630,7 +630,7 @@ fun helper() > void {
 import "magus/figure";
 
 fun aFigure() > figure\Figure !> any {
-    return figure\of("a", title: "A").box(magus\dir("pkg/a"), label: "a");
+    return figure\of("a", title: "A").box(magus\graph().dir("pkg/a"), label: "a");
 }
 `)
 

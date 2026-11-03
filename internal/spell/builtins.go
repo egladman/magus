@@ -336,16 +336,18 @@ func IsMagusEnum(name string) bool {
 }
 
 type magusRecord struct {
-	name  string
-	value vm.Value
-	enum  bool
-	src   string // the declaration's own text
+	name   string
+	value  vm.Value
+	enum   bool
+	extern bool   // a private extern an object method calls
+	src    string // the declaration's own text
 }
 
 // magusRecords holds a runtime definition for every plain record and enum the magus
 // declarations define. The module is native, so no import executes its declarations, and
 // `magus\DirsOptions{...}` would otherwise type-check and then fail with "unknown object
-// type". A record has no methods or static state, so every session shares one set.
+// type". Sessions with no magus module share it.
+// Nothing binds its externs.
 var magusRecords = sync.OnceValues(func() ([]magusRecord, error) {
 	return defineRecords(MagusDeclSource())
 })
@@ -361,13 +363,24 @@ func defineRecords(decls string) ([]magusRecord, error) {
 	if err := sess.Exec(context.Background(), body); err != nil {
 		return nil, failingRecord(out, err)
 	}
-	for i := range out {
-		out[i].value = sess.GetGlobal(out[i].name)
-		if out[i].value.IsNull() {
-			return nil, fmt.Errorf("magus declaration %s defined no runtime value", out[i].name)
-		}
+	if err := readRecordValues(sess, out); err != nil {
+		return nil, err
 	}
 	return out, nil
+}
+
+// readRecordValues fills each record's value from the session that ran it.
+func readRecordValues(sess *buzz.Session, records []magusRecord) error {
+	for i := range records {
+		if records[i].extern {
+			continue
+		}
+		records[i].value = sess.GetGlobal(records[i].name)
+		if records[i].value.IsNull() {
+			return fmt.Errorf("magus declaration %s defined no runtime value", records[i].name)
+		}
+	}
+	return nil
 }
 
 // failingRecord names the first record that does not run, adding one at a
@@ -386,10 +399,10 @@ func failingRecord(records []magusRecord, whole error) error {
 	return fmt.Errorf("magus records cannot be defined: %w", whole)
 }
 
-// RecordSource returns the part of a declaration source a session can run: its
-// exported plain records and enums, keeping the first declaration of each name, so
-// several modules' declarations concatenated run as one. An object with methods is a
-// namespace or a host-built value, and an extern method cannot be compiled.
+// RecordSource returns the part of a declaration source a session can run.
+// That is its exported records and enums, first declaration of each name only,
+// so several modules' declarations concatenated run as one.
+// It keeps the private externs an object's methods call.
 func RecordSource(decls string) (string, error) {
 	body, _, err := recordDecls(decls)
 	return body, err
@@ -405,22 +418,8 @@ func recordDecls(src string) (string, []magusRecord, error) {
 	var out []magusRecord
 	seen := map[string]bool{}
 	for i, stmt := range prog.Stmts {
-		var r magusRecord
-		switch d := stmt.(type) {
-		case *ast.ObjectDecl:
-			if !d.IsExported || d.IsProtocol || len(d.Methods) > 0 || len(d.StaticFields) > 0 {
-				continue
-			}
-			r.name = d.Name
-		case *ast.EnumDecl:
-			if !d.IsExported {
-				continue
-			}
-			r.name, r.enum = d.Name, true
-		default:
-			continue
-		}
-		if seen[r.name] {
+		r, ok := declRecord(stmt)
+		if !ok || seen[r.name] {
 			continue
 		}
 		seen[r.name] = true
@@ -435,6 +434,19 @@ func recordDecls(src string) (string, []magusRecord, error) {
 	return body.String(), out, nil
 }
 
+// declRecord is the record stmt declares, and false for one no session runs.
+func declRecord(stmt ast.Stmt) (magusRecord, bool) {
+	switch d := stmt.(type) {
+	case *ast.ObjectDecl:
+		return magusRecord{name: d.Name}, d.IsExported && !d.IsProtocol && len(d.StaticFields) == 0
+	case *ast.EnumDecl:
+		return magusRecord{name: d.Name, enum: true}, d.IsExported
+	case *ast.FunDecl:
+		return magusRecord{name: d.Name, extern: true}, d.IsExtern && !d.IsExported
+	}
+	return magusRecord{}, false
+}
+
 // defineMagusRecords binds every magus record and enum under its bare name, which is
 // what `magus\T{...}` constructs at run time, and sets each enum on the magus module so
 // `magus\E.case` and an inferred `.case` argument resolve. A name the session already
@@ -447,9 +459,49 @@ func defineMagusRecords(sess *buzz.Session) error {
 	if err != nil {
 		return err
 	}
-	globals := sess.Globals()
 	mod, hasModule := sess.NativeModule("magus")
+	if hasModule {
+		if records, err = sessionRecords(sess, mod, records); err != nil {
+			return err
+		}
+	}
+	bindRecords(sess, mod, hasModule, records)
+	return nil
+}
+
+// sessionRecords runs the records again in a child of sess, so a method's
+// private extern calls the member of the module sess holds. Enums come from
+// the same run: a field's default case is the one the session compares to.
+func sessionRecords(sess *buzz.Session, mod vm.Value, shared []magusRecord) ([]magusRecord, error) {
+	child := sess.NewChild()
+	var body strings.Builder
+	out := slices.Clone(shared)
+	for _, r := range out {
+		body.WriteString(r.src)
+		if !r.extern {
+			continue
+		}
+		member, ok := mod.MapGet(r.name)
+		if !ok {
+			return nil, fmt.Errorf("magus record methods: the magus module has no member %q", r.name)
+		}
+		child.SetGlobal(r.name, member)
+	}
+	if err := child.Exec(context.Background(), body.String()); err != nil {
+		return nil, fmt.Errorf("magus record methods cannot be defined: %w", err)
+	}
+	if err := readRecordValues(child, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func bindRecords(sess *buzz.Session, mod vm.Value, hasModule bool, records []magusRecord) {
+	globals := sess.Globals()
 	for _, r := range records {
+		if r.extern {
+			continue
+		}
 		if _, bound := globals[r.name]; !bound {
 			sess.SetGlobal(r.name, r.value)
 		}
@@ -462,5 +514,4 @@ func defineMagusRecords(sess *buzz.Session) error {
 			}
 		}
 	}
-	return nil
 }

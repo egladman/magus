@@ -9,12 +9,8 @@ package std
 // serialization round trip, and it made a CLI subcommand load-bearing for a module that
 // has nothing to do with the CLI.
 //
-// A STRUCTURAL interface sidesteps the cycle. The workspace is ALREADY on the context
-// (types.WorkspaceFromContext, what magus\projects and magus\affected read); it is carried as
-// the narrow types.WorkspaceRepository, but the concrete value is the real *magus.Magus,
-// which has the lenses. So the capability is named here in terms of types.* and recovered
-// by assertion, with neither package naming the other. internal/handler/mcp reaches the
-// same API the same way and for the same reason.
+// A STRUCTURAL interface sidesteps the cycle: the context holds a *magus.Magus.
+// The capability is named in types.* terms and recovered by assertion.
 
 import (
 	"context"

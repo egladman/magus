@@ -158,7 +158,7 @@ fun issue(root: str, args: [str]) > result\Result::<bool> {
         if (named.len() == 0) {
             return result\fail::<bool>("mandate issue: --rows names the plan's job rows, comma-separated; a mandate with none has nothing to carry out");
         }
-        final jobs = mandate\rows(magus\job.list().jobs);
+        final jobs = mandate\rows(magus\workspace().jobs().jobs);
         final missing = unknownRows(named, jobs: jobs);
         if (missing.len() > 0) {
             return result\fail::<bool>("mandate issue: the job store holds no row {missing.join(", ")}; `job apply` the plan before the mandate is issued");
@@ -223,7 +223,7 @@ fun report(root: str) > result\Result::<bool> {
     }
     final terms = issued!;
     try {
-        final list = magus\job.list();
+        final list = magus\workspace().jobs();
         final jobs = mandate\rows(list.jobs);
         final now = mandate\now();
         if (last!.action == "revoke") {

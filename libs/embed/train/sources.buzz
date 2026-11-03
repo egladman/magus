@@ -125,8 +125,8 @@ fun trackedPaths() > result\Result::<[str]> {
 
 export fun everyNode(kind: str, perMatch: int) > result\Result::<magus\QueryResult> {
     try {
-        final probe: magus\QueryResult = magus\query("kind={kind}", opts: magus\QueryOptions{limit = 1, budget = 1});
-        return result\ok::<magus\QueryResult>(magus\query("kind={kind}", opts: magus\QueryOptions{limit = probe.matchCount, budget = probe.matchCount * perMatch + 1000}));
+        final probe: magus\QueryResult = magus\graph().query("kind={kind}", opts: magus\QueryOptions{limit = 1, budget = 1});
+        return result\ok::<magus\QueryResult>(magus\graph().query("kind={kind}", opts: magus\QueryOptions{limit = probe.matchCount, budget = probe.matchCount * perMatch + 1000}));
     } catch (err: any) {
         return result\caught::<magus\QueryResult>(err, doing: "sources: query kind={kind}");
     }
@@ -256,7 +256,7 @@ export fun load() > result\Result::<Snapshot> {
             byPath[p] = f;
         }
 
-        final digest = magus\symbolIndexDigest();
+        final digest = magus\graph();
         final missing = buildableGaps(digest.gaps);
         if (!digest.indexed or missing > 0) {
             return result\fail::<Snapshot>("sources: the symbol index is missing or partial ({missing} gaps); run `magus graph build`");

@@ -6,22 +6,22 @@ import "site/diagrams/packages" as _;
 import "site/diagrams/buzz-stages" as _;
 
 export fun buzzEngineFigure() > figure\Figure !> any {
-    final session = magus\dir("libs/gopherbuzz");
+    final session = magus\graph().dir("libs/gopherbuzz");
     final pipeline = [
         session,
-        magus\dir("libs/gopherbuzz/token"),
-        magus\dir("libs/gopherbuzz/ast"),
-        magus\dir("libs/gopherbuzz/types"),
-        magus\dir("libs/gopherbuzz/vm"),
+        magus\graph().dir("libs/gopherbuzz/token"),
+        magus\graph().dir("libs/gopherbuzz/ast"),
+        magus\graph().dir("libs/gopherbuzz/types"),
+        magus\graph().dir("libs/gopherbuzz/vm"),
     ];
-    final engine = magus\dir("internal/interp");
-    final bindings = magus\dir("internal/interp/bindings");
-    final opencode = magus\dir("internal/interp/bindings/opencode");
-    final opencodeWasm = magus\dir("internal/interp/bindings/opencode/wasm");
-    final trampolines = magus\dir("internal/interp/bindings/gen");
-    final hostModules = magus\dir("std");
-    final buzzStdlib = magus\dir("libs/gopherbuzz/std");
-    final dry = magus\dir("internal/dry");
+    final engine = magus\graph().dir("internal/interp");
+    final bindings = magus\graph().dir("internal/interp/bindings");
+    final opencode = magus\graph().dir("internal/interp/bindings/opencode");
+    final opencodeWasm = magus\graph().dir("internal/interp/bindings/opencode/wasm");
+    final trampolines = magus\graph().dir("internal/interp/bindings/gen");
+    final hostModules = magus\graph().dir("std");
+    final buzzStdlib = magus\graph().dir("libs/gopherbuzz/std");
+    final dry = magus\graph().dir("internal/dry");
     final playground = figure\external("Browser playground", sub: "js/wasm editor", tag: "client", look: figure\Look.plain);
     return figure\of("buzz-engine",
             title: "One pipeline, and the modules each host registers",
@@ -60,17 +60,17 @@ export fun buzzEngineFigure() > figure\Figure !> any {
         .scope(goPackages("internal/interp/**"))
         .scope(goPackages("internal/dry/**"))
         .scope(goPackages("std/**"))
-        .except([buzzStdlib, magus\dir("libs/gopherbuzz/internal/codec")],
+        .except([buzzStdlib, magus\graph().dir("libs/gopherbuzz/internal/codec")],
             why: "the Buzz stdlib and its JSON codec: both hosts install them the same way, so they tell the two apart in nothing")
         .except(gopherbuzzAround(), why: AROUND_WHY)
-        .except([magus\dir("internal/interp/bindings/ffi"), magus\dir("internal/interp/bindings/gen/decode"),
-                magus\dir("internal/interp/bindings/gen/providerops")],
+        .except([magus\graph().dir("internal/interp/bindings/ffi"), magus\graph().dir("internal/interp/bindings/gen/decode"),
+                magus\graph().dir("internal/interp/bindings/gen/providerops")],
             why: "the register call, the generated argument decoders and the generated provider-call values every trampoline uses")
-        .except([magus\dir("internal/interp/engine"), magus\dir("internal/interp/engine/buzz")],
+        .except([magus\graph().dir("internal/interp/engine"), magus\graph().dir("internal/interp/engine/buzz")],
             why: "the generic engine interface and its buzz adapter; the magusfile engine drives the session directly")
-        .except([magus\dir("internal/interp/mcpclient"), magus\dir("internal/interp/transform")],
+        .except([magus\graph().dir("internal/interp/mcpclient"), magus\graph().dir("internal/interp/transform")],
             why: "the MCP client and transform workers run Buzz apart from the two hosts compared here")
-        .except([magus\dir("std/gen/stdtest")], why: "generated test mocks")
+        .except([magus\graph().dir("std/gen/stdtest")], why: "generated test mocks")
         .except(goPackages("std/encoding/**"),
             why: "the encoding host modules, wired through the trampolines like every module in the Host modules box");
 }

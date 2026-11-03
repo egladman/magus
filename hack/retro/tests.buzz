@@ -658,7 +658,7 @@ fun isFunc(n: magus\KnowledgeNode) > bool {
 }
 
 fun definedIn(file: str) > [str] !> any {
-    final card = magus\explain(file);
+    final card = magus\graph().explain(file);
     if (card.resolution != magus\KnowledgeResolution.path) {
         throw "tests: {file} is not a file the graph holds (resolved {card.resolution.value} to {card.node.id})";
     }
@@ -675,7 +675,7 @@ fun resolveSymbol(name: str) > str !> any {
     if (name.startsWith("symbol:")) {
         return name;
     }
-    final q = magus\query("kind=symbol id=~[/#]{name}\\(\\)\\.$");
+    final q = magus\graph().query("kind=symbol id=~[/#]{name}\\(\\)\\.$");
     final ids = mut [<str>];
     foreach (m in q.nodes) {
         if (m.kind == "symbol" and !isTestFile(m.source) and (m.id.endsWith("/{name}().") or m.id.endsWith("#{name}()."))) {
@@ -741,7 +741,7 @@ fun scopeIds(req: Request) > [str] !> any {
             addUnique(ids, value: id);
         }
     } else {
-        foreach (file in magus\dir(req.dir!).files) {
+        foreach (file in magus\graph().dir(req.dir!).files) {
             if (file.endsWith(".go") and !isTestFile(file)) {
                 foreach (id in definedIn(file)) {
                     addUnique(ids, value: id);
@@ -757,7 +757,7 @@ fun scopeIds(req: Request) > [str] !> any {
 fun gather(ids: [str], depth: int, nodes: mut {str: Sym}, calls: mut [Call], scope: mut [Sym]) > void !> any {
     final gaps = mut [<str>];
     foreach (id in ids) {
-        final nb = magus\neighborhood(id, opts: magus\NeighborhoodOptions{ depth = depth, relations = [magus\RelationID.calls], direction = magus\EdgeDirection.inward });
+        final nb = magus\graph().neighborhood(id, opts: magus\NeighborhoodOptions{ depth = depth, relations = [magus\RelationID.calls], direction = magus\EdgeDirection.inward });
         foreach (g in nb.answer.gaps) {
             if (g.language == "go") {
                 addUnique(gaps, value: "{g.project.path} ({g.state.value})");
@@ -790,14 +790,14 @@ fun addTestCallees(nodes: mut {str: Sym}, calls: mut [Call]) > void !> any {
         if (!isRoot(s)) {
             continue;
         }
-        foreach (o in magus\explain(id).out) {
+        foreach (o in magus\graph().explain(id).out) {
             if (o.relation != magus\RelationID.calls) {
                 continue;
             }
             calls.append(Call{ caller = id, callee = o.other });
             if (nodes[o.other] == null and explained[o.other] == null) {
                 explained[o.other] = true;
-                final card = magus\explain(o.other);
+                final card = magus\graph().explain(o.other);
                 if (isFunc(card.node) and isTestFile(symOf(card.node).file)) {
                     nodes[o.other] = symOf(card.node);
                 }

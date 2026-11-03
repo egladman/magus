@@ -95,7 +95,7 @@ The layers are declared in the root `magusfile.buzz`, under `"layers"` in its
 `magus\project` call: transport (`internal/httpx`, one loopback server and its middleware),
 handler (this package: request to domain to wire), service (pure application logic, no
 http or proto), repository (data access) and composition (`internal/server`, which
-assembles the server). `magus\layer("handler")` answers what each one covers, and the
+assembles the server). `magus\graph().layer("handler")` answers what each one covers, and the
 docs figures group by them.
 
 Keep the arrows pointing down that list: a handler imports its service, httpx (to mount

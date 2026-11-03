@@ -241,7 +241,7 @@ surgically instead of loading the whole file.
 **Where does risk concentrate?**
 
 ```sh
-# client tool, e.g. magus\hotspots():
+# client tool, e.g. magus\history().hotspots():
 #   hotspots    churn x complexity per project, with blast radius
 #   affinity    projects that change together: hidden coupling
 #   ownership   author concentration and bus factor
@@ -265,7 +265,7 @@ or cross it with `insight hotspots` to rank high-churn, low-coverage code first.
 **What may be unused?** The graph offers scoped candidates, not a generic
 "dead code" verdict. `magus graph stats` reports structural orphans such as a
 declared spell no target uses. Where the symbol index is available,
-`magus\unreferenced()`, through the `client` tool, reports code symbols with no indexed
+`magus\graph().unreferenced()`, through the `client` tool, reports code symbols with no indexed
 cross-file reference.
 
 Neither result proves that something is safe to delete. Entry points, external
@@ -616,7 +616,7 @@ Symbol shards can dwarf the domain graph, so they are **lazily loaded**: the def
 `magus query`/`magus graph stats`/`magus graph export --open`/warm graph never touch them. They load only when a query is
 symbol-seeded: `kind:symbol`, a `symbol:` ID,
 `relation:defines`/`references`/`calls`, or the `refs` verb. `magus refs <symbol>` lists a symbol's definition and every
-referencing file (`client` calling `magus\refs`). At large scale a derived
+referencing file (`client` calling `magus\graph().refs`). At large scale a derived
 `shards/@symbols.routing.json` (symbol hash to referencing shard names, rebuilt with
 the shards) lets an exact-ID lookup load only the shards that mention the symbol
 rather than all of them; a missing routing file just falls back to loading all.
@@ -991,13 +991,13 @@ and [MGS7002](../reference/codes/knowledge/MGS7002.md) (a doc citing an unregist
 ## For agents
 
 The MCP server exposes those verbs through the `client` tool, which runs
-`magus\query`, `magus\explain`, `magus\path`, `magus\stats`, `magus\refs`, and
+`magus\graph().query`, `magus\graph().explain`, `magus\graph().path`, `magus\graph().stats`, `magus\graph().refs`, and
 `magus\output` (a target's captured output by ref). See
 [MCP](../guides/integrations/mcp.md) for wiring. Prefer these over grep to find
 and relate magus-domain entities; start from the `MAGUS.md` routing table, which
 is already in context in a fresh clone.
 
-For a large result set, `magus\query` and `magus\refs` take `limit` and `offset`
+For a large result set, `magus\graph().query` and `magus\graph().refs` take `limit` and `offset`
 and still report the full count. Filter in the script before returning: the
 client tool does not page a result for you.
 

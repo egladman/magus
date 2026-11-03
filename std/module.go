@@ -332,6 +332,9 @@ type Module struct {
 	Namespaces []Namespace
 	// Objects are mirrors whose methods call Go; see Object.
 	Objects []Object
+	// CallbackObjects names boundary objects a callback a top-level member
+	// registers takes, as Namespace.Objects does for a namespace's members.
+	CallbackObjects []string
 	// WASM marks a module the browser playground can install: pure compute, with no
 	// process, filesystem, or network access. It is what
 	// internal/interp/bindings/gen's WASM capability is generated FROM.

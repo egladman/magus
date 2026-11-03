@@ -98,8 +98,8 @@ func runCLI() int {
 		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return 1
 	}
-	// Before the worker branches: a client worker runs magus\job.put, which opens its own
-	// Store inside std and grades the check through this.
+	// Before the worker branches: a worker runs magus\workspace().putJob.
+	// That opens its own Store inside std and grades the check through this.
 	job.SetCheckGrader(newCheckGrader())
 	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
@@ -539,10 +539,9 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// A forensic mode runs nothing, so there is no pool to share, and its report IS
 		// its stdout. An adopted call has nowhere to put that: RunReply carries an exit
 		// code and an error string and never output, so the server runs the mode in its
-		// OWN process and prints the report on ITS stdout. A caller that CAPTURES the
-		// child (magus\impact forks `affected --impact -o json` and decodes it)
-		// then reads an empty stdout at exit 0 and reports an undecodable report. Same
-		// shape as the usage bug above, one layer down.
+		// OWN process and prints the report on ITS stdout.
+		// A caller capturing the child reads an empty stdout at exit 0.
+		// magus\change().impact is one: the usage bug above, a layer down.
 		if sub == "affected" && isForensicAffected(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}

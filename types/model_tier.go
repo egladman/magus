@@ -311,9 +311,9 @@ const (
 	ModelTierSourceDefault ModelTierSource = "default"
 )
 
-// ModelTierMatrix chooses the model tier of one job from its typed request, for
-// magus\job.modelTier. A nil answer leaves the declared default to decide. The job store
-// is read-only while it runs, and it runs once, when the job is forked.
+// ModelTierMatrix chooses the model tier of one job from its typed request.
+// magus\modelTier registers it. A nil answer leaves the default to decide.
+// The job store is read-only while it runs, and it runs once, at the fork.
 //
 // An error means the matrix itself failed (it raised, or returned a choice the
 // declaration cannot use), never that it declined: declining is a nil answer.

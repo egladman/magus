@@ -1,0 +1,76 @@
+//go:build !wasm
+
+package std
+
+import (
+	"testing"
+
+	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/suite"
+)
+
+type magusHandleSuite struct{ suite.Suite }
+
+func TestMagusHandle(t *testing.T) { suite.Run(t, new(magusHandleSuite)) }
+
+func (s *magusHandleSuite) TestJobResultDecodesThroughTheVersionedDecoder() {
+	result, err := decodeJobResult(map[string]any{
+		"schema_version": types.JobResultSchemaVersion,
+		"changed_paths":  []any{"internal/job/lifecycle.go"},
+		"validation": map[string]any{
+			"command":    "magus run test .",
+			"output_ref": "out123",
+		},
+		"unresolved_risks": []any{},
+	})
+	s.Require().NoError(err)
+	s.Equal(types.JobResultSchemaVersion, result.Version)
+	s.Equal("out123", result.Validation.OutputRef)
+}
+
+func (s *magusHandleSuite) TestJobResultRefusesAFieldTheVerifierIgnores() {
+	_, err := decodeJobResult(map[string]any{
+		"schema_version":   types.JobResultSchemaVersion,
+		"changed_paths":    []any{},
+		"validation":       map[string]any{},
+		"unresolved_risks": []any{},
+		"claimed_pass":     true,
+	})
+	s.Require().ErrorContains(err, "claimed_pass")
+}
+
+func (s *magusHandleSuite) TestMovedPathsNamesEachDigestThatMoved() {
+	at := types.VCSCheckpoint{Revision: "r1"}
+	c := types.Change{At: at, Files: map[string]string{"a.go": "1", "b.go": "2"}}
+
+	got := movedPaths(c, at, map[string]string{"a.go": "1", "b.go": "3", "c.go": "4"})
+
+	s.Equal([]string{"b.go", "c.go"}, got)
+}
+
+func (s *magusHandleSuite) TestMovedPathsNamesAMovedRevision() {
+	c := types.Change{At: types.VCSCheckpoint{Revision: "r1"}}
+
+	got := movedPaths(c, types.VCSCheckpoint{Revision: "r2"}, nil)
+
+	s.Equal([]string{"HEAD r1 -> r2"}, got)
+}
+
+func (s *magusHandleSuite) TestTierOptionsKeepTheVCSDiffForNoPaths() {
+	got := tierOptions(types.Change{Base: "abc123"}, types.RiskOptions{Base: "ignored", Paths: []string{}})
+
+	s.Equal(types.RiskOptions{Base: "abc123"}, got)
+}
+
+func (s *magusHandleSuite) TestTierOptionsKeepNamedPaths() {
+	got := tierOptions(types.Change{}, types.RiskOptions{Paths: []string{"notes/v1.md"}, Checkout: "/other"})
+
+	s.Equal(types.RiskOptions{Paths: []string{"notes/v1.md"}, Checkout: "/other"}, got)
+}
+
+func (s *magusHandleSuite) TestMovedPathsIsEmptyForTheSameTree() {
+	at := types.VCSCheckpoint{Revision: "r1", PatchDigest: "p"}
+	c := types.Change{At: at, Files: map[string]string{"a.go": "1"}}
+
+	s.Empty(movedPaths(c, at, map[string]string{"a.go": "1"}))
+}

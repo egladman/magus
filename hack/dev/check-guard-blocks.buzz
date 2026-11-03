@@ -707,7 +707,7 @@ export fun hostRows(id: str, keys: [Wired], root: str, all: [Case]) > result\Res
 // leaseAt is the live job whose lease was taken in root.
 fun leaseAt(root: str) > result\Result::<Lease> {
     try {
-        final list: magus\JobList = magus\job.list();
+        final list: magus\JobList = magus\workspace().jobs();
         foreach (j in list.jobs) {
             // Only a live lease with something to write grades an edit: an exited job holds
             // nothing, and a read-only one has no boundary to step outside of.

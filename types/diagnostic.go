@@ -442,12 +442,10 @@ const CarryApprovalsInvalid DiagnosticCode = "MGS1050"
 // mgs_ function it does not know is a declaration it would silently ignore.
 const SpellContractViolated DiagnosticCode = "MGS1051"
 
-// ModelTierDeclarationUnusable is a magus\job.modelTiers or magus\job.modelTier call the
-// load cannot use: tiers that are not an enum, a default that is not one of its cases, a
-// host key naming no harness the magusfile wired, a mapping function that raises or
-// answers the wrong type, a second call, or a call outside the root magusfile. The load
-// stops, because a declaration that silently failed to register leaves a workspace that
-// reads as tiered when its jobs get the default.
+// ModelTierDeclarationUnusable is a magus\modelTiers or magus\modelTier call
+// the load cannot use: a bad enum, default, host key or mapping function.
+// A second call and a call outside the root magusfile land here too.
+// The load stops: a declaration that silently failed would read as tiered.
 const ModelTierDeclarationUnusable DiagnosticCode = "MGS1052"
 
 // FootprintDeclaredBothWays is one target declaring a path, or two overlapping globs,
@@ -873,12 +871,12 @@ const SymbolIndexNotCurrent DiagnosticCode = "MGS7003"
 // The graph build fails naming the file, the line and the known families.
 const UnknownMarkerFamily DiagnosticCode = "MGS7004"
 
-// DirNotInGraph is magus\dir asked for a path the graph holds no dir node for. A typo
-// and a directory outside every project both land here; neither is an empty Dir.
+// DirNotInGraph is magus\graph().dir asked for a path with no dir node.
+// A typo and a directory outside every project land here, never an empty Dir.
 const DirNotInGraph DiagnosticCode = "MGS7005"
 
-// LayerNotDeclared is a layer name no magus.project "layers" key declares, asked for
-// through magus\layer or a DirsOptions filter.
+// LayerNotDeclared is a layer name no magus.project "layers" key declares.
+// It is asked for through magus\graph().layer or a DirsOptions filter.
 const LayerNotDeclared DiagnosticCode = "MGS7006"
 const OutputRefMissing DiagnosticCode = "MGS8001"
 const OutputRefAmbiguous DiagnosticCode = "MGS8002"

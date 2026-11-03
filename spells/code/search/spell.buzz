@@ -309,7 +309,7 @@ fun classify(hits: [mut Hit]) > result\Result::<bool> {
 
 fun graphQuery(q: str, opts: magus\QueryOptions) > result\Result::<magus\QueryResult> {
     try {
-        return result\ok::<magus\QueryResult>(magus\query(q, opts: opts));
+        return result\ok::<magus\QueryResult>(magus\graph().query(q, opts: opts));
     } catch (err: any) {
         return result\caught::<magus\QueryResult>(err);
     }
@@ -629,7 +629,7 @@ fun position(n: magus\KnowledgeNode?) > str {
 fun calls(h: Hit, opts: Options) > result\Result::<[mut Section]> {
     var asked: magus\NeighborhoodResult? = null;
     try {
-        asked = magus\neighborhood(h.id, opts: magus\NeighborhoodOptions{ depth = 1, relations = [magus\RelationID.calls] });
+        asked = magus\graph().neighborhood(h.id, opts: magus\NeighborhoodOptions{ depth = 1, relations = [magus\RelationID.calls] });
     } catch (err: any) {
         return result\caught::<[mut Section]>(err);
     }
@@ -683,7 +683,7 @@ fun calls(h: Hit, opts: Options) > result\Result::<[mut Section]> {
 fun references(h: Hit, opts: Options) > result\Result::<Section> {
     var asked: magus\RefsResult? = null;
     try {
-        asked = magus\refs(h.id, opts: magus\RefsOptions{limit = 200});
+        asked = magus\graph().refs(h.id, opts: magus\RefsOptions{limit = 200});
     } catch (err: any) {
         return result\caught::<Section>(err);
     }
@@ -710,7 +710,7 @@ fun references(h: Hit, opts: Options) > result\Result::<Section> {
 
 // nodeAround lists a domain node's edges by relation, the way magus explain does.
 fun nodeAround(h: Hit, opts: Options) > [Section] {
-    final card: magus\ExplainResult? = magus\explain(h.id) catch null;
+    final card: magus\ExplainResult? = magus\graph().explain(h.id) catch null;
     if (card == null) {
         return [Section{ name = "edges", verdict = UNKNOWN, note = "magus explain could not resolve {h.id}" }];
     }

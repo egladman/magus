@@ -37,13 +37,13 @@ export fun reads() > [str] {
         "libs/textsearch/**/*.ts"];
 }
 
-// check fails every proofread finding the decisions table in hack/policy/proofread.buzz denies and
-// SANCTIONED does not name. magus\symbols supplies the docs and the indexes; the judging runs
-// in libs/proofread/cmd/proofread, as lint-rules has proofread-build link it. A missing or
-// stale index, a language that judged nothing and a runner that fails are findings, never a
-// pass: a rule reading nothing finds nothing.
+// check fails every proofread finding hack/policy/proofread.buzz denies.
+// SANCTIONED findings pass.
+// magus\graph().symbols() supplies the docs and the indexes.
+// libs/proofread/cmd/proofread judges them, linked by proofread-build.
+// A stale index, a silent language or a failed runner is a finding.
 export fun check(files: [Path]) > [Finding] !> any {
-    final data: {str: any} = magus\symbols();
+    final data: {str: any} = magus\graph().symbols();
     final symbols = ofLanguages(data["symbols"] ?? [<any>]);
     final indexes: [any] = data["indexes"] ?? [<any>];
     final bin = "{proofread\home}/{proofread\binary}";
@@ -83,8 +83,9 @@ export fun outOfScope(indexes: [any]) > [str] {
     return missing;
 }
 
-// ofLanguages keeps the symbols of LANGUAGES. magus\symbols returns every index, Buzz's
-// included once scip-buzz is installed, and reads keys none of the other languages' sources.
+// ofLanguages keeps the symbols of LANGUAGES.
+// magus\graph().symbols() returns every index, Buzz's once scip-buzz is in.
+// It reads keys none of the other languages' sources.
 fun ofLanguages(all: [any]) > [any] {
     final kept = mut [<any>];
     foreach (symbol in all) {
@@ -128,7 +129,7 @@ export fun judge(rows: [any], judged: {str: int}, indexes: [any], sanctioned: {s
         if ((judged[lang] ?? 0) == 0) {
             judgeable = false;
             found.append(Finding{ path = ".", message = "no {lang} symbol was judged: silence, not a pass",
-                fix = "The indexer emitted no {lang} docs or names; read `magus\\symbols()` before dropping the language." });
+                fix = "The indexer emitted no {lang} docs or names; read `magus\\graph().symbols()` before dropping the language." });
         }
     }
     if (!judgeable) {

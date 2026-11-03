@@ -18,7 +18,7 @@ final HELP = "cost: one git blame per path the fragments' commits changed, more 
 
 Plans which changes/unreleased fragments to drop or merge, each verdict proven from
 history: who still owns lines at HEAD (blame), who removed them, and which symbols those
-lines sit in (the symbol index, through magus\\diff).
+lines sit in (the symbol index, through magus\\change().diff).
 
   superseded  every line the fragment's commit wrote is gone, and one later commit that
               carries its own fragment removed or rewrote all of them
@@ -128,8 +128,8 @@ export fun parseBlame(stdout: str) > [Line] {
     return lines;
 }
 
-// symbolPatch renders lines as a unified diff that adds them, so magus\diff maps exactly
-// those HEAD lines onto the HEAD symbol index.
+// symbolPatch renders lines as a unified diff that adds them.
+// So magus\change().diff maps exactly those lines onto the HEAD symbol index.
 export fun symbolPatch(lines: {str: [Line]}) > str {
     final patch = mut [<str>];
     foreach (path in sort\strings(lines.keys())) {
@@ -610,7 +610,7 @@ fun liveProbe() > result\Result::<Probe> {
 
 fun symbolsTouched(commit: str, lines: {str: [Line]}) > result\Result::<[str]?> {
     try {
-        final d = magus\diff(opts: magus\DiffOptions{ patch = symbolPatch(lines) });
+        final d = magus\change().diff(opts: magus\DiffOptions{ patch = symbolPatch(lines) });
         final found = mut [<str>];
         var covered = false;
         foreach (f in d.files) {
@@ -626,14 +626,15 @@ fun symbolsTouched(commit: str, lines: {str: [Line]}) > result\Result::<[str]?> 
     }
 }
 
-// One magus\diff over a line in each file: its visibility reads unknown exactly where no
-// symbol index covers the file. magus\explain answers the same per path, but loads
-// the whole symbol graph again on every call.
+// One magus\change().diff over a line in each file.
+// Its visibility reads unknown exactly where no symbol index covers the file.
+// magus\graph().explain answers the same per path.
+// But it loads the whole symbol graph again on every call.
 fun filesIndexed(paths: [str]) > result\Result::<{str: bool}> {
     try {
         final probeLines = mut {<str: [Line]>};
         foreach (p in paths) { probeLines[p] = [Line{ commit = "", line = 1, text = "" }]; }
-        final d = magus\diff(opts: magus\DiffOptions{ patch = symbolPatch(probeLines) });
+        final d = magus\change().diff(opts: magus\DiffOptions{ patch = symbolPatch(probeLines) });
         final covered = mut {<str: bool>};
         foreach (f in d.files) { covered[f.path] = f.visibility != "unknown"; }
         return result\ok::<{str: bool}>(covered);

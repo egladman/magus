@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	modelTiersMember = `magus\job.modelTiers`
-	modelTierMember  = `magus\job.modelTier`
+	modelTiersMember = `magus\modelTiers`
+	modelTierMember  = `magus\modelTier`
 
 	tierEnumGlobal   = "__magusModelTierEnum"
 	skillVariantEnum = "SkillVariant"
@@ -33,18 +33,18 @@ const defaultModelTiersSource = `import "magus/modeltiers" as modeltiers;
 declareDefault(modeltiers\ModelTier, modeltiers\defaultTier, modeltiers\bounds, modeltiers\skills);
 `
 
-// registerModelTiers binds magus\job.modelTiers onto jobMap:
+// registerModelTiers binds magus\modelTiers onto magus:
 //
 //	final cc = magus\harness.provider(claudecode);
-//	magus\job.modelTiers(ModelTier, default: ModelTier.standard,
+//	magus\modelTiers(ModelTier, default: ModelTier.standard,
 //	    hosts: {cc: claudeModel}, bounds: bounds, skills: skills);
 //
 // The functions run here, once per case, and are not kept. Every misdeclaration is
 // MGS1052, so a declaration that failed to register cannot leave a workspace that reads
-// as tiered. magus\job.modelTiers(null) turns tiers off; with no call the workspace gets
+// as tiered. magus\modelTiers(null) turns tiers off; with no call the workspace gets
 // the shipped magus/modeltiers declaration, built when a fork first asks for it.
 // Nothing declared here selects a model at run time.
-func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, jobMap vm.Value) {
+func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, magus vm.Value) {
 	if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
 		// The context outlives the load that built it: a fork asks long after.
 		defaultCtx := context.WithoutCancel(ctx)
@@ -52,7 +52,7 @@ func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.Direct
 	}
 	// Per session, not per registry, as registerFunctionRule counts.
 	registered := false
-	jobMap.MapSet("modelTiers", directVal(obs, "magus.job.modelTiers", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
+	magus.MapSet("modelTiers", directVal(obs, "magus.modelTiers", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
 		reg, err := modelTierCallSite(ctx, modelTiersMember, "the tiers the workspace's jobs run at")
 		if err != nil {
 			return vm.Null, err
@@ -95,15 +95,15 @@ func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.Direct
 	}))
 }
 
-// registerModelTierMatrix binds magus\job.modelTier onto jobMap:
+// registerModelTierMatrix binds magus\modelTier onto magus:
 //
-//	magus\job.modelTier(fun(req: ModelTierRequest) > Choice? { ... });
+//	magus\modelTier(fun(req: ModelTierRequest) > Choice? { ... });
 //
 // A fork calls the function once when the row names neither a tier nor a model; null
 // leaves the declared default to decide. The function is kept, not called, here.
-func registerModelTierMatrix(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, jobMap vm.Value) {
+func registerModelTierMatrix(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, magus vm.Value) {
 	registered := false
-	jobMap.MapSet("modelTier", directVal(obs, "magus.job.modelTier", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	magus.MapSet("modelTier", directVal(obs, "magus.modelTier", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		reg, err := modelTierCallSite(ctx, modelTierMember, "the tier a job is assigned")
 		if err != nil {
 			return vm.Null, err
@@ -396,12 +396,12 @@ func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, m
 	return func(ctx context.Context, req types.ModelTierRequest) (choice *types.JobModelTier, err error) {
 		set := reg.ModelTiers(ctx)
 		if set == nil {
-			return nil, fmt.Errorf("%s: the workspace has no model tiers to choose among: magus\\job.modelTiers(null) turned them off", modelTierMember)
+			return nil, fmt.Errorf("%s: the workspace has no model tiers to choose among: magus\\modelTiers(null) turned them off", modelTierMember)
 		}
 		// The fork runs the matrix inside the store's own write, so a read of the store
 		// would wait on itself: every magus\job member raises under a failed snapshot.
 		ctx = job.WithSnapshot(ctx, job.Snapshot{Err: errors.New(
-			`magus\job: the job store is read-only inside magus\job.modelTier: decide from the request and its history`)})
+			`magus\job: the job store is read-only inside magus\modelTier: decide from the request and its history`)})
 		defer func() {
 			if r := recover(); r != nil {
 				choice, err = nil, fmt.Errorf("%s: the matrix faulted the interpreter: %v", modelTierMember, r)

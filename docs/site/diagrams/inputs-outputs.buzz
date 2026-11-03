@@ -6,10 +6,10 @@ import "site/diagrams/packages" as _;
 
 export fun inputsOutputsFigure() > figure\Figure !> any {
     // NestedDirs narrows a snapshot here, never the key.
-    final cache = magus\dir("internal/cache");
-    final audit = magus\dir("internal/audit");
+    final cache = magus\graph().dir("internal/cache");
+    final audit = magus\graph().dir("internal/audit");
     // types/workspace.go: a nested project owns its files.
-    final claims = magus\dir("types");
+    final claims = magus\graph().dir("types");
     final reads = figure\external("readsFiles([\"**/*.go\"])", sub: "matches nested files too", tag: "root", look: figure\Look.plain);
     final writes = figure\external("writesFiles([\"**/gen/*test/*.go\"])", sub: "the root's gen/ only", tag: "root", look: figure\Look.plain);
     // describe.go joins a cross-project input's owner to DependsOn.
@@ -49,9 +49,9 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
         .scope(goPackages("internal/cache/**"))
         .scope(goPackages("internal/audit/**"))
         .scope(goPackages("types/**"))
-        .except([magus\dir("internal/cache/reflink")],
+        .except([magus\graph().dir("internal/cache/reflink")],
             why: "copies files in and out of the store; it reads no glob and keys nothing")
-        .except([magus\dir("internal/cache/remotetest")], why: "a fake remote cache for tests")
-        .except([magus\dir("types/enum")],
+        .except([magus\graph().dir("internal/cache/remotetest")], why: "a fake remote cache for tests")
+        .except([magus\graph().dir("types/enum")],
             why: "the closed string sets every package checks values against; no claim rule");
 }

@@ -141,7 +141,7 @@ merges:
 
 magus counts the finished branches waiting off the base and the commits since
 the last full test, and a top-level fork prints both. It refuses nothing on them.
-A guard rule can, by reading `magus\job.forkFacts`: magus's own repository refuses
+A guard rule can, by reading `magus\workspace().forkFacts`: magus's own repository refuses
 at a number in `hack/policy/spawn.buzz`, and a workspace with no such rule is told
 and never stopped.
 

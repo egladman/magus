@@ -238,7 +238,7 @@ When the tier is unclear, start at economy. A job that fails its criteria there 
 re-forked one tier up, not retried at the same one.{{if .Full}} Economy is a starting
 point, not a ceiling: same-strength offload is legitimate.{{end}}
 
-Tiers are the workspace's{{if .Full}}: a magusfile enum (`magus\job.modelTiers`) maps each to every
+Tiers are the workspace's{{if .Full}}: a magusfile enum (`magus\modelTiers`) maps each to every
 harness's model alias, and the guard compares a spawn's tier by rank{{end}}. `--model` takes a tier
 or a model. magus never picks a model live: re-fork to change a tier.
 
@@ -309,7 +309,7 @@ Read the facts:
   one integration owner and are never hand-edited by workers.
 - `depends_on` carries the owner's direct edges.
 - Affinity stays with `{{tool "client"}}` (`{{buzz "affinity"}}`). Without MCP,
-  run `{{cmd "buzz"}} -e` printing `magus\affinity()`.
+  run `{{cmd "buzz"}} -e` printing `magus\history().affinity()`.
 - Use `{{cmd "refs"}} <symbol>` when two jobs may touch the same API.
 
 A read-only job has no write set, so it is outside this analysis.

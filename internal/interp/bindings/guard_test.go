@@ -612,12 +612,12 @@ func TestSpawnRuleReadsJobsAndTargetFacts(t *testing.T) {
 import "magus";
 
 magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
-    final list = magus\job.list();
+    final list = magus\workspace().jobs();
     var ids = "";
     foreach (row in list.jobs) { ids = ids + row.id + ";"; }
     var wrote = "refused";
     if (req.kind == magus\SpawnKind.spawn) {
-        magus\job.put("smuggled", opts: {"criteria": "from a rule"});
+        magus\workspace().putJob("smuggled", opts: {"criteria": "from a rule"});
         wrote = "written";
     }
     var target = "";

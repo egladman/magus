@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// symbolIndexWorkspace is the part of *magus.Magus magus\symbolIndexDigest reads,
+// symbolIndexWorkspace is the part of *magus.Magus magus\graph reads,
 // recovered by assertion because std cannot import root magus.
 type symbolIndexWorkspace interface {
 	FreshenSymbolIndexes(ctx context.Context) error
@@ -19,7 +19,7 @@ type symbolIndexWorkspace interface {
 	CacheDir() string
 }
 
-// MagusSymbolIndexDigest backs magus\symbolIndexDigest: a digest of the symbol index the
+// MagusSymbolIndexDigest backs magus\graph: a digest of the symbol index the
 // graph members load, which a target writes as an output for index readers to key their
 // cache on. It freshens declared indexes first, so a reader never has to depend on a
 // workflow-specific graph-build step. It raises when the gap probe cannot run, since the
@@ -31,7 +31,7 @@ func MagusSymbolIndexDigest(ctx context.Context) (types.SymbolIndexDigest, error
 	}
 	w, ok := ws.(symbolIndexWorkspace)
 	if !ok {
-		return types.SymbolIndexDigest{}, fmt.Errorf("magus\\symbolIndexDigest: this workspace has no knowledge graph")
+		return types.SymbolIndexDigest{}, fmt.Errorf("magus\\graph: this workspace has no knowledge graph")
 	}
 	if err := w.FreshenSymbolIndexes(ctx); err != nil {
 		return types.SymbolIndexDigest{}, err
@@ -45,7 +45,7 @@ func MagusSymbolIndexDigest(ctx context.Context) (types.SymbolIndexDigest, error
 	}
 	gaps, probed := w.SymbolGaps(ctx)
 	if !probed {
-		return types.SymbolIndexDigest{}, fmt.Errorf("magus\\symbolIndexDigest: could not probe which declared symbol indexes are missing")
+		return types.SymbolIndexDigest{}, fmt.Errorf("magus\\graph: could not probe which declared symbol indexes are missing")
 	}
 	d.Gaps = gaps
 	return d, nil

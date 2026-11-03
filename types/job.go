@@ -1108,9 +1108,9 @@ type PriorAttempt struct {
 // the store to strip them afterwards.
 //
 // It is a DECLARATION and not a merge: every field it carries is written, so an omitted one
-// is cleared rather than kept. magus\job.put deliberately does the opposite,
-// since an agent advancing one field of a live row must not erase the rest (see
-// job.PutMerge).
+// is cleared rather than kept.
+// magus\workspace().putJob does the opposite (see job.PutMerge).
+// An agent advancing one field of a live row must not erase the rest.
 //
 // JSON only: this is decoded from stdin and never emitted, so it carries no yaml tags.
 //
@@ -2420,12 +2420,11 @@ func JobDescendants(rows []Job, id string) []Job {
 // never stored: an overlap is a relation between two rows, so storing it on either
 // one would mean a row that stopped being true when its neighbor changed.
 //
-// The registration facts take the opposite route and are NOT derived here. ReportedBase,
-// BaseVerdict and Registered describe one row against the checkpoint that row was handed,
-// so they belong on the row, are computed once when the worker registers, and reach every
-// reader of this list (magus\job.list, JobService's ListJobs) by riding
-// the leases. Deriving a second copy at read time would be a duplicate to keep true, which
-// is exactly what the overlap rule above avoids in the other direction.
+// The registration facts take the opposite route and are NOT derived here.
+// ReportedBase, BaseVerdict and Registered judge a row against its checkpoint.
+// So they live on the row and are computed once, when the worker registers.
+// They reach magus\workspace().jobs() and ListJobs by riding the leases.
+// A second copy derived at read time would be a duplicate to keep true.
 //
 // The single door onto a report, which is why the empty case is normalized HERE: an
 // unwritten ledger serves "jobs":[] rather than null, and the MCP tool and the HTTP

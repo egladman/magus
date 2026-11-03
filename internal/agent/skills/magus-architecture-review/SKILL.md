@@ -47,7 +47,7 @@ import "std";
 import "magus";
 
 fun main(args: [str]) > void !> any {
-    final nb = magus\neighborhood(args[0], opts: magus\NeighborhoodOptions{ depth = 3, relations = ["imports"], direction = "in" });
+    final nb = magus\graph().neighborhood(args[0], opts: magus\NeighborhoodOptions{ depth = 3, relations = ["imports"], direction = "in" });
     std\print("verdict {nb.answer.verdict}");
     foreach (n in nb.nodes) {
         std\print(n.id);
@@ -121,7 +121,7 @@ fun reaches(pkgs: {str: [str]}, start: str, target: str) > bool {
 }
 
 fun main(args: [str]) > void !> any {
-    final g = magus\importGraph();
+    final g = magus\graph().imports();
     if (!g.indexed) {
         throw "no symbol index: build one with magus graph build";
     }

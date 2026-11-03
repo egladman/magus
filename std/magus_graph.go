@@ -15,7 +15,6 @@ import (
 	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -42,8 +41,8 @@ func graphsFromContext(ctx context.Context, member string) (knowledgeGraphs, err
 	return g, nil
 }
 
-// memoGraphs answers every graph read of one evaluation from one build, so a figure
-// calling magus\dir per box builds the graph once.
+// memoGraphs answers every graph read of one evaluation from one build.
+// So a figure calling magus\graph().dir per box builds the graph once.
 type memoGraphs struct {
 	g    knowledgeGraphs
 	memo *types.EvalMemo
@@ -94,12 +93,12 @@ func graphCoverage(ctx context.Context, g knowledgeGraphs, input string, seeded 
 	return cov
 }
 
-// MagusQuery backs magus\query: ranked matches for query plus their neighborhood, the
-// record `magus query -o json` prints. A query that seeds the symbol layer reads a graph
-// with the symbol shards merged in; every other query reads the domain graph.
+// MagusQuery backs magus\graph().query: ranked matches plus their neighborhood.
+// It is the record `magus query -o json` prints.
+// A query seeding the symbol layer reads the symbol shards too.
 func MagusQuery(ctx context.Context, query string, opts types.KnowledgeQueryOptions) (types.KnowledgeQueryOutput, error) {
 	if strings.TrimSpace(query) == "" {
-		return types.KnowledgeQueryOutput{}, errors.New("magus\\query: needs search terms, such as \"kind=spell go\"")
+		return types.KnowledgeQueryOutput{}, errors.New("magus\\graph().query: needs search terms, such as \"kind=spell go\"")
 	}
 	if err := nonNegative("query", map[string]int{"budget": opts.Budget, "limit": opts.Limit, "offset": opts.Offset}); err != nil {
 		return types.KnowledgeQueryOutput{}, err
@@ -127,11 +126,12 @@ func MagusQuery(ctx context.Context, query string, opts types.KnowledgeQueryOpti
 	return out, nil
 }
 
-// MagusExplain backs magus\explain: one node's context card, the record `magus explain
-// -o json` prints. A path between two nodes is magus\path.
+// MagusExplain backs magus\graph().explain: one node's context card.
+// It is the record `magus explain -o json` prints.
+// A path between two nodes is magus\graph().path.
 func MagusExplain(ctx context.Context, node string) (types.KnowledgeExplainOutput, error) {
 	if node == "" {
-		return types.KnowledgeExplainOutput{}, errors.New("magus\\explain: needs a node ID or a name that resolves to one")
+		return types.KnowledgeExplainOutput{}, errors.New("magus\\graph().explain: needs a node ID or a name that resolves to one")
 	}
 	g, err := graphsFromContext(ctx, "explain")
 	if err != nil {
@@ -147,9 +147,9 @@ func MagusExplain(ctx context.Context, node string) (types.KnowledgeExplainOutpu
 		// A bare name reads the symbol-free graph, so a miss on a name that could be a
 		// code symbol is a blind spot, not an absence.
 		if knowledge.Answer(node, false, graphCoverage(ctx, g, node, seeded)).Verdict == types.VerdictUnknown {
-			return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\explain: no node matches %q in the domain graph, code symbols are not loaded here, so ask magus\\refs", node)
+			return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\graph().explain: no node matches %q in the domain graph, code symbols are not loaded here, so ask magus\\graph().refs", node)
 		}
-		return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\explain: no node matches %q", node)
+		return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\graph().explain: no node matches %q", node)
 	}
 	return out, nil
 }
@@ -163,13 +163,14 @@ func loadGraph(ctx context.Context, g knowledgeGraphs, seeded bool) (*knowledge.
 	return g.KnowledgeGraph(ctx, req)
 }
 
-// MagusPath backs magus\path: the shortest chain of edges between node and to, the
-// record `magus path -o json` prints. opts is a PathOptions; relations narrows the hops.
+// MagusPath backs magus\graph().path: the shortest chain from node to to.
+// It is the record `magus path -o json` prints.
+// opts is a PathOptions; relations narrows the hops.
 // A resolved pair with no connection is an answer (found is false); only an endpoint
 // that resolves to nothing, or an option that names nothing, raises.
 func MagusPath(ctx context.Context, node, to string, opts types.KnowledgePathOptions) (types.KnowledgePathOutput, error) {
 	if node == "" || to == "" {
-		return types.KnowledgePathOutput{}, errors.New("magus\\path: needs both endpoints")
+		return types.KnowledgePathOutput{}, errors.New("magus\\graph().path: needs both endpoints")
 	}
 	g, err := graphsFromContext(ctx, "path")
 	if err != nil {
@@ -181,18 +182,19 @@ func MagusPath(ctx context.Context, node, to string, opts types.KnowledgePathOpt
 	}
 	out, ok := kg.PathWith(node, to, opts)
 	if !ok {
-		return types.KnowledgePathOutput{}, fmt.Errorf("magus\\path: could not resolve %q or %q to a node", node, to)
+		return types.KnowledgePathOutput{}, fmt.Errorf("magus\\graph().path: could not resolve %q or %q to a node", node, to)
 	}
 	return out, nil
 }
 
-// MagusRefs backs magus\refs: where a code symbol is defined and every file that
-// references it, the record `magus refs -o json` prints. A symbol nothing defines is an
+// MagusRefs backs magus\graph().refs: a symbol's definition and its users.
+// It is the record `magus refs -o json` prints.
+// A symbol nothing defines is an
 // answer carrying a verdict, never a raise: absent and unknown are different facts and a
 // caller branches on answer.verdict to tell them apart.
 func MagusRefs(ctx context.Context, symbol string, opts types.KnowledgeRefsOptions) (types.KnowledgeRefsOutput, error) {
 	if symbol == "" {
-		return types.KnowledgeRefsOutput{}, errors.New("magus\\refs: needs a symbol ID or a name that resolves to one")
+		return types.KnowledgeRefsOutput{}, errors.New("magus\\graph().refs: needs a symbol ID or a name that resolves to one")
 	}
 	if err := nonNegative("refs", map[string]int{"limit": opts.Limit, "offset": opts.Offset}); err != nil {
 		return types.KnowledgeRefsOutput{}, err
@@ -226,9 +228,8 @@ func MagusRefs(ctx context.Context, symbol string, opts types.KnowledgeRefsOptio
 	return out, nil
 }
 
-// MagusStats backs magus\stats: the knowledge graph's shape, the record `magus graph
-// stats -o json` prints. kind scopes every section to one node kind; empty is the whole
-// graph.
+// MagusStats backs magus\graph().stats: the shape `magus graph stats` prints.
+// kind scopes every section to one node kind; empty is the whole graph.
 func MagusStats(ctx context.Context, kind string) (types.KnowledgeStats, error) {
 	g, err := graphsFromContext(ctx, "stats")
 	if err != nil {
@@ -241,8 +242,8 @@ func MagusStats(ctx context.Context, kind string) (types.KnowledgeStats, error) 
 	return kg.Stats(kind), nil
 }
 
-// MagusImportGraph backs magus\importGraph: which workspace package imports which, by
-// directory, with Indexed saying whether a symbol index was there to read at all.
+// MagusImportGraph backs magus\graph().imports(): which package imports which.
+// Indexed says whether a symbol index was there to read at all.
 func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 	g, err := graphsFromContext(ctx, "importGraph")
 	if err != nil {
@@ -255,10 +256,9 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 	return kg.ImportGraph(), nil
 }
 
-// precedentWorkspace is the part of *magus.Magus magus\precedents and magus\symbols read beside
-// the graph: a freshen of every index, the freshness verdict `magus status` prints, which
-// files are declared outputs, and knowledge.conformance, whose gates and dep-fanout ceilings the
-// precedents are judged by.
+// precedentWorkspace is the part of *magus.Magus the graph's precedents read.
+// That is an index freshen, `magus status`'s verdict and the declared outputs.
+// knowledge.conformance's gates and ceilings judge the precedents.
 type precedentWorkspace interface {
 	FreshenSymbolIndexes(ctx context.Context) error
 	SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus
@@ -275,10 +275,9 @@ type indexedGraph struct {
 	generated map[string]bool
 }
 
-// judgedGraph freshens every index, as magus\diff does, so a caller never runs a graph build of
-// its own; one that could not be made current reads as stale, the freshen's error in its
-// detail. Freshness is judged before the graph is read, so the verdict covers the index the
-// answer came from.
+// judgedGraph freshens every index, as magus\change().diff does.
+// An index it cannot make current reads as stale, with the freshen's error.
+// Freshness is judged first, so it covers the index the answer came from.
 func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
@@ -326,45 +325,23 @@ func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 	return indexedGraph{ws: pw, kg: kg, indexes: indexes, generated: generated}, nil
 }
 
-// reportMap is report as the map a Buzz caller reads, keyed as its JSON is: no Buzz object
-// mirrors it.
-func reportMap(report any) (map[string]any, error) {
-	b, err := json.Marshal(report)
+// MagusPrecedents backs magus\graph().precedents from the symbol indexes.
+// knowledge.conformance's gates and ceilings apply.
+// Each index's freshness is judged as judgedGraph describes.
+func MagusPrecedents(ctx context.Context) (types.Holds, error) {
+	ig, err := judgedGraph(ctx, "Graph.precedents")
 	if err != nil {
-		return nil, err
-	}
-	var out map[string]any
-	if err := json.Unmarshal(b, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish
-// under knowledge.conformance's gates and dep-fanout ceilings, and each declared index's
-// freshness, judged as judgedGraph describes. Generated files are never counted. The answer
-// is a Holds as a map.
-func MagusPrecedents(ctx context.Context) (map[string]any, error) {
-	ig, err := judgedGraph(ctx, "precedents")
-	if err != nil {
-		return nil, err
+		return types.Holds{}, err
 	}
 	conformance, err := ig.ws.ConformanceOptions()
 	if err != nil {
-		return nil, fmt.Errorf("magus\\precedents: %w", err)
+		return types.Holds{}, fmt.Errorf("magus\\Graph.precedents: %w", err)
 	}
 	conformance.Generated = ig.generated
-	return reportMap(types.Holds{
+	return types.Holds{
 		Holds:   ig.kg.Precedents(knowledge.PrecedentOptions{Generated: ig.generated, Conformance: conformance}),
 		Indexes: ig.indexes,
-	})
-}
-
-// conformanceReport is magus\conformance's answer: the lens beside the freshness of the indexes it
-// was drawn from, flattened so a script reads both as one map.
-type conformanceReport struct {
-	types.Conformance
-	Indexes []types.SymbolIndexStatus `json:"indexes"`
+	}, nil
 }
 
 // ceilingWorkspace is the part of *magus.Magus that judges a change against its base revision.
@@ -373,9 +350,10 @@ type ceilingWorkspace interface {
 	MeasureConformanceBase(ctx context.Context, base string) (string, error)
 }
 
-// MagusConformanceBase backs magus\conformanceBase: it measures the merge base of base and HEAD
-// under this workspace's configuration and keeps the measure for magus\conformance, returning
-// the commit. Run it from a target, so the indexing is declared work.
+// MagusConformanceBase backs magus\change(base).mergeBase().
+// It measures the merge base under this workspace's configuration.
+// It keeps the measure for Change.conformance and returns the commit.
+// Run it from a target, so the indexing is declared work.
 func MagusConformanceBase(ctx context.Context, base string) (string, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
@@ -383,73 +361,84 @@ func MagusConformanceBase(ctx context.Context, base string) (string, error) {
 	}
 	cw, ok := ws.(ceilingWorkspace)
 	if !ok {
-		return "", errors.New("magus\\conformanceBase: this workspace cannot measure a base revision")
+		return "", errors.New("magus\\change().mergeBase: this workspace cannot measure a base revision")
 	}
 	commit, err := cw.MeasureConformanceBase(ctx, base)
 	if err != nil {
-		return "", fmt.Errorf("magus\\conformanceBase: %w", err)
+		return "", fmt.Errorf("magus\\change().mergeBase: %w", err)
 	}
 	return commit, nil
 }
 
-// MagusConformance backs magus\conformance: the conformance lens over the merged symbol indexes under
-// knowledge.conformance, and each declared index's freshness, judged as judgedGraph describes.
+// MagusConformance backs magus\change().conformance over the symbol indexes.
+// Each index's freshness is judged as judgedGraph describes.
 // Generated files are never counted. With a base it adds the ceilings checks crossed since
 // it (ConformanceCeilings). It writes nothing in the workspace. The answer is a
 // Conformance with an indexes list, as a map.
-func MagusConformance(ctx context.Context, checks []string, base string) (map[string]any, error) {
+func MagusConformance(ctx context.Context, checks []string, base string) (types.ConformanceReport, error) {
 	c := types.Ceiling{Base: base}
 	for _, m := range checks {
 		c.Checks = append(c.Checks, types.ConformanceMetric(m))
 	}
 	if err := c.Validate(); err != nil {
-		return nil, fmt.Errorf("magus\\conformance: %w", err)
+		return types.ConformanceReport{}, fmt.Errorf("magus\\Change.conformance: %w", err)
 	}
-	ig, err := judgedGraph(ctx, "conformance")
+	ig, err := judgedGraph(ctx, "Change.conformance")
 	if err != nil {
-		return nil, err
+		return types.ConformanceReport{}, err
 	}
 	opts, err := ig.ws.ConformanceOptions()
 	if err != nil {
-		return nil, fmt.Errorf("magus\\conformance: %w", err)
+		return types.ConformanceReport{}, fmt.Errorf("magus\\Change.conformance: %w", err)
 	}
 	opts.Generated = ig.generated
 	out := ig.kg.Conformance(opts)
 	out.Definition = types.ConformanceDefinition
-	if base != "" {
-		cw, ok := ig.ws.(ceilingWorkspace)
-		if !ok {
-			return nil, errors.New("magus\\conformance: this workspace cannot measure a base revision")
-		}
-		if out, err = cw.ConformanceCeilings(ctx, c, out); err != nil {
-			return nil, fmt.Errorf("magus\\conformance: %w", err)
-		}
+	if out, err = withCeilings(ctx, ig.ws, c, out); err != nil {
+		return types.ConformanceReport{}, err
 	}
-	return reportMap(conformanceReport{Conformance: out, Indexes: ig.indexes})
+	return types.ConformanceReport{Conformance: out, Indexes: ig.indexes}, nil
 }
 
-// MagusSymbols backs magus\symbols: every declaration in the merged symbol indexes with its
-// doc comment, and each declared index's freshness, judged as judgedGraph describes. Test and
-// generated files are never listed. The answer is a Symbols as a map.
-func MagusSymbols(ctx context.Context) (map[string]any, error) {
-	ig, err := judgedGraph(ctx, "symbols")
+// withCeilings adds the ceilings c crossed since its base; no base adds none.
+func withCeilings(ctx context.Context, ws any, c types.Ceiling, out types.Conformance) (types.Conformance, error) {
+	if c.Base == "" {
+		return out, nil
+	}
+	cw, ok := ws.(ceilingWorkspace)
+	if !ok {
+		return out, errors.New("magus\\Change.conformance: this workspace cannot measure a base revision")
+	}
+	out, err := cw.ConformanceCeilings(ctx, c, out)
 	if err != nil {
-		return nil, err
+		return out, fmt.Errorf("magus\\Change.conformance: %w", err)
+	}
+	return out, nil
+}
+
+// MagusSymbols backs magus\graph().symbols: every declaration with its doc.
+// Each index's freshness is judged as judgedGraph describes. Test and
+// generated files are never listed. The answer is a Symbols as a map.
+func MagusSymbols(ctx context.Context) (types.Symbols, error) {
+	ig, err := judgedGraph(ctx, "Graph.symbols")
+	if err != nil {
+		return types.Symbols{}, err
 	}
 	decls := ig.kg.SymbolDecls(knowledge.SymbolDeclOptions{Generated: ig.generated})
 	if decls == nil {
 		// No symbols reads as an empty list, never null.
 		decls = []types.SymbolDecl{}
 	}
-	return reportMap(types.Symbols{Symbols: decls, Indexes: ig.indexes})
+	return types.Symbols{Symbols: decls, Indexes: ig.indexes}, nil
 }
 
-// MagusDir backs magus\dir: one workspace directory as a Dir. dir nodes for Go packages
+// MagusDir backs magus\graph().dir: one workspace directory as a Dir.
+// dir nodes for Go packages
 // live in the symbol shards, so this reads the graph with them merged. A path with no dir
 // node raises DirNotInGraph: a typo must not come back as an empty Dir.
 func MagusDir(ctx context.Context, dir string) (types.Dir, error) {
 	if strings.TrimSpace(dir) == "" {
-		return types.Dir{}, errors.New("magus\\dir: needs a workspace-relative directory, such as \"internal/httpx\"")
+		return types.Dir{}, errors.New("magus\\graph().dir: needs a workspace-relative directory, such as \"internal/httpx\"")
 	}
 	g, err := graphsFromContext(ctx, "dir")
 	if err != nil {
@@ -461,17 +450,17 @@ func MagusDir(ctx context.Context, dir string) (types.Dir, error) {
 	}
 	d, err := kg.Dir(dir, workspaceLayers(ctx))
 	if err != nil {
-		return types.Dir{}, fmt.Errorf("magus\\dir: %w", err)
+		return types.Dir{}, fmt.Errorf("magus\\graph().dir: %w", err)
 	}
 	return d, nil
 }
 
-// MagusDirs backs magus\dirs: every dir whose workspace path matches glob, sorted by
-// path. opts is a DirsOptions; a layer it names that nothing declares raises
+// MagusDirs backs magus\graph().dirs: every dir matching glob, sorted by path.
+// opts is a DirsOptions; a layer it names that nothing declares raises
 // LayerNotDeclared.
 func MagusDirs(ctx context.Context, glob string, opts types.DirsOptions) ([]types.Dir, error) {
 	if strings.TrimSpace(glob) == "" {
-		return nil, errors.New("magus\\dirs: needs a glob over workspace paths, such as \"internal/**\"")
+		return nil, errors.New("magus\\graph().dirs: needs a glob over workspace paths, such as \"internal/**\"")
 	}
 	if err := nonNegative("dirs", map[string]int{"depth": opts.Depth}); err != nil {
 		return nil, err
@@ -486,16 +475,17 @@ func MagusDirs(ctx context.Context, glob string, opts types.DirsOptions) ([]type
 	}
 	dirs, err := kg.Dirs(glob, opts, workspaceLayers(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("magus\\dirs: %w", err)
+		return nil, fmt.Errorf("magus\\graph().dirs: %w", err)
 	}
 	return dirs, nil
 }
 
-// MagusLayer backs magus\layer: a declared layer and every dir it covers. A name no
+// MagusLayer backs magus\graph().layer: a declared layer and every dir in it.
+// A name no
 // magus.project "layers" entry declares raises LayerNotDeclared.
 func MagusLayer(ctx context.Context, name string) (types.Layer, error) {
 	if strings.TrimSpace(name) == "" {
-		return types.Layer{}, errors.New("magus\\layer: needs a layer name, such as \"handler\"")
+		return types.Layer{}, errors.New("magus\\graph().layer: needs a layer name, such as \"handler\"")
 	}
 	g, err := graphsFromContext(ctx, "layer")
 	if err != nil {
@@ -507,17 +497,16 @@ func MagusLayer(ctx context.Context, name string) (types.Layer, error) {
 	}
 	l, err := kg.Layer(name, workspaceLayers(ctx))
 	if err != nil {
-		return types.Layer{}, fmt.Errorf("magus\\layer: %w", err)
+		return types.Layer{}, fmt.Errorf("magus\\graph().layer: %w", err)
 	}
 	return l, nil
 }
 
-// MagusNeighborhood backs magus\neighborhood: the subgraph within opts.depth hops of
-// focus, along opts.relations in opts.direction, folded by opts.collapse. opts is a
-// NeighborhoodOptions.
+// MagusNeighborhood backs magus\graph().neighborhood around focus.
+// opts is a NeighborhoodOptions: depth, relations, direction and collapse.
 func MagusNeighborhood(ctx context.Context, focus string, opts types.KnowledgeNeighborhoodOptions) (types.KnowledgeNeighborhoodOutput, error) {
 	if strings.TrimSpace(focus) == "" {
-		return types.KnowledgeNeighborhoodOutput{}, errors.New("magus\\neighborhood: needs a focus node ID, path or name")
+		return types.KnowledgeNeighborhoodOutput{}, errors.New("magus\\graph().neighborhood: needs a focus node ID, path or name")
 	}
 	if err := nonNegative("neighborhood", map[string]int{"depth": opts.Depth}); err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
@@ -533,7 +522,7 @@ func MagusNeighborhood(ctx context.Context, focus string, opts types.KnowledgeNe
 	}
 	out, ok := kg.FocusNeighborhood(focus, no)
 	if !ok {
-		return types.KnowledgeNeighborhoodOutput{}, fmt.Errorf("magus\\neighborhood: no node matches %q", focus)
+		return types.KnowledgeNeighborhoodOutput{}, fmt.Errorf("magus\\graph().neighborhood: no node matches %q", focus)
 	}
 	matched := len(out.Nodes) > 1
 	if !walksSymbolLayer(no.Relations) {

@@ -176,7 +176,7 @@ export fun readDiff(input: Input) > result\Result::<magus\Diff> {
         } else if (input.rev != "") {
             rev = input.rev;
         }
-        return result\ok::<magus\Diff>(magus\diff(opts: magus\DiffOptions{ baseline = input.baseline, from = savedPath, patch = patch, rev = rev }));
+        return result\ok::<magus\Diff>(magus\change().diff(opts: magus\DiffOptions{ baseline = input.baseline, from = savedPath, patch = patch, rev = rev }));
     } catch (err: any) {
         return result\caught::<magus\Diff>(err, doing: "show-review-context: read the changeset");
     }
@@ -291,7 +291,7 @@ fun guarded(name: str, read: fun () > result\Result::<Section>) > Section {
 
 fun around(focus: str, relation: str, direction: str, depth: int) > result\Result::<magus\NeighborhoodResult> {
     try {
-        return result\ok::<magus\NeighborhoodResult>(magus\neighborhood(focus, opts: magus\NeighborhoodOptions{ depth = depth, relations = [magus\RelationID(relation)], direction = magus\EdgeDirection(direction), collapse = [<str>] }));
+        return result\ok::<magus\NeighborhoodResult>(magus\graph().neighborhood(focus, opts: magus\NeighborhoodOptions{ depth = depth, relations = [magus\RelationID(relation)], direction = magus\EdgeDirection(direction), collapse = [<str>] }));
     } catch (err: any) {
         return result\caught::<magus\NeighborhoodResult>(err, doing: "read the neighbourhood of {focus}");
     }
@@ -502,7 +502,7 @@ export fun card(c: Candidate, depth: int) > Card {
     var node = magus\KnowledgeNode{ id = c.id, kind = "symbol", label = c.label, doc = "", source = "", attrs = {<str: str>} };
     var explained = "";
     try {
-        final e: magus\ExplainResult = magus\explain(c.id);
+        final e: magus\ExplainResult = magus\graph().explain(c.id);
         node = e.node;
     } catch (e: any) {
         explained = result\caught::<bool>(e).error!.message;
@@ -536,7 +536,7 @@ export fun card(c: Candidate, depth: int) > Card {
 // symbolCandidate resolves a name or ID to the one symbol the symbol step cards.
 export fun symbolCandidate(name: str) > result\Result::<Candidate> {
     try {
-        final r: magus\RefsResult = magus\refs(name, opts: magus\RefsOptions{ limit = 1 });
+        final r: magus\RefsResult = magus\graph().refs(name, opts: magus\RefsOptions{ limit = 1 });
         if (r.symbol == "") {
             return result\fail::<Candidate>("show-review-context: no indexed symbol answers to {name} ({r.answer.verdict.value} {r.answer.reason.value})");
         }
@@ -594,7 +594,7 @@ export fun dependenciesSection(d: magus\Diff, baseline: str) > result\Result::<S
             }
         }
         if (base.size() > 0) {
-            head = magus\importGraph();
+            head = magus\graph().imports();
         }
     } catch (err: any) {
         return result\caught::<Section>(err, doing: "read the dependencies against {baseline}");
@@ -618,7 +618,7 @@ export fun dependenciesSection(d: magus\Diff, baseline: str) > result\Result::<S
 
 export fun coChangeSection(d: magus\Diff, deps: {str: [str]}) > result\Result::<Section> {
     try {
-        final aff: magus\Affinity = magus\affinity();
+        final aff: magus\Affinity = magus\history().affinity();
         final items = mut [<str>];
         foreach (p in aff.pairs) {
             final touched = d.seedProjects.indexOf(p.a) != null or d.seedProjects.indexOf(p.b) != null;
@@ -685,7 +685,7 @@ export fun apiGrowthSection(all: [Candidate]) > Section {
 export fun layersSection(d: magus\Diff) > result\Result::<Section> {
     final items = mut [<str>];
     foreach (dir in changedDirs(d)) {
-        final info: magus\Dir = magus\dir(dir) catch magus\Dir{ path = dir, id = "", layer = "", language = "", imports = [<str>], importedBy = [<str>], importsIndexed = false, calls = [<magus\DirCall>], calledBy = [<magus\DirCall>], children = [<str>], files = 0 };
+        final info: magus\Dir = magus\graph().dir(dir) catch magus\Dir{ path = dir, id = "", layer = "", language = "", imports = [<str>], importedBy = [<str>], importsIndexed = false, calls = [<magus\DirCall>], calledBy = [<magus\DirCall>], children = [<str>], files = 0 };
         if (info.layer != "") {
             items.append("{dir} is in layer {info.layer}");
         }
@@ -767,7 +767,7 @@ export fun terms(all: [Candidate]) > [str] {
 export fun vocabularyTerm(term: str) > result\Result::<Term> {
     var q: magus\QueryResult? = null;
     try {
-        q = magus\query(term, opts: magus\QueryOptions{ limit = 20 });
+        q = magus\graph().query(term, opts: magus\QueryOptions{ limit = 20 });
     } catch (err: any) {
         return result\caught::<Term>(err, doing: "query {term}");
     }
@@ -1113,12 +1113,12 @@ fun labels(cs: [Candidate]) > [str] {
 }
 
 test "a card goes only to a touched symbol: never unchanged, generated or a package" {
-    final d = magus\diff(opts: magus\DiffOptions{ from = FIXTURE });
+    final d = magus\change().diff(opts: magus\DiffOptions{ from = FIXTURE });
     assert\equal(labels(candidates(d)), want: ["Render", "NewWidget", "parse_widget_name"], message: "carded");
 }
 
 test "the budget cuts the narrowest and names what it cut" {
-    final d = magus\diff(opts: magus\DiffOptions{ from = FIXTURE });
+    final d = magus\change().diff(opts: magus\DiffOptions{ from = FIXTURE });
     final s = select(candidates(d), budget: 2);
     assert\equal(labels(s.carded), want: ["NewWidget", "parse_widget_name"], message: "added or re-signed first");
     assert\equal(labels(s.omitted), want: ["Render"], message: "cut");
@@ -1187,7 +1187,7 @@ test "a member's prefix is its ID through the enclosing type" {
 }
 
 test "-o json keeps its shape" {
-    final d = magus\diff(opts: magus\DiffOptions{ from = FIXTURE });
+    final d = magus\change().diff(opts: magus\DiffOptions{ from = FIXTURE });
     final b = Bundle{ base = d.base, rev = "main...HEAD", lens = "all", files = fileRows(d), notes = d.notes,
         selection = select(candidates(d), budget: 1), cards = [<Card>], architecture = [<Section>], vocabulary = [<Term>] };
     final shape = json\parse(json\stringify(bundleJSON(b)));

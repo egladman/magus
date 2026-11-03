@@ -73,7 +73,7 @@ export fun hostCalls(src: str) > [Finding] {
         if (m != null) {
             found.append(Finding{ path = LIBRARY, line = n,
                 message = "the figure library calls magus\\{m![1]}; it takes graph records, it never reads the workspace",
-                fix = "Take the Dir, Layer or RefsResult as a parameter and let the figure build it with magus\\dir, magus\\layer or magus\\refs." });
+                fix = "Take the Dir, Layer or RefsResult as a parameter and let the figure build it with magus\\graph().dir, magus\\graph().layer or magus\\graph().refs." });
         }
     }
     return found;
@@ -152,15 +152,15 @@ test "a figure with an unlabeled argument or a warning is reported, a clean one 
 
 test "the figure library may name magus record types but not call the host" {
     final src = "import \"magus\";\n"
-        + "// magus\\dir(\"internal/httpx\") in a comment is an example\n"
+        + "// magus\\graph().dir(\"internal/httpx\") in a comment is an example\n"
         + "fun path(d: magus\\Dir) > str \{ return d.path; }\n"
         + "fun opts() > magus\\DirsOptions \{ return magus\\DirsOptions\{ language = \"go\" }; }\n"
         + "fun refuse() > void !> str \{ throw \"takes a Dir from magus\\\\dir\"; }\n"
-        + "fun reach() > [magus\\Dir] !> any \{ return magus\\dirs(\"internal/**\"); }\n"
+        + "fun reach() > [magus\\Dir] !> any \{ return magus\\graph().dirs(\"internal/**\"); }\n"
         + "fun log() > void !> any \{ magus\\log.info(\"x\"); }\n";
     final got = check(support\fixture({"libs/figure/figure.buzz": src}));
     final lines = mut [<int>];
     foreach (f in got) { lines.append(f.line); }
     assert\equal(lines, want: [6, 7], message: "the host calls, not the types, the comment or the string: {support\messages(got)}");
-    assert\equal(got[0].message, want: "the figure library calls magus\\dirs; it takes graph records, it never reads the workspace", message: "names the member");
+    assert\equal(got[0].message, want: "the figure library calls magus\\graph().dirs; it takes graph records, it never reads the workspace", message: "names the member");
 }

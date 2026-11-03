@@ -1,0 +1,531 @@
+// Cost: reads every tracked .buzz, .md and Go file once.
+//
+// Rewrites each call site of the magus module's flat members and deleted
+// namespaces into the root-constructor shape: magus\refs(x) becomes
+// magus\graph().refs(x), magus\job.exit(id) becomes magus\job(id).exit().
+// A file already changed since HEAD gets only the rules a rewrite cannot
+// match again, so a second run changes nothing.
+//
+//	magus buzz hack/dev/rewrite-magus-module.buzz -- [--dry-run] [path...]
+namespace rewritemagus;
+
+import "flags";
+import "result";
+import "std";
+import "fs";
+import "vcs";
+import "magus";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/rewrite-magus-module.buzz -- [--dry-run] [path...]";
+final HELP = "cost: reads every tracked .buzz, .md and Go file once\n{USAGE}";
+
+// Rule is how one old member reads after the regroup. An empty ctor is a
+// plain rename. moved is the argument that becomes the constructor's, -1
+// for none; field means the old call is now a field.
+export object Rule {
+    ctor: str = "",
+    method: str,
+    moved: int = -1,
+    field: bool = false,
+}
+
+fun graph(method: str) > Rule => Rule{ ctor = "graph", method = method };
+fun workspace(method: str, moved: int = -1) > Rule => Rule{ ctor = "workspace", method = method, moved = moved };
+fun history(method: str) > Rule => Rule{ ctor = "history", method = method, moved = 0 };
+fun change(method: str, moved: int = -1) > Rule => Rule{ ctor = "change", method = method, moved = moved };
+fun rename(to: str) > Rule => Rule{ method = to };
+
+// rewrittenNames are the old names a rewrite writes back as new ones, so
+// only a file still at HEAD takes them.
+final rewrittenNames = ["Graph", "modelTiers"];
+
+export fun rules() > {str: Rule} {
+    return {
+        "query": graph("query"), "explain": graph("explain"), "path": graph("path"),
+        "refs": graph("refs"), "stats": graph("stats"), "neighborhood": graph("neighborhood"),
+        "dir": graph("dir"), "dirs": graph("dirs"), "layer": graph("layer"),
+        "symbols": graph("symbols"), "precedents": graph("precedents"),
+        "unreferenced": graph("unreferenced"), "duplication": graph("duplication"),
+        "projectGraph": graph("deps"), "importGraph": graph("imports"),
+        "symbolIndexDigest": rename("graph"),
+        "diff": change("diff"), "affected": change("affected", moved: 0),
+        "impact": change("impact", moved: 0), "conformance": change("conformance", moved: 1),
+        "conformanceBase": change("mergeBase", moved: 0), "risk.assess": change("tier"),
+        "vcs.checkpoint": Rule{ ctor = "change", method = "at", field = true },
+        "hotspots": history("hotspots"), "affinity": history("affinity"),
+        "ownership": history("ownership"), "trend": history("trend"),
+        "volatility": workspace("volatility"), "modelTiers": workspace("tierOutcomes"),
+        "grouping": workspace("grouping"), "skills": workspace("skills"),
+        "attention": workspace("attention"), "fileDiskAttention": workspace("fileDiskAttention"),
+        "diskReclaim": workspace("diskReclaim"), "bustCache": workspace("bustCache"),
+        "diagnoseDrift": workspace("diagnoseDrift"),
+        "job.list": workspace("jobs"), "job.put": workspace("putJob"),
+        "job.clear": workspace("clearJobs"), "job.forkFacts": workspace("forkFacts", moved: 0),
+        "job.unmerged": workspace("unmerged", moved: 0),
+        "job.exit": Rule{ ctor = "job", method = "exit", moved = 0 },
+        "job.wait": Rule{ ctor = "job", method = "wait", moved = 0 },
+        "job.register": Rule{ ctor = "job", method = "register", moved = 0 },
+        "job.modelTiers": rename("modelTiers"), "job.modelTier": rename("modelTier"),
+        "trail.read": Rule{ ctor = "session", method = "trail", moved = 0 },
+        "trail.mark": Rule{ ctor = "session", method = "mark" },
+        "trail.marks": Rule{ ctor = "session", method = "marks" },
+        "trail.shape": rename("guard.shape"), "trail.shapes": rename("guard.shapes"),
+        "workspace.provider": rename("workspaceProvider"),
+        "RiskTier": rename("Tier"), "RiskReport": rename("TierReport"),
+        "RiskOptions": rename("TierOptions"), "RiskEvidence": rename("TierEvidence"),
+        "RiskGateStep": rename("TierGateStep"),
+        "Graph": rename("Deps"), "SymbolIndexDigest": rename("Graph"),
+    };
+}
+
+// settledRules drops the rules whose output an old name also spells.
+export fun settledRules() > {str: Rule} {
+    final table = rules();
+    return table.filter(fun (key: str, rule: Rule) > bool => rewrittenNames.indexOf(key) == null);
+}
+
+fun isNameByte(c: str) > bool {
+    return (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9") or c == "_" or c == ".";
+}
+
+// memberAt is the dotted name text starts with, its trailing dots dropped.
+export fun memberAt(text: str) > str {
+    var n = 0;
+    while (n < text.len() and isNameByte(text.sub(n, len: 1))) {
+        n = n + 1;
+    }
+    while (n > 0 and text.sub(n - 1, len: 1) == ".") {
+        n = n - 1;
+    }
+    return text.sub(0, len: n);
+}
+
+// ruleFor is the longest dotted prefix of member a rule names, or null.
+export fun ruleFor(member: str, table: {str: Rule}) > str? {
+    final parts = member.split(".");
+    for (var n = parts.len(); n > 0; n = n - 1) {
+        final key = parts.sub(0, len: n).join(".");
+        if (table[key] != null) {
+            return key;
+        }
+    }
+    return null;
+}
+
+fun depthChange(c: str) > int {
+    if (c == "(" or c == "[" or c == "\{") {
+        return 1;
+    }
+    if (c == ")" or c == "]" or c == "}") {
+        return -1;
+    }
+    return 0;
+}
+
+// Args is one call's argument list and where its closing paren sits.
+export object Args {
+    list: [str],
+    end: int,
+}
+
+// callArgs splits the call text opens with at its top-level commas, or
+// null when text opens no call or the call does not close.
+export fun callArgs(text: str) > Args? {
+    if (!text.startsWith("(")) {
+        return null;
+    }
+    final list = mut [<str>];
+    var depth = 0;
+    var start = 1;
+    for (var i = 0; i < text.len(); i = i + 1) {
+        final c = text.sub(i, len: 1);
+        depth = depth + depthChange(c);
+        if (depth == 0) {
+            final last = text.sub(start, len: i - start).trim();
+            if (last != "" or list.len() > 0) {
+                list.append(last);
+            }
+            return Args{ list = list, end = i + 1 };
+        }
+        if (depth == 1 and c == ",") {
+            list.append(text.sub(start, len: i - start).trim());
+            start = i + 1;
+        }
+    }
+    return null;
+}
+
+// unlabel drops a leading `name: ` from one argument.
+export fun unlabel(arg: str) > str {
+    final colon = arg.indexOf(":");
+    if (colon == null or colon! == 0) {
+        return arg;
+    }
+    final label = arg.sub(0, len: colon!).trim();
+    if (memberAt(label) != label or label.indexOf(".") != null) {
+        return arg;
+    }
+    return arg.sub(colon! + 1).trim();
+}
+
+// Moved is a call's arguments split into the constructor's and the method's.
+object Moved {
+    ctorArg: str,
+    rest: [str],
+}
+
+fun moveArg(list: [str], moved: int) > Moved {
+    final rest = mut [<str>];
+    foreach (i, a in list) {
+        if (i != moved) {
+            rest.append(a);
+        }
+    }
+    if (rest.len() > 0) {
+        rest[0] = unlabel(rest[0]);
+    }
+    return Moved{ ctorArg = unlabel(list[moved]), rest = rest };
+}
+
+// renderCall is rule applied to a call with args. A call whose arguments
+// all stay keeps their text, line breaks included.
+fun renderCall(rule: Rule, args: Args, call: str) > str {
+    if (rule.moved < 0 or rule.moved >= args.list.len()) {
+        final head = "{rule.ctor}().{rule.method}";
+        return if (rule.field) head else head + call;
+    }
+    final m = moveArg(args.list, moved: rule.moved);
+    final head = "{rule.ctor}({m.ctorArg}).{rule.method}";
+    return if (rule.field) head else "{head}({m.rest.join(", ")})";
+}
+
+// Replaced is the new text of one member reference and how much of the
+// old it consumed.
+export object Replaced {
+    text: str,
+    consumed: int,
+}
+
+// replaceMember rewrites the member reference text starts with, or null
+// when no rule names it.
+export fun replaceMember(text: str, table: {str: Rule}) > Replaced? {
+    final key = ruleFor(memberAt(text), table: table);
+    if (key == null) {
+        return null;
+    }
+    final rule = table[key!]!;
+    final after = text.sub(key!.len());
+    if (rule.ctor == "") {
+        return Replaced{ text = rule.method, consumed = key!.len() };
+    }
+    final args = callArgs(after);
+    if (args == null) {
+        return Replaced{ text = "{rule.ctor}().{rule.method}", consumed = key!.len() };
+    }
+    final call = after.sub(0, len: args!.end);
+    return Replaced{ text = renderCall(rule, args: args!, call: call), consumed = key!.len() + args!.end };
+}
+
+// rewritePiece rewrites what follows one `magus\` in a file: the second
+// backslash of an escaped `magus\\` stays, then the member.
+fun rewritePiece(piece: str, table: {str: Rule}) > str {
+    final slash = if (piece.startsWith("\\")) "\\" else "";
+    final body = piece.sub(slash.len());
+    final r = replaceMember(body, table: table);
+    if (r == null) {
+        return piece;
+    }
+    return slash + r!.text + body.sub(r!.consumed);
+}
+
+// lineAfter is the line a reference sits on once piece follows line.
+fun lineAfter(line: str, piece: str) > str {
+    final lines = piece.split("\n");
+    if (lines.len() > 1) {
+        return lines[lines.len() - 1];
+    }
+    return "{line}magus\\{piece}";
+}
+
+// rewriteText rewrites every magus member reference in text. With
+// comments false, a reference on a line that holds `//` before it stays.
+export fun rewriteText(text: str, table: {str: Rule}, comments: bool = true) > str {
+    final pieces = text.split("magus\\");
+    final rewritten = mut [pieces[0]];
+    var line = lineAfter("", piece: pieces[0]);
+    foreach (i, piece in pieces) {
+        if (i == 0) {
+            continue;
+        }
+        final inComment = line.indexOf("//") != null;
+        rewritten.append(if (comments or !inComment) rewritePiece(piece, table: table) else piece);
+        line = lineAfter(line, piece: piece);
+    }
+    return rewritten.join("magus\\");
+}
+
+// writable reports whether the job's write paths cover path.
+export fun writable(path: str) > bool {
+    if (path.endsWith(".buzz") or path.endsWith(".md")) {
+        return true;
+    }
+    final parts = path.split("/");
+    if (parts.len() == 1) {
+        return true;
+    }
+    final dir = parts.sub(0, len: parts.len() - 1).join("/");
+    if (["std", "types", "cmd/magus", "cmd/magus-utils", "internal/interp/bindings"].indexOf(dir) != null) {
+        return true;
+    }
+    return path.endsWith("_test.go") and parts[0] == "internal" and (parts.len() == 3 or parts.len() == 4);
+}
+
+// skipped is a path the rewrite never reads: generated output, records of
+// what shipped, upstream Buzz, installed skill copies and this script.
+export fun skipped(path: str) > bool {
+    if (path.indexOf("/gen/") != null or path.startsWith("gen/")) {
+        return true;
+    }
+    foreach (prefix in ["libs/gopherbuzz/", "changes/released/", ".claude/", ".agents/", ".opencode/"]) {
+        if (path.startsWith(prefix)) {
+            return true;
+        }
+    }
+    return ["CHANGELOG.md", "AGENTS.md", "hack/dev/rewrite-magus-module.buzz", "std/magus_handle.go", "internal/interp/bindings/buzz.go"].indexOf(path) != null;
+}
+
+fun candidate(path: str) > bool {
+    if (skipped(path)) {
+        return false;
+    }
+    return path.endsWith(".buzz") or path.endsWith(".md") or path.endsWith(".go");
+}
+
+// Report is what one run changed and what it could not.
+export object Report {
+    rewritten: mut [str],
+    commentsLeft: mut [str],
+    outside: mut [str],
+    outputs: mut [str],
+    refused: mut [str],
+    sites: int = 0,
+}
+
+fun newReport() > mut Report {
+    return mut Report{
+        rewritten = mut [<str>], commentsLeft = mut [<str>], outside = mut [<str>],
+        outputs = mut [<str>], refused = mut [<str>],
+    };
+}
+
+fun countSites(before: str, after: str) > int {
+    final a = before.split("magus\\");
+    final b = after.split("magus\\");
+    var changed = 0;
+    foreach (i, piece in a) {
+        if (i > 0 and (i >= b.len() or b[i] != piece)) {
+            changed = changed + 1;
+        }
+    }
+    return changed;
+}
+
+// Edit is one file's text before and after the rewrite.
+object Edit {
+    path: str,
+    before: str,
+    after: str,
+    table: {str: Rule},
+}
+
+// tryWrite writes text to path and returns the guard's refusal, or null.
+fun tryWrite(path: str, text: str) > str? {
+    try {
+        fs\writeFile(path, content: text);
+    } catch (err: any) {
+        return "{err}".split("\n")[0];
+    }
+    return null;
+}
+
+// writeEdit writes the whole rewrite, or the code alone when the guard
+// refuses the rewritten comments.
+fun writeEdit(edit: Edit, report: mut Report) > void {
+    final refusal = tryWrite(edit.path, text: edit.after);
+    if (refusal == null) {
+        report.rewritten.append(edit.path);
+        report.sites = report.sites + countSites(edit.before, after: edit.after);
+        return;
+    }
+    final code = rewriteText(edit.before, table: edit.table, comments: false);
+    if (code == edit.before or tryWrite(edit.path, text: code) != null) {
+        report.refused.append("{edit.path}: {refusal!}");
+        return;
+    }
+    report.commentsLeft.append("{edit.path}: {refusal!}");
+    report.sites = report.sites + countSites(edit.before, after: code);
+}
+
+fun planEdit(path: str, changed: [str]) > Edit? !> any {
+    final before = fs\readFile(path);
+    if (before.indexOf("magus\\") == null) {
+        return null;
+    }
+    final table = if (changed.indexOf(path) != null) settledRules() else rules();
+    final after = rewriteText(before, table: table);
+    if (after == before) {
+        return null;
+    }
+    return Edit{ path = path, before = before, after = after, table = table };
+}
+
+fun listed(args: [str]) > [str] !> any {
+    final ran = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true });
+    return ran.stdout.split("\n").filter(fun (i: int, p: str) > bool => p != "");
+}
+
+fun planEdits(paths: [str]) > [Edit] !> any {
+    final changed = listed(["diff", "--name-only", "HEAD"]);
+    final edits = mut [<Edit>];
+    foreach (path in listed(["ls-files", "--"] + paths)) {
+        if (candidate(path)) {
+            final edit = planEdit(path, changed: changed);
+            if (edit -> e) {
+                edits.append(e);
+            }
+        }
+    }
+    return edits;
+}
+
+// outputPaths are the edits' paths a project declares as generated.
+fun outputPaths(edits: [Edit]) > [str] !> any {
+    if (edits.len() == 0) {
+        return [<str>];
+    }
+    final described = magus\describe.file(edits.map(fun (i: int, e: Edit) > str => e.path));
+    final found = mut [<str>];
+    foreach (f in described.files) {
+        if (f.role == "output") {
+            found.append(f.path);
+        }
+    }
+    return found;
+}
+
+fun applyEdit(edit: Edit, outputs: [str], dryRun: bool, report: mut Report) > void {
+    if (outputs.indexOf(edit.path) != null) {
+        report.outputs.append(edit.path);
+    } else if (!writable(edit.path)) {
+        report.outside.append(edit.path);
+    } else if (dryRun) {
+        report.rewritten.append(edit.path);
+        report.sites = report.sites + countSites(edit.before, after: edit.after);
+    } else {
+        writeEdit(edit, report: report);
+    }
+}
+
+export fun rewriteTree(dryRun: bool, paths: [str]) > result\Result::<Report> {
+    final report = newReport();
+    try {
+        final edits = planEdits(paths);
+        final outputs = outputPaths(edits);
+        foreach (edit in edits) {
+            applyEdit(edit, outputs: outputs, dryRun: dryRun, report: report);
+        }
+    } catch (err: any) {
+        return result\caught::<Report>(err, doing: "rewrite-magus-module: rewrite the tree");
+    }
+    return result\ok::<Report>(report);
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help", "--dry-run"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0) {
+        throw "rewrite-magus-module: unknown {parsed.unknown.join(" ")}\n{USAGE}";
+    }
+    final dryRun = parsed.values["--dry-run"] != null;
+    std\print(if (dryRun) "dry run: writes nothing" else "writes the files it lists");
+    final done = rewriteTree(dryRun, paths: parsed.positionals);
+    if (done.error != null) {
+        throw done.error!.message;
+    }
+    printReport(done.value!);
+}
+
+fun printReport(report: Report) > void {
+    std\print("{report.sites} sites in {report.rewritten.len() + report.commentsLeft.len()} files");
+    printList("rewritten", paths: report.rewritten);
+    printList("code rewritten, comments refused by a write rule", paths: report.commentsLeft);
+    printList("refused by a write rule, left as they are", paths: report.refused);
+    printList("declared outputs: regenerate them", paths: report.outputs);
+    printList("outside the write paths, left as they are", paths: report.outside);
+}
+
+fun printList(title: str, paths: [str]) > void {
+    if (paths.len() == 0) {
+        return;
+    }
+    std\print("{title} ({paths.len()}):");
+    foreach (p in paths) {
+        std\print("  {p}");
+    }
+}
+
+test "a graph read moves onto magus\\graph()" {
+    assert\equal(rewriteText("magus\\refs(\"X\", opts: o)", table: rules()), want: "magus\\graph().refs(\"X\", opts: o)", message: "refs");
+}
+
+test "a moved argument becomes the constructor's and the next loses its label" {
+    final t = rules();
+    assert\equal(rewriteText("magus\\impact(b, opts: o)", table: t), want: "magus\\change(b).impact(o)", message: "impact");
+    assert\equal(rewriteText("magus\\conformance([\"x\"], base: b)", table: t), want: "magus\\change(b).conformance([\"x\"])", message: "conformance");
+    assert\equal(rewriteText("magus\\job.exit(id, result: r)", table: t), want: "magus\\job(id).exit(r)", message: "exit");
+    assert\equal(rewriteText("magus\\hotspots()", table: t), want: "magus\\history().hotspots()", message: "no args");
+}
+
+test "arguments that all stay keep their line breaks" {
+    assert\equal(rewriteText("magus\\refs(\n    \"X\",\n    opts: o)", table: rules()), want: "magus\\graph().refs(\n    \"X\",\n    opts: o)", message: "verbatim");
+}
+
+test "a reference in prose takes the constructor with no arguments" {
+    assert\equal(rewriteText("see magus\\job.list.", table: rules()), want: "see magus\\workspace().jobs.", message: "prose");
+}
+
+test "an escaped reference keeps both backslashes" {
+    assert\equal(rewriteText("\"magus\\\\affected(\\\"main\\\")\"", table: rules()), want: "\"magus\\\\change(\\\"main\\\").affected()\"", message: "escaped");
+}
+
+test "a renamed type and a call become a field" {
+    final t = rules();
+    assert\equal(rewriteText("magus\\Graph and magus\\SymbolIndexDigest", table: t), want: "magus\\Deps and magus\\Graph", message: "types");
+    assert\equal(rewriteText("magus\\vcs.checkpoint().revision", table: t), want: "magus\\change().at.revision", message: "field");
+}
+
+test "a file already rewritten keeps its new names" {
+    final once = rewriteText("magus\\SymbolIndexDigest magus\\job.modelTiers(m)", table: rules());
+    assert\equal(rewriteText(once, table: settledRules()), want: once, message: "settled");
+}
+
+test "code-only keeps a comment's reference" {
+    final text = "// see magus\\refs\nmagus\\refs(x)";
+    assert\equal(rewriteText(text, table: rules(), comments: false), want: "// see magus\\refs\nmagus\\graph().refs(x)", message: "code only");
+}
+
+test "a member no rule names is left alone" {
+    assert\equal(rewriteText("magus\\project(x) magus\\job", table: rules()), want: "magus\\project(x) magus\\job", message: "kept");
+}
+
+test "only the job's write paths are written" {
+    assert\equal(writable("internal/guard/x_test.go"), want: true, message: "internal test");
+    assert\equal(writable("internal/guard/x.go"), want: false, message: "internal source");
+    assert\equal(writable("vcs/x_test.go"), want: false, message: "outside");
+    assert\equal(writable("docs/a.md"), want: true, message: "md");
+}

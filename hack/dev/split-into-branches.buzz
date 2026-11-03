@@ -420,7 +420,7 @@ fun collect(base: str) > result\Result::<[Change]> {
 
 fun projectDeps() > result\Result::<{str: [str]}> {
     try {
-        final g = magus\projectGraph();
+        final g = magus\graph().deps();
         final deps = mut {<str: [str]>};
         foreach (n in g.nodes) { deps[n] = g.dependsOn[n] ?? [<str>]; }
         return result\ok::<{str: [str]}>(deps);
@@ -2029,13 +2029,13 @@ fun changedSymbols(base: str) > result\Result::<[Sym]> {
     try {
         final seen = mut {<str: bool>};
         final syms = mut [<Sym>];
-        final reviews = [magus\diff(opts: magus\DiffOptions{ rev = "{base}...HEAD" }), magus\diff()];
+        final reviews = [magus\change().diff(opts: magus\DiffOptions{ rev = "{base}...HEAD" }), magus\change().diff()];
         foreach (d in reviews) {
             foreach (f in d.files) {
                 foreach (s in f.symbols) {
                     if (seen[s.id] != null) { continue; }
                     seen[s.id] = true;
-                    final r = magus\refs(s.id);
+                    final r = magus\graph().refs(s.id);
                     var line = 0;
                     foreach (def in r.defs) {
                         if (def.file == f.path and def.lines.len() > 0) { line = def.lines[0]; }
@@ -2060,7 +2060,7 @@ fun changedSymbols(base: str) > result\Result::<[Sym]> {
 // indexed, written in a language (by diff driver) it reported a changed symbol in.
 fun indexedPaths(regions: [Region], syms: [Sym], files: [Change]) > result\Result::<[str]> {
     try {
-        final digest = magus\symbolIndexDigest();
+        final digest = magus\graph();
         final languages = mut [<str>];
         final symPaths = mut {<str: bool>};
         foreach (s in syms) { symPaths[s.path] = true; }

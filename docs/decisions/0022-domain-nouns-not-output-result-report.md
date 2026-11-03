@@ -70,7 +70,7 @@ Measured on this tree 2026-11-01: `Output` 25, `Report` 20, `Result` 9,
 | Proto `insight` → `historymetrics`; nested nouns; `GetHistoryMetrics*Response`             | done    |
 | Lint: RPC I/O ends in Request/Response; nested messages have no `*Output`/`*Report` suffix | done    |
 | Action `*Result` renames when those files are touched                                      | planned |
-| `magus\precedents` → `magus\holds` / `magus\counts`                                        | planned |
+| `magus\graph().precedents` → `magus\holds` / `magus\counts`                                        | planned |
 
 ### Principles checked
 

@@ -8,7 +8,7 @@ import "site/diagrams/packages" as _;
 // directory) cannot draw it. The symbol must be defined directly in dir, or the figure
 // raises: the actor is checked against the index the way a box's symbol: anchor is.
 export fun codeStage(dir: magus\Dir, symbol: str, name: str, sub: str = "", look: figure\Look? = null) > figure\Actor !> any {
-    final found: magus\RefsResult = magus\refs(symbol);
+    final found: magus\RefsResult = magus\graph().refs(symbol);
     final prefix = dir.path + "/";
     foreach (site in found.defs) {
         if (site.file.startsWith(prefix) and site.file.sub(prefix.len()).indexOf("/") == null) {
@@ -28,12 +28,12 @@ export fun gopherbuzzPackages() > [magus\Dir] !> any {
 // it; a figure excepts them for AROUND_WHY.
 export fun gopherbuzzAround() > [magus\Dir] !> any {
     return [
-        magus\dir("libs/gopherbuzz/benchmarks/comparison"),
-        magus\dir("libs/gopherbuzz/benchmarks/upstream"),
-        magus\dir("libs/gopherbuzz/buzzgen"),
-        magus\dir("libs/gopherbuzz/cmd/buzz"),
-        magus\dir("libs/gopherbuzz/examples/ffi-c"),
-        magus\dir("libs/gopherbuzz/wasm"),
+        magus\graph().dir("libs/gopherbuzz/benchmarks/comparison"),
+        magus\graph().dir("libs/gopherbuzz/benchmarks/upstream"),
+        magus\graph().dir("libs/gopherbuzz/buzzgen"),
+        magus\graph().dir("libs/gopherbuzz/cmd/buzz"),
+        magus\graph().dir("libs/gopherbuzz/examples/ffi-c"),
+        magus\graph().dir("libs/gopherbuzz/wasm"),
     ];
 }
 

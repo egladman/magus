@@ -483,7 +483,7 @@ func TestListJobs_ServesTheStoresReport(t *testing.T) {
 }
 
 // listJobsSuite pins that the console's listing scopes overlaps by the served workspace,
-// as `magus ls jobs` and magus\job.list do.
+// as `magus ls jobs` and magus\workspace().jobs do.
 type listJobsSuite struct {
 	suite.Suite
 }

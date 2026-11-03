@@ -74,7 +74,7 @@ func (s *ExitedHolderBindingSuite) TestOwnExitKeepsTheBinding() {
 func (s *ExitedHolderBindingSuite) TestOwnClientExitKeepsTheBinding() {
 	input := hookJSON(s.T(), map[string]any{"session_id": s.who.Session, "cwd": "/Users/dev/repo", "hook_event_name": "PreToolUse",
 		"agent_id": s.who.Agent, "agent_type": "general-purpose",
-		"tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; magus\job.exit("held-job");`}})
+		"tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; magus\job("held-job").exit();`}})
 	v := Judge(s.ctx, Dependencies{}, Request{Input: input, Host: s.who.Host})
 	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
 	s.setState(types.StateExited)

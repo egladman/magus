@@ -5,9 +5,9 @@ import "magus/figure";
 import "site/diagrams/packages" as _;
 
 export fun diagramPipelineFigure() > figure\Figure !> any {
-    final module = magus\dir("libs/figure");
-    final host = magus\dir("std");
-    final server = magus\dir("internal/handler/diagram");
+    final module = magus\graph().dir("libs/figure");
+    final host = magus\graph().dir("std");
+    final server = magus\graph().dir("internal/handler/diagram");
     final source = figure\external("Figure source", sub: "records, sets, actors", tag: "buzz", look: figure\Look.plain);
     final files = figure\external("SVGs + receipts", sub: "diagrams-generate", look: figure\Look.store);
     final site = figure\external("Site render", sub: "inlines the page copy", look: figure\Look.plain);
@@ -16,7 +16,7 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
             title: "One library draws every figure, here and in the console",
             eyebrow: "figures",
             desc: "A figure in docs/site/diagrams builds its boxes from the knowledge graph's own "
-                + "records, magus\\dir, magus\\dirs and magus\\layer, and draws the imports and "
+                + "records, magus\\graph().dir, magus\\graph().dirs and magus\\graph().layer, and draws the imports and "
                 + "declared calls between them. magus/figure lays it out and paints it; "
                 + "diagrams-generate writes the committed light, dark and page copies with a "
                 + "receipt beside each, and the site render inlines the page copy. The server "
@@ -42,35 +42,35 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
         .scope(goPackages("libs/*"))
         .scope(goPackages("libs/figure/**"))
         .scope(goPackages("std/**"))
-        .scope(magus\layer("handler").dirs)
-        .except([magus\dir("libs/gopherbuzz")],
+        .scope(magus\graph().layer("handler").dirs)
+        .except([magus\graph().dir("libs/gopherbuzz")],
             why: "the Buzz runtime every module runs on, figures included; drawn in buzz-engine")
-        .except([magus\dir("libs/testpairing")],
+        .except([magus\graph().dir("libs/testpairing")],
             why: "the Go analyzer for test layout; no figure passes through it")
-        .except([magus\dir("libs/proofread")],
+        .except([magus\graph().dir("libs/proofread")],
             why: "the prose linter; figure layout does not use it")
-        .except([magus\dir("libs/diagnostics")],
+        .except([magus\graph().dir("libs/diagnostics")],
             why: "the diagnostic-code framework; a figure's findings are plain strings")
-        .except([magus\dir("libs/testkit")], why: "fixtures for magus's Go tests")
-        .except([magus\dir("libs/scipbuzz")],
+        .except([magus\graph().dir("libs/testkit")], why: "fixtures for magus's Go tests")
+        .except([magus\graph().dir("libs/scipbuzz")],
             why: "the Buzz symbol indexer; it feeds the knowledge graph, not a figure")
-        .except([magus\dir("libs/cmdline")],
+        .except([magus\graph().dir("libs/cmdline")],
             why: "the command tree magus's generators read; no figure passes through it")
-        .except([magus\dir("libs/proofread")],
+        .except([magus\graph().dir("libs/proofread")],
             why: "the prose judge; a figure's text is not judged by it")
-        .except([magus\dir("libs/xdg")],
+        .except([magus\graph().dir("libs/xdg")],
             why: "the user config, state and cache directories; no figure passes through them")
-        .except([magus\dir("libs/embed")],
+        .except([magus\graph().dir("libs/embed")],
             why: "the static embedding table and retrieval eval behind knowledge search; no figure passes through it")
-        .except([magus\dir("libs/image")],
+        .except([magus\graph().dir("libs/image")],
             why: "OCI layout assembly; no figure passes through it")
-        .except([magus\dir("libs/oci")],
+        .except([magus\graph().dir("libs/oci")],
             why: "the registry client; no figure passes through it")
-        .except([magus\dir("libs/result")],
+        .except([magus\graph().dir("libs/result")],
             why: "the Buzz Result type embedded by go-build; no figure passes through it")
-        .except([magus\dir("std/gen/stdtest")], why: "generated test mocks")
+        .except([magus\graph().dir("std/gen/stdtest")], why: "generated test mocks")
         .except(goPackages("std/encoding/**"),
             why: "the encoding host modules; a figure source reads the graph through the magus module alone")
-        .except(figure\without(magus\layer("handler").dirs, drop: [server]),
+        .except(figure\without(magus\graph().layer("handler").dirs, drop: [server]),
             why: "the console's other services; none embeds magus/figure");
 }

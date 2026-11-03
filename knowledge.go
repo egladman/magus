@@ -2462,10 +2462,10 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 // refresh) by a cache-first rebuild. It is always fresh, since the warm graph is served
 // only while a watcher can invalidate it.
 //
-// With symbols (magus\query on symbols, magus\refs) it builds cache-first into a FRESH
-// graph and merges the @symbols shards into it, so the warm graph the other MCP tools
-// answer from is never polluted with a workspace's (potentially huge) symbol set. A scope
-// that targets one symbol merges only the shards that mention it.
+// With symbols, as magus\graph().refs asks, it builds a FRESH graph.
+// It merges the @symbols shards into that one.
+// So the warm graph other MCP tools read never holds a huge symbol set.
+// A scope that targets one symbol merges only the shards that mention it.
 func (m *Magus) knowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	if !req.Symbols.Loaded() {
 		return m.warmKnowledgeGraph().Get(ctx, req.Refresh)

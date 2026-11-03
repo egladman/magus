@@ -38,7 +38,7 @@ import "magus";
 
 export fun summary() > str !> any {
     var picked = "";
-    foreach (s in magus\skills({"form": "full"})) {
+    foreach (s in magus\workspace().skills({"form": "full"})) {
         if (s.source == "local" or s.name == "magus-query") {
             picked = picked + "{s.name} {s.source} {s.form} {s.current}\n";
         }
@@ -47,11 +47,11 @@ export fun summary() > str !> any {
 }
 
 export fun unknown() > void !> any {
-    magus\skills({"name": "acme-rule"});
+    magus\workspace().skills({"name": "acme-rule"});
 }
 
 export fun misspelledOption() > void !> any {
-    magus\skills({"nmae": "acme-rules"});
+    magus\workspace().skills({"nmae": "acme-rules"});
 }
 `
 
@@ -79,8 +79,8 @@ func callSkills(t *testing.T, ctx context.Context, sess *buzz.Session, name stri
 	return "", nil
 }
 
-// TestSkillsThroughBuzzScript drives magus\skills through the parser, checker and VM
-// against the real catalog, installed the way `magus agent install` writes it.
+// TestSkillsThroughBuzzScript drives magus\workspace().skills through the VM.
+// It reads the real catalog, installed the way `magus agent install` writes it.
 func TestSkillsThroughBuzzScript(t *testing.T) {
 	root := t.TempDir()
 	fixture.WireHarness(t, agent.HarnessDescriptor{

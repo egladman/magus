@@ -398,10 +398,9 @@ func indexerOnPath(t *testing.T) {
 	t.Setenv("PATH", fmt.Sprintf(`%s%s%s`, bin.Root(), string(os.PathListSeparator), os.Getenv("PATH")))
 }
 
-// A reader that freshens the index it reads (magus\precedents, Diff) is called from a
-// target's body, and the run that body belongs to holds the project's lock for its whole
-// invocation. Rebuilding through m.Run nested a second invocation the lock refused
-// (MGS3007), so the reader read a stale index. The rebuild now runs inside the outer run.
+// A reader that freshens its index, like graph().precedents, runs in a target.
+// That run holds the project's lock, so a nested m.Run was refused (MGS3007).
+// The rebuild runs inside the outer run.
 func TestFreshenInsideATargetReindexesThroughTheOuterRun(t *testing.T) {
 	indexerOnPath(t)
 	var m *Magus

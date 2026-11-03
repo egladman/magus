@@ -124,8 +124,8 @@ func WithBrokerPolicy(p types.BrokerPolicy) Option {
 	return func(o *workspace.Load) { o.BrokerPolicy = p }
 }
 
-// WithoutWorkspaceProviders opens the workspace without running its wired workspace
-// providers (magus\workspace.provider), leaving only the magusfile-declared projects.
+// WithoutWorkspaceProviders opens the workspace without its provider spells.
+// Only magusfile projects are left, none magus\workspaceProvider adds.
 // For a caller inspecting a tree that is not a working checkout: an exported revision
 // has no installed toolchain for a provider to shell out to.
 func WithoutWorkspaceProviders() Option {
@@ -148,8 +148,9 @@ func (reg *WorkspaceRegistry) RegisterProject(path string, opts ...ProjectOption
 	reg.r.RegisterProject(path, opts...)
 }
 
-// AddProvider wires the named workspace-provider spell, as magus\workspace.provider does
-// from a magusfile: Open runs it to add the projects it reports.
+// AddProvider wires the named workspace-provider spell.
+// magus\workspaceProvider does the same from a magusfile.
+// Open runs it to add the projects it reports.
 func (reg *WorkspaceRegistry) AddProvider(spellName string) { reg.r.AddProvider(spellName) }
 
 // WithWorkspaceRegistry injects a pre-built WorkspaceRegistry, replacing the default one.

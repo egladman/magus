@@ -5,11 +5,11 @@ import "magus/figure";
 
 // goPackages is every Go package glob matches.
 export fun goPackages(glob: str) > [magus\Dir] !> any {
-    return magus\dirs(glob, opts: magus\DirsOptions{ language = "go" });
+    return magus\graph().dirs(glob, opts: magus\DirsOptions{ language = "go" });
 }
 
 // cmdTools is every command under cmd/ except the magus binary itself: docs generators,
 // codegen and the browser playground, each built by its own target.
 export fun cmdTools() > [magus\Dir] !> any {
-    return figure\without(goPackages("cmd/*"), drop: [magus\dir("cmd/magus")]);
+    return figure\without(goPackages("cmd/*"), drop: [magus\graph().dir("cmd/magus")]);
 }

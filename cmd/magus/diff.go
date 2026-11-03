@@ -2841,10 +2841,8 @@ func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev type
 	}
 	defer restore()
 
-	// The advisors ask magus about the workspace (magus\describe.file, magus\diff,
-	// magus\impact), which reads it off the context the way `magus buzz` does.
-	// The caller's already-loaded workspace is attached rather than loaded again:
-	// loadMagus is once-per-process and panics on a second call with a different root.
+	// The advisors read the workspace off the context, as `magus buzz` does.
+	// It is attached, not loaded again: loadMagus panics on a second root.
 	if m != nil {
 		ctx = types.WithWorkspace(ctx, viewInternals(m))
 	}
@@ -2930,9 +2928,9 @@ func setAdviceEnv(base string) (func(), error) {
 	}, nil
 }
 
-// adviceReviewEnv names the file holding the run's one review, which advice.buzz's review
-// reads in place of a fresh magus\diff. The action's review step sets the same name on the
-// forge.
+// adviceReviewEnv names the file holding the run's one review.
+// advice.buzz's review reads it in place of a fresh magus\change().diff.
+// The action's review step sets the same name on the forge.
 const adviceReviewEnv = "ADVICE_REVIEW"
 
 // shareReview writes rev where the advisors read it and returns the restore, which removes

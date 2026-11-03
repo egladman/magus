@@ -423,8 +423,9 @@ func TestNoteMainSpawnRecordsOrchestration(t *testing.T) {
 	assert.Empty(t, readCostState(hint.NewGate(cache, sub.factsKey())).Forked, "a subagent is never an orchestrator")
 }
 
-// A fork is filed from each shape that writes a row: the CLI verb, its record on stdin, a
-// magus\job.put rendered from an MCP call, and either one inside a `magus buzz` script.
+// A fork is filed from each shape that writes a row.
+// Those are the CLI verb, its record on stdin, and an MCP call's putJob.
+// Either one inside a `magus buzz` script files one too.
 func TestNoteForkReadsEveryShape(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1_700_000_000, 0)
@@ -438,7 +439,7 @@ func TestNoteForkReadsEveryShape(t *testing.T) {
 {"schema_version": %s, "id": "a2", "read_only": true}
 EOF`, strconv.Itoa(types.JobSchemaVersion)), []string{"a2"}},
 		{`client op=put id="a3" parent="root"`, []string{"a3"}},
-		{`./magus buzz -e 'import "magus"; magus\job.put("a4", opts: {"parent": "root"});'`, []string{"a4"}},
+		{`./magus buzz -e 'import "magus"; magus\workspace().putJob("a4", opts: {"parent": "root"});'`, []string{"a4"}},
 		{"./magus job wait a1", nil},
 		{"./magus job exit a1 --stdin", nil},
 		{`client op=register id="a1"`, nil},
@@ -518,7 +519,7 @@ func orchestrationLines(notes string) []string {
 		"./magus run install /",
 		"./magus query output grd0123456789ab",
 		"./magus query output out1 --identity",
-		`./magus buzz -e 'import "magus"; magus\job.put("a1", opts: {"parent": "root"});'`,
+		`./magus buzz -e 'import "magus"; magus\workspace().putJob("a1", opts: {"parent": "root"});'`,
 		"git branch x",
 		"git switch x",
 		"git worktree add ../w main",

@@ -413,11 +413,9 @@ func (m *Magus) load(ctx context.Context) error {
 		return errors.Join(err, m.spellShadows())
 	}
 	m.magusfileExports = customTargets
-	// Workspace providers run HERE, in the one window where both facts they need are
-	// true: the magusfiles have been evaluated (so magus\workspace.provider has named
-	// its spells, and those spells are registered), and the registry has not been
-	// applied yet (so magus\project("libs/foo", {...}) still layers on top of a
-	// provided project rather than being overwritten by it).
+	// Workspace providers run HERE, where both facts they need hold.
+	// The magusfiles ran, so magus\workspaceProvider named its spells.
+	// The registry waits, so magus\project still layers on top.
 	if !m.skipProviders {
 		if err := workspace.AddProvidedProjects(ctx, m.ws, m.wsReg.Providers(), workspace.ProviderCache{
 			Dir:       resolveCacheDir(m.ws.Root, m.cfg),
@@ -2009,8 +2007,8 @@ func (m *Magus) Where(dir string) (*types.Project, bool) {
 
 // BaseLastPassed is the base ref that means "the commit this branch last completed a
 // fully passing run at", read from the run history rather than from the VCS. Every
-// entry point that takes a base ref accepts it, so `--base last-passed`,
-// MAGUS_VCS_BASE_REF, and magus\affected() all reach the same resolution.
+// entry point that takes a base ref accepts it.
+// `--base last-passed` and magus\change().affected() reach one resolution.
 const BaseLastPassed = "last-passed"
 
 // Affected computes projects touched by VCS changes since base.
@@ -2030,11 +2028,9 @@ func (m *Magus) Affected(ctx context.Context, base string) (*types.AffectedResul
 // resolveLastPassed translates [BaseLastPassed] into the commit the current branch last
 // passed at, and passes any other base through untouched.
 //
-// It resolves HERE rather than in vcs.Resolve's precedence chain because the answer does
-// not come from the VCS at all: it comes from the run history, which the vcs package
-// must not learn about. Affected is the single funnel every affected computation goes
-// through (ExpandAffected and Plan both call it), so one resolution covers the CLI, the
-// shard planner, and magus\affected in a magusfile.
+// It resolves HERE, not in vcs.Resolve: the answer is the run history.
+// Every affected computation goes through Affected.
+// So one resolution covers the CLI, the planner and change().affected.
 //
 // The fallback when nothing was recorded is the PARENT of HEAD, announced. It is not the
 // configured default: on the branch that builds itself the default base is that same

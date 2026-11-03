@@ -81,12 +81,12 @@ type RiskReport struct {
 	Gate     []RiskGateStep `json:"gate"     yaml:"gate"`
 }
 
-// RiskOptions are what a change is assessed against: magus\risk.assess's options, and the
-// workspace's RiskAssessor's.
+// RiskOptions are what a change is assessed against.
+// They are magus\change().tier's options, and the workspace's RiskAssessor's.
 type RiskOptions struct {
 	// Base is the revision the change is measured from; empty is the configured affected
 	// base.
-	Base string `json:"base,omitempty"`
+	Base string `json:"base,omitempty" buzz:"-"`
 	// Paths replaces the version-control diff when non-nil: the change is these paths.
 	Paths []string `json:"paths,omitempty"`
 	// Checkout is the root of another checkout of the same repository whose change is

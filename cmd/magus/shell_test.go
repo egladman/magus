@@ -1181,16 +1181,16 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 		toolInput string
 		want      string
 	}{
-		"fork on another row":   {client(`magus\job.put("harness/other", opts: {"write_paths": ["**"]});`), "deny\n"},
-		"fork widening its own": {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"**\"]});", own)), "deny\n"},
-		"clearing the board":    {client(`magus\job.clear();`), "deny\n"},
-		"exec elsewhere":        {client(`magus\job.register("harness/other");`), "deny\n"},
-		"exec its own":          {client(fmt.Sprintf("magus\\job.register(%s);", own)), "pass\n"},
-		"listing the plan":      {client(`magus\job.list();`), "pass\n"},
-		"giving paths back":     {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"cmd/magus/**\"]});", own)), "pass\n"},
+		"fork on another row":   {client(`magus\workspace().putJob("harness/other", opts: {"write_paths": ["**"]});`), "deny\n"},
+		"fork widening its own": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"**\"]});", own)), "deny\n"},
+		"clearing the board":    {client(`magus\workspace().clearJobs();`), "deny\n"},
+		"exec elsewhere":        {client(`magus\job("harness/other").register();`), "deny\n"},
+		"exec its own":          {client(fmt.Sprintf("magus\\job(%s).register();", own)), "pass\n"},
+		"listing the plan":      {client(`magus\workspace().jobs();`), "pass\n"},
+		"giving paths back":     {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"]});", own)), "pass\n"},
 		// A shrink beside a forged checkpoint or rewritten criteria is not a plain shrink.
-		"forging its own base":   {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"checkpoint\": \"deadbeef\"});", own)), "deny\n"},
-		"rewriting its criteria": {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"criteria\": \"something else\"});", own)), "deny\n"},
+		"forging its own base":   {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"checkpoint\": \"deadbeef\"});", own)), "deny\n"},
+		"rewriting its criteria": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"criteria\": \"something else\"});", own)), "deny\n"},
 	} {
 		envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"mcp-%s\",\"tool_name\":\"mcp__magus__client\",\"tool_input\":%s}", name, tc.toolInput)
 		var out bytes.Buffer

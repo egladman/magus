@@ -47,9 +47,9 @@ import "magus";
 import "magus/figure";
 
 export fun serverHttpFigure() > figure\Figure !> any {
-    final guard = magus\dir("internal/httpx");
-    final mcp = magus\dir("internal/handler/mcp");
-    final handlers = magus\layer("handler").dirs;
+    final guard = magus\graph().dir("internal/httpx");
+    final mcp = magus\graph().dir("internal/handler/mcp");
+    final handlers = magus\graph().layer("handler").dirs;
     final agent = figure\external("AI agents", look: figure\Look.plain);
     return figure\of("server-http", title: "The HTTP routes")
         .box(guard, label: "Guard", focal: true)
@@ -61,14 +61,14 @@ export fun serverHttpFigure() > figure\Figure !> any {
 }
 ```
 
-{{if .Full}}- `magus\dir(path)` raises MGS7005 on a directory the graph does not hold, naming
-  the nearest one. `magus\layer(name)` raises MGS7006 on a layer nothing declares.
+{{if .Full}}- `magus\graph().dir(path)` raises MGS7005 on a directory the graph does not hold, naming
+  the nearest one. `magus\graph().layer(name)` raises MGS7006 on a layer nothing declares.
   A typo fails the figure at the line that made it.
 - `.diagram()` lays it out and raises every finding at once;
   `figure\draw(f, theme: figure\Theme.light)` does the same and paints it.
 - Prove a figure draws before you register it: call it from a scratch `main()`
-  inside `try`/`catch` and run `{{cmd "buzz"}} <file>`.{{else}}- `magus\dir(path)`: raises MGS7005 on directory graph does not hold, naming nearest.
-- `magus\layer(name)`: raises MGS7006 on layer nothing declares.
+  inside `try`/`catch` and run `{{cmd "buzz"}} <file>`.{{else}}- `magus\graph().dir(path)`: raises MGS7005 on directory graph does not hold, naming nearest.
+- `magus\graph().layer(name)`: raises MGS7006 on layer nothing declares.
 - Typo fails figure at its line.
 - `.diagram()`: lays out, raises every finding at once.
 - `figure\draw(f, theme: figure\Theme.light)`: same, and paints.
@@ -82,20 +82,20 @@ bottom instead of left to right.{{end}}
 
 {{if .Full}}| call | draws |
 | --- | --- |
-| `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)` | one directory; `symbol:` anchors it at a `magus\refs` result |
+| `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)` | one directory; `symbol:` anchors it at a `magus\graph().refs` result |
 | `.group(dirs, label:, ...)` | every directory in a list of `magus\Dir` as one box |
-| `figure\external(name, sub:, tag:, link:, look:)` | an actor: a person, a vendor, a step, a Buzz file, a decision |{{else}}- `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)`: one directory; `symbol:` anchors it at `magus\refs` result
+| `figure\external(name, sub:, tag:, link:, look:)` | an actor: a person, a vendor, a step, a Buzz file, a decision |{{else}}- `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)`: one directory; `symbol:` anchors it at `magus\graph().refs` result
 - `.group(dirs, label:, ...)`: every directory in list of `magus\Dir` as one box
 - `figure\external(name, sub:, tag:, link:, look:)`: actor: person, vendor, step, Buzz file, decision{{end}}
 
 {{if .Full}}Take directories as records, never as path strings:
 
-- `magus\layer("handler").dirs` is every directory a declared layer covers.
-- `magus\dirs("internal/queue/*")` is every directory a glob matches.
+- `magus\graph().layer("handler").dirs` is every directory a declared layer covers.
+- `magus\graph().dirs("internal/queue/*")` is every directory a glob matches.
 - `+` joins two lists. `figure\without(dirs, drop: [...])` leaves some out, and
   raises when one it drops is not there.{{else}}Directories as records, never path strings:
-- `magus\layer("handler").dirs`: every directory declared layer covers.
-- `magus\dirs("internal/queue/*")`: every directory glob matches.
+- `magus\graph().layer("handler").dirs`: every directory declared layer covers.
+- `magus\graph().dirs("internal/queue/*")`: every directory glob matches.
 - `+` joins two lists.
 - `figure\without(dirs, drop: [...])` leaves some out; raises when one it drops is not there.{{end}}
 

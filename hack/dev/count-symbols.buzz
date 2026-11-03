@@ -68,7 +68,7 @@ export fun tally(keys: [str]) > [Row] {
 export fun symbols(project: str) > result\Result::<[Symbol]> {
     try {
         final terms = "kind=symbol project={project}";
-        final probe: magus\QueryResult = magus\query(terms, opts: magus\QueryOptions{ limit = 1, budget = 1 });
+        final probe: magus\QueryResult = magus\graph().query(terms, opts: magus\QueryOptions{ limit = 1, budget = 1 });
         final answer = probe.answer;
         if (answer.verdict == magus\KnowledgeVerdict.unknown or answer.staleIndexes.len() > 0) {
             return result\fail::<[Symbol]>("count-symbols: the code index cannot answer for {project} ({answer.verdict.value}{answer.reason.value}); rebuild it with `magus graph build`, then run this again");
@@ -78,7 +78,7 @@ export fun symbols(project: str) > result\Result::<[Symbol]> {
         }
         // One read of every match: each query call loads the index again, so paging costs a
         // load per page.
-        final all: magus\QueryResult = magus\query(terms, opts: magus\QueryOptions{ limit = probe.matchCount, budget = probe.matchCount });
+        final all: magus\QueryResult = magus\graph().query(terms, opts: magus\QueryOptions{ limit = probe.matchCount, budget = probe.matchCount });
         final matched = mut {<str: bool>};
         foreach (m in all.matches) {
             matched[m.id] = true;

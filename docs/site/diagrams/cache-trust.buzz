@@ -5,7 +5,7 @@ import "magus/figure";
 import "site/diagrams/packages" as _;
 
 export fun cacheTrustFigure() > figure\Figure !> any {
-    final remote = magus\dir("internal/cache");
+    final remote = magus\graph().dir("internal/cache");
     final pr = figure\external("PR run", sub: "no signing key", tag: "pull_request", look: figure\Look.plain);
     final local = figure\external("Local tier", sub: "Actions cache, PR ref", look: figure\Look.store);
     final main = figure\external("Default branch run", sub: "holds the signing key", tag: "push", look: figure\Look.plain);
@@ -35,8 +35,8 @@ export fun cacheTrustFigure() > figure\Figure !> any {
         .legend(figure\Look.store, label: "one pull request only")
         .legend(figure\Look.optional, label: "never replayed")
         .scope(goPackages("internal/cache/**"))
-        .except([magus\dir("internal/cache/reflink")],
+        .except([magus\graph().dir("internal/cache/reflink")],
             why: "copy-on-write file clones for a local restore; no tier, key or signature")
-        .except([magus\dir("internal/cache/remotetest")],
+        .except([magus\graph().dir("internal/cache/remotetest")],
             why: "a test server for the remote protocols, linked only by tests");
 }

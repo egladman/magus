@@ -494,11 +494,10 @@ func guardModelRows(ctx context.Context, rootOverride string) func() []types.Mod
 	})
 }
 
-// guardModelTiers is the lazy reader of the model-tier declaration of the workspace found
-// from rootOverride, nil outside a workspace. It opens the workspace whole, as guardModelRows
-// does, and shares that one load: the guard's own rule load keeps only the magus\guard
-// registrations and what they reach, so it holds neither a magus\job.modelTiers call nor
-// the harness spells whose aliases map each tier to a model.
+// guardModelTiers lazily reads the model tiers of rootOverride's workspace.
+// It opens the workspace whole, as guardModelRows does.
+// The guard's rule load keeps only magus\guard registrations.
+// So it holds no magus\modelTiers call and no harness aliases.
 func guardModelTiers(ctx context.Context, rootOverride string) func() *types.ModelTierSet {
 	if _, err := workspace.FindRoot(rootOverride); err != nil {
 		return nil

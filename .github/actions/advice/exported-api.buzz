@@ -15,7 +15,8 @@
 // this reports who can SEE the thing you changed and lets the author decide the bump.
 //
 // It shares the ranking with the console's Diff app and `magus diff` by construction:
-// all three read magus\diff, so nobody maintains a second opinion about which files matter.
+// all three read magus\change().diff.
+// So nobody maintains a second opinion about which files matter.
 //
 // Reads the `baseline` input.
 import "advice";

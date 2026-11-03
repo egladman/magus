@@ -193,18 +193,13 @@ export fun diffRange(base: str, head: str) > str !> any {
     return merged.stdout.trim();
 }
 
-// reviewOpts says which changeset magus\diff should read, and what to compare it against.
-//
-// ON THE FORGE the checkout is CLEAN: a pull request's changes are commits, so the
-// working-tree default is empty and an advisor reading it reported nothing at all, on every
-// pull request, for as long as exported-api had existed. The range is what it has to read.
-//
-// LOCALLY the working tree is right and the range would be wrong: `magus diff --impact` is
-// run before committing, and the uncommitted edit IS the change its reader is weighing.
-//
-// baseline is the base's `graph export --symbols`, when the workflow built one. Without it
-// every symbol's `change` is empty and `api` is null. minCohort and minShare are the
-// conformance checks' silence gates, passed through as given; "" keeps the defaults.
+// reviewOpts says which changeset magus\change().diff reads, against what.
+// On the forge the checkout is clean, so it reads the commit range.
+// Locally the uncommitted edit is the change, so it reads the working tree.
+// baseline is the base's `graph export --symbols`, when the workflow built one.
+// Without it every symbol's `change` is empty and `api` is null.
+// minCohort and minShare are the conformance checks' silence gates.
+// They pass through as given; "" keeps the defaults.
 export fun reviewOpts(baseline: str, base: str, head: str, local: bool, minCohort: str, minShare: str) > magus\DiffOptions !> any {
     var cohort = 0;
     if (minCohort != "") {
@@ -231,12 +226,13 @@ export fun reviewOpts(baseline: str, base: str, head: str, local: bool, minCohor
 // value rather than diffing again. The action sets none, so on the forge each reader diffs.
 final review_env = "ADVICE_REVIEW";
 
-// review is the change under advice, as magus\diff annotates it: the saved review when the run
-// wrote one, and otherwise computed here from the baseline and conformance gate inputs.
+// review is the change under advice, as magus\change().diff annotates it.
+// It is the saved review when the run wrote one.
+// Otherwise it is computed here from the baseline and conformance gate inputs.
 export fun review(base: str, head: str) > magus\Diff !> any {
     final saved = os\env(review_env) ?? "";
-    if (saved != "") { return magus\diff(opts: magus\DiffOptions{ from = saved }); }
-    return magus\diff(opts: reviewOpts(baseline: input("baseline"), base: base, head: head, local: collecting(),
+    if (saved != "") { return magus\change().diff(opts: magus\DiffOptions{ from = saved }); }
+    return magus\change().diff(opts: reviewOpts(baseline: input("baseline"), base: base, head: head, local: collecting(),
         minCohort: input("conformance-min-cohort"), minShare: input("conformance-min-share")));
 }
 
@@ -477,7 +473,7 @@ test "on the forge the changeset is the RANGE, and locally it is the working tre
     final here = reviewOpts(baseline: "", base: "main", head: "HEAD", local: true, minCohort: "3", minShare: "0.9");
     std\assert(here.rev == "", message: "the uncommitted edit is what a local reader is weighing");
     std\assert(here.baseline == "", message: "no baseline, no bump claimed");
-    std\assert(here.minCohort == 3 and here.minShare == 0.9, message: "the gates reach magus\\diff as given");
+    std\assert(here.minCohort == 3 and here.minShare == 0.9, message: "the gates reach magus\\change().diff as given");
 }
 
 test "withoutFooter ignores a changed timestamp" {

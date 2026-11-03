@@ -6,11 +6,8 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/interp/bindings/ffi"
-	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/workspace"
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
-	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -20,47 +17,20 @@ var skillCatalog = sync.OnceValue(func() *agent.Catalog {
 	return agent.Default(types.KnowledgeSchemaVersion)
 })
 
-// buildSkills binds magus\skills. Hand-bound because the catalog lives in
-// internal/agent, which imports std, so std cannot hold an Impl for it.
-func buildSkills(obs buzz.DirectObserver) vm.Value {
-	return directVal(obs, "magus.skills", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		out, err := magusSkills(ctx, ffi.AnyMap(args, 0))
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.ObjectSlice(out, bindgen.ObjectSkill), nil
-	})
+func init() { //nolint:gochecknoinits // std cannot import internal/agent, which imports std
+	std.SkillCatalog = magusSkills
 }
 
-func magusSkills(ctx context.Context, opts map[string]any) ([]types.Skill, error) {
-	var q agent.SkillQuery
-	for k, v := range opts {
-		s, ok := v.(string)
-		if !ok {
-			return nil, fmt.Errorf("magus.skills: %s must be a string, got %T", k, v)
-		}
-		switch k {
-		case "name":
-			q.Name = s
-		case "form":
-			form, err := agent.ParseForm(s)
-			if err != nil {
-				return nil, fmt.Errorf("magus.skills: %w", err)
-			}
-			q.Form = form
-		default:
-			return nil, fmt.Errorf("magus.skills: unknown option %q (want name, form)", k)
-		}
-	}
+func magusSkills(ctx context.Context, opts types.SkillsOptions) ([]types.Skill, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil, types.DiagnosticErrorf(types.MagusfileOnlyMember,
-			"magus\\skills: no workspace on the context; it reads the workspace's skill directories, so run it from a magusfile target or a `magus buzz` script inside a workspace")
+			"magus\\Workspace.skills: no workspace on the context; it reads the workspace's skill directories, so run it from a magusfile target or a `magus buzz` script inside a workspace")
 	}
 	wired, err := workspace.WiredHarnesses(ws)
 	if err != nil {
-		return nil, fmt.Errorf("magus\\skills: %w", err)
+		return nil, fmt.Errorf("magus\\Workspace.skills: %w", err)
 	}
 	ctx = agent.ContextWithWiredHarnesses(ctx, wired)
-	return skillCatalog().Offered(ctx, ws.Root(), wired, q)
+	return skillCatalog().Offered(ctx, ws.Root(), wired, agent.SkillQuery{Name: opts.Name, Form: opts.Form})
 }

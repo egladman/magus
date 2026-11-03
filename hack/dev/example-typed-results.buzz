@@ -42,7 +42,7 @@ export fun fileLines(paths: [str]) > result\Result::<[str]> {
 // empty list: `unknown` means part of the workspace had no index to search.
 export fun queryLines(terms: str) > result\Result::<[str]> {
     try {
-        final q: magus\QueryResult = magus\query(terms, opts: magus\QueryOptions{ limit = 5 });
+        final q: magus\QueryResult = magus\graph().query(terms, opts: magus\QueryOptions{ limit = 5 });
         final lines = mut ["{q.matchCount} matches ({q.answer.verdict.value})"];
         foreach (m in q.matches) {
             lines.append("  {m.kind} {m.label}");
@@ -56,7 +56,7 @@ export fun queryLines(terms: str) > result\Result::<[str]> {
 // refsLines are where a code symbol is defined and how widely it is used.
 export fun refsLines(symbol: str) > result\Result::<[str]> {
     try {
-        final r: magus\RefsResult = magus\refs(symbol, opts: magus\RefsOptions{ limit = 5 });
+        final r: magus\RefsResult = magus\graph().refs(symbol, opts: magus\RefsOptions{ limit = 5 });
         final lines = mut ["{r.label}: {r.refCount} references in {r.fileCount} files ({r.answer.verdict.value})"];
         foreach (d in r.defs) {
             lines.append("  defined in {d.file}:{d.lines.join(",")}");
@@ -70,7 +70,7 @@ export fun refsLines(symbol: str) > result\Result::<[str]> {
 // jobLines count the job store's rows by state, and the write paths the declared ones hold.
 export fun jobLines() > result\Result::<[str]> {
     try {
-        final list: magus\JobList = magus\job.list();
+        final list: magus\JobList = magus\workspace().jobs();
         final byState = mut {<str: int>};
         final declared = mut [<str>];
         foreach (j in list.jobs) {

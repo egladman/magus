@@ -27,9 +27,9 @@ export fun harnessPyramidFigure() > figure\Figure !> any {
 }
 
 export fun harnessStackFigure() > figure\Figure !> any {
-    final store = magus\dir("internal/job");
-    final guard = magus\dir("internal/guard");
-    final graph = magus\dir("internal/graph/workspacegraph");
+    final store = magus\graph().dir("internal/job");
+    final guard = magus\graph().dir("internal/guard");
+    final graph = magus\graph().dir("internal/graph/workspacegraph");
     final person = figure\external("Person", sub: "forks, reviews");
     final claude = figure\external("Claude Code", sub: "inner harness");
     final codex = figure\external("Codex", sub: "inner harness");

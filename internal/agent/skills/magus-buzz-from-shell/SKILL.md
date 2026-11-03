@@ -107,7 +107,7 @@ assuming a row's call takes the arguments you expect.
 | `git ...` | `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for the rest |
 | `( cd d && tool )` | `proc\exec("tool", args: [...], dir: d)` |
 | `a \| b` across two real tools | `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })` |
-| `magus ... -o json \| jq` | `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records |
+| `magus ... -o json \| jq` | `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records |
 | `{{cmd "run"}} t p` | `ctx.needs(t)` inside a target; `magus\run([...])` in a script |{{else}}Signatures: `{{cmd "describe"}} module <name>`. Check before assuming arguments.
 
 shell: Buzz
@@ -137,7 +137,7 @@ shell: Buzz
 - `git ...`: `vcs\status`, `vcs\ref`, `vcs\commit`, `vcs\history`, `vcs\changedFiles`; `vcs\cmd` for rest
 - `( cd d && tool )`: `proc\exec("tool", args: [...], dir: d)`
 - `a | b` across two real tools: `proc\exec("b", opts: proc\ExecOptions{ stdin = first.stdout })`
-- `magus ... -o json | jq`: `magus\describe.<noun>`, `magus\query`, `magus\refs`: typed records
+- `magus ... -o json | jq`: `magus\describe.<noun>`, `magus\graph().query`, `magus\graph().refs`: typed records
 - `{{cmd "run"}} t p`: `ctx.needs(t)` inside target; `magus\run([...])` in script{{end}}
 
 ## Pairs

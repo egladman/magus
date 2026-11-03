@@ -11,6 +11,7 @@ import (
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -172,15 +173,17 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	magus.MapSet("review", buildReview(ctx, obs))
 	lifecycle := buildLifecycle(ctx, obs)
 	magus.MapSet("lifecycle", lifecycle)
-	magus.MapSet("workspace", buildWorkspace(ctx, obs))
-	jobMap := buildJob(ctx, sess, obs)
-	magus.MapSet("job", jobMap)
+	magus.MapSet("workspaceProvider", buildWorkspaceProvider(ctx, obs))
+	registerModelTiers(ctx, sess, obs, magus)
+	registerModelTierMatrix(ctx, sess, obs, magus)
 	magus.MapSet("service", buildService(obs))
-	magus.MapSet("vcs", buildVCS(obs))
-	magus.MapSet("risk", buildRisk(sess, obs))
-	magus.MapSet("trail", buildTrail(sess, obs))
-	magus.MapSet("skills", buildSkills(obs))
 	guard := buildGuard(ctx, sess, obs)
+	guard.MapSet("shape", directVal(obs, "magus.guard.shape", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		return ffi.StringVal(trail.CommandShape(ffi.String(args, 0))), nil
+	}))
+	guard.MapSet("shapes", directVal(obs, "magus.guard.shapes", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		return ffi.StringSliceVal(trail.CommandShapes(ffi.String(args, 0))), nil
+	}))
 	harness := buildHarness(ctx, obs)
 	magus.MapSet("guard", guard)
 	magus.MapSet("harness", harness)
@@ -249,8 +252,8 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 		guard.MapSet("command", magusfileOnly(obs, `magus\guard.command`))
 		guard.MapSet("write", magusfileOnly(obs, `magus\guard.write`))
 		harness.MapSet("provider", magusfileOnly(obs, `magus\harness.provider`))
-		jobMap.MapSet("modelTiers", magusfileOnly(obs, `magus\job.modelTiers`))
-		jobMap.MapSet("modelTier", magusfileOnly(obs, `magus\job.modelTier`))
+		magus.MapSet("modelTiers", magusfileOnly(obs, `magus\modelTiers`))
+		magus.MapSet("modelTier", magusfileOnly(obs, `magus\modelTier`))
 	}
 	if len(withheld) > 0 {
 		magus = dropMembers(magus, withheld)

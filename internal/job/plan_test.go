@@ -767,9 +767,10 @@ func TestVerifyHoldsTheClaimToTheObservedDiff(t *testing.T) {
 	})
 }
 
-// TestForkMergeHoldsANewRowToTheLimits pins that magus\job.put forks under the same
-// scope, limits and default timeout `magus job fork` applies, and so does a merge that
-// brings an ended row back, while a merge onto a live row stays an update nothing refuses.
+// TestForkMergeHoldsANewRowToTheLimits pins that magus\workspace().putJob forks
+// under the scope, limits and timeout `magus job fork` applies.
+// A merge that brings an ended row back does too.
+// A merge onto a live row stays an update nothing refuses.
 func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	t.Parallel()
 

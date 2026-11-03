@@ -346,7 +346,7 @@ func TestMagusBustCacheReachable(t *testing.T) {
 import "magus";
 import "fs";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    magus\bustCache();
+    magus\workspace().bustCache();
     fs\writeFile("ran", "ok");
 }
 `)

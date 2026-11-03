@@ -449,8 +449,8 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	assert.Equal(t, "on-disk", report.Jobs[0].ID, "nothing was written through the snapshot")
 }
 
-// magus\job.list measures overlaps through the function `magus ls jobs` calls, so the
-// typed call's footprints are exactly job.MeasureOverlaps over the same rows.
+// magus\workspace().jobs() measures overlaps as `magus ls jobs` does.
+// So its footprints are exactly job.MeasureOverlaps over the same rows.
 func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
@@ -530,7 +530,7 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 	assert.ErrorContains(t, err, "cache directory")
 }
 
-// decodedPut decodes a magus\job.put opts map the way the binding does.
+// decodedPut decodes a magus\workspace().putJob opts map as the binding does.
 func decodedPut(t *testing.T, opts map[string]any) types.JobPut {
 	t.Helper()
 	put, err := job.DecodePut(opts)
@@ -538,8 +538,8 @@ func decodedPut(t *testing.T, opts map[string]any) types.JobPut {
 	return put
 }
 
-// TestPutLedgerMergesRatherThanReplaces proves a put decoded from magus\job.put's map
-// merges: a later put naming only `state` must not erase the goal an earlier put declared.
+// TestPutLedgerMergesRatherThanReplaces proves a decoded putJob map merges.
+// A later put naming only `state` must not erase an earlier put's goal.
 // Not parallel, and the env is why: see TestLedgerIsServedInProcess above. A root of
 // "" hashes to the same state directory in every checkout, so these rows would land in
 // the developer's own store and the clear below would drop what it found there.
@@ -615,10 +615,10 @@ func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	assert.Equal(t, "fleet/bound", store.Actor().Lease)
 }
 
-// TestLedgerBindingAndStoreAgree pins that magus\job.put and the store are two doors
-// onto the same file: a row put through the binding is visible through the store,
-// and internal/job.Store's own path derivation (CacheDir/ledger/leases.json)
-// is what makes that true without either side naming the other.
+// TestLedgerBindingAndStoreAgree pins that putJob and the store share one file.
+// A row put through magus\workspace().putJob shows in the store.
+// internal/job.Store's own path derivation makes that true.
+// Neither side names the other.
 func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	stateBase := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateBase)
@@ -795,7 +795,7 @@ func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
 		"layer":          func() error { _, err := MagusLayer(ctx, "x"); return err },
 		"neighborhood":   func() error { _, err := MagusNeighborhood(ctx, "x", types.KnowledgeNeighborhoodOptions{}); return err },
 		"output":         func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
-		"vcs.checkpoint": func() error { _, err := MagusVCSCheckpoint(ctx); return err },
+		"change":         func() error { _, err := MagusChangeOpen(ctx, "", types.ChangeOptions{}); return err },
 	}
 	for member, call := range calls {
 		assert.ErrorIsf(t, call(), types.MagusfileOnlyMember, "magus\\%s", member)
@@ -877,18 +877,18 @@ type checkoutWorkspace struct {
 func (checkoutWorkspace) Root() string                 { return "." }
 func (checkoutWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
 
-// The member and `magus vcs checkpoint` resolve the same tree the same way, so the two
-// cannot describe it differently.
-func TestVCSCheckpointAgreesWithTheCLI(t *testing.T) {
+// A Change records the tree the way `magus vcs checkpoint` resolves it, so
+// the two cannot describe it differently.
+func TestChangeRecordsTheCheckpointTheCLIPrints(t *testing.T) {
 	t.Parallel()
 	ctx := types.WithWorkspace(t.Context(), checkoutWorkspace{})
 
-	got, gotErr := MagusVCSCheckpoint(ctx)
+	c, gotErr := MagusChangeOpen(ctx, "", types.ChangeOptions{})
 
 	res, err := vcs.Resolve(ctx, ".", "", types.VCSOptions{})
 	require.NoError(t, err)
 	want, wantErr := vcs.Checkpoint(ctx, ".", res, false)
-	assert.Equal(t, want, got)
+	assert.Equal(t, want, c.At)
 	assert.Equal(t, wantErr, gotErr)
 }
 
@@ -925,9 +925,9 @@ func withJobGrader(t *testing.T, g job.CheckGrader) {
 	t.Cleanup(func() { job.SetCheckGrader(previous) })
 }
 
-// magus\job.put forks by merge, and the multi-agent skill sends agents through it, so it is
-// held to the guard's verdict on the check the way `magus job fork` is: the grader the
-// composition root installed refuses a denied check, with nothing written.
+// magus\workspace().putJob forks by merge, and the multi-agent skill uses it.
+// So it is held to the guard's verdict on the check, as `magus job fork` is.
+// The installed grader refuses a denied check, with nothing written.
 func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	testkit.Isolate(t)
 	var roots []string
@@ -1025,29 +1025,3 @@ func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 	assert.Equal(t, types.JobModelTier{Name: "principal", Rank: 2, Model: "opus", Skills: tier.Skills, Source: tier.Source, Site: tier.Site}, tier)
 }
 
-// RiskOptionsSuite pins how magus\risk.assess reads a RiskOptions object, which always
-// carries every field with its default.
-type RiskOptionsSuite struct {
-	suite.Suite
-}
-
-func TestRiskOptionsSuite(t *testing.T) {
-	suite.Run(t, new(RiskOptionsSuite))
-}
-
-func (s *RiskOptionsSuite) TestEmptyPathsKeepTheVCSDiff() {
-	o, err := riskOptions(map[string]any{"base": "abc123", "paths": []any{}, "checkout": ""})
-	s.Require().NoError(err)
-	s.Equal(types.RiskOptions{Base: "abc123"}, o)
-}
-
-func (s *RiskOptionsSuite) TestNamedPathsReplaceTheDiff() {
-	o, err := riskOptions(map[string]any{"base": "", "paths": []any{"notes/v1.md"}, "checkout": "/other"})
-	s.Require().NoError(err)
-	s.Equal(types.RiskOptions{Paths: []string{"notes/v1.md"}, Checkout: "/other"}, o)
-}
-
-func (s *RiskOptionsSuite) TestAnUnknownOptionRaises() {
-	_, err := riskOptions(map[string]any{"bse": "abc123"})
-	s.Require().ErrorContains(err, `unknown option "bse"`)
-}

@@ -38,8 +38,8 @@ that skill writes to and reads from.
 
 | step                      | what you run                                              |
 | ------------------------- | --------------------------------------------------------- |
-| Record the working state  | `magus vcs checkpoint`, `client` (`magus\vcs.checkpoint`) |
-| Declare the work          | `magus job fork`, `client` (`magus\job.put`)              |
+| Record the working state  | `magus vcs checkpoint`, `client` (`magus\change().at`) |
+| Declare the work          | `magus job fork`, `client` (`magus\workspace().putJob`)              |
 | Hand out the jobs         | the host's own spawn, recorded but never judged           |
 | Give the holder its terms | `magus describe job <job>`                                |
 | Take the lease            | `magus job exec <job>`                                    |
@@ -95,7 +95,7 @@ The command takes no arguments: it reports the whole workspace's working state.
 A path argument is refused rather than ignored, because
 `magus vcs checkpoint <path>` would read as a path-scoped digest, which is a
 different and much narrower fact. Agents connected over
-[MCP](../mcp.md) call `client` (`magus\vcs.checkpoint`), which takes no parameters and
+[MCP](../mcp.md) call `client` (`magus\change().at`), which takes no parameters and
 returns the same record. Full flags: [`magus vcs`](../../../reference/manpage/magus-vcs.md).
 
 ## Declare the work
@@ -199,7 +199,7 @@ the orchestrator or a person at a terminal, writes anything.
 
 **A child is forked with `--parent <your job>`.** The guard lets a leased
 session fork a NEW row that names its own job as `parent`, as flags, as a
-`--stdin` record in a quoted heredoc, or as `client` calling `magus\job.put` with
+`--stdin` record in a quoted heredoc, or as `client` calling `magus\workspace().putJob` with
 `parent`, and leaves its boundary to the store: a child claiming more than its
 parent is refused there, once. The store grades a child only when it writes as
 that lease, which it reads from the checkout's binding; a worker the guard
@@ -226,8 +226,8 @@ file and the job that holds the checkout, and the fix it names is a worktree
 rather than a narrower boundary. Half-saved, one of those files stops the workspace
 loading for EVERY worker in the checkout at once: they lose `magus run`, `magus
 ls` and their own tests, over an edit none of them made and none of them can
-see. The same three doors are covered, since `magus job fork`, `client` (`magus\job.put`) and
-`magus\job.put` share one declaration path.
+see. The same three doors are covered, since `magus job fork`, `client` (`magus\workspace().putJob`) and
+`magus\workspace().putJob` share one declaration path.
 
 Nothing else about a shared checkout is refused. Two sets of write paths that
 merely overlap are the orchestrator's call (it may have sequenced them
@@ -525,7 +525,7 @@ A small change to a path a live job owns does not need a new worker or the
 job ended. Enter the path first, then write it:
 
 ```sh
-# client tool: magus\job.put("<job>", opts: {"enter": "<path>"})
+# client tool: magus\workspace().putJob("<job>", opts: {"enter": "<path>"})
 echo '{"schema_version": 11, "id": "<job>", "enter": "<path>"}' | magus job fork --stdin
 ```
 
@@ -691,7 +691,7 @@ you is the next section's subject.
 A job's acceptance criteria are prose a person grades. A **goal** is the part
 magus grades itself, and `magus job wait` does not record `pass` until every one
 verifies. Goals are data: they live in the job record's `goals`, which
-`magus job fork --stdin`, the `client` tool's `magus\job.put` and a magusfile's `magus\job.put`
+`magus job fork --stdin`, the `client` tool's `magus\workspace().putJob` and a magusfile's `magus\workspace().putJob`
 all accept. There are no flags for them. `fork` refuses a job that writes and
 declares neither a `check` nor a goal, since `wait` would have nothing to grade
 it by; a `read_only` job is exempt.
@@ -857,7 +857,7 @@ import "std";
 
 fun declare() > void {
   try {
-    magus\job.put("api/migrate", {
+    magus\workspace().putJob("api/migrate", {
       "criteria": "move the accounts table to the new schema",
       "write_paths": ["db", "api"],
       "goals": [

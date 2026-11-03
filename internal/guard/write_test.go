@@ -761,7 +761,7 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 
 		require.Equal(t, writeGrade{Decision: "advise", Context: got.Context, Why: got.Why, Kind: advisoryUnleasedWrite}, got,
 			"the spawn chain is a claim, so it may teach and may never block; a standing fact, so it is held to one firing per session")
-		assert.Contains(t, got.Context, `magus\job.put`, "the advisory must name the tool that declares the plan")
+		assert.Contains(t, got.Context, `magus\workspace().putJob`, "the advisory must name the tool that declares the plan")
 		assert.Contains(t, got.Context, envHookLease, "and the channel a worker enrolls over")
 	})
 
@@ -1131,7 +1131,7 @@ func TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath(t *testing.T) {
 
 	denied := gradeLeasedWrite(ctx, Dependencies{}, "orch", target)
 	require.Equal(t, "deny", denied.Decision)
-	assert.Contains(t, denied.Reason, `magus\job.put("orch/worker", opts: {"enter": "internal/ledger/store.go"})`)
+	assert.Contains(t, denied.Reason, `magus\workspace().putJob("orch/worker", opts: {"enter": "internal/ledger/store.go"})`)
 
 	_, err := store.Enter(ctx, "orch/worker", "internal/ledger/store.go")
 	require.NoError(t, err)

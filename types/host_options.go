@@ -48,7 +48,8 @@ type MagusCommandOptions struct {
 	AllowFailure bool
 }
 
-// MagusDiffOptions are magus\diff's options. types.DiffOptions is the in-process
+// MagusDiffOptions are magus\change().diff's options.
+// types.DiffOptions is the in-process
 // review's, which takes a parsed baseline; this one names files and a range for the
 // nested `magus diff` to read.
 type MagusDiffOptions struct {
@@ -75,7 +76,7 @@ type RaiseOptions struct {
 	URL string
 }
 
-// SkillsOptions are magus\skills' options.
+// SkillsOptions are magus\workspace().skills' options.
 type SkillsOptions struct {
 	// Name selects one skill; empty lists every one.
 	Name string

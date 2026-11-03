@@ -104,6 +104,6 @@ func TestMagusSymbolIndexDigest(t *testing.T) {
 
 	t.Run("outside a workspace raises", func(t *testing.T) {
 		_, err := MagusSymbolIndexDigest(t.Context())
-		require.ErrorContains(t, err, "magus\\symbolIndexDigest: no workspace on the context")
+		require.ErrorContains(t, err, "magus\\graph: no workspace on the context")
 	})
 }

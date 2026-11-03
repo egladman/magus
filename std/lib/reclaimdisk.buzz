@@ -479,7 +479,7 @@ fun processCwds(deadline: double) > [Cwd] !> any { //nolint:no-throw // a passed
 }
 
 fun jobLeases() > [Lease] !> any { //nolint:no-throw // a passed deadline raises through it
-    final list: magus\JobList = magus\job.list();
+    final list: magus\JobList = magus\workspace().jobs();
     return list.jobs.map(fun (i: int, j: magus\Job) > Lease => Lease{ id = j.id, state = j.state.value, checkoutRoot = j.checkoutRoot });
 }
 
@@ -644,7 +644,7 @@ export fun trimLine(t: CacheTrim, fence: double) > str? {
 /// trimDeclared trims every cache a spell gives a budget and returns each
 /// result. A cache that fails names itself, and the others still run.
 export fun trimDeclared(fence: double, deadline: double) > [CacheTrim] !> any { //nolint:no-throw // a passed deadline raises through it
-    final plan: magus\DiskReclaim = magus\diskReclaim();
+    final plan: magus\DiskReclaim = magus\workspace().diskReclaim();
     final done = mut [<CacheTrim>];
     foreach (c in plan.caches) {
         done.append(trimCache("the {c.spell} spell's {c.env}", dir: c.dir, trimMb: c.trimMb, fence: fence, deadline: deadline));
@@ -753,7 +753,7 @@ fun runTick(cwd: str, deadline: double, force: bool) > TickReport !> any { //nol
         did.append("stopped before the worktrees: {e}");
     }
     final after = fs\diskUsage(cwd);
-    final plan: magus\DiskReclaim = magus\diskReclaim();
+    final plan: magus\DiskReclaim = magus\workspace().diskReclaim();
     final waiting = if (kept == "") "" else waitingLine(plan.listCommand);
     final said = diskwatch\personLine(diskwatch\Report{ freeBytes = after.freeBytes, totalBytes = after.totalBytes, path = after.path, did = did, kept = kept, waiting = waiting });
     diskwatch\append(store, s: diskwatch\DiskSample{ at = os\time(), path = after.path, totalBytes = after.totalBytes, freeBytes = after.freeBytes, action = "reclaimed", detail = said });
@@ -761,7 +761,7 @@ fun runTick(cwd: str, deadline: double, force: bool) > TickReport !> any { //nol
         diskwatch\append(store, s: diskwatch\DiskSample{ at = os\time(), path = after.path, action = "said", detail = "nothing freed" });
         return TickReport{ ran = true };
     }
-    magus\fileDiskAttention(said);
+    magus\workspace().fileDiskAttention(said);
     return TickReport{ ran = true, line = said };
 }
 

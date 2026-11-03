@@ -41,7 +41,7 @@ brief. The output is a decision aid, not a chronological commit dump.{{else}}Out
    through `{{cmd "buzz"}}`:{{else}}5. `{{tool "client"}}` (`{{buzz "trend"}}`) affinity, ownership, trend: only context (hidden coupling, ownership risk, rising activity). No CLI verb; without MCP: one lens via `{{cmd "buzz"}}`:{{end}}
 
    ```sh
-   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\trend())); }'
+   magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\history().trend())); }'
    ```
 
 {{if .Full}}## Write the brief{{else}}## Brief{{end}}

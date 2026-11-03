@@ -38,14 +38,15 @@ export fun reads() > [str] {
         "libs/xdg/**/*.go", "libs/cmdline/**/*.go"];
 }
 
-// check fails every departure from an established precedent in FAMILIES that SANCTIONED does
-// not name, mined from the live symbol index by magus\precedents. A missing or stale index is
-// a finding, never a pass: a rule reading nothing finds nothing.
+// check fails every departure from an established precedent in FAMILIES.
+// SANCTIONED departures pass.
+// magus\graph().precedents() mines them from the live symbol index.
+// A missing or stale index is a finding: a rule reading nothing finds nothing.
 export fun check(files: [Path]) > [Finding] !> any {
-    return judge(magus\precedents(), sanctioned: SANCTIONED);
+    return judge(magus\graph().precedents(), sanctioned: SANCTIONED);
 }
 
-// judge is check over a magus\precedents report.
+// judge is check over a magus\graph().precedents() report.
 export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any {
     final found = mut [<Finding>];
     final indexes: [any] = report["indexes"] ?? [<any>];
@@ -87,7 +88,7 @@ export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any 
             }
             if (held.len() == 0) {
                 found.append(Finding{ path = ".", message = "the index establishes no {lang} {family} precedent to hold",
-                    fix = "The miner or the index changed under this rule; read `magus\\precedents()` before dropping the family." });
+                    fix = "The miner or the index changed under this rule; read `magus\\graph().precedents()` before dropping the family." });
                 continue;
             }
             foreach (row in held) {

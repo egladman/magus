@@ -21,7 +21,7 @@ export fun reads() > [str] {
 // check fails each conformance ceiling the change crossed and an index the lens could not
 // vouch for, and prints the advice metrics' violations.
 export fun check(files: [Path]) > [Finding] !> any {
-    final report = magus\conformance(ceiling\POLICY.checks, base: vcs\base());
+    final report = magus\change(vcs\base()).conformance(ceiling\POLICY.checks);
     foreach (line in advice(report)) {
         std\print(line);
     }
@@ -37,7 +37,7 @@ export fun indexFix(op: str, detail: str) > str {
     return "Rebuild it with `magus graph build`, then rerun lint.";
 }
 
-// judge is check's verdict over a magus\conformance report asked for a base.
+// judge is check's verdict over a magus\change(base).conformance report.
 export fun judge(report: {str: any}) > [Finding] !> any {
     final found = mut [<Finding>];
     final indexes: [any] = report["indexes"] ?? [<any>];
@@ -54,7 +54,7 @@ export fun judge(report: {str: any}) > [Finding] !> any {
     final answer: {str: any} = report["answer"] ?? {<str: any>};
     if (answer["verdict"] == "unknown") {
         final reason: str = answer["reason"] ?? "no reason given";
-        found.append(Finding{ path = ".", message = "magus\\conformance answered unknown ({reason}), so nothing was judged",
+        found.append(Finding{ path = ".", message = "magus\\change().conformance answered unknown ({reason}), so nothing was judged",
             fix = "Rebuild the index with `magus graph build`, then rerun lint." });
     }
     if (found.len() > 0) {

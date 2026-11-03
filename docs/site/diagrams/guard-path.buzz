@@ -5,11 +5,11 @@ import "magus/figure";
 import "site/diagrams/packages" as _;
 
 export fun guardPathFigure() > figure\Figure !> any {
-    final shell = magus\dir("cmd/magus");
-    final guard = magus\dir("internal/guard");
-    final grades = magus\dir("internal/guard/builtin");
-    final jobs = magus\dir("internal/job");
-    final hint = magus\dir("internal/hint");
+    final shell = magus\graph().dir("cmd/magus");
+    final guard = magus\graph().dir("internal/guard");
+    final grades = magus\graph().dir("internal/guard/builtin");
+    final jobs = magus\graph().dir("internal/job");
+    final hint = magus\graph().dir("internal/hint");
     final hook = figure\external("Host hook", sub: "PreToolUse, stdin JSON", tag: "settings");
     final policy = figure\external("Workspace rules", sub: "magus\\guard.command, can only add", look: figure\Look.input);
     final verdict = figure\external("Verdict", sub: "deny, advise or pass", look: figure\Look.focal);
@@ -52,7 +52,7 @@ export fun guardPathFigure() > figure\Figure !> any {
         .scope(goPackages("internal/guard/**"))
         .scope(goPackages("internal/job/**"))
         .scope(goPackages("internal/hint/**"))
-        .except([magus\dir("cmd/magus/gen")],
+        .except([magus\graph().dir("cmd/magus/gen")],
             why: "the CLI's generated config flags; the hook event arrives on stdin")
         .except(cmdTools(), why: "docs generators, codegen and the browser playground; none reads a hook event");
 }

@@ -46,7 +46,7 @@ func TestAMadeUpCheckpointIsRefusedAtForkAndAtApply(t *testing.T) {
 	s := NewStore(tempLocation(t, root))
 
 	_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(madeUpRevision), config.Jobs{}, nil)
-	require.Error(t, err, "magus\\job.put stored a revision the repository does not hold")
+	require.Error(t, err, "magus\\workspace().putJob stored a revision the repository does not hold")
 	assert.Contains(t, err.Error(), madeUpRevision)
 	assert.Contains(t, err.Error(), "`magus vcs checkpoint -o name`")
 

@@ -45,8 +45,8 @@ export object Mandate {
     rows: [str] = [],
 }
 
-// Row is what the rules read of one job store row, copied out of magus\job.list so a test can
-// build one.
+// Row is what the rules read of one job store row.
+// It is copied out of magus\workspace().jobs() so a test can build one.
 export object Row {
     id: str,
     state: magus\JobState,
@@ -82,7 +82,7 @@ export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > RiskReport !> 
     try {
         report = measure(row!);
     } catch (e: any) {
-        return Assessed{ tier = "full", evidence = ["{id}: full (magus\\risk.assess raised: {e})"] };
+        return Assessed{ tier = "full", evidence = ["{id}: full (magus\\change().tier raised: {e})"] };
     }
     final lines = mut [<str>];
     foreach (e in report.evidence) {
@@ -93,7 +93,7 @@ export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > RiskReport !> 
 
 // measured is assess's measure outside a test: the ci gate's tier for the job's change.
 export fun measured(row: Row) > RiskReport !> any {
-    return magus\risk.assess("ci", opts: RiskOptions{ base = row.checkpoint, checkout = row.checkoutRoot });
+    return magus\change().tier("ci", opts: RiskOptions{ base = row.checkpoint, checkout = row.checkoutRoot });
 }
 
 // evidenceLine renders e as `magus affected ci` prints it: `<path>: <tier> (<class>: <why>)`.
@@ -560,7 +560,7 @@ export object Queue {
     jobs: [Row],
     // blocked are the rows the store reports waiting on another.
     blocked: [str] = [],
-    // unmerged is magus\job.unmerged's report on the root's branch.
+    // unmerged is magus\workspace().unmerged() on the root's branch.
     unmerged: JobUnmergedReport = JobUnmergedReport{},
 }
 
@@ -657,7 +657,7 @@ fun idleStopReason(ready: [str], unmerged: [str], stopped: [str]) > str {
 // it. With no mandate in force it refuses once per stop, so a person present can end a turn.
 // Under a mandate a refusal naming the same rows loopLimit stops running lets the turn end and
 // calls file with the rows, for the person. Past the mandate's end the turn ends.
-// What magus\job.unmerged reports refuses the same way as a waiting row.
+// What magus\workspace().unmerged() reports refuses as a waiting row does.
 // A running row whose holder stopped wakes nobody.
 // With nothing else waiting it refuses once.
 export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: fun (key: str) > int, file: fun (rows: [str]) > void) > GuardVerdict {
@@ -800,7 +800,7 @@ test "a job's tier is measured in its checkout from its checkpoint, and anything
     final asked = mut [<str>];
     final mechanical = fun (row: Row) > RiskReport !> any {
         asked.append("{row.checkoutRoot}@{row.checkpoint}");
-        return RiskReport{ tier = magus\RiskTier.mechanical, evidence = [RiskEvidence{ path = "x.go", tier = magus\RiskTier.mechanical, class = "comment", why = "comments only" }] };
+        return RiskReport{ tier = magus\Tier.mechanical, evidence = [RiskEvidence{ path = "x.go", tier = magus\Tier.mechanical, class = "comment", why = "comments only" }] };
     };
     final got = assess("late", jobs: measured, measure: mechanical);
     std\assert(got.tier == "mechanical" and asked.join(",") == "/w/late@abc", message: "measured in the job's checkout");

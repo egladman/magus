@@ -12,11 +12,11 @@ func TestTrailNamespaceShapesACommand(t *testing.T) {
 import "magus";
 
 export fun shape() > str {
-    return magus\trail.shape("grep -rn foo src");
+    return magus\guard.shape("grep -rn foo src");
 }
 
 export fun shapes() > int {
-    return magus\trail.shapes("cd x && grep -rn foo src | head -5").len();
+    return magus\guard.shapes("cd x && grep -rn foo src | head -5").len();
 }
 `)
 	got, err := call("shape")

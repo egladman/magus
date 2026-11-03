@@ -4,13 +4,13 @@ import "magus";
 import "magus/figure";
 
 export fun serverShareFigure() > figure\Figure !> any {
-    final server = magus\dir("internal/server");
-    final lan = magus\dir("internal/share");
+    final server = magus\graph().dir("internal/server");
+    final lan = magus\graph().dir("internal/share");
     // Route by route, not one read-only box: what a share link withholds is the message.
     // internal/server's shareGuarded map is the split drawn here.
-    final served = magus\dir("internal/handler/viewer");
-    final connectReads = magus\dir("internal/handler/status");
-    final withheld = magus\dir("internal/handler/graph");
+    final served = magus\graph().dir("internal/handler/viewer");
+    final connectReads = magus\graph().dir("internal/handler/status");
+    final withheld = magus\graph().dir("internal/handler/graph");
     final dash = figure\external("Console", sub: "dashboard", tag: "pwa", look: figure\Look.plain);
     final phone = figure\external("Phone on the LAN", sub: "same-origin viewer", tag: "client");
     return figure\of("server-share",
@@ -40,13 +40,13 @@ export fun serverShareFigure() > figure\Figure !> any {
         .legend(figure\Look.store, label: "served on a share")
         .legend(figure\Look.optional, label: "loopback only")
         .scope([lan])
-        .scope(magus\layer("handler").dirs)
-        .except([magus\dir("internal/handler/activity"), magus\dir("internal/handler/historymetrics"), magus\dir("internal/handler/metrics")],
+        .scope(magus\graph().layer("handler").dirs)
+        .except([magus\graph().dir("internal/handler/activity"), magus\graph().dir("internal/handler/historymetrics"), magus\graph().dir("internal/handler/metrics")],
             why: "shared read services, folded into the two shared boxes")
-        .except([magus\dir("internal/handler/diff"), magus\dir("internal/handler/job"), magus\dir("internal/handler/mcp"), magus\dir("internal/handler/plan")],
+        .except([magus\graph().dir("internal/handler/diff"), magus\graph().dir("internal/handler/job"), magus\graph().dir("internal/handler/mcp"), magus\graph().dir("internal/handler/plan")],
             why: "loopback only, named in the never-on-a-share box")
-        .except([magus\dir("internal/handler/attention"), magus\dir("internal/handler/diagram"), magus\dir("internal/handler/notes"), magus\dir("internal/handler/token"), magus\dir("internal/handler/tool")],
+        .except([magus\graph().dir("internal/handler/attention"), magus\graph().dir("internal/handler/diagram"), magus\graph().dir("internal/handler/notes"), magus\graph().dir("internal/handler/token"), magus\graph().dir("internal/handler/tool")],
             why: "loopback only: a person's blocks, the figures, private notes, token management and a service that execs tools")
-        .except([magus\dir("internal/handler/trailrpc")],
+        .except([magus\graph().dir("internal/handler/trailrpc")],
             why: "the audit interceptor around Connect services, not a route");
 }

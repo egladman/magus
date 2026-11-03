@@ -6,7 +6,7 @@ package types
 // lifecycle (state running) advances the state without erasing what an earlier put
 // declared.
 //
-// The json tags are the keys magus\job.put takes in its opts map.
+// The json tags are the keys magus\workspace().putJob takes in its opts map.
 type JobPut struct {
 	Parent     *string `json:"parent,omitempty"`
 	Criteria   *string `json:"criteria,omitempty"`

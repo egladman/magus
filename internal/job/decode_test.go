@@ -392,8 +392,9 @@ func TestDecodeDeclarationCarriesBreaksAndRefusesABlankEntry(t *testing.T) {
 }
 
 // The two write doors accept the same CURRENT fields or a row declared on one is not the
-// row the other would have recorded. DecodePut is magus\job.put's decoder and
-// types.Declaration is the CLI's. types.Declaration alone still carries the pre-rename
+// row the other would have recorded.
+// DecodePut decodes magus\workspace().putJob, and types.Declaration the CLI's.
+// types.Declaration alone still carries the pre-rename
 // spellings (owned_paths/forbidden_paths/focus/tier; see types.Declaration.FoldLegacyNames):
 // that compat is its own and was never mirrored into DecodePut, so it is excluded from
 // this comparison rather than asserted as shared vocabulary.
@@ -450,7 +451,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			}}
 		}
 		_, err = DecodePut(map[string]any{field: value})
-		require.NoError(t, err, "magus\\job.put rejects %q, which `magus job fork` accepts", field)
+		require.NoError(t, err, "magus\\workspace().putJob rejects %q, which `magus job fork` accepts", field)
 	}
 	var current []string
 	for _, field := range jsonFields(types.Declaration{}) {

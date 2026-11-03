@@ -55,7 +55,7 @@ func TestOptionStructArgDecodesTheRecord(t *testing.T) {
 	got, err := emitBuzz(m, "bindgen")
 	require.NoError(t, err)
 	src := string(got)
-	assert.Contains(t, src, `x, err := ffi.Object("magus\\query", "opts", bzArgs, 1, decode.DecodeKnowledgeQueryOptions)`)
+	assert.Contains(t, src, `x, err := ffi.Object("magus\\graph().query", "opts", bzArgs, 1, decode.DecodeKnowledgeQueryOptions)`)
 	assert.Contains(t, src, `if ffi.Present(bzArgs, 1) {`)
 }
 

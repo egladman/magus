@@ -1905,11 +1905,10 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 });
 `
 
-// The grade follows the workspace the store was opened for, not the process's working
-// directory: a daemon serving magus\job.put runs from somewhere else, and a command graded
-// there would be judged for the wrong checkout. The rule answers differently from the
-// "elsewhere" directory, so a grade that took the process cwd for the call's directory
-// would deny the check.
+// The grade follows the workspace the store was opened for, not the cwd.
+// A daemon serving magus\workspace().putJob runs from somewhere else.
+// The rule answers differently from the "elsewhere" directory.
+// So a grade that took the process cwd would deny the check.
 func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
@@ -1959,9 +1958,9 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 });
 `
 
-// A grader outlives one command in a daemon serving magus\job.put, so a rule edited after
-// its first grade must apply to the next. The edit tightens the rules: an edit that only
-// relaxed them would be held back by the approved sources and prove nothing.
+// A grader outlives one command in a daemon serving magus\workspace().putJob.
+// So a rule edited after its first grade must apply to the next.
+// The edit tightens the rules: a relaxing edit is held back and proves nothing.
 func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
@@ -2087,9 +2086,10 @@ func installCheckGrader(t *testing.T, g job.CheckGrader) {
 	t.Cleanup(func() { job.SetCheckGrader(previous) })
 }
 
-// One grader judges every fork: runCLI installs it, and the Store `magus job fork` opens
-// names none of its own, as the Stores magus\job.put opens over MCP and in the daemon do
-// (std's TestMagusPutJobGradesTheCheckLikeFork).
+// One grader judges every fork: runCLI installs it.
+// The Store `magus job fork` opens names none of its own.
+// Nor do the Stores magus\workspace().putJob opens over MCP and in the daemon.
+// std's TestMagusPutJobGradesTheCheckLikeFork pins those.
 func TestJobForkGradesWithTheInstalledGrader(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)

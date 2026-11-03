@@ -3,7 +3,7 @@
 // Traces one event back through the audit records into one timeline. Each line
 // cites its record and the command that reopens it. A link no record holds
 // prints as `not recorded: <what>`, itself a finding.
-// It reads the trail file because magus\trail.read drops the request ref.
+// It reads the trail file because magus\session().trail drops the request ref.
 namespace trace;
 
 import "encoding/json";
@@ -770,7 +770,7 @@ fun parseArgs(args: [str]) > Args !> any {
 
 fun jobRows() > [JobFacts] !> any {
     final rows = mut [<JobFacts>];
-    foreach (j in magus\job.list().jobs) {
+    foreach (j in magus\workspace().jobs().jobs) {
         rows.append(facts(j));
     }
     return rows;

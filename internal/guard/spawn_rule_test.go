@@ -826,7 +826,7 @@ func TestSubagentStopRecordsOnlyReportedUsage(t *testing.T) {
 }
 
 // The rule reads the same job rows the guard graded the call against, through the
-// snapshot magus\job.list answers from.
+// snapshot magus\workspace().jobs answers from.
 func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
 	row := types.Job{ID: "guard-facts", Criteria: "the seam", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
@@ -1346,7 +1346,7 @@ func TestExecBindsTheCallersIdentity(t *testing.T) {
 	Judge(ctx, Dependencies{}, Request{Input: "magus job exec session-job", Host: "codex", Session: "s1"})
 	Judge(ctx, Dependencies{}, Request{Input: "magus --root . job exec agent-job", Host: "claude-code", Session: "s2", Agent: "a1"})
 	tool := hookJSON(t, map[string]any{"session_id": "s3", "hook_event_name": "PreToolUse", "tool_name": "mcp__magus__client",
-		"tool_input": map[string]any{"script": `import "magus"; magus\job.register("tool-job");`}})
+		"tool_input": map[string]any{"script": `import "magus"; magus\job("tool-job").register();`}})
 	Judge(ctx, Dependencies{}, Request{Input: tool, Host: "claude-code"})
 
 	got := map[string]string{}

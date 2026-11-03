@@ -109,7 +109,7 @@ final claudeID = magus\harness.provider(claude);
 _ = magus\harness.provider(claudeMod);
 final opencodeID = magus\harness.provider(opencode);
 
-magus\job.modelTiers(modeltiers\ModelTier, default: modeltiers\ModelTier.economy,
+magus\modelTiers(modeltiers\ModelTier, default: modeltiers\ModelTier.economy,
     hosts: {
         cursorID: tierhost\cursor,
         codexID: tierhost\codex,
@@ -1084,7 +1084,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // this one: being skip_cache, it runs before any replay of that reader.
 export fun symbol_digest_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["gen/symbol-index.json"]);
-    final d = magus\symbolIndexDigest();
+    final d = magus\graph();
     final gaps: mut [str] = mut [<str>];
     foreach (g in d.gaps) { gaps.append(g.project.path); }
     final record: {str: any} = {"digest": d.digest, "indexed": d.indexed, "projects": d.projects, "gaps": gaps};
@@ -1194,10 +1194,10 @@ export fun spell_lock(ctx: magus\Context, args: [str]) > void !> any {
 
 // Logs counts from the history metrics (hotspots, ownership, affinity, volatility).
 export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
-    final hot = magus\hotspots();
-    final own = magus\ownership();
-    final aff = magus\affinity();
-    final vol = magus\volatility();
+    final hot = magus\history().hotspots();
+    final own = magus\history().ownership();
+    final aff = magus\history().affinity();
+    final vol = magus\workspace().volatility();
     magus\log.info("hotspots: {hot.files.len()} file(s) ranked by churn against complexity");
     magus\log.info("ownership: {own.projects.len()} project(s) attributed");
     magus\log.info("affinity: {aff.pairs.len()} coupled project pair(s)");
@@ -2447,7 +2447,7 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
 // Measures the change's base for the conformance ceiling rule, which only reads the measure.
 // The user cache keeps one per base commit and configuration, so this replays nothing itself.
 export fun conformance_base(ctx: magus\Context, args: [str]) > void !> any {
-    final commit = magus\conformanceBase(vcs\base());
+    final commit = magus\change(vcs\base()).mergeBase();
     magus\log.info("conformance base measured at {commit}");
 }
 
@@ -2530,11 +2530,10 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "proto/**/*.yaml",
                     "**/*.yml", "libs/testpairing/**/*.yml",
                     "proto/**/*.proto", "**/*.txtar"]);
-    // code-follows-mined-precedents and symbol-docs-follow-proofread-rules fail on a stale symbol
-    // index. magus\precedents freshens every index here, under this run's lock, so the rules
-    // run below find them current; read from that child process instead, a rebuild would be
-    // refused the lock (MGS3007).
-    _ = magus\precedents();
+    // Two lint rules fail on a stale symbol index.
+    // magus\graph().precedents() freshens every index under this run's lock.
+    // From the rules' child process a rebuild is refused the lock (MGS3007).
+    _ = magus\graph().precedents();
     _ = magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 
@@ -2638,8 +2637,9 @@ fun lintFiles(ctx: magus\Context, args: [str]) > void !> any {
     }
     golangci\linkOnce();
     final failures = mut [<str>];
-    // The rules judge from the symbol indexes; magus\precedents freshens them, as in lint_rules.
-    _ = magus\precedents();
+    // The rules judge from the symbol indexes.
+    // magus\graph().precedents() freshens them, as in lint_rules.
+    _ = magus\graph().precedents();
     if (!magus\cmd("buzz", args: ["hack/lint/run.buzz", "--"] + files, opts: magus\CommandOptions{allowFailure = true}).ok) {
         failures.append("hack/lint/run.buzz reported findings above");
     }

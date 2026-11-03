@@ -20,7 +20,7 @@ import (
 //
 // Provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache provider, `magus\ci.provider(<spell>)` a CI provider, `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret provider and the credentials read through it, `magus\harness.provider(<spell>)` an agent-host harness (many hosts; like workspace.provider, unlike cache.remote's one), and `magus\guard.shell(<rule>)` an additive shell-guard rule (strengthen-only), and `magus\guard.spawn(<fun>)` the one function the agent guard calls on every spawn and continuation (see [magus\guard.spawn](../guard-spawn.md)), and `magus\guard.command(<fun>)` the one function it calls on every agent shell command (see [magus\guard.command](../guard-command.md)), and `magus\guard.write(<fun>)` the one function it calls on every agent file write. Each provider takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 //
-// `import "magus"` is how you reach any of this. The namespace is an ordinary host module, like `fs` or `vcs`: without the import line `magus` is undefined, and the import is what attaches these signatures to your call sites. It resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `describe.project`, `affected`, `projectGraph`, `where`, history metrics (`hotspots`, `affinity`, `ownership`, `trend`, `volatility`, `unreferenced`, `duplication`, `modelTiers`, `grouping`), the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `importGraph`, `dir`, `dirs`, `layer`, `neighborhood`) and `output` all answer in-process, and so does `magus\job` (list, put, register, exit, wait, clear): the job store an orchestrating agent declares about work it handed out (see types.Job). The `magus job` CLI subcommand is a third write door onto the same rows: ls and describe read, fork declares a row, exec records a worker's landed base, and wait blocks on a dependency. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script: there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `doctor`, and the `magus\describe` methods that fork) work there either way and discover the workspace themselves.
+// `import "magus"` is how you reach any of this. The namespace is an ordinary host module, like `fs` or `vcs`: without the import line `magus` is undefined, and the import is what attaches these signatures to your call sites. It resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace. The reads hang off six root constructors, each returning a record whose methods ask about it: `magus\workspace()` (the job store, run outcomes, skills, disk), `magus\graph()` (the knowledge graph at one symbol index), `magus\change(base)` (one change against one tree), `magus\history(opts)` (one window of history), `magus\job(id)` (one row) and `magus\session(opts)` (one session's guard record). They, `describe.project`, `where` and `output` answer in-process. The `magus job` CLI subcommand is another write door onto the same job rows: ls and describe read, fork declares a row, exec records a worker's landed base, and wait blocks on a dependency. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script: there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `doctor`, and the `magus\describe` methods that fork) work there either way and discover the workspace themselves.
 func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -42,21 +42,6 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		return ObjectExecResult(ret0), nil
-	}))
-	m.MapSet("affected", vm.DirectValue("magus.affected", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := ffi.String(bzArgs, 0)
-		ret0, err := std.MagusAffected(ctx, base)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectAffectedResult(ret0), nil
-	}))
-	m.MapSet("projectGraph", vm.DirectValue("magus.projectGraph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusProjectGraph(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectGraphView(ret0), nil
 	}))
 	m.MapSet("where", vm.DirectValue("magus.where", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		dir := ffi.String(bzArgs, 0)
@@ -109,259 +94,6 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectExecResult(ret0), nil
 	}))
-	m.MapSet("hotspots", vm.DirectValue("magus.hotspots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		var opts types.HistoryMetricsOptions
-		if ffi.Present(bzArgs, 0) {
-			x, err := ffi.Object("magus\\hotspots", "opts", bzArgs, 0, decode.DecodeHistoryMetricsOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusHotspots(ctx, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectHotspots(ret0), nil
-	}))
-	m.MapSet("affinity", vm.DirectValue("magus.affinity", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		var opts types.HistoryMetricsOptions
-		if ffi.Present(bzArgs, 0) {
-			x, err := ffi.Object("magus\\affinity", "opts", bzArgs, 0, decode.DecodeHistoryMetricsOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusAffinity(ctx, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectAffinity(ret0), nil
-	}))
-	m.MapSet("ownership", vm.DirectValue("magus.ownership", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		var opts types.HistoryMetricsOptions
-		if ffi.Present(bzArgs, 0) {
-			x, err := ffi.Object("magus\\ownership", "opts", bzArgs, 0, decode.DecodeHistoryMetricsOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusOwnership(ctx, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectOwnership(ret0), nil
-	}))
-	m.MapSet("trend", vm.DirectValue("magus.trend", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		var opts types.HistoryMetricsOptions
-		if ffi.Present(bzArgs, 0) {
-			x, err := ffi.Object("magus\\trend", "opts", bzArgs, 0, decode.DecodeHistoryMetricsOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusTrend(ctx, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectTrend(ret0), nil
-	}))
-	m.MapSet("volatility", vm.DirectValue("magus.volatility", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusVolatility(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectVolatility(ret0), nil
-	}))
-	m.MapSet("unreferenced", vm.DirectValue("magus.unreferenced", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusUnreferenced(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectUnreferenced(ret0, enums), nil
-	}))
-	m.MapSet("duplication", vm.DirectValue("magus.duplication", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusDuplication(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectDuplication(ret0, enums), nil
-	}))
-	m.MapSet("modelTiers", vm.DirectValue("magus.modelTiers", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusModelTiers(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectModelTiers(ret0, enums), nil
-	}))
-	m.MapSet("grouping", vm.DirectValue("magus.grouping", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusGrouping(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectGrouping(ret0, enums), nil
-	}))
-	m.MapSet("query", vm.DirectValue("magus.query", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		query := ffi.String(bzArgs, 0)
-		var opts types.KnowledgeQueryOptions
-		if ffi.Present(bzArgs, 1) {
-			x, err := ffi.Object("magus\\query", "opts", bzArgs, 1, decode.DecodeKnowledgeQueryOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusQuery(ctx, query, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectKnowledgeQueryOutput(ret0, enums), nil
-	}))
-	m.MapSet("explain", vm.DirectValue("magus.explain", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		node := ffi.String(bzArgs, 0)
-		ret0, err := std.MagusExplain(ctx, node)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectKnowledgeExplainOutput(ret0, enums), nil
-	}))
-	m.MapSet("path", vm.DirectValue("magus.path", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		node := ffi.String(bzArgs, 0)
-		to := ffi.String(bzArgs, 1)
-		var opts types.KnowledgePathOptions
-		if ffi.Present(bzArgs, 2) {
-			x, err := ffi.Object("magus\\path", "opts", bzArgs, 2, decode.DecodeKnowledgePathOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusPath(ctx, node, to, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectKnowledgePathOutput(ret0, enums), nil
-	}))
-	m.MapSet("refs", vm.DirectValue("magus.refs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		symbol := ffi.String(bzArgs, 0)
-		var opts types.KnowledgeRefsOptions
-		if ffi.Present(bzArgs, 1) {
-			x, err := ffi.Object("magus\\refs", "opts", bzArgs, 1, decode.DecodeKnowledgeRefsOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusRefs(ctx, symbol, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectKnowledgeRefsOutput(ret0, enums), nil
-	}))
-	m.MapSet("stats", vm.DirectValue("magus.stats", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		kind := ffi.String(bzArgs, 0)
-		ret0, err := std.MagusStats(ctx, kind)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectKnowledgeStats(ret0), nil
-	}))
-	m.MapSet("importGraph", vm.DirectValue("magus.importGraph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusImportGraph(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectImportGraph(ret0), nil
-	}))
-	m.MapSet("symbolIndexDigest", vm.DirectValue("magus.symbolIndexDigest", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusSymbolIndexDigest(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectSymbolIndexDigest(ret0, enums), nil
-	}))
-	m.MapSet("precedents", vm.DirectValue("magus.precedents", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusPrecedents(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.AnyMapVal(ret0), nil
-	}))
-	m.MapSet("conformance", vm.DirectValue("magus.conformance", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		checks := ffi.StringSlice(bzArgs, 0)
-		base := ffi.String(bzArgs, 1)
-		ret0, err := std.MagusConformance(ctx, checks, base)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.AnyMapVal(ret0), nil
-	}))
-	m.MapSet("conformanceBase", vm.DirectValue("magus.conformanceBase", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := ffi.String(bzArgs, 0)
-		ret0, err := std.MagusConformanceBase(ctx, base)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.StringVal(ret0), nil
-	}))
-	m.MapSet("symbols", vm.DirectValue("magus.symbols", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusSymbols(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.AnyMapVal(ret0), nil
-	}))
-	m.MapSet("dir", vm.DirectValue("magus.dir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		path := ffi.String(bzArgs, 0)
-		ret0, err := std.MagusDir(ctx, path)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectDir(ret0), nil
-	}))
-	m.MapSet("dirs", vm.DirectValue("magus.dirs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		glob := ffi.String(bzArgs, 0)
-		var opts types.DirsOptions
-		if ffi.Present(bzArgs, 1) {
-			x, err := ffi.Object("magus\\dirs", "opts", bzArgs, 1, decode.DecodeDirsOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusDirs(ctx, glob, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.ObjectSlice(ret0, ObjectDir), nil
-	}))
-	m.MapSet("layer", vm.DirectValue("magus.layer", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		name := ffi.String(bzArgs, 0)
-		ret0, err := std.MagusLayer(ctx, name)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectLayer(ret0), nil
-	}))
-	m.MapSet("neighborhood", vm.DirectValue("magus.neighborhood", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		focus := ffi.String(bzArgs, 0)
-		var opts types.KnowledgeNeighborhoodOptions
-		if ffi.Present(bzArgs, 1) {
-			x, err := ffi.Object("magus\\neighborhood", "opts", bzArgs, 1, decode.DecodeKnowledgeNeighborhoodOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusNeighborhood(ctx, focus, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectKnowledgeNeighborhoodOutput(ret0, enums), nil
-	}))
 	m.MapSet("output", vm.DirectValue("magus.output", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ref := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusOutput(ctx, ref)
@@ -369,37 +101,6 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		return ObjectOutputRecord(ret0), nil
-	}))
-	m.MapSet("impact", vm.DirectValue("magus.impact", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		base := ffi.String(bzArgs, 0)
-		var opts types.MagusCommandOptions
-		if ffi.Present(bzArgs, 1) {
-			x, err := ffi.Object("magus\\impact", "opts", bzArgs, 1, decode.DecodeMagusCommandOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusImpact(ctx, base, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectImpactResult(ret0), nil
-	}))
-	m.MapSet("diff", vm.DirectValue("magus.diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		var opts types.MagusDiffOptions
-		if ffi.Present(bzArgs, 0) {
-			x, err := ffi.Object("magus\\diff", "opts", bzArgs, 0, decode.DecodeMagusDiffOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusDiff(ctx, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectDiff(ret0, enums), nil
 	}))
 	m.MapSet("doctor", vm.DirectValue("magus.doctor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := ffi.StringSlice(bzArgs, 0)
@@ -433,52 +134,6 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectCleanReport(ret0), nil
 	}))
-	m.MapSet("attention", vm.DirectValue("magus.attention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		args := ffi.StringSlice(bzArgs, 0)
-		var opts types.MagusCommandOptions
-		if ffi.Present(bzArgs, 1) {
-			x, err := ffi.Object("magus\\attention", "opts", bzArgs, 1, decode.DecodeMagusCommandOptions)
-			if err != nil {
-				return vm.Null, ffi.Error(err)
-			}
-			opts = x
-		}
-		ret0, err := std.MagusAttention(ctx, args, opts)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ffi.AnyMapVal(ret0), nil
-	}))
-	m.MapSet("diskReclaim", vm.DirectValue("magus.diskReclaim", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusDiskReclaim(ctx)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectDiskReclaim(ret0), nil
-	}))
-	m.MapSet("fileDiskAttention", vm.DirectValue("magus.fileDiskAttention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		message := ffi.String(bzArgs, 0)
-		if err := std.MagusFileDiskAttention(ctx, message); err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return vm.Null, nil
-	}))
-	m.MapSet("diagnoseDrift", vm.DirectValue("magus.diagnoseDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		outputs := ffi.StringSlice(bzArgs, 0)
-		inputs := ffi.StringSlice(bzArgs, 1)
-		ret0, err := std.MagusDiagnoseDrift(ctx, outputs, inputs)
-		if err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return ObjectDriftResult(ret0), nil
-	}))
-	m.MapSet("bustCache", vm.DirectValue("magus.bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		projectPath := ffi.String(bzArgs, 0)
-		if err := std.MagusBustCache(ctx, projectPath); err != nil {
-			return vm.Null, ffi.Error(err)
-		}
-		return vm.Null, nil
-	}))
 	m.MapSet("hasCharm", vm.DirectValue("magus.hasCharm", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		name := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusHasCharm(ctx, name)
@@ -486,6 +141,670 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		return ffi.BoolVal(ret0), nil
+	}))
+	m.MapSet("workspace", vm.DirectValue("magus.workspace", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		dir := ffi.String(bzArgs, 0)
+		ret0, err := std.MagusWorkspaceOpen(ctx, dir)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectMagusWorkspace(ret0, enums), nil
+	}))
+	m.MapSet("graph", vm.DirectValue("magus.graph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusGraphOpen(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectSymbolIndexDigest(ret0, enums), nil
+	}))
+	m.MapSet("change", vm.DirectValue("magus.change", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		base := ffi.String(bzArgs, 0)
+		var opts types.ChangeOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\change", "opts", bzArgs, 1, decode.DecodeChangeOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusChangeOpen(ctx, base, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectChange(ret0, enums), nil
+	}))
+	m.MapSet("history", vm.DirectValue("magus.history", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		var opts types.HistoryMetricsOptions
+		if ffi.Present(bzArgs, 0) {
+			x, err := ffi.Object("magus\\history", "opts", bzArgs, 0, decode.DecodeHistoryMetricsOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusHistoryOpen(ctx, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectHistory(ret0, enums), nil
+	}))
+	m.MapSet("job", vm.DirectValue("magus.job", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		id := ffi.String(bzArgs, 0)
+		ret0, err := std.MagusJobOpen(ctx, id)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectJob(ret0, enums), nil
+	}))
+	m.MapSet("session", vm.DirectValue("magus.session", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		var opts types.TrailReadOptions
+		if ffi.Present(bzArgs, 0) {
+			x, err := ffi.Object("magus\\session", "opts", bzArgs, 0, decode.DecodeTrailReadOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusSessionOpen(ctx, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectSession(ret0, enums), nil
+	}))
+	m.MapSet("magus__Workspace__jobs", vm.DirectValue("magus.magus__Workspace__jobs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__jobs", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusWorkspaceJobs(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectJobList(ret0, enums), nil
+	}))
+	m.MapSet("magus__Workspace__putJob", vm.DirectValue("magus.magus__Workspace__putJob", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__putJob", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		id := ffi.String(bzArgs, 1)
+		opts := ffi.AnyMap(bzArgs, 2)
+		ret0, err := std.MagusWorkspacePutJob(ctx, recv, id, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectJob(ret0, enums), nil
+	}))
+	m.MapSet("magus__Workspace__clearJobs", vm.DirectValue("magus.magus__Workspace__clearJobs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__clearJobs", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusWorkspaceClearJobs(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.IntVal(ret0), nil
+	}))
+	m.MapSet("magus__Workspace__forkFacts", vm.DirectValue("magus.magus__Workspace__forkFacts", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__forkFacts", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusWorkspaceForkFacts(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectJobForkFacts(ret0), nil
+	}))
+	m.MapSet("magus__Workspace__unmerged", vm.DirectValue("magus.magus__Workspace__unmerged", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__unmerged", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusWorkspaceUnmerged(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectJobUnmergedReport(ret0), nil
+	}))
+	m.MapSet("magus__Workspace__tierOutcomes", vm.DirectValue("magus.magus__Workspace__tierOutcomes", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__tierOutcomes", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusWorkspaceTierOutcomes(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectModelTiers(ret0, enums), nil
+	}))
+	m.MapSet("magus__Workspace__grouping", vm.DirectValue("magus.magus__Workspace__grouping", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__grouping", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusWorkspaceGrouping(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectGrouping(ret0, enums), nil
+	}))
+	m.MapSet("magus__Workspace__volatility", vm.DirectValue("magus.magus__Workspace__volatility", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__volatility", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusWorkspaceVolatility(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectVolatility(ret0), nil
+	}))
+	m.MapSet("magus__Workspace__skills", vm.DirectValue("magus.magus__Workspace__skills", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__skills", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		var opts types.SkillsOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\magus__Workspace__skills", "opts", bzArgs, 1, decode.DecodeSkillsOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusWorkspaceSkills(ctx, recv, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.ObjectSlice(ret0, ObjectSkill), nil
+	}))
+	m.MapSet("magus__Workspace__attention", vm.DirectValue("magus.magus__Workspace__attention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__attention", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		args := ffi.StringSlice(bzArgs, 1)
+		var opts types.MagusCommandOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("magus\\magus__Workspace__attention", "opts", bzArgs, 2, decode.DecodeMagusCommandOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusWorkspaceAttention(ctx, recv, args, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectAttentionList(ret0, enums), nil
+	}))
+	m.MapSet("magus__Workspace__fileDiskAttention", vm.DirectValue("magus.magus__Workspace__fileDiskAttention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__fileDiskAttention", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		message := ffi.String(bzArgs, 1)
+		if err := std.MagusWorkspaceFileDiskAttention(ctx, recv, message); err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return vm.Null, nil
+	}))
+	m.MapSet("magus__Workspace__diskReclaim", vm.DirectValue("magus.magus__Workspace__diskReclaim", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__diskReclaim", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusWorkspaceDiskReclaim(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectDiskReclaim(ret0), nil
+	}))
+	m.MapSet("magus__Workspace__bustCache", vm.DirectValue("magus.magus__Workspace__bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__bustCache", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		projectPath := ffi.String(bzArgs, 1)
+		if err := std.MagusWorkspaceBustCache(ctx, recv, projectPath); err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return vm.Null, nil
+	}))
+	m.MapSet("magus__Workspace__diagnoseDrift", vm.DirectValue("magus.magus__Workspace__diagnoseDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__diagnoseDrift", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		outputs := ffi.StringSlice(bzArgs, 1)
+		inputs := ffi.StringSlice(bzArgs, 2)
+		ret0, err := std.MagusWorkspaceDiagnoseDrift(ctx, recv, outputs, inputs)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectDriftResult(ret0), nil
+	}))
+	m.MapSet("magus__Graph__query", vm.DirectValue("magus.magus__Graph__query", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__query", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		query := ffi.String(bzArgs, 1)
+		var opts types.KnowledgeQueryOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("magus\\magus__Graph__query", "opts", bzArgs, 2, decode.DecodeKnowledgeQueryOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusGraphQuery(ctx, recv, query, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectKnowledgeQueryOutput(ret0, enums), nil
+	}))
+	m.MapSet("magus__Graph__explain", vm.DirectValue("magus.magus__Graph__explain", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__explain", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		node := ffi.String(bzArgs, 1)
+		ret0, err := std.MagusGraphExplain(ctx, recv, node)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectKnowledgeExplainOutput(ret0, enums), nil
+	}))
+	m.MapSet("magus__Graph__path", vm.DirectValue("magus.magus__Graph__path", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__path", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		node := ffi.String(bzArgs, 1)
+		to := ffi.String(bzArgs, 2)
+		var opts types.KnowledgePathOptions
+		if ffi.Present(bzArgs, 3) {
+			x, err := ffi.Object("magus\\magus__Graph__path", "opts", bzArgs, 3, decode.DecodeKnowledgePathOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusGraphPath(ctx, recv, node, to, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectKnowledgePathOutput(ret0, enums), nil
+	}))
+	m.MapSet("magus__Graph__refs", vm.DirectValue("magus.magus__Graph__refs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__refs", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		symbol := ffi.String(bzArgs, 1)
+		var opts types.KnowledgeRefsOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("magus\\magus__Graph__refs", "opts", bzArgs, 2, decode.DecodeKnowledgeRefsOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusGraphRefs(ctx, recv, symbol, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectKnowledgeRefsOutput(ret0, enums), nil
+	}))
+	m.MapSet("magus__Graph__stats", vm.DirectValue("magus.magus__Graph__stats", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__stats", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		kind := ffi.String(bzArgs, 1)
+		ret0, err := std.MagusGraphStats(ctx, recv, kind)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectKnowledgeStats(ret0), nil
+	}))
+	m.MapSet("magus__Graph__neighborhood", vm.DirectValue("magus.magus__Graph__neighborhood", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__neighborhood", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		focus := ffi.String(bzArgs, 1)
+		var opts types.KnowledgeNeighborhoodOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("magus\\magus__Graph__neighborhood", "opts", bzArgs, 2, decode.DecodeKnowledgeNeighborhoodOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusGraphNeighborhood(ctx, recv, focus, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectKnowledgeNeighborhoodOutput(ret0, enums), nil
+	}))
+	m.MapSet("magus__Graph__dir", vm.DirectValue("magus.magus__Graph__dir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__dir", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		path := ffi.String(bzArgs, 1)
+		ret0, err := std.MagusGraphDir(ctx, recv, path)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectDir(ret0), nil
+	}))
+	m.MapSet("magus__Graph__dirs", vm.DirectValue("magus.magus__Graph__dirs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__dirs", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		glob := ffi.String(bzArgs, 1)
+		var opts types.DirsOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("magus\\magus__Graph__dirs", "opts", bzArgs, 2, decode.DecodeDirsOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusGraphDirs(ctx, recv, glob, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.ObjectSlice(ret0, ObjectDir), nil
+	}))
+	m.MapSet("magus__Graph__layer", vm.DirectValue("magus.magus__Graph__layer", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__layer", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		name := ffi.String(bzArgs, 1)
+		ret0, err := std.MagusGraphLayer(ctx, recv, name)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectLayer(ret0), nil
+	}))
+	m.MapSet("magus__Graph__deps", vm.DirectValue("magus.magus__Graph__deps", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__deps", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusGraphDeps(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectGraphView(ret0), nil
+	}))
+	m.MapSet("magus__Graph__imports", vm.DirectValue("magus.magus__Graph__imports", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__imports", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusGraphImports(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImportGraph(ret0), nil
+	}))
+	m.MapSet("magus__Graph__symbols", vm.DirectValue("magus.magus__Graph__symbols", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__symbols", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusGraphSymbols(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectSymbols(ret0, enums), nil
+	}))
+	m.MapSet("magus__Graph__precedents", vm.DirectValue("magus.magus__Graph__precedents", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__precedents", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusGraphPrecedents(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectHolds(ret0, enums), nil
+	}))
+	m.MapSet("magus__Graph__unreferenced", vm.DirectValue("magus.magus__Graph__unreferenced", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__unreferenced", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusGraphUnreferenced(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectUnreferenced(ret0, enums), nil
+	}))
+	m.MapSet("magus__Graph__duplication", vm.DirectValue("magus.magus__Graph__duplication", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__duplication", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusGraphDuplication(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectDuplication(ret0, enums), nil
+	}))
+	m.MapSet("magus__Change__tier", vm.DirectValue("magus.magus__Change__tier", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Change__tier", "recv", bzArgs, 0, decode.DecodeChange)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		target := ffi.String(bzArgs, 1)
+		var opts types.RiskOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("magus\\magus__Change__tier", "opts", bzArgs, 2, decode.DecodeRiskOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusChangeTier(ctx, recv, target, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectRiskReport(ret0, enums), nil
+	}))
+	m.MapSet("magus__Change__diff", vm.DirectValue("magus.magus__Change__diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Change__diff", "recv", bzArgs, 0, decode.DecodeChange)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		var opts types.MagusDiffOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\magus__Change__diff", "opts", bzArgs, 1, decode.DecodeMagusDiffOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusChangeDiff(ctx, recv, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectDiff(ret0, enums), nil
+	}))
+	m.MapSet("magus__Change__impact", vm.DirectValue("magus.magus__Change__impact", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Change__impact", "recv", bzArgs, 0, decode.DecodeChange)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		var opts types.MagusCommandOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("magus\\magus__Change__impact", "opts", bzArgs, 1, decode.DecodeMagusCommandOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		ret0, err := std.MagusChangeImpact(ctx, recv, opts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectImpactResult(ret0), nil
+	}))
+	m.MapSet("magus__Change__affected", vm.DirectValue("magus.magus__Change__affected", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Change__affected", "recv", bzArgs, 0, decode.DecodeChange)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusChangeAffected(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectAffectedResult(ret0), nil
+	}))
+	m.MapSet("magus__Change__conformance", vm.DirectValue("magus.magus__Change__conformance", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Change__conformance", "recv", bzArgs, 0, decode.DecodeChange)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		checks := ffi.StringSlice(bzArgs, 1)
+		ret0, err := std.MagusChangeConformance(ctx, recv, checks)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectConformanceReport(ret0, enums), nil
+	}))
+	m.MapSet("magus__Change__mergeBase", vm.DirectValue("magus.magus__Change__mergeBase", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Change__mergeBase", "recv", bzArgs, 0, decode.DecodeChange)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusChangeMergeBase(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("magus__History__hotspots", vm.DirectValue("magus.magus__History__hotspots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__History__hotspots", "recv", bzArgs, 0, decode.DecodeHistory)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusHistoryHotspots(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectHotspots(ret0), nil
+	}))
+	m.MapSet("magus__History__affinity", vm.DirectValue("magus.magus__History__affinity", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__History__affinity", "recv", bzArgs, 0, decode.DecodeHistory)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusHistoryAffinity(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectAffinity(ret0), nil
+	}))
+	m.MapSet("magus__History__ownership", vm.DirectValue("magus.magus__History__ownership", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__History__ownership", "recv", bzArgs, 0, decode.DecodeHistory)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusHistoryOwnership(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectOwnership(ret0), nil
+	}))
+	m.MapSet("magus__History__trend", vm.DirectValue("magus.magus__History__trend", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__History__trend", "recv", bzArgs, 0, decode.DecodeHistory)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusHistoryTrend(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectTrend(ret0), nil
+	}))
+	m.MapSet("magus__Job__exit", vm.DirectValue("magus.magus__Job__exit", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Job__exit", "recv", bzArgs, 0, decode.DecodeJob)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		result := ffi.AnyMap(bzArgs, 1)
+		ret0, err := std.MagusJobExit(ctx, recv, result)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectJob(ret0, enums), nil
+	}))
+	m.MapSet("magus__Job__wait", vm.DirectValue("magus.magus__Job__wait", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Job__wait", "recv", bzArgs, 0, decode.DecodeJob)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		result := ffi.AnyMap(bzArgs, 1)
+		ret0, err := std.MagusJobWait(ctx, recv, result)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectJobStatus(ret0, enums), nil
+	}))
+	m.MapSet("magus__Job__register", vm.DirectValue("magus.magus__Job__register", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Job__register", "recv", bzArgs, 0, decode.DecodeJob)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusJobRegister(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectJobRegistration(ret0, enums), nil
+	}))
+	m.MapSet("magus__Session__trail", vm.DirectValue("magus.magus__Session__trail", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Session__trail", "recv", bzArgs, 0, decode.DecodeSession)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusSessionTrail(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectTrail(ret0), nil
+	}))
+	m.MapSet("magus__Session__marks", vm.DirectValue("magus.magus__Session__marks", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Session__marks", "recv", bzArgs, 0, decode.DecodeSession)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusSessionMarks(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.ObjectSlice(ret0, func(v types.TrailMark) vm.Value { return ObjectTrailMark(v, enums) }), nil
+	}))
+	m.MapSet("magus__Session__mark", vm.DirectValue("magus.magus__Session__mark", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Session__mark", "recv", bzArgs, 0, decode.DecodeSession)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		mark := ffi.AnyMap(bzArgs, 1)
+		ret0, err := std.MagusSessionMark(ctx, recv, mark)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectTrailMark(ret0, enums), nil
 	}))
 	return m
 }

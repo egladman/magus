@@ -15,21 +15,20 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func TestBuildWorkspace(t *testing.T) {
+func TestBuildWorkspaceProvider(t *testing.T) {
 	t.Run("valid spell handle records the provider", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		workspaceMap := buildWorkspace(workspace.ContextWithRegistry(context.Background(), reg), nil)
+		provider := buildWorkspaceProvider(workspace.ContextWithRegistry(context.Background(), reg), nil)
 
 		handle := vm.NewMap()
 		handle.MapSet("name", vm.StringValue("nx"))
-		require.NoError(t, callVoidDirect(t, requireDirect(t, workspaceMap, "provider"), handle))
+		require.NoError(t, callVoidDirect(t, provider, handle))
 		assert.Equal(t, []string{"nx"}, reg.Providers())
 	})
 
 	t.Run("wiring order is preserved and repeats collapse", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		workspaceMap := buildWorkspace(workspace.ContextWithRegistry(context.Background(), reg), nil)
-		provider := requireDirect(t, workspaceMap, "provider")
+		provider := buildWorkspaceProvider(workspace.ContextWithRegistry(context.Background(), reg), nil)
 
 		for _, name := range []string{"nx", "cargo", "nx"} {
 			handle := vm.NewMap()
@@ -41,22 +40,22 @@ func TestBuildWorkspace(t *testing.T) {
 	})
 
 	t.Run("no registry in context is a silent no-op", func(t *testing.T) {
-		workspaceMap := buildWorkspace(context.Background(), nil)
+		provider := buildWorkspaceProvider(context.Background(), nil)
 		handle := vm.NewMap()
 		handle.MapSet("name", vm.StringValue("nx"))
-		require.NoError(t, callVoidDirect(t, requireDirect(t, workspaceMap, "provider"), handle))
+		require.NoError(t, callVoidDirect(t, provider, handle))
 	})
 
 	t.Run("non-map argument is rejected", func(t *testing.T) {
-		workspaceMap := buildWorkspace(context.Background(), nil)
-		err := callVoidDirect(t, requireDirect(t, workspaceMap, "provider"), vm.StringValue("nx"))
+		provider := buildWorkspaceProvider(context.Background(), nil)
+		err := callVoidDirect(t, provider, vm.StringValue("nx"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "imported spell handle")
 	})
 
 	t.Run("map without a name is rejected", func(t *testing.T) {
-		workspaceMap := buildWorkspace(context.Background(), nil)
-		err := callVoidDirect(t, requireDirect(t, workspaceMap, "provider"), vm.NewMap())
+		provider := buildWorkspaceProvider(context.Background(), nil)
+		err := callVoidDirect(t, provider, vm.NewMap())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no name")
 	})

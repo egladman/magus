@@ -65,7 +65,7 @@ fun skills(level: Level) > magus\SkillVariant {
 
 func TestModelTiersDeclareTheWorkspacesOwnEnum(t *testing.T) {
 	reg, err := loadModelTiers(t, levelsDecl+`
-magus\job.modelTiers(Level, default: Level.high,
+magus\modelTiers(Level, default: Level.high,
     hosts: {"claude-code": model},
     bounds: bounds, skills: skills);
 `, "claude-code")
@@ -101,7 +101,7 @@ func TestModelTiersHostsAreKeyedByWhatProviderReturns(t *testing.T) {
 	reg, err := loadModelTiers(t, levelsDecl+`
 magus\harness.provider({"name": "cursor"});
 final cc = magus\harness.provider({"name": "claude-code"});
-magus\job.modelTiers(Level, default: Level.low,
+magus\modelTiers(Level, default: Level.low,
     hosts: {cc: model}, bounds: bounds, skills: skills);
 `)
 	require.NoError(t, err, "a provider call that discards its key still wires the harness")
@@ -117,7 +117,7 @@ magus\job.modelTiers(Level, default: Level.low,
 
 func TestModelTiersWithoutAHostsMapMapNoHarness(t *testing.T) {
 	reg, err := loadModelTiers(t, levelsDecl+`
-magus\job.modelTiers(Level, default: Level.low, bounds: bounds, skills: skills);
+magus\modelTiers(Level, default: Level.low, bounds: bounds, skills: skills);
 `)
 	require.NoError(t, err)
 	_, err = reg.ModelTiers(t.Context()).Alias("claude-code", reg.ModelTiers(t.Context()).Default())
@@ -149,7 +149,7 @@ func TestModelTiersDefaultToTheShippedDeclaration(t *testing.T) {
 func TestModelTiersNullTurnsThemOff(t *testing.T) {
 	reg, err := loadModelTiers(t, `
 import "magus";
-magus\job.modelTiers(null);
+magus\modelTiers(null);
 `)
 	require.NoError(t, err)
 	assert.Nil(t, reg.ModelTiers(t.Context()), "off is not the shipped default")
@@ -157,7 +157,7 @@ magus\job.modelTiers(null);
 
 func TestModelTiersNullTakesNothingElse(t *testing.T) {
 	_, err := loadModelTiers(t, levelsDecl+`
-magus\job.modelTiers(null, default: Level.low);
+magus\modelTiers(null, default: Level.low);
 `)
 	require.ErrorContains(t, err, string(types.ModelTierDeclarationUnusable))
 	assert.ErrorContains(t, err, "takes no other argument")
@@ -168,45 +168,45 @@ func TestModelTiersMisdeclarationIsCoded(t *testing.T) {
 		name, call, want string
 		wired            []string
 	}{
-		{"tiers are not an enum", `magus\job.modelTiers("low", default: Level.low, bounds: bounds, skills: skills);`,
+		{"tiers are not an enum", `magus\modelTiers("low", default: Level.low, bounds: bounds, skills: skills);`,
 			"tiers must be an enum", nil},
 		{"default is another enum's case", `
 enum Other { low }
-magus\job.modelTiers(Level, default: Other.low, bounds: bounds, skills: skills);`,
+magus\modelTiers(Level, default: Other.low, bounds: bounds, skills: skills);`,
 			"default must be a case of Level", nil},
-		{"no default", `magus\job.modelTiers(Level, bounds: bounds, skills: skills);`,
+		{"no default", `magus\modelTiers(Level, bounds: bounds, skills: skills);`,
 			"default must be a case of Level", nil},
-		{"bounds is not a function", `magus\job.modelTiers(Level, default: Level.low, bounds: 3, skills: skills);`,
+		{"bounds is not a function", `magus\modelTiers(Level, default: Level.low, bounds: 3, skills: skills);`,
 			"bounds must be a function", nil},
-		{"no skills", `magus\job.modelTiers(Level, default: Level.low, bounds: bounds);`,
+		{"no skills", `magus\modelTiers(Level, default: Level.low, bounds: bounds);`,
 			"skills must be a function", nil},
-		{"a host that is not wired", `magus\job.modelTiers(Level, default: Level.low,
+		{"a host that is not wired", `magus\modelTiers(Level, default: Level.low,
     hosts: {"codex": model}, bounds: bounds, skills: skills);`,
 			"has not wired", []string{"claude-code"}},
-		{"a host keyed by something other than an id", `magus\job.modelTiers(Level, default: Level.low,
+		{"a host keyed by something other than an id", `magus\modelTiers(Level, default: Level.low,
     hosts: {3: model}, bounds: bounds, skills: skills);`,
 			"must be the harness id", []string{"claude-code"}},
 		{"two tiers with one alias", `
 fun same(level: Level) > str { return "one"; }
-magus\job.modelTiers(Level, default: Level.low,
+magus\modelTiers(Level, default: Level.low,
     hosts: {"claude-code": same}, bounds: bounds, skills: skills);`,
 			"maps two cases", []string{"claude-code"}},
 		{"an empty alias", `
 fun none(level: Level) > str { return ""; }
-magus\job.modelTiers(Level, default: Level.low,
+magus\modelTiers(Level, default: Level.low,
     hosts: {"claude-code": none}, bounds: bounds, skills: skills);`,
 			"empty alias", []string{"claude-code"}},
 		{"a negative bound", `
 fun negative(level: Level) > magus\ModelTierBounds { return magus\ModelTierBounds{ maxLive = -1 }; }
-magus\job.modelTiers(Level, default: Level.low, bounds: negative, skills: skills);`,
+magus\modelTiers(Level, default: Level.low, bounds: negative, skills: skills);`,
 			"negative", nil},
 		{"a mapping that raises", `
 fun broken(level: Level) > magus\SkillVariant !> str { throw "no skills"; }
-magus\job.modelTiers(Level, default: Level.low, bounds: bounds, skills: broken);`,
+magus\modelTiers(Level, default: Level.low, bounds: bounds, skills: broken);`,
 			"skills raised for Level.low", nil},
 		{"declared twice", `
-magus\job.modelTiers(Level, default: Level.low, bounds: bounds, skills: skills);
-magus\job.modelTiers(Level, default: Level.high, bounds: bounds, skills: skills);`,
+magus\modelTiers(Level, default: Level.low, bounds: bounds, skills: skills);
+magus\modelTiers(Level, default: Level.high, bounds: bounds, skills: skills);`,
 			"already declared", nil},
 	}
 	for _, tc := range cases {
@@ -222,7 +222,7 @@ magus\job.modelTiers(Level, default: Level.high, bounds: bounds, skills: skills)
 func TestModelTiersNeedTheRootMagusfile(t *testing.T) {
 	call := `
 import "magus";
-magus\job.modelTiers(null);
+magus\modelTiers(null);
 `
 	t.Run("from a project's magusfile", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
@@ -245,13 +245,13 @@ magus\job.modelTiers(null);
 const matrixDecl = levelsDecl + `
 object Choice { tier: Level, skills: magus\SkillVariant, reason: str }
 
-magus\job.modelTiers(Level, default: Level.low,
+magus\modelTiers(Level, default: Level.low,
     hosts: {"claude-code": model}, bounds: bounds, skills: skills);
 `
 
 func TestModelTierMatrixChoosesAfterTheLoadCloses(t *testing.T) {
 	reg, err := loadModelTiers(t, matrixDecl+`
-magus\job.modelTier(fun (req: ModelTierRequest) > Choice? {
+magus\modelTier(fun (req: ModelTierRequest) > Choice? {
     if (req.id == "default-me") { return null; }
     return Choice{ tier = Level.high, skills = magus\SkillVariant.full, reason = "{req.id}: {req.kind.value}" };
 });
@@ -285,7 +285,7 @@ func TestModelTierMatrixAnswersAreChecked(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			reg, err := loadModelTiers(t, fmt.Sprintf(`%s
 enum Other { a }
-magus\job.modelTier(fun (req: ModelTierRequest) > any !> any {
+magus\modelTier(fun (req: ModelTierRequest) > any !> any {
     %s
 });
 `, matrixDecl, tc.body), "claude-code")
@@ -298,8 +298,8 @@ magus\job.modelTier(fun (req: ModelTierRequest) > any !> any {
 
 func TestModelTierMatrixCannotTouchTheJobStore(t *testing.T) {
 	reg, err := loadModelTiers(t, matrixDecl+`
-magus\job.modelTier(fun (req: ModelTierRequest) > any !> any {
-    magus\job.put("smuggled", opts: {"criteria": "from a matrix"});
+magus\modelTier(fun (req: ModelTierRequest) > any !> any {
+    magus\workspace().putJob("smuggled", opts: {"criteria": "from a matrix"});
     return null;
 });
 `, "claude-code")
@@ -311,8 +311,8 @@ magus\job.modelTier(fun (req: ModelTierRequest) > any !> any {
 func TestModelTierMatrixWithTiersOffFails(t *testing.T) {
 	reg, err := loadModelTiers(t, `
 import "magus";
-magus\job.modelTiers(null);
-magus\job.modelTier(fun (req: ModelTierRequest) > any { return null; });
+magus\modelTiers(null);
+magus\modelTier(fun (req: ModelTierRequest) > any { return null; });
 `)
 	require.NoError(t, err)
 	_, err = reg.ModelTierMatrix()(t.Context(), types.ModelTierRequest{})

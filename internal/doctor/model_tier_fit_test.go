@@ -80,7 +80,7 @@ func TestModelTierFitNamesTheLineThatRoutedAFailingTier(t *testing.T) {
 	detail := got.Details[0]
 	assert.Contains(t, detail, "economy on symbol jobs: 3 of 10 passed")
 	assert.Contains(t, detail, "2 took the declared default: change the default in the model tier declaration at magusfile.buzz:3")
-	assert.Contains(t, detail, `8 were routed here by the function registered with magus\job.modelTier at magusfile.buzz:40 (most often "small and checked")`)
+	assert.Contains(t, detail, `8 were routed here by the function registered with magus\modelTier at magusfile.buzz:40 (most often "small and checked")`)
 }
 
 func TestModelTierFitIsQuietUntilAPairHasEnoughJobs(t *testing.T) {

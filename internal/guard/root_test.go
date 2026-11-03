@@ -741,7 +741,7 @@ func TestSpawnNamesModelNamesTheHostEntryToAdd(t *testing.T) {
 
 	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnNamesModel)}, judgedAs(v))
 	assert.Contains(t, v.Reason, "maps no model for harness claude-code: its hosts are other-host")
-	assert.Contains(t, v.Reason, "add a claude-code entry to the hosts magus\\job.modelTiers declares")
+	assert.Contains(t, v.Reason, "add a claude-code entry to the hosts magus\\modelTiers declares")
 }
 
 // A spawn on a tier ranked above its row's is advised, never refused, and one at or below

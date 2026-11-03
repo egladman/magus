@@ -444,7 +444,7 @@ func TestWorkspaceRegistryRidesTheContext(t *testing.T) {
 }
 
 // TestWithoutWorkspaceProvidersLeavesMagusfileProjectsAlone: the option suppresses
-// magus\workspace.provider, which a tree with none declared cannot show. What it
+// magus\workspaceProvider, which a tree with none declared cannot show. What it
 // must NOT do is change the declared inventory.
 func TestWithoutWorkspaceProvidersLeavesMagusfileProjectsAlone(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{

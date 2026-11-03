@@ -5,8 +5,8 @@ import "magus/figure";
 import "site/diagrams/packages" as _;
 
 export fun leaseLoopFigure() > figure\Figure !> any {
-    final decl = magus\dir("internal/job");
-    final verify = magus\dir("internal/changeset");
+    final decl = magus\graph().dir("internal/job");
+    final verify = magus\graph().dir("internal/changeset");
     final cp = figure\external("magus vcs checkpoint", sub: "revision + dirty digest", look: figure\Look.plain);
     final part = figure\external("Partition by write set", sub: "refs, explain, affected", look: figure\Look.plain);
     final work = figure\external("Workers edit", sub: "one write set each");

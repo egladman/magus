@@ -270,8 +270,8 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 // that declares none pays nothing, and are reused until a file they were read from
 // changes: a grader lives as long as the Store, or the daemon, it was made for, and
 // grading against rules an edit has since replaced would admit or refuse the wrong check.
-// runCLI installs one with job.SetCheckGrader, and it is the only grader: every fork door
-// (`magus job fork`, magus\job.put over MCP, the daemon) opens a Store that names none.
+// runCLI installs one with job.SetCheckGrader, and it is the only grader.
+// Every fork door opens a Store that names none.
 func newCheckGrader() job.CheckGrader {
 	return (&rulesByRoot{loaded: map[string]gradingRules{}}).grade
 }
@@ -411,7 +411,7 @@ func outputsIn(root string) job.AttemptResolver {
 }
 
 // reportForkFacts prints what a top-level fork leaves waiting. It never stops
-// the fork: a workspace's policy decides that, on magus\job.forkFacts.
+// the fork: policy decides that, on magus\workspace().forkFacts().
 func reportForkFacts(ctx context.Context, store *job.Store, root string) {
 	rows, err := store.List()
 	if err != nil {
@@ -494,9 +494,8 @@ func lsJobs(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	// The store's report, not the bare rows: magus\job.list and JobService's ListJobs
-	// build the same one. The workspace scoping its overlaps loads only for a pair across
-	// checkouts, so most listings never pay for a load.
+	// The store's report: magus\workspace().jobs() and ListJobs build the same.
+	// Its overlaps load the workspace only for a pair across checkouts.
 	list, err := store.Report(ctx, time.Now().Unix(), globalCfg.Jobs.StaleAfter)
 	if err != nil {
 		return err
@@ -766,7 +765,7 @@ func clipTitle(s string, n int) string {
 
 func printJobTree(out io.Writer, report types.JobList) {
 	if len(report.Jobs) == 0 {
-		fmt.Fprintf(out, "No jobs. Declare one with `%s`, or with the `%s` MCP tool (magus\\job.put), and every worktree of this repository reads it here.\n",
+		fmt.Fprintf(out, "No jobs. Declare one with `%s`, or with the `%s` MCP tool (magus\\workspace().putJob), and every worktree of this repository reads it here.\n",
 			hint.JobFork.With("<job>"), hint.ToolClient)
 		return
 	}
@@ -2846,7 +2845,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Usage: magus job rm <job> [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Remove ONE job from the plan. The rows it leaves alone are the difference from")
-			fmt.Fprintf(os.Stderr, "`%s` (magus\\job.clear), which drops every row in the repository.\n", hint.ToolClient)
+			fmt.Fprintf(os.Stderr, "`%s` (magus\\workspace().clearJobs), which drops every row in the repository.\n", hint.ToolClient)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintf(os.Stderr, "This is not how a job ENDS. `%s` records what happened and\n", hint.JobExit)
 			fmt.Fprintln(os.Stderr, "leaves the row as the account of it; rm is for a row that should never have been")

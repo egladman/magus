@@ -176,7 +176,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "ArtifactVersion", Type: reflect.TypeFor[types.ArtifactVersion](), RuntimeObject: true},
 	{Name: "Tag", Type: reflect.TypeFor[types.VCSTag](), RuntimeObject: true},
 	{Name: "Affected", Type: reflect.TypeFor[types.AffectedResult](), RuntimeObject: true},
-	{Name: "Graph", Type: reflect.TypeFor[types.GraphView](), RuntimeObject: true},
+	{Name: "Deps", Type: reflect.TypeFor[types.GraphView](), RuntimeObject: true},
 	{Name: "ModuleFieldEntry", Type: reflect.TypeFor[types.ModuleFieldEntry](), RuntimeObject: true},
 	{Name: "ModuleMethodEntry", Type: reflect.TypeFor[types.ModuleMethodEntry](), RuntimeObject: true},
 	{Name: "ModuleObjectEntry", Type: reflect.TypeFor[types.ModuleObjectEntry](), RuntimeObject: true},
@@ -271,7 +271,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Trend", Type: reflect.TypeFor[types.Trend](), RuntimeObject: true},
 	{Name: "VolatilityTarget", Type: reflect.TypeFor[types.VolatilityTarget](), RuntimeObject: true},
 	{Name: "Volatility", Type: reflect.TypeFor[types.Volatility](), RuntimeObject: true},
-	// Graph reads, leaf-first. magus\query, explain, path, refs, and stats return these.
+	// Graph reads, leaf-first. magus\graph().query and refs return these.
 	// KnowledgeGodNode.in is a Buzz keyword; the mirror emits it as a free identifier.
 	{Name: "KnowledgeTermScore", Type: reflect.TypeFor[types.KnowledgeTermScore](), RuntimeObject: true},
 	{Name: "KnowledgeListRank", Type: reflect.TypeFor[types.KnowledgeListRank](), RuntimeObject: true},
@@ -295,7 +295,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "OutputRecord", Type: reflect.TypeFor[types.OutputRecord](), RuntimeObject: true},
 	{Name: "ProjectRef", Type: reflect.TypeFor[types.ProjectRef](), RuntimeObject: true},
 	{Name: "KnowledgeSymbolGap", Type: reflect.TypeFor[types.KnowledgeSymbolGap](), RuntimeObject: true},
-	{Name: "SymbolIndexDigest", Type: reflect.TypeFor[types.SymbolIndexDigest](), RuntimeObject: true},
+	{Name: "Graph", Type: reflect.TypeFor[types.SymbolIndexDigest](), RuntimeObject: true},
 	{Name: "DirCall", Type: reflect.TypeFor[types.DirCall](), RuntimeObject: true},
 	{Name: "Dir", Type: reflect.TypeFor[types.Dir](), RuntimeObject: true},
 	{Name: "Layer", Type: reflect.TypeFor[types.Layer](), RuntimeObject: true},
@@ -338,7 +338,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Duplication", Type: reflect.TypeFor[types.Duplication](), RuntimeObject: true},
 	// The conformance lens, leaf first: ConformanceRow carries a ConformanceKey and [ConformanceItem], and
 	// Conformance carries [ConformanceRow], [ConformanceCeiling] and [ConformanceUnmeasured].
-	// Conformance rides the history-metrics board and magus\conformance.
+	// It rides the history-metrics board and magus\change().conformance.
 	{Name: "ConformanceKey", Type: reflect.TypeFor[types.ConformanceKey](), RuntimeObject: true},
 	{Name: "ConformanceItem", Type: reflect.TypeFor[types.ConformanceItem](), RuntimeObject: true},
 	{Name: "ConformanceCeiling", Type: reflect.TypeFor[types.ConformanceCeiling](), RuntimeObject: true},
@@ -474,11 +474,11 @@ var boundaryTypes = []boundaryType{
 	{Name: "StopRequest", Type: reflect.TypeFor[types.StopRequest](), RuntimeObject: true},
 	{Name: "GuardVerdict", Type: reflect.TypeFor[types.GuardVerdict](), RuntimeObject: true},
 	{Name: "GuardBinary", Type: reflect.TypeFor[types.GuardBinary](), RuntimeObject: true},
-	// magus\risk.assess takes RiskOptions and returns RiskReport, leaf first.
-	{Name: "RiskOptions", Type: reflect.TypeFor[types.RiskOptions]()},
-	{Name: "RiskEvidence", Type: reflect.TypeFor[types.RiskEvidence](), RuntimeObject: true},
-	{Name: "RiskGateStep", Type: reflect.TypeFor[types.RiskGateStep](), RuntimeObject: true},
-	{Name: "RiskReport", Type: reflect.TypeFor[types.RiskReport](), RuntimeObject: true},
+	// Change.tier takes TierOptions and returns TierReport, leaf first.
+	{Name: "TierOptions", Type: reflect.TypeFor[types.RiskOptions]()},
+	{Name: "TierEvidence", Type: reflect.TypeFor[types.RiskEvidence](), RuntimeObject: true},
+	{Name: "TierGateStep", Type: reflect.TypeFor[types.RiskGateStep](), RuntimeObject: true},
+	{Name: "TierReport", Type: reflect.TypeFor[types.RiskReport](), RuntimeObject: true},
 	{Name: "Skill", Type: reflect.TypeFor[types.Skill](), RuntimeObject: true},
 	// magus\service.acquire returns it and magus\service.release takes it back.
 	{Name: "ServiceLease", Type: reflect.TypeFor[types.ServiceLease](), RuntimeObject: true},
@@ -492,6 +492,26 @@ var boundaryTypes = []boundaryType{
 	{Name: "BriefDecision", Type: reflect.TypeFor[types.BriefDecision]()},
 	{Name: "BriefRef", Type: reflect.TypeFor[types.BriefRef]()},
 	{Name: "Brief", Type: reflect.TypeFor[types.Brief]()},
+	// The magus root constructors' records and their methods' reports.
+	{Name: "Workspace", Type: reflect.TypeFor[types.MagusWorkspace](), RuntimeObject: true},
+	{Name: "ChangeOptions", Type: reflect.TypeFor[types.ChangeOptions]()},
+	{Name: "Change", Type: reflect.TypeFor[types.Change](), RuntimeObject: true},
+	{Name: "History", Type: reflect.TypeFor[types.History](), RuntimeObject: true},
+	{Name: "SessionOptions", Type: reflect.TypeFor[types.TrailReadOptions]()},
+	{Name: "Session", Type: reflect.TypeFor[types.Session](), RuntimeObject: true},
+	{Name: "JobRegistration", Type: reflect.TypeFor[types.JobRegistration](), RuntimeObject: true},
+	{Name: "PrecedentScope", Type: reflect.TypeFor[types.PrecedentScope](), RuntimeObject: true},
+	{Name: "PrecedentKey", Type: reflect.TypeFor[types.PrecedentKey](), RuntimeObject: true},
+	{Name: "SymbolIndexStatus", Type: reflect.TypeFor[types.SymbolIndexStatus](), RuntimeObject: true},
+	{Name: "Case", Type: reflect.TypeFor[types.Case](), RuntimeObject: true},
+	{Name: "Precedent", Type: reflect.TypeFor[types.Precedent](), RuntimeObject: true},
+	{Name: "Holds", Type: reflect.TypeFor[types.Holds](), RuntimeObject: true},
+	{Name: "SymbolDecl", Type: reflect.TypeFor[types.SymbolDecl](), RuntimeObject: true},
+	{Name: "Symbols", Type: reflect.TypeFor[types.Symbols](), RuntimeObject: true},
+	{Name: "ConformanceReport", Type: reflect.TypeFor[types.ConformanceReport](), RuntimeObject: true},
+	{Name: "FileRef", Type: reflect.TypeFor[types.FileRef](), RuntimeObject: true},
+	{Name: "AttentionRequest", Type: reflect.TypeFor[types.AttentionRequest](), RuntimeObject: true},
+	{Name: "AttentionList", Type: reflect.TypeFor[types.AttentionList](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`
@@ -980,7 +1000,7 @@ var boundaryEnums = []boundaryEnum{
 		Cases: []enumCase{{"none", ""}, {"config", "config"}, {"widening", "widening"}, {"person", "person"}, {"upgrade", "upgrade"}},
 	},
 	{
-		Name:  "RiskTier",
+		Name:  "Tier",
 		Type:  reflect.TypeFor[types.RiskTier](),
 		Cases: []enumCase{{"none", ""}, {"trivial", "trivial"}, {"mechanical", "mechanical"}, {"scoped", "scoped"}, {"full", "full"}},
 	},

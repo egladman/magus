@@ -2,9 +2,9 @@ package types
 
 // The impact report, as a domain type rather than an internal one.
 //
-// magus\impact returns ImpactResult, so a caller reads the affected set and why
-// each project is in it as values. project/impact computes the report and names these
-// types directly; there is no second spelling of them anywhere.
+// magus\change().impact returns ImpactResult.
+// So a caller reads the affected set and why each project is in it as values.
+// project/impact computes the report and names these types directly.
 
 // ImpactCoverage is a covered/total statement tally and its ratio (0..1), mirrored from the
 // knowledge graph's @coverage overlay so the impact report carries the raw counts.

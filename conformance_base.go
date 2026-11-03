@@ -67,7 +67,7 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head t
 	}
 	if !ok {
 		return types.Conformance{}, fmt.Errorf("conformance: no measure of base %s under this workspace's configuration, "+
-			"which magus\\conformanceBase measures and `magus run conformance-base .` runs here", commit)
+			"which magus\\change().mergeBase measures and `magus run conformance-base .` runs here", commit)
 	}
 	judged := touched[:0:0]
 	for _, p := range touched {

@@ -245,11 +245,11 @@ export fun main(args: [str]) > void !> any {
     if (themeName != "light" and themeName != "dark") {
         throw "show-session-figure: --theme is light or dark, not {themeName}\n{USAGE}";
     }
-    final t = magus\trail.read({"session": parsed.values["--session"] ?? "", "since": parsed.values["--since"] ?? "", "until": parsed.values["--until"] ?? ""});
+    final t = magus\session({"session": parsed.values["--session"] ?? "", "since": parsed.values["--since"] ?? "", "until": parsed.values["--until"] ?? ""}).trail();
     if (t.session == "") {
         throw "show-session-figure: no agent session recorded anything in this repository's trails inside the window; widen it with --since";
     }
-    final tr = tree(t, jobs: magus\job.list().jobs, all: parsed.values["--all"] != null, start: std\toInt(t.start / 1000));
+    final tr = tree(t, jobs: magus\workspace().jobs().jobs, all: parsed.values["--all"] != null, start: std\toInt(t.start / 1000));
     final theme = if (themeName == "dark") figure\Theme.dark else figure\Theme.light;
     final text = rendered(tr, format: format, theme: theme, console: parsed.values["--console"] ?? "");
     if (text.error != null) {
@@ -280,8 +280,9 @@ export fun rendered(tr: JobTree, format: str, theme: figure\Theme, console: str)
         + (if (url.value! != "") "explore: {url.value!}" else "explore: the tree is too large for a link; -o svg prints the figure"));
 }
 
-// fixture builds the tree of hack/testdata/session-figure-jobs.json over the feedback trail
-// fixture, the shape magus\job.list() and magus\trail.read() return.
+// fixture builds the tree of hack/testdata/session-figure-jobs.json.
+// It reads the feedback trail fixture beside it.
+// They are what magus\workspace().jobs() and magus\session().trail() return.
 fun fixture() > result\Result::<JobTree> {
     try {
         final raw = json\parse(fs\readFile("hack/testdata/session-figure-jobs.json"));

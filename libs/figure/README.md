@@ -10,12 +10,12 @@ import "magus";
 import "magus/figure";
 
 export fun serverHttp() > Figure !> any {
-    final guard = magus\dir("internal/httpx");
-    final mcp = magus\dir("internal/handler/mcp");
+    final guard = magus\graph().dir("internal/httpx");
+    final mcp = magus\graph().dir("internal/handler/mcp");
     return figure\of("server-http", title: "The HTTP routes")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
-        .group(figure\without(magus\layer("handler").dirs, drop: [mcp]), label: "Connect RPC")
+        .group(figure\without(magus\graph().layer("handler").dirs, drop: [mcp]), label: "Connect RPC")
         .edgesFromGraph();
 }
 ```
@@ -27,7 +27,7 @@ export fun serverHttp() > Figure !> any {
 | `of(id, title:, eyebrow:, desc:, ...)` | Starts a figure; `direction:` sets the rest.                     |
 | `without(dirs, drop:)`                 | `dirs` less `drop`; raises when `drop` names one `dirs` lacks.   |
 | `external(name, ...)`                  | An `Actor`: a box that names no directory.                       |
-| `.box(dir, ...)`                       | One directory; `symbol:` takes a `magus\refs` result.            |
+| `.box(dir, ...)`                       | One directory; `symbol:` takes a `magus\graph().refs` result.            |
 | `.group(dirs, label:, ...)`            | Every directory in `dirs` as one box.                            |
 | `.actor(a)`                            | Draws an actor at this point in declaration order.               |
 | `.scope(dirs)`                         | Directories the figure answers for.                              |

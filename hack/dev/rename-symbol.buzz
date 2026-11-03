@@ -115,7 +115,7 @@ export fun main(args: [str]) > void !> any {
 export fun rename(symbol: str, newName: str, apply: bool) > result\Result::<Plan> {
     var r: magus\RefsResult? = null;
     try {
-        r = magus\refs(symbol);
+        r = magus\graph().refs(symbol);
     } catch (err: any) {
         return result\caught::<Plan>(err, doing: "rename-symbol: look up {symbol}");
     }
@@ -200,7 +200,7 @@ test "an index that cannot answer is refused, not rebuilt" {
 // Read-only, and meaningful only where the index is current: a CI checkout with no index
 // has nothing to resolve against.
 test "this repository's index resolves a known symbol to its definition" {
-    final r: magus\RefsResult = magus\refs("FlagsParse");
+    final r: magus\RefsResult = magus\graph().refs("FlagsParse");
     if (indexRaised(r.answer.verdict.value, reason: r.answer.reason.value, stale: r.answer.staleIndexes) != "") {
         return;
     }

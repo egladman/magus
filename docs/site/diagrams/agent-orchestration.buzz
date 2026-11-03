@@ -4,11 +4,11 @@ import "magus";
 import "magus/figure";
 
 export fun agentOrchestrationFigure() > figure\Figure !> any {
-    final store = magus\dir("internal/job");
-    final guard = magus\dir("internal/guard");
-    final broker = magus\dir("broker");
-    final sandbox = magus\dir("internal/sandbox");
-    final vcs = magus\dir("vcs");
+    final store = magus\graph().dir("internal/job");
+    final guard = magus\graph().dir("internal/guard");
+    final broker = magus\graph().dir("broker");
+    final sandbox = magus\graph().dir("internal/sandbox");
+    final vcs = magus\graph().dir("vcs");
     final root = figure\external("Orchestrator", sub: "the root session");
     final worker = figure\external("Worker", sub: "one row, one check");
     final integrator = figure\external("Integrator", sub: "<parent>/integrate");

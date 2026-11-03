@@ -59,7 +59,7 @@ fun jobsByCheckout() > result\Result::<{str: str}> {
     final newest = mut {<str: int>};
     final label = mut {<str: str>};
     try {
-        final list: magus\JobList = magus\job.list();
+        final list: magus\JobList = magus\workspace().jobs();
         foreach (j in list.jobs) {
             if (j.checkoutRoot != "" and j.updated >= (newest[j.checkoutRoot] ?? -1)) {
                 newest[j.checkoutRoot] = j.updated;

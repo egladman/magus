@@ -150,11 +150,12 @@ fun forkVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerdict
     return spawn\decideForkLine(programs, line: req.command, read: read, facts: facts, limit: spawn\finishedBranchLimit);
 }
 
-// forkCounts is magus\job.forkFacts for the fork rule. A failed read leaves
+// forkCounts is magus\workspace().forkFacts() for the fork rule.
+// A failed read leaves
 // both counts unknown, which refuses nothing.
 fun forkCounts(workspace: str) > spawn\ForkCounts {
     try {
-        return countsFrom(magus\job.forkFacts(workspace));
+        return countsFrom(magus\workspace(workspace).forkFacts());
     } catch (e) {
         final why = errorText(e);
         return spawn\ForkCounts{ branchesUnknown = why, testUnknown = why };
@@ -267,7 +268,7 @@ fun mandateVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerd
     final now = mandate\now();
     var jobs = [<mandate\Row>];
     if (mandate\inForce(issued, now: now)) {
-        jobs = mandate\rows((magus\job.list() catch JobList{}).jobs);
+        jobs = mandate\rows((magus\workspace().jobs() catch JobList{}).jobs);
     }
     final store = jobs;
     final assess = fun (id: str) > mandate\Assessed {
@@ -282,7 +283,7 @@ export fun judgeStop(req: StopRequest) > GuardVerdict !> any {
     if (req.workspace == "") {
         return magus\guard.allow();
     }
-    final list = magus\job.list() catch JobList{};
+    final list = magus\workspace().jobs() catch JobList{};
     final blocked = mut [<str>];
     foreach (b in list.blocked) {
         blocked.append(b.job);
@@ -290,9 +291,9 @@ export fun judgeStop(req: StopRequest) > GuardVerdict !> any {
     var unmerged = JobUnmergedReport{};
     if (req.role.value == "root") {
         try {
-            unmerged = magus\job.unmerged(req.workspace);
+            unmerged = magus\workspace(req.workspace).unmerged();
         } catch (e: any) {
-            unmerged = JobUnmergedReport{ unknown = "magus\\job.unmerged raised: {e}" };
+            unmerged = JobUnmergedReport{ unknown = "magus\\workspace().unmerged raised: {e}" };
         }
     }
     final count = fun (key: str) > int {
@@ -414,14 +415,15 @@ fun bodyFiles(programs: [helpers\Program], dir: str) > {str: str} {
     return files;
 }
 
-// judgeSpawn is the spawn rule the root magusfile registers. magus\job.list answers from the
-// rows the guard pinned for this hook call, and throws when the store could not be read.
+// judgeSpawn is the spawn rule the root magusfile registers.
+// magus\workspace().jobs() answers from the rows the guard pinned for the call.
+// It throws when the store could not be read.
 export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
     var jobs = [<Job>];
     var rows: [helpers\JobRow]? = null;
     var unreadable = "";
     try {
-        jobs = magus\job.list().jobs;
+        jobs = magus\workspace().jobs().jobs;
         rows = jobRows(jobs);
     } catch (e) {
         unreadable = errorText(e);

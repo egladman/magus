@@ -110,7 +110,7 @@ export fun hexToBase64(digest: str) > str {
 
 fun card(id: str) > magus\ExplainResult? {
     try {
-        final found: magus\ExplainResult = magus\explain(id);
+        final found: magus\ExplainResult = magus\graph().explain(id);
         // explain falls back to the closest node, which may be any kind.
         return if (found.node.id == id) found else null;
     } catch (err: any) {
@@ -292,7 +292,7 @@ export fun npmSource(dep: Dependency, version: str, fetch: bool) > result\Result
 
 fun workspaceSections(name: str) > [str] {
     try {
-        final found: magus\QueryResult = magus\query("kind=docsection {name}", opts: magus\QueryOptions{ limit = 5, budget = 5 });
+        final found: magus\QueryResult = magus\graph().query("kind=docsection {name}", opts: magus\QueryOptions{ limit = 5, budget = 5 });
         final ids = mut [<str>];
         foreach (m in found.matches) {
             ids.append(m.id);

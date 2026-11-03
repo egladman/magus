@@ -5,12 +5,12 @@ import "magus/figure";
 import "site/diagrams/packages" as _;
 
 export fun workspaceLoadFigure() > figure\Figure !> any {
-    final discover = magus\dir("project");
-    final interp = magus\dir("internal/interp");
-    final extract = magus\dir("internal/describe");
-    final model = magus\dir("types");
-    final cache = magus\dir("internal/cache");
-    final root = magus\dir(".");
+    final discover = magus\graph().dir("project");
+    final interp = magus\graph().dir("internal/interp");
+    final extract = magus\graph().dir("internal/describe");
+    final model = magus\graph().dir("types");
+    final cache = magus\graph().dir("internal/cache");
+    final root = magus\graph().dir(".");
     final rootMf = figure\external("Root magusfile", sub: "declares project .", look: figure\Look.input);
     final nestedMf = figure\external("Nested magusfiles", sub: "docs/, proto/, libs/*", look: figure\Look.input);
     final steps = [discover, interp, extract, cache];
@@ -50,13 +50,13 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
         .scope(goPackages("internal/describe/**"))
         .scope(goPackages("types/**"))
         .scope(goPackages("internal/cache/**"))
-        .except([magus\dir("project/impact")],
+        .except([magus\graph().dir("project/impact")],
             why: "the blast radius of a changeset, which affected reads after the load")
         .except(figure\without(goPackages("internal/interp/**"), drop: [interp]),
             why: "the engine seam, host bindings, MCP client and transforms an evaluation calls through; the Evaluate box is where an export becomes a target")
-        .except([magus\dir("types/enum")],
+        .except([magus\graph().dir("types/enum")],
             why: "the closed string sets every package checks values against; no part of the project model")
-        .except([magus\dir("internal/cache/reflink"), magus\dir("internal/cache/remotetest")],
+        .except([magus\graph().dir("internal/cache/reflink"), magus\graph().dir("internal/cache/remotetest")],
             why: "copying files in and out of the store, and a fake remote cache for tests; the key is computed in internal/cache")
-        .except([magus\dir("project/impact/gen/impacttest")], why: "generated test mocks");
+        .except([magus\graph().dir("project/impact/gen/impacttest")], why: "generated test mocks");
 }

@@ -150,7 +150,7 @@ export fun glossary_usage_generate(ctx: magus\Context, args: [str]) > void !> an
 // capping, so the list depends on the tree alone and never on how a search ranked it.
 fun termUsage(title: str) > str !> any {
     final candidates = mut [<dictionary\UsageDoc>];
-    foreach (m in magus\query("kind=docsection id=~^docsection:docs/ {title}", opts: magus\QueryOptions{limit = 5000}).matches) {
+    foreach (m in magus\graph().query("kind=docsection id=~^docsection:docs/ {title}", opts: magus\QueryOptions{limit = 5000}).matches) {
         if (dictionary\usefulDoc(m.id, label: m.label) == false) { continue; }
         if (m.label.lower().indexOf(title.lower()) == null) { continue; }
         candidates.append(dictionary\docFromID(m.id, label: m.label));
@@ -169,7 +169,7 @@ fun termUsage(title: str) > str !> any {
     }
     final symbols = mut [<dictionary\UsageSymbol>];
     final names = mut {<str: bool>};
-    final found = magus\query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: magus\QueryOptions{limit = 5000});
+    final found = magus\graph().query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: magus\QueryOptions{limit = 5000});
     if (found.answer.verdict == magus\KnowledgeVerdict.unknown) {
         var buildable = 0;
         foreach (gap in found.answer.gaps) {
@@ -381,7 +381,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("assets/**"), workspace\file("releases/*.yaml")]);
     ctx.writesFiles(["gen/**", "active.urls.lock"]);
     renderer\site_publish(ROOT, DOCS, BLOG, OUT,
-        magus\describe.graph(), magus\projectGraph(),
+        magus\describe.graph(), magus\graph().deps(),
         ctx.hasCharm("rw"));
 }
 
@@ -598,5 +598,5 @@ export fun render(ctx: magus\Context, args: [str]) > void !> any {
     // has none; the changelog page is uncommitted for the same reason.
     ctx.needs(build_hljs, build_playground_editor, build_playground, changelog_page);
     _ = renderer\site_render(ROOT, DOCS, BLOG, OUT,
-        magus\describe.graph(), magus\projectGraph());
+        magus\describe.graph(), magus\graph().deps());
 }

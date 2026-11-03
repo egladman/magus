@@ -20,7 +20,7 @@ import (
 // The spell exports the harness contract's mgs_ functions (internal/spell/contract.go); Magus
 // calls them on describe/verify. A workspace may use several harnesses.
 //
-// provider returns the harness id, the key a magus\job.modelTiers hosts map is keyed by. A
+// provider returns the harness id, the key a magus\modelTiers hosts map is keyed by. A
 // call that discards it wires the harness all the same.
 func buildHarness(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 	harness := vm.NewMap()

@@ -4,10 +4,10 @@ import "magus";
 import "magus/figure";
 
 export fun serverHttpFigure() > figure\Figure !> any {
-    final guard = magus\dir("internal/httpx");
-    final mcp = magus\dir("internal/handler/mcp");
-    final server = magus\dir("internal/server");
-    final handlers = magus\layer("handler").dirs;
+    final guard = magus\graph().dir("internal/httpx");
+    final mcp = magus\graph().dir("internal/handler/mcp");
+    final server = magus\graph().dir("internal/server");
+    final handlers = magus\graph().layer("handler").dirs;
     final routes = figure\without(handlers, drop: [mcp]);
     final agent = figure\external("AI agents", sub: "Claude Code, IDE", tag: "client", look: figure\Look.plain);
     final console = figure\external("Console PWA", sub: "dashboard, review", tag: "client", look: figure\Look.plain);

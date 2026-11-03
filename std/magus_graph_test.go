@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"testing"
 
@@ -62,7 +61,7 @@ func TestDirAndLayerRaiseTheirCodes(t *testing.T) {
 
 	_, err := MagusDir(ctx, "internal/htpx")
 	require.ErrorIs(t, err, types.DirNotInGraph)
-	assert.ErrorContains(t, err, "magus\\dir")
+	assert.ErrorContains(t, err, "magus\\graph().dir")
 
 	_, err = MagusLayer(ctx, "service")
 	require.ErrorIs(t, err, types.LayerNotDeclared)
@@ -405,7 +404,6 @@ func TestSymbolsBesideIndexFreshness(t *testing.T) {
 
 	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"indexes", "symbols"}, slices.Sorted(maps.Keys(got)), "keyed as the JSON is")
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
 	var report types.Symbols
@@ -419,7 +417,7 @@ func TestSymbolsBesideIndexFreshness(t *testing.T) {
 	}, report, "a declared output is not listed, and the index verdict rides beside the symbols")
 
 	_, err = MagusSymbols(graphContext(t))
-	assert.ErrorContains(t, err, "magus\\symbols: this workspace cannot judge its symbol indexes")
+	assert.ErrorContains(t, err, "magus\\Graph.symbols: this workspace cannot judge its symbol indexes")
 }
 
 func TestSymbolsReportsNoSymbolsAsAnEmptyList(t *testing.T) {
@@ -428,7 +426,7 @@ func TestSymbolsReportsNoSymbolsAsAnEmptyList(t *testing.T) {
 
 	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
-	assert.Equal(t, []any{}, got["symbols"], "an empty workspace reads as an empty list, never null")
+	assert.Equal(t, []types.SymbolDecl{}, got.Symbols, "an empty workspace reads as an empty list, never null")
 }
 
 // sizedGoFile declares a Go file of lines lines in g, as the index ingestion sizes one.
@@ -445,11 +443,11 @@ func conformanceAtAnchor() *types.ConformanceOptions {
 	return &o
 }
 
-func decodeConformanceReport(t *testing.T, got map[string]any) conformanceReport {
+func decodeConformanceReport(t *testing.T, got types.ConformanceReport) types.ConformanceReport {
 	t.Helper()
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report conformanceReport
+	var report types.ConformanceReport
 	require.NoError(t, json.Unmarshal(b, &report))
 	return report
 }

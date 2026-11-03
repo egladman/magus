@@ -30,7 +30,7 @@ import (
 const wantServerInstructions = `You are connected to a magus workspace.
 magus is a build orchestrator for multi-language monorepos.
 
-The workspace is the client tool: a Buzz program that imports "magus" and calls its members (magus\describe, magus\query, magus\explain, magus\path, magus\refs, magus\stats, magus\where, magus\affected, magus\impact, magus\run, magus\clean, magus\output, magus\hotspots, magus\affinity, magus\ownership, magus\trend, magus\volatility, magus\doctor, magus\job, magus\vcs). Call magus\describe.module("magus") for the signatures. The tools below are the operations that module does not cover.
+The workspace is the client tool: a Buzz program that imports "magus" and calls its members (magus\describe, magus\graph().query, magus\graph().explain, magus\graph().path, magus\graph().refs, magus\graph().stats, magus\where, magus\change().affected, magus\change().impact, magus\run, magus\clean, magus\output, magus\history().hotspots, magus\history().affinity, magus\history().ownership, magus\history().trend, magus\workspace().volatility, magus\doctor, magus\job, magus\vcs). Call magus\describe.module("magus") for the signatures. The tools below are the operations that module does not cover.
 
   client                  - run Buzz against the magus client and return its value
   buzz                    - transform JSON with Buzz; no workspace access
@@ -40,8 +40,8 @@ The workspace is the client tool: a Buzz program that imports "magus" and calls 
   console                 - return a local console link when a person asks to see it
 
 Typical flow:
-  Discover through client with the typed members (magus\describe.project, .graph and .file, magus\query); they return records, not CLI text.
-  Run through client (magus\affected, magus\run); magus\output fetches a captured log by its ref.
+  Discover through client with the typed members (magus\describe.project, .graph and .file, magus\graph().query); they return records, not CLI text.
+  Run through client (magus\change().affected, magus\run); magus\output fetches a captured log by its ref.
   Health: client (magus\doctor), status, config.
 
 Config mutation is intentionally not exposed. Use the magus CLI for that.`
@@ -257,8 +257,9 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 	assert.Equal(t, 3, ran, "a refused call must not reach the tool")
 }
 
-// Over HTTP the caller's lease comes off the request's baggage header, the HTTP form of the
-// BAGGAGE a local process reads, and the client tool's magus\job.put writes as that caller.
+// Over HTTP the caller's lease comes off the request's baggage header.
+// That is the HTTP form of the BAGGAGE a local process reads.
+// The client tool's magus\workspace().putJob writes as that caller.
 func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	useClientStandIn(t)
@@ -308,7 +309,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	hdr, _ := post("", "", initializeFrame)
 	session := hdr.Get("Mcp-Session-Id")
 	require.NotEmpty(t, session)
-	shrink := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"client","arguments":{"script":"import \"magus\";\nfun main(args: [str]) > any !> str {\n  return magus\\job.put(\"root/other\", opts: {\"write_paths\": [\"internal/guard\"]});\n}\n"}}}`
+	shrink := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"client","arguments":{"script":"import \"magus\";\nfun main(args: [str]) > any !> str {\n  return magus\\workspace().putJob(\"root/other\", opts: {\"write_paths\": [\"internal/guard\"]});\n}\n"}}}`
 
 	for name, tc := range map[string]struct {
 		baggage, want string

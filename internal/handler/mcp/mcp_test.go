@@ -89,7 +89,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	t.Parallel()
 
 	originFn := func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} }
-	req := callRequest("client", map[string]any{"script": "magus\\query"})
+	req := callRequest("client", map[string]any{"script": "magus\\graph().query"})
 
 	t.Run("ok outcome sizes input and output", func(t *testing.T) {
 		tel, calls := mcpCallTelemetry(t)
@@ -150,7 +150,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 	originFn := func(context.Context) origin.Client {
 		return origin.Client{Name: "test-agent", UserAgent: "claude-code/1.2.3"}
 	}
-	req := callRequest("client", map[string]any{"script": "magus\\query"})
+	req := callRequest("client", map[string]any{"script": "magus\\graph().query"})
 	const out = "hello world result payload"
 	h := wrap(quietLogger(), originFn, dir, noSecrets, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultText(out), nil

@@ -4,12 +4,14 @@
 //     import "magus/figure";
 //
 //     export fun serverHttp() > Figure !> any {
-//         final guard = magus\dir("internal/httpx");
-//         final mcp = magus\dir("internal/handler/mcp");
+//         final g = magus\graph();
+//         final guard = g.dir("internal/httpx");
+//         final mcp = g.dir("internal/handler/mcp");
+//         final rpc = figure\without(g.layer("handler").dirs, drop: [mcp]);
 //         return figure\of("server-http")
 //             .box(guard, label: "Guard", focal: true)
 //             .box(mcp, label: "/mcp")
-//             .group(figure\without(magus\layer("handler").dirs, drop: [mcp]), label: "Connect RPC")
+//             .group(rpc, label: "Connect RPC")
 //             .edgesFromGraph();
 //     }
 //
@@ -5207,8 +5209,9 @@ fun serverHttpTwin(observed: Observed = Observed{}) > mut Sketch {
         .scope(["internal/handler/*", "internal/httpx", "internal/server"]);
 }
 
-// observedServerScope is magus\importGraph() over internal/handler/*, internal/httpx and
-// internal/server, declared the way docs/engine/page.buzz importFlow declares it.
+// observedServerScope is magus\graph().imports() over the server's dirs.
+// Those are internal/handler/*, internal/httpx and internal/server.
+// It is declared the way docs/engine/page.buzz importFlow declares it.
 fun observedServerScope() > mut Sketch {
     final pkgs = [
         "internal/handler/activity", "internal/handler/attention", "internal/handler/diff",
@@ -6547,7 +6550,7 @@ fun notDirs(dirs: [magus\Dir], call: str) > str? {
     var i = 0;
     while (i < dirs.len()) {
         if (recordPath(dirs[i]) == "") {
-            return "{call} takes Dir records from magus\\dir or magus\\dirs, and item {i} is not one";
+            return "{call} takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item {i} is not one";
         }
         i = i + 1;
     }
@@ -6594,7 +6597,7 @@ export object Box {
     tag: str = "",
     focal: bool = false,
     look: Look? = null,
-    // Anchors a dir box at a definition inside it, from magus\refs.
+    // Anchors a dir box at a definition inside it, from magus\graph().refs.
     symbol: magus\RefsResult? = null,
 }
 
@@ -6689,9 +6692,9 @@ export object Figure {
         return this;
     }
 
-    // box draws one directory. The label defaults to its path. symbol anchors the box at a
-    // function or type the directory defines, from magus\refs; a symbol defined elsewhere
-    // is a finding. focal is Look.focal.
+    // box draws one directory. The label defaults to its path.
+    // symbol anchors the box at a definition inside it, via magus\graph().refs.
+    // A symbol defined elsewhere is a finding. focal is Look.focal.
     mut fun box(dir: magus\Dir, label: str = "", sub: str = "", tag: str = "", focal: bool = false, look: Look? = null, symbol: magus\RefsResult? = null) > mut Figure {
         this.boxes = this.boxes + [Box{ dir = dir, label = label, sub = sub, tag = tag, focal = focal, look = look, symbol = symbol }];
         return this;
@@ -6971,7 +6974,7 @@ fun dirPaths(dirs: [magus\Dir], call: str, found: mut [str]) > [str] {
     while (i < dirs.len()) {
         final path = recordPath(dirs[i]);
         if (path == "") {
-            found.append("{call} takes Dir records from magus\\dir or magus\\dirs, and item {i} is not one");
+            found.append("{call} takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item {i} is not one");
         } else if (seen[path] == null) {
             seen[path] = true;
             list.append(path);
@@ -7031,7 +7034,7 @@ fun resolvePart(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor},
     if (b.dir != null) {
         final dir = b.dir!;
         if (recordPath(dir) == "") {
-            found.append("box takes a Dir from magus\\dir, and this argument is not one");
+            found.append("box takes a Dir from magus\\graph().dir, and this argument is not one");
             return null;
         }
         final call = "box({quote(dir.path)})";
@@ -7124,13 +7127,13 @@ fun resolveFlow(f: Flow, found: mut [str]) > DrawnFlow? {
         call = "flowAcross({quote(src.actor!.name)}, dst: {quote(dst.actor!.name)})";
     } else if (src.actor != null) {
         if (dst.dir == null or recordPath(dst.dir!) == "") {
-            found.append("flowIn({quote(src.actor!.name)}) takes a Dir from magus\\dir as dst");
+            found.append("flowIn({quote(src.actor!.name)}) takes a Dir from magus\\graph().dir as dst");
             return null;
         }
         call = "flowIn({quote(src.actor!.name)}, dst: {quote(dst.dir!.path)})";
     } else if (dst.actor != null) {
         if (src.dir == null or recordPath(src.dir!) == "") {
-            found.append("flowOut(dst: {quote(dst.actor!.name)}) takes a Dir from magus\\dir as src");
+            found.append("flowOut(dst: {quote(dst.actor!.name)}) takes a Dir from magus\\graph().dir as src");
             return null;
         }
         call = "flowOut({quote(src.dir!.path)}, dst: {quote(dst.actor!.name)})";
@@ -7228,7 +7231,7 @@ fun lowered(fig: Figure) > result\Result::<Sketch> {
     final marks: mut [DrawnMark] = mut [<DrawnMark>];
     foreach (m in fig.edgeMarks) {
         if (recordPath(m.src) == "" or recordPath(m.dst) == "") {
-            found.append("markEdge takes Dir records from magus\\dir at both ends");
+            found.append("markEdge takes Dir records from magus\\graph().dir at both ends");
             continue;
         }
         final call = "markEdge({quote(m.src.path)}, dst: {quote(m.dst.path)})";
@@ -7871,9 +7874,9 @@ test "a Figure written as data draws the bytes its builders draw" {
 
 test "a value that is not a record is refused where it enters" {
     final notDir = asRecord::<magus\Dir>({ "id": "dir:x" });
-    assert\equal(failure(of("t").box(notDir).unscoped(why: "x")), want: "figure \"t\": box takes a Dir from magus\\dir, and this argument is not one", message: "box");
+    assert\equal(failure(of("t").box(notDir).unscoped(why: "x")), want: "figure \"t\": box takes a Dir from magus\\graph().dir, and this argument is not one", message: "box");
     assert\equal(failure(of("t").group([guardDir(), notDir], label: "g").unscoped(why: "x")),
-        want: "figure \"t\": group(\"g\") takes Dir records from magus\\dir or magus\\dirs, and item 1 is not one\nfigure \"t\": draws directories and declares unscoped(why:); drop the unscoped",
+        want: "figure \"t\": group(\"g\") takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item 1 is not one\nfigure \"t\": draws directories and declares unscoped(why:); drop the unscoped",
         message: "group");
     var msg = "";
     try {
@@ -7881,5 +7884,5 @@ test "a value that is not a record is refused where it enters" {
     } catch (e: str) {
         msg = e;
     }
-    assert\equal(msg, want: "without takes Dir records from magus\\dir or magus\\dirs, and item 1 is not one", message: "without");
+    assert\equal(msg, want: "without takes Dir records from magus\\graph().dir or magus\\graph().dirs, and item 1 is not one", message: "without");
 }

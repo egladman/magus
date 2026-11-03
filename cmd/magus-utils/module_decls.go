@@ -1,13 +1,3 @@
-// Subcommand `moduledecls` emits the Buzz DECLARATION half of every host module:
-// an `export extern fun` per method, carrying the parameter and return types the
-// checker needs. Registered alongside the native implementation under the same
-// import path (SetModuleDecls beside SetNativeModule), it is what turns
-// `magus\impact(base)` from an Unknown-typed call into a checked one.
-//
-// Without it every host call typed as Unknown, so a magusfile could read a field
-// no return carries and only find out at run time, which is the gap Ret.Object was
-// added to close and, until now, only the docs consumed.
-
 package main
 
 import (
@@ -613,6 +603,11 @@ func collectMirrors(mod std.Module) ([]string, error) {
 			if err := visit(name); err != nil {
 				return nil, fmt.Errorf("namespace %s: %w", ns.Name, err)
 			}
+		}
+	}
+	for _, name := range mod.CallbackObjects {
+		if err := visit(name); err != nil {
+			return nil, err
 		}
 	}
 	for _, p := range sortedProtocols(mod) {

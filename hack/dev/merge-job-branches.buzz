@@ -312,7 +312,7 @@ export fun parseCheck(cmd: str) > result\Result::<stack\CheckGoal> {
 fun storeRows() > result\Result::<[JobRow]> {
     try {
         final acc = mut [<JobRow>];
-        foreach (j in magus\job.list().jobs) {
+        foreach (j in magus\workspace().jobs().jobs) {
             final goals = mut [<stack\CheckGoal>];
             foreach (g in j.goals) {
                 if (g.kind == magus\GoalKind.check) {
