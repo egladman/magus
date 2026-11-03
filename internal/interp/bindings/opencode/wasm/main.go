@@ -4,13 +4,13 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"syscall/js"
 	"time"
 
 	"github.com/egladman/magus/internal/interp/bindings/opencode"
+	"github.com/egladman/magus/internal/json"
 )
 
 func promise(work func() (any, error)) js.Value {

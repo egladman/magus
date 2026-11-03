@@ -2,13 +2,13 @@ package opencode
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/suite"
 )
 

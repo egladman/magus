@@ -5,11 +5,11 @@ package opencode
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
@@ -18,7 +18,7 @@ import (
 // committed because the spell embeds them. VCS stamping would change the asset
 // after every commit, even when its source is unchanged.
 //
-//go:generate env GOOS=js GOARCH=wasm go build -buildvcs=false -trimpath "-ldflags=-s -w" -o ../../../../spells/harness/opencode/gen/magus-opencode.wasm ./wasm
+//go:generate env GOEXPERIMENT=jsonv2 GOOS=js GOARCH=wasm go build -buildvcs=false -trimpath "-ldflags=-s -w" -o ../../../../spells/harness/opencode/gen/magus-opencode.wasm ./wasm
 //go:generate cp $GOROOT/lib/wasm/wasm_exec.js ../../../../spells/harness/opencode/gen/wasm_exec.js
 
 const Version = 1
