@@ -171,7 +171,16 @@ fun termUsage(title: str) > str !> any {
     final names = mut {<str: bool>};
     final found = magus\query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: magus\QueryOptions{limit = 5000});
     if (found.answer.verdict == magus\KnowledgeVerdict.unknown) {
-        throw "glossary-usage-generate: part of the workspace has no symbol index, so a type named {title} could be missing; run `magus graph build`";
+        var buildable = 0;
+        foreach (gap in found.answer.gaps) {
+            if (gap.unindexable) {
+                continue;
+            }
+            buildable += 1;
+        }
+        if (buildable > 0 or found.answer.staleIndexes.len() > 0) {
+            throw "glossary-usage-generate: part of the workspace has no symbol index, so a type named {title} could be missing; run `magus graph build`";
+        }
     }
     final ids = mut [<str>];
     foreach (m in found.matches) { ids.append(m.id); }
