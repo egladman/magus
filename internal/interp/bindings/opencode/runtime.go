@@ -389,7 +389,8 @@ func unknownDecision(envelope map[string]json.RawMessage) Verdict {
 			label = string(encoded)
 		}
 	}
-	return Verdict{SchemaVersion: 1, Decision: "deny", Reason: "magus guard returned the decision " + label + ", which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs."}
+	reason := fmt.Sprintf("magus guard returned the decision %s, which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs.", label)
+	return Verdict{SchemaVersion: 1, Decision: "deny", Reason: reason}
 }
 
 // stringMember is false unless key holds a JSON string, so a verdict

@@ -211,7 +211,7 @@ func (s *runtimeSuite) TestCancellationAndShutdown() {
 	case <-time.After(time.Second):
 		s.FailNow("dispatch did not cancel")
 	}
-	s.NoError(runtime.Close())
+	s.Require().NoError(runtime.Close())
 	_, err := runtime.Dispatch(context.Background(), Event{Kind: "take"})
 	s.ErrorContains(err, "runtime closed")
 }

@@ -125,7 +125,7 @@ func planHarnessAssets(root string, d HarnessDescriptor, plan *types.HarnessInst
 			return err
 		}
 		if exists && !bytes.Equal(body, a.Content) && known[a.Path] != assetDigest(body) {
-			return fmt.Errorf("harness asset %s has unrecognized local changes; preserve or move it before installing", a.Path)
+			return fmt.Errorf("harness asset %s has unrecognized local changes, so preserve or move it before installing", a.Path)
 		}
 		if !exists || !bytes.Equal(body, a.Content) {
 			if err := addPlanFile(plan, a.Path, types.HarnessFile{Exists: exists, Bytes: a.Content, Changes: []types.HarnessChange{{Op: types.HarnessWrite}}}); err != nil {
@@ -212,7 +212,10 @@ func readHarnessDocument(path string) (map[string]any, error) {
 	if len(existing) == 0 {
 		return doc, nil
 	}
-	return doc, decodeHarnessJSON(existing, &doc)
+	if err := decodeHarnessJSON(existing, &doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
 }
 
 func receiptsLast(a, b string) int {
@@ -398,7 +401,7 @@ func resolveHarnessLinkSource(root, source string) (harnessLinkSource, error) {
 		return harnessLinkSource{}, fmt.Errorf("resolve source %q: %w", source, err)
 	}
 	if err := confineToWorkspace(root, resolved); err != nil {
-		return harnessLinkSource{}, fmt.Errorf("source %q %w", source, err)
+		return harnessLinkSource{}, fmt.Errorf("source %q: %w", source, err)
 	}
 	return harnessLinkSource{name: source, path: resolved, info: info}, nil
 }
@@ -486,7 +489,7 @@ func resolveParentDir(root, candidate string) (string, error) {
 		return "", fmt.Errorf("resolve parent %q: %w", candidate, err)
 	}
 	if err := confineToWorkspace(root, resolved); err != nil {
-		return "", fmt.Errorf("parent %w", err)
+		return "", fmt.Errorf("parent: %w", err)
 	}
 	info, err := os.Stat(resolved)
 	if err != nil || !info.IsDir() {
