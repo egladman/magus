@@ -1184,6 +1184,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		}
 		deps.callDir = callDir
 		v := judgeShellLine(ctx, deps, location, callDir, input, shellD)
+		// Nothing to park on a read-only row; a writer still gets the advice.
+		if v.advisoryName() == string(advisoryCheckpointState) && standing.declared && standing.row.ReadOnly {
+			v = ShellVerdict{}
+		}
 		// Outside judgeShellLine: it reads session state (which skills have loaded) rather
 		// than the line alone, and a remedy graded by that function never writes Buzz.
 		v = deps.rankGraded(v, denyBuzzUnbriefed, denyBuzzAuthorWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input, shellD), rankBuzzAuthor)
