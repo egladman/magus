@@ -1,3 +1,4 @@
+// Tier 1, mechanical: a missing host link is a fact of the tree, found without judgment.
 // Authored skills are neutral sources; bootstrap installs their host links.
 namespace localskills;
 
