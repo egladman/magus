@@ -741,6 +741,9 @@ type workflowStep struct {
 	With map[string]string `yaml:"with"`
 }
 
+// harnessRunner is the script ci.yaml's gate runs magus through.
+const harnessRunner = "buzz hack/ci/run-with-harnesses.buzz "
+
 // workflowJob reads job's steps from the workflow file at path under the repository root.
 func workflowJob(t *testing.T, path, job string) []workflowStep {
 	t.Helper()
@@ -764,7 +767,8 @@ func ciShardBoxes(t *testing.T) ([][]string, []workflowStep) {
 	var steps []workflowStep
 	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
 		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(s.With["command"], "queue gate ") {
-			argvs = append(argvs, strings.Fields(regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")))
+			command := regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")
+			argvs = append(argvs, strings.Fields(strings.Replace(command, " -- magus "+harnessRunner+"-- ", " -- magus ", 1)))
 			steps = append(steps, s)
 		}
 	}

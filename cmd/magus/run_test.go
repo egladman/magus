@@ -706,7 +706,7 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 		command := s.With["command"]
 		// A shard gated in the queue's box names the command it runs after `-- magus`.
 		if _, inner, boxed := strings.Cut(command, " -- magus "); boxed && strings.HasPrefix(command, "queue gate ") {
-			command = inner
+			command = strings.TrimPrefix(inner, harnessRunner+"-- ")
 		}
 		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(command, "run ci") {
 			// Rendered as main's run renders it: main's shards are the ones whose entries
@@ -722,7 +722,7 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	require.NoError(t, err)
 	m := regexp.MustCompile(`final GATE = candidateMagus\("([^"]+)"\);`).FindSubmatch(raw)
 	require.NotNil(t, m, "hack/ci/merge-queue.buzz declares no GATE")
-	gate := string(m[1])
+	gate := strings.Replace(string(m[1]), harnessRunner+"gate", "run ci:gha --no-default-charms", 1)
 
 	cfg, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
 	require.NoError(t, err)
