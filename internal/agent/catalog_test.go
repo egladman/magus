@@ -526,6 +526,14 @@ func TestSkillDigestIsPerSkill(t *testing.T) {
 	assert.Equal(t, "unreadable", catalog.SkillDigest("magus-not-a-skill"))
 }
 
+// Every shipped skill renders in both forms against the real magus module, so a
+// {{buzz}} name a regroup moved fails here and not at install.
+func TestEveryShippedSkillRendersAgainstTheModule(t *testing.T) {
+	skills, err := Default(6).RenderedSkills(types.SkillFormBoth)
+	require.NoError(t, err)
+	assert.NotEmpty(t, skills)
+}
+
 func TestCatalogRenderAndStamp(t *testing.T) {
 	catalog := testCatalog(t)
 	rendered := catalog.RenderSkill(AgentSkill{Name: "magus-test", Description: "Does one thing.", Body: "# Test"})
