@@ -1740,7 +1740,6 @@ func TestSpawnIntoAFullBudgetSkipsAdviceForAWorkerThatRunsNoTarget(t *testing.T)
 	}
 }
 
-
 type SpawnUnisolatedSuite struct {
 	suite.Suite
 }
