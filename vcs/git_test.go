@@ -4247,7 +4247,7 @@ func TestCreateCheckoutReusesABranchAtTheRevision(t *testing.T) {
 
 	fourth := filepath.Join(t.TempDir(), "fourth")
 	err = g.CreateCheckout(ctx, dir, fourth, "HEAD", "job-branch")
-	require.ErrorContains(t, err, "already exists", "a branch holding commits past the revision is never reused")
+	require.ErrorContains(t, err, "would strand them", "a branch holding commits past the revision is never reused")
 }
 
 type AttrsSpaceSuite struct {

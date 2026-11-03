@@ -411,6 +411,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 				row.Validated = 1
 				_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 				require.NoError(t, err)
+				if row.Worktree != nil {
+					_, err = store.RecordWorktree(t.Context(), row.ID, *row.Worktree)
+					require.NoError(t, err)
+				}
 			}
 			if tc.corruptStore {
 				p, err := store.Path()
