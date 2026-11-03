@@ -701,12 +701,13 @@ fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     final probe = proc\exec(guard.bin, args: ["version"], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
     if (probe != null) { version = hook\firstLine(probe!.stdout); }
     if (version == "") { version = "version unreadable"; }
-    var why = "";
+    final lines = mut [<str>];
     if (failed != null) {
         foreach (line in failed!.stderr.split("\n")) {
-            if (why == "" and line != "" and line.indexOf("WARN") == null) { why = line; }
+            if (line != "" and line.indexOf("WARN") == null and lines.len() < 12) { lines.append(line); }
         }
     }
+    var why = lines.join("\n");
     if (why == "") { why = "it printed no error"; }
     return "magus guard could not judge this call: {guard.bin} ({version}) said: {why}";
 }
@@ -824,6 +825,13 @@ fun gateReply(v: Verdict, eventName: str, command: str) > str {
         return blockedAsk(v.reason, command: command);
     }
     if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
+    if (v.decision == UNJUDGED and hook\isBootstrap(command)) {
+        return json\stringify({
+            "permission": "allow",
+            "user_message": hook\firstLine(v.reason),
+            "agent_message": v.reason,
+        }) catch ALLOW;
+    }
     if (v.decision == UNJUDGED) { return denyBoth(v.reason); }
     return json\stringify({
         "permission": "deny",
