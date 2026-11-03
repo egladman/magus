@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27002
-skill_short_bytes: 21232
+skill_full_bytes: 27034
+skill_short_bytes: 21264
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `e4bf9bd4fd73` |
+| `skill-content` | `f9eb23f49a24` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -232,8 +232,8 @@ or a model. magus never picks a model live: re-fork to change a tier.
 | Shipped tier | Assign |
 |---|---|
 | principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and a bounded set of projects |
-| economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
+| standard | isolated implementation with a clear contract and a bounded set of projects, and tracing behavior through code |
+| economy | mechanical edits, fixtures, docs, inventory, and lookups the graph answers (exists, depends-on, is-generated) |
 
 If the host cannot select models or reasoning effort, keep its default. Tool access
 is a separate axis: evidence gathering, scouting, and review get read-only tools
@@ -392,9 +392,8 @@ any cap the user set for the tree. Require the worker to:
 
 End every brief with the step that files the result, as the worker's LAST act before
 it reports back. A brief that leaves it out gets a prose report and a row that never
-moves. The step: `magus job exit <job> --stdin` with a record of `schema_version` 2, `job`,
-`changed_paths`, `validation` (`command` and `output_ref`), `gate_evidence` (one `gate_id` and `output_ref` per named gate), `descendants` and
-`unresolved_risks`; `magus job exit --schema` prints the shape.
+moves. The step: `magus job exit <job> --stdin`, filing the shape `magus job exec <row>` printed.
+Never inline the result fields in a brief; the row prints them filled in.
 Keep unresolved risks mandatory.
 
 A worker writes only its own row and the children it forks. Every other store write
@@ -408,7 +407,8 @@ After the spawn, the row carries the job:
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
 - Only a row with a check or a goal can pass. Fork a scout `--read-only`; it passes only
-  through a script check (reference.md), and a prose scout ends no_return by design.
+  through a script check (reference.md) or by filing a result: a read-only row whose holder files a result is
+  recorded pass, and only a row with nothing filed ends no_return.
 
 [reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
 job's boundary, how magus ends abandoned jobs, and what `magus job wait` checks.
@@ -698,8 +698,8 @@ or a model. magus never picks a model live: re-fork to change a tier.
 | Shipped tier | Assign |
 |---|---|
 | principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and a bounded set of projects |
-| economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
+| standard | isolated implementation with a clear contract and a bounded set of projects, and tracing behavior through code |
+| economy | mechanical edits, fixtures, docs, inventory, and lookups the graph answers (exists, depends-on, is-generated) |
 
 If the host cannot select models or reasoning effort, keep its default. Tool access
 is a separate axis: evidence gathering, scouting, and review get read-only tools
@@ -874,9 +874,8 @@ End every brief with the step that files the result, as the worker's LAST act be
 it reports back. A brief that leaves it out gets a prose report and a row that never
 moves: the store keeps the write paths held, `magus job wait`
 has nothing to verify, and nobody notices until a sibling is refused over a path
-the finished worker no longer needs. The step: `magus job exit <job> --stdin` with a record of `schema_version` 2, `job`,
-`changed_paths`, `validation` (`command` and `output_ref`), `gate_evidence` (one `gate_id` and `output_ref` per named gate), `descendants` and
-`unresolved_risks`; `magus job exit --schema` prints the shape, and
+the finished worker no longer needs. The step: `magus job exit <job> --stdin`, filing the shape `magus job exec <row>` printed.
+Never inline the result fields in a brief; the row prints them filled in, and
 [reference.md](reference.md) shows a record.
 A typed result makes verification mechanical. Keep unresolved risks mandatory, so a
 mis-scoped worker can say so instead of widening silently.
@@ -892,7 +891,8 @@ After the spawn, the row carries the job:
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
 - Only a row with a check or a goal can pass. Fork a scout `--read-only`; it passes only
-  through a script check (reference.md), and a prose scout ends no_return by design.
+  through a script check (reference.md) or by filing a result: a read-only row whose holder files a result is
+  recorded pass, and only a row with nothing filed ends no_return.
 
 [reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
 job's boundary, how magus ends abandoned jobs, and what `magus job wait` checks.

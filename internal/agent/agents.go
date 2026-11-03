@@ -35,6 +35,27 @@ var agentDefs = []Agent{
 	},
 }
 
+// scoutCommands is the one allowlist the scout's prose renders from.
+var scoutCommands = []struct{ Command, Use string }{
+	{"magus query", "for what exists and how entities relate."},
+	{"magus refs", "for where a symbol is defined and used."},
+	{"magus describe", "for a file, target, project or job."},
+	{"magus affected --explain", "for why a project is or is not affected."},
+	{"magus query output <ref>", "to reopen the full output of an earlier command."},
+	{"magus job exit", "as your last act, to file your row."},
+}
+
+func renderScoutCommands() string {
+	var b strings.Builder
+	for i, c := range scoutCommands {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "- `%s` %s", c.Command, c.Use)
+	}
+	return b.String()
+}
+
 // ShippedAgents returns the agents magus ships, with instructions read from the embedded
 // Markdown.
 func ShippedAgents() ([]Agent, error) {
@@ -44,7 +65,8 @@ func ShippedAgents() ([]Agent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("agent: read %s: %w", a.Name, err)
 		}
-		a.Instructions = strings.TrimSpace(string(body)) + "\n"
+		text := strings.ReplaceAll(string(body), "{{commands}}", renderScoutCommands())
+		a.Instructions = strings.TrimSpace(text) + "\n"
 		out = append(out, a)
 	}
 	return out, nil
