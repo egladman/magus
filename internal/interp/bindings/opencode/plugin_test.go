@@ -3,6 +3,7 @@ package opencode
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -29,7 +30,7 @@ func (c *fakeClient) sessionMessages(context.Context, string) ([]sessionMessage,
 func (c *fakeClient) prompt(_ context.Context, id, message string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.prompts = append(c.prompts, id+": "+message)
+	c.prompts = append(c.prompts, fmt.Sprintf("%s: %s", id, message))
 	return c.failSend
 }
 func (c *fakeClient) notify(context.Context, string) {}
@@ -48,11 +49,11 @@ type recorder struct {
 	calls  [][]string
 }
 
-func (r *recorder) invoke(_ context.Context, in Invocation) (Capture, error) {
+func (r *recorder) invoke(_ context.Context, in magusCall) (processOutput, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.calls = append(r.calls, in.Args)
-	return Capture{Stdout: r.stdout}, nil
+	return processOutput{Stdout: r.stdout}, nil
 }
 
 func (r *recorder) ran(args ...string) bool {
@@ -73,7 +74,7 @@ func TestPlugin(t *testing.T) { suite.Run(t, new(pluginSuite)) }
 func (s *pluginSuite) SetupTest() {
 	s.client = &fakeClient{files: map[string]bool{}, vars: map[string]string{}}
 	s.magus = &recorder{stdout: `{"schema_version":1,"decision":"pass"}`}
-	runtime, err := Open(context.Background(), Plugin, s.magus.invoke)
+	runtime, err := openRuntime(context.Background(), pluginSource, s.magus.invoke)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { s.NoError(runtime.Close()) })
 	s.plugin = newPlugin(s.client, s.magus.invoke, "/repo", runtime)
@@ -174,7 +175,7 @@ func (s *pluginSuite) TestToolBeforeSkipsAnEditWithoutAPath() {
 
 func (s *pluginSuite) TestToolBeforeAddsTheFilePathToAnotherTool() {
 	call := toolCall{Session: "s", Tool: "read", Args: []byte(`{"filePath":"a.go"}`)}
-	event := Event{}
+	event := hookEvent{}
 	ready, err := s.plugin.describeCall(context.Background(), &event, call, who{session: "s"})
 	s.Require().NoError(err)
 	s.True(ready)

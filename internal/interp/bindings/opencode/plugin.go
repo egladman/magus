@@ -20,7 +20,6 @@ const (
 	observeScript     = ".opencode/magus/runtime/magus-observe.buzz"
 	magusFix          = "Install magus (https://eli.gladman.cc/magus/guides/setup/), build it from source (https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path."
 	agentName         = "opencode"
-	hookTimeout       = 30 * time.Second
 	maxBrief          = 16384
 )
 
@@ -109,9 +108,9 @@ type who struct{ session, agent string }
 // concurrent use.
 type plugin struct {
 	client    pluginClient
-	invoke    Invoke
+	invoke    invoker
 	directory string
-	runtime   *Runtime
+	runtime   *buzzRuntime
 
 	mu                  sync.Mutex
 	parents             map[string]string
@@ -121,12 +120,12 @@ type plugin struct {
 	diskNote, briefNote string
 }
 
-func newPlugin(client pluginClient, invoke Invoke, directory string, runtime *Runtime) *plugin {
+func newPlugin(client pluginClient, invoke invoker, directory string, runtime *buzzRuntime) *plugin {
 	return &plugin{client: client, invoke: invoke, directory: directory, runtime: runtime,
 		parents: map[string]string{}, followUps: map[string]string{}, background: map[string]bool{}}
 }
 
-func str(value any) string {
+func stringValue(value any) string {
 	text, _ := value.(string)
 	return text
 }
@@ -169,7 +168,7 @@ func (c toolCall) argsJSON() (string, error) {
 
 func argString(fields map[string]any, keys ...string) string {
 	for _, key := range keys {
-		if found := str(fields[key]); found != "" {
+		if found := stringValue(fields[key]); found != "" {
 			return found
 		}
 	}
@@ -230,7 +229,7 @@ func magusToolName(tool string, servers []mcpServer) string {
 
 func lastReplyText(messages []sessionMessage) string {
 	for i := len(messages) - 1; i >= 0; i-- {
-		switch str(messages[i].Info.Role) {
+		switch stringValue(messages[i].Info.Role) {
 		case "user":
 			return ""
 		case "assistant":
@@ -246,21 +245,21 @@ func replyText(parts []messagePart) string {
 	var texts []string
 	for _, part := range parts {
 		if spoken(part) {
-			texts = append(texts, str(part.Text))
+			texts = append(texts, stringValue(part.Text))
 		}
 	}
 	return strings.Join(texts, "\n\n")
 }
 
 func spoken(part messagePart) bool {
-	return str(part.Type) == "text" && !truthy(part.Synthetic) && !truthy(part.Ignored) && strings.TrimSpace(str(part.Text)) != ""
+	return stringValue(part.Type) == "text" && !truthy(part.Synthetic) && !truthy(part.Ignored) && strings.TrimSpace(stringValue(part.Text)) != ""
 }
 
 func typedTexts(parts []messagePart) []string {
 	var texts []string
 	for _, part := range parts {
-		if str(part.Type) == "text" && !truthy(part.Synthetic) {
-			texts = append(texts, str(part.Text))
+		if stringValue(part.Type) == "text" && !truthy(part.Synthetic) {
+			texts = append(texts, stringValue(part.Text))
 		}
 	}
 	return texts
@@ -309,8 +308,8 @@ func validMilliseconds(ms float64) bool {
 }
 
 // dispatchJSON runs one event given as JSON and answers its result as JSON.
-func dispatchJSON(ctx context.Context, r *Runtime, data string) (string, error) {
-	var event Event
+func dispatchJSON(ctx context.Context, r *buzzRuntime, data string) (string, error) {
+	var event hookEvent
 	if err := json.Unmarshal([]byte(data), &event); err != nil {
 		return "", fmt.Errorf("harness plugin: event: %w", err)
 	}
@@ -344,8 +343,8 @@ func (p *plugin) magusTool(tool string) string {
 	return magusToolName(tool, p.config.servers)
 }
 
-func (p *plugin) run(ctx context.Context, args []string, input string) (Capture, error) {
-	return p.invoke(ctx, Invocation{Args: args, Input: input})
+func (p *plugin) run(ctx context.Context, args []string, input string) (processOutput, error) {
+	return p.invoke(ctx, magusCall{Args: args, Input: input})
 }
 
 func (p *plugin) runOnce(ctx context.Context, args []string, input string) string {
@@ -356,8 +355,8 @@ func (p *plugin) runOnce(ctx context.Context, args []string, input string) strin
 	return capture.Stdout
 }
 
-func (p *plugin) judge(ctx context.Context, args []string, input string) Verdict {
-	return Judge(ctx, p.invoke, Invocation{Args: args, Input: input})
+func (p *plugin) judge(ctx context.Context, args []string, input string) guardVerdict {
+	return askGuard(ctx, p.invoke, magusCall{Args: args, Input: input})
 }
 
 func (p *plugin) runGlue(ctx context.Context, script string, event any) string {
@@ -370,7 +369,7 @@ func (p *plugin) setParent(id, parent string) {
 	p.parents[id] = parent
 }
 
-func (p *plugin) parentOf(ctx context.Context, id string) string {
+func (p *plugin) parentSession(ctx context.Context, id string) string {
 	p.mu.Lock()
 	parent, known := p.parents[id]
 	p.mu.Unlock()
@@ -394,7 +393,7 @@ func (p *plugin) whoIs(ctx context.Context, id string) who {
 	}
 	root := id
 	for range 16 {
-		parent := p.parentOf(ctx, root)
+		parent := p.parentSession(ctx, root)
 		if parent == "" {
 			break
 		}
@@ -524,7 +523,7 @@ func (p *plugin) sendFollowUp(ctx context.Context, id, message, failure string) 
 	p.mu.Lock()
 	delete(p.followUps, id)
 	p.mu.Unlock()
-	p.client.warn("[magus guard] " + failure + err.Error())
+	p.client.warn(fmt.Sprintf("[magus guard] %s%v", failure, err))
 	return false
 }
 
@@ -564,10 +563,10 @@ func replyPrompt(stdout string) string {
 	return response.Prompt
 }
 
-func (p *plugin) warnVerdict(verdict Verdict) {
+func (p *plugin) warnVerdict(verdict guardVerdict) {
 	switch verdict.Decision {
 	case "unjudged":
-		p.client.warn("[magus guard] " + verdict.Why + "\n" + magusFix)
+		p.client.warn(fmt.Sprintf("[magus guard] %s\n%s", verdict.Why, magusFix))
 	case "advise":
 		p.client.warn("[magus guard] " + verdict.Context)
 	}
@@ -627,7 +626,7 @@ func (p *plugin) backgroundChildIdle(ctx context.Context, child string) {
 
 func (p *plugin) toolBefore(ctx context.Context, call toolCall) error {
 	identity := p.whoIs(ctx, call.Session)
-	event := Event{Kind: "before", Tool: call.Tool, SessionID: call.Session, CallID: call.CallID, RootSessionID: identity.session, AgentID: identity.agent, Cwd: p.directory}
+	event := hookEvent{Kind: "before", Tool: call.Tool, SessionID: call.Session, CallID: call.CallID, RootSessionID: identity.session, AgentID: identity.agent, Cwd: p.directory}
 	ready, err := p.describeCall(ctx, &event, call, identity)
 	if err != nil || !ready {
 		return err
@@ -644,7 +643,7 @@ func (p *plugin) toolBefore(ctx context.Context, call toolCall) error {
 
 // describeCall fills event from the call's args, false when there is
 // nothing to judge.
-func (p *plugin) describeCall(ctx context.Context, event *Event, call toolCall, identity who) (bool, error) {
+func (p *plugin) describeCall(ctx context.Context, event *hookEvent, call toolCall, identity who) (bool, error) {
 	fields := call.fields()
 	switch call.Tool {
 	case "bash":
@@ -660,7 +659,7 @@ func (p *plugin) describeCall(ctx context.Context, event *Event, call toolCall, 
 	return p.describeOther(ctx, event, call, fields, identity)
 }
 
-func (p *plugin) describeCommand(event *Event, fields map[string]any) bool {
+func (p *plugin) describeCommand(event *hookEvent, fields map[string]any) bool {
 	event.Command = argString(fields, "command")
 	if event.Command == "" {
 		return false
@@ -669,7 +668,7 @@ func (p *plugin) describeCommand(event *Event, fields map[string]any) bool {
 	return true
 }
 
-func describePatch(event *Event, fields map[string]any) bool {
+func describePatch(event *hookEvent, fields map[string]any) bool {
 	patch := argString(fields, "patchText")
 	if patch == "" {
 		return false
@@ -678,7 +677,7 @@ func describePatch(event *Event, fields map[string]any) bool {
 	return true
 }
 
-func describeTask(event *Event, call toolCall, fields map[string]any) (bool, error) {
+func describeTask(event *hookEvent, call toolCall, fields map[string]any) (bool, error) {
 	if argString(fields, "prompt") == "" {
 		return false, nil
 	}
@@ -687,7 +686,7 @@ func describeTask(event *Event, call toolCall, fields map[string]any) (bool, err
 	return err == nil, err
 }
 
-func (p *plugin) describeOther(ctx context.Context, event *Event, call toolCall, fields map[string]any, identity who) (bool, error) {
+func (p *plugin) describeOther(ctx context.Context, event *hookEvent, call toolCall, fields map[string]any, identity who) (bool, error) {
 	var err error
 	if name := p.magusTool(call.Tool); name != "" {
 		event.Tool, event.MCP = "mcp__magus__"+name, true
@@ -719,7 +718,7 @@ func (p *plugin) permissionAsk(ctx context.Context, request permissionRequest) (
 		return "", nil
 	}
 	identity := p.whoIs(ctx, request.Session)
-	result, err := p.runtime.Dispatch(ctx, Event{Kind: "permission", Tool: "bash", Command: request.Command, RootSessionID: identity.session, AgentID: identity.agent, Cwd: p.directory})
+	result, err := p.runtime.Dispatch(ctx, hookEvent{Kind: "permission", Tool: "bash", Command: request.Command, RootSessionID: identity.session, AgentID: identity.agent, Cwd: p.directory})
 	return result.Status, err
 }
 
@@ -727,7 +726,7 @@ func (p *plugin) permissionAsk(ctx context.Context, request permissionRequest) (
 // back with an error too, so the output carries what was already taken.
 func (p *plugin) toolAfter(ctx context.Context, call toolCall, out toolResult) ([]noteEdit, error) {
 	edits := append(p.heldNotes(out.Notable), p.buzzCheckNotes(ctx, call)...)
-	advisory, err := p.runtime.Dispatch(ctx, Event{Kind: "take", SessionID: call.Session, CallID: call.CallID})
+	advisory, err := p.runtime.Dispatch(ctx, hookEvent{Kind: "take", SessionID: call.Session, CallID: call.CallID})
 	if err != nil {
 		return edits, err
 	}
@@ -779,13 +778,13 @@ func (p *plugin) afterTask(ctx context.Context, call toolCall, out toolResult, e
 		return edits, nil
 	}
 	if reason := p.guardSubagentStop(ctx, identity, out.Child, false); reason != "" {
-		edits = append(edits, noteEdit{Text: "[magus guard] " + reason + "\n\nResume the subagent with task_id " + out.Child + "."})
+		edits = append(edits, noteEdit{Text: fmt.Sprintf("[magus guard] %s\n\nResume the subagent with task_id %s.", reason, out.Child)})
 	}
 	return edits, nil
 }
 
 func (p *plugin) chatMessage(ctx context.Context, id string, parts []messagePart) {
-	if p.parentOf(ctx, id) != "" {
+	if p.parentSession(ctx, id) != "" {
 		return
 	}
 	message := strings.Join(typedTexts(parts), "\n\n")
@@ -803,7 +802,7 @@ func (p *plugin) event(ctx context.Context, event sessionEvent) {
 			p.holdBrief(ctx)
 		}
 	case "session.compacted":
-		if p.parentOf(ctx, event.Session) == "" {
+		if p.parentSession(ctx, event.Session) == "" {
 			p.holdBrief(ctx)
 		}
 	case "session.idle":
@@ -816,7 +815,7 @@ func (p *plugin) sessionIdle(ctx context.Context, id string) {
 		p.backgroundChildIdle(ctx, id)
 		return
 	}
-	if p.parentOf(ctx, id) != "" {
+	if p.parentSession(ctx, id) != "" {
 		return
 	}
 	followed := p.hasFollowUp(id)

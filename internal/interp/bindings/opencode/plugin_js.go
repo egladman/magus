@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"syscall/js"
+	"time"
 
 	"github.com/egladman/magus/internal/json"
 )
@@ -33,6 +34,8 @@ func jsonString(value js.Value) (string, error) {
 	}
 	return encoded.String(), nil
 }
+
+const hookTimeout = 30 * time.Second
 
 func consoleWarn(message string) { js.Global().Get("console").Call("warn", message) }
 
@@ -124,7 +127,7 @@ func (c jsClient) env(name string) string {
 	return text(property(property(js.Global().Get("process"), "env"), name))
 }
 
-func toolCallOf(input, args js.Value) toolCall {
+func decodeToolCall(input, args js.Value) toolCall {
 	call := toolCall{Session: text(property(input, "sessionID")), Tool: text(property(input, "tool")), CallID: text(property(input, "callID"))}
 	if encoded, err := jsonString(args); err == nil {
 		call.Args = []byte(encoded)
@@ -132,7 +135,7 @@ func toolCallOf(input, args js.Value) toolCall {
 	return call
 }
 
-func toolResultOf(output js.Value) toolResult {
+func decodeToolResult(output js.Value) toolResult {
 	metadata := property(output, "metadata")
 	background := property(metadata, "background")
 	return toolResult{
@@ -142,7 +145,7 @@ func toolResultOf(output js.Value) toolResult {
 	}
 }
 
-func permissionOf(input js.Value) permissionRequest {
+func decodePermission(input js.Value) permissionRequest {
 	command := property(property(input, "metadata"), "command")
 	if command.Type() != js.TypeString {
 		command = property(input, "title")
@@ -150,7 +153,7 @@ func permissionOf(input js.Value) permissionRequest {
 	return permissionRequest{Type: text(property(input, "type")), Command: text(command), Session: text(property(input, "sessionID"))}
 }
 
-func sessionEventOf(input js.Value) sessionEvent {
+func decodeSessionEvent(input js.Value) sessionEvent {
 	event := property(input, "event")
 	properties := property(event, "properties")
 	info := property(properties, "info")
@@ -158,9 +161,9 @@ func sessionEventOf(input js.Value) sessionEvent {
 		Parent: text(property(info, "parentID")), Session: text(property(properties, "sessionID"))}
 }
 
-// messagePartsOf decodes a chat message's parts, or none when they are not
+// decodeMessageParts decodes a chat message's parts, or none when they are not
 // an array of objects.
-func messagePartsOf(parts js.Value) []messagePart {
+func decodeMessageParts(parts js.Value) []messagePart {
 	encoded, err := jsonString(parts)
 	if err != nil {
 		return nil
@@ -172,16 +175,16 @@ func messagePartsOf(parts js.Value) []messagePart {
 	return decoded
 }
 
-func configOf(config js.Value) pluginConfig {
+func decodeConfig(config js.Value) pluginConfig {
 	bash := property(property(config, "permission"), "bash")
 	patterns := map[string]string{}
 	for _, key := range objectKeys(bash) {
 		patterns[key] = text(bash.Get(key))
 	}
-	return pluginConfig{bash: patterns, servers: mcpServersOf(property(config, "mcp"))}
+	return pluginConfig{bash: patterns, servers: decodeMCPServers(property(config, "mcp"))}
 }
 
-func mcpServersOf(mcp js.Value) []mcpServer {
+func decodeMCPServers(mcp js.Value) []mcpServer {
 	var servers []mcpServer
 	for _, key := range objectKeys(mcp) {
 		command := property(mcp.Get(key), "command")
@@ -258,27 +261,30 @@ func hook(handler func(context.Context, js.Value, js.Value) error) js.Func {
 func hooks(p *plugin) map[string]any {
 	return map[string]any{
 		"tool.execute.before": hook(func(ctx context.Context, input, output js.Value) error {
-			return p.toolBefore(ctx, toolCallOf(input, property(output, "args")))
+			return p.toolBefore(ctx, decodeToolCall(input, property(output, "args")))
 		}),
 		"tool.execute.after": hook(func(ctx context.Context, input, output js.Value) error {
-			edits, err := p.toolAfter(ctx, toolCallOf(input, property(input, "args")), toolResultOf(output))
+			edits, err := p.toolAfter(ctx, decodeToolCall(input, property(input, "args")), decodeToolResult(output))
 			applyNotes(output, edits)
 			return err
 		}),
 		"permission.ask": hook(func(ctx context.Context, input, output js.Value) error {
-			status, err := p.permissionAsk(ctx, permissionOf(input))
+			status, err := p.permissionAsk(ctx, decodePermission(input))
 			if status != "" {
 				output.Set("status", status)
 			}
 			return err
 		}),
 		"chat.message": hook(func(ctx context.Context, input, output js.Value) error {
-			p.chatMessage(ctx, text(property(input, "sessionID")), messagePartsOf(property(output, "parts")))
+			p.chatMessage(ctx, text(property(input, "sessionID")), decodeMessageParts(property(output, "parts")))
 			return nil
 		}),
-		"config":    hook(func(_ context.Context, input, _ js.Value) error { p.configure(configOf(input)); return nil }),
+		"config":    hook(func(_ context.Context, input, _ js.Value) error { p.configure(decodeConfig(input)); return nil }),
 		"shell.env": hook(shellEnv),
-		"event":     hook(func(ctx context.Context, input, _ js.Value) error { p.event(ctx, sessionEventOf(input)); return nil }),
+		"event": hook(func(ctx context.Context, input, _ js.Value) error {
+			p.event(ctx, decodeSessionEvent(input))
+			return nil
+		}),
 	}
 }
 
@@ -298,10 +304,9 @@ func createPlugin(input js.Value) (any, error) {
 	defer cancel()
 	sdk := jsClient{client: client}
 	invoke := spawner(directory, pluginBinary(ctx, sdk))
-	runtime, err := Open(context.Background(), Plugin, invoke)
+	runtime, err := openRuntime(context.Background(), pluginSource, invoke)
 	if err != nil {
 		return nil, err
 	}
 	return hooks(newPlugin(sdk, invoke, directory, runtime)), nil
 }
-

@@ -18,30 +18,28 @@ import (
 //go:generate env GOEXPERIMENT=jsonv2 GOOS=js GOARCH=wasm go build -buildvcs=false -trimpath "-ldflags=-s -w" -o ../../../../spells/harness/opencode/gen/magus-opencode.wasm ./wasm
 //go:generate cp $GOROOT/lib/wasm/wasm_exec.js ../../../../spells/harness/opencode/gen/wasm_exec.js
 
-const Version = 1
-
 // moduleName is the Buzz module plugin.buzz imports.
 const moduleName = "opencode"
 
 // declarations is the Buzz module the runtime session provides.
 const declarations = `export extern fun judge(event: {str: str}, mode: str, payload: str) > {str: str};`
 
-// Plugin is the Buzz program that routes harness events in the wasm runtime.
+// pluginSource is the Buzz program that routes harness events.
 //
 //go:embed plugin.buzz
-var Plugin string
+var pluginSource string
 
-type Invocation struct {
+type magusCall struct {
 	Args  []string `json:"args"`
 	Input string   `json:"input"`
 }
-type Capture struct {
+type processOutput struct {
 	Stdout string `json:"stdout"`
 	Stderr string `json:"stderr"`
 }
-type Invoke func(context.Context, Invocation) (Capture, error)
+type invoker func(context.Context, magusCall) (processOutput, error)
 
-type Verdict struct {
+type guardVerdict struct {
 	SchemaVersion int    `json:"schema_version"`
 	Decision      string `json:"decision"`
 	Reason        string `json:"reason,omitempty"`
@@ -49,24 +47,24 @@ type Verdict struct {
 	Why           string `json:"why,omitempty"`
 }
 
-type Event struct {
-	Kind          string   `json:"kind"`
-	Tool          string   `json:"tool,omitempty"`
-	SessionID     string   `json:"sessionID,omitempty"`
-	CallID        string   `json:"callID,omitempty"`
-	RootSessionID string   `json:"rootSessionID,omitempty"`
-	AgentID       string   `json:"agentID,omitempty"`
-	Cwd           string   `json:"cwd,omitempty"`
-	Command       string   `json:"command,omitempty"`
-	Path          string   `json:"path,omitempty"`
-	ArgsJSON      string   `json:"argsJSON,omitempty"`
-	PatchText     string   `json:"patchText,omitempty"`
-	Promptable    bool     `json:"promptable,omitempty"`
-	MCP           bool     `json:"mcp,omitempty"`
-	Context       string   `json:"context,omitempty"`
-	Verdict       *Verdict `json:"verdict,omitempty"`
+type hookEvent struct {
+	Kind          string        `json:"kind"`
+	Tool          string        `json:"tool,omitempty"`
+	SessionID     string        `json:"sessionID,omitempty"`
+	CallID        string        `json:"callID,omitempty"`
+	RootSessionID string        `json:"rootSessionID,omitempty"`
+	AgentID       string        `json:"agentID,omitempty"`
+	Cwd           string        `json:"cwd,omitempty"`
+	Command       string        `json:"command,omitempty"`
+	Path          string        `json:"path,omitempty"`
+	ArgsJSON      string        `json:"argsJSON,omitempty"`
+	PatchText     string        `json:"patchText,omitempty"`
+	Promptable    bool          `json:"promptable,omitempty"`
+	MCP           bool          `json:"mcp,omitempty"`
+	Context       string        `json:"context,omitempty"`
+	Verdict       *guardVerdict `json:"verdict,omitempty"`
 }
-type Result struct {
+type dispatchResult struct {
 	Block   bool   `json:"block"`
 	Reason  string `json:"reason"`
 	Context string `json:"context"`
@@ -75,28 +73,29 @@ type Result struct {
 }
 type request struct {
 	ctx   context.Context
-	event Event
+	event hookEvent
 	reply chan response
 }
 type response struct {
-	result Result
+	result dispatchResult
 	err    error
 }
 
-type Runtime struct {
+type buzzRuntime struct {
 	requests chan request
 	done     chan struct{}
 	cancel   context.CancelFunc
 }
 
-// Open gives the session one owning goroutine, including initialization and
-// teardown. Calls waiting on native JavaScript promises never reenter the VM.
-func Open(ctx context.Context, source string, invoke Invoke) (*Runtime, error) {
+// openRuntime gives the session one owning goroutine, including
+// initialization and teardown. Calls waiting on native JavaScript promises
+// never reenter the VM.
+func openRuntime(ctx context.Context, source string, invoke invoker) (*buzzRuntime, error) {
 	if invoke == nil {
 		return nil, errors.New("harness runtime: missing native invocation capability")
 	}
 	lifetime, cancel := context.WithCancel(ctx)
-	r := &Runtime{requests: make(chan request), done: make(chan struct{}), cancel: cancel}
+	r := &buzzRuntime{requests: make(chan request), done: make(chan struct{}), cancel: cancel}
 	ready := make(chan error, 1)
 	go r.serve(lifetime, source, invoke, ready)
 	select {
@@ -114,7 +113,7 @@ func Open(ctx context.Context, source string, invoke Invoke) (*Runtime, error) {
 }
 
 // module binds the Buzz module plugin.buzz imports.
-func module(invoke Invoke) buzz.Module {
+func module(invoke invoker) buzz.Module {
 	return buzz.Module{Name: moduleName, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
 		s.DeclareModuleTypes(moduleName, declarations)
 		s.SetModuleDecls(moduleName, declarations)
@@ -131,7 +130,7 @@ func module(invoke Invoke) buzz.Module {
 }
 
 // newSession is the session plugin.buzz runs in; the caller owns Close.
-func newSession(ctx context.Context, invoke Invoke) (*buzz.Session, error) {
+func newSession(ctx context.Context, invoke invoker) (*buzz.Session, error) {
 	sess := buzz.NewSession(ctx, buzz.WithoutFileImports(), buzz.WithoutFFI())
 	if err := sess.Provide(buzz.ModuleEnv{Ctx: ctx}, module(invoke)); err != nil {
 		_ = sess.Close()
@@ -151,7 +150,7 @@ func loadDispatch(ctx context.Context, sess *buzz.Session, source string) (vm.Va
 	return dispatch, nil
 }
 
-func (r *Runtime) serve(ctx context.Context, source string, invoke Invoke, ready chan<- error) {
+func (r *buzzRuntime) serve(ctx context.Context, source string, invoke invoker, ready chan<- error) {
 	defer close(r.done)
 	sess, err := newSession(ctx, invoke)
 	if err != nil {
@@ -193,25 +192,25 @@ func call(lifetime context.Context, sess *buzz.Session, dispatch vm.Value, req r
 	return response{result, err}
 }
 
-func (r *Runtime) Dispatch(ctx context.Context, event Event) (Result, error) {
+func (r *buzzRuntime) Dispatch(ctx context.Context, event hookEvent) (dispatchResult, error) {
 	req := request{ctx: ctx, event: event, reply: make(chan response, 1)}
 	select {
 	case <-ctx.Done():
-		return Result{}, ctx.Err()
+		return dispatchResult{}, ctx.Err()
 	case <-r.done:
-		return Result{}, errors.New("harness runtime: runtime closed")
+		return dispatchResult{}, errors.New("harness runtime: runtime closed")
 	case r.requests <- req:
 	}
 	select {
 	case <-ctx.Done():
-		return Result{}, ctx.Err()
+		return dispatchResult{}, ctx.Err()
 	case <-r.done:
-		return Result{}, errors.New("harness runtime: runtime closed")
+		return dispatchResult{}, errors.New("harness runtime: runtime closed")
 	case res := <-req.reply:
 		return res.result, res.err
 	}
 }
-func (r *Runtime) Close() error { r.cancel(); <-r.done; return nil }
+func (r *buzzRuntime) Close() error { r.cancel(); <-r.done; return nil }
 
 func record(fields map[string]string) vm.Value {
 	value := vm.NewMap()
@@ -227,7 +226,7 @@ func field(value vm.Value, key string) string {
 	}
 	return ""
 }
-func eventValue(e Event) vm.Value {
+func eventValue(e hookEvent) vm.Value {
 	key, _ := json.Marshal([]string{e.SessionID, e.CallID})
 	fields := map[string]string{"kind": e.Kind, "tool": e.Tool, "key": string(key), "session": e.RootSessionID,
 		"agent": e.AgentID, "cwd": e.Cwd, "command": e.Command, "path": e.Path, "args": e.ArgsJSON,
@@ -244,22 +243,22 @@ func eventValue(e Event) vm.Value {
 	}
 	return record(fields)
 }
-func decodeResult(value vm.Value) (Result, error) {
+func decodeResult(value vm.Value) (dispatchResult, error) {
 	for _, key := range []string{"block", "reason", "context", "status", "mcp"} {
 		v, ok := value.MapGet(key)
 		if !ok || !v.IsString() {
-			return Result{}, fmt.Errorf("harness runtime: malformed Buzz result field %q", key)
+			return dispatchResult{}, fmt.Errorf("harness runtime: malformed Buzz result field %q", key)
 		}
 	}
 	block, mcp, status := field(value, "block"), field(value, "mcp"), field(value, "status")
 	if (block != "true" && block != "false") || (mcp != "true" && mcp != "false") ||
 		(status != "" && status != "ask" && status != "allow" && status != "deny") {
-		return Result{}, errors.New("harness runtime: malformed Buzz decision")
+		return dispatchResult{}, errors.New("harness runtime: malformed Buzz decision")
 	}
-	return Result{Block: block == "true", Reason: field(value, "reason"), Context: field(value, "context"), Status: status, MCP: mcp == "true"}, nil
+	return dispatchResult{Block: block == "true", Reason: field(value, "reason"), Context: field(value, "context"), Status: status, MCP: mcp == "true"}, nil
 }
 
-func judge(ctx context.Context, invoke Invoke, event vm.Value, mode, payload string) vm.Value {
+func judge(ctx context.Context, invoke invoker, event vm.Value, mode, payload string) vm.Value {
 	unjudged := func(why string) vm.Value { return record(map[string]string{"decision": "unjudged", "why": why}) }
 	args := shellArgs()
 	switch mode {
@@ -294,13 +293,13 @@ func judge(ctx context.Context, invoke Invoke, event vm.Value, mode, payload str
 			args = append(args, "--agent", agent)
 		}
 	}
-	verdict := Judge(ctx, invoke, Invocation{Args: args, Input: payload})
+	verdict := askGuard(ctx, invoke, magusCall{Args: args, Input: payload})
 	return record(map[string]string{"decision": verdict.Decision, "reason": verdict.Reason, "context": verdict.Context, "why": verdict.Why})
 }
 
-// Judge preserves the native guard's verdict for lifecycle events whose result
-// is delivered through an SDK prompt rather than a tool rejection.
-func Judge(ctx context.Context, invoke Invoke, invocation Invocation) Verdict {
+// askGuard preserves the native guard's verdict for lifecycle events whose
+// result is delivered through an SDK prompt rather than a tool rejection.
+func askGuard(ctx context.Context, invoke invoker, invocation magusCall) guardVerdict {
 	capture, err := invokeWithLegacyRetry(ctx, invoke, invocation)
 	if err != nil {
 		return unjudgedVerdict(err.Error())
@@ -312,15 +311,15 @@ func Judge(ctx context.Context, invoke Invoke, invocation Invocation) Verdict {
 	return decideVerdict(envelope)
 }
 
-func unjudgedVerdict(why string) Verdict { return Verdict{Decision: "unjudged", Why: why} }
+func unjudgedVerdict(why string) guardVerdict { return guardVerdict{Decision: "unjudged", Why: why} }
 
 // invokeWithLegacyRetry drops the newer flags when magus prints nothing.
-func invokeWithLegacyRetry(ctx context.Context, invoke Invoke, invocation Invocation) (Capture, error) {
+func invokeWithLegacyRetry(ctx context.Context, invoke invoker, invocation magusCall) (processOutput, error) {
 	capture, err := invoke(ctx, invocation)
 	if err != nil || strings.TrimSpace(capture.Stdout) != "" {
 		return capture, err
 	}
-	return invoke(ctx, Invocation{Args: legacyArgs(invocation.Args), Input: invocation.Input})
+	return invoke(ctx, magusCall{Args: legacyArgs(invocation.Args), Input: invocation.Input})
 }
 
 func legacyArgs(args []string) []string {
@@ -361,10 +360,10 @@ func schemaMismatch(envelope map[string]json.RawMessage) string {
 	return ""
 }
 
-func decideVerdict(envelope map[string]json.RawMessage) Verdict {
+func decideVerdict(envelope map[string]json.RawMessage) guardVerdict {
 	var decision string
 	_ = json.Unmarshal(envelope["decision"], &decision)
-	verdict := Verdict{SchemaVersion: 1, Decision: decision}
+	verdict := guardVerdict{SchemaVersion: 1, Decision: decision}
 	ok := false
 	switch decision {
 	case "pass":
@@ -380,7 +379,7 @@ func decideVerdict(envelope map[string]json.RawMessage) Verdict {
 	return unknownDecision(envelope)
 }
 
-func unknownDecision(envelope map[string]json.RawMessage) Verdict {
+func unknownDecision(envelope map[string]json.RawMessage) guardVerdict {
 	label := "undefined"
 	if raw, ok := envelope["decision"]; ok {
 		var decoded any
@@ -390,7 +389,7 @@ func unknownDecision(envelope map[string]json.RawMessage) Verdict {
 		}
 	}
 	reason := fmt.Sprintf("magus guard returned the decision %s, which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs.", label)
-	return Verdict{SchemaVersion: 1, Decision: "deny", Reason: reason}
+	return guardVerdict{SchemaVersion: 1, Decision: "deny", Reason: reason}
 }
 
 // stringMember is false unless key holds a JSON string, so a verdict

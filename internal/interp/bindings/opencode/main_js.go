@@ -10,10 +10,13 @@ import (
 	"time"
 )
 
+// abiVersion is the API version the loader script checks before use.
+const abiVersion = 1
+
 // Serve publishes the wasm API on globalThis and blocks for the life of the
 // JavaScript runtime.
 func Serve() {
-	js.Global().Set("__magusOpenCodeWasmV1", map[string]any{"version": Version, "create": js.FuncOf(create), "createPlugin": js.FuncOf(createPluginHook)})
+	js.Global().Set("__magusOpenCodeWasmV1", map[string]any{"version": abiVersion, "create": js.FuncOf(create), "createPlugin": js.FuncOf(createPluginHook)})
 	select {}
 }
 
@@ -94,12 +97,14 @@ func await(ctx context.Context, pending js.Value, cancel func()) (js.Value, erro
 	}
 }
 
-func spawner(directory, binary string) Invoke {
-	return func(ctx context.Context, input Invocation) (Capture, error) { return invoke(ctx, directory, binary, input) }
+func spawner(directory, binary string) invoker {
+	return func(ctx context.Context, input magusCall) (processOutput, error) {
+		return invoke(ctx, directory, binary, input)
+	}
 }
 
-func invoke(ctx context.Context, directory, binary string, input Invocation) (Capture, error) {
-	var capture Capture
+func invoke(ctx context.Context, directory, binary string, input magusCall) (processOutput, error) {
+	var capture processOutput
 	_, err := javascript(func() (any, error) {
 		var err error
 		capture, err = runProcess(ctx, directory, binary, input)
@@ -116,13 +121,13 @@ func bunRuntime() (js.Value, error) {
 	return bun, nil
 }
 
-func runProcess(ctx context.Context, directory, binary string, input Invocation) (Capture, error) {
+func runProcess(ctx context.Context, directory, binary string, input magusCall) (processOutput, error) {
 	if err := ctx.Err(); err != nil {
-		return Capture{}, err
+		return processOutput{}, err
 	}
 	bun, err := bunRuntime()
 	if err != nil {
-		return Capture{}, err
+		return processOutput{}, err
 	}
 	argv := make([]any, 0, len(input.Args)+1)
 	argv = append(argv, binary)
@@ -135,7 +140,7 @@ func runProcess(ctx context.Context, directory, binary string, input Invocation)
 
 // waitProcess collects the process's output, killing it on any way out but
 // completion.
-func waitProcess(ctx context.Context, proc js.Value) (Capture, error) {
+func waitProcess(ctx context.Context, proc js.Value) (processOutput, error) {
 	kill := func() { _, _ = javascript(func() (any, error) { proc.Call("kill"); return nil, nil }) }
 	completed := false
 	defer func() {
@@ -147,10 +152,10 @@ func waitProcess(ctx context.Context, proc js.Value) (Capture, error) {
 	streams := []any{response.New(proc.Get("stdout")).Call("text"), response.New(proc.Get("stderr")).Call("text"), proc.Get("exited")}
 	result, err := await(ctx, js.Global().Get("Promise").Call("all", streams), kill)
 	if err != nil {
-		return Capture{}, err
+		return processOutput{}, err
 	}
 	completed = true
-	return Capture{Stdout: result.Index(0).String(), Stderr: result.Index(1).String()}, nil
+	return processOutput{Stdout: result.Index(0).String(), Stderr: result.Index(1).String()}, nil
 }
 
 func createArgs(args []js.Value) (string, string, time.Duration, error) {
@@ -170,7 +175,7 @@ func create(_ js.Value, args []js.Value) any {
 		return rejected(err)
 	}
 	return promise(func() (any, error) {
-		runtime, err := Open(context.Background(), Plugin, spawner(directory, binary))
+		runtime, err := openRuntime(context.Background(), pluginSource, spawner(directory, binary))
 		if err != nil {
 			return nil, err
 		}
@@ -178,7 +183,7 @@ func create(_ js.Value, args []js.Value) any {
 	})
 }
 
-func runtimeHandle(runtime *Runtime, timeout time.Duration) map[string]any {
+func runtimeHandle(runtime *buzzRuntime, timeout time.Duration) map[string]any {
 	var dispatch, closeRuntime js.Func
 	dispatch = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) != 1 || args[0].Type() != js.TypeString {
@@ -199,7 +204,7 @@ func runtimeHandle(runtime *Runtime, timeout time.Duration) map[string]any {
 			return nil, err
 		})
 	})
-	return map[string]any{"version": Version, "dispatch": dispatch, "close": closeRuntime}
+	return map[string]any{"version": abiVersion, "dispatch": dispatch, "close": closeRuntime}
 }
 
 func createPluginHook(_ js.Value, args []js.Value) any {
