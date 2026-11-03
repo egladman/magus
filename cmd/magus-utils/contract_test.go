@@ -21,7 +21,7 @@ func TestReadHarnessContract(t *testing.T) {
 		assert.Equal(t, fn.Name == "mgs_getHarness" || fn.Name == "mgs_renderPrompts", fn.Required, "%s: required on every harness", fn.Name)
 	}
 	assert.Equal(t, map[string]string{
-		"mgs_getHarness":            "() > Harness",
+		"mgs_getHarness":           "() > Harness",
 		"mgs_getSkills":            "() > HarnessSkills",
 		"mgs_listEntries":          "() > [ManagedEntries]",
 		"mgs_listHooks":            "() > [HookCommand]",
