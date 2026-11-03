@@ -27,7 +27,7 @@ type symbolIndexWorkspace interface {
 func MagusSymbolIndexDigest(ctx context.Context) (types.SymbolIndexDigest, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.SymbolIndexDigest{}, errorNoWorkspace("symbolIndexDigest")
+		return types.SymbolIndexDigest{}, errorNoWorkspace("graph")
 	}
 	w, ok := ws.(symbolIndexWorkspace)
 	if !ok {
