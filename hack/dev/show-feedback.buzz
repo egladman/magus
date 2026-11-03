@@ -218,7 +218,7 @@ export fun rows(t: Trail, marks: [TrailMark]) > [Row] {
 // report reads the session and folds it into rows.
 export fun report(session: str, since: str, through: str) > result\Result::<Report> {
     try {
-        final t = magus\session({"session": session, "since": since, "until": through}).trail();
+        final t = magus\session(magus\SessionOptions{ session = session, since = since, @"until" = through }).trail();
         return result\ok::<Report>(fold(t, marks: magus\session().marks()));
     } catch (err: any) {
         return result\caught::<Report>(err, doing: "show-feedback: read the trail");
