@@ -8846,8 +8846,12 @@ func decodeString(v vm.Value, path string) (string, error) {
 }
 
 // decodeEnum accepts an enum case or its backing string: a spell writes the case, and
-// the encoder writes the string.
+// the encoder writes the string. An unset Go enum crosses as null or an empty
+// backing string, so both decode to its zero value.
 func decodeEnum(v vm.Value, path, typ string, cases []string) (string, error) {
+	if v.IsNull() || (v.IsString() && v.AsString() == "") {
+		return "", nil
+	}
 	if backing, ok := v.EnumValue(); ok {
 		v = backing
 	}

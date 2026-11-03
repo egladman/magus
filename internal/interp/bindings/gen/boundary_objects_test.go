@@ -261,7 +261,7 @@ func populateInbound(v reflect.Value) {
 		populateInbound(v.Elem())
 	case reflect.Struct:
 		for i := range v.NumField() {
-			if v.Type().Field(i).IsExported() {
+			if f := v.Type().Field(i); f.IsExported() && f.Tag.Get("buzz") != "-" {
 				populateInbound(v.Field(i))
 			}
 		}
