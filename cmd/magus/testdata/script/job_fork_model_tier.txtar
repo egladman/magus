@@ -72,7 +72,7 @@ fun choose(req: ModelTierRequest) > Choice? {
     };
 }
 
-magus\job.modelTier(choose);
+magus\modelTier(choose);
 -- code.go --
 package pkg
 -- small.json --
