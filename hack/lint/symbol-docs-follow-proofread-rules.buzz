@@ -43,9 +43,9 @@ export fun reads() > [str] {
 // libs/proofread/cmd/proofread judges them, linked by proofread-build.
 // A stale index, a silent language or a failed runner is a finding.
 export fun check(files: [Path]) > [Finding] !> any {
-    final data: {str: any} = magus\graph().symbols();
-    final symbols = ofLanguages(data["symbols"] ?? [<any>]);
-    final indexes: [any] = data["indexes"] ?? [<any>];
+    final data = magus\graph().symbols();
+    final symbols = ofLanguages(data.symbols);
+    final indexes = data.indexes.map(fun (i: int, idx: magus\SymbolIndexStatus) > any => indexRow(idx));
     final bin = "{proofread\home}/{proofread\binary}";
     final table = decisions\writeDecisions([<str>]);
     final run = proc\exec(bin, args: ["doc-comment", "--stdin", "--decisions", table],
@@ -86,14 +86,22 @@ export fun outOfScope(indexes: [any]) > [str] {
 // ofLanguages keeps the symbols of LANGUAGES.
 // magus\graph().symbols() returns every index, Buzz's once scip-buzz is in.
 // It reads keys none of the other languages' sources.
-fun ofLanguages(all: [any]) > [any] {
+fun ofLanguages(all: [magus\SymbolDecl]) > [any] {
     final kept = mut [<any>];
-    foreach (symbol in all) {
-        if (LANGUAGES.indexOf(symbol["language"] ?? "") != null) {
-            kept.append(symbol);
+    foreach (s in all) {
+        if (LANGUAGES.indexOf(s.language) != null) {
+            kept.append({"node": s.node, "source": s.source, "language": s.language,
+                "name": s.name, "kind": s.kind, "owner": s.owner, "doc": s.doc});
         }
     }
     return kept;
+}
+
+// indexRow is idx keyed as support\staleness and outOfScope read it.
+fun indexRow(idx: magus\SymbolIndexStatus) > any {
+    return {"freshness": idx.freshness.value, "project": {"path": idx.project.path},
+        "language": idx.language, "detail": idx.detail, "changed": idx.changed,
+        "changed_count": idx.changedCount};
 }
 
 // judgedCounts is how many symbols each language's index gave the runner.
@@ -205,6 +213,11 @@ fun symbol(language: str) > {str: any} {
         "kind": "function", "owner": "", "doc": "Run runs."};
 }
 
+fun decl(language: str) > magus\SymbolDecl {
+    return magus\SymbolDecl{ node = "symbol:x/Run().", source = "a.go:1", language = language,
+        name = "Run", kind = "function", doc = "Run runs." };
+}
+
 test "a finding is reported at its declaration with the rule and the match" {
     final got = judge([finding("filler", node: "symbol:x/Run().", source: "cmd/magus/run.go:41")],
         judged: counts(), indexes: both(), sanctioned: {<str: str>});
@@ -282,7 +295,8 @@ test "the doc-comment budgets are denied and history stays off" {
 }
 
 test "only the declared languages reach the runner" {
-    final got = ofLanguages([symbol("go"), symbol("buzz"), symbol("typescript")]);
+    final got = ofLanguages([decl("go"), decl("buzz"), decl("typescript")]);
+    assert\equal(got[0], want: symbol("go"), message: "a decl crosses as the runner's keys");
     assert\equal(got.len(), want: 2, message: "a Buzz symbol is not judged");
     assert\equal(judgedCounts(got)["buzz"], want: null, message: "nor counted");
 }
