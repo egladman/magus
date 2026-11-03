@@ -109,6 +109,7 @@ export extern fun describe() > str !> any;
 export extern fun diffStat(base: str = "", dir: str = "") > [FileStat] !> any;
 export extern fun dirtyDiff(paths: [str] = [<str>]) > str;
 export extern fun history(limit: int = 10, paths: [str] = [<str>], firstParent: bool = false) > [Commit] !> any;
+export extern fun ignoredFiles(paths: [str], dir: str = "") > [str] !> any;
 export extern fun isDirty(paths: [str] = [<str>]) > bool !> any;
 export extern fun name() > str;
 export extern fun ref(dir: str = "") > str? !> any;

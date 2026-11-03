@@ -239,3 +239,35 @@ func TestJJCheckoutIDSurvivesACleanDiff(t *testing.T) {
 	require.True(t, ok)
 	assert.NotEqual(t, id, committed)
 }
+
+func TestJJIgnoredFilesNamesWhatJJDoesNotTrack(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not available")
+	}
+	dir := t.TempDir()
+	jjInitRepository(t, dir, map[string]string{
+		".gitignore":     "installed/\n*.log\n",
+		"kept.txt":       "k\n",
+		"sub/also.txt":   "a\n",
+		"installed/a.js": "x\n",
+		"sub/stray.log":  "x\n",
+	})
+	writeRepositoryFile(t, dir, "fresh.txt", "new\n")
+
+	got, err := jjVCS{}.IgnoredFiles(t.Context(), dir, []string{"installed", "kept.txt", "fresh.txt", "sub", "sub/stray.log", "missing.txt"})
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"installed", "sub/stray.log"}, got,
+		"a file jj snapshots is not ignored, a directory holding a tracked file is not, and an absent path is not")
+}
+
+func TestJJIgnoredFilesAnswersInPathsRelativeToDir(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not available")
+	}
+	dir := t.TempDir()
+	jjInitRepository(t, dir, map[string]string{".gitignore": "*.log\n", "sub/a.txt": "a\n", "sub/b.log": "b\n"})
+
+	got, err := jjVCS{}.IgnoredFiles(t.Context(), filepath.Join(dir, "sub"), []string{"a.txt", "b.log"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b.log"}, got)
+}

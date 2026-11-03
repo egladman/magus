@@ -117,6 +117,19 @@ True if the working tree has uncommitted changes. Pass paths to scope the check 
 
 **Returns:** bool
 
+### ignoredFiles
+
+The given paths the VCS ignores, as given: the files and directories its ignore rules cover (jj: the ones it does not track, since it snapshots every file it does not ignore). Paths are relative to dir, which reads the repository holding that directory (relative to the target's cwd) instead of the one holding the cwd. Empty when no VCS is resolved; raises when the backend cannot answer, rather than answering that nothing is ignored.
+
+**Signature:** `vcs\ignoredFiles(paths, [dir]) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go)
+
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `paths`   | `[]string` |          |             |
+| `dir`     | `string`   | yes      |             |
+
+**Returns:** []string
+
 ### dirtyDiff
 
 The uncommitted changes to paths, as the active VCS's own unified diff; "" when nothing changed or no VCS is resolved. is_dirty answers whether an output moved, this answers how - which is what a drift gate needs when it fires in CI and nobody can look at the tree. Every backend implements it, so a magusfile no longer branches on vcs\name() to print a diff; the bytes are the backend's native format, not a normalized one.

@@ -786,6 +786,7 @@ github.com/egladman/magus/std.VCSDescribe func(ctx context.Context) (string, err
 github.com/egladman/magus/std.VCSDiffStat func(ctx context.Context, base string, dir string) ([]github.com/egladman/magus/types.FileStat, error)
 github.com/egladman/magus/std.VCSDirtyDiff func(ctx context.Context, paths []string) (string, error)
 github.com/egladman/magus/std.VCSHistory func(ctx context.Context, limit int, paths []string, firstParent bool) ([]github.com/egladman/magus/types.Commit, error)
+github.com/egladman/magus/std.VCSIgnoredFiles func(ctx context.Context, paths []string, dir string) ([]string, error)
 github.com/egladman/magus/std.VCSIsDirty func(ctx context.Context, paths []string) (bool, error)
 github.com/egladman/magus/std.VCSLeaseGate type func(ctx context.Context, row github.com/egladman/magus/types.Job, backend string, args []string, dir string, env []string) error
 github.com/egladman/magus/std.VCSName func(ctx context.Context) (string, error)

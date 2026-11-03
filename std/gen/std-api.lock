@@ -223,6 +223,7 @@ vcs.describe
 vcs.diffStat
 vcs.dirtyDiff
 vcs.history
+vcs.ignoredFiles
 vcs.isDirty
 vcs.name
 vcs.ref

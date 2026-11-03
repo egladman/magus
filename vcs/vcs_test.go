@@ -1140,6 +1140,14 @@ func TestParityIgnoreReportersAgree(t *testing.T) {
 		paths, err := resolver.IgnoredPaths(t.Context(), dir, []string{"keep.log"})
 		require.NoError(t, err, "IgnoredPaths")
 
+		// jj reads what it tracks, not the rules, so a tracked path
+		// is never ignored there.
+		if b.name == "jj" {
+			assert.False(t, paths["keep.log"], "jj: IgnoredPaths reported a tracked path")
+			assert.Empty(t, files, "jj: IgnoredFiles reported a tracked path")
+			return
+		}
+
 		// Both must say TRUE, not merely agree. Agreement alone is satisfied by
 		// false == false, which is what two reporters BOTH returning nothing looks like,
 		// and hg's and sl's IgnoredPaths swallow a failed probe into an empty map, so
@@ -2016,7 +2024,7 @@ var capabilityMatrix = map[types.VCSCapability]map[string]bool{
 	types.CapPushStatusReporter:    {"git": true, "hg": true, "sl": true},
 	types.CapRevTimeReporter:       {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapTrackedFileReporter:   {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapIgnoredFileReporter:   {"git": true, "hg": true, "sl": true},
+	types.CapIgnoredFileReporter:   {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapChurnReporter:         {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapBranchChangeReporter:  {"git": true},
 	types.CapRangeReporter:         {"git": true, "hg": true, "sl": true, "jj": true},

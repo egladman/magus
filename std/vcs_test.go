@@ -517,3 +517,42 @@ func TestVcsCmdTimeoutCutsOffAHungBinary(t *testing.T) {
 	require.ErrorContains(t, err, "killed after its 300ms timeoutMs")
 	assert.Less(t, time.Since(start), 10*time.Second, "the hung git was killed, not waited out")
 }
+
+// declinesIgnoredFiles is a driver whose backend declines IgnoredFileReporter.
+type declinesIgnoredFiles struct{ types.VCSDriver }
+
+func (declinesIgnoredFiles) Name() string { return "fake" }
+
+func (declinesIgnoredFiles) IgnoredFiles(context.Context, string, []string) ([]string, error) {
+	return nil, &types.VCSUnsupportedError{VCS: "fake", Capability: types.CapIgnoredFileReporter}
+}
+
+func TestVcsIgnoredFilesReturnsWhatTheRulesCover(t *testing.T) {
+	root := testkit.NewRepository(t, nil).Root()
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("installed/\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "installed"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "installed", "a.js"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "kept.txt"), nil, 0o644))
+	ctx := WithCurrentWorkingDirectory(t.Context(), t.TempDir())
+
+	got, err := VCSIgnoredFiles(ctx, []string{"installed", "kept.txt"}, root)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"installed"}, got)
+}
+
+func TestVcsIgnoredFilesRaisesForABackendThatDeclines(t *testing.T) {
+	got, err := ignoredFiles(t.Context(), declinesIgnoredFiles{}, "", []string{"a"})
+	require.Error(t, err, "an empty answer would read as nothing being ignored")
+	assert.Nil(t, got)
+	var unsupported *types.VCSUnsupportedError
+	require.ErrorAs(t, err, &unsupported)
+	assert.Equal(t, types.CapIgnoredFileReporter, unsupported.Capability)
+}
+
+func TestVcsIgnoredFilesRaisesForAMissingDir(t *testing.T) {
+	ctx := WithCurrentWorkingDirectory(t.Context(), t.TempDir())
+
+	got, err := VCSIgnoredFiles(ctx, []string{"a"}, filepath.Join(t.TempDir(), "gone"))
+	require.ErrorContains(t, err, "vcs.ignoredFiles: dir")
+	assert.Nil(t, got)
+}

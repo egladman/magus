@@ -95,6 +95,15 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.BoolVal(ret0), nil
 	}))
+	m.MapSet("ignoredFiles", vm.DirectValue("vcs.ignoredFiles", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		paths := ffi.StringSlice(bzArgs, 0)
+		dir := ffi.String(bzArgs, 1)
+		ret0, err := std.VCSIgnoredFiles(ctx, paths, dir)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringSliceVal(ret0), nil
+	}))
 	m.MapSet("dirtyDiff", vm.DirectValue("vcs.dirtyDiff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		paths := ffi.StringSlice(bzArgs, 0)
 		ret0, err := std.VCSDirtyDiff(ctx, paths)

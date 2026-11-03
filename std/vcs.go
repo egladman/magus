@@ -107,6 +107,17 @@ var Vcs = Module{
 			Impl:    VCSIsDirty,
 		},
 		{
+			Name: "ignored_files",
+			Doc:  "The given paths the VCS ignores, as given: the files and directories its ignore rules cover (jj: the ones it does not track, since it snapshots every file it does not ignore). Paths are relative to dir, which reads the repository holding that directory (relative to the target's cwd) instead of the one holding the cwd. Empty when no VCS is resolved; raises when the backend cannot answer, rather than answering that nothing is ignored.",
+			Args: []Arg{
+				{Name: "paths", Type: TypeStringSlice},
+				{Name: "dir", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeStringSlice}},
+			Raises:  true,
+			Impl:    VCSIgnoredFiles,
+		},
+		{
 			Name: "dirty_diff",
 			Doc:  "The uncommitted changes to paths, as the active VCS's own unified diff; \"\" when nothing changed or no VCS is resolved. is_dirty answers whether an output moved, this answers how - which is what a drift gate needs when it fires in CI and nobody can look at the tree. Every backend implements it, so a magusfile no longer branches on vcs\\name() to print a diff; the bytes are the backend's native format, not a normalized one.",
 			Args: []Arg{
@@ -447,6 +458,28 @@ func VCSIsDirty(ctx context.Context, paths []string) (bool, error) {
 		return false, vcsFailed(err, "read %s status", v.Name())
 	}
 	return dirty, nil
+}
+
+// VCSIgnoredFiles returns the paths the VCS holding dir ignores, as given.
+// It raises for a backend that cannot answer, since an empty list would
+// read as nothing being ignored.
+func VCSIgnoredFiles(ctx context.Context, paths []string, dir string) ([]string, error) {
+	v, _, dir, err := vcsAt(ctx, "ignoredFiles", dir)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, nil
+	}
+	return ignoredFiles(ctx, v, dir, paths)
+}
+
+func ignoredFiles(ctx context.Context, v types.VCSDriver, dir string, paths []string) ([]string, error) {
+	ignored, err := v.IgnoredFiles(ctx, dir, paths)
+	if err != nil {
+		return nil, vcsFailed(err, "read %s ignored files", v.Name())
+	}
+	return ignored, nil
 }
 
 // VCSDirtyDiff returns the working tree's uncommitted diff for paths. Unlike VCSIsDirty

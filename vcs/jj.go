@@ -659,6 +659,42 @@ func (v jjVCS) IgnoredPaths(_ context.Context, _ string, _ []string) (map[string
 	return map[string]bool{}, nil
 }
 
+// IgnoredFiles derives the answer, since jj cannot list what it ignores.
+// jj tracks every file it does not ignore, so an existing path with nothing
+// tracked at or under it is ignored. `file list` reads @, which snapshots.
+func (v jjVCS) IgnoredFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
+	if err != nil {
+		return nil, err
+	}
+	var tracked []string
+	for _, chunk := range gitPathChunks(paths) {
+		args := []string{"file", "list", "--"}
+		for _, p := range chunk {
+			args = append(args, prefix+p)
+		}
+		out, err := vcsOutput(ctx, root, "jj", args...)
+		if err != nil {
+			return nil, fmt.Errorf("jj file list: %w", err)
+		}
+		tracked = append(tracked, splitLines([]byte(out))...)
+	}
+	var ignored []string
+	for _, p := range paths {
+		full := prefix + strings.TrimSuffix(p, "/")
+		if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(full))); err != nil {
+			continue
+		}
+		if !slices.ContainsFunc(tracked, func(t string) bool { return t == full || strings.HasPrefix(t, full+"/") }) {
+			ignored = append(ignored, p)
+		}
+	}
+	return ignored, nil
+}
+
 // ConfiguredRemote implements types.RemoteConfigReporter for a COLOCATED workspace only,
 // where `jj git init` wrote a .git beside .jj and jj's remotes are that repository's.
 //
