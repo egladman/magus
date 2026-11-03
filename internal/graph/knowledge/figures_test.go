@@ -47,7 +47,7 @@ fun sessionFigure(name: str, dir: str) > fig\Figure !> any {
     return fig\of("session-{name}",
             title: "Session",
             desc: "Jobs of " + name)
-        .box(m\dir(dir), label: "jobs");
+        .box(m\graph().dir(dir), label: "jobs");
 }
 `)
 	ws.Write("diagrams/later.buzz", `import "magus/figure";
