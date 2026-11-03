@@ -54,27 +54,27 @@ magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph
 ```
 
-| Kind       |     Size | List them                     | Anchors (most connected)                                                                                                                                   |
-| ---------- | -------: | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                                                         |
-| target     |     200+ | `magus query kind=target`     | `lint-rules`, `buzz-test`, `catalog-docs-generate`                                                                                                         |
-| spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                                                                 |
-| op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-fmt`                                                                                                                            |
-| tool       | built in | `magus query kind=tool`       |                                                                                                                                                            |
-| charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `gha`                                                                                                                                          |
-| module     | built in | `magus query kind=module`     |                                                                                                                                                            |
-| method     | built in | `magus query kind=method`     |                                                                                                                                                            |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS1021`, `MGS3032`                                                                                                                            |
-| doc        |    2000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/proofread/index.md`, `docs/guides/integrations/agents/guard.md`                                           |
-| dir        |     600+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                                                                   |
-| file       |     500+ | `magus query kind=file`       | `magusfile.buzz`, `libs/figure/figure.buzz`, `hack/ci/pull-requests.buzz`                                                                                  |
-| function   |    4000+ | `magus query kind=function`   | `apiBase`, `main`, `main`                                                                                                                                  |
-| import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                                                                       |
-| rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                                                     |
-| package    |     100+ | `magus query kind=package`    | `gopkg.in/yaml.v3`, `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`                                                                          |
-| link       |     100+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://cursor.com/docs/agent/hooks`, `https://eli.gladman.cc/magus/`                                                           |
-| marker     |        4 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:skills`                                                                                                |
-| figure     |      30+ | `magus query kind=figure`     | `What an agent host gets, and the gate every call crosses`, `Three roles, one store, and a guard at every boundary`, `One go run, then magus builds magus` |
+| Kind       |     Size | List them                     | Anchors (most connected)                                                                                                                                       |
+| ---------- | -------: | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                                                             |
+| target     |     200+ | `magus query kind=target`     | `lint-rules`, `buzz-test`, `catalog-docs-generate`                                                                                                             |
+| spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                                                                     |
+| op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-fmt`                                                                                                                                |
+| tool       | built in | `magus query kind=tool`       |                                                                                                                                                                |
+| charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `gha`                                                                                                                                              |
+| module     | built in | `magus query kind=module`     |                                                                                                                                                                |
+| method     | built in | `magus query kind=method`     |                                                                                                                                                                |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS1021`, `MGS3032`                                                                                                                                |
+| doc        |    2000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/proofread/index.md`, `docs/guides/integrations/agents/guard.md`                                               |
+| dir        |     600+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                                                                       |
+| file       |     500+ | `magus query kind=file`       | `magusfile.buzz`, `libs/figure/figure.buzz`, `hack/ci/pull-requests.buzz`                                                                                      |
+| function   |    4000+ | `magus query kind=function`   | `apiBase`, `main`, `main`                                                                                                                                      |
+| import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                                                                           |
+| rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                                                         |
+| package    |     100+ | `magus query kind=package`    | `gopkg.in/yaml.v3`, `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`                                                                              |
+| link       |     100+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://cursor.com/docs/agent/hooks`, `https://eli.gladman.cc/magus/`                                                               |
+| marker     |        4 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:skills`                                                                                                    |
+| figure     |      30+ | `magus query kind=figure`     | `One library draws every figure, here and in the console`, `One pipeline, and the modules each host registers`, `The only listener a second machine can reach` |
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                                   |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------------------- |
