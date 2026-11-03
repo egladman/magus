@@ -23,6 +23,10 @@ import (
 
 const Version = 1
 
+// Declarations is the opencode module the runtime session provides; a checker that
+// loads plugin.buzz outside that session declares it the same way.
+const Declarations = `export extern fun judge(event: {str: str}, mode: str, payload: str) > {str: str};`
+
 // Plugin is the Buzz program that routes OpenCode events in the wasm runtime.
 //
 //go:embed plugin.buzz
@@ -115,9 +119,8 @@ func (r *Runtime) serve(ctx context.Context, source string, invoke Invoke, ready
 	sess := buzz.NewSession(ctx, buzz.WithoutFileImports(), buzz.WithoutFFI())
 	defer sess.Close()
 	module := buzz.Module{Name: "opencode", Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		declarations := `export extern fun judge(event: {str: str}, mode: str, payload: str) > {str: str};`
-		s.DeclareModuleTypes("opencode", declarations)
-		s.SetModuleDecls("opencode", declarations)
+		s.DeclareModuleTypes("opencode", Declarations)
+		s.SetModuleDecls("opencode", Declarations)
 		mod := vm.NewMap()
 		mod.MapSet("judge", vm.DirectValue("opencode.judge", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
 			if len(args) != 3 {

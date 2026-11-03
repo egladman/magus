@@ -6,7 +6,7 @@
 // --embedded, the mode their host loads them in; everything else checks strict. docs/ checks from
 // docs/, where its `lib/...` and `engine/...` imports resolve, except docs/magusfile.buzz.
 //
-// A BZZ2001 for an import of magus/spell/*, project/* or mergequeue is ignored: the host binds
+// A BZZ2001 for an import of magus/spell/*, project/*, mergequeue or opencode is ignored: the host binds
 // those at load, so --check cannot resolve them. Skipped: testdata, the docs figures (the figure
 // rule owns them), internal/spell/gen and the FFI demo.
 //
@@ -34,7 +34,7 @@ final SKIPPED = ["docs/site/diagrams/", "internal/spell/gen/", "libs/gopherbuzz/
 final EMBEDDED = ["spells/", "hack/", "docs/", "std/examples/", "cmd/", "console/", "internal/queue/"];
 
 // HOST_BOUND are the import prefixes the host binds at load.
-final HOST_BOUND = ["magus/spell/", "project/", "mergequeue"];
+final HOST_BOUND = ["magus/spell/", "project/", "mergequeue", "opencode\""];
 
 final FIX = "Fix what the checker names; a warning fails here as an error does. Run "
     + "`magus buzz --check [--embedded] <file>` to see it.";
