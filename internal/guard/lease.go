@@ -2643,7 +2643,7 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 			site.stagedOnLine, site.stagedUnread = lineStagedPaths(ctx, cmds, cmp.Or(site.dir, me.CheckoutRoot))
 		}
 		if _, picks := pickOperands(c.inv); picks || recordsCommit(c.inv) {
-			site.regenerated = integrationRegenerates(ctx, deps, me)
+			site.regenerated = rowRegenerates(ctx, deps, me)
 		}
 		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
 		if r.refused() {
@@ -2942,25 +2942,45 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	return vcsRefusal{op: op, kind: vcsOpLands, why: why}
 }
 
-// integrationRegenerates reports what a row naming Integrates may commit
-// beyond its write paths: every path a target declares writing. Regenerating
-// them is that row's work. The workspace opens once, and only when a path needs
-// it: an open costs seconds.
-func integrationRegenerates(ctx context.Context, deps Dependencies, row types.Job) func() (func(string) bool, error) {
-	if len(row.Integrates) == 0 {
-		return nil
-	}
+// rowRegenerates reports what a row may commit beyond its write paths. An
+// integrating row gets every declared output. Any other gets those of targets
+// reading a source it wrote. The workspace opens once, on first need.
+func rowRegenerates(ctx context.Context, deps Dependencies, row types.Job) func() (func(string) bool, error) {
 	return sync.OnceValues(func() (func(string) bool, error) {
 		ws, err := deps.inspect(ctx, row.CheckoutRoot)
 		if err != nil {
 			return nil, err
 		}
-		return func(p string) bool {
-			return slices.ContainsFunc(ws.All(), func(project *types.Project) bool {
-				return project != nil && (declaresOutput(project, p) || declaresUpdate(project, p))
-			})
-		}, nil
+		if len(row.Integrates) > 0 {
+			return func(p string) bool {
+				return slices.ContainsFunc(ws.All(), func(project *types.Project) bool {
+					return project != nil && (declaresOutput(project, p) || declaresUpdate(project, p))
+				})
+			}, nil
+		}
+		return ownRegeneration(job.RegeneratedOutside(row.CheckoutRoot, row, ws.All(), nil), ws.All()), nil
 	})
+}
+
+func ownRegeneration(regenerated []job.RegeneratedOutput, projects []*types.Project) func(string) bool {
+	targets := make(map[string]bool, len(regenerated))
+	for _, r := range regenerated {
+		targets[r.Target] = true
+	}
+	return func(p string) bool {
+		return slices.ContainsFunc(projects, func(project *types.Project) bool {
+			return project != nil && declaresTargetOutput(project, targets, p)
+		})
+	}
+}
+
+func declaresTargetOutput(project *types.Project, targets map[string]bool, p string) bool {
+	for name, refs := range project.TargetOutputs {
+		if targets[fmt.Sprintf("%s:%s", project.Path, name)] && slices.ContainsFunc(refs, func(r types.OutputRef) bool { return r.Rooted(project.Path).Match(p) }) {
+			return true
+		}
+	}
+	return false
 }
 
 func declaresOutput(project *types.Project, p string) bool {
@@ -3016,12 +3036,12 @@ func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Jo
 		return ""
 	}
 	list := strings.Join(outside, " ")
-	return fmt.Sprintf("It commits %s, outside the lease's write paths (%s). Unstage them with `git restore --staged -- %s` and file them owed: the integrator regenerates an output, and your orchestrator widens the row for anything else.",
+	return fmt.Sprintf("It commits %s, outside the lease's write paths (%s). Unstage them with `git restore --staged -- %s` and file them owed: you may commit an output a target declares when you wrote a source it reads (the target ran, so its output is yours), and your orchestrator widens the row for anything else.",
 		list, strings.Join(row.WritePaths, ", "), list)
 }
 
 // pathsOutsideLease is the sorted paths row may not commit: outside its write
-// paths, not one magus maintains, and not one an integrating row regenerates.
+// paths, not one magus maintains, and not one the row regenerates.
 // An error says that last part could not be read, for the paths it returns.
 func pathsOutsideLease(row types.Job, paths []string, site vcsSite) ([]string, error) {
 	var outside []string
@@ -3041,7 +3061,7 @@ func pathsOutsideLease(row types.Job, paths []string, site vcsSite) ([]string, e
 	return slices.DeleteFunc(outside, regenerates), nil
 }
 
-// regeneratedUnread refuses an integrating row's paths beyond its write paths
+// regeneratedUnread refuses a row's paths beyond its write paths
 // when the workspace naming the regenerated ones did not open.
 func regeneratedUnread(outside []string, err error) string {
 	return fmt.Sprintf("It writes %s beyond the lease's write paths, and which of them a target regenerates cannot be read: %v.", strings.Join(outside, " "), err)
@@ -3069,7 +3089,7 @@ func pickPathsRefusal(ctx context.Context, row types.Job, inv hint.Invocation, r
 	if len(outside) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("It picks commits writing %s, outside the lease's write paths (%s). Take only the paths you hold with `git checkout <commit> -- <path>` and commit them, or file the rest owed: the integrator regenerates an output, and your orchestrator widens the row for anything else.",
+	return fmt.Sprintf("It picks commits writing %s, outside the lease's write paths (%s). Take only the paths you hold with `git checkout <commit> -- <path>` and commit them, or file the rest owed: you may commit an output a target declares when you wrote a source it reads, and your orchestrator widens the row for anything else.",
 		strings.Join(outside, " "), strings.Join(row.WritePaths, ", "))
 }
 

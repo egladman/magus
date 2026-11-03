@@ -133,7 +133,7 @@ export fun regeneratedRefusal(dir: str, porcelain: str) > str {
     if (paths.len() == 0) {
         return "";
     }
-    return "bootstrap-checkout: the build regenerated {paths.len()} output(s) the commit holds stale ({paths.join(", ")}), so the binary is -dirty. Record them on the job's branch: git -C {dir} add {paths.join(" ")} && git -C {dir} commit -m '<msg>', then rerun the bootstrap";
+    return "bootstrap-checkout: the build regenerated {paths.len()} output(s) the commit holds stale ({paths.join(", ")}), so the binary is -dirty. The row may commit them when a target declares them as outputs of a source it wrote; any other path stays refused. Record them on the job's branch: git -C {dir} add {paths.join(" ")} && git -C {dir} commit -m '<msg>', then rerun the bootstrap";
 }
 
 // regeneratedPaths are the paths `git status --porcelain` lists. Each path follows the first

@@ -1619,7 +1619,10 @@ func (s *commitPathsSuite) write(rel string) {
 }
 
 func (s *commitPathsSuite) deny(command string) string {
-	return denyLeaseScopedVCS(s.ctx, Dependencies{callDir: s.dir}, s.worker.ID, command)
+	ws := typestest.NewMockWorkspaceRepository(s.T())
+	ws.EXPECT().All().Return(nil).Maybe()
+	deps := Dependencies{callDir: s.dir, Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+	return denyLeaseScopedVCS(s.ctx, deps, s.worker.ID, command)
 }
 
 func (s *commitPathsSuite) TestAStagedPathInsideTheLeasePasses() {
@@ -1663,6 +1666,42 @@ func (s *commitPathsSuite) TestAnIntegratingRowCommitsWhatItRegenerates() {
 	s.repo.git(s.dir, "add", "docs/hand.md")
 	s.Contains(denyLeaseScopedVCS(ctx, deps, integrating.ID, "git commit -m done"), "It commits docs/hand.md",
 		"a file no target writes is still graded")
+}
+
+func (s *commitPathsSuite) regeneratingDeps(readsGlob string) Dependencies {
+	project := &types.Project{Path: ".",
+		TargetInputs:  map[string][]types.InputRef{"gen": {{Glob: readsGlob}}},
+		TargetOutputs: map[string][]types.OutputRef{"gen": {{Glob: "docs/gen.json"}}}}
+	ws := typestest.NewMockWorkspaceRepository(s.T())
+	ws.EXPECT().All().Return([]*types.Project{project}).Maybe()
+	return Dependencies{callDir: s.dir, Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+}
+
+func (s *commitPathsSuite) stage(paths ...string) {
+	for _, p := range paths {
+		s.write(p)
+	}
+	s.repo.git(s.dir, append([]string{"add"}, paths...)...)
+}
+
+func (s *commitPathsSuite) TestAWorkerCommitsTheDeclaredOutputOfASourceItWrote() {
+	deps := s.regeneratingDeps("cmd/magus/*.go")
+	s.stage("cmd/magus/x.go", "docs/gen.json")
+	s.Empty(denyLeaseScopedVCS(s.ctx, deps, s.worker.ID, "git commit -m done"))
+}
+
+func (s *commitPathsSuite) TestAWorkerStillCommitsNoUndeclaredPath() {
+	deps := s.regeneratingDeps("cmd/magus/*.go")
+	s.stage("cmd/magus/x.go", "docs/gen.json", "docs/hand.md")
+	got := denyLeaseScopedVCS(s.ctx, deps, s.worker.ID, "git commit -m done")
+	s.Contains(got, "It commits docs/hand.md,")
+	s.NotContains(got, "docs/gen.json,")
+}
+
+func (s *commitPathsSuite) TestAWorkerCommitsNoOutputOfASourceOutsideItsRow() {
+	deps := s.regeneratingDeps("internal/other/*.go")
+	s.stage("cmd/magus/x.go", "docs/gen.json")
+	s.Contains(denyLeaseScopedVCS(s.ctx, deps, s.worker.ID, "git commit -m done"), "It commits docs/gen.json")
 }
 
 func (s *commitPathsSuite) TestAnAddOnTheSameLineIsGraded() {
