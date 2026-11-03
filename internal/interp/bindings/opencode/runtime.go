@@ -1,5 +1,3 @@
-// Package opencode embeds the private OpenCode Buzz integration. It deliberately
-// does not import internal/agent or expose arbitrary JavaScript or process APIs.
 package opencode
 
 import (
@@ -14,19 +12,21 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
-// The OpenCode harness spell ships ./wasm as js/wasm. The outputs are
-// committed because the spell embeds them. VCS stamping would change the asset
-// after every commit, even when its source is unchanged.
+// The harness spell embeds ./wasm built as js/wasm, so the outputs are
+// committed, unstamped so an unchanged source keeps its bytes.
 //
 //go:generate env GOEXPERIMENT=jsonv2 GOOS=js GOARCH=wasm go build -buildvcs=false -trimpath "-ldflags=-s -w" -o ../../../../spells/harness/opencode/gen/magus-opencode.wasm ./wasm
 //go:generate cp $GOROOT/lib/wasm/wasm_exec.js ../../../../spells/harness/opencode/gen/wasm_exec.js
 
 const Version = 1
 
-// declarations is the opencode module the runtime session provides.
-const declarations =`export extern fun judge(event: {str: str}, mode: str, payload: str) > {str: str};`
+// moduleName is the Buzz module plugin.buzz imports.
+const moduleName = "opencode"
 
-// Plugin is the Buzz program that routes OpenCode events in the wasm runtime.
+// declarations is the Buzz module the runtime session provides.
+const declarations = `export extern fun judge(event: {str: str}, mode: str, payload: str) > {str: str};`
+
+// Plugin is the Buzz program that routes harness events in the wasm runtime.
 //
 //go:embed plugin.buzz
 var Plugin string
@@ -93,7 +93,7 @@ type Runtime struct {
 // teardown. Calls waiting on native JavaScript promises never reenter the VM.
 func Open(ctx context.Context, source string, invoke Invoke) (*Runtime, error) {
 	if invoke == nil {
-		return nil, errors.New("opencode: missing native invocation capability")
+		return nil, errors.New("harness runtime: missing native invocation capability")
 	}
 	lifetime, cancel := context.WithCancel(ctx)
 	r := &Runtime{requests: make(chan request), done: make(chan struct{}), cancel: cancel}
@@ -113,19 +113,19 @@ func Open(ctx context.Context, source string, invoke Invoke) (*Runtime, error) {
 	}
 }
 
-// module binds the opencode module plugin.buzz imports.
+// module binds the Buzz module plugin.buzz imports.
 func module(invoke Invoke) buzz.Module {
-	return buzz.Module{Name: "opencode", Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.DeclareModuleTypes("opencode", declarations)
-		s.SetModuleDecls("opencode", declarations)
+	return buzz.Module{Name: moduleName, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
+		s.DeclareModuleTypes(moduleName, declarations)
+		s.SetModuleDecls(moduleName, declarations)
 		mod := vm.NewMap()
-		mod.MapSet("judge", vm.DirectValue("opencode.judge", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
+		mod.MapSet("judge", vm.DirectValue(moduleName+".judge", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
 			if len(args) != 3 {
-				return vm.Null, errors.New("opencode: judge requires event, mode and payload")
+				return vm.Null, errors.New("harness runtime: judge requires event, mode and payload")
 			}
 			return judge(callCtx, invoke, args[0], args[1].String(), args[2].String()), nil
 		}))
-		s.SetNativeModule("opencode", mod)
+		s.SetNativeModule(moduleName, mod)
 		return nil
 	}}
 }
@@ -142,11 +142,11 @@ func newSession(ctx context.Context, invoke Invoke) (*buzz.Session, error) {
 
 func loadDispatch(ctx context.Context, sess *buzz.Session, source string) (vm.Value, error) {
 	if err := sess.Exec(ctx, source); err != nil {
-		return vm.Null, fmt.Errorf("opencode: load plugin.buzz: %w", err)
+		return vm.Null, fmt.Errorf("harness runtime: load plugin.buzz: %w", err)
 	}
 	dispatch, ok := sess.Exports()["dispatch"]
 	if !ok || !dispatch.IsFun() {
-		return vm.Null, errors.New("opencode: plugin.buzz must export dispatch")
+		return vm.Null, errors.New("harness runtime: plugin.buzz must export dispatch")
 	}
 	return dispatch, nil
 }
@@ -199,14 +199,14 @@ func (r *Runtime) Dispatch(ctx context.Context, event Event) (Result, error) {
 	case <-ctx.Done():
 		return Result{}, ctx.Err()
 	case <-r.done:
-		return Result{}, errors.New("opencode: runtime closed")
+		return Result{}, errors.New("harness runtime: runtime closed")
 	case r.requests <- req:
 	}
 	select {
 	case <-ctx.Done():
 		return Result{}, ctx.Err()
 	case <-r.done:
-		return Result{}, errors.New("opencode: runtime closed")
+		return Result{}, errors.New("harness runtime: runtime closed")
 	case res := <-req.reply:
 		return res.result, res.err
 	}
@@ -248,20 +248,20 @@ func decodeResult(value vm.Value) (Result, error) {
 	for _, key := range []string{"block", "reason", "context", "status", "mcp"} {
 		v, ok := value.MapGet(key)
 		if !ok || !v.IsString() {
-			return Result{}, fmt.Errorf("opencode: malformed Buzz result field %q", key)
+			return Result{}, fmt.Errorf("harness runtime: malformed Buzz result field %q", key)
 		}
 	}
 	block, mcp, status := field(value, "block"), field(value, "mcp"), field(value, "status")
 	if (block != "true" && block != "false") || (mcp != "true" && mcp != "false") ||
 		(status != "" && status != "ask" && status != "allow" && status != "deny") {
-		return Result{}, errors.New("opencode: malformed Buzz decision")
+		return Result{}, errors.New("harness runtime: malformed Buzz decision")
 	}
 	return Result{Block: block == "true", Reason: field(value, "reason"), Context: field(value, "context"), Status: status, MCP: mcp == "true"}, nil
 }
 
 func judge(ctx context.Context, invoke Invoke, event vm.Value, mode, payload string) vm.Value {
 	unjudged := func(why string) vm.Value { return record(map[string]string{"decision": "unjudged", "why": why}) }
-	args := []string{"shell", "--agent-name", "opencode", "--renders-ask", "-o", "json"}
+	args := shellArgs()
 	switch mode {
 	case "path":
 		args = append([]string{"shell", "--path"}, args[1:]...)
