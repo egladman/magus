@@ -7,9 +7,12 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/symbols/buzzindex"
 	"github.com/egladman/magus/internal/symbols/goindex"
 	"github.com/egladman/magus/internal/symbols/shindex"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -94,4 +97,65 @@ func (s *ConformanceBaseSuite) TestBuzzAndShellRunInProcessUnderTheBaseRoot() {
 
 func (s *ConformanceBaseSuite) TestAnExternalFormatHasNoInProcessIndexer() {
 	s.Nil(inProcessIndexer(&spells.SymbolIndexer{Format: "scip"}, "/t/p", "/t"))
+}
+
+type ConformanceBaseBoxSuite struct {
+	suite.Suite
+}
+
+func TestConformanceBaseBoxSuite(t *testing.T) {
+	suite.Run(t, new(ConformanceBaseBoxSuite))
+}
+
+const boxMagusfile = "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"
+
+func (s *ConformanceBaseBoxSuite) inspect(root string, cfg config.Config) *Magus {
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell("buzz"))
+	inspected, err := Inspect(s.T().Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling), workspace.WithLoadedConfig(cfg))
+	s.Require().NoError(err)
+	m := inspected.(*Magus)
+	s.T().Cleanup(func() { _ = m.Close() })
+	return m
+}
+
+func (s *ConformanceBaseBoxSuite) TestMeasureWritesOnlyInsideTheBox() {
+	denied := filepath.Join(s.T().TempDir(), "denied")
+	s.Require().NoError(os.Mkdir(denied, 0o500))
+	s.T().Setenv("XDG_CACHE_HOME", denied)
+	s.T().Setenv("HOME", denied)
+	granted := filepath.Join(s.T().TempDir(), "granted")
+	cfg := config.Defaults()
+	cfg.Cache.Dir = granted
+
+	repo := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": boxMagusfile})
+	m := s.inspect(repo.Root(), cfg)
+	commit, err := m.MeasureConformanceBase(s.T().Context(), "HEAD")
+	s.Require().NoError(err)
+
+	kept, err := filepath.Glob(filepath.Join(granted, "conformance", commit+"-*.jsonl"))
+	s.Require().NoError(err)
+	s.Len(kept, 1)
+	s.NoDirExists(filepath.Join(denied, "magus"))
+}
+
+func (s *ConformanceBaseBoxSuite) TestCheckoutsOfOneWorkspaceReadOneMeasure() {
+	s.T().Setenv("XDG_CACHE_HOME", s.T().TempDir())
+	repo := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": boxMagusfile})
+	sibling := repo.AddWorktree("sibling")
+
+	first := s.inspect(repo.Root(), config.Defaults())
+	second := s.inspect(sibling.Root(), config.Defaults())
+	s.NotEqual(first.CacheDir(), second.CacheDir())
+
+	commit, err := first.MeasureConformanceBase(s.T().Context(), "HEAD")
+	s.Require().NoError(err)
+
+	plan, err := second.baseIndexPlan(s.T().Context(), second.Root())
+	s.Require().NoError(err)
+	entry, err := second.conformanceEntry(s.T().Context(), commit, plan)
+	s.Require().NoError(err)
+	_, kept, err := readConformanceEntry(entry)
+	s.Require().NoError(err)
+	s.True(kept, "the sibling checkout finds the measure the first one kept")
 }

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/json"
@@ -18,7 +19,6 @@ import (
 	"github.com/egladman/magus/internal/symbols/buzzindex"
 	"github.com/egladman/magus/internal/symbols/goindex"
 	"github.com/egladman/magus/internal/symbols/shindex"
-	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -87,17 +87,19 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head t
 }
 
 // MeasureConformanceBase measures the merge base of base and HEAD with magus's in-process
-// indexers under this workspace's configuration, and keeps it in the user cache, which every
-// checkout on the machine shares, keyed by commit, policy, indexer versions and magus build. It returns the
-// commit, and reuses a kept measure. It opens no workspace and starts no run.
+// indexers under this workspace's configuration. It keeps the measure in the
+// workspace store every checkout shares, keyed by commit, policy, indexer
+// versions and magus build.
+// The base is exported there too, since a sandboxed gate writes only to the
+// store and the temp dir. It returns the commit, and reuses a kept measure.
 func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string, error) {
 	v, commit, err := m.conformanceBaseCommit(ctx, base)
 	if err != nil {
 		return "", err
 	}
-	tree, err := xdg.ScratchCheckoutDir("conformance")
+	tree, err := m.conformanceTree()
 	if err != nil {
-		return "", fmt.Errorf("conformance: %w", err)
+		return "", err
 	}
 	defer os.RemoveAll(tree)
 	// Keyed by the indexers as head runs them, so ConformanceCeilings finds the entry: a Go
@@ -192,11 +194,11 @@ func (m *Magus) conformanceEntry(ctx context.Context, commit string, plan baseIn
 	for _, ix := range plan.indexes {
 		fmt.Fprintf(h, "\x00%s\x00%s\x00%s", ix.project, ix.language, ix.ix.Version())
 	}
-	root, err := xdg.CacheDir()
+	store, err := config.StoreDir(m.ws.Root, m.cfg)
 	if err != nil {
 		return "", fmt.Errorf("conformance: %w", err)
 	}
-	return filepath.Join(root, "magus", "conformance", fmt.Sprintf("%s-%x.jsonl", commit, h.Sum(nil))), nil
+	return filepath.Join(store, "conformance", fmt.Sprintf("%s-%x.jsonl", commit, h.Sum(nil))), nil
 }
 
 // baseIndex is one in-process symbol index of a project, over the base tree.
@@ -368,4 +370,20 @@ func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan
 		return types.Conformance{}, errors.New("the in-process indexers read no symbols, so no ceiling can be judged against it")
 	}
 	return out, nil
+}
+
+func (m *Magus) conformanceTree() (string, error) {
+	store, err := config.StoreDir(m.ws.Root, m.cfg)
+	if err != nil {
+		return "", fmt.Errorf("conformance: %w", err)
+	}
+	trees := filepath.Join(store, "conformance-trees")
+	if err := os.MkdirAll(trees, 0o700); err != nil {
+		return "", fmt.Errorf("conformance: %w", err)
+	}
+	tree, err := os.MkdirTemp(trees, "")
+	if err != nil {
+		return "", fmt.Errorf("conformance: %w", err)
+	}
+	return tree, nil
 }
