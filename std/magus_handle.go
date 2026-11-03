@@ -313,102 +313,122 @@ func graphMethod[T any](ctx context.Context, g types.SymbolIndexDigest, member s
 	return read()
 }
 
-// MagusGraphQuery is Graph.query.
+// MagusGraphQuery answers Graph.query.
+// It raises once the index g holds moved.
 func MagusGraphQuery(ctx context.Context, g types.SymbolIndexDigest, query string, opts types.KnowledgeQueryOptions) (types.KnowledgeQueryOutput, error) {
 	return graphMethod(ctx, g, "query", func() (types.KnowledgeQueryOutput, error) { return MagusQuery(ctx, query, opts) })
 }
 
-// MagusGraphExplain is Graph.explain.
+// MagusGraphExplain answers Graph.explain.
+// It raises once the index g holds moved.
 func MagusGraphExplain(ctx context.Context, g types.SymbolIndexDigest, node string) (types.KnowledgeExplainOutput, error) {
 	return graphMethod(ctx, g, "explain", func() (types.KnowledgeExplainOutput, error) { return MagusExplain(ctx, node) })
 }
 
-// MagusGraphPath is Graph.path.
+// MagusGraphPath answers Graph.path.
+// It raises once the index g holds moved.
 func MagusGraphPath(ctx context.Context, g types.SymbolIndexDigest, node, to string, opts types.KnowledgePathOptions) (types.KnowledgePathOutput, error) {
 	return graphMethod(ctx, g, "path", func() (types.KnowledgePathOutput, error) { return MagusPath(ctx, node, to, opts) })
 }
 
-// MagusGraphRefs is Graph.refs.
+// MagusGraphRefs answers Graph.refs.
+// It raises once the index g holds moved.
 func MagusGraphRefs(ctx context.Context, g types.SymbolIndexDigest, symbol string, opts types.KnowledgeRefsOptions) (types.KnowledgeRefsOutput, error) {
 	return graphMethod(ctx, g, "refs", func() (types.KnowledgeRefsOutput, error) { return MagusRefs(ctx, symbol, opts) })
 }
 
-// MagusGraphStats is Graph.stats.
+// MagusGraphStats answers Graph.stats.
+// It raises once the index g holds moved.
 func MagusGraphStats(ctx context.Context, g types.SymbolIndexDigest, kind string) (types.KnowledgeStats, error) {
 	return graphMethod(ctx, g, "stats", func() (types.KnowledgeStats, error) { return MagusStats(ctx, kind) })
 }
 
-// MagusGraphNeighborhood is Graph.neighborhood.
+// MagusGraphNeighborhood answers Graph.neighborhood.
+// It raises once the index g holds moved.
 func MagusGraphNeighborhood(ctx context.Context, g types.SymbolIndexDigest, focus string, opts types.KnowledgeNeighborhoodOptions) (types.KnowledgeNeighborhoodOutput, error) {
 	return graphMethod(ctx, g, "neighborhood", func() (types.KnowledgeNeighborhoodOutput, error) { return MagusNeighborhood(ctx, focus, opts) })
 }
 
-// MagusGraphDir is Graph.dir.
+// MagusGraphDir answers Graph.dir.
+// It raises once the index g holds moved.
 func MagusGraphDir(ctx context.Context, g types.SymbolIndexDigest, path string) (types.Dir, error) {
 	return graphMethod(ctx, g, "dir", func() (types.Dir, error) { return MagusDir(ctx, path) })
 }
 
-// MagusGraphDirs is Graph.dirs.
+// MagusGraphDirs answers Graph.dirs.
+// It raises once the index g holds moved.
 func MagusGraphDirs(ctx context.Context, g types.SymbolIndexDigest, glob string, opts types.DirsOptions) ([]types.Dir, error) {
 	return graphMethod(ctx, g, "dirs", func() ([]types.Dir, error) { return MagusDirs(ctx, glob, opts) })
 }
 
-// MagusGraphLayer is Graph.layer.
+// MagusGraphLayer answers Graph.layer.
+// It raises once the index g holds moved.
 func MagusGraphLayer(ctx context.Context, g types.SymbolIndexDigest, name string) (types.Layer, error) {
 	return graphMethod(ctx, g, "layer", func() (types.Layer, error) { return MagusLayer(ctx, name) })
 }
 
-// MagusGraphDeps is Graph.deps.
+// MagusGraphDeps answers Graph.deps.
+// It raises once the index g holds moved.
 func MagusGraphDeps(ctx context.Context, g types.SymbolIndexDigest) (types.GraphView, error) {
 	return graphMethod(ctx, g, "deps", func() (types.GraphView, error) { return MagusProjectGraph(ctx) })
 }
 
-// MagusGraphImports is Graph.imports.
+// MagusGraphImports answers Graph.imports.
+// It raises once the index g holds moved.
 func MagusGraphImports(ctx context.Context, g types.SymbolIndexDigest) (types.ImportGraph, error) {
 	return graphMethod(ctx, g, "imports", func() (types.ImportGraph, error) { return MagusImportGraph(ctx) })
 }
 
-// MagusGraphSymbols is Graph.symbols.
+// MagusGraphSymbols answers Graph.symbols.
+// It raises once the index g holds moved.
 func MagusGraphSymbols(ctx context.Context, g types.SymbolIndexDigest) (types.Symbols, error) {
 	return graphMethod(ctx, g, "symbols", func() (types.Symbols, error) { return MagusSymbols(ctx) })
 }
 
-// MagusGraphPrecedents is Graph.precedents.
+// MagusGraphPrecedents answers Graph.precedents.
+// It raises once the index g holds moved.
 func MagusGraphPrecedents(ctx context.Context, g types.SymbolIndexDigest) (types.Holds, error) {
 	return graphMethod(ctx, g, "precedents", func() (types.Holds, error) { return MagusPrecedents(ctx) })
 }
 
-// MagusGraphUnreferenced is Graph.unreferenced.
+// MagusGraphUnreferenced answers Graph.unreferenced.
+// It raises once the index g holds moved.
 func MagusGraphUnreferenced(ctx context.Context, g types.SymbolIndexDigest) (types.Unreferenced, error) {
 	return graphMethod(ctx, g, "unreferenced", func() (types.Unreferenced, error) { return MagusUnreferenced(ctx) })
 }
 
-// MagusGraphDuplication is Graph.duplication.
+// MagusGraphDuplication answers Graph.duplication.
+// It raises once the index g holds moved.
 func MagusGraphDuplication(ctx context.Context, g types.SymbolIndexDigest) (types.Duplication, error) {
 	return graphMethod(ctx, g, "duplication", func() (types.Duplication, error) { return MagusDuplication(ctx) })
 }
 
-// MagusHistoryHotspots is History.hotspots.
+// MagusHistoryHotspots answers History.hotspots.
+// It reads the git window h holds.
 func MagusHistoryHotspots(ctx context.Context, h types.History) (types.Hotspots, error) {
 	return MagusHotspots(ctx, h.Options())
 }
 
-// MagusHistoryAffinity is History.affinity.
+// MagusHistoryAffinity answers History.affinity.
+// It reads the git window h holds.
 func MagusHistoryAffinity(ctx context.Context, h types.History) (types.Affinity, error) {
 	return MagusAffinity(ctx, h.Options())
 }
 
-// MagusHistoryOwnership is History.ownership.
+// MagusHistoryOwnership answers History.ownership.
+// It reads the git window h holds.
 func MagusHistoryOwnership(ctx context.Context, h types.History) (types.Ownership, error) {
 	return MagusOwnership(ctx, h.Options())
 }
 
-// MagusHistoryTrend is History.trend.
+// MagusHistoryTrend answers History.trend.
+// It reads the git window h holds.
 func MagusHistoryTrend(ctx context.Context, h types.History) (types.Trend, error) {
 	return MagusTrend(ctx, h.Options())
 }
 
-// MagusSessionTrail is Session.trail.
+// MagusSessionTrail answers Session.trail.
+// It reads this repository's trail store.
 func MagusSessionTrail(ctx context.Context, s types.Session) (types.Trail, error) {
 	return MagusTrailRead(ctx, s.TrailOptions())
 }
@@ -418,17 +438,20 @@ func MagusSessionMarks(ctx context.Context, _ types.Session) ([]types.TrailMark,
 	return MagusTrailMarks(ctx)
 }
 
-// MagusSessionMark is Session.mark.
+// MagusSessionMark answers Session.mark.
+// It reads this repository's trail store.
 func MagusSessionMark(ctx context.Context, _ types.Session, mark map[string]any) (types.TrailMark, error) {
 	return MagusTrailMark(ctx, mark)
 }
 
-// MagusWorkspaceJobs is Workspace.jobs.
+// MagusWorkspaceJobs answers Workspace.jobs.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceJobs(ctx context.Context, _ types.MagusWorkspace) (types.JobList, error) {
 	return MagusListJob(ctx)
 }
 
-// MagusWorkspacePutJob is Workspace.putJob.
+// MagusWorkspacePutJob answers Workspace.putJob.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspacePutJob(ctx context.Context, _ types.MagusWorkspace, id string, opts map[string]any) (types.Job, error) {
 	put, err := decodeJobPut(opts)
 	if err != nil {
@@ -437,7 +460,8 @@ func MagusWorkspacePutJob(ctx context.Context, _ types.MagusWorkspace, id string
 	return MagusPutJob(ctx, id, put)
 }
 
-// MagusWorkspaceClearJobs is Workspace.clearJobs.
+// MagusWorkspaceClearJobs answers Workspace.clearJobs.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceClearJobs(ctx context.Context, _ types.MagusWorkspace) (int, error) {
 	return MagusClearJob(ctx)
 }
@@ -452,42 +476,50 @@ func MagusWorkspaceUnmerged(ctx context.Context, w types.MagusWorkspace) (types.
 	return MagusUnmergedJob(ctx, w.Dir)
 }
 
-// MagusWorkspaceTierOutcomes is Workspace.tierOutcomes.
+// MagusWorkspaceTierOutcomes answers Workspace.tierOutcomes.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceTierOutcomes(ctx context.Context, _ types.MagusWorkspace) (types.ModelTiers, error) {
 	return MagusModelTiers(ctx)
 }
 
-// MagusWorkspaceGrouping is Workspace.grouping.
+// MagusWorkspaceGrouping answers Workspace.grouping.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceGrouping(ctx context.Context, _ types.MagusWorkspace) (types.Grouping, error) {
 	return MagusGrouping(ctx)
 }
 
-// MagusWorkspaceVolatility is Workspace.volatility.
+// MagusWorkspaceVolatility answers Workspace.volatility.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceVolatility(ctx context.Context, _ types.MagusWorkspace) (types.Volatility, error) {
 	return MagusVolatility(ctx)
 }
 
-// MagusWorkspaceAttention is Workspace.attention.
+// MagusWorkspaceAttention answers Workspace.attention.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceAttention(ctx context.Context, _ types.MagusWorkspace, args []string, opts types.MagusCommandOptions) (types.AttentionList, error) {
 	return MagusAttention(ctx, args, opts)
 }
 
-// MagusWorkspaceFileDiskAttention is Workspace.fileDiskAttention.
+// MagusWorkspaceFileDiskAttention answers Workspace.fileDiskAttention.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceFileDiskAttention(ctx context.Context, _ types.MagusWorkspace, message string) error {
 	return MagusFileDiskAttention(ctx, message)
 }
 
-// MagusWorkspaceDiskReclaim is Workspace.diskReclaim.
+// MagusWorkspaceDiskReclaim answers Workspace.diskReclaim.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceDiskReclaim(ctx context.Context, _ types.MagusWorkspace) (types.DiskReclaim, error) {
 	return MagusDiskReclaim(ctx)
 }
 
-// MagusWorkspaceBustCache is Workspace.bustCache.
+// MagusWorkspaceBustCache answers Workspace.bustCache.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceBustCache(ctx context.Context, _ types.MagusWorkspace, projectPath string) error {
 	return MagusBustCache(ctx, projectPath)
 }
 
-// MagusWorkspaceDiagnoseDrift is Workspace.diagnoseDrift.
+// MagusWorkspaceDiagnoseDrift answers Workspace.diagnoseDrift.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceDiagnoseDrift(ctx context.Context, _ types.MagusWorkspace, outputs, inputs []string) (types.DriftResult, error) {
 	return MagusDiagnoseDrift(ctx, outputs, inputs)
 }
@@ -496,7 +528,8 @@ func MagusWorkspaceDiagnoseDrift(ctx context.Context, _ types.MagusWorkspace, ou
 // and imports std, so the bindings set it.
 var SkillCatalog func(ctx context.Context, opts types.SkillsOptions) ([]types.Skill, error)
 
-// MagusWorkspaceSkills is Workspace.skills.
+// MagusWorkspaceSkills answers Workspace.skills.
+// It reads the workspace on ctx and raises MGS1022 outside one.
 func MagusWorkspaceSkills(ctx context.Context, _ types.MagusWorkspace, opts types.SkillsOptions) ([]types.Skill, error) {
 	if SkillCatalog == nil {
 		return nil, errors.New("magus\\Workspace.skills: this build wires no skill catalog")
