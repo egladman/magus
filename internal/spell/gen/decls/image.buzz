@@ -129,7 +129,7 @@ export object Digest {
     encoded: str = "",
 
     fun string() > str {
-        return Digest__string(this);
+        return image__Digest__string(this);
     }
 }
 
@@ -206,7 +206,7 @@ export object Provenance {
     dependencies: [Dependency] = [],
 }
 
-extern fun Digest__string(recv: Digest) > str;
+extern fun image__Digest__string(recv: Digest) > str;
 
 export extern fun assemble(spec: Spec, layout: str) > Layout !> any;
 export extern fun assembleIndex(layouts: [str], layout: str) > Layout !> any;

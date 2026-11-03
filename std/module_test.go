@@ -456,13 +456,13 @@ func (s *ObjectSuite) object() Object {
 
 func (s *ObjectSuite) TestExternTakesTheRecordFirst() {
 	o := s.object()
-	ext := o.Extern(o.Methods[0])
+	ext := Module{Name: "covok"}.ObjectExtern(o, o.Methods[0])
 	// A func is never DeepEqual to another, so the Impl is compared by name.
 	s.Equal(MethodFuncName(o.Methods[0]), MethodFuncName(ext))
 	ext.Impl = nil
 	s.Equal(Method{
-		Name:     "Rec__labelOf",
-		BuzzName: "Rec__labelOf",
+		Name:     "covok__Rec__labelOf",
+		BuzzName: "covok__Rec__labelOf",
 		Args:     []Arg{{Name: "recv", Type: TypeAnyMap, Object: "Rec"}, {Name: "prefix", Type: TypeString}},
 		Returns:  []Ret{{Type: TypeString}},
 	}, ext)
@@ -477,7 +477,7 @@ func (s *ObjectSuite) TestModuleListsEveryObjectExtern() {
 	mod := Module{Name: "covok", Objects: []Object{s.object()}}
 	externs := mod.ObjectExterns()
 	s.Require().Len(externs, 1)
-	s.Equal("Rec__labelOf", externs[0].Name)
+	s.Equal("covok__Rec__labelOf", externs[0].Name)
 }
 
 func (s *ObjectSuite) TestAWellFormedObjectValidates() {

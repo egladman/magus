@@ -166,7 +166,7 @@ func renderRecordDecls(mod std.Module) (string, error) {
 			return "", err
 		}
 		if o, ok := mirrorObject(mod, entry.Type); ok {
-			if out, err = withObjectMethods(out, o); err != nil {
+			if out, err = withObjectMethods(out, mod, o); err != nil {
 				return "", err
 			}
 		}
@@ -183,14 +183,14 @@ func renderRecordDecls(mod std.Module) (string, error) {
 
 // withObjectMethods inserts o's forwarding methods before the mirror's
 // closing brace.
-func withObjectMethods(mirror []byte, o std.Object) ([]byte, error) {
+func withObjectMethods(mirror []byte, mod std.Module, o std.Object) ([]byte, error) {
 	closing := bytes.LastIndex(mirror, []byte("}"))
 	if closing < 0 {
 		return nil, fmt.Errorf("mirror %s: no closing brace to declare its methods before", o.Name)
 	}
 	var methods bytes.Buffer
 	for _, meth := range o.Methods {
-		src, err := forwardingMethod(o, meth)
+		src, err := forwardingMethod(mod, o, meth)
 		if err != nil {
 			return nil, fmt.Errorf("object %s: %s: %w", o.Name, meth.Name, err)
 		}
@@ -200,8 +200,8 @@ func withObjectMethods(mirror []byte, o std.Object) ([]byte, error) {
 }
 
 // forwardingMethod renders meth as a Buzz method that passes `this` and its
-// arguments, labeled, to the private extern o.Extern(meth) declares.
-func forwardingMethod(o std.Object, meth std.Method) (string, error) {
+// arguments, labeled, to the private extern mod.ObjectExtern declares.
+func forwardingMethod(mod std.Module, o std.Object, meth std.Method) (string, error) {
 	decl, err := externDecl(meth)
 	if err != nil {
 		return "", err
@@ -214,7 +214,7 @@ func forwardingMethod(o std.Object, meth std.Method) (string, error) {
 	for _, a := range meth.Args {
 		call = append(call, fmt.Sprintf("%s: %s", a.Name, a.Name))
 	}
-	stmt := fmt.Sprintf("%s(%s);", o.Extern(meth).Name, strings.Join(call, ", "))
+	stmt := fmt.Sprintf("%s(%s);", mod.ObjectExtern(o, meth).Name, strings.Join(call, ", "))
 	if len(meth.Returns) > 0 {
 		stmt = "return " + stmt
 	}

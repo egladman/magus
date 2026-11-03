@@ -628,6 +628,7 @@ github.com/egladman/magus/std.Module.MCPTools field []MCPTool
 github.com/egladman/magus/std.Module.Methods field []Method
 github.com/egladman/magus/std.Module.Name field string
 github.com/egladman/magus/std.Module.Namespaces field []Namespace
+github.com/egladman/magus/std.Module.ObjectExtern method func(o Object, meth Method) Method
 github.com/egladman/magus/std.Module.ObjectExterns method func() []Method
 github.com/egladman/magus/std.Module.Objects field []Object
 github.com/egladman/magus/std.Module.Path field string
@@ -644,7 +645,6 @@ github.com/egladman/magus/std.NetIsPortOpen func(ctx context.Context, host strin
 github.com/egladman/magus/std.NetWaitForPort func(ctx context.Context, host string, port int, timeoutMs int) (bool, error)
 github.com/egladman/magus/std.Object type struct
 github.com/egladman/magus/std.Object.Doc field string
-github.com/egladman/magus/std.Object.Extern method func(meth Method) Method
 github.com/egladman/magus/std.Object.MethodName method func(meth Method) string
 github.com/egladman/magus/std.Object.Methods field []Method
 github.com/egladman/magus/std.Object.Name field string

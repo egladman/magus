@@ -196,14 +196,16 @@ type Object struct {
 	Methods []Method
 }
 
-// Extern returns the private top-level member meth forwards to, such as
-// Digest__string, whose first argument is the record itself.
-func (o Object) Extern(meth Method) Method {
-	m := meth
-	m.Name = fmt.Sprintf("%s__%s", o.Name, o.MethodName(meth))
-	m.BuzzName = m.Name
-	m.Args = append([]Arg{{Name: "recv", Type: TypeAnyMap, Object: o.Name}}, meth.Args...)
-	return m
+// ObjectExtern returns the private top-level member meth of o forwards to,
+// such as image__Digest__string, whose first argument is the record itself.
+// The module prefix keeps two modules' records of one name apart: a session
+// binds every private extern under its bare name.
+func (m Module) ObjectExtern(o Object, meth Method) Method {
+	ext := meth
+	ext.Name = fmt.Sprintf("%s__%s__%s", m.Name, o.Name, o.MethodName(meth))
+	ext.BuzzName = ext.Name
+	ext.Args = append([]Arg{{Name: "recv", Type: TypeAnyMap, Object: o.Name}}, meth.Args...)
+	return ext
 }
 
 // Signature renders meth's Buzz call form on a record, as in
@@ -396,7 +398,7 @@ func (m Module) ObjectExterns() []Method {
 	var out []Method
 	for _, o := range m.Objects {
 		for _, meth := range o.Methods {
-			out = append(out, o.Extern(meth))
+			out = append(out, m.ObjectExtern(o, meth))
 		}
 	}
 	return out
@@ -458,7 +460,7 @@ func validateObjects(m Module) error {
 			if meth.Extern {
 				return fmt.Errorf("object %q method %q is Extern, an object method needs an Impl", o.Name, meth.Name)
 			}
-			if err := validateMethod(o.Extern(meth)); err != nil {
+			if err := validateMethod(m.ObjectExtern(o, meth)); err != nil {
 				return fmt.Errorf("object %q method %q: %w", o.Name, meth.Name, err)
 			}
 		}

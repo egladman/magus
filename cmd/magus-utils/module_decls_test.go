@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"slices"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/hostmodules"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 )
 
@@ -155,22 +157,22 @@ func (s *ModuleDeclsSuite) TestCollectEnumsDeclaresAnEnumScopedToTheModule() {
 
 func (s *ModuleDeclsSuite) TestAForwardingMethodPassesThisAndLabelsItsArguments() {
 	o := std.Object{Name: "Change"}
-	got, err := forwardingMethod(o, std.Method{
+	got, err := forwardingMethod(std.Module{Name: "magus"}, o, std.Method{
 		Name: "tier", Args: []std.Arg{{Name: "target", Type: std.TypeString}, {Name: "depth", Type: std.TypeInt}},
 		Returns: []std.Ret{{Type: std.TypeString}}, Raises: true,
 	})
 	s.Require().NoError(err)
-	s.Equal("\n    fun tier(target: str, depth: int) > str !> any {\n        return Change__tier(this, target: target, depth: depth);\n    }\n", got)
+	s.Equal("\n    fun tier(target: str, depth: int) > str !> any {\n        return magus__Change__tier(this, target: target, depth: depth);\n    }\n", got)
 }
 
 func (s *ModuleDeclsSuite) TestAVoidForwardingMethodReturnsNothing() {
-	got, err := forwardingMethod(std.Object{Name: "Change"}, std.Method{Name: "bust"})
+	got, err := forwardingMethod(std.Module{Name: "magus"}, std.Object{Name: "Change"}, std.Method{Name: "bust"})
 	s.Require().NoError(err)
-	s.Equal("\n    fun bust() > void {\n        Change__bust(this);\n    }\n", got)
+	s.Equal("\n    fun bust() > void {\n        magus__Change__bust(this);\n    }\n", got)
 }
 
 func (s *ModuleDeclsSuite) TestAVariadicObjectMethodIsRefused() {
-	_, err := forwardingMethod(std.Object{Name: "Change"}, std.Method{
+	_, err := forwardingMethod(std.Module{Name: "magus"}, std.Object{Name: "Change"}, std.Method{
 		Name: "join", Args: []std.Arg{{Name: "parts", Type: std.TypeString, Variadic: true}},
 	})
 	s.ErrorContains(err, "variadic")
@@ -179,8 +181,46 @@ func (s *ModuleDeclsSuite) TestAVariadicObjectMethodIsRefused() {
 func (s *ModuleDeclsSuite) TestTheObjectExternIsDeclaredPrivate() {
 	src, err := renderRecordDecls(std.Image)
 	s.Require().NoError(err)
-	s.Contains(src, "\nextern fun Digest__string(recv: Digest) > str;\n")
-	s.Contains(src, "return Digest__string(this);")
+	s.Contains(src, "\nextern fun image__Digest__string(recv: Digest) > str;\n")
+	s.Contains(src, "return image__Digest__string(this);")
+}
+
+func (s *ModuleDeclsSuite) recordModule(name string) std.Module {
+	return std.Module{Name: name, Objects: []std.Object{{Name: "Digest", Methods: []std.Method{{
+		Name: "string", Returns: []std.Ret{{Type: std.TypeString}}, Impl: std.ImageDigestString,
+	}}}}}
+}
+
+func (s *ModuleDeclsSuite) load(sess *buzz.Session, mod std.Module) {
+	src, err := renderRecordDecls(mod)
+	s.Require().NoError(err)
+	native := vm.NewMap()
+	answer := mod.Name
+	for _, ext := range mod.ObjectExterns() {
+		native.MapSet(ext.Name, vm.DirectValue(ext.Name, func(context.Context, []vm.Value) (vm.Value, error) {
+			return vm.StringValue(answer), nil
+		}))
+	}
+	sess.SetNativeModule(mod.Name, native)
+	sess.SetModuleDecls(mod.Name, src)
+}
+
+// Two modules may declare one method on one record name, each reaching its
+// own Go.
+func (s *ModuleDeclsSuite) TestTwoModulesShareAnObjectMethodName() {
+	ctx := s.T().Context()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	s.load(sess, s.recordModule("alpha"))
+	s.load(sess, s.recordModule("beta"))
+	s.Require().NoError(sess.Exec(ctx, `
+import "alpha";
+import "beta";
+final a = alpha\Digest{}.string();
+final b = beta\Digest{}.string();
+`))
+	s.Equal("alpha", sess.Globals()["a"].AsString())
+	s.Equal("beta", sess.Globals()["b"].AsString())
 }
 
 // The image decls and the generated trampoline run together, as a magusfile
