@@ -22,6 +22,7 @@ import "fs";
 import "os";
 import "path";
 import "std";
+import "vcs";
 import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/lint/banned-words" as bannedwords;
@@ -115,12 +116,12 @@ export fun rules() > [Rule] {
     ];
 }
 
-// PRUNED are the directories the walk never enters: VCS metadata, local state, installed
-// dependencies and generated output hold nothing this repository authors.
+// PRUNED are the directories the walk never enters, ignored or not. gen is
+// tracked output the ignore rules cannot exclude; the rest spare the VCS query.
 final PRUNED = {".git": true, ".magus": true, "node_modules": true, ".pnpm-store": true, ".testcache": true, "gen": true};
 
 // PRUNED_PATHS are pruned by their whole path: other checkouts of this repository, whose
-// files would each be reported twice.
+// files would each be reported twice. They are untracked, not always ignored.
 final PRUNED_PATHS = {".claude/worktrees": true};
 
 // KEPT_PATHS are generated trees walked despite PRUNED, because a rule reads them: the
@@ -128,21 +129,41 @@ final PRUNED_PATHS = {".claude/worktrees": true};
 // registry magus generates.
 final KEPT_PATHS = {"docs/site/diagrams/gen": true, "internal/handler/mcp/gen": true};
 
-// walk returns every file under root outside the pruned trees, as root-relative paths.
+// KEPT_IGNORED are ignored trees walked anyway: each checkout installs
+// .claude, and the rules read its settings and skills. Everything under
+// one inherits its ignore, so the walk stops asking the VCS there.
+final KEPT_IGNORED = {".claude": true};
+
+// walk returns every file under root outside the pruned trees and the
+// VCS ignore rules, as root-relative paths.
 export fun walk(root: str) > [str] !> any {
     final acc = mut [<str>];
-    walkInto(root, rel: "", acc: acc);
+    walkInto(root, rel: "", kept: false, acc: acc);
     return acc;
 }
 
-fun walkInto(root: str, rel: str, acc: mut [str]) > void !> any {
+fun walkInto(root: str, rel: str, kept: bool, acc: mut [str]) > void !> any {
     final dir = if (rel == "") root else root + "/" + rel;
-    foreach (name in fs\listDir(dir)) {
+    final names = fs\listDir(dir);
+    final ignored = mut {<str, bool>};
+    if (!kept) {
+        final paths = mut [<str>];
+        foreach (name in names) {
+            paths.append(if (rel == "") name else rel + "/" + name);
+        }
+        foreach (p in vcs\ignoredFiles(paths, dir: root)) {
+            ignored[p] = true;
+        }
+    }
+    foreach (name in names) {
         final p = if (rel == "") name else rel + "/" + name;
+        if (ignored[p] != null and KEPT_IGNORED[p] == null) {
+            continue;
+        }
         if (!fs\isDir(root + "/" + p)) {
             acc.append(p);
         } else if ((PRUNED[name] == null or KEPT_PATHS[p] != null) and PRUNED_PATHS[p] == null) {
-            walkInto(root, rel: p, acc: acc);
+            walkInto(root, rel: p, kept: kept or ignored[p] != null, acc: acc);
         }
     }
 }
@@ -583,9 +604,25 @@ test "the walk prunes what no rule reads" {
         fs\mkdirAll(fs\dirname(root + "/" + p));
         fs\writeFile(root + "/" + p, content: "");
     }
+    _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
     final got = walk(root);
     assert\equal(got.len(), want: 3, message: "three files survive");
     assert\contains(got, item: "a.lock", message: "top level");
     assert\contains(got, item: ".claude/settings.json", message: ".claude outside worktrees");
     assert\contains(got, item: "docs/site/diagrams/gen/e.buzz", message: "a gen tree a rule reads");
+}
+
+test "the walk skips what the VCS ignores and keeps what it does not" {
+    final root = fs\tempDir("lint-ignore-");
+    foreach (p in [".gitignore", "tracked.lock", "kept.lock", "installed/a.js", "stray.log", ".claude/skills/a/SKILL.md"]) {
+        fs\mkdirAll(fs\dirname(root + "/" + p));
+        fs\writeFile(root + "/" + p, content: if (p == ".gitignore") "installed/\n*.log\n/.claude/\n" else "");
+    }
+    _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    _ = vcs\cmd(["add", "tracked.lock"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    final got = walk(root);
+    assert\contains(got, item: "tracked.lock", message: "tracked file");
+    assert\contains(got, item: "kept.lock", message: "untracked, not ignored");
+    assert\contains(got, item: ".claude/skills/a/SKILL.md", message: "a file deep in a kept ignored tree");
+    assert\equal(got.len(), want: 4, message: "ignored dir and file skipped");
 }
