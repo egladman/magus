@@ -172,6 +172,9 @@ func RemovedAPICall(src string) (call, replacement string, ok bool) {
 // magusfile predates the backslash spelling entirely.
 func magusRooted(e ast.Node, member []string) bool {
 	for i := len(member) - 1; i >= 0; i-- {
+		if call, ok := e.(*ast.CallExpr); ok {
+			e = call.Callee
+		}
 		me, isMember := e.(*ast.MemberExpr)
 		if !isMember || me.Name != member[i] {
 			return false
@@ -187,7 +190,7 @@ func magusRooted(e ast.Node, member []string) bool {
 // magus (std's runMagus). A rule catalog or a rendered MAGUS.md changes when the binary
 // does, with no source the target could declare.
 func binaryAnswers() [][]string {
-	return [][]string{{"describe"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"impact"}, {"attention"}, {"diff"}}
+	return [][]string{{"describe"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"change", "impact"}, {"workspace", "attention"}, {"change", "diff"}, {"magus__Change__impact"}, {"magus__Workspace__attention"}, {"magus__Change__diff"}}
 }
 
 // BinaryAnswerTargets returns the normalized keys of the exported targets in src whose
