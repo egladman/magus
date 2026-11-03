@@ -498,7 +498,7 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: decisionAdvise, Kind: advisoryUnleasedWrite,
-		Context: fmt.Sprintf("magus workspace: this spawned process names no lease; declare the plan with magus\\job.put and export %s=<lease id> in each worker.", envHookLease),
+		Context: fmt.Sprintf("magus workspace: this spawned process names no lease; declare the plan with magus\\workspace().putJob and export %s=<lease id> in each worker.", envHookLease),
 		Why: "The job store holds no live lease, so the guard has no declared boundary to grade these writes against. " +
 			"Nothing records who owns which paths, so two workers editing one file is invisible until somebody reads the diff, and no checkpoint says which revision the work applies to.\n" +
 			"This is an advisory and never a block: the spawn chain is a claim the environment makes, so it may teach and may not judge. Load the magus-multi-agent skill for how a plan is partitioned."}
@@ -961,7 +961,7 @@ func declarationCovering(decls []string, rel string) (string, bool, error) {
 // nothing about whether this write is legitimate, only that nothing graded it.
 func adviseMalformedDeclaration(err error) writeGrade {
 	return writeGrade{Decision: decisionAdvise,
-		Context: fmt.Sprintf("magus workspace: a declared lease path could not be matched (%v); fix the pattern with magus\\job.put, then retry this write.", err),
+		Context: fmt.Sprintf("magus workspace: a declared lease path could not be matched (%v); fix the pattern with magus\\workspace().putJob, then retry this write.", err),
 		Why:     "That boundary was not checked. The guard fails open on a pattern it cannot read, which means a write or deny path spelled this way is not being enforced at all."}
 }
 
