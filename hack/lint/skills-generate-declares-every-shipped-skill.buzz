@@ -38,7 +38,7 @@ export fun reads() > [str] {
     globs.append(CATALOG);
     globs.append(SHIPPED + "/*/SKILL.md");
     foreach (name in HAND_AUTHORED) {
-        globs.append(".claude/skills/" + name + "/SKILL.md");
+        globs.append(".agents/skills/" + name + "/SKILL.md");
     }
     return globs;
 }
