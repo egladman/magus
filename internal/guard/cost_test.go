@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/hint"
@@ -599,20 +600,33 @@ func TestRootWorkClass(t *testing.T) {
 	}
 }
 
-func TestDrivesOnlyJobsKeepsWorkspaceWorkDistinct(t *testing.T) {
-	for _, tc := range []struct {
-		script string
-		want   bool
-	}{
-		{`import "magus"; magus\workspace().putJob("a");`, true},
-		{`import workspace from "magus"; workspace().jobs();`, true},
-		{`import "magus"; magus\workspace().skills();`, false},
-		{`import workspace from "magus"; workspace().bustCache();`, false},
-		{`import workspace from "magus"; final open = workspace; open().bustCache();`, false},
-		{`import "magus"; magus\workspace(magus\cmd("run", ["build"])).jobs();`, false},
-	} {
-		assert.Equal(t, tc.want, drivesOnlyJobs(tc.script), tc.script)
-	}
+type DrivesOnlyJobsSuite struct {
+	suite.Suite
+}
+
+func TestDrivesOnlyJobsSuite(t *testing.T) {
+	suite.Run(t, new(DrivesOnlyJobsSuite))
+}
+
+func (s *DrivesOnlyJobsSuite) TestWorkspaceJobMethodsAreInBounds() {
+	s.True(drivesOnlyJobs(`import "magus"; magus\workspace().putJob("a");`))
+	s.True(drivesOnlyJobs(`import workspace from "magus"; workspace().jobs();`))
+	s.True(drivesOnlyJobs(`import "magus"; magus\workspace().clearJobs(); magus\workspace().forkFacts();`))
+}
+
+func (s *DrivesOnlyJobsSuite) TestJobIDMethodsAreInBounds() {
+	s.True(drivesOnlyJobs(`import "magus"; magus\job("a").exit();`))
+	s.True(drivesOnlyJobs(`import "magus"; magus\job("a").wait();`))
+	s.True(drivesOnlyJobs(`import "magus"; magus\job("a").register();`))
+	s.True(drivesOnlyJobs(`import job, workspace from "magus"; job("a").exit(); workspace().putJob("a");`))
+}
+
+func (s *DrivesOnlyJobsSuite) TestOtherWorkspaceWorkIsOutOfBounds() {
+	s.False(drivesOnlyJobs(`import "magus"; magus\workspace().skills();`))
+	s.False(drivesOnlyJobs(`import workspace from "magus"; workspace().bustCache();`))
+	s.False(drivesOnlyJobs(`import workspace from "magus"; final open = workspace; open().bustCache();`))
+	s.False(drivesOnlyJobs(`import "magus"; magus\workspace(magus\cmd("run", ["build"])).jobs();`))
+	s.False(drivesOnlyJobs(`import "magus"; magus\job("a").exit(); magus\workspace().bustCache();`))
 }
 
 func TestNotesPath(t *testing.T) {
