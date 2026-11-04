@@ -129,6 +129,27 @@ func TestFilterShardsIntersectsRatherThanReplaces(t *testing.T) {
 	}, got)
 }
 
+type FilterShardUnitsSuite struct{ suite.Suite }
+
+func TestFilterShardUnitsSuite(t *testing.T) { suite.Run(t, new(FilterShardUnitsSuite)) }
+
+func (s *FilterShardUnitsSuite) TestDropsTheUnitsOfUnselectedProjects() {
+	got := filterShardPaths([]types.Shard{{
+		ID:           "0",
+		ProjectPaths: []string{".", "docs"},
+		Units:        []types.Unit{{Project: ".", Target: "test"}, {Project: "docs", Target: "lint"}},
+	}}, map[string]bool{"docs": true})
+	s.Equal([]types.Shard{{ID: "0", ProjectPaths: []string{"docs"}, Units: []types.Unit{{Project: "docs", Target: "lint"}}}}, got)
+}
+
+func (s *FilterShardUnitsSuite) TestKeepsTheMatrixFreeOfUnits() {
+	out := planOutput{Count: 1, Matrix: []planShard{{Shard: "0", Projects: ".", Label: ".", Units: []types.Unit{{Project: ".", Target: "test"}}}}}
+	published, err := planOutputs(out)
+	s.Require().NoError(err)
+	s.JSONEq(`{"include":[{"shard":"0","projects":".","label":"."}]}`, published[0].Value)
+	s.Len(out.Matrix[0].Units, 1, "the plan document keeps its units")
+}
+
 // TestFilterShardPathsEmptyWhenNothingMatches: a real project outside the affected set is
 // the honest empty answer, not an error: that is precisely the question being asked.
 func TestFilterShardPathsEmptyWhenNothingMatches(t *testing.T) {

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
 )
 
@@ -555,7 +556,8 @@ func TestDecodeSavedPlan(t *testing.T) {
 	t.Parallel()
 
 	got, err := decodeSavedPlan([]byte(`{"target":"ci","count":2,"max_parallel":2,"future_key":true,
-		"matrix":[{"shard":"1","projects":". docs","label":". docs"},{"shard":"2","projects":"console","label":"console"}],
+		"matrix":[{"shard":"1","projects":". docs","label":". docs","units":[{"project":".","target":"test"}]},
+			{"shard":"2","projects":"console","label":"console","units":[{"project":"console","target":"lint"}]}],
 		"outputs":[{"name":"count","value":"2"}]}`))
 	require.NoError(t, err)
 	assert.Equal(t, planOutput{
@@ -563,8 +565,8 @@ func TestDecodeSavedPlan(t *testing.T) {
 		Count:       2,
 		MaxParallel: 2,
 		Matrix: []planShard{
-			{Shard: "1", Projects: ". docs", Label: ". docs"},
-			{Shard: "2", Projects: "console", Label: "console"},
+			{Shard: "1", Projects: ". docs", Label: ". docs", Units: []types.Unit{{Project: ".", Target: "test"}}},
+			{Shard: "2", Projects: "console", Label: "console", Units: []types.Unit{{Project: "console", Target: "lint"}}},
 		},
 		Outputs: []planPublish{{Name: "count", Value: "2"}},
 	}, got)
@@ -577,8 +579,9 @@ func TestDecodeSavedPlan(t *testing.T) {
 		{"no target", `{"count":0,"matrix":[]}`, "names no target"},
 		{"count disagrees", `{"target":"ci","count":2,"matrix":[{"shard":"1","projects":"."}]}`, "states 2 shard(s) but lists 1"},
 		{"shard without id", `{"target":"ci","count":1,"matrix":[{"projects":"."}]}`, "a shard with no id"},
-		{"duplicate id", `{"target":"ci","count":2,"matrix":[{"shard":"1","projects":"."},{"shard":"1","projects":"docs"}]}`, "lists shard 1 twice"},
+		{"duplicate id", `{"target":"ci","count":2,"matrix":[{"shard":"1","projects":".","units":[{"project":".","target":"test"}]},{"shard":"1","projects":"docs"}]}`, "lists shard 1 twice"},
 		{"no projects", `{"target":"ci","count":1,"matrix":[{"shard":"1","projects":"  "}]}`, "shard 1 has no projects"},
+		{"no units", `{"target":"ci","count":1,"matrix":[{"shard":"1","projects":"."}]}`, "shard 1 lists no units"},
 	}
 	for _, tt := range refused {
 		t.Run(tt.name, func(t *testing.T) {
@@ -636,6 +639,21 @@ func TestPlanProjectsKeepPlanOrder(t *testing.T) {
 
 	got := planProjects([]planShard{{Projects: ". docs"}, {Projects: "console  libs/a"}})
 	assert.Equal(t, []string{".", "docs", "console", "libs/a"}, got)
+}
+
+type PlanTargetsSuite struct{ suite.Suite }
+
+func TestPlanTargetsSuite(t *testing.T) { suite.Run(t, new(PlanTargetsSuite)) }
+
+func (s *PlanTargetsSuite) TestRunsEachShardUnitAsItsOwnTarget() {
+	got := planTargets([]planShard{{Units: []types.Unit{{Project: ".", Target: "test"}, {Project: "libs/a", Target: "format"}}}})
+	s.Equal([]types.Target{{Path: ".", Name: "test"}, {Path: "libs/a", Name: "format"}}, got)
+}
+
+func (s *PlanTargetsSuite) TestAUnitTwoShardsHoldRunsOnce() {
+	u := types.Unit{Project: ".", Target: "lint"}
+	got := planTargets([]planShard{{Units: []types.Unit{u}}, {Units: []types.Unit{u}}})
+	s.Equal([]types.Target{{Path: ".", Name: "lint"}}, got)
 }
 
 // ci.yaml publishes the plan with two templates rendered from one saved plan. They are

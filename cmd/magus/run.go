@@ -129,6 +129,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if shardEnvErr != nil {
 		return exit.Usagef("magus run: %v", shardEnvErr)
 	}
+	var planShards []planShard
 	if saved != nil {
 		switch {
 		case rf.Detach:
@@ -139,6 +140,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			return exit.Usagef("magus run: the plan on --stdin names the projects; drop the project arguments")
 		case len(skips.refs) > 0:
 			return exit.Usagef("magus run: the plan on --stdin names the projects; --skip does not apply")
+		case len(extraArgs) > 0:
+			return exit.Usagef("magus run: the plan on --stdin runs the targets %s composes, and ctx.needs hands a composed target no args; run the target that takes %s by name",
+				saved.Target, strings.Join(extraArgs, " "))
 		}
 		shards, err := selectPlanShards(*saved, targetName, rf.Shard, rf.NShards)
 		if err != nil {
@@ -153,6 +157,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		if globalCfg.DryRun {
 			return emitSavedPlanDryRun(ctx, *saved, rawTarget, shards)
 		}
+		planShards = shards
 		projectArgs = planProjects(shards)
 		if len(projectArgs) == 0 {
 			slog.InfoContext(ctx, "magus run --stdin: the plan has no shards, so nothing runs", slog.String("target", targetName))
@@ -293,11 +298,14 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if inherited {
 		source = "pipe"
 	}
+	if saved != nil {
+		targets, source = planTargets(planShards), "plan"
+	}
 	// Fault tolerance by design: a target only some projects serve should skip (not
 	// error) the projects that lack it when the scope is the workspace or several
 	// projects, but a single project that does not serve it (or a name no project serves
 	// at all) is an error. This is the run counterpart to affected's tolerance.
-	if len(targets) > 0 {
+	if len(targets) > 0 && saved == nil {
 		targets, err = filterServedTargets(ctx, m, targets, targetName)
 		if err != nil {
 			return err
@@ -672,6 +680,9 @@ func decodeSavedPlan(data []byte) (planOutput, error) {
 			return planOutput{}, refusePlan("the plan on stdin lists shard %s twice", s.Shard)
 		case len(strings.Fields(s.Projects)) == 0:
 			return planOutput{}, refusePlan("the plan on stdin: shard %s has no projects", s.Shard)
+		case len(s.Units) == 0:
+			return planOutput{}, refusePlan("the plan on stdin: shard %s lists no units; print it again with `%s`",
+				s.Shard, hint.Affected.With(p.Target, "--plan"))
 		}
 		seen[s.Shard] = true
 	}
@@ -714,6 +725,30 @@ func planProjects(shards []planShard) []string {
 	return projects
 }
 
+// planTargets is the units shards run, in plan order, each once.
+func planTargets(shards []planShard) []types.Target {
+	var targets []types.Target
+	seen := map[types.Unit]bool{}
+	for _, s := range shards {
+		for _, u := range s.Units {
+			if !seen[u] {
+				seen[u] = true
+				targets = append(targets, types.Target{Path: u.Project, Name: u.Target})
+			}
+		}
+	}
+	return targets
+}
+
+// planUnitList is units as space-separated project:target.
+func planUnitList(units []types.Unit) string {
+	names := make([]string, len(units))
+	for i, u := range units {
+		names[i] = u.String()
+	}
+	return strings.Join(names, " ")
+}
+
 // emitSavedPlanDryRun answers `run --stdin --dry-run`, which runs nothing. Structured -o
 // renders the plan document as read, which is how a saved plan renders again without
 // being computed again; text names each shard's command.
@@ -728,7 +763,7 @@ func emitSavedPlanDryRun(ctx context.Context, p planOutput, target string, shard
 			slog.InfoContext(ctx, "[dry] the plan has no shards; nothing would run", attr.Notice(""))
 		}
 		for _, s := range shards {
-			slog.InfoContext(ctx, fmt.Sprintf("[dry] shard %s: magus run %s %s", s.Shard, target, s.Projects), attr.Notice(""))
+			slog.InfoContext(ctx, fmt.Sprintf("[dry] shard %s: %s runs %s", s.Shard, target, planUnitList(s.Units)), attr.Notice(""))
 		}
 		return nil
 	case outputName:
