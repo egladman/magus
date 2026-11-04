@@ -928,7 +928,7 @@ var ruleDocCaptureFilter = types.RuleDoc{
 		"A filter keeps the one line it matched and drops the rest, so `grep 'cause:'` keeps the symptom and discards the ref that reads the whole log two lines below it. " +
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it. " +
 		"The better route is an output contract up front, `-o jsonl --tee <file>`, queried with `jq`. " +
-		"It denies by default and names `magus query output <ref>`, which reads the whole log the filter was cutting, and `magus query invocation <inv>`, which reads the whole run.A workspace whose readers need such searches sets it to advise. " +
+		"It denies by default and names `magus query output <ref>`, which reads the whole log the filter was cutting, and `magus query invocation <inv>`, which reads the whole run. A workspace whose readers need such searches sets it to advise. " +
 		"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture.",
 }
 
