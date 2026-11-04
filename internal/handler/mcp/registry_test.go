@@ -99,7 +99,7 @@ func TestServerInstructionsNameRealMembers(t *testing.T) {
 					continue
 				}
 				for _, method := range object.Methods {
-					members[std.CamelCase(root.Name)+"()."+std.BuzzMethodName(method)] = true
+					members[fmt.Sprintf("%s().%s", std.CamelCase(root.Name), std.BuzzMethodName(method))] = true
 				}
 			}
 		}

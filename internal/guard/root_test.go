@@ -652,11 +652,13 @@ func TestSpawnNamesModelAppliesToLeasedNestedSpawns(t *testing.T) {
 				deps.Builtins[string(denyRuleSpawnNamesModel)] = builtin.Setting{Decision: builtin.Off}
 			}
 			v := judgeLeasedNestedSpawn(ctx, t, deps, tc.model)
-			assert.Equal(t, tc.decision, v.Decision)
-			assert.Equal(t, tc.rule, v.Rule)
 			if tc.reasonPart != "" {
 				assert.Contains(t, v.Reason, tc.reasonPart)
 			}
+			want := types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: tc.decision, Rule: tc.rule,
+				LeaseFrom: v.LeaseFrom}
+			v.Reason, v.Next = "", nil
+			assert.Equal(t, want, v)
 		})
 	}
 }

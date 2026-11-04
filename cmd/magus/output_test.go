@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"go/ast"
 	"go/parser"
@@ -15,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1088,4 +1090,128 @@ func (s *teeReplacementSuite) TestAnUnusedLazyStreamLeavesExistingContentsAlone(
 	file := &lazyFile{path: global.tee}
 	s.Require().NoError(file.Close())
 	s.Equal("previous run\n", s.contents())
+}
+
+type templateJSONSuite struct{ suite.Suite }
+
+func TestTemplateJSON(t *testing.T) { suite.Run(t, new(templateJSONSuite)) }
+
+func (s *templateJSONSuite) TestNestedRecordsUseJSONFieldNames() {
+	value := struct {
+		Nested struct {
+			Paths []string `json:"paths"`
+		} `json:"nested"`
+	}{}
+	value.Nested.Paths = []string{"a.go", "b.go"}
+	var buf bytes.Buffer
+	s.Require().NoError(renderTemplate(&buf, value, `{{json .nested}}`))
+	s.JSONEq(`{"paths":["a.go","b.go"]}`, buf.String())
+}
+
+func (s *templateJSONSuite) TestNullIsJSONNull() {
+	var buf bytes.Buffer
+	s.Require().NoError(renderTemplate(&buf, map[string]any{"value": nil}, `{{json .value}}`))
+	s.Equal("null", buf.String())
+}
+
+func (s *templateJSONSuite) TestStringsAreEscaped() {
+	var buf bytes.Buffer
+	s.Require().NoError(renderTemplate(&buf, map[string]string{"value": "line\n\"quoted\"\\path"}, `{{.value | json}}`))
+	s.Equal(`"line\n\"quoted\"\\path"`, buf.String())
+}
+
+func (s *templateJSONSuite) TestExistingFunctionsRemainAvailable() {
+	var buf bytes.Buffer
+	s.Require().NoError(renderTemplate(&buf, map[string]any{"values": []string{"a", "b"}}, `{{upper "ok"}} {{json .values}}`))
+	s.Equal(`OK ["a","b"]`, buf.String())
+}
+
+func (s *templateJSONSuite) TestConfiguredCodecErrorsArePreserved() {
+	refused := errors.New("codec refused nested value")
+	wr := output.Writer{Codec: output.Codec{
+		Marshal: func(value any) ([]byte, error) {
+			if _, shaped := value.(map[string]any); shaped {
+				return nil, refused
+			}
+			return json.Marshal(value)
+		},
+		Unmarshal: json.Unmarshal,
+	}}
+	value := struct {
+		Nested struct{} `json:"nested"`
+	}{}
+	var buf bytes.Buffer
+	err := wr.Write(&buf, output.Options{Format: output.Template, Template: `{{json .nested}}`}, value)
+	s.ErrorIs(err, refused)
+	s.Empty(buf.String())
+}
+
+func (s *templateJSONSuite) TestCustomFunctionsArePreservedWithoutMutatingTheirMap() {
+	funcs := template.FuncMap{"label": func() string { return "value" }}
+	wr := output.Writer{Codec: output.Codec{Marshal: json.Marshal, Unmarshal: json.Unmarshal}, Funcs: funcs}
+	var buf bytes.Buffer
+	err := wr.Write(&buf, output.Options{Format: output.Template, Template: `{{label}}={{json .}}`}, []string{"a"})
+
+	s.Require().NoError(err)
+	s.Equal(`value=["a"]`, buf.String())
+	s.NotContains(funcs, "json")
+}
+
+type outputMetadataSuite struct{ suite.Suite }
+
+func TestOutputMetadata(t *testing.T) { suite.Run(t, new(outputMetadataSuite)) }
+
+func (s *outputMetadataSuite) SetupTest() {
+	original := commands.Root
+	s.T().Cleanup(func() { commands.Root = original })
+	commands.Root = cmdline.Command{Children: []cmdline.Command{
+		{Name: "raw-example", UnstructuredOutput: true, Children: []cmdline.Command{{Name: "record"}}},
+		{Name: "server", Children: []cmdline.Command{{Name: "start"}}},
+	}}
+}
+
+func (s *outputMetadataSuite) TestANewDeclarationRefusesOutputBeforeTheVerb() {
+	err := refuseOutputOnPath("json", []string{"raw-example"})
+
+	s.EqualError(err, "magus raw-example: -o is not supported by this command")
+	s.Equal(exit.Usage, exit.Code(err))
+}
+
+func (s *outputMetadataSuite) TestANewDeclarationRefusesTheShortFlagAfterTheVerb() {
+	fs := flag.NewFlagSet("raw-example", flag.ContinueOnError)
+	fs.String("o", "", "format")
+	s.Require().NoError(fs.Parse([]string{"-o", "json"}))
+
+	err := checkOutputSupported("raw-example", fs)
+
+	s.EqualError(err, "magus raw-example: -o is not supported by this command")
+	s.Equal(exit.Usage, exit.Code(err))
+}
+
+func (s *outputMetadataSuite) TestANewDeclarationRefusesTheLongFlagAfterTheVerb() {
+	fs := flag.NewFlagSet("raw-example", flag.ContinueOnError)
+	fs.String("output", "", "format")
+	s.Require().NoError(fs.Parse([]string{"--output", "json"}))
+
+	s.Error(checkOutputSupported("raw-example", fs))
+}
+
+func (s *outputMetadataSuite) TestTheDeclarationOverridesAnOldExclusion() {
+	s.Require().NoError(refuseOutputOnPath("json", []string{"server", "start"}))
+	fs := flag.NewFlagSet("server start", flag.ContinueOnError)
+	fs.String("o", "", "format")
+	s.Require().NoError(fs.Parse([]string{"-o", "json"}))
+	s.NoError(checkOutputSupported("server start", fs))
+}
+
+func (s *outputMetadataSuite) TestAChildDoesNotInheritItsParentsRawOutput() {
+	s.NoError(refuseOutputOnPath("json", []string{"raw-example", "record"}))
+}
+
+func (s *outputMetadataSuite) TestAnAmbientDefaultDoesNotCountAsAnExplicitFlag() {
+	fs := flag.NewFlagSet("raw-example", flag.ContinueOnError)
+	fs.String("o", "json", "format")
+
+	s.NoError(checkOutputSupported("raw-example", fs))
+	s.NoError(refuseOutputOnPath("", []string{"raw-example"}))
 }

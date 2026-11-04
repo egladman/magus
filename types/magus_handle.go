@@ -41,7 +41,7 @@ type History struct {
 
 // Options is h as the history scan reads it.
 func (h History) Options() HistoryMetricsOptions {
-	return HistoryMetricsOptions{Dir: h.Dir, Commits: h.Commits, Since: h.Since, Files: h.Files}
+	return HistoryMetricsOptions(h)
 }
 
 // Session is magus\session(): which session's guard record a read
@@ -54,7 +54,7 @@ type Session struct {
 
 // TrailOptions is s as a trail read takes it.
 func (s Session) TrailOptions() TrailReadOptions {
-	return TrailReadOptions{Session: s.Session, Since: s.Since, Until: s.Until}
+	return TrailReadOptions(s)
 }
 
 // JobRegistration is Job.register()'s answer: the stored row and the
