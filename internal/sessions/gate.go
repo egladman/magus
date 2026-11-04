@@ -109,7 +109,7 @@ type GateResult struct {
 	// whose answer could not have moved. Recorded per gate so the debt is countable
 	// across a branch rather than only visible in the run that printed it.
 	UndeclaredSeeds []string `json:"undeclared_seeds,omitempty"`
-	// Tier is the risk tier a sized gate ran at (types.RiskTier); empty is the full
+	// Tier is the risk tier a sized gate ran at (types.Tier); empty is the full
 	// gate. A sized pass is a verdict on the change, since the tier proved the rest of
 	// the gate could not observe it.
 	Tier string `json:"tier,omitempty"`
