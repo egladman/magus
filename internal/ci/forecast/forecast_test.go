@@ -98,27 +98,40 @@ func TestHistory_Update_capsAtSampleWindow(t *testing.T) {
 	assert.Equal(t, SampleWindow*2, st.Samples, "Samples counter")
 }
 
-func TestMemoryBudget_derivedFromTheHostWithNoKnob(t *testing.T) {
-	t.Parallel()
-	// The default path: no caller sets anything, and a budget still appears on any
-	// host magus can ask. This is the whole point of not exposing a config key:
-	// the protection has to be on for people who never heard of it.
-	f := Forecaster{}
-	got := f.memoryBudget()
-	if mem.UsableBytes(context.Background()) == 0 {
-		assert.Zero(t, got, "an unmeasurable host must plan exactly as before, never on a guess")
-		return
-	}
-	assert.Positive(t, got, "a measurable host must get a budget without being configured")
-	assert.Less(t, got, mem.UsableBytes(context.Background()), "the budget must leave headroom for the agent, caches and toolchains")
+type BudgetSuite struct{ suite.Suite }
+
+func TestBudgetSuite(t *testing.T) { suite.Run(t, new(BudgetSuite)) }
+
+func (s *BudgetSuite) TestNoBudgetIsSetFromThePlanningHost() {
+	s.Zero(Forecaster{}.memoryBudget())
 }
 
-func TestMemoryBudget_explicitSettingWins(t *testing.T) {
-	t.Parallel()
-	// Settable only so a test can pin behavior independently of the machine
-	// running it; no config key reaches this.
-	f := Forecaster{MemoryBudgetBytes: 7 << 30}
-	assert.Equal(t, int64(7<<30), f.memoryBudget())
+func (s *BudgetSuite) TestTheBudgetIsTheGivenSetting() {
+	s.Equal(int64(7<<30), Forecaster{MemoryBudgetBytes: 7 << 30}.memoryBudget())
+}
+
+func (s *BudgetSuite) TestARunnerClassBudgetLeavesHeadroom() {
+	got := BudgetBytes(16384)
+	s.Positive(got)
+	s.Less(got, int64(16384)<<20)
+	s.Equal(int64(float64(int64(16384)<<20)*mem.UsableFraction), got)
+}
+
+type ColdSuite struct{ suite.Suite }
+
+func TestColdSuite(t *testing.T) { suite.Run(t, new(ColdSuite)) }
+
+func (s *ColdSuite) TestNoMeasurementIsCold() {
+	s.True(Forecaster{}.Cold(unitList("a:test", "b:lint")))
+}
+
+func (s *ColdSuite) TestOneMeasuredUnitIsWarm() {
+	h := measured(1, map[string]int64{"a:test": 60_000})
+	s.False(Forecaster{History: h}.Cold(unitList("a:test", "b:lint")))
+}
+
+func (s *ColdSuite) TestNoUnitsIsNotCold() {
+	s.False(Forecaster{}.Cold(nil))
 }
 
 // TestPlanReadsHistoryRecordedUnderItsSpellKey crosses the boundary the drift lived on.

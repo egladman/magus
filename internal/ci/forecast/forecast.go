@@ -2,7 +2,6 @@ package forecast
 
 import (
 	"cmp"
-	"context"
 	"slices"
 
 	"github.com/egladman/magus/internal/sys/mem"
@@ -17,43 +16,51 @@ type Forecaster struct {
 	// Needs is the transitive needs closure of a unit, the unit itself
 	// included. nil treats every unit as needing nothing else.
 	Needs func(types.Unit) []types.Unit
-	// MemoryBudgetBytes caps a shard's predicted peak. Leave it zero: the
-	// forecaster then derives a budget from the machine it is planning for, which
-	// is what every caller should want and nobody can pick better by hand.
-	//
-	// It stays settable only because a test has to pin behavior without depending
-	// on the memory of whatever runs the suite. There is deliberately no config
-	// key and no flag behind it: the number a user would have to invent is a
-	// fraction of a runner's RAM they cannot see, and a knob defaulting to "off"
-	// would protect nobody while implying it did.
+	// MemoryBudgetBytes caps a shard's predicted peak; zero checks none. The
+	// caller derives it from the configured runner class, never the planner.
 	MemoryBudgetBytes int64
 }
 
-// usableMemoryFraction is the share of the machine's memory the projects on one
-// shard may be predicted to need.
-//
-// Not 1.0, because a runner is never only running the build: the CI agent, the
-// Go build cache, node, and the toolchains all sit in the same memory, and the
-// measured peaks this is compared against are the projects alone. Three quarters
-// leaves that headroom without buying runners for work that would have fit.
-const usableMemoryFraction = mem.UsableFraction
-
-// memoryBudget returns the byte budget for one shard: the explicit setting when
-// a caller pinned one, otherwise three quarters of the host's memory, otherwise
-// zero for "unknown, plan as before".
-func (f Forecaster) memoryBudget() int64 {
-	if f.MemoryBudgetBytes > 0 {
-		return f.MemoryBudgetBytes
-	}
-	// Usable, so a planner running inside a memory-limited container plans for the
-	// class it is actually in. A ceiling is part of the machine class in a way
-	// transient free memory is not. When the planner and the shards genuinely
-	// differ, MemoryBudgetBytes above is the explicit answer.
-	if total := mem.UsableBytes(context.Background()); total > 0 {
-		return int64(float64(total) * usableMemoryFraction)
-	}
-	return 0
+// BudgetBytes is the share of a runner's memory the units on one shard may be
+// predicted to need. Not all of it: the CI agent and the toolchains share the
+// machine, and the measured peaks are the units alone.
+func BudgetBytes(runnerMemoryMB int) int64 {
+	return int64(float64(runnerMemoryMB) * (1 << 20) * mem.UsableFraction)
 }
+
+// ColdShards is the most shards a plan opens when no unit has a recorded
+// duration. Unmeasured weights are guesses, and fanning out on guesses buys
+// runners that may finish nothing sooner.
+const ColdShards = 2
+
+// Cold reports whether the history measured none of units or their
+// prerequisites, so every weight in a pack would be the fallback.
+func (f Forecaster) Cold(units []types.Unit) bool {
+	return len(units) > 0 && len(f.Unmeasured(units)) == len(f.nodes(units))
+}
+
+// nodes is units and their prerequisites, each once.
+func (f Forecaster) nodes(units []types.Unit) []types.Unit {
+	seen := map[string]bool{}
+	var out []types.Unit
+	note := func(u types.Unit) {
+		if k := u.String(); !seen[k] {
+			seen[k] = true
+			out = append(out, u)
+		}
+	}
+	for _, u := range units {
+		note(u)
+		if f.Needs != nil {
+			for _, n := range f.Needs(u) {
+				note(n)
+			}
+		}
+	}
+	return out
+}
+
+func (f Forecaster) memoryBudget() int64 { return f.MemoryBudgetBytes }
 
 // Plan partitions units into at most maxShards shards. A shard costs
 // SetupP50Ms plus each distinct target in its units' needs closures.
@@ -87,14 +94,15 @@ type weights struct {
 
 func (f Forecaster) weigh(units []types.Unit) weights {
 	w := weights{setupMs: int64(f.History.effectiveConstants().SetupP50Ms)}
-	index := map[types.Unit]int{}
+	index := map[string]int{}
 	node := func(u types.Unit) int {
-		if i, ok := index[u]; ok {
+		k := u.String()
+		if i, ok := index[k]; ok {
 			return i
 		}
-		index[u] = len(w.nodeMs)
+		index[k] = len(w.nodeMs)
 		w.nodeMs = append(w.nodeMs, f.predict(u))
-		return index[u]
+		return index[k]
 	}
 	type weighed struct {
 		unit    types.Unit
@@ -286,23 +294,10 @@ func (f Forecaster) SufficientShards(units []types.Unit, maxShards int) int {
 // Unmeasured names the units and prerequisites the history holds no
 // duration for, sorted by project:target.
 func (f Forecaster) Unmeasured(units []types.Unit) []types.Unit {
-	seen := map[types.Unit]bool{}
 	var out []types.Unit
-	note := func(u types.Unit) {
-		if seen[u] {
-			return
-		}
-		seen[u] = true
+	for _, u := range f.nodes(units) {
 		if !f.History.Measured(u.Project, u.Target, f.TagsByProject[u.Project]) {
 			out = append(out, u)
-		}
-	}
-	for _, u := range units {
-		note(u)
-		if f.Needs != nil {
-			for _, n := range f.Needs(u) {
-				note(n)
-			}
 		}
 	}
 	slices.SortFunc(out, func(a, b types.Unit) int { return cmp.Compare(a.String(), b.String()) })
