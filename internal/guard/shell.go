@@ -2096,7 +2096,7 @@ var (
 
 	// Names what the filter cuts, or the reader corrects the spelling instead of the
 	// mistake: the ref two lines under each failure's cause.
-	captureFilterAdvice    = fmt.Sprintf("magus workspace: a filter drops the output: out<hex> ref under cause:; read a target: `%s`; the run: `%s`.", hint.QueryOutput.With("<ref>"), hint.QueryInvocation.With("<inv>"))
+	captureFilterAdvice    = fmt.Sprintf("magus workspace: a filter drops the output: out<hex> ref under cause:; read it with `%s`, or the whole run with `%s`.", hint.QueryOutput.With("<ref>"), hint.QueryInvocation.With("<inv>"))
 	captureFilterAdviceWhy = "Next time give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION."
 	captureFilterBrief = "magus workspace: a filter over a run capture drops the `output:` ref under `cause:`; `-o jsonl --tee <file>` gives the run a contract."
