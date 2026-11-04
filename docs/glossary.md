@@ -173,6 +173,10 @@ A target that fails once and passes on rerun is volatile, as opposed to a regres
 
 ## Insight and knowledge
 
+### Change risk
+
+A per-function score from complexity and test coverage: `c^2 (1 - cov)^3 + c`. A touched function past 10 is refused. [Change risk in full](glossary/change-risk.md).
+
 ### Knowledge graph
 
 The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path. [Knowledge graph in full](glossary/knowledge-graph.md).
@@ -180,6 +184,10 @@ The queryable graph of a workspace's spells, targets, docs, and code relationshi
 ### MAGUS.md
 
 The committed routing index at a workspace root, regenerated from the knowledge graph: it lists every node and points at the exact query for a given question, so it is the entry point an agent reads first. [MAGUS.md in full](glossary/magusmd.md).
+
+### Mutant
+
+A copy of a touched function with one token swapped, run against the spell's own tests. A survivor means no test asserts on that token. [Mutant in full](glossary/mutant.md).
 
 ### historymetrics
 
