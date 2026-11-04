@@ -381,6 +381,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil && opts.Format == outputText {
 		printFailedResults(os.Stdout, failed.list())
 	}
+	if opts.Format == outputText {
+		printRunRef(os.Stdout, journal.InvocationIDFromContext(invCtx))
+	}
 	if af.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)
 	}
@@ -453,6 +456,14 @@ func printFailedResults(w io.Writer, events []journal.Event) {
 		}
 		_, _ = fmt.Fprintln(w)
 	}
+}
+
+// printRunRef names the whole run, which no per-target ref reaches.
+func printRunRef(w io.Writer, inv string) {
+	if inv == "" {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "\nrun: %s; `%s` prints the whole run\n", inv, hint.QueryInvocation.With(inv))
 }
 
 func affectedMissingTargetUsage() {

@@ -16,7 +16,24 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type PrintRunRefSuite struct{ suite.Suite }
+
+func TestPrintRunRefSuite(t *testing.T) { suite.Run(t, new(PrintRunRefSuite)) }
+
+func (s *PrintRunRefSuite) TestNamesInvocationAndItsReader() {
+	var out strings.Builder
+	printRunRef(&out, "invmsm3vcou1")
+	s.Equal("\nrun: invmsm3vcou1; `magus query invocation invmsm3vcou1` prints the whole run\n", out.String())
+}
+
+func (s *PrintRunRefSuite) TestPrintsNothingWithoutAnInvocation() {
+	var out strings.Builder
+	printRunRef(&out, "")
+	s.Empty(out.String())
+}
 
 func TestPrintFailedResultsNamesEachFailureByRefOrCode(t *testing.T) {
 	t.Parallel()
