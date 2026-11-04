@@ -73,8 +73,11 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectConformanceUnmeasured(v.(types.ConformanceUnmeasured))
 	}},
 	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow), enums) }},
+	{Name: "Crap", Zero: types.Crap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrap(v.(types.Crap)) }},
+	{Name: "CrapFunction", Zero: types.CrapFunction{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrapFunction(v.(types.CrapFunction)) }},
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential), enums) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
+	{Name: "DecisionSyntax", Zero: spells.DecisionSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDecisionSyntax(v.(spells.DecisionSyntax)) }},
 	{Name: "Descriptor", Zero: types.ImageDescriptor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectImageDescriptor(v.(types.ImageDescriptor), enums)
 	}},
@@ -147,6 +150,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "FileStat", Zero: types.FileStat{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileStat(v.(types.FileStat)) }},
 	{Name: "FindReviewRequest", Zero: types.FindReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFindReviewRequest(v.(types.FindReviewRequest)) }},
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
+	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap)) }},
 	{Name: "GateEvidence", Zero: types.GateEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGateEvidence(v.(types.GateEvidence)) }},
 	{Name: "GateStatus", Zero: types.GateStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGateStatus(v.(types.GateStatus)) }},
 	{Name: "Goal", Zero: types.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGoal(v.(types.Goal), enums) }},
@@ -264,6 +268,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ModuleFieldEntry", Zero: types.ModuleFieldEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleFieldEntry(v.(types.ModuleFieldEntry)) }},
 	{Name: "ModuleMethodEntry", Zero: types.ModuleMethodEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleMethodEntry(v.(types.ModuleMethodEntry)) }},
 	{Name: "ModuleObjectEntry", Zero: types.ModuleObjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleObjectEntry(v.(types.ModuleObjectEntry)) }},
+	{Name: "Mutant", Zero: types.Mutant{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMutant(v.(types.Mutant), enums) }},
+	{Name: "Mutants", Zero: types.Mutants{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMutants(v.(types.Mutants), enums) }},
+	{Name: "MutationSyntax", Zero: spells.MutationSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMutationSyntax(v.(spells.MutationSyntax)) }},
 	{Name: "NeighborhoodResult", Zero: types.KnowledgeNeighborhoodOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeNeighborhoodOutput(v.(types.KnowledgeNeighborhoodOutput), enums)
 	}},
@@ -374,6 +381,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Status", Zero: types.StatusRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRecord(v.(types.StatusRecord)) }},
 	{Name: "StopRequest", Zero: types.StopRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStopRequest(v.(types.StopRequest), enums) }},
 	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStubSyntax(v.(spells.StubSyntax)) }},
+	{Name: "Swap", Zero: spells.Swap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSwap(v.(spells.Swap)) }},
 	{Name: "SymbolDecl", Zero: types.SymbolDecl{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSymbolDecl(v.(types.SymbolDecl)) }},
 	{Name: "SymbolIndexStatus", Zero: types.SymbolIndexStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectSymbolIndexStatus(v.(types.SymbolIndexStatus), enums)
