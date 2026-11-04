@@ -36,6 +36,10 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Case", Zero: types.Case{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCase(v.(types.Case)) }},
 	{Name: "ChainStep", Zero: types.ChainStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChainStep(v.(types.ChainStep)) }},
 	{Name: "Change", Zero: types.Change{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChange(v.(types.Change), enums) }},
+	{Name: "ChangeRisk", Zero: types.ChangeRisk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChangeRisk(v.(types.ChangeRisk)) }},
+	{Name: "ChangeRiskFunction", Zero: types.ChangeRiskFunction{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectChangeRiskFunction(v.(types.ChangeRiskFunction))
+	}},
 	{Name: "CharmConflict", Zero: spells.CharmConflict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmConflict(v.(spells.CharmConflict)) }},
 	{Name: "CharmDeclaration", Zero: types.CharmDeclaration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmDeclaration(v.(types.CharmDeclaration)) }},
 	{Name: "CharmEntry", Zero: types.CharmEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmEntry(v.(types.CharmEntry)) }},
@@ -73,8 +77,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectConformanceUnmeasured(v.(types.ConformanceUnmeasured))
 	}},
 	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow), enums) }},
-	{Name: "Crap", Zero: types.Crap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrap(v.(types.Crap)) }},
-	{Name: "CrapFunction", Zero: types.CrapFunction{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrapFunction(v.(types.CrapFunction)) }},
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential), enums) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
 	{Name: "DecisionSyntax", Zero: spells.DecisionSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDecisionSyntax(v.(spells.DecisionSyntax)) }},
