@@ -16,7 +16,29 @@ import (
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type AffectedTargetSplitSuite struct{ suite.Suite }
+
+func TestAffectedTargetSplitSuite(t *testing.T) { suite.Run(t, new(AffectedTargetSplitSuite)) }
+
+func (s *AffectedTargetSplitSuite) TestBaseKeepsItsValueBesideATarget() {
+	var af *flaggen.AffectedFlags
+	bind := func(fs *flag.FlagSet) { af = flaggen.BindAffected(fs) }
+
+	target, rest, ok := splitTargetFromArgs([]string{"ci", "--base", "origin/main", "-o", "jsonl"}, bind)
+	s.Require().True(ok)
+	s.Equal("ci", target)
+
+	fs := flag.NewFlagSet("affected", flag.ContinueOnError)
+	bind(fs)
+	var format string
+	fs.StringVar(&format, "o", "", "")
+	s.Require().NoError(fs.Parse(rest))
+	s.Equal("origin/main", af.Base)
+	s.Equal("jsonl", format)
+}
 
 // TestGuardKnowsEveryGlobalFlag holds the guard's reading of a magus argv to the flags magus
 // really binds. A global flag the guard did not know would have its value read as the
@@ -156,8 +178,7 @@ func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
 	assert.Equal(t, "generate", target)
 	assert.Equal(t, []string{"--skip", "docs", "--skip", "console"}, rest)
 
-	// The limit a nil binder still accepts, pinned so it is a known cost rather than a
-	// surprise: `magus affected` passes nil and carries no repeatable flag.
+	// With no binder the first --skip swallows the second. A known cost.
 	_, rest, ok = splitTargetFromArgs(args, nil)
 	require.True(t, ok)
 	assert.Equal(t, []string{"--skip", "--skip", "docs", "console"}, rest)
