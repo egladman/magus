@@ -319,7 +319,7 @@ func LatestHarnessWrite(fold Fold) (HarnessWriteRecord, bool) {
 			continue
 		}
 		var hw HarnessWrite
-		if json.Unmarshal(rec.Payload, &hw) != nil {
+		if hw.UnmarshalJSON(rec.Payload) != nil {
 			continue
 		}
 		return HarnessWriteRecord{HarnessWrite: hw, At: time.UnixMilli(rec.Ts)}, true
