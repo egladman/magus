@@ -313,7 +313,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		// lease whose boundary silently stopped being checked looks exactly like one
 		// nobody declared.
 		return writeGrade{Decision: decisionAdvise,
-			Context: fmt.Sprintf("magus workspace: the job store could not be read (%v); re-declare the plan with magus\\workspace().putJob if leased work runs.", err),
+			Context: fmt.Sprintf("magus workspace: no lease was checked: the job store could not be read (%v); re-declare the plan with magus\\workspace().putJob.", err),
 			Why:     "The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff."}
 	}
 	// An id magus cannot parse is one it cannot look up either, so it is graded as absent.
@@ -1023,12 +1023,8 @@ func denyOtherCheckout(checkout, lease, writePath string) writeGrade {
 // scratchWorkspace reports dir under the magus tmp dir in a repository
 // other than checkout's. A sibling checkout there stays refused.
 func scratchWorkspace(dir, checkout string) bool {
-	cache, err := xdg.CacheDir()
-	if err != nil {
-		return false
-	}
-	scratch := filepath.Join(cache, "magus", "tmp")
-	if dir == "" || samePath(dir, scratch) || !within(dir, scratch) {
+	scratch, err := scratchCheckouts()
+	if err != nil || dir == "" || samePath(dir, scratch) || !within(dir, scratch) {
 		return false
 	}
 	_, mine, ok := gitCheckout(checkout)
