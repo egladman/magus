@@ -129,27 +129,27 @@ func TestInheritOffWhenAnOptionWasDropped(t *testing.T) {
 
 // newInheritProbe builds a probe whose provider, history and assessment are all stubbed,
 // so the decision is exercised with no repository and no CI provider.
-func newInheritProbe(green string, found bool, history []types.Commit, rep types.RiskReport) InheritProbe {
+func newInheritProbe(green string, found bool, history []types.Commit, rep types.TierReport) InheritProbe {
 	return InheritProbe{
 		LastGreenRun: func(context.Context) (string, string, bool) {
 			return "https://example/run/7", green, found
 		},
 		History: func(context.Context) ([]types.Commit, error) { return history, nil },
-		Assess:  func(context.Context, string) (types.RiskReport, error) { return rep, nil },
+		Assess:  func(context.Context, string) (types.TierReport, error) { return rep, nil },
 	}
 }
 
 var (
-	proseReport = types.RiskReport{Tier: types.RiskTrivial, Evidence: []types.RiskEvidence{
+	proseReport = types.TierReport{Tier: types.RiskTrivial, Evidence: []types.TierEvidence{
 		{Path: "docs/x.md", Class: "prose", Tier: types.RiskTrivial, Why: `matches "**/*.md" (built-in default); nothing in ci's chain reads it`},
 	}}
-	codeReport = types.RiskReport{Tier: types.RiskScoped, Evidence: []types.RiskEvidence{
+	codeReport = types.TierReport{Tier: types.RiskScoped, Evidence: []types.TierEvidence{
 		{Path: "docs/x.md", Class: "prose", Tier: types.RiskTrivial, Why: "prose"},
 		{Path: "internal/y.go", Class: "code", Tier: types.RiskScoped, Why: "Go package y"},
 	}}
 	// embedReport is the regression the tier exists for: markdown a package compiles in
 	// is prose by class, and inheriting over it skipped the tests that read it.
-	embedReport = types.RiskReport{Tier: types.RiskScoped, Evidence: []types.RiskEvidence{
+	embedReport = types.TierReport{Tier: types.RiskScoped, Evidence: []types.TierEvidence{
 		{Path: "internal/agent/skills/run/SKILL.md", Class: "prose", Tier: types.RiskScoped, Why: "embedded by Go package skills (go:embed)"},
 	}}
 )
@@ -167,7 +167,7 @@ var inheritHistory = []types.Commit{
 func TestInheritProbeFires(t *testing.T) {
 	var assessedAt string
 	p := newInheritProbe("green0123456789", true, inheritHistory, proseReport)
-	p.Assess = func(_ context.Context, green string) (types.RiskReport, error) {
+	p.Assess = func(_ context.Context, green string) (types.TierReport, error) {
 		assessedAt = green
 		return proseReport, nil
 	}
@@ -205,7 +205,7 @@ func TestInheritProbeDeclines(t *testing.T) {
 		"green run unnamed":     newInheritProbe("", true, inheritHistory, proseReport),
 		"code in the delta":     newInheritProbe("green0123456789", true, inheritHistory, codeReport),
 		"embedded markdown":     newInheritProbe("green0123456789", true, inheritHistory, embedReport),
-		"a comment-only change": newInheritProbe("green0123456789", true, inheritHistory, types.RiskReport{Tier: types.RiskMechanical}),
+		"a comment-only change": newInheritProbe("green0123456789", true, inheritHistory, types.TierReport{Tier: types.RiskMechanical}),
 		"merge in the range":    newInheritProbe("green0123456789", true, pushedMerge, proseReport),
 		"green out of reach":    newInheritProbe("unreachable", true, inheritHistory, proseReport),
 		"disabled":              {Disabled: true},
@@ -230,7 +230,7 @@ func TestInheritProbeSurvivesBrokenInputs(t *testing.T) {
 	assert.False(t, ok, "an unreadable history declines")
 
 	p = newInheritProbe("green0123456789", true, inheritHistory, proseReport)
-	p.Assess = func(context.Context, string) (types.RiskReport, error) { return proseReport, boom }
+	p.Assess = func(context.Context, string) (types.TierReport, error) { return proseReport, boom }
 	_, ok = p.Evaluate(context.Background())
 	assert.False(t, ok, "an unreadable diff declines")
 }
@@ -238,7 +238,7 @@ func TestInheritProbeSurvivesBrokenInputs(t *testing.T) {
 // An empty delta is the boundary case: nothing changed since green, so the
 // verdict inherits and both reports say so rather than printing an empty table.
 func TestInheritProbeEmptyDelta(t *testing.T) {
-	p := newInheritProbe("green0123456789", true, inheritHistory, types.RiskReport{Tier: types.RiskTrivial})
+	p := newInheritProbe("green0123456789", true, inheritHistory, types.TierReport{Tier: types.RiskTrivial})
 	got, ok := p.Evaluate(context.Background())
 	require.True(t, ok)
 	assert.Contains(t, got.AnnotationText(), "\nno paths changed since that run")

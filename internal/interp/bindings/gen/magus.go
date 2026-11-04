@@ -607,9 +607,9 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		target := ffi.String(bzArgs, 1)
-		var opts types.RiskOptions
+		var opts types.TierOptions
 		if ffi.Present(bzArgs, 2) {
-			x, err := ffi.Object("magus\\magus__Change__tier", "opts", bzArgs, 2, decode.DecodeRiskOptions)
+			x, err := ffi.Object("magus\\magus__Change__tier", "opts", bzArgs, 2, decode.DecodeTierOptions)
 			if err != nil {
 				return vm.Null, ffi.Error(err)
 			}
@@ -619,7 +619,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectRiskReport(ret0, enums), nil
+		return ObjectTierReport(ret0, enums), nil
 	}))
 	m.MapSet("magus__Change__diff", vm.DirectValue("magus.magus__Change__diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__Change__diff", "recv", bzArgs, 0, decode.DecodeChange)

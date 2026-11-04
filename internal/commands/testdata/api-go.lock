@@ -76,8 +76,8 @@ github.com/egladman/magus.Magus.AffectedFromPaths method(ptr) func(ctx context.C
 github.com/egladman/magus.Magus.Affinity method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Affinity, error)
 github.com/egladman/magus.Magus.All method(ptr) func() []*github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.ApplySandbox method(ptr) func(ctx context.Context) (context.Context, error)
-github.com/egladman/magus.Magus.AssessChange method(ptr) func(ctx context.Context, target string, o AssessOptions) (github.com/egladman/magus/types.RiskReport, error)
-github.com/egladman/magus.Magus.AssessRisk method(ptr) func(ctx context.Context, target string, o github.com/egladman/magus/types.RiskOptions) (github.com/egladman/magus/types.RiskReport, error)
+github.com/egladman/magus.Magus.AssessChange method(ptr) func(ctx context.Context, target string, o AssessOptions) (github.com/egladman/magus/types.TierReport, error)
+github.com/egladman/magus.Magus.AssessRisk method(ptr) func(ctx context.Context, target string, o github.com/egladman/magus/types.TierOptions) (github.com/egladman/magus/types.TierReport, error)
 github.com/egladman/magus.Magus.AutoResolvable method(ptr) func(ctx context.Context, path string, base []byte, merged []byte) (verdict string, ok bool)
 github.com/egladman/magus.Magus.AutoResolve method(ptr) func(ctx context.Context, path string, base []byte, ours []byte, theirs []byte) (merged []byte, report string, ok bool)
 github.com/egladman/magus.Magus.AutoResolveGlobs method(ptr) func() []string
@@ -171,7 +171,7 @@ github.com/egladman/magus.Magus.Root method(ptr) func() string
 github.com/egladman/magus.Magus.Run method(ptr) func(ctx context.Context, targets []github.com/egladman/magus/types.Target, opts ...RunOption) error
 github.com/egladman/magus.Magus.RunAffected method(ptr) func(ctx context.Context, target string, opts ...RunOption) error
 github.com/egladman/magus.Magus.RunCI method(ptr) func(ctx context.Context, targets []github.com/egladman/magus/types.Target, opts ...RunOption) error
-github.com/egladman/magus.Magus.RunGate method(ptr) func(ctx context.Context, rep github.com/egladman/magus/types.RiskReport, opts ...RunOption) error
+github.com/egladman/magus.Magus.RunGate method(ptr) func(ctx context.Context, rep github.com/egladman/magus/types.TierReport, opts ...RunOption) error
 github.com/egladman/magus.Magus.SandboxMode method(ptr) func() github.com/egladman/magus/types.SandboxMode
 github.com/egladman/magus.Magus.SaveSpellCaches method(ptr) func(ctx context.Context) ([]SpellCache, error)
 github.com/egladman/magus.Magus.SecretProvider method(ptr) func() string
@@ -530,7 +530,7 @@ github.com/egladman/magus/std.MagusChangeDiff func(ctx context.Context, c github
 github.com/egladman/magus/std.MagusChangeImpact func(ctx context.Context, c github.com/egladman/magus/types.Change, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ImpactResult, error)
 github.com/egladman/magus/std.MagusChangeMergeBase func(ctx context.Context, c github.com/egladman/magus/types.Change) (string, error)
 github.com/egladman/magus/std.MagusChangeOpen func(ctx context.Context, base string, opts github.com/egladman/magus/types.ChangeOptions) (github.com/egladman/magus/types.Change, error)
-github.com/egladman/magus/std.MagusChangeTier func(ctx context.Context, c github.com/egladman/magus/types.Change, target string, opts github.com/egladman/magus/types.RiskOptions) (github.com/egladman/magus/types.RiskReport, error)
+github.com/egladman/magus/std.MagusChangeTier func(ctx context.Context, c github.com/egladman/magus/types.Change, target string, opts github.com/egladman/magus/types.TierOptions) (github.com/egladman/magus/types.TierReport, error)
 github.com/egladman/magus/std.MagusClean func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.CleanReport, error)
 github.com/egladman/magus/std.MagusClearJob func(ctx context.Context) (int, error)
 github.com/egladman/magus/std.MagusCommand func(ctx context.Context, sub string, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
@@ -607,7 +607,7 @@ github.com/egladman/magus/std.MagusQuery func(ctx context.Context, query string,
 github.com/egladman/magus/std.MagusRaise func(ctx context.Context, code github.com/egladman/magus/types.DiagnosticCodeRef, message string, opts github.com/egladman/magus/types.RaiseOptions) error
 github.com/egladman/magus/std.MagusRefs func(ctx context.Context, symbol string, opts github.com/egladman/magus/types.KnowledgeRefsOptions) (github.com/egladman/magus/types.KnowledgeRefsOutput, error)
 github.com/egladman/magus/std.MagusRegisterJob func(ctx context.Context, id string) (github.com/egladman/magus/types.Job, string, error)
-github.com/egladman/magus/std.MagusRiskAssess func(ctx context.Context, target string, opts github.com/egladman/magus/types.RiskOptions) (github.com/egladman/magus/types.RiskReport, error)
+github.com/egladman/magus/std.MagusRiskAssess func(ctx context.Context, target string, opts github.com/egladman/magus/types.TierOptions) (github.com/egladman/magus/types.TierReport, error)
 github.com/egladman/magus/std.MagusRun func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
 github.com/egladman/magus/std.MagusSessionMark func(ctx context.Context, _ github.com/egladman/magus/types.Session, mark map[string]any) (github.com/egladman/magus/types.TrailMark, error)
 github.com/egladman/magus/std.MagusSessionMarks func(ctx context.Context, _ github.com/egladman/magus/types.Session) ([]github.com/egladman/magus/types.TrailMark, error)
@@ -4779,40 +4779,11 @@ github.com/egladman/magus/types.RevisionFetcher.FetchRef imethod func(ctx contex
 github.com/egladman/magus/types.RevisionFileReader type interface
 github.com/egladman/magus/types.RevisionFileReader.ReadFileAt imethod func(ctx context.Context, root string, rev string, path string) (string, error)
 github.com/egladman/magus/types.RiskAssessor type interface
-github.com/egladman/magus/types.RiskAssessor.AssessRisk imethod func(ctx context.Context, target string, o RiskOptions) (RiskReport, error)
-github.com/egladman/magus/types.RiskEvidence type struct
-github.com/egladman/magus/types.RiskEvidence.Class field string "json:\"class,omitempty\"   yaml:\"class,omitempty\""
-github.com/egladman/magus/types.RiskEvidence.Line method func() string
-github.com/egladman/magus/types.RiskEvidence.Packages field []string "json:\"packages,omitempty\" yaml:\"packages,omitempty\""
-github.com/egladman/magus/types.RiskEvidence.Path field string "json:\"path,omitempty\"    yaml:\"path,omitempty\""
-github.com/egladman/magus/types.RiskEvidence.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
-github.com/egladman/magus/types.RiskEvidence.Target field string "json:\"target,omitempty\"  yaml:\"target,omitempty\""
-github.com/egladman/magus/types.RiskEvidence.Tier field RiskTier "json:\"tier\"              yaml:\"tier\""
-github.com/egladman/magus/types.RiskEvidence.Why field string "json:\"why\"               yaml:\"why\""
-github.com/egladman/magus/types.RiskFull const RiskTier = "full"
-github.com/egladman/magus/types.RiskGateStep type struct
-github.com/egladman/magus/types.RiskGateStep.Argv field []string "json:\"argv\"               yaml:\"argv\""
-github.com/egladman/magus/types.RiskGateStep.Op field string "json:\"op,omitempty\"       yaml:\"op,omitempty\""
-github.com/egladman/magus/types.RiskGateStep.Packages field []string "json:\"packages,omitempty\" yaml:\"packages,omitempty\""
-github.com/egladman/magus/types.RiskGateStep.Projects field []string "json:\"projects\"           yaml:\"projects\""
-github.com/egladman/magus/types.RiskGateStep.Target field string "json:\"target\"             yaml:\"target\""
-github.com/egladman/magus/types.RiskMechanical const RiskTier = "mechanical"
-github.com/egladman/magus/types.RiskOptions type struct
-github.com/egladman/magus/types.RiskOptions.Base field string "json:\"base,omitempty\" buzz:\"-\""
-github.com/egladman/magus/types.RiskOptions.Checkout field string "json:\"checkout,omitempty\""
-github.com/egladman/magus/types.RiskOptions.Paths field []string "json:\"paths,omitempty\""
-github.com/egladman/magus/types.RiskReport type struct
-github.com/egladman/magus/types.RiskReport.Affected field []string "json:\"affected\" yaml:\"affected\""
-github.com/egladman/magus/types.RiskReport.Base field string "json:\"base\"     yaml:\"base\""
-github.com/egladman/magus/types.RiskReport.Commands method func() []string
-github.com/egladman/magus/types.RiskReport.Evidence field []RiskEvidence "json:\"evidence\" yaml:\"evidence\""
-github.com/egladman/magus/types.RiskReport.Gate field []RiskGateStep "json:\"gate\"     yaml:\"gate\""
-github.com/egladman/magus/types.RiskReport.Lines method func() []string
-github.com/egladman/magus/types.RiskReport.Target field string "json:\"target\"   yaml:\"target\""
-github.com/egladman/magus/types.RiskReport.Tier field RiskTier "json:\"tier\"     yaml:\"tier\""
-github.com/egladman/magus/types.RiskScoped const RiskTier = "scoped"
-github.com/egladman/magus/types.RiskTier type string
-github.com/egladman/magus/types.RiskTrivial const RiskTier = "trivial"
+github.com/egladman/magus/types.RiskAssessor.AssessRisk imethod func(ctx context.Context, target string, o TierOptions) (TierReport, error)
+github.com/egladman/magus/types.RiskFull const Tier = "full"
+github.com/egladman/magus/types.RiskMechanical const Tier = "mechanical"
+github.com/egladman/magus/types.RiskScoped const Tier = "scoped"
+github.com/egladman/magus/types.RiskTrivial const Tier = "trivial"
 github.com/egladman/magus/types.RootGlob func(projectPath string, glob string) string
 github.com/egladman/magus/types.RuleDoc type struct
 github.com/egladman/magus/types.RuleDoc.Catches field string "json:\"catches\""
@@ -5522,6 +5493,35 @@ github.com/egladman/magus/types.ThreadSource.MarshalText method func() ([]byte, 
 github.com/egladman/magus/types.ThreadSource.UnmarshalText method(ptr) func(text []byte) error
 github.com/egladman/magus/types.ThreadSource.Valid method func() bool
 github.com/egladman/magus/types.ThreadSource.Values method func() []string
+github.com/egladman/magus/types.Tier type string
+github.com/egladman/magus/types.TierEvidence type struct
+github.com/egladman/magus/types.TierEvidence.Class field string "json:\"class,omitempty\"   yaml:\"class,omitempty\""
+github.com/egladman/magus/types.TierEvidence.Line method func() string
+github.com/egladman/magus/types.TierEvidence.Packages field []string "json:\"packages,omitempty\" yaml:\"packages,omitempty\""
+github.com/egladman/magus/types.TierEvidence.Path field string "json:\"path,omitempty\"    yaml:\"path,omitempty\""
+github.com/egladman/magus/types.TierEvidence.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
+github.com/egladman/magus/types.TierEvidence.Target field string "json:\"target,omitempty\"  yaml:\"target,omitempty\""
+github.com/egladman/magus/types.TierEvidence.Tier field Tier "json:\"tier\"              yaml:\"tier\""
+github.com/egladman/magus/types.TierEvidence.Why field string "json:\"why\"               yaml:\"why\""
+github.com/egladman/magus/types.TierGateStep type struct
+github.com/egladman/magus/types.TierGateStep.Argv field []string "json:\"argv\"               yaml:\"argv\""
+github.com/egladman/magus/types.TierGateStep.Op field string "json:\"op,omitempty\"       yaml:\"op,omitempty\""
+github.com/egladman/magus/types.TierGateStep.Packages field []string "json:\"packages,omitempty\" yaml:\"packages,omitempty\""
+github.com/egladman/magus/types.TierGateStep.Projects field []string "json:\"projects\"           yaml:\"projects\""
+github.com/egladman/magus/types.TierGateStep.Target field string "json:\"target\"             yaml:\"target\""
+github.com/egladman/magus/types.TierOptions type struct
+github.com/egladman/magus/types.TierOptions.Base field string "json:\"base,omitempty\" buzz:\"-\""
+github.com/egladman/magus/types.TierOptions.Checkout field string "json:\"checkout,omitempty\""
+github.com/egladman/magus/types.TierOptions.Paths field []string "json:\"paths,omitempty\""
+github.com/egladman/magus/types.TierReport type struct
+github.com/egladman/magus/types.TierReport.Affected field []string "json:\"affected\" yaml:\"affected\""
+github.com/egladman/magus/types.TierReport.Base field string "json:\"base\"     yaml:\"base\""
+github.com/egladman/magus/types.TierReport.Commands method func() []string
+github.com/egladman/magus/types.TierReport.Evidence field []TierEvidence "json:\"evidence\" yaml:\"evidence\""
+github.com/egladman/magus/types.TierReport.Gate field []TierGateStep "json:\"gate\"     yaml:\"gate\""
+github.com/egladman/magus/types.TierReport.Lines method func() []string
+github.com/egladman/magus/types.TierReport.Target field string "json:\"target\"   yaml:\"target\""
+github.com/egladman/magus/types.TierReport.Tier field Tier "json:\"tier\"     yaml:\"tier\""
 github.com/egladman/magus/types.TimeDateOnly const TimeLayout = "2006-01-02"
 github.com/egladman/magus/types.TimeDateTime const TimeLayout = "2006-01-02 15:04:05"
 github.com/egladman/magus/types.TimeKitchen const TimeLayout = "3:04PM"

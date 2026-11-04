@@ -269,8 +269,8 @@ func TestPlanSummaryMarkdownPrefersTheInheritanceReport(t *testing.T) {
 func TestPlanRiskOnATrivialChange(t *testing.T) {
 	t.Parallel()
 
-	rep := types.RiskReport{Base: "0123456789abcdef", Tier: types.RiskTrivial, Gate: []types.RiskGateStep{},
-		Evidence: []types.RiskEvidence{{Path: "notes/v1.md", Class: "prose", Tier: types.RiskTrivial, Why: "nothing in ci's chain reads it"}}}
+	rep := types.TierReport{Base: "0123456789abcdef", Tier: types.RiskTrivial, Gate: []types.TierGateStep{},
+		Evidence: []types.TierEvidence{{Path: "notes/v1.md", Class: "prose", Tier: types.RiskTrivial, Why: "nothing in ci's chain reads it"}}}
 	risk := newPlanRisk(rep)
 	assert.Equal(t, &planRisk{Tier: types.RiskTrivial, Base: "0123456789abcdef", Paths: rep.Evidence}, risk)
 	summary := "### Gate sized trivial\n\n" +
@@ -293,7 +293,7 @@ func TestSavedPlanJSONContainsTypedInputsWithoutMarkdown(t *testing.T) {
 	for _, out := range []planOutput{
 		{Target: "ci", Matrix: []planShard{{Shard: "1", Projects: "."}}},
 		{Target: "ci", Inherit: &planInherit{Run: "42", Commit: "abc123"}},
-		{Target: "ci", Risk: &planRisk{Tier: types.RiskTrivial, Paths: []types.RiskEvidence{{Path: "notes/v1.md", Tier: types.RiskTrivial, Why: "no gate step reads it"}}}},
+		{Target: "ci", Risk: &planRisk{Tier: types.RiskTrivial, Paths: []types.TierEvidence{{Path: "notes/v1.md", Tier: types.RiskTrivial, Why: "no gate step reads it"}}}},
 	} {
 		body, err := json.Marshal(out)
 		require.NoError(t, err)

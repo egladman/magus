@@ -54,7 +54,7 @@ type gateRedundancy struct {
 	// names its own selection.
 	undeclared []string
 	// tier is what size narrowed the gate to; empty runs the full gate.
-	tier types.RiskTier
+	tier types.Tier
 	// scope is what this gate's verdict covers; see gateScope.
 	scope sessions.GateScope
 }
@@ -236,7 +236,7 @@ func (g *gateRedundancy) finding(ctx context.Context, disabled bool) (gateFindin
 // size tiers the change against base once the gate is going to run, and returns the
 // report when a gate smaller than full suffices. nil runs the full gate: an inert gate,
 // a forced run, a change that could not be assessed, or one that tiers full.
-func (g *gateRedundancy) size(ctx context.Context, base string, forced bool) *types.RiskReport {
+func (g *gateRedundancy) size(ctx context.Context, base string, forced bool) *types.TierReport {
 	if g == nil || forced {
 		return nil
 	}
@@ -254,7 +254,7 @@ func (g *gateRedundancy) size(ctx context.Context, base string, forced bool) *ty
 
 // renderSizing prints a sized gate in the redundancy refusal's shape: the decision and
 // its override, every changed path with its tier, and the commands that run instead.
-func renderSizing(target string, rep types.RiskReport) string {
+func renderSizing(target string, rep types.TierReport) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s gate sized %s against %s; override: --no-redundancy-check\n", target, rep.Tier, shortCommit(rep.Base))
 	for _, line := range rep.Lines() {
@@ -419,7 +419,7 @@ func planInheritance(ctx context.Context, m *magus.Magus) *internalci.InheritFin
 		History: func(ctx context.Context) ([]types.Commit, error) {
 			return g.drv.History(ctx, g.root, types.HistoryQuery{Limit: gateMergeScanLimit})
 		},
-		Assess: func(ctx context.Context, green string) (types.RiskReport, error) {
+		Assess: func(ctx context.Context, green string) (types.TierReport, error) {
 			return m.AssessChange(ctx, types.TargetCI, magus.AssessOptions{Base: green})
 		},
 	}

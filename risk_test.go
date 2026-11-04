@@ -14,7 +14,7 @@ import (
 // TestSizedRuns: a sized gate's plain steps run together, and each narrowed step runs on
 // its own, carrying the narrowing for its op.
 func TestSizedRuns(t *testing.T) {
-	rep := types.RiskReport{Gate: []types.RiskGateStep{
+	rep := types.TierReport{Gate: []types.TierGateStep{
 		{Target: "lint", Projects: []string{".", "docs"}},
 		{Target: "test", Projects: []string{"."}, Op: "go::go-test", Packages: []string{"fx/a", "fx/b"}},
 		{Target: "build", Projects: []string{"."}},
@@ -26,7 +26,7 @@ func TestSizedRuns(t *testing.T) {
 	assert.Equal(t, []types.Target{{Path: ".", Name: "test"}}, runs[1].targets)
 	require.NotNil(t, runs[1].narrowing)
 	assert.Equal(t, project.OpNarrowing{Op: "go-test", Bin: "go"}, project.OpNarrowing{Op: runs[1].narrowing.Op, Bin: runs[1].narrowing.Bin})
-	assert.Empty(t, sizedRuns(types.RiskReport{}))
+	assert.Empty(t, sizedRuns(types.TierReport{}))
 }
 
 // TestAssessRiskTiersASmallChangeHereAndInAnotherCheckout: the RiskAssessor a Buzz script
@@ -44,11 +44,11 @@ func TestAssessRiskTiersASmallChangeHereAndInAnotherCheckout(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	var assessor types.RiskAssessor = m
-	here, err := assessor.AssessRisk(context.Background(), types.TargetCI, types.RiskOptions{Paths: []string{"notes/v1.md"}})
+	here, err := assessor.AssessRisk(context.Background(), types.TargetCI, types.TierOptions{Paths: []string{"notes/v1.md"}})
 	require.NoError(t, err)
 	assert.Equal(t, types.RiskTrivial, here.Tier, here.Lines())
 
-	there, err := assessor.AssessRisk(context.Background(), types.TargetCI, types.RiskOptions{Paths: []string{"magusfile.buzz"}, Checkout: other})
+	there, err := assessor.AssessRisk(context.Background(), types.TargetCI, types.TierOptions{Paths: []string{"magusfile.buzz"}, Checkout: other})
 	require.NoError(t, err)
 	assert.Equal(t, types.RiskFull, there.Tier, there.Lines())
 }
@@ -75,7 +75,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 
 	for _, tc := range []struct {
 		path string
-		tier types.RiskTier
+		tier types.Tier
 		gate []string
 	}{
 		{"notes/v1.md", types.RiskTrivial, []string{}},
@@ -87,7 +87,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 			require.NoError(t, err)
 			// Base, the evidence and the gate steps are the assessor's own working, which the
 			// tier cases elsewhere pin; the gate's commands are asserted below.
-			assert.Equal(t, types.RiskReport{
+			assert.Equal(t, types.TierReport{
 				Base:     rep.Base,
 				Target:   types.TargetCI,
 				Tier:     tc.tier,

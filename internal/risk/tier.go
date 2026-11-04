@@ -43,12 +43,12 @@ type Inputs struct {
 	Read func(ctx context.Context, path string) (old, cur string, err error)
 }
 
-var tierRank = map[types.RiskTier]int{
+var tierRank = map[types.Tier]int{
 	types.RiskTrivial: 0, types.RiskMechanical: 1, types.RiskScoped: 2, types.RiskFull: 3,
 }
 
 // Higher reports whether a outranks b.
-func Higher(a, b types.RiskTier) bool { return tierRank[a] > tierRank[b] }
+func Higher(a, b types.Tier) bool { return tierRank[a] > tierRank[b] }
 
 // reader is a (project, target) pair that declares a changed path as its input.
 type reader struct{ project, target string }
@@ -56,7 +56,7 @@ type reader struct{ project, target string }
 // verdict is one path's tier before the gate is built.
 type verdict struct {
 	Classified
-	tier types.RiskTier
+	tier types.Tier
 	why  string
 	// place is set while the path waits on a placement to settle its tier.
 	place bool
@@ -92,7 +92,7 @@ type assessment struct {
 // A path no project claims is full on its own, and every path is full while
 // UnboundedBy is set. The change's tier is its highest path's, and an empty delta is
 // trivial.
-func Assess(ctx context.Context, in Inputs) types.RiskReport {
+func Assess(ctx context.Context, in Inputs) types.TierReport {
 	a := &assessment{
 		in:       in,
 		entries:  make(map[string]types.FileEntry, len(in.Claims)),
@@ -112,15 +112,15 @@ func Assess(ctx context.Context, in Inputs) types.RiskReport {
 	}
 	a.place(ctx, verdicts)
 
-	rep := types.RiskReport{
+	rep := types.TierReport{
 		Base: in.Base, Target: in.Target, Tier: types.RiskTrivial,
-		Affected: slices.Clone(in.Affected), Evidence: []types.RiskEvidence{},
+		Affected: slices.Clone(in.Affected), Evidence: []types.TierEvidence{},
 	}
 	if rep.Affected == nil {
 		rep.Affected = []string{}
 	}
 	for _, v := range verdicts {
-		ev := types.RiskEvidence{Path: v.Path, Project: a.entries[v.Path].Project, Class: v.Class.String(), Tier: v.tier, Why: v.why}
+		ev := types.TierEvidence{Path: v.Path, Project: a.entries[v.Path].Project, Class: v.Class.String(), Tier: v.tier, Why: v.why}
 		if v.hit != nil && v.placed.Closure != nil {
 			if v.hit.TestOnly {
 				ev.Packages = v.placed.Closure(nil, []string{v.hit.Package})
@@ -180,7 +180,7 @@ func (a *assessment) classify(ctx context.Context, c Classified) verdict {
 
 // generated trusts a generated file as committed unless something its generator reads
 // changed in the same delta; then the drift check has to re-derive it.
-func (a *assessment) generated(c Classified) (types.RiskTier, string) {
+func (a *assessment) generated(c Classified) (types.Tier, string) {
 	entry := a.entries[c.Path]
 	for _, claim := range entry.Claims {
 		if claim.Role != "output" {
@@ -346,11 +346,11 @@ type scopedModule struct {
 	testOnly []string
 }
 
-func (a *assessment) gate(rep *types.RiskReport, verdicts []verdict) {
+func (a *assessment) gate(rep *types.TierReport, verdicts []verdict) {
 	var steps []step
 	switch rep.Tier {
 	case types.RiskTrivial:
-		rep.Gate = []types.RiskGateStep{}
+		rep.Gate = []types.TierGateStep{}
 		return
 	case types.RiskMechanical:
 		for _, p := range a.in.Affected {
@@ -373,7 +373,7 @@ func (a *assessment) gate(rep *types.RiskReport, verdicts []verdict) {
 // reader. Without Go, each affected project gets the mechanical steps when a path
 // needs them. Either way every target that declares a changed prose or comment-only
 // path runs, since it is the one whose result that path can move.
-func (a *assessment) scopedGate(rep *types.RiskReport, verdicts []verdict) []step {
+func (a *assessment) scopedGate(rep *types.TierReport, verdicts []verdict) []step {
 	var readers []reader
 	mechanical := false
 	for _, v := range verdicts {
@@ -398,12 +398,12 @@ func (a *assessment) scopedGate(rep *types.RiskReport, verdicts []verdict) []ste
 				if ok {
 					steps = append(steps, narrowed...)
 					for _, t := range skipped {
-						rep.Evidence = append(rep.Evidence, types.RiskEvidence{Project: p, Target: t, Tier: types.RiskScoped,
+						rep.Evidence = append(rep.Evidence, types.TierEvidence{Project: p, Target: t, Tier: types.RiskScoped,
 							Why: "skipped: the change touches none of the files it declares, so its cache key would not move"})
 					}
 					continue
 				}
-				rep.Evidence = append(rep.Evidence, types.RiskEvidence{Project: p, Target: a.in.Target, Tier: types.RiskScoped,
+				rep.Evidence = append(rep.Evidence, types.TierEvidence{Project: p, Target: a.in.Target, Tier: types.RiskScoped,
 					Why: fmt.Sprintf("no test target in %s's chain runs %s, so its tests cannot be narrowed and it runs whole", a.in.Target, sm.placed.Narrows)})
 			}
 			if a.hasTarget(p, a.in.Target) {
@@ -440,7 +440,7 @@ func (a *assessment) fullSteps() []step {
 // scopedModules groups the scoped paths by module and finds the project rooted at each.
 // A module no project is rooted at leaves nobody to run its narrowed tests, so the
 // change is full.
-func (a *assessment) scopedModules(rep *types.RiskReport, verdicts []verdict) map[string]*scopedModule {
+func (a *assessment) scopedModules(rep *types.TierReport, verdicts []verdict) map[string]*scopedModule {
 	byModule := map[string]*scopedModule{}
 	var order []string
 	for _, v := range verdicts {
@@ -464,7 +464,7 @@ func (a *assessment) scopedModules(rep *types.RiskReport, verdicts []verdict) ma
 		sm := byModule[mod]
 		if sm.project == nil {
 			rep.Tier = types.RiskFull
-			rep.Evidence = append(rep.Evidence, types.RiskEvidence{Tier: types.RiskFull,
+			rep.Evidence = append(rep.Evidence, types.TierEvidence{Tier: types.RiskFull,
 				Why: fmt.Sprintf("module %s is no project's root, so no project can run its narrowed tests", mod)})
 			continue
 		}
@@ -596,12 +596,12 @@ func chainClosure(p *types.Project, target string) []string {
 // render merges steps that run the same target into one command over their projects,
 // in first-seen order, and spells each as the argv a person runs. A narrowed step stays
 // its own command, since its narrowing applies to its one project.
-func render(steps []step) []types.RiskGateStep {
-	out := []types.RiskGateStep{}
+func render(steps []step) []types.TierGateStep {
+	out := []types.TierGateStep{}
 	index := map[string]int{}
 	for _, s := range steps {
 		if s.op != "" {
-			out = append(out, types.RiskGateStep{Target: s.target, Projects: []string{s.project}, Op: s.op, Packages: s.packages})
+			out = append(out, types.TierGateStep{Target: s.target, Projects: []string{s.project}, Op: s.op, Packages: s.packages})
 			continue
 		}
 		if i, ok := index[s.target]; ok {
@@ -611,7 +611,7 @@ func render(steps []step) []types.RiskGateStep {
 			continue
 		}
 		index[s.target] = len(out)
-		out = append(out, types.RiskGateStep{Target: s.target, Projects: []string{s.project}})
+		out = append(out, types.TierGateStep{Target: s.target, Projects: []string{s.project}})
 	}
 	for i := range out {
 		argv := append([]string{"magus", "run", out[i].Target}, out[i].Projects...)

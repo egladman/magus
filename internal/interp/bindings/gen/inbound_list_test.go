@@ -160,7 +160,7 @@ var inboundTypes = []inboundType{
 	{Name: "SessionOptions", Zero: types.TrailReadOptions{}, Encode: func(v any) vm.Value { return ObjectTrailReadOptions(v.(types.TrailReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTrailReadOptions(v) }},
 	{Name: "Session", Zero: types.Session{}, Encode: func(v any) vm.Value { return ObjectSession(v.(types.Session), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSession(v) }},
 	{Name: "Workspace", Zero: types.MagusWorkspace{}, Encode: func(v any) vm.Value { return ObjectMagusWorkspace(v.(types.MagusWorkspace), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMagusWorkspace(v) }},
-	{Name: "TierOptions", Zero: types.RiskOptions{}, Encode: func(v any) vm.Value { return ObjectRiskOptions(v.(types.RiskOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeRiskOptions(v) }},
+	{Name: "TierOptions", Zero: types.TierOptions{}, Encode: func(v any) vm.Value { return ObjectTierOptions(v.(types.TierOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTierOptions(v) }},
 	{Name: "Job", Zero: types.Job{}, Encode: func(v any) vm.Value { return ObjectJob(v.(types.Job), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJob(v) }},
 }
 

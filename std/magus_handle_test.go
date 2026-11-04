@@ -57,15 +57,15 @@ func (s *magusHandleSuite) TestMovedPathsNamesAMovedRevision() {
 }
 
 func (s *magusHandleSuite) TestTierOptionsKeepTheVCSDiffForNoPaths() {
-	got := tierOptions(types.Change{Base: "abc123"}, types.RiskOptions{Base: "ignored", Paths: []string{}})
+	got := tierOptions(types.Change{Base: "abc123"}, types.TierOptions{Base: "ignored", Paths: []string{}})
 
-	s.Equal(types.RiskOptions{Base: "abc123"}, got)
+	s.Equal(types.TierOptions{Base: "abc123"}, got)
 }
 
 func (s *magusHandleSuite) TestTierOptionsKeepNamedPaths() {
-	got := tierOptions(types.Change{}, types.RiskOptions{Paths: []string{"notes/v1.md"}, Checkout: "/other"})
+	got := tierOptions(types.Change{}, types.TierOptions{Paths: []string{"notes/v1.md"}, Checkout: "/other"})
 
-	s.Equal(types.RiskOptions{Paths: []string{"notes/v1.md"}, Checkout: "/other"}, got)
+	s.Equal(types.TierOptions{Paths: []string{"notes/v1.md"}, Checkout: "/other"}, got)
 }
 
 func (s *magusHandleSuite) TestMovedPathsIsEmptyForTheSameTree() {

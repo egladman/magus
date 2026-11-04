@@ -7788,13 +7788,13 @@ func decodeMagusWorkspace(v vm.Value, path string) (types.MagusWorkspace, error)
 	return out, nil
 }
 
-// DecodeRiskOptions decodes a Buzz TierOptions, an object instance or a map, into a types.RiskOptions.
-func DecodeRiskOptions(v vm.Value) (types.RiskOptions, error) {
-	return decodeRiskOptions(v, "tierOptions")
+// DecodeTierOptions decodes a Buzz TierOptions, an object instance or a map, into a types.TierOptions.
+func DecodeTierOptions(v vm.Value) (types.TierOptions, error) {
+	return decodeTierOptions(v, "tierOptions")
 }
 
-func decodeRiskOptions(v vm.Value, path string) (types.RiskOptions, error) {
-	var out types.RiskOptions
+func decodeTierOptions(v vm.Value, path string) (types.TierOptions, error) {
+	var out types.TierOptions
 	fields, ok := v.MapView()
 	if !ok {
 		return out, mismatch(path, "TierOptions", v)
