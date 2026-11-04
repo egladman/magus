@@ -2690,7 +2690,7 @@ func vcsCommandRefusal(ctx context.Context, row types.Job, backend string, args 
 	if backend == "git" && unlocated == "" {
 		site, unlocated, relocated = gitEnvSite(site, env, row.CheckoutRoot)
 	}
-	if unlocated == "" && !relocated && backend == "git" && !isInit(inv) && actsInPlace(inv) &&
+	if unlocated == "" && !relocated && backend == "git" && !isInit(inv) && repositoryLocal(inv) &&
 		inOtherRepository(site, row.CheckoutRoot) && workTreeAt(ctx, site.dir, row.CheckoutRoot) {
 		return nil
 	}
@@ -2792,12 +2792,11 @@ func inOtherRepository(site vcsSite, checkout string) bool {
 	return ok && !samePath(common, own)
 }
 
-// actsInPlace reports whether a git argv acts only on the repository it runs in, so that
-// standing in another repository is enough to keep it off the job's. A push writes to a
-// remote, which may be the job's repository; inline config can move the work tree
-// (core.worktree) or define an alias that runs anything. A worktree call
-// names a target path anywhere, so the repository it stands in proves nothing.
-func actsInPlace(inv hint.Invocation) bool {
+// repositoryLocal reports whether a git argv touches only its own repository.
+// A push writes to a remote, which may be the job's repository.
+// Inline config can move the work tree, or alias anything.
+// A worktree call names a path anywhere.
+func repositoryLocal(inv hint.Invocation) bool {
 	g := parseGit(inv.Args)
 	return g.at >= 0 && g.sub != "push" && g.sub != "worktree" && !g.configured
 }
