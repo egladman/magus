@@ -1,7 +1,7 @@
 ---
 title: "ADR 0023: touched functions keep change risk at 10 and kill their mutants"
 order: 23
-description: A function a change touches is refused when its change risk passes 10 or a mutant of it survives. Spells declare decision tokens, token swaps and a coverage command as data, and one engine in core scores and mutates every language. An equivalent mutant is excepted inline with a reason. Change risk has no exception. The engine, the spell declarations, the host functions and the two lint rules are built; the lint runner does not name the rules yet.
+description: A function a change touches is refused when its change risk passes 10 or a mutant of it survives, and it is worse than the same function at base. Spells declare decision tokens, token swaps and a coverage command as data, and one engine in core scores and mutates every language. An equivalent mutant is excepted inline with a reason. Change risk has no exception. Coverage floors hold each changed file's covered lines against its base. The engine, the spell declarations, the host functions and the two lint rules are built, and lint-rules runs both.
 tags: [adr, decision, lint, coverage, mutation, spells, gates]
 status: accepted (partly implemented)
 date: 2026-11-03
@@ -113,20 +113,57 @@ number; it reports scores and mutants, and a lint rule decides.
 | `Magus.Mutants`, the scoped baseline, `mutants.jsonl` and the marker reader | done                                         |
 | the `magus:mutant` marker syntax and its unused-marker findings             | done                                         |
 | Buzz methods `Change.risk`, `Change.mutants` and `Workspace.risk`           | done                                         |
-| lint rule `touched-functions-keep-change-risk-under-10`                     | done (`hack/lint/run.buzz` does not name it) |
-| lint rule `touched-functions-kill-their-mutants`                            | done (`hack/lint/run.buzz` does not name it) |
-| `Change.risk` scoring this repository's own change                          | in progress (the root `coverage` op is red)  |
+| lint rule `touched-functions-keep-change-risk-under-10`                     | done (`hack/lint/run.buzz` names it)         |
+| lint rule `touched-functions-kill-their-mutants`                            | done (`hack/lint/run.buzz` names it)         |
+| coverage run in scratch copies, scoped to the touched files' tests          | done                                         |
+| each touched function judged against itself at base, in both rules          | done                                         |
+| a mutant with no result after a green baseline is killed                    | done                                         |
+| covered lines kept, in place of the 70% Go and 62% Buzz totals              | done                                         |
+| `Change.risk` scoring this repository's own change                          | in progress (not run since the copies)       |
 | `Change.mutants` over this repository's own change                          | in progress (a Buzz mutant breaks its parse) |
 | coverage for bash                                                           | not built                                    |
 | Measured section (refusals and wall time over the last 20 merges)           | not built                                    |
 
-Until `hack/lint/run.buzz` names the two rules, nothing refuses a touched function:
-`magus diff` prints the change-risk check as advice and `Magus.Mutants` answers only when
-called. On the building branch, change risk against `origin/main` ran the root `coverage` op for 12m47s
-and failed, because that op runs the whole Go suite, which is red, and its buzz spell
-calls `magus buzz -t` with no file. Mutation stopped within five minutes: its first
-Buzz subject swapped the `>` of a return type for `>=`, the docs magusfile no longer
-parsed, and that one unparsable mutant ended the whole run.
+On the building branch, change risk against `origin/main` ran the root `coverage` op for
+12m47s and failed: that op ran the whole Go suite, which was red. Listing the rules under
+`lint-rules` then deadlocked (MGS3007), because `Change.risk` started a run on the project
+the outer run held. Mutation stopped within five minutes: its first Buzz subject swapped
+the `>` of a return type for `>=`, and the docs magusfile no longer parsed.
+
+### Judge against base
+
+Eli decided on 2026-11-03 that removing code never costs. A touched function is charged
+only when it is past 10 and its change risk is worse than the same function's at base, or
+when it has more surviving mutants than it had at base. This is a measurement, not a
+waiver: the base is scored the same way, in a scratch export of the merge base.
+
+- **The base span comes from the patch.** The function's lines map back through the
+  working tree's hunks and the commits' hunks. Removed lines inside the span belong to
+  it, so a shrunk function is scored over what it was.
+- **A function new since base, or one whose base cannot be measured, meets 10 alone.** The
+  answer says which (`BaseReason`), so the fallback is never silent.
+- **Only a function with a survivor is mutated at base.** None cannot be worse. Each
+  mutant carries its function's survivor count at base.
+
+### Coverage runs in scratch copies
+
+`Change.risk` runs each coverage op in a scratch copy of the working tree, and again in an
+export of the merge base, with the copy's own cache dir. A run never locks a project of
+the workspace, so the lint rules run under `lint-rules`. Each run is scoped to the test
+scope the spell names for a touched or changed file, so a red test elsewhere costs
+nothing. A red test in scope makes each function there a gap that names the command.
+
+A mutant whose scoped run records no result, after its baseline passed in the same copy,
+did not compile or load: it is killed. Only a baseline with no result is an error.
+
+### Covered lines kept
+
+Eli replaced the whole-workspace coverage floors (70% of Go statements in `test`, 62% of
+Buzz lines in `buzz_test`) on 2026-11-03: deleting well-covered code lowered a total. The
+change-risk rule now reports, per changed file, a line covered at base that is still there
+and no longer covered, and a coverable line the change added that no scoped test covers.
+A removed line is never compared, and a file whose coverage could not be measured is a
+finding that says why.
 
 ### Principles checked
 
@@ -162,8 +199,13 @@ parsed, and that one unparsable mutant ended the whole run.
   inline marker. Reopen if a survivor class appears that no marker can sit beside.
 - **Mutating untouched functions, or the whole tree in CI.** Lost: it charges bystanders
   and takes hours. Reopen with a measured wall time that fits a gate.
-- **No worse than the base, through the conformance ceiling.** Lost: Eli decided a touched
-  function past 10 is refused.
+- **No worse than the base alone, through the conformance ceiling.** Lost: Eli decided a
+  touched function past 10 is refused. The base now decides only for a function already
+  past 10 ([Judge against base](#judge-against-base)), and it is measured by the same
+  engine, not by a conformance count.
+- **A nested coverage run, or `ctx.needs` on the root `coverage` op.** Lost: the nested
+  run deadlocked under `lint-rules`, and the root op runs the whole suite, so one red
+  test anywhere made every function a gap.
 - **Complexity in a SCIP `Documentation` line.** Built first and removed: it leaked into
   the interchange SCIP and needed a filter in the reader.
 - **Resolving every `$NAME` inside a command token.** Lost: it rewrites a user's own
@@ -196,3 +238,10 @@ parsed, and that one unparsable mutant ended the whole run.
 Eli renamed the score to change risk. The Buzz members moved onto objects: `Change.risk()`
 and `Change.mutants()` measure from the Change's base, and `Workspace.risk()` scores every
 function. The first lint rule became `touched-functions-keep-change-risk-under-10`.
+
+### 2026-11-04: judged against base, measured in copies
+
+A touched function is judged against itself at base, coverage runs scoped in scratch
+copies, and covered lines kept replace the coverage totals. See
+[Judge against base](#judge-against-base), [Coverage runs in scratch
+copies](#coverage-runs-in-scratch-copies) and [Covered lines kept](#covered-lines-kept).

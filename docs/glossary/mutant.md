@@ -14,7 +14,9 @@ mutant, one that cannot change behavior, is excepted with
 `// magus:mutant op=<swap> reason=<why>` beside the site. A marker without a reason,
 or one that matches no survivor, is itself a finding.
 
-A cached run never decides a mutant: a replayed result ran no test.
+A cached run never decides a mutant: a replayed result ran no test. A mutant that
+does not compile or load, after its unmutated run passed, is killed. A survivor is
+refused only when its function has more survivors than the same function at base.
 
 ## Example
 

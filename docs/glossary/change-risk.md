@@ -10,8 +10,9 @@ tags: [glossary, insight-and-knowledge]
 A per-function score from the function's complexity c and its test coverage cov:
 `c^2 (1 - cov)^3 + c`. Complexity is one plus the decision tokens in the function's
 body, which each spell declares as data. A fully covered function scores c; an
-uncovered one scores c^2 + c. A function a change touches whose score passes 10
-is refused, and there is no exception form: the fix is a test or a smaller function.
+uncovered one scores c^2 + c. A function a change touches whose score passes 10,
+and is worse than the same function scored at base, is refused. A function only
+shrunk never is. There is no exception form: the fix is a test or a smaller function.
 
 ## Example
 
