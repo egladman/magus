@@ -1355,7 +1355,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// way the skill gates are: the parser decides WHAT the command is, and the arm
 		// with a location decides what the workspace knows about it.
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
-			cover, commit, moved, replay, waiver := pushCoverage(ctx, deps, location, input, shellD, callDir)
+			ev := pushCoverage(ctx, deps, location, input, shellD, callDir)
 			// The same worker test lease-vcs uses: a root session holding a parentless row
 			// publishes, so its refusal names no orchestrator. A row that cannot be read
 			// stays a worker.
@@ -1363,8 +1363,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			if me, ok := actingLiveLease(ctx, deps, actingLease); ok && workerRole(me, deps.caller) == "" {
 				worker = ""
 			}
-			decision, reason := gradePushWithoutGate(cover, commit, worker)
-			if moved {
+			decision, reason := gradePushWithoutGate(ev, worker)
+			if ev.moved {
 				decision, reason = decisionDeny, movedPushReason
 			}
 			if decision != "" {
@@ -1375,10 +1375,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			if decision == decisionDeny {
 				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
 				verdict.Rule = string(denyRulePushUngated)
-			} else if replay.Inv != "" && !moved {
-				verdict.Context = fmt.Sprintf("magus workspace: %s is covered by `%s` at %s on the identical tree (%s).", commit, types.TargetCI, replay.Commit, gateRunRef(replay))
-			} else if cover == gateWaived && !moved {
-				verdict.Context = waiverNote(commit, waiver)
+			} else if note := ev.admitted(); note != "" {
+				verdict.Context = note
 			}
 		}
 		if preauth == "" {
