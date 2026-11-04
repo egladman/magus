@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/symbols/buzzindex"
 	"github.com/egladman/magus/internal/symbols/goindex"
@@ -97,7 +98,7 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 	if err != nil {
 		return "", err
 	}
-	tree, err := m.conformanceTree()
+	tree, err := conformanceTree(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -372,16 +373,10 @@ func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan
 	return out, nil
 }
 
-func (m *Magus) conformanceTree() (string, error) {
-	store, err := config.StoreDir(m.ws.Root, m.cfg)
-	if err != nil {
-		return "", fmt.Errorf("conformance: %w", err)
-	}
-	trees := filepath.Join(store, "conformance-trees")
-	if err := os.MkdirAll(trees, 0o700); err != nil {
-		return "", fmt.Errorf("conformance: %w", err)
-	}
-	tree, err := os.MkdirTemp(trees, "")
+// conformanceTree is outside the workspace on purpose. Mise walks up from
+// it for config, and the Linux sandbox denies the workspace's.
+func conformanceTree(ctx context.Context) (string, error) {
+	tree, err := os.MkdirTemp(sandbox.PolicyFromContext(ctx).TempBase(), "magus-conformance-tree-")
 	if err != nil {
 		return "", fmt.Errorf("conformance: %w", err)
 	}

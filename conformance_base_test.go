@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/symbols/buzzindex"
 	"github.com/egladman/magus/internal/symbols/goindex"
 	"github.com/egladman/magus/internal/symbols/shindex"
@@ -97,6 +98,17 @@ func (s *ConformanceBaseSuite) TestBuzzAndShellRunInProcessUnderTheBaseRoot() {
 
 func (s *ConformanceBaseSuite) TestAnExternalFormatHasNoInProcessIndexer() {
 	s.Nil(inProcessIndexer(&spells.SymbolIndexer{Format: "scip"}, "/t/p", "/t"))
+}
+
+func (s *ConformanceBaseSuite) TestTheBaseTreeIsMadeInThePoliciesPrivateTempDir() {
+	private := s.T().TempDir()
+	ctx := sandbox.WithPolicy(s.T().Context(), &sandbox.Policy{TempDir: private})
+
+	tree, err := conformanceTree(ctx)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = os.RemoveAll(tree) })
+
+	s.Equal(private, filepath.Dir(tree))
 }
 
 type ConformanceBaseBoxSuite struct {
