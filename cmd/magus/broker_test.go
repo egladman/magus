@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -262,9 +263,9 @@ func TestBrokerStopSuite(t *testing.T) { suite.Run(t, new(BrokerStopSuite)) }
 // standInOtherBuild refuses one hello as a broker on another protocol does.
 func (s *BrokerStopSuite) standInOtherBuild() {
 	sock := strings.TrimPrefix(broker.DefaultAddr(), "unix://")
-	ln, err := net.Listen("unix", sock)
+	ln, err := endpoint.ListenUnix(sock)
 	s.Require().NoError(err)
-	s.T().Cleanup(func() { _ = ln.Close() })
+	s.T().Cleanup(func() { _ = ln.Close(); _ = os.Remove(sock) })
 	s.Require().NoError(os.WriteFile(sock+".handshake", []byte("stand-in"), 0o600))
 	serveOtherBuild(ln, false)
 }
@@ -309,7 +310,7 @@ func TestHelperOtherBuildBroker(t *testing.T) {
 	sock := args[1]
 	terms := make(chan os.Signal, 4)
 	signal.Notify(terms, syscall.SIGTERM)
-	ln, err := net.Listen("unix", sock)
+	ln, err := endpoint.ListenUnix(sock)
 	if err != nil {
 		os.Exit(3)
 	}

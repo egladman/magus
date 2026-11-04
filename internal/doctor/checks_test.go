@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -1176,11 +1176,11 @@ func TestSockDirOrDefault(t *testing.T) {
 // bind is reported as an environment skip rather than as a defect in the check.
 func listenUnix(t *testing.T, path string) {
 	t.Helper()
-	ln, err := net.Listen("unix", path)
+	ln, err := endpoint.ListenUnix(path)
 	if err != nil {
 		t.Skipf("cannot bind a unix socket at %s: %v", path, err)
 	}
-	t.Cleanup(func() { _ = ln.Close() })
+	t.Cleanup(func() { _ = ln.Close(); _ = os.Remove(path) })
 }
 
 func TestIsSocketAlive(t *testing.T) {
