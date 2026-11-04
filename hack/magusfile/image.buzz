@@ -1,0 +1,272 @@
+// magus's own container images (ADR 0018). Each function returns its
+// error in its result; the magusfile target that calls it raises.
+
+import "fs";
+import "image";
+import "serialize";
+
+final SOURCE = "https://github.com/egladman/magus";
+final DESCRIPTION = "magus - content-addressed monorepo build cache";
+
+// base is the distroless `:nonroot` index, pinned by digest.
+// tags carries noffi for static: purego's dynamic import needs a loader
+// that distroless/static lacks. Dynamic keeps FFI on glibc.
+export object ImageVariant {
+    name: str,
+    base: str,
+    platforms: [str],
+    tags: [str],
+    description: str,
+    tagSuffix: str,
+}
+
+export final STATIC = ImageVariant{
+    name = "static",
+    base = "gcr.io/distroless/static@sha256:18f4cc26c9ffa7f20a359298be7deadac5c607c8e03a02b8119f1a5fc2f82c99",
+    platforms = ["linux/amd64", "linux/arm64"],
+    tags = ["noffi"],
+    description = DESCRIPTION + " (static)",
+    tagSuffix = "",
+};
+
+export final DYNAMIC = ImageVariant{
+    name = "dynamic",
+    base = "gcr.io/distroless/cc@sha256:3ee00291cf386ec52a552e6a858d555debd74776eb4bfa53fa3df2cd6677515e",
+    platforms = ["linux/amd64"],
+    tags = [],
+    description = DESCRIPTION,
+    tagSuffix = "-dynamic",
+};
+
+export object Step {
+    platform: image\Platform,
+    env: {str: str},
+    buildArgs: [str],
+    binary: str,
+    base: str,
+    layout: str,
+}
+
+export object Plan {
+    variant: ImageVariant,
+    steps: [Step] = [],
+    index: str = "",
+    error: str = "",
+}
+
+export object Assembled {
+    layouts: [image\Layout] = [],
+    index: str = "",
+    error: str = "",
+}
+
+// builder is the SLSA builder id the provenance names.
+export object Build {
+    ldflags: str,
+    revision: str,
+    builder: str,
+}
+
+export object Attested {
+    index: str = "",
+    error: str = "",
+}
+
+export object Published {
+    refs: [str] = [],
+    error: str = "",
+}
+
+export object Loaded {
+    tag: str = "",
+    id: str = "",
+    layout: str = "",
+    error: str = "",
+}
+
+export object LoadedID {
+    id: str = "",
+    error: str = "",
+}
+
+export object Only {
+    variant: ImageVariant,
+    error: str = "",
+}
+
+export fun releaseTags(v: ImageVariant, version: str, stable: bool) > [str] {
+    if (stable) {
+        return [version + v.tagSuffix, "latest" + v.tagSuffix];
+    }
+    return [version + v.tagSuffix];
+}
+
+// only narrows v to the one platform a local load runs.
+export fun only(v: ImageVariant, platform: str) > Only {
+    if (v.platforms.indexOf(platform) == null) {
+        return Only{
+            variant = v,
+            error = "image-build: the {v.name} image is built for "
+                + "{v.platforms.join(", ")}, not {platform}; name a platform charm",
+        };
+    }
+    return Only{ variant = ImageVariant{
+        name = v.name,
+        base = v.base,
+        platforms = [platform],
+        tags = v.tags,
+        description = v.description,
+        tagSuffix = v.tagSuffix,
+    } };
+}
+
+// loadedID reads the image ID from `docker load` output.
+export fun loadedID(output: str) > LoadedID {
+    final marker = "Loaded image ID: ";
+    foreach (line in output.split("\n")) {
+        final at = line.indexOf(marker);
+        if (at -> start) {
+            return LoadedID{ id = line.sub(start + marker.len()).trim() };
+        }
+    }
+    return LoadedID{ error = "image-build: docker load printed no image ID:\n{output}" };
+}
+
+// blobPath is the path docker's load archive and the OCI layout share for a digest.
+fun blobPath(d: image\Digest) > str {
+    return "blobs/{d.algorithm}/{d.encoded}";
+}
+
+// prepareLoad writes the docker-save manifest.json classic `docker load` needs
+// beside the OCI layout. Without it, a daemon that is not on the containerd
+// image store fails with `blobs/json: no such file or directory`. RepoTags stay
+// empty so load prints `Loaded image ID:` rather than a tag name.
+export fun prepareLoad(layout: str) > str {
+    try {
+        final opened = image\open(layout);
+        if (opened.config == null) {
+            return "image-build: prepareLoad {layout}: layout holds no image config";
+        }
+        final layers = mut [<str>];
+        foreach (layer in opened.layers) {
+            layers.append(blobPath(layer.digest));
+        }
+        final body = serialize\jsonEncode(serialize\Boxed.init([{
+            "Config": blobPath(opened.config!.digest),
+            "RepoTags": [<str>],
+            "Layers": layers,
+        }]));
+        fs\writeFile(layout + "/manifest.json", content: body);
+        return "";
+    } catch (e) {
+        return "image-build: prepareLoad {layout}: {e}";
+    }
+}
+
+export fun slug(p: image\Platform) > str {
+    return "{p.os.value}-{p.architecture.value}";
+}
+
+fun root(v: ImageVariant) > str {
+    return "dist/image/{v.name}";
+}
+
+export fun buildArgs(v: ImageVariant, ldflags: str, output: str) > [str] {
+    final args = mut ["-trimpath"];
+    if (v.tags.len() > 0) {
+        args.append("-tags");
+        args.append(v.tags.join(","));
+    }
+    foreach (a in ["-ldflags", ldflags, "-o", output, "./cmd/magus"]) {
+        args.append(a);
+    }
+    return args;
+}
+
+// Neither variant links C: nothing magus runs in a container needs it,
+// and a cgo cross build would need a C toolchain per platform.
+export fun plan(v: ImageVariant, ldflags: str) > Plan {
+    final steps = mut [<Step>];
+    try {
+        foreach (parsed in image\parsePlatforms(v.platforms)) {
+            // parsePlatforms leaves variant null; goEnv refuses that.
+            final p = image\Platform{ os = parsed.os, architecture = parsed.architecture };
+            final env = image\goEnv(p).cloneMutable();
+            env["CGO_ENABLED"] = "0";
+            env["GOEXPERIMENT"] = "jsonv2";
+            final dir = "{root(v)}/{slug(p)}";
+            steps.append(Step{
+                platform = p,
+                env = env,
+                buildArgs = buildArgs(v, ldflags: ldflags, output: "{dir}/magus"),
+                binary = "{dir}/magus",
+                base = "{dir}/base",
+                layout = "{dir}/layout",
+            });
+        }
+    } catch (e) {
+        return Plan{ variant = v, error = "image plan {v.name}: {e}" };
+    }
+    return Plan{ variant = v, steps = steps, index = "{root(v)}/index" };
+}
+
+export fun spec(v: ImageVariant, step: Step, mode: int) > image\Spec {
+    return image\Spec{
+        base = step.base,
+        platform = step.platform,
+        files = [image\File{ source = step.binary, path = "/magus", mode = mode }],
+        directories = [image\Directory{ path = "/workspace", mode = mode }],
+        config = image\Config{
+            user = "nonroot:nonroot",
+            workingDir = "/workspace",
+            entrypoint = ["/magus"],
+            cmd = ["ls"],
+            labels = {
+                "org.opencontainers.image.source": SOURCE,
+                "org.opencontainers.image.description": v.description,
+                "org.opencontainers.image.licenses": "Apache-2.0",
+            },
+        },
+    };
+}
+
+// assemble compiles each platform's binary through compile, pulls its
+// base, writes its layout, then an index over them. compile is the
+// caller's go build, so this module binds no spell.
+export fun assemble(p: Plan, compile: fun (env: {str: str}, args: [str]) > void !> any) > Assembled {
+    if (p.error != "") {
+        return Assembled{ error = p.error };
+    }
+    final layouts = mut [<image\Layout>];
+    try {
+        final mode = fs\mode("0755");
+        fs\removeAll(root(p.variant));
+        foreach (step in p.steps) {
+            compile(step.env, args: step.buildArgs);
+            _ = image\pull(p.variant.base, platform: step.platform, layout: step.base);
+            layouts.append(image\assemble(spec(p.variant, step: step, mode: mode), layout: step.layout));
+        }
+        _ = image\assembleIndex(layouts.map(fun (i: int, l: image\Layout) > str => l.path), layout: p.index);
+    } catch (e) {
+        return Assembled{ error = "image assemble {p.variant.name}: {e}" };
+    }
+    return Assembled{ layouts = layouts, index = p.index };
+}
+
+// attest writes an SPDX SBOM and SLSA provenance for the index and
+// attaches both as OCI 1.1 referrers in a new layout beside it.
+export fun attest(a: Assembled, build: Build) > Attested {
+    final dir = fs\dirname(a.index);
+    final layout = dir + "/attested";
+    try {
+        final sbom = image\writeSBOM(a.index, path: dir + "/sbom.spdx.json");
+        final provenance = image\writeProvenance(a.index, provenance: image\Provenance{
+            builderID = build.builder,
+            sourceRevision = build.revision,
+        }, path: dir + "/provenance.intoto.json");
+        _ = image\attachReferrers(a.index, documents: [sbom, provenance], layout: layout);
+    } catch (e) {
+        return Attested{ error = "image attest {a.index}: {e}" };
+    }
+    return Attested{ index = layout };
+}

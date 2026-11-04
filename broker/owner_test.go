@@ -429,3 +429,49 @@ func TestAStepGroupNeedsAClaimOfItsConnection(t *testing.T) {
 	_, err = c.Hold(t.Context(), Hold{Claim: v.ID, PGID: 4242, Command: "sleep 30"})
 	require.ErrorContains(t, err, "which this connection does not hold")
 }
+
+// A magus under a held command never competes with the hold's claim.
+func TestARunUnderAHeldCommandSharesItsClaim(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(0, 1))
+	wrapper := "1:" + types.WrapperInvocation("exec")
+	cmd, _ := startGroup(t)
+	_, err := dial(t, addr).Hold(t.Context(), Hold{
+		PGID: cmd.Process.Pid, Command: "magus job fork", Slots: 1, Deadline: time.Now().Add(time.Hour),
+		Invocation: wrapper,
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	v, err := dial(t, addr).Request(ctx, types.MachineClaim{
+		Project: "libs/x", Target: "install", Slots: 1, PID: 2, Invocation: "2:run", Ancestors: []string{wrapper},
+	})
+	require.NoError(t, err)
+	assert.True(t, v.Granted, "the only slot is its parent's")
+}
+
+// A hold shares its slots only: a budget strangers filled refuses its child.
+func TestARunUnderAHeldCommandGetsNoSeatOnAFullBudget(t *testing.T) {
+	addr := testAddr(t)
+	serve(t, addr, WithCapacity(1000, 4))
+	wrapper := "1:" + types.WrapperInvocation("exec")
+	stranger, err := dial(t, addr).Request(t.Context(), types.MachineClaim{Project: "other", Target: "test", MemoryMB: 900, PID: 3})
+	require.NoError(t, err)
+	require.True(t, stranger.Granted)
+	cmd, _ := startGroup(t)
+	_, err = dial(t, addr).Hold(t.Context(), Hold{
+		PGID: cmd.Process.Pid, Command: "magus run test .", Slots: 1, Deadline: time.Now().Add(time.Hour),
+		Invocation: wrapper,
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	v, err := dial(t, addr).Request(ctx, types.MachineClaim{
+		Project: "libs/x", Target: "test", MemoryMB: 500, PID: 2, Invocation: "2:run", Ancestors: []string{wrapper},
+	})
+	require.NoError(t, err)
+	assert.False(t, v.Granted, "it would hold 1400 MB of a 1000 MB budget")
+	assert.True(t, v.Fits)
+}

@@ -243,6 +243,90 @@ type SessionTrail struct {
 	// feed the cost summary and stay out of the encoded form, which would otherwise carry
 	// one row per tool call.
 	Calls []SessionCall `json:"-"`
+	// Repeats are facts, not a verdict: policy says which to report.
+	Repeats []RepeatRun `json:"repeats,omitempty"`
+}
+
+// RepeatRun is Count consecutive calls of one thread with the same call and
+// result digests and no write by that thread between. Worker is the host's
+// subagent id, empty for the main thread; ThreadFrom says if the host could
+// tell. A write by a shell command or another process is invisible to it.
+type RepeatRun struct {
+	Worker       string             `json:"worker,omitempty"`
+	Thread       types.AgentThread  `json:"thread,omitempty"`
+	ThreadFrom   types.ThreadSource `json:"thread_from,omitempty"`
+	Tool         string             `json:"tool"`
+	CallDigest   string             `json:"call_digest"`
+	ResultDigest string             `json:"result_digest"`
+	Count        int                `json:"count"`
+	First        time.Time          `json:"first"`
+	Last         time.Time          `json:"last"`
+	ToolMs       int64              `json:"tool_ms"`
+	SpanMs       int64              `json:"span_ms"`
+}
+
+// repeats folds calls into the runs of two or more. A call missing either
+// digest joins no run: an absent digest would equal every other.
+func repeats(calls []SessionCall) []RepeatRun {
+	ordered := slices.Clone(calls)
+	slices.SortStableFunc(ordered, func(a, b SessionCall) int { return a.At.Compare(b.At) })
+	open := map[string]map[string]*RepeatRun{}
+	var out []RepeatRun
+	finish := func(run *RepeatRun) {
+		if run.Count >= 2 {
+			run.SpanMs = run.Last.Sub(run.First).Milliseconds()
+			out = append(out, *run)
+		}
+	}
+	for _, call := range ordered {
+		runs := open[call.Worker]
+		if call.Action == toolWrite {
+			for _, run := range runs {
+				finish(run)
+			}
+			delete(open, call.Worker)
+			continue
+		}
+		if call.ToolMs == 0 || call.CallDigest == "" || call.ResultDigest == "" {
+			continue
+		}
+		if runs == nil {
+			runs = map[string]*RepeatRun{}
+			open[call.Worker] = runs
+		}
+		run := runs[call.CallDigest]
+		if run != nil && run.ResultDigest == call.ResultDigest {
+			run.Count++
+			run.Last = call.At
+			run.ToolMs += call.ToolMs
+			continue
+		}
+		if run != nil {
+			finish(run)
+		}
+		runs[call.CallDigest] = startRun(call)
+	}
+	for _, runs := range open {
+		for _, run := range runs {
+			finish(run)
+		}
+	}
+	sortRepeatRuns(out)
+	return out
+}
+
+func sortRepeatRuns(runs []RepeatRun) {
+	slices.SortFunc(runs, func(a, b RepeatRun) int {
+		return cmp.Or(a.First.Compare(b.First), strings.Compare(a.CallDigest, b.CallDigest))
+	})
+}
+
+func startRun(call SessionCall) *RepeatRun {
+	return &RepeatRun{
+		Worker: call.Worker, Thread: call.Thread, ThreadFrom: call.ThreadFrom,
+		Tool: call.Action, CallDigest: call.CallDigest, ResultDigest: call.ResultDigest,
+		Count: 1, First: call.At, Last: call.At, ToolMs: call.ToolMs,
+	}
 }
 
 // SessionCall is one guard observation of a call and the cost facts recorded beside it.
@@ -255,6 +339,11 @@ type SessionCall struct {
 	At       time.Time
 	Decision string
 	Rule     string
+	// Worker is the host's subagent id, empty for the main thread. ToolMs is
+	// the host's tool time, set on tool-time rows only.
+	Action string
+	Worker string
+	ToolMs int64
 	types.AgentFacts
 }
 
@@ -292,7 +381,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 		switch e.Kind {
 		case KindAgentCommand:
 			out.Commands++
-			call := SessionCall{At: time.UnixMilli(e.Ts), AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
+			call := SessionCall{At: time.UnixMilli(e.Ts), Action: e.Action, Worker: e.Agent, ToolMs: e.DurationMs, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
 			if raw, err := ReadBlob(base, e.ResponseRef); err == nil {
 				var resp agentCommandResponse
 				if json.Unmarshal(raw, &resp) == nil {
@@ -329,6 +418,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 			out.Leases = append(out.Leases, e.Lease)
 		}
 	}
+	out.Repeats = repeats(out.Calls)
 	return out
 }
 

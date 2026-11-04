@@ -29,7 +29,7 @@ const weightToken =
   /^--pf-t--global--font--weight--(?:(?:body|heading)--(?:default|bold)|(?:body|heading)--legacy|(?:body|heading)--bold--legacy)$/;
 const lineHeightToken = /^--pf-t--global--font--line-height--(?:body|heading)$/;
 const familyToken = /^--pf-t--global--font--family--(?:body|heading|mono)(?:--legacy)?$/;
-// The label and chip tokens are the uppercase recipes magus/label-token requires.
+// The label and chip tokens are the uppercase patterns magus/label-token requires.
 const consoleSizeToken = /^--console-(?:label-size|chip-size|[a-z0-9-]*font-size)$/;
 const consoleWeightToken = /^--console-(?:label-weight|chip-weight|[a-z0-9-]*font-weight)$/;
 const consoleLineHeightToken = /^--console-[a-z0-9-]*line-height$/;

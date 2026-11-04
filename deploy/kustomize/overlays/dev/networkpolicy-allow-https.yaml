@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-https
+  labels:
+    app.kubernetes.io/name: magus
+    app.kubernetes.io/component: network
+  annotations:
+    kubernetes.io/description: Lets the daemon pull spells and images over HTTPS, never from the cloud metadata endpoint.
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: magus
+      app.kubernetes.io/component: daemon
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
+      ports:
+        - port: 443
+          protocol: TCP

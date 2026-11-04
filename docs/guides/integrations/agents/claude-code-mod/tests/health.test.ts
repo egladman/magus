@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { assess, BOOTSTRAP, signature, statusText } from '../hooks/health'
+import { assess, BOOTSTRAP, inBand, statusText } from '../hooks/health'
 import type { Probe } from '../hooks/health'
 
 const healthy: Probe = {
@@ -26,31 +26,14 @@ describe('assess', () => {
     expect(issues[0]?.fix).toBe(BOOTSTRAP)
   })
 
-  test('the magus source tree without ./magus is running a borrowed binary', async () => {
-    const issues = assess({
-      ...healthy,
-      hasLocalBinary: false,
-      binary: { path: '/usr/local/bin/magus', version: 'v1-g6eadd1057', commit: '6eadd1057da4' },
-      server: { ...healthy.server!, version: 'v1-g6eadd1057' },
-    })
-    expect(issues.map(i => i.id)).toEqual(['borrowed-binary'])
-    expect(issues[0]?.title).toContain('/usr/local/bin/magus')
-    expect(issues[0]?.title).toContain('6eadd1057')
+  test('a borrowed or stale binary is not judged: the guard names the rebuild to the agent', async () => {
+    const borrowed = assess({ ...healthy, hasLocalBinary: false, binary: { ...healthy.binary!, commit: '6eadd1057da4' } })
+    expect(borrowed).toEqual([])
+    expect(assess({ ...healthy, binary: { ...healthy.binary!, commit: '6eadd1057da4' }, behind: 1 })).toEqual([])
   })
 
   test('another workspace on a PATH binary is fine', async () => {
     expect(assess({ ...healthy, isMagusSource: false, hasLocalBinary: false })).toEqual([])
-  })
-
-  test('a binary behind HEAD counts the commits', async () => {
-    const issues = assess({ ...healthy, binary: { ...healthy.binary!, commit: '6eadd1057da4' }, behind: 1 })
-    expect(issues.map(i => i.id)).toEqual(['stale-binary'])
-    expect(issues[0]?.title).toBe('./magus is 1 commit behind HEAD')
-  })
-
-  test('a binary off HEAD\'s history names both commits', async () => {
-    const issues = assess({ ...healthy, binary: { ...healthy.binary!, commit: 'aaaaaaaaaaaa' }, behind: null })
-    expect(issues[0]?.title).toBe('./magus is built from aaaaaaaaa, HEAD is 94d434ac0')
   })
 
   test('a server that is down hides the skew and MCP checks', async () => {
@@ -70,9 +53,12 @@ describe('assess', () => {
     expect(statusText(issues)).toBe('⚠ server skew, mcp not-ready')
   })
 
-  test('the signature changes when an issue title changes', async () => {
-    const one = assess({ ...healthy, binary: { ...healthy.binary!, commit: 'x' }, behind: 1 })
-    const two = assess({ ...healthy, binary: { ...healthy.binary!, commit: 'x' }, behind: 2 })
-    expect(signature(one)).not.toBe(signature(two))
+  test('only the guard failing open and a server on another version reach the band', async () => {
+    const down = assess({ ...healthy, server: { isRunning: false, version: '', mcpState: '', mcpNote: '' } })
+    const skew = assess({ ...healthy, server: { isRunning: true, version: 'v0-old', mcpState: 'not-ready', mcpNote: '' } })
+    const off = assess({ ...healthy, hasLocalBinary: false, pathBinary: null, binary: null, server: null })
+    expect(inBand(down)).toEqual([])
+    expect(inBand(skew).map(i => i.id)).toEqual(['server-skew'])
+    expect(inBand(off).map(i => i.id)).toEqual(['guard-off'])
   })
 })

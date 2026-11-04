@@ -4,6 +4,7 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "std";
 
 import "assert";
@@ -93,8 +94,13 @@ export fun checkCommand(check: any?, validation: str) > str {
 
 // parseDescribed reads `magus describe job <id> -o json`: the row, plus the deny paths the
 // workspace derives for it (generated files, other leases, shared build inputs).
-export fun parseDescribed(described: str) > Terms !> any {
-    final doc = json\parse(described);
+export fun parseDescribed(described: str) > result\Result::<Terms> {
+    var doc: any = null;
+    try {
+        doc = json\parse(described);
+    } catch (err: any) {
+        return result\caught::<Terms>(err, doing: "render-brief: the job row is not JSON");
+    }
     final j = doc["job"] ?? {<str: any>};
     final deny = mut [<Deny>];
     foreach (p in j["deny_paths"] ?? []) {
@@ -115,7 +121,7 @@ export fun parseDescribed(described: str) > Terms !> any {
     foreach (d in j["depends_on"] ?? []) {
         deps.append(Dependency{ job = d, state = "" });
     }
-    return Terms{
+    return result\ok::<Terms>(Terms{
         id = j["id"] ?? "",
         criteria = j["criteria"] ?? "",
         checkpoint = j["checkpoint"] ?? "",
@@ -127,7 +133,7 @@ export fun parseDescribed(described: str) > Terms !> any {
         overlaps = [<Overlap>],
         check = check,
         gates = gates,
-    };
+    });
 }
 
 // withNeighbours fills each dependency's state and the overlaps naming t.id, read off the
@@ -260,15 +266,15 @@ fun resultTemplate(t: Terms) > [str] {
 }
 
 // brief renders t as the worker's complete instructions. extra is appended verbatim under
-// its own heading, "" for none. Raises on a row a worker cannot finish: no check, or no
-// write paths on a job that is not read-only.
-export fun brief(t: Terms, extra: str) > str !> str {
+// its own heading, "" for none. A row a worker cannot finish is an error: no
+// check, or no write paths on a job that is not read-only.
+export fun brief(t: Terms, extra: str) > result\Result::<str> {
     if (t.check == "") {
-        throw "render-brief: job {t.id} names no check, so the brief cannot say when the work is done; "
-            + "give the row one (`./magus job fork` with --check) before handing it out";
+        return result\fail::<str>("render-brief: job {t.id} names no check, so the brief cannot say when the work is done; "
+            + "give the row one (`./magus job fork` with --check) before handing it out");
     }
     if (!t.readOnly and t.writePaths.len() == 0) {
-        throw "render-brief: job {t.id} is not read-only and has no write paths, so every write its worker makes is refused";
+        return result\fail::<str>("render-brief: job {t.id} is not read-only and has no write paths, so every write its worker makes is refused");
     }
     final text = mut [
         "# Job {t.id}",
@@ -385,18 +391,32 @@ export fun brief(t: Terms, extra: str) > str !> str {
         text.append("");
         text.append(extra.trim());
     }
-    return text.join("\n") + "\n";
+    return result\ok::<str>(text.join("\n") + "\n");
 }
 
 // fetchTerms reads job's terms and neighbours through the magus module.
-export fun fetchTerms(job: str) > Terms !> any {
-    final described = magus\cmd("describe", args: ["job", job, "-o", "json"], opts: {"quiet": true}).stdout;
-    final terms = parseDescribed(described);
-    if (terms.id != job) {
-        throw "render-brief: `magus describe job {job}` returned no row for it";
+export fun fetchTerms(job: str) > result\Result::<Terms> {
+    var described = "";
+    var listing = "";
+    try {
+        described = magus\cmd("describe", args: ["job", job, "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout;
+        listing = magus\cmd("ls", args: ["jobs", "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout;
+    } catch (err: any) {
+        return result\caught::<Terms>(err, doing: "render-brief: read job {job}");
     }
-    final listed = json\parse(magus\cmd("ls", args: ["jobs", "-o", "json"], opts: {"quiet": true}).stdout);
-    return withNeighbours(terms, states: jobStates(listed), overlaps: parseOverlaps(job, listed: listed));
+    final terms = parseDescribed(described);
+    if (terms.error != null) {
+        return terms;
+    }
+    if (terms.value!.id != job) {
+        return result\fail::<Terms>("render-brief: `magus describe job {job}` returned no row for it");
+    }
+    try {
+        final listed = json\parse(listing);
+        return result\ok::<Terms>(withNeighbours(terms.value!, states: jobStates(listed), overlaps: parseOverlaps(job, listed: listed)));
+    } catch (err: any) {
+        return result\caught::<Terms>(err, doing: "render-brief: the job list is not JSON");
+    }
 }
 
 export fun main(args: [str]) > void !> any {
@@ -414,19 +434,34 @@ export fun main(args: [str]) > void !> any {
     }
     final extraPath = parsed.values["--extra"] ?? "";
     final extra = if (extraPath == "") "" else fs\readFile(extraPath);
-    std\print(brief(fetchTerms(job), extra: extra).trim());
+    final terms = fetchTerms(job);
+    if (terms.error != null) {
+        throw terms.error!.message;
+    }
+    final text = brief(terms.value!, extra: extra);
+    if (text.error != null) {
+        throw text.error!.message;
+    }
+    std\print(text.value!.trim());
 }
 
-fun golden() > Terms !> any {
-    final described = fs\readFile("hack/testdata/render-brief-row.json");
-    final listed = json\parse(fs\readFile("hack/testdata/render-brief-jobs.json"));
-    final terms = parseDescribed(described);
-    return withNeighbours(terms, states: jobStates(listed), overlaps: parseOverlaps(terms.id, listed: listed));
+fun golden() > result\Result::<Terms> {
+    try {
+        final described = fs\readFile("hack/testdata/render-brief-row.json");
+        final listed = json\parse(fs\readFile("hack/testdata/render-brief-jobs.json"));
+        final terms = parseDescribed(described);
+        if (terms.error != null) {
+            return terms;
+        }
+        return result\ok::<Terms>(withNeighbours(terms.value!, states: jobStates(listed), overlaps: parseOverlaps(terms.value!.id, listed: listed)));
+    } catch (err: any) {
+        return result\caught::<Terms>(err, doing: "render-brief: read the fixture");
+    }
 }
 
 test "the fixture row renders the golden brief" {
     final want: [str] = json\parse(fs\readFile("hack/testdata/render-brief-golden.json"));
-    final got = brief(golden(), extra: "Load magus-buzz-write before writing Buzz.\n").trim().split("\n");
+    final got = brief(golden().value!, extra: "Load magus-buzz-write before writing Buzz.\n").value!.trim().split("\n");
     assert\equal(got, want: want, message: "brief");
 }
 
@@ -449,15 +484,15 @@ test "declaration claims are spelled out per file, grouped by reason" {
 }
 
 test "a row with no check or no write paths is refused" {
-    final t = golden();
+    final t = golden().value!;
     final unchecked = Terms{ id = t.id, criteria = t.criteria, checkpoint = t.checkpoint, readOnly = false, writePaths = t.writePaths,
         denyPaths = t.denyPaths, readPaths = t.readPaths, dependencies = t.dependencies, overlaps = t.overlaps, check = "", gates = [<Gate>] };
-    assert\equal(brief(unchecked, extra: "") catch "refused", want: "refused", message: "no check");
+    assert\equal(brief(unchecked, extra: "").error != null, want: true, message: "no check");
     final unwritable = Terms{ id = t.id, criteria = t.criteria, checkpoint = t.checkpoint, readOnly = false, writePaths = [<str>],
         denyPaths = t.denyPaths, readPaths = t.readPaths, dependencies = t.dependencies, overlaps = t.overlaps, check = t.check, gates = t.gates };
-    assert\equal(brief(unwritable, extra: "") catch "refused", want: "refused", message: "no write paths");
+    assert\equal(brief(unwritable, extra: "").error != null, want: true, message: "no write paths");
 }
 
 test "the same terms render the same bytes" {
-    assert\equal(brief(golden(), extra: ""), want: brief(golden(), extra: ""), message: "deterministic");
+    assert\equal(brief(golden().value!, extra: "").value!, want: brief(golden().value!, extra: "").value!, message: "deterministic");
 }

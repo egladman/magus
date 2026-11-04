@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/libs/cmdline/exit"
@@ -170,4 +171,49 @@ func TestPrintVerdictFoundWithGapsStillWarns(t *testing.T) {
 	got := renderVerdict(types.ClassifyAnswer(true, "", []types.KnowledgeSymbolGap{gap("libs/api")}), "")
 	assert.Contains(t, got, "outside coverage: libs/api (not-indexed)",
 		"a populated list from a half-indexed workspace is as misleading as an empty one")
+}
+
+// VerdictRemedySuite pins that the verdict offers `magus graph build` only for a gap a build
+// closes.
+type VerdictRemedySuite struct {
+	suite.Suite
+}
+
+func TestVerdictRemedySuite(t *testing.T) { suite.Run(t, new(VerdictRemedySuite)) }
+
+func unindexed(project, language string) types.KnowledgeSymbolGap {
+	return types.KnowledgeSymbolGap{Project: types.NewProjectRef(project, ""), State: types.SymbolIndexNotBuilt,
+		Detail: "no symbol index for " + language, Unindexable: true}
+}
+
+func (s *VerdictRemedySuite) TestALanguageNothingIndexesGetsNoBuildRemedy() {
+	got := renderVerdict(types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{unindexed("console", "typescript"), unindexed("proto", "protobuf")}), "")
+	s.Contains(got, "outside coverage: console (no symbol index for typescript), proto (no symbol index for protobuf)")
+	s.NotContains(got, "build the missing index")
+}
+
+func (s *VerdictRemedySuite) TestAnUnbuiltIndexBesideOneNothingMakesGetsTheBuildRemedy() {
+	got := renderVerdict(types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{unindexed("console", "typescript"), gap("libs/api")}), "")
+	s.Contains(got, "build the missing index with: ")
+}
+
+func (s *VerdictRemedySuite) TestAReadThatRefreshedPrintsItsCauseAndNoRebuild() {
+	cause := &types.KnowledgeIndexCause{Why: "a refresh started in the background", Fix: "ask again once it lands"}
+	stale := knowledge.Answer("Foo", false, knowledge.Coverage{Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{{Project: "libs/api"}}})
+	stale.IndexCause = cause
+	missing := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{gap("libs/api")})
+	missing.IndexCause = cause
+	for _, ans := range []types.KnowledgeAnswer{stale, missing} {
+		got := renderVerdict(ans, "")
+		s.Contains(got, "  why: a refresh started in the background\n  fix: ask again once it lands\n")
+		s.NotContains(got, "graph build")
+	}
+}
+
+func (s *VerdictRemedySuite) TestAMissingIndexerGetsItsInstallNotABuild() {
+	missing := gap("libs/api")
+	missing.Language, missing.Hint = "go", "install scip-go"
+	got := renderVerdict(types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{missing}), "")
+	s.Contains(got, "install scip-go")
+	s.NotContains(got, "build the missing index")
 }

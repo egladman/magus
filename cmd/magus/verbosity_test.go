@@ -147,7 +147,8 @@ func TestApplyDisplayHonorsConfiguredLevel(t *testing.T) {
 	global.quiet = true
 	applyDisplay()
 	assert.Equal(t, "error", globalCfg.Log.Level)
-	assert.False(t, slog.Default().Enabled(context.Background(), slog.LevelWarn))
+	// A warning still reaches the quiet filter, which keeps only an unchecked one.
+	assert.False(t, slog.Default().Enabled(context.Background(), slog.LevelDebug))
 }
 
 // A quiet display drops a failure's reasoning and a short wait; the run log's capture

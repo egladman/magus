@@ -1,4 +1,3 @@
-import { must } from "../lib/guards";
 // tileView.ts - the DOM renderer for one tab's split-pane layout. A tab's body is a Pane tree
 // (tiling.ts): a single leaf when un-split (the common case) or a tree of splits after the operator
 // tiles it. This module renders that tree into nested CSS grids with draggable dividers, mounts a
@@ -32,7 +31,9 @@ import {
   type Leaf,
   type Direction,
 } from "./tiling";
-import type { PageController } from "./page";
+import type { PageController, SearchProvider } from "./page";
+import type { Result } from "../gen/magus/types";
+import { appLoadFailure } from "../ui/alert";
 import { h } from "./view";
 
 // The divider thickness (px). Kept here as the single source so the grid template and the CSS hit
@@ -47,12 +48,12 @@ export interface TileApp {
 }
 
 // What the console injects: how to mount an app into a host, how to persist the tree, and the
-// launcher's app list. mountApp returns the app's controller (or null if it declined /
-// is unknown), which tileView drives for visibility and teardown.
+// launcher's app list. mountApp returns the app's controller, which tileView drives for visibility
+// and teardown, or why the app could not load, which the pane shows.
 export interface TileDeps {
   seed: Pane; // the tab's initial tree: a single leaf, or a restored split tree
   apps: readonly TileApp[];
-  mountApp(pageId: string, host: HTMLElement): Promise<PageController<unknown, unknown> | null>;
+  mountApp(pageId: string, host: HTMLElement): Promise<Result<PageController<unknown, unknown>>>;
   onLayoutChange(tree: Pane): void; // persist (the console writes it into the tab's layout)
   // The FOCUSED pane's open document changed (page.ts's TitleSource), or focus moved to a pane
   // showing a different one. A tab holds a whole tree of apps but the bar has room for one
@@ -269,10 +270,11 @@ export function createTileView(deps: TileDeps): TileView {
     if (!p || p.pageId === "" || p.controller || mounting.has(leafId)) return;
     mounting.add(leafId);
     p.host.replaceChildren();
-    const controller = await deps.mountApp(p.pageId, p.host);
+    const mounted = await deps.mountApp(p.pageId, p.host);
     mounting.delete(leafId);
+    const controller = mounted.error ? failedPane(p.host, p.pageId, mounted.error) : mounted.value;
     if (!panes.has(leafId)) {
-      controller?.deactivate();
+      controller.deactivate();
       return;
     }
     p.controller = controller;
@@ -399,12 +401,20 @@ export function createTileView(deps: TileDeps): TileView {
     return false;
   }
 
+  // A leaf with no mounted pane has no rect to compare, so it is not a candidate.
+  function neighborCandidates(): { id: string; rect: DOMRect }[] {
+    return leaves(tree)
+      .filter((l) => l.id !== focusId)
+      .flatMap((l) => {
+        const pane = panes.get(l.id);
+        return pane ? [{ id: l.id, rect: pane.host.getBoundingClientRect() }] : [];
+      });
+  }
+
   function focus(dir: Direction): void {
     const from = panes.get(focusId);
     if (!from) return;
-    const candidates = leaves(tree)
-      .filter((l) => l.id !== focusId)
-      .map((l) => ({ id: l.id, rect: must(panes.get(l.id)).host.getBoundingClientRect() }));
+    const candidates = neighborCandidates();
     const target = neighborInDirection(from.host.getBoundingClientRect(), candidates, dir);
     if (target) {
       setFocus(target);
@@ -421,9 +431,7 @@ export function createTileView(deps: TileDeps): TileView {
   function move(dir: Direction): void {
     const from = panes.get(focusId);
     if (!from) return;
-    const candidates = leaves(tree)
-      .filter((l) => l.id !== focusId)
-      .map((l) => ({ id: l.id, rect: must(panes.get(l.id)).host.getBoundingClientRect() }));
+    const candidates = neighborCandidates();
     const target = neighborInDirection(from.host.getBoundingClientRect(), candidates, dir);
     if (!target) return;
     tree = swapLeaves(tree, focusId, target);
@@ -542,4 +550,17 @@ export function createTileView(deps: TileDeps): TileView {
     setVisible,
     deactivate,
   };
+}
+
+const noSearch: SearchProvider<null> = {
+  placeholder: "",
+  parse: () => null,
+  apply: () => ({ matches: 0 }),
+};
+
+// failedPane shows why an app did not load in its own pane and stands in as its controller, so the
+// pane keeps the reason on screen instead of retrying the mount on every render.
+function failedPane(host: HTMLElement, pageId: string, error: Error): PageController<null, null> {
+  host.replaceChildren(appLoadFailure(pageId, error));
+  return { search: noSearch, setVisible: () => {}, deactivate: () => host.replaceChildren() };
 }

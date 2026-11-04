@@ -48,17 +48,17 @@ type Service struct {
 	// Nil when this service fronts no server, leaving StatusSnapshot.Broker nil.
 	brokerFn func() *types.StatusBroker
 
-	// Insight cache: an assembled InsightView reused for insightTTL so repeated dashboard
-	// polls collapse onto one git-log scan. The mutex also serializes cold-cache assembly.
-	insightMu    sync.Mutex
-	insightCache *insightEntry
-	insightTTL   time.Duration
+	// History-metrics cache: git-backed Board fields reused for historyMetricsTTL so
+	// repeated dashboard polls collapse onto one git-log scan. The mutex serializes cold assembly.
+	historyMetricsMu    sync.Mutex
+	historyMetricsCache *historyMetricsEntry
+	historyMetricsTTL   time.Duration
 
 	// Test seams. Production leaves these nil; the real Magus / server socket is used.
 	statusSnapshotFn func(ctx context.Context) types.StatusSnapshot
 	knowledgeGraphFn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)
 	describeGraphFn  func() types.TargetGraphOutput
-	insightFn        func(ctx context.Context) (types.InsightView, error)
+	historyMetricsFn func(ctx context.Context) (Board, error)
 	workingDiffFn    func(ctx context.Context, paths []string) (string, error)
 	diffFn           func(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error)
 }
@@ -89,21 +89,20 @@ func WithDescribeGraphFunction(fn func() types.TargetGraphOutput) Option {
 	return func(s *Service) { s.describeGraphFn = fn }
 }
 
-// WithInsightFunction replaces the workspace lens computation behind Insight. Tests pass this to
-// drive the cache without a real workspace or git history.
-func WithInsightFunction(fn func(ctx context.Context) (types.InsightView, error)) Option {
-	return func(s *Service) { s.insightFn = fn }
+// WithHistoryMetricsFunction replaces the git-backed Board computation. Tests drive the
+// cache without a real workspace or git history.
+func WithHistoryMetricsFunction(fn func(ctx context.Context) (Board, error)) Option {
+	return func(s *Service) { s.historyMetricsFn = fn }
 }
 
-// WithInsightTTL overrides how long an assembled InsightView is reused before the git-log
-// scan runs again. Zero disables caching (every call recomputes); negative is treated as
-// zero. Production leaves it at defaultInsightTTL.
-func WithInsightTTL(d time.Duration) Option {
+// WithHistoryMetricsTTL overrides how long git-backed Board fields are reused. Zero
+// disables caching; negative is treated as zero. Production leaves defaultHistoryMetricsTTL.
+func WithHistoryMetricsTTL(d time.Duration) Option {
 	return func(s *Service) {
 		if d < 0 {
 			d = 0
 		}
-		s.insightTTL = d
+		s.historyMetricsTTL = d
 	}
 }
 
@@ -126,7 +125,7 @@ func WithBrokerStatus(fn func() *types.StatusBroker) Option {
 // and the running magus version. m may be nil only when every graph/status path is
 // overridden by a With* seam (tests).
 func NewService(m *magus.Magus, cfg config.Config, base types.StatusBase, version string, opts ...Option) *Service {
-	s := &Service{magus: m, config: cfg, statusBase: base, version: version, insightTTL: defaultInsightTTL, startedAt: time.Now().UTC()}
+	s := &Service{magus: m, config: cfg, statusBase: base, version: version, historyMetricsTTL: defaultHistoryMetricsTTL, startedAt: time.Now().UTC()}
 	for _, o := range opts {
 		o(s)
 	}
@@ -247,11 +246,11 @@ func (s *Service) Graph(ctx context.Context, flavor, sel string) (types.Knowledg
 // WorkingDiff returns the working tree's uncommitted changes as one unified patch, scoped to
 // paths when non-empty. It backs the console's review app.
 //
-// Deliberately NOT cached, unlike Insight beside it. The insight lenses fold a bounded
-// git-log scan that costs the same answer for minutes at a time; a working diff is the thing
-// the reader is editing RIGHT NOW, and a review app showing a diff from thirty seconds
-// ago is worse than one that takes another few milliseconds. The backend's own diff is fast
-// because it reads the index, not history.
+// Deliberately NOT cached, unlike HistoryMetrics beside it. The history metrics fold a
+// bounded git-log scan that costs the same answer for minutes at a time; a working diff is
+// the thing the reader is editing RIGHT NOW, and a review app showing a diff from thirty
+// seconds ago is worse than one that takes another few milliseconds. The backend's own diff
+// is fast because it reads the index, not history.
 func (s *Service) WorkingDiff(ctx context.Context, paths []string) (string, error) {
 	if s.workingDiffFn != nil {
 		return s.workingDiffFn(ctx, paths)
@@ -326,8 +325,8 @@ func (s *Service) DiffWith(ctx context.Context, paths []string, opts types.DiffO
 	//
 	// Best-effort, like every other overlay: a workspace with no history yields no churn, and
 	// the files stay nil rather than reporting a confident zero.
-	if view, ierr := s.Insight(ctx); ierr == nil {
-		rev.AttachChurn(view.Hotspots.Files, view.Trend.Projects)
+	if board, herr := s.HistoryMetrics(ctx); herr == nil {
+		rev.AttachChurn(board.Hotspots.Files, board.Trend.Projects)
 	}
 	// The agent record: which sessions wrote each file and what they had read first, from the
 	// guard hook's trail and from loaded transcripts.

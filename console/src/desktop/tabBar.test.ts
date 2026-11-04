@@ -10,8 +10,8 @@ test("tabViews maps every tab and marks exactly the active one", () => {
   let ws = openTab(emptyWorkspace, { id: "a", pageId: "logs", title: "Log viewer" });
   ws = openTab(ws, { id: "b", pageId: "graph", title: "Graph" });
   assert.deepEqual(tabViews(ws), [
-    { id: "a", title: "Log viewer", hint: undefined, active: false },
-    { id: "b", title: "Graph", hint: undefined, active: true }, // openTab activates the last opened
+    { id: "a", title: "Log viewer", active: false },
+    { id: "b", title: "Graph", active: true }, // openTab activates the last opened
   ]);
 });
 
@@ -21,9 +21,7 @@ test("an empty workspace yields no tab views", () => {
 
 test("no tab is active when activeId points nowhere", () => {
   const ws = { tabs: [{ id: "a", pageId: "logs", title: "Log viewer" }], activeId: null };
-  assert.deepEqual(tabViews(ws), [
-    { id: "a", title: "Log viewer", hint: undefined, active: false },
-  ]);
+  assert.deepEqual(tabViews(ws), [{ id: "a", title: "Log viewer", active: false }]);
 });
 
 // --- auto-naming: a tab titled after the document its app has open ------------------------

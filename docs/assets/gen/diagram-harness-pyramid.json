@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "harness-pyramid",
+  "findings": [],
+  "stamp": "sha256:abd6dc7fa5d24a27b544993208844e8622b8fe4834e7d636722dab38f135503a"
+}

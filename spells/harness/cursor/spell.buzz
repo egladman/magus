@@ -68,6 +68,10 @@ fun cursor_event_names() > [str] {
         "sessionEnd",
         // The person's message, recorded for the topics it raises and always let through.
         "beforeSubmitPrompt",
+        // A deny goes back as followup_message, the next message,
+        // which resumes the agent (https://cursor.com/docs/agent/hooks).
+        "stop",
+        "subagentStop",
     ];
 }
 
@@ -75,6 +79,19 @@ fun cursor_matcher(event: str) > str {
     if (event == "preToolUse") { return PRETOOL_MATCHER; }
     if (event == "postToolUse" or event == "postToolUseFailure") { return POSTTOOL_MATCHER; }
     return "";
+}
+
+// cursor_points are the hook points the port answers on event.
+fun cursor_points(event: str) > [HookPoint] {
+    if (event == "sessionStart") { return [HookPoint.sessionStart]; }
+    if (event == "beforeShellExecution") { return [HookPoint.shell]; }
+    if (event == "beforeMCPExecution") { return [HookPoint.mcp]; }
+    if (event == "preToolUse") { return [HookPoint.shell, HookPoint.edit, HookPoint.spawn]; }
+    if (event == "preCompact") { return [HookPoint.compact]; }
+    if (event == "subagentStart") { return [HookPoint.spawn]; }
+    if (event == "stop") { return [HookPoint.stop]; }
+    if (event == "subagentStop") { return [HookPoint.subagentStop]; }
+    return [<HookPoint>];
 }
 
 fun cursor_buzz_check_hook() > HookCommand {
@@ -85,9 +102,17 @@ fun cursor_buzz_check_hook() > HookCommand {
 fun cursor_hooks() > [HookCommand] {
     final hooks = mut [<HookCommand>];
     foreach (event in cursor_event_names()) {
-        hooks.append(HookCommand{event = event, matcher = cursor_matcher(event), script = "cursor-hook", flags = cursor_guard_flags(), timeoutS = HOOK_TIMEOUT_S});
+        hooks.append(HookCommand{event = event, matcher = cursor_matcher(event), script = "cursor-hook", flags = cursor_guard_flags(),
+            timeoutS = HOOK_TIMEOUT_S, points = cursor_points(event)});
     }
     hooks.append(cursor_buzz_check_hook());
+    // postToolUse carries duration in ms. Cursor has no background
+    // mode for a hook, so this one waits on the recorder.
+    hooks.append(HookCommand{event = "postToolUse", matcher = POSTTOOL_MATCHER, script = "magus-duration",
+        flags = cursor_guard_flags(), timeoutS = HOOK_TIMEOUT_S, points = [<HookPoint>]});
+    // Cursor reads a beforeSubmitPrompt hook's stdout as its JSON verdict, so the disk
+    // hook's one line goes to stderr, where Cursor's hook log shows it.
+    hooks.append(reclaimDiskHook(mgs_getName(), event: "beforeSubmitPrompt", say: "stderr"));
     return hooks;
 }
 
@@ -95,12 +120,20 @@ export fun mgs_listHooks() > [HookCommand] {
     return cursor_hooks();
 }
 
+export fun mgs_listUnsupportedHooks() > [HookBinding] {
+    return [
+        unsupportedHook(HookPoint.attach, reason: "no hook accepts or returns an image or a file inline; "
+            + "attachments arrive by path and replies carry text (https://cursor.com/docs/agent/hooks)"),
+    ];
+}
+
 // A timed-out gating hook must block the call: otherwise retrying a slow guard
 // becomes a way to run a command it would refuse.
 fun cursor_entry(hook: HookCommand) > {str: any} {
     final entry = mut {<str: any>};
     if (hook.matcher != "") { entry["matcher"] = hook.matcher; }
-    entry["command"] = buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
+    final command = buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
+    entry["command"] = if (hook.script == "magus-duration") command + " # magus:harness" else command;
     entry["timeout"] = hook.timeoutS;
     if (hook.event == "beforeMCPExecution" or hook.event == "beforeShellExecution" or hook.event == "preToolUse") {
         entry["failClosed"] = true;
@@ -131,8 +164,8 @@ export fun mgs_listEntries() > [ManagedEntries] {
 }
 
 // The hooks file and its version, set only where the file lacks it.
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = ".cursor/hooks.json", defaults = {"version": 1}};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = ".cursor/hooks.json", defaults = {"version": 1}}, guard = "hooks"};
 }
 
 // Cursor reads skills from .agents/skills, .cursor/skills and .claude/skills (probed on
@@ -143,10 +176,17 @@ export fun mgs_getSkills() > HarnessSkills {
 }
 
 // Cursor loads a skill by reading its SKILL.md, and the preToolUse matcher covers Read, so
-// every load reaches the guard.
+// every load reaches the guard. PAYLOAD_FIELDS are common hook input fields
+// no other host sends (https://cursor.com/docs/agent/hooks, read 2026-10-29).
+final PAYLOAD_FIELDS = ["cursor_version", "conversation_id", "generation_id", "workspace_roots"];
+
+// A deny's agent_message reaches the agent and its user_message the person.
 export fun mgs_getLimits() > Limits {
-    return Limits{hookTimeoutMs = HOOK_TIMEOUT_S * 1000, observesSkillLoads = true};
+    return Limits{hookTimeoutMs = HOOK_TIMEOUT_S * 1000, observesSkillLoads = true, payloadFields = PAYLOAD_FIELDS, channels = ["capture", "notice"]};
 }
+
+// Cursor documents no discovery tool, and a subagent inherits all of them.
+final DISCOVERY_TOOLS = [<str>];
 
 // Every Cursor tool the guard should know whose input's shape does not say what it does; a
 // tool missing here is one the guard cannot judge (unjudged-tool).
@@ -206,6 +246,14 @@ fun cursor_scout_fixture(readOnly: bool) > ShippedAgent {
     };
 }
 
+test "mgs_renderAgents restricts no tool of a read-only agent, so discovery stays reachable" {
+    final content = cursor_agent(cursor_scout_fixture(true)).content;
+    assert\isTrue(content.indexOf("\ntools:") == null, "an allowlist would drop what it omits");
+    foreach (name in DISCOVERY_TOOLS) {
+        assert\isTrue(content.indexOf(name) == null, "{name} is not removed");
+    }
+}
+
 test "mgs_renderAgents renders a read-only agent that inherits the model" {
     final file = cursor_agent(cursor_scout_fixture(true));
     assert\equal(file.path, ".cursor/agents/magus-scout.md", "Cursor reads .cursor/agents");
@@ -231,8 +279,8 @@ test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "cursor", "id must match magus\\harness.provider wiring and --id");
 }
 
-test "mgs_getHarnessConfig names the Cursor hooks file and seeds version 1, and no env" {
-    final cfg = mgs_getHarnessConfig();
+test "mgs_getHarness names the Cursor hooks file and seeds version 1, and no env" {
+    final cfg = mgs_getHarness().config;
     assert\equal(cfg.path, ".cursor/hooks.json", "workspace-relative host config path");
     assert\equal("{cfg.defaults["version"]}", "1", "defaults merge on first create");
     assert\isTrue(cfg.defaults["env"] == null, "hooks.json gains no env key");
@@ -253,8 +301,9 @@ test "guard command is the shipped Cursor Buzz port, not a shell script" {
 
 test "the entries cover every Cursor event magus uses, one guard entry each" {
     final names = cursor_event_names();
-    assert\equal(names.len(), 10, "sessionStart, beforeShell, beforeMCP, preToolUse, postToolUse, postToolUseFailure, preCompact, subagentStart, sessionEnd, beforeSubmitPrompt");
-    assert\isTrue(names.indexOf("stop") == null, "the reply check is opt-in, never shipped");
+    assert\equal(names.len(), 12, "sessionStart, beforeShell, beforeMCP, preToolUse, postToolUse, postToolUseFailure, preCompact, subagentStart, sessionEnd, beforeSubmitPrompt, stop, subagentStop");
+    assert\equal(cursor_points("stop")[0].value, "stop", "the guard answers the stop");
+    assert\equal(cursor_points("subagentStop")[0].value, "subagent-stop", "and the subagent's");
     final entries = cursor_entries();
     assert\equal(entries.len(), names.len(), "one managed block per event");
     foreach (i, block in entries) {
@@ -267,8 +316,10 @@ test "the entries cover every Cursor event magus uses, one guard entry each" {
         assert\equal((guard["matcher"] as? str) ?? "", cursor_matcher(names[i]), "the matcher the event takes");
     }
     final post = entries[names.indexOf("postToolUse")!];
-    assert\equal(post.entries.len(), 2, "the advice and the Buzz check");
+    assert\equal(post.entries.len(), 3, "the advice, the Buzz check and the duration recorder");
     assert\equal("{post.entries[1]["matcher"]}", WRITE_MATCHER, "every tool that writes a file");
+    assert\isTrue("{post.entries[2]["command"]}".indexOf("magus-duration.buzz") != null, "the recorder");
+    assert\isTrue("{post.entries[2]["command"]}".endsWith(" # magus:harness"), "magus cannot tell the recorder is its own without the marker");
 }
 
 test "mgs_getMcp prints Cursor stdio setup guidance only" {

@@ -16,18 +16,19 @@
 // Live shim (this file) = binary interface.
 
 import assert from "node:assert/strict";
-import { spawn as nodeSpawn } from "node:child_process";
-import { accessSync, constants, mkdtempSync } from "node:fs";
+import { spawn as nodeSpawn, spawnSync } from "node:child_process";
+import { accessSync, constants, copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { MagusGuard } from "./opencode-plugin.ts";
+import { MagusGuard } from "./opencode-plugin.installed.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // docs/guides/integrations/agents -> repo root.
 const WORKSPACE_ROOT = path.resolve(HERE, "../../../..");
+const OPENCODE_SPELL = path.join(WORKSPACE_ROOT, "spells/harness/opencode");
 // One empty job store and one empty cache for every case in this file; see the env pins in
 // the spawn shim.
 const stateHome = mkdtempSync(path.join(os.tmpdir(), "magus-guard-live-"));
@@ -80,6 +81,46 @@ const skip =
 if (magusBin === null) {
   console.warn(`[opencode-plugin.live.test] skipping: ${skip}`);
 }
+
+test("installed probe exits after its real Wasm-backed assertions", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "magus-opencode-probe-"));
+  const pluginDir = path.join(root, ".opencode/plugins");
+  const runtimeDir = path.join(root, ".opencode/magus");
+  try {
+    mkdirSync(pluginDir, { recursive: true });
+    mkdirSync(runtimeDir, { recursive: true });
+    copyFileSync(path.join(OPENCODE_SPELL, "plugins/magus.js"), path.join(pluginDir, "magus.js"));
+    copyFileSync(path.join(OPENCODE_SPELL, "probe.ts"), path.join(runtimeDir, "probe.ts"));
+    copyFileSync(
+      path.join(OPENCODE_SPELL, "gen/wasm_exec.js"),
+      path.join(runtimeDir, "wasm_exec.js"),
+    );
+    copyFileSync(
+      path.join(OPENCODE_SPELL, "gen/magus-opencode.wasm"),
+      path.join(runtimeDir, "magus-opencode.wasm"),
+    );
+
+    const result = spawnSync(process.execPath, [path.join(runtimeDir, "probe.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 8_000,
+    });
+    assert.equal(
+      result.error,
+      undefined,
+      `probe child failed to launch or timed out: ${result.error?.message ?? ""}`,
+    );
+    assert.equal(result.signal, null, "probe child must exit normally");
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stdout,
+      "opencode-probe: assertions passed\n",
+      "all guard assertions must complete before successful exit",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 /** `bin` is argv[0] as the plugin spreads it; `argv` is everything after it. */
 type SpawnCall = { bin: string; argv: string[]; stdin: string };

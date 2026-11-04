@@ -1,25 +1,38 @@
 package main
 
 import (
+	"cmp"
 	"context"
+	"flag"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/figure"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -85,7 +98,8 @@ func leaseBoundary(ctx context.Context, root string, store *job.Store, row types
 		return job.TermsFacts{WorkspaceCold: true}
 	}
 	derived := generatedBoundary(m, affected.Affected, row.WritePaths)
-	derived = append(derived, leasedBoundary(row, leases)...)
+	here := job.WorkingCheckout(cmp.Or(row.CheckoutRoot, m.Root()), row)
+	derived = append(derived, leasedBoundary(row, leases, here, func() ([]*types.Project, string) { return m.All(), "" })...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
 	notes := collectNotes(ctx, m, row)
 	facts := job.TermsFacts{
@@ -149,7 +163,10 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 //
 // An ANCESTOR claims nothing against its descendant either: a child is forked inside its
 // parent's boundary, so listing the parent's paths would put the child's own out of reach.
-func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
+//
+// Nor does a lease in another checkout claim a generated output ([job.HeldApart]): row's
+// holder, working in here, regenerates its own copy.
+func leasedBoundary(row types.Job, leases []types.Job, here string, projects job.Projects) []job.TermsBoundary {
 	ancestors := types.JobAncestors(leases, row.ID)
 	var out []job.TermsBoundary
 	for _, other := range leases {
@@ -158,6 +175,9 @@ func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
 			continue
 		}
 		for _, p := range other.HardPaths() {
+			if apart, _ := job.HeldApart(here, other, projects, p); apart {
+				continue
+			}
 			out = append(out, job.TermsBoundary{
 				Path:   p,
 				Reason: fmt.Sprintf("owned by live lease %s: coordinate, never work around", other.ID),
@@ -225,7 +245,7 @@ func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []job.Te
 	if len(seeds) == 0 {
 		return nil
 	}
-	out, err := m.Affinity(ctx, types.InsightOptions{Commits: leaseAffinityCommits})
+	out, err := m.Affinity(ctx, types.HistoryMetricsOptions{Commits: leaseAffinityCommits})
 	if err != nil {
 		return nil
 	}
@@ -322,29 +342,28 @@ func validationReachesGate(ctx context.Context, root, validation string) []strin
 // rather than being trusted to be acyclic: `magus describe graph` reports cycles instead
 // of rejecting them, so one can reach here.
 func chainToGate(start string, deps map[string][]string) []string {
-	seen := map[string]bool{}
-	var walk func(name string) []string
-	walk = func(name string) []string {
-		if seen[name] {
-			return nil
-		}
-		seen[name] = true
-		if name == types.TargetCI {
-			return []string{name}
-		}
-		for _, next := range deps[name] {
-			if chain := walk(next); len(chain) > 0 {
-				return append([]string{name}, chain...)
-			}
-		}
-		return nil
-	}
 	// A start nobody declares is not a chain of length one: every bare word in the
 	// validation field reaches here, project paths and flags included.
 	if _, ok := deps[start]; !ok {
 		return nil
 	}
-	return walk(start)
+	return gateWalk(start, deps, map[string]bool{})
+}
+
+func gateWalk(name string, deps map[string][]string, seen map[string]bool) []string {
+	if seen[name] {
+		return nil
+	}
+	seen[name] = true
+	if name == types.TargetCI {
+		return []string{name}
+	}
+	for _, next := range deps[name] {
+		if chain := gateWalk(next, deps, seen); len(chain) > 0 {
+			return append([]string{name}, chain...)
+		}
+	}
+	return nil
 }
 
 // leaseGraphEvidence resolves each write path against the knowledge graph, one line per
@@ -471,14 +490,7 @@ func newJobGraph(root string, rebuild bool) *jobGraph {
 			return loadMagus(ctx, root)
 		},
 		stale: func(ctx context.Context) []types.KnowledgeStaleIndex {
-			// The opened workspace judges afresh and names the changed files, which a
-			// verdict the store recorded does not carry. Describe opens it for the
-			// boundary anyway.
-			m, err := loadMagus(ctx, root)
-			if err != nil {
-				return staleIndexes(ctx, root)
-			}
-			return findStaleIndexes(ctx, m)
+			return rootStaleIndexes(ctx, root)
 		},
 		build: func(ctx context.Context) (*knowledge.Graph, error) {
 			return loadKnowledgeGraphForRefs(ctx, root, false, "")
@@ -487,6 +499,16 @@ func newJobGraph(root string, rebuild bool) *jobGraph {
 			return loadKnowledgeGraph(ctx, root, false, false, false)
 		},
 	}
+}
+
+// rootStaleIndexes judges afresh from the opened workspace, which names the
+// changed files a recorded verdict does not carry.
+func rootStaleIndexes(ctx context.Context, root string) []types.KnowledgeStaleIndex {
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return staleIndexes(ctx, root)
+	}
+	return findStaleIndexes(ctx, m)
 }
 
 // newTreeJobGraph is newJobGraph for a checkout the process did not open at startup. It
@@ -538,7 +560,24 @@ func newTreeJobGraph(tree string, rebuild bool) *jobGraph {
 }
 
 func (r *jobGraph) load(ctx context.Context) *knowledge.Graph {
-	return r.graph.get(ctx, r.mustNotRead, r.build)
+	return r.graph.get(ctx, r.mustNotRead, announcedLoad("the symbol graph", r.build))
+}
+
+// announcedLoad says what a load waits on, then what it took. The load
+// rebuilds a stale index for minutes, and lazyGraph hides its failure.
+func announcedLoad(what string, load func(context.Context) (*knowledge.Graph, error)) func(context.Context) (*knowledge.Graph, error) {
+	return func(ctx context.Context) (*knowledge.Graph, error) {
+		slog.InfoContext(ctx, fmt.Sprintf("loading %s; a missing or stale symbol index is rebuilt first, which can take minutes", what), attr.Notice("note"))
+		began := time.Now()
+		g, err := load(ctx)
+		took := cache.FormatDuration(time.Since(began))
+		if err != nil {
+			slog.InfoContext(ctx, fmt.Sprintf("could not load %s after %s", what, took), attr.Error(err), attr.Notice("note"))
+			return g, err
+		}
+		slog.InfoContext(ctx, fmt.Sprintf("loaded %s in %s", what, took), attr.Notice("note"))
+		return g, nil
+	}
 }
 
 // loadScoped is load for a row writing paths.
@@ -552,7 +591,7 @@ func (r *jobGraph) loadScoped(paths []string) func(context.Context) *knowledge.G
 // loadDomain is loadScoped for the domain graph, under the same rule.
 func (r *jobGraph) loadDomain(ctx context.Context, paths []string) *knowledge.Graph {
 	r.setScope(paths)
-	return r.domainGraph.get(ctx, r.mustNotRead, r.domain)
+	return r.domainGraph.get(ctx, r.mustNotRead, announcedLoad("the domain graph", r.domain))
 }
 
 func (r *jobGraph) setScope(paths []string) {
@@ -590,10 +629,9 @@ func staleIndexHits(s types.KnowledgeStaleIndex, paths []string) bool {
 	})
 }
 
-// extendedFootprint is rec with the tests beside what it writes added to its write paths and
-// the outputs regenerated from them permitted as the integrator's, with a note for each and a
-// count line. A bound caller, whose fork may not widen its boundary, and a workspace that
-// did not load are skipped.
+// extendedFootprint adds to rec's write paths the tests beside what it writes.
+// It permits the outputs they regenerate as the integrator's. Each kind gets a
+// count line. It skips a bound caller and a workspace that did not load.
 func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, root string, rec types.Declaration, ws job.Workspace) (types.Declaration, []string) {
 	if store.Actor().Bound() || ws.Unavailable != "" {
 		return rec, nil
@@ -604,12 +642,16 @@ func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, r
 	if g := graph.load(ctx); g != nil && g.HasSymbols() {
 		referrers = g.Referrers
 	}
-	paths, notes := job.ExtendFootprint(root, declared, ws.Projects, referrers)
+	paths, _ := job.ExtendFootprint(root, declared, ws.Projects, referrers)
 	rec.WritePaths = append(rec.WritePaths, paths...)
 	rec.SoftPaths = append(rec.SoftPaths, paths...)
 	declared.WritePaths = append(declared.WritePaths, paths...)
 	deviations := job.IntegratorDeviations(root, declared, ws.Projects, ws.Ignored)
 	rec.Deviations = append(rec.Deviations, deviations...)
+	var notes []string
+	if len(paths) > 0 {
+		notes = append(notes, fmt.Sprintf("%d test file(s) beside the write paths were added to them: -o json lists each", len(paths)))
+	}
 	if len(deviations) > 0 {
 		notes = append(notes, fmt.Sprintf("%d regenerated output(s) outside the write paths are permitted: the integrator owns them", len(deviations)))
 	}
@@ -619,22 +661,29 @@ func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, r
 // graphsByTree answers a graph per checkout, root's being rootGraph and any other built on
 // first ask under the same rebuild rule.
 func graphsByTree(root string, rootGraph *jobGraph, rebuild bool) func(tree string) *jobGraph {
-	var (
-		mu     sync.Mutex
-		others = map[string]*jobGraph{}
-	)
-	return func(tree string) *jobGraph {
-		tree = filepath.Clean(tree)
-		if tree == filepath.Clean(root) {
-			return rootGraph
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		if _, ok := others[tree]; !ok {
-			others[tree] = newTreeJobGraph(tree, rebuild)
-		}
-		return others[tree]
+	g := &treeGraphs{root: filepath.Clean(root), rootGraph: rootGraph, rebuild: rebuild, others: map[string]*jobGraph{}}
+	return g.in
+}
+
+type treeGraphs struct {
+	root      string
+	rootGraph *jobGraph
+	rebuild   bool
+	mu        sync.Mutex
+	others    map[string]*jobGraph
+}
+
+func (t *treeGraphs) in(tree string) *jobGraph {
+	tree = filepath.Clean(tree)
+	if tree == t.root {
+		return t.rootGraph
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, ok := t.others[tree]; !ok {
+		t.others[tree] = newTreeJobGraph(tree, t.rebuild)
+	}
+	return t.others[tree]
 }
 
 // runsAtCurrentKey answers whether a recorded run is current in tree: the cache key its
@@ -774,4 +823,136 @@ func gradesSymbols(rows []types.Job, id string) bool {
 		}
 	}
 	return false
+}
+
+// jobGraphCommand is `magus job graph`: the live plan as figures that fit
+// magus/figure's budgets. -o svg writes them and prints each path.
+func jobGraphCommand(ctx context.Context, root string, args []string) error {
+	var gf *flaggen.JobGraphFlags
+	pos, err := commandParse("job graph", args, func(fs *flag.FlagSet) {
+		gf = flaggen.BindJobGraph(fs)
+		fs.Usage = func() { jobGraphUsage(fs) }
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) > 0 {
+		return exit.Usagef("magus job graph: takes no arguments (got %q)", pos[0])
+	}
+	opts, err := output.Parse(global.output, outputSVG)
+	if err != nil {
+		return exit.Usagef("magus job graph: %s", err)
+	}
+	if gf.Dir != "" && opts.Format != outputSVG {
+		return exit.Usagef("magus job graph: --dir names where -o svg writes; add -o svg")
+	}
+	root = resolveRootOrEmpty(root)
+	store, err := openJobs(ctx, root, jobOpen{})
+	if err != nil {
+		return err
+	}
+	list, err := store.Report(ctx, time.Now().Unix(), globalCfg.Jobs.StaleAfter)
+	if err != nil {
+		return err
+	}
+	list, _ = withoutEnded(list)
+	plan := job.NewPlan(list.Jobs)
+	figs := plan.Figures()
+	switch opts.Format {
+	case outputSVG:
+		dir, err := planSVGDir(root, gf.Dir)
+		if err != nil {
+			return err
+		}
+		paths, err := writePlanSVGs(ctx, plan, figs, dir)
+		if err != nil {
+			return err
+		}
+		return emitNames(os.Stdout, paths)
+	case outputName:
+		ids := make([]string, len(figs))
+		for i, f := range figs {
+			ids[i] = f.ID
+		}
+		return emitNames(os.Stdout, ids)
+	case outputText:
+		plan.Print(os.Stdout, figs, jobHolderCell)
+		return nil
+	default:
+		return emitFormatted(opts, figs)
+	}
+}
+
+func jobGraphUsage(fs *flag.FlagSet) {
+	fmt.Fprintln(os.Stderr, "Usage: magus job graph [-o svg] [--dir <dir>] [flags]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Draw the live jobs as a plan: one box per job, an edge per fork,")
+	fmt.Fprintln(os.Stderr, "merge and declared dependency, each box tagged with its state and")
+	fmt.Fprintln(os.Stderr, "naming its holder. A plan larger than one figure holds splits into an")
+	fmt.Fprintln(os.Stderr, "overview, one box per group of jobs, and a figure per group.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Without -o it prints each figure's boxes and edges. -o svg writes")
+	fmt.Fprintln(os.Stderr, "each figure to <id>.svg in --dir and prints one path per line,")
+	fmt.Fprintln(os.Stderr, "the overview first. The same plan writes the same bytes.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintln(os.Stderr, "  magus job graph -o svg --dir /tmp/plan")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
+}
+
+// planSVGDir is dir, else the job-graph folder of the cache.
+func planSVGDir(root, dir string) (string, error) {
+	if dir == "" {
+		cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(cacheDir, "job-graph")
+	}
+	return filepath.Abs(dir)
+}
+
+// outputSVG is `magus job graph`'s own -o format.
+const outputSVG output.Format = "svg"
+
+// drawPlanFigure paints rec in a session of its own, as Draw needs.
+func drawPlanFigure(ctx context.Context, rec figure.Figure) (string, error) {
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+	buzzstd.RegisterWithOutput(sess, io.Discard)
+	if err := bindings.RegisterMagusRecordTypes(sess); err != nil {
+		return "", err
+	}
+	figure.DeclareModules(sess)
+	svg, err := figure.Draw(ctx, sess, rec, "")
+	if err != nil {
+		return "", err
+	}
+	return figure.Standalone(svg), nil
+}
+
+// writePlanSVGs writes each figure to dir as <id>.svg. It draws every
+// figure before writing any, so a refusal writes nothing.
+func writePlanSVGs(ctx context.Context, p *job.Plan, figs []*job.PlanFigure, dir string) ([]string, error) {
+	svgs := make([]string, len(figs))
+	for i, f := range figs {
+		svg, err := drawPlanFigure(ctx, p.FigureRecord(f, jobHolderCell))
+		if err != nil {
+			return nil, fmt.Errorf("magus job graph: draw %s: %w", f.ID, err)
+		}
+		svgs[i] = svg
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("magus job graph: %w", err)
+	}
+	paths := make([]string, len(figs))
+	for i, f := range figs {
+		paths[i] = filepath.Join(dir, f.ID+".svg")
+		if err := os.WriteFile(paths[i], []byte(svgs[i]), 0o644); err != nil {
+			return nil, fmt.Errorf("magus job graph: %w", err)
+		}
+	}
+	return paths, nil
 }

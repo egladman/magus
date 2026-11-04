@@ -190,6 +190,37 @@ func TestSymbolIndexerExecuteRetriesAMidRunEditWithoutBackoff(t *testing.T) {
 	assert.Equal(t, *clock, st.lastRun, "the min interval still throttles the retry")
 }
 
+func TestSymbolIndexerExecuteStopsForTheMachineLockWithoutThrottle(t *testing.T) {
+	si, _, _ := newTestIndexer(t)
+	si.state[goIndexA] = &indexState{dirty: true}
+	si.runIndex = func(context.Context, indexRef) error {
+		return fmt.Errorf("%w: another checkout", errMachineBuildHeld)
+	}
+
+	si.execute(context.Background(), goIndexA)
+
+	st := si.state[goIndexA]
+	assert.True(t, st.dirty, "the index still needs building")
+	assert.Zero(t, st.failures)
+	assert.True(t, st.backoffTill.IsZero(), "another build says nothing about the indexer")
+	assert.True(t, st.lastRun.IsZero(), "nothing ran, so the next tick may ask again")
+}
+
+func TestTakeMachineBuildLockStopsAndNamesTheHolder(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	first, err := takeMachineBuildLock("/ws/first")
+	require.NoError(t, err)
+
+	_, err = takeMachineBuildLock("/ws/second")
+
+	require.ErrorIs(t, err, errMachineBuildHeld)
+	assert.Contains(t, err.Error(), "the background symbol index of /ws/first")
+	require.NoError(t, first.Release())
+	again, err := takeMachineBuildLock("/ws/second")
+	require.NoError(t, err)
+	require.NoError(t, again.Release())
+}
+
 // TestRunReturnsUndeclaredSourceModified pins what the retry above relies on: MGS4007
 // raised by the cache survives Magus.Run's error chain, so errors.Is sees it.
 func TestRunReturnsUndeclaredSourceModified(t *testing.T) {
@@ -256,6 +287,22 @@ func TestSymbolIndexerExecuteFailureBacksOff(t *testing.T) {
 	assert.Equal(t, 1, st.failures)
 	assert.True(t, st.dirty, "a failed run stays dirty to retry")
 	assert.False(t, st.backoffTill.IsZero(), "a failure sets a backoff deadline")
+}
+
+func TestSymbolIndexerDoesNotBackOffWhenItGaveWayToARun(t *testing.T) {
+	si, _, _ := newTestIndexer(t)
+	si.runIndex = func(ctx context.Context, ref indexRef) error {
+		return types.ExitError{Err: refreshYieldedDiagnostic("pkg/a", processRecord{PID: 1}), Code: supersedeExit}
+	}
+	si.state[goIndexA] = &indexState{dirty: true}
+
+	si.execute(t.Context(), goIndexA)
+
+	st := si.state[goIndexA]
+	assert.Zero(t, st.failures)
+	assert.True(t, st.dirty, "the index is still behind")
+	assert.True(t, st.backoffTill.IsZero())
+	assert.False(t, st.lastRun.IsZero(), "the min interval still spaces the retry")
 }
 
 // One edit dirties every index of its project, and a missing scip-buzz backs off only the
@@ -351,10 +398,9 @@ func indexerOnPath(t *testing.T) {
 	t.Setenv("PATH", fmt.Sprintf(`%s%s%s`, bin.Root(), string(os.PathListSeparator), os.Getenv("PATH")))
 }
 
-// A reader that freshens the index it reads (magus\precedents, Diff) is called from a
-// target's body, and the run that body belongs to holds the project's lock for its whole
-// invocation. Rebuilding through m.Run nested a second invocation the lock refused
-// (MGS3007), so the reader read a stale index. The rebuild now runs inside the outer run.
+// A reader that freshens its index, like graph().precedents, runs in a target.
+// That run holds the project's lock, so a nested m.Run was refused (MGS3007).
+// The rebuild runs inside the outer run.
 func TestFreshenInsideATargetReindexesThroughTheOuterRun(t *testing.T) {
 	indexerOnPath(t)
 	var m *Magus
@@ -461,6 +507,8 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
+	// The fixture indexer is an external SCIP command, which runs only where it is opted in.
+	w.Write("magus.yaml", fmt.Sprintf("spells:\n  symbol_indexers: [%s]\n", spellName))
 	root := w.Root()
 	src := filepath.Join(root, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package main\n"), 0o644))
@@ -483,12 +531,21 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 	return m, src, &version
 }
 
+// indexersHeld maps a workspace root to a channel writesTheIndex closes.
+// That one run then blocks until cancelled.
+var indexersHeld sync.Map
+
 // writesTheIndex is a symbol indexer body that writes a fixed index where dispatch tells a
 // real indexer to, inside the run, so the entry the run files records it.
 func writesTheIndex(ctx context.Context, req spells.InvokeRequest) (any, error) {
 	root, err := filepath.EvalSymlinks(types.WorkspaceFromContext(ctx).Root())
 	if err != nil {
 		return nil, err
+	}
+	if started, ok := indexersHeld.LoadAndDelete(root); ok {
+		close(started.(chan struct{}))
+		<-ctx.Done()
+		return nil, ctx.Err()
 	}
 	dir, err := filepath.EvalSymlinks(req.Dir)
 	if err != nil {
@@ -570,7 +627,7 @@ func TestSymbolIndexStepKeysLikeTheRunThatBuiltIt(t *testing.T) {
 	ps := []*types.Project{p}
 	toolVersions, err := m.toolVersionsByProject(ctx, ps)
 	require.NoError(t, err)
-	step := m.symbolIndexStep(p, spells.DefaultSymbolIndexOp, toolVersions[p.Path], m.probeObservations(ctx, ps, indexesDriven(projectIndexes(p)))[p.Path])
+	step := m.symbolIndexStep(p, spells.DefaultSymbolIndexOp, toolVersions[p.Path], m.probeObservations(ctx, ps, indexesDriven(projectIndexes(p, m.cfg.Spells)))[p.Path])
 	probeKey, _, err := m.cache.StepKey(ctx, &step)
 	require.NoError(t, err)
 
@@ -673,6 +730,7 @@ func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
 	}
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
+	w.Write("magus.yaml", "spells:\n  symbol_indexers: ["+goSpell+", "+buzzSpell+"]\n")
 	root := w.Root()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644))
 	reg := NewWorkspaceRegistry()
@@ -723,6 +781,273 @@ func TestSymbolGapNamesTheMissingIndexerOfASingleIndex(t *testing.T) {
 		{Project: types.NewProjectRef("web", "/ws/web"), Language: "typescript", State: types.SymbolIndexNotBuilt, Hint: symbols.MissingIndexerHint("typescript", "scip-typescript")},
 		{Project: types.NewProjectRef("svc", "/ws/svc"), Language: "go", State: types.SymbolIndexNotBuilt},
 	}, probeSymbolIndexes(decls, installed))
+}
+
+func (s *magusSuite) TestRefreshBringsAStaleIndexCurrentAndNamesIt() {
+	m, src := newIndexedWorkspace(s.T())
+	s.Require().NoError(os.WriteFile(src, []byte("package main\n\nfunc added() {}\n"), 0o644))
+	s.Require().Equal(types.SymbolIndexStale, freshness(s.T(), m))
+
+	got := m.RefreshSymbolIndexes(s.T().Context())
+
+	s.Equal([]string{"."}, got.Refreshed, "the fixture spell declares no language")
+	s.Empty(got.Problems)
+	s.Positive(got.Took)
+	s.Equal(types.SymbolIndexFresh, freshness(s.T(), m))
+}
+
+func (s *magusSuite) TestRefreshGivesTheProjectLockToARun() {
+	quickSupersede(s.T(), 10*time.Second)
+	m, src := newIndexedWorkspace(s.T())
+	s.Require().NoError(os.WriteFile(src, []byte("package main\n\nfunc added() {}\n"), 0o644))
+	root, err := filepath.EvalSymlinks(m.Root())
+	s.Require().NoError(err)
+	started := make(chan struct{})
+	indexersHeld.Store(root, started)
+
+	result := make(chan SymbolRefresh, 1)
+	go func() { result <- m.RefreshSymbolIndexes(s.T().Context()) }()
+	select {
+	case <-started:
+	case <-time.After(30 * time.Second):
+		s.FailNow("the refresh never reached its indexer")
+	}
+
+	out, toOut := captureLockOut()
+	runner := newProjectLocker(resolveCacheDir(m.Root(), m.cfg), m.Root(), toOut)
+	release, err := runner.acquire(s.T().Context(), ".")
+	s.Require().NoError(err, "a run must not be refused for a refresh")
+	release()
+
+	got := <-result
+	s.Empty(got.Refreshed)
+	s.Require().Len(got.Problems, 1)
+	s.Contains(got.Problems[0], "gave project . to pid")
+	s.Contains(out.String(), "asked the background refresh on project . to stop")
+	s.NotContains(got.Problems[0], "never ran", "the indexer did run, and stopped")
+	s.Empty(RecentSymbolRefreshFailures(resolveCacheDir(m.Root(), m.cfg), time.Now()), "giving way is no failure to back off from")
+}
+
+func (s *magusSuite) TestRefreshLeavesACurrentIndexAlone() {
+	m, _ := newIndexedWorkspace(s.T())
+
+	got := m.RefreshSymbolIndexes(s.T().Context())
+
+	s.Empty(got.Refreshed)
+	s.Empty(got.Problems)
+}
+
+func (s *magusSuite) TestRecentRefreshFailuresHoldForTheBackoff() {
+	cacheDir := s.T().TempDir()
+	index := symbols.IndexPath(cacheDir, "libs/a", "scip")
+	recordRefreshFailure(index, "scip-go exploded")
+
+	s.Equal([]string{"scip-go exploded"}, RecentSymbolRefreshFailures(cacheDir, time.Now()))
+	s.Empty(RecentSymbolRefreshFailures(cacheDir, time.Now().Add(symbolIndexBackoffBase+time.Minute)))
+}
+
+// staleRefresher is a symbolRefresher over one stale Go index under dir,
+// running run.
+func staleRefresher(dir string, run func(context.Context, types.SymbolIndexStatus) error) symbolRefresher {
+	return symbolRefresher{
+		budget: time.Minute, abandon: time.Millisecond, now: time.Now,
+		admit: func(context.Context) (func(), error) { return func() {}, nil },
+		status: func(context.Context) []types.SymbolIndexStatus {
+			return []types.SymbolIndexStatus{{Project: types.NewProjectRef("libs/a", dir), Op: "scip", Language: "go", Freshness: types.SymbolIndexStale}}
+		},
+		indexPath: func(types.SymbolIndexStatus) string { return filepath.Join(dir, "symbols", "scip.pack") },
+		run:       run,
+	}
+}
+
+func (s *magusSuite) TestRefreshHoldsItsMachineClaimExceptAcrossAnIndexer() {
+	var events []string
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error {
+		events = append(events, "run")
+		return nil
+	})
+	r.admit = func(context.Context) (func(), error) {
+		events = append(events, "claim")
+		return func() { events = append(events, "release") }, nil
+	}
+	status := r.status
+	r.status = func(ctx context.Context) []types.SymbolIndexStatus {
+		events = append(events, "status")
+		return status(ctx)
+	}
+	r.after = func(context.Context) { events = append(events, "after") }
+
+	got := r.refresh(s.T().Context())
+
+	s.Empty(got.Problems)
+	s.Equal([]string{"claim", "status", "release", "run", "claim", "after", "release"}, events)
+}
+
+func (s *magusSuite) TestRefreshRefusedByTheMachineStartsNothing() {
+	runs := 0
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error {
+		runs++
+		return nil
+	})
+	r.admit = func(context.Context) (func(), error) { return nil, errors.New("the machine is full") }
+
+	got := r.refresh(s.T().Context())
+
+	s.Zero(runs)
+	s.Empty(got.Refreshed)
+	s.Equal([]string{"the machine is full"}, got.Problems)
+	s.NoFileExists(r.indexPath(types.SymbolIndexStatus{})+symbolRefreshFailedSuffix, "a full machine says nothing about the indexer")
+}
+
+func (s *magusSuite) TestRefreshRefusedAfterItsIndexerNamesTheGuardIndexes() {
+	claims := 0
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error { return nil })
+	r.admit = func(context.Context) (func(), error) {
+		claims++
+		if claims > 1 {
+			return nil, errors.New("the machine is full")
+		}
+		return func() {}, nil
+	}
+	r.after = func(context.Context) { s.Fail("wrote the guard indexes without a claim") }
+
+	got := r.refresh(s.T().Context())
+
+	s.Len(got.Refreshed, 1)
+	s.Equal([]string{"guard and scripts indexes not written: the machine is full"}, got.Problems)
+}
+
+func (s *magusSuite) TestRefreshReturnsWithinTheBudgetWhenARunIgnoresCancellation() {
+	release := make(chan struct{})
+	s.T().Cleanup(func() { close(release) })
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error {
+		<-release
+		return nil
+	})
+	r.budget = 10 * time.Millisecond
+
+	got := r.refresh(s.T().Context())
+
+	s.Empty(got.Refreshed)
+	s.Require().Len(got.Problems, 1)
+	s.Contains(got.Problems[0], "outlived the 10ms budget")
+}
+
+func (s *magusSuite) TestRefreshNamesARunThatFailsAndBacksOffTheNextRead() {
+	runs := 0
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error {
+		runs++
+		return errors.New("scip-go exploded")
+	})
+
+	first := r.refresh(s.T().Context())
+	second := r.refresh(s.T().Context())
+
+	s.Equal([]string{"scip-go exploded"}, first.Problems)
+	s.Require().Len(second.Problems, 1)
+	s.Contains(second.Problems[0], "libs/a (go index): its last refresh failed")
+	s.Contains(second.Problems[0], "scip-go exploded")
+	s.Equal(1, runs, "the backoff spares the second read the run")
+}
+
+func (s *magusSuite) TestRefreshStopsWhenARunTakesItsLockAndRecordsNoFailure() {
+	dir := s.T().TempDir()
+	runs := 0
+	r := staleRefresher(dir, func(context.Context, types.SymbolIndexStatus) error {
+		runs++
+		return types.ExitError{Err: refreshYieldedDiagnostic("libs/a", processRecord{PID: 4242, Command: "magus run go-test ."}), Code: supersedeExit}
+	})
+	status := r.status
+	r.status = func(ctx context.Context) []types.SymbolIndexStatus {
+		return append(status(ctx), status(ctx)...)
+	}
+
+	got := r.refresh(s.T().Context())
+
+	s.Equal(1, runs, "the next index may share the lock the run is polling for")
+	s.Require().Len(got.Problems, 1)
+	s.Contains(got.Problems[0], "pid 4242")
+	s.NoFileExists(r.indexPath(types.SymbolIndexStatus{})+symbolRefreshFailedSuffix, "giving way to a run is no failure to back off from")
+}
+
+func (s *magusSuite) TestRefreshRetriesOnceTheBackoffHasPassed() {
+	runs := 0
+	now := time.Now()
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error {
+		runs++
+		if runs == 1 {
+			return errors.New("flaked")
+		}
+		return nil
+	})
+	r.now = func() time.Time { return now }
+	_ = r.refresh(s.T().Context())
+
+	now = now.Add(symbolIndexBackoffBase + time.Minute)
+	got := r.refresh(s.T().Context())
+
+	s.Equal([]string{"libs/a (go index)"}, got.Refreshed)
+	s.NoFileExists(r.indexPath(types.SymbolIndexStatus{}) + symbolRefreshFailedSuffix)
+}
+
+func (s *magusSuite) TestRefreshSetsNoBackoffWhenAnotherMagusHoldsTheLock() {
+	dir := s.T().TempDir()
+	r := staleRefresher(dir, func(context.Context, types.SymbolIndexStatus) error {
+		return exitCodeError(lockContendedExit)
+	})
+
+	got := r.refresh(s.T().Context())
+
+	s.Len(got.Problems, 1)
+	s.NoFileExists(r.indexPath(types.SymbolIndexStatus{}) + symbolRefreshFailedSuffix)
+}
+
+func (s *magusSuite) TestRefreshReturnsWhenTheGuardIndexesOutliveTheBudget() {
+	release := make(chan struct{})
+	s.T().Cleanup(func() { close(release) })
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error { return nil })
+	r.budget = 10 * time.Millisecond
+	r.abandon = time.Minute
+	cancelled := make(chan error, 1)
+	r.after = func(ctx context.Context) {
+		cancelled <- ctx.Err()
+		<-release
+	}
+
+	got := r.refresh(s.T().Context())
+
+	s.Equal([]string{"libs/a (go index)"}, got.Refreshed)
+	s.Empty(got.Problems)
+	s.NoError(<-cancelled, "the deadline does not cancel them")
+}
+
+func (s *magusSuite) TestRefreshRunsTheGuardIndexesOnlyAfterARefresh() {
+	after := 0
+	r := staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error { return errors.New("no") })
+	r.after = func(context.Context) { after++ }
+	_ = r.refresh(s.T().Context())
+	s.Zero(after)
+
+	r = staleRefresher(s.T().TempDir(), func(context.Context, types.SymbolIndexStatus) error { return nil })
+	r.after = func(context.Context) { after++ }
+	_ = r.refresh(s.T().Context())
+	s.Equal(1, after)
+}
+
+// exitCodeError is a run error carrying a process exit status.
+type exitCodeError int
+
+func (e exitCodeError) Error() string { return fmt.Sprintf("exit %d", int(e)) }
+func (e exitCodeError) ExitCode() int { return int(e) }
+
+func (s *magusSuite) TestALanguageNothingIndexesIsAnUnindexableGap() {
+	decls := []knowledge.SymbolIndexDeclaration{{Project: "web", Dir: "/ws/web", Language: "typescript"}}
+	gaps := probeSymbolIndexes(decls, func(string) bool { return true })
+	s.Equal([]types.KnowledgeSymbolGap{{
+		Project: types.NewProjectRef("web", "/ws/web"), Language: "typescript", State: types.SymbolIndexNotBuilt,
+		Detail: "has no indexer", Unindexable: true,
+	}}, gaps)
+	s.False(gaps[0].Buildable(), "no build makes an index nothing produces")
 }
 
 // Whether an indexer is installed is asked of the PATH a run hands its children, not the
@@ -808,6 +1133,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
+	w.Write("magus.yaml", fmt.Sprintf("spells:\n  symbol_indexers: [%s, %s]\n", goSpell, tsSpell))
 	root := w.Root()
 	for dir, file := range map[string]string{"svc": "main.go", "web": "index.ts"} {
 		w.Write(dir+"/magusfile.buzz", "")
@@ -846,14 +1172,15 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 	var mu sync.Mutex
 	forked := map[string]int{}
+	goList := spells.Command{Bin: "go", Args: []string{"list", "./..."}}
 	sp := spells.NewSpell("go",
-		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "scip-go"}}),
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages, Command: goList, Uses: []string{"go"}}),
 		spells.WithOps(map[string]spells.Op{
-			spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go"}},
+			spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: goList},
 			"govulncheck":               {Command: spells.Command{Bin: "govulncheck"}},
 		}),
 		spells.WithTools(map[string]spells.Tool{
-			"scip-go":     {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
+			"go":          {Observe: spells.Command{Bin: "go", Args: []string{"version"}}},
 			"govulncheck": {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
 		}),
 		spells.WithVersionProber(func(_ context.Context, cmd spells.Command, _ string) (string, error) {
@@ -864,7 +1191,7 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 		}),
 	)
 	binDir := testkit.NewWorkspace(t)
-	for _, bin := range []string{"scip-go", "govulncheck"} {
+	for _, bin := range []string{"go", "govulncheck"} {
 		binDir.WriteExecutable(bin, "\x7fELF binary")
 	}
 	t.Setenv("PATH", binDir.Root())
@@ -879,16 +1206,16 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 	m := &Magus{ws: &types.Workspace{Root: root}}
 	var idxs []projectIndex
 	for _, p := range ps {
-		idxs = append(idxs, projectIndexes(p)...)
+		idxs = append(idxs, projectIndexes(p, config.SpellsConfig{})...)
 	}
 
 	got := m.probeObservations(t.Context(), ps, indexesDriven(idxs))
-	assert.Equal(t, map[string]int{"scip-go": 1}, forked,
-		"one scip-go fork for seven projects that see the same inputs, and no govulncheck")
-	assert.Equal(t, "v1", got["p3"]["go:scip-go"])
+	assert.Equal(t, map[string]int{"go": 1}, forked,
+		"one go fork for seven projects that see the same inputs, and no govulncheck")
+	assert.Equal(t, "v1", got["p3"]["go:go"])
 
 	m.probeObservations(t.Context(), ps, indexesDriven(idxs))
-	assert.Equal(t, map[string]int{"scip-go": 1}, forked, "the second status check is a cache hit")
+	assert.Equal(t, map[string]int{"go": 1}, forked, "the second status check is a cache hit")
 
 	m.probeObservations(t.Context(), ps, map[string]map[string]bool{"p0": {"go:govulncheck": true}, "p1": {"go:govulncheck": true}})
 	assert.Equal(t, 2, forked["govulncheck"], "the database observation is never cached: it moves on a clock")
@@ -1032,7 +1359,7 @@ func TestFreshenIndexesNamesTheLockHolderWhenTheRefreshIsRefused(t *testing.T) {
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "locked by another magus process")
 	assert.Contains(t, err.Error(), "pid 4242")
-	assert.NotContains(t, err.Error(), symbols.InstallHint("go"), "the indexer never ran, so it is not missing")
+	assert.NotContains(t, err.Error(), "may not be installed", "the indexer never ran, so it is not missing")
 }
 
 // A read-only cache runs the indexer and records nothing, so the fresh index is one nothing can
@@ -1160,6 +1487,9 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 	encoded, err = json.Marshal(d)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), `"why"`, "a diagnostic with no reason omits the field")
+
+	fixed := toDiagnostic(types.DiagnosticErrorf(types.SymbolIndexNotCurrent, "stale").WithFix("magus graph build"))
+	assert.Equal(t, "magus graph build", fixed.Fix)
 }
 
 // An entry for sources the tree went back to replays the index those sources built, never
@@ -1187,6 +1517,7 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
+	w.Write("magus.yaml", fmt.Sprintf("spells:\n  symbol_indexers: [%s]\n", spellName))
 	root := w.Root()
 	src := filepath.Join(root, "main.go")
 	original := []byte("package main\n\nfunc Tokenize() {}\n")

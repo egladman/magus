@@ -1,4 +1,3 @@
-import { must } from "../../lib/guards";
 // main.ts - the Log Viewer composition root. A purpose-built, read-only viewer for a magus
 // run's captured output: the #data= fragment carries a magus.viewer.v1alpha1 Journal (protobuf,
 // gzip+base64url), decoded here and rendered pretty from its STRUCTURE (per-target groups, exec
@@ -13,6 +12,7 @@ import { must } from "../../lib/guards";
 // is a no-op if the scaffold is absent.
 
 import { fromBinary } from "@bufbuild/protobuf";
+import { MagusError, attempt, fail, fromPromise, type Result } from "../../gen/magus/types";
 import { JournalSchema } from "@wire/viewer/v1alpha1/viewer_pb";
 import type { Journal } from "@wire/viewer/v1alpha1/viewer_pb";
 import {
@@ -519,7 +519,8 @@ async function loadFromURL(): Promise<void> {
   // to read a synthetic journal; returning first is what made that path unreachable from a URL.
   const demo = wantsDemo(parseHash());
   if (demo && !params.inv && !params.ref) {
-    startDemo();
+    const started = startDemo();
+    if (started.error) setStatus("The demo could not start: " + started.error.message, true);
     return;
   }
   if (params.data) {
@@ -545,19 +546,9 @@ async function loadFromURL(): Promise<void> {
   }
   if (params.src) {
     setStatus("Fetching the log...");
-    try {
-      const u = new URL(params.src, location.href);
-      if (u.protocol !== "https:" && u.protocol !== "http:") {
-        throw new Error("only http and https addresses are read");
-      }
-      const r = await fetch(params.src, { headers: { Accept: "text/plain" } });
-      // An arbitrary address, not the magus server, so a 401 here must not sign the console out;
-      // setStatus raises the failure toast itself.
-      if (!r.ok) throw new Error("the address answered HTTP " + r.status);
-      loadText(await r.text(), ref);
-    } catch (e) {
-      setStatus("Could not fetch the log: " + errMessage(e) + ".", true);
-    }
+    const fetched = await fetchLogText(params.src);
+    if (!fetched.error) loadText(fetched.value, ref);
+    else setStatus("Could not fetch the log: " + fetched.error.message + ".", true);
     return;
   }
   // #inv= and a bare #ref= address a stored run in the LOCAL cache - what the run browser writes
@@ -571,7 +562,7 @@ async function loadFromURL(): Promise<void> {
     // demo carries through: under #demo the ref names a run of the synthetic scenario, and reaching
     // for a server for it would fail on a machine that has none - which is the whole point of demo.
     if (params.inv) await openInvocation(params.inv, params.inv, demo, host, token);
-    else await openRunOutput(params.ref, undefined, "", demo, host, token);
+    else if (params.ref) await openRunOutput(params.ref, undefined, "", demo, host, token);
     return;
   }
   // No static content requested: connect live if an explicit `#port=` link resolves. A static
@@ -589,6 +580,24 @@ async function loadFromURL(): Promise<void> {
     return;
   }
   // Nothing to show: leave the empty state visible.
+}
+
+async function fetchLogText(src: string): Promise<Result<string>> {
+  const u = attempt(() => new URL(src, location.href));
+  if (u.error) return u;
+  if (u.value.protocol !== "https:" && u.value.protocol !== "http:") {
+    return fail(new MagusError({ code: "", message: "only http and https addresses are read" }));
+  }
+  const r = await fromPromise(fetch(src, { headers: { Accept: "text/plain" } }));
+  if (r.error) return r;
+  // An arbitrary address, not the magus server, so a 401 here must not sign the console out;
+  // setStatus raises the failure toast itself.
+  if (!r.value.ok) {
+    return fail(
+      new MagusError({ code: "", message: "the address answered HTTP " + r.value.status }),
+    );
+  }
+  return fromPromise(r.value.text());
 }
 
 function loadText(text: string, ref: string): void {
@@ -636,9 +645,8 @@ function finishLoad(ref: string, statusMsg: string, name?: string): void {
   setStatus("");
   publishStatus({ count: statusMsg });
   const foldBtn = el("fold-all-btn");
-  if (foldBtn)
-    (foldBtn as HTMLButtonElement).disabled =
-      state.timeline || must(state.model).titled === 0 || !state.pretty;
+  if (foldBtn instanceof HTMLButtonElement)
+    foldBtn.disabled = state.timeline || (state.model?.titled ?? 0) === 0 || !state.pretty;
   const copyBtn = el("copy-all-btn");
   if (copyBtn) (copyBtn as HTMLButtonElement).disabled = false;
   const cmdBtn = el("copy-cmd-btn");
@@ -836,7 +844,7 @@ function wireFullscreen(): void {
     () => {
       setBtnLabel(btn, document.fullscreenElement === panel ? "Exit fullscreen" : "Fullscreen");
     },
-    { signal: lifecycleAbort?.signal },
+    lifecycleAbort ? { signal: lifecycleAbort.signal } : {},
   );
 }
 

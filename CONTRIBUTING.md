@@ -57,6 +57,31 @@ with whichever `go` leads `PATH`, which is how CI once built golangci-lint with 
 different toolchain than the one it analyzed with, and panicked. `mise install`
 gets you both binaries at the pinned versions.
 
+## Agent integrations
+
+After placing a source-built `./magus`, prepare the checkout with:
+
+```sh
+./magus buzz hack/dev/bootstrap-checkout.buzz -- --here
+```
+
+Bootstrap installs every harness declared in `magusfile.buzz`, including its
+skills, hooks, prompts and runtime assets. To refresh only these integrations:
+
+```sh
+./magus buzz hack/dev/bootstrap-harnesses.buzz
+```
+
+Commit canonical sources under `spells/harness/`, `hack/policy/`, and `.agents/`,
+plus the shared `AGENTS.md`. The installed `.claude/`, `.codex/`, `.cursor/`,
+`.opencode/` and `opencode.json` stay local and ignored. Existing personal config
+is merged; conflicting authored skill links or loop files are reported without
+being removed. Bootstrap refuses uncommitted canonical wiring.
+
+Repository installation does not activate a plugin in your user account. Follow
+the chosen host's guide for that step; `magus doctor` reports personal activation
+separately from missing repository files.
+
 ## Adding to the public interface
 
 magus promises that a magusfile which works today keeps working, and there is no
@@ -323,7 +348,9 @@ order and stop at the first yes.
 | a call that cannot be undone                                      | compiled guard rule that denies                             | a whole-tree `git reset --hard` destroys a concurrent agent's work ([The guard](https://github.com/egladman/magus/blob/main/docs/guides/integrations/agents/guard.md)) |
 | a call a later command can redo, where a command answers it       | compiled guard rule that denies and serves that command     | `stage-all` refuses `git add -A` and serves `magus vcs ls-files`                                                                                                       |
 | a call this repository refuses and a user's task runner would not | a rule in `hack/policy/*.buzz`, wired in the root magusfile | `brief-builds-magus` and `worker-builds-magus` in `hack/policy/builds.buzz`                                                                                            |
-| a property of files, checked at the gate                          | a lint rule in `hack/lint/` or a test                       | `banned-words` and `provider-io-is-buzz` in `hack/lint/`; `adr-template` in `docs/lib/adr.buzz`                                                                        |
+| a property of files, checked at the gate                          | a lint rule in `hack/lint/` or a test                       | `banned-words`, `provider-io-is-buzz` and `typescript-never-throws` in `hack/lint/`; `adr-template` in `docs/lib/adr.buzz`                                             |
+| a flag bound by hand outside `gen/`                               | a lint rule in `hack/lint/`, landing with its sweep         | not built yet; the rule fails on a hand-bound flag outside `gen/`                                                                                                      |
+| a `throw` below the top-level entry                               | a lint rule in `hack/lint/` whose counts may only fall      | `no-throw` in `hack/lint/`, counted in `no-throw.jsonl`                                                                                                                |
 | a name that must keep resolving                                   | a drift test                                                | every command path in a hint is walked against the registry ([Hints belong in `hint`](#hints-belong-in-hint))                                                          |
 | a refusal by the verb that owns the decision                      | a coded error that names the next step                      | a budget magus cannot fit is refused with MGS3009                                                                                                                      |
 | structure the tool reads                                          | a magusfile declaration                                     | a target declares its outputs, and CI runs the target ([Workflow targets, not inline logic](#workflow-targets-not-inline-logic))                                       |
@@ -547,13 +574,8 @@ than a hand-maintained ignore list. What follows is how that lands here.
 | TypeScript | Biome, via `biome-format` | excluded (`!src/gen/**`) | bundler and protobuf output is not Biome-normal and never will be       |
 | Markdown   | dprint                    | excluded (`dprint.json`) | generators do not emit dprint-normal output yet; see below              |
 
-Two things worth knowing before you change any of it:
+One thing worth knowing before you change any of it:
 
-- **Go formatting is gated by golangci-lint, not by the `format` target.** `gofmt -l`
-  lists unformatted files on stdout and exits 0, and magus reads an op's verdict from
-  the exit code alone, so unformatted Go used to pass green. `.golangci.yml` enables
-  `gofmt` under `formatters:`, which reports the same finding and exits 1. The `format`
-  target keeps `gofmt -l` as the local reporter, and `format:rw` flips it to `-w`.
 - **Markdown formatting is dprint, and generated Markdown is excluded from it.** That
   exclusion is the documented fallback, not the goal: it stays until each Markdown
   generator emits dprint-normal output, at which point its entry comes out of
@@ -666,10 +688,10 @@ folds the fragments into its manifest. `changes/README.md` has the format, and
 group fails the check.
 
 Your branch's own commits are squashed away, so they keep the lowercase
-imperative style with no prefix. `magus run git-hooks-install .` installs this
-repository's git hooks from `hack/git-hooks/`; its `commit-msg` hook applies the
-title rule only to commits made directly on `main`. `magus run git-hooks-remove .`
-takes them out again. To add a hook, see
+imperative style with no prefix. The guard judges an agent's commit subject, and
+applies the title rule only to commits made directly on `main`. No git hook runs
+on your own commit. `magus run git-hooks-remove:rw .` deletes the `commit-msg`
+shim an earlier checkout installed. To add a hook, see
 [Your own hooks, in Buzz](https://eli.gladman.cc/magus/guides/integrations/git/#your-own-hooks-in-buzz).
 
 ## Workflow targets, not inline logic

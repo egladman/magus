@@ -727,6 +727,11 @@ func (g *Graph) resolve(ref string) (string, types.KnowledgeResolution, bool) {
 	if id, ok := g.pathNode(ref); ok {
 		return id, types.ResolvedPath, true
 	}
+	// A file: or dir: id names one node. The closest node of another kind
+	// would be a wrong answer that looks right.
+	if kind, _, ok := strings.Cut(ref, ":"); ok && (kind == types.KindFile || kind == types.KindDir) {
+		return "", "", false
+	}
 	matches := g.Resolve(ref, 1)
 	if len(matches) == 0 {
 		return "", "", false
@@ -1207,7 +1212,11 @@ func (g *Graph) resolveSymbol(ref string) (string, bool) {
 		return id, true
 	}
 	for _, m := range g.Resolve(ref, 0) {
-		if m.Kind == types.KindSymbol {
+		if m.Kind != types.KindSymbol {
+			continue
+		}
+		// Ranking also matches docs. A symbol that only mentions ref is not it.
+		if n, ok := g.node(m.ID); ok && (n.Label == ref || strings.HasSuffix(ref, "."+n.Label)) {
 			return m.ID, true
 		}
 	}

@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 )
 
-// humanOnlyWorkspace answers the two reads IndexHumanOnly makes: the projects and a lookup
+// humanOnlyWorkspace answers the two reads IndexTargetPolicies makes: the projects and a lookup
 // by path. The generated WorkspaceReader mock would close an import cycle here.
 type humanOnlyWorkspace struct {
 	WorkspaceReader
@@ -31,10 +31,11 @@ func (w humanOnlyWorkspace) Get(path string) *Project {
 // ref flattened beside its reason, and an index that declares nothing encoded as an empty
 // object, so a manifest records "none declared" in two bytes.
 func TestHumanOnlyIndexRoundTrips(t *testing.T) {
-	ix := HumanOnlyIndex{
+	ix := TargetPolicyIndex{
 		Projects: []string{".", "evals"},
-		Targets: []HumanOnlyTarget{{
+		Targets: []TargetPolicy{{
 			TargetRef: TargetRef{Project: ".", Target: "agent-bench-run"},
+			HumanOnly: true,
 			Reason:    "launches paid sessions",
 			SkipCache: true,
 			ReachedBy: []TargetRef{{Project: ".", Target: "bench-all"}},
@@ -43,13 +44,13 @@ func TestHumanOnlyIndexRoundTrips(t *testing.T) {
 	b, err := json.Marshal(ix)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"projects": [".", "evals"], "targets": [{"project": ".", "target": "agent-bench-run",
-		"reason": "launches paid sessions", "skip_cache": true, "reached_by": [{"project": ".", "target": "bench-all"}]}]}`, string(b))
+		"human_only": true, "reason": "launches paid sessions", "skip_cache": true, "reached_by": [{"project": ".", "target": "bench-all"}]}]}`, string(b))
 
-	var back HumanOnlyIndex
+	var back TargetPolicyIndex
 	require.NoError(t, json.Unmarshal(b, &back))
 	assert.Equal(t, ix, back)
 
-	none, err := json.Marshal(HumanOnlyIndex{})
+	none, err := json.Marshal(TargetPolicyIndex{})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{}`, string(none))
 }
@@ -78,20 +79,20 @@ func TestIndexHumanOnlyStopsAtTheFirstHumanOnlyTarget(t *testing.T) {
 	ws := humanOnlyWorkspace{projects: []*Project{root, evals}}
 
 	ref := func(project, target string) TargetRef { return TargetRef{Project: project, Target: target} }
-	assert.Equal(t, HumanOnlyIndex{
+	assert.Equal(t, TargetPolicyIndex{
 		Projects: []string{".", "evals"},
-		Targets: []HumanOnlyTarget{
-			{TargetRef: ref(".", "bench"), Reason: "launches paid sessions", SkipCache: true, ReachedBy: []TargetRef{ref(".", "outer"), ref(".", "suite")}},
-			{TargetRef: ref(".", "gated"), Reason: "asks a person", ReachedBy: []TargetRef{ref(".", "via")}},
-			{TargetRef: ref(".", "inner"), Reason: "runs under gated"},
-			{TargetRef: ref("evals", "grade"), Reason: "spends tokens", ReachedBy: []TargetRef{ref(".", "cross")}},
+		Targets: []TargetPolicy{
+			{TargetRef: ref(".", "bench"), HumanOnly: true, Reason: "launches paid sessions", SkipCache: true, ReachedBy: []TargetRef{ref(".", "outer"), ref(".", "suite")}},
+			{TargetRef: ref(".", "gated"), HumanOnly: true, Reason: "asks a person", ReachedBy: []TargetRef{ref(".", "via")}},
+			{TargetRef: ref(".", "inner"), HumanOnly: true, Reason: "runs under gated"},
+			{TargetRef: ref("evals", "grade"), HumanOnly: true, Reason: "spends tokens", ReachedBy: []TargetRef{ref(".", "cross")}},
 		},
-	}, IndexHumanOnly(ws))
+	}, IndexTargetPolicies(ws))
 }
 
 // TestIndexHumanOnlyOfAWorkspaceDeclaringNone pins the cheap case: the projects are listed
 // so a reader can tell a declaration of none from no record, and no chain is walked.
 func TestIndexHumanOnlyOfAWorkspaceDeclaringNone(t *testing.T) {
 	ws := humanOnlyWorkspace{projects: []*Project{{Path: ".", TargetChains: map[string][]ChainStep{"ci": {{Target: "test"}}}}}}
-	assert.Equal(t, HumanOnlyIndex{Projects: []string{"."}}, IndexHumanOnly(ws))
+	assert.Equal(t, TargetPolicyIndex{Projects: []string{"."}}, IndexTargetPolicies(ws))
 }

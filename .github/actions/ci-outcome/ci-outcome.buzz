@@ -55,10 +55,10 @@ fun env(name: str) > str { return os\env(name) ?? ""; }
 fun volatilitySection() > str !> any {
     // One typed read of the loaded workspace. This used to shell out twice - once for
     // `-o name` to decide whether to render anything, and again for `-o text` to get the
-    // prose - and both answers are fields on the same report.
-    final report = magus\insight();
+    // prose - and both answers are fields on the same Volatility metric.
+    final report = magus\workspace().volatility();
     final flagged = mut [<str>];
-    foreach (t in report.volatility.targets) {
+    foreach (t in report.targets) {
         if (t.volatile) {
             flagged.append("{t.project}:{t.target}  score {t.score}  pass {t.pass}  fail {t.fail}");
         }

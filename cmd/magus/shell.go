@@ -1,12 +1,18 @@
 package main
 
 import (
+	"bytes"
+	"cmp"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -14,11 +20,13 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
@@ -26,6 +34,7 @@ import (
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // magus shell is the guard with one door.
@@ -124,7 +133,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// Started here rather than in Judge, so loading the rules spends the same budget.
 	ctx, cancel := guard.WithHookDeadline(ctx)
 	defer cancel()
-	fset := flag.NewFlagSet("magus shell", flag.ContinueOnError)
+	fset := flag.NewFlagSet("shell", flag.ContinueOnError) //nolint:hostvocab // TestEveryLeafRendersEveryFormatOrRefusesThem requires the leaf name shell
 	// --observe is observation, not policy. A wrapper sets it for a tool that only
 	// LOOKS: no rule judges a read, so running the write rules over one would only
 	// ever manufacture a false advisory about editing a file the agent opened
@@ -163,7 +172,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// failed guard as no verdict and fails open, so an environment magus knows is wrong
 	// would disarm every rule for the session. --observe and --message carry no verdict to
 	// deny.
-	if refusal, _ := ctx.Value(envRefusalKey{}).(error); refusal != nil && !sf.Observe && !sf.Message {
+	if refusal, _ := ctx.Value(envRefusalKey{}).(error); refusal != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
@@ -185,7 +194,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// so a host that blocks on 2 fails closed in both cases. --observe and --message are
 	// exempt because they carry no verdict: there is nothing to fail closed about, and
 	// the documented contract is that they always exit 0.
-	if readError != nil && !sf.Observe && !sf.Message {
+	if readError != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
@@ -197,6 +206,19 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 			return err
 		}
 		return verdictExit(errOut, opts, verdict)
+	}
+	var judge, judgeRoot string
+	if sf.Transport != "" {
+		commit, _ := buildinfo.Commit()
+		handled, declined, err := delegateToCheckout(ctx, commit, input, out, errOut)
+		if handled {
+			return err
+		}
+		judge, judgeRoot = declined.note, unloadableCheckout(ctx, declined.root)
+	}
+	if by := os.Getenv(delegatedEnv); by != "" {
+		self, _ := runningBinaryPath()
+		judge = fmt.Sprintf("Judged by %s, this checkout's own ./magus, which %s handed the call to.", self, by)
 	}
 	// A hook's stdout is the host's pipe; a terminal on it means someone typed this.
 	window := terminalWindow()
@@ -222,9 +244,31 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		RendersAsk: sf.RendersAsk,
 		// The call's own word on how the host runs it.
 		CallBackground: sf.CallBackground,
-		CallTimeout:    time.Duration(sf.CallTimeoutMs) * time.Millisecond,
+		CallTimeout:    sf.CallTimeout,
+		ToolMs:         sf.Duration.Milliseconds(),
+		CallDigest:     sf.CallDigest,
+		ResultDigest:   sf.ResultDigest,
 	}
-	applyHostFacts(ctx, &req)
+	// A misnamed host is refused, never judged as another.
+	// --observe and --message carry no verdict, so they log it.
+	limits, known, refusal := applyHostFacts(ctx, &req)
+	if refusal != nil {
+		if !sf.Observe && !sf.Message && sf.Duration == 0 {
+			verdict := types.GuardJudgment{
+				SchemaVersion: agent.GuardSchemaVersion,
+				Decision:      "deny",
+				Reason: fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared.\nNext: %s",
+					refusal.err.Error(), refusal.next.Run),
+				Next: []types.NextStep{refusal.next},
+			}
+			if err := writeGuardVerdict(out, opts, verdict); err != nil {
+				return err
+			}
+			return verdictExit(errOut, opts, verdict)
+		}
+		slog.WarnContext(ctx, "the hook entry names the wrong harness",
+			attr.Error(refusal.err), attr.Notice(""), attr.Component("magus shell"))
+	}
 	// Marked before the rules load, so a hook its host kills while loading them is still
 	// reported to the session's next judgment.
 	ctx = guard.BeginJudgment(ctx, guardCacheDir(""), req)
@@ -237,12 +281,19 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// long they take.
 	verdict := guard.JudgeWithin(ctx, base, req, func(ctx context.Context) types.GuardJudgment {
 		// The hook ignores --root and loads no workspace up front: the one it judges in is
-		// wherever the host runs it.
-		deps := guardDependencies(ctx, "")
+		// wherever the host runs it, or a checkout whose own ./magus was passed over and whose
+		// tree this binary cannot load, so its stale-binary rule refuses what changes state.
+		deps := guardDependencies(ctx, judgeRoot)
+		if judgeRoot != "" {
+			if cache, err := deps.CacheDir(judgeRoot); err == nil {
+				ctx = guard.WithLocation(ctx, cache, judgeRoot, judgeRoot)
+			}
+		}
 		stopJudge := traceFromContext(ctx).phase("guard.judge")
 		defer stopJudge()
 		return guard.Judge(ctx, deps, req)
 	})
+	verdict = routeDeny(ctx, limits, known, judgedBy(verdict, judge))
 	// -q and -s mean the exit code IS the answer, which this command can honor exactly
 	// because its whole output is one verdict. They bound a run's progress chatter
 	// everywhere else; here there is no progress, so suppressing the verdict is the only
@@ -315,13 +366,13 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	// An unresolvable path leaves the trail row without one; the version still records.
 	binary, _ := runningBinaryPath()
 	deps, rules := guard.NewDependencies(ctx, guard.Wiring{
-		Root:            root,
-		Config:          globalCfg,
-		BinaryVersion:   version,
-		Binary:          binary,
-		Inspect:         inspect,
-		HumanOnlyRecord: guardHumanOnlyRecord(rootOverride, inspect),
-		CacheDir:        guardCacheDir(rootOverride),
+		Root:           root,
+		Config:         globalCfg,
+		BinaryVersion:  version,
+		Binary:         binary,
+		Inspect:        inspect,
+		TargetPolicies: guardTargetPolicies(rootOverride, inspect),
+		CacheDir:       guardCacheDir(rootOverride),
 		Trace: func(ctx context.Context, phase string) func() {
 			return traceFromContext(ctx).phase(phase)
 		},
@@ -330,10 +381,32 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	deps.GraphStaleAdvice = index.staleGraphAdvice
 	deps.SymbolDefined = index.symbolDefined
 	deps.SymbolIDs = index.symbolIDs
-	deps.IndexCause = index.indexCause
 	deps.SymbolSites = index.symbolSites
 	deps.GraphIDs = index.graphIDs
 	deps.IndexedIDs = index.indexedIDs
+	cacheDir := deps.CacheDir
+	deps.GraphMoved = func(ctx context.Context, root string) (string, bool) {
+		if op := knowledge.ReadGuardOperation(ctx, root); op != "" {
+			return knowledge.GuardCheckout{}.StaleAt(knowledge.GuardCheckout{Operation: op}), true
+		}
+		dir, err := cacheDir(root)
+		if err != nil {
+			return "", false
+		}
+		built, err := knowledge.ReadGuardIndexCheckout(dir, root)
+		if err != nil {
+			return "", false
+		}
+		return built.StaleAt(knowledge.GuardCheckout{}), false
+	}
+	deps.SymbolIndexBuilt = func(root string) bool {
+		dir, err := cacheDir(root)
+		if err != nil {
+			return false
+		}
+		has, err := knowledge.GuardIndexHasSymbols(dir, root)
+		return err == nil && has
+	}
 	// A hook reads the model facts install wrote beside its tool rows: loading the workspace
 	// for them cost most of a judgment, and under load more than the hook's deadline. A
 	// caller that is no hook names no tool rows and loads the workspace as before.
@@ -352,20 +425,20 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	return deps, rules
 }
 
-// guardHumanOnlyRecord answers what the workspace at root, "" for the one found from
-// rootOverride, declares human_only from the knowledge store's record of it (see
-// workspacegraph.RecordedHumanOnly). Each call holds a lazy workspace of its own, whose one walk of
+// guardTargetPolicies answers what the workspace at root, "" for the one found from
+// rootOverride, declares as target policy from the knowledge store's record of it (see
+// workspacegraph.RecordedTargetPolicies). Each call holds a lazy workspace of its own, whose one walk of
 // the tree is taken now: a daemon grading checks keeps these dependencies for hours, and
 // a walk kept from an earlier call would vouch for a record the tree has since moved past.
 // The record is read without opening the workspace; open is there only because a lazy
 // workspace must say how it would be opened.
-func guardHumanOnlyRecord(rootOverride string, inspect func(context.Context, string) (types.WorkspaceRepository, error)) func(context.Context, string) (types.HumanOnlyIndex, bool) {
-	return func(ctx context.Context, root string) (types.HumanOnlyIndex, bool) {
+func guardTargetPolicies(rootOverride string, inspect func(context.Context, string) (types.WorkspaceRepository, error)) func(context.Context, string) (types.TargetPolicyIndex, bool) {
+	return func(ctx context.Context, root string) (types.TargetPolicyIndex, bool) {
 		ask := root
 		if root == "" {
 			found, err := workspace.FindRoot(rootOverride)
 			if err != nil {
-				return types.HumanOnlyIndex{}, false
+				return types.TargetPolicyIndex{}, false
 			}
 			root = found
 		}
@@ -376,7 +449,7 @@ func guardHumanOnlyRecord(rootOverride string, inspect func(context.Context, str
 			}
 			return asMagus(ws)
 		})
-		return workspacegraph.RecordedHumanOnly(ctx, lw, globalCfg)
+		return workspacegraph.RecordedTargetPolicies(ctx, lw, globalCfg)
 	}
 }
 
@@ -421,11 +494,10 @@ func guardModelRows(ctx context.Context, rootOverride string) func() []types.Mod
 	})
 }
 
-// guardModelTiers is the lazy reader of the model-tier declaration of the workspace found
-// from rootOverride, nil outside a workspace. It opens the workspace whole, as guardModelRows
-// does, and shares that one load: the guard's own rule load keeps only the magus\guard
-// registrations and what they reach, so it holds neither a magus\job.modelTiers call nor
-// the harness spells whose aliases map each tier to a model.
+// guardModelTiers lazily reads the model tiers of rootOverride's workspace.
+// It opens the workspace whole, as guardModelRows does.
+// The guard's rule load keeps only magus\guard registrations.
+// So it holds no magus\modelTiers call and no harness aliases.
 func guardModelTiers(ctx context.Context, rootOverride string) func() *types.ModelTierSet {
 	if _, err := workspace.FindRoot(rootOverride); err != nil {
 		return nil
@@ -464,28 +536,72 @@ func guardCacheDir(rootOverride string) func(root string) (string, error) {
 	}
 }
 
+// hostRefusal is why a call cannot be judged under its --agent-name, and the
+// command that gets the person unstuck.
+type hostRefusal struct {
+	err  error
+	next types.NextStep
+}
+
 // applyHostFacts fills req from the tool rows installed for its host, whose limits file
 // install writes from the host's harness spell, so the glue names only the host and the
-// hook never loads the workspace for them. Without the files the gap is logged.
-func applyHostFacts(ctx context.Context, req *guard.Request) {
+// hook never loads the workspace for them. Without the files the gap is logged, and the
+// limits come back false.
+// It refuses a host nothing installed names, or a payload another host sent.
+func applyHostFacts(ctx context.Context, req *guard.Request) (types.Limits, bool, *hostRefusal) {
 	if strings.TrimSpace(req.Host) == "" {
-		return
+		return types.Limits{}, false, nil
 	}
 	root, err := guardRoot("")
 	if err != nil {
 		root = ""
+	}
+	installed := agent.InstalledHosts(root)
+	if err := agent.CheckHostInstalled(installed, req.Host); err != nil {
+		argv := []string{"magus", "agent", "harness", "install", "--id", req.Host}
+		return types.Limits{}, false, &hostRefusal{err: err, next: types.NextStep{
+			ID: "harness-install", Run: strings.Join(argv, " "), Argv: argv,
+			Why: fmt.Sprintf("installs the tool rows of %s, when the workspace loads that harness", req.Host),
+		}}
+	}
+	if err := agent.CheckHostPayload(installed, req.Host, req.Input); err != nil {
+		argv := []string{"magus", "describe", "harness"}
+		return types.Limits{}, false, &hostRefusal{err: err, next: types.NextStep{
+			ID: "harness-describe", Run: strings.Join(argv, " "), Argv: argv,
+			Why: "prints each harness's hook entries, each naming its own host",
+		}}
 	}
 	req.Tools = agent.FindToolRows(root, req.Host)
 	limits, err := req.Tools.Limits()
 	if err != nil {
 		slog.WarnContext(ctx, "the guard judges without the host's limits and skill-load capability",
 			attr.Error(err), attr.Notice(""), attr.Component("magus shell"))
-		return
+		return types.Limits{}, false, nil
 	}
 	req.ObservesSkillLoads = limits.ObservesSkillLoads
 	req.HostForegroundDefault = time.Duration(limits.ForegroundDefaultMs) * time.Millisecond
 	req.HostForegroundMax = time.Duration(limits.ForegroundMaxMs) * time.Millisecond
 	req.HostResumesOnBackgroundFrom = limits.ResumesOnBackgroundFrom
+	return limits, true, nil
+}
+
+// routeDeny is quiet.Wrap's decision for a hook reply: a host whose harness declares no
+// capture channel gets a deny's verdict line alone, since there all a reply carries reaches
+// the person too. Limits that name no usable channel leave the reason whole and say so.
+func routeDeny(ctx context.Context, limits types.Limits, known bool, verdict types.GuardJudgment) types.GuardJudgment {
+	if !known || verdict.Decision != "deny" {
+		return verdict
+	}
+	channels, err := agent.ParseHarnessChannels(limits.Channels)
+	if err != nil {
+		slog.WarnContext(ctx, "the deny goes out whole because the host's installed limits name no usable channel; rerun `magus agent harness install`",
+			attr.Error(err), attr.Notice(""), attr.Component("magus shell"))
+		return verdict
+	}
+	if !slices.Contains(channels, agent.ChannelCapture) {
+		verdict.Reason, _, _ = strings.Cut(verdict.Reason, "\n")
+	}
+	return verdict
 }
 
 // guardRoot finds the workspace whose rules the guard enforces, searching from override,
@@ -675,10 +791,9 @@ const guardDenyExitCode = 2
 // glue that reads only the status must stop, and one that renders the host's prompt reads
 // the decision off stdout.
 //
-// The reason reaches stderr only when stdout does not already carry it as prose,
-// i.e. every format but text. The guard templates read the verdict off stdout and
-// one discards stderr outright, so an unconditional copy printed a kilobyte-plus
-// reason twice to an audience with a context budget.
+// Stderr gets the reason's first line, and only when stdout does not already carry it as
+// prose, i.e. every format but text. A host shows a blocking hook's stderr to the person
+// and the agent alike, so it gets the verdict alone; stdout carries the rest.
 func enforceVerdict(opts output.Options, verdict types.GuardJudgment) error {
 	return verdictExit(os.Stderr, opts, verdict)
 }
@@ -688,7 +803,8 @@ func verdictExit(errOut io.Writer, opts output.Options, verdict types.GuardJudgm
 		return nil
 	}
 	if opts.Format != outputText {
-		fmt.Fprintln(errOut, verdict.Reason)
+		headline, _, _ := strings.Cut(verdict.Reason, "\n")
+		fmt.Fprintln(errOut, headline)
 	}
 	return exit.Reported(guardDenyExitCode)
 }
@@ -754,4 +870,225 @@ func readGuardInput(in io.Reader) (string, error) {
 		return "", fmt.Errorf("the payload is larger than the %d-byte limit, so it was not read whole", guardInputLimit)
 	}
 	return strings.TrimSpace(string(b)), nil
+}
+
+// delegatedEnv marks a guard call one magus handed to the checkout's own ./magus, so that
+// one judges instead of handing it on again.
+const delegatedEnv = "__MAGUS_DELEGATED_BY"
+
+// hookEvent is the part of a host's event that says where the call lands.
+type hookEvent struct {
+	Cwd       string `json:"cwd"`
+	ToolInput struct {
+		Command      string `json:"command"`
+		Cmd          string `json:"cmd"`
+		Workdir      string `json:"workdir"`
+		FilePath     string `json:"file_path"`
+		Path         string `json:"path"`
+		NotebookPath string `json:"notebook_path"`
+	} `json:"tool_input"`
+}
+
+// callDir is the directory a host event's call lands in: the file a write names, else the
+// workspace a shell line's calls all run in, else the shell tool's workdir, else the
+// session's cwd. "" when the input is a bare command or names none.
+func callDir(input string) string {
+	if !strings.HasPrefix(strings.TrimSpace(input), "{") {
+		return ""
+	}
+	var ev hookEvent
+	if json.Unmarshal([]byte(input), &ev) != nil {
+		return ""
+	}
+	at := func(p string) string {
+		if p == "" || filepath.IsAbs(p) || ev.Cwd == "" {
+			return p
+		}
+		return filepath.Join(ev.Cwd, p)
+	}
+	for _, p := range []string{ev.ToolInput.FilePath, ev.ToolInput.NotebookPath, ev.ToolInput.Path} {
+		if p != "" {
+			return filepath.Dir(at(p))
+		}
+	}
+	dir := ev.Cwd
+	if ev.ToolInput.Workdir != "" {
+		dir = at(ev.ToolInput.Workdir)
+	}
+	if root := guard.LineWorkspace(cmp.Or(ev.ToolInput.Command, ev.ToolInput.Cmd), dir); root != "" {
+		return root
+	}
+	return dir
+}
+
+// checkoutBinary is the ./magus of the workspace dir lies in, when it is executable and is
+// not the binary at running; "" otherwise. A directory not created yet is judged by the
+// nearest one that exists.
+func checkoutBinary(dir, running string) string {
+	for dir != "" {
+		if _, err := os.Stat(dir); err == nil {
+			break
+		}
+		if parent := filepath.Dir(dir); parent != dir {
+			dir = parent
+			continue
+		}
+		return ""
+	}
+	if dir == "" {
+		return ""
+	}
+	root, err := workspace.FindRoot(dir)
+	if err != nil {
+		return ""
+	}
+	own := filepath.Join(root, "magus")
+	info, err := os.Stat(own)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+		return ""
+	}
+	if mine, err := os.Stat(running); err == nil && os.SameFile(info, mine) {
+		return ""
+	}
+	return own
+}
+
+// delegateToCheckout hands a hook call to the ./magus of the checkout it lands in when that
+// was built at its HEAD or later, since a branch extending types or bindings loads only in
+// its own build. The delegate runs here, so this session's policy still applies. On handled
+// false this binary judges, and declined says why the checkout's ./magus did not.
+//
+// A build behind HEAD still judges when newer than runningCommit.
+// An older judge cannot read a newer row, and denied every call.
+func delegateToCheckout(ctx context.Context, runningCommit, input string, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
+	if os.Getenv(delegatedEnv) != "" {
+		return false, checkoutDecline{}, nil
+	}
+	running, err := runningBinaryPath()
+	if err != nil {
+		slog.WarnContext(ctx, "this binary's own path is unknown, so it judges the call instead of handing it on",
+			attr.Error(err), attr.Component("magus shell"))
+		return false, checkoutDecline{}, nil
+	}
+	own := checkoutBinary(callDir(input), running)
+	if own == "" {
+		return false, checkoutDecline{}, nil
+	}
+	decline := func(why string) checkoutDecline {
+		d := checkoutDecline{root: filepath.Dir(own), note: fmt.Sprintf("Judged by %s, not by %s: %s.", running, own, why)}
+		slog.WarnContext(ctx, d.note, attr.Component("magus shell"))
+		return d
+	}
+	// The sentinel keeps the delegate from re-execing into the ./magus of this process's
+	// directory, which is the binary handing the call over.
+	env := append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running), bootstrapExecSentinelVar+"=1")
+	built, behind := checkoutBinaryBehind(ctx, own, env)
+	if behind != "" && !newerThanRunning(ctx, filepath.Dir(own), built, runningCommit) {
+		if line := guard.BootstrapLine(filepath.Dir(own)); line != "" {
+			behind += fmt.Sprintf(". A ./magus at HEAD judges here once the main session places one, or the bootstrap builds it, alone on its line: `%s`", line)
+		}
+		return false, decline(behind), nil
+	}
+	cmd := &exec.Cmd{
+		Path:   own,
+		Args:   slices.Concat([]string{own}, os.Args[1:]),
+		Env:    env,
+		Stdin:  strings.NewReader(input),
+		Stdout: out,
+		Stderr: errOut,
+	}
+	err = cmd.Start()
+	if err == nil {
+		stop := context.AfterFunc(ctx, func() { _ = cmd.Process.Kill() })
+		err = cmd.Wait()
+		stop()
+	}
+	var exited *exec.ExitError
+	switch {
+	case err == nil:
+		return true, checkoutDecline{}, nil
+	case errors.As(err, &exited):
+		return true, checkoutDecline{}, exit.Reported(exited.ExitCode())
+	}
+	return false, decline(fmt.Sprintf("it did not start: %v", err)), nil
+}
+
+// checkoutDecline is a checkout whose own ./magus was passed over, and the note saying so.
+type checkoutDecline struct{ root, note string }
+
+// unloadableCheckout is root when this binary cannot load its guard policy, "" otherwise.
+// The load costs a judgment only after its checkout's ./magus was passed over.
+func unloadableCheckout(ctx context.Context, root string) string {
+	if root == "" {
+		return ""
+	}
+	if _, err := loadGuardRules(ctx, root); err == nil {
+		return ""
+	}
+	return root
+}
+
+// checkoutBinaryBehind is the commit own was built at, "" when unstamped.
+// why says it is not the checkout's HEAD or after it, "" when it is.
+// The binary is asked for its own stamp, run with env.
+func checkoutBinaryBehind(ctx context.Context, own string, env []string) (built, why string) {
+	root := filepath.Dir(own)
+	var stamp bytes.Buffer
+	probe := exec.CommandContext(ctx, own, "version", "--client", "-o", "template={{.commit}}")
+	probe.Dir, probe.Env, probe.Stdout = root, env, &stamp
+	if err := probe.Run(); err != nil {
+		return "", fmt.Sprintf("`%s version` failed: %v", own, err)
+	}
+	built = strings.TrimSpace(stamp.String())
+	if built == "" || built == unknownVersion {
+		return "", "it carries no commit stamp"
+	}
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return built, fmt.Sprintf("no version control answered in %s to place its commit %s (%v)", root, shortCommit(built), err)
+	}
+	head, err := res.VCS.FindCommit(ctx, root, "")
+	if err != nil {
+		return built, fmt.Sprintf("the checkout's HEAD could not be read to place its commit %s: %v", shortCommit(built), err)
+	}
+	if head.ID == built {
+		return built, ""
+	}
+	after, err := res.VCS.IsAncestor(ctx, root, head.ID, built)
+	switch {
+	case err != nil:
+		return built, fmt.Sprintf("it was built at %s, which could not be placed against HEAD %s: %v", shortCommit(built), shortCommit(head.ID), err)
+	case !after:
+		return built, fmt.Sprintf("it was built at %s, which is neither the checkout's HEAD %s nor a commit after it", shortCommit(built), shortCommit(head.ID))
+	}
+	return built, ""
+}
+
+// newerThanRunning reports whether built descends from running, this binary's
+// commit. An unknown commit, or one the checkout cannot place, is not newer.
+func newerThanRunning(ctx context.Context, root, built, running string) bool {
+	if built == "" || running == "" || running == unknownVersion || built == running {
+		return false
+	}
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return false
+	}
+	newer, err := res.VCS.IsAncestor(ctx, root, running, built)
+	return err == nil && newer
+}
+
+// judgedBy appends note, which says which binary judged, to the verdict's text. A pass
+// carries no text to append to.
+func judgedBy(verdict types.GuardJudgment, note string) types.GuardJudgment {
+	if note == "" {
+		return verdict
+	}
+	switch verdict.Decision {
+	case "deny", "ask":
+		verdict.Reason = strings.TrimSpace(strings.Join([]string{verdict.Reason, note}, "\n"))
+	case "advise":
+		verdict.Context = strings.TrimSpace(strings.Join([]string{verdict.Context, note}, "\n"))
+	}
+	return verdict
 }

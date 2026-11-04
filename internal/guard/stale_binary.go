@@ -2,6 +2,7 @@ package guard
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -12,8 +13,11 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
@@ -310,7 +314,7 @@ func ghReadOnly(args []string) bool {
 }
 
 // magusReadVerbs are the magus verbs that answer a question and write nothing shared.
-var magusReadVerbs = []string{"version", "ls", "describe", "query", "status", "explain", "refs", "path", "doctor"}
+var magusReadVerbs = []string{"version", "ls", "describe", "query", "status", "explain", "refs", "path", "doctor", "where"}
 
 // magusReadOnly reports a magus invocation that reads. Asking for help always does, and so
 // does `affected --explain`, which says why each project is affected and runs nothing.
@@ -327,6 +331,8 @@ func magusReadOnly(args []string) bool {
 		return false
 	case words[0] == "affected":
 		return magusFlag(args, "explain")
+	case words[0] == "vcs":
+		return len(words) > 1 && words[1] == "ls-files"
 	}
 	return slices.Contains(magusReadVerbs, words[0])
 }
@@ -354,8 +360,10 @@ func scoutRecord(args []string) bool {
 // branch to the commit its placed binary was built at (see fastForward). The placement and
 // the bootstrap pass for every caller, lease or none: a worker runs the placement before its
 // lease is bound, and a judge that cannot load the tree must not deny the line it names.
-// Whether a worker may build is the raw-tool rule's to say.
-func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
+// Whether a worker may build is the raw-tool rule's to say. The rebuild is a run of a
+// target at declares relinks, read off at's record, never off a target's name.
+func recoveryLine(command string, d Dialect, lease string, builds bool, at location) bool {
+	command = withoutLeaseExport(command, d)
 	call, ok := soleCall(command, d)
 	if !ok {
 		return false
@@ -367,8 +375,10 @@ func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
 	if lease != "" && len(call.Assigns) == 0 && fastForward(hint.Invocation{Name: path.Base(words[0]), Args: words[1:]}) {
 		return true
 	}
-	placement := len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" && words[2] == placementScript
-	if placement {
+	// denyCheckoutBootstrap still judges who may build which checkout.
+	places := onlyBaggageAssigns(call.Assigns) && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" &&
+		(words[2] == placementScript || words[2] == job.CheckoutBootstrapScript)
+	if places {
 		return true
 	}
 	workerOnly := lease != "" && !builds
@@ -383,25 +393,115 @@ func recoveryLine(command string, d Dialect, lease string, builds bool) bool {
 		return false
 	case prog == "magus" && len(call.Assigns) == 0:
 		if r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]}); ok {
-			return r.verb == "run" && targetName(r.target) == "go-build" && len(r.projects) <= 1 && (len(r.projects) == 0 || r.projects[0] == ".")
+			return runRelinks(at.declared().ix, r)
 		}
 	}
 	return false
 }
 
-// vcsRecoveryLine reports a git line that continues or aborts an interrupted cherry-pick,
-// merge, rebase or revert, or adds a worktree.
+// withoutLeaseExport is command past a leading `export BAGGAGE=...`, the prefix
+// edit-ungraded teaches. Any other command comes back unchanged.
+func withoutLeaseExport(command string, d Dialect) string {
+	f, err := parseFile(command, d)
+	if err != nil || len(f.Stmts) == 0 {
+		return command
+	}
+	first, rest := f.Stmts[0], f.Stmts[1:]
+	if bin, ok := first.Cmd.(*syntax.BinaryCmd); ok && len(rest) == 0 && bin.Op == syntax.AndStmt {
+		first, rest = bin.X, []*syntax.Stmt{bin.Y}
+	}
+	decl, ok := first.Cmd.(*syntax.DeclClause)
+	if !ok || len(rest) != 1 || decl.Variant == nil || decl.Variant.Value != "export" || !onlyBaggageAssigns(decl.Args) {
+		return command
+	}
+	var b strings.Builder
+	if syntax.NewPrinter().Print(&b, rest[0]) != nil {
+		return command
+	}
+	return b.String()
+}
+
+// onlyBaggageAssigns reports assignments setting nothing but the lease claim.
+func onlyBaggageAssigns(assigns []*syntax.Assign) bool {
+	return !slices.ContainsFunc(assigns, func(a *syntax.Assign) bool {
+		return a.Name == nil || a.Name.Value != trail.EnvBaggage
+	})
+}
+
+// vcsRecoveryLine reports a git line that continues, skips or aborts an interrupted
+// cherry-pick, merge, rebase or revert, picks more commits, or adds a worktree.
 func vcsRecoveryLine(words []string) bool {
 	if len(words) < 3 || path.Base(words[0]) != "git" {
 		return false
 	}
+	if len(words) == 3 && (words[2] == "--abort" || words[2] == "--continue" || words[2] == "--skip") {
+		return slices.Contains([]string{"cherry-pick", "merge", "rebase", "revert"}, words[1])
+	}
 	switch words[1] {
-	case "cherry-pick", "merge", "rebase", "revert":
-		return len(words) == 3 && (words[2] == "--abort" || words[2] == "--continue")
+	case "cherry-pick":
+		// Finishing a series: the rest of its commits are what make the tree build again.
+		return !slices.ContainsFunc(words[2:], func(w string) bool {
+			return strings.HasPrefix(w, "-") && w != "-x" && w != "--no-edit"
+		})
 	case "worktree":
 		return words[2] == "add"
 	}
 	return false
+}
+
+// outsideAnyWorkspace reports a write that lands under no magus workspace: an agent's
+// memory, a scratchpad, a temp file. No guard policy judges such a path, so a policy that
+// does not load holds nothing back there.
+func outsideAnyWorkspace(path string, at location) bool {
+	target, placed := placePath(path, cmp.Or(at.dir, at.workspace), userHome())
+	if !placed {
+		return false
+	}
+	if rel, err := filepath.Rel(at.workspace, target); at.workspace == "" || err == nil && filepath.IsLocal(rel) {
+		return false
+	}
+	for dir := filepath.Dir(target); ; dir = filepath.Dir(dir) {
+		for _, marker := range []string{config.Filename, config.DottedFilename, "magusfile.buzz"} {
+			if _, err := os.Lstat(filepath.Join(dir, marker)); err == nil {
+				return false
+			}
+		}
+		if dir == filepath.Dir(dir) {
+			return true
+		}
+	}
+}
+
+// checkpointReset reports a `git reset --keep|--merge <rev>` alone on
+// its line, where rev is a clean checkpoint a job row records.
+// A ./magus was placed at that revision, so it loads.
+// --hard stays the whole-tree rule's to refuse.
+func checkpointReset(ctx context.Context, command string, d Dialect, at location) bool {
+	call, ok := soleCall(command, d)
+	if !ok || len(call.Assigns) > 0 {
+		return false
+	}
+	words := literalWords(call.Args)
+	if len(words) != 4 || path.Base(words[0]) != "git" || words[1] != "reset" ||
+		(words[2] != "--keep" && words[2] != "--merge") || strings.HasPrefix(words[3], "-") {
+		return false
+	}
+	root := cmp.Or(at.dir, at.workspace)
+	if root == "" {
+		return false
+	}
+	resolved, err := gitNames(ctx, root, "rev-parse", "--verify", "--quiet", words[3]+"^{commit}")
+	if err != nil || len(resolved) != 1 {
+		return false
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(rows, func(r types.Job) bool {
+		rev, digest := types.ParseCheckpointToken(r.Checkpoint)
+		return digest == "" && len(rev) >= 7 && strings.HasPrefix(resolved[0], rev)
+	})
 }
 
 // onlyEditorAssigns reports an environment prefix that sets nothing but the editor git
@@ -419,7 +519,10 @@ func onlyEditorAssigns(assigns []*syntax.Assign) bool {
 // read-only or is the fix; the verb it names is the gated one, if any. A read-only scout
 // may also record its work, which reads its row from the job store.
 func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCall {
-	call := judgedCall{seam: seamCommand, what: "this command", lease: in.lease, builds: in.lease == "", command: in.command, dialect: in.dialect}
+	call := judgedCall{
+		seam: seamCommand, what: "this command", lease: in.lease, builds: in.lease == "",
+		command: in.command, dialect: in.dialect, policyNote: runPolicyNote(in.command, at),
+	}
 	if !call.builds {
 		role, _ := actingRole(ctx, at, in.lease, "")
 		call.builds = role == types.AgentRoleIntegrator
@@ -431,7 +534,9 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 	if in.mcpTool != "" {
 		call.what = fmt.Sprintf("this call to the magus %s tool", in.mcpTool)
 	}
-	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds)
+	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds, at) &&
+		!writesOnlyOutside(in.command, in.dialect, cmp.Or(at.dir, at.workspace), at.workspace, userHome()) &&
+		!checkpointReset(ctx, in.command, in.dialect, at)
 	if call.changes && in.lease != "" && scoutLine(in.command, in.dialect) {
 		_, row := actingRole(ctx, at, in.lease, "")
 		call.changes = !row.ReadOnly
@@ -444,7 +549,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 // the call, the failures and the fallbacks behind the ref.
 func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
-	fix := binaryRemedy(own, hasBinary, call.lease, call.builds)
+	fix := binaryRemedy(own, root, call.lease, call.builds)
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
 	case reason.Cause == unloadSkewedSpell:
@@ -462,10 +567,15 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 	why.WriteString("\nEdits, spawns, pushes and commands that change state wait until a magus loads the tree. " +
 		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`. " +
 		"So does getting the tree back to one a binary can be built from, each alone on its line: " +
-		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--continue`, and `git worktree add`. " +
+		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--skip`, " +
+		"`git cherry-pick <commit>...` to finish a series, `git worktree add`, and `git reset --keep <checkpoint>` to a revision a job row records as its checkpoint. " +
+		"So do writes outside any workspace, such as memory or a scratchpad, by a file write or a shell redirect. " +
 		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it.")
 	if fix.why != "" {
 		why.WriteString("\n" + fix.why)
+	}
+	if call.policyNote != "" {
+		why.WriteString("\n" + call.policyNote)
 	}
 	return denial{Say: fmt.Sprintf("%s; %s.", problem, fix.say), Why: why.String()}
 }
@@ -483,14 +593,23 @@ func (f binaryFix) next(rule denyRuleName) []types.NextStep {
 	return []types.NextStep{placementNext(rule, f.placeFor)}
 }
 
-// binaryRemedy is the fix for a binary that cannot load the tree, by who is asking. A
-// leased worker is never told to build: there is one binary per base, and the main
+// binaryRemedy is the fix for a binary that cannot load the tree at root, by who is asking.
+// A leased worker is never told to build: there is one binary per base, and the main
 // session builds it and places a copy in each worker checkout.
-func binaryRemedy(own, hasBinary bool, lease string, builds bool) binaryFix {
+func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	if builds {
 		lease = ""
 	}
+	hasBinary := hasMagusBinary(root)
+	bootstrap := config.SourceCommand(root, "", "", true)
 	switch {
+	case lease != "" && own && hasBinary && job.BuildsItsOwnMagus(root):
+		// A placement can be older than a tree the worker's own commits moved.
+		return binaryFix{
+			say: fmt.Sprintf("build this checkout's own, alone on its line: `%s`", job.CheckoutBootstrap(root)),
+			why: "That line runs for the holder of the job whose checkout it is, whatever judges the call. The main session can place a ./magus instead when no Go build input differs.\n" +
+				workerFastForward + "\n" + onePerBase,
+		}
 	case lease != "" && own && hasBinary:
 		return binaryFix{
 			say:      "ask the main session to place a ./magus that loads this workspace",
@@ -511,16 +630,24 @@ func binaryRemedy(own, hasBinary bool, lease string, builds bool) binaryFix {
 	case own && hasBinary:
 		return binaryFix{
 			say: "rebuild ./magus with " + ownRebuild,
-			why: "If the rebuild cannot load the tree either, bootstrap over it, alone on its line: " +
-				"`" + ward.BootstrapCommand + "`. If the error names a magusfile line instead, fix that line.",
+			why: fmt.Sprintf("If the rebuild cannot load the tree either, bootstrap over it, alone on its line: `%s`. If the error names a magusfile line instead, fix that line.", bootstrap),
 		}
 	case own:
-		return binaryFix{say: "bootstrap ./magus with `" + ward.BootstrapCommand + "`"}
+		return binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", bootstrap)}
 	}
 	return binaryFix{
-		say: "install a magus that loads this workspace with `magus self update`",
+		say: fmt.Sprintf("install a magus that loads this workspace with `%s`", config.ReleaseCommand(config.RequiredVersionAt(root))),
 		why: "If the error names a magusfile line instead, fix that line; `magus doctor` names the failure.",
 	}
+}
+
+// BootstrapLine is the line that builds a ./magus at the HEAD of root, a checkout of magus
+// itself, "" for any other workspace.
+func BootstrapLine(root string) string {
+	if !ownSourceRoot(root) {
+		return ""
+	}
+	return config.SourceCommand(root, "", "", true)
 }
 
 // placementScript copies the main checkout's ./magus into a worker's checkout.
@@ -602,10 +729,12 @@ func staleOwnBinary(root string) bool {
 	return false
 }
 
-// replacesStaleMagus reports the line that gets root a current ./magus, alone on its line:
-// `./magus run go-build .`, or the bootstrap, while ./magus is stale or absent. Either is
-// the root's own to run then, since no worker builds magus and nothing else replaces it.
-func replacesStaleMagus(command string, root string) bool {
+// replacesStaleMagus reports the line that gets at's workspace a current ./magus, alone on
+// its line: a run of a target that declares relinks, or the bootstrap, while ./magus is
+// stale or absent. Either is the root's own to run then, since no worker builds magus and
+// nothing else replaces it.
+func replacesStaleMagus(command string, at location) bool {
+	root := at.workspace
 	if root == "" || (hasMagusBinary(root) && !staleOwnBinary(root)) {
 		return false
 	}
@@ -625,5 +754,5 @@ func replacesStaleMagus(command string, root string) bool {
 		return false
 	}
 	r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]})
-	return ok && r.verb == "run" && targetName(r.target) == "go-build" && slices.Equal(r.projects, []string{"."})
+	return ok && runRelinks(at.declared().ix, r)
 }

@@ -448,7 +448,21 @@ func TestSlObjectBatchReadsCommittedFiles(t *testing.T) {
 	}
 	_, err = batch.Read("no/such.buzz")
 	require.ErrorIs(t, err, ErrObjectMissing)
+	_, err = (saplingVCS{}).ReadFileAt(t.Context(), dir, ".", "no/such.buzz")
+	require.ErrorIs(t, err, ErrObjectMissing)
 	got, err := batch.Read("a.buzz")
 	require.NoError(t, err)
 	assert.Equal(t, "one\n", got)
+}
+
+func TestSaplingBranchHeadsListsBookmarks(t *testing.T) {
+	dir := slRepository(t, map[string]string{"a.txt": "one\n"})
+	vcsTestRun(t, dir, "sl", "bookmark", "job")
+	head, err := saplingVCS{}.FindCommit(t.Context(), dir, ".")
+	require.NoError(t, err)
+
+	got, err := saplingVCS{}.BranchHeads(t.Context(), dir)
+
+	require.NoError(t, err)
+	assert.Equal(t, head.ID, got["job"])
 }

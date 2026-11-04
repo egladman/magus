@@ -34,6 +34,17 @@ type RuleDoc struct {
 // URL is the page that documents the rule, the one a [Finding] links to.
 func (d RuleDoc) URL() string { return prf.URL(d.Code) }
 
+// Codes returns every rule's PRF code in [Rules] order, for an entry point registering the
+// catalog's prefix with diagnostics.RegisterCatalog.
+func Codes() []diagnostics.Code {
+	docs := Catalog()
+	out := make([]diagnostics.Code, len(docs))
+	for i, d := range docs {
+		out[i] = d.Code
+	}
+	return out
+}
+
 // Catalog returns every rule in [Rules] order.
 func Catalog() []RuleDoc {
 	out := make([]RuleDoc, len(checks))

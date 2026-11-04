@@ -31,7 +31,7 @@
 //   unknown:    no base to read. Fatal like introduced, and said so once.
 // A fresh CVE against a year-old module then reddens main and the schedule, not every open
 // pull request whose author cannot fix it there. docs/guides/security-scanning.md is the
-// recipe for copying this.
+// guide for copying this.
 //
 // This is the part a task orchestrator with a real language can do and a YAML `run:` step
 // cannot. The scanner gives you JSON and an exit code; deciding what that MEANS for this
@@ -40,12 +40,12 @@
 import "std";
 import "proc";
 import "fs";
-import "vcs";
 import "encoding/json";
 import "encoding/yaml";
 import "semver";
 import "time";
 import "flags";
+import "hack/magusfile/deviations" as deviations;
 // Used by the test blocks, which run under buzz_test now that it globs hack/.
 import "assert";
 
@@ -85,6 +85,24 @@ test "semver takes npm range syntax directly, so nothing needs deriving" {
     assert\isFalse(semver\satisfies("9.9.9", constraint: "<0.0.0"), message: "no patch published");
 }
 
+// registryFailure names a failed `pnpm view` of pkg, or is "" when it ran. A blocking
+// advisory whose fix cannot be looked up fails the step: deferring it would pass it unjudged.
+fun registryFailure(pkg: str, code: int, stderr: str) > str {
+    if (code == 0) {
+        return "";
+    }
+    return "audit: registry unreachable: `pnpm view {pkg} time --json` exited {code}: {stderr.trim()}; "
+        + "a blocking advisory on {pkg} cannot be judged without it, so retry once the registry answers";
+}
+
+test "a registry that does not answer fails the audit with the pnpm view error" {
+    assert\equal(registryFailure("nanoid", code: 0, stderr: ""), want: "", message: "a lookup that ran");
+    final failed = registryFailure("nanoid", code: 1, stderr: "ERR_PNPM_FETCH_404  GET https://registry/nanoid\n");
+    assert\isTrue(failed.indexOf("registry unreachable") != null, message: failed);
+    assert\isTrue(failed.indexOf("exited 1: ERR_PNPM_FETCH_404  GET https://registry/nanoid;") != null, message: failed);
+    assert\isTrue(failed.indexOf("cooling period") == null, message: "never the cooling-period reason");
+}
+
 // hasInstallablePatch reports whether any published version of pkg satisfies the
 // advisory's patched range AND is old enough to clear the cooling period - that is,
 // whether a fix could land today.
@@ -98,9 +116,10 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
         return false;
     }
     final res = proc\exec("pnpm", args: ["view", pkg, "time", "--json"], dir: ".",
-        opts: {"allow_failure": true});
-    if (res.code != 0) {
-        return false; // registry unreachable: defer rather than fail on a network blip
+        opts: proc\ExecOptions{allowFailure = true});
+    final unreachable = registryFailure(pkg, code: res.code, stderr: res.stderr);
+    if (unreachable != "") {
+        throw unreachable;
     }
 
     final now = time\parse("2006-01-02T15:04:05Z", value: time\nowIso());
@@ -262,55 +281,6 @@ test "inherited is fatal only where the base IS the head" {
     assert\isTrue(isFatal("unknown", changed: true), message: "no base keeps the strict behavior");
 }
 
-// showArgs is each backend's spelling of "print path as of rev", path relative to the
-// working directory.
-fun showArgs(rev: str, path: str) > [str] {
-    final backend = vcs\name();
-    if (backend == "git") {
-        return ["show", rev + ":./" + path];
-    }
-    if (backend == "jj") {
-        return ["file", "show", "-r", rev, path];
-    }
-    return ["cat", "-r", rev, path];
-}
-
-// BaseFile is path as the base ref has it; text is null when it cannot be read, missing
-// says why.
-object BaseFile {
-    text: str?,
-    changed: bool = false,
-    missing: str = "",
-}
-
-fun readBase(path: str) > BaseFile {
-    if (vcs\name() == "") {
-        return BaseFile{ text = null, missing = "no VCS" };
-    }
-    final resolved = vcs\base() catch null;
-    if (resolved == null) {
-        return BaseFile{ text = null, missing = "the base ref cannot be resolved here" };
-    }
-    final rev = resolved!;
-    if (rev == "") {
-        return BaseFile{ text = null, missing = "vcs.base_ref is empty" };
-    }
-    var changed = false;
-    try {
-        changed = vcs\commit(rev).id != vcs\commit().id;
-    } catch (e) {
-        // A shallow CI clone often lacks the base.
-        return BaseFile{ text = null, missing = "base ref {rev} does not resolve here; fetch it" };
-    }
-    // A failed read is no base, never an empty one: a blobless clone fetches the blob on
-    // demand, and a sandbox without network must not turn every finding introduced.
-    final res = vcs\cmd(showArgs(rev, path: path), opts: {"quiet": true, "allow_failure": true}) catch null;
-    if (res == null or !res!.ok) {
-        return BaseFile{ text = null, missing = "{path} is unreadable at {rev}" };
-    }
-    return BaseFile{ text = res!.stdout, changed = changed };
-}
-
 // anyActionable gates the base read: provenance only decides actionable findings, so a
 // run with none skips the VCS and manifest reads.
 fun anyActionable(findings: [Finding]) > bool {
@@ -421,7 +391,7 @@ packages:
 // printed and carried. Throws to fail the calling target.
 export fun audit(inheritedFatal: bool = false) > void !> any {
     final res = proc\exec("pnpm", args: ["audit", "--json"], dir: ".",
-        opts: {"allow_failure": true});
+        opts: proc\ExecOptions{allowFailure = true});
     if (res.code == 0) {
         std\print("audit: no advisories match this tree");
         std\print("security: 0 introduced, 0 inherited, 0 deferred");
@@ -474,7 +444,7 @@ export fun audit(inheritedFatal: bool = false) > void !> any {
 
     var base = Base{ inventory = {<str: bool>} };
     if (anyActionable(findings)) {
-        final lock = readBase("pnpm-lock.yaml");
+        final lock = deviations\readBase("pnpm-lock.yaml");
         var inventory: {str: bool}? = null;
         if (lock.text != null) {
             inventory = pnpmInventory(lock.text!);
@@ -554,7 +524,7 @@ fun goFindings(stream: str) > [Finding] !> any {
     if (body == "") {
         return findings;
     }
-    final messages = json\parse("[" + body.replace("\n}\n\{", "\n},\n\{") + "]");
+    final messages = json\parse("[" + body.replace("\n}\n\{", with: "\n},\n\{") + "]");
     var summaries = mut {<str: str>};
     var order = mut [<str>];
     var copies = mut {<str: str>};
@@ -691,7 +661,7 @@ export fun govulncheck(run: any, go: any, inheritedFatal: bool) > void !> any {
 
     var base = Base{ inventory = {<str: bool>} };
     if (anyActionable(findings)) {
-        final mod = readBase("go.mod");
+        final mod = deviations\readBase("go.mod");
         var inventory: {str: bool}? = null;
         if (mod.text != null) {
             var parsed = "";

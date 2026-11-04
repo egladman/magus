@@ -28,7 +28,7 @@ contract.
 | your messages   | `UserPromptSubmit`, recorded and never answered                 |
 | checkpoint      | `Stop`                                                          |
 | reply check     | opt-in: `Stop`, a `block` that continues the turn once          |
-| scout agent     | `.codex/agents/magus-scout.toml`, `sandbox_mode = "read-only"`  |
+| scout agent     | `.codex/agents/magus-scout.toml`, read-only by its lease        |
 | rehydration     | `SessionStart` (`compact`)                                      |
 | MCP             | `~/.codex/config.toml`, see [MCP](../mcp.md)                    |
 | quiet output    | `[shell_environment_policy.set]` in `~/.codex/config.toml`      |
@@ -180,6 +180,16 @@ shown here:
             "statusMessage": "magus: checking the Buzz it wrote"
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-duration.buzz -- --agent-name codex # magus:harness",
+            "statusMessage": "magus: recording tool time"
+          }
+        ]
       }
     ],
     "SubagentStart": [
@@ -227,6 +237,16 @@ shown here:
     ],
     "SessionStart": [
       {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "statusMessage": "magus: briefing the session"
+          }
+        ]
+      },
+      {
         "matcher": "compact",
         "hooks": [
           {
@@ -238,6 +258,15 @@ shown here:
       }
     ],
     "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus guard: checking the stop"
+          }
+        ]
+      },
       {
         "hooks": [
           {
@@ -255,6 +284,15 @@ shown here:
             "type": "command",
             "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus: noting the request"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C . -s docs/guides/integrations/agents/magus-reclaim-disk.buzz -- --agent-name codex",
+            "statusMessage": "magus: sampling free disk space"
           }
         ]
       }
@@ -295,10 +333,14 @@ same command template answers it: allow for a push a gate covers, so nobody is
 asked, no decision for an ungated push, so the person decides, and deny for a
 session bound to a job lease, because workers do not publish. Project rules load
 only when the project's `.codex` layer is trusted, the same trust that loads its
-hooks. Where no prompt can happen (no rules file, `permission_mode` of
-`bypassPermissions` or `dontAsk`, or a push written as anything but a plain
+hooks. Where no prompt can happen (no rules file, a `permission_mode` other than
+`default`, `acceptEdits` or `auto`, or a push written as anything but a plain
 `git push`, `hg push`, `sl push` or `jj git push` command), the guard refuses the push and names the person's own
-terminal. One open Codex bug ignores a prompt rule under `danger-full-access` with
+terminal. `systemMessage` carries that to the person, and the deny reason tells the agent
+to relay it verbatim if they saw nothing. Not verified against a client: what a prompt rule
+does under `approval_policy = "never"`, which a hook cannot read, and any way to answer a
+prompt from another device. The `ask` end-to-end scenarios in `internal/agent/harness` run the
+first. One open Codex bug ignores a prompt rule under `danger-full-access` with
 granular rules, [openai/codex#25312](https://github.com/openai/codex/issues/25312).
 The template refuses a session whose hook input reports `bypassPermissions`, but
 nothing here has confirmed that full access reports that mode, so do not run pushes
@@ -394,10 +436,8 @@ Three more hooks complete the picture of a subagent:
   context size a later continuation to that child reads. The child's own tool calls
   carry `agent_id` and `agent_type` too, so its commands are attributed to it.
 
-The scout agent file sets `sandbox_mode = "read-only"`, so the sandbox enforces what
-its instructions only ask for. Codex's read-only sandbox blocks writes, which may
-include magus's own cache and activity records, so a query that needs one can fail
-inside the scout. That has not been run live here.
+The scout agent file sets no sandbox, because Codex ignores one in an agent file. Its
+lease enforces what its instructions only ask for.
 
 ### Checking the Buzz it writes
 

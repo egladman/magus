@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/libs/conventions/namewords"
 	"github.com/egladman/magus/libs/conventions/providerio"
 	"github.com/egladman/magus/libs/conventions/ruletext"
+	"github.com/egladman/magus/libs/conventions/secretfields"
 	"github.com/egladman/magus/libs/conventions/stderrprint"
 	"github.com/egladman/magus/libs/conventions/stringjoin"
 	"github.com/egladman/magus/libs/conventions/stutter"
@@ -45,6 +46,7 @@ func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register 
 	register.Plugin("namewords", plugin("namewords", namewords.New))
 	register.Plugin("providerio", plugin("providerio", providerio.New))
 	register.Plugin("ruletext", plugin("ruletext", ruletext.New))
+	register.Plugin("secretfields", plugin("secretfields", secretfields.New))
 	register.Plugin("stderrprint", plugin("stderrprint", stderrprint.New))
 	register.Plugin("stringjoin", plugin("stringjoin", stringjoin.New))
 	register.Plugin("stutter", plugin("stutter", stutter.New))

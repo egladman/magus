@@ -24,7 +24,6 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	internalci "github.com/egladman/magus/internal/ci"
-	"github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
@@ -266,7 +265,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Merge magus.yaml default_charms with any explicit charm on the target, the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
-	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, af.NoDefaultCharms)
+	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, !af.DefaultCharms)
 	// Same as `magus run`: an affected ci run goes through RunCI and loses the write
 	// charms, so the header has to say so.
 	if target == "ci" {
@@ -288,12 +287,12 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// advises when the machine is idle. See prepareGateRedundancy.
 	gate := prepareGateRedundancy(ctx, m, target, targets, charms, false)
 	gate.noteUndeclaredSeeds(slices.Sorted(maps.Keys(undeclaredOnly)))
-	if gateErr := gate.evaluate(ctx, af.NoRedundancyCheck); gateErr != nil {
+	if gateErr := gate.evaluate(ctx, !af.RedundancyCheck); gateErr != nil {
 		return gateErr
 	}
 	// Sized once the gate is going to run. A trivial change is proven to need no gate,
 	// which is a verdict on the change rather than a deferral, so it exits 0.
-	sized := gate.size(ctx, af.Base, af.NoRedundancyCheck)
+	sized := gate.size(ctx, af.Base, !af.RedundancyCheck)
 	if sized != nil {
 		slog.InfoContext(ctx, renderSizing(target, *sized), attr.Notice(""), attr.Component("magus"))
 		if sized.Tier == types.RiskTrivial {
@@ -324,8 +323,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if af.Step {
 		runOpts = append(runOpts, magus.WithStep())
 	}
-	if af.NoCache {
-		runOpts = append(runOpts, magus.WithNoCache())
+	if !af.Cache {
+		runOpts = append(runOpts, magus.WithCache(false))
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))
 	ctx = processStdioContext(ctx)
@@ -599,12 +598,12 @@ type planInheritPath struct {
 // no gate step can observe it, so the matrix is empty, and every changed path rides
 // along with its tier and what decided it.
 type planRisk struct {
-	Tier  types.RiskTier       `json:"tier"`
+	Tier  types.Tier           `json:"tier"`
 	Base  string               `json:"base"`
-	Paths []types.RiskEvidence `json:"paths"`
+	Paths []types.TierEvidence `json:"paths"`
 }
 
-func newPlanRisk(rep types.RiskReport) *planRisk {
+func newPlanRisk(rep types.TierReport) *planRisk {
 	return &planRisk{Tier: rep.Tier, Base: rep.Base, Paths: rep.Evidence}
 }
 
@@ -654,13 +653,13 @@ func planOutputs(out planOutput) ([]planPublish, error) {
 // for the delta.
 func planSummaryMarkdown(out planOutput) string {
 	if out.Inherit != nil {
-		evidence := make([]types.RiskEvidence, 0, len(out.Inherit.Paths))
+		evidence := make([]types.TierEvidence, 0, len(out.Inherit.Paths))
 		for _, p := range out.Inherit.Paths {
-			evidence = append(evidence, types.RiskEvidence{Path: p.Path, Tier: types.RiskTier(p.Tier), Class: p.Class, Why: p.Why})
+			evidence = append(evidence, types.TierEvidence{Path: p.Path, Tier: types.Tier(p.Tier), Class: p.Class, Why: p.Why})
 		}
 		return (internalci.InheritFinding{
 			Run: out.Inherit.Run, Commit: out.Inherit.Commit,
-			Report: types.RiskReport{Evidence: evidence},
+			Report: types.TierReport{Evidence: evidence},
 		}).SummaryMarkdown()
 	}
 	if out.Risk != nil {
@@ -1297,7 +1296,7 @@ func printImpactText(out *types.ImpactResult) error {
 		if len(out.SeedProjects) > 1 {
 			label = fmt.Sprintf("%s (1 of %d seeds)", seed, len(out.SeedProjects))
 		}
-		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: fmt.Sprintf("%s:%s", types.KindProject, seed)})
+		link := liveExplorerLink(graphLinkOpts{View: "blast", Node: fmt.Sprintf("%s:%s", types.KindProject, seed)})
 		fmt.Printf("\nView the blast radius of %s in the Graph Explorer: %s\n", label, link)
 		fmt.Printf("%s\n", authHint(link))
 		fmt.Printf("(start the magus server if the graph does not load)\n")

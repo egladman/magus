@@ -35,7 +35,7 @@ In the docs:
 - [Across separate runs: the workspace lock](../concepts/concurrency.md#across-separate-runs-the-workspace-lock)
 - [Workspace providers](../concepts/workspace/providers.md#workspace-providers)
 - [Review, workspace and the merge queue](../decisions/0011-typed-provider-calls.md#review-workspace-and-the-merge-queue)
-- [A workspace charm such as breaking](../decisions/0017-a-change-accepts-the-findings-it-causes.md#a-workspace-charm-such-as-breaking)
+- [A workspace charm such as breaking](../decisions/0021-a-change-accepts-the-findings-it-causes.md#a-workspace-charm-such-as-breaking)
 - [2. Bootstrap a workspace with magus init](../guides/getting-started.md#2-bootstrap-a-workspace-with-magus-init)
 
 In the code (`magus refs <name>` lists every site):

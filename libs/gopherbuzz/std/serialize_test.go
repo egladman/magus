@@ -110,6 +110,40 @@ func TestJSONEncodeUnwrapsBoxedAtAnyDepth(t *testing.T) {
 	assert.JSONEq(t, `[{"n":2}]`, nested)
 }
 
+// An enum case encodes as its value, as upstream's serialize does, so a record holding
+// one reaches an embedder as data.
+func TestJSONEncodeWritesAnEnumCaseAsItsValue(t *testing.T) {
+	ctx := t.Context()
+	sess := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = sess.Close() })
+	require.NoError(t, sess.Exec(ctx, "enum<str> Decision { allow = \"allow\", deny = \"deny\" }\nfinal d = {\"decision\": Decision.deny};\n"))
+
+	got, err := JSONEncode(sess.GetGlobal("d"))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"decision":"deny"}`, got)
+}
+
+func TestJSONEncodeWritesInstanceFieldsAtAnyDepth(t *testing.T) {
+	sess := buzz.NewSession(t.Context())
+	t.Cleanup(func() { _ = sess.Close() })
+	require.NoError(t, sess.Exec(t.Context(), `
+object Record {
+    n: int = 2,
+    next: any = null,
+    fun value() > int { return this.n; }
+}
+final r = Record{};
+final nested = [r];
+final cycle = mut Record{};
+cycle.next = cycle;
+`))
+	got, err := JSONEncode(sess.GetGlobal("nested"))
+	require.NoError(t, err)
+	assert.JSONEq(t, `[{"n":2,"next":null}]`, got)
+	_, err = JSONEncode(sess.GetGlobal("cycle"))
+	require.ErrorIs(t, err, errCircularReference)
+}
+
 func TestJSONDecodeValueKeepsIntegralNumbersInts(t *testing.T) {
 	v, err := JSONDecodeValue([]byte(`{"n":2,"f":1.5}`))
 	require.NoError(t, err)

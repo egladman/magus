@@ -88,7 +88,7 @@ import "site/config" as _;
 // proc\exec raises on a non-zero exit, so a bundle that cannot build stops the render where
 // it broke.
 fun esbuild(args: [str]) > void !> any {
-    proc\exec("esbuild", args, ".", {});
+    _ = proc\exec("esbuild", args, ".", proc\ExecOptions{});
 }
 
 // walkBlog visits every publishable blog/*.md post (isPublishablePost: not the index, not
@@ -132,7 +132,7 @@ fun walk(rel: str, site: Site) > void !> any {
 
 // site_render rebuilds gen/ from ../docs and the root README. Pure function of git
 // history (footers) and the source tree - reproducible and gate-stable.
-export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: magus\TargetGraph, graph: magus\Graph) > Site !> any {
+export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: magus\TargetGraph, graph: magus\ProjectGraph) > Site !> any {
     // Generator state for one render pass, threaded explicitly into every renderer as a
     // `site` arg - no module-global singleton, so parallel renders never share state.
     // (outDir, not out: `out` is a reserved word in buzz.)
@@ -378,8 +378,8 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
 // site_conventions re-exports the gates check for the magusfile. engine/gates is
 // flat-imported here, and a flat import does not RE-export, so the magusfile cannot
 // reach conventionsCheck through this module without a wrapper.
-export fun site_conventions(root: str, docs: str) > void !> any {
-    conventionsCheck(root, docs);
+export fun site_conventions(root: str, docs: str, files: [str]) > void !> any {
+    conventionsCheck(root, docs: docs, files: files);
 }
 
 // site_publish is the cacheable publication unit used by docs:site-generate. Keep every
@@ -387,7 +387,7 @@ export fun site_conventions(root: str, docs: str) > void !> any {
 // integrity manifest, and (only for rw) the URL ledger. The npm-backed bundles are not
 // built here: site-generate needs build-hljs and build-playground-editor, so they are in
 // gen/ before the render starts.
-export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: magus\TargetGraph, graph: magus\Graph, updateUrls: bool) > void !> any {
+export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: magus\TargetGraph, graph: magus\ProjectGraph, updateUrls: bool) > void !> any {
     final site = site_render(root, docs, blog, outDir, targets, graph);
     writeSiteManifest(site);
     if (updateUrls) { updateUrlLock(site); }

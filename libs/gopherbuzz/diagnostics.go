@@ -51,6 +51,7 @@ const (
 	// Warnings (checker.go).
 	StringAccumulation diagnostics.Code = "BZZ3002" // a string rebuilt from itself with + inside a loop
 	RedundantUnwrap    diagnostics.Code = "BZZ3003" // a force-unwrap ! on an operand that is not optional
+	DiscardedValue     diagnostics.Code = "BZZ3004" // an expression statement whose non-void value is unused
 )
 
 // allBZZCodes enumerates every BZZ code, in ascending order. Kept in sync with the const block above by
@@ -59,7 +60,13 @@ var allBZZCodes = []diagnostics.Code{
 	UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch, UnhandledRaise, UnknownMember,
 	RedundantImportAlias, UnimportedNamespace, ImmutableWrite,
 	UnresolvedImport, FiberMisuse, FFIDisabled,
-	UnusedImport, StringAccumulation, RedundantUnwrap,
+	UnusedImport, StringAccumulation, RedundantUnwrap, DiscardedValue,
+}
+
+// Codes returns every BZZ code in ascending order, for a host registering the catalog's
+// prefix with diagnostics.RegisterCatalog. The slice is a copy.
+func Codes() []diagnostics.Code {
+	return append([]diagnostics.Code(nil), allBZZCodes...)
 }
 
 // Severity classifies a BZZ diagnostic. The zero value is SeverityError, so every

@@ -1,0 +1,252 @@
+// The version-bump rule: a branch bumps each schema or format counter once.
+// Every bump restamps what the counter stamps and invalidates every store
+// written at the old value. A second bump on one branch costs every reader
+// again. No one outside the branch read the value in between.
+namespace agentpolicy\versions;
+
+import "std";
+import "fs";
+import "vcs";
+import "magus";
+import "./hack/policy/verdict" as verdict;
+
+export object Counter {
+    name: str,
+    file: str,
+    declaration: str,
+}
+
+// counters are the hand-maintained version counters, each found by the line in file that
+// starts with declaration. A counter missing here is not guarded.
+export final counters = [
+    Counter{ name = "skill-stamp-format", file = "internal/agent/catalog.go", declaration = "const skillStampFormat = " },
+    Counter{ name = "guard-template-version", file = "internal/agent/guard.go", declaration = "const GuardTemplateVersion = " },
+    Counter{ name = "guard-schema-version", file = "internal/agent/guard.go", declaration = "const GuardSchemaVersion = " },
+    Counter{ name = "agent-session-schema-version", file = "internal/agent/session.go", declaration = "const SessionSchemaVersion = " },
+    Counter{ name = "tool-rows-version", file = "internal/agent/tools.go", declaration = "const ToolRowsVersion = " },
+    Counter{ name = "harness-schema-version", file = "internal/agent/harness.go", declaration = "const harnessSchemaVersion = " },
+    Counter{ name = "harness-spell-schema-version", file = "internal/interp/bindings/harness_spell.go", declaration = "const harnessSchemaVersion = " },
+    Counter{ name = "knowledge-schema-version", file = "types/knowledge.go", declaration = "const KnowledgeSchemaVersion = " },
+    Counter{ name = "job-schema-version", file = "types/job.go", declaration = "const JobSchemaVersion = " },
+    Counter{ name = "job-result-schema-version", file = "types/job.go", declaration = "const JobResultSchemaVersion = " },
+    Counter{ name = "event-schema-version", file = "types/event.go", declaration = "const EventSchemaVersion = " },
+    Counter{ name = "stored-output-schema-version", file = "types/output_record.go", declaration = "const StoredOutputSchemaVersion = " },
+    Counter{ name = "sessions-schema-version", file = "internal/sessions/sessions.go", declaration = "const SchemaVersion = " },
+    Counter{ name = "session-record-schema-version", file = "internal/sessions/sessions.go", declaration = "const schemaVersionSession = " },
+    Counter{ name = "goindex-format-version", file = "internal/symbols/goindex/goindex.go", declaration = "const formatVersion = " },
+    Counter{ name = "auth-store-version", file = "internal/auth/store.go", declaration = "const storeVersion = " },
+    Counter{ name = "trail-command-schema-version", file = "internal/trail/trail.go", declaration = "const agentCommandSchemaVersion = " },
+    Counter{ name = "trail-spawn-schema-version", file = "internal/trail/trail.go", declaration = "const agentSpawnSchemaVersion = " },
+    Counter{ name = "project-cache-schema-version", file = "project/cache.go", declaration = "const cacheSchemaVersion = " },
+    Counter{ name = "owed-schema-version", file = "vcs/owed.go", declaration = "const owedSchemaVersion = " },
+    Counter{ name = "broker-protocol-version", file = "broker/wire.go", declaration = "const ProtocolVersion = " },
+    Counter{ name = "cache-key-version", file = "internal/cache/hash.go", declaration = "const KeyVersion = " },
+    Counter{ name = "forecast-history-version", file = "internal/ci/forecast/history.go", declaration = "const HistoryVersion = " },
+    Counter{ name = "spell-lock-version", file = "internal/spell/remote/lock.go", declaration = "const lockVersion = " },
+    Counter{ name = "textrank-weights-version", file = "internal/textrank/weights.go", declaration = "const weightsVersion = " },
+    Counter{ name = "lifecycle-cache-version", file = "internal/workspace/lifecycle.go", declaration = "const lifecycleCacheVersion = " },
+    Counter{ name = "provider-cache-version", file = "internal/workspace/provider_cache.go", declaration = "const providerCacheVersion = " },
+    Counter{ name = "buzz-bytecode-version", file = "libs/gopherbuzz/vm/marshal.go", declaration = "const BytecodeVersion uint16 = " },
+    Counter{ name = "buzz-bytecode-record-version", file = "libs/gopherbuzz/bytecode_cache.go", declaration = "const bytecodeRecordVersion uint16 = " },
+    Counter{ name = "proofread-baseline-version", file = "libs/proofread/cmd/proofread/baseline.go", declaration = "const baselineVersion = " },
+    Counter{ name = "proofread-outcomes-version", file = "libs/proofread/cmd/proofread/outcomes.go", declaration = "outcomesVersion = " },
+];
+
+// Edit is a write as the guard hands it over: content for a whole file, oldText and newText
+// for a replacement.
+export object Edit {
+    rel: str,
+    content: str = "",
+    oldText: str = "",
+    newText: str = "",
+}
+
+// judgeWrite is decide over the live checkout: the file on disk is the branch's value and
+// the file at the merge base with vcs\base is the base's.
+export fun judgeWrite(req: WriteRequest) > GuardVerdict? {
+    if (req.workspace == "") {
+        return null;
+    }
+    final prefix = req.workspace + "/";
+    final rel = if (req.path.startsWith(prefix)) req.path.sub(prefix.len(), len: req.path.len() - prefix.len()) else req.path;
+    final edit = Edit{ rel = rel, content = req.content, oldText = req.oldText, newText = req.newText };
+    final current = fun (path: str) > str? {
+        return fs\readFile(fs\join(req.workspace, name: path)) catch null;
+    };
+    final base = fun (path: str) > str? !> str {
+        return baseText(req.workspace, rel: path);
+    };
+    return decide(edit, current: current, base: base);
+}
+
+// decide denies an edit that changes a counter the branch already changed. A first bump, an
+// edit that leaves the value alone, and one back to the base value are allowed. null is no
+// opinion; an unreadable base advises, since the rule could not judge.
+export fun decide(edit: Edit, current: fun (path: str) > str?, base: fun (path: str) > str? !> str) > GuardVerdict? {
+    final touched = counters.filter(fun (i: int, c: Counter) > bool => c.file == edit.rel
+        and (edit.content != "" or edit.oldText.indexOf(c.declaration) != null or edit.newText.indexOf(c.declaration) != null));
+    if (touched.len() == 0) {
+        return null;
+    }
+    final now = current(edit.rel);
+    final proposed = applied(edit, current: now);
+    if (proposed == null) {
+        return null;
+    }
+    foreach (c in touched) {
+        final branchValue = valueOf(now ?? "", declaration: c.declaration);
+        final proposedValue = valueOf(proposed!, declaration: c.declaration);
+        if (proposedValue == branchValue) {
+            continue;
+        }
+        var baseValue = "";
+        try {
+            baseValue = valueOf(base(edit.rel) ?? "", declaration: c.declaration);
+        } catch (err: str) {
+            return magus\guard.advise("{c.name}: the merge base could not be read, so the once-per-branch bump check did not run: {err}");
+        }
+        if (branchValue == baseValue or proposedValue == baseValue) {
+            continue;
+        }
+        return magus\guard.deny("this branch already bumped {c.name} from {shown(baseValue)} to {shown(branchValue)}; a branch bumps a version once\n"
+            + "The edit sets it to {proposedValue}. Keep {branchValue}: no one outside this branch read it, so the first bump already covers this change.\n"
+            + "Declared in {c.file} by `{c.declaration.trim()}`; the counters are listed in hack/policy/version-bumps.buzz.",
+            opts: {"rule": "version-bump-once"});
+    }
+    return null;
+}
+
+// applied is the file's text after edit, null when a replacement's oldText is not in the
+// file, which the host refuses anyway.
+fun applied(edit: Edit, current: str?) > str? {
+    if (edit.content != "") {
+        return edit.content;
+    }
+    final text = current ?? "";
+    if (edit.oldText == "") {
+        return text + edit.newText;
+    }
+    if (text.indexOf(edit.oldText) == null) {
+        return null;
+    }
+    return text.replace(edit.oldText, with: edit.newText);
+}
+
+// valueOf is the rest of the first line starting with declaration, "" when none does.
+export fun valueOf(text: str, declaration: str) > str {
+    foreach (line in text.split("\n")) {
+        final trimmed = line.trim();
+        if (trimmed.startsWith(declaration)) {
+            return trimmed.sub(declaration.len(), len: trimmed.len() - declaration.len()).trim();
+        }
+    }
+    return "";
+}
+
+fun shown(value: str) > str {
+    return if (value == "") "nothing (new on this branch)" else value;
+}
+
+// baseText is rel at the merge base of HEAD with vcs\base, null when the file did not exist
+// there. vcs has no file-at-revision method, so this is git's own `merge-base` and `show`.
+fun baseText(workspace: str, rel: str) > str? !> str {
+    final ref = vcs\base(workspace) catch "";
+    if (ref == "") {
+        throw "vcs\\base resolved no base ref";
+    }
+    final opts = vcs\CommandOptions{ quiet = true, allowFailure = true, dir = workspace };
+    final mergeBase = vcs\cmd(["merge-base", ref, "HEAD"], opts: opts) catch null;
+    if (mergeBase == null or mergeBase!.code != 0) {
+        throw "git merge-base {ref} HEAD failed";
+    }
+    final shown = vcs\cmd(["show", "{mergeBase!.stdout.trim()}:{rel}"], opts: opts) catch null;
+    if (shown == null or shown!.code != 0) {
+        return null;
+    }
+    return shown!.stdout;
+}
+
+fun fakeFiles(files: {str: str}) > fun (path: str) > str? {
+    return fun (path: str) > str? {
+        return files[path];
+    };
+}
+
+fun fakeBase(files: {str: str}) > fun (path: str) > str? !> str {
+    return fun (path: str) > str? !> str {
+        return files[path];
+    };
+}
+
+final skillFile = "internal/agent/catalog.go";
+
+fun skill(value: str) > str {
+    return "package agent\n\nconst skillStampFormat = {value}\n\nfunc x() \{\}\n";
+}
+
+test "the first bump on a branch is allowed" {
+    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 1", newText = "const skillStampFormat = 2" };
+    final v = decide(edit, current: fakeFiles({skillFile: skill("1")}), base: fakeBase({skillFile: skill("1")}));
+    std\assert(v == null, message: "first bump");
+}
+
+test "a second bump on a branch is denied naming the counter, the base value and the branch value" {
+    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 2", newText = "const skillStampFormat = 3" };
+    final v = decide(edit, current: fakeFiles({skillFile: skill("2")}), base: fakeBase({skillFile: skill("1")}));
+    std\assert(v != null and v!.decision == magus\GuardDecision.deny, message: "second bump denied");
+    final reason = v!.reason;
+    std\assert(reason.indexOf("skill-stamp-format") != null and reason.indexOf("from 1 to 2") != null, message: reason);
+    std\assert(reason.indexOf("a branch bumps a version once") != null, message: reason);
+    verdict\assertVerdict(reason, label: "second bump");
+}
+
+test "a whole-file write that bumps again is denied, and one that keeps the value is allowed" {
+    final files = fakeFiles({skillFile: skill("2")});
+    final base = fakeBase({skillFile: skill("1")});
+    final bumped = decide(Edit{ rel = skillFile, content = skill("3") }, current: files, base: base);
+    std\assert(bumped != null and bumped!.decision == magus\GuardDecision.deny, message: "write bumps again");
+    final kept = decide(Edit{ rel = skillFile, content = skill("2") + "// more\n" }, current: files, base: base);
+    std\assert(kept == null, message: "write keeps the value");
+}
+
+test "an edit back to the base value is allowed" {
+    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 2", newText = "const skillStampFormat = 1" };
+    std\assert(decide(edit, current: fakeFiles({skillFile: skill("2")}), base: fakeBase({skillFile: skill("1")})) == null, message: "revert");
+}
+
+test "an unrelated edit is never judged, and never reads the base" {
+    final base = fun (path: str) > str? !> str {
+        throw "the base was read";
+    };
+    final other = Edit{ rel = skillFile, oldText = "func x() \{\}", newText = "func y() \{\}" };
+    std\assert(decide(other, current: fakeFiles({skillFile: skill("2")}), base: base) == null, message: "same file, other line");
+    final elsewhere = Edit{ rel = "README.md", content = "const skillStampFormat = 200\n" };
+    std\assert(decide(elsewhere, current: fakeFiles({}), base: base) == null, message: "file with no counter");
+}
+
+test "a counter new on the branch is set once, then held" {
+    final file = "internal/symbols/goindex/goindex.go";
+    final base = fakeBase({});
+    final added = Edit{ rel = file, content = "const formatVersion = \"goindex 1\"\n" };
+    std\assert(decide(added, current: fakeFiles({}), base: base) == null, message: "introduced");
+    final again = Edit{ rel = file, oldText = "const formatVersion = \"goindex 1\"", newText = "const formatVersion = \"goindex 2\"" };
+    final v = decide(again, current: fakeFiles({file: "const formatVersion = \"goindex 1\"\n"}), base: base);
+    std\assert(v != null and v!.decision == magus\GuardDecision.deny, message: "bumped again");
+    std\assert(v!.reason.indexOf("new on this branch") != null, message: v!.reason);
+}
+
+test "an unreadable base advises instead of judging" {
+    final base = fun (path: str) > str? !> str {
+        throw "no base";
+    };
+    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 2", newText = "const skillStampFormat = 3" };
+    final v = decide(edit, current: fakeFiles({skillFile: skill("2")}), base: base);
+    std\assert(v != null and v!.decision == magus\GuardDecision.advise, message: "advised");
+}
+
+test "every counter's declaration is in its file today" {
+    foreach (c in counters) {
+        final text = fs\readFile(c.file) catch "";
+        std\assert(valueOf(text, declaration: c.declaration) != "", message: "{c.name}: no `{c.declaration}` in {c.file}");
+    }
+}

@@ -5,8 +5,8 @@ import "magus/figure";
 import "site/diagrams/packages" as _;
 
 export fun ciProvidersFigure() > figure\Figure !> any {
-    final contract = magus\dir("internal/ci/annotate");
-    final quote = magus\dir("internal/ci");
+    final contract = magus\graph().dir("internal/ci/annotate");
+    final quote = magus\graph().dir("internal/ci");
     final run = figure\external("run and cache", sub: "a project failed", look: figure\Look.plain);
     final ops = figure\external("Provider ops", sub: "group start, end, annotate", look: figure\Look.plain);
     final prefixes = figure\external("quote_prefixes", sub: "declared once", look: figure\Look.plain);
@@ -33,6 +33,6 @@ export fun ciProvidersFigure() > figure\Figure !> any {
         .zone("provider spell, in buzz", actors: [ops, prefixes])
         .legend(figure\Look.external, label: "outside magus")
         .scope(goPackages("internal/ci/**"))
-        .except([magus\dir("internal/ci/forecast"), magus\dir("internal/ci/volatility")],
+        .except([magus\graph().dir("internal/ci/forecast"), magus\graph().dir("internal/ci/volatility")],
             why: "shard sizing and flaky-test retry: they read run history and speak to no CI system");
 }

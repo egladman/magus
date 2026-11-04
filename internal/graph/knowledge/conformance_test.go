@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
@@ -93,17 +94,6 @@ func lensFixtureOptions() types.ConformanceOptions {
 		Step:      0.05,
 		Exclude:   []string{"third/**"},
 		Generated: map[string]bool{"internal/b/b_string.go": true},
-		Ratchet: types.ConformanceRatchet{
-			Schema: 1,
-			Thresholds: []types.ConformanceThreshold{{
-				ConformanceKey: types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource},
-				Value:          30, N: 5, Percentile: 95, Why: "p95 at fixture", Line: 4,
-			}},
-			Known: []types.ConformanceKnown{
-				{Metric: types.ConformanceCloneTokens, Items: []string{"internal/a/fs_linux.go#linuxStat", "internal/a/fs_darwin.go#darwinStat"}, Reason: "twins", Line: 12},
-				{Metric: types.ConformanceFileLines, Items: []string{"internal/a/a.go", "internal/b/b.go"}, Reason: "split pending", Line: 10},
-			},
-		},
 	}
 	for _, l := range []struct {
 		m      types.ConformanceMetric
@@ -112,7 +102,7 @@ func lensFixtureOptions() types.ConformanceOptions {
 		pct    float64
 		anchor int
 	}{
-		{types.ConformanceFileLines, types.ConformancePopSource, "", 95, 100},
+		{types.ConformanceFileLines, types.ConformancePopSource, "", 95, 30},
 		{types.ConformanceFileLines, types.ConformancePopMain, "", 95, 100},
 		{types.ConformanceFileLines, types.ConformancePopTest, "", 99, 100},
 		{types.ConformanceFuncLines, types.ConformancePopSource, "", 95, 8},
@@ -130,7 +120,7 @@ func lensFixtureOptions() types.ConformanceOptions {
 	return o
 }
 
-func findConformanceRow(t *testing.T, out types.ConformanceOutput, m types.ConformanceMetric, p types.ConformancePopulation, scope string) types.ConformanceRow {
+func findConformanceRow(t *testing.T, out types.Conformance, m types.ConformanceMetric, p types.ConformancePopulation, scope string) types.ConformanceRow {
 	t.Helper()
 	for _, r := range out.Rows {
 		if r.Key == (types.ConformanceKey{Metric: m, Population: p, Scope: scope}) {
@@ -161,11 +151,11 @@ func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 	assert.Equal(t, types.VerdictFound, out.Answer.Verdict)
 	assert.Equal(t, 1, out.Excluded, "third/t.go")
 
-	// The committed 30 is enforced, not the anchor 100 or the live p95 40; a.go is known.
+	// The anchor 30 is enforced, not the live p95 40.
 	lines := findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
 	assert.Equal(t, types.ConformanceRow{
-		Key: lines.Key, N: 5, P50: 10, P90: 40, P95: 40, P99: 40, Live: 40, Value: 30, Anchor: 100,
-		Known: 1, Source: types.ConformanceFromRatchet,
+		Key: lines.Key, N: 5, P50: 10, P90: 40, P95: 40, P99: 40, Live: 40, Value: 30,
+		Violations: []types.ConformanceItem{{ID: "internal/a/a.go", Source: "internal/a/a.go:1", Measure: 40}},
 	}, lines)
 	assert.Equal(t, 60, findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopMain, "").P99)
 	assert.Equal(t, 30, findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopTest, "").P99)
@@ -206,246 +196,22 @@ func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 	testClones := findConformanceRow(t, out, types.ConformanceCloneTokens, types.ConformancePopTest, "")
 	assert.Equal(t, 1, testClones.N)
 	assert.Empty(t, testClones.Violations, "no value is configured for test clones")
-	assert.Empty(t, testClones.Source)
 
 	assert.Equal(t, []types.ConformanceItem{{ID: "internal/a/a.go#T", Source: "internal/a/a.go:14", Measure: 1}},
 		findConformanceRow(t, out, types.ConformanceExportScope, types.ConformancePopSource, "").Violations,
 		"F is used from cmd/tool; T only from its own test")
 	assert.Equal(t, []types.ConformanceItem{{ID: "cmd/tool/main.go#Run", Source: "cmd/tool/main.go:32", Measure: 1}},
 		findConformanceRow(t, out, types.ConformanceExportScope, types.ConformancePopMain, "").Violations)
-
-	assert.Equal(t, []types.ConformanceKnown{
-		{Metric: types.ConformanceFileLines, Items: []string{"internal/b/b.go"}, Reason: "split pending", Line: 10},
-		{Metric: types.ConformanceCloneTokens, Items: []string{"internal/a/fs_linux.go#linuxStat", "internal/a/fs_darwin.go#darwinStat"}, Reason: "twins", Line: 12},
-	}, out.Stale, "b.go is under 30 now, and twins never form a group")
 }
 
-func TestConformanceKnownCloneGroup(t *testing.T) {
-	g := lensFixture()
-	o := lensFixtureOptions()
-	o.Ratchet.Known = []types.ConformanceKnown{{Metric: types.ConformanceCloneTokens, Items: []string{"internal/a/a.go#F", "internal/b/b.go#G"}, Reason: "one home pending"}}
-
-	clones := findConformanceRow(t, g.Conformance(o), types.ConformanceCloneTokens, types.ConformancePopSource, "")
-	assert.Equal(t, 1, clones.Known)
-	assert.Empty(t, clones.Violations)
-	assert.Empty(t, g.Conformance(o).Stale)
-
-	// A group's members must all be known: one entry naming only F leaves the group judged.
-	o.Ratchet.Known[0].Items = []string{"internal/a/a.go#F"}
-	clones = findConformanceRow(t, g.Conformance(o), types.ConformanceCloneTokens, types.ConformancePopSource, "")
-	assert.Zero(t, clones.Known)
-	assert.Len(t, clones.Violations, 1)
-}
-
-// A known item is matched by ID alone: its measure is never compared with anything, so
-// growth past its value is not a violation.
-func TestConformanceKnownItemIgnoresItsMeasure(t *testing.T) {
-	key := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
-	o := types.ConformanceOptions{Ratchet: types.ConformanceRatchet{Schema: 1,
-		Thresholds: []types.ConformanceThreshold{{ConformanceKey: key, Value: 30}},
-		Known:      []types.ConformanceKnown{{Metric: types.ConformanceFileLines, Items: []string{"pkg/f00.go"}, Reason: "split pending"}},
-	}}
-	out := conformanceSizedFiles(300, 10).Conformance(o)
-	row := findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
-	assert.Equal(t, 1, row.Known, "f00.go at 10x the value")
-	assert.Empty(t, row.Violations)
-	assert.Empty(t, out.Stale)
-}
-
-// A renamed or moved item with no recorded shape matches no sample: its old ID is stale,
-// and its new ID, if still past the value, is a violation.
-func TestConformanceKnownIDMatchingNoSampleIsStale(t *testing.T) {
-	key := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
-	known := types.ConformanceKnown{Metric: types.ConformanceFileLines, Items: []string{"pkg/old.go"}, Reason: "split pending", Line: 3}
-	o := types.ConformanceOptions{Ratchet: types.ConformanceRatchet{Schema: 1,
-		Thresholds: []types.ConformanceThreshold{{ConformanceKey: key, Value: 30}},
-		Known:      []types.ConformanceKnown{known},
-	}}
-	out := conformanceSizedFiles(300, 10).Conformance(o)
-	assert.Equal(t, []types.ConformanceKnown{known}, out.Stale)
-	assert.Equal(t, []types.ConformanceItem{{ID: "pkg/f00.go", Source: "pkg/f00.go:1", Measure: 300}},
-		findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopSource, "").Violations)
-}
-
-// carryOptions enforce 10 func lines and 30 file lines on source, with one known entry of
-// metric m listing items.
-func carryOptions(m types.ConformanceMetric, items ...string) types.ConformanceOptions {
-	return types.ConformanceOptions{Ratchet: types.ConformanceRatchet{Schema: 1,
-		Thresholds: []types.ConformanceThreshold{
-			{ConformanceKey: types.ConformanceKey{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}, Value: 10},
-			{ConformanceKey: types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}, Value: 30},
-		},
-		Known: []types.ConformanceKnown{{Metric: m, Items: items, Reason: "split pending", Line: 3}},
-	}}
-}
-
-// recordShapes fills o's known entries with the shapes out reports, as format does.
-func recordShapes(o *types.ConformanceOptions, out types.ConformanceOutput) {
-	for i, k := range o.Ratchet.Known {
-		shapes := map[string]string{}
-		for _, item := range k.Items {
-			if s := out.Shapes[item]; s != "" {
-				shapes[item] = s
-			}
-		}
-		o.Ratchet.Known[i].Shapes = shapes
-	}
-}
-
-func TestConformanceCarriesARenamedKnownFunction(t *testing.T) {
-	long := func(name string) types.KnowledgeSymbol {
-		return conformanceSym("/pkg", name+"().", "pkg/a.go", 1, 20, 20, "SA", 100)
-	}
-	other := conformanceSym("/pkg", "Other().", "pkg/b.go", 1, 20, 20, "SB", 100)
-	o := carryOptions(types.ConformanceFuncLines, "pkg/a.go#Long", "pkg/b.go#Other")
-	before := assembleLens([]types.KnowledgeSymbol{long("Long"), other}).Conformance(o)
-	require.Equal(t, map[string]string{"pkg/a.go#Long": "SA", "pkg/b.go#Other": "SB"}, before.Shapes)
-	recordShapes(&o, before)
-
-	out := assembleLens([]types.KnowledgeSymbol{long("Renamed"), other}).Conformance(o)
-	row := findConformanceRow(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "")
-	assert.Equal(t, 2, row.Known, "Renamed is Long")
-	assert.Empty(t, row.Violations)
-	out.Rows = nil
-	assert.Equal(t, types.ConformanceOutput{
-		Carried: []types.ConformanceCarry{{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed"}}},
-		Shapes:  map[string]string{"pkg/a.go#Renamed": "SA", "pkg/b.go#Other": "SB"},
-		Answer:  types.KnowledgeAnswer{Verdict: types.VerdictFound},
-	}, out, "shapes under the carried ID")
-	assert.Equal(t, []string{"pkg/a.go#Long", "pkg/b.go#Other"}, o.Ratchet.Known[0].Items, "the record is read, never edited")
-}
-
-func TestConformanceCarriesAnItemListedTwice(t *testing.T) {
-	long := func(name string) types.KnowledgeSymbol {
-		return conformanceSym("/pkg", name+"().", "pkg/a.go", 1, 20, 20, "SA", 100)
-	}
-	o := carryOptions(types.ConformanceFuncLines, "pkg/a.go#Long")
-	o.Ratchet.Known[0].Shapes = map[string]string{"pkg/a.go#Long": "SA"}
-	o.Ratchet.Known = append(o.Ratchet.Known, types.ConformanceKnown{
-		Metric: types.ConformanceFuncLines, Items: []string{"pkg/a.go#Long"}, Reason: "listed again", Line: 4,
-	})
-
-	out := assembleLens([]types.KnowledgeSymbol{long("Renamed")}).Conformance(o)
-	assert.Equal(t, []types.ConformanceCarry{{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed"}}}, out.Carried)
-	assert.Equal(t, 1, findConformanceRow(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "").Known)
-}
-
-func TestConformanceCarriesAMovedKnownFile(t *testing.T) {
-	file := func(path string) []types.KnowledgeSymbol {
-		a := conformanceSym("/pkg", "A().", path, 1, 2, 300, "", 0)
-		b := conformanceSym("/pkg", "B().", path, 4, 5, 300, "", 0)
-		a.BodyDigest, b.BodyDigest = "d1", "d2"
-		return []types.KnowledgeSymbol{a, b}
-	}
-	small := conformanceSym("/pkg", "C().", "pkg/small.go", 1, 2, 10, "", 0)
-	small.BodyDigest = "d3"
-	o := carryOptions(types.ConformanceFileLines, "pkg/old.go")
-	before := assembleLens(append(file("pkg/old.go"), small)).Conformance(o)
-	recordShapes(&o, before)
-	require.NotEmpty(t, o.Ratchet.Known[0].Shapes["pkg/old.go"])
-
-	out := assembleLens(append(file("pkg/new.go"), small)).Conformance(o)
-	row := findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
-	assert.Equal(t, 1, row.Known)
-	assert.Empty(t, row.Violations)
-	assert.Empty(t, out.Stale)
-	assert.Equal(t, []types.ConformanceCarry{{Metric: types.ConformanceFileLines, From: "pkg/old.go", To: []string{"pkg/new.go"}}}, out.Carried)
-
-	// A file that changed a symbol on the way did not move whole.
-	moved := file("pkg/new.go")
-	moved[1].BodyDigest = "d2-edited"
-	out = assembleLens(append(moved, small)).Conformance(o)
-	assert.Empty(t, out.Carried)
-	assert.Len(t, out.Stale, 1)
-}
-
-func TestConformanceShapeTwinsCarryNothing(t *testing.T) {
-	renamed := conformanceSym("/pkg", "Renamed().", "pkg/a.go", 1, 20, 20, "SA", 100)
-	twin := conformanceSym("/pkg", "Twin().", "pkg/b.go", 1, 20, 20, "SA", 100)
-	o := carryOptions(types.ConformanceFuncLines, "pkg/a.go#Long")
-	o.Ratchet.Known[0].Shapes = map[string]string{"pkg/a.go#Long": "SA"}
-
-	out := assembleLens([]types.KnowledgeSymbol{renamed, twin}).Conformance(o)
-	assert.Len(t, findConformanceRow(t, out, types.ConformanceFuncLines, types.ConformancePopSource, "").Violations, 2)
-	out.Rows = nil
-	assert.Equal(t, types.ConformanceOutput{
-		Stale: []types.ConformanceKnown{
-			{Metric: types.ConformanceFuncLines, Items: []string{"pkg/a.go#Long"}, Reason: "split pending", Line: 3},
-		},
-		Ambiguous: []types.ConformanceCarry{
-			{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed", "pkg/b.go#Twin"}},
-		},
-		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
-	}, out)
-
-	// One candidate that two known items claim is no evidence for either.
-	o = carryOptions(types.ConformanceFuncLines, "pkg/a.go#Long", "pkg/c.go#Gone")
-	o.Ratchet.Known[0].Shapes = map[string]string{"pkg/a.go#Long": "SA", "pkg/c.go#Gone": "SA"}
-	out = assembleLens([]types.KnowledgeSymbol{renamed}).Conformance(o)
-	assert.Empty(t, out.Carried)
-	assert.Equal(t, []types.ConformanceCarry{
-		{Metric: types.ConformanceFuncLines, From: "pkg/a.go#Long", To: []string{"pkg/a.go#Renamed"}},
-		{Metric: types.ConformanceFuncLines, From: "pkg/c.go#Gone", To: []string{"pkg/a.go#Renamed"}},
-	}, out.Ambiguous)
-}
-
-func TestConformanceRenamedCloneMemberKeepsItsGroupKnown(t *testing.T) {
-	o := lensFixtureOptions()
-	o.Ratchet.Known = []types.ConformanceKnown{{Metric: types.ConformanceCloneTokens, Items: []string{"internal/a/a.go#F", "internal/b/b.go#G"}, Reason: "one home pending", Line: 12}}
-	recordShapes(&o, lensFixture().Conformance(o))
-
-	syms := lensSymbols()
-	for i := range syms {
-		if syms[i].Key == conformanceNS("/internal/b")+"G()." {
-			syms[i].Key = conformanceNS("/internal/b") + "G2()."
-		}
-	}
-	out := assembleLens(syms).Conformance(o)
-	clones := findConformanceRow(t, out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
-	assert.Equal(t, 1, clones.Known)
-	assert.Empty(t, clones.Violations)
-	assert.Empty(t, out.Stale)
-	assert.Equal(t, []types.ConformanceCarry{
-		{Metric: types.ConformanceCloneTokens, From: "internal/b/b.go#G", To: []string{"internal/b/b.go#G2"}},
-	}, out.Carried, "F is listed, so G2 is the one unlisted member sharing the shape")
-}
-
-// A known export goes stale when a caller is added from another package, a change to a
-// file the entry does not name.
-func TestConformanceKnownExportGoesStaleOnAnOutsideCaller(t *testing.T) {
-	known := types.ConformanceKnown{Metric: types.ConformanceExportScope, Items: []string{"internal/a/a.go#T"}, Reason: "stacked change", Line: 20}
-	o := lensFixtureOptions()
-	o.Ratchet.Known = []types.ConformanceKnown{known}
-
-	before := lensFixture().Conformance(o)
-	assert.Equal(t, 1, findConformanceRow(t, before, types.ConformanceExportScope, types.ConformancePopSource, "").Known)
-	assert.Empty(t, before.Stale)
-
-	syms := lensSymbols()
-	for i := range syms {
-		if syms[i].Key == conformanceNS("/internal/a")+"T#" {
-			syms[i].Refs = append(syms[i].Refs, types.KnowledgeSymbolRef{Path: "cmd/tool/main.go", Count: 1})
-		}
-	}
-	after := assembleLens(syms).Conformance(o)
-	assert.Zero(t, findConformanceRow(t, after, types.ConformanceExportScope, types.ConformancePopSource, "").Known)
-	assert.Equal(t, []types.ConformanceKnown{known}, after.Stale, "only cmd/tool/main.go changed")
-}
-
-// A new copy joining a known clone group makes the whole group one violation, located at
-// its first member, a file the new copy did not touch.
-func TestConformanceNewCopyFailsAKnownCloneGroupAtItsFirstMember(t *testing.T) {
-	o := lensFixtureOptions()
-	o.Ratchet.Known = []types.ConformanceKnown{{Metric: types.ConformanceCloneTokens, Items: []string{"internal/a/a.go#F", "internal/b/b.go#G"}, Reason: "one home pending"}}
-
+// A new copy joining a clone group makes the whole group one violation, located at its first
+// member, a file the new copy did not touch.
+func TestConformanceNewCopyJoinsACloneGroupAtItsFirstMember(t *testing.T) {
 	syms := append(lensSymbols(), conformanceSym("/internal/b", "H().", "internal/b/b.go", 14, 23, 20, "S1", 90))
-	out := assembleLens(syms).Conformance(o)
-	clones := findConformanceRow(t, out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
-	assert.Zero(t, clones.Known)
+	clones := findConformanceRow(t, assembleLens(syms).Conformance(lensFixtureOptions()), types.ConformanceCloneTokens, types.ConformancePopSource, "")
 	assert.Equal(t, []types.ConformanceItem{
 		{ID: "internal/a/a.go#F, internal/b/b.go#G, internal/b/b.go#H", Source: "internal/a/a.go:3", Measure: 90},
 	}, clones.Violations, "H was added to b.go; the finding points at a.go")
-	assert.Empty(t, out.Stale, "the entry still shares two members with the group")
 }
 
 func TestCloneGroupsSkipsPlatformTwins(t *testing.T) {
@@ -461,6 +227,137 @@ func TestExportScope(t *testing.T) {
 		{ID: "cmd/tool/main.go#Run", Source: "cmd/tool/main.go:32", Measure: 1},
 		{ID: "internal/a/a.go#T", Source: "internal/a/a.go:14", Measure: 1},
 	}, exportScope(lensFixture(), lensFixtureOptions()), "methods, the root package and test files are out of scope")
+}
+
+// ExportScopeSuite pins what counts as use of an export. Each case is named
+// for a real finding in internal/config or internal/agent.
+type ExportScopeSuite struct {
+	suite.Suite
+}
+
+func TestExportScopeSuite(t *testing.T) {
+	suite.Run(t, new(ExportScopeSuite))
+}
+
+const (
+	exportReader     = "cmd/tool/main.go"
+	exportTestReader = "cmd/tool/main_test.go"
+	exportBinder     = "internal/cfg/gen/bind.go"
+)
+
+// exportSym is a symbol of package internal/cfg with that rendering.
+func exportSym(desc, signature string, refs ...string) types.KnowledgeSymbol {
+	s := conformanceSym("/internal/cfg", desc, "internal/cfg/cfg.go", 1, 1, 1, "", 0, refs...)
+	s.Signature = signature
+	return s
+}
+
+// flagged is what export-scope reports over syms, within internal/cfg.
+func (s *ExportScopeSuite) flagged(syms ...types.KnowledgeSymbol) []string {
+	all := append([]types.KnowledgeSymbol{
+		conformancePkg("/internal/cfg", []string{"internal/cfg/cfg.go"}),
+		conformancePkg("/internal/cfg/gen", []string{exportBinder}),
+		conformancePkg("/cmd/tool", []string{exportReader}),
+		conformanceSym("/cmd/tool", "main().", exportReader, 1, 2, 2, "", 0),
+	}, syms...)
+	var out []string
+	for _, it := range exportScope(assembleLens(all), lensFixtureOptions()) {
+		if name, ok := strings.CutPrefix(it.ID, "internal/cfg/cfg.go#"); ok {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func (s *ExportScopeSuite) TestFieldReadOutsideUsesItsType() {
+	s.Empty(s.flagged(
+		exportSym("VCS#", "type VCS struct"),
+		exportSym("VCS#BaseRef.", "struct field BaseRef string", exportReader),
+	))
+}
+
+func (s *ExportScopeSuite) TestMethodReadOutsideUsesItsType() {
+	s.Empty(s.flagged(
+		exportSym("CarryApprovals#", "type CarryApprovals CarryPolicy"),
+		exportSym("CarryApprovals#Policy().", "func (c CarryApprovals) Policy() queuetypes.CarryPolicy", exportReader),
+	))
+}
+
+func (s *ExportScopeSuite) TestReadFieldCarriesItsType() {
+	s.Empty(s.flagged(
+		exportSym("Config#", "type Config struct", exportReader),
+		exportSym("Config#Queue.", "struct field Queue Queue", exportReader),
+		exportSym("Queue#", "type Queue struct"),
+	))
+}
+
+func (s *ExportScopeSuite) TestReadFieldCarriesItsMapValueType() {
+	s.Empty(s.flagged(
+		exportSym("ConformanceConfig#", "type ConformanceConfig struct", exportReader),
+		exportSym("ConformanceConfig#Checks.",
+			"struct field Checks map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig", exportReader),
+		exportSym("ConformanceLimitConfig#", "type ConformanceLimitConfig struct"),
+	))
+}
+
+func (s *ExportScopeSuite) TestUsedSignatureCarriesItsTypes() {
+	s.Empty(s.flagged(
+		exportSym("RegisterHarnessSpellLoader().", "func RegisterHarnessSpellLoader(fn HarnessSpellLoader) (previous HarnessSpellLoader)", exportReader),
+		exportSym("HarnessSpellLoader#", "type HarnessSpellLoader func(ctx context.Context) error"),
+	))
+}
+
+func (s *ExportScopeSuite) TestUnreadFieldCarriesNothing() {
+	s.Equal([]string{"Source"}, s.flagged(
+		exportSym("Config#", "type Config struct", exportReader),
+		exportSym("Config#Sources.", "struct field Sources []Source"),
+		exportSym("Source#", "type Source struct"),
+	))
+}
+
+func (s *ExportScopeSuite) TestAFieldNameIsNotItsType() {
+	s.Equal([]string{"Diff"}, s.flagged(
+		exportSym("Report#", "type Report struct", exportReader),
+		exportSym("Report#Diff.", "struct field Diff string", exportReader),
+		exportSym("Diff#", "type Diff struct"),
+	))
+}
+
+func (s *ExportScopeSuite) TestAConstGroupIsOneUnit() {
+	s.Empty(s.flagged(
+		exportSym("HarnessStatus#", "type HarnessStatus string"),
+		exportSym("HarnessVerified.", `const HarnessVerified HarnessStatus = "verified"`, exportReader),
+		exportSym("HarnessUncovered.", `const HarnessUncovered HarnessStatus = "uncovered"`),
+	))
+}
+
+func (s *ExportScopeSuite) TestAConstGroupNoOneReadsStaysAFinding() {
+	s.Equal([]string{"SourceCaveat", "SourceFollow", "SourceVerdict"}, s.flagged(
+		exportSym("SourceVerdict#", "type SourceVerdict string"),
+		exportSym("SourceFollow.", `const SourceFollow SourceVerdict = "follow"`, exportTestReader),
+		exportSym("SourceCaveat.", `const SourceCaveat SourceVerdict = "caveat"`),
+	))
+}
+
+func (s *ExportScopeSuite) TestConstsOfAnotherPackagesTypeAreNoGroup() {
+	s.Equal([]string{"DefaultShutdownGrace"}, s.flagged(
+		exportSym("DefaultShutdownGrace.", "const DefaultShutdownGrace time.Duration = 300000000000"),
+		exportSym("DefaultPoll.", "const DefaultPoll time.Duration = 1000000000", exportReader),
+	))
+}
+
+func (s *ExportScopeSuite) TestATestReadIsNoUse() {
+	s.Equal([]string{"ConformanceGatesConfig"}, s.flagged(
+		exportSym("ConformanceGatesConfig#", "type ConformanceGatesConfig struct", exportTestReader),
+		exportSym("ConformanceGatesConfig#Bar.", "struct field Bar float64", exportTestReader),
+	))
+}
+
+func (s *ExportScopeSuite) TestAGeneratedReadIsNoUse() {
+	s.Equal([]string{"Diff"}, s.flagged(
+		exportSym("Diff#", "type Diff struct"),
+		exportSym("Diff#Tui.", "struct field Tui *bool", exportBinder),
+	))
 }
 
 func TestConformanceSamplesDropGeneratedAndExcluded(t *testing.T) {
@@ -497,42 +394,58 @@ func conformanceSizedFiles(lines ...int) *Graph {
 	return mergeAll([]Shard{assembleSymbols(".", syms, nil)})
 }
 
-// A proposal is the live percentile, offered only when a large enough sample sits a full
-// step under the enforced value. A live value looser than it yields violations instead.
-func TestConformanceProposalRule(t *testing.T) {
+// ProposalSuite pins the proposal rule over files of 1 through 30 lines: a proposal is the
+// live p95, offered only when a large enough sample sits a full step under the anchor. A live
+// value looser than the anchor yields violations instead.
+type ProposalSuite struct {
+	suite.Suite
+	g *Graph
+}
+
+func TestProposalSuite(t *testing.T) {
+	suite.Run(t, new(ProposalSuite))
+}
+
+func (s *ProposalSuite) SetupSuite() {
 	var lines []int
 	for i := 1; i <= 30; i++ {
 		lines = append(lines, i)
 	}
-	g := conformanceSizedFiles(lines...)
+	s.g = conformanceSizedFiles(lines...)
+}
+
+// row is the file-lines source row under anchor with minSample.
+func (s *ProposalSuite) row(anchor, minSample int) types.ConformanceRow {
 	key := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
-	for _, tc := range []struct {
-		name               string
-		committed          int
-		minSample          int
-		propose, violating int
-		src                types.ConformanceSource
-	}{
-		{name: "anchor far above the live p95", minSample: 30, propose: 29, src: types.ConformanceFromAnchor},
-		{name: "too few samples", minSample: 31, src: types.ConformanceFromAnchor},
-		{name: "within one step", committed: 30, minSample: 30, src: types.ConformanceFromRatchet},
-		{name: "live looser than the commit", committed: 25, minSample: 30, violating: 5, src: types.ConformanceFromRatchet},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			o := types.ConformanceOptions{
-				Limits:    map[types.ConformanceKey]types.ConformanceLimit{key: {Percentile: 95, Anchor: 100}},
-				MinSample: tc.minSample, Step: 0.05,
-			}
-			if tc.committed > 0 {
-				o.Ratchet = types.ConformanceRatchet{Schema: 1, Thresholds: []types.ConformanceThreshold{{ConformanceKey: key, Value: tc.committed}}}
-			}
-			row := findConformanceRow(t, g.Conformance(o), types.ConformanceFileLines, types.ConformancePopSource, "")
-			assert.Len(t, row.Violations, tc.violating)
-			wantRow := row
-			wantRow.Live, wantRow.Propose, wantRow.Source = 29, tc.propose, tc.src
-			assert.Equal(t, wantRow, row)
-		})
+	o := types.ConformanceOptions{
+		Limits:    map[types.ConformanceKey]types.ConformanceLimit{key: {Percentile: 95, Anchor: anchor}},
+		MinSample: minSample, Step: 0.05,
 	}
+	row := findConformanceRow(s.T(), s.g.Conformance(o), types.ConformanceFileLines, types.ConformancePopSource, "")
+	s.Equal(29, row.Live)
+	return row
+}
+
+func (s *ProposalSuite) TestAnAnchorFarAboveTheLivePercentileProposesIt() {
+	row := s.row(100, 30)
+	s.Equal(29, row.Propose)
+	s.Empty(row.Violations)
+}
+
+func (s *ProposalSuite) TestTooFewSamplesProposeNothing() {
+	s.Zero(s.row(100, 31).Propose)
+}
+
+func (s *ProposalSuite) TestAnAnchorWithinOneStepProposesNothing() {
+	row := s.row(30, 30)
+	s.Zero(row.Propose)
+	s.Empty(row.Violations)
+}
+
+func (s *ProposalSuite) TestALiveValueLooserThanTheAnchorViolates() {
+	row := s.row(25, 30)
+	s.Zero(row.Propose)
+	s.Len(row.Violations, 5)
 }
 
 func TestConformanceIsDeterministic(t *testing.T) {
@@ -607,21 +520,6 @@ func TestConformanceCallSequenceRow(t *testing.T) {
 		{ID: "internal/a/a.go#A", Source: "internal/a/a.go:1", Measure: 8},
 		{ID: "internal/b/b.go#B", Source: "internal/b/b.go:1", Measure: 8},
 	}, row.Violations)
-
-	o.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{
-		{Metric: types.ConformanceCallSequence, Items: []string{"internal/b/b.go#B", "internal/c/c.go#C"}, Reason: "fold pending", Line: 3},
-	}}
-	out := g.Conformance(o)
-	row = findConformanceRow(t, out, types.ConformanceCallSequence, types.ConformancePopSource, "")
-	row.P50, row.P90, row.P95, row.P99 = 0, 0, 0, 0
-	assert.Equal(t, types.ConformanceRow{
-		Key: types.ConformanceKey{Metric: types.ConformanceCallSequence, Population: types.ConformancePopSource},
-		N:   3, Live: 8, Value: 7, Anchor: 7, Known: 1, Source: types.ConformanceFromAnchor,
-		Violations: []types.ConformanceItem{{ID: "internal/a/a.go#A", Source: "internal/a/a.go:1", Measure: 8}},
-	}, row)
-	assert.Equal(t, []types.ConformanceKnown{
-		{Metric: types.ConformanceCallSequence, Items: []string{"internal/c/c.go#C"}, Reason: "fold pending", Line: 3},
-	}, out.Stale, "C is under the value")
 }
 
 // boundarySymbols is a command beside a library, an interface, a store writing through
@@ -680,7 +578,7 @@ func TestConformanceMainLogic(t *testing.T) {
 	row := findConformanceRow(t, out, types.ConformanceMainLogic, types.ConformancePopMain, "")
 	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
 	assert.Equal(t, types.ConformanceRow{
-		Key: row.Key, N: 7, Value: 119, Anchor: 119, Source: types.ConformanceFromAnchor,
+		Key: row.Key, N: 7, Value: 119,
 		Violations: []types.ConformanceItem{
 			{ID: "cmd/tool/main.go#compute", Source: "cmd/tool/main.go:10", Measure: 150, Home: "internal/lib"},
 		},
@@ -692,7 +590,7 @@ func TestConformanceStorePathExport(t *testing.T) {
 	row := findConformanceRow(t, out, types.ConformanceStorePathExport, types.ConformancePopSource, "")
 	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
 	assert.Equal(t, types.ConformanceRow{
-		Key: row.Key, N: 2, Source: types.ConformanceFromAnchor,
+		Key: row.Key, N: 2,
 		Violations: []types.ConformanceItem{
 			{ID: "internal/store/store.go#LogPath", Source: "internal/store/store.go:3", Measure: 2, Home: "internal/store"},
 		},
@@ -715,7 +613,7 @@ func TestConformanceFileSplit(t *testing.T) {
 	row := findConformanceRow(t, g.Conformance(options(1500)), types.ConformanceFileSplit, types.ConformancePopSource, "")
 	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
 	assert.Equal(t, types.ConformanceRow{
-		Key: row.Key, N: 2, Value: 1500, Anchor: 1500, Source: types.ConformanceFromAnchor,
+		Key: row.Key, N: 2, Value: 1500,
 		Violations: []types.ConformanceItem{
 			{ID: "internal/r/r_tasks.go", Source: "internal/r/r_tasks.go:1", Measure: 1100, Home: "internal/r/r.go", Unshared: true},
 			{ID: "internal/r/r_cache.go", Source: "internal/r/r_cache.go:1", Measure: 900, Home: "internal/r/r.go"},
@@ -728,26 +626,25 @@ func TestConformanceFileSplit(t *testing.T) {
 }
 
 // splitNameSymbols is two packages whose job.go is past 1500 lines. internal/a has no
-// job_claim.go; internal/b has one, beside a test, a platform build and a known file that
-// each name two concepts after job.go.
+// job_claim.go; internal/b has one, beside a test and a platform build that each name two
+// concepts after job.go.
 func splitNameSymbols() []types.KnowledgeSymbol {
 	const (
 		a, b                    = "/internal/a", "/internal/b"
 		aRoot, aCallers         = "internal/a/job.go", "internal/a/job_claim_callers.go"
 		bRoot, bClaim, bCallers = "internal/b/job.go", "internal/b/job_claim.go", "internal/b/job_claim_callers.go"
-		bTest, bLinux, bKnown   = "internal/b/job_lease_cache_test.go", "internal/b/job_lease_linux.go", "internal/b/job_lease_store.go"
+		bTest, bLinux           = "internal/b/job_lease_cache_test.go", "internal/b/job_lease_linux.go"
 	)
 	return []types.KnowledgeSymbol{
 		conformancePkg(a, []string{aRoot, aCallers}),
-		conformancePkg(b, []string{bRoot, bClaim, bCallers, bTest, bLinux, bKnown}),
+		conformancePkg(b, []string{bRoot, bClaim, bCallers, bTest, bLinux}),
 		conformanceSym(a, "Run().", aRoot, 3, 12, 2900, "S1", 90, aCallers),
 		conformanceSym(a, "callers().", aCallers, 3, 12, 100, "S2", 90),
-		conformanceSym(b, "Run().", bRoot, 3, 12, 2900, "S3", 90, bClaim, bKnown),
+		conformanceSym(b, "Run().", bRoot, 3, 12, 2900, "S3", 90, bClaim),
 		conformanceSym(b, "claim().", bClaim, 3, 12, 200, "S4", 90, bCallers),
 		conformanceSym(b, "callers().", bCallers, 3, 12, 100, "S5", 90),
 		conformanceSym(b, "TestLease().", bTest, 3, 12, 50, "S6", 90),
 		conformanceSym(b, "lease().", bLinux, 3, 12, 40, "S7", 90),
-		conformanceSym(b, "store().", bKnown, 3, 12, 60, "S8", 90),
 	}
 }
 
@@ -760,22 +657,17 @@ func TestConformanceFileSplitNamesOneConcept(t *testing.T) {
 	key := types.ConformanceKey{Metric: types.ConformanceFileSplit, Population: types.ConformancePopSource}
 	o := types.ConformanceOptions{MinSample: 1, Step: 0.05,
 		Limits: map[types.ConformanceKey]types.ConformanceLimit{key: {Anchor: 1500}},
-		Ratchet: types.ConformanceRatchet{Known: []types.ConformanceKnown{
-			{Metric: types.ConformanceFileSplit, Items: []string{"internal/b/job_lease_store.go"}, Reason: "seeded"},
-		}},
 	}
 
-	out := g.Conformance(o)
-	row := findConformanceRow(t, out, types.ConformanceFileSplit, types.ConformancePopSource, "")
+	row := findConformanceRow(t, g.Conformance(o), types.ConformanceFileSplit, types.ConformancePopSource, "")
 	// The distribution is the population's, which other tests pin; this one judges names.
 	row.N, row.P50, row.P90, row.P95, row.P99, row.Live, row.Value, row.Propose = 0, 0, 0, 0, 0, 0, 0, 0
-	assert.Equal(t, types.ConformanceRow{Key: key, Anchor: 1500, Known: 1, Source: row.Source, Violations: []types.ConformanceItem{
+	assert.Equal(t, types.ConformanceRow{Key: key, Violations: []types.ConformanceItem{
 		{ID: "internal/a/job_claim_callers.go", Source: "internal/a/job_claim_callers.go:1", Measure: 3000,
 			Home: "internal/a/job.go", Rename: "internal/a/job_claim.go"},
 		{ID: "internal/b/job_claim_callers.go", Source: "internal/b/job_claim_callers.go:1", Measure: 300,
 			Home: "internal/b/job_claim.go"},
 	}}, row, "a root past 1500 passes a split by size, never a name splitting two concepts off it"+
 		"; beside job_claim.go, job_claim_callers.go splits job_claim.go and would fit in it"+
-		"; the test and the linux build are never findings; job_lease_store.go is known")
-	assert.Empty(t, out.Stale, "a known name finding stays past its row whatever it measures")
+		"; the test and the linux build are never findings")
 }

@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 func TestReadLinesKeepsLineNumbersAndFlagsAnUnfinishedLine(t *testing.T) {
@@ -125,6 +127,7 @@ func TestJSONLNamesTheLineThatDoesNotDecode(t *testing.T) {
 	require.NoError(t, os.WriteFile(l.Path, []byte(`{"key":"a"}`+"\n\n"+`{"key":`+"\n"), 0o644))
 	_, err := l.Load()
 	require.ErrorContains(t, err, l.Path+":3: ")
+	require.ErrorIs(t, err, types.StoreLineUndecodable)
 }
 
 // While the file an older magus kept the store in exists, neither a read nor a write goes on,
@@ -136,6 +139,7 @@ func TestJSONLRefusesWhileTheOldFileExists(t *testing.T) {
 	require.NoError(t, os.WriteFile(l.Old, []byte(`[]`), 0o644))
 	_, err := l.Load()
 	require.ErrorIs(t, err, ErrLegacyStore)
+	require.ErrorIs(t, err, types.LegacyStorePresent)
 	require.ErrorContains(t, err, "preserve it")
 	require.ErrorIs(t, l.Update(t.Context(), set(mark{Key: "a"})), ErrLegacyStore)
 	raw, err := os.ReadFile(l.Old)

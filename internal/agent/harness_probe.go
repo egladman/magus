@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/egladman/magus/types"
 )
 
 // probeTimeout bounds one guard-command probe. Matches the shipped hook templates'
@@ -82,6 +84,23 @@ func probeable(root, command string) bool {
 	default:
 		return runnableAsProbe(root, command)
 	}
+}
+
+// declaredSilent reports whether the harness declares command a recorder.
+// Every hook that runs it binds no hook point, so no verdict is expected.
+// A command a point-binding hook also runs stays probed.
+func declaredSilent(command string, hooks []types.HookCommand) bool {
+	declared := false
+	for _, h := range hooks {
+		if !strings.HasSuffix(command, hookInvocation(h)) {
+			continue
+		}
+		if len(h.Points) > 0 {
+			return false
+		}
+		declared = true
+	}
+	return declared
 }
 
 // namesTemplate reports whether command invokes the shipped Buzz template called stem.
@@ -222,14 +241,14 @@ func probeEvent(command string) (event string, wantDecisions []string) {
 // this; this is what makes the difference between a config that WOULD have been
 // reported "verified" while its guard command was silently broken, and one that
 // genuinely answers.
-func probeHarnessCommands(ctx context.Context, root string, config map[string]any) (HarnessStatus, string) {
+func probeHarnessCommands(ctx context.Context, root string, config map[string]any, hooks []types.HookCommand) (HarnessStatus, string) {
 	var all []string
 	collectCommands(config, &all)
 
 	seen := make(map[string]bool, len(all))
 	var commands []string
 	for _, c := range all {
-		if seen[c] || !probeable(root, c) {
+		if seen[c] || !probeable(root, c) || declaredSilent(c, hooks) {
 			continue
 		}
 		seen[c] = true
@@ -304,11 +323,9 @@ func hasExecutableMagus(root string) bool {
 // a host would run it) against a synthetic event, in an isolated environment, and
 // reports whether a verdict came back in the shape expected.
 //
-// Read-only: it neither writes into root nor touches the real user config or
-// activity trail. HOME, XDG_STATE_HOME, XDG_CONFIG_HOME and TMPDIR are all
-// redirected to a throwaway directory removed when the probe returns, so
-// whatever `magus shell` would otherwise record (an activity event, a
-// guard-notice-once marker) lands there instead of in the machine's real state.
+// Recorded state lands in a throwaway directory removed on return.
+// HOME and XDG_CONFIG_HOME stay real: a moved config dir makes a mise shim
+// refuse to run with "not trusted".
 func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, string) {
 	scratch, err := os.MkdirTemp("", "magus-harness-probe-*")
 	if err != nil {
@@ -325,9 +342,7 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader(event)
 	env := append(withoutLeaseClaim(os.Environ()),
-		"HOME="+scratch,
 		"XDG_STATE_HOME="+filepath.Join(scratch, "state"),
-		"XDG_CONFIG_HOME="+filepath.Join(scratch, "config"),
 		"TMPDIR="+scratch,
 		"PATH="+absolutePATH(os.Getenv("PATH")),
 	)

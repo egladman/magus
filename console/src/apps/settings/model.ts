@@ -24,6 +24,7 @@
 // other machine.
 
 import type { Keymap } from "../../desktop/commands";
+import { MagusError, fail, ok, parseJSON, type Result } from "../../gen/magus/types";
 import type { Persisted } from "../../lib/persist";
 import type { MotionPref } from "../../lib/settings";
 
@@ -91,20 +92,17 @@ export function buildSettingsEnvelope(p: Settings, layout: LayoutSettings): Sett
 // settings object that magus does not know, `skipped` = known keys present but rejected by the type check
 // (a wrong-typed value, or a malformed keymap). `newerSchema` carries the file's schemaVersion when it is
 // ahead of this console's, so the app can say the file came from a newer build.
-export type ImportResult =
-  | {
-      ok: true;
-      next: Settings;
-      // The merged layout snapshot. Separate from `next` because the app applies it directly
-      // rather than staging it: there is no form to stage it against.
-      nextLayout: LayoutSettings;
-      applied: (keyof Settings)[];
-      appliedLayout: (keyof LayoutSettings)[];
-      unknown: string[];
-      skipped: string[];
-      newerSchema?: number;
-    }
-  | { ok: false; error: string };
+export interface ImportResult {
+  next: Settings;
+  // The merged layout snapshot. Separate from `next` because the app applies it directly
+  // rather than staging it: there is no form to stage it against.
+  nextLayout: LayoutSettings;
+  applied: (keyof Settings)[];
+  appliedLayout: (keyof LayoutSettings)[];
+  unknown: string[];
+  skipped: string[];
+  newerSchema?: number | undefined;
+}
 
 // The canonical set of keys importSettings understands. Kept in sync with the Settings interface so a
 // settings-object key outside this set is reported as unknown rather than silently dropped.
@@ -155,16 +153,17 @@ export function importSettings(
   raw: string,
   current: Settings,
   currentLayout: LayoutSettings,
-): ImportResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    // reported: the ImportResult carries this error to the Settings import form
-    return { ok: false, error: "The text is not valid JSON." };
-  }
+): Result<ImportResult> {
+  const doc = parseJSON(raw);
+  if (doc.error) return fail(new MagusError({ code: "", message: "The text is not valid JSON." }));
+  const parsed = doc.value;
   if (!isRecord(parsed) || !isRecord(parsed.settings)) {
-    return { ok: false, error: "Not a magus console settings file (no settings object)." };
+    return fail(
+      new MagusError({
+        code: "",
+        message: "Not a magus console settings file (no settings object).",
+      }),
+    );
   }
 
   const settings = parsed.settings;
@@ -237,7 +236,7 @@ export function importSettings(
   } else skipLayout("sidebarExpanded");
 
   if (applied.length === 0 && appliedLayout.length === 0) {
-    return { ok: false, error: "No recognizable settings to import." };
+    return fail(new MagusError({ code: "", message: "No recognizable settings to import." }));
   }
 
   const unknown = [
@@ -249,7 +248,7 @@ export function importSettings(
   const version = parsed.schemaVersion;
   const newerSchema =
     typeof version === "number" && version > SETTINGS_SCHEMA_VERSION ? version : undefined;
-  return { ok: true, next, nextLayout, applied, appliedLayout, unknown, skipped, newerSchema };
+  return ok({ next, nextLayout, applied, appliedLayout, unknown, skipped, newerSchema });
 }
 
 // --- Pending diff (the transactional model) --------------------------------------------------------
@@ -367,11 +366,16 @@ export function diffLines(before: string, after: string): DiffLine[] {
   const b = after.split("\n");
   const n = a.length;
   const m = b.length;
-  // lcs[i][j] = length of the LCS of a[i:] and b[j:], filled from the bottom-right corner.
-  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  // lcs[i * width + j] = length of the LCS of a[i:] and b[j:], filled from the bottom-right corner.
+  // Every read stays inside the (n+1) x (m+1) table, so the ?? fallbacks never fire.
+  const width = m + 1;
+  const lcs = new Array<number>((n + 1) * width).fill(0);
+  const cell = (i: number, j: number): number => lcs[i * width + j] ?? 0;
+  const lineOf = (lines: string[], k: number): string => lines[k] ?? "";
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      lcs[i * width + j] =
+        a[i] === b[j] ? cell(i + 1, j + 1) + 1 : Math.max(cell(i + 1, j), cell(i, j + 1));
     }
   }
   const out: DiffLine[] = [];
@@ -379,23 +383,23 @@ export function diffLines(before: string, after: string): DiffLine[] {
   let j = 0;
   while (i < n && j < m) {
     if (a[i] === b[j]) {
-      out.push({ kind: "same", text: a[i] });
+      out.push({ kind: "same", text: lineOf(a, i) });
       i++;
       j++;
-    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
-      out.push({ kind: "del", text: a[i] });
+    } else if (cell(i + 1, j) >= cell(i, j + 1)) {
+      out.push({ kind: "del", text: lineOf(a, i) });
       i++;
     } else {
-      out.push({ kind: "add", text: b[j] });
+      out.push({ kind: "add", text: lineOf(b, j) });
       j++;
     }
   }
   while (i < n) {
-    out.push({ kind: "del", text: a[i] });
+    out.push({ kind: "del", text: lineOf(a, i) });
     i++;
   }
   while (j < m) {
-    out.push({ kind: "add", text: b[j] });
+    out.push({ kind: "add", text: lineOf(b, j) });
     j++;
   }
   return out;

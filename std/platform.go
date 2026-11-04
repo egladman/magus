@@ -116,7 +116,7 @@ var Platform = Module{
 			Name:    "memory_bytes",
 			Doc:     "How much memory this process may commit, in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Narrowed by a container's memory ceiling where there is one, the way cpus() honors a CPU quota. Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".",
 			Returns: []Ret{{Type: TypeInt}},
-			Impl:    PlatformMemory,
+			Impl:    PlatformMemoryBytes,
 		},
 		{
 			Name:    "cpus",
@@ -127,7 +127,7 @@ var Platform = Module{
 	},
 }
 
-// PlatformMemory returns the memory this process may commit in bytes, or 0 when
+// PlatformMemoryBytes returns the memory this process may commit in bytes, or 0 when
 // it cannot be determined.
 //
 // Narrowed by a container's memory ceiling where there is one, for the reason
@@ -143,7 +143,7 @@ var Platform = Module{
 // hold reports UNKNOWN rather than a truncated figure. That is only reachable on
 // a 32-bit host with over 2GB, where a silently wrapped number would size a
 // magusfile's parallelism off nonsense; see the deferred 32-bit plan.
-func PlatformMemory(ctx context.Context) (int, error) {
+func PlatformMemoryBytes(ctx context.Context) (int, error) {
 	b := mem.UsableBytes(ctx)
 	if b <= 0 || b > int64(math.MaxInt) {
 		return 0, nil

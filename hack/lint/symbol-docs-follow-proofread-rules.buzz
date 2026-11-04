@@ -32,24 +32,24 @@ export fun reads() > [str] {
     return ["**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
         "libs/proofread/**/*.go", "libs/proofread/proofread.buzz",
         "hack/policy/proofread.buzz", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
-        "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
+        "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go",
         "libs/xdg/**/*.go", "libs/cmdline/**/*.go", "console/**/*.ts", "docs/**/*.ts", "docs/guides/integrations/agents/**/*.ts",
         "libs/textsearch/**/*.ts"];
 }
 
-// check fails every proofread finding the decisions table in hack/policy/proofread.buzz denies and
-// SANCTIONED does not name. magus\symbols supplies the docs and the indexes; the judging runs
-// in libs/proofread/cmd/proofread, as lint-rules has proofread-build link it. A missing or
-// stale index, a language that judged nothing and a runner that fails are findings, never a
-// pass: a rule reading nothing finds nothing.
+// check fails every proofread finding hack/policy/proofread.buzz denies.
+// SANCTIONED findings pass.
+// magus\graph().symbols() supplies the docs and the indexes.
+// libs/proofread/cmd/proofread judges them, linked by proofread-build.
+// A stale index, a silent language or a failed runner is a finding.
 export fun check(files: [Path]) > [Finding] !> any {
-    final data: {str: any} = magus\symbols();
-    final symbols = ofLanguages(data["symbols"] ?? [<any>]);
-    final indexes: [any] = data["indexes"] ?? [<any>];
+    final data = magus\graph().symbols();
+    final symbols = ofLanguages(data.symbols);
+    final indexes = data.indexes.map(fun (i: int, idx: magus\SymbolIndexStatus) > any => indexRow(idx));
     final bin = "{proofread\home}/{proofread\binary}";
     final table = decisions\writeDecisions([<str>]);
     final run = proc\exec(bin, args: ["doc-comment", "--stdin", "--decisions", table],
-        opts: {"stdin": json\stringify(symbols), "quiet": true, "allow_failure": true});
+        opts: proc\ExecOptions{ stdin = json\stringify(symbols), quiet = true, allowFailure = true });
     fs\remove(table) catch void;
     // Exit 1 is a deny finding, written to stdout like any other.
     if (run.code != 0 and run.code != 1) {
@@ -58,19 +58,50 @@ export fun check(files: [Path]) > [Finding] !> any {
             fix = "Run `{proofread\build}`, then {bin} doc-comment, and read why it stopped." }];
     }
     final findings: [any] = json\parse(run.stdout);
+    foreach (lang in outOfScope(indexes)) {
+        std\print("symbol-docs-follow-proofread-rules: no {lang} symbol index is declared, so {lang} docs are out of scope and none was judged");
+    }
     return judge(findings, judged: judgedCounts(symbols), indexes: indexes, sanctioned: SANCTIONED);
 }
 
-// ofLanguages keeps the symbols of LANGUAGES. magus\symbols returns every index, Buzz's
-// included once scip-buzz is installed, and reads keys none of the other languages' sources.
-fun ofLanguages(all: [any]) > [any] {
+// outOfScope is each of LANGUAGES no index in indexes is declared for. Nothing measures such
+// a language's docs, so the rule says so and judges the rest, rather than failing on a gap
+// no fix to a doc can close.
+export fun outOfScope(indexes: [any]) > [str] {
+    final missing = mut [<str>];
+    foreach (lang in LANGUAGES) {
+        var declared = false;
+        foreach (idx in indexes) {
+            if (idx["language"] == lang) {
+                declared = true;
+            }
+        }
+        if (!declared) {
+            missing.append(lang);
+        }
+    }
+    return missing;
+}
+
+// ofLanguages keeps the symbols of LANGUAGES.
+// magus\graph().symbols() returns every index, Buzz's once scip-buzz is in.
+// It reads keys none of the other languages' sources.
+fun ofLanguages(all: [magus\SymbolDecl]) > [any] {
     final kept = mut [<any>];
-    foreach (symbol in all) {
-        if (LANGUAGES.indexOf(symbol["language"] ?? "") != null) {
-            kept.append(symbol);
+    foreach (s in all) {
+        if (LANGUAGES.indexOf(s.language) != null) {
+            kept.append({"node": s.node, "source": s.source, "language": s.language,
+                "name": s.name, "kind": s.kind, "owner": s.owner, "doc": s.doc});
         }
     }
     return kept;
+}
+
+// indexRow is idx keyed as support\staleness and outOfScope read it.
+fun indexRow(idx: magus\SymbolIndexStatus) > any {
+    return {"freshness": idx.freshness.value, "project": {"path": idx.project.path},
+        "language": idx.language, "detail": idx.detail, "changed": idx.changed,
+        "changed_count": idx.changedCount};
 }
 
 // judgedCounts is how many symbols each language's index gave the runner.
@@ -88,27 +119,25 @@ fun judgedCounts(symbols: [any]) > {str: int} {
 export fun judge(rows: [any], judged: {str: int}, indexes: [any], sanctioned: {str: str}) > [Finding] !> any {
     final found = mut [<Finding>];
     var judgeable = true;
+    final unindexed = outOfScope(indexes);
     foreach (lang in LANGUAGES) {
-        var declared = false;
+        if (unindexed.indexOf(lang) != null) {
+            continue;
+        }
         foreach (idx in indexes) {
             if (idx["language"] != lang) {
                 continue;
             }
-            declared = true;
             final stale = support\staleness(idx, judging: "docs");
             judgeable = judgeable and stale.judgeable;
             foreach (f in stale.findings) {
                 found.append(f);
             }
         }
-        if (!declared) {
-            judgeable = false;
-            found.append(Finding{ path = ".", message = "no {lang} symbol index is declared, so no {lang} doc was judged",
-                fix = "A spell binding {lang} declares its indexer; check `magus describe spell`." });
-        } else if ((judged[lang] ?? 0) == 0) {
+        if ((judged[lang] ?? 0) == 0) {
             judgeable = false;
             found.append(Finding{ path = ".", message = "no {lang} symbol was judged: silence, not a pass",
-                fix = "The indexer emitted no {lang} docs or names; read `magus\\symbols()` before dropping the language." });
+                fix = "The indexer emitted no {lang} docs or names; read `magus\\graph().symbols()` before dropping the language." });
         }
     }
     if (!judgeable) {
@@ -184,6 +213,11 @@ fun symbol(language: str) > {str: any} {
         "kind": "function", "owner": "", "doc": "Run runs."};
 }
 
+fun decl(language: str) > magus\SymbolDecl {
+    return magus\SymbolDecl{ node = "symbol:x/Run().", source = "a.go:1", language = language,
+        name = "Run", kind = "function", doc = "Run runs." };
+}
+
 test "a finding is reported at its declaration with the rule and the match" {
     final got = judge([finding("filler", node: "symbol:x/Run().", source: "cmd/magus/run.go:41")],
         judged: counts(), indexes: both(), sanctioned: {<str: str>});
@@ -205,13 +239,21 @@ test "a sanctioned finding is skipped and a sanction that no longer applies fail
     assert\equal(bare.len(), want: 1, message: "a sanction needs a reason");
 }
 
-test "a stale or missing index fails instead of passing on what it lacks" {
+test "a stale index fails instead of passing on what it lacks" {
     final stale: {str: any} = {"project": {"path": "console"}, "language": "typescript", "freshness": "out-of-date"};
     final got = judge([<any>], judged: counts(), indexes: [fresh("go"), stale], sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "the stale index");
     assert\equal(got[0].path, want: "console", message: "names the project");
-    final none = judge([<any>], judged: counts(), indexes: [fresh("go")], sanctioned: {<str: str>});
-    assert\equal(none.len(), want: 1, message: "no typescript index at all");
+}
+
+test "a language with no declared index is out of scope, and the rest is judged" {
+    final indexes = [fresh("go")];
+    assert\equal(outOfScope(indexes).join(", "), want: "typescript", message: "typescript has no index");
+    final got = judge([finding("filler", node: "symbol:x/Run().", source: "cmd/magus/run.go:41")],
+        judged: {"go": 12}, indexes: indexes, sanctioned: {<str: str>});
+    assert\equal(got.len(), want: 1, message: "the go finding, and no failure for typescript");
+    assert\equal(got[0].path, want: "cmd/magus/run.go", message: got[0].message);
+    assert\equal(outOfScope(both()).len(), want: 0, message: "both declared");
 }
 
 test "a stale index listing its changes fails at each one and still judges the rest" {
@@ -253,7 +295,8 @@ test "the doc-comment budgets are denied and history stays off" {
 }
 
 test "only the declared languages reach the runner" {
-    final got = ofLanguages([symbol("go"), symbol("buzz"), symbol("typescript")]);
+    final got = ofLanguages([decl("go"), decl("buzz"), decl("typescript")]);
+    assert\equal(got[0], want: symbol("go"), message: "a decl crosses as the runner's keys");
     assert\equal(got.len(), want: 2, message: "a Buzz symbol is not judged");
     assert\equal(judgedCounts(got)["buzz"], want: null, message: "nor counted");
 }

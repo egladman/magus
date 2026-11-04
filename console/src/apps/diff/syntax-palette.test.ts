@@ -32,7 +32,7 @@ function block(css: string, selector: RegExp, marker: string, label: string): st
 function value(cssBlock: string, name: string, label: string): string {
   const m = new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(cssBlock);
   assert.ok(m, `${label}: --${name} is not a six-digit hex literal`);
-  return m[1].toLowerCase();
+  return (m[1] ?? "").toLowerCase();
 }
 
 const consoleLight = block(consoleCss, /:root\s*\{/, "--console-syntax-comment", "console light");

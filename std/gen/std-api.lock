@@ -2,6 +2,7 @@ archive.compress
 archive.list
 archive.readFile
 archive.uncompress
+buzz.parse
 charm.after
 charm.afterFunc
 charm.append
@@ -59,6 +60,7 @@ fs.chmod
 fs.copyDir
 fs.copyFile
 fs.dirname
+fs.diskUsage
 fs.exists
 fs.ext
 fs.glob
@@ -67,6 +69,7 @@ fs.isFile
 fs.join
 fs.listDir
 fs.mkdirAll
+fs.mode
 fs.readFile
 fs.readLines
 fs.readlink
@@ -76,9 +79,11 @@ fs.rename
 fs.scratchCheckoutDir
 fs.size
 fs.stat
+fs.stateDir
 fs.symlink
 fs.tempDir
 fs.tempFile
+fs.trimOldest
 fs.walk
 fs.watch
 fs.writeFile
@@ -91,6 +96,19 @@ http.post
 http.request
 http.server
 http.upload_chunked
+image.assemble
+image.assembleIndex
+image.attachReferrers
+image.goEnv
+image.layout
+image.open
+image.parsePlatform
+image.parsePlatforms
+image.pull
+image.push
+image.referrers
+image.writeProvenance
+image.writeSBOM
 log.at
 log.debug
 log.error
@@ -98,6 +116,7 @@ log.info
 log.trace
 log.warn
 markdown.frontmatter
+markdown.sections
 markdown.stripFrontmatter
 markdown.toHtml
 math.clamp
@@ -204,6 +223,7 @@ vcs.describe
 vcs.diffStat
 vcs.dirtyDiff
 vcs.history
+vcs.ignoredFiles
 vcs.isDirty
 vcs.name
 vcs.ref

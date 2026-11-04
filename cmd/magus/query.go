@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,9 +8,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -22,20 +22,17 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
-	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -102,45 +99,7 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 	var qf *flaggen.QueryFlags
 	pos, err := commandParse("query", args, func(fs *flag.FlagSet) {
 		qf = flaggen.BindQuery(fs, flaggen.QueryDefaults{URL: defaultLogViewerURL})
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json|jsonl] [--open] [--attempts] [--identity] [--publish]")
-			fmt.Fprintln(os.Stderr, "       magus query output --stdin")
-			fmt.Fprintln(os.Stderr, "       magus query invocation <id> [-o json] [--secrets]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Terms are free text plus field matchers: kind=spell, project=pkg/foo,")
-			fmt.Fprintln(os.Stderr, "relation=uses, id=build. Negate with != (kind!=op) and match a regex")
-			fmt.Fprintln(os.Stderr, "with =~ (id=~build$). The : grammar (kind:spell, -kind:op) still works.")
-			fmt.Fprintln(os.Stderr, "  magus query kind=spell go")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Field matchers filter; free text ranks. A match needs any one of the")
-			fmt.Fprintln(os.Stderr, "terms, ranked by BM25F over names, signatures, paths and docs, and one")
-			fmt.Fprintln(os.Stderr, "holding fewer terms than the query is a partial match. -o json says why")
-			fmt.Fprintln(os.Stderr, "each match ranked (terms held, lists, weights digest). A term holding a")
-			fmt.Fprintln(os.Stderr, "path separator must appear whole, and explain resolves only full matches.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintf(os.Stderr, "`%s <ref>` retrieves one target run's captured output by its\n", hint.QueryOutput.Leaf())
-			fmt.Fprintln(os.Stderr, "output ref (out1a2b3c), shown when the target ran:")
-			fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", hint.QueryOutput.With("out1a2b3c"))
-			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", hint.QueryOutput.With("out1a2b3c", "-o json"))
-			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", hint.QueryOutput.With("out1a2b3c", "--open"))
-			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored attempts\n", hint.QueryOutput.With("out1a2b3c", "--attempts"))
-			fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", hint.QueryOutput.With("out1a2b3c", "--identity"))
-			fmt.Fprintf(os.Stderr, "  %-38s print records from -o jsonl; writes nothing\n", hint.QueryOutput.With("--stdin"))
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintf(os.Stderr, "`%s <id>` reads one run's journal back by the id shown as\n", hint.QueryInvocation.Leaf())
-			fmt.Fprintf(os.Stderr, "`inv:` in %s:\n", hint.QueryOutput.With("<ref>", "--identity"))
-			fmt.Fprintf(os.Stderr, "  %-38s the run's events, newest last\n", hint.QueryInvocation.With("invmsm3vcou1"))
-			fmt.Fprintf(os.Stderr, "  %-38s only the credential reads (audit)\n", hint.QueryInvocation.With("invmsm3vcou1", "--secrets"))
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--open respects the BROWSER environment variable to pick the browser")
-			fmt.Fprintln(os.Stderr, "(e.g. BROWSER=firefox); otherwise it uses your desktop's default handler.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { printQueryUsage(fs) }
 	})
 	if err != nil {
 		return err
@@ -152,96 +111,18 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 	// Output-reference retrieval is an EXPLICIT subcommand (`magus query output <ref>`), not a
 	// shape-routed positional, so a search term can never collide with a ref id.
 	if qf.Stdin {
-		if len(pos) != 1 || pos[0] != hint.QueryOutput.Leaf() {
-			return exit.Usagef("magus query: --stdin applies only to `%s --stdin`, which takes no ref", hint.QueryOutput)
-		}
-		if qf.Attempts || qf.Identity || qf.Publish || qf.Open || qf.Print {
-			// A record on stdin is untrusted: printed, never published or handed to a browser.
-			return exit.Usagef("magus query output --stdin: --attempts, --identity, --publish, --open and --print act on a stored run; a record on stdin is only printed")
-		}
-		outOpts, oerr := outputOptionsOrDefault()
-		if oerr != nil {
-			return oerr
-		}
-		if outOpts.Format != outputText {
-			return exit.Usagef("magus query output --stdin: -o %s is not supported; it prints each record's output, and the records themselves are already the structured form", outOpts.Format)
-		}
-		return printOutputRecords(os.Stdin, os.Stdout, noticeLines{ctx: ctx, level: slog.LevelInfo})
+		return queryOutputStdin(ctx, qf, pos)
 	}
 	if len(pos) >= 1 && pos[0] == hint.QueryOutput.Leaf() {
-		if len(pos) != 2 {
-			slog.ErrorContext(ctx, fmt.Sprintf("expected exactly one ref (e.g. %s)", hint.QueryOutput.With("out1a2b3c")), attr.Notice(hint.QueryOutput.String()))
-			return exit.Reported(exit.Usage)
-		}
-		ref := pos[1]
-		if !cache.LooksLikeRef(ref) {
-			if !trail.ValidRef(ref) {
-				msg := fmt.Sprintf("%q is not an output ref (expected out<hex> for a run, or a stored payload such as grd<hex> or mcp<hex>)", ref)
-				slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg)))
-				return exit.Reported(exit.Usage)
-			}
-			if qf.Attempts || qf.Identity || qf.Publish || qf.Open || qf.Print {
-				return exit.Usagef("magus query output: %s is a stored payload, not a run; --attempts, --identity, --publish, --open and --print apply only to out<hex> refs", ref)
-			}
-			outOpts, oerr := outputOptionsOrDefault()
-			if oerr != nil {
-				return oerr
-			}
-			return queryTrailPayload(ctx, root, ref, outOpts)
-		}
-		outOpts, oerr := outputOptionsOrDefault()
-		if oerr != nil {
-			return oerr
-		}
-		exclusive := 0
-		for _, set := range []bool{qf.Attempts, qf.Identity, qf.Publish, qf.Open || qf.Print} {
-			if set {
-				exclusive++
-			}
-		}
-		if exclusive > 1 {
-			slog.ErrorContext(ctx, "--attempts, --identity, --publish, and --open/--print are distinct actions; pick one", attr.Notice("magus query output"))
-			return exit.Reported(exit.Usage)
-		}
-		return queryOutputRef(ctx, root, ref, outputRefOpts{open: qf.Open, printURL: qf.Print, viewerBase: qf.URL, attempts: qf.Attempts, identity: qf.Identity, publish: qf.Publish, out: outOpts})
+		return queryOutputCommand(ctx, root, qf, pos)
 	}
 	// `magus query invocation <id>`, the sibling of `query output <ref>`, and explicit for
 	// the same reason: an id is shape-routed nowhere, so a search term cannot collide with one.
 	if len(pos) >= 1 && pos[0] == hint.QueryInvocation.Leaf() {
-		if len(pos) != 2 {
-			slog.ErrorContext(ctx, fmt.Sprintf("expected exactly one invocation id (e.g. %s)", hint.QueryInvocation.With("invmsm3vcou1")),
-				attr.Notice(hint.QueryInvocation.String()))
-			return exit.Reported(exit.Usage)
-		}
-		inv := pos[1]
-		if !cache.LooksLikeInvocationID(inv) {
-			slog.ErrorContext(ctx, fmt.Sprintf("%q is not an invocation id (expected inv<id>, e.g. invmsm3vcou1); a run prints one as `inv:` in %s",
-				inv, hint.QueryOutput.With("<ref> --identity")), attr.Notice("magus query invocation"))
-			return exit.Reported(exit.Usage)
-		}
-		outOpts, oerr := outputOptionsOrDefault()
-		if oerr != nil {
-			return oerr
-		}
-		return queryInvocation(ctx, root, inv, qf.Secrets, outOpts)
+		return queryInvocationCommand(ctx, root, qf, pos)
 	}
-	// An invocation id handed to the graph grammar finds nothing and reports `matches: 0`,
-	// which reads as "that run does not exist" rather than "wrong command". magus printed the
-	// id, so it can recognize it coming back.
-	if len(pos) == 1 && cache.LooksLikeInvocationID(pos[0]) {
-		slog.ErrorContext(ctx, fmt.Sprintf("%q is an invocation id, not a graph term. Read it with: %s",
-			pos[0], hint.QueryInvocation.With(pos[0])), attr.Notice("magus query"))
-		return exit.Reported(exit.Usage)
-	}
-	if qf.Open || qf.Print || qf.Attempts || qf.Identity || qf.Publish {
-		// --open/--print/--attempts/--identity only apply to `query output <ref>`. Set on a graph
-		// search, they were a mistake; stop rather than silently ignore them.
-		slog.ErrorContext(ctx, fmt.Sprintf("--open/--print/--attempts/--identity/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.", hint.QueryOutput, hint.GraphExport.With("--open")), attr.Notice("magus query"))
-		return exit.Reported(exit.Usage)
-	}
-	if len(pos) == 0 && qf.Kind == "" {
-		slog.ErrorContext(ctx, "requires search terms", attr.Notice("magus query"))
-		return exit.Reported(exit.Usage)
+	if err := checkQuerySearch(ctx, qf, pos); err != nil {
+		return err
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -251,53 +132,135 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 
 	input := strings.Join(pos, " ")
 	for _, k := range splitCSV(qf.Kind) {
-		input += " kind=" + k
+		input = fmt.Sprintf("%s kind=%s", input, k)
 	}
 
 	read := graphRead{Input: input, Budget: qf.Budget, Nearest: opts.Format == outputText}
+	if qf.Refresh && !qf.Global && refreshIndexesNow(ctx, root, "magus query") {
+		return nil
+	}
 	var res queryResult
 	if qf.Refresh || qf.Global || !askServer(ctx, root, readQuery, &read, &res) {
-		ws, err := openForRead(ctx, root)
-		if err != nil {
-			return err
-		}
-		if res, err = searchGraph(ctx, ws, globalCfg, read, qf.Refresh, qf.Global); err != nil {
+		if res, err = readQueryLocally(ctx, root, qf, read); err != nil {
 			return err
 		}
 	}
 	out := res.Out
+	if !qf.Refresh && !qf.Global {
+		if cause := refreshInBackground(ctx, root, out.Answer, fmt.Sprintf("%s query '%s' --refresh", hint.BinaryName(), input)); cause != nil {
+			out.Answer.IndexCause = cause
+		}
+	}
+	noteShardErrors(ctx, root, "magus query")
 
 	stop := traceFromContext(ctx).phase("query.next")
 	nx := newNextGate(root)
 	next := nx.served(hint.NextForQuery(out))
 	stop()
 
-	// The status is decided once, for every format: a rule that held only for text would
-	// leave the callers most likely to branch on it (`-o name` in a chain, `-o json` in a
-	// script) reading a blind spot as an emptiness.
 	switch opts.Format {
-	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		if err := emitFormatted(opts, queryWithNext{KnowledgeQueryOutput: out, Next: next}); err != nil {
-			return err
-		}
-		// Before exitForQuery, which passes a POPULATED answer whatever its verdict: a
-		// short list from a stale index is exactly the shape that reads as complete.
-		// The notice goes to stderr so the record on stdout stays parseable.
-		if err := reportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer); err != nil {
-			return err
-		}
-		return exitForQuery(out)
-	case outputName:
-		if err := emitItemNames(os.Stdout, out.Matches, func(m types.KnowledgeMatch) string { return m.ID }); err != nil {
-			return err
-		}
-		if err := reportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer); err != nil {
-			return err
-		}
-		return exitForQuery(out)
+	case outputJSON, outputYAML, outputJSONL, outputTemplate, outputName:
+		return emitQueryRecord(ctx, opts, out, next)
 	}
-
 	return writeQueryText(ctx, os.Stdout, nx, next, res)
+}
+
+// checkQuerySearch refuses a graph search whose words or flags were meant for
+// something else.
+func checkQuerySearch(ctx context.Context, qf *flaggen.QueryFlags, pos []string) error {
+	// A graph search for an id magus printed would report `matches: 0`,
+	// which reads as "that run does not exist".
+	if len(pos) == 1 && cache.LooksLikeInvocationID(pos[0]) {
+		slog.ErrorContext(ctx, fmt.Sprintf("%q is an invocation id, not a graph term. Read it with: %s",
+			pos[0], hint.QueryInvocation.With(pos[0])), attr.Notice("magus query"))
+		return exit.Reported(exit.Usage)
+	}
+	if qf.Open || qf.Print || qf.Attempts || qf.Identity || qf.Publish {
+		// These apply only to `query output <ref>`: stop, never ignore them.
+		slog.ErrorContext(ctx, fmt.Sprintf("--open/--print/--attempts/--identity/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.", hint.QueryOutput, hint.GraphExport.With("--open")), attr.Notice("magus query"))
+		return exit.Reported(exit.Usage)
+	}
+	if len(pos) == 0 && qf.Kind == "" {
+		slog.ErrorContext(ctx, "requires search terms", attr.Notice("magus query"))
+		return exit.Reported(exit.Usage)
+	}
+	return nil
+}
+
+// emitQueryRecord prints out as a record or as names. A script branches on
+// the status, so a blind spot must not read as an emptiness here either.
+func emitQueryRecord(ctx context.Context, opts output.Options, out types.KnowledgeQueryOutput, next []types.NextStep) error {
+	if err := emitQueryMatches(opts, out, next); err != nil {
+		return err
+	}
+	// exitForQuery passes a populated answer whatever its verdict, and a short
+	// list from a stale index reads as complete. stderr keeps stdout parseable.
+	if err := reportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer); err != nil {
+		return err
+	}
+	return exitForQuery(out)
+}
+
+func printQueryUsage(fs *flag.FlagSet) {
+	fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
+	fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o <format>] [--open] [--attempts] [--identity] [--publish]")
+	fmt.Fprintln(os.Stderr, "       magus query output --stdin")
+	fmt.Fprintln(os.Stderr, "       magus query invocation <id> [-o json] [--secrets]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Terms are free text plus field matchers: kind=spell, project=pkg/foo,")
+	fmt.Fprintln(os.Stderr, "relation=uses, id=build. Negate with != (kind!=op) and match a regex")
+	fmt.Fprintln(os.Stderr, "with =~ (id=~build$). The : grammar (kind:spell, -kind:op) still works.")
+	fmt.Fprintln(os.Stderr, "  magus query kind=spell go")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Field matchers filter; free text ranks. A match needs any one of the")
+	fmt.Fprintln(os.Stderr, "terms, ranked by BM25F over names, signatures, paths and docs, and one")
+	fmt.Fprintln(os.Stderr, "holding fewer terms than the query is a partial match. -o json says why")
+	fmt.Fprintln(os.Stderr, "each match ranked (terms held, lists, weights digest). A term holding a")
+	fmt.Fprintln(os.Stderr, "path separator must appear whole, and explain resolves only full matches.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintf(os.Stderr, "`%s <ref>` retrieves one target run's captured output by its\n", hint.QueryOutput.Leaf())
+	fmt.Fprintln(os.Stderr, "output ref (out1a2b3c), shown when the target ran:")
+	fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", hint.QueryOutput.With("out1a2b3c"))
+	fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", hint.QueryOutput.With("out1a2b3c", "-o json"))
+	fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", hint.QueryOutput.With("out1a2b3c", "--open"))
+	fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored attempts\n", hint.QueryOutput.With("out1a2b3c", "--attempts"))
+	fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", hint.QueryOutput.With("out1a2b3c", "--identity"))
+	fmt.Fprintf(os.Stderr, "  %-38s print records from -o jsonl; writes nothing\n", hint.QueryOutput.With("--stdin"))
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintf(os.Stderr, "`%s <id>` reads one run's journal back by the id shown as\n", hint.QueryInvocation.Leaf())
+	fmt.Fprintf(os.Stderr, "`inv:` in %s:\n", hint.QueryOutput.With("<ref>", "--identity"))
+	fmt.Fprintf(os.Stderr, "  %-38s the run's events, newest last\n", hint.QueryInvocation.With("invmsm3vcou1"))
+	fmt.Fprintf(os.Stderr, "  %-38s only the credential reads (audit)\n", hint.QueryInvocation.With("invmsm3vcou1", "--secrets"))
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "--open respects the BROWSER environment variable to pick the browser")
+	fmt.Fprintln(os.Stderr, "(e.g. BROWSER=firefox); otherwise it uses your desktop's default handler.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
+}
+
+// readQueryLocally prefers the stored graph while an index
+// is behind the tree, then a loaded graph.
+func readQueryLocally(ctx context.Context, root string, qf *flaggen.QueryFlags, read graphRead) (queryResult, error) {
+	ws, err := openForRead(ctx, root)
+	if err != nil {
+		return queryResult{}, err
+	}
+	if !qf.Refresh && !qf.Global {
+		if stored, answered := searchStoredIfStale(ctx, ws, globalCfg, read); answered {
+			return stored, nil
+		}
+	}
+	return searchGraph(ctx, ws, globalCfg, read, qf.Refresh, qf.Global)
+}
+
+func emitQueryMatches(opts output.Options, out types.KnowledgeQueryOutput, next []types.NextStep) error {
+	if opts.Format == outputName {
+		return emitItemNames(os.Stdout, out.Matches, func(m types.KnowledgeMatch) string { return m.ID })
+	}
+	return emitFormatted(opts, queryWithNext{KnowledgeQueryOutput: out, Next: next})
 }
 
 // writeQueryText writes res as `magus query` prints it in text form, with next under
@@ -333,544 +296,13 @@ func writeQueryText(ctx context.Context, w io.Writer, nx nextGate, next []types.
 	return reportIndexStaleness(w, out.Answer)
 }
 
-// outputRefOpts carries the options for `magus query output <ref>`.
-type outputRefOpts struct {
-	open       bool           // open the browser log viewer instead of printing
-	printURL   bool           // with open, print the URL instead of launching a browser
-	viewerBase string         // log viewer base URL
-	attempts   bool           // list the ref's stored executions instead of printing output
-	identity   bool           // show the run's identity (descriptor, lineage, key digests)
-	publish    bool           // upload this run's output to the remote as a signed bundle
-	out        output.Options // -o: text prints raw bytes, json/yaml prints the descriptor record
-}
-
-// queryOutputRef retrieves a target's captured output by reference id (or unique prefix). The
-// default prints the exact bytes to stdout (pipe-friendly); -o json/yaml prints the descriptor
-// record; --open hands it to the browser log viewer. The bytes never leave the machine: --open
-// rides them in a URL fragment, exactly like `magus graph export --open`.
-func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) error {
-	// What this verb emits by default is the raw bytes a run captured, and bytes have no
-	// fields to template and no identity to name. Only the record WRAPPING them has a
-	// shape, which is why json, jsonl and yaml work and the rest are refused rather than
-	// silently answered with the bytes: the accepted-and-ignored failure -o exists to
-	// avoid, and worse here than elsewhere because the fallback looks like real output.
-	switch o.out.Format {
-	case outputText, outputJSON, outputJSONL, outputYAML:
-	default:
-		return exit.Usagef("magus query output: -o %s is not supported; a captured log has no fields to render, so json, jsonl and yaml (the record around the bytes) are the only structured forms", o.out.Format)
-	}
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return err
-	}
-	if o.attempts {
-		return listOutputAttempts(ctx, m, ref, o.out)
-	}
-	if o.identity {
-		return showOutputIdentity(ctx, m, ref, o.out)
-	}
-	if o.publish {
-		published, perr := m.PublishOutput(ctx, ref)
-		if perr != nil {
-			if errors.Is(perr, fs.ErrNotExist) {
-				// Not the generic lookup path: its hint suggests --publish, which is
-				// the command that just failed.
-				msg := fmt.Sprintf("no stored output for ref %q to publish; it may have aged out of the cache, or the ref is mistyped", ref)
-				slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))
-				return exit.Reported(exit.Usage)
-			}
-			return fmt.Errorf("magus query output: publish %s: %w", ref, perr)
-		}
-		fmt.Printf("published %s to the remote cache\n", published)
-		fmt.Printf("a teammate with the same trust set can now run: %s\n", hint.QueryOutput.With(published))
-		return nil
-	}
-	if o.open {
-		// The viewer ingests a magus.viewer.v1alpha1 Journal, so hand it the ref's display events:
-		// the browser renders pretty from structure.
-		data, desc, err := m.OutputByRef(ctx, ref)
-		if err != nil {
-			return reportRefLookupError(ctx, m, ref, err)
-		}
-		events := console.StitchDisplayEvents(data, cache.OutputDescriptor{
-			Ref: desc.Ref, Project: desc.Project, Target: desc.Target, Inv: desc.Inv,
-			Failed: desc.Failed, ErrMsg: desc.ErrMsg, TimestampMs: desc.TimestampMs, DurationMs: desc.DurationMs,
-		})
-		var inv magus.Invocation
-		if desc.Inv != "" {
-			inv, _ = m.InvocationByID(desc.Inv) // best-effort lineage; omitted if the run log aged out
-		}
-		// The run's per-class key digests ride along so the viewer can show a
-		// machine-vs-machine key comparison. Best-effort: a run predating key-input
-		// persistence just opens without them.
-		var keyDigests string
-		if lines, lerr := m.OutputKeyInputs(ctx, ref); lerr == nil {
-			pairs := make([]console.KeyClassDigest, 0, len(cache.ClassDigests(lines)))
-			for _, c := range cache.ClassDigests(lines) {
-				pairs = append(pairs, console.KeyClassDigest{Class: c.Class, Digest: c.Digest})
-			}
-			keyDigests = console.KeyDigestsParam(pairs)
-		}
-		return openOutputInViewer(ctx, desc, events, inv, keyDigests, o)
-	}
-	// Remote-aware: a ref unknown locally may have been published from CI or a
-	// teammate's machine, so the print path consults the remote bundle namespace
-	// before reporting it missing.
-	if o.out.Format != outputText {
-		rec, rerr := m.OutputRecordByRef(ctx, ref)
-		if rerr != nil {
-			return reportRefLookupError(ctx, m, ref, rerr)
-		}
-		if o.out.Format == outputJSONL {
-			// A slice, or writeJSONL would stream one of the record's list fields.
-			return emitFormatted(o.out, []types.StoredOutput{rec})
-		}
-		return emitFormatted(o.out, rec)
-	}
-	data, desc, err := m.OutputByRefRemote(ctx, ref)
-	if err != nil {
-		return reportRefLookupError(ctx, m, ref, err)
-	}
-	// On stderr, after the bytes: stdout stays pipe-clean, and a reader who has just
-	// looked at what a run PRODUCED is one step from wanting to run it. Only worth
-	// saying when the descriptor records a target to reproduce.
-	if desc.Target != "" {
-		interactive.Hint(ctx, fmt.Sprintf("reproduce this invocation here with `%s`", hint.X.With(ref)))
-	}
-	_, err = os.Stdout.Write(data) // default: verbatim bytes, pipe-clean
-	if err == nil && desc.Failed && desc.ErrMsg != "" {
-		// A failure's reason often lives only in the descriptor (a drift check prints
-		// nothing), and only json showed it. It follows the bytes as a notice on stderr,
-		// neutralized as an imported record's is, so stdout stays exactly what the run wrote.
-		msg, _ := cache.NeutralizeTerminal([]byte(strings.TrimRight(desc.ErrMsg, "\n")), false)
-		slog.ErrorContext(ctx, string(msg), attr.Notice(""), attr.Component("magus query output"))
-		noticeFailedNeed(ctx, desc)
-	}
-	return err
-}
-
-// noticeFailedNeed names the ctx.needs member a composed target failed on and the command
-// that reads its output, which holds the findings the parent's own output and error only
-// restate. It says nothing for a descriptor that records no member.
-func noticeFailedNeed(ctx context.Context, d magus.OutputDescriptor) {
-	if d.FailedNeedRef == "" {
-		return
-	}
-	slog.InfoContext(ctx, fmt.Sprintf("the failing step is %s, a ctx.needs member; its output is under its own ref:", d.FailedNeedTarget),
-		attr.Notice(""), attr.Component("magus query output"), attr.Next(hint.QueryOutput.With(d.FailedNeedRef)))
-}
-
-// trailPayloadRecord is the -o json/yaml projection of a stored payload: no run stands
-// behind it, so the ref and the bytes are the whole record.
-type trailPayloadRecord struct {
-	Ref    string `json:"ref"`
-	Output string `json:"output"`
-}
-
-// queryTrailPayload prints a payload the activity trail stored under a non-out prefix: a
-// guard verdict (grd), an MCP request or response (mcp). The ref names its own store, so a
-// miss here is final and the run-output store is not consulted.
-func queryTrailPayload(ctx context.Context, root, ref string, out output.Options) error {
-	switch out.Format {
-	case outputText, outputJSON, outputYAML:
-	default:
-		return exit.Usagef("magus query output: -o %s is not supported; a stored payload has no fields to render, so json and yaml are the only structured forms", out.Format)
-	}
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return err
-	}
-	data, err := m.PayloadByRef(ctx, ref)
-	if errors.Is(err, fs.ErrNotExist) {
-		msg := err.Error() + "; the activity trail may have rotated it out, or the ref is mistyped"
-		slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))
-		return exit.Reported(exit.Usage)
-	}
-	if err != nil {
-		return fmt.Errorf("magus query output: read %s: %w", ref, err)
-	}
-	if out.Format == outputJSON || out.Format == outputYAML {
-		return emitFormatted(out, trailPayloadRecord{Ref: ref, Output: string(data)})
-	}
-	// A verdict is stored without a trailing newline, so it would run into the prompt.
-	if !bytes.HasSuffix(data, []byte("\n")) {
-		data = append(data, '\n')
-	}
-	_, err = os.Stdout.Write(data)
-	return err
-}
-
-// listOutputAttempts renders the keep-last-K executions behind one portable ref, newest
-// first. Every attempt of a step shares the step's ref; the attempt id is the
-// execution-unique handle, and passing a full attempt id to `magus query output`
-// retrieves that exact execution's bytes.
-func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out output.Options) error {
-	list, err := m.OutputAttempts(ctx, ref)
-	if err != nil {
-		return reportRefLookupError(ctx, m, ref, err)
-	}
-	if out.Format == outputJSON || out.Format == outputYAML {
-		return emitFormatted(out, list)
-	}
-	// Head the listing with the STEP's identity: the portable ref when a v2
-	// descriptor carries the key, else the ref as the user typed it. list[0].Ref
-	// would name one arbitrary execution for a pre-portable directory.
-	stepRef := ref
-	for _, d := range list {
-		if d.Key != "" {
-			stepRef = d.Ref
-			break
-		}
-	}
-	fmt.Printf("attempts for %s (newest first):\n", stepRef)
-	for _, d := range list {
-		status := "pass"
-		if d.Failed {
-			status = "fail"
-		}
-		when := time.UnixMilli(d.TimestampMs).Format("2006-01-02 15:04:05")
-		dur := (time.Duration(d.DurationMs) * time.Millisecond).Round(time.Millisecond)
-		fmt.Printf("  %s  %s  %8s  %s  %s\n", d.Attempt, status, dur, when, d.Inv)
-	}
-	// The bare ref already answers with the newest attempt; the hint earns its keep
-	// for reaching an OLDER one.
-	if len(list) > 1 {
-		fmt.Printf("\nRetrieve one attempt's exact output: %s\n", hint.QueryOutput.With(list[len(list)-1].Attempt))
-	}
-	return nil
-}
-
-// outputIdentityRecord is the -o json/yaml projection of `query output <ref> --identity`: the
-// stored descriptor, the producing invocation's lineage when its run log survives, and
-// the cache key's component-class digests when the run persisted its key inputs.
-// invocationRecord is the machine-readable projection of one run: its header plus the events
-// an audit cares about. The events are already redacted (journal.Emit scrubs Text on the way
-// in), and a secret event carries only the reference and the provider by construction.
-type invocationRecord struct {
-	magus.Invocation
-	Secrets []magus.Event `json:"secrets,omitempty"`
-	Events  []magus.Event `json:"events,omitempty"`
-}
-
-// queryInvocation reads one run's journal back. `--secrets` narrows it to the credential
-// reads, which is the question the secrets page promises an answer to: "which credentials did
-// this run reach for, and through which backend".
-//
-// This exists because the events were written and unreachable. The reference and provider were
-// recorded on every read, docs/concepts/secrets.md offered that as the audit trail, and the id
-// magus prints (`inv:`) resolved to nothing, so the trail was a claim rather than a record.
-func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, out output.Options) error {
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return err
-	}
-	header, events, err := m.InvocationEventsByID(inv)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			// Aged out is the ordinary case, not a typo, so say which it might be. The cap is
-			// the server's RotateLogs job; a missing log is indistinguishable from a bad id.
-			slog.ErrorContext(ctx, fmt.Sprintf("no run log for %q; it may have aged out of the cache, or the id is mistyped", inv), attr.Notice("magus query invocation"))
-			return exit.Reported(exit.Usage)
-		}
-		return fmt.Errorf("magus query invocation: read run log for %s: %w", inv, err)
-	}
-
-	var secrets []magus.Event
-	for _, e := range events {
-		if e.Kind == journal.KindSecret {
-			secrets = append(secrets, e)
-		}
-	}
-
-	switch out.Format {
-	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		rec := invocationRecord{Invocation: header, Secrets: secrets}
-		if !secretsOnly {
-			rec.Events = events
-		}
-		return emitFormatted(out, rec)
-	case outputName:
-		return emitNames(os.Stdout, []string{header.ID})
-	}
-
-	fmt.Printf("inv:     %s\n", header.ID)
-	if len(header.Command.Arguments) > 0 {
-		fmt.Printf("command: magus %s\n", strings.Join(header.Command.Arguments, " "))
-	}
-	if header.Command.Cwd != "" {
-		fmt.Printf("cwd:     %s\n", header.Command.Cwd)
-	}
-	if header.StartedMs > 0 {
-		line := time.UnixMilli(header.StartedMs).Format("2006-01-02 15:04:05")
-		if header.FinishedMs > header.StartedMs {
-			line += fmt.Sprintf(" (%s)", (time.Duration(header.FinishedMs-header.StartedMs) * time.Millisecond).Round(time.Millisecond))
-		}
-		fmt.Printf("started: %s\n", line)
-	}
-	if header.Status != "" {
-		fmt.Printf("status:  %s\n", header.Status)
-	}
-	if header.MagusVersion != "" {
-		fmt.Printf("magus:   %s\n", header.MagusVersion)
-	}
-
-	fmt.Println()
-	if len(secrets) == 0 {
-		// Say it plainly rather than printing an empty heading. "No credential reads" is a
-		// real audit answer, and the reader must be able to tell it apart from "not recorded".
-		// Same noun as the populated branch below, and as the rest of the CLI: this
-		// line used to say "no credential was resolved", which read as a different fact.
-		fmt.Println("secrets: no credential reads during this run")
-	} else {
-		fmt.Printf("secrets: %d credential read(s)\n", len(secrets))
-		for _, e := range secrets {
-			where := e.Project
-			if e.Target != "" {
-				where += " " + e.Target
-			}
-			fmt.Printf("  %s  %-28s %s\n", time.UnixMilli(e.Timestamp).Format("15:04:05"), where, e.Text)
-		}
-	}
-	if secretsOnly {
-		return nil
-	}
-
-	fmt.Println()
-	fmt.Printf("events:  %d\n", len(events))
-	for _, e := range events {
-		if e.Kind == journal.KindOutput {
-			continue // the captured bytes belong to `query output <ref>`, not here
-		}
-		detail := e.Text
-		if e.Kind == journal.KindResult {
-			// A result is the line a reader acts on: which target, and the ref that reads
-			// its output, so a failure never needs a second lookup to find its log.
-			first, _, _ := strings.Cut(e.Text, "\n")
-			detail = strings.Join(slices.DeleteFunc([]string{e.Status, e.Project, e.Target, e.Ref, first}, func(s string) bool { return s == "" }), " ")
-		} else if e.Status != "" {
-			detail = strings.TrimSpace(fmt.Sprintf("%s %s", e.Status, detail))
-		}
-		fmt.Printf("  %s  %-9s %s\n", time.UnixMilli(e.Timestamp).Format("15:04:05"), e.Kind, detail)
-	}
-	return nil
-}
-
-type outputIdentityRecord struct {
-	magus.OutputDescriptor
-	Invocation   *magus.Invocation   `json:"invocation,omitempty"`
-	ClassDigests []cache.ClassDigest `json:"class_digests,omitempty"`
-}
-
-// showOutputIdentity renders a stored run's IDENTITY rather than its output: what ran,
-// how it ended, which invocation produced it, and the digests of its cache key's
-// component classes: the machine-comparable half of the works-on-my-machine story
-// (two machines compare digests to learn WHICH class disagrees; `describe target
-// --cache --against` then names the exact line).
-func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out output.Options) error {
-	desc, err := m.OutputDescriptorByRef(ctx, ref)
-	if err != nil {
-		return reportRefLookupError(ctx, m, ref, err)
-	}
-	var digests []cache.ClassDigest
-	lines, lerr := m.OutputKeyInputs(ctx, ref)
-	switch {
-	case lerr == nil:
-		digests = cache.ClassDigests(lines)
-	case !errors.Is(lerr, fs.ErrNotExist):
-		// Absent lines are ordinary (a run predating persistence); anything else is a
-		// real read failure and must not masquerade as one.
-		return fmt.Errorf("magus query output: read stored key inputs for %s: %w", ref, lerr)
-	}
-	var inv *magus.Invocation
-	if desc.Inv != "" {
-		if got, ierr := m.InvocationByID(desc.Inv); ierr == nil {
-			inv = &got
-		}
-	}
-	switch out.Format {
-	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(out, outputIdentityRecord{OutputDescriptor: desc, Invocation: inv, ClassDigests: digests})
-	case outputName:
-		return emitNames(os.Stdout, []string{desc.Ref})
-	}
-	fmt.Printf("ref:     %s\n", desc.Ref)
-	fmt.Printf("project: %s\n", desc.Project)
-	if desc.Target != "" {
-		fmt.Printf("target:  %s\n", desc.Target)
-	}
-	status := "pass"
-	if desc.Failed {
-		status = "fail"
-	}
-	fmt.Printf("status:  %s (%s) at %s\n", status,
-		(time.Duration(desc.DurationMs) * time.Millisecond).Round(time.Millisecond),
-		time.UnixMilli(desc.TimestampMs).Format("2006-01-02 15:04:05"))
-	if desc.ErrMsg != "" {
-		fmt.Printf("error:   %s\n", desc.ErrMsg)
-	}
-	if desc.FailedNeedRef != "" {
-		fmt.Printf("failed:  ctx.needs %s, read it with %s\n", desc.FailedNeedTarget, hint.QueryOutput.With(desc.FailedNeedRef))
-	}
-	if desc.Attempt != "" {
-		fmt.Printf("attempt: %s\n", desc.Attempt)
-	}
-	if desc.Inv != "" {
-		fmt.Printf("inv:     %s", desc.Inv)
-		if inv != nil && len(inv.Command.Arguments) > 0 {
-			fmt.Printf("  (magus %s)", strings.Join(inv.Command.Arguments, " "))
-		}
-		fmt.Println()
-	}
-	if desc.Key != "" {
-		fmt.Printf("key:     %s (keyVersion %d)\n", desc.Key, desc.KeyVersion)
-	}
-	if desc.MagusVersion != "" {
-		fmt.Printf("magus:   %s\n", desc.MagusVersion)
-	}
-	if desc.Revision != "" {
-		fmt.Printf("rev:     %s", magus.ShortRevision(desc.Revision))
-		if desc.Dirty {
-			fmt.Printf(" (dirty: uncommitted changes at capture time; the revision alone may not reproduce it)")
-		}
-		fmt.Println()
-		// The cache key pins a tree STATE, never a commit; this is the one place
-		// that names one, by comparing the descriptor's revision against HEAD now.
-		// PROVENANCE only, never instruction: on a cache HIT, recordOutput never runs,
-		// so the descriptor still carries the revision of whichever run FIRST minted
-		// this key, which can differ from HEAD even though the current tree
-		// reproduces the output perfectly (that reproduction is exactly why it was a
-		// hit). Telling the user to check out the recorded commit would therefore be
-		// wrong on the most common path that reaches this line: a ref that resolved
-		// already has its bytes, and the KEY, not the commit, is what decided that.
-		// Only print when the two actually differ: same revision is the common case
-		// and needs no callout.
-		if _, cur, _ := m.CurrentRevision(ctx); cur != "" && cur != desc.Revision {
-			fmt.Printf("recorded at %s, you are on %s.\n", magus.ShortRevision(desc.Revision), magus.ShortRevision(cur))
-		}
-	}
-	if len(digests) == 0 {
-		fmt.Println("\nkey components: unavailable (run predates key-input persistence; re-run the target to record them)")
-		return nil
-	}
-	fmt.Println("\nkey components:")
-	for _, d := range digests {
-		noun := "lines"
-		if d.Count == 1 {
-			noun = "line"
-		}
-		fmt.Printf("  %-16s %s  %d %s\n", d.Class, d.Digest, d.Count, noun)
-	}
-	return nil
-}
-
-// reportRefLookupError renders the standard output-ref resolution failures (ambiguous prefix,
-// missing/aged-out, or an unexpected error) as a coded diagnostic + exit code. On the
-// missing-ref path it also prints a best-effort suggestion inverting the ref back to the
-// workspace target(s) that could have minted it; see printIdentifyRefSuggestion. m may be
-// nil at call sites with no loaded Magus in scope; the suggestion is then skipped, not
-// attempted against a nil receiver.
-func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err error) error {
-	var amb *cache.AmbiguousRefError
-	switch {
-	case errors.As(err, &amb):
-		slog.ErrorContext(ctx, "", attr.Notice("magus query"), attr.Error(types.DiagnosticErrorf(types.OutputRefAmbiguous, "%s", amb.Error())))
-		return exit.Reported(exit.Usage)
-	case errors.Is(err, fs.ErrNotExist):
-		// Name the stores consulted when the lookup knows them: a foreign ref that was
-		// never published reads exactly like a mistyped one otherwise. Render the message
-		// ONCE: RefNotFoundError.Error() already includes "consulted: <stores>".
-		msg := fmt.Sprintf("no stored output for ref %q. It may have aged out of the cache, or the ref is mistyped; re-run the target to regenerate it.", ref)
-		var missing *cache.RefNotFoundError
-		if errors.As(err, &missing) {
-			msg = missing.Error()
-		}
-		slog.ErrorContext(ctx, "", attr.Notice("magus query"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))
-		printIdentifyRefSuggestion(ctx, m, ref)
-		return exit.Reported(exit.Usage)
-	default:
-		return fmt.Errorf("magus query: look up output ref %q: %w", ref, err)
-	}
-}
-
-// printIdentifyRefSuggestion best-effort-inverts a missing ref back to the workspace
-// target(s) that could have minted it (Magus.IdentifyRef) and prints the finding to
-// stderr. A nil m, or IdentifyRef itself erroring (e.g. types.ErrNoCache on an Inspect
-// workspace), both skip silently: a best-effort suggestion must never turn a lookup
-// error into a different one.
-func printIdentifyRefSuggestion(ctx context.Context, m *magus.Magus, ref string) {
-	if m == nil {
-		return
-	}
-	matches, err := m.IdentifyRef(ctx, ref)
-	if err != nil {
-		return
-	}
-	switch len(matches) {
-	case 0:
-		// Informative, not a failure to try: nothing here keys to the ref because the
-		// run that printed it had different inputs, not because this lookup is broken.
-		slog.InfoContext(ctx, fmt.Sprintf("No target in this workspace keys to that ref at the current tree, which means the run that printed it had different inputs (a different commit, uncommitted change, or environment).\nOnce you know which target it should be: %s", hint.DescribeTargets.With("<target>", "--cache", "--against", ref)), attr.Notice(""))
-	case 1:
-		slog.InfoContext(ctx, "Nothing has produced it here, but this workspace would print it for:\n  "+m.RefMatchCommand(matches[0]), attr.Notice(""))
-	default:
-		var cmds strings.Builder
-		for _, mt := range matches {
-			cmds.WriteString("\n  " + m.RefMatchCommand(mt))
-		}
-		slog.InfoContext(ctx, "Nothing has produced it here, but this workspace would print it for any of:"+cmds.String(), attr.Notice(""))
-	}
-	// Reachable from every branch, not just the zero-match one: even a matched target
-	// may be nondeterministic or expensive enough that the exact bytes from whoever
-	// already has them beat a local re-run.
-	slog.InfoContext(ctx, "If someone else has it, they can share it with: "+hint.QueryOutput.With(ref, "--publish"), attr.Notice(""))
-}
-
-// openOutputInViewer builds the viewer URL and opens a browser; --print emits the
-// URL instead. It warns when the link nears browser URL-length limits.
-func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events []journal.Event, inv magus.Invocation, keyDigests string, o outputRefOpts) error {
-	rawInv := journal.Invocation{
-		ID:           inv.ID,
-		Command:      journal.Command{Arguments: inv.Command.Arguments, Cwd: inv.Command.Cwd, Trigger: inv.Command.Trigger},
-		StartedMs:    inv.StartedMs,
-		FinishedMs:   inv.FinishedMs,
-		Status:       inv.Status,
-		MagusVersion: inv.MagusVersion,
-	}
-	openURL, err := console.LogViewerURL(o.viewerBase, desc.Ref, events, rawInv, keyDigests)
-	if err != nil {
-		return err
-	}
-	if len(openURL) > fragmentWarnBytes {
-		slog.WarnContext(ctx, fmt.Sprintf("this link is %d KB, near or past what Safari and older\n"+
-			"Firefox accept in a URL (Chrome is fine). If the page does not load, pipe it instead:\n"+
-			"  magus query output %s | less. Continuing.", len(openURL)/1024, desc.Ref), attr.Notice("magus query"))
-	}
-	if o.printURL {
-		fmt.Println(openURL)
-		return nil
-	}
-	slog.InfoContext(ctx, fmt.Sprintf("opening the log viewer for %s; the output rides in the link fragment and never leaves your machine.", desc.Ref), attr.Notice(""))
-	if err := openBrowser(openURL); err != nil {
-		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus query"), attr.Error(err),
-			attr.Why("Re-run with --print to get the URL."))
-		return exit.Reported(exit.Failure)
-	}
-	return nil
-}
-
 func explainCommand(ctx context.Context, root string, args []string) error {
 	var xf *flaggen.ExplainFlags
+	var flags *flag.FlagSet
 	pos, err := commandParse("explain", args, func(fs *flag.FlagSet) {
+		flags = fs
 		xf = flaggen.BindExplain(fs)
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus explain <node-id-or-name> [flags]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, types.KnowledgeExplainDefinition)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "The argument is a node ID (target:pkg/foo:build) or a name that resolves")
-			fmt.Fprintln(os.Stderr, "to one (build). Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { printExplainUsage(fs) }
 	})
 	if err != nil {
 		return err
@@ -879,6 +311,10 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 		slog.ErrorContext(ctx, "requires a node ID or name", attr.Notice("magus explain"))
 		return exit.Reported(exit.Usage)
 	}
+	if err := checkSourcePage("explain", xf.MaxLines, xf.SkipLines); err != nil {
+		return err
+	}
+	source := explainSourceWindow(xf, flags, pos[0])
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -886,22 +322,23 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 	}
 
 	read := graphRead{Input: pos[0]}
-	var res explainResult
-	if xf.Refresh || xf.Global || !askServer(ctx, root, readExplain, &read, &res) {
-		ws, err := openForRead(ctx, root)
-		if err != nil {
-			return err
-		}
-		if res, err = explainNode(ctx, ws, globalCfg, read, xf.Refresh, xf.Global); err != nil {
-			return err
-		}
+	if xf.Refresh && !xf.Global && refreshIndexesNow(ctx, root, "magus explain") {
+		return nil
+	}
+	res, err := readExplainResult(ctx, root, xf, read)
+	if err != nil {
+		return err
 	}
 	if !res.Found {
-		slog.ErrorContext(ctx, fmt.Sprintf("no node matches %q", pos[0]), attr.Notice("magus explain"))
-		missLines := noticeLines{ctx: ctx, level: slog.LevelError}
-		printVerdict(missLines, res.Answer, hint.Refs.With(pos[0]))
-		emitNearest(ctx, res.Nearest)
-		return exitForVerdict(res.Answer.Verdict)
+		res.Answer = explainMissAnswer(ctx, root, pos[0], res.Answer)
+	}
+	// A stale index only: reading a card never starts a first build.
+	if !xf.Refresh && !xf.Global && len(res.Answer.StaleIndexes) > 0 {
+		noteExplainRefresh(ctx, root, pos[0], &res)
+	}
+	noteShardErrors(ctx, root, "magus explain")
+	if !res.Found {
+		return reportExplainMiss(ctx, pos[0], res)
 	}
 	out := res.Out
 
@@ -910,16 +347,102 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 	next := nx.served(hint.NextForExplain(out))
 	stop()
 
+	var section *types.KnowledgeDefinitionSite
+	if source.Show {
+		site, err := docSectionSource(resolveRootOrEmpty(root), out.Node, source)
+		if err != nil {
+			return err
+		}
+		section = &site
+		if opts.Format == outputText {
+			return emitDocSectionSource(os.Stdout, site)
+		}
+	}
+
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, explainWithNext{
-			KnowledgeExplainOutput: out, Next: next, AgentSessions: sessionContact(root, out.Node),
-		})
+		record := explainWithNext{KnowledgeExplainOutput: out, Next: next, AgentSessions: sessionContact(root, out.Node), Source: section}
+		return emitExplainRecord(opts, record, section)
 	case outputName:
 		return emitNames(os.Stdout, []string{out.Node.ID})
 	}
 
 	return writeExplainText(os.Stdout, root, pos[0], nx, next, res)
+}
+
+func noteExplainRefresh(ctx context.Context, root, input string, res *explainResult) {
+	wait := fmt.Sprintf("%s explain '%s' --refresh", hint.BinaryName(), strings.ReplaceAll(input, "'", `'\''`))
+	if cause := refreshInBackground(ctx, root, res.Answer, wait); cause != nil {
+		res.Answer.IndexCause = cause
+	}
+}
+
+func reportExplainMiss(ctx context.Context, input string, res explainResult) error {
+	slog.ErrorContext(ctx, fmt.Sprintf("no node matches %q", input), attr.Notice("magus explain"))
+	missLines := noticeLines{ctx: ctx, level: slog.LevelError}
+	printVerdict(missLines, res.Answer, hint.Refs.With(input))
+	emitNearest(ctx, res.Nearest)
+	return exitForVerdict(res.Answer.Verdict)
+}
+
+func emitExplainRecord(opts output.Options, record explainWithNext, section *types.KnowledgeDefinitionSite) error {
+	if err := emitFormatted(opts, record); err != nil {
+		return err
+	}
+	if section != nil {
+		return docSectionExit(*section)
+	}
+	return nil
+}
+
+func explainSourceWindow(xf *flaggen.ExplainFlags, flags *flag.FlagSet, subject string) sourceWindow {
+	return sourceWindow{
+		SourceWindow: knowledge.SourceWindow{
+			Show:     xf.Source || flagGiven(flags, flaggen.FlagExplainMaxLines) || flagGiven(flags, flaggen.FlagExplainSkipLines),
+			MaxLines: xf.MaxLines, SkipLines: xf.SkipLines,
+		},
+		again: commandAgain(hint.Explain.With, flags, subject, flaggen.FlagExplainMaxLines, flaggen.FlagExplainSkipLines),
+	}
+}
+
+func readExplainResult(ctx context.Context, root string, xf *flaggen.ExplainFlags, read graphRead) (explainResult, error) {
+	var res explainResult
+	if !xf.Refresh && !xf.Global && askServer(ctx, root, readExplain, &read, &res) {
+		return res, nil
+	}
+	ws, err := openForRead(ctx, root)
+	if err != nil {
+		return explainResult{}, err
+	}
+	return explainNode(ctx, ws, globalCfg, read, xf.Refresh, xf.Global)
+}
+
+func printExplainUsage(fs *flag.FlagSet) {
+	fmt.Fprintln(os.Stderr, "Usage: magus explain <node-id-or-name> [flags]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, types.KnowledgeExplainDefinition)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "The argument is a node ID (target:pkg/foo:build) or a name that resolves")
+	fmt.Fprintln(os.Stderr, "to one (build). Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
+}
+
+// explainMissAnswer drops each gap no build closes whose project
+// holds no text of the node's name, as refs does.
+func explainMissAnswer(ctx context.Context, root, input string, ans types.KnowledgeAnswer) types.KnowledgeAnswer {
+	searchRoot := resolveRootOrEmpty(root)
+	if searchRoot == "" || !slices.ContainsFunc(ans.Gaps, func(g types.KnowledgeSymbolGap) bool { return g.Unindexable }) {
+		return ans
+	}
+	name := input
+	if _, rest, kinded := strings.Cut(input, ":"); kinded {
+		name = rest
+	}
+	matches, _, _, _, _, err := textScan(ctx, searchRoot, name, nil, false, nil)
+	if err != nil {
+		return ans
+	}
+	return knowledge.WithoutUnheldGaps(ans, searchRoot, textHits(matches))
 }
 
 // writeExplainText writes res, the node asked resolved to, as `magus explain` prints it
@@ -937,7 +460,7 @@ func writeExplainText(w io.Writer, root, asked string, nx nextGate, next []types
 	// open to an empty focus; omit it. The link is always printed for other kinds;
 	// the server may not be up when the browser opens it, hence the hint.
 	if out.Node.Kind != types.KindSymbol {
-		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: out.Node.ID})
+		link := liveExplorerLink(graphLinkOpts{View: "blast", Node: out.Node.ID})
 		fmt.Fprintf(w, "\nView in Graph Explorer: %s\n", link)
 		fmt.Fprintf(w, "%s\n", authHint(link))
 		fmt.Fprintf(w, "(start the magus server if the graph does not load)\n")
@@ -990,6 +513,15 @@ func pathCommand(ctx context.Context, root string, args []string) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
+	case outputName:
+		names := make([]string, 0, len(out.Steps)+1)
+		for i, step := range out.Steps {
+			if i == 0 {
+				names = append(names, step.From)
+			}
+			names = append(names, step.To)
+		}
+		return emitNames(os.Stdout, names)
 	}
 
 	fmt.Print(render.PathText(out))
@@ -1103,10 +635,11 @@ func measuredCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config)
 
 // searchLoaded is searchGraph over g, a graph loaded once for many reads: it must hold
 // every symbol shard when read seeds the symbol layer, and only the default graph
-// otherwise.
-func searchLoaded(ctx context.Context, g *knowledge.Graph, read graphRead, coverage coverageFunc) queryResult {
+// otherwise. table loads the embed table, nil to rank without it; searchGraph passes
+// embedtable.Cached.
+func searchLoaded(ctx context.Context, g *knowledge.Graph, read graphRead, table func() (*embed.Table, error), coverage coverageFunc) queryResult {
 	stop := traceFromContext(ctx).phase("query.search")
-	out := g.QueryPage(read.Input, read.Budget, 0, 0, embedtable.Cached)
+	out := g.QueryPage(read.Input, read.Budget, 0, 0, table)
 	stop()
 	return answerQuery(ctx, g, read, out, knowledge.SeedsLazyLayer(read.Input), coverage)
 }
@@ -1231,6 +764,210 @@ func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepos
 		return w.Magus(ctx)
 	}
 	return nil, fmt.Errorf("%T is not a workspace", ws)
+}
+
+// searchStoredIfStale answers read from the stored graph when an index is
+// behind the tree, false otherwise. An edit moves the graph's stamps too, and
+// reassembling it costs a read 10-30 s the background refresh pays.
+func searchStoredIfStale(ctx context.Context, ws graphWorkspace, cfg config.Config, read graphRead) (queryResult, bool) {
+	if !knowledge.CouldMatchLazyLayer(read.Input) {
+		return queryResult{}, false
+	}
+	stale := findStaleIndexes(ctx, ws)
+	if len(stale) == 0 {
+		return queryResult{}, false
+	}
+	cacheDir, err := magus.ResolveCacheDir(ws.Root(), workspace.WithLoadedConfig(cfg))
+	if err != nil {
+		return queryResult{}, false
+	}
+	store := knowledge.NewStore(cacheDir, true, 0, nil, slog.Default())
+	g, err := store.Load(ctx)
+	if err != nil {
+		return queryResult{}, false
+	}
+	g.SetRoot(ws.Root())
+	if knowledge.SeedsLazyLayer(read.Input) {
+		if err := store.MergeSymbolShards(ctx, g); err != nil || !g.HasSymbols() {
+			return queryResult{}, false
+		}
+	}
+	return searchLoaded(ctx, g, read, embedtable.Cached, knownStaleCoverage(ctx, ws, cfg, stale)), true
+}
+
+// detachedRefreshEnv marks the process startRefresh detached.
+const detachedRefreshEnv = "MAGUS_DETACHED_REFRESH"
+
+// refreshLock is one graph build lock: the machine's or a store's.
+type refreshLock struct {
+	acquire func(context.Context, maintenance.GraphBuildHolder, io.Writer, time.Duration) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error)
+	try     func(maintenance.GraphBuildHolder, io.Writer) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error)
+}
+
+func machineRefreshLock() refreshLock {
+	return refreshLock{acquire: maintenance.AcquireMachineGraphBuild, try: maintenance.TryMachineGraphBuild}
+}
+
+func storeRefreshLock(dir string) refreshLock {
+	return refreshLock{
+		acquire: func(ctx context.Context, me maintenance.GraphBuildHolder, w io.Writer, every time.Duration) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error) {
+			return maintenance.AcquireGraphBuild(ctx, dir, me, w, every)
+		},
+		try: func(me maintenance.GraphBuildHolder, w io.Writer) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error) {
+			return maintenance.TryGraphBuild(dir, me, w)
+		},
+	}
+}
+
+// takeRefreshLock takes a graph build lock for a refresh. A detached refresh
+// never queues: a nil lock and nil error mean it should stop.
+func takeRefreshLock(ctx context.Context, take refreshLock, me maintenance.GraphBuildHolder, verb string, detached bool) (*maintenance.GraphBuildLock, error) {
+	notices := noticeLines{ctx: ctx, level: slog.LevelInfo, label: verb, prefix: "magus graph build: "}
+	if !detached {
+		lock, _, err := take.acquire(ctx, me, notices, graphBuildPoll)
+		return lock, err
+	}
+	lock, holder, err := take.try(me, notices)
+	if holder != nil {
+		slog.InfoContext(ctx, fmt.Sprintf("%s holds the refresh lock, so this refresh stops", holder), attr.Notice(verb))
+	}
+	return lock, err
+}
+
+// refreshIndexesNow is `--refresh`: it waits for a refresh already running,
+// brings the stale indexes up to the tree, and says on stderr what that cost.
+// What stays behind it names at error level, and the read still answers.
+// It returns true when the command should exit instead: a detached refresh
+// has no reader, and its read would hold a graph outside these locks.
+func refreshIndexesNow(ctx context.Context, root, verb string) bool {
+	detached := os.Getenv(detachedRefreshEnv) != ""
+	_ = os.Unsetenv(detachedRefreshEnv)
+	ctx, cancel := context.WithTimeout(ctx, magus.SymbolRefreshBudget)
+	defer cancel()
+	retry := fmt.Sprintf("`%s` retries", hint.GraphBuild)
+	failed := func(err error) bool {
+		slog.ErrorContext(ctx, "could not refresh the symbol indexes; "+retry, attr.Notice(verb), attr.Error(err))
+		return detached
+	}
+	wsRoot := resolveRootOrEmpty(root)
+	if wsRoot == "" {
+		return failed(errors.New("no workspace root here, so no knowledge store to refresh"))
+	}
+	storeDir, err := knowledgeStoreDir(wsRoot)
+	if err != nil {
+		return failed(err)
+	}
+	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of " + wsRoot, Store: storeDir}
+	machine, err := takeRefreshLock(ctx, machineRefreshLock(), me, verb, detached)
+	if err != nil {
+		return failed(err)
+	}
+	if machine == nil {
+		return true
+	}
+	defer func() { _ = machine.Release() }()
+	store, err := takeRefreshLock(ctx, storeRefreshLock(storeDir), me, verb, detached)
+	if err != nil {
+		return failed(err)
+	}
+	if store == nil {
+		return true
+	}
+	defer func() { _ = store.Release() }()
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return failed(err)
+	}
+	refresh := m.RefreshSymbolIndexes(ctx)
+	spent := func(d time.Duration) time.Duration { return d.Round(100 * time.Millisecond) }
+	if n := len(refresh.Refreshed); n > 0 {
+		slog.InfoContext(ctx, fmt.Sprintf("refreshed %d symbol index(es) in %s (finding them %s, indexers %s, guard indexes %s): %s", n, spent(refresh.Took),
+			spent(refresh.Swept), spent(refresh.Indexed), spent(refresh.Took-refresh.Swept-refresh.Indexed), strings.Join(refresh.Refreshed, ", ")), attr.Notice(verb))
+	}
+	if len(refresh.Problems) > 0 {
+		slog.ErrorContext(ctx, fmt.Sprintf("could not refresh every symbol index in %s, so this answer is drawn from them as they stand; %s: %s",
+			spent(refresh.Took), retry, strings.Join(refresh.Problems, "; ")), attr.Notice(verb))
+	}
+	return detached
+}
+
+// refreshInBackground starts a refresh of the indexes behind ans and answers
+// what the read should say about it, nil when it has nothing to say. A plain
+// read never waits on an indexer. wait is the command that does.
+func refreshInBackground(ctx context.Context, root string, ans types.KnowledgeAnswer, wait string) *types.KnowledgeIndexCause {
+	if !ans.IndexBehind() || globalCfg.DryRun || globalCfg.Knowledge.SymbolIndexing.Disabled {
+		return nil
+	}
+	dir, err := knowledgeStoreDir(root)
+	if err != nil {
+		return nil
+	}
+	fix := fmt.Sprintf("ask again once it lands, or wait for it: `%s`", wait)
+	if holder, running := maintenance.RunningGraphBuild(dir); running {
+		return &types.KnowledgeIndexCause{Why: fmt.Sprintf("this answer comes from the index as it stands, while pid %d refreshes it", holder.PID), Fix: fix}
+	}
+	if failed := magus.RecentSymbolRefreshFailures(filepath.Dir(dir), time.Now()); len(failed) > 0 {
+		why := "its last refresh failed: " + strings.Join(failed, "; ")
+		slog.ErrorContext(ctx, why, attr.Notice("magus"))
+		return &types.KnowledgeIndexCause{Why: why, Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
+	}
+	holder, running, err := maintenance.RunningMachineGraphBuild()
+	if err != nil {
+		slog.ErrorContext(ctx, "could not start a background refresh", attr.Notice("magus"), attr.Error(err))
+		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
+	}
+	if running {
+		return &types.KnowledgeIndexCause{Why: fmt.Sprintf("this answer comes from the index as it stands, and this read started no refresh: a machine runs one at a time, and %s is running", holder), Fix: fix}
+	}
+	started, err := startRefresh(dir)
+	switch {
+	case err != nil:
+		slog.ErrorContext(ctx, "could not start a background refresh", attr.Notice("magus"), attr.Error(err))
+		return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a background refresh would not start: " + err.Error(), Fix: fmt.Sprintf("`%s`", hint.GraphBuild)}
+	case !started:
+		return nil
+	}
+	return &types.KnowledgeIndexCause{Why: "this answer comes from the index as it stands, and a refresh started in the background", Fix: fix}
+}
+
+// startRefresh runs this command again with --refresh, detached, logging to
+// a file in dir. A test binary starts nothing: it would rerun its tests.
+func startRefresh(dir string) (bool, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return false, err
+	}
+	if strings.HasSuffix(exe, ".test") {
+		return false, nil
+	}
+	logFile, err := createRefreshLog(dir)
+	if err != nil {
+		return false, err
+	}
+	defer logFile.Close()
+	return launchRefresh(refreshCommand(exe, logFile))
+}
+
+func launchRefresh(cmd *exec.Cmd) (bool, error) {
+	if err := cmd.Start(); err != nil {
+		return false, err
+	}
+	return true, cmd.Process.Release()
+}
+
+func refreshCommand(exe string, logFile *os.File) *exec.Cmd {
+	cmd := detachedCommand(exe, append(slices.Clone(os.Args[1:]), "--refresh"))
+	cmd.Stdout, cmd.Stderr = logFile, logFile
+	cmd.Env = append(os.Environ(), detachedRefreshEnv+"=1")
+	cmd.SysProcAttr = detachedSysProcAttr()
+	return cmd
+}
+
+func createRefreshLog(dir string) (*os.File, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	return os.Create(filepath.Join(dir, "symbol-refresh.log"))
 }
 
 // askServer has a running server answer verb into reply and reports whether it did. A

@@ -8,13 +8,17 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"text/template"
 
 	sprig "github.com/Masterminds/sprig/v3"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 )
 
@@ -42,11 +46,25 @@ func outputDestination(out io.Writer) (io.Writer, func() error, error) {
 	if global.tee == "" {
 		return out, func() error { return nil }, nil
 	}
-	f, err := os.OpenFile(global.tee, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	f, err := openTeeFile(global.tee)
 	if err != nil {
 		return nil, nil, fmt.Errorf("--tee: %w", err)
 	}
 	return io.MultiWriter(structuredStdout(out), f), f.Close, nil
+}
+
+// A command may open several destinations while streaming records. Truncate only
+// the first, so a fresh invocation replaces the old capture without losing its own records.
+func openTeeFile(path string) (*os.File, error) {
+	flags := os.O_WRONLY | os.O_APPEND | os.O_CREATE
+	if global.teeInitialized != path {
+		flags |= os.O_TRUNC
+	}
+	f, err := os.OpenFile(path, flags, 0o644)
+	if err == nil {
+		global.teeInitialized = path
+	}
+	return f, err
 }
 
 // openSink builds the invocation's one sink for its -o format, over stdout (mirrored to
@@ -69,7 +87,7 @@ func openSink(ctx context.Context, opts output.Options) (*magus.Sink, func() err
 	return sink, func() error { return errors.Join(sink.Close(), tee.Close()) }, nil
 }
 
-// lazyFile opens path for appending on the first write, so a format that keeps stdout
+// lazyFile opens path on the first write, so a format that keeps stdout
 // empty leaves no --tee file behind. Not safe for concurrent writes.
 type lazyFile struct {
 	path string
@@ -79,7 +97,7 @@ type lazyFile struct {
 
 func (l *lazyFile) Write(p []byte) (int, error) {
 	if l.f == nil && l.err == nil {
-		l.f, l.err = os.OpenFile(l.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+		l.f, l.err = openTeeFile(l.path)
 	}
 	if l.err != nil {
 		return 0, fmt.Errorf("--tee: %w", l.err)
@@ -138,6 +156,15 @@ func emitItemNames[T any](out io.Writer, items []T, name func(T) string) error {
 		names = append(names, name(item))
 	}
 	return emitNames(out, names)
+}
+
+// emitRecord renders every format but text: v in a structured one, names
+// under -o name. Taking names here means a command cannot forget -o name.
+func emitRecord(opts output.Options, v any, names []string) error {
+	if opts.Format == outputName {
+		return emitNames(os.Stdout, names)
+	}
+	return emitFormatted(opts, v)
 }
 
 // outputWriter renders json, yaml, jsonl and template through magus's one JSON codec,
@@ -210,4 +237,68 @@ func templateJoin(list any, sep string) string {
 		parts[i] = fmt.Sprint(rv.Index(i).Interface())
 	}
 	return strings.Join(parts, sep)
+}
+
+// unstructuredCommand reads the declaration, so dispatch and flag parsing share
+// the command tree's decision about who owns stdout.
+func unstructuredCommand(name string) bool {
+	var raw bool
+	cmdline.Walk(commands.Root, func(path string, c cmdline.Command) {
+		if path == name {
+			raw = c.UnstructuredOutput
+		}
+	})
+	return raw
+}
+
+// checkOutputSupported rejects -o on a verb that renders nothing structured. Usage-class
+// (exit 2): the flag was never going to do anything, so failing before the work happens
+// is the whole point.
+//
+// It asks the FlagSet whether -o was typed on THIS invocation rather than reading
+// global.output, which is ambient: bindDisplayFlags seeds each flag's default from the
+// live global. A value left there by an earlier dispatch on the same process (one
+// adopted run in the server, one testscript command) would otherwise fail the next
+// command for a flag nobody passed it.
+func checkOutputSupported(name string, fs *flag.FlagSet) error {
+	if !unstructuredCommand(name) {
+		return nil
+	}
+	if !flagWasSet(fs, "output") && !flagWasSet(fs, "o") {
+		return nil
+	}
+	return exit.Usagef("magus %s: -o is not supported by this command", name)
+}
+
+// refuseOutputOnPath is checkOutputSupported for what commandParse never sees:
+// a -o before the verb, and a verb with a FlagSet of its own.
+// It runs once per process, so output is what this invocation typed.
+func refuseOutputOnPath(output string, args []string) error {
+	if output == "" {
+		return nil
+	}
+	path := commandPath(args)
+	if !unstructuredCommand(path) {
+		return nil
+	}
+	return exit.Usagef("magus %s: -o is not supported by this command", path)
+}
+
+// commandPath is the deepest command args name in the tree, such as
+// "config cache prune". Flags and words no child answers to are skipped.
+func commandPath(args []string) string {
+	var path []string
+	children := commands.Root.Children
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		i := slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == arg })
+		if i < 0 {
+			continue
+		}
+		path = append(path, arg)
+		children = children[i].Children
+	}
+	return strings.Join(path, " ")
 }

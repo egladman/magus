@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // newMutableCache opens a mutable cache at <tmp>/.magus and
@@ -395,12 +396,55 @@ func TestStats(t *testing.T) {
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
 
-	_, err := c.Run(context.Background(), step, func(_ context.Context) error {
+	r, err := c.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("out"), 0o644)
 	})
 	require.NoError(t, err)
-	want := Stats{Hit: 0, Miss: 1, Error: 0}
+	want := Stats{Hit: 0, Miss: 1, Error: 0, Files: r.Files}
 	assert.Equal(t, want, c.Stats())
+}
+
+type RunCountsSuite struct {
+	suite.Suite
+	c    *Cache
+	step Step
+	out  string
+}
+
+func TestRunCountsSuite(t *testing.T) { suite.Run(t, new(RunCountsSuite)) }
+
+func (s *RunCountsSuite) SetupTest() {
+	root, _, c := newMutableCache(s.T())
+	writeMain(s.T(), root, "package main")
+	s.c, s.out, s.step = c, touchOut(s.T(), root), makeStep(root)
+	s.step.Outputs = types.MustParseGlobs("test/pkg/out.txt")
+}
+
+func (s *RunCountsSuite) run() Result {
+	r, err := s.c.Run(context.Background(), s.step, func(_ context.Context) error {
+		return os.WriteFile(s.out, []byte("out"), 0o644)
+	})
+	s.Require().NoError(err)
+	return r
+}
+
+func (s *RunCountsSuite) TestRunRecordsItsInputFileCount() {
+	r := s.run()
+	s.Positive(r.Files, "the step hashes main.go")
+	s.Equal(r.Files, s.c.Stats().Files)
+}
+
+func (s *RunCountsSuite) TestStatsSumsInputFilesOverAHitToo() {
+	miss := s.run()
+	hit := s.run()
+	s.Require().True(hit.Hit)
+	s.Equal(miss.Files, hit.Files)
+	s.Equal(miss.Files+hit.Files, s.c.Stats().Files)
+}
+
+func (s *RunCountsSuite) TestStatsSlotsIsZeroWithoutAGrant() {
+	s.run()
+	s.Zero(s.c.Stats().Slots, "a bare Run took no grant, so none is reported")
 }
 
 // TestCacheSizeCapAccepted exercises MAGUS_CACHE_SIZE parsing: any
@@ -1783,36 +1827,6 @@ func TestExportDoesNotBlockANestedRun(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Export did not finish once no run held the cache")
 	}
-}
-
-func TestWrapNeedFailureKeepsTheErrorText(t *testing.T) {
-	base := errors.New("[MGS4007] .:lint-rules failed")
-	wrapped := WrapNeedFailure(fmt.Errorf("ctx.needs: %w", base), NeedMember{Target: "lint-rules", Ref: "outaaaaaaaaaaaa"})
-
-	assert.Equal(t, "ctx.needs: [MGS4007] .:lint-rules failed", wrapped.Error(), "hopChain and causeSignature read this text")
-	require.ErrorIs(t, wrapped, base)
-	target, ref := asNeedFailure(fmt.Errorf("ctx.needs: %w", wrapped))
-	assert.Equal(t, "lint-rules", target)
-	assert.Equal(t, "outaaaaaaaaaaaa", ref)
-}
-
-func TestWrapNeedFailureKeepsTheDeepestMember(t *testing.T) {
-	inner := WrapNeedFailure(errors.New("golangci exited 1"), NeedMember{Target: "lint-go", Ref: "outbbbbbbbbbbbb"})
-	outer := WrapNeedFailure(fmt.Errorf("ctx.needs: %w", inner), NeedMember{Target: "lint", Ref: "outcccccccccccc"})
-
-	target, ref := asNeedFailure(outer)
-	assert.Equal(t, "lint-go", target)
-	assert.Equal(t, "outbbbbbbbbbbbb", ref)
-}
-
-func TestWrapNeedFailureLeavesWhatItCannotName(t *testing.T) {
-	require.NoError(t, WrapNeedFailure(nil, NeedMember{Target: "lint", Ref: "outaaaaaaaaaaaa"}))
-
-	boom := errors.New("boom")
-	assert.Same(t, boom, WrapNeedFailure(boom, NeedMember{Target: "lint"}), "a member whose output was not persisted has no ref to name")
-	target, ref := asNeedFailure(boom)
-	assert.Empty(t, target)
-	assert.Empty(t, ref)
 }
 
 func TestRunRecordsTheFailedNeedOnTheDescriptor(t *testing.T) {

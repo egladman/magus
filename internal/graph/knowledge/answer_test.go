@@ -5,9 +5,53 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
+
+type withoutUnheldGapsSuite struct {
+	suite.Suite
+	proto types.KnowledgeAnswer
+}
+
+func TestWithoutUnheldGapsSuite(t *testing.T) { suite.Run(t, new(withoutUnheldGapsSuite)) }
+
+func (s *withoutUnheldGapsSuite) SetupTest() {
+	s.proto = types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{
+		Project: types.NewProjectRef("proto", ""), Language: "protobuf", State: types.SymbolIndexNotBuilt, Unindexable: true,
+	}})
+}
+
+// A name only in Go files is not explained by a project holding only protobuf.
+func (s *withoutUnheldGapsSuite) TestAProjectWithNoMatchCannotExplainTheMiss() {
+	got := WithoutUnheldGaps(s.proto, "/w", []types.TextHit{{Path: "cmd/buzz-playground/main.go", Line: 1}})
+	s.Equal(types.VerdictAbsent, got.Verdict)
+	s.Empty(got.Gaps)
+}
+
+func (s *withoutUnheldGapsSuite) TestAnAbsoluteMatchInTheProjectKeepsItsGap() {
+	got := WithoutUnheldGaps(s.proto, "/w", []types.TextHit{{Path: "/w/proto/magus/a.proto", Line: 1}})
+	s.Equal(types.VerdictUnknown, got.Verdict)
+	s.Len(got.Gaps, 1)
+}
+
+func (s *withoutUnheldGapsSuite) TestAProjectSharingAPrefixHoldsNoMatch() {
+	got := WithoutUnheldGaps(s.proto, "/w", []types.TextHit{{Path: "protobuf/a.proto", Line: 1}})
+	s.Equal(types.VerdictAbsent, got.Verdict)
+}
+
+func (s *withoutUnheldGapsSuite) TestTheRootProjectHoldsEveryMatch() {
+	root := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef(".", ""), Unindexable: true}})
+	s.Equal(types.VerdictUnknown, WithoutUnheldGaps(root, "/w", nil).Verdict)
+}
+
+func (s *withoutUnheldGapsSuite) TestAGapABuildClosesStays() {
+	unbuilt := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("libs/api", ""), State: types.SymbolIndexNotBuilt}})
+	got := WithoutUnheldGaps(unbuilt, "/w", nil)
+	s.Equal(types.VerdictUnknown, got.Verdict)
+	s.Len(got.Gaps, 1)
+}
 
 // verdictCases spans every shape the grammar routes differently: bare text, each matcher
 // operator, wildcards, and a kind on either side of the lazy layer. The invariants below

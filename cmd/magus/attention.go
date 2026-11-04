@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
@@ -223,17 +224,16 @@ func attentionDispose(root string, args []string) error {
 	if err != nil {
 		return disposeError(err, rest[0], dir)
 	}
+	if err := job.ReleaseRequestDisposed(context.Background(), root, req); err != nil {
+		slog.WarnContext(context.Background(), fmt.Sprintf("disposed %s, but its holder's row still carries it", req.ID), attr.Error(err), attr.Unchecked())
+	}
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
-	if opts.Format == outputName {
-		fmt.Println(req.ID)
-		return nil
-	}
 	if opts.Format != outputText {
-		return emitFormatted(opts, req)
+		return emitRecord(opts, req, []string{req.ID})
 	}
 	fmt.Fprintf(os.Stdout, "disposed %s, open %s, raised by %s from invocation %s\n",
 		req.ID,

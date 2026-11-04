@@ -34,8 +34,10 @@
 //
 // The symbol half says the same thing about code: a symbol the change adds, renames or
 // re-signs that differs from how the rest of the workspace declares the same kind of thing.
-// magus\diff computes it from the symbol index (one pass over every declaration, too large for
-// a script) and hands each changed symbol its `checks`; this renders them, one table per check.
+// magus\change().diff computes it from the symbol index.
+// That is one pass over every declaration, too large for a script.
+// It hands each changed symbol its `checks`.
+// This renders them, one table per check.
 import "vcs";
 import "advice";
 import "magus";
@@ -180,9 +182,10 @@ fun targetTable(items: [{str: str}]) > str {
     return parts.join("") + "\n";
 }
 
-// symbolChecks is one table per conformance check, in the order the body renders them. Every
-// check magus\diff can report has a row here; TestConformanceTablesCoverEveryCheck holds the
-// two lists together, so a new check cannot land and go unrendered.
+// symbolChecks is one table per conformance check, in render order.
+// Every check magus\change().diff can report has a row here.
+// TestConformanceTablesCoverEveryCheck holds the two lists together.
+// So a new check cannot land and go unrendered.
 final symbolChecks = [
     {"check": "naming-affix", "heading": "This adds a name missing the word pattern most declarations of its shape share"},
     {"check": "name-collision", "heading": "This adds a name a workspace entity already carries"},
@@ -294,7 +297,8 @@ fun main() > void !> any {
         return;
     }
 
-    // The symbol half reads the same two gates through magus\diff (advice\review passes them).
+    // The symbol half reads the same two gates through magus\change().diff.
+    // advice\review passes them.
     final minCohort = parseGate("conformance-min-cohort", fallback: 5.0);
     final minShare = parseGate("conformance-min-share", fallback: 0.8);
 
@@ -313,7 +317,7 @@ fun main() > void !> any {
     // diff proposes the names and the base tree rejects the ones already there.
     advice\fetchBase(base, refspec: false);
     final diff = vcs\cmd(["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
-        opts: {"dir": ".", "quiet": true, "allow_failure": true}).stdout;
+        opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true }).stdout;
     var added = mut [<str>];
     foreach (n in advice\addedTargets(diff)) {
         if (advice\declaredAtBase(n, base: base)) { continue; }

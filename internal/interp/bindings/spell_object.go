@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -68,8 +69,15 @@ func bindBuzzCommandMethod(h vm.Value, spellName, target string, tgt spells.Op) 
 			}
 			return vm.Null, runInstall(ctx, tgt, opts)
 		}
-		res, err := runBuzzCommand(ctx, tgt, opts)
+		opts.allowFailure, err = allowFailureFromBuzz(args, consumed)
 		if err != nil {
+			return vm.Null, fmt.Errorf("%s: %w", target, err)
+		}
+		if opts.allowFailure && !tgt.Capture {
+			return vm.Null, fmt.Errorf("%s: allowFailure needs an op with capture = true: its record carries the exit status", target)
+		}
+		res, err := runBuzzCommand(ctx, tgt, opts)
+		if err != nil && (!opts.allowFailure || !res.Started || ctx.Err() != nil) {
 			return vm.Null, err
 		}
 		if tgt.Capture {
@@ -77,6 +85,23 @@ func bindBuzzCommandMethod(h vm.Value, spellName, target string, tgt spells.Op) 
 		}
 		return vm.Null, nil
 	}))
+}
+
+// allowFailureFromBuzz reads allowFailure off the options table at args[idx].
+// A process that never started and a cancelled run stay errors, as under
+// proc\exec.
+func allowFailureFromBuzz(args []vm.Value, idx int) (bool, error) {
+	if idx >= len(args) || !args[idx].IsMap() {
+		return false, nil
+	}
+	v, ok := args[idx].MapGet("allowFailure")
+	if !ok {
+		return false, nil
+	}
+	if !v.IsBool() {
+		return false, errors.New("allowFailure must be a bool")
+	}
+	return v.AsBool(), nil
 }
 
 // execRecordToBuzz converts the shared {stdout, stderr, code, ok} exec object to

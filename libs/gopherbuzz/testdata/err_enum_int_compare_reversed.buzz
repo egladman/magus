@@ -1,0 +1,4 @@
+// @error: Type mismatch: got type `int`, expected `Plain`: != between an enum and `int` is always true; compare to a case (Plain.a), convert the int with Plain(s), or compare the enum's .value
+// The plain value on the left is the same mistake as on the right.
+enum Plain { a, b }
+final __r = 0 != Plain.a;

@@ -14,7 +14,40 @@ import (
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type probeEnvironmentSuite struct{ suite.Suite }
+
+func TestProbeEnvironmentSuite(t *testing.T) { suite.Run(t, new(probeEnvironmentSuite)) }
+
+// A mise shim on PATH exits "not trusted" when its config directory moves.
+func (s *probeEnvironmentSuite) TestTheConfigDirStaysForAShim() {
+	s.T().Setenv("XDG_CONFIG_HOME", "/real/config")
+	w := testkit.NewWorkspace(s.T())
+	root := w.Root()
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\ncase \"$XDG_CONFIG_HOME\" in\n/real/config) printf 'deny' ;;\n*) printf 'not trusted' ;;\nesac\n")
+	writeProbeableHarness(s.T(), root, "shim", probeCommand)
+
+	result, err := VerifyHarness(untimedProbes(), root, "shim")
+	s.Require().NoError(err)
+	s.Equal(HarnessVerified, result.Status, result.Reason)
+}
+
+// Recorded state lands in the throwaway directory, never the caller's.
+func (s *probeEnvironmentSuite) TestStateLandsInTheScratchDir() {
+	caller := s.T().TempDir()
+	s.T().Setenv("XDG_STATE_HOME", caller)
+	w := testkit.NewWorkspace(s.T())
+	root := w.Root()
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\nmkdir -p \"$XDG_STATE_HOME\"\ntouch \"$XDG_STATE_HOME/recorded\"\nprintf 'deny'\n")
+	writeProbeableHarness(s.T(), root, "scratch", probeCommand)
+
+	result, err := VerifyHarness(untimedProbes(), root, "scratch")
+	s.Require().NoError(err)
+	s.Equal(HarnessVerified, result.Status, result.Reason)
+	s.NoFileExists(filepath.Join(caller, "recorded"))
+}
 
 // untimedProbes lifts the probe deadline: the stand-ins these tests wire answer or
 // exit at once, so the shipped 10s measures only how loaded the machine is, and go
@@ -275,6 +308,54 @@ func TestVerifyHarnessProbeSkipsLifecycleScripts(t *testing.T) {
 			assert.Equal(t, HarnessVerified, result.Status)
 		})
 	}
+}
+
+type declaredHooksSuite struct{ suite.Suite }
+
+func TestDeclaredHooksSuite(t *testing.T) { suite.Run(t, new(declaredHooksSuite)) }
+
+const reclaimCommand = "./magus buzz -s docs/guides/integrations/agents/magus-reclaim-disk.buzz -- --agent-name x"
+
+// writeDeclaredHarness wires command and declares it as a hook with points.
+func writeDeclaredHarness(t *testing.T, root, command, points string) {
+	t.Helper()
+	body := fmt.Sprintf(`{
+  "schema_version": 2,
+  "id": "declared",
+  "display": {"name": "declared"},
+  "config": {"path": "declared/hooks.json"},
+  "skills": {"paths": [], "form": "short"},
+  "hooks": [{"event": "before", "matcher": "run", "script": "magus-reclaim-disk", "flags": ["--agent-name", "x"], "points": %s}],
+  "managed_entries": [{
+    "path": ["hooks", "before"],
+    "entries": [
+      {"match": "run", "commands": [{"type": "command", "command": %q}]},
+      {"match": "other", "commands": [{"type": "command", "command": "magus buzz -s magus-observe.buzz"}]}
+    ]
+  }]
+}`, points, command)
+	registerHarnessSpell(t, "declared", body)
+	mergeHarness(t, root, "declared")
+}
+
+func (s *declaredHooksSuite) TestARecorderHookIsNotExpectedToAnswer() {
+	w := testkit.NewWorkspace(s.T())
+	writeSilentMagus(w)
+	writeDeclaredHarness(s.T(), w.Root(), reclaimCommand, `[]`)
+
+	result, err := VerifyHarness(untimedProbes(), w.Root(), "declared")
+	s.Require().NoError(err)
+	s.Equal(HarnessVerified, result.Status, result.Reason)
+}
+
+func (s *declaredHooksSuite) TestAPointBindingHookThatStaysSilentFails() {
+	w := testkit.NewWorkspace(s.T())
+	writeSilentMagus(w)
+	writeDeclaredHarness(s.T(), w.Root(), reclaimCommand, `["shell"]`)
+
+	result, err := VerifyHarness(untimedProbes(), w.Root(), "declared")
+	s.Require().NoError(err)
+	s.Equal(HarnessUncovered, result.Status)
 }
 
 // buildMinimalPATH resolves each name against the CURRENT (real) PATH, so call it

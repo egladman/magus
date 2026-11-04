@@ -5,10 +5,10 @@ import "magus/figure";
 import "site/diagrams/packages" as _;
 
 export fun knowledgeGraphFigure() > figure\Figure !> any {
-    final graph = magus\dir("internal/graph/knowledge");
-    final verbs = magus\dir(".");
-    final cli = magus\dir("cmd/magus");
-    final mcp = magus\dir("internal/handler/mcp");
+    final graph = magus\graph().dir("internal/graph/knowledge");
+    final verbs = magus\graph().dir(".");
+    final cli = magus\graph().dir("cmd/magus");
+    final mcp = magus\graph().dir("internal/handler/mcp");
     final core = figure\external("Magusfiles + registry", sub: "@registry, one per project", look: figure\Look.plain);
     final files = figure\external("File adapters", sub: "buzz, docs, dirs, links, owners", look: figure\Look.plain);
     final symbols = figure\external("Symbols", sub: "SCIP index, lazy shards", look: figure\Look.input);
@@ -31,7 +31,7 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
         .box(graph, label: "One graph", sub: "fingerprint, sync, merge", focal: true)
         .box(verbs, label: "The four verbs", sub: "query, explain, refs, path")
         .box(cli, label: "magus CLI", sub: "text or -o json", tag: "reader")
-        .box(mcp, label: "MCP client", sub: "magus\\query and kin", tag: "reader")
+        .box(mcp, label: "MCP client", sub: "magus\\graph().query and kin", tag: "reader")
         .edgesFromGraph()
         .hideEdges([cli], dst: [graph, mcp],
             why: "graph build drives the store and the CLI serves the MCP tools; the reads go through the verbs")
@@ -44,10 +44,8 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
         .legend(figure\Look.focal, label: "what every reader asks")
         .legend(figure\Look.input, label: "built by a SCIP indexer")
         .scope(goPackages("internal/graph/**"))
-        .except([magus\dir("internal/graph/dependency")],
+        .except([magus\graph().dir("internal/graph/dependency")],
             why: "the project dependency DAG targets run in, a different graph")
-        .except([magus\dir("internal/graph/url")],
-            why: "composes the console explorer's URL; it reads no shard and asks no verb")
-        .except([magus\dir("internal/graph/workspacegraph")],
+        .except([magus\graph().dir("internal/graph/workspacegraph")],
             why: "the seam the root package installs its graph builders through; it holds none of the graph itself");
 }

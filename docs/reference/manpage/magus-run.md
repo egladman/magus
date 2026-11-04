@@ -43,35 +43,32 @@ plan renders more than once without being computed again.
 
 ## Options
 
+**--[no-]cache** (default: on)
+: Replay a cache hit; --no-cache forces a fresh run, which still refreshes the entry
+
+**--[no-]default-charms** (default: on)
+: Apply magus.yaml default_charms; --no-default-charms ignores them for this run
+
 **--depth** *int*
 : With --graph: cap displayed depth (0 = unlimited)
 
-**--detach**
+**--[no-]detach** (default: off)
 : Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server
 
-**--graph**
+**--[no-]graph** (default: off)
 : Render the dependency graph for the selected scope instead of executing
 
 **--n-shards** *int*
 : Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused
 
-**--no-cache**
-: Force a fresh run even on a cache hit; still refreshes the entry
-
-**--no-default-charms**
-: Ignore magus.yaml default_charms for this run
-
-**--no-redundancy-check**
-: Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only
-
-**--no-volatility-retry**
-: Disable volatility auto-retry for this run
-
-**--open**
+**--[no-]open** (default: off)
 : Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
 
 **--race** *string*
 : Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time.
+
+**--[no-]redundancy-check** (default: on)
+: Let the ci gate defer or reduce its tier when a passing run is on record (MGS3010); --no-redundancy-check runs it in full. ci target only
 
 **--shard** *string*
 : With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing
@@ -79,17 +76,20 @@ plan renders more than once without being computed again.
 **--skip** *string*
 : Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/\*); a value matching nothing is an error
 
-**--stdin**
+**--[no-]stdin** (default: off)
 : Run the shards of a saved shard plan, the document affected --plan prints, read from stdin; the plan names the target and the projects
 
-**--step**
+**--[no-]step** (default: off)
 : Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)
 
-**--timeout** *duration*
-: Abort if the run has not finished within this duration (e.g. 5m, 1h30m)
+**--timeout** *value*
+: Abort if the run has not finished within this duration (e.g. 5m, 1h30m). Bare numbers are minutes.
 
-**--upstream**
+**--[no-]upstream** (default: off)
 : With --graph: show dependents instead of dependencies
+
+**--[no-]volatility-retry** (default: on)
+: Retry a target that fails with volatile output; --no-volatility-retry disables it for this run
 
 ## Operands
 
@@ -219,5 +219,5 @@ magus run --stdin --dry-run -o 'template={{.summary}}' < plan.json
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-gate**(1)](magus-gate.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

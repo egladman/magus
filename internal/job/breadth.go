@@ -32,7 +32,8 @@ type Workspace struct {
 // says so in a deviation. The bounds come from the workspace's own magus.yaml, and one that
 // cannot be read is a problem of the row rather than a default.
 func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Workspace, read SymbolReader) types.JobProblems {
-	if row.ReadOnly {
+	// An integration's claim is computed: what merged, plus what regenerates.
+	if row.ReadOnly || row.Integrating() {
 		return nil
 	}
 	cfg, err := config.LoadWorkspaceOnly(root)

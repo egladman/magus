@@ -3,8 +3,8 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Gather architecture evidence from the magus knowledge graph (package imports, layers, symbol callers, churn, ownership) instead of reading files."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 12444
-skill_short_bytes: 9253
+skill_full_bytes: 12559
+skill_short_bytes: 9359
 ---
 
 # magus-architecture-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `147` |
-| `knowledge-schema-version` | `24` |
-| `skill-content` | `782d142fa230` |
+| `skill-stamp-format` | `1` |
+| `knowledge-schema-version` | `25` |
+| `skill-content` | `dd8f1fe72ba4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -62,14 +62,14 @@ Gather architecture evidence from magus: holds package imports, directory tree, 
 
 Question: run; read
 - what X imports; what imports X: `magus explain dir:<path>`; `imports` and `imported by` edges
-- what transitively depends on X: `magus\neighborhood` with `direction = "in"` (below); `nodes`; `"out"` walks what X needs
-- import cycle; would A importing B make one: `magus\importGraph` script below; `cycle edge` lines, or `B already reaches A: true`
-- layer clean: `magus\layer("<name>")`; each covered Dir's `imports` against layers it may use
+- what transitively depends on X: `magus\graph().neighborhood` with `direction = "in"` (below); `nodes`; `"out"` walks what X needs
+- import cycle; would A importing B make one: `magus\graph().imports` script below; `cycle edge` lines, or `B already reaches A: true`
+- layer clean: `magus\graph().layer("<name>")`; each covered Dir's `imports` against layers it may use
 - what already does this; where new code belongs: `magus query "kind=symbol <name>"`; existing implementations, files
 - who calls symbol: `magus explain '<symbol id>'`; `called by` symbols, `referenced by` files
 - what file holds: `magus explain <path/to/file>`; `defines (N)`
 - which packages central: `magus graph stats --symbols --kind dir`; `IN` column: fan-in
-- how churned, owned, duplicated: `magus\insight()`; `hotspots`, `ownership`, `duplication`
+- how churned, owned, duplicated: `magus\history().hotspots()` / `magus\history().ownership()` / `magus\graph().duplication()`
 - what breaks if I change symbol: `magus refs <symbol> --occurrences`; `N occurrence(s) in M file(s)`
 - what changeset reaches: `magus affected --impact`; seed and affected projects
 
@@ -82,7 +82,7 @@ import "std";
 import "magus";
 
 fun main(args: [str]) > void !> any {
-    final nb = magus\neighborhood(args[0], opts: magus\NeighborhoodOptions{ depth = 3, relations = ["imports"], direction = "in" });
+    final nb = magus\graph().neighborhood(args[0], opts: magus\NeighborhoodOptions{ depth = 3, relations = ["imports"], direction = "in" });
     std\print("verdict {nb.answer.verdict}");
     foreach (n in nb.nodes) {
         std\print(n.id);
@@ -90,8 +90,8 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-`magus\dir("<path>")`: same card as record: `imports`, `importedBy`, `files`, `layer`, `importsIndexed`.
-`magus\dirs("<glob>", opts: magus\DirsOptions{ layer = "<name>" })`: filters directories by layer, `language` or `depth`.
+`magus\graph().dir("<path>")`: same card as record: `imports`, `importedBy`, `files`, `layer`, `importsIndexed`.
+`magus\graph().dirs("<glob>", opts: magus\DirsOptions{ layer = "<name>" })`: filters directories by layer, `language` or `depth`.
 
 ## Every claim carries evidence
 
@@ -109,7 +109,7 @@ Empty or thin answer: evidence only once verdict says so:
 
 ## Cycles, layering
 
-No built-in cycle check; `magus\importGraph()` maps every package to its imports; enough.
+No built-in cycle check; `magus\graph().imports()` maps every package to its imports; enough.
 Save `cycles.buzz`.
 `magus buzz cycles.buzz`: lists every import edge on cycle.
 `magus buzz cycles.buzz <A> <B>`: would A importing B close one.
@@ -136,7 +136,7 @@ fun reaches(pkgs: {str: [str]}, start: str, target: str) > bool {
 }
 
 fun main(args: [str]) > void !> any {
-    final g = magus\importGraph();
+    final g = magus\graph().imports();
     if (!g.indexed) {
         throw "no symbol index: build one with magus graph build";
     }
@@ -156,7 +156,7 @@ fun main(args: [str]) > void !> any {
 
 Move adds import edges: every caller of moved code imports new home; new home imports what code calls.
 Ask two-argument form once per new edge.
-Layering declared, never inferred. `magus\layer("<name>")` returns Dirs declared layer covers; raises naming declared layers when name is not one.
+Layering declared, never inferred. `magus\graph().layer("<name>")` returns Dirs declared layer covers; raises naming declared layers when name is not one.
 No layers declared -> say so; do not invent from directory names.
 
 ## False answers
@@ -164,9 +164,9 @@ No layers declared -> say so; do not invent from directory names.
 Each: correct command in fast path.
 - `magus graph stats` without `--symbols` counts no package imports -> god nodes not packages; orphans: unused spells, isolated nodes, not unimported packages.
 - `--kind dir` degree counts contained files too -> many-file directory ranks high on `OUT` alone. Read `IN` for fan-in.
-- `magus path` walks edges both directions: found path means connected, not dependent. Use `magus\neighborhood` with `direction`.
+- `magus path` walks edges both directions: found path means connected, not dependent. Use `magus\graph().neighborhood` with `direction`.
 - `N nodes reach this` line on `magus explain` card saturates: one-caller private helper reports over a thousand. Does not size migration; `refs --occurrences` does.
-- `affinity` in `magus\insight` pairs projects -> inside one project sees nothing.
+- `magus\history().affinity` pairs projects -> inside one project sees nothing.
 - `hotspots` ranks generated files too: `magus describe file <path>` before calling hotspot design problem.
 - `kind=owner` exists only where repo commits CODEOWNERS file; otherwise `ownership` lens: each project's primary author, `busFactor1`.
 - Free-text `magus query` does not search symbols; name `kind=symbol`. `relation=imports` matches nothing without `kind=dir`.
@@ -179,7 +179,7 @@ Ask explicitly; nothing prompts it.
 Boundary not free: in Go, splitting package forces exports, widening public API you meant to shrink; no churn/coupling metric records cost.
 
 Suspect shapes, clearest first (shape: why; shown by):
-- imported only from inside own subtree: parent's implementation, not boundary; every `importedBy` entry of `magus\dir("<path>")` under its parent
+- imported only from inside own subtree: parent's implementation, not boundary; every `importedBy` entry of `magus\graph().dir("<path>")` under its parent
 - exactly one importer, no encapsulation behind it: file in wrong place; one `importedBy` entry; `magus explain <file>` shows definitions
 - single file, single exported symbol: package name just renames one function; `files` is 1 on Dir; `magus explain <file>`
 
@@ -192,8 +192,8 @@ Merge only when importers all live inside own parent and nothing exported needs 
 
 Before proposing new code, package, abstraction: show nothing does job already:
 1. `magus query "kind=symbol <name>"` for each name new code would need. Try synonyms: duplicates under other names common.
-2. Read `duplication` lens of `magus\insight()`: functions calling same symbols, same proportions: copied logic.
-3. Place new code where `imports` of `magus\dir` already cover its needs -> no new import edge.
+2. Read `magus\graph().duplication()`: functions calling same symbols, same proportions: copied logic.
+3. Place new code where `imports` of `magus\graph().dir` already cover its needs -> no new import edge.
 State observed convention in proposal, plus command showing it.
 
 ## Audit domain model
@@ -269,14 +269,14 @@ every package.
 | question | run | read |
 | --- | --- | --- |
 | what does X import; what imports X | `magus explain dir:<path>` | the `imports` and `imported by` edges |
-| what transitively depends on X | `magus\neighborhood` with `direction = "in"` (below) | `nodes`; `"out"` walks what X needs |
-| is there an import cycle; would A importing B make one | the `magus\importGraph` script below | `cycle edge` lines, or `B already reaches A: true` |
-| is this layer clean | `magus\layer("<name>")` | each covered Dir's `imports` against the layers it may use |
+| what transitively depends on X | `magus\graph().neighborhood` with `direction = "in"` (below) | `nodes`; `"out"` walks what X needs |
+| is there an import cycle; would A importing B make one | the `magus\graph().imports` script below | `cycle edge` lines, or `B already reaches A: true` |
+| is this layer clean | `magus\graph().layer("<name>")` | each covered Dir's `imports` against the layers it may use |
 | what already does this; where does new code belong | `magus query "kind=symbol <name>"` | existing implementations and their files |
 | who calls this symbol | `magus explain '<symbol id>'` | `called by` symbols and `referenced by` files |
 | what a file holds | `magus explain <path/to/file>` | `defines (N)` |
 | which packages are central | `magus graph stats --symbols --kind dir` | the `IN` column: fan-in |
-| how churned, owned or duplicated | `magus\insight()` | `hotspots`, `ownership`, `duplication` |
+| how churned, owned or duplicated | `magus\history().hotspots()` / `magus\history().ownership()` / `magus\graph().duplication()` | each metric |
 | what breaks if I change a symbol | `magus refs <symbol> --occurrences` | `N occurrence(s) in M file(s)` |
 | what a changeset reaches | `magus affected --impact` | the seed and affected projects |
 
@@ -292,7 +292,7 @@ import "std";
 import "magus";
 
 fun main(args: [str]) > void !> any {
-    final nb = magus\neighborhood(args[0], opts: magus\NeighborhoodOptions{ depth = 3, relations = ["imports"], direction = "in" });
+    final nb = magus\graph().neighborhood(args[0], opts: magus\NeighborhoodOptions{ depth = 3, relations = ["imports"], direction = "in" });
     std\print("verdict {nb.answer.verdict}");
     foreach (n in nb.nodes) {
         std\print(n.id);
@@ -300,8 +300,8 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-`magus\dir("<path>")` is the same card as a record: `imports`, `importedBy`,
-`files`, `layer`, and `importsIndexed`. `magus\dirs("<glob>", opts:
+`magus\graph().dir("<path>")` is the same card as a record: `imports`, `importedBy`,
+`files`, `layer`, and `importsIndexed`. `magus\graph().dirs("<glob>", opts:
 magus\DirsOptions{ layer = "<name>" })` filters directories by layer, `language` or
 `depth`.
 
@@ -331,7 +331,7 @@ An empty or thin answer is evidence only once its verdict says so:
 
 ## Cycles and layering
 
-There is no built-in cycle check. `magus\importGraph()` maps every package to
+There is no built-in cycle check. `magus\graph().imports()` maps every package to
 the packages it imports, which is enough. Save this as `cycles.buzz`. Run
 `magus buzz cycles.buzz` to list every import edge that sits on a cycle. Run
 `magus buzz cycles.buzz <A> <B>` to ask whether A importing B would close one.
@@ -358,7 +358,7 @@ fun reaches(pkgs: {str: [str]}, start: str, target: str) > bool {
 }
 
 fun main(args: [str]) > void !> any {
-    final g = magus\importGraph();
+    final g = magus\graph().imports();
     if (!g.indexed) {
         throw "no symbol index: build one with magus graph build";
     }
@@ -381,7 +381,7 @@ new home, and the new home imports whatever the code calls. Ask the two-argument
 form once per new edge. `refs --occurrences` lists the calling files,
 and so the packages a move touches.
 
-Layering is declared, never inferred. `magus\layer("<name>")` returns the Dirs a
+Layering is declared, never inferred. `magus\graph().layer("<name>")` returns the Dirs a
 declared layer covers, and raises naming the declared layers when the name is not
 one. With no layers declared, say so; do not invent them from directory names.
 
@@ -395,12 +395,12 @@ Each of these has a correct command in the fast path.
 - `--kind dir` degree counts contained files too, so a directory of many files
   ranks high on `OUT` alone. Read `IN` for fan-in.
 - `magus path` walks edges in both directions. A found path says two nodes
-  connect, not that one depends on the other. Use `magus\neighborhood` with a
+  connect, not that one depends on the other. Use `magus\graph().neighborhood` with a
   `direction`.
 - The `N nodes reach this` line on an `magus explain` card saturates: a private
   helper with one caller reports over a thousand. It does not size a migration;
   `refs --occurrences` does.
-- `affinity` in `magus\insight` pairs PROJECTS, so inside one project it sees
+- `magus\history().affinity` pairs PROJECTS, so inside one project it sees
   nothing.
 - `hotspots` ranks generated files too. Run `magus describe file <path>` before
   calling a hotspot a design problem.
@@ -427,7 +427,7 @@ The shapes worth flagging, most clearly wrong first:
 
 | shape | why it is suspect | shown by |
 | --- | --- | --- |
-| imported only from inside its own subtree | it is a parent's implementation, not a boundary | every `importedBy` entry of `magus\dir("<path>")` sits under its parent |
+| imported only from inside its own subtree | it is a parent's implementation, not a boundary | every `importedBy` entry of `magus\graph().dir("<path>")` sits under its parent |
 | exactly one importer, and no encapsulation behind it | a file in the wrong place | one `importedBy` entry; `magus explain <file>` shows what it defines |
 | single file, single exported symbol | the package name is a second name for one function | `files` is 1 on the Dir; `magus explain <file>` |
 
@@ -449,9 +449,9 @@ already does the job:
 
 1. `magus query "kind=symbol <name>"` for each name the new code would need. Try
    synonyms; a second implementation under another name is the common case.
-2. Read the `duplication` lens of `magus\insight()`: functions that call the same
+2. Read `magus\graph().duplication()`: functions that call the same
    symbols in the same proportions, which is what copied logic looks like.
-3. Place new code where the `imports` of `magus\dir` already cover what it
+3. Place new code where the `imports` of `magus\graph().dir` already cover what it
    needs, so the change adds no import edge.
 
 A suggestion that follows the workspace's own conventions costs less than

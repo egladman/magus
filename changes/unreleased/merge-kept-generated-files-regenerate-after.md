@@ -1,7 +1,5 @@
 ### Changed
 
-- **A merge regenerates what it changed, in the merge.** The merge driver's registration
-  writes settle hooks running `magus vcs resolve --hook` on the whole tree: projects
-  whose sources or outputs the operation changed regenerate and are staged, a clean
-  merge's commit is left to `git commit`, and a failed regeneration stops the commit.
-  `regenerate-owed` is gone.
+- **A merge regenerates what it changed.** A generated file the merge driver keeps one
+  side of is recorded as owed, and `magus vcs resolve` runs the record once the merge has
+  the whole tree. `regenerate-owed` is gone.

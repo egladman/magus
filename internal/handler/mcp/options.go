@@ -120,11 +120,6 @@ func (o Options) httpAddr() netip.AddrPort {
 	return defaultAddrPort
 }
 
-// SiteOrigin is the scheme://host origin of the hosted Graph Explorer that
-// cmd/magus/graph.go names as defaultExploreURL; keep the two in sync. internal/server
-// allows it as the bridge's CORS origin.
-const SiteOrigin = "https://eli.gladman.cc"
-
 // graphReader is the knowledge graph workspace.ViewAs adds to an opened *magus.Magus.
 type graphReader interface {
 	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)

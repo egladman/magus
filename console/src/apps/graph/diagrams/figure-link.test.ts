@@ -30,14 +30,13 @@ const ok = {
 
 function refusal(payload: string): string {
   const read = decodeFigureLink(payload);
-  assert.equal(read.ok, false, "expected a refusal");
-  return read.ok ? "" : read.error;
+  assert.ok(read.error, "expected a refusal");
+  return read.error.message;
 }
 
 test("the fixture decodes to the graph it was built from", () => {
   assert.deepEqual(decodeFigureLink(FIXTURE), {
-    ok: true,
-    figure: {
+    value: {
       title: "Session s-1: café → jobs",
       nodes: [
         { id: "session", label: "session", seed: true },
@@ -66,9 +65,9 @@ test("every stroke and label survives the round trip", () => {
     ["a", "b", "plain", "spawns"],
   ];
   const read = decodeFigureLink(encode({ ...ok, nodes, edges }));
-  assert.ok(read.ok, read.ok ? "" : read.error);
+  assert.ok(!read.error, read.error?.message);
   assert.deepEqual(
-    read.figure.edges.map((e) => [e.from, e.to, e.stroke, e.label]),
+    read.value.edges.map((e) => [e.from, e.to, e.stroke, e.label]),
     [
       ["a", "b", "plain", ""],
       ["a", "b", "optional", "after"],
@@ -80,12 +79,12 @@ test("every stroke and label survives the round trip", () => {
 });
 
 test("a padded payload is read as well", () => {
-  assert.equal(decodeFigureLink(FIXTURE + "==").ok, true);
+  assert.equal(decodeFigureLink(FIXTURE + "==").error, undefined);
 });
 
 test("a node without a seed flag is no seed", () => {
   const read = decodeFigureLink(encode({ ...ok, nodes: [{ id: "a", label: "a" }] }));
-  assert.deepEqual(read.ok && read.figure.nodes, [{ id: "a", label: "a", seed: false }]);
+  assert.deepEqual(read.value?.nodes, [{ id: "a", label: "a", seed: false }]);
 });
 
 test("an empty payload is refused", () => {
@@ -167,12 +166,14 @@ const linked = (seeds: number) => {
       ],
     }),
   );
-  assert.ok(read.ok);
-  return read.figure;
+  assert.ok(!read.error);
+  return read.value;
 };
 
 test("the record is actors and flows carrying each edge's stroke and label, seeds tagged edited", () => {
-  const f = figureForLink(linked(1));
+  const built = figureForLink(linked(1));
+  assert.ok(!built.error);
+  const f = built.value;
   assert.deepEqual(
     f.boxes.map((b) => [b.actor?.name, b.actor?.tag, b.actor?.look]),
     [
@@ -196,7 +197,9 @@ test("the record is actors and flows carrying each edge's stroke and label, seed
 });
 
 test("seeds past the figure's accent budget are tagged and left plain", () => {
-  const f = figureForLink(linked(3));
+  const built = figureForLink(linked(3));
+  assert.ok(!built.error);
+  const f = built.value;
   assert.deepEqual(
     f.boxes.map((b) => [b.actor?.tag, b.actor?.look]),
     [
@@ -218,13 +221,15 @@ test("a label two nodes share takes the node's id", () => {
       ],
     }),
   );
-  assert.ok(read.ok);
+  assert.ok(!read.error);
+  const built = figureForLink(read.value);
+  assert.ok(!built.error);
   assert.deepEqual(
-    figureForLink(read.figure).boxes.map((b) => b.actor?.name),
+    built.value.boxes.map((b) => b.actor?.name),
     ["core (libs/core)", "core (app/core)"],
   );
   assert.deepEqual(
-    linkedRows(read.figure).map((n) => n.id),
+    linkedRows(read.value).map((n) => n.id),
     ["external:core (libs/core)", "external:core (app/core)"],
     "the list is keyed by the ids the drawing carries",
   );

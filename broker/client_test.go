@@ -92,6 +92,30 @@ func TestReleaseDuringReassertReachesTheNewBroker(t *testing.T) {
 	}
 }
 
+func TestAHelloRefusedForItsProtocolNamesABrokerFromAnotherBuild(t *testing.T) {
+	addr := testAddr(t)
+	ln, err := Listen(t.Context(), addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		nc, err := acceptStandIn(ln)
+		if err != nil {
+			return
+		}
+		defer func() { _ = nc.Close() }()
+		f, err := newFrameReader(nc).read()
+		if err != nil || f.Type != typeHello {
+			return
+		}
+		_ = (&frameWriter{w: nc}).write(typeError, f.ID, errorReply{Code: CodeProtocol, Message: "broker: expected a hello speaking protocol 99"})
+	}()
+
+	err = NewClient(addr).Handshake(t.Context())
+	require.ErrorIs(t, err, types.PeerFromAnotherBuild)
+	require.ErrorIs(t, err, ErrUnavailable, "a step still runs, or refuses, as with no broker")
+	assert.ErrorContains(t, err, "protocol 99")
+}
+
 type lockedBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer

@@ -10,7 +10,7 @@ This page is for a Go developer who wants to call magus from their own
 program (`import "github.com/egladman/magus"`) rather than shelling out to
 the `magus` binary. If you have never run `magus` and do not care to, this is
 the page for you; the [CLI reference](cli.md) describes the same domain from
-the other side. For runnable recipes (open a workspace, run a target, ask what a
+the other side. For runnable examples (open a workspace, run a target, ask what a
 change affects, judge a tool call), start with the
 [Go SDK guide](../guides/go-sdk.md).
 

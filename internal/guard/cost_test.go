@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/hint"
@@ -87,7 +88,7 @@ func TestDelegableClass(t *testing.T) {
 		"cd internal && rg -l Verdict .":       types.DelegableSearch,
 		"git diff --name-only main...HEAD":     "",
 	} {
-		assert.Equal(t, want, delegableClass(line), line)
+		assert.Equal(t, want, delegableClass(line, magusRepoAt), line)
 	}
 }
 
@@ -151,15 +152,15 @@ var costBoundLines = map[string]types.DelegableClass{
 func TestCostFree(t *testing.T) {
 	t.Parallel()
 	for _, line := range costFreeLines {
-		assert.True(t, costFree(line), line)
-		assert.Empty(t, delegableClass(line), line)
+		assert.True(t, costFree(line, magusRepoAt), line)
+		assert.Empty(t, delegableClass(line, magusRepoAt), line)
 	}
 	for line, class := range costBoundLines {
-		assert.False(t, costFree(line), line)
-		assert.Equal(t, class, delegableClass(line), line)
+		assert.False(t, costFree(line, magusRepoAt), line)
+		assert.Equal(t, class, delegableClass(line, magusRepoAt), line)
 	}
-	assert.False(t, costFree("cd /r"), "a line that only changes directory is not a quiet command")
-	assert.False(t, costFree(""))
+	assert.False(t, costFree("cd /r", magusRepoAt), "a line that only changes directory is not a quiet command")
+	assert.False(t, costFree("", magusRepoAt))
 }
 
 func TestInputClassOfAFreeCommandIsNone(t *testing.T) {
@@ -423,8 +424,9 @@ func TestNoteMainSpawnRecordsOrchestration(t *testing.T) {
 	assert.Empty(t, readCostState(hint.NewGate(cache, sub.factsKey())).Forked, "a subagent is never an orchestrator")
 }
 
-// A fork is filed from each shape that writes a row: the CLI verb, its record on stdin, a
-// magus\job.put rendered from an MCP call, and either one inside a `magus buzz` script.
+// A fork is filed from each shape that writes a row.
+// Those are the CLI verb, its record on stdin, and an MCP call's putJob.
+// Either one inside a `magus buzz` script files one too.
 func TestNoteForkReadsEveryShape(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1_700_000_000, 0)
@@ -438,7 +440,7 @@ func TestNoteForkReadsEveryShape(t *testing.T) {
 {"schema_version": %s, "id": "a2", "read_only": true}
 EOF`, strconv.Itoa(types.JobSchemaVersion)), []string{"a2"}},
 		{`client op=put id="a3" parent="root"`, []string{"a3"}},
-		{`./magus buzz -e 'import "magus"; magus\job.put("a4", opts: {"parent": "root"});'`, []string{"a4"}},
+		{`./magus buzz -e 'import "magus"; magus\workspace().putJob("a4", opts: {"parent": "root"});'`, []string{"a4"}},
 		{"./magus job wait a1", nil},
 		{"./magus job exit a1 --stdin", nil},
 		{`client op=register id="a1"`, nil},
@@ -491,7 +493,7 @@ func orchestratorFixture(t *testing.T) (at location, notes string) {
 	root := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("binary"), 0o755))
-	return location{cacheDir: t.TempDir(), workspace: root, dir: root}, t.TempDir()
+	return location{cacheDir: t.TempDir(), workspace: root, dir: root, policies: magusRepoAt.policies}, t.TempDir()
 }
 
 // orchestrationLines are calls a session that hands out work makes as orchestration.
@@ -518,7 +520,7 @@ func orchestrationLines(notes string) []string {
 		"./magus run install /",
 		"./magus query output grd0123456789ab",
 		"./magus query output out1 --identity",
-		`./magus buzz -e 'import "magus"; magus\job.put("a1", opts: {"parent": "root"});'`,
+		`./magus buzz -e 'import "magus"; magus\workspace().putJob("a1", opts: {"parent": "root"});'`,
 		"git branch x",
 		"git switch x",
 		"git worktree add ../w main",
@@ -568,7 +570,7 @@ var groundworkLines = []struct {
 	{"./magus run go::go-build .", delegableIntegrate},
 	{"./magus run generate:rw .", delegableIntegrate},
 	{"./magus run generate / -s", delegableIntegrate},
-	{"./magus run content-generate docs", delegableIntegrate},
+	{"./magus run content-generate docs", types.DelegableRun},
 	{"./magus vcs ls-files internal/guard/root.go", types.DelegableRead},
 	{"git cherry-pick abc123", delegableIntegrate},
 	{"git cherry-pick --continue", delegableIntegrate},
@@ -596,6 +598,35 @@ func TestRootWorkClass(t *testing.T) {
 	for _, g := range groundworkLines {
 		assert.Equal(t, g.class, rootWorkClass(g.line, at), g.line)
 	}
+}
+
+type DrivesOnlyJobsSuite struct {
+	suite.Suite
+}
+
+func TestDrivesOnlyJobsSuite(t *testing.T) {
+	suite.Run(t, new(DrivesOnlyJobsSuite))
+}
+
+func (s *DrivesOnlyJobsSuite) TestWorkspaceJobMethodsAreInBounds() {
+	s.True(drivesOnlyJobs(`import "magus"; magus\workspace().putJob("a");`))
+	s.True(drivesOnlyJobs(`import workspace from "magus"; workspace().jobs();`))
+	s.True(drivesOnlyJobs(`import "magus"; magus\workspace().clearJobs(); magus\workspace().forkFacts();`))
+}
+
+func (s *DrivesOnlyJobsSuite) TestJobIDMethodsAreInBounds() {
+	s.True(drivesOnlyJobs(`import "magus"; magus\job("a").exit();`))
+	s.True(drivesOnlyJobs(`import "magus"; magus\job("a").wait();`))
+	s.True(drivesOnlyJobs(`import "magus"; magus\job("a").register();`))
+	s.True(drivesOnlyJobs(`import job, workspace from "magus"; job("a").exit(); workspace().putJob("a");`))
+}
+
+func (s *DrivesOnlyJobsSuite) TestOtherWorkspaceWorkIsOutOfBounds() {
+	s.False(drivesOnlyJobs(`import "magus"; magus\workspace().skills();`))
+	s.False(drivesOnlyJobs(`import workspace from "magus"; workspace().bustCache();`))
+	s.False(drivesOnlyJobs(`import workspace from "magus"; final open = workspace; open().bustCache();`))
+	s.False(drivesOnlyJobs(`import "magus"; magus\workspace(magus\cmd("run", ["build"])).jobs();`))
+	s.False(drivesOnlyJobs(`import "magus"; magus\job("a").exit(); magus\workspace().bustCache();`))
 }
 
 func TestNotesPath(t *testing.T) {

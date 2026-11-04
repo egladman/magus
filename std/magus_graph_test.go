@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"testing"
 
@@ -62,11 +61,11 @@ func TestDirAndLayerRaiseTheirCodes(t *testing.T) {
 
 	_, err := MagusDir(ctx, "internal/htpx")
 	require.ErrorIs(t, err, types.DirNotInGraph)
-	assert.ErrorContains(t, err, "magus\\dir")
+	assert.ErrorContains(t, err, "magus\\graph().dir")
 
 	_, err = MagusLayer(ctx, "service")
 	require.ErrorIs(t, err, types.LayerNotDeclared)
-	_, err = MagusDirs(ctx, "**", map[string]any{"layer": "service"})
+	_, err = MagusDirs(ctx, "**", types.DirsOptions{Layer: "service"})
 	require.ErrorIs(t, err, types.LayerNotDeclared, "a DirsOptions layer is held to the declarations too")
 }
 
@@ -74,7 +73,7 @@ func TestDirsAndLayerReadEveryProjectsDeclarations(t *testing.T) {
 	t.Parallel()
 	ctx := dirContext(t)
 
-	dirs, err := MagusDirs(ctx, "internal/**", map[string]any{"layer": "handler", "language": "go", "depth": int64(0)})
+	dirs, err := MagusDirs(ctx, "internal/**", types.DirsOptions{Layer: "handler", Language: "go"})
 	require.NoError(t, err)
 	require.Len(t, dirs, 1)
 	assert.Equal(t, types.Dir{
@@ -113,11 +112,11 @@ func TestPathFiltersRelations(t *testing.T) {
 	t.Parallel()
 	ctx := dirContext(t)
 
-	p, err := MagusPath(ctx, "internal/handler/mcp", "internal/httpx", map[string]any{"relations": []any{"imports"}})
+	p, err := MagusPath(ctx, "internal/handler/mcp", "internal/httpx", types.KnowledgePathOptions{Relations: []types.RelationID{types.RelationImports}})
 	require.NoError(t, err)
 	assert.True(t, p.Found)
 
-	none, err := MagusPath(ctx, "internal/handler/mcp", "internal/httpx", map[string]any{"relations": []any{"depends_on"}})
+	none, err := MagusPath(ctx, "internal/handler/mcp", "internal/httpx", types.KnowledgePathOptions{Relations: []types.RelationID{types.RelationDependsOn}})
 	require.NoError(t, err)
 	assert.False(t, none.Found, "no path of those relations is an answer")
 }
@@ -126,8 +125,8 @@ func TestNeighborhoodDecodesItsOptions(t *testing.T) {
 	t.Parallel()
 	ctx := dirContext(t)
 
-	out, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{
-		"depth": int64(1), "relations": []any{"calls"}, "direction": "out", "collapse": []any{"internal/handler"},
+	out, err := MagusNeighborhood(ctx, "internal/httpx", types.KnowledgeNeighborhoodOptions{
+		Depth: 1, Relations: []types.RelationID{types.RelationCalls}, Direction: types.EdgeOut, Collapse: []string{"internal/handler"},
 	})
 	require.NoError(t, err)
 	// The node list is the walk's own rendering of the graph and the answer is asserted by its
@@ -150,52 +149,33 @@ func TestNeighborhoodDecodesItsOptions(t *testing.T) {
 	}, out)
 	assert.Equal(t, types.VerdictUnknown, out.Answer.Verdict, "calls lives beside the symbol layer, and no index was loaded")
 
-	declared, err := MagusNeighborhood(ctx, "target:.:mcp-tools-generate", map[string]any{"relations": []any{"depends_on"}})
+	declared, err := MagusNeighborhood(ctx, "target:.:mcp-tools-generate", types.KnowledgeNeighborhoodOptions{Relations: []types.RelationID{types.RelationDependsOn}})
 	require.NoError(t, err)
 	assert.Equal(t, types.VerdictAbsent, declared.Answer.Verdict, "a depends_on walk never needed an index")
 }
 
-// A typo in an option would otherwise answer a different question than the one asked.
-func TestDirLayerAndNeighborhoodOptionsAreStrict(t *testing.T) {
+// The members refuse what the generated option records cannot: a negative depth, a bad
+// glob, an empty or unresolvable name.
+func TestDirLayerAndNeighborhoodRefuseBadInput(t *testing.T) {
 	t.Parallel()
 	ctx := dirContext(t)
 
 	for name, call := range map[string]func() error{
-		"unknown dirs key": func() error { _, err := MagusDirs(ctx, "**", map[string]any{"layr": "x"}); return err },
-		"negative depth":   func() error { _, err := MagusDirs(ctx, "**", map[string]any{"depth": int64(-1)}); return err },
-		"bad glob":         func() error { _, err := MagusDirs(ctx, "[", nil); return err },
-		"unknown relation": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"relations": []any{"import"}})
+		"negative depth": func() error { _, err := MagusDirs(ctx, "**", types.DirsOptions{Depth: -1}); return err },
+		"bad glob":       func() error { _, err := MagusDirs(ctx, "[", types.DirsOptions{}); return err },
+		"negative neighborhood depth": func() error {
+			_, err := MagusNeighborhood(ctx, "internal/httpx", types.KnowledgeNeighborhoodOptions{Depth: -1})
 			return err
 		},
-		"bad direction": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"direction": "up"})
+		"unresolvable focus": func() error {
+			_, err := MagusNeighborhood(ctx, "nonesuch-xyz", types.KnowledgeNeighborhoodOptions{})
 			return err
 		},
-		"collapse not a list": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"collapse": "internal"})
-			return err
-		},
-		"unresolvable focus": func() error { _, err := MagusNeighborhood(ctx, "nonesuch-xyz", nil); return err },
-		"unknown path option": func() error {
-			_, err := MagusPath(ctx, "a", "b", map[string]any{"relation": []any{"imports"}})
-			return err
-		},
-		"empty dir":          func() error { _, err := MagusDir(ctx, " "); return err },
-		"empty layer name":   func() error { _, err := MagusLayer(ctx, ""); return err },
-		"empty dirs glob":    func() error { _, err := MagusDirs(ctx, "", nil); return err },
-		"empty neighborhood": func() error { _, err := MagusNeighborhood(ctx, "", nil); return err },
-		"string depth": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"depth": "2"})
-			return err
-		},
-		"non-string layer": func() error { _, err := MagusDirs(ctx, "**", map[string]any{"layer": int64(1)}); return err },
-		"non-string collapse": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"collapse": []any{int64(1)}})
-			return err
-		},
-		"unknown neighborhood": func() error {
-			_, err := MagusNeighborhood(ctx, "internal/httpx", map[string]any{"dept": int64(1)})
+		"empty dir":        func() error { _, err := MagusDir(ctx, " "); return err },
+		"empty layer name": func() error { _, err := MagusLayer(ctx, ""); return err },
+		"empty dirs glob":  func() error { _, err := MagusDirs(ctx, "", types.DirsOptions{}); return err },
+		"empty neighborhood": func() error {
+			_, err := MagusNeighborhood(ctx, "", types.KnowledgeNeighborhoodOptions{})
 			return err
 		},
 	} {
@@ -226,7 +206,7 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 		_, err := MagusDir(eval, "internal/httpx")
 		require.NoError(t, err)
 	}
-	_, err := MagusDirs(eval, "internal/**", nil)
+	_, err := MagusDirs(eval, "internal/**", types.DirsOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, ws.builds, "four members in one evaluation")
 
@@ -292,10 +272,10 @@ func TestPrecedentsAreJudgedByTheWorkspacesConformance(t *testing.T) {
 	require.NoError(t, err)
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report types.PrecedentReport
+	var report types.Holds
 	require.NoError(t, json.Unmarshal(b, &report))
-	require.Len(t, report.Precedents, 1)
-	assert.False(t, report.Precedents[0].Established, "six cases are under the workspace's cohort gate of seven")
+	require.Len(t, report.Holds, 1)
+	assert.False(t, report.Holds[0].Established, "six cases are under the workspace's cohort gate of seven")
 
 	ws.conformanceErr = errors.New("conformance.json: line 1: schema 2: want 1")
 	_, err = MagusPrecedents(types.WithWorkspace(t.Context(), ws))
@@ -361,10 +341,10 @@ func TestPrecedentsReportRowsBesideIndexFreshness(t *testing.T) {
 	require.NoError(t, err)
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report types.PrecedentReport
+	var report types.Holds
 	require.NoError(t, json.Unmarshal(b, &report))
-	assert.Equal(t, types.PrecedentReport{
-		Precedents: []types.Precedent{{
+	assert.Equal(t, types.Holds{
+		Holds: []types.Precedent{{
 			Family: types.PrecedentErrSentinelName, Scope: types.PrecedentScope{Language: "go"}, Key: types.PrecedentKey{Prefix: "err"},
 			Follow: 5, Cohort: 6, Share: 5.0 / 6, Established: true, Cited: cited,
 			Departures: []types.Case{{Node: bad, Source: "internal/a/z.go:4"}},
@@ -392,7 +372,7 @@ func TestPrecedentsFreshenEveryIndexBeforeJudgingIt(t *testing.T) {
 	assert.True(t, ws.readAfter, "freshness is read after the freshen, so it judges the rebuilt index")
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report types.PrecedentReport
+	var report types.Holds
 	require.NoError(t, json.Unmarshal(b, &report))
 	stale.Detail = "docs changed\nscip-buzz is not on PATH"
 	assert.Equal(t, []types.SymbolIndexStatus{fresh, stale}, report.Indexes,
@@ -424,12 +404,11 @@ func TestSymbolsBesideIndexFreshness(t *testing.T) {
 
 	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"indexes", "symbols"}, slices.Sorted(maps.Keys(got)), "keyed as the JSON is")
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report types.SymbolReport
+	var report types.Symbols
 	require.NoError(t, json.Unmarshal(b, &report))
-	assert.Equal(t, types.SymbolReport{
+	assert.Equal(t, types.Symbols{
 		Symbols: []types.SymbolDecl{{
 			Node: open, Source: "internal/a/open.go:3", Language: "go", Name: "Open",
 			Kind: "function", Doc: "Open reads the file.",
@@ -438,7 +417,7 @@ func TestSymbolsBesideIndexFreshness(t *testing.T) {
 	}, report, "a declared output is not listed, and the index verdict rides beside the symbols")
 
 	_, err = MagusSymbols(graphContext(t))
-	assert.ErrorContains(t, err, "magus\\symbols: this workspace cannot judge its symbol indexes")
+	assert.ErrorContains(t, err, "magus\\Graph.symbols: this workspace cannot judge its symbol indexes")
 }
 
 func TestSymbolsReportsNoSymbolsAsAnEmptyList(t *testing.T) {
@@ -447,7 +426,7 @@ func TestSymbolsReportsNoSymbolsAsAnEmptyList(t *testing.T) {
 
 	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
-	assert.Equal(t, []any{}, got["symbols"], "an empty workspace reads as an empty list, never null")
+	assert.Equal(t, []types.SymbolDecl{}, got.Symbols, "an empty workspace reads as an empty list, never null")
 }
 
 // sizedGoFile declares a Go file of lines lines in g, as the index ingestion sizes one.
@@ -464,11 +443,11 @@ func conformanceAtAnchor() *types.ConformanceOptions {
 	return &o
 }
 
-func decodeConformanceReport(t *testing.T, got map[string]any) conformanceReport {
+func decodeConformanceReport(t *testing.T, got types.ConformanceReport) types.ConformanceReport {
 	t.Helper()
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report conformanceReport
+	var report types.ConformanceReport
 	require.NoError(t, json.Unmarshal(b, &report))
 	return report
 }
@@ -488,7 +467,7 @@ func TestConformanceReportsRowsBesideIndexFreshness(t *testing.T) {
 		conformance:         conformanceAtAnchor(),
 	}
 
-	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws), nil, "")
 	require.NoError(t, err)
 	report := decodeConformanceReport(t, got)
 	wantReport := report
@@ -502,7 +481,7 @@ func TestConformanceReportsRowsBesideIndexFreshness(t *testing.T) {
 	row := report.Rows[i]
 	wantRow := row
 	wantRow.N = 2 // a declared output is never counted
-	wantRow.Value, wantRow.Source = 100, types.ConformanceFromAnchor
+	wantRow.Value = 100
 	wantRow.Violations = []types.ConformanceItem{{ID: "internal/a/big.go", Source: "internal/a/big.go:1", Measure: 300}}
 	assert.Equal(t, wantRow, row)
 	assert.Zero(t, row.Propose, "a live percentile above the enforced value is never proposed")
@@ -511,7 +490,7 @@ func TestConformanceReportsRowsBesideIndexFreshness(t *testing.T) {
 func TestConformanceWithoutSymbolsIsUnknownNotAPass(t *testing.T) {
 	t.Parallel()
 	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()}}
-	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusConformance(types.WithWorkspace(t.Context(), ws), nil, "")
 	require.NoError(t, err)
 	answer := decodeConformanceReport(t, got).Answer
 	wantAnswer := answer
@@ -525,16 +504,12 @@ func TestConformanceMisconfigurationIsAnError(t *testing.T) {
 	errorValue(g, "internal/a/e0.go", 3, "ErrA")
 	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()}}
 
-	ws.conformanceErr = errors.New("conformance.json: line 1: schema 2: want 1")
-	_, err := MagusConformance(types.WithWorkspace(t.Context(), ws))
-	assert.ErrorContains(t, err, "schema 2", "a record that cannot be read is an error")
+	ws.conformanceErr = errors.New("min_sample 0: want at least 1")
+	_, err := MagusConformance(types.WithWorkspace(t.Context(), ws), nil, "")
+	assert.ErrorContains(t, err, "min_sample", "a policy the workspace refuses is an error")
 
-	ws.conformanceErr = nil
-	bad := conformanceAtAnchor()
-	bad.MinSample = 0
-	ws.conformance = bad
-	_, err = MagusConformance(types.WithWorkspace(t.Context(), ws))
-	assert.ErrorContains(t, err, "min_sample", "a policy that fails validation is an error even with no record to read")
+	_, err = MagusConformance(types.WithWorkspace(t.Context(), ws), nil, "origin/main")
+	assert.ErrorContains(t, err, "name the checks", "a base with no checks is refused before anything is measured")
 }
 
 // Every query names the weights it ranked under, and a reader context that could not be

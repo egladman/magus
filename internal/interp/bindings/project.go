@@ -268,7 +268,7 @@ func parseBuzzProjectOptions(ctx context.Context, v vm.Value) ([]workspace.Proje
 			// binds cleanly, then silently adds nothing to run. Warn (not error). A pure
 			// in-VM cache backend is bound through magus.cache.remote, not here.
 			if sp, ok := project.DefaultSpellRegistry().Lookup(name); ok && contributesNothing(sp) {
-				slog.WarnContext(ctx, "magus.project: bound spell exposes no targets; did its `mgs_listTargets` get omitted or misnamed?", "spell", name)
+				slog.WarnContext(ctx, "magus.project: bound spell exposes no targets; did its `mgs_listTargets` get omitted or misnamed?", slog.String("spell", name), attr.Unchecked())
 			}
 			if name == magusfileSpellName {
 				return nil, magusfileNotASpellError("listing it in \"spells\"")
@@ -434,6 +434,30 @@ func parseBuzzProjectOptions(ctx context.Context, v vm.Value) ([]workspace.Proje
 							"the guard quotes it to the agent it stops and to the person it asks", name)
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.HumanOnly(reason)))
+			}
+			// The guard reads these declarations instead of a target's name, so a
+			// workspace's own `build` never inherits what magus's go-build declares.
+			if rv, ok := pv.MapGet("relinks"); ok {
+				binary := ""
+				if rv.IsString() {
+					binary = strings.TrimSpace(rv.AsString())
+				}
+				if binary == "" {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].relinks needs the path of the binary a run replaces, workspace-relative, e.g. \"./magus\"", name)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.Relinks(binary)))
+			}
+			if iv, ok := pv.MapGet("integrates"); ok {
+				reason := ""
+				if iv.IsString() {
+					reason = strings.TrimSpace(iv.AsString())
+				}
+				if reason == "" {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].integrates needs a reason string saying why an integrator runs this target, e.g. \"regenerates the bindings\"", name)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.Integrates(reason)))
 			}
 			// drift says what happens when this target's declared output moves under a
 			// read-only run. Absent means the default, which already gates a target that

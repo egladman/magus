@@ -6,6 +6,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestSpellOpKind covers OpKind's empty-default resolution and the IsService
@@ -68,6 +69,14 @@ func TestCommandValidateQuiet(t *testing.T) {
 	require.ErrorContains(t, Command{Bin: "go", Quiet: true}.Validate(), "quiet without capture")
 }
 
+func TestCommandValidateSourcesEachWithoutSourcesRefused(t *testing.T) {
+	require.ErrorContains(t, Command{Bin: "gofmt", SourcesEach: true}.Validate(), "sources_each without sources")
+}
+
+func TestCommandValidateSourcesEachWithSourcesAccepted(t *testing.T) {
+	require.NoError(t, Command{Bin: "gofmt", Sources: []string{"**/*.go"}, SourcesEach: true}.Validate())
+}
+
 // TestServiceValidate pins the shape rules a Service is resolved against: exactly one
 // of Command or Start, and a Start service declares both how to tell it is up and how
 // to stop it, since the supervisor holds none of its processes.
@@ -98,4 +107,24 @@ func TestServiceValidate(t *testing.T) {
 			require.EqualError(t, err, tt.wantErr)
 		})
 	}
+}
+
+type commandSelectionSuite struct{ suite.Suite }
+
+func TestCommandSelection(t *testing.T) { suite.Run(t, new(commandSelectionSuite)) }
+func (s *commandSelectionSuite) TestGoDialectIsValid() {
+	s.NoError(Command{TestSelection: "go"}.Validate())
+}
+func (s *commandSelectionSuite) TestEmptyDeclaresNoSelector() { s.NoError(Command{}.Validate()) }
+func (s *commandSelectionSuite) TestUnknownDialectIsRejected() {
+	s.ErrorContains(Command{TestSelection: "g0"}.Validate(), `unsupported test_selection "g0"`)
+}
+func (s *commandSelectionSuite) TestDialectSurvivesJSON() {
+	original := Command{Bin: "go", Args: []string{"test"}, TestSelection: "go"}
+	data, err := json.Marshal(original)
+	s.Require().NoError(err)
+	s.Contains(string(data), `"test_selection":"go"`)
+	var decoded Command
+	s.Require().NoError(json.Unmarshal(data, &decoded))
+	s.Equal(original, decoded)
 }

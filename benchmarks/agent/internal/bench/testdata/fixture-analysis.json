@@ -1,7 +1,9 @@
 {
   "platform": "fixture",
   "seed": 20260902,
-  "bootstrap_iters": 10000,
+  "randomization_samples": 100000,
+  "alpha": 0.05,
+  "power": 0.8,
   "min_relative_delta": 0.1,
   "runs": 12,
   "arms": [
@@ -53,8 +55,17 @@
         0.4385029682449546,
         1
       ],
-      "k": 3,
-      "pass_pow_k": 1,
+      "pass_at_k": [
+        1,
+        1,
+        1
+      ],
+      "pass_pow_k": [
+        1,
+        1,
+        1
+      ],
+      "answers": null,
       "metrics": {
         "cache_read_tokens": {
           "n": 3,
@@ -321,8 +332,25 @@
         0.4385029682449546,
         1
       ],
-      "k": 3,
-      "pass_pow_k": 1,
+      "pass_at_k": [
+        1,
+        1,
+        1
+      ],
+      "pass_pow_k": [
+        1,
+        1,
+        1
+      ],
+      "answers": {
+        "runs": 3,
+        "tp": 12,
+        "fp": 0,
+        "fn": 3,
+        "precision": 1,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
       "metrics": {
         "cache_read_tokens": {
           "n": 3,
@@ -589,8 +617,17 @@
         0.4385029682449546,
         1
       ],
-      "k": 3,
-      "pass_pow_k": 1,
+      "pass_at_k": [
+        1,
+        1,
+        1
+      ],
+      "pass_pow_k": [
+        1,
+        1,
+        1
+      ],
+      "answers": null,
       "metrics": {
         "cache_read_tokens": {
           "n": 3,
@@ -854,11 +891,28 @@
       "unknown_outcomes": 0,
       "pass_at_1": 0.6666666666666666,
       "pass_at_1_ci": [
-        0.2076596008020477,
+        0.20765960080204776,
         0.9385080552796037
       ],
-      "k": 3,
-      "pass_pow_k": 0,
+      "pass_at_k": [
+        0.6666666666666667,
+        1,
+        1
+      ],
+      "pass_pow_k": [
+        0.6666666666666666,
+        0.3333333333333333,
+        0
+      ],
+      "answers": {
+        "runs": 3,
+        "tp": 9,
+        "fp": 6,
+        "fn": 6,
+        "precision": 0.6,
+        "recall": 0.6,
+        "f1": 0.6
+      },
       "metrics": {
         "cache_read_tokens": {
           "n": 3,
@@ -1120,12 +1174,34 @@
   "arm_summary": {
     "full": {
       "n": 6,
+      "graded": 6,
       "successes": 6,
-      "pass_rate": 1,
-      "pass_rate_ci": [
-        0.6096657120978346,
+      "tasks": 2,
+      "pass_at_1": 1,
+      "pass_at_1_ci": [
+        1,
         1
       ],
+      "k": 3,
+      "pass_at_k": [
+        1,
+        1,
+        1
+      ],
+      "pass_pow_k": [
+        1,
+        1,
+        1
+      ],
+      "answers": {
+        "runs": 3,
+        "tp": 12,
+        "fp": 0,
+        "fn": 3,
+        "precision": 1,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
       "dollars": {
         "n": 6,
         "median": 0.089,
@@ -1142,12 +1218,34 @@
     },
     "rampant": {
       "n": 6,
+      "graded": 6,
       "successes": 5,
-      "pass_rate": 0.8333333333333334,
-      "pass_rate_ci": [
-        0.43649717781352987,
-        0.9699466302516935
+      "tasks": 2,
+      "pass_at_1": 0.8333333333333333,
+      "pass_at_1_ci": [
+        0,
+        1
       ],
+      "k": 3,
+      "pass_at_k": [
+        0.8333333333333334,
+        1,
+        1
+      ],
+      "pass_pow_k": [
+        0.8333333333333333,
+        0.6666666666666666,
+        0.5
+      ],
+      "answers": {
+        "runs": 3,
+        "tp": 9,
+        "fp": 6,
+        "fn": 6,
+        "precision": 0.6,
+        "recall": 0.6,
+        "f1": 0.6
+      },
       "dollars": {
         "n": 6,
         "median": 0.216125,
@@ -1163,398 +1261,472 @@
       }
     }
   },
-  "paired": {
+  "refusal": "",
+  "comparisons": {
     "cache_read_tokens": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -52000,
-        "delta_median": -52000,
-        "ci_low": -52000,
-        "ci_high": -52000,
-        "p": 0.0001,
-        "baseline_median": 84000,
-        "relative": -0.6190476190476191,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -52000,
-        "delta_median": -52000,
-        "ci_low": -52000,
-        "ci_high": -52000,
-        "p": 0.0001,
-        "baseline_median": 84000,
-        "relative": -0.6190476190476191,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "cache_read_tokens",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 32000,
+          "baseline": 84000,
+          "delta": -52000
+        },
+        {
+          "task": "task-b",
+          "treated": 32000,
+          "baseline": 84000,
+          "delta": -52000
+        }
+      ],
+      "delta_mean": -52000,
+      "baseline_mean": 84000,
+      "relative": -0.6190476190476191,
+      "ci_low": -52000,
+      "ci_high": -52000,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
     },
     "cache_write_tokens": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -5700,
-        "delta_median": -5700,
-        "ci_low": -5700,
-        "ci_high": -5700,
-        "p": 0.0001,
-        "baseline_median": 10500,
-        "relative": -0.5428571428571428,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -5700,
-        "delta_median": -5700,
-        "ci_low": -5700,
-        "ci_high": -5700,
-        "p": 0.0001,
-        "baseline_median": 10500,
-        "relative": -0.5428571428571428,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "cache_write_tokens",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 4800,
+          "baseline": 10500,
+          "delta": -5700
+        },
+        {
+          "task": "task-b",
+          "treated": 4800,
+          "baseline": 10500,
+          "delta": -5700
+        }
+      ],
+      "delta_mean": -5700,
+      "baseline_mean": 10500,
+      "relative": -0.5428571428571428,
+      "ci_low": -5700,
+      "ci_high": -5700,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
     },
     "dollars": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -0.12812500000000002,
-        "delta_median": -0.12812500000000002,
-        "ci_low": -0.12962500000000002,
-        "ci_high": -0.12662500000000002,
-        "p": 0.0001,
-        "baseline_median": 0.216125,
-        "relative": -0.5928282244071719,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -0.12612500000000001,
-        "delta_median": -0.12812500000000002,
-        "ci_low": -0.12962500000000002,
-        "ci_high": -0.12062500000000002,
-        "p": 0.0001,
-        "baseline_median": 0.216125,
-        "relative": -0.5835743204164258,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "dollars",
+      "family": true,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 0.08800000000000001,
+          "baseline": 0.216125,
+          "delta": -0.128125
+        },
+        {
+          "task": "task-b",
+          "treated": 0.09000000000000001,
+          "baseline": 0.216125,
+          "delta": -0.126125
+        }
+      ],
+      "delta_mean": -0.127125,
+      "baseline_mean": 0.216125,
+      "relative": -0.5882012724117986,
+      "ci_low": -0.1398312047361747,
+      "ci_high": -0.11441879526382528,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": 1,
+      "effect_size_dz": -89.89094955833977,
+      "min_detectable": 0.017085854607389678,
+      "verdict": "inconclusive",
+      "reason": "2 task(s): the smallest p an exact test can reach is 0.5, above 0.05"
     },
     "file_reads": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -3,
-        "delta_median": -3,
-        "ci_low": -3,
-        "ci_high": -3,
-        "p": 0.0001,
-        "baseline_median": 7,
-        "relative": -0.42857142857142855,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -3,
-        "delta_median": -3,
-        "ci_low": -3,
-        "ci_high": -3,
-        "p": 0.0001,
-        "baseline_median": 7,
-        "relative": -0.42857142857142855,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "file_reads",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 4,
+          "baseline": 7,
+          "delta": -3
+        },
+        {
+          "task": "task-b",
+          "treated": 4,
+          "baseline": 7,
+          "delta": -3
+        }
+      ],
+      "delta_mean": -3,
+      "baseline_mean": 7,
+      "relative": -0.42857142857142855,
+      "ci_low": -3,
+      "ci_high": -3,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
     },
     "input_tokens": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -6800,
-        "delta_median": -6800,
-        "ci_low": -7100,
-        "ci_high": -6500,
-        "p": 0.0001,
-        "baseline_median": 11200,
-        "relative": -0.6071428571428571,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -6800,
-        "delta_median": -6800,
-        "ci_low": -7100,
-        "ci_high": -6500,
-        "p": 0.0001,
-        "baseline_median": 11200,
-        "relative": -0.6071428571428571,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "input_tokens",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 4400,
+          "baseline": 11200,
+          "delta": -6800
+        },
+        {
+          "task": "task-b",
+          "treated": 4400,
+          "baseline": 11200,
+          "delta": -6800
+        }
+      ],
+      "delta_mean": -6800,
+      "baseline_mean": 11200,
+      "relative": -0.6071428571428571,
+      "ci_low": -6800,
+      "ci_high": -6800,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
     },
     "output_tokens": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -1300,
-        "delta_median": -1300,
-        "ci_low": -1300,
-        "ci_high": -1300,
-        "p": 0.0001,
-        "baseline_median": 2100,
-        "relative": -0.6190476190476191,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -1300,
-        "delta_median": -1300,
-        "ci_low": -1300,
-        "ci_high": -1300,
-        "p": 0.0001,
-        "baseline_median": 2100,
-        "relative": -0.6190476190476191,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "output_tokens",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 800,
+          "baseline": 2100,
+          "delta": -1300
+        },
+        {
+          "task": "task-b",
+          "treated": 800,
+          "baseline": 2100,
+          "delta": -1300
+        }
+      ],
+      "delta_mean": -1300,
+      "baseline_mean": 2100,
+      "relative": -0.6190476190476191,
+      "ci_low": -1300,
+      "ci_high": -1300,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
+    },
+    "pass_at_1": {
+      "metric": "pass_at_1",
+      "family": true,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 1,
+          "baseline": 1,
+          "delta": 0
+        },
+        {
+          "task": "task-b",
+          "treated": 1,
+          "baseline": 0.6666666666666666,
+          "delta": 0.33333333333333337
+        }
+      ],
+      "delta_mean": 0.16666666666666669,
+      "baseline_mean": 0.8333333333333333,
+      "relative": 0.20000000000000004,
+      "ci_low": -1.9510341226957821,
+      "ci_high": 2.2843674560291154,
+      "p": 1,
+      "min_attainable_p": 0.5,
+      "p_holm": 1,
+      "effect_size_dz": 0.7071067811865476,
+      "min_detectable": 2.847642434564944,
+      "verdict": "inconclusive",
+      "reason": "2 task(s): the smallest p an exact test can reach is 0.5, above 0.05"
     },
     "re_read_rate": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -0.5714285714285714,
-        "delta_median": -0.5714285714285714,
-        "ci_low": -0.5714285714285714,
-        "ci_high": -0.5714285714285714,
-        "p": 0.0001,
-        "baseline_median": 0.5714285714285714,
-        "relative": -1,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -0.5714285714285714,
-        "delta_median": -0.5714285714285714,
-        "ci_low": -0.5714285714285714,
-        "ci_high": -0.5714285714285714,
-        "p": 0.0001,
-        "baseline_median": 0.5714285714285714,
-        "relative": -1,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "re_read_rate",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 0,
+          "baseline": 0.5714285714285714,
+          "delta": -0.5714285714285714
+        },
+        {
+          "task": "task-b",
+          "treated": 0,
+          "baseline": 0.5714285714285714,
+          "delta": -0.5714285714285714
+        }
+      ],
+      "delta_mean": -0.5714285714285714,
+      "baseline_mean": 0.5714285714285714,
+      "relative": -1,
+      "ci_low": -0.5714285714285714,
+      "ci_high": -0.5714285714285714,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
     },
     "time_to_done_ms": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -120000,
-        "delta_median": -120000,
-        "ci_low": -120000,
-        "ci_high": -120000,
-        "p": 0.0001,
-        "baseline_median": 240000,
-        "relative": -0.5,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -120000,
-        "delta_median": -120000,
-        "ci_low": -120000,
-        "ci_high": -120000,
-        "p": 0.0001,
-        "baseline_median": 240000,
-        "relative": -0.5,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "time_to_done_ms",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 120000,
+          "baseline": 240000,
+          "delta": -120000
+        },
+        {
+          "task": "task-b",
+          "treated": 120000,
+          "baseline": 240000,
+          "delta": -120000
+        }
+      ],
+      "delta_mean": -120000,
+      "baseline_mean": 240000,
+      "relative": -0.5,
+      "ci_low": -120000,
+      "ci_high": -120000,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
     },
     "time_to_first_edit_ms": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -30000,
-        "delta_median": -30000,
-        "ci_low": -30000,
-        "ci_high": -30000,
-        "p": 0.0001,
-        "baseline_median": 61000,
-        "relative": -0.4918032786885246,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -30000,
-        "delta_median": -30000,
-        "ci_low": -30000,
-        "ci_high": -30000,
-        "p": 0.0001,
-        "baseline_median": 61000,
-        "relative": -0.4918032786885246,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "time_to_first_edit_ms",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 31000,
+          "baseline": 61000,
+          "delta": -30000
+        },
+        {
+          "task": "task-b",
+          "treated": 31000,
+          "baseline": 61000,
+          "delta": -30000
+        }
+      ],
+      "delta_mean": -30000,
+      "baseline_mean": 61000,
+      "relative": -0.4918032786885246,
+      "ci_low": -30000,
+      "ci_high": -30000,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
     },
     "tool_calls": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -6,
-        "delta_median": -6,
-        "ci_low": -6,
-        "ci_high": -6,
-        "p": 0.0001,
-        "baseline_median": 14,
-        "relative": -0.42857142857142855,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -6,
-        "delta_median": -6,
-        "ci_low": -6,
-        "ci_high": -6,
-        "p": 0.0001,
-        "baseline_median": 14,
-        "relative": -0.42857142857142855,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "tool_calls",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 8,
+          "baseline": 14,
+          "delta": -6
+        },
+        {
+          "task": "task-b",
+          "treated": 8,
+          "baseline": 14,
+          "delta": -6
+        }
+      ],
+      "delta_mean": -6,
+      "baseline_mean": 14,
+      "relative": -0.42857142857142855,
+      "ci_low": -6,
+      "ci_high": -6,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
     },
     "tool_result_bytes": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -8600,
-        "delta_median": -8600,
-        "ci_low": -8600,
-        "ci_high": -8600,
-        "p": 0.0001,
-        "baseline_median": 12600,
-        "relative": -0.6825396825396826,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -8600,
-        "delta_median": -8600,
-        "ci_low": -8600,
-        "ci_high": -8600,
-        "p": 0.0001,
-        "baseline_median": 12600,
-        "relative": -0.6825396825396826,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "tool_result_bytes",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 4000,
+          "baseline": 12600,
+          "delta": -8600
+        },
+        {
+          "task": "task-b",
+          "treated": 4000,
+          "baseline": 12600,
+          "delta": -8600
+        }
+      ],
+      "delta_mean": -8600,
+      "baseline_mean": 12600,
+      "relative": -0.6825396825396826,
+      "ci_low": -8600,
+      "ci_high": -8600,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
     },
     "total_billed_tokens": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -65800,
-        "delta_median": -65800,
-        "ci_low": -66100,
-        "ci_high": -65500,
-        "p": 0.0001,
-        "baseline_median": 107800,
-        "relative": -0.6103896103896104,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -65800,
-        "delta_median": -65800,
-        "ci_low": -66100,
-        "ci_high": -65500,
-        "p": 0.0001,
-        "baseline_median": 107800,
-        "relative": -0.6103896103896104,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "total_billed_tokens",
+      "family": true,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 42000,
+          "baseline": 107800,
+          "delta": -65800
+        },
+        {
+          "task": "task-b",
+          "treated": 42000,
+          "baseline": 107800,
+          "delta": -65800
+        }
+      ],
+      "delta_mean": -65800,
+      "baseline_mean": 107800,
+      "relative": -0.6103896103896104,
+      "ci_low": -65800,
+      "ci_high": -65800,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": 1,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "inconclusive",
+      "reason": "2 task(s): the smallest p an exact test can reach is 0.5, above 0.05"
     },
     "turns": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -3,
-        "delta_median": -3,
-        "ci_low": -3,
-        "ci_high": -3,
-        "p": 0.0001,
-        "baseline_median": 7,
-        "relative": -0.42857142857142855,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -3,
-        "delta_median": -3,
-        "ci_low": -3,
-        "ci_high": -3,
-        "p": 0.0001,
-        "baseline_median": 7,
-        "relative": -0.42857142857142855,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "turns",
+      "family": false,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 4,
+          "baseline": 7,
+          "delta": -3
+        },
+        {
+          "task": "task-b",
+          "treated": 4,
+          "baseline": 7,
+          "delta": -3
+        }
+      ],
+      "delta_mean": -3,
+      "baseline_mean": 7,
+      "relative": -0.42857142857142855,
+      "ci_low": -3,
+      "ci_high": -3,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": null,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "descriptive",
+      "reason": "outside the headline family, so Holm does not cover it"
     },
     "wall_ms": {
-      "task-a": {
-        "n_pairs": 3,
-        "delta_mean": -120000,
-        "delta_median": -120000,
-        "ci_low": -120000,
-        "ci_high": -120000,
-        "p": 0.0001,
-        "baseline_median": 242000,
-        "relative": -0.49586776859504134,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      },
-      "task-b": {
-        "n_pairs": 3,
-        "delta_mean": -120000,
-        "delta_median": -120000,
-        "ci_low": -120000,
-        "ci_high": -120000,
-        "p": 0.0001,
-        "baseline_median": 242000,
-        "relative": -0.49586776859504134,
-        "ci_excludes_zero": true,
-        "verdict": "lower under full",
-        "p_holm": 0.0002
-      }
+      "metric": "wall_ms",
+      "family": true,
+      "tasks": 2,
+      "deltas": [
+        {
+          "task": "task-a",
+          "treated": 122000,
+          "baseline": 242000,
+          "delta": -120000
+        },
+        {
+          "task": "task-b",
+          "treated": 122000,
+          "baseline": 242000,
+          "delta": -120000
+        }
+      ],
+      "delta_mean": -120000,
+      "baseline_mean": 242000,
+      "relative": -0.49586776859504134,
+      "ci_low": -120000,
+      "ci_high": -120000,
+      "p": 0.5,
+      "min_attainable_p": 0.5,
+      "p_holm": 1,
+      "effect_size_dz": null,
+      "min_detectable": null,
+      "verdict": "inconclusive",
+      "reason": "2 task(s): the smallest p an exact test can reach is 0.5, above 0.05"
     }
   },
   "data_quality": {
@@ -1593,6 +1765,6 @@
     "runs_with_invariant_violations": [
       "rampant-task-a-r1-20260909T120000Z"
     ],
-    "incomplete_pairs": []
+    "unpaired_tasks": []
   }
 }

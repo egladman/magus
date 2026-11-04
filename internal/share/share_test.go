@@ -1,9 +1,11 @@
 package share
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/json"
@@ -146,7 +149,7 @@ func TestShareListenerRefusesEveryOtherClass(t *testing.T) {
 	require.NoError(t, err)
 	console, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "c", Grant: types.GrantConsole, TTL: time.Hour})
 	require.NoError(t, err)
-	for name, tok := range map[string]string{"operator": op, "console token": console} {
+	for name, tok := range map[string]string{"operator": op.Reveal(), "console token": console.Reveal()} {
 		assert.Equal(t, http.StatusUnauthorized, get(t, base+"/api/v1/status", tok), name)
 	}
 	secret := tokenFromURL(t, link.URL)
@@ -188,6 +191,27 @@ func statusRoutes(h http.Handler) map[string]Route {
 		Format:  rpcerr.FormatJSON,
 		Needs:   map[string]types.Need{"/api/v1/status": {Scope: types.ScopeConsole, Level: types.LevelRead}},
 	}}
+}
+
+type PlaintextWarningSuite struct{ suite.Suite }
+
+func TestPlaintextWarningSuite(t *testing.T) {
+	suite.Run(t, new(PlaintextWarningSuite))
+}
+
+func (s *PlaintextWarningSuite) TestOpeningALinkWarnsItIsPlaintext() {
+	testkit.Isolate(s.T())
+	var logged bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	m := NewManager(s.T().Context(), log)
+	m.selectAddr = func() (netip.Addr, error) { return addr("127.0.0.1"), nil }
+	s.T().Cleanup(m.Close)
+	dir := s.T().TempDir()
+
+	_, err := m.Start(types.GrantConsole, dir, statusRoutes(http.NotFoundHandler()), 0)
+
+	s.Require().NoError(err)
+	s.Contains(logged.String(), "plaintext HTTP")
 }
 
 // A route with no Needs would be guarded by nothing, so Start refuses it before opening a
@@ -464,7 +488,7 @@ func TestManagerTTLClosesListener(t *testing.T) {
 	// A token that dies in 150ms exercises the timeout teardown path; the listener's lifetime is
 	// the token's, not a second clock.
 	m := newTestManager(t, ctx)
-	m.mint = func(minter types.Grant, ttl time.Duration) (string, auth.ShareToken, error) {
+	m.mint = func(minter types.Grant, ttl time.Duration) (types.Secret, auth.ShareToken, error) {
 		secret, tok, err := auth.MintShare(minter, ttl)
 		tok.Expires = time.Now().Add(150 * time.Millisecond)
 		return secret, tok, err

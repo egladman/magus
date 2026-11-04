@@ -9,13 +9,16 @@
 // PageModule<LogState, ParsedQuery>, etc. - so each app keeps its state and its
 // query grammar strongly typed instead of collapsing to `any` at the console boundary.
 
+import type { Result } from "../gen/magus/types";
+
 export interface PageModule<S, Q> {
   readonly id: string; // "dashboard" | "graph" | "logs"
   readonly title: string;
   // Build the app into `host` and return the controller the console drives. Async so
   // the heavy per-app bundle (d3-force, protobuf) is a dynamic import() - a tab
-  // stays cheap until it is actually opened.
-  activate(host: HTMLElement): Promise<PageController<S, Q>>;
+  // stays cheap until it is actually opened. An app that cannot load fails with the
+  // reason, and the console shows it in the pane.
+  activate(host: HTMLElement): Promise<Result<PageController<S, Q>>>;
 }
 
 export interface PageController<S, Q> {
@@ -38,10 +41,10 @@ export interface PageController<S, Q> {
   setVisible(visible: boolean): void;
   // The document this app currently has open, for the console to title the tab after
   // (see TitleSource). An app with no document concept omits it and keeps its static title.
-  readonly docTitle?: TitleSource;
+  readonly docTitle?: TitleSource | undefined;
   // The app's current state, for the console to inspect. Typed per app via S; the
   // console treats it opaquely.
-  readonly state?: S;
+  readonly state?: S | undefined;
 }
 
 // TitleSource is how an app reports the document it currently has open, so the console can

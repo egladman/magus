@@ -1,8 +1,14 @@
 package project
 
 import (
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/egladman/magus/vcs"
 )
 
 // IgnoreDirs lists non-dot directory names skipped by discovery and watch
@@ -50,4 +56,28 @@ func IsIgnoreDir(name string) bool {
 		return true
 	}
 	return slices.Contains(IgnoreDirs, name)
+}
+
+// SkipsWalkDir reports whether a discovery walk skips the directory at path, named name: an
+// ignored name, or a second checkout of the repository a project walk would index twice.
+func SkipsWalkDir(name, path string) bool {
+	return IsIgnoreDir(name) || vcs.IsSecondaryCheckout(path)
+}
+
+// CheckoutRoot is the nearest directory at or above dir holding an entry a built-in VCS
+// driver claims, or false when none does. A stat error other than not-found counts as a
+// marker, so the climb never passes a directory it cannot read.
+func CheckoutRoot(dir string) (string, bool) {
+	for cur := dir; ; {
+		for _, marker := range vcs.Markers() {
+			if _, err := os.Stat(filepath.Join(cur, marker)); !errors.Is(err, fs.ErrNotExist) {
+				return cur, true
+			}
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return "", false
+		}
+		cur = parent
+	}
 }

@@ -48,7 +48,7 @@ line.
   to one line per key through a rename and never edits a line in place, once
   the file holds more than twice as many lines as keys, plus 64. A
   store a person edits by hand, which nothing compacts, refuses a repeated key
-  instead (the conformance ratchet, [`hack/policy/conformance.jsonl`](https://github.com/egladman/magus/blob/main/hack/policy/conformance.jsonl)).
+  instead.
 - **Atomic write via rename.** A rewrite goes to a temporary file in the same
   directory and is renamed over the old one (`file.WriteFileAtomic`, which
   also syncs). A reader sees the old file or the new one, never half of
@@ -96,8 +96,8 @@ The stores that do not follow the format yet, as found on 2026-10-14:
 - [`internal/json`](https://github.com/egladman/magus/tree/main/internal/json) gives every line its strict decoder.
 - The `store-path-export` conformance metric fails an exported path of a
   state-writing package that code outside it references; the shared root
-  resolvers (`config.CacheDir`, `config.StoreDir`, `vcs.StateDir`) are listed in
-  the ratchet with the reason.
+  resolvers (`config.CacheDir`, `config.StoreDir`, `vcs.StateDir`) predate it,
+  and the conformance ceiling keeps a changed file from adding one.
 - Nothing refuses a new JSON document, so the format itself holds in review
   alone.
 

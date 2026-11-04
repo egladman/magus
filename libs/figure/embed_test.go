@@ -1,6 +1,7 @@
 package figure
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -15,10 +16,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDeclareModulesResolvesTheResultImport(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer func() { _ = sess.Close() }()
+	DeclareModules(sess)
+	require.NoError(t, sess.Exec(ctx, "import \"result\";\nexport final declared = result\\ok(1);\n"))
+}
+
 func TestSourceIsTheFigureModule(t *testing.T) {
 	assert.True(t, strings.Contains(Source, "\nnamespace figure;\n"), "figure.buzz declares the figure namespace")
 	assert.True(t, strings.Contains(Source, "\nexport fun of(id: str,"), "of() is the module's entry point")
 	assert.True(t, strings.Contains(Source, "\nexport fun draw(f: Figure, theme: Theme,"), "draw() paints a Figure")
+}
+
+func TestStandaloneMatchesTheModule(t *testing.T) {
+	assert.Contains(t, Source, fmt.Sprintf("export final XmlDeclaration = %q;", xmlDeclaration))
+	assert.Equal(t, xmlDeclaration+"<svg/>", Standalone("<svg/>"))
+	assert.False(t, strings.HasPrefix("<svg/>", "<?xml"), "Draw's inline form carries no declaration")
 }
 
 func TestSourceSHA256IsTheFileOnDisk(t *testing.T) {

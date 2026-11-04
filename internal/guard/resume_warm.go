@@ -50,8 +50,8 @@ func resumeTTL(acct account) promptCacheTTL {
 	return best
 }
 
-// warmWorker is a worker this session spawned whose job ended within the TTL, and which a
-// spawn's job continues.
+// warmWorker is a worker this session spawned that stopped or ended
+// within the TTL, and which a spawn's job continues.
 type warmWorker struct {
 	agent string
 	job   string
@@ -79,11 +79,9 @@ func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row types.
 	return denySpawnWarmWorker(row, w, ttl), true
 }
 
-// findWarmWorker is the warm worker row continues: a spawn record of facts whose job ended
-// within ttl of now and that row names in Follows or shares a write path with. False when
-// row carries a FreshReason, when the worker's spawn title has another role than title (a
-// reviewer is not the writer's continuation), when row is bound to another checkout than
-// the worker's, or when every such worker is near its model's price step.
+// findWarmWorker is the worker row continues: one that stopped or ended
+// within ttl, which row follows or shares a path with. A FreshReason,
+// another role, another checkout or a near price step answers false.
 func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, title string, models []types.ModelPricing, ttl time.Duration, now time.Time) (warmWorker, bool) {
 	if row.FreshReason != "" || ttl <= 0 {
 		return warmWorker{}, false
@@ -99,14 +97,14 @@ func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, title stri
 		}
 		agent := cmp.Or(rec.ID, rec.Name)
 		ended, ok := spawnTitleRow(rows, rec.Description)
-		if !ok || agent == "" || ended.ID == row.ID || ended.State == "" || ended.State.Editing() {
+		if !ok || agent == "" || ended.ID == row.ID || ended.State == "" || (ended.State.Editing() && ended.HolderStopped == 0) {
 			continue
 		}
 		link := continuationLink(row, ended)
 		if link == "" || !sameCheckout(row, ended) {
 			continue
 		}
-		since := time.Unix(ended.Updated, 0)
+		since := time.Unix(max(ended.Updated, ended.HolderStopped), 0)
 		if seen, ok := facts.LastSeen(agentSeenKind(rec.ID)); rec.ID != "" && ok {
 			since = seen
 		}
@@ -168,7 +166,7 @@ func nearPriceStep(rec spawnedAgent, model string, models []types.ModelPricing) 
 
 func denySpawnWarmWorker(row types.Job, w warmWorker, ttl promptCacheTTL) denial {
 	return denial{
-		Say: fmt.Sprintf("job %s %s; worker %s stays warm %s more (TTL %s: %s): continue agent %s with a message (SendMessage), or set `fresh_reason` and run `%s`.",
+		Say: fmt.Sprintf("job %s %s; worker %s stays warm %s more (TTL %s: %s): continue agent %s with a message, or set `fresh_reason` and run `%s`.",
 			row.ID, w.link, w.agent, w.left.Round(time.Second), ttl.ttl, ttl.source, w.agent, hint.JobApply.With("-f", "<record>")),
 		Why: fmt.Sprintf("Worker %s ended %s ago. "+
 			"A resumed worker reads its context at the cache-read price and has already oriented; a fresh one pays the prefix and the orientation again for code another context already holds. "+

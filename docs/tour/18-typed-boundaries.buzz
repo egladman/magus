@@ -73,7 +73,7 @@ fun select(registries: [Registry], host: str) > [Registry] {
 // something a caller can test for without asking.
 fun readable(ref: str) > bool {
     try {
-        magus\secret.read(ref);
+        _ = magus\secret.read(ref);
         return true;
     } catch (e) {
         return false;
@@ -124,8 +124,8 @@ export fun login(ctx: magus\Context, args: [str]) > void !> any {
     foreach (reg in selected) {
         final user = magus\secret.read(reg.user_ref);
         final token = magus\secret.read(reg.token_ref);
-        proc\exec("env", args: ["echo", "login", reg.host, "-u", user, "--password-stdin"],
-            dir: ".", opts: {"stdin": token});
+        _ = proc\exec("env", args: ["echo", "login", reg.host, "-u", user, "--password-stdin"],
+            dir: ".", opts: proc\ExecOptions{stdin = token});
         magus\log.info("login: " + reg.host + " authenticated as " + user);
     }
 }

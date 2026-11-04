@@ -11,7 +11,12 @@ import (
 
 	"github.com/egladman/magus/benchmarks/agent/internal/pricing"
 	"github.com/egladman/magus/internal/json"
+	"github.com/stretchr/testify/suite"
 )
+
+type benchSuite struct{ suite.Suite }
+
+func TestBenchSuite(t *testing.T) { suite.Run(t, new(benchSuite)) }
 
 func loadTestPricing(t *testing.T) pricing.Table {
 	t.Helper()
@@ -57,6 +62,8 @@ func int64p(i int64) *int64 { return &i }
 
 func floatp(f float64) *float64 { return &f }
 
+func stringp(s string) *string { return &s }
+
 func almost(a, b, places float64) bool { return math.Abs(a-b) < math.Pow(10, -places)/2 }
 
 func syntheticRecord(arm, task string, rep int64, dollars float64, tokens int64, success bool) RunRecord {
@@ -72,291 +79,353 @@ func syntheticRecord(arm, task string, rep int64, dollars float64, tokens int64,
 }
 
 func controlRecord(kind string, success bool) RunRecord {
-	return RunRecord{Control: &ControlRun{
+	return RunRecord{Control: &controlRun{
 		RunID: "rampant-task-a-r1-" + kind, Arm: "rampant", Task: "task-a", Rep: 1, Model: "claude-opus-5",
 		Control: kind, CheckExit: int64p(map[bool]int64{true: 0, false: 1}[success]), Success: boolp(success),
 	}}
 }
 
-func TestBenchControlsMustDiscriminate(t *testing.T) {
+// taskPairs is one run per arm for each of n tasks, full spending fullTokens
+// and rampant rampantTokens plus a per-task spread, so the deltas vary and the
+// t interval has width.
+func taskPairs(n int, fullTokens, rampantTokens func(task int) int64) []RunRecord {
+	var records []RunRecord
+	for i := range n {
+		task := fmt.Sprintf("task-%02d", i)
+		records = append(records,
+			syntheticRecord("full", task, 1, float64(fullTokens(i))/1000, fullTokens(i), true),
+			syntheticRecord("rampant", task, 1, float64(rampantTokens(i))/1000, rampantTokens(i), true))
+	}
+	return records
+}
+
+func (s *benchSuite) analyze(records []RunRecord) *Analysis {
+	a, err := Analyze(records, 7)
+	s.Require().NoError(err)
+	return a
+}
+
+func (s *benchSuite) TestControlsDiscriminateWhenGoldenPassesAndNullFails() {
 	scored := []RunRecord{
 		syntheticRecord("rampant", "task-a", 1, 1.0, 100, true),
 		syntheticRecord("full", "task-a", 1, 1.0, 100, true),
 	}
-	goldenOK := controlRecord(controlGolden, true)
-	nullFails := controlRecord(controlNull, false)
-	nullPasses := controlRecord(controlNull, true)
-	good, err := Analyze(append(append([]RunRecord{}, scored...), goldenOK, nullFails), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !good.Controls["task-a"].Discriminates || good.Runs != 2 {
-		t.Errorf("good: discriminates=%v runs=%d (controls are not scored runs)", good.Controls["task-a"].Discriminates, good.Runs)
-	}
-	lax, err := Analyze(append(append([]RunRecord{}, scored...), goldenOK, nullPasses), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if lax.Controls["task-a"].Discriminates {
-		t.Error("a passing null control must not discriminate")
-	}
-	unverified, err := Analyze(scored, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if unverified.Controls["task-a"].Discriminates || unverified.Controls["task-a"].Golden.N != 0 {
-		t.Errorf("unverified: %+v", unverified.Controls["task-a"])
-	}
+	a := s.analyze(append(scored, controlRecord(controlGolden, true), controlRecord(controlNull, false)))
+	s.True(a.Controls["task-a"].Discriminates)
+	s.Equal(int64(2), a.Runs, "controls are not scored runs")
 }
 
-func TestBenchWilsonInterval(t *testing.T) {
-	// The bounds are the Wilson score interval to full precision, so a
-	// reordered operation shows up as a last-bit difference here.
-	cases := []struct {
-		successes, total int64
-		low, high        float64
-	}{
-		{0, 10, 0.0, 0.2775327998628892},
-		{5, 10, 0.236593090512564, 0.7634069094874361},
-		{10, 10, 0.7224672001371107, 0.9999999999999999},
-		{3, 3, 0.4385029682449546, 1.0},
+func (s *benchSuite) TestControlsDoNotDiscriminateWhenNullPasses() {
+	scored := []RunRecord{
+		syntheticRecord("rampant", "task-a", 1, 1.0, 100, true),
+		syntheticRecord("full", "task-a", 1, 1.0, 100, true),
 	}
-	for _, c := range cases {
-		got := wilsonInterval(c.successes, c.total)
-		if *got[0] != c.low || *got[1] != c.high {
-			t.Errorf("wilson(%d, %d) = [%v, %v], want [%v, %v]", c.successes, c.total, *got[0], *got[1], c.low, c.high)
-		}
-	}
-	if got := wilsonInterval(0, 0); got[0] != nil || got[1] != nil {
-		t.Errorf("wilson(0, 0) = %v", got)
-	}
+	a := s.analyze(append(scored, controlRecord(controlGolden, true), controlRecord(controlNull, true)))
+	s.False(a.Controls["task-a"].Discriminates)
 }
 
-func TestBenchCostOfPass(t *testing.T) {
+func (s *benchSuite) TestControlsAreUnverifiedWithoutAControlRun() {
+	a := s.analyze([]RunRecord{
+		syntheticRecord("rampant", "task-a", 1, 1.0, 100, true),
+		syntheticRecord("full", "task-a", 1, 1.0, 100, true),
+	})
+	s.False(a.Controls["task-a"].Discriminates)
+	s.Zero(a.Controls["task-a"].Golden.N)
+}
+
+func (s *benchSuite) TestWilsonIntervalIsNilWhenNothingIsGraded() {
+	got := wilsonInterval(0, 0)
+	s.Nil(got[0])
+	s.Nil(got[1])
+}
+
+func (s *benchSuite) TestWilsonIntervalOfThreePasses() {
+	got := wilsonInterval(3, 3)
+	s.InDelta(0.4385029682449546, *got[0], 1e-12)
+	s.InDelta(1.0, *got[1], 1e-12)
+}
+
+// Two passes of three: pass@k is 1 - C(1,k)/C(3,k), pass^k C(2,k)/C(3,k).
+func (s *benchSuite) TestPassAtKAndPassPowKOfTwoPassesInThree() {
+	cell := cellStats([]*ScoredRun{
+		syntheticRecord("full", "t", 1, 1, 1, true).Scored,
+		syntheticRecord("full", "t", 2, 1, 1, false).Scored,
+		syntheticRecord("full", "t", 3, 1, 1, true).Scored,
+	})
+	s.InDeltaSlice([]float64{2.0 / 3, 1, 1}, cell.PassAtK, 1e-15)
+	s.InDeltaSlice([]float64{2.0 / 3, 1.0 / 3, 0}, cell.PassPowK, 1e-15)
+}
+
+func (s *benchSuite) TestPassPowKIsOneOnlyWhenEveryRunPasses() {
+	s.Equal(1.0, passPowK(3, 3, 3))
+	s.Equal(0.0, passPowK(3, 2, 3))
+	s.Equal(0.0, passAtK(3, 0, 3))
+}
+
+func (s *benchSuite) TestCellExcludesUnknownOutcomesFromPassAtK() {
+	unknown := syntheticRecord("full", "t", 2, 1, 1, true).Scored
+	unknown.Success, unknown.CheckExit = nil, nil
+	cell := cellStats([]*ScoredRun{syntheticRecord("full", "t", 1, 1, 1, true).Scored, unknown})
+	s.Len(cell.PassAtK, 1, "k runs only to the graded count")
+	s.Equal(int64(1), cell.UnknownOutcomes)
+}
+
+// task-a passes 2 of 2 and task-b 1 of 4, so the macro pass@1 (0.625) differs
+// from the pooled 3 of 6, and k stops at 2, the smaller task's graded count.
+func (s *benchSuite) TestArmPassRatesAverageTasksNotTrials() {
+	records := []RunRecord{
+		syntheticRecord("full", "task-a", 1, 1, 1, true),
+		syntheticRecord("full", "task-a", 2, 1, 1, true),
+		syntheticRecord("full", "task-b", 1, 1, 1, true),
+		syntheticRecord("full", "task-b", 2, 1, 1, false),
+		syntheticRecord("full", "task-b", 3, 1, 1, false),
+		syntheticRecord("full", "task-b", 4, 1, 1, false),
+	}
+	summary := s.analyze(records).ArmSummaries["full"]
+	s.InDelta(0.625, *summary.PassAt1, 1e-15)
+	s.Equal(int64(2), summary.K)
+	s.InDeltaSlice([]float64{0.625, 0.75}, summary.PassAtK, 1e-15)
+	s.InDeltaSlice([]float64{0.625, 0.5}, summary.PassPowK, 1e-15)
+	s.NotNil(summary.PassAt1CI[0], "two tasks give a t interval over their rates")
+}
+
+func (s *benchSuite) TestArmPassAt1HasNoIntervalFromOneTask() {
+	summary := s.analyze([]RunRecord{syntheticRecord("full", "task-a", 1, 1, 1, true)}).ArmSummaries["full"]
+	s.Nil(summary.PassAt1CI[0], "one task is no spread to interval")
+}
+
+func (s *benchSuite) TestCostOfPassIsInfiniteWithNoPasses() {
 	var failing []*ScoredRun
 	for rep := int64(1); rep <= 3; rep++ {
 		failing = append(failing, syntheticRecord("rampant", "task-a", rep, 0.5, 100, false).Scored)
 	}
-	summary := armSummary(failing)
-	if summary.PassRate != 0.0 || !summary.CostOfPassUSD.Infinite || summary.CostOfPassUSD.Value != nil {
-		t.Errorf("zero pass rate: %+v", summary.CostOfPassUSD)
-	}
-	mixed := []*ScoredRun{
+	cost := armSummary(failing, nil).CostOfPassUSD
+	s.True(cost.Infinite)
+	s.Nil(cost.Value)
+}
+
+func (s *benchSuite) TestCostOfPassIsGradedDollarsOverPasses() {
+	summary := armSummary([]*ScoredRun{
 		syntheticRecord("full", "task-a", 1, 1.0, 100, true).Scored,
 		syntheticRecord("full", "task-a", 2, 2.0, 100, true).Scored,
 		syntheticRecord("full", "task-a", 3, 3.0, 100, false).Scored,
-	}
-	summary = armSummary(mixed)
-	if *summary.Dollars.Mean != 2.0 || !almost(summary.PassRate, 2.0/3.0, 7) || !almost(*summary.CostOfPassUSD.Value, 3.0, 7) {
-		t.Errorf("mean=%v rate=%v cost=%v", *summary.Dollars.Mean, summary.PassRate, *summary.CostOfPassUSD.Value)
-	}
+	}, nil)
+	s.InDelta(3.0, *summary.CostOfPassUSD.Value, 1e-15, "6 dollars over 2 passes")
 }
 
-func pairedRow(t *testing.T, records []RunRecord, seed int64, metric string) PairedDelta {
-	t.Helper()
-	a, err := Analyze(records, seed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return a.Paired[metric]["task-a"]
-}
-
-func TestBenchDeltasPairRepIWithRepI(t *testing.T) {
-	// Per-rep values differ widely but each pair differs by exactly 10, so a
-	// pairing that ignored the rep field would not produce a zero-width CI.
+// Per-rep values differ widely and the reps are listed out of order; only the
+// task means pair, so the delta is exactly 10 however reps are labeled.
+func (s *benchSuite) TestComparisonPairsByTaskNotByRep() {
 	var records []RunRecord
-	for _, c := range []struct{ rep, base int64 }{{1, 100}, {2, 200}, {3, 300}} {
-		records = append(records, syntheticRecord("rampant", "task-a", c.rep, float64(c.base)/100.0, c.base, true))
+	for _, c := range []struct{ rep, tokens int64 }{{1, 100}, {2, 200}, {3, 300}} {
+		records = append(records, syntheticRecord("rampant", "task-a", c.rep, 1, c.tokens, true))
 	}
-	for _, c := range []struct{ rep, base int64 }{{3, 310}, {1, 110}, {2, 210}} {
-		records = append(records, syntheticRecord("full", "task-a", c.rep, float64(c.base)/100.0, c.base, true))
+	for _, c := range []struct{ rep, tokens int64 }{{1, 310}, {2, 110}, {3, 210}} {
+		records = append(records, syntheticRecord("full", "task-a", c.rep, 1, c.tokens, true))
 	}
-	row := pairedRow(t, records, 7, "total_billed_tokens")
-	if row.NPairs != 3 || *row.DeltaMean != 10.0 || *row.DeltaMedian != 10.0 || *row.CILow != 10.0 || *row.CIHigh != 10.0 {
-		t.Errorf("got %+v", row)
-	}
+	row := s.analyze(records).Comparisons["total_billed_tokens"]
+	want := row // only the pairing is under test here
+	want.Tasks = 1
+	want.Deltas = []TaskDelta{{Task: "task-a", Treated: 210, Baseline: 200, Delta: 10}}
+	s.Equal(want, row)
 }
 
-func TestBenchVerdictNeedsBothACleanCIAndATenPercentDelta(t *testing.T) {
-	var records []RunRecord
-	for _, c := range []struct{ rep, base int64 }{{1, 1000}, {2, 1010}, {3, 1020}} {
-		records = append(records, syntheticRecord("rampant", "task-a", c.rep, 1.0, c.base, true))
-		records = append(records, syntheticRecord("full", "task-a", c.rep, 1.0, c.base-20, true))
-	}
-	row := pairedRow(t, records, 7, "total_billed_tokens")
-	if !row.CIExcludesZero || math.Abs(*row.Relative) >= minRelativeDelta || row.Verdict != verdictInconclusive {
-		t.Errorf("got %+v", row)
-	}
+// The 2026-09-10 pilot's shape: a large consistent difference over too few
+// tasks. An exact test over 3 tasks cannot go below 0.25, and must say so.
+func (s *benchSuite) TestThreeTasksCannotEarnAVerdict() {
+	a := s.analyze(taskPairs(3, func(int) int64 { return 1000 }, func(i int) int64 { return 2000 + int64(i) }))
+	row := a.Comparisons["total_billed_tokens"]
+	s.Equal(0.25, *row.P)
+	s.Equal(0.25, *row.MinAttainableP)
+	s.Equal(verdictInconclusive, row.Verdict)
+	s.Contains(row.Reason, "smallest p an exact test can reach is 0.25")
 }
 
-func TestBenchVerdictFiresWhenTheDeltaIsLargeAndClean(t *testing.T) {
-	var records []RunRecord
-	for _, c := range []struct{ rep, base int64 }{{1, 1000}, {2, 1100}, {3, 1200}} {
-		records = append(records, syntheticRecord("rampant", "task-a", c.rep, 1.0, c.base, true))
-		records = append(records, syntheticRecord("full", "task-a", c.rep, 0.5, c.base/2, true))
-	}
-	if row := pairedRow(t, records, 7, "total_billed_tokens"); row.Verdict != verdictLower {
-		t.Errorf("got %+v", row)
-	}
+func (s *benchSuite) TestReportNeverPrintsAZeroP() {
+	text := Report(s.analyze(taskPairs(3, func(int) int64 { return 1000 }, func(i int) int64 { return 2000 + int64(i) })))
+	s.NotContains(text, "(Holm) 0.000")
+	s.NotContains(text, "| 0.000 |")
+	s.Contains(text, "p (Holm) 1")
+	s.Contains(text, "bottoms out at 0.25")
 }
 
-func TestBenchHolm(t *testing.T) {
-	adjusted := holm(map[string]*float64{"task-a": floatp(0.01), "task-b": floatp(0.04), "task-c": nil})
-	if !almost(*adjusted["task-a"], 0.02, 7) || !almost(*adjusted["task-b"], 0.04, 7) || adjusted["task-c"] != nil {
-		t.Errorf("got a=%v b=%v c=%v", *adjusted["task-a"], *adjusted["task-b"], adjusted["task-c"])
-	}
-	monotone := holm(map[string]*float64{"a": floatp(0.03), "b": floatp(0.031), "c": floatp(0.032)})
-	if *monotone["a"] > *monotone["b"] || *monotone["b"] > *monotone["c"] {
-		t.Errorf("not monotone: %v %v %v", *monotone["a"], *monotone["b"], *monotone["c"])
-	}
-	if *monotone["a"] != 0.09 {
-		t.Errorf("a = %v, want 0.09 (3 * 0.03, the smallest p at family size 3)", *monotone["a"])
-	}
+// Eight tasks halve tokens and dollars: p = 2/256 each, Holm across the four
+// family members lifts it to 4 * 2/256, still under 0.05.
+func (s *benchSuite) TestEightTasksWithALargeDifferenceEarnAVerdict() {
+	a := s.analyze(taskPairs(8, func(i int) int64 { return 1000 + 10*int64(i) }, func(i int) int64 { return 2000 + 30*int64(i) }))
+	row := a.Comparisons["total_billed_tokens"]
+	s.Equal(2.0/256, *row.P)
+	s.InDelta(4*2.0/256, *row.PHolm, 1e-15)
+	s.Equal(verdictLower, row.Verdict)
+	s.Empty(row.Reason)
+	s.NotNil(row.MinDetectable)
+	s.NotNil(row.EffectSize)
 }
 
-func TestBenchDescribe(t *testing.T) {
+func (s *benchSuite) TestASmallDifferenceIsInconclusiveWhateverItsP() {
+	a := s.analyze(taskPairs(8, func(i int) int64 { return 980 + int64(i) }, func(i int) int64 { return 1000 + 2*int64(i) }))
+	row := a.Comparisons["total_billed_tokens"]
+	s.LessOrEqual(*row.PHolm, 0.05)
+	s.Equal(verdictInconclusive, row.Verdict)
+	s.Contains(row.Reason, "under 10%")
+}
+
+func (s *benchSuite) TestHolmCoversOnlyTheHeadlineFamily() {
+	a := s.analyze(taskPairs(8, func(i int) int64 { return 1000 + 10*int64(i) }, func(i int) int64 { return 2000 + 30*int64(i) }))
+	turns := a.Comparisons["turns"]
+	s.Nil(turns.PHolm)
+	s.Equal(verdictDescriptive, turns.Verdict)
+	s.NotNil(a.Comparisons[passAt1Metric].PHolm, "pass@1 is in the family")
+}
+
+func (s *benchSuite) TestConstantDeltasLeaveEffectSizeAndDetectableEffectNil() {
+	a := s.analyze(taskPairs(4, func(int) int64 { return 1000 }, func(int) int64 { return 2000 }))
+	row := a.Comparisons["total_billed_tokens"]
+	s.Nil(row.EffectSize)
+	s.Nil(row.MinDetectable)
+	s.Equal(-1000.0, *row.CILow, "a zero-spread t interval is the point")
+}
+
+func (s *benchSuite) TestComparisonIsRefusedWhenTheModelDiffers() {
+	records := taskPairs(8, func(int) int64 { return 1000 }, func(int) int64 { return 2000 })
+	records[0].Scored.Model = "claude-sonnet-5"
+	a := s.analyze(records)
+	s.Contains(a.Refusal, "model differs across the runs (claude-opus-5, claude-sonnet-5)")
+	s.Empty(a.Comparisons)
+	s.Contains(Report(a), "No comparison: model differs")
+}
+
+func (s *benchSuite) TestComparisonIsRefusedWhenTheEffortDiffers() {
+	records := taskPairs(4, func(int) int64 { return 1000 }, func(int) int64 { return 2000 })
+	records[1].Scored.Effort = stringp("high")
+	s.Contains(s.analyze(records).Refusal, `effort differs across the runs ("high", unrecorded)`)
+}
+
+func (s *benchSuite) TestRefusalIgnoresArmsOutsideTheComparison() {
+	records := taskPairs(4, func(int) int64 { return 1000 }, func(int) int64 { return 2000 })
+	selftest := syntheticRecord("_selftest", "task-00", 1, 1, 1, true)
+	selftest.Scored.Model = "claude-sonnet-5"
+	s.Empty(s.analyze(append(records, selftest)).Refusal)
+}
+
+func (s *benchSuite) TestAnswersReportPrecisionAndRecall() {
+	run := syntheticRecord("full", "task-a", 1, 1, 1, true).Scored
+	run.Answer = &answerCounts{TP: 4, FP: 0, FN: 1}
+	other := syntheticRecord("full", "task-a", 2, 1, 1, true).Scored
+	other.Answer = &answerCounts{TP: 2, FP: 2, FN: 0}
+	score := answerScore([]*ScoredRun{run, other})
+	s.Equal(int64(2), score.Runs)
+	s.InDelta(6.0/8, *score.Precision, 1e-15)
+	s.InDelta(6.0/7, *score.Recall, 1e-15)
+	s.InDelta(2*(6.0/8)*(6.0/7)/(6.0/8+6.0/7), *score.F1, 1e-15)
+}
+
+func (s *benchSuite) TestAnswerPrecisionIsNilWhenNothingWasNamed() {
+	run := syntheticRecord("full", "task-a", 1, 1, 1, true).Scored
+	run.Answer = &answerCounts{FN: 3}
+	score := answerScore([]*ScoredRun{run})
+	s.Nil(score.Precision)
+	s.Equal(0.0, *score.Recall)
+	s.Nil(score.F1)
+}
+
+func (s *benchSuite) TestAnswersAreNilWithoutAnInterrogationTask() {
+	s.Nil(answerScore([]*ScoredRun{syntheticRecord("full", "task-a", 1, 1, 1, true).Scored}))
+}
+
+func (s *benchSuite) TestDescribeDropsNilsAndInterpolatesQuartiles() {
 	spread := describe([]*float64{floatp(4), nil, floatp(1), floatp(3), floatp(2)})
-	if spread.N != 4 || *spread.Median != 2.5 || *spread.IQR[0] != 1.75 || *spread.IQR[1] != 3.25 || *spread.Mean != 2.5 {
-		t.Errorf("got %+v", spread)
-	}
-	if describe([]*float64{nil}).N != 0 {
-		t.Error("all-nil input must describe as empty")
-	}
-	// An odd count picks a value rather than interpolating, so the median is one
-	// of the inputs while the quartiles still land between them.
-	ints := describe([]*float64{floatp(5), floatp(1), floatp(3)})
-	if *ints.Median != 3 || *ints.IQR[0] != 2 || *ints.IQR[1] != 4 || *ints.Mean != 3 {
-		t.Errorf("ints: %+v", ints)
-	}
-	one := describe([]*float64{floatp(7)})
-	if *one.Median != 7 || *one.IQR[0] != 7 || *one.IQR[1] != 7 || *one.Mean != 7 {
-		t.Errorf("single: %+v", one)
-	}
+	s.Equal(Spread{N: 4, Median: floatp(2.5), IQR: [2]*float64{floatp(1.75), floatp(3.25)}, Mean: floatp(2.5)}, spread)
+}
+
+func (s *benchSuite) TestDescribeOfOnlyNilsIsEmpty() {
+	s.Zero(describe([]*float64{nil}).N)
+}
+
+// An odd count picks a value rather than interpolating, so the median is one of
+// the inputs while the quartiles still land between them.
+func (s *benchSuite) TestDescribeOddCountPicksTheMiddle() {
+	spread := describe([]*float64{floatp(5), floatp(1), floatp(3)})
+	s.Equal(Spread{N: 3, Median: floatp(3), IQR: [2]*float64{floatp(2), floatp(4)}, Mean: floatp(3)}, spread)
+}
+
+func (s *benchSuite) TestDescribeOfOneValue() {
+	spread := describe([]*float64{floatp(7)})
+	s.Equal(Spread{N: 1, Median: floatp(7), IQR: [2]*float64{floatp(7), floatp(7)}, Mean: floatp(7)}, spread)
 }
 
 // analysisJSON analyzes at seed 42, the seed every determinism check shares.
-func analysisJSON(t *testing.T, records []RunRecord) string {
-	t.Helper()
+func (s *benchSuite) analysisJSON(records []RunRecord) string {
 	a, err := Analyze(records, 42)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.Require().NoError(err)
 	raw, err := a.JSON()
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.Require().NoError(err)
 	return string(raw)
 }
 
-func TestBenchDeterminism(t *testing.T) {
-	_, _, records := fixtureRecords(t)
-	t.Run("same seed gives identical output", func(t *testing.T) {
-		first := analysisJSON(t, records)
-		second := analysisJSON(t, records)
-		if first != second {
-			t.Error("two runs with one seed differ")
-		}
-	})
-	t.Run("record order does not change the analysis", func(t *testing.T) {
-		reversed := make([]RunRecord, len(records))
-		for i, r := range records {
-			reversed[len(records)-1-i] = r
-		}
-		if analysisJSON(t, records) != analysisJSON(t, reversed) {
-			t.Error("reversing the records changed the analysis")
-		}
-	})
-	t.Run("the point estimate does not depend on the seed", func(t *testing.T) {
-		one := pairedRow(t, records, 1, "dollars")
-		two := pairedRow(t, records, 2, "dollars")
-		if *one.DeltaMean != *two.DeltaMean {
-			t.Errorf("means differ: %v %v", *one.DeltaMean, *two.DeltaMean)
-		}
-		for _, row := range []PairedDelta{one, two} {
-			if *row.CILow > *row.DeltaMean || *row.DeltaMean > *row.CIHigh {
-				t.Errorf("CI [%v, %v] does not cover the mean %v", *row.CILow, *row.CIHigh, *row.DeltaMean)
-			}
-		}
-	})
-	t.Run("analysis round trips through json", func(t *testing.T) {
-		text := analysisJSON(t, records)
-		file := filepath.Join(t.TempDir(), "analysis.json")
-		if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		back, err := LoadAnalysis(file)
-		if err != nil {
-			t.Fatal(err)
-		}
-		again, err := back.JSON()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(again) != text {
-			t.Error("round trip changed the analysis")
-		}
-		if Report(back) != Report(mustAnalyze(t, records, 42)) {
-			t.Error("report differs from memory and from disk")
-		}
-	})
-	t.Run("report caveats are generated from the data", func(t *testing.T) {
-		text := Report(mustAnalyze(t, records, 42))
-		for _, want := range []string{"cost-of-pass", "pass^k", "null, not zero", fixtureRunID("full", "task-a", 3), "test file deleted", "n=3"} {
-			if !strings.Contains(text, want) {
-				t.Errorf("report lacks %q", want)
-			}
-		}
-	})
+func (s *benchSuite) TestSameSeedGivesIdenticalOutput() {
+	_, _, records := fixtureRecords(s.T())
+	s.Equal(s.analysisJSON(records), s.analysisJSON(records))
 }
 
-func mustAnalyze(t *testing.T, records []RunRecord, seed int64) *Analysis {
-	t.Helper()
-	a, err := Analyze(records, seed)
-	if err != nil {
-		t.Fatal(err)
+func (s *benchSuite) TestRecordOrderDoesNotChangeTheAnalysis() {
+	_, _, records := fixtureRecords(s.T())
+	reversed := make([]RunRecord, len(records))
+	for i, r := range records {
+		reversed[len(records)-1-i] = r
 	}
+	s.Equal(s.analysisJSON(records), s.analysisJSON(reversed))
+}
+
+func (s *benchSuite) TestAnalysisRoundTripsThroughJSON() {
+	_, _, records := fixtureRecords(s.T())
+	text := s.analysisJSON(records)
+	file := filepath.Join(s.T().TempDir(), "analysis.json")
+	s.Require().NoError(os.WriteFile(file, []byte(text), 0o644))
+	back, err := LoadAnalysis(file)
+	s.Require().NoError(err)
+	again, err := back.JSON()
+	s.Require().NoError(err)
+	s.Equal(text, string(again))
+	s.Equal(Report(s.analyzeAt(records, 42)), Report(back), "report differs from memory and from disk")
+}
+
+func (s *benchSuite) TestReportCaveatsAreGeneratedFromTheData() {
+	_, _, records := fixtureRecords(s.T())
+	text := Report(s.analyzeAt(records, 42))
+	for _, want := range []string{"cost-of-pass", "pass^k", "null, not zero", fixtureRunID("full", "task-a", 3),
+		"test file deleted", "n=3", "precision", "bottoms out at 0.5"} {
+		s.Contains(text, want)
+	}
+}
+
+func (s *benchSuite) analyzeAt(records []RunRecord, seed uint64) *Analysis {
+	a, err := Analyze(records, seed)
+	s.Require().NoError(err)
 	return a
 }
 
-// TestBenchPipelineMatchesPinnedOutput pins every stage's output over the
-// synthetic fixture (testdata/fixture-*, seed 20260902) against checked-in bytes.
-//
-// A regression pin on THIS binary: the fixtures were produced by it and are
-// regenerated whenever its arithmetic changes on purpose.
-//
-// It does NOT cover the resampler. MEASURED 2026-09-20: replacing the RNG
-// outright moved no bound in these fixtures, because every paired delta here is
-// constant across reps, and resampling identical values returns that value
-// whatever the draw order. A draw-sequence regression needs a fixture whose
-// deltas vary.
-//
-// analysis.json is compared to a tolerance rather than byte for byte, because
-// its floats carry platform-dependent last bits; metrics.jsonl and report.md
-// are exact.
-func TestBenchPipelineMatchesPinnedOutput(t *testing.T) {
+// TestPipelineMatchesPinnedOutput pins every stage over the synthetic fixture
+// (testdata/fixture-*, seed 20260902), regenerated when the arithmetic changes
+// on purpose. analysis.json compares to a tolerance, its floats carrying
+// platform-dependent last bits; metrics.jsonl and report.md are exact.
+func (s *benchSuite) TestPipelineMatchesPinnedOutput() {
+	t := s.T()
 	_, _, records := fixtureRecords(t)
 	metrics, err := RecordsJSONL(records)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.Require().NoError(err)
 	assertSameBytes(t, "metrics.jsonl", metrics)
 	metricsFile := filepath.Join(t.TempDir(), "metrics.jsonl")
-	if err := os.WriteFile(metricsFile, metrics, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	s.Require().NoError(os.WriteFile(metricsFile, metrics, 0o644))
 	loaded, err := LoadRecords(metricsFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a := mustAnalyze(t, loaded, 20260902)
+	s.Require().NoError(err)
+	a := s.analyzeAt(loaded, 20260902)
 	// The real platform is whatever regenerated the fixture, so pinning its
 	// bytes would fail everywhere else. Its EFFECT is what the pin has to
 	// tolerate, which assertSameNumbers does.
 	a.Platform = "fixture"
 	raw, err := a.JSON()
-	if err != nil {
-		t.Fatal(err)
-	}
+	s.Require().NoError(err)
 	assertSameNumbers(t, "analysis.json", raw)
 	// The report rounds to a fixed number of digits, so it is byte-stable
 	// across platforms even where analysis.json is not.

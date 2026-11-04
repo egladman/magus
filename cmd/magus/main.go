@@ -63,6 +63,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/diagnostics"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 )
@@ -84,19 +85,21 @@ func main() {
 // claims of its own rather than running inside the parent step's seat. `ci` is a target
 // these verbs reach, not a verb.
 func schedulesSteps(args []string) bool {
-	switch sub, _ := peekSub(expandVerbosityArgs(args)); sub {
-	case "run", "affected":
-		return true
-	}
-	return false
+	sub, _ := peekSub(expandVerbosityArgs(args))
+	return sub == "run" || sub == "affected"
 }
 
 // runCLI is the CLI entry point as a function returning an exit code, so both main
 // (os.Exit(runCLI())) and the testscript harness (testscript.Main) can drive the
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
-	// Before the worker branches: a client worker runs magus\job.put, which opens its own
-	// Store inside std and grades the check through this.
+	// First: every worker and command below reads code origins off this registry.
+	if err := registerDiagnosticCatalogs(); err != nil {
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+		return 1
+	}
+	// Before the worker branches: a worker runs magus\workspace().putJob.
+	// That opens its own Store inside std and grades the check through this.
 	job.SetCheckGrader(newCheckGrader())
 	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
@@ -393,6 +396,10 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	//
 	// The config tier stays: usage text reads it (server.address in `server -h`),
 	// and reading magus.yaml writes nothing.
+	if sub == "self" {
+		// self update fixes a stale binary that cannot decode magus.yaml.
+		return dispatchProfile{}
+	}
 	if wantsUsage(subArgs) {
 		return dispatchProfile{needsConfig: true}
 	}
@@ -414,7 +421,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// setting the environment had set. That was invisible locally, where the trust
 		// set is not what the yaml is consulted for, and fatal in CI.
 		return dispatchProfile{needsConfig: true}
-	case "completion", "self", "man":
+	case "completion", "man":
 		return dispatchProfile{needsConfig: true}
 	case "agent":
 		// agent install writes embedded skill files into a repo dir; it needs no
@@ -532,10 +539,9 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// A forensic mode runs nothing, so there is no pool to share, and its report IS
 		// its stdout. An adopted call has nowhere to put that: RunReply carries an exit
 		// code and an error string and never output, so the server runs the mode in its
-		// OWN process and prints the report on ITS stdout. A caller that CAPTURES the
-		// child (magus\impact forks `affected --impact -o json` and decodes it)
-		// then reads an empty stdout at exit 0 and reports an undecodable report. Same
-		// shape as the usage bug above, one layer down.
+		// OWN process and prints the report on ITS stdout.
+		// A caller capturing the child reads an empty stdout at exit 0.
+		// magus\change().impact is one: the usage bug above, a layer down.
 		if sub == "affected" && isForensicAffected(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}
@@ -838,9 +844,8 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		stopSock()
 		if sock != "" {
 			stopFwd := trace.phase("startup.forward")
-			// The flags are not parsed yet, so this is magus.yaml and the environment,
-			// the inherited floor included; a --sandbox flag rides in args and the server
-			// reads it there (see adoptedSandbox).
+			// Flags are unparsed, so this is magus.yaml and the environment.
+			// A --sandbox flag rides in args (see adoptedSandbox).
 			fwdCtx := rootCtx
 			if globalCfg.Sandbox.Mode.Enabled() {
 				fwdCtx = proc.WithSandboxFloor(rootCtx, globalCfg.Sandbox.Mode)
@@ -852,28 +857,10 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			if fwdErr == nil {
 				return startupResult{cleanup: cleanup}, code
 			}
-			// A call the server did not adopt is the normal path here: run locally
-			// without alarming the user. The server does not adopt a subcommand that
-			// never adopts (only run/affected do), nor a client whose build or protocol
-			// differs from its own (version/protocol mismatch); in every case the server
-			// is alive and answered, it just will not take THIS call, and retrying it
-			// will not help. A version mismatch is common when multiple worktrees run
-			// different builds against one shared per-user server; it is not a failure,
-			// so it must not warn. Reserve warn for a genuine forward failure (transport
-			// error, dead server). proc.NotAdopted owns the classification: the errors
-			// carry it (a NotAdopted() method).
-			if proc.NotAdopted(fwdErr) {
-				slog.Debug("proc forward not adopted; running locally", attr.Error(fwdErr))
-			} else {
-				slog.Warn("proc forward failed; running locally", attr.Error(fwdErr))
-			}
-			// parentLive is a narrower question than "not adopted": keep MAGUS_PROC_SOCKET
-			// pointed at the parent only when it is a usable pool for deeper adoptable
-			// calls. A not-adoptable subcommand leaves a live, same-version server worth
-			// forwarding to (nested adoptable calls hit the single top-level pool; probes
-			// like doctor's server check see the real server). A version/protocol mismatch
-			// (like a transport failure) leaves a server we cannot use: clear the
-			// pointer so nothing keeps dialing it, and fall through to hosting our own pool.
+			logForwardFallback(rootCtx, slog.Default(), fwdErr)
+			// Keep MAGUS_PROC_SOCKET on the parent only while it can serve.
+			// A refused or dead parent is cleared and we host our own pool,
+			// which keeps MGS3048 to once per run.
 			parentLive = errors.Is(fwdErr, proc.ErrNotAdoptable)
 			if !parentLive {
 				_ = os.Unsetenv(proc.SocketEnv)
@@ -915,6 +902,11 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// `magus run build --concurrency 4` silently ran at the default width, and every
 	// other generated config flag was dead in that position too.
 	bindGlobalsAfterSubcommand(rest)
+	if err := refuseOutputOnPath(global.output, rest); err != nil {
+		stopFlags()
+		slog.ErrorContext(rootCtx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
+		return startupResult{cleanup: cleanup}, exit.Usage
+	}
 	if err := errors.Join(finalizeConfig(), refuseInheritedSandboxWeakened(globalCfg.Sandbox.Mode)); err != nil {
 		stopFlags()
 		slog.ErrorContext(rootCtx, "invalid configuration from flags", attr.Notice(""), attr.Component("magus"), attr.Error(err))
@@ -1059,6 +1051,23 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}, -1
 }
 
+// logForwardFallback says why a forwarded call runs locally instead.
+// A subcommand that never adopts is routine, so it stays at debug.
+// A server from another build warns with MGS3048, or it hides a stale
+// daemon. Anything else failed the forward.
+func logForwardFallback(ctx context.Context, log *slog.Logger, err error) {
+	switch {
+	case errors.Is(err, proc.ErrNotAdoptable):
+		log.DebugContext(ctx, "proc forward not adopted; running locally", attr.Error(err))
+	case proc.NotAdopted(err):
+		log.WarnContext(ctx, types.FormatDiagnostic(types.PeerFromAnotherBuild,
+			"a magus server or pool parent from another build did not adopt this call, so it runs locally until that process restarts"),
+			attr.Error(err))
+	default:
+		log.WarnContext(ctx, "proc forward failed; running locally", attr.Error(err))
+	}
+}
+
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
 	group := ""
@@ -1073,15 +1082,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
-	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   "+outputFormatHelp)
 	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
 	fmt.Fprintln(os.Stderr, "  -s, --silent         like -q, but bound failing dumps (tail + log path) and bubble up only 'magus:notice:' lines")
-	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        detail (-v), plus live target output (-vv), plus tracing (-vvv)")
-	fmt.Fprintln(os.Stderr, "  --concurrency N      max parallel target runs (0 = config / MAGUS_CONCURRENCY / min(NumCPU,8))")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Pre-subcommand flags (must precede the subcommand):")
-	fmt.Fprintln(os.Stderr, "  --root <path>        workspace root (default: walk up to go.mod)")
-	fmt.Fprintln(os.Stderr, "  --config <path>      config file (default: search magus.yaml)")
+	printRootFlags(os.Stderr)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run `magus <subcommand> -h` for subcommand-specific flags.")
 	fmt.Fprintln(os.Stderr, "")
@@ -1463,13 +1466,22 @@ func startupTraceEnabled(args []string) bool {
 	return effectiveLevel(verbosity(extractVerbosityCount(args)), extractQuietFlag(args)) <= config.LevelTrace
 }
 
-// rationaleArgs returns err's rationale as an [attr.Why] log argument, or none when err
-// carries no rationale.
-func rationaleArgs(err error) []any {
+// registerDiagnosticCatalogs reserves each shipped catalog's prefix; a clash is a build defect.
+func registerDiagnosticCatalogs() error {
+	return errors.Join(diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes()),
+		diagnostics.RegisterCatalog("gopherbuzz", buzz.Codes()))
+}
+
+// diagnosticArgs is err's rationale as an [attr.Why], plus an origin mark on a workspace code.
+func diagnosticArgs(err error) []any {
+	var args []any
 	if why := types.DiagnosticRationale(err); why != "" {
-		return []any{attr.Why(why)}
+		args = append(args, attr.Why(why))
 	}
-	return nil
+	if ev, ok := types.ErrorDiagnosticEvent(err, ""); ok && types.CodeOrigin(ev.Code) == types.DiagnosticOriginWorkspace {
+		args = append(args, slog.String("origin", string(types.DiagnosticOriginWorkspace)))
+	}
+	return args
 }
 
 // mapExitCode maps a dispatch error to an exit code and logs it unless it was already reported.
@@ -1481,7 +1493,7 @@ func mapExitCode(err error) int {
 	// MGS3012 twice and promoted MGS3014, a deliberate non-failure, from Warn to Error.
 	var exitErr types.ExitError
 	if code != exit.OK && !exit.AlreadyReported(err) && !errors.As(err, &exitErr) {
-		slog.Error(err.Error(), rationaleArgs(err)...) //nolint:errmsg // the final error line has no verdict beyond the error itself; an attr.Error with an empty message would print a different line and log an empty message to non-display handlers
+		slog.Error(err.Error(), diagnosticArgs(err)...) //nolint:errmsg // the final error line has no verdict beyond the error itself; an attr.Error with an empty message would print a different line and log an empty message to non-display handlers
 	}
 	return code
 }

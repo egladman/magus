@@ -115,6 +115,9 @@ type mainCall struct {
 	spawnBroken string
 	// root is the workspace root, "" when unknown.
 	root string
+	// policyNote is how the target policies the work was classed by were read, "" when
+	// the knowledge store's record answered or none were read.
+	policyNote string
 }
 
 // costFinding is one cost rule matching a call: a refusal, or advice said once per
@@ -196,7 +199,7 @@ func groundworkFinding(s builtin.Setting, c mainCall) (costFinding, bool) {
 	if c.spawnBroken != "" {
 		say = fmt.Sprintf("magus workspace: this session hands out work, and %s is groundwork, but spawning is broken: %s; take a row with `./magus job exec <row>` and do it as its holder.", work, c.spawnBroken)
 	}
-	say += integrationScriptNote(c)
+	say = withPolicyNote(say+integrationScriptNote(c), c.policyNote)
 	return costFinding{
 		rule: denyRuleOrchestratorGroundwork,
 		deny: s.Decision == builtin.Deny && c.orchestration == types.OrchestrationProven,
@@ -293,15 +296,55 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 		return applyFindings(gate, verdict, []costFinding{f}, from)
 	}
 	st := sessionCostState(at, who, liveRowLookup(ctx, at), time.Now())
-	call := mainCall{from: from, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command), free: costFree(in.command), line: in.command,
+	call := mainCall{from: from, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command, at), free: costFree(in.command, at), line: in.command,
 		orchestration: orchestration(st, from), root: at.workspace}
 	if call.orchestration != "" {
 		call.work = mainWork(ctx, at, st, in.command)
 	}
+	// Checking a worker's acceptance evidence by its ref is the orchestrator's own job.
+	// Refused, the root relays the ref to a worker and never sees the evidence itself.
+	if call.work != "" && (readsOutputRef(in.command) || ownSourceRoot(at.workspace) && recoversOwnCheckout(in.command)) {
+		call.work = ""
+	}
 	if call.work != "" {
 		call.spawnBroken = spawnBroken(deps, who.Host)
+		call.policyNote = runPolicyNote(in.command, at)
 	}
 	return applyFindings(gate, verdict, mainFindings(deps.settingLookup, st, call), from)
+}
+
+// readsOutputRef reports a line that is one `magus query output <ref>` and nothing else: no
+// pipe, no second command, no `--`, and no flag but --identity, --problems or a global flag
+// other than --tee, which writes a file.
+func readsOutputRef(line string) bool {
+	cmds, ok := ParseCommands(line)
+	if !ok {
+		return false
+	}
+	cmds = slices.DeleteFunc(cmds, isCdInvocation)
+	if len(cmds) != 1 || !isMagusInvocation(cmds[0]) {
+		return false
+	}
+	words := magusSubcommandWords(cmds[0].Args)
+	if len(words) != 3 || !hint.QueryOutput.MatchedBy(words) {
+		return false
+	}
+	for _, a := range cmds[0].Args {
+		if a == "--" {
+			return false
+		}
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		name, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if name == "identity" || name == "problems" {
+			continue
+		}
+		if _, global := MagusFlagTakesValue(name); !global || name == "tee" {
+			return false
+		}
+	}
+	return true
 }
 
 // gradeMainWrite judges a write by a session's unleased main thread inside a checkout of
@@ -388,21 +431,22 @@ func shadowVerdicts(st costState, c mainCall) map[types.GuardProfile]types.Guard
 	return out
 }
 
-// gradeMainSpawn judges a spawn by the main thread under the spawn cost rules: whether it
-// names a model, and whether that model is at the model tier its job was forked at. Tiers
-// compare by rank in the workspace's declaration, never by name or price; a spawn bound to
-// no row, or to a row forked with no declaration, has nothing to compare.
-func gradeMainSpawn(deps Dependencies, verdict types.GuardJudgment, env hookRequest, who hookAttribution, at location, lease string, titled spawnTitle) types.GuardJudgment {
-	if verdict.Decision == decisionDeny || !env.IsSpawn || lease != "" || at.cacheDir == "" {
+// gradeSpawnModel judges whether any spawning thread names a model, and whether a bound
+// spawn stays at the model tier its row was forked at. Tiers compare by rank in the
+// workspace's declaration, never by name or price; a spawn bound to no row, or to a row
+// forked with no declaration, has nothing to compare.
+func gradeSpawnModel(deps Dependencies, verdict types.GuardJudgment, env hookRequest, who hookAttribution, at location, lease string, titled spawnTitle) types.GuardJudgment {
+	if verdict.Decision == decisionDeny || !env.IsSpawn || at.cacheDir == "" {
 		return verdict
 	}
 	thread, from := callerThread(at.cacheDir, who, lease)
-	if thread != types.AgentThreadMain {
-		return verdict
-	}
 	var forked forkedTier
 	bound := false
 	if row, ok := titled(); ok {
+		if d := unknownRowSpawnDenial(deps, row); d.refused() {
+			verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, d.Say, string(denyRuleLeaseRowUnknown)
+			return verdict
+		}
 		forked, bound = boundModelTier(deps, row)
 	}
 	if bound && at.models != nil {
@@ -420,7 +464,7 @@ func gradeMainSpawn(deps Dependencies, verdict types.GuardJudgment, env hookRequ
 			findings = append(findings, costFinding{rule: denyRuleSpawnNamesModel, deny: true, key: hint.MarkerKind(denyRuleSpawnNamesModel), say: say})
 		}
 	}
-	if s := deps.settingLookup(string(denyRuleSpawnAboveModelTier)); s.Decision != builtin.Off && bound {
+	if s := deps.settingLookup(string(denyRuleSpawnAboveModelTier)); s.Decision != builtin.Off && bound && lease == "" && thread == types.AgentThreadMain {
 		if say := forked.rankedAbove(host, env.DeclaredModel); say != "" {
 			findings = append(findings, costFinding{rule: denyRuleSpawnAboveModelTier, key: hint.MarkerKind(denyRuleSpawnAboveModelTier), say: say})
 		}
@@ -488,7 +532,7 @@ func (f forkedTier) refusal(host, model string) string {
 	}
 	alias, err := f.set.Alias(host, f.tier)
 	if err != nil {
-		return fmt.Sprintf("magus workspace: job %s was forked at model tier %s, and %v; add a %s entry to the hosts magus\\job.modelTiers declares, or spawn the job from a harness it maps.",
+		return fmt.Sprintf("magus workspace: job %s was forked at model tier %s, and %v; add a %s entry to the hosts magus\\modelTiers declares, or spawn the job from a harness it maps.",
 			f.job, f.record.Name, err, host)
 	}
 	spawned, ok := modelTierByExactID(f.set, host, model, f.rows)
@@ -515,6 +559,15 @@ func (f forkedTier) rankedAbove(host, model string) string {
 	}
 	// Resolve found the host mapped, so Alias cannot fail here.
 	alias, _ := f.set.Alias(host, f.tier)
-	return fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above job %s's %s: spawn it on %s, or re-fork the row at the tier the work needs.",
+	return fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above job %s's %s: spawn it on %s, or set the row's tier with `magus job apply` and a changed `model`.",
 		model, spawned.Name(), spawned.Rank(), f.job, f.line(alias), alias)
+}
+
+// Only the explicit recovery entry is root work; ordinary builds remain delegated.
+func recoversOwnCheckout(line string) bool {
+	cmds, ok := ParseCommands(line)
+	if !ok || len(cmds) != 1 || !isMagusInvocation(cmds[0]) {
+		return false
+	}
+	return slices.Equal(magusSubcommandWords(cmds[0].Args), []string{"buzz", "hack/dev/bootstrap-checkout.buzz", "--", "--here", "--recover"})
 }

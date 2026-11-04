@@ -100,6 +100,7 @@ const (
 	TargetRun_STATE_PASSED      TargetRun_State = 3 // finished successfully
 	TargetRun_STATE_FAILED      TargetRun_State = 4 // finished with an error
 	TargetRun_STATE_CACHED      TargetRun_State = 5 // satisfied from cache (no work run)
+	TargetRun_STATE_PERMITTED   TargetRun_State = 6 // passed only because a deviation ledger permitted its findings
 )
 
 // Enum value maps for TargetRun_State.
@@ -111,6 +112,7 @@ var (
 		3: "STATE_PASSED",
 		4: "STATE_FAILED",
 		5: "STATE_CACHED",
+		6: "STATE_PERMITTED",
 	}
 	TargetRun_State_value = map[string]int32{
 		"STATE_UNSPECIFIED": 0,
@@ -119,6 +121,7 @@ var (
 		"STATE_PASSED":      3,
 		"STATE_FAILED":      4,
 		"STATE_CACHED":      5,
+		"STATE_PERMITTED":   6,
 	}
 )
 
@@ -1875,7 +1878,7 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"\atrigger\x18\x02 \x01(\tR\atrigger\x129\n" +
 	"\n" +
 	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12:\n" +
-	"\atargets\x18\x04 \x03(\v2 .magus.status.v1alpha1.TargetRunR\atargets\"\xa8\x03\n" +
+	"\atargets\x18\x04 \x03(\v2 .magus.status.v1alpha1.TargetRunR\atargets\"\xbe\x03\n" +
 	"\tTargetRun\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12<\n" +
@@ -1886,14 +1889,15 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"\n" +
 	"output_ref\x18\x06 \x01(\tR\toutputRef\x12\x1f\n" +
 	"\vduration_ms\x18\a \x01(\x03R\n" +
-	"durationMs\"y\n" +
+	"durationMs\"\x8e\x01\n" +
 	"\x05State\x12\x15\n" +
 	"\x11STATE_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fSTATE_QUEUED\x10\x01\x12\x11\n" +
 	"\rSTATE_RUNNING\x10\x02\x12\x10\n" +
 	"\fSTATE_PASSED\x10\x03\x12\x10\n" +
 	"\fSTATE_FAILED\x10\x04\x12\x10\n" +
-	"\fSTATE_CACHED\x10\x05\"\xd0\x01\n" +
+	"\fSTATE_CACHED\x10\x05\x12\x13\n" +
+	"\x0fSTATE_PERMITTED\x10\x06\"\xd0\x01\n" +
 	"\aService\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x18\n" +

@@ -121,8 +121,9 @@ each host's vendored schema.
 | [`AGENTS.md`](https://github.com/egladman/magus/blob/main/AGENTS.md)                         | the managed skills block between its `magus:skills` markers    |
 
 Installed skills are not committed, because `magus agent install` regenerates
-them from the binary. The two under `.claude/skills/` that are committed are
-written by hand for working on magus itself.
+them from the binary. The ones under `.agents/skills/` that are committed are
+written by hand for working on magus itself, and `.claude/skills/` links to each
+because Claude Code reads only that directory.
 
 The shared reference pages sit behind those: [Skills](agents/skills.md) for the
 install, [The guard](agents/guard.md) for what is denied and why,
@@ -186,13 +187,13 @@ decision cell against the shipped adapters. That proves the guard's decision
 and adapter behavior for controlled events; it does not prove that a locally
 installed vendor client discovers configuration or dispatches a real hook.
 
-The Go suite in `internal/hoste2e` proves that part. It sits behind the `e2e`
-build tag, so a normal `go test` never compiles it, and it spends model tokens
-and the local logins of every host it drives. Run it on demand through the
-`hoste2e-test` target:
+The Go suites in `internal/agent/harness` prove that part, one per host. They sit
+behind the `e2e` build tag, so a normal `go test` never compiles them, and they
+spend model tokens and the local logins of every host they drive. Run them on
+demand through the `agent-harness-test` target:
 
 ```sh
-magus run hoste2e-test .
+magus run agent-harness-test .
 ```
 
 The target is declared `human_only`, so an agent's run of it asks you first,
@@ -203,8 +204,8 @@ merge `magus describe harness` prints, the skills), and drives the host
 headless through scripted turns. The scenarios cover a shell deny and advise,
 a judged read, a write to a declared output, a denied write, an MCP call, the
 recorded prompt, the opt-in reply check once the workspace wires it, the checkpoint,
-a skill load, a judged spawn with its child and context size, and the brief after a
-compaction. Each one
+a skill load, a judged spawn with its child and context size, a child continued after
+it stops with a question, and the brief after a compaction. Each one
 asserts on what magus recorded and on what the model said back, so a verdict
 that never reached the model fails.
 
@@ -215,13 +216,13 @@ keychain login or `CLAUDE_CODE_OAUTH_TOKEN`, which the suite passes through.
 Every run writes a version report naming each host's binary, version and model
 beside each scenario's result.
 
-- `MAGUS_E2E_HOSTS`: comma-separated host ids to drive; all four by default
-- `MAGUS_E2E_<HOST>_BIN`: the host binary to use before the one on `PATH`
-- `MAGUS_E2E_<HOST>_MODEL`: the model the host runs
-- `MAGUS_E2E_TIMEOUT`: the bound on one host invocation
-- `MAGUS_E2E_MAGUS`: the magus binary to wire; `./magus` by default
-- `MAGUS_E2E_KEEP=1`: keep each temporary workspace
-- `MAGUS_E2E_REPORT`: the version report's path
+- `AGENT_HARNESS_HOSTS`: comma-separated host ids to drive; all four by default
+- `AGENT_HARNESS_<HOST>_BIN`: the host binary to use before the one on `PATH`
+- `AGENT_HARNESS_<HOST>_MODEL`: the model the host runs
+- `AGENT_HARNESS_TIMEOUT`: the bound on one host invocation
+- `AGENT_HARNESS_MAGUS`: the magus binary to wire; `./magus` by default
+- `AGENT_HARNESS_KEEP=1`: keep each temporary workspace
+- `AGENT_HARNESS_REPORT`: the version report's path
 
 |             | command rules | declared-output rule | deny | advise | host E2E: shell verdict | MCP call rules                                       |
 | ----------- | ------------- | -------------------- | ---- | ------ | ----------------------- | ---------------------------------------------------- |

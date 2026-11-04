@@ -7,6 +7,7 @@ import "magus";
 import "os";
 import "path";
 import "proc";
+import "result";
 import "std";
 import "uuid";
 import "vcs";
@@ -125,12 +126,12 @@ export fun strength(verdict: str) > int {
     return 0;
 }
 
-// matcherMatches applies a hook matcher to a tool name. It evaluates the forms a harness
-// writes (empty or * for every tool, exact names joined by |, a ^-anchored prefix and a
-// trailing .* prefix) and raises on any other regex rather than guess what it selects.
-export fun matcherMatches(matcher: str, tool: str) > bool !> str {
+// matcherMatches applies a hook matcher to a tool name.
+// It evaluates empty or *, names joined by |, a ^ prefix and a trailing .*
+// Any other regex fails rather than guess what it selects.
+export fun matcherMatches(matcher: str, tool: str) > result\Result::<bool> {
     if (matcher == "" or matcher == "*") {
-        return true;
+        return result\ok::<bool>(true);
     }
     final word = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
     var prefix = false;
@@ -146,40 +147,50 @@ export fun matcherMatches(matcher: str, tool: str) > bool !> str {
     foreach (i in 0..body.len()) {
         final ch = body.sub(i, len: 1);
         if (word.indexOf(ch) == null and !(ch == "|" and !prefix)) {
-            throw "matcher `{matcher}` is a regex this script does not evaluate; replay it by hand";
+            return result\fail::<bool>("matcher `{matcher}` is a regex this script does not evaluate; replay it by hand");
         }
     }
     if (prefix) {
-        return tool.startsWith(body);
+        return result\ok::<bool>(tool.startsWith(body));
     }
-    return body.split("|").indexOf(tool) != null;
+    return result\ok::<bool>(body.split("|").indexOf(tool) != null);
 }
 
-fun findHandler(h: any, event: str, matcher: str) > HookCommand? !> any {
+// findHandler holds none or one command: a non-command handler wires none.
+fun findHandler(h: any, event: str, matcher: str) > result\Result::<[HookCommand]> {
     final m = h as? {str: any};
     if (m == null) {
-        return null;
+        return result\ok::<[HookCommand]>([<HookCommand>]);
     }
     if (((m!["type"] as? str) ?? "command") != "command") {
-        return null;
+        return result\ok::<[HookCommand]>([<HookCommand>]);
     }
-    return HookCommand{
-        event = event,
-        matcher = matcher,
-        command = (m!["command"] as? str) ?? "",
-        timeout = std\toInt(m!["timeout"] ?? DEFAULT_TIMEOUT),
-        failClosed = (m!["failClosed"] as? bool) ?? false,
-    };
+    try {
+        return result\ok::<[HookCommand]>([HookCommand{
+            event = event,
+            matcher = matcher,
+            command = (m!["command"] as? str) ?? "",
+            timeout = std\toInt(m!["timeout"] ?? DEFAULT_TIMEOUT),
+            failClosed = (m!["failClosed"] as? bool) ?? false,
+        }]);
+    } catch (err: any) {
+        return result\caught::<[HookCommand]>(err, doing: "hook handler for {event} {matcher}");
+    }
 }
 
 // hooksAt is every command config wires under the dotted key, in file order. A group
 // holding a hooks list is Claude Code's and Codex's nesting; any other entry is a
 // handler itself, as Cursor writes it.
-export fun hooksAt(config: str, key: str) > [HookCommand] !> any {
+export fun hooksAt(config: str, key: str) > result\Result::<[HookCommand]> {
     final parts = key.split(".");
     final event = parts[parts.len() - 1];
     final found = mut [<HookCommand>];
-    final groups = (hook\dig(json\parse(config), dotPath: key) as? [any]) ?? [<any>];
+    var groups = [<any>];
+    try {
+        groups = (hook\dig(json\parse(config), dotPath: key) as? [any]) ?? [<any>];
+    } catch (err: any) {
+        return result\caught::<[HookCommand]>(err, doing: "read the hooks under {key}");
+    }
     foreach (g in groups) {
         final group = g as? {str: any};
         if (group == null) {
@@ -190,21 +201,24 @@ export fun hooksAt(config: str, key: str) > [HookCommand] !> any {
         final handlers = nested ?? [g];
         foreach (h in handlers) {
             final cmd = findHandler(h, event: event, matcher: matcher);
-            if (cmd != null) {
-                found.append(cmd!);
+            if (cmd.error -> err) {
+                return result\Result::<[HookCommand]>{ error = err };
+            }
+            foreach (c in cmd.value!) {
+                found.append(c);
             }
         }
     }
-    return found;
+    return result\ok::<[HookCommand]>(found);
 }
 
 // splitArgv splits a hook command into the words a host that runs an argv runs. A command
 // that needs a shell to mean anything is refused: replaying it word by word would judge a
 // different call.
-export fun splitArgv(command: str) > [str] !> str {
+export fun splitArgv(command: str) > result\Result::<[str]> {
     foreach (ch in ["\"", "'", "$", "|", ";", "&", "<", ">", "`", "\\", "(", ")"]) {
         if (command.indexOf(ch) != null) {
-            throw "hook command `{command}` uses `{ch}`, which needs a shell; replay it by hand";
+            return result\fail::<[str]>("hook command `{command}` uses `{ch}`, which needs a shell; replay it by hand");
         }
     }
     final words = mut [<str>];
@@ -214,9 +228,9 @@ export fun splitArgv(command: str) > [str] !> str {
         }
     }
     if (words.len() == 0) {
-        throw "a hook entry has an empty command";
+        return result\fail::<[str]>("a hook entry has an empty command");
     }
-    return words;
+    return result\ok::<[str]>(words);
 }
 
 // citedRule names the rule a reply cites: its reference page, else a `[rule]` tag.
@@ -249,7 +263,7 @@ fun ruleOf(text: str) > str {
     if (ref == "") {
         return "";
     }
-    final stored = magus\cmd("query", args: ["output", ref], opts: {"quiet": true, "allow_failure": true}) catch null;
+    final stored = magus\cmd("query", args: ["output", ref], opts: magus\CommandOptions{ quiet = true, allowFailure = true }) catch null;
     if (stored == null) {
         return "";
     }
@@ -393,13 +407,17 @@ export fun strongest(all: [Observed]) > Observed {
 }
 
 // outsidePath is the first candidate none of writePaths covers, "" when they cover all.
-export fun outsidePath(writePaths: [str]) > str !> any {
-    foreach (p in OUTSIDE_CANDIDATES) {
-        if (!path\matchesAny(writePaths, path: p)) {
-            return p;
+export fun outsidePath(writePaths: [str]) > result\Result::<str> {
+    try {
+        foreach (p in OUTSIDE_CANDIDATES) {
+            if (!path\matchesAny(writePaths, path: p)) {
+                return result\ok::<str>(p);
+            }
         }
+        return result\ok::<str>("");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "match the write paths against the candidates");
     }
-    return "";
 }
 
 // Lease is the live job taken in the checkout and a path its write paths leave out; both
@@ -529,92 +547,119 @@ fun quote(s: str) > str {
 // runHook runs one wired command on payload from root, as host would: Cursor splits the
 // command into an argv and runs it, every other host hands it to a shell, and Claude Code
 // sets CLAUDE_PROJECT_DIR for it first.
-fun runHook(host: str, h: HookCommand, root: str, payload: str) > Observed !> any {
-    final opts: {str: any} = {"quiet": true, "allow_failure": true, "stdin": payload};
-    final started = os\time();
-    var r: proc\ExecResult? = null;
-    if (host == "cursor") {
-        final argv = splitArgv(h.command);
-        var bin = argv[0];
-        if (bin.indexOf("/") == null) {
-            bin = proc\which(bin) catch "";
-        } else if (!bin.startsWith("/")) {
-            bin = "{root}/{bin}";
+fun runHook(host: str, h: HookCommand, root: str, payload: str) > result\Result::<Observed> {
+    try {
+        final opts = proc\ExecOptions{ quiet = true, allowFailure = true, stdin = payload };
+        final started = os\time();
+        var r: proc\ExecResult? = null;
+        if (host == "cursor") {
+            final split = splitArgv(h.command);
+            if (split.error -> refused) {
+                return result\Result::<Observed>{ error = refused };
+            }
+            final argv = split.value!;
+            var bin = argv[0];
+            if (bin.indexOf("/") == null) {
+                bin = proc\which(bin) catch "";
+            } else if (!bin.startsWith("/")) {
+                bin = "{root}/{bin}";
+            }
+            if (bin == "") {
+                return result\ok::<Observed>(classifyCursor(127, stdout: "", stderr: "`{argv[0]}` is not on PATH", overran: false, failClosed: h.failClosed));
+            }
+            r = proc\exec(bin, args: argv.sub(1), dir: root, opts: opts);
+        } else {
+            var prefix = "";
+            if (host == "claude-code") {
+                prefix = "CLAUDE_PROJECT_DIR={quote(root)}; export CLAUDE_PROJECT_DIR; ";
+            }
+            r = proc\exec("sh", args: ["-c", prefix + h.command], dir: root, opts: opts);
         }
-        if (bin == "") {
-            return classifyCursor(127, stdout: "", stderr: "`{argv[0]}` is not on PATH", overran: false, failClosed: h.failClosed);
-        }
-        r = proc\exec(bin, args: argv.sub(1), dir: root, opts: opts);
-    } else {
-        var prefix = "";
-        if (host == "claude-code") {
-            prefix = "CLAUDE_PROJECT_DIR={quote(root)}; export CLAUDE_PROJECT_DIR; ";
-        }
-        r = proc\exec("sh", args: ["-c", prefix + h.command], dir: root, opts: opts);
+        final overran = os\time() - started > std\toDouble(h.timeout) * 1000.0;
+        return result\ok::<Observed>(classifyHost(host, h: h, code: r!.code, stdout: r!.stdout, stderr: r!.stderr, overran: overran));
+    } catch (err: any) {
+        return result\caught::<Observed>(err, doing: "run the hook `{h.command}`");
     }
-    final overran = os\time() - started > std\toDouble(h.timeout) * 1000.0;
-    return classifyHost(host, h: h, code: r!.code, stdout: r!.stdout, stderr: r!.stderr, overran: overran);
 }
 
 // ask sends r through every entry for its event whose matcher selects its tool, and folds
 // the answers.
-fun ask(host: str, r: Route, hooks: [HookCommand], root: str, session: str, agent: bool) > Observed !> any {
-    final payload = json\stringify(envelope(host, r: r, root: root, session: session, agent: agent));
+fun ask(host: str, r: Route, hooks: [HookCommand], root: str, session: str, agent: bool) > result\Result::<Observed> {
+    var payload = "";
+    try {
+        payload = json\stringify(envelope(host, r: r, root: root, session: session, agent: agent));
+    } catch (err: any) {
+        return result\caught::<Observed>(err, doing: "encode the {r.event} event");
+    }
     final seen = mut [<Observed>];
     foreach (h in hooks) {
-        if (h.event == r.event and matcherMatches(h.matcher, tool: r.tool)) {
-            seen.append(runHook(host, h: h, root: root, payload: payload));
+        final selected = matcherMatches(h.matcher, tool: r.tool);
+        if (selected.error -> err) {
+            return result\Result::<Observed>{ error = err };
+        }
+        if (h.event == r.event and selected.value!) {
+            final ran = runHook(host, h: h, root: root, payload: payload);
+            if (ran.error -> err) {
+                return result\Result::<Observed>{ error = err };
+            }
+            seen.append(ran.value!);
         }
     }
-    return strongest(seen);
+    return result\ok::<Observed>(strongest(seen));
 }
 
-export fun replay(host: str, c: Case, hooks: [HookCommand], root: str) > Row !> any {
+export fun replay(host: str, c: Case, hooks: [HookCommand], root: str) > result\Result::<Row> {
     if (c.skip != "") {
-        return Row{ host = host, name = c.name, expect = c.expect, verdict = "skipped", rule = "", ok = true, note = c.skip };
+        return result\ok::<Row>(Row{ host = host, name = c.name, expect = c.expect, verdict = "skipped", rule = "", ok = true, note = c.skip });
     }
     final r = route(host, c: c);
     if (r.skip != "") {
-        return Row{ host = host, name = c.name, expect = c.expect, verdict = "skipped", rule = "", ok = true, note = r.skip };
+        return result\ok::<Row>(Row{ host = host, name = c.name, expect = c.expect, verdict = "skipped", rule = "", ok = true, note = r.skip });
     }
-    final session = "guard-check-{uuid\v7()}";
+    var session = "";
+    try {
+        session = "guard-check-{uuid\v7()}";
+    } catch (err: any) {
+        return result\caught::<Row>(err, doing: "make a session id");
+    }
     if (c.bind != "") {
         final take = route(host, c: bash("take {c.bind}", command: "./magus job exec {c.bind}"));
         final took = ask(host, r: take, hooks: hooks, root: root, session: session, agent: c.agent);
-        if (took.verdict == "deny" or took.verdict == "dead") {
-            return Row{ host = host, name = c.name, expect = c.expect, verdict = took.verdict, rule = took.rule, ok = false,
-                note = "taking job {c.bind} first was answered {took.verdict}, so no lease was bound: {took.note}" };
+        if (took.error -> err) {
+            return result\Result::<Row>{ error = err };
+        }
+        if (took.value!.verdict == "deny" or took.value!.verdict == "dead") {
+            return result\ok::<Row>(Row{ host = host, name = c.name, expect = c.expect, verdict = took.value!.verdict, rule = took.value!.rule, ok = false,
+                note = "taking job {c.bind} first was answered {took.value!.verdict}, so no lease was bound: {took.value!.note}" });
         }
     }
-    final o = ask(host, r: r, hooks: hooks, root: root, session: session, agent: c.agent);
-    return Row{ host = host, name = c.name, expect = c.expect, verdict = o.verdict, rule = o.rule,
-        ok = meets(host, verdict: o.verdict, expect: c.expect), note = o.note };
+    final asked = ask(host, r: r, hooks: hooks, root: root, session: session, agent: c.agent);
+    if (asked.error -> err) {
+        return result\Result::<Row>{ error = err };
+    }
+    final o = asked.value!;
+    return result\ok::<Row>(Row{ host = host, name = c.name, expect = c.expect, verdict = o.verdict, rule = o.rule,
+        ok = meets(host, verdict: o.verdict, expect: c.expect), note = o.note });
 }
 
 fun errorRow(host: str, name: str, expect: str, err: str) > Row {
     return Row{ host = host, name = name, expect = expect, verdict = "error", rule = "", ok = false, note = firstLine(err) };
 }
 
-// guarded is replay with whatever it raises turned into a failing row, so one broken
-// case never hides the rest.
+// guarded is replay with a failure turned into a failing row, so one
+// broken case never hides the rest.
 export fun guarded(host: str, c: Case, hooks: [HookCommand], root: str) > Row {
-    var row: Row? = null;
-    var err = "";
-    try {
-        row = replay(host, c: c, hooks: hooks, root: root);
-    } catch (e) {
-        err = "{e}";
+    final replayed = replay(host, c: c, hooks: hooks, root: root);
+    if (replayed.error -> err) {
+        return errorRow(host, name: c.name, expect: c.expect, err: err.message);
     }
-    if (row != null) {
-        return row!;
-    }
-    return errorRow(host, name: c.name, expect: c.expect, err: err);
+    return replayed.value!;
 }
 
 // hostRows replays every case through what id wires under keys in root, the keys being
 // the ones describe harness names. A host that declares no gating key is a row, not a
 // failure; a declared file missing from disk is a failure, since that host runs no hook.
-export fun hostRows(id: str, keys: [Wired], root: str, all: [Case]) > [Row] !> any {
+export fun hostRows(id: str, keys: [Wired], root: str, all: [Case]) > result\Result::<[Row]> {
     final gating = mut [<Wired>];
     foreach (w in keys) {
         final parts = w.key.split(".");
@@ -623,47 +668,64 @@ export fun hostRows(id: str, keys: [Wired], root: str, all: [Case]) > [Row] !> a
         }
     }
     if (gating.len() == 0) {
-        return [Row{ host = id, name = "hook config", expect = "-", verdict = "unwired", rule = "", ok = true,
-            note = "describe harness declares no gating hook for {id}, so there is nothing to replay" }];
+        return result\ok::<[Row]>([Row{ host = id, name = "hook config", expect = "-", verdict = "unwired", rule = "", ok = true,
+            note = "describe harness declares no gating hook for {id}, so there is nothing to replay" }]);
     }
     final file = gating[0].file;
     final at = "{root}/{file}";
-    if (!fs\isFile(at)) {
-        return [Row{ host = id, name = "hook config", expect = "deny", verdict = "dead", rule = "", ok = false,
-            note = "{file} does not exist, so {id} runs no hook; `./magus describe harness {id}` prints what to merge" }];
+    var config = "";
+    try {
+        if (!fs\isFile(at)) {
+            return result\ok::<[Row]>([Row{ host = id, name = "hook config", expect = "deny", verdict = "dead", rule = "", ok = false,
+                note = "{file} does not exist, so {id} runs no hook; `./magus describe harness {id}` prints what to merge" }]);
+        }
+        config = fs\readFile(at);
+    } catch (err: any) {
+        return result\caught::<[Row]>(err, doing: "read {at}");
     }
-    final config = fs\readFile(at);
     final hooks = mut [<HookCommand>];
     foreach (w in gating) {
-        foreach (h in hooksAt(config, key: w.key)) {
+        final wired = hooksAt(config, key: w.key);
+        if (wired.error -> err) {
+            return result\Result::<[Row]>{ error = err };
+        }
+        foreach (h in wired.value!) {
             hooks.append(h);
         }
     }
     if (hooks.len() == 0) {
-        return [Row{ host = id, name = "hook config", expect = "deny", verdict = "dead", rule = "", ok = false,
-            note = "{file} wires no command under the gating keys describe harness names, so {id} judges nothing" }];
+        return result\ok::<[Row]>([Row{ host = id, name = "hook config", expect = "deny", verdict = "dead", rule = "", ok = false,
+            note = "{file} wires no command under the gating keys describe harness names, so {id} judges nothing" }]);
     }
     final rows = mut [<Row>];
     foreach (c in all) {
         rows.append(guarded(id, c: c, hooks: hooks, root: root));
     }
-    return rows;
+    return result\ok::<[Row]>(rows);
 }
 
 // leaseAt is the live job whose lease was taken in root.
-fun leaseAt(root: str) > Lease !> any {
-    final list: magus\JobList = magus\job.list();
-    foreach (j in list.jobs) {
-        // Only a live lease with something to write grades an edit: an exited job holds
-        // nothing, and a read-only one has no boundary to step outside of.
-        if (j.checkoutRoot == root and ["declared", "running"].indexOf(j.state) != null and j.writePaths.len() > 0) {
-            return Lease{ job = j.id, outside = outsidePath(j.writePaths) };
+fun leaseAt(root: str) > result\Result::<Lease> {
+    try {
+        final list: magus\JobList = magus\workspace().jobs();
+        foreach (j in list.jobs) {
+            // Only a live lease with something to write grades an edit: an exited job holds
+            // nothing, and a read-only one has no boundary to step outside of.
+            if (j.checkoutRoot == root and (j.state == magus\JobState.declared or j.state == magus\JobState.running) and j.writePaths.len() > 0) {
+                final outside = outsidePath(j.writePaths);
+                if (outside.error -> err) {
+                    return result\Result::<Lease>{ error = err };
+                }
+                return result\ok::<Lease>(Lease{ job = j.id, outside = outside.value! });
+            }
         }
+        return result\ok::<Lease>(Lease{ job = "", outside = "" });
+    } catch (err: any) {
+        return result\caught::<Lease>(err, doing: "list the jobs");
     }
-    return Lease{ job = "", outside = "" };
 }
 
-fun hostReport(plan: magus\HarnessPlan, root: str, all: [Case]) > HostReport {
+fun hostReport(plan: magus\HarnessInstallation, root: str, all: [Case]) > HostReport {
     final keys = mut [<Wired>];
     foreach (w in plan.wired) {
         keys.append(Wired{ file = w.file, key = w.key });
@@ -671,34 +733,45 @@ fun hostReport(plan: magus\HarnessPlan, root: str, all: [Case]) > HostReport {
     final file = if (keys.len() == 0) "" else keys[0].file;
     final note = if (plan.files.keys().len() == 0) "" else "describe harness says this config is not current; `./magus describe harness {plan.id}` prints the merge";
     var rows = [<Row>];
-    try {
-        rows = hostRows(plan.id, keys: keys, root: root, all: all);
-    } catch (e) {
-        rows = [errorRow(plan.id, name: "hook config", expect: "deny", err: "{e}")];
+    final replayed = hostRows(plan.id, keys: keys, root: root, all: all);
+    if (replayed.error -> err) {
+        rows = [errorRow(plan.id, name: "hook config", expect: "deny", err: err.message)];
+    } else {
+        rows = replayed.value!;
     }
     return HostReport{ id = plan.id, file = file, note = note, rows = rows };
+}
+
+// plansOf is the plan of every harness describe harness names.
+fun plansOf() > result\Result::<[magus\HarnessInstallation]> {
+    try {
+        final wired = mut [<magus\HarnessInstallation>];
+        foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: magus\CommandOptions{ quiet = true }).stdout.trim().split("\n")) {
+            if (id != "") { wired.append(magus\describe.harness(id)); }
+        }
+        return result\ok::<[magus\HarnessInstallation]>(wired);
+    } catch (err: any) {
+        return result\caught::<[magus\HarnessInstallation]>(err, doing: "list the harnesses");
+    }
 }
 
 // check replays every case through every host describe harness names, against the
 // checkout at root. It never raises: what fails becomes a row.
 export fun check(root: str) > Report {
-    final lease = leaseAt(root) catch Lease{ job = "", outside = "" };
+    var lease = Lease{ job = "", outside = "" };
+    final leased = leaseAt(root);
+    if (leased.error == null) {
+        lease = leased.value!;
+    }
     final all = cases(root, lease: lease);
     final hosts = mut [<HostReport>];
-    var plans = [<magus\HarnessPlan>];
-    var err = "";
-    try {
-        final wired = mut [<magus\HarnessPlan>];
-        foreach (id in magus\cmd("describe", args: ["harness", "-o", "name"], opts: {"quiet": true}).stdout.trim().split("\n")) {
-            if (id != "") { wired.append(magus\describe.harness(id)); }
-        }
-        plans = wired;
-    } catch (e) {
-        err = "{e}";
-    }
-    if (err != "") {
+    var plans = [<magus\HarnessInstallation>];
+    final planned = plansOf();
+    if (planned.error -> err) {
         hosts.append(HostReport{ id = "describe harness", file = "", note = "",
-            rows = [errorRow("describe harness", name: "list hosts", expect: "deny", err: err)] });
+            rows = [errorRow("describe harness", name: "list hosts", expect: "deny", err: err.message)] });
+    } else {
+        plans = planned.value!;
     }
     foreach (plan in plans) {
         hosts.append(hostReport(plan, root: root, all: all));
@@ -782,22 +855,22 @@ export fun main(args: [str]) > void !> any {
 }
 
 test "matchers select by exact name, alternatives and an anchored or .* prefix" {
-    assert\equal(matcherMatches("Bash", tool: "Bash"), want: true, message: "exact");
-    assert\equal(matcherMatches("Edit|Write|NotebookEdit", tool: "Write"), want: true, message: "alternative");
-    assert\equal(matcherMatches("Edit|Write", tool: "WriteFile"), want: false, message: "alternatives are whole names");
-    assert\equal(matcherMatches("^mcp__magus__", tool: "mcp__magus__client"), want: true, message: "prefix");
-    assert\equal(matcherMatches("mcp__.*", tool: "mcp__magus__client"), want: true, message: "codex's .* prefix");
-    assert\equal(matcherMatches("mcp__.*", tool: "Bash"), want: false, message: ".* is still a prefix");
-    assert\equal(matcherMatches("", tool: "Read"), want: true, message: "empty matches all");
-    final refused = matcherMatches("Notebook(Edit)?", tool: "NotebookEdit") catch false;
-    assert\equal(refused, want: false, message: "a regex raises");
+    assert\equal(matcherMatches("Bash", tool: "Bash").value!, want: true, message: "exact");
+    assert\equal(matcherMatches("Edit|Write|NotebookEdit", tool: "Write").value!, want: true, message: "alternative");
+    assert\equal(matcherMatches("Edit|Write", tool: "WriteFile").value!, want: false, message: "alternatives are whole names");
+    assert\equal(matcherMatches("^mcp__magus__", tool: "mcp__magus__client").value!, want: true, message: "prefix");
+    assert\equal(matcherMatches("mcp__.*", tool: "mcp__magus__client").value!, want: true, message: "codex's .* prefix");
+    assert\equal(matcherMatches("mcp__.*", tool: "Bash").value!, want: false, message: ".* is still a prefix");
+    assert\equal(matcherMatches("", tool: "Read").value!, want: true, message: "empty matches all");
+    final refused = matcherMatches("Notebook(Edit)?", tool: "NotebookEdit");
+    assert\equal(refused.error!.message, want: "matcher `Notebook(Edit)?` is a regex this script does not evaluate; replay it by hand", message: "a regex fails");
 }
 
 test "a nested settings file parses in file order, the other events left out" {
-    final hooks = hooksAt(fs\readFile("hack/testdata/guard-health-settings.json"), key: "hooks.PreToolUse");
+    final hooks = hooksAt(fs\readFile("hack/testdata/guard-health-settings.json"), key: "hooks.PreToolUse").value!;
     final got = mut [<str>];
     foreach (h in hooks) {
-        got.append("{h.event} {h.matcher} {h.timeout} {splitArgv(h.command)[3]}");
+        got.append("{h.event} {h.matcher} {h.timeout} {splitArgv(h.command).value![3]}");
     }
     assert\equal(got, want: [
         "PreToolUse Bash 10 docs/guides/integrations/agents/magus-command.buzz",
@@ -810,19 +883,19 @@ test "a nested settings file parses in file order, the other events left out" {
 test "Cursor's flat handlers parse with their event, matcher and failClosed" {
     final config = `\{"version":1,"hooks":\{"beforeShellExecution":[\{"command":"magus buzz -s h.buzz -- --agent-name cursor"\}],`
         + `"preToolUse":[\{"matcher":"Write|StrReplace","command":"magus buzz -s h.buzz -- --agent-name cursor","failClosed":true,"timeout":5\},\{"type":"prompt","prompt":"x"\}]\}\}`;
-    final shell = hooksAt(config, key: "hooks.beforeShellExecution");
+    final shell = hooksAt(config, key: "hooks.beforeShellExecution").value!;
     assert\equal("{shell.len()} {shell[0].event} [{shell[0].matcher}] {shell[0].timeout} {shell[0].failClosed}",
         want: "1 beforeShellExecution [] 60 false", message: "shell gate");
-    final tools = hooksAt(config, key: "hooks.preToolUse");
+    final tools = hooksAt(config, key: "hooks.preToolUse").value!;
     assert\equal("{tools.len()} {tools[0].event} {tools[0].matcher} {tools[0].timeout} {tools[0].failClosed}",
         want: "1 preToolUse Write|StrReplace 5 true", message: "a prompt handler is left out");
-    assert\equal(hooksAt(config, key: "hooks.stop").len(), want: 0, message: "an absent key wires nothing");
+    assert\equal(hooksAt(config, key: "hooks.stop").value!.len(), want: 0, message: "an absent key wires nothing");
 }
 
 test "a command that needs a shell is refused as an argv" {
-    final got = splitArgv("MAGUS=1 magus buzz x.buzz | tee log") catch ["refused"];
-    assert\equal(got, want: ["refused"], message: "pipe");
-    assert\equal(splitArgv("magus buzz -s h.buzz -- --agent-name cursor"), want: ["magus", "buzz", "-s", "h.buzz", "--", "--agent-name", "cursor"], message: "words");
+    final got = splitArgv("MAGUS=1 magus buzz x.buzz | tee log");
+    assert\equal(got.error!.message, want: "hook command `MAGUS=1 magus buzz x.buzz | tee log` uses `|`, which needs a shell; replay it by hand", message: "pipe");
+    assert\equal(splitArgv("magus buzz -s h.buzz -- --agent-name cursor").value!, want: ["magus", "buzz", "-s", "h.buzz", "--", "--agent-name", "cursor"], message: "words");
 }
 
 test "Claude Code and Codex replies classify the way the host reads them" {
@@ -862,7 +935,7 @@ test "the strongest verdict wins, and no matching entry is a dead guard" {
 }
 
 test "the edit case binds the lease and targets a path it does not cover" {
-    assert\equal(outsidePath(["*.go", "hack/**"]), want: "README.md", message: "first uncovered");
+    assert\equal(outsidePath(["*.go", "hack/**"]).value!, want: "README.md", message: "first uncovered");
     final unleased = cases("/w", lease: Lease{ job = "", outside = "" });
     assert\equal(unleased[unleased.len() - 1].skip != "", want: true, message: "skipped without a lease");
     final covered = cases("/w", lease: Lease{ job = "j", outside = "" });
@@ -904,7 +977,7 @@ test "each host's envelope carries its own fields" {
     assert\equal("{edit["tool_name"]} {hook\field(edit, dotPath: "tool_input.file_path")} {edit["agent_id"] == null}", want: "StrReplace /w/doc.go true", message: "cursor edit");
 }
 
-test "a case that raises becomes a failing row" {
+test "a case that fails becomes a failing row" {
     final broken = [HookCommand{ event = "PreToolUse", matcher = "Ba(sh)?", command = "true", timeout = 10, failClosed = false }];
     final row = guarded("claude-code", c: bash("x", command: "ls"), hooks: broken, root: "/w");
     assert\equal("{row.verdict} {row.ok}", want: "error false", message: "verdict");
@@ -912,11 +985,11 @@ test "a case that raises becomes a failing row" {
 }
 
 test "a host that declares no gating hook is a row, not a failure; a missing file fails" {
-    final none = hostRows("opencode", keys: [<Wired>], root: "/w", all: [bash("x", command: "ls")]);
+    final none = hostRows("opencode", keys: [<Wired>], root: "/w", all: [bash("x", command: "ls")]).value!;
     assert\equal("{none.len()} {none[0].verdict} {none[0].ok}", want: "1 unwired true", message: "opencode");
-    final stop = hostRows("codex", keys: [Wired{ file = ".codex/hooks.json", key = "hooks.Stop" }], root: "/w", all: [<Case>]);
+    final stop = hostRows("codex", keys: [Wired{ file = ".codex/hooks.json", key = "hooks.Stop" }], root: "/w", all: [<Case>]).value!;
     assert\equal(stop[0].verdict, want: "unwired", message: "only non-gating keys");
-    final missing = hostRows("cursor", keys: [Wired{ file = ".cursor/hooks.json", key = "hooks.preToolUse" }], root: "hack/dev/no-such-checkout", all: [<Case>]);
+    final missing = hostRows("cursor", keys: [Wired{ file = ".cursor/hooks.json", key = "hooks.preToolUse" }], root: "hack/dev/no-such-checkout", all: [<Case>]).value!;
     assert\equal("{missing[0].verdict} {missing[0].ok}", want: "dead false", message: "declared but absent");
 }
 

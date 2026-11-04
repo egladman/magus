@@ -1,4 +1,4 @@
-import { must } from "../../lib/guards";
+import { MagusError, fail, ok, type Result } from "../../gen/magus/types";
 // demo.ts - the server-free showcase (#demo). Replay the shared scenario (demo-scenario.ts) as two
 // magus.viewer.v1alpha1 Journals and REVEAL the primary one incrementally so the page feels like a live run
 // streaming in. The primary (streamed) invocation is the failing services/identity:test run an agent
@@ -87,7 +87,7 @@ function buildJournal(
   for (const { run, start } of placed) {
     const at0 = base + start;
     const execs = run.execs ?? [];
-    for (let i = 0; i < execs.length; i++) {
+    for (const [i, text] of execs.entries()) {
       const at = at0 + Math.round((run.durationMs * i) / Math.max(1, execs.length));
       events.push(
         create(EventSchema, {
@@ -95,7 +95,7 @@ function buildJournal(
           time: demoTs(at),
           project: run.project,
           target: run.target,
-          text: execs[i],
+          text,
         }),
       );
     }
@@ -161,18 +161,24 @@ function buildJournal(
 
 // brokenTestJournal is the primary streamed invocation: the MCP-triggered services/identity:test run
 // that FAILs.
-function brokenTestJournal(): Journal {
+function brokenTestJournal(): Result<Journal> {
   const runs = scenarioRuns(Date.now());
-  const test = must(runs.find((r) => r.inv === INV_TEST_BREAK));
-  return buildJournal(
-    [{ run: test, start: 0 }],
-    INV_TEST_BREAK,
-    {
-      arguments: ["run", "test", "services/identity"],
-      cwd: WORKSPACE_ROOT,
-      trigger: Trigger.RUN,
-    },
-    "projects: services/identity (cwd)",
+  const test = runs.find((r) => r.inv === INV_TEST_BREAK);
+  if (!test)
+    return fail(
+      new MagusError({ code: "", message: "the demo scenario has no run " + INV_TEST_BREAK }),
+    );
+  return ok(
+    buildJournal(
+      [{ run: test, start: 0 }],
+      INV_TEST_BREAK,
+      {
+        arguments: ["run", "test", "services/identity"],
+        cwd: WORKSPACE_ROOT,
+        trigger: Trigger.RUN,
+      },
+      "projects: services/identity (cwd)",
+    ),
   );
 }
 
@@ -227,8 +233,10 @@ const TRIGGERS: Record<string, Trigger> = {
 // startDemo enters the showcase: it frames the axis from the failing-test Invocation, opens the
 // waterfall, streams that invocation's events in over a few seconds via the shared live buffer, and
 // renders the completed CI sweep as its own group on the shared axis.
-export function startDemo(): void {
-  const journal = brokenTestJournal();
+export function startDemo(): Result<void> {
+  const broken = brokenTestJournal();
+  if (broken.error) return broken;
+  const journal = broken.value;
   const ordered = journal.events;
   const sibling = ciSweepJournal();
 
@@ -249,9 +257,9 @@ export function startDemo(): void {
 
   // Prime the first frame with enough events that a target span exists immediately (so the
   // waterfall is never momentarily empty): the STARTED/SCOPE preamble plus the first EXEC.
-  let i = 0;
   const prime = Math.min(3, ordered.length);
-  for (; i < prime; i++) state.liveEvents.push(ordered[i]);
+  state.liveEvents.push(...ordered.slice(0, prime));
+  let i = prime;
   scheduleLiveRender();
 
   const BATCH = 3;
@@ -264,12 +272,15 @@ export function startDemo(): void {
       setLiveStatus("done");
       return;
     }
-    for (let k = 0; k < BATCH && i < ordered.length; k++) state.liveEvents.push(ordered[i++]);
+    const batch = ordered.slice(i, i + BATCH);
+    state.liveEvents.push(...batch);
+    i += batch.length;
     scheduleLiveRender();
   }, TICK_MS);
 
   // Clear the reveal if the page is being torn down, so no timer fires after navigation.
   window.addEventListener("pagehide", stopDemo, { once: true });
+  return ok(undefined);
 }
 
 export function stopDemo(): void {

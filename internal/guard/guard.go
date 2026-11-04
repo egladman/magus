@@ -51,6 +51,9 @@ type Dependencies struct {
 	// own magus.yaml, because a cache dir configured in the orchestrator's tree says
 	// nothing about where a worker's cache lives.
 	CacheDir func(root string) (string, error)
+	// Workspace is the root of the workspace the caller opened.
+	// With one, the process cwd names no workspace.
+	Workspace string
 	// NotesShared is the workspace's declared shared notes store, empty when it declares none.
 	NotesShared string
 	// ShellRules are workspace-declared additive shell rules from
@@ -83,6 +86,11 @@ type Dependencies struct {
 	WriteRule workspace.WriteRule
 	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per judgment.
 	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
+	// StopRule is the working tree's magus\guard.stop rule, nil when none is registered.
+	// It is called on every Stop and SubagentStop event the built-in stop check lets through.
+	StopRule workspace.StopRule
+	// ApprovedStopRule is ApprovedSpawnRule for the stop rule, resolved per judgment.
+	ApprovedStopRule func(ctx context.Context) (workspace.StopRule, error)
 	// ModelRows yields the model rows the workspace's harnesses publish through
 	// mgs_listModels, nil when none does. It can load the workspace and its harness
 	// spells, so it must load them once however often it is called; the guard calls it
@@ -95,11 +103,11 @@ type Dependencies struct {
 	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
 	// have nothing to compare and stay silent.
 	ModelTiers func() *types.ModelTierSet
-	// HumanOnlyRecord answers what the workspace at root declares human_only from the
+	// TargetPolicies answers what the workspace at root declares as target policy from the
 	// record the knowledge store keeps of it, without opening the workspace; "" is the
 	// caller's own. false means it cannot prove the record current, and the rule opens
 	// the workspace through Inspect instead. Nil means no record: every judgment opens it.
-	HumanOnlyRecord func(ctx context.Context, root string) (types.HumanOnlyIndex, bool)
+	TargetPolicies func(ctx context.Context, root string) (types.TargetPolicyIndex, bool)
 	// CheckoutState reads the checkout holding dir for a command rule judging a push or a
 	// commit, nil when its version control cannot report it.
 	CheckoutState func(ctx context.Context, dir string) *types.CheckoutState
@@ -133,11 +141,6 @@ type Dependencies struct {
 	// SymbolIDs lists the ids of the indexed symbols named ident. More than one makes the
 	// name ambiguous: refs wants an id to pick a definition. Nil leaves every name unambiguous.
 	SymbolIDs func(ident string) []string
-	// IndexCause names the observed reason the symbol index is missing or behind (no
-	// server, so the VCS refresh hook's sync did nothing; a hook whose binary is absent; a
-	// sync running now) and the command that clears it, as advisory sentences. "" when it
-	// could not tell within the guard's budget.
-	IndexCause func() string
 	// SymbolSites lists each file defining or referencing ident, with its count and first
 	// lines, from SymbolDefined's index and definitive on the same terms.
 	SymbolSites func(ident string) (sites []types.KnowledgeRefSite, definitive bool)
@@ -157,6 +160,13 @@ type Dependencies struct {
 	// against the disk itself, such as a listing walked entry for entry, where GraphIDs'
 	// freshness check would only silence it on the first edit.
 	IndexedIDs func(ctx context.Context, kind string) (ids []string, ok bool)
+	// GraphMoved says why the graph at root describes another tree than the one on disk,
+	// "" when it does not or cannot tell; underway is a history rewrite still in progress.
+	// Nil answers "" for every root.
+	GraphMoved func(ctx context.Context, root string) (reason string, underway bool)
+	// SymbolIndexBuilt reports whether `magus graph build` wrote an index holding symbols
+	// for root, current or not. Nil answers false.
+	SymbolIndexBuilt func(root string) bool
 	// TrackedFiles lists every file version control tracks in the checkout at root,
 	// relative to root, and reports false when it cannot say before ctx ends. A listing of
 	// tracked files is proved against it.
@@ -179,6 +189,10 @@ type Dependencies struct {
 	// them on every hook row, so a verdict can be tied to the build that reached it.
 	Binary        string
 	BinaryVersion string
+	// BinaryCommit is the commit the running magus was built at, "" when unstamped, and
+	// BinaryDirty whether uncommitted changes went into it.
+	BinaryCommit string
+	BinaryDirty  bool
 
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
@@ -186,6 +200,9 @@ type Dependencies struct {
 	// callDir is the directory the judged call runs in, where its relative paths resolve.
 	// Judge fills it from the envelope's cwd; empty means the hook process's own.
 	callDir string
+	// callDirUnread marks a script's lines behind a cd no hook can read.
+	// Neither callDir nor the hook's own directory says where they run.
+	callDirUnread bool
 	// caller is who makes the judged call, which decides whether a lease acts as a worker.
 	// Judge fills it; zero is an identity-less caller.
 	caller job.Caller
@@ -204,16 +221,27 @@ type Dependencies struct {
 	worker bool
 	// revisions memoizes revision for one judgment; Judge fills it, nil reads every time.
 	revisions *revisionMemo
+	// opens keeps each root's open; Judge fills it, nil opens every time.
+	opens *workspaceOpens
 }
 
 // workingDir is where a relative path on the judged line resolves. The hook process's cwd
 // is only the fallback: a host runs its hooks from wherever it likes.
 func (d Dependencies) workingDir() (string, bool) {
+	if d.callDirUnread {
+		return "", false
+	}
 	if d.callDir != "" {
 		return d.callDir, true
 	}
 	wd, err := os.Getwd()
 	return wd, err == nil
+}
+
+// callShellDir is where the judged line starts, as a walk of it reads that.
+func (d Dependencies) callShellDir() shellDir {
+	cwd, _ := d.workingDir()
+	return shellDir{dir: cwd, known: !d.callDirUnread}
 }
 
 // errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent
@@ -223,28 +251,64 @@ var errNoDependency = errors.New("guard: the caller supplied no resolver for thi
 // inspect opens the workspace at root, "" for the one the hook runs in, as a boundedPhase:
 // an open costs seconds on an idle machine and more on a loaded one. An open that does not
 // answer in time answers its error, which every rule reads as a workspace it could not open.
+// A root opens once in a judgment: rules ask per file.
 func (d Dependencies) inspect(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 	if d.Inspect == nil {
 		return nil, errNoDependency
 	}
-	return boundedPhase(ctx, phaseInspect, func(open context.Context) (types.WorkspaceRepository, error) {
+	if kept, ok := d.opens.kept(root); ok {
+		return kept.ws, kept.err
+	}
+	ws, err := boundedPhase(ctx, phaseInspect, func(open context.Context) (types.WorkspaceRepository, error) {
 		return d.Inspect(open, root)
 	})
+	d.opens.keep(root, workspaceOpen{ws, err})
+	return ws, err
 }
 
-// humanOnlyRecord is HumanOnlyRecord as a boundedPhase of its own: a read that does not
+type workspaceOpen struct {
+	ws  types.WorkspaceRepository
+	err error
+}
+
+// workspaceOpens holds each root one judgment opened. A nil one keeps nothing.
+type workspaceOpens struct {
+	mu     sync.Mutex
+	byRoot map[string]workspaceOpen
+}
+
+func (o *workspaceOpens) kept(root string) (workspaceOpen, bool) {
+	if o == nil {
+		return workspaceOpen{}, false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	got, ok := o.byRoot[root]
+	return got, ok
+}
+
+func (o *workspaceOpens) keep(root string, got workspaceOpen) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.byRoot[root] = got
+}
+
+// targetPolicies is TargetPolicies as a boundedPhase of its own: a read that does not
 // answer in time answers false, as does every later one in the judgment, and the rule falls
 // back to the open.
-func (d Dependencies) humanOnlyRecord(ctx context.Context, root string) (types.HumanOnlyIndex, bool) {
-	if d.HumanOnlyRecord == nil {
-		return types.HumanOnlyIndex{}, false
+func (d Dependencies) targetPolicies(ctx context.Context, root string) (types.TargetPolicyIndex, bool) {
+	if d.TargetPolicies == nil {
+		return types.TargetPolicyIndex{}, false
 	}
 	type answer struct {
-		ix types.HumanOnlyIndex
+		ix types.TargetPolicyIndex
 		ok bool
 	}
-	a, err := boundedPhase(ctx, phaseHumanOnlyRecord, func(read context.Context) (answer, error) {
-		ix, ok := d.HumanOnlyRecord(read, root)
+	a, err := boundedPhase(ctx, phaseTargetPolicies, func(read context.Context) (answer, error) {
+		ix, ok := d.TargetPolicies(read, root)
 		return answer{ix, ok}, nil
 	})
 	return a.ix, err == nil && a.ok
@@ -443,10 +507,6 @@ func (d Dependencies) rankGraded(v ShellVerdict, rule denyRuleName, reason strin
 	if reason == "" {
 		return v
 	}
-	// A skill the caller cannot load is a remedy it cannot take.
-	if (rule == denyArchitectureUnbriefed || rule == denyBuzzUnbriefed) && !d.loadsSkills() {
-		return v
-	}
 	if g := d.grade(ShellVerdict{Deny: reason, Rule: denyRule{Name: rule}}); g.Deny == "" {
 		return stronger(v, g)
 	}
@@ -579,6 +639,11 @@ type Request struct {
 	// CallTimeout is the one the call gave its shell command, zero when it named none. An
 	// envelope's timeout fills it when it is zero.
 	CallTimeout time.Duration
+	// CallDigest and ResultDigest fingerprint a ToolMs record's call, result.
+	CallDigest, ResultDigest string
+	// ToolMs records how long the tool named by Input ran, as the host
+	// reports it. Nothing is judged. Zero means no such record.
+	ToolMs int64
 	// HostForegroundDefault is the host's timeout for a shell command that names none, and
 	// HostForegroundMax the longest one it allows, both declared by the wiring. With either
 	// zero the advice that reads them stands down: a fact nobody declared is not "no
@@ -640,12 +705,19 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	ctx = withPhaseLog(ctx, deps.RuleLoad)
 	judgmentPhases(ctx).settle(deps)
 	deps.revisions = &revisionMemo{current: map[string]string{}}
+	deps.opens = &workspaceOpens{byRoot: map[string]workspaceOpen{}}
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	if req.Message {
 		if !req.DryRun {
 			recordMessageTopics(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), input)
+		}
+		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	}
+	if req.ToolMs > 0 {
+		if !req.DryRun {
+			appendToolTime(ctx, hookLocation(ctx, deps), who, input, req)
 		}
 		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	}
@@ -724,6 +796,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			if !ok {
 				v = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 			}
+			lease, _ := resolveLease(who, req.Lease, boundJob(who, at).Job)
+			v = gradeWorkspaceStop(withJobStoreRows(ctx, at), deps, v, input, who, at, lease)
 			if !req.DryRun && !req.Observe {
 				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, req.HostResumesOnBackgroundFrom, v); err != nil {
 					v.Context = fmt.Sprintf("%smagus workspace: the job store did not end the job this session held: %s", strings.TrimPrefix(v.Context+"\n", "\n"), err)
@@ -840,6 +914,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// nothing graded the call at all.
 	//
 	// --observe is exempt, as it is from every other verdict: it carries none.
+	judgmentPhases(ctx).enclose(phaseBuiltinRules)
 	standing := actingLeaseStanding(ctx, deps, actingLease)
 	if binding.Gone {
 		standing.endedBinding = binding.Job
@@ -955,6 +1030,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 		}
 		if verdict.Decision != decisionDeny {
+			if reason := denyDeviationWrite(input, write); reason != "" {
+				refuse(denyRuleDeviationAuthor, reason)
+			}
+		}
+		if verdict.Decision != decisionDeny {
 			switch g := gradeHookWiringWrite(location.workspace, actingLease, who.Agent != "", input); g.Decision {
 			case decisionDeny:
 				refuse(denyRuleHookWiringWrite, g.Reason)
@@ -965,12 +1045,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				}
 			}
 		}
-		// Last of the denies and first thing a Buzz write meets, in that order for a
-		// reason: the two above answer whether this agent may touch the file at all, and
-		// there is nothing to learn before a write that is refused anyway.
-		// Neither asks a caller that cannot load a skill, nor briefs a write outside the
-		// workspace, such as a report in a scratchpad.
-		briefable := deps.loadsSkills() && inSource(location.workspace, input)
+		// Last of the denies: a refused write has nothing to learn first.
+		// A write outside the workspace is not briefed.
+		briefable := inSource(location.workspace, input)
 		if verdict.Decision != decisionDeny && briefable {
 			if reason := denyBuzzWriteWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input); reason != "" {
 				refuse(denyBuzzUnbriefed, reason)
@@ -979,6 +1056,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if verdict.Decision != decisionDeny && briefable {
 			if reason := denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, newSourceDir(location.workspace, input)); reason != "" {
 				refuse(denyArchitectureUnbriefed, reason)
+			}
+		}
+		if verdict.Decision != decisionDeny {
+			if reason := denyAmbiguousCIWord(facts, writeAssumesCIWord(input)); reason != "" {
+				refuse(denyRuleAmbiguousCIWord, reason)
 			}
 		}
 		// A script is judged by what running it would be judged by, and the write is the
@@ -1102,6 +1184,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		}
 		deps.callDir = callDir
 		v := judgeShellLine(ctx, deps, location, callDir, input, shellD)
+		// Nothing to park on a read-only row; a writer still gets the advice.
+		if v.advisoryName() == string(advisoryCheckpointState) && standing.declared && standing.row.ReadOnly {
+			v = ShellVerdict{}
+		}
 		// Outside judgeShellLine: it reads session state (which skills have loaded) rather
 		// than the line alone, and a remedy graded by that function never writes Buzz.
 		v = deps.rankGraded(v, denyBuzzUnbriefed, denyBuzzAuthorWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input, shellD), rankBuzzAuthor)
@@ -1121,6 +1207,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		}
 		if v.Deny == "" {
 			v = stronger(v, deps.grade(judgeHeredocWrites(ctx, deps, req, who, callDir, actingLease, input, shellD)))
+		}
+		if v.Deny == "" {
+			if reason := denyAmbiguousCIWord(facts, assumesCIWord(input)); reason != "" {
+				v = ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleAmbiguousCIWord},
+					Why: "The bare word \"ci\" names both the magus target and the host's CI/CD; picking either before the person clarifies is the assumption this rule stops."}
+			}
 		}
 		var unbriefed string
 		if structureProbe(input, location.workspace) {
@@ -1171,11 +1263,6 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		if verdict.Decision != decisionDeny {
 			if d := denyAgentGrant(input, shellD); d.refused() {
 				refuseWith(denyRuleGrantIsAPersons, d)
-			}
-		}
-		if verdict.Decision != decisionDeny {
-			if d := denyAgentWaive(input, shellD); d.refused() {
-				refuseWith(denyRuleWaiverIsAPersons, d)
 			}
 		}
 		// The job store's half of the shell-command rules, ranked BELOW the rules above
@@ -1392,16 +1479,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// magus cannot parse both leave every lease-scoped rule inert while the verdicts look
 	// identical to a session nobody leased. Once per session each, and never on a deny,
 	// which explains itself and was reached by a rule that did not need the row. Graded
-	// before the gate, so one the workspace raised refuses every call. A release request
-	// for the lease is the third: it reads the attention queue, so only until it has fired.
-	var release advice
-	if !req.Observe && verdict.Decision != decisionDeny && verdict.Decision != decisionAsk && !markers.AlreadyFired(advisoryReleaseRequested) {
-		release = adviseReleaseRequested(location, actingLease)
-	}
+	// before the gate, so one the workspace raised refuses every call.
+	// A release request is the third, told once per lease.
+	judgmentPhases(ctx).enclose(phaseNotices)
 	for kind, notice := range map[hint.MarkerKind]advice{
 		advisoryLeaseTerminal:    adviseTerminalLease(standing, actingLease),
 		advisoryLeaseInvalid:     adviseInvalidLease(actingLease),
-		advisoryReleaseRequested: release,
+		advisoryReleaseRequested: adviseReleaseRequested(standing.row),
 	} {
 		if notice.Say == "" || req.Observe || verdict.Decision == decisionDeny || verdict.Decision == decisionAsk {
 			continue
@@ -1414,7 +1498,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		case g.Context == "":
 			continue
 		}
-		held := markers.Once(kind, notice.Say)
+		gate := markers
+		if kind == advisoryReleaseRequested {
+			gate = stallGate(stateAt.cacheDir, actingLease)
+		}
+		held := gate.Once(kind, notice.Say)
 		if held == "" {
 			continue
 		}
@@ -1479,8 +1567,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	if req.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
+	judgmentPhases(ctx).enclose("")
 	if !req.DryRun {
 		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord, deps.judging(callDir))
+		clearHolderStopped(ctx, location, who)
 	}
 	return verdict
 }
@@ -1516,8 +1606,13 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	v = rankWorktreeRemove(v, deps.grade(denyWorktreeRemove(ctx, deps, at, callDir, line, d)))
 	v = deps.rankGraded(v, denyRuleInterpreterRewrite, denyInterpreterRewrite(at, line, d), rankInterpreterRewrite)
 	v = deps.rankGraded(v, denyRuleConflictRewrite, denyConflictRewrite(at, line, d), rankConflictRewrite)
+	v = deps.rankGraded(v, denyRuleConflictCommit, denyConflictCommit(ctx, at, line, d), rankConflictCommit)
 	v = deps.rankGraded(v, denyRuleUnreadCommand, denyUnreadCommand(line, d), rankUnreadCommand)
+	v = deps.rankGraded(v, denyRuleCacheClear, denyCacheClear(line, d), rankCacheClear)
 	v = deps.rankGraded(v, denyRuleCacheDirWrite, denyCacheDirCommand(at, line, d), rankCacheDirWrite)
+	v = deps.rankGraded(v, denyRuleDeviationAuthor, denyDeviationCommand(callDir, line, d), rankDeviationWrite)
+	v = deps.rankGraded(v, denyRuleStaleBinary, denyContractPick(ctx, deps, at, line, d), rankContractPick)
+	v = deps.rankGraded(v, denyRuleStaleBinary, denyContractSkew(ctx, deps, at, line, d), rankContractPick)
 	return deps.rankGraded(v, denyRuleTokenState, denyTokenStateCommand(at, line, d), rankTokenState)
 }
 
@@ -1597,6 +1692,7 @@ func roleScopedCommandRules() []roleScopedRule {
 		{denyRuleLeaseRebind, denyLeaseScopedRebind},
 		{denyRuleLeaseHarness, denyLeaseScopedHarness},
 		{denyRuleLeaseWrite, oneString(denyWriteOutsideLease)},
+		{denyRuleEditUngraded, denyUngradedRewrite},
 		{denyRuleSleepPoll, denyRefusedRetry},
 	}
 }
@@ -2171,6 +2267,9 @@ type location struct {
 	dir string
 	// models is the judged request's Dependencies.ModelRows.
 	models func() []types.ModelPricing
+	// policies is what the workspace declares and how it was read, read once per judgment
+	// and only when a rule asks.
+	policies func() declaredIndex
 }
 
 // jobs places the job store and checkout record of the checkout at. A user state dir that
@@ -2272,7 +2371,16 @@ func withPendingRow(ctx context.Context, row types.Job) context.Context {
 		row.State = types.StateDeclared
 	}
 	rows := slices.DeleteFunc(slices.Clone(snap.Rows), func(r types.Job) bool { return r.ID == row.ID })
+	ctx = context.WithValue(ctx, pendingRowKey{}, row.ID)
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: append(rows, row.Clone())})
+}
+
+type pendingRowKey struct{}
+
+// pendingRowID is the row withPendingRow pinned, or "".
+func pendingRowID(ctx context.Context) string {
+	id, _ := ctx.Value(pendingRowKey{}).(string)
+	return id
 }
 
 // leaseRows reports the pinned job store, reading it when nothing pinned one. A test that
@@ -2451,6 +2559,11 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	}
 	stampHeartbeat(ctx, location.workspace, heartbeat{Session: who.Session, Lease: lease, Transcript: who.Transcript, At: time.Now()})
 	cost := observeCall(ctx, location, input, who, tool, lease, verdict)
+	phases := judgmentPhases(ctx).phases()
+	var judged int64
+	if len(phases) > 0 {
+		judged = phases[len(phases)-1].ElapsedMs
+	}
 	command := trail.AgentCommand{
 		PolicyDigest: policyDigest,
 		DecidedBy:    cmp.Or(rule.decidedBy, decidedBy(verdict)),
@@ -2475,7 +2588,8 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Binary:          by.binary,
 		BinaryVersion:   by.version,
 		Cwd:             by.cwd,
-		Phases:          judgmentPhases(ctx).phases(),
+		Phases:          phases,
+		GuardMs:         judged,
 		AgentFacts:      cost,
 	}
 	if tool == hookToolCommand {
@@ -2484,6 +2598,39 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		command.Path = input
 	}
 	trail.AppendAgentCommand(ctx, location.cacheDir, command)
+}
+
+// appendToolTime records how long a host says tool ran, and its digests.
+// Best-effort and verdictless, like appendHookActivity.
+// A digest the host did not give is named in Unobserved, not left empty.
+func appendToolTime(ctx context.Context, location location, who hookAttribution, tool string, req Request) {
+	if location.cacheDir == "" {
+		return
+	}
+	lease, _ := resolveActingLease(who, location, "")
+	thread, from := callerThread(location.cacheDir, who, lease)
+	facts := types.AgentFacts{
+		Thread: thread, ThreadFrom: from,
+		CallDigest: req.CallDigest, ResultDigest: req.ResultDigest,
+	}
+	if req.CallDigest == "" {
+		facts.Unobserved = append(facts.Unobserved, "call")
+	}
+	if req.ResultDigest == "" {
+		facts.Unobserved = append(facts.Unobserved, "result")
+	}
+	trail.AppendAgentCommand(ctx, location.cacheDir, trail.AgentCommand{
+		AgentFacts: facts,
+		EntryPoint: trail.EntryPointFromContext(ctx),
+		Workspace:  location.workspace,
+		Host:       who.Host,
+		Session:    who.Session,
+		Agent:      who.Agent,
+		Transcript: who.Transcript,
+		Event:      who.Event,
+		Tool:       tool,
+		ToolMs:     req.ToolMs,
+	})
 }
 
 // spawnVerdictRecord is what the trail keeps about how a spawn or continuation was judged.
@@ -2551,6 +2698,9 @@ func hookLocation(ctx context.Context, deps Dependencies) location {
 		if at.models == nil {
 			at.models = deps.ModelRows
 		}
+		if at.policies == nil {
+			at.policies = policiesAt(ctx, deps, at.workspace)
+		}
 		return at
 	}
 	return hookLocationAt(deps, "")
@@ -2561,6 +2711,14 @@ func hookLocation(ctx context.Context, deps Dependencies) location {
 // resolved config applies; another checkout reads its own magus.yaml, because a cache dir
 // configured in the orchestrator's tree says nothing about where a worker's cache lives.
 func hookLocationAt(deps Dependencies, dir string) location {
+	if dir == "" && deps.Workspace != "" {
+		cacheDir, err := deps.cacheDir("")
+		if err != nil {
+			return location{}
+		}
+		return location{cacheDir: cacheDir, workspace: deps.Workspace, dir: deps.Workspace, models: deps.ModelRows,
+			policies: policiesAt(context.Background(), deps, deps.Workspace)}
+	}
 	root, err := workspace.FindRoot(dir)
 	if err != nil {
 		return location{}
@@ -2581,7 +2739,38 @@ func hookLocationAt(deps Dependencies, dir string) location {
 			dir = wd
 		}
 	}
-	return location{cacheDir: cacheDir, workspace: root, dir: dir, models: deps.ModelRows}
+	return location{cacheDir: cacheDir, workspace: root, dir: dir, models: deps.ModelRows,
+		policies: policiesAt(context.Background(), deps, root)}
+}
+
+// LineWorkspace is the root of the workspace every call on a bash line runs in, the line
+// starting in cwd: a `cd` moves later calls, and so do a magus call's -C and --root. It is
+// "" when cwd is relative, the line does not parse or runs no call, a call's directory
+// cannot be read off the line, or two calls land in different workspaces.
+func LineWorkspace(command, cwd string) string {
+	if !filepath.IsAbs(cwd) {
+		return ""
+	}
+	calls, ok := locateCalls(command, DialectBash, cwd, func(hint.Invocation) bool { return true }, false)
+	if !ok || len(calls) == 0 {
+		return ""
+	}
+	var root string
+	for _, c := range calls {
+		dir, placed := c.at.dir, !c.unfollowed && c.at.known && filepath.IsAbs(c.at.dir)
+		if isMagusInvocation(c.inv) {
+			dir, placed = magusCallDir(c)
+		}
+		if !placed {
+			return ""
+		}
+		found, err := workspace.FindRoot(dir)
+		if err != nil || (root != "" && !samePath(found, root)) {
+			return ""
+		}
+		root = found
+	}
+	return root
 }
 
 // hookContextAt pins the trail location to the checkout holding cwd, the directory the host

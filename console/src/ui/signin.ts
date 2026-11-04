@@ -75,9 +75,7 @@ function rememberPick(root: string): void {
 function tokenEvidence(token: string | null): string {
   if (!token) return "None. Nothing here came from an authenticated server.";
   const tail = token.length > 4 ? token.slice(-4) : token;
-  return (
-    "From your link, ending " + tail + (token.startsWith("mgo_") ? " (the operator token)" : "")
-  );
+  return "From your link, ending " + tail;
 }
 
 let asking = false;
@@ -306,8 +304,11 @@ function ask(roots: readonly string[]): void {
     // straight out into the console behind it, and the two accounts of where the user is disagree.
     const stops = [...box.querySelectorAll<HTMLElement>("button")];
     if (stops.length === 0) return;
-    const edge = e.shiftKey ? stops[0] : stops[stops.length - 1];
-    const wrapTo = e.shiftKey ? stops[stops.length - 1] : stops[0];
+    const first = stops[0];
+    const last = stops[stops.length - 1];
+    if (first === undefined || last === undefined) return;
+    const edge = e.shiftKey ? first : last;
+    const wrapTo = e.shiftKey ? last : first;
     const active = document.activeElement;
     if (active === edge || !(active instanceof Node) || !box.contains(active)) {
       e.preventDefault();

@@ -4,6 +4,7 @@
 namespace agentpolicy\helpers;
 
 import "fs";
+import "magus";
 
 // Program is one program a command runs, copied out of the request because a Buzz test
 // cannot build the host's CommandInvocation.
@@ -213,14 +214,25 @@ export fun vcsRequest(calls: [[str]]) > [Program] {
     return programs;
 }
 
-// JobRow is what the spawn rule reads of one job store row, copied out of magus\job.list
-// because a Buzz test cannot build the host's Job.
+// JobRow is what the spawn rule reads of one job store row.
+// It is copied out of magus\workspace().jobs().
+// A Buzz test cannot build the host's Job.
 export object JobRow {
     id: str,
     parent: str = "",
-    state: str,
+    state: magus\JobState,
     // checkoutRoot is the checkout the row is bound to, "" when it is bound to none or unread.
     checkoutRoot: str = "",
+}
+
+// jobState is the JobState case whose value is s, none for any other.
+fun jobState(s: str) > magus\JobState {
+    foreach (c in magus\JobState) {
+        if (c.value == s) {
+            return c;
+        }
+    }
+    return magus\JobState.none;
 }
 
 // jobRows is a job store, each row spelled as [id, state] or [id, state, parent].
@@ -231,7 +243,7 @@ export fun jobRows(specs: [[str]]) > [JobRow] {
         if (spec.len() > 2) {
             parent = spec[2];
         }
-        rows.append(JobRow{ id = spec[0], state = spec[1], parent = parent });
+        rows.append(JobRow{ id = spec[0], state = jobState(spec[1]), parent = parent });
     }
     return rows;
 }

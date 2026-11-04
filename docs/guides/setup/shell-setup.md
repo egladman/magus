@@ -49,7 +49,7 @@ autoload -Uz compinit && compinit
 
 Do **not** append the zsh script to `~/.zshrc`. It ends by invoking its own completion function, which only means something inside a completion context; sourced from an rc it runs at shell startup and registers nothing.
 
-Unlike the bash recipe this writes a snapshot, so regenerate it after a [`magus self update`](../setup.md#update) to pick up new subcommands and flags.
+Unlike the bash setup this writes a snapshot, so regenerate it after a [`magus self update`](../setup.md#update) to pick up new subcommands and flags.
 
 ### fish
 

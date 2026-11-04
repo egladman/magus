@@ -291,7 +291,7 @@ function build(spec: NoteSpec): Note {
     staleness: spec.staleness ?? Staleness.UNMEASURED,
     outrunDays: spec.outrunDays ?? 0,
     modifyTime: timestampFromMs(Date.now() - spec.editedDaysAgo * 86400000),
-    source: spec.source ? create(SourceSchema, spec.source) : undefined,
+    ...(spec.source ? { source: create(SourceSchema, spec.source) } : {}),
   });
 }
 

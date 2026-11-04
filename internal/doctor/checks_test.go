@@ -397,7 +397,7 @@ func TestDoctorGuardWiringHarnessReportsAnEnabledModNobodyInstalled(t *testing.T
 		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "mod-host")
 		// Personal plugin installs cannot be fixed in CI; doctor advises, verify still fails.
 		require.Equal(t, types.CheckAdvice, c.Status)
-		assert.Contains(t, strings.Join(c.Details, "\n"), "/plugin install magus --marketplace egladman/magus")
+		assert.Contains(t, strings.Join(c.Details, "\n"), "claude plugin marketplace add egladman/magus")
 	})
 
 	t.Run("enabled and installed -> no plugin problem", func(t *testing.T) {
@@ -569,12 +569,8 @@ func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 	// A non-git tree resolves no VCS, which is the same degrade path.
 	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	got := r.checkSelfStalingOutputs(nil)
-	assert.Equal(t, types.CheckOK, got.Status)
-	assert.True(t,
-		strings.Contains(got.Message, "skipped") ||
-			strings.Contains(got.Message, "no VCS") ||
-			strings.Contains(got.Message, "no commit"),
-		"expected a skip, got %q", got.Message)
+	assert.Equal(t, types.EvidenceUnknown, got.Evidence, "a skip is counted unknown, never a pass")
+	assert.Contains(t, got.Message, "skipped")
 }
 
 type detectingWorkspace struct{ types.WorkspaceReader }
@@ -652,7 +648,8 @@ func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
-	assert.Equal(t, types.CheckOK, got.Status, got.Message)
+	assert.Equal(t, types.EvidenceUnknown, got.Evidence, "a check with nothing to enumerate did not run, so it is no pass")
+	assert.Contains(t, got.Message, "skipped")
 }
 
 // TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs is MGS1029: the expansion

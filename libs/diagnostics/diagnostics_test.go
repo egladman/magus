@@ -4,9 +4,100 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 )
+
+// registerTST reserves the TST prefix for a fake catalog, as a composition point would.
+func registerTST(t *testing.T) {
+	t.Helper()
+	if err := RegisterCatalog("tst", []Code{"TST0001", "TST0002"}); err != nil {
+		t.Fatalf("RegisterCatalog(tst) = %v", err)
+	}
+}
+
+func TestPrefixIsTheLeadingCapitals(t *testing.T) {
+	if got := Prefix("ACME1001"); got != "ACME" {
+		t.Errorf("Prefix(ACME1001) = %q, want ACME", got)
+	}
+}
+
+func TestPrefixOfACodeWithNoCapitalsIsEmpty(t *testing.T) {
+	if got := Prefix("1001"); got != "" {
+		t.Errorf("Prefix(1001) = %q, want empty", got)
+	}
+}
+
+func TestRegisterCatalogReservesItsPrefix(t *testing.T) {
+	registerTST(t)
+	if !slices.Contains(ReservedPrefixes(), "TST") {
+		t.Errorf("ReservedPrefixes() = %v, want TST among them", ReservedPrefixes())
+	}
+}
+
+func TestRegisterTheSamePrefixForItsOwnerAgainIsANoOp(t *testing.T) {
+	registerTST(t)
+	if err := Register("TST", "tst"); err != nil {
+		t.Errorf("Register(TST, tst) again = %v, want nil", err)
+	}
+}
+
+func TestOwnerIsWhoRegistered(t *testing.T) {
+	registerTST(t)
+	if o, ok := Owner("TST0009"); !ok || o != "tst" {
+		t.Errorf("Owner(TST0009) = %q, %v, want tst", o, ok)
+	}
+}
+
+func TestOwnerOfAnUnregisteredPrefixIsNone(t *testing.T) {
+	if _, ok := Owner("NOPE0001"); ok {
+		t.Error("Owner(NOPE0001) found an owner nobody registered")
+	}
+}
+
+func TestRegisterRefusesAnotherOwnersPrefix(t *testing.T) {
+	registerTST(t)
+	if err := Register("TST", "other"); err == nil || !strings.Contains(err.Error(), "collides with TST") {
+		t.Errorf("Register(TST, other) = %v, want a collision with TST", err)
+	}
+}
+
+func TestRegisterRefusesAPrefixOfAReservedOne(t *testing.T) {
+	registerTST(t)
+	if err := Register("TS", "other"); err == nil || !strings.Contains(err.Error(), "collides with TST") {
+		t.Errorf("Register(TS, other) = %v, want a collision with TST", err)
+	}
+}
+
+func TestRegisterRefusesAPrefixAReservedOneStarts(t *testing.T) {
+	registerTST(t)
+	if err := Register("TSTX", "other"); err == nil || !strings.Contains(err.Error(), "collides with TST") {
+		t.Errorf("Register(TSTX, other) = %v, want a collision with TST", err)
+	}
+}
+
+func TestRegisterRefusesAMalformedPrefix(t *testing.T) {
+	if err := Register("ws", "other"); err == nil || !strings.Contains(err.Error(), "capital letters") {
+		t.Errorf("Register(ws, other) = %v, want a malformed-prefix error", err)
+	}
+}
+
+func TestEventOfCarriesTheCapturedURL(t *testing.T) {
+	err := fmt.Errorf("wrapped: %w", New(testURL).Errorf("TST0001", "boom"))
+	ev, ok := ErrorEvent(err, "a:build")
+	want := Event{Code: "TST0001", Message: "boom", Unit: "a:build", URL: "https://example/docs/TST0001.md"}
+	if !ok || ev != want {
+		t.Errorf("ErrorEvent = %+v, %v, want %+v", ev, ok, want)
+	}
+}
+
+func TestEventOfAnUncodedErrorIsNone(t *testing.T) {
+	if _, ok := ErrorEvent(errors.New("plain"), "a:build"); ok {
+		t.Error("ErrorEvent found a code in a plain error")
+	}
+}
 
 // testURL is a stand-in docs-URL layout for a fake "TST" domain, so the framework can be tested without
 // any consumer's real code catalog.
@@ -135,6 +226,28 @@ func TestWhyNeverRenders(t *testing.T) {
 	}
 	if got := d.Errorf(Code("TST0006"), "outer: %v", err).Error(); strings.Contains(got, why) {
 		t.Errorf("nested Errorf = %q, carries the why", got)
+	}
+}
+
+func TestFixCrossesIntoBuzzOnly(t *testing.T) {
+	d := New(testURL)
+	const fix = "run magus graph build"
+	err := d.Errorf(Code("TST0010"), "index is stale").WithFix(fix)
+
+	if got := err.Error(); strings.Contains(got, fix) {
+		t.Errorf("Error() = %q, carries the fix", got)
+	}
+	want := map[string]string{
+		"code":    "TST0010",
+		"message": "index is stale",
+		"url":     "https://example/docs/TST0010.md",
+		"fix":     fix,
+	}
+	if got := err.BuzzError(); !maps.Equal(got, want) {
+		t.Errorf("BuzzError = %v, want %v", got, want)
+	}
+	if _, ok := d.Errorf(Code("TST0010"), "no fix").BuzzError()["fix"]; ok {
+		t.Error("BuzzError carries fix for an error without one")
 	}
 }
 

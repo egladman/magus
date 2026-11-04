@@ -136,14 +136,14 @@ export function initSearch(): void {
     if (loading) return;
     loading = true;
     fetch(ROOT + "search-index.json")
-      .then((r) => {
-        if (!r.ok) throw new Error("search index HTTP " + r.status);
-        return r.json();
-      })
+      .then((r) => (r.ok ? r.json() : null))
       .then((data: unknown) => {
-        if (!Array.isArray(data)) throw new Error("search index is not an array");
-        index = data;
         loading = false;
+        if (!Array.isArray(data)) {
+          if (fail) fail();
+          return;
+        }
+        index = data;
         ready();
       })
       .catch(() => {

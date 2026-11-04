@@ -1,0 +1,126 @@
+import "assert";
+import "fs";
+import "./tests" as layers;
+
+final DIR = "hack/retro/testdata/tests";
+final MODULE = "example.com/demo";
+
+fun id(name: str) > str {
+    return "symbol:gomod example.com/demo `example.com/demo/pkg`/{name}().";
+}
+
+fun sym(name: str, file: str, line: int, end: int) > layers\Sym {
+    return layers\Sym{ id = id(name), label = name, file = file, line = line, end = end };
+}
+
+fun nodes() > {str: layers\Sym} {
+    final all = mut {<str: layers\Sym>};
+    foreach (s in [
+        sym("Allow", file: "pkg/gate.go", line: 3, end: 11),
+        sym("Inner", file: "pkg/gate.go", line: 13, end: 15),
+        sym("Serve", file: "pkg/serve.go", line: 1, end: 3),
+        sym("TestAllowPasses", file: "pkg/gate_test.go", line: 9, end: 14),
+        sym("TestInnerWithMock", file: "pkg/gate_test.go", line: 16, end: 21),
+        sym("fixture", file: "pkg/gate_test.go", line: 23, end: 25),
+        sym("TestFlowEndToEnd", file: "pkg/flow_test.go", line: 7, end: 9),
+    ]) {
+        all[s.id] = s;
+    }
+    return all;
+}
+
+fun calls() > [layers\Call] {
+    final found = mut [<layers\Call>];
+    foreach (pair in [
+        ["TestAllowPasses", "Allow"], ["TestAllowPasses", "fixture"], ["Allow", "Inner"],
+        ["TestInnerWithMock", "Inner"], ["TestFlowEndToEnd", "Serve"], ["Serve", "Allow"],
+    ]) {
+        found.append(layers\Call{ caller = id(pair[0]), callee = id(pair[1]) });
+    }
+    return found;
+}
+
+fun sources() > {str: str} !> any {
+    return {
+        "pkg/gate.go": fs\readFile("{DIR}/gate.go.txt"),
+        "pkg/gate_test.go": fs\readFile("{DIR}/gate_test.go.txt"),
+        "pkg/flow_test.go": fs\readFile("{DIR}/flow_test.go.txt"),
+    };
+}
+
+fun findings(depth: int) > [layers\Finding] !> any {
+    final all = nodes();
+    final blocks = layers\parseProfile(fs\readFile("{DIR}/profile.txt"), module: MODULE);
+    return layers\report([all[id("Allow")]!, all[id("Inner")]!], nodes: all, calls: calls(), blocks: blocks,
+        sources: sources(), module: MODULE, depth: depth);
+}
+
+fun reached(f: layers\Finding) > [str] {
+    final found = mut [<str>];
+    foreach (r in f.reach) {
+        found.append("{r.depth} {r.root.label} {r.layer} [{r.signals.join("; ")}] via {r.via.join(" -> ")}");
+    }
+    return found;
+}
+
+test "tests reach a symbol by directed calls only: a test of a shared callee does not count" {
+    final f = findings(3);
+    assert\equal(reached(f[0]), want: [
+        "1 TestAllowPasses integration [real filesystem (fixture)] via TestAllowPasses -> Allow",
+        "2 TestFlowEndToEnd e2e [e2e build tag (pkg/flow_test.go)] via TestFlowEndToEnd -> Serve -> Allow",
+    ], message: "Allow");
+    assert\equal(reached(f[1]), want: [
+        "1 TestInnerWithMock unit [mock typestest (TestInnerWithMock)] via TestInnerWithMock -> Inner",
+        "2 TestAllowPasses integration [real filesystem (fixture)] via TestAllowPasses -> Allow -> Inner",
+        "3 TestFlowEndToEnd e2e [e2e build tag (pkg/flow_test.go)] via TestFlowEndToEnd -> Serve -> Allow -> Inner",
+    ], message: "Inner");
+    assert\equal(f[0].reach[0].helpers, want: ["fixture"], message: "helpers");
+    assert\equal(f[0].reach[0].asserts, want: 1, message: "asserts");
+}
+
+test "--depth bounds the walk up the calls edges" {
+    final f = findings(1);
+    assert\equal(reached(f[1]), want: ["1 TestInnerWithMock unit [mock typestest (TestInnerWithMock)] via TestInnerWithMock -> Inner"], message: "depth 1");
+}
+
+test "the profile's never-ran blocks and joined conditions are cited" {
+    final f = findings(3);
+    assert\equal([f[0].covered, f[0].total, f[0].blocks], want: [4, 5, 5], message: "Allow coverage");
+    assert\equal(f[0].uncovered.len(), want: 1, message: "one block never ran");
+    assert\equal("{f[0].uncovered[0].span} at {f[0].uncovered[0].at}", want: "7.38,9.3 at 5", message: "cite");
+    assert\equal(f[0].operands, want: [
+        "pkg/gate.go:4 `if lease == \"\" || path == \"\" \{` joins conditions with ||; its block ran 5 time(s), and which operand fired is not recorded",
+    ], message: "operand");
+    assert\equal([f[1].covered, f[1].total, f[1].uncovered.len()], want: [1, 1, 0], message: "Inner coverage");
+}
+
+test "the worklist asks the rubric's questions with the evidence that raised them" {
+    final f = findings(3);
+    assert\equal(f[0].worklist, want: [
+        "layer mismatch? 1 test(s) call Allow directly; signals across all 2: unit 0, integration 1, e2e 1; does each tier match the contract it proves?",
+        "happy-path-only? 1 statement(s) in 1 block(s) of pkg/gate.go never ran (7-9); which failure branch does no test take, and which tier should own it?",
+        "happy-path-only? no reaching test names a failure (deny, refuse, fail, error, reject, invalid, missing); read their asserts",
+        "operand? pkg/gate.go:4 `if lease == \"\" || path == \"\" \{` joins conditions with ||; its block ran 5 time(s), and which operand fired is not recorded; does a test fail when one operand is flipped?",
+        "assertions observe the outcome? read TestAllowPasses pkg/gate_test.go:9-14 (1 assertion line(s)); TestFlowEndToEnd pkg/flow_test.go:7-9 (0 assertion line(s)); does each compare the whole result, not one field?",
+    ], message: "Allow");
+    assert\equal(f[1].worklist[f[1].worklist.len() - 1],
+        want: "fake where the real thing is cheap? TestInnerWithMock use a mock; does it preserve the contract, and is the real collaborator cheap here?", message: "fake");
+}
+
+test "a symbol no test reaches is untested, not silent" {
+    final all = nodes();
+    final f = layers\report([all[id("Serve")]!], nodes: all, calls: [<layers\Call>], blocks: [<layers\Block>], sources: sources(), module: MODULE, depth: 3);
+    assert\equal(f[0].worklist, want: ["untested? no test reaches Serve within depth 3 of calls edges; which tier should own its contract?"], message: "untested");
+}
+
+test "a profile with no block for a file in scope is refused" {
+    final blocks = layers\parseProfile(fs\readFile("{DIR}/profile.txt"), module: MODULE);
+    final ok = layers\checkProfile(blocks, files: ["pkg/gate.go"], profile: "p") catch "raised";
+    assert\equal(ok == null, want: true, message: "held");
+    final narrow = layers\checkProfile(blocks, files: ["pkg/gate.go", "pkg/serve.go"], profile: "p") catch "raised";
+    assert\equal(narrow, want: "raised", message: "narrow");
+}
+
+test "a symbol id names its package less the module" {
+    assert\equal(layers\packageOf(id("Allow"), module: MODULE), want: "pkg", message: "package");
+}

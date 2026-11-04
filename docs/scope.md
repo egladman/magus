@@ -416,15 +416,16 @@ than inheriting the host's. The trade is coherent and the cost is large.
 Each of those took on a new capability. magus's additions read a model it already
 had to build, and the test above is how to check any one of them against its diff.
 
-The agent-harness world drew the line at the opposite extreme, and the contrast
-is worth stating because magus keeps being read as a member of that category.
+Inner harnesses, the agent loops, drew the line at the opposite extreme, and
+the contrast is worth stating because magus keeps being read as one of them
+([The model proposes, the harness executes](design/principles/the-model-proposes-the-harness-executes.md)).
 deepseek-harness's published decision notes sharpened the lease
 checkpoint and release semantics, which is why the architectural disagreement
 deserves stating precisely. It makes every module a plugin (the model adapter,
 the tool registry, the session log, the agent loop itself), so there is no
 privileged core to patch: what remains is a small kernel, Cordis, owning the
 context, the service registry, and plugin lifecycle, with a few services still
-marked core rather than swappable. For a harness that is a defensible bet: a harness is an orchestration shell,
+marked core rather than swappable. For an inner harness that is a defensible bet: an agent loop is an orchestration shell,
 its behavior is supposed to be yours, and hackability is the product. magus made
 the opposite bet for the opposite reason. A build tool's product is its verdicts:
 the cache saying a replay is honest, the drift gate saying generated output

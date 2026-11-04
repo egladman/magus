@@ -2,6 +2,7 @@
 // .github/actions/advice/figure-link.buzz writes it, so a change to the shape is a change there.
 // A fragment never reaches a server, which is why the hosted console can draw it with no backend.
 
+import { MagusError, attempt, fail, ok, parseJSON, type Result } from "../../../gen/magus/types";
 import type { Stroke } from "./wasm";
 
 export const FIGURE_LINK_VERSION = 2;
@@ -31,11 +32,7 @@ export interface LinkedFigure {
   readonly edges: readonly LinkedEdge[];
 }
 
-export type FigureLinkRead =
-  | { readonly ok: true; readonly figure: LinkedFigure }
-  | { readonly ok: false; readonly error: string };
-
-const fail = (error: string): FigureLinkRead => ({ ok: false, error });
+const refuse = (message: string): Result<never> => fail(new MagusError({ code: "", message }));
 
 const isStroke = (v: string): v is Stroke => STROKES.some((s) => s === v);
 
@@ -59,48 +56,41 @@ function decodeBase64url(raw: string): Uint8Array | string {
 
 // decodeFigureLink reads the payload after "#figure=". Every failure names what was wrong
 // with the link; none throws.
-export function decodeFigureLink(payload: string): FigureLinkRead {
+export function decodeFigureLink(payload: string): Result<LinkedFigure> {
   const bytes = decodeBase64url(payload);
-  if (typeof bytes === "string") return fail(bytes);
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    // reported: the fail() result surfaces in the Figures view.
-    return fail("the link is not UTF-8 text");
-  }
-  let doc: unknown;
-  try {
-    doc = JSON.parse(text);
-  } catch (e) {
-    return fail("the link is not JSON: " + (e instanceof Error ? e.message : String(e)));
-  }
-  const top = record(doc);
-  if (!top) return fail("the link holds no object");
+  if (typeof bytes === "string") return refuse(bytes);
+  const text = attempt(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  if (text.error) return refuse("the link is not UTF-8 text");
+  const doc = parseJSON(text.value);
+  if (doc.error) return refuse("the link is not JSON: " + doc.error.message);
+  const top = record(doc.value);
+  if (!top) return refuse("the link holds no object");
   if (top.v !== FIGURE_LINK_VERSION)
-    return fail(
+    return refuse(
       "the link is version " +
         JSON.stringify(top.v) +
         " and this console reads version " +
         FIGURE_LINK_VERSION,
     );
   if (top.kind !== "deps")
-    return fail('the link draws a "' + String(top.kind) + '" figure and this console draws "deps"');
-  if (typeof top.title !== "string") return fail("the link has no title");
-  if (!Array.isArray(top.nodes)) return fail("the link has no nodes");
+    return refuse(
+      'the link draws a "' + String(top.kind) + '" figure and this console draws "deps"',
+    );
+  if (typeof top.title !== "string") return refuse("the link has no title");
+  if (!Array.isArray(top.nodes)) return refuse("the link has no nodes");
 
   const nodes: LinkedNode[] = [];
   const ids = new Set<string>();
   for (const [i, raw] of top.nodes.entries()) {
     const n = record(raw);
     if (!n || typeof n.id !== "string" || n.id === "" || typeof n.label !== "string")
-      return fail("node " + i + " has no id and label");
-    if (ids.has(n.id)) return fail("node id " + JSON.stringify(n.id) + " appears twice");
+      return refuse("node " + i + " has no id and label");
+    if (ids.has(n.id)) return refuse("node id " + JSON.stringify(n.id) + " appears twice");
     ids.add(n.id);
     nodes.push({ id: n.id, label: n.label, seed: n.seed === true });
   }
 
-  if (!Array.isArray(top.edges)) return fail("the link has no edges");
+  if (!Array.isArray(top.edges)) return refuse("the link has no edges");
   const edges: LinkedEdge[] = [];
   for (const [i, raw] of top.edges.entries()) {
     if (
@@ -109,15 +99,22 @@ export function decodeFigureLink(payload: string): FigureLinkRead {
       raw.length > 4 ||
       raw.some((part) => typeof part !== "string")
     )
-      return fail("edge " + i + " is not [from, to, stroke?, label?] strings");
-    const [from, to, stroke = "plain", label = ""] = raw as string[];
+      return refuse("edge " + i + " is not [from, to, stroke?, label?] strings");
+    const [from, to, stroke = "plain", label = ""]: unknown[] = raw;
+    if (
+      typeof from !== "string" ||
+      typeof to !== "string" ||
+      typeof stroke !== "string" ||
+      typeof label !== "string"
+    )
+      return refuse("edge " + i + " is not [from, to, stroke?, label?] strings");
     for (const end of [from, to])
-      if (!ids.has(end)) return fail("edge " + i + " names " + JSON.stringify(end) + ", no node");
+      if (!ids.has(end)) return refuse("edge " + i + " names " + JSON.stringify(end) + ", no node");
     if (!isStroke(stroke))
-      return fail(
+      return refuse(
         `edge ${i} has stroke ${JSON.stringify(stroke)}, not one of ${STROKES.join(", ")}`,
       );
     edges.push({ from, to, stroke, label });
   }
-  return { ok: true, figure: { title: top.title, nodes, edges } };
+  return ok({ title: top.title, nodes, edges });
 }

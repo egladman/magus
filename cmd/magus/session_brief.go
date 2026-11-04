@@ -101,6 +101,9 @@ type sessionBrief struct {
 	// Unintegrated are the finished jobs whose branches hold commits this checkout has not
 	// got, nil when none wait. Without a count here, nothing reminds a session they exist.
 	Unintegrated *briefUnintegrated `json:"unintegrated,omitempty"`
+	// Unmerged is what the checkout's branch does not hold, the facts
+	// the stop rule refuses on.
+	Unmerged types.JobUnmergedReport `json:"unmerged"`
 	// Attention is the open attention queue, the same count `session ls` prints. Nil means
 	// the brief was not gathered, which prints nothing; a store that could not be read is
 	// Unread on a non-nil value, so the two never read as an empty queue.
@@ -138,13 +141,11 @@ type sessionBrief struct {
 	Recent []briefSession `json:"recent,omitempty"`
 }
 
-// briefUnintegrated counts finished branches off the base, against the thresholds at which a
-// fork advises and refuses; Unknown says why they could not be counted.
+// briefUnintegrated counts finished branches off the base. Unknown says why
+// they could not be counted.
 type briefUnintegrated struct {
 	Count    int      `json:"count"`
 	Branches []string `json:"branches,omitempty"`
-	AdviseAt int      `json:"advise_at"`
-	RefuseAt int      `json:"refuse_at"`
 	Unknown  string   `json:"unknown,omitempty"`
 }
 
@@ -331,6 +332,9 @@ func admitSessionBrief(ctx context.Context, root string) (func(), error) {
 	}, required)
 }
 
+// briefUnmergedLines caps what the brief prints of the unmerged report.
+const briefUnmergedLines = 10
+
 // gatherSessionBrief reads the checkout. ws is the loaded workspace, or nil when the
 // magusfile would not load, which costs the classification and nothing else.
 //
@@ -349,7 +353,9 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	}
 	if rows, err := readJobRows(ctx, root); err != nil {
 		brief.Jobs = &briefJobTree{Unread: err.Error()}
+		brief.Unmerged.Unknown = err.Error()
 	} else {
+		brief.Unmerged = job.Unmerged(ctx, root, rows)
 		acting, _, _ := checkoutLease(ctx, root)
 		brief.Leases, brief.OtherLeases = briefLeases(rows, acting, root)
 		brief.Jobs = sessionJobTree(ctx, rows, acting, root, vcsOpts)
@@ -562,23 +568,23 @@ func sessionJobTree(ctx context.Context, rows []types.Job, acting, root string, 
 	}
 	out := &briefJobTree{Root: acting}
 	// The root's own row is not in the tree, so its forks are the top level.
-	for _, line := range jobTreeOrder(withoutParent(tree, acting)) {
-		if line.lease.State == types.StateExited && line.lease.Rejection == nil {
-			out.Uncollected = append(out.Uncollected, line.lease.ID)
+	for _, line := range job.TreeOrder(withoutParent(tree, acting)) {
+		if line.Job.State == types.StateExited && line.Job.Rejection == nil {
+			out.Uncollected = append(out.Uncollected, line.Job.ID)
 		}
 		if len(out.Jobs) == briefMaxJobs {
 			out.More++
 			continue
 		}
-		job := briefTreeJob(ctx, rows, line.lease, vcsOpts)
-		job.Depth = line.depth
-		out.Jobs = append(out.Jobs, job)
+		brief := briefTreeJob(ctx, rows, line.Job, vcsOpts)
+		brief.Depth = line.Depth
+		out.Jobs = append(out.Jobs, brief)
 	}
 	return out
 }
 
-// withoutParent clears parent from rows' Parent, so jobTreeOrder places its children at
-// the top level rather than after a row the tree does not carry.
+// withoutParent clears parent from rows' Parent, so job.TreeOrder places its
+// children at the top level rather than after a row the tree does not carry.
 func withoutParent(rows []types.Job, parent string) []types.Job {
 	if parent == "" {
 		return rows
@@ -791,6 +797,13 @@ func (b sessionBrief) Text() string {
 	b.writeFailures(&s)
 	b.writeLeases(&s)
 	b.writeUnintegrated(&s)
+	unmerged := b.Unmerged.Lines()
+	for _, line := range unmerged[:min(len(unmerged), briefUnmergedLines)] {
+		briefLine(&s, "%s", line)
+	}
+	if len(unmerged) > briefUnmergedLines {
+		briefLine(&s, "  and %d more; `%s` lists every one", len(unmerged)-briefUnmergedLines, hint.LsJobs.With())
+	}
 	b.writeJobs(&s)
 	b.writeAttention(&s)
 	b.writeFeedback(&s)
@@ -911,7 +924,7 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 // unintegratedBranches counts the finished branches waiting off this checkout's revision,
 // nil when none wait. A count that could not be read says why rather than reading as zero.
 func unintegratedBranches(ctx context.Context, root string) *briefUnintegrated {
-	out := &briefUnintegrated{AdviseAt: globalCfg.Jobs.IntegrateAdviseAt, RefuseAt: globalCfg.Jobs.IntegrateRefuseAt}
+	out := &briefUnintegrated{}
 	store, err := openJobs(ctx, root, jobOpen{})
 	if err != nil {
 		out.Unknown = err.Error()
@@ -942,11 +955,8 @@ func (b sessionBrief) writeUnintegrated(s *strings.Builder) {
 		briefLine(s, "finished branches off the base: unknown, %s", u.Unknown)
 		return
 	}
-	briefLine(s, "finished branches off the base: %d (a fork advises at %d, refuses at %d): %s",
-		u.Count, u.AdviseAt, u.RefuseAt, strings.Join(u.Branches, ", "))
-	if u.Count >= u.AdviseAt {
-		briefLine(s, "  integrate them: `%s` with a record naming them in integrates", hint.JobFork.With("--stdin", "--checkout", "<dir>"))
-	}
+	briefLine(s, "finished branches off the base: %d: %s", u.Count, strings.Join(u.Branches, ", "))
+	briefLine(s, "  integrate them: `%s` with a record naming them in integrates", hint.JobFork.With("--stdin", "--checkout", "<dir>"))
 }
 
 func (b sessionBrief) writeJobs(s *strings.Builder) {

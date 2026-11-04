@@ -54,8 +54,8 @@ func WriteChanges(w io.Writer, c types.Changes) error {
 	return json.NewEncoder(w).Encode(c)
 }
 
-// capabilitiesDoc is a provider's capabilities on one base, as a document.
-type capabilitiesDoc struct {
+// CapabilitiesDoc is a provider's capabilities on one base, as a document.
+type CapabilitiesDoc struct {
 	Schema       string              `json:"schema"`
 	Base         string              `json:"base"`
 	StackMerge   types.StackMerge    `json:"stack_merge"`
@@ -79,7 +79,7 @@ func WriteCapabilities(w io.Writer, base string, c types.Capabilities) error {
 	if err := c.Check(); err != nil {
 		return fmt.Errorf("%s: %w", types.SchemaCapabilities, err)
 	}
-	doc := capabilitiesDoc{Schema: types.SchemaCapabilities, Base: base, StackMerge: c.StackMerge,
+	doc := CapabilitiesDoc{Schema: types.SchemaCapabilities, Base: base, StackMerge: c.StackMerge,
 		LinearStacks: c.LinearStacks, Methods: c.Methods, RequiredApprovals: c.RequiredApprovals, QueueLabel: c.QueueLabel}
 	if c.Setup != nil {
 		s := *c.Setup

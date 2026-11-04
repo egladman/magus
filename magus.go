@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,7 +35,6 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
-	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/report"
@@ -42,9 +42,11 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
@@ -288,8 +290,9 @@ func (w internals) CheckSpawn(parent, child types.ModelTier) error {
 func (w internals) Telemetry() observability.Provider { return w.tel }
 
 // FindRoot walks up from dir to the workspace root. The nearest magus.yaml wins; with
-// none, the root is the outermost contiguous directory holding a project marker
-// (magusfiles/, magusfile.buzz or go.mod). With neither, the error carries
+// none, the root is the outermost contiguous directory holding a magusfile
+// (magusfiles/ or magusfile.buzz), and then the nearest VCS checkout, which logs a
+// warning naming `magus init`. No language manifest roots one. With none, the error carries
 // [types.NoWorkspaceRoot]. An empty dir is an error: a library has no working directory
 // to fall back to, so pass the directory to start from (os.Getwd's, if that is meant).
 func FindRoot(dir string) (string, error) {
@@ -410,11 +413,9 @@ func (m *Magus) load(ctx context.Context) error {
 		return errors.Join(err, m.spellShadows())
 	}
 	m.magusfileExports = customTargets
-	// Workspace providers run HERE, in the one window where both facts they need are
-	// true: the magusfiles have been evaluated (so magus\workspace.provider has named
-	// its spells, and those spells are registered), and the registry has not been
-	// applied yet (so magus\project("libs/foo", {...}) still layers on top of a
-	// provided project rather than being overwritten by it).
+	// Workspace providers run HERE, where both facts they need hold.
+	// The magusfiles ran, so magus\workspaceProvider named its spells.
+	// The registry waits, so magus\project still layers on top.
 	if !m.skipProviders {
 		if err := workspace.AddProvidedProjects(ctx, m.ws, m.wsReg.Providers(), workspace.ProviderCache{
 			Dir:       resolveCacheDir(m.ws.Root, m.cfg),
@@ -438,7 +439,41 @@ func (m *Magus) load(ctx context.Context) error {
 		return err
 	}
 	m.autobindMagusfileSpell()
+	if err := checkSymbolIndexerOptIns(m.cfg.Spells.SymbolIndexers, m.All()); err != nil {
+		return err
+	}
 	return m.spellShadows()
+}
+
+// checkSymbolIndexerOptIns refuses a spells.symbol_indexers entry that names no spell
+// with an external SCIP indexer, built in or bound by a project. A misspelled entry would
+// otherwise opt nothing in, and the language would keep reporting no index with no word
+// about why.
+func checkSymbolIndexerOptIns(optIns []string, projects []*types.Project) error {
+	if len(optIns) == 0 {
+		return nil
+	}
+	external := map[string]bool{}
+	for name, d := range spell.Builtins() {
+		if d.SymbolIndexer != nil && d.SymbolIndexer.Format == spells.SymbolFormatSCIP {
+			external[name] = true
+		}
+	}
+	for _, p := range projects {
+		for _, sp := range p.ResolvedSpells {
+			if si := sp.SymbolIndexer(); si != nil && si.Format == spells.SymbolFormatSCIP {
+				external[sp.Name()] = true
+			}
+		}
+	}
+	var errs []error
+	for _, name := range optIns {
+		if !external[name] {
+			errs = append(errs, fmt.Errorf("magus.yaml %s lists %q, which names no spell with an external SCIP indexer (the spells that declare one: %s)",
+				symbols.OptInSetting, name, strings.Join(slices.Sorted(maps.Keys(external)), ", ")))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // refuseHumanOnlyInGate errors when a project's `ci`, or a target its ctx.needs chain
@@ -480,11 +515,11 @@ func (m *Magus) spellRegistryClient(ctx context.Context, host string) (*oci.Clie
 	if !ok {
 		return c, nil
 	}
-	pass, err := m.resolver.Read(ctx, entry.Password)
+	pass, err := m.resolver.Read(ctx, entry.PasswordRef)
 	if err != nil {
 		return nil, fmt.Errorf("spells.registries %s: %w", host, err)
 	}
-	c.Username, c.Password = entry.Username, pass.Reveal()
+	c.Credentials = oci.Credentials{Username: entry.Username, Password: pass}
 	return c, nil
 }
 
@@ -1831,18 +1866,12 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
 		return string(b), err == nil
 	}
-	conformance, base, note, err := diffConformance(m.cfg.Knowledge.Conformance.Options(), cfg, in.patch, generated, in.read)
+	conformance, err := diffConformance(m.cfg.Knowledge.Conformance.Options(), cfg, generated)
 	if err != nil {
 		fail("knowledge.conformance could not be read", err)
 		return
 	}
-	if patchErr != nil && conformance.RatchetPath != "" {
-		base, note = nil, fmt.Sprintf("conformance: the patch could not be read, so what the change did to %s is unknown", conformance.RatchetPath)
-	}
-	if note != "" {
-		out.Notes = append(out.Notes, note)
-	}
-	in.conformance, in.ratchetBase = conformance, base
+	in.conformance = conformance
 	attachConformance(byPath, graph, in)
 }
 
@@ -1978,8 +2007,8 @@ func (m *Magus) Where(dir string) (*types.Project, bool) {
 
 // BaseLastPassed is the base ref that means "the commit this branch last completed a
 // fully passing run at", read from the run history rather than from the VCS. Every
-// entry point that takes a base ref accepts it, so `--base last-passed`,
-// MAGUS_VCS_BASE_REF, and magus\affected() all reach the same resolution.
+// entry point that takes a base ref accepts it.
+// `--base last-passed` and magus\change().affected() reach one resolution.
 const BaseLastPassed = "last-passed"
 
 // Affected computes projects touched by VCS changes since base.
@@ -1999,11 +2028,9 @@ func (m *Magus) Affected(ctx context.Context, base string) (*types.AffectedResul
 // resolveLastPassed translates [BaseLastPassed] into the commit the current branch last
 // passed at, and passes any other base through untouched.
 //
-// It resolves HERE rather than in vcs.Resolve's precedence chain because the answer does
-// not come from the VCS at all: it comes from the run history, which the vcs package
-// must not learn about. Affected is the single funnel every affected computation goes
-// through (ExpandAffected and Plan both call it), so one resolution covers the CLI, the
-// shard planner, and magus\affected in a magusfile.
+// It resolves HERE, not in vcs.Resolve: the answer is the run history.
+// Every affected computation goes through Affected.
+// So one resolution covers the CLI, the planner and change().affected.
 //
 // The fallback when nothing was recorded is the PARENT of HEAD, announced. It is not the
 // configured default: on the branch that builds itself the default base is that same

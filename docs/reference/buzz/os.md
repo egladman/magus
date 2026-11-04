@@ -79,7 +79,7 @@ Return the absolute path of the running magus binary. Pair it with fs\stat insid
 
 ### retry
 
-Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error a host call inside fn raised keeps its type, and one typed non-retryable stops at once; a value fn throws itself, a string included, is retried. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}; a wrongly typed or negative option raises.
+Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error a host call inside fn raised keeps its type, and one typed non-retryable stops at once; a value fn throws itself, a string included, is retried. opts is a RetryOptions: backoffMs is the first pause (default 500) and maxBackoffMs caps it (default 30000); a negative option raises.
 
 **Signature:** `os\retry(max, fn, [opts]) -> any` - [source](https://github.com/egladman/magus/blob/main/std/os.go)
 

@@ -5,10 +5,9 @@ runs:
   using: composite
   steps:
     # Every indexer is pinned in mise.toml; this catches a runner whose environment did
-    # not activate the same toolchain Magus will use for target execution.
+    # not activate the same toolchain Magus will use for target execution. Go and Buzz
+    # index in-process; only TypeScript still ships an external indexer.
     - name: Install and verify SCIP indexers
       shell: bash
       run: |
-        scip-go --version
-        scip-buzz --version
         scip-typescript --version

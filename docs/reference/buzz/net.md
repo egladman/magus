@@ -16,15 +16,15 @@ TCP readiness and port allocation: wait for a service to accept connections, and
 
 ### waitForPort
 
-Block until a TCP connection to host:port succeeds, then return true; return false when the timeout elapses first. Use it after starting a dev server or a container instead of sleeping a guessed number of seconds. timeout_ms defaults to 30000. Returns FALSE rather than raising on timeout, so a caller can fall back or report its own message; the run's cancellation is honored, so Ctrl-C does not wait out the timeout.
+Block until a TCP connection to host:port succeeds, then return true; return false when the timeout elapses first. Use it after starting a dev server or a container instead of sleeping a guessed number of seconds. timeoutMs defaults to 30000. Returns FALSE rather than raising on timeout, so a caller can fall back or report its own message; the run's cancellation is honored, so Ctrl-C does not wait out the timeout.
 
-**Signature:** `net\waitForPort(host, port, [timeout_ms]) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/net.go)
+**Signature:** `net\waitForPort(host, port, [timeoutMs]) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/net.go)
 
-| Parameter    | Type     | Optional | Description |
-| ------------ | -------- | -------- | ----------- |
-| `host`       | `string` |          |             |
-| `port`       | `int`    |          |             |
-| `timeout_ms` | `int`    | yes      |             |
+| Parameter   | Type     | Optional | Description |
+| ----------- | -------- | -------- | ----------- |
+| `host`      | `string` |          |             |
+| `port`      | `int`    |          |             |
+| `timeoutMs` | `int`    | yes      |             |
 
 **Returns:** bool
 

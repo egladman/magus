@@ -52,14 +52,14 @@ route. The daemon refuses to start if a procedure has no need, or a need is
 none or names a level its scope lacks, and a daemon whose workspace failed to
 load holds every route to the same needs.
 
-| Route                                                                                                        | Needs           |
-| ------------------------------------------------------------------------------------------------------------ | --------------- |
-| `/mcp`                                                                                                       | `mcp=write`     |
-| TokenService, every procedure                                                                                | `tokens=write`  |
-| JobService `RunJob`                                                                                          | `console=write` |
-| `/api/v1/diff` and its sub-routes, `/api/v1/plan`, `/api/v1/attention`, `POST /api/v1/share`                 | `console=write` |
-| every other procedure: Activity, Graph, Insight, Status, Tool, Notes, Metrics, Viewer, JobService `ListJobs` | `console=read`  |
-| `/api/v1/events`, `/api/v1/insight`, `/api/v1/graph`                                                         | `console=read`  |
+| Route                                                                                                               | Needs           |
+| ------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `/mcp`                                                                                                              | `mcp=write`     |
+| TokenService, every procedure                                                                                       | `tokens=write`  |
+| JobService `RunJob`                                                                                                 | `console=write` |
+| `/api/v1/diff` and its sub-routes, `/api/v1/plan`, `/api/v1/attention`, `POST /api/v1/share`                        | `console=write` |
+| every other procedure: Activity, Graph, HistoryMetrics, Status, Tool, Notes, Metrics, Viewer, JobService `ListJobs` | `console=read`  |
+| `/api/v1/events`, `/api/v1/graph`                                                                                   | `console=read`  |
 
 The diff, plan and attention routes need `console=write` because they serve
 unreviewed source, every target's name, or an action.
@@ -98,7 +98,7 @@ before it hashes anything:
 | `mgo_` | operator | `$XDG_STATE_HOME/magus/mcp_token`, 0600                        | never; rotate it with `magus config token generate --force` |
 | `mgs_` | stored   | `$XDG_STATE_HOME/magus/tokens.d/<name>.json`, only its SHA-256 | 90 days by default, at most 366                             |
 | `mgl_` | share    | the daemon's memory                                            | 15 minutes by default, at most 24 hours                     |
-| `mgx_` | exchange | `tokens.d`, only its SHA-256                                   | one minute, and spent on first use                          |
+| `mgx_` | exchange | `tokens.d`, only its SHA-256                                   | ten seconds, and spent on first use                         |
 
 Every class has one layout: the prefix, 43 base62 characters of randomness, and
 a 6-character CRC32 of those, so a typo fails before any lookup. A secret
@@ -110,6 +110,20 @@ an exchange code is never a bearer anywhere. A share link's listener accepts its
 own `mgl_` token and nothing else. The operator token is refused from any peer
 that is not loopback, judged by the TCP peer address, so even a daemon bound past
 loopback with `mcp.insecure_bind` serves only stored tokens to the network.
+
+The console never holds an operator token. It refuses an `mgo_` token in a link's
+fragment, forgets one a browser stored earlier, and names
+`magus config console token create`, which mints the token to use instead.
+
+The daemon refuses an `mgo_` token on every console route as well, with the same
+pointer. A credential that reaches `/mcp` and token management has no business in a
+browser. The CLI is held to the same rule: `magus diff` and `magus notes` mint a
+console token for their calls to the review routes and revoke it when they finish,
+so the operator token stays out of those requests. With no daemon listening they
+mint nothing.
+
+A share link travels over plaintext HTTP on the LAN, so anyone on that network can
+read its token until it expires.
 
 One credential has no token and no prefix: `socket-peer`, the caller on the
 daemon's [unix socket](../guides/integrations/server.md#two-transports). The kernel
@@ -162,12 +176,17 @@ open "http://127.0.0.1:7391/console/#code=$(magus config console token create --
 ```
 
 The console trades the code at `POST /api/v1/token/exchange` for a console token
-living 12 hours, and scrubs it from the address bar. A code lives one minute and
+living 12 hours, and scrubs it from the address bar. A code lives ten seconds and
 works once, so the opener's argv, a shell history or a screen share holds nothing
 worth taking. The browser then holds a token that cannot reach token management,
 so a script injected into the console cannot mint anything. A console handed the
-operator token itself trades it for a console token at once, and says so loudly
-when it cannot.
+operator token itself refuses it and names the command above.
+
+The daemon answers console routes for its loopback origins alone. To trust a page
+hosted elsewhere, list its exact `scheme://host` origin in `mcp.allowed_origins`,
+which is empty by default. `magus graph export --open` fails naming that key when
+the explorer's origin is not listed, because the page receives the graph. An entry
+that is not an exact origin stops the daemon at start.
 
 ## Agents
 

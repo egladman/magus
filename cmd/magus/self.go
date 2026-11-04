@@ -85,6 +85,10 @@ func selfPlaceCommand(ctx context.Context, args []string) error {
 		return fmt.Errorf("magus self place: want one binary to place, got %d arguments", fs.NArg())
 	}
 	source := fs.Arg(0)
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 
 	repl, err := readPlaceStamp(ctx, source)
 	if err != nil {
@@ -100,8 +104,17 @@ func selfPlaceCommand(ctx context.Context, args []string) error {
 	if err := placeInto(source, target); err != nil {
 		return fmt.Errorf("magus self place: %w", err)
 	}
+	if opts.Format != outputText {
+		return emitRecord(opts, selfPlaceOutput{Commit: repl.Commit, BuildDate: repl.BuildDate, Path: target}, []string{target})
+	}
 	fmt.Printf("Placed %s (built %s) at %s\n", repl.Commit, repl.BuildDate, target)
 	return nil
+}
+
+type selfPlaceOutput struct {
+	Commit    string `json:"commit"`
+	BuildDate string `json:"build_date"`
+	Path      string `json:"path"`
 }
 
 func readPlaceStamp(ctx context.Context, source string) (types.BuildStamp, error) {

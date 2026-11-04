@@ -18,18 +18,18 @@ import (
 // API naming an internal type. Each field is documented on the function of the same name
 // below.
 type Builders struct {
-	BuildGlobal          func(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error)
-	Build                func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error)
-	MergeSymbols         func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error
-	MergeSymbolsForRef   func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error
-	Query                func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, input string, budget int, log *slog.Logger) (types.KnowledgeQueryOutput, *knowledge.Graph, error)
-	SymbolGaps           func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger) ([]types.KnowledgeSymbolGap, bool)
-	SymbolIndexTimes     func(ctx context.Context, ws types.Inspector, root string, cfg config.Config) (map[string]time.Time, bool)
-	SymbolOccurrences    func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger, key string) (SymbolOccurrenceRead, bool)
-	RecordedHumanOnly    func(ctx context.Context, ws types.Inspector, cfg config.Config) (types.HumanOnlyIndex, bool)
-	RecordedStaleIndexes func(ctx context.Context, ws types.Inspector, cfg config.Config) ([]types.KnowledgeStaleIndex, bool)
-	UsePublishedShards   func(ws types.Inspector, r knowledge.RemoteShards)
-	ReaderContext        func(ctx context.Context, ws types.Inspector, root string) ([]string, error)
+	BuildGlobal            func(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error)
+	Build                  func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error)
+	MergeSymbols           func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error
+	MergeSymbolsForRef     func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error
+	Query                  func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, input string, budget int, log *slog.Logger) (types.KnowledgeQueryOutput, *knowledge.Graph, error)
+	SymbolGaps             func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger) ([]types.KnowledgeSymbolGap, bool)
+	SymbolIndexTimes       func(ctx context.Context, ws types.Inspector, root string, cfg config.Config) (map[string]time.Time, bool)
+	SymbolOccurrences      func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger, key string) (SymbolOccurrenceRead, bool)
+	RecordedTargetPolicies func(ctx context.Context, ws types.Inspector, cfg config.Config) (types.TargetPolicyIndex, bool)
+	RecordedStaleIndexes   func(ctx context.Context, ws types.Inspector, cfg config.Config) ([]types.KnowledgeStaleIndex, bool)
+	UsePublishedShards     func(ws types.Inspector, r knowledge.RemoteShards)
+	ReaderContext          func(ctx context.Context, ws types.Inspector, root string) ([]string, error)
 }
 
 var builders *Builders
@@ -104,12 +104,12 @@ func SymbolOccurrences(ctx context.Context, ws types.Inspector, root string, cfg
 	return linked().SymbolOccurrences(ctx, ws, root, cfg, log, key)
 }
 
-// RecordedHumanOnly answers, for a lazy workspace that has not been opened, what it
-// declares human_only, from what the knowledge store recorded at its last evaluated sync.
+// RecordedTargetPolicies answers, for a lazy workspace that has not been opened, what it
+// declares as target policy, from what the knowledge store recorded at its last evaluated sync.
 // false means the caller must open the workspace to learn it, which it also means for a
 // ws that is no lazy workspace. It never opens ws and writes nothing.
-func RecordedHumanOnly(ctx context.Context, ws types.Inspector, cfg config.Config) (types.HumanOnlyIndex, bool) {
-	return linked().RecordedHumanOnly(ctx, ws, cfg)
+func RecordedTargetPolicies(ctx context.Context, ws types.Inspector, cfg config.Config) (types.TargetPolicyIndex, bool) {
+	return linked().RecordedTargetPolicies(ctx, ws, cfg)
 }
 
 // RecordedStaleIndexes answers, for a lazy workspace that has not been opened, which

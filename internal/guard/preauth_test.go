@@ -352,7 +352,6 @@ func servedRoles(t *testing.T) (context.Context, []servedRole) {
 	hostGate(at.cacheDir, host).MarkFired(hostAgentsKind)
 	facts := hint.NewGate(at.cacheDir, FactsKey(host, session))
 	writeCostState(facts, costState{Forked: []string{handed.ID}})
-	writeAgentMarker(facts, agentTypeKind("a-scout"), []byte(`{"type":"magus-scout"}`))
 	tools := testTools(t)
 	as := func(agent, lease string) Request {
 		return Request{Host: host, Session: session, Agent: agent, Lease: lease, ObservesSkillLoads: true, Tools: tools}
@@ -360,7 +359,6 @@ func servedRoles(t *testing.T) (context.Context, []servedRole) {
 	groundwork := as("", "")
 	groundwork.Input, groundwork.DryRun = "git show HEAD", true
 	require.Equal(t, string(denyRuleOrchestratorGroundwork), Judge(ctx, strict(Dependencies{}), groundwork).Rule, "the root is proven to orchestrate")
-	require.False(t, Dependencies{facts: facts, caller: job.Caller{Agent: "a-scout"}}.loadsSkills(), "the scout cannot load a skill")
 	return ctx, []servedRole{
 		{name: "person"},
 		{name: "root with a handed-out row", call: as("", "")},

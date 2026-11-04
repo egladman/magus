@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
@@ -169,6 +170,54 @@ func TestRecordPolicyEventCarriesRefsNotBodies(t *testing.T) {
 }
 
 // Every verdict event names the policy in force and which side decided it.
+func TestAToolTimeRecordsTheToolsRunTimeAndJudgesNothing(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+
+	v := Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
+
+	assert.Equal(t, decisionPass, v.Decision)
+	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	require.Len(t, commands, 1)
+	got := commands[0]
+	got.Ts, got.Workspace, got.Binary, got.BinaryVersion, got.Cwd = 0, "", "", "", ""
+	got.User, got.UID, got.RequestRef, got.ResponseRef = "", "", "", ""
+	got.RequestBytes, got.ResponseBytes = 0, 0
+	assert.Equal(t, trail.Event{
+		Kind:       trail.KindAgentCommand,
+		Origin:     types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "s1"},
+		Action:     "Bash",
+		Outcome:    trail.OutcomeOK,
+		DurationMs: 420,
+		Preview:    "observed",
+	}, got)
+}
+
+func TestAToolTimeKeepsTheDigestsItWasGiven(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+
+	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", ResultDigest: "r1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
+
+	calls := trail.ForSession(cacheDir, "s1", 10).Calls
+	require.Len(t, calls, 1)
+	got := calls[0]
+	got.At = time.Time{}
+	assert.Equal(t, trail.SessionCall{Action: "Bash", ToolMs: 420, AgentFacts: types.AgentFacts{
+		CallDigest: "c1", ResultDigest: "r1", Thread: types.AgentThreadMain, ThreadFrom: types.ThreadInferred,
+	}}, got)
+}
+
+func TestAToolTimeNamesTheDigestsItWasNotGiven(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+
+	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
+	Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, CallDigest: "c1", Host: "claude-code", Session: "s1", Event: "PostToolUse"})
+
+	calls := trail.ForSession(cacheDir, "s1", 10).Calls
+	require.Len(t, calls, 2)
+	assert.Equal(t, []string{"call", "result"}, calls[0].Unobserved)
+	assert.Equal(t, []string{"result"}, calls[1].Unobserved)
+}
+
 func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	deps := Dependencies{Policy: func() PolicyState { return PolicyState{Digest: "d9", ShellRules: 1} }}
@@ -179,7 +228,7 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	// The clock, the stamped account, the workspace and the content-addressed fields are
 	// cleared first, so a field added to the event cannot be dropped here unseen.
 	e := commands[0]
-	e.Ts, e.Origin, e.Workspace, e.DurationMs = 0, types.Origin{}, "", 0
+	e.Ts, e.Origin, e.Workspace, e.GuardMs = 0, types.Origin{}, "", 0
 	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
 	e.Preview, e.VerdictRef = "", ""
 	assert.NotEmpty(t, e.Cwd, "a bare command records the directory the judge ran in")

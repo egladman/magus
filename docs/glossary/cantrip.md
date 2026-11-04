@@ -26,7 +26,7 @@ match `spells/code/search` is the same refusal again: that module is source a
 magusfile imports, and it is not a registered spell. A shared schema with one
 caller removes no failure.
 
-[ADR 0017](../decisions/0017-a-change-accepts-the-findings-it-causes.md) uses
+[ADR 0021](../decisions/0021-a-change-accepts-the-findings-it-causes.md) uses
 this word for a proposed rename of spell. That rename is not in this tree.
 Author against this page.
 

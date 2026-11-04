@@ -40,7 +40,7 @@ type Config struct {
 	Diff       Diff       `json:"diff" yaml:"diff"`
 	Jobs       Jobs       `json:"jobs" yaml:"jobs"`
 	Queue      Queue      `json:"queue" yaml:"queue"`
-	Go         GoConfig   `json:"go" yaml:"go"`
+	Disk       Disk       `json:"disk" yaml:"disk"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set.
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -141,16 +141,78 @@ type Config struct {
 	// one exported env var would flip billing or the level for every workspace a shell
 	// touches without a trace in any file.
 	Agents Agents `json:"agents" yaml:"agents" cli:"-"`
+
+	// Diagnostics declares this workspace's own codes. cli:"-": a flag changing the prefix
+	// would make one raise valid in one shell and refused in another.
+	Diagnostics Diagnostics `json:"diagnostics" yaml:"diagnostics" cli:"-"`
+
+	// Sources is a person's reading list, read by the Cursor web hint.
+	// User-level only: committed, it would rank every contributor's searches.
+	Sources []Source `json:"sources" yaml:"sources" cli:"-"`
 }
 
-// GoConfig configures what magus reports about the Go toolchain.
-type GoConfig struct {
-	// CacheBudgetMB is the size in MB (binary) past which `magus doctor` advises cleaning the Go
-	// build cache or the golangci-lint cache. Default 20480; 0 turns the check off.
-	//
-	// A budget rather than a cap: neither cache is magus's, so doctor measures and names the
-	// command that frees it and deletes nothing.
-	CacheBudgetMB int `json:"cache_budget_mb" yaml:"cache_budget_mb" validate:"gte=0"`
+// Source is one reading-list entry. URL matches as a prefix of a cited URL.
+// Topic holds the words a search shares with it. Why shows beside a caveat.
+// Contradicts names the claim or source it disputes.
+type Source struct {
+	URL         string        `json:"url" yaml:"url"`
+	Topic       string        `json:"topic" yaml:"topic"`
+	Verdict     SourceVerdict `json:"verdict" yaml:"verdict"`
+	Why         string        `json:"why" yaml:"why"`
+	Contradicts string        `json:"contradicts" yaml:"contradicts"`
+}
+
+// SourceVerdict ranks a reading-list entry in the web hint. Follow ranks
+// first, caveat is named with its why, skip is dropped.
+type SourceVerdict string
+
+// The verdicts a [Source] may carry.
+const (
+	SourceFollow SourceVerdict = "follow"
+	SourceCaveat SourceVerdict = "caveat"
+	SourceSkip   SourceVerdict = "skip"
+)
+
+// Values lists every verdict in rank order.
+func (SourceVerdict) Values() []string {
+	return []string{string(SourceFollow), string(SourceCaveat), string(SourceSkip)}
+}
+
+// Valid reports whether v is one of [SourceVerdict.Values].
+func (v SourceVerdict) Valid() bool { return slices.Contains(v.Values(), string(v)) }
+
+// Diagnostics is the namespace of the codes a workspace mints with magus\diagnosticCode and
+// attaches to its guard rules: one prefix per workspace, numbers within it.
+type Diagnostics struct {
+	// Prefix is the code prefix, 2 to 8 capital letters, clear of every prefix magus's own
+	// catalogs reserve. Empty mints no codes: magus\diagnosticCode refuses every one.
+	Prefix string `json:"prefix" yaml:"prefix"`
+	// Docs is a code's page with {code} standing for the code: a URL or a workspace path.
+	// Empty renders a raised code with no see: line.
+	Docs string `json:"docs" yaml:"docs"`
+}
+
+// Resolver is the docs resolver for every code this workspace can raise.
+func (d Diagnostics) Resolver() types.DiagnosticDocs {
+	return types.DiagnosticDocs{Prefix: d.Prefix, Docs: d.Docs}
+}
+
+// Disk configures the reclaim hook every harness spell wires: it samples the free space of
+// the filesystem holding the workspace at most once per SampleEvery, and past MinFreeMB or
+// GrowthMBPerHour starts one small reclaim chunk in the background. It needs no daemon.
+type Disk struct {
+	// MinFreeMB is the free space in MB (binary) below which the hook reclaims. Default
+	// 51200; 0 turns reclaiming off and leaves the samples.
+	MinFreeMB int `json:"min_free_mb" yaml:"min_free_mb" validate:"gte=0"`
+	// CriticalFreeMB is the free space in MB below which the hook says so on every sample,
+	// so an agent puts reclaiming first. Default 10240; 0 turns the line off.
+	CriticalFreeMB int `json:"critical_free_mb" yaml:"critical_free_mb" validate:"gte=0"`
+	// GrowthMBPerHour is the rate at which free space may fall, in MB an hour, before the hook
+	// reclaims however much is left. Default 20480; 0 turns the growth trigger off.
+	GrowthMBPerHour int `json:"growth_mb_per_hour" yaml:"growth_mb_per_hour" validate:"gte=0"`
+	// SampleEvery is the hook's rate limit: a hook that fires sooner reads one file's mtime
+	// and returns. Default 10m; 0 turns the hook off, and anything else takes at least 1m.
+	SampleEvery time.Duration `json:"sample_every" yaml:"sample_every" validate:"omitempty,gte=1m"`
 }
 
 // Queue configures the merge queue, `magus queue`.
@@ -246,12 +308,6 @@ type Jobs struct {
 	// record refuses it as too broad (MGS3043). Default 1; zero or negative is an error.
 	// Workspace only, like StaleAfter.
 	MaxClaimProjects int `json:"max_claim_projects" yaml:"max_claim_projects" validate:"gt=0" merge:"written"`
-	// IntegrateAdviseAt is how many finished branches may wait off the base before a fork of
-	// anything but an integration job advises forking one. Default 5; workspace only.
-	IntegrateAdviseAt int `json:"integrate_advise_at" yaml:"integrate_advise_at" validate:"gt=0" merge:"written"`
-	// IntegrateRefuseAt is the count past which such a fork is refused until an integration
-	// job names the branches; it must exceed IntegrateAdviseAt. Default 10; workspace only.
-	IntegrateRefuseAt int `json:"integrate_refuse_at" yaml:"integrate_refuse_at" validate:"gtfield=IntegrateAdviseAt" merge:"written"`
 	// MaxClaims is the most proved claims any job may be given through its
 	// max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an
 	// error. Workspace only, like StaleAfter.
@@ -272,6 +328,10 @@ type SpellsConfig struct {
 	// Registries are the credentials `magus spell` verbs present to a container
 	// registry, one entry per host. A registry with no entry is reached anonymously.
 	Registries []SpellRegistry `json:"registries" yaml:"registries" validate:"unique=Host,dive"`
+	// SymbolIndexers names the spells whose external SCIP indexer runs here, such as
+	// typescript for scip-typescript. One forks a tool the workspace installs and is slower
+	// than magus's in-process indexers, so unlisted, its language has no symbol index.
+	SymbolIndexers []string `json:"symbol_indexers" yaml:"symbol_indexers" validate:"unique,dive,required"`
 	// Imports declares spells by the path a magusfile imports them under, so an entry
 	// reads like the import it answers:
 	//
@@ -294,16 +354,29 @@ type SpellImport struct {
 	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 }
 
-// SpellRegistry authenticates to one registry host. Password is a secret REFERENCE,
+// SpellRegistry authenticates to one registry host. PasswordRef is a secret REFERENCE,
 // never the value: it resolves through the workspace's selected secret provider
 // exactly as magus\secret.read does, so under the built-in provider it names an
 // environment variable (GITHUB_TOKEN for ghcr.io in Actions), and under a provider
 // spell it is that provider's own path.
 type SpellRegistry struct {
 	// Host is the registry as a reference spells it: "ghcr.io", "localhost:5000".
-	Host     string `json:"host" yaml:"host" validate:"required,registry_host"`
-	Username string `json:"username" yaml:"username" validate:"required"`
-	Password string `json:"password" yaml:"password" validate:"required"`
+	Host        string `json:"host" yaml:"host" validate:"required,registry_host"`
+	Username    string `json:"username" yaml:"username" validate:"required"`
+	PasswordRef string `json:"password" yaml:"password" validate:"required"`
+}
+
+// RunsSymbolIndexer reports whether si, the indexer the spell called name declares, runs
+// in this workspace. A nil si never runs and an in-process indexer always does. An
+// external SCIP command runs only when SymbolIndexers lists name.
+func (s SpellsConfig) RunsSymbolIndexer(name string, si *spells.SymbolIndexer) bool {
+	if si == nil {
+		return false
+	}
+	if si.Format != spells.SymbolFormatSCIP {
+		return true
+	}
+	return slices.Contains(s.SymbolIndexers, name)
 }
 
 // Registry returns the entry for host, and whether there is one.
@@ -412,7 +485,7 @@ type Cache struct {
 	// absence of the behavior: answering "can this run write?" meant parsing a double
 	// negative, and the CI snippet that used it read inverted from its own intent.
 	Write   CacheWrite   `json:"write" yaml:"write"`
-	Include CacheInclude `json:"include" yaml:"include"`
+	Include cacheInclude `json:"include" yaml:"include"`
 	SizeMB  int          `json:"size_mb" yaml:"size_mb" validate:"gte=0"` // disk cap in MB (binary); 0 = unlimited
 	Remote  CacheRemote  `json:"remote" yaml:"remote"`                    // settings specific to a shared remote cache backend
 }
@@ -434,24 +507,24 @@ type CacheRemoteWrite struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // when false, write the local tier but never the remote; unset writes the remote when the local tier is written and a signing key is held; true makes remote writes required
 }
 
-// CacheInclude selects which facts about the host enter every cache key.
+// cacheInclude selects which facts about the host enter every cache key.
 //
 // OS and architecture are separate because they move independently: a container image
 // built on linux/amd64 differs from linux/arm64 by ARCH alone, while a shell test suite
 // differs between macOS and linux by OS alone. One combined switch would make a target
 // that cares about one pay for both.
-type CacheInclude struct {
-	OS   CacheIncludeFlag `json:"os" yaml:"os"`
-	Arch CacheIncludeFlag `json:"arch" yaml:"arch"`
+type cacheInclude struct {
+	OS   cacheIncludeFlag `json:"os" yaml:"os"`
+	Arch cacheIncludeFlag `json:"arch" yaml:"arch"`
 }
 
-// CacheIncludeFlag is one host fact's switch. Both default to DISABLED, and neither
+// cacheIncludeFlag is one host fact's switch. Both default to DISABLED, and neither
 // holds correctness: Manifest.Platform refuses a cross-platform replay whatever these
 // say, so on one machine they are constants that discriminate nothing. Keeping them out
 // is what lets an output ref name the same run on every machine. Turn one on for a cache
 // shared across platforms, where one key per platform beats every platform colliding on
 // one key and taking the guard's miss.
-type CacheIncludeFlag struct {
+type cacheIncludeFlag struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // when true, this host property keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay
 }
 
@@ -553,6 +626,10 @@ type MCP struct {
 	// InsecureBind permits a non-loopback Address. That listener serves bearer tokens over
 	// plaintext HTTP, so without it the server refuses to start rather than warn.
 	InsecureBind bool `json:"insecure_bind" yaml:"insecure_bind"`
+	// AllowedOrigins lists exact scheme://host origins, past loopback, trusted
+	// with the console routes and a graph. Empty trusts no hosted page.
+	// An inexact entry stops the server.
+	AllowedOrigins []string `json:"allowed_origins" yaml:"allowed_origins"`
 }
 
 // HTTPEnabled reports whether the server mounts /mcp on its HTTP listener.
@@ -688,9 +765,9 @@ type Knowledge struct {
 	// will want MinShared higher, one of large functions may want MinScore lower.
 	Duplication DuplicationConfig `json:"duplication" yaml:"duplication"`
 	// Conformance is the policy of the conformance lens and its checks: which code distributions are
-	// measured, the shipped anchor each is bounded by, and the committed ratchet record.
+	// measured and the anchor each is held to.
 	//
-	// cli:"-": magus.yaml ONLY. A ratchet is committed policy, so a per-run flag or one
+	// cli:"-": magus.yaml ONLY. An anchor is committed policy, so a per-run flag or one
 	// exported env var would loosen every check without a trace in any file.
 	Conformance ConformanceConfig `json:"conformance" yaml:"conformance" cli:"-"`
 	// Sessions declares which agent hosts' transcripts to fold into the @session overlay,
@@ -784,28 +861,25 @@ func (c DuplicationConfig) Options() types.DuplicationOptions {
 // A key written in a magus.yaml replaces the default for that whole field, as every
 // non-zero config value does: writing checks states all of them.
 type ConformanceConfig struct {
-	// Ratchet is the workspace-relative path of the committed record of measured
-	// thresholds. Empty enforces the anchors alone and records no proposals.
-	Ratchet string `json:"ratchet" yaml:"ratchet"`
 	// MinSample is how many measurements a population needs before a proposal is made
 	// from it; a smaller population keeps its anchor.
 	MinSample int `json:"min_sample" yaml:"min_sample" validate:"gte=1"`
-	// Step is the fraction a live percentile must fall below its committed value before a
-	// tighter one is proposed.
+	// Step is the fraction a live percentile must fall below its anchor before a tighter
+	// one is proposed.
 	Step float64 `json:"step" yaml:"step" validate:"gt=0,lt=1"`
 	// Exclude are workspace-relative globs of code kept out of every population, such as
 	// a vendored or upstream-shaped tree. Generated output is always out.
 	Exclude []string `json:"exclude" yaml:"exclude"`
 	// Gates are the absolute noise gates of the conformance checks.
-	Gates ConformanceGatesConfig `json:"gates" yaml:"gates"`
+	Gates conformanceGatesConfig `json:"gates" yaml:"gates"`
 	// Checks is the policy per metric and population. A metric or population left out is
 	// not checked.
 	Checks map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig `json:"checks" yaml:"checks"`
 }
 
-// ConformanceGatesConfig is knowledge.conformance.gates: the cohort a convention needs before it
+// conformanceGatesConfig is knowledge.conformance.gates: the cohort a convention needs before it
 // binds a change, and how many findings are reported.
-type ConformanceGatesConfig struct {
+type conformanceGatesConfig struct {
 	MinCohort   int     `json:"min_cohort" yaml:"min_cohort" validate:"gte=1"`
 	MinShare    float64 `json:"min_share" yaml:"min_share" validate:"gte=0,lte=1"`
 	Bar         float64 `json:"bar" yaml:"bar" validate:"gte=0,lte=1"`
@@ -816,8 +890,7 @@ type ConformanceGatesConfig struct {
 type ConformanceLimitConfig struct {
 	// Percentile is the percentile of the live distribution a proposal measures at.
 	Percentile float64 `json:"percentile" yaml:"percentile"`
-	// Anchor is the ceiling no committed value may exceed, and the value enforced while
-	// nothing is committed.
+	// Anchor is the value enforced: an item past it is a violation.
 	Anchor int `json:"anchor" yaml:"anchor"`
 	// MinSubject is the fewest importers a package needs before alias-share or name-clash
 	// judges it; 0 judges every package with one. Other metrics ignore it.
@@ -830,7 +903,7 @@ type ConformanceLimitConfig struct {
 }
 
 // Options is the config as the graph package reads it, which cannot import this one.
-// Ratchet and Generated are the caller's to fill from files. A scope becomes its own key.
+// Generated is the caller's to fill. A scope becomes its own key.
 func (c ConformanceConfig) Options() types.ConformanceOptions {
 	limits := map[types.ConformanceKey]types.ConformanceLimit{}
 	for metric, pops := range c.Checks {
@@ -846,11 +919,10 @@ func (c ConformanceConfig) Options() types.ConformanceOptions {
 		}
 	}
 	return types.ConformanceOptions{
-		Limits:      limits,
-		RatchetPath: c.Ratchet,
-		MinSample:   c.MinSample,
-		Step:        c.Step,
-		Exclude:     slices.Clone(c.Exclude),
+		Limits:    limits,
+		MinSample: c.MinSample,
+		Step:      c.Step,
+		Exclude:   slices.Clone(c.Exclude),
 		Gates: types.ConformanceGates{
 			MinCohort:   c.Gates.MinCohort,
 			MinShare:    c.Gates.MinShare,
@@ -886,7 +958,7 @@ func conformanceDefaults() ConformanceConfig {
 	return ConformanceConfig{
 		MinSample: 30,
 		Step:      0.05,
-		Gates:     ConformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Gates:     conformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
 			types.ConformanceFileLines:    {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
 			types.ConformanceFuncLines:    {src: limit(99, 92), main: limit(99, 140), test: limit(99, 73)},
@@ -1091,16 +1163,13 @@ var envOnly = []cmdline.Env{
 	{Name: "MAGUS_WORKSPACE_ROOT", Key: "", Default: "", Doc: "Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand"},
 	{Name: "MAGUS_INTERNAL_ADVICE_MODE", Key: "", Default: "", Doc: "Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice"},
 	{Name: "MAGUS_INTERNAL_ADVICE_BASE_BRANCH", Key: "", Default: "", Doc: "Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting"},
+	{Name: "MAGUS_DETACHED_REFRESH", Key: "", Default: "", Doc: "Set by magus on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh; never set it by hand"},
 }
 
-// DefaultGoCacheBudgetMB is go.cache_budget_mb when nothing sets it: 20 GiB.
-const DefaultGoCacheBudgetMB = 20480
-
-// DefaultShutdownGrace is shutdown_grace when nothing sets it. Long enough for most test
-// and build steps to finish; a supervisor that will not wait this long sends its own
-// second signal or SIGKILL, and runs outlive the broker anyway, re-asserting their claims
-// on the next one.
-const DefaultShutdownGrace = 5 * time.Minute
+// defaultShutdownGrace is shutdown_grace when nothing sets it. Long enough for
+// most test and build steps to finish. A supervisor that will not wait sends
+// its own second signal or SIGKILL. Runs outlive the broker anyway.
+const defaultShutdownGrace = 5 * time.Minute
 
 // Defaults returns a Config populated with the magus built-in defaults. It reads no
 // environment, so HistoryPath is empty; the loaders set it from [DefaultHistoryPath].
@@ -1117,9 +1186,9 @@ func Defaults() Config {
 				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},
 		},
-		ShutdownGrace: DefaultShutdownGrace,
-		Go:            GoConfig{CacheBudgetMB: DefaultGoCacheBudgetMB},
-		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, IntegrateAdviseAt: 5, IntegrateRefuseAt: 10, MaxClaims: 10},
+		ShutdownGrace: defaultShutdownGrace,
+		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
+		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).

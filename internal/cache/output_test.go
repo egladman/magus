@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -496,17 +497,58 @@ func TestListDescriptors(t *testing.T) {
 	r3 := mustPersist(t, s, "k2", []byte("test\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 200})
 	r4 := mustPersist(t, s, "k3", []byte("scope\n"), OutputDescriptor{Project: "pkg/b", TimestampMs: 400}) // no target: still listed
 
-	got := s.ListDescriptors()
+	got, err := s.ListDescriptors()
+	require.NoError(t, err)
 	require.Len(t, got, 4, "every retained execution is listed, including the target-less project-scoped run")
 	// Newest first by timestamp: r4 (400), r2 (300), r3 (200), r1 (100).
 	assert.Equal(t, []string{r4, r2, r3, r1}, []string{got[0].Ref, got[1].Ref, got[2].Ref, got[3].Ref})
 	assert.Equal(t, "build:rw", got[1].Target, "the repro target (charm suffix) is preserved verbatim")
 }
 
+// A narrowed, failed or other-project run is not a full test. A charm suffix
+// does not stop one counting.
+func TestLastFullTestIsTheNewestPassedRootTest(t *testing.T) {
+	s := NewOutputStore(t.TempDir())
+	last, err := s.LastFullTest()
+	require.NoError(t, err)
+	assert.Equal(t, job.FullTest{}, last, "an empty store has no full test")
+
+	want := mustPersist(t, s, "full", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test:rw", TimestampMs: 100, Revision: "abc"})
+	mustPersist(t, s, "old", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test", TimestampMs: 50, Revision: "older"})
+	mustPersist(t, s, "failed", []byte("no\n"), OutputDescriptor{Project: ".", Target: "test", TimestampMs: 200, Revision: "f", Failed: true})
+	mustPersist(t, s, "narrow", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test", TimestampMs: 300, Revision: "n", ExtraArgs: []string{"-run", "X"}})
+	mustPersist(t, s, "project", []byte("ok\n"), OutputDescriptor{Project: "docs", Target: "test", TimestampMs: 400, Revision: "p"})
+	mustPersist(t, s, "build", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "build", TimestampMs: 500, Revision: "b"})
+
+	last, err = s.LastFullTest()
+	require.NoError(t, err)
+	assert.Equal(t, job.FullTest{Ref: want, Revision: "abc"}, last)
+}
+
+type LastFullTestSuite struct {
+	suite.Suite
+}
+
+func TestLastFullTestSuite(t *testing.T) {
+	suite.Run(t, new(LastFullTestSuite))
+}
+
+func (s *LastFullTestSuite) TestARunOnADirtyTreeIsNotAFullTestOfItsRevision() {
+	store := NewOutputStore(s.T().TempDir())
+	clean := mustPersist(s.T(), store, "clean", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test", TimestampMs: 100, Revision: "abc"})
+	mustPersist(s.T(), store, "dirty", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test", TimestampMs: 200, Revision: "def", Dirty: true})
+
+	last, err := store.LastFullTest()
+	s.Require().NoError(err)
+	s.Equal(job.FullTest{Ref: clean, Revision: "abc"}, last)
+}
+
 // TestListDescriptorsEmpty: a store with nothing persisted returns nil, so the browser shows an
 // empty tree rather than erroring.
 func TestListDescriptorsEmpty(t *testing.T) {
-	assert.Nil(t, NewOutputStore(t.TempDir()).ListDescriptors())
+	descs, err := NewOutputStore(t.TempDir()).ListDescriptors()
+	require.NoError(t, err)
+	assert.Nil(t, descs)
 }
 
 // TestOutputStoreKeepLastK bounds retention to defaultOutputKeepLast newest executions
@@ -1537,4 +1579,33 @@ func TestCacheHitFromAnotherCheckoutReportsMGS8005(t *testing.T) {
 		require.True(t, runPrinting(t, cA, rootA, "build", "").Hit)
 		assert.Empty(t, replayReports(&records))
 	})
+}
+
+func (s *LastFullTestSuite) TestAnUnreadableStoreIsNotAnEmptyStore() {
+	store := NewOutputStore(s.T().TempDir())
+	s.Require().NoError(os.WriteFile(store.outputsDir(), []byte("not a directory"), 0o600))
+	last, err := store.LastFullTest()
+	s.Require().Error(err)
+	s.Equal(job.FullTest{}, last)
+}
+
+func (s *LastFullTestSuite) TestACorruptDescriptorDoesNotProveNoFullTestExists() {
+	store := NewOutputStore(s.T().TempDir())
+	dir := filepath.Join(store.outputsDir(), "key")
+	s.Require().NoError(os.MkdirAll(dir, 0o700))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "broken"+descExt), []byte("not json"), 0o600))
+	last, err := store.LastFullTest()
+	s.Require().Error(err)
+	s.Equal(job.FullTest{}, last)
+}
+
+func (s *LastFullTestSuite) TestACorruptStoreDoesNotReturnPartialHistory() {
+	store := NewOutputStore(s.T().TempDir())
+	mustPersist(s.T(), store, "good", []byte("ok\n"), OutputDescriptor{Project: ".", Target: "test", Revision: "abc"})
+	dir := filepath.Join(store.outputsDir(), "broken")
+	s.Require().NoError(os.MkdirAll(dir, 0o700))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "broken"+descExt), []byte("not json"), 0o600))
+	descs, err := store.ListDescriptors()
+	s.Require().Error(err)
+	s.Nil(descs)
 }

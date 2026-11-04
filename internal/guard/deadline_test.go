@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
@@ -124,7 +125,7 @@ func TestBoundedPhaseAnswersInTime(t *testing.T) {
 	got, err := boundedPhase(ctx, phaseInspect, func(context.Context) (string, error) { return "ws", nil })
 	require.NoError(t, err)
 	assert.Equal(t, "ws", got)
-	_, err = boundedPhase(ctx, phaseHumanOnlyRecord, func(context.Context) (string, error) { return "", failed })
+	_, err = boundedPhase(ctx, phaseTargetPolicies, func(context.Context) (string, error) { return "", failed })
 	require.ErrorIs(t, err, failed)
 
 	phases := judgmentPhases(ctx).finished()
@@ -168,7 +169,7 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 			assert.Less(t, time.Since(start), 2*time.Second)
 			assert.Equal(t, verdictWithRule(c.decision, string(advisoryUnfinished)), unworded(v))
 			if c.decision == decisionDeny {
-				assert.Contains(t, v.Reason, "the guard's judgment did not finish within 7s. A call that changes state is denied rather than let through unjudged; retry it.")
+				assert.Contains(t, v.Reason, "the guard's judgment did not finish within 7s. A call that changes state is denied rather than let through unjudged. A retry passes only if judging costs less this time, such as on a less loaded machine; if it lapses twice, report it rather than repeat it.")
 			} else {
 				assert.Equal(t, unjudgedNote(), v.Context)
 			}
@@ -276,7 +277,8 @@ func TestDryRunLapseIsNotGraded(t *testing.T) {
 // that names the phase that stalled once and then only says the guard is still not judging,
 // and a judgment that answers in time starts the count over. The judgment here is slow
 // rather than stuck, the shape a loaded machine gives every phase.
-func TestJudgeWithinDegradesAfterConsecutiveLapses(t *testing.T) {
+// Decision 127 keeps a write in a job's checkout denied; see LapseDegradeSuite.
+func TestJudgeWithinDegradesACommandAfterConsecutiveLapses(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	req := Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1"}
 	slowLoad := func(ctx context.Context) types.GuardJudgment {
@@ -299,7 +301,9 @@ func TestJudgeWithinDegradesAfterConsecutiveLapses(t *testing.T) {
 	assert.Equal(t, verdictWithRule(decisionAdvise, string(advisoryUnfinished)), unworded(degraded))
 	assert.Contains(t, degraded.Context, "on 3 judgments in a row in this session, so this command ran with no rule judging it")
 	assert.Contains(t, degraded.Context, "This one stalled in its load_rules phase")
-	assert.Contains(t, degraded.Context, "`magus server status`")
+	assert.Contains(t, degraded.Context, "Nothing measured why")
+	assert.NotContains(t, degraded.Context, "loaded machine")
+	assert.NotContains(t, degraded.Context, "magus server status")
 	again := lapse()
 	wantAgain := again
 	wantAgain.Decision = decisionAdvise
@@ -409,6 +413,35 @@ func TestJudgeWithinAnswersAWriteWhoseWorkspaceOpenStalls(t *testing.T) {
 	assert.Equal(t, int32(1), opens.Load(), "one stalled open per judgment")
 }
 
+// A pick grades each file it writes, and each file another checkout's
+// job holds asks for this checkout's projects. Opens must not follow the
+// file count.
+func TestJudgeOpensAWorkspaceOnceForALargePick(t *testing.T) {
+	r := newWorktreeRepository(t)
+	for i := range 23 {
+		name := fmt.Sprintf("pkg/f%d.go", i)
+		require.NoError(t, os.MkdirAll(filepath.Join(r.main, "pkg"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(r.main, name), []byte("x\n"), 0o644))
+		r.git(r.main, "add", "--", name)
+	}
+	r.git(r.main, "commit", "-q", "-m", "write 23 files")
+	r.git(r.main, "branch", "picked")
+
+	wt, sibling := r.add("lease-job"), r.add("sibling")
+	worker := narrowLease()
+	worker.Parent, worker.CheckoutRoot, worker.WritePaths = "orchestrator", wt, []string{"pkg/**"}
+	holder := types.Job{ID: "sibling", Criteria: "hold the package", WritePaths: []string{"pkg/**"}, State: types.StateRunning, Registered: 1, CheckoutRoot: sibling}
+	ctx, _ := fleetFixture(t, worker, holder)
+
+	opens := map[string]int{}
+	deps := Dependencies{Inspect: func(_ context.Context, root string) (types.WorkspaceRepository, error) {
+		opens[root]++
+		return nil, errors.New("no workspace")
+	}}
+	Judge(ctx, deps, Request{Input: "git cherry-pick picked", Dir: wt, Lease: worker.ID, Host: "claude-code", Session: "s1"})
+	assert.Equal(t, 1, opens[wt], "opens by root: %v", opens)
+}
+
 // inertBenchRules is a root magusfile with one rule of each kind a hook loads, so the judged
 // arm pays for parsing and registering them as a hook does.
 const inertBenchRules = `import "magus";
@@ -498,4 +531,138 @@ func BenchmarkPlainWriteWithAPendingPolicy(b *testing.B) {
 			b.Fatalf("a plain write was denied: %+v", v)
 		}
 	}
+}
+
+// JudgeBudgetSuite pins what bounds a dry run's workspace open and what a lapse's
+// trail row says.
+type JudgeBudgetSuite struct {
+	suite.Suite
+}
+
+func TestJudgeBudgetSuite(t *testing.T) {
+	suite.Run(t, new(JudgeBudgetSuite))
+}
+
+func (s *JudgeBudgetSuite) inspectBudgetUnder(ctx context.Context) int64 {
+	ctx = withPhaseLog(ctx, trail.Phase{})
+	_, err := boundedPhase(ctx, phaseInspect, func(context.Context) (string, error) { return "ws", nil })
+	s.Require().NoError(err)
+	phases := judgmentPhases(ctx).finished()
+	s.Require().Len(phases, 1)
+	return phases[0].BudgetMs
+}
+
+func (s *JudgeBudgetSuite) TestDryRunOpenIsNotCappedAtTheHooksShare() {
+	ctx, cancel := withDryRunDeadline(s.T().Context())
+	defer cancel()
+	s.Greater(s.inspectBudgetUnder(ctx), hookBudget.Milliseconds())
+}
+
+func (s *JudgeBudgetSuite) TestHookOpenKeepsTheCap() {
+	ctx, cancel := WithHookDeadline(s.T().Context())
+	defer cancel()
+	s.Equal(inspectBudget.Milliseconds(), s.inspectBudgetUnder(ctx))
+}
+
+func (s *JudgeBudgetSuite) TestDryRunNestedInAHookKeepsTheCap() {
+	hook, cancelHook := WithHookDeadline(s.T().Context())
+	defer cancelHook()
+	ctx, cancel := withDryRunDeadline(hook)
+	defer cancel()
+	s.Equal(inspectBudget.Milliseconds(), s.inspectBudgetUnder(ctx))
+}
+
+func (s *JudgeBudgetSuite) TestJudgeLapsedReportsARuleThatRanOut() {
+	ctx, root, _ := writeFixture(s.T())
+	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		<-ctx.Done()
+		return types.GuardVerdict{}, ctx.Err()
+	}
+	v, lapsed := JudgeLapsed(ctx, Dependencies{WriteRule: loops}, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, DryRun: true})
+	s.Equal(decisionDeny, v.Decision)
+	s.True(lapsed)
+}
+
+func (s *JudgeBudgetSuite) TestJudgeLapsedLeavesARealDenyAlone() {
+	ctx, _, _ := writeFixture(s.T())
+	v, lapsed := JudgeLapsed(ctx, Dependencies{}, Request{Input: "git reset --hard origin/main", DryRun: true})
+	s.Equal(decisionDeny, v.Decision)
+	s.False(lapsed)
+}
+
+func (s *JudgeBudgetSuite) TestJudgeLapsedKeepsARuleDenyPastALapsedPhase() {
+	ctx, _, _ := writeFixture(s.T())
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	release := make(chan struct{})
+	defer close(release)
+	stalls := func(context.Context, string) (types.TargetPolicyIndex, bool) {
+		<-release
+		return types.TargetPolicyIndex{}, false
+	}
+	// The policy read lapses first; the verdict is still reset's own rule.
+	line := "./magus run test . && git reset --hard origin/main"
+	v, lapsed := JudgeLapsed(ctx, Dependencies{TargetPolicies: stalls}, Request{Input: line, DryRun: true})
+	s.Equal(decisionDeny, v.Decision)
+	s.NotEqual(string(advisoryUnfinished), v.Rule)
+	s.NotContains(v.Reason, "did not finish grading")
+	s.False(lapsed)
+}
+
+// A rule free to word its deny like a lapse must not read as one.
+func (s *JudgeBudgetSuite) TestJudgeLapsedIgnoresARuleQuotingTheLapseWords() {
+	ctx, root, _ := writeFixture(s.T())
+	quotes := func(context.Context, types.WriteRequest, hint.Gate) (types.GuardVerdict, error) {
+		return types.GuardVerdict{Decision: types.GuardDeny, Reason: "magus did not finish grading this"}, nil
+	}
+	v, lapsed := JudgeLapsed(ctx, Dependencies{WriteRule: quotes}, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, DryRun: true})
+	s.Equal(decisionDeny, v.Decision)
+	s.False(lapsed)
+}
+
+func (s *JudgeBudgetSuite) TestJudgeLapsedReportsNoLapseOnAPass() {
+	ctx, _, _ := writeFixture(s.T())
+	v, lapsed := JudgeLapsed(ctx, Dependencies{}, Request{Input: "ls", DryRun: true})
+	s.NotEqual(decisionDeny, v.Decision)
+	s.False(lapsed)
+}
+
+func (s *JudgeBudgetSuite) TestTrailNamesBuiltinRulesAndNotices() {
+	ctx, cacheDir := spawnFixture(s.T())
+	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+	rows := trailEvents(s.T(), cacheDir, trail.KindAgentCommand)
+	s.Require().NotEmpty(rows)
+	names := make([]string, len(rows[0].Phases))
+	for i, p := range rows[0].Phases {
+		names[i] = p.Name
+	}
+	s.Contains(names, phaseBuiltinRules)
+	s.Contains(names, phaseNotices)
+}
+
+func (s *JudgeBudgetSuite) TestStallBetweenPhasesNamesTheSpan() {
+	log := &phaseLog{start: time.Now()}
+	log.enclose(phaseBuiltinRules)
+	log.begin(phaseInspect)
+	log.record(timedPhase(phaseInspect, time.Millisecond, time.Second, false))
+	stalled, ok := log.stalled()
+	s.True(ok)
+	s.Equal(phaseBuiltinRules, stalled.Name)
+}
+
+func (s *JudgeBudgetSuite) TestLapsedRowKeepsABoundLease() {
+	row := types.Job{ID: "bound-job", Criteria: "hold a lease", State: types.StateRunning, WritePaths: []string{"internal/held/**"}}
+	ctx, _ := fleetFixture(s.T(), row)
+	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+	bindCaller(s.T(), ctx, who, row.ID)
+	req := Request{Input: bashCall(s.T(), who.Session, who.Agent, "ls"), Host: who.Host}
+
+	v := lapseNow(ctx, s.T(), Dependencies{}, req, func(context.Context) {})
+
+	s.Equal(row.ID, v.Lease)
+	rows := trailEvents(s.T(), hookLocation(ctx, Dependencies{}).cacheDir, trail.KindAgentCommand)
+	s.Require().NotEmpty(rows)
+	s.Equal(row.ID, rows[len(rows)-1].Lease)
 }

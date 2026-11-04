@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // tarball builds an in-memory tar stream from name->content entries (a directory entry
@@ -4246,5 +4247,48 @@ func TestCreateCheckoutReusesABranchAtTheRevision(t *testing.T) {
 
 	fourth := filepath.Join(t.TempDir(), "fourth")
 	err = g.CreateCheckout(ctx, dir, fourth, "HEAD", "job-branch")
-	require.ErrorContains(t, err, "already exists", "a branch holding commits past the revision is never reused")
+	require.ErrorContains(t, err, "would strand them", "a branch holding commits past the revision is never reused")
+}
+
+type AttrsSpaceSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestAttrsSpaceSuite(t *testing.T) { suite.Run(t, new(AttrsSpaceSuite)) }
+
+func (s *AttrsSpaceSuite) SetupTest() {
+	s.dir = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"}).Root()
+}
+
+func (s *AttrsSpaceSuite) attr(name, path string) string {
+	out, err := exec.Command("git", "-C", s.dir, "check-attr", name, "--", path).Output()
+	s.Require().NoError(err)
+	return strings.TrimSpace(string(out))
+}
+
+func (s *AttrsSpaceSuite) TestPatternWithASpaceIsQuoted() {
+	body := gitAttrsBody(types.MergeDriverGlobs{Outputs: []string{"docs/reference/config *.md"}})
+
+	s.Contains(body, "\"docs/reference/config *.md\" merge=magus linguist-generated\n")
+}
+
+func (s *AttrsSpaceSuite) TestPatternWithoutASpaceStaysBare() {
+	body := gitAttrsBody(types.MergeDriverGlobs{Outputs: []string{"docs/reference/config.md"}})
+
+	s.Contains(body, "\ndocs/reference/config.md merge=magus linguist-generated\n")
+}
+
+func (s *AttrsSpaceSuite) TestGitMatchesAQuotedPatternAndCheckPasses() {
+	globs := types.MergeDriverGlobs{Outputs: []string{"docs/reference/config *.md"}}
+	s.Require().NoError(gitVCS{}.InstallMergeDriver(s.T().Context(), s.dir, globs))
+
+	got := s.attr("merge", "docs/reference/config x.md")
+	ok, err := gitVCS{}.CheckMergeDriver(s.T().Context(), s.dir)
+
+	s.Equal("docs/reference/config x.md: merge: magus", got)
+	s.Require().NoError(err)
+	s.True(ok)
+	_, statErr := os.Stat(filepath.Join(s.dir, ".gitattributes"))
+	s.NoError(statErr)
 }

@@ -137,10 +137,10 @@ func mergeDriverUsage() error {
 	fmt.Fprintln(os.Stderr, "vcs.auto_resolve opts in. git, hg and Sapling invoke it during a merge, and")
 	fmt.Fprintf(os.Stderr, "`%s` runs it through `jj resolve` on jj. An opted-in file\n", hint.VCSResolve.String())
 	fmt.Fprintln(os.Stderr, "is merged when every region both sides changed is low risk, and otherwise")
-	fmt.Fprintln(os.Stderr, "left with conflict markers. A declared output keeps the current version")
-	fmt.Fprintln(os.Stderr, "instead of writing conflict markers. On git it records the regeneration it owes,")
-	fmt.Fprintf(os.Stderr, "and `%s` runs it once the merge, rebase, cherry-pick or\n", hint.VCSResolve.String())
-	fmt.Fprintln(os.Stderr, "revert has the whole tree.")
+	fmt.Fprintln(os.Stderr, "left with conflict markers. On git a declared output keeps the current version,")
+	fmt.Fprintln(os.Stderr, "warns that the other side's change is gone, and records the regeneration it owes;")
+	fmt.Fprintf(os.Stderr, "`%s` runs it once the merge, rebase, cherry-pick or revert\n", hint.VCSResolve.String())
+	fmt.Fprintln(os.Stderr, "has the whole tree. With no record, a declared output is left conflicted too.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "You do not run this by hand. Wire it once per clone with `%s`.\n", hint.Init.String())
 	fmt.Fprintln(os.Stderr, "git calls it as:  magus vcs merge-driver %O %A %B %L %P")
@@ -284,11 +284,11 @@ func vcsResolveCommand(ctx context.Context, root string, rc runConfig, args []st
 
 	if !globalCfg.DryRun {
 		if conflicts, err = autoResolveConflicts(ctx, m, res.VCS, conflicts); err != nil {
-			return err
+			return stageFailed(err, "settling by job claims", "planning the rest")
 		}
 		if len(conflicts) > 0 && rf.Against != "" {
 			if conflicts, err = settleByClaims(ctx, m, res.VCS, ours, rf.Against, conflicts); err != nil {
-				return err
+				return stageFailed(err, "planning the rest")
 			}
 		}
 		if len(conflicts) == 0 {
@@ -602,7 +602,7 @@ func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Ma
 	}
 	if staleDecls {
 		fmt.Printf("vcs resolve: not regenerating - the magusfile is still mid-merge, and a generator it changes would produce bytes matching neither side. Resolve the magusfile, then `%s` to finish.\n", hint.Run.With("generate:rw"))
-	} else if err := runRebuildTargets(ctx, root, rc, plan.Rebuild); err != nil {
+	} else if err := runRebuildTargets(func(args []string) error { return runTarget(ctx, root, rc, args) }, plan.Rebuild); err != nil {
 		return fmt.Errorf("vcs resolve, %s: regenerate: %w", resolveTreeState(plan,
 			"the conflict markers were cleared and the deletions recorded, but nothing was marked resolved"), err)
 	}
@@ -679,16 +679,30 @@ func resolveTreeState(plan settle.Plan, reached string) string {
 // runRebuildTargets runs each target ONCE over every project that needs it. Grouping by
 // target keeps this a single build: fifty conflicted files still cost one `magus run
 // generate` per distinct target.
-func runRebuildTargets(ctx context.Context, root string, rc runConfig, rebuild map[string][]string) error {
+//
+// A failed target does not stop the rest, so one pass names every stale input.
+// The error lists each failed command.
+func runRebuildTargets(run func(args []string) error, rebuild map[string][]string) error {
+	var failed []error
 	for _, target := range slices.Sorted(maps.Keys(rebuild)) {
 		projects := rebuild[target]
 		slices.Sort(projects)
-		fmt.Printf("regenerating: %s\n", hint.Run.With(target, strings.Join(projects, " ")))
-		if err := runTarget(ctx, root, rc, append([]string{target}, projects...)); err != nil {
-			return err
+		command := hint.Run.With(target, strings.Join(projects, " "))
+		fmt.Printf("regenerating: %s\n", command)
+		if err := run(append([]string{target}, projects...)); err != nil {
+			failed = append(failed, fmt.Errorf("%s: %w", command, err))
 		}
 	}
-	return nil
+	if len(failed) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%d of %d target(s) failed: %w", len(failed), len(rebuild), errors.Join(failed...))
+}
+
+// stageFailed names the stages that did not run. Each reads the conflicts the
+// failed one was to settle.
+func stageFailed(err error, notRun ...string) error {
+	return fmt.Errorf("%w: not run because of it: %s", err, strings.Join(notRun, ", "))
 }
 
 func reportResolution(plan settle.Plan, dryRun bool) {
@@ -1121,11 +1135,10 @@ func vcsLsFilesCommand(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	switch opts.Format {
-	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, list)
+	if opts.Format == outputText {
+		return emitNames(os.Stdout, list.Files)
 	}
-	return emitNames(os.Stdout, list.Files)
+	return emitRecord(opts, list, list.Files)
 }
 
 // lsFilesFacts gathers what the selection reads about each dirty path.

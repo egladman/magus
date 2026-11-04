@@ -78,7 +78,7 @@ the next time the agent is wrong or gone, they start from zero.
     group was slower (about 64.6 versus 48.2 minutes, d=1.52). Checked 2026-09-10.
 
 [^agent-commands-2026-09]: Measured in this repository on 2026-09-09 over the Claude Code,
-    Codex and OpenCode transcripts on one machine, using the session-load recipes in
+    Codex and OpenCode transcripts on one machine, using the session-load adapters in
     [the agents guide](../../guides/integrations/agents/session-load.md): 113,430 Bash tool
     calls in the 21 days to that date; 22 of 203 sessions carried the guard-not-running
     notice and accounted for 17% of those calls. Reproducible with `magus session load`

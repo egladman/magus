@@ -6,9 +6,107 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 )
+
+// configSuite is the package's one testify suite: add tests here as methods.
+type configSuite struct {
+	suite.Suite
+}
+
+func TestConfigSuite(t *testing.T) {
+	suite.Run(t, new(configSuite))
+}
+
+// SetupSuite registers the MGS catalog as magus's startup does, so a workspace prefix has
+// a built-in one to collide with.
+func (s *configSuite) SetupSuite() {
+	s.Require().NoError(diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes()))
+}
+
+// diagnosticsFailure is the one failure Validate reports for d on a valid config.
+func (s *configSuite) diagnosticsFailure(d Diagnostics) FieldFailure {
+	cfg := Defaults()
+	cfg.CI.MaxShards = -1
+	cfg.Diagnostics = d
+	var ve *ValidationError
+	s.Require().ErrorAs(Validate(cfg), &ve)
+	s.Require().Len(ve.Failures, 1)
+	return ve.Failures[0]
+}
+
+func (s *configSuite) TestDiagnosticsAcceptsAPrefixAndATemplate() {
+	cfg := Defaults()
+	cfg.CI.MaxShards = -1
+	cfg.Diagnostics = Diagnostics{Prefix: "WS", Docs: "docs/codes/{code}.md"}
+	s.NoError(Validate(cfg))
+}
+
+func (s *configSuite) TestDiagnosticsRefusesTheMGSPrefix() {
+	f := s.diagnosticsFailure(Diagnostics{Prefix: "MGS"})
+	s.Equal("diagnostics.prefix", f.Field)
+	s.Contains(f.String(), "collides with MGS")
+}
+
+func (s *configSuite) TestDiagnosticsRefusesAPrefixOfAReservedOne() {
+	s.Contains(s.diagnosticsFailure(Diagnostics{Prefix: "MG"}).String(), "collides with MGS")
+}
+
+func (s *configSuite) TestDiagnosticsRefusesADocsTemplateWithoutTheCode() {
+	f := s.diagnosticsFailure(Diagnostics{Prefix: "WS", Docs: "https://ws.example/codes/"})
+	s.Equal("diagnostics.docs", f.Field)
+	s.Contains(f.String(), "must hold {code}")
+}
+
+func (s *configSuite) TestDiagnosticsRefusesDocsWithNoPrefix() {
+	s.Contains(s.diagnosticsFailure(Diagnostics{Docs: "docs/codes/{code}.md"}).String(), "declares none")
+}
+
+func (s *configSuite) sourcesFailures(sources ...Source) []FieldFailure {
+	cfg := Defaults()
+	cfg.CI.MaxShards = -1
+	cfg.Sources = sources
+	var ve *ValidationError
+	s.Require().ErrorAs(Validate(cfg), &ve)
+	return ve.Failures
+}
+
+func (s *configSuite) TestSourcesAcceptsEveryVerdict() {
+	cfg := Defaults()
+	cfg.CI.MaxShards = -1
+	cfg.Sources = []Source{
+		{URL: "https://go.dev/doc/", Verdict: SourceFollow},
+		{URL: "https://blog.example/go", Verdict: SourceCaveat, Why: "dated"},
+		{URL: "https://spam.example/", Verdict: SourceSkip},
+	}
+	s.NoError(Validate(cfg))
+}
+
+func (s *configSuite) TestSourcesRefusesAnUnknownVerdictNamingTheEntry() {
+	failures := s.sourcesFailures(
+		Source{URL: "https://go.dev/doc/", Verdict: SourceFollow},
+		Source{URL: "https://blog.example/go", Verdict: "trust"},
+	)
+	s.Require().Len(failures, 1)
+	s.Equal("sources[1].verdict", failures[0].Field)
+	s.Equal(`sources[1].verdict: entry https://blog.example/go must be one of: follow, caveat, skip (got "trust")`,
+		failures[0].String())
+}
+
+func (s *configSuite) TestSourcesRefusesAMissingVerdict() {
+	failures := s.sourcesFailures(Source{URL: "https://go.dev/doc/"})
+	s.Require().Len(failures, 1)
+	s.Equal("source_verdict", failures[0].Tag)
+}
+
+func (s *configSuite) TestSourcesRefusesAnEntryWithNoURL() {
+	failures := s.sourcesFailures(Source{Topic: "go", Verdict: SourceFollow})
+	s.Require().Len(failures, 1)
+	s.Equal(FieldFailure{Field: "sources[0].url", Tag: "required"}, failures[0])
+}
 
 func TestValidate_ValidMinimal(t *testing.T) {
 	// ci.max_shards must be -1 (unlimited) or in [1,256]; use -1 for a minimal valid config.
@@ -48,8 +146,8 @@ func TestValidationError_Error(t *testing.T) {
 func TestValidate_SpellRegistries(t *testing.T) {
 	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
 	valid.Spells.Registries = []SpellRegistry{
-		{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"},
-		{Host: "localhost:5000", Username: "me", Password: "op://dev/registry/token"},
+		{Host: "ghcr.io", Username: "ci", PasswordRef: "GITHUB_TOKEN"},
+		{Host: "localhost:5000", Username: "me", PasswordRef: "op://dev/registry/token"},
 	}
 	require.NoError(t, Validate(valid))
 
@@ -58,11 +156,11 @@ func TestValidate_SpellRegistries(t *testing.T) {
 		want FieldFailure
 	}{
 		"scheme": {
-			regs: []SpellRegistry{{Host: "https://ghcr.io", Username: "u", Password: "P"}},
+			regs: []SpellRegistry{{Host: "https://ghcr.io", Username: "u", PasswordRef: "P"}},
 			want: FieldFailure{Field: "spells.registries[0].host", Tag: "registry_host", Value: "https://ghcr.io"},
 		},
 		"uppercase": {
-			regs: []SpellRegistry{{Host: "GHCR.io", Username: "u", Password: "P"}},
+			regs: []SpellRegistry{{Host: "GHCR.io", Username: "u", PasswordRef: "P"}},
 			want: FieldFailure{Field: "spells.registries[0].host", Tag: "registry_host", Value: "GHCR.io"},
 		},
 		"no password ref": {
@@ -70,7 +168,7 @@ func TestValidate_SpellRegistries(t *testing.T) {
 			want: FieldFailure{Field: "spells.registries[0].password", Tag: "required"},
 		},
 		"duplicate host": {
-			regs: []SpellRegistry{{Host: "ghcr.io", Username: "a", Password: "A"}, {Host: "ghcr.io", Username: "b", Password: "B"}},
+			regs: []SpellRegistry{{Host: "ghcr.io", Username: "a", PasswordRef: "A"}, {Host: "ghcr.io", Username: "b", PasswordRef: "B"}},
 			want: FieldFailure{Field: "spells.registries", Tag: "unique", Param: "Host"},
 		},
 	} {
@@ -193,6 +291,35 @@ func TestValidate_CacheTierWrites(t *testing.T) {
 	}
 }
 
+type AllowedOriginsSuite struct{ suite.Suite }
+
+func TestAllowedOriginsSuite(t *testing.T) { suite.Run(t, new(AllowedOriginsSuite)) }
+
+func (s *AllowedOriginsSuite) validate(origins ...string) error {
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs}
+	cfg.MCP.AllowedOrigins = origins
+	return Validate(cfg)
+}
+
+func (s *AllowedOriginsSuite) TestEmptyIsValid() {
+	s.NoError(s.validate())
+}
+
+func (s *AllowedOriginsSuite) TestExactOriginIsValid() {
+	s.NoError(s.validate("https://example.com", "http://localhost:8080"))
+}
+
+func (s *AllowedOriginsSuite) TestAPathIsNamed() {
+	var ve *ValidationError
+	s.Require().ErrorAs(s.validate("https://example.com/console"), &ve)
+	s.Equal([]FieldFailure{{Field: "mcp.allowed_origins", Tag: "exact_origin", Value: "https://example.com/console"}}, ve.Failures)
+	s.Contains(ve.Error(), "exact http or https scheme://host origin")
+}
+
+func (s *AllowedOriginsSuite) TestABareHostIsRefused() {
+	s.Error(s.validate("example.com"))
+}
+
 // mcp.http is honored only while the server serves MCP at all; an explicit true beside
 // mcp.enabled false is refused rather than ignored.
 func TestValidate_MCPHTTP(t *testing.T) {
@@ -229,10 +356,10 @@ func TestValidate_MCPHTTP(t *testing.T) {
 }
 
 func TestSpellsConfigRegistry(t *testing.T) {
-	s := SpellsConfig{Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}}}
+	s := SpellsConfig{Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", PasswordRef: "GITHUB_TOKEN"}}}
 	got, ok := s.Registry("GHCR.IO")
 	assert.True(t, ok, "a reference's host matches case-insensitively")
-	assert.Equal(t, SpellRegistry{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}, got)
+	assert.Equal(t, SpellRegistry{Host: "ghcr.io", Username: "ci", PasswordRef: "GITHUB_TOKEN"}, got)
 	_, ok = s.Registry("docker.io")
 	assert.False(t, ok)
 }
@@ -247,14 +374,6 @@ func TestValidate_Conformance(t *testing.T) {
 		edit func(*ConformanceConfig)
 		want FieldFailure
 	}{
-		"ratchet outside the workspace": {
-			edit: func(c *ConformanceConfig) { c.Ratchet = "../conformance.json" },
-			want: FieldFailure{Field: "knowledge.conformance.ratchet", Tag: "conformance_ratchet_path", Value: "../conformance.json"},
-		},
-		"absolute ratchet": {
-			edit: func(c *ConformanceConfig) { c.Ratchet = "/etc/conformance.json" },
-			want: FieldFailure{Field: "knowledge.conformance.ratchet", Tag: "conformance_ratchet_path", Value: "/etc/conformance.json"},
-		},
 		"empty exclude pattern": {
 			edit: func(c *ConformanceConfig) { c.Exclude = []string{""} },
 			want: FieldFailure{Field: "knowledge.conformance.exclude[0]", Tag: "required"},

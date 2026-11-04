@@ -213,7 +213,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	w.Magusfile("import \"magus\";\nimport \"spells/brief-host\" as host;\nmagus\\harness.provider(host);\n")
 	w.Write("spells/brief-host/spell.buzz", "import \"magus/spell\";\n"+
 		"export fun mgs_getName() > str { return \"brief-host\"; }\n"+
-		"export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{path = \"host/hooks.json\"}; }\n"+
+		"export fun mgs_getHarness() > Harness { return Harness{config = HarnessConfig{path = \"host/hooks.json\"}, guard = \"\"}; }\n"+
 		"export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }\n")
 	w.Write("AGENTS.md", "# rules\n")
 	fixture.WireHarness(t, agent.HarnessDescriptor{
@@ -460,13 +460,10 @@ func briefClock() sessions.PromptCacheClock {
 func TestSessionBriefCountsFinishedBranchesOffTheBase(t *testing.T) {
 	t.Parallel()
 
-	var below strings.Builder
-	sessionBrief{Unintegrated: &briefUnintegrated{Count: 2, Branches: []string{"done-a", "done-b"}, AdviseAt: 5, RefuseAt: 10}}.writeUnintegrated(&below)
-	assert.Equal(t, "finished branches off the base: 2 (a fork advises at 5, refuses at 10): done-a, done-b\n", below.String())
-
-	var at strings.Builder
-	sessionBrief{Unintegrated: &briefUnintegrated{Count: 1, Branches: []string{"done-a"}, AdviseAt: 1, RefuseAt: 2}}.writeUnintegrated(&at)
-	assert.Contains(t, at.String(), fmt.Sprintf("integrate them: `%s`", hint.JobFork.With("--stdin", "--checkout", "<dir>")))
+	var waiting strings.Builder
+	sessionBrief{Unintegrated: &briefUnintegrated{Count: 2, Branches: []string{"done-a", "done-b"}}}.writeUnintegrated(&waiting)
+	assert.Contains(t, waiting.String(), "finished branches off the base: 2: done-a, done-b\n")
+	assert.Contains(t, waiting.String(), fmt.Sprintf("integrate them: `%s`", hint.JobFork.With("--stdin", "--checkout", "<dir>")))
 
 	var unknown strings.Builder
 	sessionBrief{Unintegrated: &briefUnintegrated{Unknown: "version control is disabled here"}}.writeUnintegrated(&unknown)
@@ -622,4 +619,36 @@ func TestSessionBriefNamesEveryExitedJobNobodyCollected(t *testing.T) {
   %s
 `, hint.JobWait.With("root/13")), "a job past the cap is still named")
 	assertBriefIsContextSafe(t, text)
+}
+
+func TestSessionBriefListsWhatIsNotMerged(t *testing.T) {
+	t.Parallel()
+	brief := sessionBrief{Unmerged: types.JobUnmergedReport{Branch: "feat/x", Rows: []types.JobUnmerged{
+		{Job: "w", Head: "abc123", Why: "2 commit(s) are not on feat/x", Remedy: "merge abc123"},
+	}}}
+
+	text := brief.Text()
+
+	assert.Contains(t, text, "not merged onto feat/x: 1")
+	assert.Contains(t, text, "w at abc123: 2 commit(s) are not on feat/x; merge abc123")
+}
+
+func TestSessionBriefSaysAnUnknownBranchIsUnknown(t *testing.T) {
+	t.Parallel()
+	brief := sessionBrief{Unmerged: types.JobUnmergedReport{Unknown: "no branch checked out"}}
+
+	assert.Contains(t, brief.Text(), "not merged: unknown, no branch checked out")
+}
+
+func TestSessionBriefCapsALongUnmergedReport(t *testing.T) {
+	t.Parallel()
+	var rows []types.JobUnmerged
+	for i := range briefUnmergedLines + 3 {
+		rows = append(rows, types.JobUnmerged{Job: fmt.Sprintf("w%d", i), Why: "off", Remedy: "merge"})
+	}
+
+	text := sessionBrief{Unmerged: types.JobUnmergedReport{Rows: rows}}.Text()
+
+	assert.Contains(t, text, "and 4 more")
+	assert.NotContains(t, text, "w12")
 }

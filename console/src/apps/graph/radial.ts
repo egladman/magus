@@ -49,8 +49,7 @@ export function layoutRadial(
   depthOf.set(centerId, 0);
   parentOf.set(centerId, null);
   const queue: string[] = [centerId];
-  for (let qi = 0; qi < queue.length; qi++) {
-    const id = queue[qi];
+  for (const id of queue) {
     const depth = depthOf.get(id) ?? 0;
     if (depth >= RADIAL_MAX_RINGS) continue; // do not discover beyond the cap
     const neighbors = sortedIds(adj.get(id) ?? new Set());
@@ -93,7 +92,9 @@ export function layoutRadial(
       for (const group of groups.values()) group.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
       const prevRing = rings[d - 1];
-      let cursor = angleOf.get(prevRing[0]) ?? -Math.PI / 2;
+      if (!prevRing) break;
+      const prevFirst = prevRing[0];
+      let cursor = (prevFirst === undefined ? undefined : angleOf.get(prevFirst)) ?? -Math.PI / 2;
       const total = members.length;
       ordered = [];
       for (const parent of prevRing) {
@@ -110,8 +111,8 @@ export function layoutRadial(
   }
 
   // ---- Step 5: write positions -----------------------------------------------
-  for (let d = 0; d < rings.length; d++) {
-    for (const id of rings[d]) {
+  for (const [d, ring] of rings.entries()) {
+    for (const id of ring) {
       const n = byId.get(id);
       if (!n) continue;
       const angle = angleOf.get(id) ?? 0;

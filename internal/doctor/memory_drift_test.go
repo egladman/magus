@@ -18,7 +18,7 @@ func TestHistoryUnreadableCheckNamesTheRebuildForANewerHistory(t *testing.T) {
 	skew := historyUnreadableCheck("memory-declarations", &forecast.UnsupportedVersionError{Have: 9, Max: 8, Path: "h"})
 	assert.Equal(t, types.CheckAdvice, skew.Status)
 	assert.Contains(t, skew.Message, "version 9")
-	assert.Contains(t, skew.Fix, "go-build")
+	assert.Contains(t, skew.Fix, "build")
 
 	other := historyUnreadableCheck("memory-declarations", assert.AnError)
 	assert.Empty(t, other.Fix, "an unknown failure names no fix")

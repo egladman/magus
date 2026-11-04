@@ -6,6 +6,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func applyMerge(t *testing.T, params map[string]any, base types.Job) types.Job {
@@ -167,4 +168,23 @@ func TestMergeReadsMaxClaimsAsAWholeCount(t *testing.T) {
 		_, err := DecodePut(map[string]any{"max_claims": v})
 		require.ErrorContains(t, err, "max_claims", "%#v", v)
 	}
+}
+
+type putDeliverySuite struct {
+	suite.Suite
+}
+
+func TestPutDelivery(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(putDeliverySuite))
+}
+
+func (s *putDeliverySuite) TestAPutSetsTheDeliveryAndParentHead() {
+	got := applyPut(s.T(), types.JobPut{Delivery: new(types.DeliveryStacked), ParentHead: new("feat/p")}, types.Job{ID: "u1"})
+	s.Equal(types.Job{ID: "u1", Delivery: types.DeliveryStacked, ParentHead: "feat/p"}, got)
+}
+
+func (s *putDeliverySuite) TestAnUnknownDeliveryIsRefused() {
+	_, err := PutMerge(types.JobPut{Delivery: new("merge")})
+	s.Require().ErrorContains(err, `delivery "merge" is not one of fold, separate, stacked`)
 }

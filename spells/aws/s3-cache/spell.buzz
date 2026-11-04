@@ -49,6 +49,7 @@ import "magus/spell"
 import "crypto"
 import "std"
 import "os"
+import "result"
 
 // Named for the product (Amazon S3), not the capability it provides here. Its
 // siblings are named the same way - github-actions, gitlab-ci - and "s3-cache"
@@ -214,25 +215,25 @@ export fun enabled(target: Target, req: Empty) > Ack {
 // get_artifact downloads the object for req.hash into req.path: ok on a hit (200), not
 // ok on a miss (404) or when not configured. Any other status throws, so a failing
 // store is counted as failed rather than read as a cold cache.
-export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+export fun get_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed store call
     if (access() == "" or bucket() == "") { return Ack{ ok = false }; }
     final path = "/" + bucket() + "/" + cache_key(req.hash);
     final headers = sign("GET", path, "", EMPTY_SHA256);
     final code = http\download(endpoint() + path, req.path, headers);
     if (code == 404) { return Ack{ ok = false }; }
-    if (code != 200) { throw "s3 cache: GET {path}: status {code}"; }
+    if (code != 200) { throw "s3 cache: GET {path}: status {code}"; } //nolint:no-throw // magus reads a raise as a failed store call
     return Ack{ ok = true };
 }
 
 // has_artifact asks for the object's metadata only (HEAD): ok on 200, not ok on 404,
 // and any other status throws.
-export fun has_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
+export fun has_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed store call
     if (access() == "" or bucket() == "") { return Ack{ ok = false }; }
     final path = "/" + bucket() + "/" + cache_key(req.hash);
     final headers = sign("HEAD", path, "", EMPTY_SHA256);
     final res = http\request("HEAD", endpoint() + path, "", headers);
     if (res["status"] == 404) { return Ack{ ok = false }; }
-    if (res["status"] != 200) { throw "s3 cache: HEAD {path}: status {res["status"]}"; }
+    if (res["status"] != 200) { throw "s3 cache: HEAD {path}: status {res["status"]}"; } //nolint:no-throw // magus reads a raise as a failed store call
     return Ack{ ok = true };
 }
 
@@ -240,13 +241,13 @@ export fun has_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
 // store; any other status throws. S3 overwrites, so it never answers "already
 // present". The payload hash is the file's SHA-256 (S3 verifies it against
 // x-amz-content-sha256).
-export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
-    if (access() == "" or bucket() == "") { throw "s3 cache: put_artifact: no credentials or bucket configured"; }
+export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any { //nolint:no-throw // magus reads a raise as a failed store call
+    if (access() == "" or bucket() == "") { throw "s3 cache: put_artifact: no credentials or bucket configured"; } //nolint:no-throw // magus reads a raise as a failed store call
     final src = req.path;
     final path = "/" + bucket() + "/" + cache_key(req.hash);
     final headers = sign("PUT", path, "", crypto\sha256File(src));
     final res = http\upload_chunked("PUT", endpoint() + path, src, 0, headers);
-    if (res[0] != 200) { throw "s3 cache: PUT {path}: status {res[0]}"; }
+    if (res[0] != 200) { throw "s3 cache: PUT {path}: status {res[0]}"; } //nolint:no-throw // magus reads a raise as a failed store call
     return Ack{ ok = true };
 }
 
@@ -256,25 +257,29 @@ export fun put_artifact(target: Target, req: ArtifactRequest) > Ack !> any {
 // marker needs percent-encoding, and the canonical query string (keys sorted:
 // marker before prefix) is byte-identical to the one on the URL.
 //
-// RAISES on a non-200 rather than returning "". It used to return "", which listing()
-// reads as end-of-listing - indistinguishable from a genuinely complete one. A
+// FAILS on a non-200 rather than returning "". It used to return "", which
+// listing() reads as end-of-listing, the same as a genuinely complete one. A
 // transient 500 or throttle on page 3 of 10 therefore truncated the enumeration
 // silently, and prune then applied keep_last to the PARTIAL set: with 1000 objects
 // and keep_last=100, a failure after 200 evicted 100 of the 200 seen, including
 // objects inside the true global newest-100. It printed a plausible count and exited
 // 0. Deleting the wrong artifact is unrecoverable, so a listing that cannot be
 // completed must stop the prune, not shrink it.
-fun listPage(marker: str) > str !> any {
+fun listPage(marker: str) > result\Result::<str> {
     var query = "prefix=magus-";
     if (marker != "") { query = "marker=" + marker + "&prefix=magus-"; }
     final path = "/" + bucket();
     final headers = sign("GET", path, query, EMPTY_SHA256);
-    final res = http\get(endpoint() + path + "?" + query, headers);
-    if (res["status"] != 200) {
-        throw "s3 prune: listing page failed with status {res["status"]} "
-            + "(marker \"{marker}\"); refusing to prune from a partial listing";
+    try {
+        final res = http\get(endpoint() + path + "?" + query, headers);
+        if (res["status"] != 200) {
+            return result\fail::<str>("s3 prune: listing page failed with status {res["status"]} "
+                + "(marker \"{marker}\"); refusing to prune from a partial listing");
+        }
+        return result\ok::<str>("{res["body"]}");
+    } catch (err: any) {
+        return result\caught::<str>(err);
     }
-    return "{res["body"]}";
 }
 
 // listing is a fiber generator over every magus- object in the bucket. Each resume
@@ -283,10 +288,16 @@ fun listPage(marker: str) > str !> any {
 // coroutine. It returns null when the listing is exhausted; since a real artifact is
 // never null, the consumer drains it with a resume-until-null loop. The bucket's
 // LastModified is the S3-side mtime, so no per-object HEAD is needed.
-fun listing() > any !> any {
+// Each row is a Result: a page that fails yields a failed one and ends it.
+fun listing() > any {
     var marker = "";
     while (true) {
-        final body = listPage(marker);
+        final page = listPage(marker);
+        if (page.error -> err) {
+            yield result\Result::<any>{ error = err };
+            return null;
+        }
+        final body = page.value!;
         // Each <Contents> block carries one object's <Key> and <LastModified>;
         // blocks[0] is the preamble before the first object, so skip it.
         final blocks = body.split("<Contents>");
@@ -296,7 +307,7 @@ fun listing() > any !> any {
             final key = b.split("<Key>")[1].split("</Key>")[0];
             final lm = b.split("<LastModified>")[1].split("</LastModified>")[0];
             last = key;
-            yield mut {"key": key, "lastModified": lm};
+            yield result\ok::<any>(mut {"key": key, "lastModified": lm});
         }
         // Continue only while S3 reports the listing truncated.
         final trunc = body.split("<IsTruncated>");
@@ -310,11 +321,15 @@ fun listing() > any !> any {
 
 // deleteObject removes one object by key (S3 DeleteObject, path-style). DeleteObject
 // is idempotent, returning 204 No Content whether or not the key existed.
-fun deleteObject(key: str) > bool !> any {
+fun deleteObject(key: str) > result\Result::<bool> {
     final path = "/" + bucket() + "/" + key;
     final headers = sign("DELETE", path, "", EMPTY_SHA256);
-    final res = http\request("DELETE", endpoint() + path, "", headers);
-    return res["status"] == 204 or res["status"] == 200;
+    try {
+        final res = http\request("DELETE", endpoint() + path, "", headers);
+        return result\ok::<bool>(res["status"] == 204 or res["status"] == 200);
+    } catch (err: any) {
+        return result\caught::<bool>(err);
+    }
 }
 
 // prune evicts cache objects per a retention policy, enumerating them through the
@@ -326,7 +341,7 @@ fun deleteObject(key: str) > bool !> any {
 // doomed set is keyed by object key so the overlap never double-deletes. Reports done
 // once the sweep completes; counts are reported to stdout (the host bridge only
 // learns completion).
-export fun prune(target: Target, req: PruneRequest) > PruneResult !> any {
+export fun prune(target: Target, req: PruneRequest) > PruneResult !> any { //nolint:no-throw // magus reads a raise as a failed prune
     if (access() == "" or bucket() == "") { return PruneResult{ done = false }; }
     final olderSecs = req.olderThanSecs;
     final keepLast = req.keepLast;
@@ -336,11 +351,17 @@ export fun prune(target: Target, req: PruneRequest) > PruneResult !> any {
     // millis once (host time module) so the bounds below are integer comparisons.
     var artifacts = mut [];
     final gen = &listing();
-    var e = resume(gen);
-    while (e != null) {
+    var next = resume(gen);
+    while (next != null) {
+        final row: result\Result::<any> = next;
+        if (row.error -> err) {
+            //nolint:no-throw // magus reads a raise as a failed prune
+            throw err.message;
+        }
+        final e: any = row.value!;
         e["ms"] = time\parse(S3_TIME_LAYOUT, "{e["lastModified"]}");
         artifacts.append(e);
-        e = resume(gen);
+        next = resume(gen);
     }
 
     // Select objects to evict, de-duplicated by key across the two bounds.
@@ -370,7 +391,12 @@ export fun prune(target: Target, req: PruneRequest) > PruneResult !> any {
             std\print("s3 prune: would delete {key} ({it["lastModified"]})");
             removed = removed + 1;
         } else {
-            if (deleteObject(key)) { removed = removed + 1; }
+            final deleted = deleteObject(key);
+            if (deleted.error -> err) {
+                //nolint:no-throw // magus reads a raise as a failed prune
+                throw err.message;
+            }
+            if (deleted.value!) { removed = removed + 1; }
         }
     }
     if (dry) {

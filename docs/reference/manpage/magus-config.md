@@ -30,7 +30,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 ### config set options
 
-**--global**
+**--[no-]global** (default: off)
 : Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)
 
 ### config history passed options
@@ -57,21 +57,21 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 ### config cache prune options
 
-**--dry-run**
+**--[no-]dry-run** (default: off)
 : Print what would be removed without deleting anything
 
 **--keep-last** *int*
 : Keep only the newest N entries, evict the rest (--remote only)
 
-**--older-than** *duration*
-: Remove entries older than this duration (e.g. 168h = 7 days)
+**--older-than** *value*
+: Remove entries older than this duration (e.g. 168h = 7 days). Bare numbers are hours.
 
-**--remote**
+**--[no-]remote** (default: off)
 : Prune the configured remote backend instead of the local cache
 
 ### config cache export options
 
-**--remote**
+**--[no-]remote** (default: off)
 : Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive
 
 **--to** *string*
@@ -79,7 +79,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 ### config cache import options
 
-**--remote**
+**--[no-]remote** (default: off)
 : Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive
 
 ### config mcp connector create options
@@ -92,12 +92,12 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 ### config token generate options
 
-**--force**
+**--[no-]force** (default: off)
 : Overwrite an existing token (rotation)
 
 ### config console token create options
 
-**--code**
+**--[no-]code** (default: off)
 : Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once
 
 **--expires** *string*
@@ -106,7 +106,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 **--name** *string*
 : Name for this console token (default: console-N)
 
-**--viewer**
+**--[no-]viewer** (default: off)
 : Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share
 
 ## Subcommands
@@ -160,5 +160,5 @@ magus config cache prune --older-than 168h
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-gate**(1)](magus-gate.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

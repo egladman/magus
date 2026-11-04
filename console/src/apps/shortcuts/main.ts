@@ -15,6 +15,7 @@ import { formatChord, type Command, type Keymap } from "../../desktop/commands";
 import { displayToken } from "../../desktop/commandBar";
 import { h } from "../../desktop/view";
 import type { PageController, PageModule, SearchProvider } from "../../desktop/page";
+import { ok, type Result } from "../../gen/magus/types";
 
 // What the console injects: the live command list and the effective (merged default+user) keymap, both
 // read fresh on each activation, plus the platform so keys label correctly (Cmd vs Ctrl); run
@@ -70,7 +71,7 @@ export function createShortcutsApp(deps: ShortcutsAppDeps): PageModule<null, nul
   return {
     id: "shortcuts",
     title: "Shortcuts",
-    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+    async activate(host: HTMLElement): Promise<Result<PageController<null, null>>> {
       const root = h("div");
       root.dataset.app = "shortcuts";
 
@@ -166,7 +167,7 @@ export function createShortcutsApp(deps: ShortcutsAppDeps): PageModule<null, nul
       }
 
       host.append(root);
-      return {
+      return ok({
         search: noSearch,
         // Static, but still part of the shell lifecycle: this keeps the app contract
         // exhaustive when panes are focused, tiled, or backgrounded.
@@ -174,7 +175,7 @@ export function createShortcutsApp(deps: ShortcutsAppDeps): PageModule<null, nul
         deactivate() {
           host.replaceChildren();
         },
-      };
+      });
     },
   };
 }

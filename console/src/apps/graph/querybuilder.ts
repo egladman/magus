@@ -155,7 +155,7 @@ export function parseTerms(str: string): Term[] {
   const out: Term[] = [];
   let i = 0;
   while (i < str.length) {
-    while (i < str.length && /\s/.test(str[i])) i++;
+    while (i < str.length && /\s/.test(str.charAt(i))) i++;
     if (i >= str.length) break;
     let negated = false;
     if (str[i] === "-") {
@@ -166,7 +166,8 @@ export function parseTerms(str: string): Term[] {
     const fm = /^([a-zA-Z]+):/.exec(str.slice(i));
     // An unknown prefix is not a field: it stays part of the value, so a filter magus understands
     // and this builder does not still round-trips instead of being silently rewritten.
-    const named = fm && fm[1].toLowerCase() !== "" ? asField(fm[1].toLowerCase()) : null;
+    const prefix = fm?.[1]?.toLowerCase();
+    const named = prefix ? asField(prefix) : null;
     if (fm && named) {
       field = named;
       i += fm[0].length;
@@ -178,7 +179,7 @@ export function parseTerms(str: string): Term[] {
       i = end < 0 ? str.length : end + 1;
     } else {
       let j = i;
-      while (j < str.length && !/\s/.test(str[j])) j++;
+      while (j < str.length && !/\s/.test(str.charAt(j))) j++;
       value = str.slice(i, j);
       i = j;
     }
@@ -365,8 +366,8 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       },
     }).then((res) => {
       opening = false;
-      if (res.ok) {
-        detached = res.handle;
+      if (!res.error) {
+        detached = res.value;
         detachBtn.removeAttribute("data-detach-failed");
         detachBtn.title = "Put it back";
         clearNotice();
@@ -374,7 +375,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       }
       // A browser can refuse a second window. The reason is said where the reader is looking, in the
       // panel, and as a toast; a tooltip alone reaches nobody on touch and nobody who is not hovering.
-      const message = "Could not open the builder in its own window: " + res.reason;
+      const message = "Could not open the builder in its own window: " + res.error.message;
       detachBtn.title = message;
       detachBtn.setAttribute("data-detach-failed", "");
       showFailure(message, "graph:detach");
@@ -441,7 +442,9 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     else if (e.key === "End") next = TAB_IDS.length - 1;
     if (next < 0) return;
     e.preventDefault();
-    tab = TAB_IDS[next];
+    const nextTab = TAB_IDS[next];
+    if (nextTab === undefined) return;
+    tab = nextTab;
     paint();
     tabButtons.get(tab)?.focus();
   });

@@ -881,6 +881,108 @@ func TestSupersedeQualifier(t *testing.T) {
 	}
 }
 
+// holdAsBackgroundRefresh has a subprocess hold app's flock for holdMS.
+// Its owner record says a background refresh holds it.
+func holdAsBackgroundRefresh(t *testing.T, cacheDir string, holdMS int) *projectLocker {
+	t.Helper()
+	cmd := helperHold(t, cacheDir, "app", holdMS)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start holder: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	waitForFile(t, filepath.Join(workspace.LocksDir(cacheDir, testWorkspaceRoot), "app", "ready"), 3*time.Second)
+	l := newProjectLocker(cacheDir, testWorkspaceRoot)
+	rec := processRecord{PID: cmd.Process.Pid, Command: "magus refs X --refresh", Started: time.Now(), Root: l.root, Background: true}
+	if err := record.Write(l.ownerPath("app"), rec); err != nil {
+		t.Fatalf("write owner: %v", err)
+	}
+	return l
+}
+
+// The bug as reported: a refresh in another process refused the run.
+func TestARunTakesTheLockFromABackgroundRefreshInAnotherProcess(t *testing.T) {
+	quickSupersede(t, 10*time.Second)
+	out, toOut := captureLockOut()
+	cacheDir := t.TempDir()
+	holdAsBackgroundRefresh(t, cacheDir, 300)
+
+	rel, err := newProjectLocker(cacheDir, testWorkspaceRoot, toOut).acquire(t.Context(), "app")
+	if err != nil {
+		t.Fatalf("a run must not be refused for a refresh: %v", err)
+	}
+	defer rel()
+
+	assert.Contains(t, out.String(), "asked the background refresh on project app to stop")
+	assert.Contains(t, out.String(), "magus refs X --refresh")
+	assert.Contains(t, out.String(), "waiting at most 10s")
+	assert.Contains(t, out.String(), "stopped the background refresh on project app")
+}
+
+func TestARunIsRefusedWhenARefreshInAnotherProcessDoesNotStop(t *testing.T) {
+	quickSupersede(t, 50*time.Millisecond)
+	out, toOut := captureLockOut()
+	cacheDir := t.TempDir()
+	holdAsBackgroundRefresh(t, cacheDir, 5000)
+
+	_, err := newProjectLocker(cacheDir, testWorkspaceRoot, toOut).acquire(t.Context(), "app")
+
+	var contended *lockContendedError
+	if !errors.As(err, &contended) {
+		t.Fatalf("want a refusal past the bound, got %v", err)
+	}
+	assert.Contains(t, out.String(), "the background refresh on project app did not stop within 50ms")
+}
+
+func TestALockRefusalNamesTheWayToWait(t *testing.T) {
+	refused := &lockContendedError{Project: "app", Owner: "pid 41221 (magus run test)"}
+	assert.Contains(t, refused.Error(), "this command succeeds once that run ends")
+	assert.Contains(t, refused.Error(), "a backgrounded run announces its end")
+}
+
+func TestABackgroundRefreshNeverStopsAnother(t *testing.T) {
+	cacheDir := t.TempDir()
+	holdAsBackgroundRefresh(t, cacheDir, 5000)
+
+	start := time.Now()
+	_, err := newProjectLocker(cacheDir, testWorkspaceRoot, asBackground()).acquire(t.Context(), "app")
+
+	var contended *lockContendedError
+	if !errors.As(err, &contended) {
+		t.Fatalf("want a refusal, got %v", err)
+	}
+	assert.Less(t, time.Since(start), time.Second, "background work never waits")
+}
+
+// The server's shape: holder and run share a process, so the run queues.
+func TestARunTakesTheLockFromABackgroundRefreshInThisProcess(t *testing.T) {
+	quickSupersede(t, 5*time.Second)
+	out, toOut := captureLockOut()
+	cacheDir := t.TempDir()
+
+	refresh := newProjectLocker(cacheDir, testWorkspaceRoot, asBackground())
+	rel, err := refresh.acquire(t.Context(), "app")
+	if err != nil {
+		t.Fatalf("refresh acquire: %v", err)
+	}
+	hold := &projectHold{unlock: rel, locker: refresh, paths: []string{"app"}}
+	defer hold.release()
+	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
+	defer watch.close()
+	go func() {
+		<-ctx.Done()
+		hold.release()
+	}()
+
+	rel2, err := newProjectLocker(cacheDir, testWorkspaceRoot, toOut).acquire(t.Context(), "app")
+	if err != nil {
+		t.Fatalf("run acquire: %v", err)
+	}
+	defer rel2()
+
+	assert.Contains(t, out.String(), "waiting at most 5s")
+	assert.ErrorIs(t, watch.verdict(nil), types.GateSuperseded)
+}
+
 // TestALaterGateTakesTheLockAndTheEarlierOneReportsMGS3014 is the whole protocol end to
 // end: the request, the abort, the handover and both messages.
 //

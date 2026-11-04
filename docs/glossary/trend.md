@@ -22,11 +22,16 @@ magus\log.info(magus\insightMarkdown());
 
 In the docs:
 
-- [Trend](../reference/api/insight/v1alpha1/insight.md#trend)
+- [Trend](../reference/api/historymetrics/v1alpha1/historymetrics.md#trend)
+- [trend](../reference/buzz/magus.md#trend)
+
+In the code (`magus refs <name>` lists every site):
+
+- `types.Trend` (Go)
 
 <!-- END GLOSSARY USAGE -->
 
 ## See also
 
 - [Hotspot](hotspot.md)
-- [Insight](../concepts/knowledge/insight.md)
+- [History metrics](../concepts/knowledge/historymetrics.md)

@@ -3,12 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"slices"
 	"strings"
 	"sync"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/output"
 )
 
@@ -26,11 +29,12 @@ const (
 // globalFlags carries display/verbosity flags shared across the top-level and every subcommand FlagSet
 // (last write wins, so `magus -v ls` and `magus ls -v` are equivalent).
 type globalFlags struct {
-	output  string    // raw --output/-o value; parsed on demand
-	tee     string    // mirror structured output to this file in append-create mode
-	verbose verbosity // counted -v level
-	quiet   bool      // suppress progress; quiet wins over -v
-	silent  bool      // quiet + bounded failure dumps + bubbled notice lines
+	teeInitialized string    // the capture already replaced during this invocation
+	output         string    // raw --output/-o value; parsed on demand
+	tee            string    // mirror this invocation's structured output to this file
+	verbose        verbosity // counted -v level
+	quiet          bool      // suppress progress; quiet wins over -v
+	silent         bool      // quiet + bounded failure dumps + bubbled notice lines
 }
 
 var global globalFlags
@@ -40,7 +44,7 @@ var global globalFlags
 // outputFormatHelp names the bare -o template form explicitly, because that is how a
 // caller discovers which field names a template may use: they are the -o json keys
 // (.name), not the Go field names (.Name), and nothing else advertises that.
-var outputFormatHelp = fmt.Sprintf("Output format (%s|template[=<go-template>]); default: text. Bare -o template lists the available template fields (they are the -o json names)", output.Join(output.Common, "|"))
+var outputFormatHelp = fmt.Sprintf("Output format (%s|template[=<go-template>]); default: text. Bare -o template lists the available template fields (they are the -o json names); see docs/reference/output-formats.md", output.Join(output.Common, "|"))
 
 // bindGlobalFlags registers the flags magus accepts before its subcommand, bar the display
 // set bindDisplayFlags adds. The guard reads a magus argv with its own copy of both
@@ -54,9 +58,17 @@ func bindGlobalFlags(fs *flag.FlagSet, root, cfgPath *string) {
 }
 
 func bindDisplayFlags(fs *flag.FlagSet) {
+	bindOutputFlags(fs)
+	bindProgressFlags(fs)
+}
+
+func bindOutputFlags(fs *flag.FlagSet) {
 	fs.StringVar(&global.output, "output", global.output, outputFormatHelp)
 	fs.StringVar(&global.output, "o", global.output, "Short for --output")
-	fs.StringVar(&global.tee, "tee", global.tee, "Also write structured output (-o json|yaml|jsonl|template) to this file (append-create mode)")
+	fs.StringVar(&global.tee, "tee", global.tee, "Also write structured output (-o json|yaml|jsonl|template) to this file (replaces previous contents)")
+}
+
+func bindProgressFlags(fs *flag.FlagSet) {
 	fs.Var(&global.verbose, "v", "increase log verbosity (-v/-vv: debug; -vvv: trace)")
 	fs.BoolVar(&global.quiet, "quiet", global.quiet, "suppress progress output; only print errors and dump failing project output to stderr")
 	fs.BoolVar(&global.quiet, "q", global.quiet, "short for --quiet")
@@ -79,6 +91,9 @@ func commandParse(name string, args []string, local func(*flag.FlagSet)) ([]stri
 	if err := fs.Parse(reorderFlagsFirst(fs, expandVerbosityArgs(args))); err != nil {
 		return nil, err
 	}
+	if flagWasSet(fs, "tee") {
+		global.teeInitialized = ""
+	}
 	applyDisplay()
 	if err := checkOutputSupported(name, fs); err != nil {
 		return nil, err
@@ -86,56 +101,18 @@ func commandParse(name string, args []string, local func(*flag.FlagSet)) ([]stri
 	return fs.Args(), nil
 }
 
-// commandsWithoutOutput names the verbs that render nothing structured, keyed by the
-// name they hand commandParse.
-//
-// -o is bound into EVERY FlagSet (bindDisplayFlags), because it is a global flag that
-// may precede or follow the subcommand. A verb that never consults it therefore accepted
-// `-o json`, printed prose, and exited 0: the accepted-and-ignored failure that costs
-// most in a pipe, since the caller's parse fails somewhere else entirely.
-//
-// Declared rather than derived: deriving it needs a check AFTER the verb has had its
-// chance to consult -o, which is a post-dispatch hook this file cannot reach. A wrong
-// entry here is loud rather than silent (the verb's own `-o json` tests fail), which is
-// what makes the list safe to keep by hand.
-var commandsWithoutOutput = map[string]bool{
-	"affected --bisect":        true,
-	"buzz":                     true,
-	"graph build":              true,
-	"mcp":                      true,
-	"notes capture":            true,
-	"notes edit":               true,
-	"queue apply":              true,
-	"queue ls":                 true,
-	"queue plan":               true,
-	"queue validate":           true,
-	"queue gate":               true,
-	"server prune-preserved":   true,
-	"server reload":            true,
-	"server rotate-activities": true,
-	"server rotate-logs":       true,
-	"server start":             true,
-	"server stop":              true,
-	"vcs resolve":              true,
-}
-
-// checkOutputSupported rejects -o on a verb that renders nothing structured. Usage-class
-// (exit 2): the flag was never going to do anything, so failing before the work happens
-// is the whole point.
-//
-// It asks the FlagSet whether -o was typed on THIS invocation rather than reading
-// global.output, which is ambient: bindDisplayFlags seeds each flag's default from the
-// live global. A value left there by an earlier dispatch on the same process (one
-// adopted run in the server, one testscript command) would otherwise fail the next
-// command for a flag nobody passed it.
-func checkOutputSupported(name string, fs *flag.FlagSet) error {
-	if !commandsWithoutOutput[name] {
-		return nil
+// commandAt is the tree's node for a FlagSet's name, or false for a name that
+// is no path, such as "run build".
+func commandAt(name string) (cmdline.Command, bool) {
+	node := commands.Root
+	for word := range strings.FieldsSeq(name) {
+		i := slices.IndexFunc(node.Children, func(c cmdline.Command) bool { return c.Name == word })
+		if i < 0 {
+			return cmdline.Command{}, false
+		}
+		node = node.Children[i]
 	}
-	if !flagWasSet(fs, "output") && !flagWasSet(fs, "o") {
-		return nil
-	}
-	return exit.Usagef("magus %s: -o is not supported by this command", name)
+	return node, true
 }
 
 // reorderFlagsFirst moves recognized flags (and their values) ahead of positional
@@ -281,8 +258,7 @@ type recordedFlag struct {
 func recordFlagSet(name string, fs *flag.FlagSet) {
 	var flags []recordedFlag
 	fs.VisitAll(func(f *flag.Flag) {
-		boolean, _ := f.Value.(interface{ IsBoolFlag() bool })
-		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage, Bool: boolean != nil && boolean.IsBoolFlag()})
+		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage, Bool: flagIsBool(f)})
 	})
 	flagRecord.Lock()
 	defer flagRecord.Unlock()
@@ -295,19 +271,74 @@ func recordFlagSet(name string, fs *flag.FlagSet) {
 // printOwnDefaults prints the flags fs declares beyond the global ones. Every command
 // accepts the globals and `magus -h` lists them once; repeating them under each command
 // buried its few own flags in about a thousand lines of help.
+//
+// It prints through cmdline.FlagHelp, the formatter behind the man page, so a bool reads
+// --[no-]name (default: on|off) in both. flag.PrintDefaults prints a single dash and
+// lifts a backquoted word out of the usage as the value's name.
 func printOwnDefaults(fs *flag.FlagSet) {
 	globals := globalFlagNames()
-	// nodisplayflags: this set only prints fs's own flags; fs is the set that parses.
-	own := flag.NewFlagSet(fs.Name(), flag.ContinueOnError)
-	own.SetOutput(fs.Output())
-	fs.VisitAll(func(f *flag.Flag) {
-		if globals[f.Name] {
-			return
+	help := cmdline.FlagHelp(fs, func(name string) bool { return globals[name] })
+	cmd, known := commandAt(fs.Name())
+	if !known {
+		printFlagHelp(fs.Output(), help)
+		return
+	}
+	printGroupedFlagHelp(fs.Output(), help, cmd.Flags)
+	printExamples(fs.Output(), cmd.Examples)
+}
+
+func printExamples(w io.Writer, examples []cmdline.Example) {
+	if len(examples) > 0 {
+		fmt.Fprintln(w, "\nExamples:")
+	}
+	for _, e := range examples {
+		fmt.Fprintf(w, "  %s\n    \t%s\n", e.Command, e.Comment)
+	}
+}
+
+// printGroupedFlagHelp prints the flags no group claims, then each group's
+// under its heading, in the order the tree declares them.
+func printGroupedFlagHelp(w io.Writer, help []cmdline.Help, declared []cmdline.Flag) {
+	groupOf := map[string]string{}
+	var groups []string
+	for _, f := range declared {
+		groupOf[f.Name] = f.Group
+		if f.Group != "" && !slices.Contains(groups, f.Group) {
+			groups = append(groups, f.Group)
 		}
-		own.Var(f.Value, f.Name, f.Usage)
-		own.Lookup(f.Name).DefValue = f.DefValue
-	})
-	own.PrintDefaults()
+	}
+	inGroup := func(group string) []cmdline.Help {
+		return slices.DeleteFunc(slices.Clone(help), func(h cmdline.Help) bool {
+			return groupOf[strings.TrimLeft(strings.TrimPrefix(h.Name, "--[no-]"), "-")] != group
+		})
+	}
+	printFlagHelp(w, inGroup(""))
+	for _, group := range groups {
+		fmt.Fprintf(w, "\n%s\n", group)
+		printFlagHelp(w, inGroup(group))
+	}
+}
+
+// printRootFlags prints the flags the command tree declares on the program itself.
+func printRootFlags(w io.Writer) {
+	// nodisplayflags: this set only prints the root's declared flags in the top-level
+	// help, which lists the display flags itself; it parses nothing.
+	fs := flag.NewFlagSet(commands.Root.Name, flag.ContinueOnError)
+	commands.Root.BindFlags(fs)
+	printFlagHelp(w, cmdline.FlagHelp(fs, nil))
+}
+
+func printFlagHelp(w io.Writer, flags []cmdline.Help) {
+	for _, h := range flags {
+		label := "  " + h.Name
+		if h.Value != "" {
+			label += " " + h.Value
+		}
+		if h.Default != "" {
+			label = fmt.Sprintf("%s (default: %s)", label, h.Default)
+		}
+		fmt.Fprintf(w, "%s\n    \t%s\n", label, strings.ReplaceAll(h.Usage, "\n", "\n    \t"))
+	}
 }
 
 // globalFlagNames is the set every command gets for free: the config flags generated

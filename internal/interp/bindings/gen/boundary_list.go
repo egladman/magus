@@ -13,16 +13,29 @@ import (
 // RuntimeBoundaryTypes is every value magus encodes for Buzz, zero-valued and paired
 // with its encoder. A test populates each and asserts the round trip loses nothing.
 var RuntimeBoundaryTypes = []ffi.BoundaryType{
+	{Name: "AddedLayer", Zero: types.ImageAddedLayer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectImageAddedLayer(v.(types.ImageAddedLayer), enums)
+	}},
 	{Name: "Affected", Zero: types.AffectedResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffectedResult(v.(types.AffectedResult)) }},
-	{Name: "Affinity", Zero: types.AffinityOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffinityOutput(v.(types.AffinityOutput)) }},
+	{Name: "Affinity", Zero: types.Affinity{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffinity(v.(types.Affinity)) }},
 	{Name: "ArchiveEntry", Zero: types.ArchiveEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArchiveEntry(v.(types.ArchiveEntry)) }},
 	{Name: "Artifact", Zero: types.TargetArtifact{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetArtifact(v.(types.TargetArtifact)) }},
 	{Name: "ArtifactRequest", Zero: types.ArtifactRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArtifactRequest(v.(types.ArtifactRequest)) }},
 	{Name: "ArtifactVersion", Zero: types.ArtifactVersion{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArtifactVersion(v.(types.ArtifactVersion)) }},
+	{Name: "AttentionList", Zero: types.AttentionList{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAttentionList(v.(types.AttentionList), enums) }},
+	{Name: "AttentionRequest", Zero: types.AttentionRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectAttentionRequest(v.(types.AttentionRequest), enums)
+	}},
+	{Name: "BuzzFile", Zero: types.BuzzFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectBuzzFile(v.(types.BuzzFile)) }},
+	{Name: "BuzzFunction", Zero: types.BuzzFunction{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectBuzzFunction(v.(types.BuzzFunction)) }},
+	{Name: "BuzzStatement", Zero: types.BuzzStatement{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectBuzzStatement(v.(types.BuzzStatement)) }},
+	{Name: "BuzzTest", Zero: types.BuzzTest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectBuzzTest(v.(types.BuzzTest)) }},
 	{Name: "CIAnnotation", Zero: types.CIAnnotation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCIAnnotation(v.(types.CIAnnotation)) }},
 	{Name: "CIGroup", Zero: types.CIGroup{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCIGroup(v.(types.CIGroup)) }},
 	{Name: "CIGroupEnd", Zero: types.CIGroupEnd{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCIGroupEnd(v.(types.CIGroupEnd)) }},
+	{Name: "Case", Zero: types.Case{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCase(v.(types.Case)) }},
 	{Name: "ChainStep", Zero: types.ChainStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChainStep(v.(types.ChainStep)) }},
+	{Name: "Change", Zero: types.Change{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChange(v.(types.Change), enums) }},
 	{Name: "CharmConflict", Zero: spells.CharmConflict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmConflict(v.(spells.CharmConflict)) }},
 	{Name: "CharmDeclaration", Zero: types.CharmDeclaration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmDeclaration(v.(types.CharmDeclaration)) }},
 	{Name: "CharmEntry", Zero: types.CharmEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmEntry(v.(types.CharmEntry)) }},
@@ -42,19 +55,34 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Commit", Zero: types.CommitRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommitRecord(v.(types.CommitRecord)) }},
 	{Name: "CommitAuthor", Zero: types.CommitAuthor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCommitAuthor(v.(types.CommitAuthor)) }},
 	{Name: "CompressResult", Zero: types.CompressResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCompressResult(v.(types.CompressResult)) }},
-	{Name: "Conformance", Zero: types.ConformanceOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectConformanceOutput(v.(types.ConformanceOutput), enums)
+	{Name: "Conformance", Zero: types.Conformance{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformance(v.(types.Conformance), enums) }},
+	{Name: "ConformanceCeiling", Zero: types.ConformanceCeiling{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectConformanceCeiling(v.(types.ConformanceCeiling), enums)
 	}},
-	{Name: "ConformanceCarry", Zero: types.ConformanceCarry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceCarry(v.(types.ConformanceCarry)) }},
 	{Name: "ConformanceItem", Zero: types.ConformanceItem{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceItem(v.(types.ConformanceItem)) }},
-	{Name: "ConformanceKey", Zero: types.ConformanceKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceKey(v.(types.ConformanceKey)) }},
-	{Name: "ConformanceKnown", Zero: types.ConformanceKnown{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceKnown(v.(types.ConformanceKnown)) }},
-	{Name: "ConformanceRow", Zero: types.ConformanceRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceRow(v.(types.ConformanceRow)) }},
-	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow)) }},
-	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential)) }},
+	{Name: "ConformanceKey", Zero: types.ConformanceKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectConformanceKey(v.(types.ConformanceKey), enums)
+	}},
+	{Name: "ConformanceReport", Zero: types.ConformanceReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectConformanceReport(v.(types.ConformanceReport), enums)
+	}},
+	{Name: "ConformanceRow", Zero: types.ConformanceRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectConformanceRow(v.(types.ConformanceRow), enums)
+	}},
+	{Name: "ConformanceUnmeasured", Zero: types.ConformanceUnmeasured{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectConformanceUnmeasured(v.(types.ConformanceUnmeasured))
+	}},
+	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow), enums) }},
+	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential), enums) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
+	{Name: "Descriptor", Zero: types.ImageDescriptor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectImageDescriptor(v.(types.ImageDescriptor), enums)
+	}},
 	{Name: "Deviation", Zero: types.Deviation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDeviation(v.(types.Deviation)) }},
 	{Name: "Diagnostic", Zero: types.Diagnostic{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiagnostic(v.(types.Diagnostic)) }},
+	{Name: "DiagnosticCode", Zero: types.DiagnosticCodeRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectDiagnosticCodeRef(v.(types.DiagnosticCodeRef), enums)
+	}},
 	{Name: "Diff", Zero: types.Diff{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiff(v.(types.Diff), enums) }},
 	{Name: "DiffAPI", Zero: types.DiffAPI{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffAPI(v.(types.DiffAPI)) }},
 	{Name: "DiffChurn", Zero: types.DiffChurn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffChurn(v.(types.DiffChurn)) }},
@@ -74,56 +102,73 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "DiffUncovered", Zero: types.DiffUncovered{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUncovered(v.(types.DiffUncovered), enums) }},
 	{Name: "DiffUnread", Zero: types.DiffUnread{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUnread(v.(types.DiffUnread), enums) }},
 	{Name: "DiffWhy", Zero: types.DiffWhy{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffWhy(v.(types.DiffWhy), enums) }},
+	{Name: "Digest", Zero: types.ImageDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDigest(v.(types.ImageDigest), enums) }},
 	{Name: "Dir", Zero: types.Dir{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDir(v.(types.Dir)) }},
 	{Name: "DirCall", Zero: types.DirCall{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDirCall(v.(types.DirCall)) }},
+	{Name: "DiscoveryFile", Zero: spells.DiscoveryFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiscoveryFile(v.(spells.DiscoveryFile)) }},
+	{Name: "DiscoveryQuery", Zero: spells.DiscoveryQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiscoveryQuery(v.(spells.DiscoveryQuery)) }},
+	{Name: "DiskReclaim", Zero: types.DiskReclaim{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiskReclaim(v.(types.DiskReclaim)) }},
+	{Name: "DiskUsage", Zero: types.DiskUsage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiskUsage(v.(types.DiskUsage)) }},
 	{Name: "DoctorReport", Zero: types.DoctorReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDoctorReport(v.(types.DoctorReport), enums) }},
 	{Name: "DoctorSummary", Zero: types.DoctorSummary{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDoctorSummary(v.(types.DoctorSummary)) }},
+	{Name: "Document", Zero: types.ImageDocument{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDocument(v.(types.ImageDocument), enums) }},
 	{Name: "DriftResult", Zero: types.DriftResultRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDriftResultRecord(v.(types.DriftResultRecord)) }},
-	{Name: "Duplication", Zero: types.DuplicationOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectDuplicationOutput(v.(types.DuplicationOutput), enums)
+	{Name: "Duplication", Zero: types.Duplication{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDuplication(v.(types.Duplication), enums) }},
+	{Name: "DuplicationGroup", Zero: types.DuplicationGroup{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectDuplicationGroup(v.(types.DuplicationGroup), enums)
 	}},
-	{Name: "DuplicationGroup", Zero: types.DuplicationGroup{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDuplicationGroup(v.(types.DuplicationGroup)) }},
 	{Name: "DuplicationHistory", Zero: types.DuplicationHistory{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectDuplicationHistory(v.(types.DuplicationHistory))
 	}},
 	{Name: "DuplicationSite", Zero: types.DuplicationSite{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDuplicationSite(v.(types.DuplicationSite)) }},
-	{Name: "EdgeRef", Zero: types.KnowledgeEdgeRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeEdgeRef(v.(types.KnowledgeEdgeRef)) }},
+	{Name: "EdgeRef", Zero: types.KnowledgeEdgeRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectKnowledgeEdgeRef(v.(types.KnowledgeEdgeRef), enums)
+	}},
 	{Name: "Empty", Zero: types.Empty{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEmpty(v.(types.Empty)) }},
-	{Name: "EvaluatedProject", Zero: types.EvaluatedProject{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEvaluatedProject(v.(types.EvaluatedProject)) }},
+	{Name: "Entry", Zero: types.ImageEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageEntry(v.(types.ImageEntry), enums) }},
+	{Name: "EvaluatedProject", Zero: types.EvaluatedProject{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectEvaluatedProject(v.(types.EvaluatedProject), enums)
+	}},
 	{Name: "EvaluatedSpell", Zero: types.EvaluatedSpell{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEvaluatedSpell(v.(types.EvaluatedSpell)) }},
-	{Name: "EvaluatedTarget", Zero: types.EvaluatedTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEvaluatedTarget(v.(types.EvaluatedTarget)) }},
+	{Name: "EvaluatedTarget", Zero: types.EvaluatedTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectEvaluatedTarget(v.(types.EvaluatedTarget), enums)
+	}},
 	{Name: "ExecResult", Zero: types.ExecResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectExecResult(v.(types.ExecResult)) }},
 	{Name: "ExplainResult", Zero: types.KnowledgeExplainOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeExplainOutput(v.(types.KnowledgeExplainOutput), enums)
 	}},
-	{Name: "FileChange", Zero: types.FileChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileChange(v.(types.FileChange)) }},
+	{Name: "FileChange", Zero: types.FileChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileChange(v.(types.FileChange), enums) }},
 	{Name: "FileClaim", Zero: types.FileClaim{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileClaim(v.(types.FileClaim)) }},
 	{Name: "FileEntry", Zero: types.FileEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileEntry(v.(types.FileEntry)) }},
 	{Name: "FileHotspot", Zero: types.FileHotspot{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileHotspot(v.(types.FileHotspot)) }},
 	{Name: "FileInfo", Zero: types.FileInfo{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileInfo(v.(types.FileInfo)) }},
+	{Name: "FileRef", Zero: types.FileRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileRef(v.(types.FileRef)) }},
 	{Name: "FileReport", Zero: types.FileReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileReport(v.(types.FileReport)) }},
 	{Name: "FileStat", Zero: types.FileStat{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileStat(v.(types.FileStat)) }},
 	{Name: "FindReviewRequest", Zero: types.FindReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFindReviewRequest(v.(types.FindReviewRequest)) }},
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
 	{Name: "GateEvidence", Zero: types.GateEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGateEvidence(v.(types.GateEvidence)) }},
 	{Name: "GateStatus", Zero: types.GateStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGateStatus(v.(types.GateStatus)) }},
-	{Name: "Goal", Zero: types.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGoal(v.(types.Goal)) }},
+	{Name: "Goal", Zero: types.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGoal(v.(types.Goal), enums) }},
 	{Name: "Grant", Zero: types.Grant{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGrant(v.(types.Grant)) }},
-	{Name: "Graph", Zero: types.GraphView{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGraphView(v.(types.GraphView)) }},
-	{Name: "Grouping", Zero: types.GroupingOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectGroupingOutput(v.(types.GroupingOutput), enums)
+	{Name: "Graph", Zero: types.SymbolIndexDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectSymbolIndexDigest(v.(types.SymbolIndexDigest), enums)
 	}},
+	{Name: "Grouping", Zero: types.Grouping{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGrouping(v.(types.Grouping), enums) }},
 	{Name: "GroupingRecord", Zero: types.GroupingRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectGroupingRecord(v.(types.GroupingRecord), enums)
 	}},
 	{Name: "GuardBinary", Zero: types.GuardBinary{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGuardBinary(v.(types.GuardBinary)) }},
-	{Name: "GuardVerdict", Zero: types.GuardVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGuardVerdict(v.(types.GuardVerdict)) }},
-	{Name: "HarnessChange", Zero: types.HarnessChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessChange(v.(types.HarnessChange)) }},
-	{Name: "HarnessFile", Zero: types.HarnessFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessFile(v.(types.HarnessFile)) }},
-	{Name: "HarnessPlan", Zero: types.HarnessPlan{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessPlan(v.(types.HarnessPlan)) }},
+	{Name: "GuardVerdict", Zero: types.GuardVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGuardVerdict(v.(types.GuardVerdict), enums) }},
+	{Name: "HarnessChange", Zero: types.HarnessChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessChange(v.(types.HarnessChange), enums) }},
+	{Name: "HarnessFile", Zero: types.HarnessFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessFile(v.(types.HarnessFile), enums) }},
+	{Name: "HarnessInstallation", Zero: types.HarnessInstallation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectHarnessInstallation(v.(types.HarnessInstallation), enums)
+	}},
 	{Name: "HarnessWired", Zero: types.HarnessWired{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessWired(v.(types.HarnessWired)) }},
-	{Name: "Hotspots", Zero: types.HotspotOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHotspotOutput(v.(types.HotspotOutput)) }},
-	{Name: "HttpResponse", Zero: types.HTTPResponse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHTTPResponse(v.(types.HTTPResponse)) }},
+	{Name: "History", Zero: types.History{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHistory(v.(types.History), enums) }},
+	{Name: "Holds", Zero: types.Holds{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHolds(v.(types.Holds), enums) }},
+	{Name: "Hotspots", Zero: types.Hotspots{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHotspots(v.(types.Hotspots)) }},
 	{Name: "Impact", Zero: types.ImpactResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactResult(v.(types.ImpactResult)) }},
 	{Name: "ImpactCoverage", Zero: types.ImpactCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactCoverage(v.(types.ImpactCoverage)) }},
 	{Name: "ImpactFileCoverage", Zero: types.ImpactFileCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -132,17 +177,20 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ImpactProject", Zero: types.ImpactProject{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactProject(v.(types.ImpactProject)) }},
 	{Name: "ImpactSymbol", Zero: types.ImpactSymbol{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactSymbol(v.(types.ImpactSymbol)) }},
 	{Name: "ImportGraph", Zero: types.ImportGraph{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImportGraph(v.(types.ImportGraph)) }},
-	{Name: "InflightChange", Zero: types.InflightChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInflightChange(v.(types.InflightChange)) }},
+	{Name: "InflightChange", Zero: types.InflightChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectInflightChange(v.(types.InflightChange), enums)
+	}},
 	{Name: "InflightFetch", Zero: types.InflightFetch{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInflightFetch(v.(types.InflightFetch)) }},
 	{Name: "InflightNeighbour", Zero: types.InflightNeighbour{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInflightNeighbour(v.(types.InflightNeighbour)) }},
 	{Name: "InputRef", Zero: types.InputRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInputRef(v.(types.InputRef)) }},
-	{Name: "InsightReport", Zero: types.InsightReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInsightReport(v.(types.InsightReport), enums) }},
 	{Name: "Job", Zero: types.Job{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJob(v.(types.Job), enums) }},
 	{Name: "JobAttempt", Zero: types.JobAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobAttempt(v.(types.JobAttempt)) }},
-	{Name: "JobBlock", Zero: types.JobBlock{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobBlock(v.(types.JobBlock)) }},
+	{Name: "JobBlock", Zero: types.JobBlock{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobBlock(v.(types.JobBlock), enums) }},
 	{Name: "JobClaim", Zero: types.JobClaim{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobClaim(v.(types.JobClaim), enums) }},
+	{Name: "JobDeferred", Zero: types.JobDeferred{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobDeferred(v.(types.JobDeferred)) }},
 	{Name: "JobDenial", Zero: types.JobDenial{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobDenial(v.(types.JobDenial)) }},
-	{Name: "JobEntry", Zero: types.JobEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobEntry(v.(types.JobEntry)) }},
+	{Name: "JobEntry", Zero: types.JobEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobEntry(v.(types.JobEntry), enums) }},
+	{Name: "JobForkFacts", Zero: types.JobForkFacts{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobForkFacts(v.(types.JobForkFacts)) }},
 	{Name: "JobGateAttempt", Zero: types.JobGateAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobGateAttempt(v.(types.JobGateAttempt)) }},
 	{Name: "JobIntegration", Zero: types.JobIntegration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobIntegration(v.(types.JobIntegration)) }},
 	{Name: "JobList", Zero: types.JobList{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobList(v.(types.JobList), enums) }},
@@ -152,6 +200,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectJobOverlapFootprint(v.(types.JobOverlapFootprint))
 	}},
 	{Name: "JobReadOnly", Zero: types.JobReadOnly{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobReadOnly(v.(types.JobReadOnly)) }},
+	{Name: "JobRegistration", Zero: types.JobRegistration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectJobRegistration(v.(types.JobRegistration), enums)
+	}},
 	{Name: "JobRejection", Zero: types.JobRejection{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobRejection(v.(types.JobRejection)) }},
 	{Name: "JobRelease", Zero: types.JobRelease{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobRelease(v.(types.JobRelease)) }},
 	{Name: "JobResult", Zero: types.JobResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobResult(v.(types.JobResult)) }},
@@ -159,10 +210,12 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectJobResultValidation(v.(types.JobResultValidation))
 	}},
 	{Name: "JobRun", Zero: types.JobRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobRun(v.(types.JobRun)) }},
-	{Name: "JobStatus", Zero: types.JobStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobStatus(v.(types.JobStatus)) }},
+	{Name: "JobStatus", Zero: types.JobStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobStatus(v.(types.JobStatus), enums) }},
 	{Name: "JobUnattributedWrite", Zero: types.JobUnattributedWrite{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectJobUnattributedWrite(v.(types.JobUnattributedWrite))
 	}},
+	{Name: "JobUnmerged", Zero: types.JobUnmerged{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobUnmerged(v.(types.JobUnmerged)) }},
+	{Name: "JobUnmergedReport", Zero: types.JobUnmergedReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobUnmergedReport(v.(types.JobUnmergedReport)) }},
 	{Name: "JobWorktree", Zero: types.JobWorktree{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobWorktree(v.(types.JobWorktree)) }},
 	{Name: "KnowledgeAnswer", Zero: types.KnowledgeAnswer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeAnswer(v.(types.KnowledgeAnswer), enums)
@@ -170,7 +223,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "KnowledgeDocCoverage", Zero: types.KnowledgeDocCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeDocCoverage(v.(types.KnowledgeDocCoverage))
 	}},
-	{Name: "KnowledgeEdge", Zero: types.KnowledgeEdge{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeEdge(v.(types.KnowledgeEdge)) }},
+	{Name: "KnowledgeEdge", Zero: types.KnowledgeEdge{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeEdge(v.(types.KnowledgeEdge), enums) }},
 	{Name: "KnowledgeFold", Zero: types.KnowledgeFold{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeFold(v.(types.KnowledgeFold)) }},
 	{Name: "KnowledgeGodNode", Zero: types.KnowledgeGodNode{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeGodNode(v.(types.KnowledgeGodNode)) }},
 	{Name: "KnowledgeIndexCause", Zero: types.KnowledgeIndexCause{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -192,40 +245,48 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectKnowledgeTextPresence(v.(types.KnowledgeTextPresence))
 	}},
 	{Name: "Layer", Zero: types.Layer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLayer(v.(types.Layer)) }},
+	{Name: "Layout", Zero: types.ImageLayout{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageLayout(v.(types.ImageLayout), enums) }},
 	{Name: "LeaseCheck", Zero: types.LeaseCheck{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLeaseCheck(v.(types.LeaseCheck)) }},
 	{Name: "LifecycleQuery", Zero: types.LifecycleQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleQuery(v.(types.LifecycleQuery)) }},
 	{Name: "LifecycleStatus", Zero: types.LifecycleStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleStatus(v.(types.LifecycleStatus)) }},
 	{Name: "MCPTool", Zero: types.MCPTool{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMCPTool(v.(types.MCPTool)) }},
 	{Name: "MCPToolParam", Zero: types.MCPToolParam{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMCPToolParam(v.(types.MCPToolParam)) }},
+	{Name: "MarkdownSection", Zero: types.MarkdownSection{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMarkdownSection(v.(types.MarkdownSection)) }},
 	{Name: "Match", Zero: types.KnowledgeMatch{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeMatch(v.(types.KnowledgeMatch)) }},
-	{Name: "ModelTierOutput", Zero: types.ModelTierOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectModelTierOutput(v.(types.ModelTierOutput), enums)
-	}},
 	{Name: "ModelTierRecord", Zero: types.ModelTierRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectModelTierRecord(v.(types.ModelTierRecord), enums)
 	}},
 	{Name: "ModelTierRequest", Zero: types.ModelTierRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectModelTierRequest(v.(types.ModelTierRequest), enums)
 	}},
+	{Name: "ModelTiers", Zero: types.ModelTiers{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModelTiers(v.(types.ModelTiers), enums) }},
 	{Name: "Module", Zero: types.ModuleEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleEntry(v.(types.ModuleEntry)) }},
 	{Name: "ModuleFieldEntry", Zero: types.ModuleFieldEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleFieldEntry(v.(types.ModuleFieldEntry)) }},
 	{Name: "ModuleMethodEntry", Zero: types.ModuleMethodEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleMethodEntry(v.(types.ModuleMethodEntry)) }},
+	{Name: "ModuleObjectEntry", Zero: types.ModuleObjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleObjectEntry(v.(types.ModuleObjectEntry)) }},
 	{Name: "NeighborhoodResult", Zero: types.KnowledgeNeighborhoodOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeNeighborhoodOutput(v.(types.KnowledgeNeighborhoodOutput), enums)
 	}},
 	{Name: "Node", Zero: types.Node{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectNode(v.(types.Node)) }},
-	{Name: "Origin", Zero: types.Origin{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOrigin(v.(types.Origin)) }},
+	{Name: "Origin", Zero: types.Origin{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOrigin(v.(types.Origin), enums) }},
 	{Name: "OutputRecord", Zero: types.OutputRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOutputRecord(v.(types.OutputRecord)) }},
 	{Name: "OutputRef", Zero: types.OutputRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOutputRef(v.(types.OutputRef)) }},
-	{Name: "Ownership", Zero: types.OwnershipOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOwnershipOutput(v.(types.OwnershipOutput)) }},
+	{Name: "Ownership", Zero: types.Ownership{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOwnership(v.(types.Ownership)) }},
 	{Name: "OwnershipEntry", Zero: types.OwnershipEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOwnershipEntry(v.(types.OwnershipEntry)) }},
 	{Name: "PathResult", Zero: types.KnowledgePathOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectKnowledgePathOutput(v.(types.KnowledgePathOutput))
+		return ObjectKnowledgePathOutput(v.(types.KnowledgePathOutput), enums)
 	}},
-	{Name: "PathStep", Zero: types.KnowledgePathStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgePathStep(v.(types.KnowledgePathStep)) }},
+	{Name: "PathStep", Zero: types.KnowledgePathStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectKnowledgePathStep(v.(types.KnowledgePathStep), enums)
+	}},
 	{Name: "PipeRecord", Zero: types.PipeRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPipeRecord(v.(types.PipeRecord)) }},
-	{Name: "PriorAttempt", Zero: types.PriorAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPriorAttempt(v.(types.PriorAttempt)) }},
+	{Name: "Platform", Zero: types.ImagePlatform{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePlatform(v.(types.ImagePlatform), enums) }},
+	{Name: "Precedent", Zero: types.Precedent{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedent(v.(types.Precedent), enums) }},
+	{Name: "PrecedentKey", Zero: types.PrecedentKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentKey(v.(types.PrecedentKey)) }},
+	{Name: "PrecedentScope", Zero: types.PrecedentScope{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentScope(v.(types.PrecedentScope)) }},
+	{Name: "PriorAttempt", Zero: types.PriorAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPriorAttempt(v.(types.PriorAttempt), enums) }},
 	{Name: "ProjectEntry", Zero: types.ProjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectEntry(v.(types.ProjectEntry)) }},
+	{Name: "ProjectGraph", Zero: types.ProjectGraph{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectGraph(v.(types.ProjectGraph)) }},
 	{Name: "ProjectQuery", Zero: types.ProjectQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectQuery(v.(types.ProjectQuery)) }},
 	{Name: "ProjectRef", Zero: types.ProjectRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectRef(v.(types.ProjectRef)) }},
 	{Name: "Projects", Zero: types.ProjectsOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectsOutput(v.(types.ProjectsOutput)) }},
@@ -234,6 +295,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "PublishReviewRequest", Zero: types.PublishReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectPublishReviewRequest(v.(types.PublishReviewRequest))
 	}},
+	{Name: "Pushed", Zero: types.ImagePushed{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePushed(v.(types.ImagePushed), enums) }},
 	{Name: "QueryResult", Zero: types.KnowledgeQueryOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeQueryOutput(v.(types.KnowledgeQueryOutput), enums)
 	}},
@@ -279,15 +341,16 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "RefsResult", Zero: types.KnowledgeRefsOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeRefsOutput(v.(types.KnowledgeRefsOutput), enums)
 	}},
-	{Name: "RegionChange", Zero: types.RegionChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRegionChange(v.(types.RegionChange)) }},
+	{Name: "RegionChange", Zero: types.RegionChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRegionChange(v.(types.RegionChange), enums) }},
 	{Name: "ReleaseStage", Zero: types.ReleaseStage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReleaseStage(v.(types.ReleaseStage)) }},
 	{Name: "ReplyReviewRequest", Zero: types.ReplyReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectReplyReviewRequest(v.(types.ReplyReviewRequest))
 	}},
-	{Name: "RetryVerdict", Zero: types.RetryVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRetryVerdict(v.(types.RetryVerdict)) }},
+	{Name: "Response", Zero: types.HTTPResponse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHTTPResponse(v.(types.HTTPResponse)) }},
+	{Name: "RetryVerdict", Zero: types.RetryVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRetryVerdict(v.(types.RetryVerdict), enums) }},
 	{Name: "ReviewDraft", Zero: types.ReviewDraft{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewDraft(v.(types.ReviewDraft)) }},
 	{Name: "ReviewRef", Zero: types.ReviewRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewRef(v.(types.ReviewRef)) }},
-	{Name: "Rule", Zero: types.RuleDoc{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRuleDoc(v.(types.RuleDoc)) }},
+	{Name: "Rule", Zero: types.RuleDoc{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRuleDoc(v.(types.RuleDoc), enums) }},
 	{Name: "Run", Zero: types.StatusRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRun(v.(types.StatusRun), enums) }},
 	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandbox(v.(spells.Sandbox), enums) }},
 	{Name: "SandboxAllow", Zero: spells.SandboxAllow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandboxAllow(v.(spells.SandboxAllow), enums) }},
@@ -298,23 +361,28 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "SemverVersion", Zero: types.SemverVersion{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSemverVersion(v.(types.SemverVersion)) }},
 	{Name: "ServiceLease", Zero: types.ServiceLease{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectServiceLease(v.(types.ServiceLease)) }},
 	{Name: "ServiceView", Zero: spells.ServiceView{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectServiceView(v.(spells.ServiceView)) }},
+	{Name: "Session", Zero: types.Session{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSession(v.(types.Session), enums) }},
 	{Name: "ShellCommand", Zero: types.ShellCommand{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectShellCommand(v.(types.ShellCommand)) }},
 	{Name: "ShippedAgent", Zero: types.ShippedAgent{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectShippedAgent(v.(types.ShippedAgent)) }},
 	{Name: "Skill", Zero: types.Skill{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSkill(v.(types.Skill)) }},
 	{Name: "SpawnRequest", Zero: types.SpawnRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnRequest(v.(types.SpawnRequest), enums) }},
-	{Name: "SpawnTarget", Zero: types.SpawnTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnTarget(v.(types.SpawnTarget)) }},
+	{Name: "SpawnTarget", Zero: types.SpawnTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnTarget(v.(types.SpawnTarget), enums) }},
 	{Name: "Spell", Zero: types.Spell{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpell(v.(types.Spell)) }},
+	{Name: "SpellCache", Zero: types.SpellCache{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellCache(v.(types.SpellCache)) }},
 	{Name: "SpellToolchain", Zero: types.SpellToolchain{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellToolchain(v.(types.SpellToolchain)) }},
 	{Name: "SpellVersion", Zero: types.SpellVersion{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellVersion(v.(types.SpellVersion)) }},
 	{Name: "Status", Zero: types.StatusRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRecord(v.(types.StatusRecord)) }},
+	{Name: "StopRequest", Zero: types.StopRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStopRequest(v.(types.StopRequest), enums) }},
 	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStubSyntax(v.(spells.StubSyntax)) }},
-	{Name: "SymbolIndexDigest", Zero: types.SymbolIndexDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectSymbolIndexDigest(v.(types.SymbolIndexDigest), enums)
+	{Name: "SymbolDecl", Zero: types.SymbolDecl{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSymbolDecl(v.(types.SymbolDecl)) }},
+	{Name: "SymbolIndexStatus", Zero: types.SymbolIndexStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectSymbolIndexStatus(v.(types.SymbolIndexStatus), enums)
 	}},
 	{Name: "SymbolIndexer", Zero: spells.SymbolIndexer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSymbolIndexer(v.(spells.SymbolIndexer), enums) }},
+	{Name: "Symbols", Zero: types.Symbols{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSymbols(v.(types.Symbols), enums) }},
 	{Name: "Syntax", Zero: spells.Syntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSyntax(v.(spells.Syntax)) }},
 	{Name: "Tag", Zero: types.VCSTag{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSTag(v.(types.VCSTag)) }},
-	{Name: "Target", Zero: types.Target{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTarget(v.(types.Target)) }},
+	{Name: "Target", Zero: types.Target{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTarget(v.(types.Target), enums) }},
 	{Name: "TargetEntry", Zero: types.TargetEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetEntry(v.(types.TargetEntry)) }},
 	{Name: "TargetGraph", Zero: types.TargetGraphOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetGraphOutput(v.(types.TargetGraphOutput)) }},
 	{Name: "TargetGraphNode", Zero: types.TargetGraphNode{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetGraphNode(v.(types.TargetGraphNode)) }},
@@ -327,25 +395,30 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	}},
 	{Name: "TargetSpellUse", Zero: types.TargetSpellUse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetSpellUse(v.(types.TargetSpellUse)) }},
 	{Name: "TermSize", Zero: types.TermSize{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTermSize(v.(types.TermSize)) }},
+	{Name: "TierEvidence", Zero: types.TierEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierEvidence(v.(types.TierEvidence), enums) }},
+	{Name: "TierGateStep", Zero: types.TierGateStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierGateStep(v.(types.TierGateStep)) }},
+	{Name: "TierReport", Zero: types.TierReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierReport(v.(types.TierReport), enums) }},
 	{Name: "ToolReport", Zero: types.ToolReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolReport(v.(types.ToolReport)) }},
 	{Name: "ToolRow", Zero: types.ToolRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolRow(v.(types.ToolRow)) }},
 	{Name: "Trail", Zero: types.Trail{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrail(v.(types.Trail)) }},
-	{Name: "TrailMark", Zero: types.TrailMark{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailMark(v.(types.TrailMark)) }},
+	{Name: "TrailMark", Zero: types.TrailMark{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailMark(v.(types.TrailMark), enums) }},
 	{Name: "TrailObservation", Zero: types.TrailObservation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailObservation(v.(types.TrailObservation)) }},
 	{Name: "TrailSpawn", Zero: types.TrailSpawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailSpawn(v.(types.TrailSpawn)) }},
-	{Name: "Trend", Zero: types.TrendOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrendOutput(v.(types.TrendOutput)) }},
+	{Name: "Trend", Zero: types.Trend{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrend(v.(types.Trend)) }},
 	{Name: "TrendEntry", Zero: types.TrendEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrendEntry(v.(types.TrendEntry)) }},
+	{Name: "TrimReport", Zero: types.TrimReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrimReport(v.(types.TrimReport)) }},
 	{Name: "URL", Zero: types.URL{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectURL(v.(types.URL)) }},
 	{Name: "UncompressResult", Zero: types.UncompressResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUncompressResult(v.(types.UncompressResult)) }},
-	{Name: "Unreferenced", Zero: types.UnreferencedOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectUnreferencedOutput(v.(types.UnreferencedOutput), enums)
-	}},
+	{Name: "Unreferenced", Zero: types.Unreferenced{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUnreferenced(v.(types.Unreferenced), enums) }},
 	{Name: "UnreferencedEntry", Zero: types.UnreferencedEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUnreferencedEntry(v.(types.UnreferencedEntry)) }},
 	{Name: "UpdateRef", Zero: types.UpdateRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUpdateRef(v.(types.UpdateRef)) }},
 	{Name: "VCSCheckpoint", Zero: types.VCSCheckpoint{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSCheckpoint(v.(types.VCSCheckpoint)) }},
 	{Name: "VCSInvocation", Zero: types.VCSInvocation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSInvocation(v.(types.VCSInvocation)) }},
-	{Name: "Volatility", Zero: types.VolatilityReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatilityReport(v.(types.VolatilityReport)) }},
+	{Name: "Volatility", Zero: types.Volatility{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatility(v.(types.Volatility)) }},
 	{Name: "VolatilityTarget", Zero: types.VolatilityTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatilityTarget(v.(types.VolatilityTarget)) }},
+	{Name: "Workspace", Zero: types.MagusWorkspace{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectMagusWorkspace(v.(types.MagusWorkspace), enums)
+	}},
 	{Name: "WorkspaceEntry", Zero: types.WorkspaceEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWorkspaceEntry(v.(types.WorkspaceEntry)) }},
 	{Name: "WriteRequest", Zero: types.WriteRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWriteRequest(v.(types.WriteRequest), enums) }},
 	{Name: "YamlPositions", Zero: types.YAMLPositions{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectYAMLPositions(v.(types.YAMLPositions)) }},

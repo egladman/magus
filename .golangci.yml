@@ -23,7 +23,7 @@ linters:
     # every platform. This tree carries ~52 build-tagged files (io_uring, the stat and
     # topology variants, the unix/windows server detach pair), so that failure would be
     # both easy to introduce and slow to attribute. Zero findings when adopted: it is a
-    # ratchet, not a cleanup.
+    # guard, not a cleanup.
     - gocheckcompilerdirectives # //go: directives are well-formed and actually apply
 
     # --- HTTP safety ---
@@ -38,7 +38,7 @@ linters:
     # that proof go stale the moment someone adds one of those fields back to v.
     # musttag above catches a missing json tag on the way in; this catches the
     # marshal call itself losing the error-safety invariant its blank identifier
-    # depends on. Zero findings when adopted: it is a ratchet, not a cleanup.
+    # depends on. Zero findings when adopted: it is a guard, not a cleanup.
     - errchkjson
     - unconvert       # remove redundant type conversions
     - durationcheck   # catch time.Duration multiplication bugs
@@ -52,13 +52,13 @@ linters:
     # mistake legal - the slice grows past its n zero-valued elements instead of
     # filling them, so the result carries n silent zeros ahead of every real
     # value. makezero is the length half of what prealloc only checks the
-    # capacity half of. Zero findings when adopted: it is a ratchet, not a cleanup.
+    # capacity half of. Zero findings when adopted: it is a guard, not a cleanup.
     - makezero
     # A bidirectional override (U+202E and its family) reorders how a line RENDERS while
     # leaving the bytes the compiler reads untouched, so a reviewer and the toolchain can be
     # made to disagree about what a line says. Nothing in Go's own tooling reports one, and
     # this tree is read in review: a deception it failed to notice in its own source is one
-    # it would then render to somebody else. Zero findings when adopted: it is a ratchet, not
+    # it would then render to somebody else. Zero findings when adopted: it is a guard, not
     # a cleanup. The renderer half of this lives in internal/diff.SanitizeBidi, which is what
     # protects code magus DISPLAYS rather than code it ships.
     - bidichk
@@ -93,19 +93,19 @@ linters:
     - nolintlint      # enforce that //nolint directives include a reason
     - whitespace      # flag unnecessary blank lines inside functions/blocks
 
-    # --- In-repo linters (see libs/testlayout/.custom-gcl.yml) ---
+    # --- In-repo linters (see libs/testpairing/.custom-gcl.yml) ---
     # testpair reports every X_test.go with no X.go beside it, with no exemptions:
     # no conventional names, no allow list, no marker, no exclusion below. It is a
-    # linter of its own so the //nolint:testlayout an import cycle earns cannot
-    # silence it, and hack/lint/testlayout-pairing-has-no-exemptions.buzz refuses
-    # any directive or exclusion that would. testlayout reports a test file outside
-    # its package and a _unix file name. The reasoning is in libs/testlayout/README.md.
+    # linter of its own so the //nolint:testpairing an import cycle earns cannot
+    # silence it, and hack/lint/testpairing-pairing-has-no-exemptions.buzz refuses
+    # any directive or exclusion that would. testpairing reports a test file outside
+    # its package and a _unix file name. The reasoning is in libs/testpairing/README.md.
     #
     # These only exist in .magus/custom-gcl. The stock golangci-lint on PATH
     # cannot read this config while the lines below are present - it exits with
-    # `plugin("testlayout") not found`. That is the price of golangci-lint having
+    # `plugin("testpairing") not found`. That is the price of golangci-lint having
     # no runtime plugin loading, and it is why `magus run lint` builds the binary.
-    - testlayout
+    - testpairing
     - testpair
 
     # This repo's own rules over Go source, one linter each, from libs/conventions
@@ -129,6 +129,7 @@ linters:
     - diagmsg
     - errmsg
     - stderrprint
+    - secretfields
 
     # A NoError that continues past a failure reads a nil result and panics, burying
     # the error that explains it; go-require keeps require's FailNow off goroutines.
@@ -137,12 +138,21 @@ linters:
     # types is the near-leaf domain package; see the rule below.
     - depguard
 
+    # A calendar step or a local zone makes a result depend on where and when it runs.
+    # Each kept site carries //nolint:forbidigo with its reason.
+    - forbidigo
+
     # A new init() fails lint. Each kept site carries //nolint:gochecknoinits with its
     # reason, which nolintlint requires, so adding one is a reviewable exception.
     # Generated protobuf code and test files are excluded by path below.
     - gochecknoinits
 
   settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^time\.Time\.AddDate$
+          msg: AddDate steps calendar days in the receiver's zone; use t.UTC().AddDate or Add(n*24*time.Hour)
     depguard:
       rules:
         # types/doc.go's contract: no filesystem, VCS, or process execution. What it
@@ -179,7 +189,7 @@ linters:
             - pkg: github.com/egladman/magus/
               desc: types may depend on spells, libs/diagnostics, internal/json and types/enum, nothing else in magus
 
-        # libs/conventions, libs/proofread and libs/testlayout are magus-repo policy, never shipped.
+        # libs/conventions, libs/proofread and libs/testpairing are magus-repo policy, never shipped.
         root-imports-no-repo-policy:
           list-mode: lax
           files:
@@ -190,15 +200,15 @@ linters:
               desc: the conventions are magus-repo policy and never ship in the root module
             - pkg: github.com/egladman/magus/libs/proofread
               desc: the conventions are magus-repo policy and never ship in the root module
-            - pkg: github.com/egladman/magus/libs/testlayout
+            - pkg: github.com/egladman/magus/libs/testpairing
               desc: the conventions are magus-repo policy and never ship in the root module
 
 
     custom:
-      testlayout:
+      testpairing:
         type: module
         description: reports a test file outside its package, or named for unix
-        original-url: github.com/egladman/magus/libs/testlayout
+        original-url: github.com/egladman/magus/libs/testpairing
         settings:
           # Name the platforms (X_linux.go, X_darwin.go, X_other.go), never unix.
           report-unix-suffix: true
@@ -207,7 +217,7 @@ linters:
       testpair:
         type: module
         description: reports a test file with no source file of the same name
-        original-url: github.com/egladman/magus/libs/testlayout
+        original-url: github.com/egladman/magus/libs/testpairing
 
       hostagnostic:
         type: module
@@ -297,12 +307,11 @@ linters:
           # never exempts a slog message.
           slog: true
           hint: a message is the verdict, one next command and a ref; the rationale goes behind the ref
-          # A RATCHET: every file holding a finding on 2026-10-09 (173 findings in 54
+          # AN ALLOW LIST: every file holding a finding on 2026-10-09 (173 findings in 54
           # files: 87 message-length, 56 message-rationale, 24 message-tag, 6
           # message-commands), exempt until the terse-output rewrites land. Delete an
           # entry once its file is clean; never add one.
           allow:
-            - {file: cmd/magus/gate.go, reason: staged}
             - {file: cmd/magus/spell.go, reason: staged}
             - {file: cmd/magus/stale_index.go, reason: staged}
             - {file: describe.go, reason: staged}
@@ -337,6 +346,17 @@ linters:
             - {file: symbol.go, reason: staged}
             - {file: types/secret.go, reason: staged}
             - {file: watchdog.go, reason: staged}
+
+      secretfields:
+        type: module
+        description: reports a struct field or named result that holds a credential as a plain string
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          # A name is a credential when its last camel-case words spell one of these.
+          # A field that only refers to a secret says so in its name (PasswordRef).
+          words: [Password, Passwd, Secret, Token, Tokens, Credential, APIKey, Bearer, SigningKey,
+                  PrivateKey, HMAC]
+          hint: hold it as types.Secret, which masks every rendering and reveals only by name
 
       # Results go to stdout through the output emitters, help to stderr when asked,
       # and every other stderr line is a slog record, so -q, -s, why folding, -o jsonl
@@ -795,7 +815,7 @@ linters:
     # project/insight.go's Complexity(), where it silently counted every interior
     # space as indentation and corrupted every FileHotspots score. staticcheck
     # found it; the preset threw the finding away. Measured after the fix: zero
-    # SA4011 findings tree-wide, so re-enabling it is a ratchet, not a cleanup.
+    # SA4011 findings tree-wide, so re-enabling it is a guard, not a cleanup.
     presets:
       - comments
       - common-false-positives
@@ -868,25 +888,25 @@ linters:
       # run reports it. Pairing is testpair's, so nothing here can hide an unpaired
       # test file.
       - path: ^broker/(activation_unix|activation_unix_test)\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^cmd/magus/(bootstrap_exec_unix|detach_unix)\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/audit/inode_unix\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/file/identity_unix\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/job/store_unix_test\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/proc/spawn/(jobserver_unix|jobserver_unix_test|pty_unix|reap_unix|reap_unix_test|run_unix|rusage_unix)\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/proc/sockdir/(sockdir_unix|sockdir_unix_test)\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/sandbox/owner_unix\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/sessions/adapter_unix\.go$
-        linters: [testlayout]
+        linters: [testpairing]
       - path: ^internal/textindex/mmap_unix\.go$
-        linters: [testlayout]
+        linters: [testpairing]
 
       # filenames' backlog: concatenations already in the tree when the rule
       # landed. Each is a rename waiting for a session with room for it, not an
@@ -897,7 +917,7 @@ linters:
         # standard term for a dependency lock file.
         text: ^(magusfile|lockfile|eventstream|hostmodules|promptcache|selfupdate|toolref) mashes
 
-      # stutter's backlog, in testlayout's shape above: each entry is a rename to
+      # stutter's backlog, in testpairing's shape above: each entry is a rename to
       # make, and the fix deletes it. The rule was a test that read the symbol graph
       # and skipped whenever the index was empty, which in the test run was always,
       # so these 40 names reached main unseen. Each rule names its symbols, so a new
@@ -945,22 +965,6 @@ linters:
       - path: ^std/encoding/[a-z0-9]+/[a-z0-9]+\.go$
         linters: [stutter]
         text: ^(base64\.Base64(URL)?(Encode|Decode)|csv\.CSV(Parse|Stringify)|hex\.Hex(Encode|Decode)|ini\.INI(Parse|Stringify)|json\.JSON(Parse|Stringify)|toml\.TOML(Parse|Stringify)|url\.URL(Encode|Decode|Parse|Build)|xml\.XML(Element|Render|Parse)|yaml\.YAML(Parse|Stringify)) stutters
-
-# Formatting is gated HERE, not by the format target, because `gofmt -l` cannot fail: it
-# reports on stdout and exits 0, and magus reads an op's verdict from the exit code alone.
-# The format target keeps it as the local reporter (rw flips it to -w).
-# Zero findings when adopted: a ratchet, not a cleanup.
-formatters:
-  enable:
-    - gofmt
-  settings:
-    gofmt:
-      # simplify: false to match what `format:rw` actually applies. golangci-lint defaults
-      # it ON (gofmt -s), but the go-fmt op runs plain `gofmt -w`, so leaving it on makes
-      # the gate demand a rewrite the formatter will not perform - lint failing on
-      # something format cannot fix. Adopting -s is a separate decision; it belongs in the
-      # spell's op first, so the two stay in agreement.
-      simplify: false
 
 # Report every finding. golangci-lint defaults to max-issues-per-linter: 50 and
 # max-same-issues: 3, which silently hides repeated findings (e.g. a pervasive

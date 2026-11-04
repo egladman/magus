@@ -112,12 +112,12 @@ describe("the workspace scope control", () => {
     const items = menuItems(host);
     // All workspaces, the two roots, then the demo action.
     assert.equal(items.length, 4);
-    assert.equal(items[0].textContent, "All workspaces");
+    assert.equal(items[0]?.textContent, "All workspaces");
     assert.deepEqual(
       items.slice(1, 3).map((b) => b.title),
       BOTH,
     );
-    assert.match(items[3].textContent ?? "", /acmedemo|acme\s*demo/);
+    assert.match(items[3]?.textContent ?? "", /acmedemo|acme\s*demo/);
   });
 
   test("picking scopes the browser tab", () => {

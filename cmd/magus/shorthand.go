@@ -34,6 +34,10 @@ func installShorthandCommand(args []string) error {
 	if fs.NArg() != 0 {
 		return fmt.Errorf("magus self install-shorthand: unexpected argument %q", fs.Arg(0))
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 
 	target, err := runningBinaryPath()
 	if err != nil {
@@ -52,6 +56,9 @@ func installShorthandCommand(args []string) error {
 
 	if _, err := os.Lstat(linkPath); err == nil {
 		if resolved, err := filepath.EvalSymlinks(linkPath); err == nil && resolved == target {
+			if opts.Format != outputText {
+				return emitRecord(opts, selfInstallShorthandOutput{Link: linkPath, Target: target}, []string{linkPath})
+			}
 			fmt.Printf("%s already points at %s\n", linkPath, target)
 			return nil
 		}
@@ -69,8 +76,17 @@ func installShorthandCommand(args []string) error {
 		}
 		return fmt.Errorf("magus self install-shorthand: create %s: %w", linkPath, err)
 	}
+	if opts.Format != outputText {
+		return emitRecord(opts, selfInstallShorthandOutput{Link: linkPath, Target: target, Created: true}, []string{linkPath})
+	}
 	fmt.Printf("Installed the %s shorthand: %s -> %s\n", shorthandName, linkPath, target)
 	return nil
+}
+
+type selfInstallShorthandOutput struct {
+	Link    string `json:"link"`
+	Target  string `json:"target"`
+	Created bool   `json:"created"`
 }
 
 // runningBinaryPath returns the real path of the running binary. os.Executable

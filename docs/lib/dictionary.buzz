@@ -220,7 +220,7 @@ export fun glossaryIndex(pages: [TermPage]) > str {
             if (p.group == group) { members.append(p); }
         }
         if (members.len() == 0) { continue; }
-        members.sort(fun (a: TermPage, b: TermPage) > bool => a.order < b.order or (a.order == b.order and a.slug < b.slug));
+        _ = members.sort(fun (a: TermPage, b: TermPage) > bool => a.order < b.order or (a.order == b.order and a.slug < b.slug));
         rows.append("");
         rows.append("## {GROUP_TITLES[group] ?? group}");
         foreach (p in members) {
@@ -269,8 +269,11 @@ export fun symbolFromID(id: str, term: str) > UsageSymbol {
         return UsageSymbol{ name = "{segs[segs.len() - 1]}.{name}", language = "Go" };
     }
     if (id.startsWith("symbol:buzz host ")) {
-        final mod = id.sub("symbol:buzz host ".len()).split("/")[0];
-        return UsageSymbol{ name = "{mod}\\{name}", language = "Buzz host type" };
+        // Only submodule ids quote the module; the root one is bare.
+        final ticks = id.split("`");
+        final mod = if (ticks.len() >= 3) ticks[1] else id.sub("symbol:buzz host ".len()).split("/")[0];
+        final segs = mod.split("/");
+        return UsageSymbol{ name = "{segs[segs.len() - 1]}\\{name}", language = "Buzz host type" };
     }
     if (id.startsWith("symbol:npm ")) {
         final pkg = id.sub("symbol:npm ".len()).split(" ")[0];
@@ -371,6 +374,7 @@ test "the index groups terms in order and keeps each term's old anchor" {
 test "symbol ids read the way magus refs takes them" {
     std\assert(symbolFromID("symbol:gomod github.com/egladman/magus `github.com/egladman/magus/types`/Job#", term: "Job").name == "types.Job", message: "go type");
     std\assert(symbolFromID("symbol:buzz host magus/Job#", term: "Job").name == "magus\\Job", message: "buzz host");
+    std\assert(symbolFromID("symbol:buzz host `magus/reclaimdisk`/Cache#", term: "Cache").name == "reclaimdisk\\Cache", message: "buzz host submodule");
     std\assert(symbolFromID("symbol:gomod github.com/egladman/magus `github.com/egladman/magus/types`/JobBlock#Job.", term: "Job").name == "", message: "a field is not the term");
     std\assert(symbolFromID("symbol:npm magus-console src/gen/magus/job/v1alpha1/`job_pb.ts`/Job#", term: "Job").name == "", message: "generated");
     std\assert(symbolFromID("symbol:gomod github.com/egladman/magus `github.com/egladman/magus/types`/LeaseID#", term: "Lease id").name == "types.LeaseID", message: "compacted");

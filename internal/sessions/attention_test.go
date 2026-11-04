@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // attRecord builds one session record with an explicit timestamp. The fold's rules
@@ -290,6 +292,37 @@ func TestSourceLabelMatchesWhatRequestIDDigests(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "agent/claude", SourceLabel("agent", "claude"))
 	assert.Equal(t, "magus", SourceLabel("magus", ""))
+}
+
+// AppendRequestSuite pins the append a hook files a request with.
+type AppendRequestSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestAppendRequestSuite(t *testing.T) {
+	suite.Run(t, new(AppendRequestSuite))
+}
+
+func (s *AppendRequestSuite) SetupTest() {
+	s.dir = s.T().TempDir()
+}
+
+func (s *AppendRequestSuite) TestItFillsTheIDOpenRequestWould() {
+	s.Require().NoError(AppendRequest(s.dir, "sess-1", blocked("needs a decision"), InvocationStart{}))
+	s.Equal([]string{RequestID("sess-1", blocked("needs a decision"))}, queueIDs(s.T(), s.dir))
+}
+
+// A second open on disk shows the store was not read first.
+func (s *AppendRequestSuite) TestARepeatAppendsAndCollapsesInTheFold() {
+	s.Require().NoError(AppendRequest(s.dir, "sess-1", blocked("needs a decision"), InvocationStart{}))
+	s.Require().NoError(AppendRequest(s.dir, "sess-1", blocked("needs a decision"), InvocationStart{}))
+
+	fold, err := ReadAll(s.dir)
+	s.Require().NoError(err)
+	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r Record) bool { return r.Kind != KindAttentionOpen })
+	s.Len(opens, 2)
+	s.Len(queueIDs(s.T(), s.dir), 1)
 }
 
 func TestOpenRequestWritesOneRequestAndReportsIt(t *testing.T) {

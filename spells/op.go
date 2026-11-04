@@ -48,8 +48,12 @@ type Charm struct {
 // expand a variable magus itself set. See internal/interp/bindings' resolveRunnerRefs
 // for the resolution rule and its scope: it is NOT the process environment.
 type Command struct {
-	Bin  string   `json:"bin,omitempty"`
-	Args []string `json:"args,omitempty"`
+	// TestSelection names the dialect of forwarded test-selection arguments.
+	// A wrapper may inherit it only when its dispatch proves those args reach the
+	// op unchanged. Empty declares no selector; currently only "go" is supported.
+	TestSelection string   `json:"test_selection,omitempty"`
+	Bin           string   `json:"bin,omitempty"`
+	Args          []string `json:"args,omitempty"`
 	// DefaultArgs are trailing argv tokens the RUNNER appends only when the
 	// invocation passes no explicit args of its own; explicit call-site args
 	// replace them. `magus run <t> -- <extra>` forwarding is not explicit args:
@@ -115,9 +119,7 @@ type Command struct {
 	// (the default) batches every matched file across as few invocations as fit
 	// under the runner's ARG_MAX-safe limit. Meaningless without Sources.
 	SourcesEach bool `json:"sources_each,omitempty"`
-	// Capture makes this command's spell method return its exec record. The field
-	// belongs on Command because it is declared by a Command-returning handler;
-	// Op carries the resolved copy that dispatch reads.
+	// Capture makes this command's spell method return its exec record.
 	Capture bool `json:"capture,omitempty"`
 	// Quiet keeps a captured command's output out of the step's log: it reaches the
 	// caller as the return value and nowhere else. It is for an op whose output exists
@@ -164,8 +166,14 @@ type Command struct {
 // Validate rejects a Command whose fields contradict each other. Quiet without
 // Capture is an error: the output would stream nowhere and return nowhere.
 func (c Command) Validate() error {
+	if c.TestSelection != "" && c.TestSelection != "go" {
+		return fmt.Errorf("unsupported test_selection %q: supported dialect is go", c.TestSelection)
+	}
 	if c.Quiet && !c.Capture {
 		return errors.New("quiet without capture discards the output, set capture = true or drop quiet")
+	}
+	if c.SourcesEach && len(c.Sources) == 0 {
+		return errors.New("sources_each without sources has no files to run per, set sources or drop sources_each")
 	}
 	return nil
 }
@@ -308,17 +316,12 @@ func (s Service) Validate() error {
 //
 // In-VM spell logic is not an op kind: a remote cache provider is a separate contract
 // magus invokes by name, and other custom logic belongs in a magusfile target body.
-//
-// Capture makes the op's magusfile method return the {stdout, stderr, code, ok} record
-// instead of void, for ops whose output is the point rather than the exit code. It is
-// Go-internal, not mirrored to Buzz.
 type Op struct {
 	// Kind is the op's lifecycle kind (OpKind*); empty means OpKindCommand.
 	Kind string `json:"kind,omitempty"`
 	Command
 	// Service is set only for a service op (Kind == OpKindService); nil otherwise.
 	Service *Service `json:"service,omitempty"`
-	Capture bool     `json:"capture,omitempty"`
 	// Install is set only for an install op (Kind == OpKindInstall). The embedded
 	// Command is the first declared install's, for describe and charm discovery; the
 	// runner resolves the real one against the project's lockfile.

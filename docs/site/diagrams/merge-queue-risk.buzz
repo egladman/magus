@@ -4,11 +4,11 @@ import "magus";
 import "magus/figure";
 
 export fun mergeQueueRiskFigure() > figure\Figure !> any {
-    final provider = magus\dir("internal/queue/provider");
-    final queueDir = magus\dir("internal/queue");
-    final sdk = magus\dir(".");
-    final risk = magus\dir("internal/risk");
-    final nested: [magus\Dir] = magus\dirs("internal/queue/*");
+    final provider = magus\graph().dir("internal/queue/provider");
+    final queueDir = magus\graph().dir("internal/queue");
+    final sdk = magus\graph().dir(".");
+    final risk = magus\graph().dir("internal/risk");
+    final nested: [magus\Dir] = magus\graph().dirs("internal/queue/*");
     final queue = figure\without(nested + [queueDir], drop: [provider]);
     final github = figure\external("GitHub", sub: "auto-merge or a label");
     final low = figure\external("low risk?", look: figure\Look.decision);

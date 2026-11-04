@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -55,23 +56,35 @@ type RunOption func(*run)
 
 // run is the accumulated state of a Run/CI/RunAffected call.
 type run struct {
-	DryRun            bool
-	Charms            []string       // execution charms propagated via context; "rw" enables mutating targets
-	sink              *Sink          // nil reports through a text sink on stderr. See WithSink
-	report            *report.Writer // sink's record stream; nil unless its format records
-	lockReport        *report.Writer // report, unless the sink prints lock decisions as prose
-	NoVolatilityRetry bool
-	BaseRef           string
-	Race              bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
-	RaceReplay        bool     // MGS4003 determinism replay; orthogonal to Race
-	Spell             string   // when set, restricts execution to this spell; unmatched projects are skipped
-	Step              bool     // forces Concurrency=1; StepGate comes from ctx
-	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
-	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
-	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
-	narrowing         *project.OpNarrowing
-	session           string // the host session the guard judges the run for; see WithSession
-	observer          types.Observer
+	DryRun          bool
+	Charms          []string       // execution charms propagated via context; "rw" enables mutating targets
+	sink            *Sink          // nil reports through a text sink on stderr. See WithSink
+	report          *report.Writer // sink's record stream; nil unless its format records
+	lockReport      *report.Writer // report, unless the sink prints lock decisions as prose
+	VolatilityRetry bool           // retry volatile targets; applyRunOptions defaults it true
+	BaseRef         string
+	Race            bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
+	RaceReplay      bool     // MGS4003 determinism replay; orthogonal to Race
+	Spell           string   // when set, restricts execution to this spell; unmatched projects are skipped
+	Step            bool     // forces Concurrency=1; StepGate comes from ctx
+	ExtraArgs       []string // forwarded to spells via project.WithExtraArgs
+	Cache           bool     // replay cache hits; false forces a fresh run that still refreshes the entry (magus run --no-cache); applyRunOptions defaults it true
+	Gate            bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
+	Background      bool     // index work; any run that wants its locks stops it
+	narrowing       *project.OpNarrowing
+	session         string // the host session the guard judges the run for; see WithSession
+	observer        types.Observer
+}
+
+// lockRole is what the run's project locks admit it to.
+func (o run) lockRole() []lockerOption {
+	switch {
+	case o.Gate:
+		return []lockerOption{asGate()}
+	case o.Background:
+		return []lockerOption{asBackground()}
+	}
+	return nil
 }
 
 // out is the sink the run reports through.
@@ -93,8 +106,8 @@ func WithCharms(charms ...string) RunOption {
 	return func(o *run) { o.Charms = append(o.Charms, charms...) }
 }
 
-// WithNoVolatilityRetry disables the volatility auto-retry logic.
-func WithNoVolatilityRetry() RunOption { return func(o *run) { o.NoVolatilityRetry = true } }
+// WithVolatilityRetry sets whether the volatility auto-retry logic runs; the default is true.
+func WithVolatilityRetry(on bool) RunOption { return func(o *run) { o.VolatilityRetry = on } }
 
 // WithBaseRef overrides MAGUS_VCS_BASE_REF for RunAffected invocations.
 func WithBaseRef(ref string) RunOption { return func(o *run) { o.BaseRef = ref } }
@@ -114,11 +127,11 @@ func WithRace() RunOption { return func(o *run) { o.Race = true } }
 // WithRaceReplay enables determinism replay (MGS4003). Compose with WithRace for MGS4001/4002/4004.
 func WithRaceReplay() RunOption { return func(o *run) { o.RaceReplay = true } }
 
-// WithNoCache forces every selected target to run fresh even on a cache hit.
-// Unlike a skip_cache target policy (which never snapshots), a --no-cache run
-// still refreshes the cache entry on success, so a subsequent ordinary run
-// replays the rebuilt result instead of the stale one.
-func WithNoCache() RunOption { return func(o *run) { o.NoCache = true } }
+// WithCache sets whether selected targets may replay a cache hit; the default is true.
+// WithCache(false) runs every selected target fresh. Unlike a skip_cache target policy
+// (which never snapshots), such a run still refreshes the cache entry on success, so a
+// subsequent ordinary run replays the rebuilt result instead of the stale one.
+func WithCache(on bool) RunOption { return func(o *run) { o.Cache = on } }
 
 // WithGate marks this invocation as the workspace's gate: the whole ci target, run to
 // judge the tree as it stands rather than to build one part of it.
@@ -148,7 +161,7 @@ func (o run) observed(ctx context.Context) context.Context {
 }
 
 func applyRunOptions(opts []RunOption) run {
-	var o run
+	o := run{Cache: true, VolatilityRetry: true}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -597,8 +610,8 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// claim that can only over-invalidate.
 	// Each indexing spell's op keys on its own spell's sources, so binding the buzz spell
 	// beside go leaves the Go index's key where it was.
-	if indexesSymbols(p, target) {
-		if indexed := symbolIndexSources(p, target); len(indexed) > 0 {
+	if indexesSymbols(p, target, m.cfg.Spells) {
+		if indexed := symbolIndexSources(p, target, m.cfg.Spells); len(indexed) > 0 {
 			step.Sources = slices.Concat(magusfileGlobs(p.Path), indexed)
 			if p.Path != "." {
 				step.Sources = append(step.Sources, magusfileGlobs(".")...)
@@ -642,7 +655,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// The index is the op's one output, at one path under the root in every checkout, so the
 	// shared store replays it into a fresh one. Outside the workspace it cannot be an output,
 	// so it is a stamp: an entry replays only while the index is the one its run wrote.
-	if indexesSymbols(p, target) {
+	if indexesSymbols(p, target, m.cfg.Spells) {
 		index := symbols.IndexPath(m.CacheDir(), p.Path, target)
 		step.Outputs, step.RequiredOutputs, step.ForeignOutputs = nil, nil, nil
 		if rel, err := filepath.Rel(step.WorkspaceRoot, index); err == nil && filepath.IsLocal(rel) {
@@ -952,7 +965,7 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	if keysTools(p, target) {
 		keyTools = toolVersions[p.Path]
 	}
-	applyRunKeying(&step, p, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
+	applyRunKeying(&step, p, m.cfg.Spells, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
 	return m.cache.StepKeyMemo(ctx, &step, memo)
 }
 
@@ -1057,8 +1070,8 @@ func (m *Magus) readsCharm(p *types.Project, target, charm string) bool {
 // indexer is its own binary, keyed through the observation its spell declares for it, and
 // of the spell's other tools only those the indexer declares it uses (go for scip-go,
 // never golangci-lint or tsc) key it, through observationsForTarget.
-func applyRunKeying(step *cache.Step, p *types.Project, toolVersions, observations, charms []string) {
-	if indexesSymbols(p, step.Target) {
+func applyRunKeying(step *cache.Step, p *types.Project, cfg config.SpellsConfig, toolVersions, observations, charms []string) {
+	if indexesSymbols(p, step.Target, cfg) {
 		toolVersions = nil
 	}
 	step.ToolVersions = toolVersions
@@ -1401,7 +1414,7 @@ func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Proje
 				if extracted != nil && r.full != "" {
 					extracted[fmt.Sprintf("%s\x00%s\x00%s", p.Path, s.Name(), tool)] = r.full
 				}
-				vers = append(vers, fmt.Sprintf("%s:%s:%s", s.Name(), tool, r.token))
+				vers = append(vers, fmt.Sprintf("%s:%s:%s", s.Name(), tool, r.narrowed))
 			}
 		}
 		if len(vers) > 0 {
@@ -1411,9 +1424,9 @@ func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Proje
 	return out, nil
 }
 
-// toolReading is one probe's two consumers: the cache key wants a narrowed token, the
+// toolReading is one probe's two consumers: the cache key wants a narrowed version, the
 // window gate wants the whole version, and both come from the same spawn.
-type toolReading struct{ token, full string }
+type toolReading struct{ narrowed, full string }
 
 // probeReadings resolves every distinct (spell, dir, tool) a run needs, CONCURRENTLY.
 //
@@ -1523,7 +1536,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 	// A declared constant needs no process. It stays out of `full`: an author typed it,
 	// so there is nothing for the gate to compare.
 	if t.Probe.Bin == "" {
-		return toolReading{token: t.Key.Const}, nil
+		return toolReading{narrowed: t.Key.Const}, nil
 	}
 	// The absence is decided inside the fork, so probeCached records it as an absence
 	// (no TTL) rather than as a failure.
@@ -1545,10 +1558,10 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 			} else {
 				slog.WarnContext(ctx, absentMessage(tool, absent.cause), slog.String("spell", s.Name()))
 			}
-			return toolReading{token: unprobedToken}, nil
+			return toolReading{narrowed: unprobedToken}, nil
 		case ctx.Err() != nil:
 			// A cancelled run keys nothing, and its failure says nothing about the tool.
-			return toolReading{token: unprobedToken}, nil //nolint:nilerr // the cancellation is the caller's to report
+			return toolReading{narrowed: unprobedToken}, nil //nolint:nilerr // the cancellation is the caller's to report
 		default:
 			// The usual cause is a fresh checkout: a launcher such as pnpm runs, and the tool it
 			// would exec was never installed beside it.
@@ -1558,7 +1571,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 				WithWhy("No cache key could tell the tool's upgrades apart.")
 		}
 	}
-	token, note := spells.VersionToken(probed, t.Key)
+	narrowed, note := spells.VersionToken(probed, t.Key)
 	if note != "" {
 		slog.With(attr.Component("magus")).WarnContext(ctx, "tool-version key degraded; cache key is coarser than declared",
 			slog.String("spell", s.Name()), slog.String("tool", tool),
@@ -1566,8 +1579,8 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 	}
 	slog.With(attr.Component("magus")).DebugContext(ctx, "tool-version probe",
 		slog.String("spell", s.Name()), slog.String("tool", tool),
-		slog.String("output", probed), slog.String("token", token))
-	r := toolReading{token: token}
+		slog.String("output", probed), slog.String("narrowed", narrowed))
+	r := toolReading{narrowed: narrowed}
 	if full, ok := spells.ExtractVersion(probed); ok {
 		r.full = full
 	}
@@ -1948,7 +1961,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// The streams are this invocation's own: a run a target starts in this process reads
 	// none of them, so it neither waits on this pipe's upstream nor publishes to its reader.
 	ctx = pipe.WithStdio(ctx, pipe.Stdio{})
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.lockReport, stdio)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.lockReport, stdio, opts.lockRole()...)
 	if err != nil {
 		return err
 	}
@@ -1964,9 +1977,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx, stall := m.watchForStall(ctx, prog, hold.release)
 	defer stall.close()
 
-	// Armed alongside it, over the other condition this run cannot diagnose from inside
-	// itself: a later gate on this same tree waiting for the locks held above. Inert
-	// unless this invocation is the gate. See watchForSupersede.
+	// Armed alongside it, for a later run waiting on the locks held above.
+	// Inert unless this is the gate or background work. See watchForSupersede.
 	ctx, superseded := m.watchForSupersede(ctx, hold)
 	defer superseded.close()
 	// The supersede verdict is applied last: a superseded gate that goes quiet during a
@@ -2059,7 +2071,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			}
 			toolVersions = byProject[p.Path]
 		}
-		applyRunKeying(&step, p, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
+		applyRunKeying(&step, p, m.cfg.Spells, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
 		return step, nil
 	}
 	newStep := func(p *types.Project, target string) (cache.Step, error) {
@@ -2106,7 +2118,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			if forcesNoCache(opts) {
 				step.NoCache = true
 			}
-			if opts.NoCache {
+			if !opts.Cache {
 				step.SkipReplay = true
 			}
 			steps = append(steps, step)
@@ -2214,7 +2226,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// twenty others still retries exactly the one.
 	var volatilityRT *volatility.Runtime
 	if history != nil {
-		retry := trackVolatile && !opts.NoVolatilityRetry
+		retry := trackVolatile && opts.VolatilityRetry
 		volatilityRT = m.buildVolatilityRuntime(ctx, retry, history)
 		if volatilityRT != nil {
 			ctx = volatility.WithRuntime(ctx, volatilityRT)
@@ -2296,10 +2308,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	ctx = types.WithInstallRunner(ctx, m.installRunner(installKeying{
 		prober: prober, revision: revision, dirty: dirty, vcsName: vcsName,
-		skipReplay: opts.NoCache, opts: cacheOpts,
+		skipReplay: !opts.Cache, opts: cacheOpts,
 	}))
 	composed := &composedRunner{m: m, runs: runs, newStep: newStep,
-		skipReplay: opts.NoCache, forceNoCache: forcesNoCache(opts), cacheOpts: cacheOpts}
+		skipReplay: !opts.Cache, forceNoCache: forcesNoCache(opts), cacheOpts: cacheOpts}
 	// A body that reads a symbol index freshens it through this run (see
 	// freshenSymbolIndexes): a nested `magus run` of the index op is refused MGS3007.
 	cross.RunStepsWith(func(ctx context.Context, p *types.Project, step cache.Step) error {
@@ -2381,9 +2393,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	// Footer summary for a fan-out: a single line tallying the per-project results.
 	// Skipped for a single project, where the per-project status line already says it all.
-	if s := m.cache.Stats(); s.Hit+s.Miss+s.Error > 1 {
+	if s := m.cache.Stats(); s.Hit+s.Miss+s.Permitted+s.Error > 1 {
 		out.emit(ctx, report.RunSummary{
-			Hits: s.Hit, Misses: s.Miss, Errors: s.Error, DurationMs: time.Since(start).Milliseconds(),
+			Hits: s.Hit, Misses: s.Miss, Permitted: s.Permitted, Errors: s.Error, Files: s.Files, Slots: s.Slots,
+			DurationMs: time.Since(start).Milliseconds(),
 		})
 	}
 	// Beside the footer, not deferred by the caller: every path that runs targets
@@ -3224,18 +3237,14 @@ func diagnosticCaptureOption(ctx context.Context) cache.RunOption {
 
 // diagEventFromError extracts a DiagnosticEvent from a target's run error when it
 // is a coded DiagnosticError, tagging it with the target's identity. Returns
-// ok=false for a nil or non-diagnostic error (a plain build failure is not an MGS
-// event).
+// ok=false for a nil or uncoded error (a plain build failure is not a diagnostic
+// event). The event keeps the docs page the raise captured.
 func diagEventFromError(projectPath, target string, err error) (types.DiagnosticEvent, bool) {
-	var de *types.DiagnosticError
-	if err == nil || !errors.As(err, &de) {
-		return types.DiagnosticEvent{}, false
-	}
 	unit := projectPath
 	if target != "" {
 		unit += ":" + target
 	}
-	return types.DiagnosticEvent{Code: de.Code, Message: de.Msg, Unit: unit}, true
+	return types.ErrorDiagnosticEvent(err, unit)
 }
 
 // charmedTarget renders "target:charm,..." the way cache.reproTarget does for an

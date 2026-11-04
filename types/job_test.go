@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestValidJobID pins the rule every lease channel shares. The marker scanner is not the
@@ -1262,4 +1263,43 @@ func TestParseClaimEvidenceReadsADeadHolder(t *testing.T) {
 
 	_, err = ParseClaimEvidence("dead")
 	assert.EqualError(t, err, `"dead" names no dead subject`)
+}
+
+type deliverySuite struct {
+	suite.Suite
+}
+
+func TestDelivery(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(deliverySuite))
+}
+
+func (s *deliverySuite) TestEachDeliveryIsAccepted() {
+	for _, d := range JobDeliveries() {
+		s.Require().NoError(Declaration{ID: "worker", Delivery: d}.Validate(), d)
+	}
+}
+
+func (s *deliverySuite) TestAnUnknownDeliveryIsRefusedNamingTheSet() {
+	err := Declaration{ID: "worker", Delivery: "merge"}.Validate()
+	s.Require().ErrorContains(err, `delivery "merge" is not a delivery`)
+	s.Require().ErrorContains(err, "fold, separate, stacked")
+}
+
+func (s *deliverySuite) TestAParentHeadOffAStackedJobIsRefused() {
+	err := Declaration{ID: "worker", Delivery: DeliveryFold, ParentHead: "feat/a"}.Validate()
+	s.Require().ErrorContains(err, "this job is not stacked")
+}
+
+func (s *deliverySuite) TestApplyCarriesDeliveryAndTheParentHead() {
+	var row Job
+	Declaration{ID: "worker", Delivery: DeliveryStacked, ParentHead: " feat/a "}.Apply(&row)
+	var want Job
+	Declaration{ID: "worker"}.Apply(&want)
+	want.Delivery, want.ParentHead = DeliveryStacked, "feat/a"
+	s.Equal(want, row)
+
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	s.Empty(row.Delivery, "a spec naming no delivery clears it")
+	s.Empty(row.ParentHead)
 }

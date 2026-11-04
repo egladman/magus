@@ -8,6 +8,7 @@
 //
 // Same contract as pulse.ts, for the same reasons: best-effort, hidden rather than zeroed when there
 // is no answer, and latched off per host once the server says it does not serve the route.
+import { MagusError, fail, fromPromise, ok, type Result } from "../gen/magus/types";
 import { authHeaders, validateLoopbackHost } from "../lib/server";
 
 // Hosts whose server has no diff route. A plain fetch 404 is NOT a ConnectError, so server.ts's
@@ -41,30 +42,32 @@ export function badgeLabel(count: number): string {
 // badge, because that is a display question, not a measurement one.
 export async function fetchDiffCount(
   host: string,
-  call: (host: string) => Promise<number | null> = getDiffCount,
+  call: (host: string) => Promise<Result<number | null>> = getDiffCount,
 ): Promise<number | null> {
   if (!host || routeless.has(host)) return null;
-  try {
-    return await call(host);
-  } catch (e) {
-    if (e instanceof RoutelessError) routeless.add(host);
-    return null;
-  }
+  const answer = await call(host);
+  if (!answer.error) return answer.value;
+  if (answer.error instanceof RoutelessError) routeless.add(host);
+  return null;
 }
 
-// Thrown when the server answers "no such route", so fetchDiffCount can tell a permanent absence from
+// The error carried when the server answers "no such route", so fetchDiffCount can tell a permanent absence from
 // a passing outage without the transport leaking into it.
-export class RoutelessError extends Error {
+export class RoutelessError extends MagusError {
   // Without this every stack trace and console line reads "Error", which is the one thing the class
   // exists to distinguish.
   override name = "RoutelessError";
+
+  constructor(status: string) {
+    super({ code: "", message: status });
+  }
 }
 
 // How long to wait before giving up on one read. Matches lib/server.ts's readiness probe, which rides
 // the same interval: without it a hung connection leaves a request pending per tick, unbounded.
 const TIMEOUT_MS = 3000;
 
-async function getDiffCount(host: string): Promise<number | null> {
+async function getDiffCount(host: string): Promise<Result<number | null>> {
   // Defense in depth, mirroring lib/server.ts's fetchReadiness: the caller passes an already-resolved
   // host, but re-verify it is literal loopback OR the page's OWN origin before attaching the bearer
   // token, so a future caller that ever passes a raw string cannot send the token to a third party.
@@ -72,18 +75,29 @@ async function getDiffCount(host: string): Promise<number | null> {
   const safe =
     validateLoopbackHost(host) ??
     (typeof location !== "undefined" && host === location.host ? host : null);
-  if (!safe) return null;
-  const res = await fetch(`http://${safe}/api/v1/diff/session`, {
-    headers: authHeaders(),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (res.status === 404 || res.status === 501) throw new RoutelessError(String(res.status));
-  if (!res.ok) throw new Error(String(res.status));
-  const session: unknown = await res.json();
-  const files = (session as { diff?: { files?: unknown } })?.diff?.files;
-  // A shape change upstream must read as "no answer" rather than as a count: the alternative is a
-  // badge asserting a number nobody measured.
-  return Array.isArray(files) ? files.length : null;
+  if (!safe) return ok(null);
+  const res = await fromPromise(
+    fetch(`http://${safe}/api/v1/diff/session`, {
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    }),
+  );
+  if (res.error) return res;
+  const { status } = res.value;
+  if (status === 404 || status === 501) return fail(new RoutelessError(String(status)));
+  if (!res.value.ok) return fail(new MagusError({ code: "", message: String(status) }));
+  const body = await fromPromise<unknown>(res.value.json());
+  if (body.error) return body;
+  return ok(diffFileCount(body.value));
+}
+
+// A shape change upstream must read as "no answer" rather than as a count: the alternative is a
+// badge asserting a number nobody measured.
+function diffFileCount(session: unknown): number | null {
+  if (typeof session !== "object" || session === null || !("diff" in session)) return null;
+  const diff = session.diff;
+  if (typeof diff !== "object" || diff === null || !("files" in diff)) return null;
+  return Array.isArray(diff.files) ? diff.files.length : null;
 }
 
 // resetRoutelessHosts drops the latch. Exported for the tests, which would otherwise leak one case's

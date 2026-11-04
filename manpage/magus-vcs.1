@@ -89,22 +89,22 @@ base in yourself on the others, then run resolve.
 \fB\-\-exclude\fR \fIpattern\fR
 Leave out paths this write\-path pattern covers; repeatable or comma\-separated
 .TP
-\fB\-\-include\-generated\fR
+\fB\-\-[no\-]include\-generated\fR (default: off)
 Also list declared outputs a dirty source in this change explains
 .TP
-\fB\-\-include\-held\fR
+\fB\-\-[no\-]include\-held\fR (default: off)
 Also list paths another live job in this checkout writes
 .TP
-\fB\-\-include\-staged\fR
+\fB\-\-[no\-]include\-staged\fR (default: off)
 Also list paths whose whole change is already staged; git only
 .TP
-\fB\-\-include\-unclaimed\fR
+\fB\-\-[no\-]include\-unclaimed\fR (default: off)
 Also list paths no target declares, and the ones magus maintains itself
 .TP
-\fB\-\-include\-unexplained\fR
+\fB\-\-[no\-]include\-unexplained\fR (default: off)
 Also list declared outputs no source change here explains
 .TP
-\fB\-\-include\-untracked\fR
+\fB\-\-[no\-]include\-untracked\fR (default: off)
 Also list untracked files; refused on jj, which has none
 .TP
 \fB\-\-project\fR \fIproject\fR
@@ -119,7 +119,7 @@ Merge this ref first, then settle what it conflicts with
 .SS vcs checkpoint options
 .RS
 .TP
-\fB\-\-preserve\fR
+\fB\-\-[no\-]preserve\fR (default: off)
 Also capture the uncommitted work and print a handle that restores it
 .RE
 .SH SUBCOMMANDS
@@ -206,7 +206,6 @@ magus vcs checkpoint --preserve
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

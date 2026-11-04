@@ -438,9 +438,12 @@ type ObjectLit struct {
 	Pos
 	TypeName  string
 	Namespace string
-	Keys      []string
-	Values    []Node
-	Mut       bool
+	// TypeArgs is the `::<A, B>` argument text of `Name::<A, B>{...}`, comma
+	// separated; "" when the literal wrote none. The VM ignores it.
+	TypeArgs string
+	Keys     []string
+	Values   []Node
+	Mut      bool
 }
 
 // InterpExpr: "text {expr} ..." — alternating literal and expression parts.

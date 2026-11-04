@@ -49,14 +49,16 @@ func TestOutputImportReadsRecordsInOrder(t *testing.T) {
 
 func TestOutputImportRefusesNewerSchema(t *testing.T) {
 	_, err := readRecords(outputRecordLine(t, func(r map[string]any) { r["schema_version"] = types.StoredOutputSchemaVersion + 1 }))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "line 1: output record schema_version 2 is newer than this magus reads (1)")
+	require.ErrorIs(t, err, types.StoreRecordsNewer)
+	assert.ErrorContains(t, err, "line 1: ")
+	assert.ErrorContains(t, err, "output record schema_version 2 is newer than this magus reads (1)")
 
 	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { delete(r, "schema_version") }))
 	assert.ErrorContains(t, err, "line 1: not an output record: it has no schema_version")
 
 	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { r["requires"] = []string{"future-feature"} }))
-	assert.ErrorContains(t, err, "line 1: output record requires [future-feature]")
+	require.ErrorIs(t, err, types.StoreRecordsNewer)
+	assert.ErrorContains(t, err, "output record requires [future-feature]")
 }
 
 // Nothing reaches each when any line is bad, so a caller never prints half an input.

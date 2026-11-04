@@ -129,9 +129,9 @@ The catch-all replaced the per-tool entries, among them the `Edit|Write|Notebook
 entry that ran `magus-path.buzz`. A `.claude/settings.json` merged before that still
 carries them, and `magus describe harness claude-code` lists each as one to retire.
 
-This repository's own `.claude/settings.json` holds exactly what the spell prints,
-merged with the command `magus describe harness` prints beside it. The scripts are
-the glue; the harness only prints the fragments that name them. See
+This repository's bootstrap installs `.claude/settings.json` from the canonical
+harness spell, merging managed hooks with existing local settings. The installed
+file is ignored; the harness sources remain reviewed in version control. See
 [guard templates](guard-templates.md) for the files and the variables that adapt
 them.
 
@@ -262,11 +262,17 @@ worktree session with no `./magus` is an error, where it used to run open on wha
 PATH held; `SessionStart` says so once per session, naming one command, whenever the
 binary that would judge the session cannot load the tree.
 
-A push at a commit no passing gate covers gets the verdict `ask`, and the command
-template renders it as `permissionDecision: "ask"`: Claude Code shows you the
-reason, which names the commit and the gate state, and approving publishes it. A
-push the gate covers runs without a prompt. A session bound to a job lease is
-denied instead, because workers do not publish.
+A run of a `human_only` target gets the verdict `ask`. Under `permission_mode`
+`default`, `acceptEdits` or `auto`, the command template renders it as
+`permissionDecision: "ask"`: Claude Code shows you the reason, and approving runs it.
+Any other mode, or none, may never prompt, so the template refuses the call with
+`permissionDecision: "deny"`. Its `systemMessage` shows you what happened, why this
+session cannot ask, and the command to run in your own terminal. The model reads the
+same, with word to relay it verbatim if you did not see it.
+
+A push at a commit no passing gate covers is denied, and the reason names the commit
+and the gate state. A push the gate covers runs without a prompt. A session bound to
+a job lease is denied both, because workers do not publish.
 
 ### Maintaining the workspace harness
 
@@ -473,6 +479,13 @@ hook that can break the session it was meant to watch. It opens with the same
 workspace-root walk as the lease hook above, for the same reason.
 [Attention hooks](notifications.md) covers the envelope and the outcome vocabulary.
 
+## Recording how long a tool ran
+
+Wire `PostToolUse` to
+[`magus-duration.buzz`](guard-templates.md#magus-durationbuzz) (this repository
+does, under the matcher that excludes `Agent|Task`) and each finished call
+records how long the host said the tool took. It judges nothing and exits 0.
+
 ## Recording where the work stands
 
 Wire `Stop` to [`magus-checkpoint.buzz`](guard-templates.md#magus-checkpointbuzz)
@@ -501,6 +514,32 @@ This is the wiring this repository dogfoods, in `.claude/settings.json` beside
 the three guard hooks. It is not a guard: it judges nothing, prints nothing, and
 exits 0 whatever happens. `magus session checkpoint --note "..."` writes the same
 record by hand, which is the form to reach for when you are the one stopping.
+
+## Watching free disk space
+
+Wire `UserPromptSubmit` to
+[`magus-reclaim-disk.buzz`](guard-templates.md#magus-reclaim-diskbuzz) and each
+turn costs one stat of the free-space store until a minute has passed. Past that
+it says what the store holds that nobody was told, and starts one detached tick
+that trims caches when free space runs low.
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-reclaim-disk.buzz -- --agent-name claude-code",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
 ## Judging the reply a turn ends with
 
@@ -585,49 +624,58 @@ is handed.
 ## The magus mod
 
 The repository is a Claude Code plugin marketplace with one mod in it, `magus`,
-whose source is `claude-code-mod/` beside this page. Install it once per person:
+whose source is `claude-code-mod/` beside this page. Add the marketplace once per person:
 
 ```text
-/plugin install magus --marketplace egladman/magus
+claude plugin marketplace add egladman/magus
 ```
+
+From a local checkout, `claude plugin marketplace add <checkout> --scope local` then
+`claude plugin install magus@magus --scope local` does the same.
 
 It adds these to a session:
 
-- A status line entry and a band above the prompt that name a magus problem with the
-  command that fixes it: no binary, a borrowed or stale `./magus`, a stopped daemon,
-  a daemon running another version, or an MCP endpoint that is not serving.
+- A status line entry that names a magus problem: no binary, a stopped daemon, a
+  daemon running another version, or an MCP endpoint that is not serving. The band
+  above the prompt draws only the two that nothing else says, a guard that fails
+  open and a daemon on another version, with a Copy fix button that says when the
+  copy did not reach a clipboard. A stale or borrowed `./magus` is not drawn: the
+  guard names the rebuild to the agent.
 - A pane, opened with `/magus`, of the job tree, recent runs, and the session's
   subagents. It reads the daemon's Connect API over its unix socket, the same
   services the console uses, so it needs `magus server start` and holds no token.
-- Prompt-cache warnings: a countdown before the cache expires, and a warning or a
-  held prompt when you submit after it has, priced from a rates table you can
-  replace through the mod's `ratesFile` setting.
-- Cost gates, each priced from the same table and each off, `warn` (a toast) or a
-  stronger step, `warn` by default. The price step gate acts when the context the
-  next prompt re-sends is at or within `priceStepMarginTokens` of a model's
-  prompt-size price step, past which every request costs more, and `confirm` holds
-  the prompt once and suggests `/compact`. The subagent gate checks the model a
-  spawn runs on against `spawnMaxInputUsdPerMTok` (2 by default, Sonnet's input
-  rate; 0 turns it off); `deny` refuses the spawn before it starts and points to
-  the read-only `magus-scout` agent or `model: haiku`. The budget gate acts once
-  the session's spend passes `sessionBudgetUsd` (0 by default, which is off), and
-  `confirm` holds the prompt once.
-- The session's spend, main conversation and subagents together, in the status line
-  and at the top of the pane.
+- A warning or a held prompt when you submit after the prompt cache has expired,
+  priced from a rates table you can replace through the mod's `ratesFile` setting.
+  There is no countdown: the moment that matters is the submit.
+- Cost gates, each priced from the same table. The cache and price step gates are
+  `off`, `warn` (a toast) or `confirm`, `warn` by default. The price step gate acts
+  when the context the next prompt re-sends is at or within `priceStepMarginTokens`
+  of a model's prompt-size price step, past which every request costs more, and
+  `confirm` holds the prompt once and suggests `/compact`. The subagent gate is `off`
+  or `deny`, `off` by default: `deny` checks the model a spawn runs on against
+  `spawnMaxInputUsdPerMTok` (2 by default, Sonnet's input rate; 0 turns it off) and
+  refuses the spawn before it starts, pointing to the read-only `magus-scout` agent
+  or `model: haiku`. The budget gate acts once the session's spend passes
+  `sessionBudgetUsd` (0 by default, which is off), and `confirm` holds the prompt
+  once. A subagent's token count is shown, never flagged: context size is not billed
+  cost.
+- The session's spend, main conversation and subagents together, at the top of the
+  pane.
 - The machine build budget, read from `magus status -o json` every 15 seconds and
-  around each Bash call that runs magus: `budget 8/10 slots, 8.7/23.5 GiB` in the
-  status line, and each holder's pid, target, slots, memory, age and checkout on the
-  pane's Budget tab. When a magus run in the session fails with
-  [MGS3009](../../../reference/codes/sandbox/MGS3009.md), a band above the prompt names
-  it and who holds the budget for five minutes, and the Budget tab keeps the refusal.
+  around each Bash call that runs magus: each holder's pid, target, slots, memory,
+  age and checkout, the callers waiting for a seat, and the
+  [MGS3009](../../../reference/codes/sandbox/MGS3009.md) refusals, on the pane's
+  Budget tab. Nothing about it reaches the status line or the band: an agent reads
+  a refusal and retries.
 
-Every threshold is a setting in `/config`: `cacheGate`, `cacheWarnMinutes`,
-`gateMinTokens`, `cacheTtl`, `priceStepGate`, `priceStepMarginTokens`, `spawnGate`,
-`spawnMaxInputUsdPerMTok`, `sessionBudgetUsd`, `budgetGate`, `subagentTokenBudget`,
-`ratesFile` and `ratesStaleDays`. The mod reads a spawn's model from the call, then
+Every threshold is a setting in `/config`: `cacheGate`, `gateMinTokens`, `cacheTtl`,
+`priceStepGate`, `priceStepMarginTokens`, `spawnGate`, `spawnMaxInputUsdPerMTok`,
+`sessionBudgetUsd`, `budgetGate` and `ratesFile`. A `spawnGate` of `warn`, and the
+settings `cacheWarnMinutes`, `subagentTokenBudget` and `ratesStaleDays`, are gone.
+The mod reads a spawn's model from the call, then
 the agent's definition file under `.claude/agents`, then
 `CLAUDE_CODE_SUBAGENT_MODEL`, then the session; a built-in or plugin agent it cannot
-read is judged after it starts, by a toast alone. The mod uses the early-access Claude
+read is judged after it starts, by a toast alone in `deny` mode. The mod uses the early-access Claude
 Code plugin API, so a Claude Code update can change what it needs.
 
 A workspace can register the marketplace and turn the mod on for everyone who opens
@@ -642,12 +690,16 @@ magus\harness.provider(claudeMod);
 `.claude/settings.json`, `extraKnownMarketplaces.magus` and
 `enabledPlugins["magus@magus"]`, with the command that merges them. Claude Code
 reads the marketplace only once the person trusts the folder. The settings do not
-install the mod: each person runs the install line above once, and until they do
-the mod never appears. `magus agent harness verify claude-code-mod` and
-`magus doctor` read what Claude Code recorded in `installed_plugins.json` under
-`CLAUDE_CONFIG_DIR` (`~/.claude` by default). Verify fails naming the install
-line while the workspace enables the mod and the person has not installed it;
-doctor advises on that gap so CI is not red for a personal install. A workspace that does not enable the mod is not checked.
+install the mod: each person runs the line above once, or trusts the folder and
+starts a session, and until then the mod never appears. `magus agent harness verify
+claude-code-mod` and `magus doctor` count the mod as installed when
+`installed_plugins.json` lists it or when the cache directory for the `magus`
+plugin holds a version directory, both under the `plugins` directory of `CLAUDE_CONFIG_DIR` (`~/.claude`
+by default) or under `CLAUDE_CODE_PLUGIN_CACHE_DIR` when that is set. Claude Code
+caches a plugin from a relative-path marketplace without recording it, which the
+cache check covers. Verify fails naming the line above while the workspace enables
+the mod and neither is found; doctor advises on that gap so CI is not red for a
+personal install. A workspace that does not enable the mod is not checked.
 
 ## Coverage and limits
 

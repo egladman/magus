@@ -52,37 +52,37 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 
 ## Options
 
-**--attempts**
+**--[no-]attempts** (default: off)
 : output \<ref\>: list the ref's stored attempts (newest first)
 
 **--budget** *int*
 : Max nodes in the returned neighborhood (default 50)
 
-**--global**
+**--[no-]global** (default: off)
 : Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace
 
-**--identity**
+**--[no-]identity** (default: off)
 : output \<ref\>: show the run's identity (descriptor, lineage, cache key, component digests)
 
 **--kind** *string*
 : Restrict matches to these node kinds (comma-separated)
 
-**--open**
+**--[no-]open** (default: off)
 : output \<ref\>: open the captured output in the browser log viewer (delivered privately)
 
-**--print**
+**--[no-]print** (default: off)
 : With --open, print the viewer URL instead of launching a browser
 
-**--publish**
+**--[no-]publish** (default: off)
 : output \<ref\>: upload this run's output to the remote cache as a signed bundle
 
-**--refresh**
+**--[no-]refresh** (default: off)
 : Force a full graph rebuild before querying
 
-**--secrets**
+**--[no-]secrets** (default: off)
 : invocation \<id\>: list only the credential reads (reference and provider, never the value)
 
-**--stdin** *-o jsonl*
+**--[no-]stdin** (default: off)
 : output: print records -o jsonl wrote, from stdin; writes nothing
 
 **--url** *string* (default: https://eli.gladman.cc/magus/console/logs/)
@@ -136,5 +136,5 @@ magus query invocation invmsm3vcou1 --secrets
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-gate**(1)](magus-gate.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

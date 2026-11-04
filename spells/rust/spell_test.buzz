@@ -1,0 +1,127 @@
+import "std";
+import "magus/spell";
+import "./spell" as rust;
+
+fun manifest(file: str, content: str) > DiscoveryFile {
+    return DiscoveryFile{ path = file, content = content };
+}
+
+fun discover(files: [DiscoveryFile]) > [DiscoveredProject] {
+    return rust\discover_projects(Target{}, req: DiscoveryQuery{ root = "/repo", files = files });
+}
+
+fun claimAt(claims: [DiscoveredProject], dir: str) > DiscoveredProject {
+    foreach (c in claims) {
+        if (c.path == dir) {
+            return c;
+        }
+    }
+    std\panic("no claim at {dir}");
+    return DiscoveredProject{};
+}
+
+fun hasGap(c: DiscoveredProject, file: str, fragment: str) > bool {
+    foreach (gap in c.notInferred) {
+        if (gap.file == file and gap.why.indexOf(fragment) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+final WORKSPACE = [
+    manifest("Cargo.toml", content: "[workspace]\nmembers = [\"crates/*\"]\n[workspace.dependencies]\ncore = \{ path = \"crates/core\" \}\nserde = \"1\"\n"),
+    manifest("crates/app/Cargo.toml", content: "[package]\nname = \"app\"\n[dependencies]\ncore.workspace = true\nserde.workspace = true\nutil = \{ path = \"../util\" \}\n"),
+    manifest("crates/core/Cargo.toml", content: "[package]\nname = \"core\"\n"),
+    manifest("crates/util/Cargo.toml", content: "[package]\nname = \"util\"\n[dev-dependencies]\ncore = \{ path = \"../core\", version = \"0.1\" \}\n"),
+    DiscoveryFile{ path = "crates/app/src/main.rs" },
+];
+
+test "a single crate at the root is one project with build, test and lint" {
+    final claims = discover([manifest("Cargo.toml", content: "[package]\nname = \"solo\"\n[dependencies]\nserde = \"1\"\n")]) catch [<DiscoveredProject>];
+    std\assert(claims.len() == 1, message: "one claim");
+    final c = claims[0];
+    std\assert(c.path == "." and c.role == DiscoveryRole.project and c.name == "solo", message: "root project named by [package]");
+    std\assert(c.targets["build"]![0] == "cargo-build", message: "build");
+    std\assert(c.targets["test"]![0] == "cargo-test", message: "test");
+    std\assert(c.targets["lint"]![0] == "cargo-clippy", message: "lint");
+    std\assert(c.targets["ci"] == null, message: "core composes ci");
+    std\assert(c.dependsOn.len() == 0 and c.notInferred.len() == 0, message: "a registry dependency is neither an edge nor a gap");
+}
+
+test "every workspace member is a project" {
+    final claims = discover(WORKSPACE) catch [<DiscoveredProject>];
+    std\assert(claims.len() == 4, message: "root plus three members");
+    std\assert(claims[0].path == "." and claims[1].path == "crates/app", message: "sorted by path");
+}
+
+test "path dependencies become dependsOn, inherited ones included" {
+    final claims = discover(WORKSPACE) catch [<DiscoveredProject>];
+    final app = claimAt(claims, dir: "crates/app");
+    std\assert(app.dependsOn.len() == 2, message: "core and util");
+    std\assert(app.dependsOn[0] == "crates/core" and app.dependsOn[1] == "crates/util", message: "sorted dirs");
+    std\assert(app.notInferred.len() == 0, message: "workspace = true without a path is a registry dependency");
+    final util = claimAt(claims, dir: "crates/util");
+    std\assert(util.dependsOn.len() == 1 and util.dependsOn[0] == "crates/core", message: "dev-dependencies count");
+}
+
+test "a virtual workspace root depends on its members and runs nothing" {
+    final root = claimAt(discover(WORKSPACE) catch [<DiscoveredProject>], dir: ".");
+    std\assert(root.targets.len() == 0, message: "no targets");
+    std\assert(root.dependsOn.len() == 3, message: "every member");
+    std\assert(hasGap(root, file: "Cargo.toml", fragment: "virtual workspace"), message: "the missing targets are reported");
+}
+
+test "a root package with default-members spans them" {
+    final claims = discover([
+        manifest("Cargo.toml", content: "[package]\nname = \"top\"\n[workspace]\nmembers = [\"cli\"]\ndefault-members = [\".\", \"cli\"]\n"),
+        manifest("cli/Cargo.toml", content: "[package]\nname = \"cli\"\n"),
+    ]) catch [<DiscoveredProject>];
+    final top = claimAt(claims, dir: ".");
+    std\assert(top.spans.len() == 1 and top.spans[0] == "cli", message: "cargo build at the root builds cli too");
+    std\assert(top.targets["build"] != null, message: "a root package keeps its targets");
+}
+
+test "unresolved path dependencies are gaps" {
+    final claims = discover([
+        manifest("Cargo.toml", content: "[package]\nname = \"a\"\n[dependencies]\nout = \{ path = \"../elsewhere\" \}\nnope = \{ path = \"missing\" \}\n[target.'cfg(unix)'.dependencies]\ninherit = \{ workspace = true \}\n"),
+    ]) catch [<DiscoveredProject>];
+    final a = claims[0];
+    std\assert(a.dependsOn.len() == 0, message: "no edges");
+    std\assert(hasGap(a, file: "Cargo.toml", fragment: "dependencies.out: path ../elsewhere leaves the workspace root"), message: "outside the root");
+    std\assert(hasGap(a, file: "Cargo.toml", fragment: "dependencies.nope: path missing holds no Cargo.toml"), message: "no manifest there");
+    std\assert(hasGap(a, file: "Cargo.toml", fragment: "target.cfg(unix).dependencies.inherit: workspace = true"), message: "no workspace to inherit from");
+}
+
+test "build scripts, features and patches are reported" {
+    final claims = discover([
+        manifest("Cargo.toml", content: "[workspace]\nmembers = [\"k\", \"gone\"]\n[patch.crates-io]\nfoo = \{ path = \"vendor/foo\" \}\n"),
+        manifest("k/Cargo.toml", content: "[package]\nname = \"k\"\n[features]\nsimd = []\nalloc = []\n"),
+        DiscoveryFile{ path = "k/build.rs" },
+    ]) catch [<DiscoveredProject>];
+    final k = claimAt(claims, dir: "k");
+    std\assert(hasGap(k, file: "k/build.rs", fragment: "build script"), message: "build.rs");
+    std\assert(hasGap(k, file: "k/Cargo.toml", fragment: "features alloc, simd"), message: "features, sorted");
+    final root = claimAt(claims, dir: ".");
+    std\assert(hasGap(root, file: "Cargo.toml", fragment: "workspace.members gone"), message: "a member with no crate");
+    std\assert(hasGap(root, file: "Cargo.toml", fragment: "patch.crates-io.foo"), message: "path patch");
+}
+
+test "a crate under a workspace that does not list it is a gap" {
+    final claims = discover([
+        manifest("Cargo.toml", content: "[workspace]\nmembers = [\"a\"]\nexclude = [\"tools\"]\n"),
+        manifest("a/Cargo.toml", content: "[package]\nname = \"a\"\n"),
+        manifest("stray/Cargo.toml", content: "[package]\nname = \"stray\"\n"),
+        manifest("tools/gen/Cargo.toml", content: "[package]\nname = \"gen\"\n"),
+    ]) catch [<DiscoveredProject>];
+    std\assert(hasGap(claimAt(claims, dir: "stray"), file: "stray/Cargo.toml", fragment: "neither in its members nor its exclude"), message: "stray");
+    std\assert(claimAt(claims, dir: "tools/gen").notInferred.len() == 0, message: "an excluded crate stands alone");
+    std\assert(claimAt(claims, dir: ".").dependsOn.len() == 1, message: "only the member");
+}
+
+test "an unreadable manifest is claimed with a gap" {
+    final claims = discover([manifest("x/Cargo.toml", content: "[[")]) catch [<DiscoveredProject>];
+    std\assert(claims.len() == 1 and claims[0].path == "x", message: "claimed");
+    std\assert(claims[0].targets.len() == 0, message: "no targets on a manifest it could not read");
+    std\assert(hasGap(claims[0], file: "x/Cargo.toml", fragment: "Cargo.toml:"), message: "parse error named");
+}

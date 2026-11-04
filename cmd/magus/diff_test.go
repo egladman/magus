@@ -56,6 +56,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		format  output.Format
 		term    diffTUITerm
 		enabled bool
+		noTUI   bool
 		want    bool
 	}{
 		{
@@ -88,7 +89,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 		},
 		{
 			name:    "--no-tui is the one explicit answer",
-			flags:   flaggen.DiffFlags{NoTui: true},
+			noTUI:   true,
 			src:     workingTree,
 			format:  outputText,
 			term:    atTerminal,
@@ -165,6 +166,7 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			flags := tc.flags
+			flags.Tui = !tc.noTUI
 			assert.Equal(t, tc.want, wantsTUI(&flags, tc.src, tc.format, tc.term, tc.enabled))
 		})
 	}
@@ -564,7 +566,7 @@ func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
 // blast radius is not this changeset's problem, and a project the lens cannot name an owner
 // for is dropped rather than listed with a blank one, which reads as a lookup that failed.
 func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
-	own := types.OwnershipOutput{Projects: []types.OwnershipEntry{
+	own := types.Ownership{Projects: []types.OwnershipEntry{
 		{Path: "root", Primary: "alice", PrimaryShare: 72, Authors: 4},
 		{Path: "unrelated", Primary: "carol", PrimaryShare: 51, Authors: 9},
 		{Path: "docs", Authors: 0},
@@ -641,7 +643,7 @@ func (s *heldDiffSession) unblock() { s.releaseOnce.Do(func() { close(s.release)
 // bridge is a diffBridge pointed at the held session, skipping the attach round trip the queue has no
 // part in.
 func (s *heldDiffSession) bridge() *diffBridge {
-	b := &diffBridge{addr: strings.TrimPrefix(s.srv.URL, "http://"), token: "held"}
+	b := &diffBridge{addr: strings.TrimPrefix(s.srv.URL, "http://"), token: types.NewSecret("held")}
 	b.start()
 	return b
 }
@@ -2099,10 +2101,10 @@ func TestWantsTUIKeepsTheViewerForUnreadAndThread(t *testing.T) {
 	term := diffTUITerm{Reads: true, Paints: true}
 	src := diffInput{kind: inputWorkingTree}
 
-	assert.True(t, wantsTUI(&flaggen.DiffFlags{Unread: true}, src, outputText, term, true))
-	assert.True(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1"}, src, outputText, term, true))
-	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1"}, src, outputJSON, term, true), "-o json prints the record")
-	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1", NoTui: true}, src, outputText, term, true))
+	assert.True(t, wantsTUI(&flaggen.DiffFlags{Unread: true, Tui: true}, src, outputText, term, true))
+	assert.True(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1", Tui: true}, src, outputText, term, true))
+	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1", Tui: true}, src, outputJSON, term, true), "-o json prints the record")
+	assert.False(t, wantsTUI(&flaggen.DiffFlags{Thread: "c1"}, src, outputText, term, true))
 }
 
 // TestPrintDiffTextOrdersTheEvidence covers the whole text rendering: the counts headline,
@@ -2454,14 +2456,67 @@ func TestDialDiffBridgeSaysWhyItDidNotJoin(t *testing.T) {
 	})
 }
 
-func TestDialDiffBridgeWarnsOnATokenThatDoesNotLoad(t *testing.T) {
+func TestDialDiffBridgeWarnsOnATokenThatCannotBeMinted(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
 	require.NoError(t, os.MkdirAll(filepath.Join(state, "magus"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(state, "magus", "mcp_token"), []byte("junk\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(state, "magus", "tokens.d"), []byte("a file\n"), 0o600))
+	srv := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(srv.Close)
+	prevAddr := globalCfg.MCP.Address
+	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
+	globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
 	var got *diffBridge
 	logged := captureWarnings(t, func() { got = dialDiffBridge(context.Background(), nil, "digest") })
 
 	assert.Nil(t, got)
-	assert.Contains(t, logged, "operator token did not load")
+	assert.Contains(t, logged, "could not be minted")
+}
+
+func TestDialDiffBridgeCarriesAConsoleTokenAndRevokesIt(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	var presented string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		presented = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		_, _ = w.Write([]byte(`{"as_of":"digest"}`))
+	}))
+	t.Cleanup(srv.Close)
+	prevAddr := globalCfg.MCP.Address
+	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
+	globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
+
+	b := dialDiffBridge(context.Background(), nil, "digest")
+	require.NotNil(t, b)
+	cred, ok := auth.Verify(presented)
+	require.True(t, ok, "the token is live while the bridge is open")
+	cred.ID, cred.Name = "", ""
+	assert.Equal(t, types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, cred)
+
+	b.close()
+	_, ok = auth.Verify(presented)
+	assert.False(t, ok, "close revokes it")
+}
+
+func TestServerReviewCommentsRevokesItsToken(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	var presented string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		presented = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		cred, ok := auth.Verify(presented)
+		if !ok || cred.Kind != types.KindStored {
+			http.Error(w, "no", http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	prevAddr := globalCfg.MCP.Address
+	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
+	globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
+
+	_, _, served := serverReviewComments(context.Background())
+
+	assert.True(t, served)
+	_, ok := auth.Verify(presented)
+	assert.False(t, ok)
 }

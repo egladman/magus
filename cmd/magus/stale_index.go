@@ -85,11 +85,13 @@ func staleIndexNotice(ans types.KnowledgeAnswer) string {
 	if projects == 0 {
 		return ""
 	}
-	notice := fmt.Sprintf("\nstale index: %s changed since %s last indexed %s, so this answer may be missing sites in %s.\n",
-		plural(projects, "a project", "projects"), hint.GraphBuild,
-		plural(projects, "it", "them"), ans.DescribeStale())
+	notice := fmt.Sprintf("\nstale index: %s changed since %s last indexed, so this answer may be missing sites in %s.\n",
+		plural(projects, "a project", "projects"), plural(projects, "it was", "they were"), ans.DescribeStale())
 	if files := describeChangedFiles(ans.StaleIndexDetails); files != "" {
 		notice += fmt.Sprintf("  changed since: %s; deletions are not listed\n", files)
+	}
+	if c := ans.IndexCause; c != nil {
+		return notice + fmt.Sprintf("  %s\n  %s\n", c.Why, c.Fix)
 	}
 	return notice + fmt.Sprintf("  refresh and ask again: %s\n", hint.GraphBuild)
 }
@@ -226,13 +228,13 @@ func renderStaleGraphAdvice(reason string, stale []types.KnowledgeStaleIndex) st
 	case reason != "":
 		fmt.Fprintf(&b, "magus workspace: the graph is stale, %s. Run `%s` once any merge or rebase is finished, then ask again. The answer you are about to get describes another tree than the checkout's.\n", reason, hint.GraphBuild)
 	case len(stale) > 0:
-		fmt.Fprintf(&b, "magus workspace: run `%s` first, then ask again. The answer you are about to get is drawn from an index built before the current sources.\n", hint.GraphBuild)
+		b.WriteString("magus workspace: the answer you are about to get is drawn from an index built before the current sources. refs, query and explain refresh it in the background.\n")
 	default:
 		return ""
 	}
 	if projects := len(types.StaleIndexProjects(stale)); projects > 0 {
-		fmt.Fprintf(&b, "%s changed since %s last indexed %s: %s. A symbol added or moved since then is missing from the answer, and a lookup that misses it reports \"unknown, not absent\" rather than nothing being there.\n",
-			plural(projects, "One project", "Several projects"), hint.GraphBuild, plural(projects, "it", "them"), types.DescribeStaleIndexes(stale))
+		fmt.Fprintf(&b, "%s changed since %s last indexed: %s. A symbol added or moved since then is missing from the answer, and a lookup that misses it reports \"unknown, not absent\" rather than nothing being there.\n",
+			plural(projects, "One project", "Several projects"), plural(projects, "it was", "they were"), types.DescribeStaleIndexes(stale))
 	}
 	if files := describeChangedFiles(stale); files != "" {
 		fmt.Fprintf(&b, "Changed since: %s; deletions are not listed.\n", files)
@@ -298,9 +300,10 @@ func observeSync(ctx context.Context, root string) maintenance.SyncObservation {
 }
 
 // withIndexCause returns ans carrying indexCause when it was drawn from an index that is
-// missing or behind, and unchanged otherwise.
+// missing or behind, and unchanged otherwise. A cause already there is what
+// the read itself did about that, which outranks a diagnosis.
 func withIndexCause(ctx context.Context, root string, ans types.KnowledgeAnswer) types.KnowledgeAnswer {
-	if ans.IndexBehind() {
+	if ans.IndexBehind() && ans.IndexCause == nil {
 		c := indexCause(ctx, root)
 		ans.IndexCause = &c
 	}
@@ -316,14 +319,6 @@ func indexCause(ctx context.Context, root string) types.KnowledgeIndexCause {
 		ServerStop:  hint.ServerStop.String(),
 		JobRunSync:  hint.JobRun.With(job.NameSyncGraph),
 	})
-}
-
-// printIndexCause writes the answer's index cause under its verdict block, in its
-// indentation, and nothing when it carries none.
-func printIndexCause(w io.Writer, ans types.KnowledgeAnswer) {
-	if c := ans.IndexCause; c != nil {
-		fmt.Fprintf(w, "  why: %s\n  fix: %s\n", c.Why, c.Fix)
-	}
 }
 
 // indexCause is why the workspace's index is missing or behind, as advisory sentences, or

@@ -601,7 +601,7 @@ func TestPrettyHandlerErrorWritesHeadingToStickyRegion(t *testing.T) {
 // sticky region so the user's shell prompt returns to a clean full-screen
 // terminal.
 func TestPrettyHandlerSummaryReleasesStickyRegion(t *testing.T) {
-	t.Parallel()
+	t.Setenv("TERM", "xterm-256color")
 
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
@@ -639,7 +639,7 @@ func TestPrettyHandlerSummaryReleasesStickyRegion(t *testing.T) {
 // pinned there is nothing to act on, so the rows go back immediately and the
 // shell prompt returns to a full-screen terminal.
 func TestPrettyHandlerSummaryReleasesACleanBand(t *testing.T) {
-	t.Parallel()
+	t.Setenv("TERM", "xterm-256color")
 
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
@@ -742,7 +742,7 @@ func TestStatusLineRenderShowsElapsed(t *testing.T) {
 // record lands in the region's status row rather than the scrolling
 // output, so it repaints in place instead of accumulating.
 func TestPrettyHandlerPoolEventPaintsTheStatusRow(t *testing.T) {
-	t.Parallel()
+	t.Setenv("TERM", "xterm-256color")
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
 
@@ -778,7 +778,7 @@ func TestPrettyHandlerPoolEventIsSilentOffATerminal(t *testing.T) {
 // TestPrettyHandlerRendersStatusGatesEmission mirrors the check the cache
 // makes before sampling the limiter, so the cheap path stays cheap.
 func TestPrettyHandlerRendersStatusGatesEmission(t *testing.T) {
-	t.Parallel()
+	t.Setenv("TERM", "xterm-256color")
 
 	var plain bytes.Buffer
 	assert.False(t, newTestHandler(&plain).RendersBand(),
@@ -1072,6 +1072,7 @@ func TestRepeatedCodeOnceNamesTheOneStep(t *testing.T) {
 // seven failures, so suppressed restatements that still took a slot would evict
 // the one failure worth looking at.
 func TestBlockedCascadeLeavesTheRootPinned(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
 	docsCascade(t, h)
@@ -1255,6 +1256,7 @@ func TestBlockedSuppressionDoesNotChangeTheCount(t *testing.T) {
 // TestHitFailureResolvesAClickToTheTargetThatFailed is the property that makes
 // the band actionable rather than merely visible.
 func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
 	require.True(t, h.lease.Enabled())
@@ -1308,7 +1310,7 @@ func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
 // more than one through the same handler, and without the split the second run
 // reports the first one's failures and a clock that started before it did.
 func TestPrettyHandlerResetsPerRunStateAcrossRuns(t *testing.T) {
-	t.Parallel()
+	t.Setenv("TERM", "xterm-256color")
 
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)
@@ -1387,6 +1389,7 @@ func TestNoEscapeSequencesEverReachAPipe(t *testing.T) {
 // already stripped styling under NO_COLOR while the handler's own band did not,
 // so the same run answered the same question two ways.
 func TestBandHonoursNoColor(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
 	t.Setenv("NO_COLOR", "1")
 
 	var buf ttyBuf
@@ -1421,7 +1424,7 @@ func TestBandHonoursNoColor(t *testing.T) {
 // So this asks the terminal. It renders through the emulator, FINDS the row the
 // failure was really drawn on, and requires hit-testing to agree.
 func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
-	t.Parallel()
+	t.Setenv("TERM", "xterm-256color")
 	s := screen.New(80, 24)
 	fmt.Fprint(s, "$ magus affected ci\n")
 	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
@@ -1588,7 +1591,7 @@ func TestPoolGaugeClampsImpossibleCounts(t *testing.T) {
 // failure tree on the left, the selected failure's captured output on the
 // right, in rows this handler already owns.
 func TestPreviewMakesASecondColumn(t *testing.T) {
-	t.Parallel()
+	t.Setenv("TERM", "xterm-256color")
 	s := screen.New(120, 24)
 	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
 	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.error",
@@ -1611,7 +1614,7 @@ func TestPreviewMakesASecondColumn(t *testing.T) {
 // TestPreviewIsNotClickable: only the left column names targets. A click on the
 // output must not resolve to whatever failure shares its row.
 func TestPreviewIsNotClickable(t *testing.T) {
-	t.Parallel()
+	t.Setenv("TERM", "xterm-256color")
 	s := screen.New(120, 24)
 	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
 	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.error",
@@ -1629,7 +1632,7 @@ func TestPreviewIsNotClickable(t *testing.T) {
 // TestPreviewClearsBackToOneColumn: dropping the preview must not leave the
 // divider behind.
 func TestPreviewClearsBackToOneColumn(t *testing.T) {
-	t.Parallel()
+	t.Setenv("TERM", "xterm-256color")
 	s := screen.New(120, 24)
 	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
 	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.error",

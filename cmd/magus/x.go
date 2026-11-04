@@ -111,7 +111,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 		if *step {
 			ciOpts = append(ciOpts, magus.WithStep())
 		}
-		return m.RunCI(ctx, ciTargets, ciOpts...)
+		return runAndEmit(ctx, m, "ci", nil, ciTargets, ciOpts)
 	}
 	// Expand short aliases.
 	targetName = canonicalTarget(targetName)
@@ -126,7 +126,30 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	if charms := withDefaultCharms(nil, globalCfg.DefaultCharms, false); len(charms) > 0 {
 		xOpts = append(xOpts, magus.WithCharms(charms...))
 	}
-	return m.Run(ctx, targets, xOpts...)
+	return runAndEmit(ctx, m, targetName, nil, targets, xOpts)
+}
+
+// runAndEmit runs what x picked and renders it as `magus run` does.
+// Under jsonl the sink has already streamed it.
+func runAndEmit(ctx context.Context, m *magus.Magus, target string, charms []string, targets []types.Target, runOpts []magus.RunOption) error {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	run := m.Run
+	if target == "ci" {
+		run = m.RunCI
+	}
+	if err := run(ctx, targets, runOpts...); err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputTemplate:
+		return emitRunResult(ctx, m, opts, target, charms, targets, nil, nil)
+	case outputName:
+		return emitProjectNames(m, targets)
+	}
+	return nil
 }
 
 // pickProject filters all projects by the AND-substring rule, ranks the
@@ -426,10 +449,7 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 	if step {
 		opts = append(opts, magus.WithStep())
 	}
-	if parsed.Name == "ci" {
-		return m.RunCI(ctx, targets, opts...)
-	}
-	return m.Run(ctx, targets, opts...)
+	return runAndEmit(ctx, m, parsed.Name, parsed.Charms, targets, opts)
 }
 
 // elide keeps a value inside the aligned column, trimming from the LEFT because the

@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // describe runs the semantic checks over a Contract as Resolve would have decoded it.
@@ -198,7 +199,7 @@ func TestDescriptor_SymbolIndexerEnvs(t *testing.T) {
 func TestBuiltinGoSymbolIndexerCoversEveryOS(t *testing.T) {
 	si := Builtins()["go"].SymbolIndexer
 	require.NotNil(t, si)
-	assert.Equal(t, []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}}, si.Envs)
+	assert.Equal(t, []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}, {"GOOS": "js", "GOARCH": "wasm"}}, si.Envs)
 }
 
 // The shipped indexers that declare no op keep the op and the index file every cached
@@ -213,13 +214,13 @@ func TestBuiltinIndexersKeepTheirOps(t *testing.T) {
 		}
 	}
 	assert.Equal(t, map[string]string{
-		"buzz": "scip-buzz", "go": "scip", "python": "scip", "rust": "scip", "typescript": "scip",
+		"bash": "shell-index", "buzz": "scip-buzz", "go": "scip", "python": "scip", "rust": "scip", "typescript": "scip",
 	}, ops)
-	assert.Equal(t, "index.scip", filepath.Base(symbols.IndexPath(t.TempDir(), ".", ops["go"])))
+	assert.Equal(t, "scip.pack", filepath.Base(symbols.IndexPath(t.TempDir(), ".", ops["go"])))
 }
 
-// Every shipped indexer (scip-go, scip-python, scip-typescript, rust-analyzer, scip-buzz)
-// reaches the runner through the synthesized op, so each one is quiet on success.
+// Every shipped indexer (the in-process indexers and the opt-in SCIP commands) reaches
+// the runner through the synthesized op, so each one is quiet on success.
 func TestBuiltinIndexerOpsAreQuiet(t *testing.T) {
 	bins := map[string]string{}
 	for name, d := range Builtins() {
@@ -232,7 +233,7 @@ func TestBuiltinIndexerOpsAreQuiet(t *testing.T) {
 		assert.Truef(t, command.Capture && command.Quiet, "%s: its indexer prints nothing on success", name)
 	}
 	assert.Equal(t, map[string]string{
-		"buzz": "scip-buzz", "go": "scip-go", "python": "scip-python", "rust": "rust-analyzer", "typescript": "scip-typescript",
+		"bash": "", "buzz": "", "go": "go", "python": "scip-python", "rust": "rust-analyzer", "typescript": "scip-typescript",
 	}, bins)
 }
 
@@ -550,27 +551,6 @@ func TestDescriptorToolsDropsEmptyEntries(t *testing.T) {
 	assert.Empty(t, m.Tools)
 }
 
-// A tool declaring only a diagnostics format is kept: the entry says something magus
-// acts on, so the drop-empty-entries rule must not treat it as saying nothing.
-func TestDescriptorToolsCarriesDiagnosticsFormat(t *testing.T) {
-	m, err := describe(Contract{Name: "docker", Tools: map[string]spells.Tool{
-		"hadolint": {Diagnostics: spells.DiagnosticGNU},
-	}})
-	require.NoError(t, err)
-	assert.Equal(t, spells.DiagnosticGNU, m.Tools["hadolint"].Diagnostics)
-}
-
-// An unrecognized format is a spell-authoring bug caught at load, the same place a bad
-// key.upTo lands, not a silent fall back to scraping prose.
-func TestDescriptorToolsRejectsUnknownDiagnosticsFormat(t *testing.T) {
-	_, err := describe(Contract{Name: "docker", Tools: map[string]spells.Tool{
-		"hadolint": {Diagnostics: "sarif"},
-	}})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "diagnostics is sarif")
-	assert.Contains(t, err.Error(), "gnu", "the message names the formats magus accepts")
-}
-
 // A half-written hint is refused rather than dropped: one with no contains would fire on
 // every failure of the command, and one with no advise would consume the match and
 // print nothing, reading as "magus had no idea".
@@ -732,4 +712,197 @@ func TestBuiltinStubSyntax(t *testing.T) {
 	assert.Nil(t, m["bash"].Syntax, "a spell that cannot declare a body honestly declares none")
 	require.NotNil(t, m["buzz"].Syntax)
 	assert.Nil(t, m["buzz"].Syntax.Stubs, "buzz declares comments only")
+}
+
+type discoveredSuite struct {
+	suite.Suite
+	spell spells.Descriptor
+}
+
+func TestDiscoveredSuite(t *testing.T) { suite.Run(t, new(discoveredSuite)) }
+
+func (s *discoveredSuite) SetupTest() {
+	s.spell = spells.Descriptor{Name: "go", Ops: map[string]spells.Op{"go-build": {}, "go-test": {}, "go-vet": {}}}
+}
+
+func (s *discoveredSuite) claim() spells.DiscoveredProject {
+	return spells.DiscoveredProject{
+		Path:        ".",
+		Role:        spells.DiscoveryRoleProject,
+		DependsOn:   []string{"libs/proto"},
+		Targets:     map[string][]string{"build": {"go-build"}, "test": {"go-test"}, "lint": {"go-vet"}},
+		Spans:       []string{"web"},
+		NotInferred: []spells.DiscoveryGap{{File: "Makefile", Why: "make rules: meaning unknown"}},
+	}
+}
+
+func (s *discoveredSuite) refuse(c spells.DiscoveredProject, want string) {
+	err := ValidateDiscovered(s.spell, []spells.DiscoveredProject{c})
+	s.Require().Error(err)
+	s.Contains(err.Error(), `spell "go": discover_projects:`)
+	s.Contains(err.Error(), want)
+}
+
+// A spell names the records through the magus/spell bundle, which a built-in loads as well.
+func (s *discoveredSuite) TestASpellNamesTheRecords() {
+	const src = `
+import "magus/spell";
+export fun mgs_getName() > str { return "discovering"; }
+fun claim(file: DiscoveryFile) > DiscoveredProject {
+    return DiscoveredProject{path = file.path, role = DiscoveryRole.project,
+        notInferred = [DiscoveryGap{file = file.path, why = "make rules: meaning unknown"}]};
+}
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] !> any {
+    return [claim(req.files[0])];
+}
+`
+	spec, err := resolve(s.T(), src)
+	s.Require().NoError(err)
+	s.Equal("discovering", spec.Name)
+}
+
+func (s *discoveredSuite) TestAcceptsARootProject() {
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{s.claim()}))
+}
+
+func (s *discoveredSuite) TestAcceptsAMemberWithNoTargets() {
+	member := spells.DiscoveredProject{Path: "scripts", Role: spells.DiscoveryRoleMember}
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{member}))
+}
+
+func (s *discoveredSuite) TestAcceptsAnOpInAnotherSpelling() {
+	c := s.claim()
+	c.Targets = map[string][]string{"build": {"go_build"}}
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{c}))
+}
+
+func (s *discoveredSuite) TestRefusesCI() {
+	c := s.claim()
+	c.Targets["ci"] = []string{"go-test"}
+	s.refuse(c, `target "ci": core composes ci`)
+}
+
+func (s *discoveredSuite) TestRefusesATargetNameOutsideTheVocabulary() {
+	c := s.claim()
+	c.Targets["vet"] = []string{"go-vet"}
+	s.refuse(c, `target "vet" is not a discovery target name, one of install, generate, format, lint, build, test, security`)
+}
+
+func (s *discoveredSuite) TestRefusesClean() {
+	c := s.claim()
+	c.Targets["clean"] = []string{"go-build"}
+	s.refuse(c, `target "clean" is not a discovery target name`)
+}
+
+func (s *discoveredSuite) TestRefusesAnOpTheSpellDoesNotDeclare() {
+	c := s.claim()
+	c.Targets["test"] = []string{"go-test", "vitest"}
+	s.refuse(c, `target "test": op "vitest" is not one the spell declares, one of go-build, go-test, go-vet`)
+}
+
+func (s *discoveredSuite) TestRefusesATargetWithNoOp() {
+	c := s.claim()
+	c.Targets["build"] = nil
+	s.refuse(c, `target "build" names no op`)
+}
+
+func (s *discoveredSuite) TestRefusesAnUnsetRole() {
+	c := s.claim()
+	c.Role = ""
+	s.refuse(c, `role "unset": want one of project, member`)
+}
+
+func (s *discoveredSuite) TestRefusesAnUnknownRole() {
+	c := s.claim()
+	c.Role = "workspace"
+	s.refuse(c, `role "workspace": want one of project, member`)
+}
+
+func (s *discoveredSuite) TestRefusesAnEmptyPath() {
+	c := s.claim()
+	c.Path = ""
+	s.refuse(c, "a path is required")
+}
+
+func (s *discoveredSuite) TestRefusesAnUncleanPath() {
+	c := s.claim()
+	c.Path = "./web/"
+	s.refuse(c, `not clean, write "web"`)
+}
+
+func (s *discoveredSuite) TestRefusesAnAbsolutePath() {
+	c := s.claim()
+	c.Path = "/repo/web"
+	s.refuse(c, "never absolute")
+}
+
+func (s *discoveredSuite) TestRefusesABackslash() {
+	c := s.claim()
+	c.Path = `web\app`
+	s.refuse(c, "forward slashes")
+}
+
+func (s *discoveredSuite) TestRefusesADependencyOutsideTheRoot() {
+	c := s.claim()
+	c.DependsOn = []string{"../other"}
+	s.refuse(c, `dependsOn "../other": leaves the workspace root`)
+}
+
+func (s *discoveredSuite) TestRefusesTheRootAsASpan() {
+	c := s.claim()
+	c.Spans = []string{"."}
+	s.refuse(c, `spans ".": names the workspace root`)
+}
+
+func (s *discoveredSuite) TestRefusesAnAncestorSpan() {
+	c := s.claim()
+	c.Path = "svc/api"
+	c.Spans = []string{"svc"}
+	s.refuse(c, `svc/api: spans "svc": a span is a directory inside the claim`)
+}
+
+func (s *discoveredSuite) TestAcceptsANestedSpan() {
+	c := s.claim()
+	c.Path = "svc"
+	c.Spans = []string{"svc/web"}
+	s.NoError(ValidateDiscovered(s.spell, []spells.DiscoveredProject{c}))
+}
+
+func (s *discoveredSuite) TestRefusesAGapWithNoReason() {
+	c := s.claim()
+	c.NotInferred = []spells.DiscoveryGap{{File: "Makefile", Why: " "}}
+	s.refuse(c, `notInferred "Makefile": why is required`)
+}
+
+func (s *discoveredSuite) TestRefusesTwoClaimsOnOnePath() {
+	err := ValidateDiscovered(s.spell, []spells.DiscoveredProject{s.claim(), s.claim()})
+	s.Require().Error(err)
+	s.Contains(err.Error(), `claims "." twice`)
+}
+
+func (s *discoveredSuite) TestInProcessIndexerNeedsNoCommand() {
+	m, err := describe(Contract{Name: "bash", SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatShellScript, Op: "shell-index"}})
+	s.Require().NoError(err)
+	s.Equal(spells.Op{Kind: spells.OpKindSymbolIndex, Command: spells.Command{Capture: true, Quiet: true}}, m.Ops["shell-index"])
+}
+
+func (s *discoveredSuite) TestInProcessIndexerRefusesACommand() {
+	_, err := describe(Contract{Name: "buzz", SymbolIndexer: &spells.SymbolIndexer{
+		Format: spells.SymbolFormatBuzzModule, Command: spells.Command{Bin: "scip-buzz"},
+	}})
+	s.EqualError(err, `spell "buzz": symbol indexer: format buzz-module runs no command, drop command`)
+}
+
+func (s *discoveredSuite) TestInProcessIndexerRefusesUses() {
+	_, err := describe(Contract{Name: "bash", SymbolIndexer: &spells.SymbolIndexer{
+		Format: spells.SymbolFormatShellScript, Uses: []string{"bash"},
+	}})
+	s.EqualError(err, `spell "bash": symbol indexer: format shell-script runs no tool, drop uses`)
+}
+
+func (s *discoveredSuite) TestInProcessIndexerRefusesEnvs() {
+	_, err := describe(Contract{Name: "buzz", SymbolIndexer: &spells.SymbolIndexer{
+		Format: spells.SymbolFormatBuzzModule, Envs: []map[string]string{{"GOOS": "linux"}},
+	}})
+	s.EqualError(err, `spell "buzz": symbol indexer: format buzz-module reads one build of the files, drop envs`)
 }

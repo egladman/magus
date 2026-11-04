@@ -10,6 +10,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/result"
 )
 
 // Source is the figure module's Buzz source, served as `import "magus/figure"` by a host
@@ -17,6 +18,13 @@ import (
 //
 //go:embed figure.buzz
 var Source string
+
+// DeclareModules makes sess resolve "magus/figure" and the source modules it
+// imports. The host still provides "magus" and the stdlib.
+func DeclareModules(sess *buzz.Session) {
+	sess.SetModuleDecls("magus/figure", Source)
+	sess.SetModuleDecls(result.ModulePath, result.Source)
+}
 
 // SourceSHA256 is the hex SHA-256 of Source: the identity of the figure engine this binary
 // renders with, which moves only when figure.buzz does.
@@ -312,7 +320,7 @@ fun decoded(f: figure\Figure) > figure\Figure !> str {
 // Draw lays fig out with figure\draw and paints it with Theme.page, the palette that
 // follows a page's CSS variables. anchorHref is figure's link template, with {path}.
 //
-// sess must resolve "magus/figure" and "magus", which the module imports for its record types.
+// sess must hold DeclareModules' modules and "magus", for its record types.
 // Draw executes its entry program in sess, so a caller gives it a session of its own. A
 // figure the module refuses, or a case name no enum holds, is a *Findings.
 func Draw(ctx context.Context, sess *buzz.Session, fig Figure, anchorHref string) (string, error) {
@@ -335,6 +343,14 @@ func Draw(ctx context.Context, sess *buzz.Session, fig Figure, anchorHref string
 		return "", &Findings{Text: findings}
 	}
 	return items[0].AsString(), nil
+}
+
+// xmlDeclaration is XmlDeclaration in figure.buzz.
+const xmlDeclaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+
+// Standalone is svg as a file of its own. Draw returns the inline form.
+func Standalone(svg string) string {
+	return xmlDeclaration + svg
 }
 
 // field is one key of a record as a host hands it to Buzz: a map read through the record's

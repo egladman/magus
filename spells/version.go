@@ -153,7 +153,7 @@ func (k VersionKey) IsZero() bool { return k.Const == "" && k.UpTo == VersionNon
 // The note is never an error. Every degradation here is a case where magus can still
 // produce a CORRECT key by being more conservative than the author asked for, and
 // failing the run instead would break a build for a cache-key reason.
-func VersionToken(output string, key VersionKey) (token string, note string) {
+func VersionToken(output string, key VersionKey) (version string, note string) {
 	if key.Const != "" {
 		return key.Const, ""
 	}
@@ -402,10 +402,6 @@ type Tool struct {
 	// work below 1.21" belongs here, "we have not moved to node 25 yet" belongs in the
 	// workspace's own bounds, which are intersected with this one.
 	Supported VersionBounds `json:"supported,omitempty"`
-	// Diagnostics names the convention this binary prints findings in; empty means
-	// prose. On the tool rather than the op because the format is the binary's:
-	// hadolint reports the same way whichever op invokes it.
-	Diagnostics DiagnosticFormat `json:"diagnostics,omitempty"`
 	// Lifecycle names the endoflife.date product that publishes this binary's release
 	// cycles and their end-of-life dates ("go", "nodejs"). Empty means none is known.
 	//

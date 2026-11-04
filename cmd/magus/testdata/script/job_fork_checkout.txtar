@@ -85,8 +85,8 @@ export fun mgs_getName() > str { return "rows-host"; }
 
 export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }
 
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = "host/hooks.json"};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = "host/hooks.json"}, guard = ""};
 }
 
 export fun mgs_getSkills() > HarnessSkills {

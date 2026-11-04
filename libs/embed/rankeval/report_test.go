@@ -1,10 +1,12 @@
 package rankeval
 
 import (
+	"bytes"
 	"math"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -24,7 +26,8 @@ func fileOfFixture(id string) string {
 	return ""
 }
 
-func TestFileCutMixedIDs(t *testing.T) {
+func (s *rankevalSuite) TestFileCutMixedIDs() {
+	t := s.T()
 	ranked := []string{
 		"symbol:a.go#A", "dir:.", "file:a.go", "symbol:b.go#B", "dir:pkg",
 		"symbol:a.go#C", "file:c.go", "target:pkg:build", "symbol:b.go#D", "file:d.go",
@@ -35,7 +38,8 @@ func TestFileCutMixedIDs(t *testing.T) {
 	assert.Empty(t, FileCut(nil, fileOfFixture, cutoff))
 }
 
-func TestFileCutStopsAtTenFiles(t *testing.T) {
+func (s *rankevalSuite) TestFileCutStopsAtTenFiles() {
+	t := s.T()
 	var ranked []string
 	for i := range 30 {
 		ranked = append(ranked, "symbol:f"+strconv.Itoa(i)+".go#S", "dir:d"+strconv.Itoa(i), "file:f"+strconv.Itoa(i)+".go")
@@ -69,7 +73,8 @@ func sampleRuns() []Run {
 	return []Run{r1, r2, r3, r4}
 }
 
-func TestSummarizeOverall(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeOverall() {
+	t := s.T()
 	rep := Summarize(SetJudgedDev, sampleRuns())
 	third := 1.0 / 3
 	// TestSummarizeSlices covers the per-shape slices.
@@ -102,7 +107,8 @@ func TestSummarizeOverall(t *testing.T) {
 	}, rep)
 }
 
-func TestSummarizeSlices(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeSlices() {
+	t := s.T()
 	rep := Summarize(SetJudgedDev, sampleRuns())
 	require.Len(t, rep.Shapes, 3)
 	assert.Equal(t, Metrics{Unscorable: 1, DroppedGold: 2}, rep.Shapes[ShapePath], "a run with nothing relevant scores nothing")
@@ -112,7 +118,8 @@ func TestSummarizeSlices(t *testing.T) {
 	assert.Nil(t, rep.Verbs, "one verb is no slice")
 }
 
-func TestPrecisionSeparatesWhatRecallTies(t *testing.T) {
+func (s *rankevalSuite) TestPrecisionSeparatesWhatRecallTies() {
+	t := s.T()
 	gold := map[string]int{"file:a": 1}
 	padded := []string{"file:a", "file:u1", "file:u2", "file:u3", "file:u4", "file:u5", "file:u6", "file:u7", "file:u8", "file:u9"}
 	got := []Metrics{
@@ -125,7 +132,8 @@ func TestPrecisionSeparatesWhatRecallTies(t *testing.T) {
 	})
 }
 
-func TestSummarizeAgentAgreementIsBinaryWithNodes(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeAgentAgreementIsBinaryWithNodes() {
+	t := s.T()
 	r := run("h", SetAgentAgreement, ShapeIdentifier, map[string]int{"file:a": 3, "file:b": 1, "dir:pkg": 1}, "file:b", "file:a")
 	r.Judgment.Session = "s1"
 	r.Ranked = []string{"symbol:b#B", "file:b", "dir:pkg", "symbol:a#A", "file:a"}
@@ -138,12 +146,14 @@ func TestSummarizeAgentAgreementIsBinaryWithNodes(t *testing.T) {
 	assert.InDelta(t, 0.5, rep.Nodes.MRR, 1e-12)
 }
 
-func TestSummarizeEmpty(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeEmpty() {
+	t := s.T()
 	rep := Summarize(SetJudgedDev, nil)
 	assert.Equal(t, SetReport{Set: SetJudgedDev}, rep)
 }
 
-func TestSummarizeText(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeText() {
+	t := s.T()
 	text := Report{Sets: []SetReport{
 		Summarize(SetJudgedDev, sampleRuns()),
 		{Set: SetJudgedHoldout, Absent: "sealed"},
@@ -158,13 +168,82 @@ func TestSummarizeText(t *testing.T) {
 	assert.Contains(t, text, "== agent-agreement (report-only): not built\n")
 }
 
-func TestSummarizeReportRoundTripsJSON(t *testing.T) {
-	rep := Report{Sets: []SetReport{Summarize(SetJudgedDev, sampleRuns()), {Set: SetFigures, Absent: "not built"}}}
+func configured(config Config, rep SetReport) SetReport {
+	rep.Config = config
+	return rep
+}
+
+func (s *rankevalSuite) TestSummarizeReportRoundTripsJSON() {
+	t := s.T()
+	rep := Report{Sets: []SetReport{
+		configured(ConfigEmbedOn, Summarize(SetJudgedDev, sampleRuns())),
+		{Set: SetFigures, Config: ConfigEmbedOff, Absent: "not built"},
+	}}
 	b, err := marshalJSON(rep)
 	require.NoError(t, err)
 	var back Report
 	require.NoError(t, unmarshalStrictJSON(b, &back))
 	assert.Equal(t, rep, back)
+}
+
+func (s *rankevalSuite) TestSetReportRefusesAnUnknownConfig() {
+	t := s.T()
+	_, err := marshalJSON(SetReport{Set: SetJudgedDev})
+	assert.ErrorContains(t, err, `config "" is not one of`)
+	var back SetReport
+	err = unmarshalStrictJSON([]byte(`{"eval_set":"judged-dev","config":"embed=maybe","overall":{}}`), &back)
+	assert.ErrorContains(t, err, `config "embed=maybe" is not one of`)
+}
+
+func (s *rankevalSuite) TestBaselineKeepsTheLastLinePerSetAndConfig() {
+	t := s.T()
+	path := filepath.Join(t.TempDir(), "baseline.jsonl")
+	rep := Report{Sets: []SetReport{
+		configured(ConfigEmbedOn, Summarize(SetJudgedDev, sampleRuns())),
+		configured(ConfigEmbedOff, Summarize(SetJudgedDev, sampleRuns()[:2])),
+		{Set: SetFigures, Config: ConfigEmbedOn, Absent: "not built"},
+	}}
+	require.NoError(t, WriteBaseline(path, rep))
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, 3, bytes.Count(raw, []byte("\n")), "one line per set and config")
+	f, err := os.Open(path)
+	require.NoError(t, err)
+	defer f.Close()
+	back, err := ReadBaseline(f)
+	require.NoError(t, err)
+	assert.Equal(t, rep, back)
+
+	newer := configured(ConfigEmbedOn, SetReport{Set: SetJudgedDev, Absent: "rebuilt"})
+	line, err := marshalJSON(newer)
+	require.NoError(t, err)
+	require.NoError(t, appendLine(path, line))
+	f2, err := os.Open(path)
+	require.NoError(t, err)
+	defer f2.Close()
+	back, err = ReadBaseline(f2)
+	require.NoError(t, err)
+	assert.Equal(t, []SetReport{newer, rep.Sets[1], rep.Sets[2]}, back.Sets, "the later line replaces the earlier in place")
+}
+
+func (s *rankevalSuite) TestCompareMatchesConfigs() {
+	t := s.T()
+	none := func(int) string { return "" }
+	base := Report{Sets: []SetReport{
+		{Set: SetJudgedDev, Config: ConfigEmbedOn, Scores: scores(none, 0.2, 0.4, 0.1)},
+		{Set: SetJudgedDev, Config: ConfigEmbedOff, Scores: scores(none, 0.9, 0.5, 0.7)},
+	}}
+	now := Report{Sets: []SetReport{
+		{Set: SetJudgedDev, Config: ConfigEmbedOff, Scores: scores(none, 0.8, 0.6, 0.7)},
+	}}
+	cs := Compare(base, now)
+	require.Len(t, cs, 2)
+	for _, c := range cs {
+		assert.Equal(t, ConfigEmbedOff, c.Config)
+		assert.InDelta(t, 0.7, c.Base, 1e-12, "embed=off is compared with embed=off, never with embed=on")
+		assert.InDelta(t, 0.7, c.Now, 1e-12)
+	}
 }
 
 func scores(cluster func(i int) string, values ...float64) []QueryScore {
@@ -175,7 +254,8 @@ func scores(cluster func(i int) string, values ...float64) []QueryScore {
 	return out
 }
 
-func TestSummarizeCompare(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeCompare() {
+	t := s.T()
 	none := func(int) string { return "" }
 	base := Report{Sets: []SetReport{
 		{Set: SetJudgedDev, Scores: scores(none, 0.2, 0.4, 0.1, 0.5, 0.3, 0.2, 0.6, 0.1)},
@@ -212,7 +292,8 @@ func TestSummarizeCompare(t *testing.T) {
 	assert.Zero(t, def.PHolm)
 }
 
-func TestSummarizeCompareClustersBySession(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeCompareClustersBySession() {
+	t := s.T()
 	session := func(i int) string { return "s" + strconv.Itoa(i/3) }
 	base := Report{Sets: []SetReport{{Set: SetAgentAgreement, Scores: scores(session, 0, 0, 0, 0, 0, 0)}}}
 	now := Report{Sets: []SetReport{{Set: SetAgentAgreement, Scores: scores(session, 1, 1, 1, 1, 1, 0.4)}}}
@@ -229,7 +310,8 @@ func TestSummarizeCompareClustersBySession(t *testing.T) {
 	assert.Equal(t, "1 paired unit(s); a test needs 2", Compare(one, one)[0].Skipped)
 }
 
-func TestSummarizeComparisonText(t *testing.T) {
+func (s *rankevalSuite) TestSummarizeComparisonText() {
+	t := s.T()
 	text := ComparisonText([]Comparison{
 		{Set: SetJudgedDev, Metric: "ndcg@10", Pairs: 8, Base: 0.3, Now: 0.5, Delta: 0.2, Lo: 0.1, Hi: 0.3, Effect: math.NaN(), P: 0.01, PHolm: 0.02},
 		{Set: SetDefinitionLookup, Metric: "ndcg@10", Pairs: 1, Skipped: "1 paired unit(s); a test needs 2"},

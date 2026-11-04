@@ -19,8 +19,8 @@ import (
 // its generator's choice and is not counted. A package is placed only where its index
 // records a package clause (Go), so a language with no reader contributes nothing. With no
 // symbol index, Indexed is false and Packages empty, never nil.
-func (g *Graph) ImportAliases() types.ImportAliasReport {
-	out := types.ImportAliasReport{Indexed: g.HasSymbols(), Packages: []types.AliasFacts{}}
+func (g *Graph) ImportAliases() types.ImportAliases {
+	out := types.ImportAliases{Indexed: g.HasSymbols(), Packages: []types.AliasFacts{}}
 	if !out.Indexed {
 		return out
 	}

@@ -1,0 +1,121 @@
+import "assert";
+import "./denials" as retro;
+
+final EVENTS = "hack/retro/testdata/denials/events.jsonl";
+
+final STAGE = "staging every file sweeps in what a target wrote; stage your files by name\n"
+    + "nothing ran (1 command)\n"
+    + "A magus target writes its declared outputs as it runs. Fix: `git add -p` stages hunks.\n"
+    + "next:\n"
+    + "  git add a.go b.go\n"
+    + "      stages only what you edited.\n"
+    + "see: https://eli.gladman.cc/magus/reference/rules/stage-all/";
+
+final PIPE = "this pipe hides the exit status\n"
+    + "magus projects its own record.\n"
+    + "next:\n"
+    + "  ask the person to rerun it\n"
+    + "see: https://eli.gladman.cc/magus/reference/rules/output-pipe/";
+
+final POLICY = [
+    "final gateDenial = \"a worker does not run the gate; finish narrow\\nthe gate is the integrator's. Run `magus affected ci` from there.\";",
+    "fun judge(x: int) > any \{",
+    "    if (x == 1) \{",
+    "        return magus\\guard.deny(gateDenial);",
+    "    }",
+    "    if (x == 2) \{",
+    "        return magus\\guard.deny(\"this branch bumped \{name} twice\\n\"",
+    "            + \"a branch bumps a version once\", opts: \{\"rule\": \"bump-once\"});",
+    "    }",
+    "    return magus\\guard.deny(helper(x));",
+    "}",
+    "test \"denies\" \{",
+    "    std\\assert(magus\\guard.deny(\"in a test\") != null, message: \"x\");",
+    "}",
+].join("\n");
+
+fun verdicts() > {str: str} {
+    return {"grdstage1": STAGE, "grdstage2": STAGE, "grdpipe": PIPE};
+}
+
+fun kinds(found: [retro\Fault], site: str) > [str] {
+    final got = mut [<str>];
+    foreach (f in found) {
+        if (f.site == site) {
+            got.append(f.kind);
+        }
+    }
+    return got;
+}
+
+test "a stored verdict splits into say, why and each next command" {
+    final d = retro\fromVerdict(STAGE, site: "e:2", at: 5);
+    assert\equal(d.rule, want: "stage-all", message: "rule from see:");
+    assert\equal(d.say, want: "staging every file sweeps in what a target wrote; stage your files by name", message: "say");
+    assert\equal(d.why, want: "A magus target writes its declared outputs as it runs. Fix: `git add -p` stages hunks.", message: "why drops the note");
+    assert\equal(d.fix, want: ["git add a.go b.go"], message: "fix drops each command's why");
+}
+
+test "the trail keeps denied lines and folds repeats of one rule and say" {
+    final hits = retro\trailHits(EVENTS, start: 0);
+    assert\equal(hits.len(), want: 5, message: "five denied lines");
+    assert\equal(retro\trailHits(EVENTS, start: 1700000004500).len(), want: 2, message: "start bounds the read");
+    final got = retro\fromTrail(hits, verdicts: verdicts(), file: "events.jsonl");
+    assert\equal(got.denials.len(), want: 2, message: "stage-all folded, output-pipe");
+    assert\equal(got.denials[0].count, want: 2, message: "two firings");
+    assert\equal(got.denials[0].site, want: "events.jsonl:3 grdstage2", message: "newest firing's site");
+    assert\equal(got.missing, want: [
+        "events.jsonl: the text of 1 denied call(s): the line carries no verdict_ref",
+        "events.jsonl: the text of 1 denied call(s): no verdict blob holds their ref",
+    ], message: "not recorded");
+}
+
+test "a policy file yields each deny outside its tests, by literal or final" {
+    final got = retro\policyDenials("hack/policy/demo.buzz", text: POLICY);
+    assert\equal(got.denials.len(), want: 2, message: "two literal denials");
+    final gate = got.denials[0];
+    assert\equal(gate.site, want: "hack/policy/demo.buzz:4", message: "site");
+    assert\equal(gate.rule, want: "policy/demo", message: "unnamed rule takes the file");
+    assert\equal(gate.say, want: "a worker does not run the gate; finish narrow", message: "say from the final");
+    assert\equal(gate.why, want: "the gate is the integrator's. Run `magus affected ci` from there.", message: "why");
+    final bump = got.denials[1];
+    assert\equal(bump.rule, want: "bump-once", message: "opts rule");
+    assert\equal(bump.say, want: "this branch bumped \{name} twice", message: "interpolation kept");
+    assert\equal(bump.why, want: "a branch bumps a version once", message: "concatenated why");
+    assert\equal(got.missing, want: ["hack/policy/demo.buzz:10: the text, built at run time by \{helper(x)}"], message: "computed");
+}
+
+test "catalog rows map rule names through their constants" {
+    final files = {
+        "internal/guard/shell.go": "const (\n\tdenyRuleStageAll denyRuleName = \"stage-all\"\n)",
+        "internal/guard/catalog.go": "var ruleDocStageAll = types.RuleDoc\{\n\tName:    string(denyRuleStageAll),\n}",
+    };
+    assert\equal(retro\catalogSites(files), want: {"stage-all": "internal/guard/catalog.go:2"}, message: "row site");
+}
+
+test "faults flag each mechanical kind" {
+    final ok = retro\Denial{ rule = "a", origin = "trail", site = "s1", say = "a short say", why = "it explains.", fix = ["./magus run test ."] };
+    final empty = retro\Denial{ rule = "b", origin = "policy", site = "s2", say = "a short say", why = "x".repeat(601), fix = [<str>] };
+    final vague = retro\Denial{ rule = "c", origin = "trail", site = "s3", say = "y".repeat(161), why = "then `git add f` stages it", fix = ["ask the person"] };
+    final found = retro\faults([ok, empty, vague]);
+    assert\equal(kinds(found, site: "s1"), want: ["duplicate-say"], message: "a clean denial shares only its say");
+    assert\equal(kinds(found, site: "s2"), want: ["empty-fix", "why-over-cap"], message: "empty fix, long why");
+    assert\equal(kinds(found, site: "s3"), want: ["fix-not-runnable", "why-acts", "why-command", "say-over-cap"], message: "vague fix, acting why");
+}
+
+test "a step is runnable when it starts with a command, a path or a tool call" {
+    assert\isTrue(retro\runnable("./magus run test ."), message: "relative path");
+    assert\isTrue(retro\runnable("/w/magus --root /w ls"), message: "absolute path");
+    assert\isTrue(retro\runnable("Skill(magus-run)"), message: "tool call");
+    assert\isFalse(retro\runnable("ask the person"), message: "prose");
+}
+
+test "the worklist keeps every policy denial and the newest firings per rule" {
+    final d = fun (rule: str, origin: str, at: int) > retro\Denial => retro\Denial{ rule = rule, origin = origin, site = "{at}", say = "{at}", why = "", fix = [<str>], at = at };
+    final work = retro\worklist([d("a", origin: "trail", at: 1), d("a", origin: "trail", at: 3), d("p", origin: "policy", at: 0), d("p", origin: "policy", at: 0)], perRule: 1);
+    final sites = mut [<str>];
+    foreach (w in work) {
+        sites.append(w.site);
+    }
+    assert\equal(sites, want: ["3", "0", "0"], message: "newest trail firing, both policy sites");
+}

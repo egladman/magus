@@ -14,6 +14,7 @@
 // console drives activate() itself. The log viewer and dashboard satisfy this; the graph explorer
 // does not yet.
 
+import { MagusError, fail, fromPromise, ok, type Result } from "../gen/magus/types";
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 
 export interface StandaloneApp {
@@ -86,7 +87,7 @@ export function moduleApp(s: ModuleApp): PageModule<null, null> {
   return {
     id: s.id,
     title: s.title,
-    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+    async activate(host: HTMLElement): Promise<Result<PageController<null, null>>> {
       if (!document.getElementById(cssId)) {
         const link = document.createElement("link");
         link.id = cssId;
@@ -94,13 +95,19 @@ export function moduleApp(s: ModuleApp): PageModule<null, null> {
         link.href = url(s.css);
         document.head.append(link);
       }
-      const mod = (await import(url(s.bundle))) as HostModule;
+      const loaded = await fromPromise<unknown>(import(url(s.bundle)));
+      if (loaded.error) return loaded;
+      const mod = loaded.value;
+      if (!isHostModule(mod))
+        return fail(
+          new MagusError({ code: "", message: s.bundle + " does not export activate(host)" }),
+        );
       // Normalized here so the console below has ONE shape to drive, whichever of the three a
       // app hands back.
       const boot = mod.activate(host);
       const instance: AppInstance | null =
         typeof boot === "function" ? { deactivate: boot } : (boot ?? null);
-      return {
+      return ok({
         search: noSearch,
         // PageController's lifecycle is mandatory even when an app is static. The normalizer
         // makes that contract true for dynamically loaded modules while preserving their simple
@@ -110,7 +117,7 @@ export function moduleApp(s: ModuleApp): PageModule<null, null> {
           instance?.deactivate();
           host.replaceChildren();
         },
-      };
+      });
     },
   };
 }
@@ -127,7 +134,7 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
   return {
     id: s.id,
     title: s.title,
-    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+    async activate(host: HTMLElement): Promise<Result<PageController<null, null>>> {
       // The app's page-scoped stylesheet, added once (idempotent by id); the console page itself does
       // not load it.
       if (!document.getElementById(cssId)) {
@@ -140,19 +147,34 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
       // Import the bundle BEFORE the scaffold exists so the app's standalone auto-boot (guarded on a
       // scaffold id) no-ops; we drive activate() ourselves once the scaffold is mounted. On reopen the
       // module is cached (no re-eval), so activate() simply re-binds to the fresh scaffold.
-      const mod = (await import(artUrl(s.bundle))) as BootModule;
+      const loaded = await fromPromise<unknown>(import(artUrl(s.bundle)));
+      if (loaded.error) return loaded;
+      const mod = loaded.value;
+      const fetched = await fromPromise(fetch(artUrl(scaffold)));
+      if (fetched.error) return fetched;
+      const read = await fromPromise(fetched.value.text());
+      if (read.error) return read;
+      const scaffoldText = read.value;
+      if (!isBootModule(mod))
+        return fail(
+          new MagusError({ code: "", message: s.bundle + " does not export activate()" }),
+        );
       // Fetch the app's co-located scaffold - a `<main>` fragment (gen/<id>/scaffold.html) that
       // this console project owns, no longer a full standalone page (the decoupled console has none).
       // The console frame provides the outer chrome (title bar, status bar); the fragment is the
       // app's own body, appended into the pane host.
-      const res = await fetch(artUrl(scaffold));
-      const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+      const doc = new DOMParser().parseFromString(scaffoldText, "text/html");
       const main = doc.querySelector("main");
       if (!main)
-        throw new Error(s.id + " scaffold.html missing its <main> (built to gen/" + scaffold + ")");
+        return fail(
+          new MagusError({
+            code: "",
+            message: "scaffold.html missing its <main> (built to gen/" + scaffold + ")",
+          }),
+        );
       host.append(document.importNode(main, true));
       mod.activate();
-      return {
+      return ok({
         search: noSearch,
         // An app that writes the shared status bar exports setVisible so it can go quiet while
         // backgrounded - the dashboard (connection pill, observing-since) and the log viewer (a live
@@ -170,7 +192,28 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
           mod.deactivate?.();
           host.replaceChildren();
         },
-      };
+      });
     },
   };
+}
+
+// A bundle is loaded by URL, so tsc never sees its exports: these check the shape the console is
+// about to call before it calls it.
+function isHostModule(mod: unknown): mod is HostModule {
+  return isObject(mod) && typeof mod.activate === "function";
+}
+
+function isBootModule(mod: unknown): mod is BootModule {
+  if (!isObject(mod) || typeof mod.activate !== "function") return false;
+  if (mod.setVisible !== undefined && typeof mod.setVisible !== "function") return false;
+  if (mod.deactivate !== undefined && typeof mod.deactivate !== "function") return false;
+  return mod.docTitle === undefined || isTitleSource(mod.docTitle);
+}
+
+function isTitleSource(v: unknown): v is TitleSource {
+  return isObject(v) && typeof v.get === "function" && typeof v.subscribe === "function";
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
 }

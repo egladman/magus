@@ -1,10 +1,13 @@
 package sessions
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // KindGateResult records how a whole ci gate came out: pass or fail, at which
@@ -24,10 +27,65 @@ const KindGateResult = "gate_result"
 // verdict on the inputs, which is why [LatestGate] skips it.
 const OutcomeDeferred = "deferred"
 
+// GateScope names what a gate's verdict covers.
+//
+// The zero value is an entry written before gate records named their scope. It covers
+// what a project scope covers, and a reader that skips it for that reason says so through
+// [GateScope.Unscoped] rather than reading it as either scope silently.
+type GateScope string
+
+const (
+	// GateScopeAffected is a gate over every project the branch affects against its
+	// default base: `magus affected ci`, or `magus run ci` over a superset of that set.
+	// Only this scope speaks for the branch.
+	GateScopeAffected GateScope = "affected"
+	// GateScopeProject is a gate over named projects that leaves an affected project out,
+	// such as `magus run ci libs/cmdline`. Its pass proves those projects alone.
+	GateScopeProject GateScope = "project"
+)
+
+// CoversBranch reports whether a verdict of this scope speaks for the whole branch.
+func (s GateScope) CoversBranch() bool { return s == GateScopeAffected }
+
+// Unscoped reports whether the entry predates gate scopes.
+//
+// compat(until: no gate store holds an unscoped record): such an entry reads as project
+// scope, so it never covers a push and the push refusal names it.
+func (s GateScope) Unscoped() bool { return s == "" }
+
+// MarshalJSON refuses the zero value: a record written now that names no scope would
+// read back as a pre-scope entry.
+func (s GateScope) MarshalJSON() ([]byte, error) {
+	switch s {
+	case GateScopeAffected, GateScopeProject:
+		return json.Marshal(string(s))
+	default:
+		return nil, fmt.Errorf("gate result scope %q: want %q or %q", string(s), GateScopeAffected, GateScopeProject)
+	}
+}
+
+// UnmarshalJSON accepts only a known scope. An entry with no scope member never reaches
+// it and keeps the zero value.
+func (s *GateScope) UnmarshalJSON(data []byte) error {
+	var v string
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	switch GateScope(v) {
+	case GateScopeAffected, GateScopeProject:
+		*s = GateScope(v)
+		return nil
+	default:
+		return fmt.Errorf("gate result scope %q: want %q or %q", v, GateScopeAffected, GateScopeProject)
+	}
+}
+
 // GateResult is the payload of a [KindGateResult] record.
 type GateResult struct {
 	// Target is the gate target the run anchored on (normally "ci").
 	Target string `json:"target"`
+	// Scope is what the verdict covers; see [GateScope].
+	Scope GateScope `json:"scope"`
 	// Ref is the movable branch name the gate ran on (types.VCSMeta.Ref).
 	Ref string `json:"ref"`
 	// Commit is the revision the gate ran at. The working tree may have been
@@ -51,7 +109,7 @@ type GateResult struct {
 	// whose answer could not have moved. Recorded per gate so the debt is countable
 	// across a branch rather than only visible in the run that printed it.
 	UndeclaredSeeds []string `json:"undeclared_seeds,omitempty"`
-	// Tier is the risk tier a sized gate ran at (types.RiskTier); empty is the full
+	// Tier is the risk tier a sized gate ran at (types.Tier); empty is the full
 	// gate. A sized pass is a verdict on the change, since the tier proved the rest of
 	// the gate could not observe it.
 	Tier string `json:"tier,omitempty"`
@@ -64,18 +122,33 @@ type GateResult struct {
 	DeferredTo string `json:"deferred_to,omitempty"`
 }
 
+// BranchVerdict reports whether this result is a verdict on the branch: a pass or fail
+// over every affected project, or a fail of any scope. A project's failure is a red
+// project wherever it ran; a project's pass proves nothing about the projects it left out.
+func (g GateResult) BranchVerdict() bool {
+	switch g.Outcome {
+	case OutcomeFail:
+		return true
+	case OutcomePass:
+		return g.Scope.CoversBranch()
+	default:
+		return false
+	}
+}
+
 // GateRecord is one gate result with the envelope's timestamp resolved.
 type GateRecord struct {
 	GateResult
 	At time.Time
 }
 
-// LatestGate returns the newest gate VERDICT for (ref, target): a pass or a
-// fail. The newest verdict wins on purpose: a fail recorded after a pass
-// means the branch is red, and a redundancy check must see that rather than
-// the stale green behind it. Deferral records are skipped: a deferral is not a
-// verdict on the inputs, and letting one shadow the green gate it points at
-// would make the check inert after its own first refusal.
+// LatestGate returns the newest gate VERDICT on the branch for (ref, target); see
+// [GateResult.BranchVerdict]. The newest verdict wins on purpose: a fail recorded after a
+// pass means the branch is red, and a redundancy check must see that rather than the stale
+// green behind it. A project-scoped pass is skipped, so `magus run ci <project>` never
+// reads as the branch gate. Deferral records are skipped: a deferral is not a verdict on
+// the inputs, and letting one shadow the green gate it points at would make the check
+// inert after its own first refusal.
 func LatestGate(fold Fold, ref, target string) (GateRecord, bool) {
 	for i := len(fold.Records) - 1; i >= 0; i-- {
 		rec := fold.Records[i]
@@ -86,7 +159,7 @@ func LatestGate(fold Fold, ref, target string) (GateRecord, bool) {
 		if json.Unmarshal(rec.Payload, &g) != nil {
 			continue
 		}
-		if g.Ref != ref || g.Target != target || g.Outcome == OutcomeDeferred {
+		if g.Ref != ref || g.Target != target || !g.BranchVerdict() {
 			continue
 		}
 		return GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}, true
@@ -94,13 +167,18 @@ func LatestGate(fold Fold, ref, target string) (GateRecord, bool) {
 	return GateRecord{}, false
 }
 
-// GateAt returns the newest gate verdict for target recorded at commit, on any ref.
-// Commits compare by prefix in both directions, because callers hold abbreviations of
-// different lengths. Deferrals are skipped for the reason LatestGate gives.
+// GateAt returns the newest gate verdict on the branch for target recorded at commit, on
+// any ref; see [GateResult.BranchVerdict]. When the commit holds only project-scoped
+// passes, it returns the newest of those, so a caller can name what ran instead of
+// reporting nothing; such a record answers false to BranchVerdict. Commits compare by
+// prefix in both directions, because callers hold abbreviations of different lengths.
+// Deferrals are skipped for the reason LatestGate gives.
 func GateAt(fold Fold, commit, target string) (GateRecord, bool) {
 	if commit == "" {
 		return GateRecord{}, false
 	}
+	var narrow GateRecord
+	found := false
 	for i := len(fold.Records) - 1; i >= 0; i-- {
 		rec := fold.Records[i]
 		if rec.Kind != KindGateResult {
@@ -116,17 +194,57 @@ func GateAt(fold Fold, commit, target string) (GateRecord, bool) {
 		if !strings.HasPrefix(g.Commit, commit) && !strings.HasPrefix(commit, g.Commit) {
 			continue
 		}
-		return GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}, true
+		at := GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}
+		if g.BranchVerdict() {
+			return at, true
+		}
+		if !found {
+			narrow, found = at, true
+		}
 	}
-	return GateRecord{}, false
+	return narrow, found
 }
 
-// RecordGate appends one gate result to the store under dir. Like the
+// FailuresOwed returns the targets the failed gate's run failed that no later run has
+// passed, in the order that run recorded them. results is a fold of [KindTargetResult]
+// records. The gate's own target is left out: every failure fails it, and only the next
+// gate passes it. A gate that did not fail, or names no run, owes nothing.
+func FailuresOwed(gate GateRecord, results Fold) []types.TargetRef {
+	if gate.Outcome != OutcomeFail || gate.Inv == "" {
+		return nil
+	}
+	var owed []types.TargetRef
+	after := gate.At.UnixMilli()
+	for _, rec := range results.Records {
+		if rec.Kind != KindTargetResult {
+			continue
+		}
+		var r TargetResult
+		if json.Unmarshal(rec.Payload, &r) != nil || r.Target == gate.Target {
+			continue
+		}
+		f := types.TargetRef{Project: r.Project, Target: r.Target}
+		switch {
+		case rec.Invocation == gate.Inv && r.Outcome == OutcomeFail && !slices.Contains(owed, f):
+			owed = append(owed, f)
+		case rec.Invocation != gate.Inv && rec.Ts > after && r.Outcome == OutcomePass:
+			owed = slices.DeleteFunc(owed, func(o types.TargetRef) bool { return o == f })
+		}
+	}
+	return owed
+}
+
+// RecordGate appends one gate result to the store under dir. A result that names no
+// [GateScope] is an error, and nothing is written. Like the
 // attention producers it mints its own invocation id: the gate verdict is one
 // short-lived fact, and joining it to the run's execution journal is not what
 // it is read for. Callers on the run path must not fail the build over an
 // error here.
 func RecordGate(dir string, g GateResult, start InvocationStart) error {
+	// Checked before Open: a payload that fails to marshal would leave the start record.
+	if _, err := g.Scope.MarshalJSON(); err != nil {
+		return err
+	}
 	w, err := Open(dir, NewID(), start)
 	if err != nil {
 		return err

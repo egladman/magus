@@ -15,7 +15,208 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type appliedChangeLinesSuite struct {
+	suite.Suite
+}
+
+func TestAppliedChangeLines(t *testing.T) { suite.Run(t, new(appliedChangeLinesSuite)) }
+
+func (s *appliedChangeLinesSuite) TestAListNamesWhatItGainedAndLost() {
+	a := Applied{
+		Prev:    types.Job{Breaks: []string{"legacy_key", "api.Open"}},
+		Next:    types.Job{Breaks: []string{"api.Open", "ledger.json"}},
+		Changed: []string{"breaks"},
+	}
+
+	s.Equal([]string{"breaks +ledger.json -legacy_key"}, a.ChangeLines())
+}
+
+func (s *appliedChangeLinesSuite) TestAValueNamesOnlyItsField() {
+	s.Equal([]string{"criteria changed"}, Applied{Changed: []string{"criteria"}}.ChangeLines())
+}
+
+func (s *appliedChangeLinesSuite) TestAReorderedListNamesOnlyItsField() {
+	a := Applied{
+		Prev:    types.Job{WritePaths: []string{"a", "b"}},
+		Next:    types.Job{WritePaths: []string{"b", "a"}},
+		Changed: []string{"write_paths"},
+	}
+
+	s.Equal([]string{"write_paths changed"}, a.ChangeLines())
+}
+
+// applyCheckoutSuite pins a record that names a checkout.
+type applyCheckoutSuite struct {
+	suite.Suite
+}
+
+func TestApplyCheckout(t *testing.T) { suite.Run(t, new(applyCheckoutSuite)) }
+
+func (s *applyCheckoutSuite) record(checkout string, write ...string) []types.Declaration {
+	rec := spec(write...)
+	rec.Checkout = checkout
+	return []types.Declaration{rec}
+}
+
+func (s *applyCheckoutSuite) TestOwnCheckoutIsANoOp() {
+	store, loc := appliedRow(s.T(), "a.go")
+
+	applied, err := Apply(s.T().Context(), store, s.record(loc.Root, "a.go"), config.Jobs{}, nil, nil, false)
+
+	s.Require().NoError(err)
+	s.Empty(applied[0].Changed)
+	s.Equal(applied[0].Prev.CheckoutRoot, applied[0].Next.CheckoutRoot)
+}
+
+func (s *applyCheckoutSuite) TestOwnCheckoutStillAppliesTheRestOfTheRecord() {
+	store, loc := appliedRow(s.T(), "a.go")
+
+	applied, err := Apply(s.T().Context(), store, s.record(loc.Root, "a.go", "b.go"), config.Jobs{}, nil, nil, false)
+
+	s.Require().NoError(err)
+	s.Equal([]string{"a.go", "b.go"}, applied[0].Next.WritePaths)
+}
+
+func (s *applyCheckoutSuite) TestAnotherCheckoutIsRefusedNamingBoth() {
+	store, loc := appliedRow(s.T(), "a.go")
+	other := s.T().TempDir()
+
+	_, err := Apply(s.T().Context(), store, s.record(other, "a.go"), config.Jobs{}, nil, nil, false)
+
+	s.Require().Error(err)
+	s.ErrorContains(err, other)
+	s.ErrorContains(err, loc.Root)
+}
+
+func (s *applyCheckoutSuite) TestABoundWorktreeIsTheRowsCheckout() {
+	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
+	own := s.T().TempDir()
+	plant(s.T(), store, types.Job{ID: "w", Criteria: "goal", WritePaths: []string{"a.go"}, Check: forkCheck(), State: types.StateDeclared, Updated: time.Now().Unix(), Worktree: &types.JobWorktree{Root: own}})
+
+	_, err := Apply(s.T().Context(), store, s.record(own, "a.go"), config.Jobs{}, nil, nil, false)
+
+	s.NoError(err)
+}
+
+func (s *applyCheckoutSuite) TestANewJobNamingACheckoutIsLeftToAFork() {
+	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
+
+	_, err := Apply(s.T().Context(), store, s.record(s.T().TempDir(), "a.go"), config.Jobs{}, nil, nil, false)
+
+	s.ErrorContains(err, "which only a fork makes")
+}
+
+// resultShapeSuite pins the result a holder is shown and the runs it filed.
+type resultShapeSuite struct {
+	suite.Suite
+}
+
+func TestResultShape(t *testing.T) { suite.Run(t, new(resultShapeSuite)) }
+
+func (s *resultShapeSuite) row() types.Job {
+	return types.Job{
+		ID:         "w",
+		WritePaths: []string{"a.go"},
+		Check:      &types.LeaseCheck{Target: "go-vet", Project: "."},
+		Goals: []types.Goal{
+			{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
+		},
+	}
+}
+
+func (s *resultShapeSuite) TestTheShapeDecodesAsAResult() {
+	shape, _, _ := strings.Cut(resultShape(s.row()), "\nA check")
+	got, err := DecodeResult(strings.NewReader(shape))
+	s.Require().NoError(err)
+	s.Equal("w", got.Job)
+	s.Equal("lint", got.GateEvidence[0].GateID)
+}
+
+func (s *resultShapeSuite) TestTheShapeNamesTheOwedForm() {
+	s.Contains(resultShape(s.row()), `"owed": "no seat"`)
+}
+
+func (s *resultShapeSuite) TestEveryGoalPrintsItsCommand() {
+	var out strings.Builder
+	RenderGoalCommands(&out, s.row())
+	s.Contains(out.String(), "lint: magus run lint .")
+}
+
+func (s *resultShapeSuite) TestFiledRunsNameTheirAttempt() {
+	row := s.row()
+	row.Attempt = &types.JobAttempt{Ref: "outa", AttemptID: "out1", Failed: true}
+	row.GateAttempts = []types.JobGateAttempt{{GateID: "lint", Attempt: types.JobAttempt{Ref: "outb", AttemptID: "out2"}}}
+	var out strings.Builder
+	RenderFiled(&out, row)
+	s.Equal("  check: outa is attempt out1, which failed\n  lint: outb is attempt out2, which passed\n", out.String())
+}
+
+func (s *resultShapeSuite) TestRewroteOutsideNamesOnlyDeclaredOutputsPastTheLease() {
+	project := &types.Project{Path: "docs", TargetOutputs: map[string][]types.OutputRef{"gen": {{Glob: "gen/*.json"}, {Glob: "gen/*.svg"}}}}
+	row := types.Job{WritePaths: []string{"docs/gen/*.svg"}}
+	got := rewroteOutside(row, []*types.Project{project}, "gen", []string{"docs/gen/a.json", "docs/gen/a.svg", "docs/page.md"})
+	s.Equal([]string{"docs/gen/a.json"}, got)
+}
+
+func (s *resultShapeSuite) TestAnIntegrationHoldsEveryDeclaredOutputSoftly() {
+	project := &types.Project{Path: "docs", TargetOutputs: map[string][]types.OutputRef{"gen": {{Glob: "gen/*.json"}}}}
+	write, soft := IntegrationOutputs(Workspace{Projects: []*types.Project{project}}, []string{"a.go"})
+	s.Equal([]string{"a.go", "docs/gen/*.json"}, write)
+	s.Equal([]string{"docs/gen/*.json"}, soft)
+}
+
+// ancestorDeviationSuite pins a row that permitted `test .` over a sub-project
+// write before MGS3045 named the owner.
+type ancestorDeviationSuite struct {
+	suite.Suite
+}
+
+func TestAncestorDeviation(t *testing.T) { suite.Run(t, new(ancestorDeviationSuite)) }
+
+func (s *ancestorDeviationSuite) deviation() []types.Deviation {
+	return []types.Deviation{{Code: types.GateNotRun, Subject: "test .", Reason: "the root runs it"}}
+}
+
+func (s *ancestorDeviationSuite) store() *Store {
+	projects := []*types.Project{
+		{
+			Path:             ".",
+			Sources:          types.MustParseGlobs("**/*.go"),
+			MagusfileTargets: []string{"ci", "test", "go-test"},
+			TargetChains:     map[string][]types.ChainStep{"ci": {{Target: "test"}}},
+		},
+		{Path: "libs/buzz", Sources: types.MustParseGlobs("**/*.go"), MagusfileTargets: []string{"test"}},
+	}
+	store := NewStore(tempLocation(s.T(), loadableRepository(s.T()))).InWorkspace(Workspace{Projects: projects})
+	plant(s.T(), store, types.Job{
+		ID: "w", Criteria: "goal", WritePaths: []string{"libs/buzz/a.go"}, Check: forkCheck(), Deviations: s.deviation(),
+		State: types.StateRunning, Updated: time.Now().Unix(),
+	})
+	return store
+}
+
+func (s *ancestorDeviationSuite) record(write ...string) []types.Declaration {
+	rec := spec(write...)
+	rec.Deviations = s.deviation()
+	return []types.Declaration{rec}
+}
+
+func (s *ancestorDeviationSuite) TestAReapplyAddingNoPathIsNotAsked() {
+	applied, err := Apply(s.T().Context(), s.store(), s.record("libs/buzz/a.go"), config.Jobs{}, nil, nil, false)
+
+	s.Require().NoError(err)
+	s.Equal(types.StateRunning, applied[0].Next.State)
+}
+
+func (s *ancestorDeviationSuite) TestAWideningIsAskedForTheOwnersGate() {
+	_, err := Apply(s.T().Context(), s.store(), s.record("libs/buzz/a.go", "libs/buzz/b.go"), config.Jobs{}, nil, nil, false)
+
+	s.Require().ErrorIs(err, types.GateNotRun)
+	s.ErrorContains(err, "test libs/buzz")
+}
 
 func TestDeclareStampsTheDeadlineFromTheTimeout(t *testing.T) {
 	t.Parallel()
@@ -566,9 +767,10 @@ func TestVerifyHoldsTheClaimToTheObservedDiff(t *testing.T) {
 	})
 }
 
-// TestForkMergeHoldsANewRowToTheLimits pins that magus\job.put forks under the same
-// scope, limits and default timeout `magus job fork` applies, and so does a merge that
-// brings an ended row back, while a merge onto a live row stays an update nothing refuses.
+// TestForkMergeHoldsANewRowToTheLimits pins that magus\workspace().putJob forks
+// under the scope, limits and timeout `magus job fork` applies.
+// A merge that brings an ended row back does too.
+// A merge onto a live row stays an update nothing refuses.
 func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	t.Parallel()
 
@@ -1069,4 +1271,132 @@ func TestForkDoorsGradeAgainstTheRowsTheyRead(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, [][]string{{}, {"a"}, {"a", "b"}, {"a", "b"}}, pinned)
+}
+
+// leaseRewritesSuite pins what a run reports of its rewrites under a lease.
+type leaseRewritesSuite struct {
+	suite.Suite
+}
+
+func TestLeaseRewrites(t *testing.T) { suite.Run(t, new(leaseRewritesSuite)) }
+
+func (s *leaseRewritesSuite) TestDisabledVersionControlIsAnErrorNotAPanic() {
+	_, loc := appliedRow(s.T(), "a.go")
+	s.T().Setenv("MAGUS_VCS_ENABLED", "false")
+	ctx := types.WithJobLease(s.T().Context(), "w")
+
+	s.NotPanics(func() {
+		lease, paths, err := LeaseRewrites(ctx, loc, "gen", nil)
+
+		s.Equal("w", lease)
+		s.Empty(paths)
+		s.Require().Error(err)
+		s.ErrorContains(err, "version control is disabled")
+	})
+}
+
+// reapplySuite applies a declaration over a row an exit already touched.
+type reapplySuite struct {
+	suite.Suite
+}
+
+func TestReapply(t *testing.T) { suite.Run(t, new(reapplySuite)) }
+
+// exitApplied files a result for appliedRow's job, whose check is `test .`.
+func (s *reapplySuite) exitApplied(loc Location) types.Job {
+	s.T().Helper()
+	result := passingResult()
+	result.Job, result.ChangedPaths = "w", []string{"a.go"}
+	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+		return types.JobAttempt{Found: true, Ref: ref, Target: "test", Project: ".", TimestampMs: 9_999_999_999_999}, nil
+	}
+	exited, err := Exit(s.T().Context(), boundStore(loc, "w"), "w", &result, resolve)
+	s.Require().NoError(err)
+	return exited
+}
+
+func (s *reapplySuite) TestWideningAppliedWhileRunningSurvivesExitAndRetake() {
+	store, loc := appliedRow(s.T(), "a.go", "b.go")
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go", "c.go")}, config.Jobs{}, nil, nil, false)
+	s.Require().NoError(err)
+	s.Require().Equal([]string{"a.go", "b.go", "c.go"}, applied[0].Next.WritePaths)
+
+	exited := s.exitApplied(loc)
+	s.Equal([]string{"a.go", "b.go", "c.go"}, exited.WritePaths)
+
+	retaken, err := NewStore(loc).Exec(s.T().Context(), "w")
+	s.Require().NoError(err)
+	want := exited
+	want.State, want.GateAttempts = types.StateRunning, nil
+	s.Equal(want, retaken)
+}
+
+func (s *reapplySuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
+	store, loc := appliedRow(s.T(), "a.go")
+	want := s.exitApplied(loc)
+	want.WritePaths, want.State, want.Widenings, want.GateAttempts = []string{"a.go", "b.go"}, types.StateDeclared, 1, nil
+
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+	s.Require().NoError(err)
+
+	next := applied[0].Next
+	want.Validated, want.WriteProof = next.Validated, next.WriteProof
+	s.Equal(want, next)
+}
+
+// narrowedAt plants w as an exit that cut b.go used to leave it.
+func (s *reapplySuite) narrowedAt(state types.JobState) *Store {
+	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
+	plant(s.T(), store, types.Job{
+		ID: "w", Criteria: "goal", WritePaths: []string{"a.go"}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
+		Releases: []types.JobRelease{{Path: "b.go", Digest: types.DigestAbsent, ReleasedAt: 1}},
+	})
+	rows, err := store.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows[0].Releases, 1)
+	return store
+}
+
+func (s *reapplySuite) TestReapplyRestoresAPathAnExitCutFromAnExitedRow() {
+	s.reappliedIs(types.StateExited, types.StateDeclared)
+}
+
+func (s *reapplySuite) TestReapplyRestoresAPathAnExitCutFromARunningRow() {
+	s.reappliedIs(types.StateRunning, types.StateRunning)
+}
+
+func (s *reapplySuite) reappliedIs(from, to types.JobState) {
+	s.T().Helper()
+	store := s.narrowedAt(from)
+	rows, err := store.List()
+	s.Require().NoError(err)
+	want := rows[0]
+	want.WritePaths, want.State, want.Widenings = []string{"a.go", "b.go"}, to, 1
+
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{spec("a.go", "b.go")}, config.Jobs{}, nil, nil, false)
+
+	s.Require().NoError(err)
+	next := applied[0].Next
+	s.Empty(next.Releases)
+	want.Releases, want.Version, want.Generation, want.Attempts = next.Releases, next.Version, next.Generation, next.Attempts
+	want.Validation, want.Validated, want.WriteProof = next.Validation, next.Validated, next.WriteProof
+	s.Equal(want, next)
+}
+
+func (s *appliedChangeLinesSuite) TestIntegratesIsAReportedSpecChange() {
+	prev := types.Job{ID: "integration"}
+	next := prev.Clone()
+	next.Integrates = []string{"worker"}
+	a := Applied{Prev: prev, Next: next, Changed: specChanges(prev, next)}
+	s.Equal([]string{"integrates"}, a.Changed)
+	s.Equal([]string{"integrates +worker"}, a.ChangeLines())
+}
+
+func (s *appliedChangeLinesSuite) TestSoftPathsIsAReportedSpecChange() {
+	prev := types.Job{ID: "integration", SoftPaths: []string{"old.go"}}
+	next := prev.Clone()
+	next.SoftPaths = []string{"new.go"}
+	a := Applied{Prev: prev, Next: next, Changed: specChanges(prev, next)}
+	s.Equal([]string{"soft_paths"}, a.Changed)
+	s.Equal([]string{"soft_paths +new.go -old.go"}, a.ChangeLines())
 }

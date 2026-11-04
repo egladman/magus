@@ -154,17 +154,17 @@ func sortedEnclosing(buf []enclosingDef, doc *scip.Document) []enclosingDef {
 // relative to the INDEXER's root, so each is joined onto projectPath to land on the same
 // spine the file nodes use. "" or "." leaves paths unchanged.
 func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage string) ([]types.KnowledgeSymbol, error) {
-	idx, err := DecodeIndex(data)
+	idx, err := decodeIndex(data)
 	if err != nil {
 		return nil, err
 	}
 	return ParseDecoded(ctx, idx, projectPath, declaredLanguage), nil
 }
 
-// DecodeIndex decodes a SCIP index's bytes. It is the expensive half of every read of an
+// decodeIndex decodes a SCIP index's bytes. It is the expensive half of every read of an
 // index, so a caller deriving several things from one index decodes it once and hands the
 // result to ParseDecoded and IndexOccurrences.
-func DecodeIndex(data []byte) (*scip.Index, error) {
+func decodeIndex(data []byte) (*scip.Index, error) {
 	var idx scip.Index
 	if err := proto.Unmarshal(data, &idx); err != nil {
 		return nil, err
@@ -172,7 +172,7 @@ func DecodeIndex(data []byte) (*scip.Index, error) {
 	return &idx, nil
 }
 
-// ParseDecoded is ParseIndex over an index DecodeIndex already decoded.
+// ParseDecoded is ParseIndex over an index ReadIndex already decoded.
 func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLanguage string) []types.KnowledgeSymbol {
 	// SymbolInformation (display name, kind) can live in any document; index it by
 	// the version-stripped KEY (not the raw moniker) so a symbol whose definition and
@@ -199,9 +199,10 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 	}
 
 	type acc struct {
-		sym  types.KnowledgeSymbol
-		defs map[string]types.KnowledgeSymbolDefinition // defining file -> its first definition
-		refs map[string]*types.KnowledgeSymbolRef       // ref file -> tally
+		sym    types.KnowledgeSymbol
+		defs   map[string]types.KnowledgeSymbolDefinition // defining file -> its first definition
+		bodies map[string]defBody                         // defining file -> that definition's body
+		refs   map[string]*types.KnowledgeSymbolRef       // ref file -> tally
 	}
 	byKey := map[string]*acc{}
 	skipped := 0
@@ -251,9 +252,10 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 			a := byKey[key]
 			if a == nil {
 				a = &acc{
-					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: info.Label, Language: docLanguage, Namespace: info.Namespace},
-					defs: map[string]types.KnowledgeSymbolDefinition{},
-					refs: map[string]*types.KnowledgeSymbolRef{},
+					sym:    types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: info.Label, Language: docLanguage, Namespace: info.Namespace},
+					defs:   map[string]types.KnowledgeSymbolDefinition{},
+					bodies: map[string]defBody{},
+					refs:   map[string]*types.KnowledgeSymbolRef{},
 				}
 				if si := infoByKey[key]; si != nil {
 					if si.DisplayName != "" {
@@ -277,21 +279,27 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 					def.Doc = docText(si)
 				}
 				a.defs[docPath] = def
+				// The body's extent, from the same occurrence, so the pair bounds the
+				// definition. EnclosingSourceRange (not the EnclosingRange field) for
+				// the reason given at sortedEnclosing: scip-go emits only the
+				// deprecated packed form. Absent for indexers that emit no enclosing
+				// range, and 0 is how that says so.
+				var body defBody
+				if r, ok := occ.EnclosingSourceRange(); ok && r.End.Line >= 0 {
+					body.end = int(r.End.Line) + 1
+				}
+				if si != nil {
+					body.signature = renderedSignature(si)
+				}
+				a.bodies[docPath] = body
 				// First definition seen (in document then occurrence order, both stable
 				// slices) wins the Source, and its own document's doc and signature come
 				// with it; later defs still add their defines edge.
 				if a.sym.Source == "" {
 					a.sym.Source = source
-					// The body's extent, from the same occurrence, so the pair bounds the
-					// definition. EnclosingSourceRange (not the EnclosingRange field) for
-					// the reason given at sortedEnclosing: scip-go emits only the
-					// deprecated packed form. Absent for indexers that emit no enclosing
-					// range, and 0 is how that says so.
-					if r, ok := occ.EnclosingSourceRange(); ok && r.End.Line >= 0 {
-						a.sym.DefEndLine = int(r.End.Line) + 1
-					}
+					a.sym.DefEndLine = body.end
 					if si != nil {
-						a.sym.Signature = renderedSignature(si)
+						a.sym.Signature = body.signature
 						a.sym.Doc = def.Doc
 					}
 				}
@@ -322,14 +330,18 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 	out := make([]types.KnowledgeSymbol, 0, len(byKey))
 	for _, a := range byKey {
 		a.sym.Defs = sortedKeys(a.defs)
+		a.sym.Refs = sortedRefs(a.refs)
+		a.sym.Calls = sortedCalls(calls[a.sym.Key], defined)
+		a.sym.Implements = sortedImplements(implements[a.sym.Key], defined)
+		if len(a.sym.Defs) > 1 && a.sym.Namespace != a.sym.Key {
+			out = append(out, platformTwins(a.sym, a.defs, a.bodies)...)
+			continue
+		}
 		if len(a.sym.Defs) > 1 {
 			for _, file := range a.sym.Defs {
 				a.sym.Definitions = append(a.sym.Definitions, a.defs[file])
 			}
 		}
-		a.sym.Refs = sortedRefs(a.refs)
-		a.sym.Calls = sortedCalls(calls[a.sym.Key], defined)
-		a.sym.Implements = sortedImplements(implements[a.sym.Key], defined)
 		out = append(out, a.sym)
 	}
 	// byKey iteration is unordered; the sort is what makes the output deterministic.
@@ -400,6 +412,70 @@ func isFencedBlock(s string) bool {
 		}
 	}
 	return true
+}
+
+// defBody is one file's definition of a symbol beyond where it starts: the last line of
+// its body (0 when the indexer recorded no extent) and its rendered signature.
+type defBody struct {
+	end       int
+	signature string
+}
+
+// platformTwins splits sym into one symbol per defining file: only exclusive build
+// constraints define a key twice (foo_darwin.go, foo_linux.go), and one node would hide
+// every body but the first. The first keeps the key, so refs still resolve it; the others
+// share its references, which name the key and not a file.
+func platformTwins(sym types.KnowledgeSymbol, defs map[string]types.KnowledgeSymbolDefinition, bodies map[string]defBody) []types.KnowledgeSymbol {
+	first, _, _ := strings.Cut(sym.Source, ":")
+	out := make([]types.KnowledgeSymbol, 0, len(sym.Defs))
+	for _, file := range sym.Defs {
+		twin := sym
+		twin.Defs = []string{file}
+		twin.Definitions = nil
+		twin.Refs = slices.Clone(sym.Refs)
+		if file != first {
+			body := bodies[file]
+			twin.Key = twinKey(sym.Key, file)
+			twin.Source, twin.Doc, twin.DefEndLine = defs[file].Source, defs[file].Doc, body.end
+			if body.signature != "" {
+				twin.Signature = body.signature
+			}
+		}
+		out = append(out, twin)
+	}
+	return out
+}
+
+// twinKey is the key of key's definition in file when another file defines key first:
+// the file rides on the package name, `gomod example.com/m@mem/total_linux.go <descriptors>`,
+// so the descriptors still parse and every lens measures the twin's body as its own.
+func twinKey(key, file string) string {
+	parts := keyParts(key)
+	parts[len(parts)-2] = fmt.Sprintf("%s@%s", parts[len(parts)-2], file)
+	return strings.Join(parts, " ")
+}
+
+// TwinBase is the key whose occurrences key's are: for a platform twin's key the key
+// without its file, since the twins share their references, and key itself otherwise. A
+// package name never holds an @ past its first byte, which is what marks a twin.
+func TwinBase(key string) string {
+	parts := keyParts(key)
+	if len(parts) < 2 {
+		return key
+	}
+	name := parts[len(parts)-2]
+	i := strings.LastIndexByte(name, '@')
+	if i <= 0 {
+		return key
+	}
+	parts[len(parts)-2] = name[:i]
+	return strings.Join(parts, " ")
+}
+
+// keyParts splits a key into its manager, its package name when it has one, and its
+// descriptors, which may hold spaces of their own.
+func keyParts(key string) []string {
+	return strings.SplitN(key, " ", 3)
 }
 
 // workspacePath rebases an indexer-relative document path onto the workspace by joining
@@ -606,4 +682,14 @@ func sortedRefs(m map[string]*types.KnowledgeSymbolRef) []types.KnowledgeSymbolR
 	}
 	slices.SortFunc(out, func(x, y types.KnowledgeSymbolRef) int { return cmp.Compare(x.Path, y.Path) })
 	return out
+}
+
+// OptInSetting is the magus.yaml key listing the spells whose external SCIP indexer runs.
+const OptInSetting = "spells.symbol_indexers"
+
+// OptInHint is the gap detail for a language whose spell declares an external SCIP
+// indexer, bin, that the workspace has not opted in. It names the setting that runs it.
+func OptInHint(language, spell, bin string) string {
+	return fmt.Sprintf("no symbol index for %s: %s is an external SCIP indexer and runs only when opted in; add %s to %s in magus.yaml",
+		language, bin, spell, OptInSetting)
 }

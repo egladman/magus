@@ -15,7 +15,9 @@ import (
 	"github.com/yuin/goldmark/util"
 	"gopkg.in/yaml.v3"
 
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module markdown -lang buzz -out ../internal/interp/bindings/gen/markdown.go -pkg bindgen
@@ -41,6 +43,13 @@ var Markdown = Module{
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
 			Impl:    MarkdownFrontmatter,
+		},
+		{
+			Name:    "sections",
+			Doc:     "List the headings of a Markdown file as entries of {anchor, level, start_line, end_line, body_end_line, digest}. Anchors are the ids to_html renders, so a repeated heading carries goldmark's -1 suffix and a fenced # line is no heading. Lines are 1-based file lines (frontmatter counted); end_line closes the section with its sub-sections, body_end_line closes its own text, and digest hashes the lines start_line through end_line.",
+			Args:    []Arg{{Name: "source", Type: TypeString}},
+			Returns: []Ret{{Type: TypeAny, Object: "[MarkdownSection]"}},
+			Impl:    MarkdownSections,
 		},
 		{
 			Name:    "strip_frontmatter",
@@ -115,6 +124,12 @@ func MarkdownFrontmatter(_ context.Context, source string) (string, error) {
 func MarkdownStripFrontmatter(_ context.Context, source string) (string, error) {
 	_, body, _ := splitFrontmatter(source)
 	return body, nil
+}
+
+// MarkdownSections lists a file's headings with their line extents and
+// digests.
+func MarkdownSections(_ context.Context, source string) ([]types.MarkdownSection, error) {
+	return knowledge.DocSections(source), nil
 }
 
 // splitFrontmatter separates an optional leading YAML frontmatter block from the

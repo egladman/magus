@@ -12,7 +12,7 @@ import (
 )
 
 // RegisterLog builds the "log" module map and returns it.
-// Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\print, which is an uncontrolled bare line.
+// Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log. Unlike std\print, which is an uncontrolled bare line. Message text uses Buzz `{expr}` interpolation; pass structured fields as `attrs` so they stay queryable in the run log rather than baked into the string. `Logger` is the protocol for an injectable logger (same methods as the free functions): `import "log" as _` then `object<Logger>` to swap Std for Quiet without rewriting call sites.
 func RegisterLog(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess

@@ -1,3 +1,4 @@
+import "result";
 import "std";
 import "fs";
 import "magus";
@@ -20,7 +21,7 @@ object Miner {
     pairs: mut [Pair],
     seen: mut {str: bool},
 
-    fun add(source: str, query: str, doc: str, held: bool) > void !> any {
+    fun add(source: str, query: str, doc: str, held: bool) > void {
         if (query == "" or doc == "" or query == doc) {
             return;
         }
@@ -66,7 +67,7 @@ fun words(text: str) > int {
     return n;
 }
 
-fun defEnd(c: sources\Snapshot, s: magus\KnowledgeNode) > int !> any {
+fun defEnd(c: sources\Snapshot, s: magus\KnowledgeNode) > int {
     final end = std\parseInt(s.attrs["def_end_line"] ?? "") ?? 0;
     final line = sources\spanLine(s.source);
     if (end >= line) {
@@ -80,7 +81,7 @@ final goDeclKinds = {"Function": true, "Method": true, "Struct": true, "Interfac
 // The CodeSearchNet protocol: a doc comment against its declaration with the doc
 // stripped. Tests pair by name below instead, and generated code says nothing a
 // person wrote.
-fun goDocDecl(m: Miner) > void !> any {
+fun goDocDecl(m: Miner) > void {
     foreach (s in m.c.symbols) {
         if (s.attrs["language"] != "go" or goDeclKinds[s.attrs["symbol_kind"] ?? ""] == null) {
             continue;
@@ -102,7 +103,7 @@ final buzzDeclKinds = {"Function": true, "Object": true, "Enum": true};
 
 // Buzz decls come from the SCIP index where it reaches and from the graph's function
 // nodes where it does not (libs/figure, gopherbuzz std); both carry the doc.
-fun buzzDocDecl(m: Miner) > void !> any {
+fun buzzDocDecl(m: Miner) > void {
     final ends: mut {str: int} = mut {};
     final docs: mut {str: str} = mut {};
     foreach (s in m.c.symbols) {
@@ -111,7 +112,12 @@ fun buzzDocDecl(m: Miner) > void !> any {
             docs[s.source] = s.attrs["doc"] ?? "";
         }
     }
-    foreach (n in sources\nodes("function")) {
+    final functions = sources\nodes("function");
+    if (functions.error -> e) {
+        m.c.faults.append(e.message);
+        return;
+    }
+    foreach (n in functions.value!) {
         if (ends[n.source] == null) {
             final path = sources\spanPath(n.source);
             if (m.c.has(path)) {
@@ -147,25 +153,37 @@ fun capitalize(s: str) > str {
 
 // documentedBy maps each node of kind to the doc page an extracted `documents` edge
 // names; an inferred edge only says a page mentions the node.
-fun documentedBy(kind: str) > {str: str} !> any {
-    final probe: magus\QueryResult = magus\query("kind={kind}", opts: {"limit": 1, "budget": 1});
-    final q: magus\QueryResult = magus\query("kind={kind}", opts: {"limit": probe.matchCount, "budget": probe.matchCount * 8 + 1000});
+fun documentedBy(kind: str) > result\Result::<{str: str}> {
+    final found = sources\everyNode(kind, perMatch: 8);
+    if (found.error -> e) {
+        return result\Result::<{str: str}>{ error = e };
+    }
     final pages: mut {str: str} = mut {};
-    foreach (e in q.links) {
-        if (e.relation == "documents" and e.confidence == "extracted" and e.source.startsWith("doc:") and e.target.startsWith("{kind}:")) {
+    foreach (e in found.value!.links) {
+        if (e.relation == magus\RelationID.documents and e.confidence == "extracted" and e.source.startsWith("doc:") and e.target.startsWith("{kind}:")) {
             final page = e.source.sub(4, len: e.source.len() - 4);
             if ((pages[e.target] ?? page) >= page) {
                 pages[e.target] = page;
             }
         }
     }
-    return pages;
+    return result\ok::<{str: str}>(pages);
 }
 
 // A host method's section on its module's reference page (generated from the
 // descriptor's doc and Buzz signature) against the Go function std/ implements it in.
-fun hostModules(m: Miner) > void !> any {
-    final pages = documentedBy("module");
+fun hostModules(m: Miner) > void {
+    final documented = documentedBy("module");
+    if (documented.error -> e) {
+        m.c.faults.append(e.message);
+        return;
+    }
+    final methods = sources\nodes("method");
+    if (methods.error -> e) {
+        m.c.faults.append(e.message);
+        return;
+    }
+    final pages = documented.value!;
     final impls: mut {str: str} = mut {};
     foreach (s in m.c.symbols) {
         final path = sources\spanPath(s.source);
@@ -173,7 +191,7 @@ fun hostModules(m: Miner) > void !> any {
             impls[s.label] = span(path, a: sources\spanLine(s.source), b: defEnd(m.c, s: s));
         }
     }
-    foreach (meth in sources\nodes("method")) {
+    foreach (meth in methods.value!) {
         final name = sources\buzzName(meth.attrs["buzz"] ?? "");
         final module = meth.id.sub(7, len: (meth.id.indexOf(".") ?? 7) - 7);
         if (name == "") {
@@ -201,7 +219,7 @@ fun provenanceLines(provenance: str) > [int] {
 
 // enclosing is the span of the smallest function or method in path around line,
 // capped at maxLines; past the cap, or outside any, a window around line.
-fun enclosing(c: sources\Snapshot, path: str, line: int, maxLines: int) > str !> any {
+fun enclosing(c: sources\Snapshot, path: str, line: int, maxLines: int) > str {
     var best = "";
     var bestLen = maxLines + 1;
     foreach (s in c.symbolsByFile[path] ?? []) {
@@ -222,7 +240,7 @@ fun enclosing(c: sources\Snapshot, path: str, line: int, maxLines: int) > str !>
     return window(c, path: path, line: line, before: 3, after: 3);
 }
 
-fun window(c: sources\Snapshot, path: str, line: int, before: int, after: int) > str !> any {
+fun window(c: sources\Snapshot, path: str, line: int, before: int, after: int) > str {
     final n = c.lines(path).len();
     final a = if (line - before < 1) 1 else line - before;
     final b = if (line + after > n) n else line + after;
@@ -246,7 +264,7 @@ fun refsByTarget(c: sources\Snapshot) > {str: [magus\KnowledgeEdge]} {
 
 // Each BZZ page's title and lead against the tests that trigger the code (named after
 // its constant, or citing the code in their doc) and the Go sites that emit it.
-fun bzzDiagnostics(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void !> any {
+fun bzzDiagnostics(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void {
     final tests: mut [magus\KnowledgeNode] = mut [];
     foreach (s in m.c.symbols) {
         final path = sources\spanPath(s.source);
@@ -300,7 +318,7 @@ fun indentOf(line: str) > int {
 }
 
 // Every `case "name":` of the list, map and string dispatch switches against its body.
-fun builtins(m: Miner) > void !> any {
+fun builtins(m: Miner) > void {
     final path = "libs/gopherbuzz/vm/operators.go";
     final dispatch = {"listMethod": true, "mapMethod": true, "stringMethod": true};
     foreach (s in m.c.symbolsByFile[path] ?? []) {
@@ -327,7 +345,7 @@ fun builtins(m: Miner) > void !> any {
 
 // Fixtures that exist to pin upstream-only constructs (match, explicit generics) stay
 // in the sources but never pair: a table taught them would rank syntax gopherbuzz rejects.
-fun upstreamOnly(c: sources\Snapshot, path: str) > bool !> any {
+fun upstreamOnly(c: sources\Snapshot, path: str) > bool {
     if (fs\basename(path).indexOf("match") != null) {
         return true;
     }
@@ -339,7 +357,7 @@ fun upstreamOnly(c: sources\Snapshot, path: str) > bool !> any {
     return false;
 }
 
-fun gopherbuzzTests(m: Miner) > void !> any {
+fun gopherbuzzTests(m: Miner) > void {
     foreach (s in m.c.symbols) {
         final path = sources\spanPath(s.source);
         if (!path.startsWith("libs/gopherbuzz/") or !path.endsWith("_test.go") or !s.label.startsWith("Test") or s.attrs["symbol_kind"] != "Function") {
@@ -384,8 +402,18 @@ fun camel(label: str) > str {
 
 // A spell op's section on its spell's concept page against the spell function that
 // defines it and the example magusfile that calls it.
-fun spellOps(m: Miner) > void !> any {
-    final pages = documentedBy("spell");
+fun spellOps(m: Miner) > void {
+    final documented = documentedBy("spell");
+    if (documented.error -> e) {
+        m.c.faults.append(e.message);
+        return;
+    }
+    final opNodes = sources\nodes("op");
+    if (opNodes.error -> e) {
+        m.c.faults.append(e.message);
+        return;
+    }
+    final pages = documented.value!;
     final defs: mut {str: str} = mut {};
     foreach (s in m.c.symbols) {
         final path = sources\spanPath(s.source);
@@ -396,7 +424,7 @@ fun spellOps(m: Miner) > void !> any {
             }
         }
     }
-    foreach (op in sources\nodes("op")) {
+    foreach (op in opNodes.value!) {
         final parts = op.id.split(":");
         if (parts.len() < 3) {
             continue;
@@ -417,7 +445,7 @@ fun spellOps(m: Miner) > void !> any {
 
 // A Buzz definition against up to three of its reference sites, one per file first,
 // in path and line order.
-fun buzzScipRefs(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void !> any {
+fun buzzScipRefs(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void {
     foreach (s in m.c.symbols) {
         if (s.attrs["language"] != "buzz" or buzzDeclKinds[s.attrs["symbol_kind"] ?? ""] == null) {
             continue;
@@ -460,10 +488,15 @@ fun buzzScipRefs(m: Miner, refs: {str: [magus\KnowledgeEdge]}) > void !> any {
     }
 }
 
-fun figureApi(m: Miner) > void !> any {
+fun figureApi(m: Miner) > void {
     final path = "libs/figure/figure.buzz";
     final page = "docs/reference/buzz/figure.md";
-    foreach (n in sources\nodes("function")) {
+    final functions = sources\nodes("function");
+    if (functions.error -> e) {
+        m.c.faults.append(e.message);
+        return;
+    }
+    foreach (n in functions.value!) {
         if (!n.id.startsWith("function:{path}:") or n.attrs["exported"] != "true" or !m.c.has(path)) {
             continue;
         }
@@ -502,9 +535,17 @@ fun attrValues(svg: str, attr: str) > [str] {
 // figures reads each drawn figure's claim off its light SVG: the title, the desc, the
 // dirs its boxes anchor (kept only when the graph holds that dir) and the docs
 // sections a <!--diagram:ID--> marker embeds it in.
-export fun figures(c: sources\Snapshot) > [{str: any}] !> any {
+export fun figures(c: sources\Snapshot) > result\Result::<[{str: any}]> {
+    final dirNodes = sources\nodes("dir");
+    if (dirNodes.error -> e) {
+        return result\Result::<[{str: any}]>{ error = e };
+    }
+    final svgs = sources\figureSvgs(c.root);
+    if (svgs.error -> e) {
+        return result\Result::<[{str: any}]>{ error = e };
+    }
     final dirs: mut {str: bool} = mut {};
-    foreach (d in sources\nodes("dir")) {
+    foreach (d in dirNodes.value!) {
         dirs[d.id.sub(4, len: d.id.len() - 4)] = true;
     }
     final markers: mut {str: mut [str]} = mut {};
@@ -533,10 +574,15 @@ export fun figures(c: sources\Snapshot) > [{str: any}] !> any {
         }
     }
     final found: mut [{str: any}] = mut [];
-    foreach (p in sources\figureSvgs(c.root)) {
+    foreach (p in svgs.value!) {
         final base = fs\basename(p);
         final id = sources\figureId(p);
-        final svg = fs\readFile(p);
+        var svg = "";
+        try {
+            svg = fs\readFile(p);
+        } catch (err: any) {
+            return result\caught::<[{str: any}]>(err, doing: "pairs: read {p}");
+        }
         final anchors: mut [str] = mut [];
         foreach (a in attrValues(svg, attr: "data-anchor")) {
             if (dirs[a] != null) {
@@ -568,12 +614,12 @@ export fun figures(c: sources\Snapshot) > [{str: any}] !> any {
             "fold": holdout\figureFold(id),
         });
     }
-    return found;
+    return result\ok::<[{str: any}]>(found);
 }
 
 // A figure's builder function (its title, desc and the dirs it draws) against each
 // docs section that embeds it and each drawn dir's Go package doc.
-fun figurePairs(m: Miner, figs: [{str: any}]) > void !> any {
+fun figurePairs(m: Miner, figs: [{str: any}]) > void {
     final packageDocs: mut {str: str} = mut {};
     foreach (s in m.c.symbols) {
         if (s.attrs["language"] != "go" or s.attrs["symbol_kind"] != "Package") {
@@ -610,7 +656,7 @@ fun figurePairs(m: Miner, figs: [{str: any}]) > void !> any {
 
 // write mines every pair source into target, sorted by source, query and doc, and
 // returns the count per source and split.
-export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > {str: int} !> any {
+export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > result\Result::<{str: int}> {
     final m = mut Miner{c = c, pairs = mut [], seen = mut {}};
     final refs = refsByTarget(c);
     goDocDecl(m);
@@ -624,7 +670,7 @@ export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > {str: i
     figureApi(m);
     figurePairs(m, figs: figs);
     final sorted = m.pairs.cloneMutable();
-    sorted.sort(fun (a: Pair, b: Pair) > bool {
+    _ = sorted.sort(fun (a: Pair, b: Pair) > bool {
         if (a.source != b.source) {
             return a.source < b.source;
         }
@@ -633,16 +679,23 @@ export fun write(c: sources\Snapshot, figs: [{str: any}], target: str) > {str: i
         }
         return a.doc < b.doc;
     });
-    final lines: mut [str] = mut [];
-    final counts: mut {str: int} = mut {};
-    foreach (p in sorted) {
-        final split = sources\splitOf(p.holdout);
-        lines.append(json\stringify({"source": p.source, "query_ref": p.query, "doc_ref": p.doc, "split": split}));
-        final key = "{p.source}/{split}";
-        counts[key] = (counts[key] ?? 0) + 1;
+    if (c.faults.len() > 0) {
+        return result\fail::<{str: int}>(c.faults[0]);
     }
-    fs\writeFile(target, content: lines.join("\n") + "\n");
-    return counts;
+    try {
+        final lines: mut [str] = mut [];
+        final counts: mut {str: int} = mut {};
+        foreach (p in sorted) {
+            final split = sources\splitOf(p.holdout);
+            lines.append(json\stringify({"source": p.source, "query_ref": p.query, "doc_ref": p.doc, "split": split}));
+            final key = "{p.source}/{split}";
+            counts[key] = (counts[key] ?? 0) + 1;
+        }
+        fs\writeFile(target, content: lines.join("\n") + "\n");
+        return result\ok::<{str: int}>(counts);
+    } catch (err: any) {
+        return result\caught::<{str: int}>(err, doing: "pairs: write {target}");
+    }
 }
 
 test "refPath reads a span's path" {

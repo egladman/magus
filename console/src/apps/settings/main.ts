@@ -1,4 +1,3 @@
-import { must } from "../../lib/guards";
 // The Settings app: a console tab gathering every browser-side console setting under a
 // TRANSACTIONAL, staged-config model. Controls edit an in-memory DRAFT seeded from the
 // committed (live) values; the page shows the pending diff and three actions - Save & Apply (persist +
@@ -10,6 +9,7 @@ import { must } from "../../lib/guards";
 // only hit the real shared keymap cell on Save or Save & Apply.
 
 import type { PageController, PageModule, SearchProvider } from "../../desktop/page";
+import { ok, type Result } from "../../gen/magus/types";
 import { createKeybindingsEditor, type KeybindingsDeps } from "../../desktop/keybindings";
 import { formatChord, isMac, mergeKeymap, type Keymap } from "../../desktop/commands";
 import {
@@ -201,46 +201,9 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
   list.setAttribute("aria-label", "Settings sections");
   nav.append(list);
   const panelsHost = h("div");
-  const buttons = new Map<string, HTMLButtonElement>();
-  const items = new Map<string, HTMLElement>();
-  const panelById = new Map<string, HTMLElement>();
-  let activeId = tabs[0].id;
+  let activeId = tabs[0]?.id ?? "";
 
-  const visibleIds = (): string[] =>
-    tabs.map((t) => t.id).filter((id) => !must(items.get(id)).hidden);
-
-  function show(id: string): void {
-    activeId = id;
-    for (const t of tabs) {
-      const on = t.id === id;
-      const btn = must(buttons.get(t.id));
-      must(items.get(t.id)).classList.toggle("pf-m-current", on);
-      btn.setAttribute("aria-selected", on ? "true" : "false");
-      btn.tabIndex = on ? 0 : -1;
-      must(panelById.get(t.id)).hidden = !on;
-    }
-  }
-
-  // Roving keyboard on the tablist (WAI-ARIA): arrows move (and activate, since the panels are cheap to
-  // swap) between visible tabs, Home/End jump to the ends. Mirrors the top tab bar's roving pattern.
-  function onKey(ev: KeyboardEvent, id: string): void {
-    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight" && ev.key !== "Home" && ev.key !== "End")
-      return;
-    ev.preventDefault();
-    const ids = visibleIds();
-    const here = ids.indexOf(id);
-    if (here < 0) return;
-    let next = here;
-    if (ev.key === "ArrowLeft") next = (here - 1 + ids.length) % ids.length;
-    else if (ev.key === "ArrowRight") next = (here + 1) % ids.length;
-    else if (ev.key === "Home") next = 0;
-    else if (ev.key === "End") next = ids.length - 1;
-    const nid = ids[next];
-    show(nid);
-    must(buttons.get(nid)).focus();
-  }
-
-  for (const t of tabs) {
+  const views = tabs.map((t) => {
     const item = h("li", "pf-v6-c-tabs__item");
     item.setAttribute("role", "presentation");
     const btn = h("button", "pf-v6-c-tabs__link");
@@ -251,8 +214,6 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
     btn.append(h("span", "pf-v6-c-tabs__item-text", t.label));
     btn.addEventListener("click", () => show(t.id));
     btn.addEventListener("keydown", (ev) => onKey(ev, t.id));
-    buttons.set(t.id, btn);
-    items.set(t.id, item);
     item.append(btn);
     list.append(item);
 
@@ -262,17 +223,50 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
     panel.setAttribute("role", "tabpanel");
     panel.setAttribute("aria-labelledby", btn.id);
     panel.tabIndex = 0;
-    panelById.set(t.id, panel);
     panelsHost.append(panel);
+    return { id: t.id, item, btn, panel };
+  });
+
+  const visible = (): typeof views => views.filter((v) => !v.item.hidden);
+
+  function show(id: string): void {
+    activeId = id;
+    for (const v of views) {
+      const on = v.id === id;
+      v.item.classList.toggle("pf-m-current", on);
+      v.btn.setAttribute("aria-selected", on ? "true" : "false");
+      v.btn.tabIndex = on ? 0 : -1;
+      v.panel.hidden = !on;
+    }
+  }
+
+  // Roving keyboard on the tablist (WAI-ARIA): arrows move (and activate, since the panels are cheap to
+  // swap) between visible tabs, Home/End jump to the ends. Mirrors the top tab bar's roving pattern.
+  function onKey(ev: KeyboardEvent, id: string): void {
+    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight" && ev.key !== "Home" && ev.key !== "End")
+      return;
+    ev.preventDefault();
+    const shown = visible();
+    const here = shown.findIndex((v) => v.id === id);
+    if (here < 0) return;
+    let next = here;
+    if (ev.key === "ArrowLeft") next = (here - 1 + shown.length) % shown.length;
+    else if (ev.key === "ArrowRight") next = (here + 1) % shown.length;
+    else if (ev.key === "Home") next = 0;
+    else if (ev.key === "End") next = shown.length - 1;
+    const target = shown[next];
+    if (!target) return;
+    show(target.id);
+    target.btn.focus();
   }
 
   function setHidden(id: string, hidden: boolean): void {
-    const item = items.get(id);
-    if (!item) return;
-    item.hidden = hidden;
+    const view = views.find((v) => v.id === id);
+    if (!view) return;
+    view.item.hidden = hidden;
     if (hidden && activeId === id) {
-      const first = visibleIds()[0];
-      if (first) show(first);
+      const first = visible()[0];
+      if (first) show(first.id);
     }
   }
 
@@ -575,13 +569,13 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       testBtn.disabled = false;
       // "Answered", not "connected" or "200": the response is opaque cross-origin, so the status code
       // and body are unreadable - this proves a server answered at that address, nothing more.
-      if (res.ok) {
+      if (!res.error) {
         hostTest.set(
-          "A server answered at " + res.url + ". Save & Apply to connect the console to it.",
+          "A server answered at " + res.value + ". Save & Apply to connect the console to it.",
           "success",
         );
       } else {
-        hostTest.set(res.reason, "error");
+        hostTest.set(res.error.message, "error");
       }
     });
   });
@@ -723,7 +717,10 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     // the "default" preset, so untouched bindings read as Default (they genuinely are the defaults).
     const activeProfile = (): string => {
       const cur = keymapDraft.get();
-      for (const p of presetList) if (keymapsEqual(cur, presets[p.id])) return p.id;
+      for (const p of presetList) {
+        const preset = presets[p.id];
+        if (preset && keymapsEqual(cur, preset)) return p.id;
+      }
       return "custom";
     };
 
@@ -853,12 +850,13 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // Import stages onto the draft (merged over the current draft), so the operator reviews the pending diff
   // and then Saves or Applies - import never commits on its own.
   const applyImport = (text: string): void => {
-    const res = importSettings(text, draftPrefs(), readLayout());
-    if (!res.ok) {
-      setStatus(res.error, "error"); // aria-live anchor keeps the terse reason
-      showToast("Settings", importFailureToast(res.error), "error");
+    const imported = importSettings(text, draftPrefs(), readLayout());
+    if (imported.error) {
+      setStatus(imported.error.message, "error"); // aria-live anchor keeps the terse reason
+      showToast("Settings", importFailureToast(imported.error.message), "error");
       return;
     }
+    const res = imported.value;
     loadDraft(res.next);
     // The layout section is applied immediately rather than staged. It has no form on this
     // app, so there is nothing to review it against and nothing that would ever commit it -
@@ -1075,10 +1073,10 @@ export function settingsApp(deps: SettingsDeps): PageModule<null, null> {
   return {
     id: "settings",
     title: "Settings",
-    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+    async activate(host: HTMLElement): Promise<Result<PageController<null, null>>> {
       ensureStylesheet(cssId, new URL("./" + cssFile, import.meta.url).href);
       const teardown = buildSettings(host, deps);
-      return {
+      return ok({
         search: noSearch,
         // The console's app contract (page.ts). Settings is a form over persisted cells: no
         // timer, no stream, and no slice of the shared status bar, so there is nothing to go quiet
@@ -1089,7 +1087,7 @@ export function settingsApp(deps: SettingsDeps): PageModule<null, null> {
           teardown();
           host.replaceChildren();
         },
-      };
+      });
     },
   };
 }

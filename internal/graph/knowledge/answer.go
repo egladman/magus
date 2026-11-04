@@ -1,6 +1,12 @@
 package knowledge
 
-import "github.com/egladman/magus/types"
+import (
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/egladman/magus/types"
+)
 
 // The one place a knowledge verdict is derived.
 //
@@ -26,6 +32,28 @@ type Coverage struct {
 	Gaps []types.KnowledgeSymbolGap
 	// Stale are the built indexes that would be rebuilt for the current sources.
 	Stale []types.KnowledgeStaleIndex
+}
+
+// WithoutUnheldGaps drops a gap no build can close from a miss when its
+// project holds none of hits, the name's text matches. The name is not there,
+// so that gap cannot explain the miss. A hit's path is absolute or under root.
+func WithoutUnheldGaps(ans types.KnowledgeAnswer, root string, hits []types.TextHit) types.KnowledgeAnswer {
+	holds := func(project string) bool {
+		return project == "." || slices.ContainsFunc(hits, func(h types.TextHit) bool {
+			rel := h.Path
+			if r, err := filepath.Rel(root, h.Path); err == nil && filepath.IsAbs(h.Path) {
+				rel = r
+			}
+			return strings.HasPrefix(filepath.ToSlash(rel), project+"/")
+		})
+	}
+	ans.Gaps = slices.DeleteFunc(slices.Clone(ans.Gaps), func(g types.KnowledgeSymbolGap) bool {
+		return g.Unindexable && !holds(g.Project.Path)
+	})
+	if len(ans.Gaps) == 0 && ans.Reason == types.ReasonSymbolIndexMissing {
+		ans.Verdict, ans.Reason = types.VerdictAbsent, ""
+	}
+	return ans
 }
 
 // Narrow narrows c to the indexes that could hold a symbol of language: a Go symbol's sites

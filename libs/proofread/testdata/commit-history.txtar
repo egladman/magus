@@ -204,7 +204,7 @@ fix(harness): close the gaps agents hit running parallel jobs (#615)
 
 * name the shared record violation in ADR 0017
 
-* add a discover spell that finds code from the graph in bounded layers; add show-code-context
+* add a discover spell that finds code from the graph in bounded layers
 
 * bring the merged code under the conformance ratchet; reword MGS8005 to grade
 

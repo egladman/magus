@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
@@ -45,7 +46,7 @@ func runTypes(args []string) error {
 		return fmt.Errorf("unknown boundary type %q: declare it in boundaryTypes first", *typeName)
 	}
 
-	out, err := renderBuzzMirror(*typeName, entry.Type)
+	out, err := renderBuzzMirror(entry.Name, entry.Type)
 	if err != nil {
 		return err
 	}
@@ -84,7 +85,10 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 	// PkgPath for the same reason: the mirrored types live in types AND in spells,
 	// and hardcoding one package pointed half of them at a type that does not exist
 	// there, Project being the case where the wrong path names a REAL other type.
-	fmt.Fprintf(&b, "// Buzz mirror of %s.%s, bundled into\n", rt.PkgPath(), rt.Name())
+	// Cut at "[": a generic is registered at its placeholder instantiation, and the
+	// reader looks for Result, not Result[.../buzzgen.T].
+	goName, _, _ := strings.Cut(rt.Name(), "[")
+	fmt.Fprintf(&b, "// Buzz mirror of %s.%s, bundled into\n", rt.PkgPath(), goName)
 	fmt.Fprintln(&b, "// whichever module owns it (magus/spell, or the host module that returns it -")
 	fmt.Fprintln(&b, "// see internal/spell/target.go and host_types.go). Edit the Go struct and rerun")
 	fmt.Fprintln(&b, "// `go generate`, never this file.")
@@ -113,6 +117,9 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 // from the header so a module bundle (moduledecls) can carry many mirrors under one
 // header instead of repeating the banner per type.
 func renderBuzzMirrorDecl(name string, rt reflect.Type) ([]byte, error) {
+	if err := checkNamedStrings(rt); err != nil {
+		return nil, fmt.Errorf("mirror %s: %w", name, err)
+	}
 	return buzzgen.ObjectDecl(name, rt, mirrorOptions())
 }
 

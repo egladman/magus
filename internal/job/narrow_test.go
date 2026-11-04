@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 const configMagusfile = `import "magus";
@@ -154,6 +156,45 @@ func TestNarrowConfigHold(t *testing.T) {
 	}
 }
 
+// releaseUnderPatternSuite pins a record naming again the glob a narrowing took
+// a file out of.
+type releaseUnderPatternSuite struct {
+	suite.Suite
+}
+
+func TestReleaseUnderPattern(t *testing.T) { suite.Run(t, new(releaseUnderPatternSuite)) }
+
+func (s *releaseUnderPatternSuite) applied(write ...string) types.Job {
+	loc := tempLocation(s.T(), testkit.NewRepository(s.T(), configFiles).Root())
+	store := NewStore(loc)
+	seed(s.T(), store, types.Job{ID: "cfg", Criteria: "goal", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Check: forkCheck()})
+	_, err := NarrowConfigHold(s.T().Context(), boundStore(loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test"})
+	s.Require().NoError(err)
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{{ID: "cfg", Criteria: "goal", WritePaths: write, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+	s.Require().NoError(err)
+	return applied[0].Next
+}
+
+func (s *releaseUnderPatternSuite) TestAPatternAloneLeavesTheFileHeldByNothing() {
+	row := s.applied("**/*.buzz")
+
+	s.True(releasedFile(row, "magusfile.buzz"), "a record naming the glob does not take the file back")
+	s.Empty(claimsOnFile(row, "magusfile.buzz"))
+	s.Equal([]string{"magusfile.buzz stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until write_paths name `magusfile.buzz#<declaration>`"},
+		ReleasedUnderPattern(row))
+}
+
+func (s *releaseUnderPatternSuite) TestAKeptClaimIsNamedAsTheHold() {
+	row := s.applied("**/*.buzz", "magusfile.buzz#project.targets.test")
+
+	s.Equal([]string{"magusfile.buzz stays released, so the pattern naming it does not hold it: only its claims do (project.targets.test)"},
+		ReleasedUnderPattern(row))
+}
+
+func (s *releaseUnderPatternSuite) TestAReleasedFileNoPatternNamesIsNotNoted() {
+	s.Empty(ReleasedUnderPattern(types.Job{WritePaths: []string{"a.go"}, Releases: []types.JobRelease{{Path: "b.go"}}}))
+}
+
 // A fork refused over a magusfile another live job holds files one release request per
 // holder and file, however often it is refused; a dry run files none.
 func TestConfigRefusalRequestsOneRelease(t *testing.T) {
@@ -197,6 +238,88 @@ func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 	assert.Equal(t, []types.FileRef{{Value: "magusfile.buzz#project.name"}}, requests[i].Files)
 	assert.Contains(t, requests[i].Message, "job keys holds magusfile.buzz")
 	assert.Contains(t, requests[i].Message, "keys has changed nothing under magusfile.buzz#project.name")
+	assert.Len(t, storedRows(t, s)["keys"].ReleaseRequests, 1, "the row carries what the guard reads")
+	require.ErrorIs(t, fork("name", "magusfile.buzz#project.name"), types.WritePathFileShared)
+	assert.Len(t, storedRows(t, s)["keys"].ReleaseRequests, 1, "a repeat files nothing")
+}
+
+// ReleaseRequestRowSuite pins what keeps and clears a request on a row.
+type ReleaseRequestRowSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestReleaseRequestRowSuite(t *testing.T) {
+	suite.Run(t, new(ReleaseRequestRowSuite))
+}
+
+func (s *ReleaseRequestRowSuite) SetupTest() {
+	s.store = NewStore(declared(s.T(), types.Job{ID: "h", State: types.StateRunning, WritePaths: []string{"a.go", "b.go"}}))
+	filed, err := s.store.FileReleaseRequest(s.T().Context(), "h", types.JobReleaseRequest{ID: "att-1", File: "a.go", Wanted: []string{"a.go"}, Message: "wanted"})
+	s.Require().NoError(err)
+	s.Require().True(filed)
+}
+
+func (s *ReleaseRequestRowSuite) requests() []types.JobReleaseRequest {
+	return storedRows(s.T(), s.store)["h"].ReleaseRequests
+}
+
+// Filing appends without reading the store: a second open of an id shows the
+// fold was not asked, and the queue still holds one row.
+func (s *ReleaseRequestRowSuite) TestAttentionIsFiledWithoutReadingTheStore() {
+	ctx := s.T().Context()
+	s.store.requestRelease(ctx, "h", "b.go", []string{"b.go"}, nil)
+	queue := releaseRequests(s.T(), s.store.root)
+	s.Require().Len(queue, 1)
+	s.Require().NoError(s.store.CloseReleaseRequest(ctx, queue[0].ID))
+	s.store.requestRelease(ctx, "h", "b.go", []string{"b.go"}, nil)
+
+	dir, err := sessions.Dir(s.store.root)
+	s.Require().NoError(err)
+	fold, err := sessions.ReadAll(dir)
+	s.Require().NoError(err)
+	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r sessions.Record) bool { return r.Kind != sessions.KindAttentionOpen })
+	s.Len(opens, 2)
+	s.Len(releaseRequests(s.T(), s.store.root), 1)
+}
+
+func (s *ReleaseRequestRowSuite) TestTheStoreStampsTheTime() {
+	s.Positive(s.requests()[0].At)
+}
+
+func (s *ReleaseRequestRowSuite) TestTheSameIDIsNotFiledTwice() {
+	filed, err := s.store.FileReleaseRequest(s.T().Context(), "h", types.JobReleaseRequest{ID: "att-1", File: "a.go"})
+	s.Require().NoError(err)
+	s.False(filed)
+	s.Len(s.requests(), 1)
+}
+
+func (s *ReleaseRequestRowSuite) TestAnUnknownHolderIsAnError() {
+	_, err := s.store.FileReleaseRequest(s.T().Context(), "nobody", types.JobReleaseRequest{ID: "att-2", File: "a.go"})
+	s.ErrorIs(err, ErrUnknownJob)
+}
+
+func (s *ReleaseRequestRowSuite) TestAWriteToTheRowKeepsIt() {
+	_, err := s.store.Update(s.T().Context(), "h", func(cur *types.Job) { cur.Criteria = "changed" })
+	s.Require().NoError(err)
+	s.Len(s.requests(), 1)
+}
+
+func (s *ReleaseRequestRowSuite) TestNarrowingPastTheFileClearsIt() {
+	_, err := s.store.Update(s.T().Context(), "h", func(cur *types.Job) { cur.WritePaths = []string{"b.go"} })
+	s.Require().NoError(err)
+	s.Empty(s.requests())
+}
+
+func (s *ReleaseRequestRowSuite) TestClosingDropsIt() {
+	s.Require().NoError(s.store.CloseReleaseRequest(s.T().Context(), "att-1"))
+	s.Empty(s.requests())
+}
+
+func (s *ReleaseRequestRowSuite) TestDisposingAnotherSourceLeavesIt() {
+	req := sessions.AttentionRequest{ID: "att-1", Source: "another/source"}
+	s.Require().NoError(ReleaseRequestDisposed(s.T().Context(), s.T().TempDir(), req))
+	s.Len(s.requests(), 1)
 }
 
 // releaseRequests are the open release requests filed for the repository at root.
@@ -206,5 +329,72 @@ func releaseRequests(t *testing.T, root string) []sessions.AttentionRequest {
 	require.NoError(t, err)
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
-	return slices.DeleteFunc(sessions.AttentionQueue(fold), func(r sessions.AttentionRequest) bool { return r.Source != ReleaseRequestSource })
+	return slices.DeleteFunc(sessions.AttentionQueue(fold), func(r sessions.AttentionRequest) bool { return r.Source != releaseRequestSource })
+}
+
+func (s *exitEvidenceSuite) TestOwedForAnyReasonButNoSeatIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: "generated drift"}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `goal "lint" is filed as owed because "generated drift", and the one reason a run is owed is "no seat"`)
+	s.ErrorContains(err, "the integrator regenerates")
+}
+
+func (s *exitEvidenceSuite) TestOwedCheckForAnyReasonButNoSeatIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: "not this row's target"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `goal "check" is filed as owed because "not this row's target"`)
+}
+
+func (s *exitEvidenceSuite) TestNarrowedLintOverTheClaimedFilesIsFiled() {
+	row := s.row()
+	loc := declared(s.T(), row)
+	for _, f := range []string{"cmd/magus/ledger.go", "internal/ledger/report.go"} {
+		full := filepath.Join(loc.Root, filepath.FromSlash(f))
+		s.Require().NoError(os.MkdirAll(filepath.Dir(full), 0o755))
+		s.Require().NoError(os.WriteFile(full, []byte("package x\n"), 0o644))
+	}
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}}
+	exit := func(args ...string) (types.Job, error) {
+		resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+			return types.JobAttempt{Found: true, Ref: ref, Project: ".", Target: "lint", ExtraArgs: args, TimestampMs: 9_999_999_999_999}, nil
+		}
+		return Exit(s.T().Context(), boundStore(loc, row.ID).InWorkspace(goCheckWorkspace(".")), row.ID, &result, resolve)
+	}
+
+	_, err := exit("cmd/magus/ledger.go")
+	s.ErrorContains(err, "internal/ledger/report.go", "exit names the changed file the run left out")
+
+	exited, err := exit("cmd/magus/ledger.go", "internal/ledger/report.go")
+	s.Require().NoError(err)
+	s.Equal(types.StateExited, exited.State)
+}
+
+func TestLintGoalLeavesOutTheTestsAForkAddedByItself(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	merge := func(u *types.Job) {
+		u.WritePaths, u.SoftPaths, u.Check = []string{"cli/registry.go", "cli/registry_test.go"}, []string{"cli/registry_test.go"}, forkCheck()
+	}
+	merged, err := resolveMerge(t.Context(), s, nil, "w", merge, nil)
+	require.NoError(t, err)
+	var row types.Job
+	merged(&row)
+
+	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
+	assert.Equal(t, []string{"cli/registry.go"}, row.Goals[i].Check.Args, "lint reads a soft path once the row changes it")
+	assert.Contains(t, row.WritePaths, "cli/registry_test.go", "the worker may still write it")
 }

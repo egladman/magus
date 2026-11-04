@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-70-g9e74268fa (commit 9e74268fa65d34de3508699a6bcc64ef80b1e647, 2026-10-21T10:26:07-04:00)
+# BEGIN magus-generated - do not edit this section manually
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -91,6 +91,7 @@ console/gen/wasm/buzz.wasm merge=magus linguist-generated
 console/gen/wasm/wasm_exec.js merge=magus linguist-generated
 console/src/apps/diff/gen/*.ts merge=magus linguist-generated
 console/src/gen/** merge=magus linguist-generated
+console/src/gen/magus/types.ts merge=magus linguist-generated
 coverage/buzz/*.lcov merge=magus linguist-generated
 coverage/buzz/coverage.txt merge=magus linguist-generated
 dist/** merge=magus linguist-generated
@@ -118,6 +119,7 @@ docs/reference/rules/*.md merge=magus linguist-generated
 docs/reference/skills/*.md merge=magus linguist-generated
 docs/reference/spell-contract.md merge=magus linguist-generated
 docs/src/gen/** merge=magus linguist-generated
+docs/src/gen/magus/types.ts merge=magus linguist-generated
 gen/knowledge-graph.json merge=magus linguist-generated
 gen/site/assets/buzz-coverage.svg merge=magus linguist-generated
 gen/site/assets/go-coverage.svg merge=magus linguist-generated
@@ -166,8 +168,8 @@ libs/proofread/internal/wordclass/testdata/en_ewt-ud-test.conllu.gz merge=magus 
 libs/scipbuzz/MAGUS.md merge=magus linguist-generated
 libs/scipbuzz/coverage.out merge=magus linguist-generated
 libs/scipbuzz/testdata/snapshots/gen/**/*.buzz merge=magus linguist-generated
-libs/testlayout/MAGUS.md merge=magus linguist-generated
-libs/testlayout/coverage.out merge=magus linguist-generated
+libs/testpairing/MAGUS.md merge=magus linguist-generated
+libs/testpairing/coverage.out merge=magus linguist-generated
 libs/textsearch/MAGUS.md merge=magus linguist-generated
 libs/textsearch/coverage.lcov merge=magus linguist-generated
 libs/xdg/MAGUS.md merge=magus linguist-generated

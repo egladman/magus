@@ -289,7 +289,7 @@ the delegated half of every fanned-out session goes with them.
 // by the session-parity gate, which fails the build when an adapter drops a
 // dimension or the guide's table disagrees with it. A host that supplies less
 // declares less; the report then says unobservable rather than zero.
-// magus-guard-template: 34
+// magus-guard-template: 36
 // magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
 
 // EVERY call that can fail is caught. A failure is a transcript this run does not
@@ -506,7 +506,7 @@ fun main(args: [str]) > int {
     if (toStdout) {
         io\stdout.write(stream) catch void;
     } else {
-        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: proc\ExecOptions{stdin = stream, allowFailure = true}) catch null;
         if (loaded == null or loaded!.code != 0) { return 1; }
     }
 
@@ -555,7 +555,7 @@ exit-like signal describes a patch rather than a command.
 // unobservable for those dimensions rather than zero. Declaring commands=yes on
 // the strength of what the other hosts supply is the failure this line exists
 // to prevent.
-// magus-guard-template: 34
+// magus-guard-template: 36
 // magus-session-coverage: schema=2 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes model=none host-version=none
 
 // EVERY call that can fail is caught: a rollout this run cannot read is not a
@@ -680,7 +680,7 @@ fun main(args: [str]) > int {
     if (toStdout) {
         io\stdout.write(stream) catch void;
     } else {
-        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: proc\ExecOptions{stdin = stream, allowFailure = true}) catch null;
         if (loaded == null or loaded!.code != 0) { return 1; }
     }
 
@@ -740,7 +740,7 @@ of its `SKILL.md`, reported as both the read and the load.
 // version, and the coverage line says so. A skill load is the Read of its SKILL.md.
 // A Task call may be recorded as CallDynamicTool{namespace: "cursor", toolName:
 // "Task", arguments}, and an MCP call as CallDynamicTool{namespace: <server>}.
-// magus-guard-template: 34
+// magus-guard-template: 36
 // magus-session-coverage: schema=2 host=cursor commands=yes exit=none skills=yes hook-output=none spawn=yes session-id=yes model=none host-version=none
 
 // EVERY call that can fail is caught: a transcript this run cannot read is not a
@@ -999,7 +999,7 @@ fun main(args: [str]) > int {
     if (toStdout) {
         io\stdout.write(stream) catch void;
     } else {
-        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: proc\ExecOptions{stdin = stream, allowFailure = true}) catch null;
         if (loaded == null or loaded!.code != 0) { return 1; }
     }
 
@@ -1049,7 +1049,7 @@ command's exit code, and the only one with no spawn part.
 // both; a report reading it says unobservable, never zero. An export part carries
 // no CLI version and this adapter does not read a per-part model id with enough
 // confidence to publish it, so both are declared none rather than guessed.
-// magus-guard-template: 34
+// magus-guard-template: 36
 // magus-session-coverage: schema=2 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes model=none host-version=none
 
 // EVERY call that can fail is caught: a session whose export fails is not a reason
@@ -1154,7 +1154,7 @@ fun parseSkip(mark: str) > int {
 fun sessionIds(opencode: str) > [str] {
     final declared = env\get("HOST_SESSION_IDS") catch "";
     if (declared != "") { return strings\fields(declared); }
-    final listed = proc\exec(opencode, args: ["sessions", "--json"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    final listed = proc\exec(opencode, args: ["sessions", "--json"], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
     if (listed == null or listed!.code != 0) { return [<str>]; }
     final ids = mut [<str>];
     final listing = json\parse(listed!.stdout) catch null;
@@ -1195,7 +1195,7 @@ fun main(args: [str]) > int {
     final marks = mut {<str: int>};
     foreach (id in sessionIds(opencode)) {
         final mark = "{stateDir}/{crypto\sha256Hex(id).sub(0, len: 16)}";
-        final exported = proc\exec(opencode, args: ["export", id], opts: {"quiet": true, "allow_failure": true}) catch null;
+        final exported = proc\exec(opencode, args: ["export", id], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
         if (exported == null or exported!.code != 0) { continue; }
         final doc = json\parse(exported!.stdout) catch null;
         if (doc == null) { continue; }
@@ -1213,7 +1213,7 @@ fun main(args: [str]) > int {
     if (toStdout) {
         io\stdout.write(stream) catch void;
     } else {
-        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: proc\ExecOptions{stdin = stream, allowFailure = true}) catch null;
         if (loaded == null or loaded!.code != 0) { return 1; }
     }
 

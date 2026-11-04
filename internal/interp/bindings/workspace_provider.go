@@ -23,12 +23,7 @@ func init() { //nolint:gochecknoinits // internal/workspace cannot link the Buzz
 	workspace.RegisterProviderRunner(runWorkspaceProvider)
 }
 
-// buildWorkspace assembles magus.workspace for a magusfile. Today it exposes
-// provider(), which wires an imported spell as a workspace provider: a spell that
-// supplies the workspace's project set because another tool already owns it:
-//
-//	import "spells/nx"
-//	magus.workspace.provider(nx)
+// buildWorkspaceProvider binds magus\workspaceProvider(spell).
 //
 // The spell exports the list_projects contract function; magus invokes it once per
 // workspace load and folds what it returns into the workspace as ordinary projects.
@@ -42,22 +37,20 @@ func init() { //nolint:gochecknoinits // internal/workspace cannot link the Buzz
 //
 // Several providers may be wired; they run in wiring order and the first to report a
 // path owns it.
-func buildWorkspace(ctx context.Context, obs buzz.DirectObserver) vm.Value {
-	workspaceObj := vm.NewMap()
-	workspaceObj.MapSet("provider", directVal(obs, "magus.workspace.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+func buildWorkspaceProvider(ctx context.Context, obs buzz.DirectObserver) vm.Value {
+	return directVal(obs, "magus.workspaceProvider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
-			return vm.Null, fmt.Errorf(`magus\workspace.provider: expected an imported spell handle`)
+			return vm.Null, fmt.Errorf(`magus\workspaceProvider: expected an imported spell handle`)
 		}
 		nv, ok := args[0].MapGet("name")
 		if !ok || !nv.IsString() || nv.AsString() == "" {
-			return vm.Null, fmt.Errorf(`magus\workspace.provider: argument is not a spell handle (no name)`)
+			return vm.Null, fmt.Errorf(`magus\workspaceProvider: argument is not a spell handle (no name)`)
 		}
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
 			reg.AddProvider(nv.AsString())
 		}
 		return vm.Null, nil
-	}))
-	return workspaceObj
+	})
 }
 
 // providerDeadline bounds one list_projects invocation. A provider shells out to a

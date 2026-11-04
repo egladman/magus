@@ -70,7 +70,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
 	req.OwnedCheckouts = ownedCheckouts(ctx, deps, at)
-	placePullRequestCall(&req, in, at)
+	placeMovedCall(&req, in, at)
 	if deps.CheckoutState != nil {
 		if site, ok := locateCheckout(in.command, in.dialect, cmp.Or(at.dir, at.workspace)); ok {
 			req.Checkout = deps.CheckoutState(ctx, site.dir)
@@ -195,12 +195,18 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 	}
 }
 
-// placePullRequestCall moves req to the checkout a pull request call runs in when the line
-// cds there first, so the rule judges the fragments and the proofread build of that tree
-// and not the session's own. A call whose directory cannot be read without running the
-// line stays where the host started.
-func placePullRequestCall(req *types.CommandRequest, in commandRuleInput, at location) {
-	site, found, located := locateFirst(in.command, in.dialect, cmp.Or(at.dir, at.workspace), isPullRequestText)
+// placeMovedCall moves req to the checkout a line cds to before a pull request
+// call or a relink, so the rule judges that tree. A directory only running the
+// line can reveal leaves the call where the host started.
+func placeMovedCall(req *types.CommandRequest, in commandRuleInput, at location) {
+	moved := func(c hint.Invocation) bool {
+		if isPullRequestText(c) {
+			return true
+		}
+		r, ok := parseTargetRun(c)
+		return ok && runRelinks(at.declared().ix, r)
+	}
+	site, found, located := locateFirst(in.command, in.dialect, cmp.Or(at.dir, at.workspace), moved)
 	if !found || !located || !site.relocated {
 		return
 	}

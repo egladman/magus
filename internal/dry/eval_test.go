@@ -200,7 +200,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
     else { docker["docker-build"]({"args": ["--load"]}); }
 }
 `
-	detail := func(r Result) string {
+	detail := func(r dryResult) string {
 		var b strings.Builder
 		for _, op := range r.Trace {
 			b.WriteString(op.Detail)
@@ -492,11 +492,11 @@ final a = figure\external("a", link: "https://a.example");
 final b = figure\external("b");
 return figure\draw(figure\of("t").actor(a).actor(b).flowAcross(a, dst: b).unscoped(why: "a process"), theme: figure\Theme.light) catch "refused";`)
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
-	assert.True(t, strings.HasPrefix(r.Result, "<svg"), r.Result)
+	assert.True(t, strings.HasPrefix(r.Result, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg"), r.Result)
 }
 
 func TestPlaygroundSourceModules(t *testing.T) {
-	assert.Equal(t, []string{"figure"}, PlaygroundSourceModules())
+	assert.Equal(t, []string{"figure", "result"}, PlaygroundSourceModules())
 }
 
 const actorFigureJSON = `{

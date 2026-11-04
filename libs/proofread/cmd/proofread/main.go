@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/proofread"
 )
 
@@ -54,6 +55,12 @@ type finding struct {
 }
 
 func main() {
+	// The composition point for proofread's catalog: a PRF prefix that clashes with
+	// another registered one is a build defect, so it stops here.
+	if err := diagnostics.RegisterCatalog("proofread", proofread.Codes()); err != nil {
+		fmt.Fprintf(os.Stderr, "proofread: %v\n", err)
+		os.Exit(1)
+	}
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
@@ -228,7 +235,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
 	event := fs.String("event", "", "the `verdict` a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT")
 	anchored := fs.Bool("anchored", false, "with review-reply, judge as review-inline")
-	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote")
+	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote, or default for the one it writes with no --out")
 	format := fs.String("o", "json", "write findings as `json`, sarif, rdjson or text")
 
 	var minimum *int
@@ -291,12 +298,12 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	}
 
 	if *voicePath != "" {
-		v, err := readVoiceFile(*voicePath)
+		voice, err := voiceOptions(*voicePath, stderr)
 		if err != nil {
 			return failure(stderr, err)
 		}
 
-		opts = append(opts, proofread.WithVoice(v))
+		opts = append(opts, voice...)
 	}
 
 	set, fromTable := t.minimums[kind]
@@ -666,7 +673,7 @@ func parseTable(data []byte) (table, error) {
 		return table{}, err
 	}
 
-	rules, err := ruleDecisions(raw.Rules)
+	rules, err := proofread.RuleDecisions(raw.Rules)
 	if err != nil {
 		return table{}, err
 	}
@@ -711,7 +718,7 @@ func parseTable(data []byte) (table, error) {
 			return table{}, fmt.Errorf("path %q: %w", glob, err)
 		}
 
-		scopedRules, err := ruleDecisions(entry)
+		scopedRules, err := proofread.RuleDecisions(entry)
 		if err != nil {
 			return table{}, fmt.Errorf("path %q: %w", glob, err)
 		}
@@ -720,29 +727,6 @@ func parseTable(data []byte) (table, error) {
 	}
 
 	return t, nil
-}
-
-// ruleDecisions checks each name against the rules and each value against the
-// three decisions.
-func ruleDecisions(in map[string]string) (map[proofread.Rule]proofread.Decision, error) {
-	known := proofread.Rules()
-	out := make(map[proofread.Rule]proofread.Decision, len(in))
-
-	for _, name := range slices.Sorted(maps.Keys(in)) {
-		r := proofread.Rule(name)
-		if !slices.Contains(known, r) {
-			return nil, fmt.Errorf("unknown rule %q", name)
-		}
-
-		var d proofread.Decision
-		if err := d.UnmarshalText([]byte(in[name])); err != nil || d == 0 {
-			return nil, fmt.Errorf("rule %q: unknown decision %q: want off, advise or deny", name, in[name])
-		}
-
-		out[r] = d
-	}
-
-	return out, nil
 }
 
 // checkGlob refuses an empty glob and one path.Match cannot read.

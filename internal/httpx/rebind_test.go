@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/rpcerr"
 )
@@ -86,6 +87,82 @@ func TestAllowedHosts(t *testing.T) {
 		assert.True(t, allowed("192.168.1.5:7391", "127.0.0.1"))
 		assert.False(t, allowed("192.168.1.5:7391", "attacker.com"))
 	})
+}
+
+type AllowOriginSuite struct {
+	suite.Suite
+	base AllowedSet
+}
+
+func TestAllowOriginSuite(t *testing.T) {
+	suite.Run(t, new(AllowOriginSuite))
+}
+
+func (s *AllowOriginSuite) SetupTest() {
+	s.base = AllowedHosts(netip.MustParseAddrPort("127.0.0.1:7391"))
+}
+
+func (s *AllowOriginSuite) serve(allowed AllowedSet, host, origin string) int {
+	req := httptest.NewRequest(http.MethodGet, "/api/", nil)
+	req.Host = host
+	req.Header.Set("Origin", origin)
+	rr := httptest.NewRecorder()
+	GuardRebind(rpcerr.FormatJSON, allowed, okHandler).ServeHTTP(rr, req)
+	return rr.Code
+}
+
+func (s *AllowOriginSuite) TestNoOriginIsTrustedByDefault() {
+	s.Equal(http.StatusForbidden, s.serve(s.base, "127.0.0.1:7391", "https://eli.gladman.cc"))
+}
+
+func (s *AllowOriginSuite) TestAdmitsTheExactOrigin() {
+	allowed, err := s.base.AllowOrigin("https://site.example")
+	s.Require().NoError(err)
+	s.Equal(http.StatusOK, s.serve(allowed, "127.0.0.1:7391", "https://site.example"))
+}
+
+func (s *AllowOriginSuite) TestRefusesAnotherSchemeOfTheOrigin() {
+	allowed, err := s.base.AllowOrigin("https://site.example")
+	s.Require().NoError(err)
+	s.Equal(http.StatusForbidden, s.serve(allowed, "127.0.0.1:7391", "http://site.example"))
+}
+
+func (s *AllowOriginSuite) TestRefusesAnotherPortOfTheOrigin() {
+	allowed, err := s.base.AllowOrigin("https://site.example")
+	s.Require().NoError(err)
+	s.Equal(http.StatusForbidden, s.serve(allowed, "127.0.0.1:7391", "https://site.example:8443"))
+}
+
+func (s *AllowOriginSuite) TestNeverTrustsTheOriginsNameAsAHost() {
+	allowed, err := s.base.AllowOrigin("https://site.example")
+	s.Require().NoError(err)
+	s.Equal(http.StatusForbidden, s.serve(allowed, "site.example", "https://site.example"))
+}
+
+func (s *AllowOriginSuite) TestLeavesTheReceiverUnchanged() {
+	_, err := s.base.AllowOrigin("https://site.example")
+	s.Require().NoError(err)
+	s.Equal(http.StatusForbidden, s.serve(s.base, "127.0.0.1:7391", "https://site.example"))
+}
+
+func (s *AllowOriginSuite) TestRefusesAPath() {
+	_, err := s.base.AllowOrigin("https://site.example/magus/")
+	s.Error(err)
+}
+
+func (s *AllowOriginSuite) TestRefusesAWildcard() {
+	_, err := s.base.AllowOrigin("*")
+	s.Error(err)
+}
+
+func (s *AllowOriginSuite) TestRefusesABareHost() {
+	_, err := s.base.AllowOrigin("site.example")
+	s.Error(err)
+}
+
+func (s *AllowOriginSuite) TestRefusesUppercase() {
+	_, err := s.base.AllowOrigin("https://Site.Example")
+	s.Error(err)
 }
 
 func TestRebindRefusalOmitsTheBearerChallenge(t *testing.T) {

@@ -630,7 +630,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 		return true, nil
 	}
 	for i := range spellCacheLookback {
-		ok, err := try(spellCacheWant{key: key, name: key.remoteKey(now.AddDate(0, 0, -i))})
+		ok, err := try(spellCacheWant{key: key, name: key.remoteKey(now.UTC().AddDate(0, 0, -i))}) //nolint:forbidigo // UTC has no DST
 		if errors.Is(err, errSpellCacheUnreachable) {
 			// Every older key would wait out the same timeout against the same store.
 			return res, nil
@@ -641,7 +641,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 	}
 	ns := c.RemoteNamespace(spellCacheNamespace)
 	for i := range spellCacheLookback {
-		pk := key.pointerKey(now.AddDate(0, 0, -i))
+		pk := key.pointerKey(now.UTC().AddDate(0, 0, -i)) //nolint:forbidigo // UTC has no DST
 		rc, err := ns.Get(ctx, pk)
 		if errors.Is(err, types.ErrCacheMiss) {
 			continue

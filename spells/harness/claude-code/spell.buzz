@@ -59,6 +59,12 @@ final SPAWN_MATCHER = "Agent|Task";
 // The tools that write a file, after which the Buzz check runs on a .buzz path.
 final WRITE_MATCHER = "Write|Edit|MultiEdit";
 
+// Every tool but the spawn tool, whose own hook already runs after the call.
+final TIMED_MATCHER = "^(?!(Agent|Task)$).*";
+
+// The recorder runs in the background, so the call never waits on it.
+final DURATION_SCRIPT = "magus-duration";
+
 // The session starts that get a fresh CLAUDE_ENV_FILE. compact keeps the session's
 // environment and only rehydrates.
 final SESSION_PATH_MATCHER = "startup|resume|clear";
@@ -69,9 +75,12 @@ fun claude_named() > [str] {
     return ["--agent-name", mgs_getName()];
 }
 
-fun claude_hook(event: str, matcher: str, script: str, flags: [str]) > HookCommand {
-    return HookCommand{event = event, matcher = matcher, script = script, flags = flags, timeoutS = HOOK_TIMEOUT_S};
+fun claude_hook(event: str, matcher: str, script: str, flags: [str], points: [HookPoint]) > HookCommand {
+    return HookCommand{event = event, matcher = matcher, script = script, flags = flags, timeoutS = HOOK_TIMEOUT_S, points = points};
 }
+
+// A recorder binds no hook point: it judges and briefs nothing.
+final RECORDS = [<HookPoint>];
 
 fun claude_buzz_check_hook() > HookCommand {
     final check = buzzCheckHook(mgs_getName());
@@ -83,25 +92,32 @@ fun claude_hooks() > [HookCommand] {
     return [
         // magus restates a read as the `cat` or `sed -n` line it stands for and a search as
         // its rg or find line, so the read and search rules hold whichever tool performs them.
-        claude_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: claude_named()),
+        claude_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: claude_named(),
+            points: [HookPoint.shell, HookPoint.edit, HookPoint.mcp, HookPoint.spawn]),
         // The observer records the path a read reached; it judges nothing.
-        claude_hook("PreToolUse", matcher: "Read", script: "magus-observe", flags: claude_named()),
-        claude_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: claude_named()),
+        claude_hook("PreToolUse", matcher: "Read", script: "magus-observe", flags: claude_named(), points: RECORDS),
+        claude_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: claude_named(), points: [HookPoint.spawn]),
         claude_buzz_check_hook(),
+        // PostToolUse carries duration_ms, the tool's own run time.
+        claude_hook("PostToolUse", matcher: TIMED_MATCHER, script: DURATION_SCRIPT, flags: claude_named(), points: RECORDS),
         // PATH's first entry becomes the root for the agent's own Bash tool commands, through
         // CLAUDE_ENV_FILE, the file Claude Code sources before each one; it never reaches a
         // hook command (code.claude.com/docs/en/hooks, "Persist environment variables").
-        claude_hook("SessionStart", matcher: SESSION_PATH_MATCHER, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]),
-        claude_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: [<str>]),
+        claude_hook("SessionStart", matcher: SESSION_PATH_MATCHER, script: "magus-session",
+            flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""], points: [HookPoint.sessionStart]),
+        claude_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: [<str>], points: [HookPoint.compact]),
         // The guard reads the session's transcript for background tasks left running.
-        claude_hook("Stop", matcher: "", script: "magus-command", flags: claude_named()),
-        claude_hook("Stop", matcher: "", script: "magus-checkpoint", flags: claude_named()),
+        claude_hook("Stop", matcher: "", script: "magus-command", flags: claude_named(), points: [HookPoint.stop]),
+        claude_hook("Stop", matcher: "", script: "magus-checkpoint", flags: claude_named(), points: RECORDS),
         // A subagent's stop carries the path of its own transcript, whose last usage record
         // is the context a later continue to it would resume.
-        claude_hook("SubagentStop", matcher: "", script: "magus-command", flags: claude_named()),
+        claude_hook("SubagentStop", matcher: "", script: "magus-command", flags: claude_named(), points: [HookPoint.subagentStop]),
         // The person's message, which the glue hands to `magus shell --message` and answers
         // with nothing: it records the topics a later rule reads.
-        claude_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: claude_named()),
+        claude_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: claude_named(), points: RECORDS),
+        // Claude Code adds a UserPromptSubmit hook's stdout to the turn's context, so the one
+        // line the disk hook prints reaches the agent before it starts on the request.
+        reclaimDiskHook(mgs_getName(), event: "UserPromptSubmit", say: "stdout"),
     ];
 }
 
@@ -109,8 +125,17 @@ export fun mgs_listHooks() > [HookCommand] {
     return claude_hooks();
 }
 
+export fun mgs_listUnsupportedHooks() > [HookBinding] {
+    return [
+        unsupportedHook(HookPoint.attach, reason: "a hook answers with text only (additionalContext, systemMessage); "
+            + "no output field carries an image or a file (https://code.claude.com/docs/en/hooks)"),
+    ];
+}
+
 fun claude_command(hook: HookCommand) > str {
-    return claude_checkout(buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags));
+    final command = claude_checkout(buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags));
+    if (hook.script == DURATION_SCRIPT) { return command + " # magus:harness"; }
+    return command;
 }
 
 fun claude_guard_command() > str {
@@ -142,7 +167,9 @@ fun claude_checkout(plain: str) > str {
 fun claude_entry(hook: HookCommand) > {str: any} {
     final entry = mut {<str: any>};
     if (hook.matcher != "") { entry["matcher"] = hook.matcher; }
-    entry["hooks"] = [{"type": "command", "command": claude_command(hook), "timeout": hook.timeoutS}];
+    final command: mut {str: any} = mut {"type": "command", "command": claude_command(hook), "timeout": hook.timeoutS};
+    if (hook.script == DURATION_SCRIPT) { command["async"] = true; }
+    entry["hooks"] = [command];
     return entry;
 }
 
@@ -248,6 +275,12 @@ export fun mgs_listTools() > HarnessTools {
     return HarnessTools{dir = claude_tools_dir(), rows = claude_tools()};
 }
 
+// Common hook input fields no other host sends
+// (https://code.claude.com/docs/en/hooks, read 2026-10-29).
+final PAYLOAD_FIELDS = ["prompt_id", "effort", "scratchpad_dir"];
+
+// Channels, per code.claude.com/docs/en/hooks: additionalContext reaches the agent alone, a
+// systemMessage the person alone, and a deny reason both.
 export fun mgs_getLimits() > Limits {
     return Limits{
         foregroundDefaultMs = FOREGROUND_DEFAULT_MS,
@@ -255,6 +288,8 @@ export fun mgs_getLimits() > Limits {
         hookTimeoutMs = HOOK_TIMEOUT_S * 1000,
         resumesOnBackgroundFrom = RESUMES_ON_BACKGROUND_FROM,
         observesSkillLoads = true,
+        payloadFields = PAYLOAD_FIELDS,
+        channels = ["display", "capture", "notice"],
     };
 }
 
@@ -296,8 +331,8 @@ export fun mgs_listModels() > [ModelRow] {
 // The settings "env" object: Claude Code sets it on the session, so every Bash tool command
 // the agent runs inherits it (testdata/hosts/claude-code/settings.schema.json, "env").
 // MAGUS_LOG_SILENT=true is -s for every one of them; a value the person already set stays.
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = ".claude/settings.json", defaults = {"env": {"MAGUS_LOG_SILENT": "true"}}};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = ".claude/settings.json", defaults = {"env": {"MAGUS_LOG_SILENT": "true"}}}, guard = "hooks"};
 }
 
 export fun mgs_getSkills() > HarnessSkills {
@@ -319,12 +354,23 @@ export fun mgs_getMcp() > McpServer {
     };
 }
 
-// claude_agent renders one shipped agent as a Claude Code subagent file. A read-only agent
-// is limited to the tools that cannot change the workspace. An agent carrying a model runs
-// on that alias; one without leaves the host default.
+// A subagent finds its other tools and skills through these. An allowlist
+// that omits them hides them, so a render never writes one.
+final DISCOVERY_TOOLS = ["ToolSearch", "Skill"];
+
+fun claude_write_tools() > [str] {
+    final names = mut [<str>];
+    foreach (row in claude_tools()) {
+        if (row.capability == ToolCapability.writes) { names.append(row.name); }
+    }
+    return names;
+}
+
+// claude_agent renders one shipped agent as a Claude Code subagent file.
+// A read-only agent denies the write tools and inherits the rest.
 fun claude_agent(agent: ShippedAgent) > AgentFile {
     final lines = mut ["---", "name: " + yamlQuote(agent.name), "description: " + yamlQuote(agent.description)];
-    if (agent.readOnly) { lines.append("tools: Read, Grep, Glob, Bash"); }
+    if (agent.readOnly) { lines.append("disallowedTools: " + claude_write_tools().join(", ")); }
     if (agent.model != "") { lines.append("model: {agent.model}"); }
     lines.append("---");
     lines.append("");
@@ -376,19 +422,32 @@ test "mgs_renderPrompts writes no file because the hook prompts" {
     assert\equal(mgs_renderPrompts({"agent-bench-run": "launches paid sessions"}).len(), 0, "permissionDecision ask is the prompt");
 }
 
-test "mgs_renderAgents renders a read-only agent with limited tools and the model it carries" {
+test "mgs_renderAgents renders a read-only agent that denies write tools and the model it carries" {
     final file = claude_agent(claude_scout_fixture(true, model: "cheap-alias"));
     assert\equal(file.path, ".claude/agents/magus-scout.md", "Claude Code reads .claude/agents");
     assert\equal(
         file.content,
-        "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ntools: Read, Grep, Glob, Bash\nmodel: cheap-alias\n---\n\nFirst line.\n\nSecond line.\n",
+        "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ndisallowedTools: Write, Edit, MultiEdit, NotebookEdit, mcp__ccd_host__sync_with_base_branch, mcp__ccd_host__clean_up_worktrees, mcp__ccd_host__discard_kept_worktree\nmodel: cheap-alias\n---\n\nFirst line.\n\nSecond line.\n",
         "frontmatter then the instructions",
     );
 }
 
+test "mgs_renderAgents never hides a discovery tool from a read-only agent" {
+    final content = claude_agent(claude_scout_fixture(true, model: "")).content;
+    assert\isTrue(content.indexOf("\ntools:") == null, "an allowlist would drop every tool it omits");
+    foreach (name in DISCOVERY_TOOLS) {
+        assert\isTrue(content.indexOf(name) == null, "{name} stays inherited");
+        var listed = false;
+        foreach (row in claude_tools()) {
+            if (row.name == name) { listed = true; }
+        }
+        assert\isTrue(listed, "{name} is a row the guard knows");
+    }
+}
+
 test "mgs_renderAgents leaves tools and model unset for a writable agent with no model" {
     final content = claude_agent(claude_scout_fixture(false, model: "")).content;
-    assert\isTrue(content.indexOf("tools:") == null, "no tool restriction");
+    assert\isTrue(content.indexOf("disallowedTools:") == null, "no tool restriction");
     assert\isTrue(content.indexOf("model:") == null, "the host default model applies");
 }
 
@@ -434,8 +493,8 @@ test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "claude-code", "id must match magus\\harness.provider wiring and --id");
 }
 
-test "mgs_getHarnessConfig names Claude Code settings and makes every Bash tool command quiet" {
-    final cfg = mgs_getHarnessConfig();
+test "mgs_getHarness names Claude Code settings and makes every Bash tool command quiet" {
+    final cfg = mgs_getHarness().config;
     assert\equal(cfg.path, ".claude/settings.json", "workspace-relative host config path");
     final env = cfg.defaults["env"] as {str: any};
     assert\equal(env.len(), 1, "one variable, magus's own");
@@ -446,6 +505,14 @@ test "mgs_getSkills installs both forms under .claude/skills" {
     final skills = mgs_getSkills();
     assert\equal(skills.form.value, "both", "the short skills and their full twins");
     assert\equal(skills.paths.join(","), ".claude/skills", "Claude Code reads .claude/skills");
+}
+
+test "a hook on a recorder outside the shipped templates carries the ownership marker" {
+    foreach (hook in mgs_listHooks()) {
+        if (hook.script == DURATION_SCRIPT) {
+            assert\isTrue(claude_command(hook).endsWith(" # magus:harness"), "magus cannot tell {hook.script} is its own without it");
+        }
+    }
 }
 
 test "every hook appears in the entries, so the drift check magus runs passes" {
@@ -476,7 +543,7 @@ test "the glue commands are the plain argv every machine shares" {
     final head = "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/";
     foreach (cmd in claude_commands()) {
         assert\isTrue(cmd.startsWith(head), "the same string on every machine, checkout binary first: {cmd}");
-        assert\isTrue(cmd.indexOf(".sh") == null and cmd.indexOf("#") == null, "a shipped Buzz template, no marker: {cmd}");
+        assert\isTrue(cmd.indexOf(".sh") == null and cmd.replace(" # magus:harness", with: "").indexOf("#") == null, "a shipped Buzz template, no marker but the ownership one: {cmd}");
         foreach (meta in ["&&", "|", ">", "$(", "`", "bash"]) {
             if (meta == "|") {
                 assert\equal(cmd.replace("||", with: "").indexOf("|"), null, "no pipe, only the binary fallback: {cmd}");
@@ -513,15 +580,20 @@ test "the entries cover PreToolUse PostToolUse SessionStart Stop SubagentStop an
     foreach (block in claude_entries()) { events.append(block.path[1]); }
     assert\equal(events.join(","), "PreToolUse,PostToolUse,SessionStart,Stop,SubagentStop,UserPromptSubmit", "six managed path blocks");
     final post = claude_block("PostToolUse")!;
-    assert\equal(post.entries.len(), 2, "the finished spawn and the Buzz check");
+    assert\equal(post.entries.len(), 3, "the finished spawn, the Buzz check and the duration recorder");
     assert\equal(post.entries[0]["matcher"] as? str, SPAWN_MATCHER, "both names of the spawn tool");
     assert\equal(post.entries[1]["matcher"] as? str, WRITE_MATCHER, "every tool that writes a file");
+    assert\equal(post.entries[2]["matcher"] as? str, TIMED_MATCHER, "every tool but the spawn, so it is timed once");
+    final timed = (post.entries[2]["hooks"] as [any])[0];
+    assert\isTrue((timed["async"] as? bool) ?? false, "the recorder never makes a call wait");
+    assert\isTrue("{timed["command"]}".indexOf("magus-duration.buzz") != null, "the duration recorder");
     final start = claude_block("SessionStart")!;
     assert\equal(start.entries[0]["matcher"] as? str, SESSION_PATH_MATCHER, "every start that gets a fresh env file");
     assert\equal(start.entries[1]["matcher"] as? str, "compact", "rehydrate");
     final message = claude_block("UserPromptSubmit")!;
-    assert\equal(message.entries.len(), 1, "one message entry");
+    assert\equal(message.entries.len(), 2, "the message record and the disk hook");
     assert\isTrue(message.entries[0]["matcher"] == null, "a message event takes no matcher");
+    assert\isTrue("{message.entries[1]["hooks"]}".indexOf("magus-reclaim-disk.buzz") != null, "the disk hook rides the message event");
     foreach (block in claude_entries()) {
         foreach (entry in block.entries) {
             final hooks = entry["hooks"] as [any];

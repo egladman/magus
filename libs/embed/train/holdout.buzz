@@ -1,3 +1,4 @@
+import "result";
 import "std";
 import "crypto";
 import "fs";
@@ -6,6 +7,8 @@ import "encoding/json";
 // The salt deals provenance groups; v1 dealt single files. The version keeps a table
 // trained on one split from being scored on another.
 final salt = "embed-holdout/v2:";
+
+// Result is what a fallible call here and in sources, pairs and runlog returns.
 final hexDigits = "0123456789abcdef";
 
 fun prefixValue(digest: str) > int {
@@ -124,24 +127,28 @@ final dealtHeld: mut {str: bool} = mut {};
 
 // write records every holdout path among paths, sorted, one {"path", "group"} per line.
 // It refuses a path no deal has grouped.
-export fun write(paths: [str], target: str) > int !> any {
+export fun write(paths: [str], target: str) > result\Result::<int> {
     final kept: mut [str] = mut [];
     foreach (p in paths) {
         final group = dealt[p];
         if (group == null) {
-            throw "holdout: no deal grouped {p}; sources\\load deals the split before write";
+            return result\fail::<int>("holdout: no deal grouped {p}; sources\\load deals the split before write");
         }
         if (dealtHeld[group!] ?? false) {
             kept.append(p);
         }
     }
-    kept.sort(fun (a: str, b: str) > bool => a < b);
-    final lines: mut [str] = mut [];
-    foreach (p in kept) {
-        lines.append(json\stringify({"path": p, "group": dealt[p] ?? ""}));
+    _ = kept.sort(fun (a: str, b: str) > bool => a < b);
+    try {
+        final lines: mut [str] = mut [];
+        foreach (p in kept) {
+            lines.append(json\stringify({"path": p, "group": dealt[p] ?? ""}));
+        }
+        fs\writeFile(target, content: lines.join("\n") + "\n");
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "holdout: write {target}");
     }
-    fs\writeFile(target, content: lines.join("\n") + "\n");
-    return kept.len();
+    return result\ok::<int>(kept.len());
 }
 
 test "bucket is stable and in range" {

@@ -12,10 +12,10 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	spellpkg "github.com/egladman/magus/spells"
@@ -102,16 +102,29 @@ func goIndexPath(cacheDir, project string) string {
 // writeSCIP writes a minimal one-definition index to path (creating parent dirs).
 func writeSCIP(t *testing.T, path string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	idx := &scip.Index{Documents: []*scip.Document{{
+	writeIndexFile(t, path, &scip.Index{Documents: []*scip.Document{{
 		RelativePath: "pkg/a/a.go",
 		Occurrences: []*scip.Occurrence{
 			{Symbol: "scip-go gomod example.com/a v1 Foo#", SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{0, 0, 3}},
 		},
-	}}}
+	}}})
+}
+
+// writeIndexFile writes idx to path as an indexer op stores it, a pack, or as SCIP
+// protobuf for any path that is not one: a knowledge.symbols override names the user's
+// own SCIP output.
+func writeIndexFile(t *testing.T, path string, idx *scip.Index) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	data, err := proto.Marshal(idx)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, data, 0o644))
+	if filepath.Ext(path) != ".pack" {
+		require.NoError(t, os.WriteFile(path, data, 0o644))
+		return
+	}
+	src := filepath.Join(t.TempDir(), "index.scip")
+	require.NoError(t, os.WriteFile(src, data, 0o644))
+	require.NoError(t, symbols.PackFromSCIP(src, path, "test"))
 }
 
 // goWorkspace describes a workspace whose "go" spell is symbol-capable (it declares a
@@ -211,8 +224,9 @@ func TestSymbolGapsLogsWhenTheProbeCannotRun(t *testing.T) {
 	assert.Contains(t, buf.String(), "cancelled", "the underlying error must be surfaced, not swallowed")
 }
 
-// A workspace with no symbol-capable project has no code-symbol layer to miss, so there
-// is nothing outside coverage and an unmatched name is a verified absence.
+// A workspace whose spells name no language and declare no indexer has no code-symbol
+// layer to miss, so there is nothing outside coverage and an unmatched name is a verified
+// absence.
 func TestSymbolGapsNoneCapable(t *testing.T) {
 	root := t.TempDir()
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: "web", Spell: "ts", Spells: []string{"ts"}}}}
@@ -220,25 +234,51 @@ func TestSymbolGapsNoneCapable(t *testing.T) {
 	assert.Empty(t, symbolGaps(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells)))
 }
 
+// A language nothing indexes is a gap of its own: an unmatched name could be one of its
+// symbols, so the lookup is unknown and says which language it could not search.
+func TestSymbolGapsNamesALanguageNothingIndexes(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	writeSCIP(t, goIndexPath(cacheDir, "pkg/a"))
+	projects, spells := goWorkspace("pkg/a")
+	projects.Projects = append(projects.Projects, types.ProjectEntry{Path: "web", Spell: "ts", Spells: []string{"ts"}})
+	spells = append(spells, types.Spell{Name: "ts", Targets: []string{"tsc"}, Language: "typescript"})
+
+	got := symbolGaps(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
+	require.Len(t, got, 1, "the built go index is no gap")
+	assert.Equal(t, "web (typescript index has no indexer)", got[0].Describe())
+}
+
+// A knowledge.symbols entry is its project's whole index set, so the project's spells'
+// languages are not reported as unindexed beside it.
+func TestSymbolGapsLeaveAnOverriddenProjectToItsEntries(t *testing.T) {
+	root := t.TempDir()
+	writeSCIP(t, filepath.Join(root, "web", "index.scip"))
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: "web", Spell: "ts", Spells: []string{"ts"}}}}
+	spells := []types.Spell{{Name: "ts", Targets: []string{"tsc"}, Language: "typescript"}}
+	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{{Project: "web", Index: "web/index.scip"}}}}
+	assert.Empty(t, symbolGaps(t.Context(), ingest(cfg, root, filepath.Join(root, ".magus"), projects, spells)))
+}
+
 // The declared language reaches ingestion, so an indexer that reports none still yields
-// labelled symbols. Without it `magus query language:typescript` is empty while
-// `language:go` works, and the graph looks like it has no TypeScript at all.
+// labelled symbols. Without it `magus query language:buzz` is empty while
+// `language:go` works, and the graph looks like it has no Buzz at all.
 func TestLoadKnowledgeSymbolsCarriesDeclaredLanguage(t *testing.T) {
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
-	writeSCIP(t, goIndexPath(cacheDir, "web"))
+	writeSCIP(t, symbols.IndexPath(cacheDir, "web", "scip-buzz"))
 
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{
-		{Path: "web", Spell: "typescript", Spells: []string{"typescript"}},
+		{Path: "web", Spell: "buzz", Spells: []string{"buzz"}},
 	}}
 	spells := []types.Spell{
-		{Name: "typescript", Language: "typescript", SymbolFormat: "scip"},
+		{Name: "buzz", Language: "buzz", SymbolFormat: "scip"},
 	}
 	got := loadKnowledgeSymbols(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
 
 	require.Len(t, got["web"], 1)
-	assert.Equal(t, "typescript", got["web"][0].Language,
-		"writeSCIP's fixture sets no Document.Language, exactly like scip-typescript")
+	assert.Equal(t, "buzz", got["web"][0].Language,
+		"writeSCIP's fixture sets no Document.Language, as an indexer may not")
 }
 
 func TestLoadKnowledgeSymbolsNoneCapable(t *testing.T) {
@@ -316,6 +356,11 @@ func registerIndexer(t *testing.T, name, language, op, bin string) types.Spell {
 	return types.Spell{Name: name, Language: language, SymbolFormat: "scip"}
 }
 
+// optIn is a workspace config that runs the external SCIP indexers of the spells named.
+func optIn(names ...string) config.Config {
+	return config.Config{Spells: config.SpellsConfig{SymbolIndexers: names}}
+}
+
 // Ingestion reads the index the run writes: the op the spell declares, and the default
 // for one that declares none, whatever the spell is called. A third-party indexer was
 // read from scip-<name>.scip while its run wrote index.scip, so its symbols never arrived.
@@ -332,7 +377,7 @@ func TestSymbolIndexDeclarationsReadTheOpTheSpellDeclares(t *testing.T) {
 		{Path: ".", Spells: []string{"zzz-third-party", "zzz-also-default", "zzz-own-op"}},
 	}}
 
-	decls := symbolIndexDeclarations(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
+	decls := symbolIndexDeclarations(t.Context(), ingest(optIn("zzz-third-party", "zzz-also-default", "zzz-own-op"), root, cacheDir, projects, spells))
 
 	assert.Equal(t, []resolvedSymbolIndex{
 		{project: ".", op: "scip", bin: "scip-kotlin", path: symbols.IndexPath(cacheDir, ".", "scip"), language: "kotlin"},
@@ -355,7 +400,7 @@ func TestSymbolIndexDeclarationRecordsKeyVerdictsByOp(t *testing.T) {
 		{project: ".", op: "scip-alt"}: {Op: "scip-alt", Language: "go", Freshness: types.SymbolIndexStale},
 	}
 
-	recs := symbolIndexDeclarationRecords(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells), freshness)
+	recs := symbolIndexDeclarationRecords(t.Context(), ingest(optIn("zzz-go-a", "zzz-go-b"), root, filepath.Join(root, ".magus"), projects, spells), freshness)
 
 	require.Len(t, recs, 2)
 	assert.Equal(t, []string{"scip", "scip-alt"}, []string{recs[0].Op, recs[1].Op})
@@ -404,6 +449,29 @@ func TestSymbolIndexTimesReadsOnlyDeclaredIndexes(t *testing.T) {
 	times := symbolIndexTimes(symbolIndexDeclarations(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells)))
 
 	assert.Equal(t, map[string]time.Time{"pkg/a": built}, normalizeTimes(times))
+}
+
+func (s *magusSuite) TestAnExternalIndexerNotOptedInIsNotIngested() {
+	t := s.T()
+	root := t.TempDir()
+	spells := []types.Spell{registerIndexer(t, "zzz-ts", "typescript", "", "scip-typescript")}
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: ".", Spells: []string{"zzz-ts"}}}}
+
+	s.Empty(symbolIndexDeclarations(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells)))
+	s.Len(symbolIndexDeclarations(t.Context(), ingest(optIn("zzz-ts"), root, filepath.Join(root, ".magus"), projects, spells)), 1)
+}
+
+func (s *magusSuite) TestAnExternalIndexerNotOptedInNamesTheSettingInItsGap() {
+	t := s.T()
+	root := t.TempDir()
+	spells := []types.Spell{registerIndexer(t, "zzz-ts", "typescript", "", "scip-typescript")}
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: ".", Spells: []string{"zzz-ts"}}}}
+
+	gaps := symbolGaps(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells))
+
+	s.Require().Len(gaps, 1)
+	s.True(gaps[0].Unindexable)
+	s.Equal("no symbol index for typescript: scip-typescript is an external SCIP indexer and runs only when opted in; add zzz-ts to spells.symbol_indexers in magus.yaml", gaps[0].Detail)
 }
 
 func normalizeTimes(in map[string]time.Time) map[string]time.Time {
@@ -695,6 +763,22 @@ func TestSymbolOccurrencesReadsAGoodIndex(t *testing.T) {
 		"the range holds Foo, so the site is editable")
 }
 
+func (s *magusSuite) TestAPlatformTwinReadsItsBaseKeysOccurrences() {
+	root := s.T().TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	s.Require().NoError(os.MkdirAll(filepath.Join(root, "pkg/a/pkg/a"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "pkg/a/pkg/a/a.go"), []byte("Foo\n"), 0o644))
+	writeSCIP(s.T(), goIndexPath(cacheDir, "pkg/a"))
+
+	projects, spells := goWorkspace("pkg/a")
+	foo, twin := "gomod example.com/a Foo#", "gomod example.com/a@pkg/a/pkg/a/a_linux.go Foo#"
+	got := symbolsOccurrences(s.T().Context(), ingest(config.Config{}, root, cacheDir, projects, spells), []string{twin, foo})
+
+	s.Require().Len(got[twin].Files, 1, "never silently empty: the twin shares Foo's sites")
+	s.Equal(got[foo], got[twin])
+	s.Len(got, 2, "one read per key asked")
+}
+
 // TestVCSHistoryFormatKeysTheCache: a shape change is invisible to the rest of the key
 // (the same HEAD and window hash the same), so without the format version an old file would
 // match, decode with the renamed field absent, and hand every consumer a zero timestamp.
@@ -911,10 +995,10 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 		Knowledge:   config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}},
 	}
 	store := knowledge.NewStore(cacheDir, true, 0, nil, nil)
-	humanOnly := types.HumanOnlyIndex{Projects: []string{"pkg/a"}}
+	targetPolicies := types.TargetPolicyIndex{Projects: []string{"pkg/a"}}
 	stamps := func() knowledge.Stamps {
 		src := knowledgeSources{
-			cfg: cfg, root: root, cacheDir: cacheDir, spells: spells, projects: projects, humanOnly: humanOnly,
+			cfg: cfg, root: root, cacheDir: cacheDir, spells: spells, projects: projects, targetPolicies: targetPolicies,
 			tree: knowledge.WalkTree(root), log: slog.New(slog.DiscardHandler),
 		}
 		return knowledgeStamps(ctx, src, store, knowledge.AllClasses)
@@ -953,7 +1037,7 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 		// human_only without changing a byte of the tree (an environment variable its
 		// magusfile reads) moves the domain stamp through the record alone.
 		{"a human_only declaration", func() {
-			humanOnly.Targets = []types.HumanOnlyTarget{{TargetRef: types.TargetRef{Project: "pkg/a", Target: "bench"}, Reason: "spends"}}
+			targetPolicies.Targets = []types.TargetPolicy{{TargetRef: types.TargetRef{Project: "pkg/a", Target: "bench"}, HumanOnly: true, Reason: "spends"}}
 		}, []knowledge.ShardClass{knowledge.ClassDomain, knowledge.ClassSession}},
 		// No walk sees .git, but the tree scans drop what its rules ignore.
 		{"an ignore rule outside the tree", func() { write(filepath.Join(root, ".git", "info", "exclude"), "docs/\n") },
@@ -1311,10 +1395,7 @@ func writeSCIPIndex(t *testing.T, root, path, language string, docs map[string][
 		}
 		idx.Documents = append(idx.Documents, doc)
 	}
-	data, err := proto.Marshal(idx)
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, data, 0o644))
+	writeIndexFile(t, path, idx)
 }
 
 // The end-to-end shape of a project bound to a Go and a Buzz indexing spell: each declares
@@ -1350,7 +1431,8 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(body), 0o644))
 	}
-	cfg := config.Config{}
+	// Both stand-ins are external SCIP indexers, which ingestion reads only when opted in.
+	cfg := optIn(goSpell, buzzSpell)
 	cacheDir := resolveCacheDir(root, cfg)
 	const (
 		parsePull = "scip-buzz buzz . . `hack/ci/pull-requests.buzz`/parsePull()."
@@ -1538,4 +1620,28 @@ func TestAggregateFileCouplingIgnoresOrderAndDuplicates(t *testing.T) {
 
 func TestAggregateFileCouplingEmpty(t *testing.T) {
 	assert.Empty(t, aggregateFileCoupling(nil, ""))
+}
+
+func TestRootModuleGapsDropsNestedModuleDirectories(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "xdg", "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "libs", "xdg", "go.mod"), []byte("module x\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module y\n"), 0o644))
+
+	got := rootModuleGaps(root, []string{"internal/guard", "libs/xdg", "libs/xdg/sub"})
+
+	assert.Equal(t, []string{"internal/guard"}, got)
+}
+
+func TestRootModuleGapsDropsDirectoryExcludedByBuildConstraint(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "cmd", "buzz-playground")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte("//go:build js && wasm\n\npackage main\n\nfunc main() {}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "built"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "built", "a.go"), []byte("package built\n"), 0o644))
+
+	got := rootModuleGaps(root, []string{"cmd/buzz-playground", "internal/built"})
+
+	assert.Equal(t, []string{"internal/built"}, got)
 }

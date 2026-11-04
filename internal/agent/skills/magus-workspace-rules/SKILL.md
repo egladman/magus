@@ -217,24 +217,22 @@ the lock target with `:update`, and your workspace fork is unaffected until you
 deliberately rebase it. Additive policy that is not host-shaped stays in
 `{{buzz "guard.shell"}}({...})`, not in the harness spell.{{end}}
 
-## Tightening a conformance threshold
+## Tightening a conformance anchor
 
-A workspace that commits a conformance ratchet (`knowledge.conformance.ratchet`) enforces the
-committed value, and the code usually drifts tighter than it. Two readings name the slack:
-the rows of `{{buzz "conformance"}}()` with `propose` above zero, and `{{cmd "doctor"}}`'s
-`conformance-ratchet` check, which gives each row's ratchet `path:line`.
+A conformance ceiling holds each changed file to its count of violations at the base
+revision; no count is stored, so nothing needs pruning. The anchors in
+`knowledge.conformance.checks` are policy, and the code usually drifts tighter than them. Two
+readings name the slack: the rows of `{{buzz "change.conformance"}}()` with `propose` above zero, and
+`{{cmd "doctor"}}`'s `conformance-ceiling` check, which names each row's magus.yaml key.
 
-1. Edit only the line doctor names. Copy the proposed `value`, the row's `n` and the
-   percentile, and put the measuring revision in `why`.
-2. Delete each known entry doctor reports as stale.
-3. Re-run doctor and read that the proposal is gone.
-4. Commit the ratchet alone. The commit is the review.
+1. Edit only the key doctor names, to the proposed value.
+2. Re-run doctor and read that the proposal is gone.
+3. Commit magus.yaml alone. The commit is the review.
 
-Never pick a number, never loosen a value, and never add a known entry to pass a check:
-fix the code, or ask the person.{{if .Full}} The ratchet is the one place a measurement
-becomes policy, so a person reads every change to it. An agent that edits the record to
-make a red check green has moved the bar instead of the code, and the diff looks like a
-routine config change.{{end}}
+Never pick a number and never loosen an anchor to pass a check: fix the code, or ask the
+person.{{if .Full}} An anchor is the one place a measurement becomes policy, so a person reads
+every change to it. An agent that loosens one to make a red check green has moved the bar
+instead of the code, and the diff looks like a routine config change.{{end}}
 
 {{if .Full}}## Prune on a schedule you already have{{else}}## Prune{{end}}
 

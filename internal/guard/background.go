@@ -145,8 +145,7 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 				last = max(last, d)
 			}
 		}
-		// Half again as long, for a cold cache or a loaded machine.
-		need := last * 3 / 2
+		need, bound := checkMargin(last)
 		if last == 0 || limit >= need {
 			continue
 		}
@@ -157,7 +156,6 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		if run.refusals.MarkFired(denyMarker(string(key))) {
 			continue
 		}
-		bound := (need + time.Minute - time.Nanosecond).Truncate(time.Minute)
 		timeout := min(bound, call.foregroundMax)
 		if last > call.foregroundMax || timeout <= limit {
 			return advice{
@@ -175,6 +173,13 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		}
 	}
 	return advice{}
+}
+
+// checkMargin allows a run half again as long as took, for a cold cache or a
+// loaded machine. bound rounds that up to a minute.
+func checkMargin(took time.Duration) (need, bound time.Duration) {
+	need = took * 3 / 2
+	return need, (need + time.Minute - time.Nanosecond).Truncate(time.Minute)
 }
 
 // execBounded is r as the line `magus job exec --timeout` bounds, its forwarded arguments

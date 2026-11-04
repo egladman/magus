@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/types"
 )
 
@@ -21,7 +21,7 @@ func pushTag(t *testing.T, reg *registry, dir, tag string) digest.Digest {
 	t.Helper()
 	content, err := Build(t.Context(), dir, allTracked{}, Provenance{Title: "x"})
 	require.NoError(t, err)
-	d, err := (&oci.Client{HTTP: reg.srv.Client()}).Push(t.Context(), oci.Reference{Registry: reg.host(), Repository: "team/spells/x", Tag: tag}, content)
+	d, err := (&oci.Client{HTTP: reg.srv.Client()}).PushArtifact(t.Context(), oci.Reference{Registry: reg.host(), Repository: "team/spells/x"}, content, tag)
 	require.NoError(t, err)
 	return d
 }

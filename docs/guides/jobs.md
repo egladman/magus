@@ -166,11 +166,27 @@ refactor/pricing: 0 of 1 goal(s) met
 net lines: +0 -0 (+0)
 exports no goal declares: none
 left defined with no use: none
+goal commands
+  check: magus run test .
+the result `magus job exit refactor/pricing --stdin` reads
+{
+  "schema_version": 2,
+  "job": "refactor/pricing",
+  "changed_paths": [
+    "<each file you changed>"
+  ],
+  "validation": {
+    "command": "magus run test .",
+    "output_ref": "<ref its run printed>"
+  },
+  "unresolved_risks": []
+}
+A check the machine would not seat has no ref: set "output_ref": "" and "owed": "no seat" on its validation or gate_evidence entry.
 ```
 
 The other half's file is listed as somebody else's, and the check is unmet because
-no run has been filed. The last three lines measure her diff so far, which is empty:
-they report, and never decide whether the job passes. She edits `total.sh` and runs the check:
+no run has been filed. The `net lines` line and the two under it measure her diff so far,
+which is empty: they report, and never decide whether the job passes. She edits `total.sh` and runs the check:
 
 ```sh
 magus run test .
@@ -197,7 +213,12 @@ changed and which run proves it:
 ```console
 $ magus job exit refactor/pricing --stdin < result.json
 exited refactor/pricing, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait refactor/pricing`
+  check: out<hex> is attempt out<hex>, which passed
 ```
+
+Exiting does not let go of the job. On stderr, exit adds that she stays bound to its
+write paths, so the guard denies a write outside them until whoever forked the job
+widens it or a wait ends it.
 
 The tax half turns out not to be needed yet. She takes it in `../shop-tax` and
 gives it back with no result:
@@ -243,6 +264,8 @@ JOB               HOLDER        STATE      MODEL     PATHS  PROOF     CHECK
 refactor/pricing  shop-pricing  pass       standard  1      alone     magus run test .
 refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
+not merged onto main: 1
+  refactor/pricing at 58d5e2c: ~/src/shop-pricing holds 1 uncommitted path(s), first pricing/total.sh; commit them in ~/src/shop-pricing, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -403,6 +426,22 @@ currency: 0 of 1 goal(s) met
 net lines: +0 -0 (+0)
 exports no goal declares: none
 left defined with no use: none
+goal commands
+  check: magus run test .
+the result `magus job exit currency --stdin` reads
+{
+  "schema_version": 2,
+  "job": "currency",
+  "changed_paths": [
+    "<each file you changed>"
+  ],
+  "validation": {
+    "command": "magus run test .",
+    "output_ref": "<ref its run printed>"
+  },
+  "unresolved_risks": []
+}
+A check the machine would not seat has no ref: set "output_ref": "" and "owed": "no seat" on its validation or gate_evidence entry.
 ```
 
 ### Splitting a file by declaration
@@ -432,6 +471,28 @@ match. A job holding `internal/job/*.go` may narrow to `internal/job/breadth.go`
 because every path the new entry names is one the glob matches. Going the other way,
 from `internal/job/breadth.go` to `internal/job/*.go`, widens the claim: the fork checks
 it as a new claim, with the breadth and overlap checks that a new claim gets.
+
+### What a lint goal grades
+
+A fork that writes Go source adds a `lint` goal over the files it writes. Test files the
+fork added beside them on its own stay out of that list until the job changes one. A
+finding in a file the job did not change is not the job's to meet, and the integration's
+whole-tree lint still reports it.
+
+So a lint run counts when it read every file the job changed, whatever the goal's list
+says now. Run `magus run lint . --no-default-charms -- <the files you changed>` and cite
+its ref; widening the job afterwards does not cost you the run. `magus job exit` checks the
+run against `changed_paths`, and `magus job wait` checks it against what the branch
+committed, or the diff when no branch of its own could be read. A generated report and a
+deleted file have nothing to read and are left out. A run that misses a changed file is
+refused and names the file, and a run taken before a later commit changed a file is
+refused as stale. A check whose args are all files gets the same answer. Any other check's
+args still have to match.
+
+A run is owed for one reason, `"no seat"`, and `magus job exit` refuses any other. An output
+regenerated outside the write paths files nothing, because the integrator regenerates it.
+A goal that is not the job's goes back to whoever forked it, to drop or to permit with a
+deviation.
 
 ## Checking a record before you fork it
 
@@ -617,6 +678,25 @@ magus could not answer at all, such as evidence that would not decode. The runne
 store goes away with the runner, so keep the record with `-o json`, which prints the
 grade as JSON, if you want it after the build. See [CI](integrations/ci.md) for
 running magus in a pipeline.
+
+## Drawing the plan
+
+`magus job graph -o svg` draws the live jobs as SVG. Each box is a job with its state
+and holder. A solid edge is a fork or a merge, and a dashed one is a declared
+dependency. One figure holds at most nine boxes and twelve edges. A larger plan splits
+into an overview, with one box per group of jobs, and one figure per group. A group is a
+job and every job forked from it, or an integrator and every job it merges. A group's
+box links to its own figure.
+
+```console
+$ magus job graph -o svg --dir plan
+plan/plan.svg
+plan/plan-integrate-wave.svg
+```
+
+The overview prints first. The same plan writes the same bytes, and nothing is
+rasterized. Without `--dir` the files go to `job-graph/` in the workspace cache
+directory. Without `-o`, the command prints each figure's boxes and edges as text.
 
 ## Where to go next
 

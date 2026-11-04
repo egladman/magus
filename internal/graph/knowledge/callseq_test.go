@@ -138,7 +138,7 @@ func TestCallSeqCheckReportsACopiedPipeline(t *testing.T) {
 		"in order: S1, S2, S3, S4, S5, S6, S7, S8",
 		"partner: internal/a/a.go#A at internal/a/a.go:1",
 		"call-sequence source: 7, the configured anchor",
-		"share the sequence in one function, or record a known call-sequence entry with its reason",
+		"share the sequence in one function",
 	)}}, got, "W is a wrapper, so it is no step; Own is B's alone")
 	assert.NotContains(t, got, symbolID(a))
 }
@@ -212,14 +212,6 @@ func TestCallSeqCheckExcludesBuildersAndVerbs(t *testing.T) {
 				"two verbs of a main package share its argument prologue")
 		})
 	}
-}
-
-func TestCallSeqCheckSkipsAKnownItem(t *testing.T) {
-	s, _, b := pipelinePair(8, "internal/b/b.go")
-	o := callSeqOptions()
-	o.Ratchet.Known = []types.ConformanceKnown{{Metric: types.ConformanceCallSequence, Items: []string{"internal/b/b.go#B"}, Reason: "fold pending"}}
-
-	assert.Empty(t, s.graph().ConformanceChecks(ConformanceChange{Subjects: []string{symbolID(b)}, Conformance: o}))
 }
 
 func TestCallSeqCheckIgnoresTestAndGeneratedPartners(t *testing.T) {

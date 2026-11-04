@@ -65,6 +65,9 @@ func CheckpointObserver(root string, symbols SymbolReader) Observer {
 		}
 		if seen.ChangedKnown {
 			seen.ChangedRevision = checkpointRevision(base.revision)
+			if !row.Integrating() {
+				seen.Landed, seen.LandedKnown, seen.LandedReason = landedSince(ctx, driver, tree, base.revision, row)
+			}
 		}
 		seen.Present, seen.PresentKnown = presentIn(tree, row)
 		seen.readSymbols(ctx, row.EffectiveGoals(), symbols)
@@ -163,6 +166,57 @@ func diffBase(ctx context.Context, driver types.VCSDriver, tree string, row type
 	return diffFrom{revision: checkpoint, named: fmt.Sprintf("%s (its checkpoint; %s)", checkpoint, unread)}
 }
 
+// landedSince is what row's branch committed since base. A path counts only if
+// it differs from every line row may take work from, so a merge or squash of
+// one is left out. A shared checkout's HEAD is not row's.
+func landedSince(ctx context.Context, driver types.VCSDriver, tree, base string, row types.Job) ([]string, bool, string) {
+	var tips []string
+	ownHead := tree == row.CheckoutRoot && (row.Worktree.Standing() || row.Parent == "")
+	if head, err := driver.FindCommit(ctx, tree, ""); err == nil && ownHead {
+		tips = append(tips, head.ID)
+	}
+	if own, err := driver.FindCommit(ctx, tree, row.ID); err == nil && !slices.Contains(tips, own.ID) {
+		tips = append(tips, own.ID)
+	}
+	if len(tips) == 0 {
+		return nil, false, fmt.Sprintf("job %s has no branch or checkout of its own here", row.ID)
+	}
+	lines := slices.Concat([]string{row.Parent, driver.Base(), checkpointRevision(row.ReportedBase)}, row.DependsOn)
+	if row.Worktree != nil {
+		lines = append(lines, row.Worktree.Base)
+	}
+	var landed []string
+	for _, tip := range tips {
+		paths, err := driver.RangeFiles(ctx, tree, base, tip, nil)
+		if err != nil {
+			return nil, false, fmt.Sprintf("the commits since %s could not be read: %v", base, err)
+		}
+		for _, line := range lines {
+			if line == "" {
+				continue
+			}
+			// A line that does not resolve here brought nothing in.
+			if _, err := driver.FindCommit(ctx, tree, line); err != nil && ctx.Err() == nil {
+				continue
+			}
+			theirs, err := driver.RangeFiles(ctx, tree, line, tip, nil)
+			if err != nil {
+				return nil, false, fmt.Sprintf("the commits since %s could not be read: %v", line, err)
+			}
+			differ, err := vcs.DifferingPaths(ctx, driver, tree, line, tip, paths)
+			if err != nil {
+				return nil, false, fmt.Sprintf("the files at %s could not be compared: %v", line, err)
+			}
+			paths = slices.DeleteFunc(paths, func(p string) bool {
+				return !slices.Contains(theirs, p) || !slices.Contains(differ, cleanPath(p))
+			})
+		}
+		landed = append(landed, paths...)
+	}
+	slices.Sort(landed)
+	return slices.Compact(landed), true, ""
+}
+
 // changedSince asks driver what differs from the checkpoint's revision, and which
 // declarations those lines land in. A nil driver is one that did not resolve, and
 // unresolved says why.
@@ -256,6 +310,7 @@ func (s *Store) Report(ctx context.Context, now int64, staleAfter time.Duration)
 		return types.JobList{}, err
 	}
 	list := types.NewJobList(HardenWritten(ctx, s, rows)).Flag(now, staleAfter)
+	list.Overlaps = ContendedOverlaps(list.Jobs, list.Overlaps, s.workspaceProjects)
 	// A footprint reads each holder's diff, a VCS call per changed path, and a stale row's
 	// holder is the one least likely to still be writing: on a store of abandoned rows,
 	// measuring them all held `magus ls jobs` for minutes.

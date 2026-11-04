@@ -38,6 +38,7 @@ In the docs:
 
 In the code (`magus refs <name>` lists every site):
 
+- `reclaimdisk\Lease` (Buzz host type)
 - `tty.Lease` (Go)
 
 <!-- END GLOSSARY USAGE -->

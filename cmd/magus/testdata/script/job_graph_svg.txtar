@@ -1,0 +1,47 @@
+# `magus job graph -o svg` writes each figure of the live plan to --dir and prints one
+# path per line, overview first. The same plan writes the same bytes, and --dir without
+# -o svg is refused rather than ignored.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+
+exec magus job fork lead --read-only --criteria 'plan the pricing work'
+exec magus job fork lead-scout --read-only --parent lead --criteria 'read the pricing code'
+exec magus job fork tax --read-only --depends-on lead-scout --criteria 'read the tax code'
+
+exec magus job graph
+stdout '^plan: Job plan: 3 jobs$'
+stdout '^  lead: declared, -$'
+stdout '^  lead -> lead-scout \(forked\)$'
+stdout '^  lead-scout -> tax \(after\)$'
+
+exec magus job graph -o svg --dir $WORK/out
+stdout '^'$WORK'/out/plan.svg$'
+exists $WORK/out/plan.svg
+grep '<svg' $WORK/out/plan.svg
+grep 'lead-scout' $WORK/out/plan.svg
+cp $WORK/out/plan.svg $WORK/first.svg
+
+exec magus job graph -o svg --dir $WORK/out
+cmp $WORK/out/plan.svg $WORK/first.svg
+
+! exec magus job graph --dir $WORK/out
+stderr '--dir names where -o svg writes'
+
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+-- shop/magusfile.buzz --
+import "magus";
+
+// test has nothing to check; the jobs here only read.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}

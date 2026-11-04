@@ -1,5 +1,6 @@
 import { errMessage, errName } from "./guards";
 import { reportFailure, type NotifyLink } from "./notifications";
+import { MagusError, fail, ok, type Result } from "../gen/magus/types";
 // server.ts - the ONE audited module for addressing and talking to a magus server.
 //
 // Every app (dashboard, graph explorer, log viewer, activity, the shell) imports
@@ -247,8 +248,9 @@ export function isReadOnly(): boolean {
 // It records the adoption (ownOrigin) so resolveServerHost returns location.host directly -
 // no fragment synthesis - and consumes the token. A page carrying an explicit #port= is a
 // cross-origin attach to a LOCAL server (the operator reaching past their origin), not
-// own-origin adoption: it just consumes any token and keeps full control. On a page with no
-// token and no #port it does nothing. Call it once, before anything reads the hash. Returns
+// own-origin adoption: it just consumes any token and keeps full control. A tokenless
+// page adopts its origin only on the daemon's own loopback /console/ mount (isDaemonConsolePage);
+// anywhere else with no token and no #port it does nothing. Call it once, before anything reads the hash. Returns
 // whether the console became READ-ONLY.
 export function adoptServerOrigin(): boolean {
   if (typeof location === "undefined") return false;
@@ -259,8 +261,11 @@ export function adoptServerOrigin(): boolean {
     consumeLiveToken(params);
     return false;
   }
-  if (params.token === undefined && params.code === undefined && getLiveToken() === null)
-    return false; // not our flow
+  // Refused before the adoption below, so an operator token adopts nothing.
+  if (isOperatorToken(params.token ?? "")) consumeLiveToken(params);
+  const carriesToken =
+    params.token !== undefined || params.code !== undefined || getLiveToken() !== null;
+  if (!carriesToken && !isDaemonConsolePage()) return false;
 
   ownOrigin = true;
   // Only a device on a NON-loopback LAN share origin becomes read-only; the
@@ -272,6 +277,16 @@ export function adoptServerOrigin(): boolean {
 
   consumeLiveToken(params); // stash + strip the token
   return readOnly;
+}
+
+// isDaemonConsolePage reports a console served from a loopback http origin under /console/: the
+// daemon's own mount. Such a page adopts its origin without a token, since the daemon answers
+// /livez and /readyz unauthenticated; every data route still needs a token, so the apps show the
+// sign-in state. The hosted console is https and a LAN viewer is not loopback, so neither matches.
+function isDaemonConsolePage(): boolean {
+  const hn = location.hostname;
+  const loopback = hn === "127.0.0.1" || hn === "::1" || hn === "[::1]" || hn === "localhost";
+  return loopback && location.protocol === "http:" && location.pathname.startsWith("/console/");
 }
 
 // serverAttach resolves the server host for an EXPLICIT attach only, or null. This is the
@@ -315,8 +330,6 @@ export function resolveServerHostOrRemembered(params: HashParams = parseHash()):
 
 // ---- reachability probe ----------------------------------------------------
 
-export type ProbeResult = { ok: true; url: string } | { ok: false; reason: string };
-
 // probeServer answers "is anything listening at this host:port?" for the Settings test-connection
 // control. /livez is the server's only tokenless route (health checks are mounted unguarded so a
 // kubelet can reach them). Current servers also wrap /livez and /readyz in the same CORSAllow
@@ -324,14 +337,16 @@ export type ProbeResult = { ok: true; url: string } | { ok: false; reason: strin
 // enough for "a server answered", and the body/status stay opaque by design. Success therefore
 // means "a server answered", NOT "magus is healthy". The browser also refuses to distinguish a
 // refused connection from a CORS/mixed-content block, so those collapse into one honest message.
-export async function probeServer(hostPort: string, timeoutMs = 3000): Promise<ProbeResult> {
+export async function probeServer(hostPort: string, timeoutMs = 3000): Promise<Result<string>> {
   const host = normalizeServerHost(hostPort);
   if (!host) {
-    return {
-      ok: false,
-      reason:
-        "Not a loopback address. Use a port (for example 8787) or 127.0.0.1 or [::1] with a port. Hostnames, localhost included, are not accepted.",
-    };
+    return fail(
+      new MagusError({
+        code: "",
+        message:
+          "Not a loopback address. Use a port (for example 8787) or 127.0.0.1 or [::1] with a port. Hostnames, localhost included, are not accepted.",
+      }),
+    );
   }
   const url = "http://" + host + "/livez";
   try {
@@ -340,27 +355,31 @@ export async function probeServer(hostPort: string, timeoutMs = 3000): Promise<P
       cache: "no-store",
       signal: AbortSignal.timeout(timeoutMs),
     });
-    return { ok: true, url };
+    return ok(url);
   } catch (e) {
     if (errName(e) === "TimeoutError" || errName(e) === "AbortError") {
-      return {
-        ok: false,
-        reason:
-          "No response from " +
-          url +
-          " within " +
-          Math.round(timeoutMs / 1000) +
-          "s. Check the port, or something is dropping the connection.",
-      };
+      return fail(
+        new MagusError({
+          code: "",
+          message:
+            "No response from " +
+            url +
+            " within " +
+            Math.round(timeoutMs / 1000) +
+            "s. Check the port, or something is dropping the connection.",
+        }),
+      );
     }
     // Deliberately no status code or errno: an opaque request surfaces one bare TypeError for every
     // network-layer failure (refused, CORS-blocked, mixed content). The browser withholds the detail, so
     // naming a cause here would be a guess.
-    return {
-      ok: false,
-      reason:
-        "Could not reach " + url + ". Is the server running? Start it with: magus server start",
-    };
+    return fail(
+      new MagusError({
+        code: "",
+        message:
+          "Could not reach " + url + ". Is the server running? Start it with: magus server start",
+      }),
+    );
   }
 }
 
@@ -441,10 +460,10 @@ export function consumeLinkCode(params: HashParams = parseHash()): string | null
 // app's own directives) so a reload stays where it was.
 function stripFragmentKey(params: HashParams, key: string): void {
   const kept: string[] = [];
-  for (const k of Object.keys(params)) {
+  for (const [k, v] of Object.entries(params)) {
     if (k === key) continue;
     // A bare fragment key (value "") is re-emitted bare so line tokens like "L10-L20" survive.
-    kept.push(params[k] === "" ? k : k + "=" + encodeURIComponent(params[k]));
+    kept.push(v === "" ? k : k + "=" + encodeURIComponent(v));
   }
   const next = kept.length ? "#" + kept.join("&") : "";
   history.replaceState(null, "", location.pathname + location.search + next);
@@ -457,6 +476,12 @@ function stripFragmentKey(params: HashParams, key: string): void {
 // the URL bar, history, or a copied link.
 export function consumeLiveToken(params: HashParams): void {
   if (!params.token) return;
+  if (isOperatorToken(params.token)) {
+    stripFragmentKey(params, "token");
+    delete params.token;
+    reportOperatorTokenRefused();
+    return;
+  }
   const remembered = isRemembered();
   try {
     // Write one store and CLEAR the other. getLiveToken reads sessionStorage first, so a
@@ -467,10 +492,10 @@ export function consumeLiveToken(params: HashParams): void {
     (remembered ? sessionStorage : localStorage).removeItem(TOKEN_KEY);
   } catch (e) {
     reportFailure(
-      "Sign-in",
+      "Console token",
       "This browser refused to store the token from your link (" +
         errMessage(e) +
-        "), so the console cannot sign in. Allow site data for this address and open the link again.",
+        "), so the console cannot keep it. Allow site data for this address and open the link again.",
       "token:storage",
     );
   }
@@ -478,20 +503,45 @@ export function consumeLiveToken(params: HashParams): void {
 }
 
 export function getLiveToken(): string | null {
+  let held: string | null;
   try {
-    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || null;
+    held = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || null;
   } catch {
     // reported: consumeLiveToken reports a store that refused the token; reading one finds nothing
     return null;
   }
+  // A browser that stored one before the console refused them forgets it here.
+  if (held !== null && isOperatorToken(held)) {
+    clearLiveToken();
+    reportOperatorTokenRefused();
+    return null;
+  }
+  return held;
+}
+
+// isOperatorToken: the operator token also reaches /mcp and token management,
+// so a browser never holds one. The prefix is its class (auth/format.go).
+export function isOperatorToken(token: string): boolean {
+  return token.startsWith("mgo_");
+}
+
+export const OPERATOR_TOKEN_REFUSED =
+  "This is the operator token, which also reaches /mcp and token management, so the console refused it and did not store it. Open the console with a console token: magus config console token create";
+
+function reportOperatorTokenRefused(): void {
+  reportFailure("Console token", OPERATOR_TOKEN_REFUSED, "token:operator-refused");
 }
 
 // setLiveToken replaces the stored bearer. It writes the store isRemembered() selects and
 // clears the other, for the same reason consumeLiveToken does: getLiveToken reads
 // sessionStorage first, so a stale copy left there would outrank the token just written.
-// Returns false when storage is unavailable, which the caller must treat as "not stored"
-// rather than assuming the swap happened.
+// Returns false when storage is unavailable or the token is the operator's.
+// The caller treats false as "not stored".
 export function setLiveToken(token: string): boolean {
+  if (isOperatorToken(token)) {
+    reportOperatorTokenRefused();
+    return false;
+  }
   try {
     const remembered = isRemembered();
     (remembered ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
@@ -575,7 +625,7 @@ export async function fetchSSE(
   signal: AbortSignal,
   onOpen?: () => void,
 ): Promise<void> {
-  const fail = (e: Error): void => {
+  const lost = (e: Error): void => {
     reportFailure(
       "Server",
       "Lost the live feed from " + url + " (" + e.message + "); retrying.",
@@ -588,7 +638,7 @@ export async function fetchSSE(
     response = await fetch(url, { headers, signal });
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") return;
-    fail(e instanceof Error ? e : new Error(String(e)));
+    lost(e instanceof Error ? e : new Error(String(e)));
     return;
   }
   if (response.status === 401) {
@@ -597,12 +647,12 @@ export async function fetchSSE(
     return;
   }
   if (!response.ok) {
-    fail(new Error("HTTP " + response.status));
+    lost(new Error("HTTP " + response.status));
     return;
   }
   if (onOpen) onOpen();
   if (!response.body) {
-    fail(new Error("no stream body"));
+    lost(new Error("no stream body"));
     return;
   }
   const deliver = (type: string, data: string): void => {
@@ -622,7 +672,7 @@ export async function fetchSSE(
     while (true) {
       const { value, done } = await reader.read();
       if (done) {
-        fail(new Error("stream ended"));
+        lost(new Error("stream ended"));
         return;
       }
       buf += value;
@@ -659,7 +709,7 @@ export async function fetchSSE(
     }
   } catch (e) {
     if (!(e instanceof Error) || e.name !== "AbortError")
-      fail(e instanceof Error ? e : new Error(String(e)));
+      lost(e instanceof Error ? e : new Error(String(e)));
   }
 }
 
@@ -731,7 +781,7 @@ export function reportHttpStatus(host: string, what: string, status: number): vo
 }
 
 // Refusal is what a person needs from a server error body: its message, and the Help link naming
-// the MGS code's page when the body carries one.
+// the code's page, magus's or the workspace's, when the body carries one.
 export interface Refusal {
   message: string;
   help?: NotifyLink;
@@ -797,23 +847,33 @@ function makeFailureInterceptor(host: string): Interceptor {
   return (next) => async (req) => {
     const report = (e: unknown): void =>
       reportRpcFailure(host, req.service.typeName, req.method.name, e);
-    try {
-      const res = await next(req);
-      if (!res.stream) return res;
-      const inner = res.message;
-      async function* guarded() {
-        try {
-          yield* inner;
-        } catch (e) {
-          report(e);
-          throw e;
-        }
-      }
-      return { ...res, message: guarded() };
-    } catch (e) {
-      report(e);
-      throw e;
-    }
+    const pending = next(req);
+    // Reporting on a branch leaves the rejection on `pending` for the awaiting caller to see.
+    pending.catch(report);
+    const res = await pending;
+    if (!res.stream) return res;
+    return { ...res, message: reportingIterable(res.message, report) };
+  };
+}
+
+// reportingIterable passes every item through and reports a failing next() while the stream is
+// consumed; the failure itself still reaches the consumer.
+function reportingIterable<T>(
+  inner: AsyncIterable<T>,
+  report: (e: unknown) => void,
+): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      const it = inner[Symbol.asyncIterator]();
+      return {
+        next: () => {
+          const step = it.next();
+          step.catch(report);
+          return step;
+        },
+        return: (value) => it.return?.(value) ?? Promise.resolve({ done: true, value }),
+      };
+    },
   };
 }
 
@@ -832,22 +892,25 @@ export function createServerTransport(
 
 // ---- sign-in ---------------------------------------------------------------
 
-// AUTH_LOST_EVENT fires on document when the server refuses the stored token. Every bundle shares
-// document, so the shell's sign-in gate hears a 401 raised inside any app.
+// AUTH_LOST_EVENT fires on document when the server answers 401. Every bundle shares document, so
+// the shell's sign-in gate hears a 401 raised inside any app. detail.hadToken is false when the
+// page never held a token, so nothing expired and the gate must not say it did.
 export const AUTH_LOST_EVENT = "magus:auth-lost";
 
 // signalAuthLost forgets a token the server refused (expired or revoked) and says so. Keeping it
 // would sign every later request with a credential that can only fail, and each app would read
-// that as an empty page.
+// that as an empty page. A page that held no token gets the gate's sign-in state and no toast.
 export function signalAuthLost(host: string): void {
+  const hadToken = getLiveToken() !== null;
   clearLiveToken();
   if (typeof document !== "undefined")
-    document.dispatchEvent(new CustomEvent(AUTH_LOST_EVENT, { detail: { host } }));
+    document.dispatchEvent(new CustomEvent(AUTH_LOST_EVENT, { detail: { host, hadToken } }));
+  if (!hadToken) return;
   reportFailure(
-    "Sign-in",
+    "Console token",
     "The server at " +
       host +
-      " refused this console's token: it expired or was revoked. Sign in again.",
+      " refused this console's token: it expired or was revoked. Open it again with a new token.",
     "auth:lost:" + host,
   );
 }

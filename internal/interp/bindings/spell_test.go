@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
@@ -842,11 +843,11 @@ func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
 	projDir := t.TempDir()
 	ctx = types.WithWorkspace(ctx, rootOnlyWS{root: projDir})
 	argvFile := filepath.Join(projDir, "argv.txt")
-	// Writes the destination it was handed BOTH to argvFile (what this test reads) and
-	// to the destination itself, since dispatch now refuses an indexer that wrote no index.
+	// Writes the destination it was handed to argvFile (what this test reads), and an
+	// empty SCIP index to the destination, since dispatch refuses an indexer that wrote none.
 	spec := symbolIndexerSpec(spells.Command{
 		Bin:  "sh",
-		Args: []string{"-c", `printf '%s' "$1" > "$2"; printf '%s' "$1" > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX", argvFile},
+		Args: []string{"-c", `printf '%s' "$1" > "$2"; : > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX", argvFile},
 	})
 
 	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
@@ -854,8 +855,9 @@ func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
 
 	got, err := os.ReadFile(argvFile)
 	require.NoError(t, err)
-	want := symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp)
-	assert.Equal(t, want, string(got), "the resolved arg must be the real index path")
+	pack := symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp)
+	assert.Equal(t, pack+".scip", string(got), "the resolved arg must be the real SCIP destination beside the pack")
+	assert.FileExists(t, pack)
 	assert.NotContains(t, string(got), "$MAGUS_SYMBOL_INDEX", "the literal reference token must never reach the child's argv")
 }
 
@@ -872,7 +874,7 @@ func TestDispatchOpHandsTheIndexerTheWorkspaceRoot(t *testing.T) {
 	argvFile := filepath.Join(t.TempDir(), "argv.txt")
 	spec := symbolIndexerSpec(spells.Command{
 		Bin:  "sh",
-		Args: []string{"-c", `printf '%s' "$2" > "$3"; printf x > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX", "$MAGUS_WORKSPACE_ROOT", argvFile},
+		Args: []string{"-c", `printf '%s' "$2" > "$3"; : > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX", "$MAGUS_WORKSPACE_ROOT", argvFile},
 	})
 	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
 	require.NoError(t, err)
@@ -883,7 +885,7 @@ func TestDispatchOpHandsTheIndexerTheWorkspaceRoot(t *testing.T) {
 }
 
 // A second indexing spell on the project is handed its own destination, keyed by its op,
-// so scip-buzz never writes over the index scip-go just built.
+// so scip-buzz never writes over the Go index.
 func TestDispatchOpHandsEachIndexerOpItsOwnIndex(t *testing.T) {
 	ctx := context.Background()
 	c, err := cache.Open(ctx, t.TempDir(), cache.WithLocalWrite(true))
@@ -892,7 +894,7 @@ func TestDispatchOpHandsEachIndexerOpItsOwnIndex(t *testing.T) {
 	projDir := t.TempDir()
 	ctx = types.WithWorkspace(ctx, rootOnlyWS{root: projDir})
 
-	cmd := spells.Command{Bin: "sh", Args: []string{"-c", `printf x > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX"}}
+	cmd := spells.Command{Bin: "sh", Args: []string{"-c", `: > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX"}}
 	spec := spells.Descriptor{
 		Name:          "buzz",
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Op: "scip-buzz", Command: cmd},
@@ -905,46 +907,107 @@ func TestDispatchOpHandsEachIndexerOpItsOwnIndex(t *testing.T) {
 	assert.NoFileExists(t, symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp), "the default op's index is not this one")
 }
 
-// An indexer that declares envs runs once under each overlay, and the index consumers
-// read is the merge: a file only the linux run compiles sits beside one only the windows
-// run does, and the file both compile appears once.
-func TestDispatchOpMergesTheSymbolIndexOfEachEnv(t *testing.T) {
-	ctx := context.Background()
-	c, err := cache.Open(ctx, t.TempDir(), cache.WithLocalWrite(true))
-	require.NoError(t, err)
-	ctx = cache.NewContext(ctx, c)
-	projDir := t.TempDir()
-	ctx = types.WithWorkspace(ctx, rootOnlyWS{root: projDir})
+// symbolIndexWorld is a cache and a one-project workspace for a symbol index dispatch.
+func (s *bindingsSuite) symbolIndexWorld() (context.Context, *cache.Cache, string) {
+	c, err := cache.Open(s.T().Context(), s.T().TempDir(), cache.WithLocalWrite(true))
+	s.Require().NoError(err)
+	projDir := s.T().TempDir()
+	return types.WithWorkspace(cache.NewContext(s.T().Context(), c), rootOnlyWS{root: projDir}), c, projDir
+}
 
-	fixtures := t.TempDir()
-	for goos, only := range map[string]string{"linux": "proc_linux.go", "windows": "proc_windows.go"} {
-		idx := &scip.Index{Documents: []*scip.Document{{RelativePath: "proc.go"}, {RelativePath: only}}}
-		data, err := proto.Marshal(idx)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(fixtures, goos+".scip"), data, 0o644))
+// goFmtRun runs the shipped go-fmt op over a directory holding files.
+func (s *bindingsSuite) goFmtRun(files map[string]string, charms ...string) (string, error) {
+	_, err := exec.LookPath("gofmt")
+	s.Require().NoError(err, "the exit status under test belongs to a real gofmt")
+	dir := s.T().TempDir()
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+		s.Require().NoError(os.WriteFile(path, []byte(content), 0o644))
 	}
-	spec := symbolIndexerSpec(spells.Command{
-		Bin:  "sh",
-		Args: []string{"-c", `cp "$2/$GOOS.scip" "$1"`, "sh", "$MAGUS_SYMBOL_INDEX", fixtures},
-	})
-	spec.SymbolIndexer.Envs = []map[string]string{{"GOOS": "linux"}, {"GOOS": "windows"}}
+	op, ok := spell.Builtins()["go"].Ops["go-fmt"]
+	s.Require().True(ok, "the go spell declares go-fmt")
+	ctx := types.WithCharms(std.WithCurrentWorkingDirectory(s.T().Context(), dir), charms)
+	_, err = runCommand(ctx, op, commandOpts{op: "go-fmt"})
+	return dir, err
+}
+
+const (
+	goFmtClean = "package p\n\nfunc F() {}\n"
+	goFmtDrift = "package p\nfunc   F( ){ }\n"
+)
+
+func (s *bindingsSuite) TestGoFmtPassesOnFormattedFiles() {
+	_, err := s.goFmtRun(map[string]string{"a.go": goFmtClean})
+	s.NoError(err)
+}
+
+func (s *bindingsSuite) TestGoFmtFailsOnAnUnformattedFile() {
+	_, err := s.goFmtRun(map[string]string{"a.go": goFmtClean, "b.go": goFmtDrift})
+	s.Error(err)
+}
+
+func (s *bindingsSuite) TestGoFmtRwRewritesTheFileAndPasses() {
+	dir, err := s.goFmtRun(map[string]string{"b.go": goFmtDrift}, "rw")
+	s.Require().NoError(err)
+	got, readErr := os.ReadFile(filepath.Join(dir, "b.go"))
+	s.Require().NoError(readErr)
+	s.Equal(goFmtClean, string(got))
+}
+
+func (s *bindingsSuite) TestGoFmtSkipsDotDirectories() {
+	_, err := s.goFmtRun(map[string]string{"a.go": goFmtClean, ".claude/w/b.go": goFmtDrift})
+	s.NoError(err)
+}
+
+// A command indexer's SCIP output is stored as a pack, one shard per directory, and the
+// SCIP file it wrote is gone.
+func (s *bindingsSuite) TestCommandIndexerOutputIsStoredAsAPack() {
+	ctx, c, projDir := s.symbolIndexWorld()
+	fixture := filepath.Join(s.T().TempDir(), "in.scip")
+	idx := &scip.Index{Documents: []*scip.Document{{RelativePath: "a/proc.go"}, {RelativePath: "b/proc.go"}}}
+	data, err := proto.Marshal(idx)
+	s.Require().NoError(err)
+	s.Require().NoError(os.WriteFile(fixture, data, 0o644))
+	spec := symbolIndexerSpec(spells.Command{Bin: "sh", Args: []string{"-c", `cp "$2" "$1"`, "sh", "$MAGUS_SYMBOL_INDEX", fixture}})
 
 	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
-	require.NoError(t, err)
+	s.Require().NoError(err)
 
-	indexPath := symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp)
-	data, err := os.ReadFile(indexPath)
-	require.NoError(t, err)
-	merged, err := symbols.DecodeIndex(data)
-	require.NoError(t, err)
-	var paths []string
-	for _, doc := range merged.GetDocuments() {
-		paths = append(paths, doc.GetRelativePath())
-	}
-	assert.Equal(t, []string{"proc.go", "proc_linux.go", "proc_windows.go"}, paths)
-	entries, err := os.ReadDir(filepath.Dir(indexPath))
-	require.NoError(t, err)
-	assert.Len(t, entries, 1, "the per-env indexes are gone once merged")
+	pack := symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp)
+	stored, err := symbols.ReadIndex(pack, true)
+	s.Require().NoError(err)
+	s.Len(stored.Documents, 2)
+	s.NoFileExists(pack + ".scip")
+}
+
+// Envs belong to the in-process Go indexer; a command indexer declaring them is refused
+// rather than run once and read as covering every configuration.
+func (s *bindingsSuite) TestCommandIndexerWithEnvsIsRefused() {
+	ctx, _, projDir := s.symbolIndexWorld()
+	spec := symbolIndexerSpec(spells.Command{Bin: "sh", Args: []string{"-c", `: > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX"}})
+	spec.SymbolIndexer.Envs = []map[string]string{{"GOOS": "linux"}}
+
+	_, err := dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
+	s.ErrorContains(err, "envs need magus's in-process Go indexer")
+}
+
+// The go-packages format runs no command: magus indexes the packages its args name in
+// process.
+func (s *bindingsSuite) TestGoPackagesIndexerRunsInProcess() {
+	ctx, c, projDir := s.symbolIndexWorld()
+	s.Require().NoError(os.WriteFile(filepath.Join(projDir, "go.mod"), []byte("module example.com/m\n\ngo 1.22\n"), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(projDir, "m.go"), []byte("package m\n\nfunc M() {}\n"), 0o644))
+	spec := symbolIndexerSpec(spells.Command{Bin: "go", Args: []string{"./..."}})
+	spec.SymbolIndexer.Format = spells.SymbolFormatGoPackages
+
+	_, err := dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
+	s.Require().NoError(err)
+
+	stored, err := symbols.ReadIndex(symbols.IndexPath(c.Dir(), ".", spells.DefaultSymbolIndexOp), true)
+	s.Require().NoError(err)
+	s.Require().Len(stored.Documents, 1)
+	s.Equal("m.go", stored.Documents[0].RelativePath)
 }
 
 // symbolIndexerSpec builds the descriptor a declared symbol indexer produces: the

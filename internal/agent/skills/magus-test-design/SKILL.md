@@ -42,13 +42,13 @@ commit, or in CI.{{else}}Observes evidence, recommends; does not choose test pol
    lower boundary can prove. Those include a live process or runtime, the filesystem,
    network, time, a scheduler, durable storage, or a language boundary.{{else}}4. Read scoped code, existing tests; find effects changing what lower boundary can prove: live process or runtime, filesystem, network, time, scheduler, durable storage, language boundary.{{end}}
 
-{{if .Full}}Prefer `{{tool "client"}}` (`{{buzz "describe.evaluatedTarget"}}`, `{{buzz "explain"}}`, `{{buzz "refs"}}`,
-`{{buzz "path"}}`); fall back to the CLI commands above. Do not start a server only to
+{{if .Full}}Prefer `{{tool "client"}}` (`{{buzz "describe.evaluatedTarget"}}`, `{{buzz "graph.explain"}}`, `{{buzz "graph.refs"}}`,
+`{{buzz "graph.path"}}`); fall back to the CLI commands above. Do not start a server only to
 review test design.
 
 An `unknown` from `{{cmd "refs"}}` is missing evidence, not proof of no callers: record
 it. Never infer the tier from a filename, an existing mock, or a target called
-`test`.{{else}}Prefer `{{tool "client"}}` (`{{buzz "describe.evaluatedTarget"}}`, `{{buzz "explain"}}`, `{{buzz "refs"}}`, `{{buzz "path"}}`); else CLI above.
+`test`.{{else}}Prefer `{{tool "client"}}` (`{{buzz "describe.evaluatedTarget"}}`, `{{buzz "graph.explain"}}`, `{{buzz "graph.refs"}}`, `{{buzz "graph.path"}}`); else CLI above.
 Do not start server only to review test design.
 `unknown` from `{{cmd "refs"}}`: missing evidence, not proof of no callers; record it.
 Never infer tier from filename, existing mock, or target called `test`.{{end}}

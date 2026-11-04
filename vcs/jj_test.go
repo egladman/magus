@@ -10,7 +10,68 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// jjForwardSuite holds two commits, with an empty working copy on the first.
+type jjForwardSuite struct {
+	suite.Suite
+	dir           string
+	first, second string
+}
+
+func TestJjForward(t *testing.T) { suite.Run(t, new(jjForwardSuite)) }
+
+func (s *jjForwardSuite) SetupTest() {
+	if _, err := exec.LookPath("jj"); err != nil {
+		s.T().Skip("jj is not installed, so its fast-forward cannot run")
+	}
+	s.dir = s.T().TempDir()
+	jjInitRepository(s.T(), s.dir, map[string]string{"a.txt": "one\n"})
+	s.first = s.commitAt("@-")
+	writeRepositoryFile(s.T(), s.dir, "a.txt", "two\n")
+	vcsTestRun(s.T(), s.dir, "jj", "commit", "-m", "second")
+	s.second = s.commitAt("@-")
+	vcsTestRun(s.T(), s.dir, "jj", "new", s.first)
+}
+
+func (s *jjForwardSuite) commitAt(rev string) string {
+	c, err := jjVCS{}.FindCommit(s.T().Context(), s.dir, rev)
+	s.Require().NoError(err)
+	return c.ID
+}
+
+func (s *jjForwardSuite) TestAnEmptyWorkingCopyMovesForward() {
+	s.Require().NoError(jjVCS{}.FastForward(s.T().Context(), s.dir, s.second))
+
+	s.Equal(s.second, s.commitAt("@-"))
+}
+
+func (s *jjForwardSuite) TestARevisionThatDoesNotDescendMovesNothing() {
+	vcsTestRun(s.T(), s.dir, "jj", "new", s.second)
+
+	s.Error(jjVCS{}.FastForward(s.T().Context(), s.dir, s.first))
+
+	s.Equal(s.second, s.commitAt("@-"))
+}
+
+func (s *jjForwardSuite) TestALocalChangeOnAnotherLineMovesNothing() {
+	writeRepositoryFile(s.T(), s.dir, "local.txt", "local\n")
+
+	s.Error(jjVCS{}.FastForward(s.T().Context(), s.dir, s.second))
+
+	s.Equal(s.first, s.commitAt("@-"))
+	s.FileExists(filepath.Join(s.dir, "local.txt"))
+}
+
+func (s *jjForwardSuite) TestBranchHeadsListsLocalBookmarks() {
+	vcsTestRun(s.T(), s.dir, "jj", "bookmark", "create", "job", "-r", s.second)
+
+	got, err := jjVCS{}.BranchHeads(s.T().Context(), s.dir)
+
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"job": s.second}, got)
+}
 
 // TestParseJJConflicts pins the `jj resolve --list` parse against output captured from
 // jj 0.44.0. The "including 1 deletion" clause is load-bearing: it is the only signal
@@ -177,4 +238,36 @@ func TestJJCheckoutIDSurvivesACleanDiff(t *testing.T) {
 	committed, ok := jjVCS{}.CheckoutID(dir)
 	require.True(t, ok)
 	assert.NotEqual(t, id, committed)
+}
+
+func TestJJIgnoredFilesNamesWhatJJDoesNotTrack(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not available")
+	}
+	dir := t.TempDir()
+	jjInitRepository(t, dir, map[string]string{
+		".gitignore":     "installed/\n*.log\n",
+		"kept.txt":       "k\n",
+		"sub/also.txt":   "a\n",
+		"installed/a.js": "x\n",
+		"sub/stray.log":  "x\n",
+	})
+	writeRepositoryFile(t, dir, "fresh.txt", "new\n")
+
+	got, err := jjVCS{}.IgnoredFiles(t.Context(), dir, []string{"installed", "kept.txt", "fresh.txt", "sub", "sub/stray.log", "missing.txt"})
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"installed", "sub/stray.log"}, got,
+		"a file jj snapshots is not ignored, a directory holding a tracked file is not, and an absent path is not")
+}
+
+func TestJJIgnoredFilesAnswersInPathsRelativeToDir(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not available")
+	}
+	dir := t.TempDir()
+	jjInitRepository(t, dir, map[string]string{".gitignore": "*.log\n", "sub/a.txt": "a\n", "sub/b.log": "b\n"})
+
+	got, err := jjVCS{}.IgnoredFiles(t.Context(), filepath.Join(dir, "sub"), []string{"a.txt", "b.log"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b.log"}, got)
 }

@@ -1,20 +1,20 @@
 ---
-title: "architecture-unbriefed: an agent's next call after a structure question, or a new directory, before the architecture skill"
-description: "A deny rule by default: it refuses an agent's next call after a structure question, or a new directory, before the architecture skill, and names what to run instead."
+title: "architecture-unbriefed: a write after a structure question, or into a new directory, before the architecture skill"
+description: "A deny rule by default: it refuses a write after a structure question, or into a new directory, before the architecture skill, and names what to run instead."
 tags: [guard, rules, architecture-unbriefed, deny]
 ---
 
 # architecture-unbriefed
 
-A deny rule by default: it refuses an agent's next call after a structure question, or a new directory, before the architecture skill, and names what to run instead.
+A deny rule by default: it refuses a write after a structure question, or into a new directory, before the architecture skill, and names what to run instead.
 
 ## What it catches
 
-An agent's next call after a structure question, or a new directory, before the architecture skill.
+A write after a structure question, or into a new directory, before the architecture skill.
 
 ## Why
 
-A structure question is answered from the workspace's own edges: what imports what, where a cycle closes, which layer a package sits in, how far a change reaches. An agent reading files one at a time answers it from the files it happened to open, and proposes a boundary nobody needed. The magus-architecture-review skill is how the graph gets asked. Two acts arm it. A message the person submits with structure vocabulary (architecture, boundaries, layering, coupling, imports, a new package, where something belongs, blast radius) marks the session, and the agent's next graded call (a shell line, a read, a search, an edit, a magus tool call) waits on the load. A write that creates a new directory waits on it too, since that write draws a boundary whatever was asked. A load counts for the agent that made it: a subagent in that session loads the skill itself, and a parent's load does not brief its child. Load Skill(magus-architecture-review), or its -full twin, once and the agent's later calls pass. It stands down on a host whose wiring does not report skill loads, where nothing could ever clear it; the new-directory advisory still speaks there. It also stands down for an agent spawned as a shipped read-only type (magus-scout), which has no Skill tool: a deny it cannot clear is a trap, and such an agent changes nothing.
+A structure question is answered from the workspace's own edges: what imports what, where a cycle closes, which layer a package sits in, how far a change reaches. An agent reading files one at a time answers it from the files it happened to open, and proposes a boundary nobody needed. The magus-architecture-review skill is how the graph gets asked. Two acts arm it. A message the person submits with structure vocabulary (architecture, boundaries, layering, coupling, imports, a new package, where something belongs, blast radius) marks the session, and the agent's next write waits on the load. A write that creates a new directory waits on it too, since that write draws a boundary whatever was asked. A shell line that searches, reads or lists the workspace's source is advised once and never refused: reading a design page or a plan is how the answer gets learned. A load counts for the agent that made it: a subagent in that session loads the skill itself, and a parent's load does not brief its child. Load Skill(magus-architecture-review), or its -full twin, once and the agent's later calls pass. It stands down on a host whose wiring does not report skill loads, where nothing could ever clear it; the new-directory advisory still speaks there. Every agent is asked alike, a shipped read-only type included: its render denies the host's write tools and keeps the Skill tool.
 
 ## Default and override
 

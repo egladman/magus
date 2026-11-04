@@ -4,13 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime/debug"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -32,40 +35,61 @@ func moduleBuildInfo(module, pkg string) *debug.BuildInfo {
 
 func TestOwnBuildEscapeNamesTheLinkForAnOwnSourceBuild(t *testing.T) {
 	root, exe := sourceCheckout(t, "example.com/tool")
-	assert.Equal(t, "This binary was built from this checkout's own sources and predates them, so it cannot "+
+	want := fmt.Sprintf("This binary was built from this checkout's own sources and predates them, so it cannot "+
 		"rebuild itself: every command it runs loads the same tree. Link a new one from source, one "+
-		"command at a time: `go build -o magus ./cmd/tool`, then rebuild it the "+
+		"command at a time: `go -C %s build -o magus ./cmd/tool`, then rebuild it the "+
 		"way this workspace builds it. If that link fails with `undefined:` in generated code, the "+
 		"checkout's committed generated files are behind its sources (a merge kept one side), and "+
-		"restoring either side's copy brings back the mismatch: regenerate them with the `go generate` "+
-		"commands its generate targets run, then link again.",
+		"restoring either side's copy brings back the mismatch: regenerate them with the commands its "+
+		"generate targets run, then link again. No script in this workspace declares SERVES "+
+		"\"code:MGS1021\", so magus names none of its own.", root)
+	assert.Equal(t, want,
 		ownBuildEscape(exe, moduleBuildInfo("example.com/tool", "cmd/tool"), root))
 }
 
-// A merged checkout of magus itself is told which generators to run, in the order the
-// *_generate targets need them, rather than to restore files from either side.
-func TestOwnBuildEscapeNamesMagusGeneratorsInOrder(t *testing.T) {
+// magus's own checkout gets nothing a stranger's would not: its recovery is the script it
+// declares for MGS1021, never a path compiled into the binary.
+func TestOwnBuildEscapeOfMagusNamesNoScriptItDoesNotServe(t *testing.T) {
 	root, exe := sourceCheckout(t, ownModule)
 	escape := ownBuildEscape(exe, moduleBuildInfo(ownModule, "cmd/magus"), root)
-
-	assert.Contains(t, escape, "command at a time: `go build -o magus ./cmd/magus`, then rebuild")
-	assert.NotContains(t, escape, "magus.old")
-	assert.Contains(t, escape, "regenerate them, one command at a time, with what the *_generate targets run: "+
-		"`go generate ./cmd/magus-utils`, then `go generate ./internal/spell/...`, then "+
-		"`go run ./cmd/magus-utils jobschema -out internal/job/gen`, then `go generate ./internal/langservice`, then "+
-		"`go generate ./std/...`, then `go generate ./internal/handler/mcp`, then link again.")
-	assert.NotContains(t, escape, "restore them")
+	assert.NotContains(t, escape, "bootstrap-checkout.buzz")
+	assert.NotContains(t, escape, "go generate ./cmd/magus-utils")
+	assert.Contains(t, escape, "No script in this workspace declares SERVES")
 }
 
-// ownGenerators restates what magusfile.buzz runs, so each must still be a proc\exec there.
-func TestOwnGeneratorsAreWhatTheMagusfileRuns(t *testing.T) {
-	data, err := os.ReadFile("magusfile.buzz")
+func TestOwnBuildEscapeNamesTheScriptTheWorkspaceServes(t *testing.T) {
+	root, exe := sourceCheckout(t, "example.com/tool")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "hack"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hack", "relink.buzz"), []byte("// relinks\n"), 0o644))
+	require.NoError(t, hint.WriteScriptsIndex(config.CacheDir(root, config.Config{}), hint.ScriptsIndex{
+		Root: root,
+		Serves: map[string][]hint.ScriptServe{"code:MGS1021": {{
+			Path: "hack/relink.buzz", Args: []string{"--checkout", "{checkout}"}, Effect: hint.ScriptEffectWrite, Summary: "relink",
+		}}},
+	}))
+	escape := ownBuildEscape(exe, moduleBuildInfo("example.com/tool", "cmd/tool"), root)
+	assert.Contains(t, escape, "This workspace's script for it: `")
+	assert.Contains(t, escape, "hack/relink.buzz -- --checkout "+shellQuoted(root))
+}
+
+// shellQuoted is path as one POSIX shell word, the way a remedy line names a checkout.
+func shellQuoted(path string) string {
+	q, _ := syntax.Quote(path, syntax.LangPOSIX) // only a NUL byte fails, and no temp dir holds one
+	return q
+}
+
+// A checkout path the shell would split or expand is quoted once, so the line pasted builds
+// that checkout.
+func TestOwnBuildEscapeQuotesTheCheckout(t *testing.T) {
+	root, exe := sourceCheckout(t, "example.com/tool")
+	quoted := filepath.Join(t.TempDir(), "landing $cache 'quoted'")
+	require.NoError(t, os.Rename(root, quoted))
+	escape := ownBuildEscape(filepath.Join(quoted, filepath.Base(exe)), moduleBuildInfo("example.com/tool", "cmd/tool"), quoted)
+	resolved, err := filepath.EvalSymlinks(quoted)
 	require.NoError(t, err)
-	for _, command := range ownGenerators {
-		words := strings.Fields(command)
-		call := fmt.Sprintf(`proc\exec("%s", ["%s"]);`, words[0], strings.Join(words[1:], `", "`))
-		assert.Contains(t, string(data), call, command)
-	}
+	words := shellQuoted(resolved)
+	assert.Contains(t, words, `\$cache`, "the $ stays literal")
+	assert.Contains(t, escape, fmt.Sprintf("go -C %s build -o magus ./cmd/tool", words))
 }
 
 // A release on PATH, a release vendored at the root of a workspace of another module, and a

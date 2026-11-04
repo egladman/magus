@@ -364,6 +364,7 @@ test("any other failure is unreadable, and says which", async () => {
 
 test("a refused connection is unreadable rather than absent", async () => {
   const real = globalThis.fetch;
+  // platform double: fetch
   globalThis.fetch = (() => Promise.reject(new Error("Failed to fetch"))) as typeof fetch;
   try {
     const read = await loadRunPlan("127.0.0.1:7391", "");

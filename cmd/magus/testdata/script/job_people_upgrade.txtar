@@ -48,6 +48,8 @@ exec sh -c 'sed -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
 cmp stdout $WORK/wait-api.out
 exec magus job wait upgrade/web
 exec magus ls jobs --all
+cp stdout $WORK/raw
+exec sh -c 'sed -e "s|$WORK|~/src|g" "$WORK/raw"'
 cmp stdout $WORK/ls-done.out
 
 -- shop/.gitignore --
@@ -104,4 +106,7 @@ JOB          HOLDER  STATE  MODEL     PATHS  PROOF     CHECK
 upgrade/api  ana     pass   standard  1      alone     magus run test api
 upgrade/web  ben     pass   standard  1      disjoint  magus run test web
 
+not merged onto main: 2
+  upgrade/api at 321cadb: ~/src/ana holds 1 uncommitted path(s), first api/deps.txt; commit them in ~/src/ana, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
+  upgrade/web at 321cadb: ~/src/ben holds 1 uncommitted path(s), first web/deps.txt; commit them in ~/src/ben, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

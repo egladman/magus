@@ -43,16 +43,16 @@ test("measureCards: a very long label clamps to CARD_MAX_W", () => {
   const ctx = fakeCtx();
   const nodes = [fakeNode("a", "a".repeat(80))];
   measureCards(ctx, nodes, "sans");
-  assert.equal(nodes[0].w, CARD_MAX_W);
-  assert.equal(nodes[0].h, CARD_H);
+  assert.equal(nodes[0]?.w, CARD_MAX_W);
+  assert.equal(nodes[0]?.h, CARD_H);
 });
 
 test("measureCards: a 1-char label clamps up to CARD_MIN_W", () => {
   const ctx = fakeCtx();
   const nodes = [fakeNode("a", "x")];
   measureCards(ctx, nodes, "sans");
-  assert.equal(nodes[0].w, CARD_MIN_W);
-  assert.equal(nodes[0].h, CARD_H);
+  assert.equal(nodes[0]?.w, CARD_MIN_W);
+  assert.equal(nodes[0]?.h, CARD_H);
 });
 
 test("measureCards: a mid-length label sits strictly between MIN and MAX", () => {
@@ -60,7 +60,7 @@ test("measureCards: a mid-length label sits strictly between MIN and MAX", () =>
   // 20 chars * 6px + 2*10 padding = 140, comfortably inside [96, 200].
   const nodes = [fakeNode("a", "a".repeat(20))];
   measureCards(ctx, nodes, "sans");
-  assert.equal(nodes[0].w, 140);
+  assert.equal(nodes[0]?.w, 140);
 });
 
 // The cache is keyed on nothing but "already measured", so a font change has to force a re-measure
@@ -68,7 +68,7 @@ test("measureCards: a mid-length label sits strictly between MIN and MAX", () =>
 test("measureCards: a font change re-measures an already-measured node", () => {
   const nodes = [fakeNode("a", "a".repeat(20))];
   measureCards(fakeCtx(), nodes, "sans");
-  assert.equal(nodes[0].w, 140);
+  assert.equal(nodes[0]?.w, 140);
 
   // Same font, wider metric: the cached width stands, which is the skip doing its job.
   const wide = {
@@ -76,11 +76,11 @@ test("measureCards: a font change re-measures an already-measured node", () => {
     measureText: (s: string) => ({ width: s.length * 12 }),
   } as unknown as CanvasRenderingContext2D;
   measureCards(wide, nodes, "sans");
-  assert.equal(nodes[0].w, 140);
+  assert.equal(nodes[0]?.w, 140);
 
   // Different font: everything is measured again, so the wider metric lands.
   measureCards(wide, nodes, "serif");
-  assert.equal(nodes[0].w, CARD_MAX_W);
+  assert.equal(nodes[0]?.w, CARD_MAX_W);
 });
 
 test("ellipsize: returns the original string when it already fits", () => {
@@ -96,7 +96,7 @@ test("ellipsize: returns a shorter mid-ellipsis string when it does not fit", ()
   assert.ok(out.length < text.length);
   assert.ok(out.includes("..."));
   // Middle-ellipsis: keeps a prefix and a suffix of the original text.
-  const [head, tail] = out.split("...");
+  const [head = "", tail = ""] = out.split("...");
   assert.ok(text.startsWith(head));
   assert.ok(text.endsWith(tail));
 });

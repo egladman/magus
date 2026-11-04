@@ -37,7 +37,7 @@ fun version() > str { return "1.4.0-rc.2"; }
 // catalog, so a workspace diagnostic can never render as though magus documented it.
 fun exclusiveCharms(ctx: magus\Context, a: str, b: str, code: str, question: str) > void !> any {
     if (ctx.hasCharm(a) and ctx.hasCharm(b)) {
-        magus\raise(code, message: "the `" + a + "` and `" + b + "` charms both answer "
+        magus\raise(magus\diagnosticCode(code), message: "the `" + a + "` and `" + b + "` charms both answer "
             + question + " - name one");
     }
 }
@@ -58,11 +58,11 @@ fun channel(ctx: magus\Context) > str !> any {
 
     final pre = semver\parse(version()).prerelease;
     if (wantStable and pre != "") {
-        magus\raise("WS1003", message: "`" + version() + "` carries the prerelease `" + pre
+        magus\raise(magus\diagnosticCode("WS1003"), message: "`" + version() + "` carries the prerelease `" + pre
             + "`, so it cannot go to the stable channel - that is the one a moving tag follows");
     }
     if (wantUnstable and pre == "") {
-        magus\raise("WS1004", message: "`" + version()
+        magus\raise(magus\diagnosticCode("WS1004"), message: "`" + version()
             + "` is a stable version, so `unstable` would file it under the wrong channel");
     }
     if (wantStable) { return "stable"; }

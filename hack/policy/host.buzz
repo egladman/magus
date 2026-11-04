@@ -367,7 +367,7 @@ test "a recursive search of the log directory is denied" {
         ["grep", "-r", "needle", ".magus/logs/"],
         ["find", "/tmp/repo/.magus/logs", "-name", "*.log"],
     ]) {
-        std\assert(judged(helpers\request([argv])).decision == "deny", message: argv.join(" "));
+        std\assert(judged(helpers\request([argv])).decision == magus\GuardDecision.deny, message: argv.join(" "));
     }
 }
 
@@ -385,7 +385,7 @@ test "a range read, a grep and a cat of a run log are denied, naming query outpu
         ["head", "-n", "15", ".magus/logs/abc.log"],
     ]) {
         final v = judgedWith(helpers\request([argv]), reads: fakeReads({"tasks/266090.output": "output: out0123456789ab"}, binary: true));
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("magus query output") != null, message: "names the ref read");
     }
 }
@@ -400,7 +400,7 @@ test "a search whose pattern mentions a log, and a read of source, stay silent" 
         ["head", "-n", "20", "README.md"],
         ["magus", "status"],
     ]) {
-        std\assert(judged(helpers\request([argv])).decision == "allow", message: argv.join(" "));
+        std\assert(judged(helpers\request([argv])).decision == magus\GuardDecision.allow, message: argv.join(" "));
     }
 }
 
@@ -408,7 +408,7 @@ test "a task capture holding refs is denied naming the first ref, the rest and t
     final path = "/tmp/claude/tasks/b3x.output";
     final text = "exit 1\noutput: out0123456789ab\nlint output: outfedcba987654\nagain out0123456789ab\ninv: invmsm3vcou1\n";
     final v = judgedWith(capture(path), reads: fakeReads({path: text}, binary: true));
-    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     final lines = v.reason.split("\n");
     std\assert(lines[0].indexOf("`magus query output out0123456789ab`") != null, message: lines[0]);
     std\assert(lines[0].indexOf("outfedcba987654") == null, message: "one command on the verdict line");
@@ -424,7 +424,7 @@ test "a capture holding many refs lists the first few and counts the rest" {
         lines.append("output: out0123456789{n}");
     }
     final v = judgedWith(capture(path), reads: fakeReads({path: lines.join("\n")}, binary: true));
-    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     std\assert(v.reason.split("\n")[0].indexOf("`magus query output out012345678910`") != null, message: v.reason);
     std\assert(v.reason.indexOf("out012345678915") != null and v.reason.indexOf("out012345678916") == null, message: "five others are named: " + v.reason);
     std\assert(v.reason.indexOf("and 2 more") != null, message: v.reason);
@@ -433,7 +433,7 @@ test "a capture holding many refs lists the first few and counts the rest" {
 test "a capture with one ref and no invocation id says where the id is printed" {
     final path = "tasks/9.output";
     final v = judgedWith(capture(path), reads: fakeReads({path: "cause: failed\noutput: out0123456789ab\n"}, binary: true));
-    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     std\assert(v.reason.split("\n")[0].indexOf("`magus query output out0123456789ab`") != null, message: v.reason);
     std\assert(v.reason.indexOf("magus query invocation <id>") != null, message: v.reason);
     std\assert(v.reason.indexOf("--identity") != null, message: "how to find the id");
@@ -442,7 +442,7 @@ test "a capture with one ref and no invocation id says where the id is printed" 
 test "a capture with an invocation id and no ref names query invocation on the verdict line" {
     final path = "tasks/9.output";
     final v = judgedWith(capture(path), reads: fakeReads({path: "run inv1a2b3c4d5 exited 75\n"}, binary: true));
-    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     std\assert(v.reason.split("\n")[0].indexOf("`magus query invocation inv1a2b3c4d5`") != null, message: v.reason);
 }
 
@@ -450,13 +450,13 @@ test "a capture naming no ref and no invocation is some other command's output, 
     final path = "tasks/9.output";
     foreach (text in ["", "go version go1.26 darwin/arm64\n", "exit 1\ninvalidate the cache\ninvoke\n", "out12345 short\nxout0123456789abx\n"]) {
         final v = judgedWith(capture(path), reads: fakeReads({path: text}, binary: true));
-        std\assert(v.decision == "allow", message: text);
+        std\assert(v.decision == magus\GuardDecision.allow, message: text);
     }
 }
 
 test "a run log keeps the generic text and is never read for refs" {
     final v = judgedWith(capture(".magus/logs/abc.log"), reads: fakeReads({".magus/logs/abc.log": "output: out0123456789ab"}, binary: true));
-    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision);
     std\assert(v.reason.indexOf("magus query output <ref>") != null, message: v.reason);
     std\assert(v.reason.indexOf("out0123456789ab") == null, message: "the log's own refs are not extracted");
 }
@@ -469,10 +469,10 @@ test "with no ./magus in the workspace a capture read is allowed; a terminals re
         ["cat", ".magus/logs/abc.log"],
         ["rg", "needle", ".magus/logs"],
     ]) {
-        std\assert(judgedWith(helpers\request([argv]), reads: none).decision == "allow", message: argv.join(" "));
+        std\assert(judgedWith(helpers\request([argv]), reads: none).decision == magus\GuardDecision.allow, message: argv.join(" "));
     }
     final terminals = judgedWith(helpers\request([["cat", "terminals/266091.txt"]]), reads: none);
-    std\assert(terminals.decision == "deny", message: "terminals");
+    std\assert(terminals.decision == magus\GuardDecision.deny, message: "terminals");
     std\assert(terminals.reason.indexOf("magus status") != null, message: terminals.reason);
 }
 
@@ -503,7 +503,7 @@ test "creating or reading a terminals directory is denied, naming magus status" 
         ["find", "/Users/eli/.cursor/projects/magus/terminals", "-name", "*.txt"],
     ]) {
         final v = judged(helpers\request([argv]));
-        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
         std\assert(v.reason.indexOf("magus status") != null, message: "names the lock");
     }
 }
@@ -517,7 +517,7 @@ test "a directory that is not named terminals, and a search for the word, stay s
         ["find", ".", "-name", "*.sh"],
         ["cat", "internal/term.go"],
     ]) {
-        std\assert(judged(helpers\request([argv])).decision == "allow", message: argv.join(" "));
+        std\assert(judged(helpers\request([argv])).decision == magus\GuardDecision.allow, message: argv.join(" "));
     }
 }
 

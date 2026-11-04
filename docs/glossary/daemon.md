@@ -28,7 +28,7 @@ In the docs:
 - [Amended 2026-09-02: machine-wide admission is daemon-owned](../guides/integrations/editor/design.md#amended-2026-09-02-machine-wide-admission-is-daemon-owned)
 - [MCP over the daemon socket](../guides/integrations/mcp.md#mcp-over-the-daemon-socket)
 - [Choosing between the daemon and ad hoc runs](../guides/integrations/server.md#choosing-between-the-daemon-and-ad-hoc-runs)
-- [One-shot daemon health probe](../guides/tips.md#one-shot-daemon-health-probe)
+- [Run the daemon on Kubernetes for development](../guides/kustomize-diagram.md#run-the-daemon-on-kubernetes-for-development)
 
 <!-- END GLOSSARY USAGE -->
 

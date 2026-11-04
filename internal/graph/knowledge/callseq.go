@@ -48,7 +48,6 @@ func (callSeqCheck) name() string { return types.CheckCallSequence }
 func (callSeqCheck) run(x *namingIndex) []finding {
 	o := x.change.Conformance
 	var q *callSeqIndex
-	known := conformanceKnownItems(o.Ratchet.Known)[types.ConformanceCallSequence]
 	subjects := map[string]bool{}
 	for _, id := range x.change.Subjects {
 		subjects[id] = true
@@ -65,8 +64,8 @@ func (callSeqCheck) run(x *namingIndex) []finding {
 		if !ok {
 			continue
 		}
-		limit, src := o.Effective(types.ConformanceKey{Metric: types.ConformanceCallSequence, Population: q.pop[i]})
-		if src == "" || known[q.items[i]] {
+		limit, enforced := o.Effective(types.ConformanceKey{Metric: types.ConformanceCallSequence, Population: q.pop[i]})
+		if !enforced {
 			continue
 		}
 		j, n := q.best(i, func(p int) bool { return x.change.Introduced[q.ids[p]] })
@@ -86,13 +85,13 @@ func (callSeqCheck) run(x *namingIndex) []finding {
 		out = append(out, finding{
 			subject: s.id,
 			score:   score,
-			message: fmt.Sprintf("`%s` calls %d workspace functions in the order `%s` does, past the %s of %d for call-sequence %s",
-				s.label, n, partner.Label, thresholdSource(src), limit, q.pop[i]),
+			message: fmt.Sprintf("`%s` calls %d workspace functions in the order `%s` does, past the configured anchor of %d for call-sequence %s",
+				s.label, n, partner.Label, limit, q.pop[i]),
 			details: []string{
 				"in order: " + strings.Join(order, ", "),
 				fmt.Sprintf("partner: %s at %s", q.items[j], partner.Source),
-				fmt.Sprintf("call-sequence %s: %d, the %s", q.pop[i], limit, thresholdSource(src)),
-				"share the sequence in one function, or record a known call-sequence entry with its reason",
+				fmt.Sprintf("call-sequence %s: %d, the configured anchor", q.pop[i], limit),
+				"share the sequence in one function",
 			},
 		})
 	}

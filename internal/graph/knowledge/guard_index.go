@@ -33,9 +33,10 @@ import (
 // build. That errs one way only: a rewrite with identical bytes silences a rule for a while,
 // and nothing makes it deny on a stale answer.
 //
-// Stamps describe files, not the checkout, so the index also records the revision and any
-// merge or rebase underway when built. Built at another revision, or during or since such
-// an operation, it answers for no kind: stamps taken mid-rebase can still match.
+// Stamps describe files, so the index answers per shard of sources, not per revision: a
+// commit that moves no indexed file leaves it current. It also records the revision and
+// any merge or rebase underway when built; built during or since such an operation, it
+// answers for no kind, since stamps taken mid-rebase can still match.
 
 // GuardSymbol is the pseudo-kind the index lists symbol NAMES under, the spelling a search
 // pattern and `magus refs <name>` use, rather than the full symbol ids.
@@ -140,20 +141,11 @@ type GuardCheckout struct {
 // ReadGuardCheckout reads the checkout at root, starting one version control process for
 // the revision. A read that fails leaves its field empty.
 func ReadGuardCheckout(ctx context.Context, root string) GuardCheckout {
-	return readGuardCheckout(ctx, root, false)
-}
-
-// readGuardCheckout skips the revision for an operation underway when untilOperation is
-// set, since StaleAt never reads it then.
-func readGuardCheckout(ctx context.Context, root string, untilOperation bool) GuardCheckout {
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	if err != nil || res.VCS == nil {
 		return GuardCheckout{}
 	}
 	c := GuardCheckout{Operation: operationUnderway(ctx, res.VCS, root)}
-	if c.Operation != "" && untilOperation {
-		return c
-	}
 	if commit, err := res.VCS.FindCommit(ctx, root, ""); err == nil {
 		c.Revision = commit.ID
 	}
@@ -178,15 +170,16 @@ func operationUnderway(ctx context.Context, v types.VCSDriver, root string) stri
 	return op
 }
 
-// StaleAt says why an index built at c cannot answer for the checkout now, or "" when it
-// can. A revision in now may be abbreviated.
+// StaleAt says why an index built at c cannot answer for the checkout now as a whole, or
+// "" when it can. A revision in now may be abbreviated; an empty one is not compared, which
+// is how GuardIndex.Stale asks about operations alone.
 func (c GuardCheckout) StaleAt(now GuardCheckout) string {
 	switch {
 	case now.Operation != "":
 		return fmt.Sprintf("a %s is in progress", now.Operation)
 	case c.Operation != "":
 		return "the index was built during a " + c.Operation
-	case c.Revision == now.Revision, now.Revision != "" && strings.HasPrefix(c.Revision, now.Revision):
+	case now.Revision == "", c.Revision == now.Revision, strings.HasPrefix(c.Revision, now.Revision):
 		return ""
 	}
 	return fmt.Sprintf("the index was built at %s and the checkout is at %s", shortRevision(c.Revision), shortRevision(now.Revision))
@@ -560,12 +553,12 @@ func (x *GuardIndex) RefSites(name string) ([]types.KnowledgeRefSite, error) {
 	return out, nil
 }
 
-// Stale says why the index describes another tree than the checkout's, "" when it does
-// not: a history rewrite underway now or when it was built, or a build at another
-// revision. It reads the checkout once, starting at most one version control process.
+// Stale says why the index cannot answer for the checkout, "" when it can: a history
+// rewrite underway now or when it was built. Which shards a commit moved is the stamps'
+// question (Fresh), so a commit touching no indexed file leaves the index current.
 func (x *GuardIndex) Stale() string {
 	x.staleOnce.Do(func() {
-		x.stale = x.built.StaleAt(readGuardCheckout(context.Background(), x.root, true))
+		x.stale = x.built.StaleAt(GuardCheckout{Operation: ReadGuardOperation(context.Background(), x.root)})
 	})
 	return x.stale
 }

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"maps"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -196,7 +197,7 @@ func targetOp(spellName, canonical string, cmd spells.Command, doc string) (spel
 	if err := validateCommand(spellName, canonical, cmd); err != nil {
 		return spells.Op{}, err
 	}
-	t := spells.Op{Command: cmd, Capture: cmd.Capture, Doc: doc}
+	t := spells.Op{Command: cmd, Doc: doc}
 	if diags := ward.Check(canonical, t); len(diags) > 0 {
 		return spells.Op{}, diags[0]
 	}
@@ -417,10 +418,6 @@ func validateTools(m spells.Descriptor) error {
 			return fmt.Errorf("spell %q: tools[%q].key.upTo is %s, want one of %s",
 				m.Name, tool, c, strings.Join(c.Values(), ", "))
 		}
-		if d := m.Tools[tool].Diagnostics; !d.Valid() {
-			return fmt.Errorf("spell %q: tools[%q].diagnostics is %s, want one of %s",
-				m.Name, tool, d, strings.Join(d.Values(), ", "))
-		}
 	}
 	return nil
 }
@@ -579,7 +576,7 @@ func validateToolDecls(tools map[string]spells.Tool) (map[string]spells.Tool, er
 			}
 		}
 		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Supported.IsZero() &&
-			t.Observe.Bin == "" && t.Diagnostics == spells.DiagnosticNone && t.Lifecycle == "" {
+			t.Observe.Bin == "" && t.Lifecycle == "" {
 			continue
 		}
 		if out == nil {
@@ -602,6 +599,19 @@ func validateSymbolIndexer(spellName string, si *spells.SymbolIndexer) error {
 			return fmt.Errorf("symbol indexer: op %q: %w", si.Op, err)
 		}
 		si.Op = types.Normalize(si.Op)
+	}
+	// The Buzz and shell indexers read the project's files in process and run nothing, so a
+	// command, a tool or a build overlay beside them would be declared and never honored.
+	if si.Format == spells.SymbolFormatBuzzModule || si.Format == spells.SymbolFormatShellScript {
+		switch {
+		case si.Command.Bin != "" || len(si.Command.Args) > 0:
+			return fmt.Errorf("symbol indexer: format %s runs no command, drop command", si.Format)
+		case len(si.Uses) > 0:
+			return fmt.Errorf("symbol indexer: format %s runs no tool, drop uses", si.Format)
+		case len(si.Envs) > 0:
+			return fmt.Errorf("symbol indexer: format %s reads one build of the files, drop envs", si.Format)
+		}
+		return nil
 	}
 	if err := validateCommand(spellName, cmp.Or(si.Op, spells.DefaultSymbolIndexOp), si.Command); err != nil {
 		return err
@@ -629,4 +639,99 @@ func validateSymbolIndexer(spellName string, si *spells.SymbolIndexer) error {
 // naming a path, not the spell.
 func validateSandbox(sb spells.Sandbox) error {
 	return sandbox.CheckDeclaration(sb)
+}
+
+// ValidateDiscovered checks a decoded discover_projects answer; one bad claim fails it
+// whole. A bad claim is an unset or unknown role, a path that is not clean and
+// workspace-relative, a span outside the claim's directory, a target name outside [spells.DiscoveryTargets] (ci included), an
+// op key the spell does not declare, a second claim on one path, or a gap with no file
+// or reason.
+func ValidateDiscovered(spell spells.Descriptor, claims []spells.DiscoveredProject) error {
+	seen := map[string]bool{}
+	for _, c := range claims {
+		if err := validateClaim(spell, c); err != nil {
+			return fmt.Errorf("spell %q: discover_projects: %w", spell.Name, err)
+		}
+		if seen[c.Path] {
+			return fmt.Errorf("spell %q: discover_projects: claims %q twice, report one record per path", spell.Name, c.Path)
+		}
+		seen[c.Path] = true
+	}
+	return nil
+}
+
+func validateClaim(spell spells.Descriptor, c spells.DiscoveredProject) error {
+	if err := validateDiscoveryPath(c.Path, true); err != nil {
+		return fmt.Errorf("path %q: %w", c.Path, err)
+	}
+	if c.Role == "" || !c.Role.Valid() {
+		return fmt.Errorf("%s: role %q: want one of %s", c.Path, c.Role, strings.Join(c.Role.Values(), ", "))
+	}
+	for _, dep := range c.DependsOn {
+		if err := validateDiscoveryPath(dep, true); err != nil {
+			return fmt.Errorf("%s: dependsOn %q: %w", c.Path, dep, err)
+		}
+	}
+	for _, dir := range c.Spans {
+		if err := validateDiscoveryPath(dir, false); err != nil {
+			return fmt.Errorf("%s: spans %q: %w", c.Path, dir, err)
+		}
+		if c.Path != "." && !strings.HasPrefix(dir, c.Path+"/") {
+			return fmt.Errorf("%s: spans %q: a span is a directory inside the claim, which the tool's own boundary reaches, and an ancestor or sibling is a dependsOn", c.Path, dir)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(c.Targets)) {
+		if err := validateDiscoveredTarget(spell, name, c.Targets[name]); err != nil {
+			return fmt.Errorf("%s: %w", c.Path, err)
+		}
+	}
+	for _, gap := range c.NotInferred {
+		if err := validateDiscoveryPath(gap.File, false); err != nil {
+			return fmt.Errorf("%s: notInferred file %q: %w", c.Path, gap.File, err)
+		}
+		if strings.TrimSpace(gap.Why) == "" {
+			return fmt.Errorf("%s: notInferred %q: why is required", c.Path, gap.File)
+		}
+	}
+	return nil
+}
+
+func validateDiscoveredTarget(spell spells.Descriptor, name string, ops []string) error {
+	vocabulary := spells.DiscoveryTargets()
+	if name == types.TargetCI {
+		return fmt.Errorf("target %q: core composes ci from %s, so a spell never reports it", name, strings.Join(vocabulary, ", "))
+	}
+	if !slices.Contains(vocabulary, name) {
+		return fmt.Errorf("target %q is not a discovery target name, one of %s", name, strings.Join(vocabulary, ", "))
+	}
+	if len(ops) == 0 {
+		return fmt.Errorf("target %q names no op", name)
+	}
+	for _, op := range ops {
+		if _, ok := spell.Ops[types.Normalize(op)]; !ok {
+			return fmt.Errorf("target %q: op %q is not one the spell declares, one of %s",
+				name, op, strings.Join(slices.Sorted(maps.Keys(spell.Ops)), ", "))
+		}
+	}
+	return nil
+}
+
+// validateDiscoveryPath refuses rather than repairs: a path that needs cleaning is a
+// spell bug, and repairing it would hide one.
+func validateDiscoveryPath(p string, rootAllowed bool) error {
+	switch {
+	case p == "":
+		return fmt.Errorf("a path is required")
+	case strings.Contains(p, `\`):
+		return fmt.Errorf("separators are forward slashes")
+	case path.IsAbs(p) || filepath.IsAbs(p):
+		return fmt.Errorf("paths are relative to the workspace root, never absolute")
+	case path.Clean(p) != p:
+		return fmt.Errorf("not clean, write %q", path.Clean(p))
+	case p == ".." || strings.HasPrefix(p, "../"):
+		return fmt.Errorf("leaves the workspace root")
+	case p == "." && !rootAllowed:
+		return fmt.Errorf("names the workspace root, which is not allowed here")
+	}
+	return nil
 }

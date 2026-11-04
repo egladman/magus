@@ -198,11 +198,15 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 			for _, h := range entry.Hooks {
 				// One magus command per hook: a shell around it is logic no template
 				// carries and no reader downloads. The claude-code spell's checkout-first
-				// prefix is the one exception, and only verbatim.
-				command := h.Command
+				// prefix is the one exception, and only verbatim. The harness marker on a
+				// hook a spell owns is the other.
+				command := strings.TrimSuffix(h.Command, " # magus:harness")
 				if rest, ok := strings.CutPrefix(command, checkoutMagusPrefix); ok {
 					command = "magus " + rest
 				}
+				// A harness-owned entry trails " # magus:harness"; that comment is the
+				// ownership marker, not a second command.
+				command = strings.TrimSuffix(strings.TrimSpace(command), " # magus:harness")
 				for _, control := range []string{";", "&&", "||", "|", ">", "$(", "#"} {
 					assert.NotContains(t, command, control, "the %s %q hook must be one plain magus command", event, entry.Matcher)
 				}
@@ -871,6 +875,7 @@ var storeMechanicsAllowed = map[string]string{
 	"internal/cache/artifact.go:copyBlob":                    "streams a blob into the CAS, hashing as it copies",
 	"internal/cache/snapshot.go:Cache.snapshotOne":           "streams a blob into the CAS, hashing as it copies",
 	"internal/maintenance/build_lock.go:AcquireGraphBuild":   "a graph build lock waits on the build it names and is held across a whole build",
+	"internal/maintenance/build_lock.go:TryGraphBuild":       "a graph build lock is held across a whole build, and a refused try names the holder",
 	"internal/queue/verdicts.go:VerdictDir.WritePlan":        "publishes a directory, not a file",
 	"internal/queue/verdicts.go:VerdictDir.RecordWithBundle": "publishes a directory, not a file",
 	"lock.go:projectLocker.acquire":                          "a project lock waits unbounded with a heartbeat: its holder is a build",
@@ -971,8 +976,7 @@ func tempOnly() { _, _ = osx.CreateTemp(".", "x") }
 var appendAllowed = map[string]string{
 	"cmd/magus/log_other.go:redirectStdio":                  "a log: the process's stderr, held open as an fd",
 	"cmd/magus/log_windows.go:redirectStdio":                "a log: the process's stderr, held open as an fd",
-	"cmd/magus/output.go:outputDestination":                 "--tee mirrors a stream into a file held open for the command",
-	"cmd/magus/output.go:lazyFile.Write":                    "--tee mirrors a stream into a file held open for the command",
+	"cmd/magus/output.go:openTeeFile":                       "--tee mirrors a stream into a file held open for the command",
 	"cmd/magus/server.go:spawnDetached":                     "a log: the daemon's stdio, handed to the child",
 	"internal/guard/unfinished.go:judgmentMark.recordLapse": "a one-byte tally read back by its size after the write",
 	"internal/hint/marker.go:Gate.Count":                    "a one-byte tally read back by its offset after the write",

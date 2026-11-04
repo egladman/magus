@@ -10,7 +10,7 @@ import type { Command, CommandTarget } from "./commands";
 const cmd = (id: string, label: string, group?: string): Command => ({
   id,
   label,
-  group,
+  ...(group === undefined ? {} : { group }),
   run() {},
 });
 const cmds: Command[] = [
@@ -35,7 +35,7 @@ test("an empty query returns every command in registry order, unscored", () => {
     r.map((m) => m.score),
     [0, 0, 0, 0],
   );
-  assert.deepEqual(r[0].hits, []);
+  assert.deepEqual(r[0]?.hits, []);
 });
 
 test("a subsequence over the token matches and reports its hit positions", () => {
@@ -45,7 +45,7 @@ test("a subsequence over the token matches and reports its hit positions", () =>
     ["console.pane.split"],
   );
   // "split" lands on s p l i t in "pane.split" (indices 5..9).
-  assert.deepEqual(r[0].hits, [5, 6, 7, 8, 9]);
+  assert.deepEqual(r[0]?.hits, [5, 6, 7, 8, 9]);
 });
 
 test("a non-contiguous subsequence still matches (tc -> tab.close)", () => {
@@ -67,7 +67,7 @@ test("a command is findable by its prose label, but label hits are not reported 
     r.map((m) => m.command.id),
     ["console.cheatsheet.toggle"],
   );
-  assert.deepEqual(r[0].hits, []); // the match is in the label, past the token, so nothing to highlight
+  assert.deepEqual(r[0]?.hits, []); // the match is in the label, past the token, so nothing to highlight
 });
 
 test("returns nothing when the query is a subsequence of no token or label", () => {
@@ -103,7 +103,7 @@ test("matchTargets reports hits on the LABEL, since that is what a target row re
     r.map((m) => m.target.value),
     ["t1"],
   );
-  assert.deepEqual(r[0].hits, [0, 1, 2, 3]);
+  assert.deepEqual(r[0]?.hits, [0, 1, 2, 3]);
 });
 
 test("two same-named targets stay tellable apart by their disambiguating suffix", () => {

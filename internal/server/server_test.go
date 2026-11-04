@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -142,14 +144,14 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	// gets past auth is never 401, whatever the MCP handler then makes of a GET).
 	assert.Equal(t, http.StatusUnauthorized, status("/mcp", ""), "no token")
 	assert.Equal(t, http.StatusUnauthorized, status("/mcp", "not-the-token"), "wrong token")
-	assert.NotEqual(t, http.StatusUnauthorized, status("/mcp", cli), "cli token should pass the guard")
-	assert.NotEqual(t, http.StatusUnauthorized, status("/mcp", connectorTok), "connector token should pass the guard")
+	assert.NotEqual(t, http.StatusUnauthorized, status("/mcp", cli.Reveal()), "cli token should pass the guard")
+	assert.NotEqual(t, http.StatusUnauthorized, status("/mcp", connectorTok.Reveal()), "connector token should pass the guard")
 
 	// /api bridge uses the same header-only guard as /mcp: the explorer sends the
 	// token in an Authorization header (its SSE reader is fetch()-based, not an
 	// EventSource), so no query-param carrier is offered.
 	assert.Equal(t, http.StatusUnauthorized, status("/api/v1/graph", ""), "no token on bridge")
-	assert.NotEqual(t, http.StatusUnauthorized, status("/api/v1/graph", cli), "cli token on bridge")
+	assert.NotEqual(t, http.StatusUnauthorized, status("/api/v1/graph", cli.Reveal()), "cli token on bridge")
 
 	// queryStatus presents the token ONLY as a `?token=` query param, never a header.
 	queryStatus := func(path, token string) int {
@@ -165,8 +167,8 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 
 	// The hardening invariant: both /mcp and the /api bridge are header-only, so a
 	// valid token in the URL is rejected on each: the token never rides in a URL.
-	assert.Equal(t, http.StatusUnauthorized, queryStatus("/mcp", cli), "/mcp must reject a query-param token")
-	assert.Equal(t, http.StatusUnauthorized, queryStatus("/api/v1/graph", cli), "/api must reject a query-param token")
+	assert.Equal(t, http.StatusUnauthorized, queryStatus("/mcp", cli.Reveal()), "/mcp must reject a query-param token")
+	assert.Equal(t, http.StatusUnauthorized, queryStatus("/api/v1/graph", cli.Reveal()), "/api must reject a query-param token")
 
 	cancel()
 	select {
@@ -177,10 +179,9 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	}
 }
 
-// TestServeMountsTheDiffThreadRoute proves /api/v1/diff/thread is mounted behind the bearer
-// guard rather than falling through to the /api/ not-found handler: a caller with no token is
-// refused, and the operator reaches the thread handler itself, which answers a request with no
-// conversation id in its own words.
+// TestServeMountsTheDiffThreadRoute proves the thread route sits behind the
+// bearer guard, not the /api/ fallback. No token is refused. A console token
+// reaches the handler, which answers a missing id in its own words.
 func TestServeMountsTheDiffThreadRoute(t *testing.T) {
 	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
@@ -206,8 +207,7 @@ func TestServeMountsTheDiffThreadRoute(t *testing.T) {
 
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	waitReady(t, base+"/readyz")
-	operator, err := auth.LoadOperator()
-	require.NoError(t, err)
+	console := mintConsoleToken(t)
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	get := func(token string) (int, string) {
@@ -228,7 +228,7 @@ func TestServeMountsTheDiffThreadRoute(t *testing.T) {
 
 	code, _ := get("")
 	assert.Equal(t, http.StatusUnauthorized, code, "no token")
-	code, body := get(operator)
+	code, body := get(console.Reveal())
 	assert.Equal(t, http.StatusBadRequest, code, "the thread handler answers, not the /api/ fallback")
 	assert.Contains(t, body, "thread requires an id parameter")
 
@@ -322,10 +322,161 @@ func TestServeHealthRoutesCORS(t *testing.T) {
 	}
 }
 
-// TestServeConsoleHostedOriginCORS proves the hosted PWA Origin
-// (https://eli.gladman.cc) can clear rebind and get a CORS preflight answer on
-// /api/, while any other Origin is refused there.
-func TestServeConsoleHostedOriginCORS(t *testing.T) {
+// TestServeRefusesAnInexactAllowedOrigin: an entry no browser can send would
+// read as trust and grant none, so it stops the server.
+func TestServeRefusesAnInexactAllowedOrigin(t *testing.T) {
+	testkit.Isolate(t)
+	root := fixtureWorkspace(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	require.NoError(t, err)
+	opts := mcp.Options{
+		Magus:    m,
+		Version:  "test",
+		HTTPAddr: netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), freePort(t)),
+	}
+	opts.Config.MCP.AllowedOrigins = []string{"https://site.example/magus/"}
+
+	err = New(opts).Serve(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mcp.allowed_origins")
+}
+
+// TestServeConsoleDefaultTrustsNoHostedOrigin: with mcp.allowed_origins empty,
+// the site this project happens to be hosted on is a stranger like any other.
+func TestServeConsoleDefaultTrustsNoHostedOrigin(t *testing.T) {
+	testkit.Isolate(t)
+	root := fixtureWorkspace(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	require.NoError(t, err)
+	port := freePort(t)
+	d := New(mcp.Options{
+		Magus:    m,
+		Version:  "test",
+		HTTPAddr: netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port),
+		HealthRoutes: map[string]http.Handler{
+			"/readyz": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		},
+	})
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- d.Serve(ctx) }()
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitReady(t, base+"/readyz")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodOptions, base+"/api/v1/graph", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", "https://eli.gladman.cc")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"))
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("server did not shut down")
+	}
+}
+
+// mintConsoleToken mints a console token, the one a browser route takes. The
+// daemon under test must already have minted the operator token.
+func mintConsoleToken(t *testing.T) types.Secret {
+	t.Helper()
+	dir, err := auth.StoreDir()
+	require.NoError(t, err)
+	store, err := auth.LoadStore(dir)
+	require.NoError(t, err)
+	secret, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "console", Grant: types.GrantConsole, TTL: time.Hour})
+	require.NoError(t, err)
+	return secret
+}
+
+// The parent names its state directory as an argument: testkit.Main scrubs the
+// child's environment. The child mints as the CLI does beside a running daemon.
+func TestMintConsoleTokenInChildProcess(t *testing.T) {
+	if flag.NArg() != 1 {
+		t.Skip("runs only as the child of TestServeConsoleRoutesRefuseTheOperatorToken")
+	}
+	t.Setenv("XDG_STATE_HOME", flag.Arg(0))
+	fmt.Println("secret=" + mintConsoleToken(t).Reveal())
+}
+
+func mintConsoleTokenInChild(t *testing.T) string {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestMintConsoleTokenInChildProcess$", "-test.v", "--", os.Getenv("XDG_STATE_HOME"))
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+	for line := range strings.Lines(string(out)) {
+		if secret, ok := strings.CutPrefix(strings.TrimSpace(line), "secret="); ok {
+			return secret
+		}
+	}
+	t.Fatalf("the child printed no secret: %s", out)
+	return ""
+}
+
+// The daemon refuses the operator token on every console route. A console
+// token minted by another process reaches the routes the CLI calls.
+func TestServeConsoleRoutesRefuseTheOperatorToken(t *testing.T) {
+	testkit.Isolate(t)
+	root := fixtureWorkspace(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	require.NoError(t, err)
+	port := freePort(t)
+	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
+	d := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: addr, HealthRoutes: map[string]http.Handler{
+		"/readyz": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+	}})
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- d.Serve(ctx) }()
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitReady(t, base+"/readyz")
+	operator, err := auth.LoadOperator()
+	require.NoError(t, err)
+	status := func(token, path string) int {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		return resp.StatusCode
+	}
+
+	cliRoutes := []string{"/api/v1/diff/session", "/api/v1/diff/review", "/api/v1/diff"}
+	for _, path := range append([]string{"/api/v1/graph", "/api/v1/diff/thread"}, cliRoutes...) {
+		assert.Equal(t, http.StatusForbidden, status(operator.Reveal(), path), path)
+	}
+	console := mintConsoleTokenInChild(t)
+	for _, path := range cliRoutes {
+		got := status(console, path)
+		assert.NotEqual(t, http.StatusUnauthorized, got, path)
+		assert.NotEqual(t, http.StatusForbidden, got, path)
+	}
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("server did not shut down")
+	}
+}
+
+// TestServeConsoleAllowedOriginCORS proves an origin in mcp.allowed_origins can
+// clear rebind and get a CORS preflight answer on /api/, while any other Origin
+// is refused there.
+func TestServeConsoleAllowedOriginCORS(t *testing.T) {
 	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 
@@ -338,14 +489,17 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	port := freePort(t)
 	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
 
-	d := New(mcp.Options{
+	const siteOrigin = "https://site.example"
+	opts := mcp.Options{
 		Magus:    m,
 		Version:  "test",
 		HTTPAddr: addr,
 		HealthRoutes: map[string]http.Handler{
 			"/readyz": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
 		},
-	})
+	}
+	opts.Config.MCP.AllowedOrigins = []string{siteOrigin}
+	d := New(opts)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- d.Serve(ctx) }()
@@ -353,7 +507,6 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	waitReady(t, base+"/readyz")
 
-	const siteOrigin = "https://eli.gladman.cc"
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	// OPTIONS /api/v1/graph from the hosted origin: rebind admits the Origin,
@@ -370,9 +523,9 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	assert.Equal(t, siteOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, "true", resp.Header.Get("Access-Control-Allow-Private-Network"))
 
-	// Viewer remount of /api/v1/insight must share the same posture (longer
+	// Viewer remount of /api/v1/history-metrics must share the same posture (longer
 	// pattern wins over /api/).
-	req, err = http.NewRequestWithContext(ctx, http.MethodOptions, base+"/api/v1/insight", nil)
+	req, err = http.NewRequestWithContext(ctx, http.MethodOptions, base+"/api/v1/history-metrics", nil)
 	require.NoError(t, err)
 	req.Header.Set("Origin", siteOrigin)
 	req.Header.Set("Access-Control-Request-Method", "GET")
@@ -382,14 +535,13 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	assert.Equal(t, siteOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
 
-	cli, err := auth.LoadOperator()
-	require.NoError(t, err)
+	cli := mintConsoleToken(t)
 
 	// Authenticated GET with the hosted Origin must not be 403 from rebind.
 	req, err = http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/graph", nil)
 	require.NoError(t, err)
 	req.Header.Set("Origin", siteOrigin)
-	req.Header.Set("Authorization", "Bearer "+cli)
+	req.Header.Set("Authorization", "Bearer "+cli.Reveal())
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
@@ -756,7 +908,7 @@ func TestMCPHTTPOff(t *testing.T) {
 	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodPost, base+"/mcp", strings.NewReader("{}"))
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+op)
+	req.Header.Set("Authorization", "Bearer "+op.Reveal())
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
@@ -922,8 +1074,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	waitReady(t, base+"/readyz")
-	cli, err := auth.LoadOperator()
-	require.NoError(t, err)
+	cli := mintConsoleToken(t)
 
 	call := func(method, path, token, contentType, body string) (int, []byte) {
 		t.Helper()
@@ -947,7 +1098,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 	code, _ := call(http.MethodPost, graph, "", "application/json", "{}")
 	assert.Equal(t, http.StatusUnauthorized, code, "the guard still comes first")
 
-	code, body := call(http.MethodPost, graph, cli, "application/json", "{}")
+	code, body := call(http.MethodPost, graph, cli.Reveal(), "application/json", "{}")
 	assert.Equal(t, http.StatusBadRequest, code)
 	var connectErr struct {
 		Code    string `json:"code"`
@@ -965,7 +1116,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 	}
 	assert.Equal(t, []string{"google.rpc.ErrorInfo", "google.rpc.PreconditionFailure", "google.rpc.ResourceInfo", "google.rpc.Help"}, kinds)
 
-	code, body = call(http.MethodGet, "/api/v1/graph", cli, "", "")
+	code, body = call(http.MethodGet, "/api/v1/graph", cli.Reveal(), "", "")
 	assert.Equal(t, http.StatusBadRequest, code)
 	type violation struct {
 		Type    string `json:"type"`
@@ -988,7 +1139,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 	assert.Equal(t, []violation{{Type: "BZZ1005", Subject: "magusfile.buzz:3:3"}}, aip.Error.Details[1].Violations)
 
 	// StatusService needs no workspace, so it answers even now.
-	code, body = call(http.MethodPost, "/magus.status.v1alpha1.StatusService/GetStatus", cli, "application/json", "{}")
+	code, body = call(http.MethodPost, "/magus.status.v1alpha1.StatusService/GetStatus", cli.Reveal(), "application/json", "{}")
 	assert.Equal(t, http.StatusOK, code, "%s", body)
 
 	cancel()
@@ -1049,13 +1200,19 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	unloadedBase := fmt.Sprintf("http://127.0.0.1:%d", unloadedPort)
 	waitReady(t, unloadedBase+"/readyz")
 
-	cli, err := auth.LoadOperator()
+	cli := mintConsoleToken(t)
+
+	operator, err := auth.LoadOperator()
 	require.NoError(t, err)
 
 	for _, name := range services {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/%s/Probe", unloadedBase, name), strings.NewReader("{}"))
 		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer "+cli)
+		token := cli
+		if name == "magus.token.v1alpha1.TokenService" {
+			token = operator
+		}
+		req.Header.Set("Authorization", "Bearer "+token.Reveal())
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
@@ -1211,60 +1368,4 @@ func TestServerSocketCarriesTheUnloadedFailure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "FAILED_PRECONDITION: %s", body)
 	assert.Contains(t, string(body), string(types.WorkspaceLoadFailed))
-}
-
-func TestGoCacheTrimmer(t *testing.T) {
-	const budgetMB = 100
-	overBytes := int64(budgetMB+1) << 20
-
-	run := func(budget int, size int64, sizeErr, cleanErr error) (trimmed bool, cleaned int, recorded []string, err error) {
-		tr := goCacheTrimmer{
-			budgetMB: budget,
-			size:     func(context.Context, int64) (int64, error) { return size, sizeErr },
-			clean:    func(context.Context) error { cleaned++; return cleanErr },
-			record:   func(_ context.Context, m string) error { recorded = append(recorded, m); return nil },
-		}
-		trimmed, err = tr.trim(context.Background())
-		return
-	}
-
-	t.Run("under budget leaves the cache alone", func(t *testing.T) {
-		trimmed, cleaned, recorded, err := run(budgetMB, 1<<20, nil, nil)
-		require.NoError(t, err)
-		assert.False(t, trimmed)
-		assert.Zero(t, cleaned)
-		assert.Empty(t, recorded)
-	})
-
-	t.Run("no budget does nothing", func(t *testing.T) {
-		trimmed, cleaned, recorded, err := run(0, overBytes<<10, nil, nil)
-		require.NoError(t, err)
-		assert.False(t, trimmed)
-		assert.Zero(t, cleaned)
-		assert.Empty(t, recorded)
-	})
-
-	t.Run("past budget cleans once and records the size", func(t *testing.T) {
-		trimmed, cleaned, recorded, err := run(budgetMB, overBytes, nil, nil)
-		require.NoError(t, err)
-		assert.True(t, trimmed)
-		assert.Equal(t, 1, cleaned)
-		require.Len(t, recorded, 1)
-		assert.Contains(t, recorded[0], "go clean -cache")
-		assert.Contains(t, recorded[0], fmt.Sprintf("at least %d MB", budgetMB+1))
-	})
-
-	t.Run("a failed clean is an error and records nothing", func(t *testing.T) {
-		trimmed, _, recorded, err := run(budgetMB, overBytes, nil, errors.New("disk gone"))
-		require.Error(t, err)
-		assert.False(t, trimmed)
-		assert.Contains(t, err.Error(), "disk gone")
-		assert.Empty(t, recorded)
-	})
-
-	t.Run("a failed measurement is an error and cleans nothing", func(t *testing.T) {
-		_, cleaned, _, err := run(budgetMB, 0, errors.New("no cache dir"), nil)
-		require.Error(t, err)
-		assert.Zero(t, cleaned)
-	})
 }

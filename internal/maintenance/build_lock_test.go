@@ -109,6 +109,67 @@ func TestAcquireGraphBuildStopsWaitingWhenCancelled(t *testing.T) {
 	assert.Contains(t, err.Error(), "stopped waiting for `magus graph build`")
 }
 
+func TestTryGraphBuildNamesTheHolderAndTakesNothing(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "knowledge")
+	first := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the first"}
+	held, busy, err := TryGraphBuild(dir, first, &bytes.Buffer{})
+	require.NoError(t, err)
+	require.NotNil(t, held)
+	assert.Nil(t, busy)
+
+	var notices bytes.Buffer
+	lock, busy, err := TryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &notices)
+	require.NoError(t, err)
+	assert.Nil(t, lock)
+	require.NotNil(t, busy)
+	assert.Equal(t, "the first", busy.By)
+	assert.Empty(t, notices.String(), "stopping is the caller's to say")
+	running, ok := RunningGraphBuild(dir)
+	require.True(t, ok)
+	assert.Equal(t, "the first", running.By, "a refused try leaves the holder's record")
+
+	require.NoError(t, held.Release())
+	lock, busy, err = TryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &notices)
+	require.NoError(t, err)
+	assert.Nil(t, busy)
+	require.NoError(t, lock.Release())
+}
+
+func TestMachineGraphBuildIsOnePlaceForEveryCheckout(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+
+	me := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the first"}
+	lock, _, err := TryMachineGraphBuild(me, &bytes.Buffer{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = lock.Release() })
+
+	_, busy, err := TryMachineGraphBuild(GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &bytes.Buffer{})
+	require.NoError(t, err)
+	require.NotNil(t, busy)
+	assert.Equal(t, me.By, busy.By)
+
+	running, ok, err := RunningMachineGraphBuild()
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, me.By, running.By)
+	assert.Equal(t, filepath.Join(state, "magus", "graph-build"), filepath.Dir(lock.holderPath))
+}
+
+func TestGraphBuildHolderRecordsItsStore(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "machine")
+	me := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the first", Store: "/ws/knowledge"}
+	lock, _, err := TryGraphBuild(dir, me, &bytes.Buffer{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = lock.Release() })
+
+	_, busy, err := TryGraphBuild(dir, GraphBuildHolder{PID: os.Getpid(), By: "the second"}, &bytes.Buffer{})
+
+	require.NoError(t, err)
+	require.NotNil(t, busy)
+	assert.Equal(t, "/ws/knowledge", busy.Store)
+}
+
 // deadPID returns the pid of a process that has exited and been reaped.
 func deadPID(t *testing.T) int {
 	t.Helper()

@@ -1,14 +1,49 @@
 package vcs
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+type DiscardCheckoutSuite struct {
+	suite.Suite
+	root string
+	dir  string
+	base string
+}
+
+func TestDiscardCheckoutSuite(t *testing.T) {
+	suite.Run(t, new(DiscardCheckoutSuite))
+}
+
+func (s *DiscardCheckoutSuite) SetupTest() {
+	s.root = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"}).Root()
+	s.base = gitTestOutput(s.T(), s.root, "rev-parse", "HEAD")
+	s.dir = filepath.Join(s.T().TempDir(), "co")
+}
+
+func (s *DiscardCheckoutSuite) TestAnUnreadableHeadIsReturnedAfterTheCheckoutIsRemoved() {
+	s.Require().NoError(gitVCS{}.CreateCheckout(s.T().Context(), s.root, s.dir, s.base, "job-a"))
+	s.Require().NoError(os.Remove(filepath.Join(s.dir, ".git")))
+
+	err := gitVCS{}.DiscardCheckout(s.T().Context(), s.root, s.dir, s.base)
+	s.Require().ErrorContains(err, "its branch may remain")
+	s.NoDirExists(s.dir)
+}
+
+func (s *DiscardCheckoutSuite) TestADetachedCheckoutIsRemovedWithoutError() {
+	s.Require().NoError(gitVCS{}.CreateCheckout(s.T().Context(), s.root, s.dir, s.base, ""))
+	s.Require().NoError(gitVCS{}.DiscardCheckout(s.T().Context(), s.root, s.dir, s.base))
+	s.NoDirExists(s.dir)
+}
 
 // headRev names the commit init made, in each backend's own spelling: jj's init leaves an
 // empty working-copy commit on top of it.

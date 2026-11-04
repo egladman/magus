@@ -27,7 +27,8 @@ function build(labels = ["One", "Two", "Three"]) {
   return { host, trigger, menu, items, outside };
 }
 
-function key(el: Element, k: string): KeyboardEvent {
+function key(el: Element | undefined, k: string): KeyboardEvent {
+  assert.ok(el, `no element to press ${k} on`);
   const e = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
   el.dispatchEvent(e);
   return e;
@@ -104,8 +105,8 @@ describe("wireMenu", () => {
 
   test("a checked radio item is where it opens", () => {
     const { trigger, menu, items } = build();
-    items[1].setAttribute("role", "menuitemradio");
-    items[1].setAttribute("aria-checked", "true");
+    items[1]?.setAttribute("role", "menuitemradio");
+    items[1]?.setAttribute("aria-checked", "true");
     wireMenu(menu, trigger);
     trigger.click();
     assert.equal(document.activeElement, items[1]);
@@ -162,7 +163,7 @@ describe("wireMenu", () => {
     trigger.click();
     padding.click();
     assert.equal(menu.hidden, false);
-    items[2].click();
+    items[2]?.click();
     assert.equal(menu.hidden, true);
     assert.equal(document.activeElement, trigger, "focus came back because it was inside");
   });
@@ -170,16 +171,16 @@ describe("wireMenu", () => {
   test("activating an item that moved focus elsewhere does not pull it back", () => {
     const { trigger, menu, items, outside } = build();
     wireMenu(menu, trigger);
-    items[0].addEventListener("click", () => outside.focus());
+    items[0]?.addEventListener("click", () => outside.focus());
     trigger.click();
-    items[0].click();
+    items[0]?.click();
     assert.equal(menu.hidden, true);
     assert.equal(document.activeElement, outside);
   });
 
   test("disabled and hidden items are skipped", () => {
     const { trigger, menu, items } = build();
-    items[1].setAttribute("aria-disabled", "true");
+    items[1]?.setAttribute("aria-disabled", "true");
     wireMenu(menu, trigger);
     trigger.click();
     key(items[0], "ArrowDown");

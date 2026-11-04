@@ -1,12 +1,260 @@
 package guard
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// commitGradeRoutesSuite pins the routes a commit took around its path grade.
+type commitGradeRoutesSuite struct {
+	commitPathsSuite
+}
+
+func TestCommitGradeRoutes(t *testing.T) { suite.Run(t, new(commitGradeRoutesSuite)) }
+
+func (s *commitGradeRoutesSuite) script(name, body string) string {
+	p := filepath.Join(s.dir, name)
+	s.Require().NoError(os.WriteFile(p, []byte(body), 0o755))
+	return p
+}
+
+func (s *commitGradeRoutesSuite) TestAPickOutsideTheWritePathsIsRefusedAndNamesTheRoute() {
+	picked := s.repo.commitFiles(s.repo.main, map[string]string{"gen.json": "x\n"})
+	got := s.deny("git cherry-pick " + picked)
+	s.Contains(got, "this commit carries paths outside lease")
+	s.Contains(got, "It picks commits writing gen.json")
+	s.Contains(got, "git checkout <commit> -- <path>")
+}
+
+func (s *commitGradeRoutesSuite) TestAPickThroughTheVCSCommandIsGraded() {
+	picked := s.repo.commitFiles(s.repo.main, map[string]string{"gen.json": "x\n"})
+	err := vcsCommandRefusal(s.ctx, s.worker, "git", []string{"cherry-pick", picked}, s.dir, nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "It picks commits writing gen.json")
+}
+
+func (s *commitGradeRoutesSuite) TestAPickInsideTheWritePathsPasses() {
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.repo.main, "cmd/magus"), 0o755))
+	picked := s.repo.commitFiles(s.repo.main, map[string]string{"cmd/magus/x.go": "x\n"})
+	s.Empty(s.deny("git cherry-pick " + picked))
+}
+
+func (s *commitGradeRoutesSuite) TestAPickFromStandardInputIsRefusedThroughTheVCSCommand() {
+	err := vcsCommandRefusal(s.ctx, s.worker, "git", []string{"cherry-pick", "--stdin"}, s.dir, nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "Name each commit in the call")
+}
+
+func (s *commitGradeRoutesSuite) TestContinuingAPickPasses() {
+	s.Empty(s.deny("git cherry-pick --continue"))
+}
+
+func (s *commitGradeRoutesSuite) TestAnIntegrationRowPicksWhatItsWritePathsCover() {
+	picked := s.repo.commitFiles(s.repo.main, map[string]string{"gen.json": "x\n"})
+	row := s.worker
+	row.WritePaths = append(row.WritePaths, "gen.json")
+	row.Integrates = []string{"other"}
+	ctx, _ := fleetFixture(s.T(), row)
+	s.Empty(denyLeaseScopedVCS(ctx, Dependencies{callDir: s.dir}, row.ID, "git cherry-pick "+picked))
+}
+
+func (s *commitGradeRoutesSuite) TestAPipedPathspecBesideACommitNamesTheTwoCalls() {
+	got := s.deny("printf 'docs/gen.json\\n' | git add --pathspec-from-file=- && git commit -m done")
+	s.Contains(got, "cannot be read before the line runs")
+	s.Contains(got, "then commit in the next")
+}
+
+func (s *commitGradeRoutesSuite) TestThePipedRemedyAloneStillStages() {
+	s.Empty(s.deny("magus vcs ls-files -o name | git add --pathspec-from-file=-"))
+}
+
+func (s *commitGradeRoutesSuite) TestAPathspecFileOnDiskIsRead() {
+	s.write("docs/gen.json")
+	s.script("list", "docs/gen.json\n")
+	s.Contains(s.deny("git add --pathspec-from-file=list && git commit -m done"), "It commits docs/gen.json")
+}
+
+func (s *commitGradeRoutesSuite) TestAPathspecFileTheLineWritesIsRefused() {
+	s.Contains(s.deny("git add --pathspec-from-file=later && git commit -m done"), "then commit in the next")
+}
+
+func (s *commitGradeRoutesSuite) TestABranchForceTypedIsRefused() {
+	s.Contains(s.deny(fmt.Sprintf("git branch -f %s HEAD~1", s.worker.ID)), "`git branch` stays with the orchestrator")
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptHidingABranchForceIsRefused() {
+	script := s.script("fold.sh", fmt.Sprintf("#!/bin/bash\ngit branch -f %s HEAD\n", s.worker.ID))
+	for _, line := range []string{"bash " + script, "sh " + script, script, "bash fold.sh"} {
+		got := s.deny(line)
+		s.Contains(got, "`git branch` stays with the orchestrator", line)
+		s.Contains(got, "a script gets the verdict its lines would get typed", line)
+	}
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptHidingARebaseIsRefused() {
+	script := s.script("fold.sh", "git rebase main\n")
+	s.Contains(s.deny("bash "+script), "`git rebase` stays with the orchestrator")
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptTheWorkerMayRunPasses() {
+	script := s.script("ok.sh", "git status --short\ngit log -1\n")
+	s.Empty(s.deny("bash " + script))
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptNotOnDiskIsRefusedWithTheRoute() {
+	s.Contains(s.deny("bash missing.sh"), "Write the script first, then run it in a call of its own")
+}
+
+func (s *commitGradeRoutesSuite) TestAProgramThatIsNotAShellScriptIsLeftAlone() {
+	s.Empty(s.deny(s.script("tool", "\x7fELF")))
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptCallingItselfIsRefusedAtTheBound() {
+	script := filepath.Join(s.dir, "self.sh")
+	s.script("self.sh", fmt.Sprintf("sh %s\n", script))
+	s.Contains(s.deny("sh "+script), "nest deeper than")
+}
+
+func (s *commitGradeRoutesSuite) TestTwoScriptsCallingEachOtherAreRefusedAtTheBound() {
+	first, second := filepath.Join(s.dir, "first.sh"), filepath.Join(s.dir, "second.sh")
+	s.script("first.sh", fmt.Sprintf("sh %s\n", second))
+	s.script("second.sh", fmt.Sprintf("sh %s\n", first))
+	s.Contains(s.deny("sh "+first), "nest deeper than")
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptCallingItselfTwiceUnderADeadLeasePasses() {
+	script := filepath.Join(s.dir, "self.sh")
+	s.script("self.sh", fmt.Sprintf("sh %s\nsh %s\n", script, script))
+	s.Empty(denyLeaseScopedVCS(s.ctx, Dependencies{callDir: s.dir}, "no-such-lease", "sh "+script))
+}
+
+func (s *commitGradeRoutesSuite) TestAVerbInANestedScriptIsRefused() {
+	inner := s.script("inner.sh", "git rebase main\n")
+	outer := s.script("outer.sh", fmt.Sprintf("sh %s\n", inner))
+	s.Contains(s.deny("sh "+outer), "`git rebase` stays with the orchestrator")
+}
+
+// scriptIn writes an executable script in a subdirectory of the checkout.
+func (s *commitGradeRoutesSuite) scriptIn(dir, name, body string) {
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.dir, dir), 0o755))
+	s.script(filepath.Join(dir, name), body)
+}
+
+func (s *commitGradeRoutesSuite) TestACdBeforeAScriptFindsItThere() {
+	s.scriptIn("tools", "ok.sh", "git status --short\n")
+	s.Empty(s.deny("cd tools && ./ok.sh"))
+}
+
+func (s *commitGradeRoutesSuite) TestACdBeforeAScriptJudgesTheOneItRuns() {
+	s.script("run.sh", "git status --short\n")
+	s.scriptIn("tools", "run.sh", "git rebase main\n")
+	s.Contains(s.deny("cd tools && ./run.sh"), "`git rebase` stays with the orchestrator")
+	s.Empty(s.deny("./run.sh"))
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptRunsItsOwnRelativeCallsFromTheCd() {
+	s.scriptIn("tools", "outer.sh", "./inner.sh\n")
+	s.scriptIn("tools", "inner.sh", "git rebase main\n")
+	s.Contains(s.deny("cd tools && ./outer.sh"), "`git rebase` stays with the orchestrator")
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptNameIsJudgedInEachDirectoryItRuns() {
+	s.script("run.sh", "git status --short\n")
+	s.scriptIn("tools", "run.sh", "git rebase main\n")
+	s.Contains(s.deny("./run.sh && cd tools && ./run.sh"), "`git rebase` stays with the orchestrator")
+}
+
+func (s *commitGradeRoutesSuite) TestARelativeScriptAfterAnUnknownCdIsRefused() {
+	s.script("ok.sh", "git status --short\n")
+	s.Contains(s.deny(`cd "$WHERE" && ./ok.sh`), "from a directory only running the line can reveal")
+}
+
+func (s *commitGradeRoutesSuite) TestAnAbsoluteScriptAfterAnUnknownCdIsRead() {
+	script := s.script("ok.sh", "git status --short\n")
+	s.Empty(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)))
+}
+
+func (s *commitGradeRoutesSuite) TestARelativeCallInAScriptAfterAnUnknownCdIsRefused() {
+	s.scriptIn("tools", "inner.sh", "git rebase main\n")
+	script := s.script("outer.sh", "./inner.sh\n")
+	s.Contains(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)), "from a directory only running the line can reveal")
+}
+
+func (s *commitGradeRoutesSuite) TestACommitInAScriptAfterAnUnknownCdIsRefused() {
+	script := s.script("save.sh", "git commit -m done\n")
+	s.Contains(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)), "where it commits cannot be read")
+}
+
+func (s *commitGradeRoutesSuite) TestALiteralCdInAScriptAfterAnUnknownCdIsRead() {
+	s.scriptIn("tools", "inner.sh", "git rebase main\n")
+	script := s.script("outer.sh", fmt.Sprintf("cd %s && ./inner.sh\n", filepath.Join(s.dir, "tools")))
+	s.Contains(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)), "`git rebase` stays with the orchestrator")
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptInASubstitutionRunsFromTheCallDirectory() {
+	s.script("ok.sh", "git status --short\n")
+	s.Empty(s.deny("x=$(./ok.sh)"))
+}
+
+func (s *commitGradeRoutesSuite) TestAScriptInASubstitutionAfterACdIsRefused() {
+	s.scriptIn("tools", "ok.sh", "git status --short\n")
+	s.Contains(s.deny("cd tools && x=$(./ok.sh)"), "from a directory only running the line can reveal")
+}
+
+func (s *commitGradeRoutesSuite) TestATwoWordPathspecFileCommitIsGraded() {
+	s.write("a.txt")
+	s.script("list.txt", "a.txt\n")
+	s.Contains(s.deny("git commit --pathspec-from-file list.txt -m done"), "It commits a.txt")
+}
+
+func (s *commitGradeRoutesSuite) TestAPathspecFileWithEqualsCommitIsGraded() {
+	s.write("a.txt")
+	s.script("list.txt", "a.txt\n")
+	s.Contains(s.deny("git commit --pathspec-from-file=list.txt -m done"), "It commits a.txt")
+}
+
+// integrating commits three paths no write path holds, as an integrating row.
+func (s *commitGradeRoutesSuite) integrating(inspect func(context.Context, string) (types.WorkspaceRepository, error)) string {
+	s.write("docs/one.json")
+	s.write("docs/two.json")
+	s.write("docs/three.json")
+	s.repo.git(s.dir, "add", "docs")
+	row := s.worker
+	row.Integrates = []string{"other"}
+	ctx, _ := fleetFixture(s.T(), row)
+	return denyLeaseScopedVCS(ctx, Dependencies{callDir: s.dir, Inspect: inspect}, row.ID, "git commit -m done")
+}
+
+func (s *commitGradeRoutesSuite) TestAnIntegrationCommitOpensTheWorkspaceOnce() {
+	opens := 0
+	project := &types.Project{Path: ".", TargetOutputs: map[string][]types.OutputRef{"gen": {{Glob: "docs/*.json"}}}}
+	ws := typestest.NewMockWorkspaceRepository(s.T())
+	ws.EXPECT().All().Return([]*types.Project{project}).Maybe()
+	s.Empty(s.integrating(func(context.Context, string) (types.WorkspaceRepository, error) {
+		opens++
+		return ws, nil
+	}))
+	s.Equal(1, opens)
+}
+
+func (s *commitGradeRoutesSuite) TestAnIntegrationCommitThatCannotOpenTheWorkspaceSaysSo() {
+	got := s.integrating(func(context.Context, string) (types.WorkspaceRepository, error) {
+		return nil, errors.New("the magusfile raised")
+	})
+	s.Contains(got, "which of them a target regenerates cannot be read: the magusfile raised")
+	s.NotContains(got, "It commits")
+}
 
 func TestMergesBase(t *testing.T) {
 	row := types.Job{DependsOn: []string{"worker-a", "worker-b"}}
@@ -58,8 +306,6 @@ func TestWorkerVCSOp(t *testing.T) {
 			// A remove or move of named paths: lease-write grades each one.
 			"git rm a.go", "git rm -r --cached internal/x", "git mv a.go b.go", "git rm -- -odd.go",
 			"hg remove a.go", "hg rm -A a.go", "sl rename a.go b.go", "hg mv a.go dir/",
-			// The fast-forward to a placed binary's commit, named by its id.
-			"git merge --ff-only f1980cc5c", "git merge f1980cc5c3224cc9fca99c41a9f03415fd77db4b --ff-only",
 		} {
 			assert.Empty(t, op(t, line), line)
 		}
@@ -92,6 +338,7 @@ func TestWorkerVCSOp(t *testing.T) {
 			"git reset --hard f1980cc5c":          "git reset",
 			"git merge f1980cc5c":                 "git merge",
 			"git merge --no-ff f1980cc5c":         "git merge",
+			"git merge --ff-only f1980cc5c":       "git merge",
 			"git merge --ff-only main":            "git merge",
 			"git merge --ff-only F1980CC5C":       "git merge",
 			"git merge --ff-only f1980c":          "git merge",
@@ -167,6 +414,63 @@ func TestIntegrationMergeAllowsOnlyTheListedBranches(t *testing.T) {
 	assert.False(t, merge("git merge --no-ff done-a", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
 }
 
+// A landing row commits and fast-forwards its own checkout, with or without -C.
+// Force, added history, a branch name and any other checkout stay refused.
+func TestLandingRowMovesItsCheckout(t *testing.T) {
+	r := newWorktreeRepository(t)
+	wt := r.add("lease-job")
+	worker := narrowLease()
+	worker.Parent = "orchestrator"
+	worker.CheckoutRoot = wt
+	ctx, _ := fleetFixture(t, worker)
+	from := func(dir string) Dependencies {
+		return Dependencies{callDir: dir, VCS: types.VCSOptions{BaseRef: "origin/main"}}
+	}
+	const rev = "4cf8063f2"
+
+	for _, command := range []string{
+		"git merge --ff-only " + rev,
+		"git merge " + rev + " --ff-only",
+		"git commit -m done",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), "in place: %q", command)
+	}
+	for _, command := range []string{
+		fmt.Sprintf("git -C %s merge --ff-only %s", wt, rev),
+		fmt.Sprintf("git -C %s commit -m done", wt),
+		fmt.Sprintf("cd %s && git merge --ff-only %s", wt, rev),
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command), "pointed at its own checkout: %q", command)
+	}
+
+	elsewhere := fmt.Sprintf("It commits in %s, and the lease was taken in %s.", r.main, wt)
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git merge --ff-only "+rev), elsewhere)
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, fmt.Sprintf("git -C %s merge --ff-only %s", r.main, rev)), elsewhere)
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, fmt.Sprintf("cd %s && git merge --ff-only %s", r.main, rev)), elsewhere)
+
+	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
+	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git merge --ff-only "+rev), "the base branch")
+
+	for _, command := range []string{
+		fmt.Sprintf("git -C %s merge --ff-only other-job", wt),
+		fmt.Sprintf("git -C %s merge %s", wt, rev),
+		fmt.Sprintf("git -C %s merge --no-ff %s", wt, rev),
+		fmt.Sprintf("git -C %s merge --ff-only --no-ff %s", wt, rev),
+		fmt.Sprintf("git -C %s merge --ff-only --squash %s", wt, rev),
+		fmt.Sprintf("git -C %s merge --ff-only -s ours %s", wt, rev),
+		fmt.Sprintf("git -C %s merge --ff-only %s a1b2c3d", wt, rev),
+		fmt.Sprintf("git -C %s reset --hard %s", wt, rev),
+		fmt.Sprintf("git -C %s branch -f lease-job %s", wt, rev),
+		fmt.Sprintf("git -C %s update-ref refs/heads/lease-job %s", wt, rev),
+		fmt.Sprintf("git -C %s --work-tree=../x merge --ff-only %s", wt, rev),
+	} {
+		assert.NotEmpty(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command), "%q", command)
+	}
+
+	refused := denyLeaseScopedVCS(ctx, from(wt), worker.ID, "git merge a1b2c3d")
+	assert.Contains(t, refused, "`git merge --ff-only <commit id>`", "the refusal names the fast-forward that passes")
+}
+
 func TestWorkerVCSMovesRefs(t *testing.T) {
 	for line, want := range map[string]bool{
 		"git switch -c topic":        true,
@@ -233,6 +537,15 @@ func TestIntegrationMergeInALoop(t *testing.T) {
 	}
 }
 
+func TestMergeRefusalNamesTheBranchesARowIntegrates(t *testing.T) {
+	row := types.Job{ID: "integrate", Integrates: []string{"done-a", "done-b"}}
+	assert.Contains(t, mergeRefusal("734253d9a", "main", row), "or a branch it integrates, merged by name: done-a, done-b.")
+}
+
+func TestMergeRefusalOfARowIntegratingNothingNamesNoBranch(t *testing.T) {
+	assert.NotContains(t, mergeRefusal("734253d9a", "main", types.Job{ID: "worker"}), "integrates")
+}
+
 func TestIntegrationHolderMergesItsBranchesOnEveryPath(t *testing.T) {
 	row := types.Job{ID: "integrate", Integrates: []string{"done-a"}}
 	got := map[string]bool{}
@@ -241,4 +554,235 @@ func TestIntegrationHolderMergesItsBranchesOnEveryPath(t *testing.T) {
 	}
 	assert.Equal(t, map[string]bool{"done-a": true, "other": false}, got)
 	assert.False(t, mergesBase("done-a", "", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
+}
+
+// standingWorker is a worker row on a checkout its fork made.
+type standingWorker struct {
+	suite.Suite
+	ctx    context.Context
+	repo   worktreeRepo
+	own    string
+	worker types.Job
+}
+
+func (s *standingWorker) SetupTest() {
+	s.repo = newWorktreeRepository(s.T())
+	s.own = s.repo.add("lease-job")
+	s.worker = narrowLease()
+	s.worker.Parent = "orchestrator"
+	s.worker.CheckoutRoot = s.own
+	s.worker.Worktree = &types.JobWorktree{Root: s.own}
+	ctx, _ := fleetFixture(s.T(), s.worker)
+	s.ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{s.worker}})
+}
+
+func (s *standingWorker) from(dir, line string) string {
+	return denyLeaseScopedVCS(s.ctx, Dependencies{callDir: dir}, s.worker.ID, line)
+}
+
+type WorkerMoveSuite struct{ standingWorker }
+
+func TestWorkerMoveSuite(t *testing.T) { suite.Run(t, new(WorkerMoveSuite)) }
+
+func (s *WorkerMoveSuite) spelledOut() string {
+	return fmt.Sprintf("`git -C %s mv <old> <new>`", s.own)
+}
+
+func (s *WorkerMoveSuite) TestALoneMovePasses() {
+	s.Empty(s.from(s.own, "git mv a.txt b.txt"))
+}
+
+func (s *WorkerMoveSuite) TestAChainedMovePasses() {
+	s.Empty(s.from(s.own, "git mv a.txt b.txt; git mv c.txt d.txt"))
+}
+
+func (s *WorkerMoveSuite) TestALoopOverLiteralWordsPasses() {
+	s.Empty(s.from(s.own, "for f in a.txt b.txt; do git mv $f new/$f; done"))
+}
+
+func (s *WorkerMoveSuite) TestAQuotedLoopVariablePasses() {
+	s.Empty(s.from(s.own, `for f in a.txt b.txt; do git mv "$f" "new/$f"; done`))
+}
+
+func (s *WorkerMoveSuite) TestALoopClimbingOutIsRefused() {
+	reason := s.from(s.own, "for f in a.txt; do git mv $f ../$f; done")
+	s.Contains(reason, "a worker moves only paths its line spells out")
+	s.Contains(reason, s.spelledOut())
+}
+
+func (s *WorkerMoveSuite) TestAnUnboundVariableIsRefusedWithTheSpelledOutLine() {
+	reason := s.from(s.own, `git mv "$src" "$dst"`)
+	s.Contains(reason, "a worker moves only paths its line spells out")
+	s.Contains(reason, s.spelledOut())
+}
+
+// The word renders as `.txt`, a path the shell would not pass.
+func (s *WorkerMoveSuite) TestAVariableBesideTextIsRefused() {
+	s.Contains(s.from(s.own, "git mv $src.txt new.txt"), "not one literal string")
+}
+
+func (s *WorkerMoveSuite) TestALoopOverACommandSubstitutionIsRefused() {
+	s.Contains(s.from(s.own, "for f in $(ls); do git mv $f new/$f; done"), "where it moves cannot be read")
+}
+
+func (s *WorkerMoveSuite) TestAShellPayloadIsRefused() {
+	s.Contains(s.from(s.own, `sh -c 'for f in a; do git mv $f.txt outside/$f.txt; done'`), "shell payload")
+}
+
+func (s *WorkerMoveSuite) TestAMoveInAConditionalIsRefusedAsAMove() {
+	reason := s.from(s.own, "if true; then git mv a.txt b.txt; fi")
+	s.Contains(reason, "a worker moves only paths its line spells out")
+	s.NotContains(reason, "a worker commits only")
+}
+
+func (s *WorkerMoveSuite) TestAMoveFromAnotherCheckoutNamesItsOwn() {
+	s.Contains(s.from(s.repo.main, "git mv a.txt b.txt"), fmt.Sprintf("`git -C %s mv a.txt b.txt`", s.own))
+}
+
+func (s *WorkerMoveSuite) TestALoopFromAnotherCheckoutIsRefused() {
+	s.Contains(s.from(s.repo.main, "for f in a.txt; do git mv $f new/$f; done"), "outside "+s.own)
+}
+
+func (s *WorkerMoveSuite) TestAnAliasNamedMvStaysAnAlias() {
+	s.Contains(s.from(s.own, "git -c alias.mv=push mv origin"), "`git -c alias.mv`")
+}
+
+type WorkerReattachSuite struct{ standingWorker }
+
+func TestWorkerReattachSuite(t *testing.T) { suite.Run(t, new(WorkerReattachSuite)) }
+
+func (s *WorkerReattachSuite) TestSwitchForceCreateOnItsOwnBranchPasses() {
+	s.Empty(s.from(s.own, "git switch -C "+s.worker.ID))
+}
+
+func (s *WorkerReattachSuite) TestCheckoutBOnItsOwnBranchPasses() {
+	s.Empty(s.from(s.own, "git checkout -B "+s.worker.ID))
+}
+
+func (s *WorkerReattachSuite) TestAStartPointOfHEADPasses() {
+	s.Empty(s.from(s.own, fmt.Sprintf("git switch -C %s HEAD", s.worker.ID)))
+}
+
+func (s *WorkerReattachSuite) TestAnotherBranchNameIsRefused() {
+	s.Contains(s.from(s.own, "git switch -C other"), "`git switch`")
+}
+
+func (s *WorkerReattachSuite) TestTheBaseBranchIsRefused() {
+	s.Contains(s.from(s.own, "git checkout -B main"), "`git checkout`")
+}
+
+func (s *WorkerReattachSuite) TestAnotherStartPointIsRefused() {
+	s.Contains(s.from(s.own, fmt.Sprintf("git switch -C %s origin/main", s.worker.ID)), "`git switch`")
+}
+
+func (s *WorkerReattachSuite) TestAForceIsRefused() {
+	s.Contains(s.from(s.own, fmt.Sprintf("git checkout -f -B %s", s.worker.ID)), "`git checkout`")
+}
+
+func (s *WorkerReattachSuite) TestAMergeIsRefused() {
+	s.Contains(s.from(s.own, fmt.Sprintf("git switch -C %s --merge", s.worker.ID)), "`git switch`")
+}
+
+func (s *WorkerReattachSuite) TestAVariableBesideTheNameIsRefused() {
+	s.Contains(s.from(s.own, fmt.Sprintf(`git switch -C "$prefix"%s`, s.worker.ID)), "not one literal string")
+}
+
+func (s *WorkerReattachSuite) TestFromAnotherCheckoutItNamesItsOwn() {
+	s.Contains(s.from(s.repo.main, "git switch -C "+s.worker.ID), fmt.Sprintf("`git -C %s switch -C %s`", s.own, s.worker.ID))
+}
+
+func (s *WorkerReattachSuite) TestARowWithNoCheckoutOfItsOwnIsRefused() {
+	row := s.worker
+	row.Worktree = nil
+	ctx := job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+	s.Contains(denyLeaseScopedVCS(ctx, Dependencies{callDir: s.own}, row.ID, "git switch -C "+row.ID), "`git switch`")
+}
+
+func (s *WorkerReattachSuite) TestADetachedCommitNamesTheLineThatKeepsIt() {
+	s.repo.git(s.own, "switch", "--detach")
+	reason := s.from(s.own, "git commit -m done")
+	s.Contains(reason, "has no branch checked out")
+	s.Contains(reason, fmt.Sprintf("`git switch -C %s`", s.worker.ID))
+}
+
+// LeaseWriteMoveSuite grades what a move writes against a row's write paths.
+type LeaseWriteMoveSuite struct {
+	suite.Suite
+	ctx context.Context
+}
+
+func TestLeaseWriteMoveSuite(t *testing.T) { suite.Run(t, new(LeaseWriteMoveSuite)) }
+
+func (s *LeaseWriteMoveSuite) hold(writes []string, denies ...string) {
+	ctx, root := fleetFixture(s.T(), types.Job{ID: "mover", WritePaths: writes, DenyPaths: denies, State: types.StateRunning, Registered: 1})
+	s.ctx = ctx
+	for _, file := range []string{"libs/old/a.go", "libs/old/sub/b.go"} {
+		s.Require().NoError(os.MkdirAll(filepath.Join(root, filepath.Dir(file)), 0o755))
+		s.Require().NoError(os.WriteFile(filepath.Join(root, file), nil, 0o644))
+	}
+}
+
+func (s *LeaseWriteMoveSuite) deny(line string) string {
+	return denyWriteOutsideLease(s.ctx, Dependencies{}, "mover", line)
+}
+
+func (s *LeaseWriteMoveSuite) TestEveryFileOnTheRowUnderBothNamesPasses() {
+	s.hold([]string{"libs/old/a.go", "libs/old/sub/b.go", "libs/new/a.go", "libs/new/sub/b.go"})
+	s.Empty(s.deny("git mv libs/old libs/new"))
+}
+
+func (s *LeaseWriteMoveSuite) TestALandingOffTheRowIsNamed() {
+	s.hold([]string{"libs/old/a.go", "libs/old/sub/b.go", "libs/new/a.go"})
+	s.Contains(s.deny("git mv libs/old libs/new"), "libs/new holds libs/new/sub/b.go, which is outside")
+}
+
+func (s *LeaseWriteMoveSuite) TestALandingOnADenyPathIsNamed() {
+	s.hold([]string{"libs/old/**", "libs/new/**"}, "libs/new/sub/**")
+	s.Contains(s.deny("git mv libs/old libs/new"), "libs/new holds libs/new/sub/b.go, which is outside")
+}
+
+func (s *LeaseWriteMoveSuite) TestASourceFileOffTheRowIsNamed() {
+	s.hold([]string{"libs/old/a.go", "libs/new/a.go", "libs/new/sub/b.go"})
+	s.Contains(s.deny("git mv libs/old libs/new"), "libs/old holds libs/old/sub, which is outside")
+}
+
+func (s *LeaseWriteMoveSuite) TestAFileMovedToAnUndeclaredNameIsRefused() {
+	s.hold([]string{"libs/old/a.go", "libs/new/a.go"})
+	s.Contains(s.deny("git mv libs/old/a.go libs/new"), "libs/new is outside")
+}
+
+func (s *LeaseWriteMoveSuite) TestALoopToAnOutsidePathIsRefused() {
+	s.hold([]string{"libs/old/a.go"})
+	s.Contains(s.deny("for f in a.go; do git mv libs/old/$f libs/elsewhere/$f; done"), "libs/elsewhere/a.go is outside")
+}
+
+func (s *LeaseWriteMoveSuite) TestALoopWithTextBesideItsVariableIsGraded() {
+	s.hold([]string{"libs/old/a.go"})
+	s.Contains(s.deny("for f in a; do git mv libs/old/$f.go libs/elsewhere/$f.go; done"), "libs/elsewhere/a.go is outside")
+}
+
+func (s *LeaseWriteMoveSuite) TestAWrappedLoopToAnOutsidePathIsRefused() {
+	s.hold([]string{"libs/old/a.go"})
+	s.Contains(s.deny("for f in a.go; do env X=1 git mv libs/old/$f libs/elsewhere/$f; done"), "libs/elsewhere/a.go is outside")
+}
+
+func (s *LeaseWriteMoveSuite) TestALoopFromOutsideTheRowIsRefused() {
+	s.hold([]string{"libs/new/a.go"})
+	s.Contains(s.deny("for f in a.go; do git mv libs/old/$f libs/new/$f; done"), "libs/old/a.go is outside")
+}
+
+func (s *LeaseWriteMoveSuite) TestALoopedRemoveIsGraded() {
+	s.hold([]string{"libs/new/a.go"})
+	s.Contains(s.deny("for f in a; do git rm libs/old/$f.go; done"), "libs/old/a.go is outside")
+}
+
+func (s *LeaseWriteMoveSuite) TestALoopInsideTheRowPasses() {
+	s.hold([]string{"libs/old/a.go", "libs/new/a.go"})
+	s.Empty(s.deny("for f in a.go; do git mv libs/old/$f libs/new/$f; done"))
+}
+
+// A claim covers its file at the path level, so moving the file passes.
+func (s *LeaseWriteMoveSuite) TestAClaimOnOneDeclarationCoversAMoveOfItsFile() {
+	s.hold([]string{"libs/old/a.go#project.name", "libs/new/a.go"})
+	s.Empty(s.deny("git mv libs/old/a.go libs/new/a.go"))
 }

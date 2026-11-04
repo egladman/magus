@@ -12,7 +12,83 @@ import (
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// ExecRefusalSuite pins that the guard's question and the exec agree.
+type ExecRefusalSuite struct {
+	suite.Suite
+	store      *Store
+	loc        Location
+	repo       *testkit.Repo
+	checkpoint string
+	landing    string
+}
+
+func TestExecRefusalSuite(t *testing.T) {
+	suite.Run(t, new(ExecRefusalSuite))
+}
+
+func (s *ExecRefusalSuite) SetupTest() {
+	s.store, s.loc, s.repo = worktreeStore(s.T())
+	s.checkpoint = s.repo.Commit("later", map[string]string{"b.txt": "b\n"})
+	s.landing = s.linked("landing", s.checkpoint)
+}
+
+func (s *ExecRefusalSuite) linked(name, rev string) string {
+	dir := filepath.Join(s.T().TempDir(), name)
+	s.repo.Git("worktree", "add", "-q", "--detach", dir, rev)
+	resolved, err := filepath.EvalSymlinks(dir)
+	s.Require().NoError(err)
+	return resolved
+}
+
+// answers plants row and asks both: the question first, since exec writes.
+func (s *ExecRefusalSuite) answers(row types.Job, here string) (asked, took error) {
+	plant(s.T(), s.store, row)
+	asked = s.store.ExecRefusal(s.T().Context(), row, here)
+	_, took = NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: here}).Exec(s.T().Context(), row.ID)
+	return asked, took
+}
+
+func (s *ExecRefusalSuite) adoptedRow() types.Job {
+	return types.Job{ID: "w1", State: types.StateDeclared, Checkpoint: s.checkpoint, Worktree: &types.JobWorktree{Root: s.landing}}
+}
+
+func (s *ExecRefusalSuite) TestAFreshCheckoutAtTheCheckpointIsRefusedByNeither() {
+	asked, took := s.answers(s.adoptedRow(), s.linked("fresh", s.checkpoint))
+	s.NoError(asked)
+	s.NoError(took)
+}
+
+func (s *ExecRefusalSuite) TestACheckoutNotAtTheCheckpointIsRefusedByBoth() {
+	asked, took := s.answers(s.adoptedRow(), s.linked("stale", s.checkpoint+"~1"))
+	s.Require().ErrorIs(took, ErrHeldElsewhere)
+	s.Require().ErrorIs(asked, ErrHeldElsewhere)
+	s.Equal(took.Error(), asked.Error())
+}
+
+func (s *ExecRefusalSuite) TestACheckoutThatIsNotLinkedIsRefusedByBoth() {
+	asked, took := s.answers(s.adoptedRow(), s.repo.Root())
+	s.Require().ErrorIs(took, ErrHeldElsewhere)
+	s.Require().ErrorIs(asked, ErrHeldElsewhere)
+	s.Equal(took.Error(), asked.Error())
+}
+
+func (s *ExecRefusalSuite) TestARowEndedWithItsSessionTakenElsewhereIsRefusedByBoth() {
+	row := s.adoptedRow()
+	row.State, row.EndReason = types.StateNoReturn, types.EndReasonSessionEnded
+	asked, took := s.answers(row, s.linked("fresh", s.checkpoint))
+	s.Require().ErrorIs(took, ErrHeldElsewhere)
+	s.Require().ErrorIs(asked, ErrHeldElsewhere)
+	s.Equal(took.Error(), asked.Error())
+}
+
+func (s *ExecRefusalSuite) TestACheckoutWithNoRevisionIsRefusedByBoth() {
+	asked, took := s.answers(types.Job{ID: "w1", State: types.StateDeclared}, s.T().TempDir())
+	s.Require().ErrorContains(took, "reports no revision")
+	s.Require().ErrorContains(asked, "reports no revision")
+}
 
 // The three tokens the verdicts are read off, in the form `magus vcs checkpoint -o name`
 // prints: a clean tree is its revision, a dirty one carries the patch digest after a "+".

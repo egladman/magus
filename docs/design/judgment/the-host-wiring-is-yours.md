@@ -11,8 +11,9 @@ magus owns the guard rules and the verdict. It does not own an integration with
 your agent host. The rules come from one binary and are identical everywhere;
 the part that knows your host (which event field carries the command, which
 reply channel reaches the model, what happens when the binary cannot be found)
-is a template you copy and edit. Adding a host is your change, not a magus
-release.
+is declared in a workspace-selected harness spell. Shipped spells provide a
+starting point; a workspace can copy and adapt one without changing Magus.
+Bootstrap installs the selected wiring, and verification reports drift.
 
 The contract is small enough to hold in your head. `magus shell` takes
 the thing to judge on stdin, either plain text or a payload keyed by FIELD
@@ -25,8 +26,9 @@ here, and it is worth being plain about the trade. Agent hosts change their
 event shapes and hook names on their own schedule. A workspace whose
 integration lives inside magus waits for a magus release to get unblocked; a
 workspace that owns fifteen lines of shell edits them that afternoon. The cost
-is charged up front and on purpose: you read your host's hook documentation
-once, and there is no zero-configuration path.
+is charged up front: choose a harness and review its wiring. Bootstrap installs
+that declared configuration; user-account plugin activation remains a separate
+step owned by the person.
 
 The second cost of such a layer is the one nobody sees until it matters. A
 guard you did not wire is a guard whose failure mode you do not know, and this

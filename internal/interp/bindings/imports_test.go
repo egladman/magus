@@ -11,12 +11,69 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const resultFromAHostError = `import "fs";
+import "result";
+
+export fun read() > result\Result::<str> {
+    try {
+        return result\ok::<str>(fs\readFile("/nonexistent/result-module"));
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "read");
+    }
+    return result\fail::<str>("unreachable");
+}
+
+export fun answer() > str {
+    final got = read();
+    if (got.error -> err) {
+        return err.message;
+    }
+    return "no error";
+}
+`
+
+func assertAnswersHostErrorMessage(t *testing.T, sess *buzz.Session) {
+	t.Helper()
+	ctx := context.Background()
+	require.NoError(t, sess.Exec(ctx, resultFromAHostError))
+	got, err := sess.CallValue(ctx, sess.Exports()["answer"], nil)
+	require.NoError(t, err)
+	assert.Contains(t, got.AsString(), "read: fs.read_file")
+	assert.NotContains(t, got.AsString(), `{"message"`, "a host error's map is read, not printed")
+}
+
+func TestScriptSessionSharesTheResultModule(t *testing.T) {
+	assertAnswersHostErrorMessage(t, scriptSession(t))
+}
+
+func TestMagusfileSessionSharesTheResultModule(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	require.NoError(t, registerMagusModules(ctx, sess))
+	assertAnswersHostErrorMessage(t, sess)
+}
+
+func TestClientSessionOffersTheResultModule(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	require.NoError(t, InstallClient(ctx, sess, os.Stderr))
+	require.NoError(t, sess.Exec(ctx, `import "result";
+export fun answer() > str { return result\fail::<int>("bad").error!.message; }
+`))
+	got, err := sess.CallValue(ctx, sess.Exports()["answer"], nil)
+	require.NoError(t, err)
+	assert.Equal(t, "bad", got.AsString())
+}
 
 // spellImportsWS is a workspace carrying resolved spell imports, the way Magus does.
 type spellImportsWS struct {

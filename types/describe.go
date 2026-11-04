@@ -673,12 +673,22 @@ type ModuleFieldEntry struct {
 	Doc  string `json:"doc,omitempty" yaml:"doc,omitempty"`
 }
 
-// ModuleEntry is a module's summary; Fields/Methods are populated only for the detail view.
+// ModuleObjectEntry is a record a module returns whose methods call Go, such as
+// image's Digest. Each method's Name is Object.method.
+type ModuleObjectEntry struct {
+	Name    string              `json:"name"              yaml:"name"`
+	Doc     string              `json:"doc,omitempty"     yaml:"doc,omitempty"`
+	Methods []ModuleMethodEntry `json:"methods,omitempty" yaml:"methods,omitempty"`
+}
+
+// ModuleEntry is a module's summary; Fields, Methods and Objects are populated
+// only for the detail view.
 type ModuleEntry struct {
 	Name    string              `json:"name"              yaml:"name"`
 	Doc     string              `json:"doc,omitempty"     yaml:"doc,omitempty"`
 	Fields  []ModuleFieldEntry  `json:"fields,omitempty"  yaml:"fields,omitempty"`
 	Methods []ModuleMethodEntry `json:"methods,omitempty" yaml:"methods,omitempty"`
+	Objects []ModuleObjectEntry `json:"objects,omitempty" yaml:"objects,omitempty"`
 }
 
 // EvaluatedTargetDefinition is the human-readable description of an evaluated target shown by "magus describe".

@@ -27,8 +27,8 @@ import "magus/figure";
 final TOPIC = "engine";
 
 export fun engineFigure() > figure\Figure !> any {
-    final engine = magus\dir("libs/engine");
-    final vm = magus\dir("libs/engine/vm/");
+    final engine = magus\graph().dir("libs/engine");
+    final vm = magus\graph().dir("libs/engine/vm/");
     return figure\of("engine",
             title: "One engine",
             eyebrow: TOPIC,
@@ -37,7 +37,7 @@ export fun engineFigure() > figure\Figure !> any {
             direction: figure\Direction.across)
         .box(engine, label: "Engine")
         .box(vm, label: "VM")
-        .box(magus\dir("libs/engine"), label: "again");
+        .box(magus\graph().dir("libs/engine"), label: "again");
 }
 `)
 	ws.Write("diagrams/session.buzz", `import "magus" as m;
@@ -47,7 +47,7 @@ fun sessionFigure(name: str, dir: str) > fig\Figure !> any {
     return fig\of("session-{name}",
             title: "Session",
             desc: "Jobs of " + name)
-        .box(m\dir(dir), label: "jobs");
+        .box(m\graph().dir(dir), label: "jobs");
 }
 `)
 	ws.Write("diagrams/later.buzz", `import "magus/figure";

@@ -1,13 +1,11 @@
 package guard
 
 import (
-	"cmp"
 	"fmt"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -67,11 +65,18 @@ func asksArchitecture(message string) bool {
 // person's words are not something to answer with an advisory, and the rule that reads the
 // mark speaks on the model's next call instead.
 func recordMessageTopics(facts hint.Gate, message string) bool {
-	if facts.Session() == "" || !asksArchitecture(message) {
+	marked := false
+	if facts.Session() == "" {
 		return false
 	}
-	facts.MarkFired(topicArchitecture)
-	return facts.AlreadyFired(topicArchitecture)
+	if asksArchitecture(message) {
+		facts.MarkFired(topicArchitecture)
+		marked = facts.AlreadyFired(topicArchitecture)
+	}
+	if recordAmbiguousCIWord(facts, message) {
+		marked = true
+	}
+	return marked
 }
 
 // denyArchitectureWithoutSkill is architecture-unbriefed: the verdict for a graded call by
@@ -93,27 +98,6 @@ func denyArchitectureWithoutSkill(facts, skills hint.Gate, observesSkillLoads bo
 	}
 	return denyUntilSkillLoaded(skills, observesSkillLoads, workspace, architectureSkill,
 		"acting on an architecture question", carries)
-}
-
-// noSkillAgents are the subagent types magus ships that have no Skill tool: a read-only
-// agent cannot load a skill, so a deny that asks for one has no remedy it can take.
-var noSkillAgents = sync.OnceValue(func() map[string]bool {
-	shipped, err := agent.ShippedAgents()
-	if err != nil {
-		return nil
-	}
-	out := map[string]bool{}
-	for _, a := range shipped {
-		out[a.Name] = a.ReadOnly
-	}
-	return out
-})
-
-// loadsSkills reports whether the calling agent can load a skill. A root session and an
-// agent of a type magus does not know can; an agent of a shipped read-only type cannot,
-// whether its own call names the type or its recorded spawn does.
-func (d Dependencies) loadsSkills() bool {
-	return !noSkillAgents()[cmp.Or(d.callerType, spawnedAgentType(d.facts, d.caller.Agent))]
 }
 
 // structureProbe reports whether a shell line searches, reads or lists the workspace's own
@@ -181,11 +165,11 @@ func inSource(workspace, p string) bool {
 	return true
 }
 
-// rankArchitectureUnbriefed ranks the reason under every other deny on the line, as
-// rankBuzzAuthor does: a call refused anyway has nothing to learn first.
+// rankArchitectureUnbriefed turns the reason into advice under every other
+// deny on the line. A read is never refused.
 func rankArchitectureUnbriefed(v ShellVerdict, reason string) ShellVerdict {
 	if reason == "" || v.Deny != "" {
 		return v
 	}
-	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyArchitectureUnbriefed}}
+	return ShellVerdict{Context: reason, Kind: hint.MarkerKind(denyArchitectureUnbriefed), demoted: true}
 }

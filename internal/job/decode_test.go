@@ -206,11 +206,11 @@ func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
 	t.Parallel()
 
 	assert.ElementsMatch(t, []string{
-		"holder", "releases", "unattributed", "entries", "write_proof", "validated", "reported_base",
+		"holder", "releases", "unattributed", "entries", "release_requests", "write_proof", "validated", "reported_base",
 		"base_verdict", "registered_by", "registered", "checkout_root", "worktree", "end_reason", "created",
 		"updated", "deadline", "result", "attempt", "gate_attempts", "last_run", "integration",
 		"waiter_evidence", "model_tier", "rework_rounds", "widenings", "claims", "generation", "attempts",
-		"prior", "rejection", "paused", "paused_by", "pause_reason", "paused_until",
+		"prior", "rejection", "paused", "paused_by", "pause_reason", "paused_until", "holder_stopped", "landed",
 	}, storeStamped)
 }
 
@@ -392,8 +392,9 @@ func TestDecodeDeclarationCarriesBreaksAndRefusesABlankEntry(t *testing.T) {
 }
 
 // The two write doors accept the same CURRENT fields or a row declared on one is not the
-// row the other would have recorded. DecodePut is magus\job.put's decoder and
-// types.Declaration is the CLI's. types.Declaration alone still carries the pre-rename
+// row the other would have recorded.
+// DecodePut decodes magus\workspace().putJob, and types.Declaration the CLI's.
+// types.Declaration alone still carries the pre-rename
 // spellings (owned_paths/forbidden_paths/focus/tier; see types.Declaration.FoldLegacyNames):
 // that compat is its own and was never mirrored into DecodePut, so it is excluded from
 // this comparison rather than asserted as shared vocabulary.
@@ -404,9 +405,10 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	// The envelope and the key, which a put names outside its map, decode.go's own legacy
 	// compat, checkout, soft_paths and integrates, which only a fork makes, and claim, which
 	// only apply proves.
+	// A settlement's fields too: only apply writes them.
 	skipped := func(field string) bool {
 		return field == "schema_version" || field == "requires" || field == "id" || field == "checkout" || field == "soft_paths" ||
-			field == "integrates" || field == "claim" || legacy[field]
+			field == "integrates" || field == "claim" || field == "deferred" || field == "left_unmerged" || legacy[field]
 	}
 	_, err := DecodePut(map[string]any{"checkout": "/tmp/co"})
 	require.ErrorContains(t, err, "which only a fork makes")
@@ -432,6 +434,8 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			value = "30m"
 		case "brief_format":
 			value = "buzz"
+		case "delivery":
+			value = types.DeliveryStacked
 		case "check":
 			value = "test internal/job"
 		case "validation":
@@ -447,7 +451,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			}}
 		}
 		_, err = DecodePut(map[string]any{field: value})
-		require.NoError(t, err, "magus\\job.put rejects %q, which `magus job fork` accepts", field)
+		require.NoError(t, err, "magus\\workspace().putJob rejects %q, which `magus job fork` accepts", field)
 	}
 	var current []string
 	for _, field := range jsonFields(types.Declaration{}) {

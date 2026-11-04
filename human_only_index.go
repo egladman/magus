@@ -8,26 +8,26 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// recordedHumanOnly answers, for a lazy workspace that has not been opened, what it
-// declares human_only, from what the knowledge store recorded at its last evaluated sync:
+// recordedTargetPolicies answers, for a lazy workspace that has not been opened, what it
+// declares as target policy, from what the knowledge store recorded at its last evaluated sync:
 // valid while the domain fast stamp matches, which costs the tree walk and a few stats and
 // never a magusfile parse. false means the caller must open the workspace to learn it; it
 // never guesses, so a store that is missing, never recorded the targets, or was synced
 // from sources that have since moved sends the caller to the workspace. It never opens lw
 // and writes nothing.
-func recordedHumanOnly(ctx context.Context, lw *LazyWorkspace, cfg config.Config) (types.HumanOnlyIndex, bool) {
+func recordedTargetPolicies(ctx context.Context, lw *LazyWorkspace, cfg config.Config) (types.TargetPolicyIndex, bool) {
 	store, fastDomain := recordedDomainStamp(ctx, lw, cfg)
-	return store.HumanOnly(fastDomain)
+	return store.TargetPolicies(fastDomain)
 }
 
-// humanOnlyIndexBehind is types.IndexHumanOnly for the evaluation behind ws, and an index
+// targetPolicyIndexBehind is types.IndexTargetPolicies for the evaluation behind ws, and an index
 // that lists no project, which the store records as nothing, when ws carries none.
-func humanOnlyIndexBehind(ctx context.Context, ws types.Inspector) types.HumanOnlyIndex {
+func targetPolicyIndexBehind(ctx context.Context, ws types.Inspector) types.TargetPolicyIndex {
 	m := magusBehind(ctx, ws)
 	if m == nil {
-		return types.HumanOnlyIndex{}
+		return types.TargetPolicyIndex{}
 	}
-	return types.IndexHumanOnly(m)
+	return types.IndexTargetPolicies(m)
 }
 
 // recordedDomainStamp is the knowledge store of lw's workspace, opened read-only, and the

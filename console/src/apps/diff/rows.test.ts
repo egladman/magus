@@ -28,7 +28,7 @@ import {
 // useful message instead of a TypeError three lines later.
 function at<T>(xs: readonly T[], i: number, what: string): T {
   const v = xs[i];
-  if (v === undefined) throw new Error(`missing ${what} at index ${i}`);
+  assert.ok(v !== undefined, `missing ${what} at index ${i}`);
   return v;
 }
 
@@ -455,7 +455,7 @@ test("maxLineChars picks up a comment longer than every code line", () => {
     },
   ];
   const rows = buildRows(patchFixture(SHORT_LINES), "unified", byHunk(comments));
-  assert.equal(maxLineChars(rows), comments[0].body.length);
+  assert.equal(maxLineChars(rows), comments[0]?.body.length);
 });
 
 test("maxLineChars picks up a touch sentence longer than every code line", () => {

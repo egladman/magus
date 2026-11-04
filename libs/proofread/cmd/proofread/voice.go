@@ -456,3 +456,30 @@ func readVoiceFile(path string) (*proofread.Voice, error) {
 
 	return v, nil
 }
+
+// voiceOptions reads the voice file -voice names. The name default is the
+// file voice build writes with no --out. With none there, it says so on
+// stderr and returns no option.
+func voiceOptions(name string, stderr io.Writer) ([]proofread.Option, error) {
+	path := name
+	if name == "default" {
+		var err error
+		if path, err = defaultVoicePath(); err != nil {
+			return nil, err
+		}
+	}
+
+	v, err := readVoiceFile(path)
+
+	switch {
+	case name == "default" && errors.Is(err, os.ErrNotExist):
+		fmt.Fprintf(stderr, "proofread: no voice file at %s, so this text is judged with no voice; "+
+			"proofread voice build writes one\n", path)
+
+		return []proofread.Option{}, nil
+	case err != nil:
+		return nil, err
+	}
+
+	return []proofread.Option{proofread.WithVoice(v)}, nil
+}

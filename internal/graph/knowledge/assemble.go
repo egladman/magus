@@ -3,6 +3,7 @@ package knowledge
 import (
 	"fmt"
 	"maps"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -31,7 +32,9 @@ type Inputs struct {
 	Graph       types.TargetGraphOutput // TargetGraph(): projects, targets, deps, charms, spell ops
 	Spells      []types.Spell           // ListSpells(): spell + op nodes
 	Modules     []types.ModuleEntry     // host modules, each with Methods populated
-	Diagnostics []types.DiagnosticCode  // AllDiagnosticCodes()
+	Diagnostics []types.DiagnosticCode  // AllDiagnosticCodes(), then the workspace's own
+	// DiagnosticDocs resolves each code's url attr, the workspace's codes included.
+	DiagnosticDocs types.DiagnosticDocs
 	// Layers is every project's magus.project "layers", joined by unionLayers; Build fills it.
 	Layers map[string]string
 	// Root is the absolute workspace root, used by the docs and buzz-source
@@ -68,17 +71,20 @@ type Inputs struct {
 	// manifest.Reads), recorded with the shards so the next read's fast domain stamp folds
 	// the same inputs. nil leaves the manifest's record as it was.
 	Reads *readlog.Reads
-	// HumanOnly is what the evaluated workspace declares human_only, recorded on the
-	// manifest (see manifest.HumanOnly) the way Indexes is and assembled into no shard. An
+	// TargetPolicies is what the evaluated workspace declares as target policy, recorded on the
+	// manifest (see manifest.TargetPolicies) the way Indexes is and assembled into no shard. An
 	// index that lists no project leaves the manifest's record as it was: it is what a
 	// gather with no evaluated workspace to resolve one from leaves it as.
-	HumanOnly types.HumanOnlyIndex
+	TargetPolicies types.TargetPolicyIndex
 	// Packages maps a project path to the third-party dependencies its manifest
 	// declares, at the versions that manifest resolves to. They merge into the single
 	// @packages shard rather than one per project, because a package node is shared
 	// between the projects that require it; see packagesShardName. Deterministic, so
 	// remote-shareable like the other extracted shards.
 	Packages map[string][]types.KnowledgePackage
+	// ManifestFiles are the workspace-relative manifests and lock files
+	// ManifestFiles names, each a file node.
+	ManifestFiles []string
 	// VCS carries per-file git history metadata (empty unless knowledge.vcs.enabled and
 	// the workspace is a git repo). It folds onto existing file nodes in the @vcs shard
 	// as attrs: deterministic per commit, so remote-shareable.
@@ -114,6 +120,9 @@ type Inputs struct {
 	// ratio onto the file (and, via SCIP def lines, symbol) nodes rather than churning
 	// the deterministic @symbols shards it annotates.
 	Coverage []FileCoverage
+	// CoverageGaps lists directories whose functions Coverage omits. With a
+	// profile present, any entry fails the build.
+	CoverageGaps []string
 	// AgentContacts carries the agent-session events `magus session load` folded into the
 	// per-repo session store, reduced to the path contacts the @session overlay counts.
 	// Observed and machine-local like Coverage, and lazily loaded for the same reason:
@@ -204,7 +213,9 @@ func AssembleClasses(in Inputs, classes []ShardClass) []Shard {
 	// onto the file/symbol nodes above. Lazily loaded (its targets are), so an empty
 	// shard is dropped rather than persisted.
 	if slices.Contains(classes, ClassCoverage) {
-		if c := assembleCoverage(in.Coverage, in.Symbols); len(c.Nodes) > 0 {
+		if len(in.Coverage) > 0 && len(in.CoverageGaps) > 0 {
+			shards = append(shards, Shard{Name: coverageShardName, Err: coverageGapError(in.CoverageGaps)})
+		} else if c := assembleCoverage(in.Coverage, in.Symbols); len(c.Nodes) > 0 {
 			shards = append(shards, c)
 		}
 	}
@@ -323,6 +334,16 @@ func assembleDomain(in Inputs) []Shard {
 			}
 			shards = append(shards, b)
 		}
+		if m := assembleManifestFiles(in.Root, in.ManifestFiles, in.Graph.Projects); len(m.Nodes) > 0 {
+			for _, n := range m.Nodes {
+				if n.Kind == types.KindFile {
+					owned = append(owned, ownedNode{ID: n.ID, Path: n.Source})
+					fileNodePaths[n.Source] = true
+					pathToNode[n.Source] = n.ID
+				}
+			}
+			shards = append(shards, m)
+		}
 		// Citations run after both prose and buzz sources are known: the resolver needs the
 		// doc and section nodes to cross-link against, and it mints its own file and dir
 		// nodes for the paths neither shard covers (Go sources have none in the default
@@ -412,6 +433,44 @@ func assembleDomain(in Inputs) []Shard {
 	annotateProseStaleness(shards, vcsByPath(in.VCS))
 
 	return shards
+}
+
+const manifestsShardName = "@manifests"
+
+// ManifestFiles is every project's manifests and lock files, workspace-relative
+// and sorted. The spells name them, so no language is known here.
+func ManifestFiles(projects types.ProjectsOutput) []string {
+	seen := map[string]bool{}
+	for _, p := range projects.Projects {
+		for _, m := range p.Manifests {
+			seen[path.Join(p.Path, m)] = true
+		}
+		for _, l := range p.Lockfiles {
+			seen[path.Clean(l)] = true
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
+}
+
+// assembleManifestFiles makes a file node for each path, contained by its
+// owning project. A path that cannot be read gets none.
+func assembleManifestFiles(root string, files []string, projects []types.TargetGraphProject) Shard {
+	s := Shard{Name: manifestsShardName}
+	for _, rel := range files {
+		src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			continue
+		}
+		id := fileID(rel)
+		attrs := fileSizeAttrs(nil, types.CountLines(src), len(src))
+		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: id, Kind: types.KindFile, Label: rel, Source: rel, Attrs: attrs})
+		if owner, ok := owningProjectPath(rel, projects); ok {
+			dirs, edges := containsChain(owner, rel, id)
+			s.Nodes = append(s.Nodes, dirs...)
+			s.Edges = append(s.Edges, edges...)
+		}
+	}
+	return s
 }
 
 // containsChain builds the directory containment tree from a project down to a
@@ -617,11 +676,15 @@ func assembleRegistry(in Inputs) Shard {
 	}
 
 	for _, code := range in.Diagnostics {
+		attrs := map[string]string{"url": in.DiagnosticDocs.URL(code)}
+		if types.CodeOrigin(code) == types.DiagnosticOriginWorkspace {
+			attrs["origin"] = string(types.DiagnosticOriginWorkspace)
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:    diagnosticID(string(code)),
 			Kind:  types.KindDiagnostic,
 			Label: string(code),
-			Attrs: map[string]string{"url": types.CodeURL(code)},
+			Attrs: attrs,
 		})
 	}
 

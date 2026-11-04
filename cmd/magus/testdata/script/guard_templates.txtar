@@ -97,6 +97,22 @@ stdin pretooluse-command-codex.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name codex
 ! stdout .
 
+# An entry naming a harness no tool rows here were installed for is refused, listing
+# the installed ones, rather than judged without its host's facts.
+stdin pretooluse-command-codex.json
+! exec magus shell -o json --agent-name cursr
+stdout '"decision": "deny"'
+stdout 'names no harness installed here, installed: codex, cursor, testscript'
+stdout '"run": "magus agent harness install --id cursr"'
+
+# A payload carrying a field only one installed host sends, and none of the named host's
+# own, came from that host: the entry is refused, naming both.
+stdin codex-shaped.json
+! exec magus shell -o json --agent-name testscript
+stdout '"decision": "deny"'
+stdout '--agent-name names testscript, but the payload carries turn_id, a field only codex sends'
+stdout '"run": "magus describe harness"'
+
 # --- magus-command.buzz: a host's Read tool, restated as the line it stands for ---
 #
 # The Read tool never reaches a shell, so magus restates the whole event it receives: a
@@ -141,6 +157,8 @@ mkdir $WORK/home
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
+exec git init -q
+exec git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m init
 exec magus job fork harness/mcp-worker --read-only --criteria 'the transport test set, held so the rebind rule has a job to read'
 stdin $WORK/exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
@@ -159,7 +177,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 ! stdout .
 
 # case: mcp/deny
-# A client script calling magus\job.clear() would drop every job, which is the one thing a
+# A client script calling magus\workspace().clearJobs() would drop every job, which is the one thing a
 # bound worker may never do, so leaseRebind refuses it and the same hookSpecificOutput reply
 # this file renders for shell commands carries the deny here. The job door is the
 # client tool's script: magus serves no per-verb job tool, so a call naming one is not a
@@ -171,6 +189,7 @@ stdout 'would drop every job'
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
+rm $WORK/notes-ws/.git
 # The binding is dropped here, not left for the cases below: every path case in this
 # fixture workspace would otherwise be graded against write paths nobody declared for it, and
 # the lease rules answer before the rule each of those cases is about. The session's binding
@@ -288,9 +307,9 @@ cd $WORK
 # An event that names no tool and carries text at `prompt` (Claude Code's envelope key) is
 # the person's message, not a call. The glue hands it to `magus shell --message` and says
 # NOTHING: a message hook's stdout reaches the model, and a recorded topic is not news to it. What the record does
-# shows on the next call, which architecture-unbriefed holds until the agent loads the
-# architecture skill. The workspace sets that rule to deny, since it only advises by
-# default.
+# shows on the next call, which architecture-unbriefed advises until the agent loads the
+# architecture skill. A read is never refused, even where the workspace sets the rule to
+# deny; a write waits on the load.
 
 cd arch-ws
 
@@ -299,10 +318,11 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 ! stdout .
 ! stderr .
 
-# case: command/deny
+# case: command/advise
 stdin $WORK/arch-bash.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout '"permissionDecision":"deny"'
+! stdout '"permissionDecision":"deny"'
+stdout '"additionalContext"'
 stdout 'magus-architecture-review'
 
 # case: command/pass
@@ -497,6 +517,8 @@ mkdir $WORK/home
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
+exec git init -q
+exec git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m init
 exec magus job fork harness/cursor-mcp-worker --read-only --criteria 'the cursor MCP transport cases, held so the rebind rule has a job to read'
 stdin $WORK/cursor-exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
@@ -509,7 +531,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 
 # case: mcp/deny
-# job.clear from a bound worker is lease-rebind refuse; Cursor's dialect carries
+# workspace().clearJobs() from a bound worker is lease-rebind refuse; Cursor's dialect carries
 # permission=deny on both channels.
 stdin $WORK/cursor-mcp-call.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
@@ -518,6 +540,7 @@ stdout 'would drop every job'
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
+rm $WORK/notes-ws/.git
 rm $WORK/home/state
 
 # A Grep with nothing to restrict passes on its gating event.
@@ -551,6 +574,8 @@ stdout 'whole-tree git stash'
 cd notes-ws
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
+exec git init -q
+exec git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m init
 exec magus job fork harness/cursor-mcp-string --read-only --criteria 'the cursor MCP string-input case, held so the rebind rule has a job to read'
 stdin $WORK/cursor-exec-mcp-string.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
@@ -561,6 +586,7 @@ stdout 'would drop every job'
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
+rm $WORK/notes-ws/.git
 rm $WORK/home/state
 
 # The rest of this section counts calls, so it runs against a stand-in magus that logs
@@ -611,7 +637,9 @@ stdout '"additional_context":"COUNTED-ADVICE"'
 stdin cursor-post-read-counted.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"COUNTED-ADVICE"'
-grep -count=5 '^shell ' $WORK/calls.log
+# The Read is also recorded as the path it reached, the one `shell --observe` call.
+grep -count=6 '^shell ' $WORK/calls.log
+grep -count=1 '^shell --observe ' $WORK/calls.log
 
 # A Read of a SKILL.md is how Cursor loads a skill, so it goes to magus as the Read it
 # is, which magus records as the load, rather than as the `cat` the other reads become.
@@ -633,7 +661,8 @@ grep '"tool_input":\{"' $WORK/calls.log.stdin
 stdin cursor-post-mcp-counted.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"COUNTED-ADVICE"'
-grep -count=7 '^shell ' $WORK/calls.log
+grep -count=9 '^shell ' $WORK/calls.log
+grep -count=2 '^shell --observe ' $WORK/calls.log
 
 # preCompact marks the conversation, and the next after-call reply carries the brief
 # with the call's own advice. Only the next: the mark is spent.
@@ -667,6 +696,25 @@ stdin cursor-subagent.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
 ! stdout 'deny'
+
+# stop and subagentStop reach the workspace's magus\guard.stop as the stops they are. A
+# deny comes back as followup_message, which Cursor sends as the next message; a pass
+# answers {}. Cursor resumes a subagent only when it completed, so another status is not
+# asked about at all.
+cd $WORK/stop-ws
+stdin $WORK/cursor-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"followup_message":"\[magus guard\] Stop left its work open'
+stdin $WORK/cursor-stop-followed.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '^\{\}$'
+stdin $WORK/cursor-subagent-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"followup_message":"\[magus guard\] SubagentStop left its work open'
+stdin $WORK/cursor-subagent-stop-error.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '^\{\}$'
+cd $WORK
 
 # --- magus-observe.buzz: the verdict-free one ----------------------------
 #
@@ -833,20 +881,28 @@ exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claud
 ! stdout .
 ! stderr .
 
-# A missing proofread, one that fails, and an envelope with no reply are all silent and
-# exit 0: the hook fires on every turn, and none of them is worth a note.
+# A proofread that is missing, or that fails, judged nothing, and the person is told: one
+# systemMessage per session naming the binary and its fix. The reply is never blocked.
+env TMPDIR=$WORK/n-proofread-missing
 env __PROOFREAD_BIN=$WORK/nonexistent-proofread
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
-! stdout .
-! stderr .
+stdout '"systemMessage":"proofread-reply judges no reply: .*nonexistent-proofread is not an executable file'
+! stdout '"decision"'
 
-env __PROOFREAD_BIN=$WORK/failing-proofread
+# Once per session: the next turn of the same session is not told again.
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
 ! stdout .
-! stderr .
 
+env TMPDIR=$WORK/n-proofread-failing
+env __PROOFREAD_BIN=$WORK/failing-proofread
+stdin $WORK/proofread-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
+stdout '"systemMessage":"proofread-reply judges no reply: .*failing-proofread exited 2: proofread: cannot judge'
+! stdout '"decision"'
+
+# An envelope with no reply has nothing to judge, so it is silent and exits 0.
 env __PROOFREAD_BIN=$WORK/fake-proofread
 stdin $WORK/stop-event.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
@@ -881,60 +937,86 @@ exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name $HOST
 stderr 'no reply shape for host'
 env __PROOFREAD_BIN=
 
-# --- fail-open: a missing magus must degrade the way each template promises ---
+# --- fail-closed: a missing magus refuses what it cannot judge, and says so ---
+#
+# Decision 114a: a call no magus judged is refused unless it is a read, and the person is
+# told how to get a magus on every such call. A recorder enforces nothing, so it records
+# nothing and says so once per session. One notice directory per case keeps each case's
+# once-per-session marker its own.
 
 env __MAGUS_BIN=$WORK/nonexistent-magus
 
-# The observer stays silent and exits 0 when magus is absent. Unlike a guard, it
-# enforces nothing, so an announcement per read would report only that an optional
-# record was skipped.
+# A recorder says once per session that it wrote nothing. A host with no notice channel
+# this file can name gets it on stderr; stdout, the host's reply, stays empty.
+env TMPDIR=$WORK/n-observe
+stdin observe-read.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_NAME
+! stdout .
+stderr 'magus-observe.buzz recorded nothing: no runnable magus was found'
+
+# The notice is one per session across every recorder, not one per read.
 stdin observe-read.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
-
-# A message is as silent: the guard's unavailable notice would reach the model as context
-# on every turn, and nothing about the message itself was ever going to be enforced.
-stdin $WORK/prompt-architecture.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-! stdout .
-! stderr .
-
-# The two lifecycle wrappers degrade the same way and for the same reason: neither
-# enforces anything, so a notice would interrupt the end of every session, or open every
-# compacted one, to report that an optional record was not written.
 stdin $WORK/stop-event.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz -- --agent-name $HOST_NAME
 ! stdout .
 ! stderr .
 
+# A message is recorded, never judged, so it is told the same way and nothing else.
+env TMPDIR=$WORK/n-message
+stdin $WORK/prompt-architecture.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout .
+stderr 'magus-command.buzz recorded nothing'
+
+# On Claude Code the person reads it as a systemMessage.
+env TMPDIR=$WORK/n-checkpoint
+stdin $WORK/stop-event.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-checkpoint.buzz -- --agent-name claude-code
+stdout '^\{"systemMessage":"magus-checkpoint.buzz recorded nothing: no runnable magus was found'
+! stderr .
+
+# The rehydrate brief's json reply carries the notice. Plain stdout is the model's
+# context, so plain mode says it on stderr.
+env TMPDIR=$WORK/n-rehydrate-json
+stdin $WORK/session-start.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz -- --format json
+stdout '"systemMessage":"magus-rehydrate.buzz recorded nothing'
+env TMPDIR=$WORK/n-rehydrate
 stdin $WORK/session-start.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz
 ! stdout .
-! stderr .
+stderr 'magus-rehydrate.buzz recorded nothing'
 
-# The command template announces itself. An unguarded session you know about beats
-# one you do not.
+# A call that may change state is refused, and the person reads why and how to get magus.
+env TMPDIR=$WORK/n-command
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout 'magus guard is NOT running'
+stdout '"permissionDecision":"deny"'
+stdout '"systemMessage":"magus guard could not judge this call: no magus binary was found'
+stdout 'Install magus'
 
-# The path template stays silent by default: for most hosts an empty response means
-# allow. That is the deliberate trade - this template can now DENY, so failing open here
-# means an unavailable guard lets a notes write through, and announcing it on every file
-# edit was judged the worse noise. __MAGUS_FAILED_RESPONSE is the opt-in for a host that
-# would rather hear about it.
+# A read changes nothing, so it passes, and the person is still told.
+stdin observe-read.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout 'permissionDecision'
+stdout '"systemMessage":"magus guard could not judge this call'
+
+# Every call the path template sees is a write, so it is refused.
 stdin advise-path.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
-! stdout .
+stdout '"permissionDecision":"deny"'
+stdout 'could not judge this write: no magus binary was found'
 
-# Cursor allows explicitly, because Cursor fails open on a hook crash anyway and
-# pretending otherwise would give false assurance.
+# Cursor shows the person a message only with a refusal, so it refuses.
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
-stdout '"permission":"allow"'
+stdout '"permission":"deny"'
+stdout '"user_message":"magus guard could not judge this call: no magus binary was found'
 
-# --- found, but cannot judge: the notice carries its own evidence -------------
+# --- found, but cannot judge: the refusal carries its own evidence ------------
 #
 # The case that actually occurs - a stale binary on PATH outlives a missing one - and
 # the one whose notice used to name two suspects while checking neither. One of them,
@@ -944,13 +1026,11 @@ stdout '"permission":"allow"'
 env __MAGUS_BIN=$WORK/stale-magus
 chmod 0755 $WORK/stale-magus
 
-# One notice directory per case below, because the notice is now held to one firing per
-# session and every fixture here carries the same session id. Sharing one directory would
-# make each case assert on whether the case above it had already spoken.
 env TMPDIR=$WORK/n-stale-command
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout 'magus guard is NOT running'
+stdout '"permissionDecision":"deny"'
+stdout 'could not judge this call'
 stdout 'stale-magus'
 stdout 'v0.0.1-stale'
 stdout 'unknown subcommand'
@@ -959,14 +1039,14 @@ stdout 'unknown subcommand'
 # staleness. Reporting it as the error would hand back the least useful of the two lines.
 ! stdout 'WARN'
 
-# Cursor's template is self-contained, so it carries the same evidence or none at all.
+# Cursor's template is self-contained, so its refusal carries the same evidence.
 env TMPDIR=$WORK/n-stale-cursor
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
-stdout '"permission":"allow"'
-stderr 'stale-magus'
-stderr 'v0.0.1-stale'
-stderr 'unknown subcommand'
+stdout '"permission":"deny"'
+stdout 'stale-magus'
+stdout 'v0.0.1-stale'
+stdout 'unknown subcommand'
 
 # A host that set its own response still gets exactly that: the evidence is the DEFAULT,
 # not something the template forces on a host that made another choice.
@@ -978,46 +1058,33 @@ stdout 'host-chose-this'
 ! stdout 'stale-magus'
 env __MAGUS_FAILED_RESPONSE=
 
-# --- the notice is said once per session -------------------------------------
+# --- every unjudged call is refused and said, never once per session ---------
 #
-# These notices report a broken installation. That is a fact for the person and carries
-# nothing an agent can act on, so a repeat is noise: measured at 2,741 unavailable and 653
-# could-not-judge firings over recent sessions, 99% of them same-session repeats.
-
-# A second call in the SAME session says nothing at all, and the verdict still fails open.
-env TMPDIR=$WORK/n-once
+# A refusal is the one reply the caller cannot see past, so the second call in a session
+# carries its reason exactly as the first did.
+env TMPDIR=$WORK/n-every
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout 'magus guard is NOT running'
+stdout 'could not judge this call'
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-! stdout .
+stdout 'could not judge this call'
 
-# A DIFFERENT session is owed the fact once, or the first session of the day would
-# silence every session after it.
-stdin deny-command-s2.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout 'magus guard is NOT running'
-
-# The families are independent: a spent could-not-judge marker must not silence the
-# missing-binary notice, which reports a different broken installation.
 env __MAGUS_BIN=$WORK/does-not-exist
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-stdout 'magus is not on PATH'
+stdout 'no magus binary was found'
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-! stdout .
+stdout 'no magus binary was found'
 env __MAGUS_BIN=$WORK/stale-magus
 
-# Cursor holds its own notices the same way, on the stderr channel it uses.
-env TMPDIR=$WORK/n-once-cursor
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
-stderr 'magus guard is NOT running'
+stdout 'could not judge this call'
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
-! stderr 'magus guard is NOT running'
+stdout 'could not judge this call'
 
 # --- a DENY never goes quiet, whatever any marker says -----------------------
 #
@@ -1079,7 +1146,66 @@ stdout 'no passing gate covers'
 stdin $WORK/bench-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"ask"'
-stdout 'Approving runs it once'
+stdout 'To run it yourself'
+
+# case: command/ask
+# acceptEdits still prompts: only a mode that never prompts turns the ask into a deny.
+stdin $WORK/bench-command-accept-edits.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"ask"'
+
+# case: command/ask
+# bypassPermissions never prompts, so the ask is a deny, never a run. systemMessage is what
+# the person reads: why this host cannot ask, and the command to type.
+stdin $WORK/bench-command-bypass.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout '"systemMessage":'
+stdout 'It needs your approval, and this session runs in permission_mode bypassPermissions, which never prompts'
+stdout 'Run it from your own terminal: magus run bench \.'
+stdout 'relay this one to them verbatim'
+! stdout '"permissionDecision":"ask"'
+! stdout 'Approving'
+
+# case: command/ask
+stdin $WORK/bench-command-dont-ask.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'permission_mode dontAsk, which never prompts'
+! stdout '"permissionDecision":"ask"'
+
+# case: command/ask
+# The modes that may ask are an allowlist: no mode, an unknown one and plan all deny, with
+# the same text for the person.
+stdin $WORK/bench-command-no-mode.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'It needs your approval, and this session reports no permission_mode'
+stdout 'Run it from your own terminal: magus run bench \.'
+! stdout '"permissionDecision":"ask"'
+stdin $WORK/bench-command-new-mode.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'It needs your approval, and this session runs in permission_mode someNewMode, which is not known to prompt'
+stdout 'Run it from your own terminal: magus run bench \.'
+! stdout '"permissionDecision":"ask"'
+stdin $WORK/bench-command-plan.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'permission_mode plan, which is not known to prompt'
+
+# case: command/ask
+# auto is on the list: its docs say a hook ask goes to the permission prompt.
+stdin $WORK/bench-command-auto.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"ask"'
+
+# case: command/ask
+# A command with quotes in it stays one JSON string in both texts.
+stdin $WORK/bench-command-quoted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'Run it from your own terminal: magus run bench \. -- \\"a b\\"'
 
 # case: command/deny
 # A caller that does not claim --renders-ask never receives an ask. A hook installed before
@@ -1114,6 +1240,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdout '"permissionDecision":"deny"'
 stdout 'own terminal'
 stdout 'magus describe harness codex'
+stdout '"systemMessage":'
 ! stdout '"permissionDecision":"ask"'
 
 mkdir .codex/rules
@@ -1280,7 +1407,45 @@ stdout 'no passing gate covers'
 stdin $WORK/cursor-bench.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"ask"'
-stdout 'Approving runs it once'
+stdout 'To run it yourself'
+
+# case: command/ask
+# preToolUse cannot render an ask, so it hands the shell's over: it allows, and the very
+# next event renders the prompt from the filed reason.
+chmod 0755 $WORK/refusing-magus
+chmod 0755 $WORK/asking-magus
+env CURSOR_HOOK_STATE_DIR=$WORK/cursor-ask-state
+stdin $WORK/cursor-pre-bench.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '^\{"permission":"allow"\}$'
+exists $WORK/cursor-ask-state
+stdin $WORK/cursor-bench-after-pre.json
+env __MAGUS_BIN=$WORK/refusing-magus
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"ask"'
+stdout 'To run it yourself'
+env __MAGUS_BIN=
+
+# case: command/ask
+# Any other ask on preToolUse is a deny, and user_message tells the person why. No rule asks
+# about a write today, so a stand-in magus answers ask.
+env __MAGUS_BIN=$WORK/asking-magus
+stdin $WORK/cursor-pre-write-ask.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"deny"'
+stdout '"user_message":"stand-in reason'
+stdout 'Cursor shows its approval prompt only for a shell command or an MCP call'
+stdout 'relay this one to them verbatim'
+! stdout '"permission":"ask"'
+
+# case: command/ask
+# beforeMCPExecution does render it.
+stdin $WORK/cursor-mcp-ask.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"ask"'
+stdout '"user_message":"stand-in reason'
+env __MAGUS_BIN=
+env CURSOR_HOOK_STATE_DIR=
 cd $WORK
 
 -- push-ws/magusfile.buzz --
@@ -1372,6 +1537,36 @@ magus run bench .
 {"hook_event_name": "PreToolUse", "session_id": "s1", "turn_id": "t1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
 -- bench-command-bypass.json --
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "bypassPermissions", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-accept-edits.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "acceptEdits", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-dont-ask.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "dontAsk", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-no-mode.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-new-mode.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "someNewMode", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-plan.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "plan", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-auto.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "auto", "tool_name": "Bash", "tool_input": {"command": "magus run bench ."}}
+-- bench-command-quoted.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "bypassPermissions", "tool_name": "Bash", "tool_input": {"command": "magus run bench . -- \"a b\""}}
+-- cursor-pre-bench.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c9", "tool_name": "Shell", "tool_use_id": "u9", "tool_input": {"command": "magus run bench ."}, "cwd": "."}
+-- cursor-bench-after-pre.json --
+{"hook_event_name": "beforeShellExecution", "conversation_id": "c9", "command": "magus run bench .", "cwd": ".", "sandbox": false}
+-- cursor-pre-write-ask.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c9", "tool_name": "Write", "tool_use_id": "u10", "tool_input": {"file_path": "notes/a.md"}}
+-- cursor-mcp-ask.json --
+{"hook_event_name": "beforeMCPExecution", "conversation_id": "c9", "mcp_server_name": "magus", "tool_name": "client", "tool_input": {"script": "1"}, "cwd": "."}
+-- asking-magus --
+#!/bin/sh
+cat >/dev/null
+echo '{"decision":"ask","reason":"stand-in reason"}'
+-- refusing-magus --
+#!/bin/sh
+echo 'beforeShellExecution judged a call preToolUse filed' >&2
+exit 1
 -- bench-command-flag.json --
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "magus run -s bench ."}}
 -- bench-approval.json --
@@ -1409,7 +1604,7 @@ exit 2
 -- exec-mcp-worker.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "magus job exec harness/mcp-worker"}}
 -- mcp-call.json --
-{"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\job.clear();"}}
+{"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\workspace().clearJobs();"}}
 -- mcp-read.json --
 {"session_id": "s1", "tool_name": "mcp__magus__client", "tool_input": {"script": "import \"magus\"; magus\\describe(\"targets\")"}}
 -- spawn-call.json --
@@ -1672,13 +1867,34 @@ not json at all
 -- cursor-mcp-read.json --
 {"hook_event_name": "beforeMCPExecution", "conversation_id": "c1", "mcp_server_name": "magus", "tool_name": "client", "tool_input": {"script": "import \"magus\"; magus\\describe(\"targets\")"}, "cwd": "."}
 -- cursor-mcp-call.json --
-{"hook_event_name": "beforeMCPExecution", "conversation_id": "c1", "mcp_server_name": "magus", "tool_name": "client", "tool_input": {"script": "import \"magus\"; magus\\job.clear();"}, "cwd": "."}
+{"hook_event_name": "beforeMCPExecution", "conversation_id": "c1", "mcp_server_name": "magus", "tool_name": "client", "tool_input": {"script": "import \"magus\"; magus\\workspace().clearJobs();"}, "cwd": "."}
 -- cursor-pre-other.json --
 {"hook_event_name": "preToolUse", "conversation_id": "c1", "tool_name": "Grep", "tool_input": {"pattern": "magus"}}
 -- cursor-session-end.json --
 {"hook_event_name": "sessionEnd", "session_id": "c1", "reason": "completed", "transcript_path": "/tmp/t.jsonl"}
 -- cursor-subagent.json --
 {"hook_event_name": "subagentStart", "conversation_id": "child", "parent_conversation_id": "c1", "subagent_type": "explore", "task": "lease: L-1\nfind every caller"}
+-- stop-ws/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "fixture workspace: only the guard's view of a stop matters here",
+});
+magus\guard.stop(fun (req: StopRequest) > GuardVerdict {
+    if (req.stopHookActive) {
+        return magus\guard.allow();
+    }
+    return magus\guard.deny("{req.event} left its work open");
+});
+-- cursor-stop.json --
+{"hook_event_name": "stop", "conversation_id": "c1", "transcript_path": "/tmp/t.jsonl", "status": "completed", "loop_count": 0}
+-- cursor-stop-followed.json --
+{"hook_event_name": "stop", "conversation_id": "c1", "transcript_path": "/tmp/t.jsonl", "status": "completed", "loop_count": 1}
+-- cursor-subagent-stop.json --
+{"hook_event_name": "subagentStop", "conversation_id": "c1", "transcript_path": "/tmp/t.jsonl", "subagent_type": "explore", "status": "completed", "loop_count": 0, "agent_transcript_path": "/tmp/child.jsonl"}
+-- cursor-subagent-stop-error.json --
+{"hook_event_name": "subagentStop", "conversation_id": "c1", "transcript_path": "/tmp/t.jsonl", "subagent_type": "explore", "status": "error", "loop_count": 0}
 -- cursor-pre-shell-pass.json --
 {"hook_event_name": "preToolUse", "conversation_id": "c1", "session_id": "c1", "tool_name": "Shell", "tool_use_id": "s-pass", "tool_input": {"command": "ls -la", "cwd": "", "timeout": 30000}, "cwd": ""}
 -- cursor-pre-shell-deny.json --
@@ -1686,7 +1902,7 @@ not json at all
 -- cursor-exec-mcp-string.json --
 {"hook_event_name": "beforeShellExecution", "conversation_id": "c3", "command": "magus job exec harness/cursor-mcp-string", "cwd": ".", "sandbox": false}
 -- cursor-mcp-call-string.json --
-{"hook_event_name": "beforeMCPExecution", "conversation_id": "c3", "mcp_server_name": "magus", "tool_name": "client", "tool_input": "{\"script\":\"import \\\"magus\\\"; magus\\\\job.clear();\"}", "command": "./magus mcp", "cwd": "."}
+{"hook_event_name": "beforeMCPExecution", "conversation_id": "c3", "mcp_server_name": "magus", "tool_name": "client", "tool_input": "{\"script\":\"import \\\"magus\\\"; magus\\\\workspace().clearJobs();\"}", "command": "./magus mcp", "cwd": "."}
 -- counting-magus --
 #!/bin/sh
 # Stands in for magus: logs each call and its stdin, advises on every judgment, and
@@ -1767,6 +1983,26 @@ blind
 -- .cursor/magus/tools/host --
 cursor
 -- .cursor/magus/tools/limits --
+{"observes_skill_loads":true}
+-- .codex/magus/tools/version --
+1
+-- .codex/magus/tools/host --
+codex
+-- .codex/magus/tools/limits --
+{"payload_fields":["turn_id"]}
+-- codex-shaped.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "turn_id": "t1", "tool_name": "Bash", "tool_input": {"command": "ls"}}
+-- push-ws/.codex/magus/tools/version --
+1
+-- push-ws/.codex/magus/tools/host --
+codex
+-- push-ws/.codex/magus/tools/limits --
+{}
+-- push-ws/.cursor/magus/tools/version --
+1
+-- push-ws/.cursor/magus/tools/host --
+cursor
+-- push-ws/.cursor/magus/tools/limits --
 {"observes_skill_loads":true}
 -- notes-ws/.cursor/magus/tools/version --
 1

@@ -260,10 +260,10 @@ func namespaceMembers(g *Graph, ns string) []string {
 // knob alone an edge flag, size alone a parser. With any of the three unconfigured it holds
 // no verdict and reports false.
 func (u sharedUse) overShared(o types.ConformanceOptions) bool {
-	body, bodySrc := o.Effective(couplingKey(types.ConformanceSharedBody))
-	spread, spreadSrc := o.Effective(couplingKey(types.ConformanceCallerSpread))
-	reach, reachSrc := o.Effective(couplingKey(types.ConformanceSharedReach))
-	if bodySrc == "" || spreadSrc == "" || reachSrc == "" {
+	body, bodyOK := o.Effective(couplingKey(types.ConformanceSharedBody))
+	spread, spreadOK := o.Effective(couplingKey(types.ConformanceCallerSpread))
+	reach, reachOK := o.Effective(couplingKey(types.ConformanceSharedReach))
+	if !bodyOK || !spreadOK || !reachOK {
 		return false
 	}
 	return len(u.Knobs) > 0 && u.Body > body && (u.Spread > spread || len(u.Callers) > reach)

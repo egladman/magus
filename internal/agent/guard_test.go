@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,11 +18,12 @@ import (
 // live outside any Go package, so no embed can reach them.
 const repoRoot = "../.."
 
+// End-to-end installation tests below require the checkout bootstrap, just as CI does.
+const dogfoodedHookConfig = repoRoot + "/.claude/settings.json"
+
 const (
 	// hookTemplateDir holds the templates a reader installs into an agent host.
 	hookTemplateDir = repoRoot + "/docs/guides/integrations/agents"
-	// dogfoodedHookConfig is this repository's own Claude Code wiring of those templates.
-	dogfoodedHookConfig = repoRoot + "/.claude/settings.json"
 )
 
 // hookTemplates are the artifacts a reader installs. The directory also holds
@@ -40,6 +40,7 @@ var hookTemplates = []string{
 	// no guard coverage and owe no parity row. See the note at the top of each for why
 	// that absence is deliberate rather than a hole.
 	"magus-observe.buzz",
+	"magus-duration.buzz",
 	"magus-checkpoint.buzz",
 	"magus-rehydrate.buzz",
 	"magus-session.buzz",
@@ -47,9 +48,11 @@ var hookTemplates = []string{
 	"proofread-reply.buzz",
 	// Judges a .buzz file the agent already wrote, not a call, so it declares no coverage.
 	"magus-buzz-check.buzz",
+	// Samples free disk space and may start a reclaim chunk; it judges no call, so it too
+	// declares no coverage.
+	"magus-reclaim-disk.buzz",
 	"codex-hooks.json",
 	"cursor-hook.buzz",
-	"opencode-plugin.ts",
 	// The session-load adapters are shipped artifacts too: version-stamped, embedded
 	// in their page, and registered here so a new one cannot arrive unnoticed. They
 	// carry no guard coverage, because they judge nothing, and answer the session
@@ -58,137 +61,6 @@ var hookTemplates = []string{
 	"magus-session-load-codex.buzz",
 	"magus-session-load-cursor.buzz",
 	"magus-session-load-opencode.buzz",
-}
-
-// hookEntry is one wiring in a host's hook config: an optional matcher and the
-// commands it runs when the event fires.
-type hookEntry struct {
-	Matcher string `json:"matcher"`
-	Hooks   []struct {
-		Command string `json:"command"`
-	} `json:"hooks"`
-}
-
-// hookSettings is a host hook config keyed by EVENT NAME rather than by the one
-// event this file used to model. Every job magus does through a host is a hook on
-// some event, and a gate that reads only the pre-tool ones cannot tell a config
-// that records no checkpoint and rehydrates no compacted session from one that
-// does, which is exactly the parity question these files exist to answer.
-type hookSettings struct {
-	Hooks map[string][]hookEntry `json:"hooks"`
-}
-
-// shippedHookConfigs are the host hook configs this repository owns: the one it
-// dogfoods, and the one it ships for a reader to copy. Both are compared against
-// each other below, because "whatever magus does on one host it does on every host
-// that can express it" is a claim about these two files more than about any prose.
-var shippedHookConfigs = map[string]string{
-	"claude-code": dogfoodedHookConfig,
-	"codex":       hookTemplateDir + "/codex-hooks.json",
-}
-
-// hookConfigExemptions records a template one config deliberately does not run,
-// with the reason it does not. An exemption is the sanctioned way to differ; the
-// unsanctioned way is to differ silently, which is what the gate refuses.
-var hookConfigExemptions = map[string]map[string]string{
-	"codex": {
-		"magus-session": "SessionStart hands a codex hook no env file and reads back only additionalContext " +
-			"(testdata/hosts/codex/session-start.command.{input,output}.schema.json), so no hook can put the " +
-			"checkout root on PATH for later shell commands",
-		"magus-observe": "Codex has no read tool: a file is read through a shell command, which the command " +
-			"rules already judge, so no PreToolUse matcher exists for the read record to ride",
-		"proofread-reply": "the reply check is opt-in on every host and no shipped config wires it; the " +
-			"dogfooded Claude Code config does by hand, which is the only reason the two differ",
-	},
-}
-
-// mcpToolMatcherPrefix is how a host config selects magus's own MCP tools. A job
-// wired under it guards a different input from the same template, so the name
-// below carries it and the parity gate can see the two apart.
-const mcpToolMatcherPrefix = "mcp__magus__"
-
-// configJobs returns the JOBS a hook config's commands invoke, keyed by the template
-// and, where the matcher selects magus's MCP tools, by that input too.
-//
-// Keyed by job rather than by file because a template wired twice under different
-// matchers is two jobs: claude-code runs magus-command.buzz on Bash AND on the
-// MCP tool call, and a gate collecting basenames alone reads the second as nothing
-// new, which is the whole absence it exists to report.
-func configJobs(t *testing.T, path string) map[string]bool {
-	t.Helper()
-	raw, err := os.ReadFile(path)
-	require.NoError(t, err, "read %s", path)
-	var cfg hookSettings
-	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
-	require.NotEmpty(t, cfg.Hooks, "%s wires no events at all", path)
-
-	found := map[string]bool{}
-	for _, entries := range cfg.Hooks {
-		for _, entry := range entries {
-			for _, h := range entry.Hooks {
-				for _, template := range hookTemplates {
-					// Only the Buzz glue is named by a config: codex-hooks.json is a config
-					// itself, and a host loads opencode-plugin.ts rather than naming it.
-					if filepath.Ext(template) != ".buzz" || !strings.Contains(h.Command, template) {
-						continue
-					}
-					name := strings.TrimSuffix(template, ".buzz")
-					if strings.Contains(entry.Matcher, "mcp__") {
-						name += " on " + mcpToolMatcherPrefix
-					}
-					found[name] = true
-				}
-			}
-		}
-	}
-	return found
-}
-
-// TestShippedHookConfigsWireTheSameJobs is the parity gate one level above the
-// coverage declarations: those say what a template CAN carry, this says whether a
-// host was actually wired to run it.
-//
-// The failure it prevents is the quiet one. A job added for one host, such as a
-// checkpoint or a post-compaction brief, is a one-line addition to that host's
-// config, and every other host keeps working, keeps passing, and silently does
-// less. Nothing surfaces the difference, because a hook that was never wired
-// produces no output to be missing.
-func TestShippedHookConfigsWireTheSameJobs(t *testing.T) {
-	wired := map[string]map[string]bool{}
-	for host, path := range shippedHookConfigs {
-		wired[host] = configJobs(t, path)
-	}
-
-	for host, templates := range wired {
-		for other, otherTemplates := range wired {
-			if other == host {
-				continue
-			}
-			for name := range otherTemplates {
-				if templates[name] {
-					continue
-				}
-				why, exempt := hookConfigExemptions[host][name]
-				assert.True(t, exempt,
-					"%s runs %s and %s does not.\n"+
-						"Wire it there too, or record why that host does without it in hookConfigExemptions.\n"+
-						"A host doing less than another is a decision; a host doing less than another with\n"+
-						"nothing saying so is the gap this gate exists to refuse.",
-					shippedHookConfigs[other], name, shippedHookConfigs[host])
-				if exempt {
-					t.Logf("%s does not run %s: %s", host, name, why)
-				}
-			}
-		}
-	}
-
-	for host, exemptions := range hookConfigExemptions {
-		for name := range exemptions {
-			assert.False(t, wired[host][name],
-				"hookConfigExemptions says %s does not run %s, but %s invokes it. Drop the exemption.",
-				host, name, shippedHookConfigs[host])
-		}
-	}
 }
 
 // templateDirScaffolding is what lives beside the templates to LINT them rather
@@ -205,10 +77,11 @@ var templateDirScaffolding = map[string]bool{
 	"biome.json":    true,
 	// Formats this directory's guide pages. It exists because the parent docs
 	// project may not write here (MGS3001), not because a reader installs it.
-	"dprint.json":             true,
-	"pnpm-lock.yaml":          true,
-	"magusfile.buzz":          true,
-	"opencode-plugin.test.ts": true,
+	"dprint.json":                  true,
+	"pnpm-lock.yaml":               true,
+	"magusfile.buzz":               true,
+	"opencode-plugin.test.ts":      true,
+	"opencode-plugin.installed.ts": true,
 	// Emits testdata/hosts/cursor/gen from @cursor/sdk's published zod. A generator
 	// magus runs, not an artifact a reader installs into a host, so it owes the parity
 	// gates nothing: no guide embeds it and no host wires it.
@@ -308,7 +181,8 @@ var guardStances = map[string]bool{"model": true, "human": true, "none": true}
 // hostCoverage is host -> input -> decision -> stance.
 type hostCoverage map[string]map[string]map[string]string
 
-// parseGuardCoverage reads every coverage declaration out of the hook templates.
+// parseGuardCoverage reads every coverage declaration out of the hook templates and
+// the OpenCode harness contract.
 // codex-hooks.json carries none and cannot: it is JSON, comments are not
 // available, and an invented key risks the host rejecting the config. Codex's
 // coverage is asserted separately, from the templates its command strings
@@ -316,9 +190,17 @@ type hostCoverage map[string]map[string]map[string]string
 func parseGuardCoverage(t *testing.T) hostCoverage {
 	t.Helper()
 	cov := hostCoverage{}
+	paths := make([]string, 0, len(hookTemplates)+1)
 	for _, name := range hookTemplates {
-		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
-		require.NoError(t, err, "read %s", name)
+		paths = append(paths, filepath.Join(hookTemplateDir, name))
+	}
+	// OpenCode's integration is a Go/Wasm runtime, not a copyable guide template.
+	// Its host coverage belongs to the canonical harness spell and is kept outside
+	// TEMPLATE_PAGES so that table remains an inventory of reader-facing artifacts.
+	paths = append(paths, filepath.Join(repoRoot, "spells", "harness", "opencode", "spell.buzz"))
+	for _, path := range paths {
+		body, err := os.ReadFile(path)
+		require.NoError(t, err, "read %s", path)
 		for _, line := range strings.Split(string(body), "\n") {
 			_, decl, found := strings.Cut(line, guardCoverageMarker)
 			if !found {
@@ -327,16 +209,16 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 			fields := map[string]string{}
 			for _, kv := range strings.Fields(decl) {
 				key, value, ok := strings.Cut(kv, "=")
-				require.True(t, ok, "%s: coverage declaration field %q is not key=value", name, kv)
+				require.True(t, ok, "%s: coverage declaration field %q is not key=value", path, kv)
 				fields[key] = value
 			}
 			require.Equal(t, guardCoverageSchema, fields["schema"],
 				"%s declares coverage schema %q; the marker's schema is %s.\n"+
 					"A schema bump means every template's %s lines must be rewritten at once.",
-				name, fields["schema"], guardCoverageSchema, guardCoverageMarker)
+				path, fields["schema"], guardCoverageSchema, guardCoverageMarker)
 			input := fields["input"]
-			require.Contains(t, GuardInputs(), input, "%s declares an unknown guard input %q", name, input)
-			require.NotEmpty(t, fields["host"], "%s: coverage declaration names no host", name)
+			require.Contains(t, GuardInputs(), input, "%s declares an unknown guard input %q", path, input)
+			require.NotEmpty(t, fields["host"], "%s: coverage declaration names no host", path)
 
 			for _, host := range strings.Split(fields["host"], ",") {
 				if cov[host] == nil {
@@ -348,8 +230,8 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 					require.True(t, ok,
 						"%s declares the %s input for host %q but says nothing about the %q decision.\n"+
 							"Every decision in agent.GuardDecisions needs an explicit stance (model, human, or none):\n"+
-							"an undeclared decision is one this host was never asked about.", name, input, host, decision)
-					require.True(t, guardStances[stance], "%s: unknown stance %q for %q (want model, human, or none)", name, stance, decision)
+							"an undeclared decision is one this host was never asked about.", path, input, host, decision)
+					require.True(t, guardStances[stance], "%s: unknown stance %q for %q (want model, human, or none)", path, stance, decision)
 					stances[decision] = stance
 				}
 				// A host may be served on one input by two artifacts, because a
@@ -362,7 +244,7 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 					require.Equal(t, prior, stances,
 						"%s declares the %s input for host %q differently from the artifact beside it.\n"+
 							"Two forms of one template must claim the same stances, or nothing can say which the host gets.",
-						name, input, host)
+						path, input, host)
 				}
 				cov[host][input] = stances
 			}
@@ -393,6 +275,7 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 // templates executed against real events, and it is not this test.
 func TestHostGluesCoverTheGuardContract(t *testing.T) {
 	cov := parseGuardCoverage(t)
+	require.NotEmpty(t, cov["opencode"], "the canonical OpenCode harness must keep explicit guard coverage")
 
 	for host, inputs := range cov {
 		for _, input := range GuardInputs() {
@@ -418,27 +301,6 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 		}
 		assert.Contains(t, string(wiring), name,
 			"%s claims to cover the codex host, but codex-hooks.json never invokes it", name)
-	}
-
-	// Every input above reaches one glue through one entry: the shipped configs wire every
-	// tool call to magus-command.buzz under the catch-all matcher, so a write, an MCP call
-	// and a command are covered by the same entry, and no second entry judges one twice.
-	for host, path := range shippedHookConfigs {
-		raw, err := os.ReadFile(path)
-		require.NoError(t, err)
-		var cfg hookSettings
-		require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
-		var judging []string
-		for _, entry := range cfg.Hooks["PreToolUse"] {
-			for _, h := range entry.Hooks {
-				assert.NotContains(t, h.Command, "magus-path.buzz",
-					"%s: a write reaches the catch-all entry whole; a path entry judges it twice", host)
-				if strings.Contains(h.Command, "magus-command.buzz") {
-					judging = append(judging, entry.Matcher)
-				}
-			}
-		}
-		assert.Equal(t, []string{"*"}, judging, "%s: one PreToolUse entry runs the command glue, on every tool", host)
 	}
 }
 
@@ -475,34 +337,18 @@ var failOpenArmRe = regexp.MustCompile(`stdout === null` +
 // last is a fail-open arm.
 var failOpenRetryRe = regexp.MustCompile(`runOnce\(|judge\(guard, extra: `)
 
-// failOpenNoticeRe matches an arm SAYING it did not judge the call: a console
-// warning, or the fallback a Buzz template hands envOr for one of the
-// __MAGUS_*_RESPONSE envelopes. That fallback is a CALL, because the
-// PermissionRequest hook has no context field to carry prose and takes the same
-// notice by another route.
-var failOpenNoticeRe = regexp.MustCompile(`console\.warn|unguarded\(\)|text: UNAVAILABLE_TEXT`)
+// failOpenNoticeRe matches an arm that refuses the call and tells the person
+// why, per decision 114a. A recorder's arm tells the person no record was
+// written.
+var failOpenNoticeRe = regexp.MustCompile(`unjudgedReply\(|refusal\(|denyBoth\(|unjudged\(|unrecordedNotice\(`)
 
 // failOpenComputedNoticeRe matches an arm that BUILDS its notice from what it observed
 // rather than printing a canned string. The evidence is the point: which binary went
 // silent, its version, what it printed.
 var failOpenComputedNoticeRe = regexp.MustCompile(`failureNotice\(guard\b`)
 
-// failOpenSilentByDesign records the verdict-carrying templates whose fail-open
-// arms deliberately announce NOTHING, and where that decision is written down.
-//
-// An exemption rather than a fix, because the decision is recorded with its
-// tradeoff named and pinned by an executed case: cmd/magus/testdata/script/
-// guard_templates.txtar asserts the path template's silence under a missing
-// magus, on the grounds that an empty response there already means
-// allow for most hosts and an announcement on every file edit was judged the
-// worse noise. Overturning that is a decision for whoever made it; leaving it
-// undeclared here is what this table refuses.
-var failOpenSilentByDesign = map[string]string{
-	"magus-path.buzz": "cmd/magus/testdata/script/guard_templates.txtar pins the silence; __MAGUS_UNAVAILABLE_RESPONSE and __MAGUS_FAILED_RESPONSE are the opt-in",
-}
-
 // TestFailOpenArmsAnnounceThemselves is a design principle's enforcement point: a
-// template that cannot judge a call must SAY so.
+// template that cannot judge a call must refuse it and SAY so.
 //
 // Silence and a clean session are the same observation. Every other gate here
 // checks what a template does with a verdict it received; this one checks the
@@ -534,10 +380,6 @@ func TestFailOpenArmsAnnounceThemselves(t *testing.T) {
 				continue
 			}
 			arms++
-			if why, exempt := failOpenSilentByDesign[name]; exempt {
-				t.Logf("%s: fail-open arm at line %d is silent by design (%s)", name, i+1, why)
-				continue
-			}
 			assertFailOpenNotice(t, name, block, i+1)
 		}
 		assert.NotZero(t, arms,
@@ -570,9 +412,8 @@ func assertFailOpenNotice(t *testing.T, name string, block []string, line int) {
 	}
 	assert.Fail(t, "fail-open arm says nothing",
 		"%s answers without a magus verdict at line %d and emits no default notice.\n"+
-			"A guard that stopped enforcing looks exactly like a clean session, so every fail-open arm\n"+
-			"announces itself (see magus-command.buzz's UNAVAILABLE_TEXT). Add a notice,\n"+
-			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
+			"A guard that stopped enforcing looks exactly like a clean session, so every such arm\n"+
+			"refuses the call and tells the person (see magus-command.buzz's unjudgedReply).",
 		name, line)
 }
 

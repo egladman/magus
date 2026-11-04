@@ -1,9 +1,55 @@
 package main
 
 import (
-	"github.com/egladman/magus/internal/graph/url"
+	"errors"
+
 	"github.com/egladman/magus/internal/service/console"
 )
+
+// graphLinkOpts are the Graph Explorer directives a link pre-applies. Each is
+// optional and only the ones set reach the fragment.
+type graphLinkOpts struct {
+	// Host is the server's loopback host:port, the link's origin.
+	Host string
+	// Code is a one-time exchange code the page trades for its token.
+	Code string
+	// Query runs a node search on load.
+	Query string
+	// View activates a named view; it wins over Query on the page.
+	View string
+	// Node is the focus node of a blast or trace view.
+	Node string
+	// To is the destination node of a trace view.
+	To string
+}
+
+// graphLink formats http://<host>/console/graph/#<directives>. An empty Host is
+// an error: there is no origin to link to. console.Link owns the escaping and
+// puts the code last.
+func graphLink(opts graphLinkOpts) (string, error) {
+	if opts.Host == "" {
+		return "", errors.New("graph link: no server host, omit the link")
+	}
+
+	var frag []console.FragmentParam
+	for _, p := range []console.FragmentParam{
+		{Key: "q", Value: opts.Query},
+		{Key: "view", Value: opts.View},
+		{Key: "node", Value: opts.Node},
+		{Key: "to", Value: opts.To},
+	} {
+		if p.Value != "" {
+			frag = append(frag, p)
+		}
+	}
+
+	return console.Link(console.LinkOpts{
+		Host:     opts.Host,
+		App:      "graph",
+		Code:     opts.Code,
+		Fragment: frag,
+	}), nil
+}
 
 // graph_link.go holds the shared seam for the "view this in the Graph Explorer"
 // deep-links a few read-only commands print beneath their output (magus affected
@@ -33,17 +79,17 @@ func authHint(link string) string {
 // authenticated URL composable while making its disclosure an explicit act rather
 // than a side effect of asking an unrelated question. Distinct from
 // graphExplorerLink in graph_source.go, which builds a static #src= link.
-func liveExplorerLink(directives url.GraphLinkOpts) string {
+func liveExplorerLink(directives graphLinkOpts) string {
 	return buildGraphLink(mcpAddrString(), "", directives)
 }
 
 // buildGraphLink fills Host/Code on the caller's directives and formats the URL,
 // returning "" only when GraphLink has no host to link to. It is split out with the
 // inputs injected so tests can assert the URL without a server.
-func buildGraphLink(host, code string, directives url.GraphLinkOpts) string {
+func buildGraphLink(host, code string, directives graphLinkOpts) string {
 	directives.Host = host
 	directives.Code = code
-	link, err := url.GraphLink(directives)
+	link, err := graphLink(directives)
 	if err != nil {
 		return ""
 	}

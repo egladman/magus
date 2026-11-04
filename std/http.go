@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/types"
 )
@@ -26,9 +27,9 @@ import (
 
 // optsDoc is the trailing line shared by every method's Doc describing the
 // optional curl-style options map (last argument).
-const optsDoc = " opts (curl-style): fail, fail_with_body, fail_early (bool); " +
-	"timeout (seconds, default 30). Retrying is NOT configured here - pass a typed " +
-	"HttpRetry as the retry argument; without one the request runs exactly once."
+const optsDoc = " opts is an Options (curl-style): fail, failWithBody, failEarly; " +
+	"timeoutSeconds (default 30). Retrying is NOT configured here - pass a typed " +
+	"Retry as the retry argument; without one the request runs exactly once."
 
 // defaultHTTPTimeout bounds a request (including any retries and backoff) so a
 // server that accepts the connection then stalls cannot hang a build forever.
@@ -52,10 +53,10 @@ var HTTP = Module{
 			Args: []Arg{
 				{Name: "url", Type: TypeString},
 				{Name: "headers", Type: TypeStringMap, Optional: true},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
+				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "Retry"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "HttpResponse"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Response"}},
 			Raises:  true,
 			Impl:    HTTPGet,
 		},
@@ -66,8 +67,8 @@ var HTTP = Module{
 				{Name: "url", Type: TypeString},
 				{Name: "dest", Type: TypeString},
 				{Name: "headers", Type: TypeStringMap, Optional: true},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
+				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "Retry"},
 			},
 			Returns: []Ret{{Type: TypeInt}},
 			Raises:  true,
@@ -80,10 +81,10 @@ var HTTP = Module{
 				{Name: "url", Type: TypeString},
 				{Name: "body", Type: TypeString},
 				{Name: "headers", Type: TypeStringMap, Optional: true},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
+				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "Retry"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "HttpResponse"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Response"}},
 			Raises:  true,
 			Impl:    HTTPPost,
 		},
@@ -95,10 +96,10 @@ var HTTP = Module{
 				{Name: "url", Type: TypeString},
 				{Name: "body", Type: TypeString, Optional: true},
 				{Name: "headers", Type: TypeStringMap, Optional: true},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "HttpRetry"},
+				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
+				{Name: "retry", Type: TypeAnyMap, Optional: true, Object: "Retry"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "HttpResponse"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Response"}},
 			Raises:  true,
 			Impl:    HTTPRequest,
 		},
@@ -112,7 +113,7 @@ var HTTP = Module{
 				"that port; 0 (the default) scans upward from 8080 and binds the first available one. Unknown keys are " +
 				"rejected. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.watch.",
 			Args: []Arg{
-				{Name: "opts", Type: TypeAnyMap},
+				{Name: "opts", Type: TypeAnyMap, Object: "ServerOptions"},
 			},
 			Returns: []Ret{{Type: TypeInt}},
 			Raises:  true,
@@ -135,12 +136,12 @@ var HTTP = Module{
 			// The runtime binds the snake_case name verbatim (http_bytes.go), so the
 			// declaration must not camelCase it.
 			BuzzName: "upload_chunked",
-			Doc:      "Send the file at src as the request body. chunk_size > 0 sends it in slices (capped at 32 MiB), each carrying a Content-Range header - the resumable-upload convention GitHub Actions Cache and RFC 7233 servers expect; chunk_size <= 0 sends it in one request. Returns the final [status, body].",
+			Doc:      "Send the file at src as the request body. chunkSize > 0 sends it in slices (capped at 32 MiB), each carrying a Content-Range header - the resumable-upload convention GitHub Actions Cache and RFC 7233 servers expect; chunkSize <= 0 sends it in one request. Returns the final [status, body].",
 			Args: []Arg{
 				{Name: "method", Type: TypeString},
 				{Name: "url", Type: TypeString},
 				{Name: "src", Type: TypeString},
-				{Name: "chunk_size", Type: TypeInt},
+				{Name: "chunkSize", Type: TypeInt},
 				{Name: "headers", Type: TypeStringMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny}},
@@ -156,7 +157,7 @@ var HTTP = Module{
 // wrong default for a build tool in both directions: a genuinely failing request
 // costs three round trips and their backoff before the failure is reported, and a
 // real outage reads as a slow build rather than a broken one. Retrying is now
-// something a caller states with an HttpRetry policy.
+// something a caller states with a Retry policy.
 var defaultHTTPClient = retry.NewHTTPClient(
 	redirectGuardClient,
 	retry.WithAttempts(1),
@@ -165,7 +166,7 @@ var defaultHTTPClient = retry.NewHTTPClient(
 
 // HTTPGet sends a GET request to url with optional headers and curl-style opts,
 // returning {status, body, headers}.
-func HTTPGet(ctx context.Context, url string, headers map[string]string, opts, retryPolicy map[string]any) (types.HTTPResponse, error) {
+func HTTPGet(ctx context.Context, url string, headers map[string]string, opts types.HTTPOptions, retryPolicy types.HTTPRetry) (types.HTTPResponse, error) {
 	return doRequest(ctx, http.MethodGet, url, "", headers, opts, retryPolicy)
 }
 
@@ -179,7 +180,7 @@ func HTTPGet(ctx context.Context, url string, headers map[string]string, opts, r
 //
 // Moving it also gained it two things the companion version never had: the
 // retrying client the rest of this module uses, and a sandbox write check on dest.
-func HTTPDownload(ctx context.Context, url, dest string, headers map[string]string, opts, retryPolicy map[string]any) (int, error) {
+func HTTPDownload(ctx context.Context, url, dest string, headers map[string]string, opts types.HTTPOptions, retryPolicy types.HTTPRetry) (int, error) {
 	if types.Tracing(ctx) {
 		return 0, nil
 	}
@@ -223,13 +224,13 @@ func HTTPDownload(ctx context.Context, url, dest string, headers map[string]stri
 
 // HTTPPost sends a POST of body to url with optional headers and curl-style opts,
 // returning {status, body, headers}.
-func HTTPPost(ctx context.Context, url, body string, headers map[string]string, opts, retryPolicy map[string]any) (types.HTTPResponse, error) {
+func HTTPPost(ctx context.Context, url, body string, headers map[string]string, opts types.HTTPOptions, retryPolicy types.HTTPRetry) (types.HTTPResponse, error) {
 	return doRequest(ctx, http.MethodPost, url, body, headers, opts, retryPolicy)
 }
 
 // HTTPRequest sends a request with the given method to url and returns
 // {status, body, headers}.
-func HTTPRequest(ctx context.Context, method, url, body string, headers map[string]string, opts, retryPolicy map[string]any) (types.HTTPResponse, error) {
+func HTTPRequest(ctx context.Context, method, url, body string, headers map[string]string, opts types.HTTPOptions, retryPolicy types.HTTPRetry) (types.HTTPResponse, error) {
 	return doRequest(ctx, method, url, body, headers, opts, retryPolicy)
 }
 
@@ -241,7 +242,7 @@ func HTTPRequest(ctx context.Context, method, url, body string, headers map[stri
 // key, a missing or ambiguous dir/mounts choice, or a mistyped value fails loudly
 // here rather than silently defaulting. The server runs until the process exits,
 // so callers pair it with a blocking call such as fs.watch to keep serving.
-func HTTPServe(ctx context.Context, opts map[string]any) (int, error) {
+func HTTPServe(ctx context.Context, opts types.HTTPServerOptions) (int, error) {
 	dir, mounts, port, err := parseServerOptions(opts)
 	if err != nil {
 		return 0, err
@@ -279,95 +280,18 @@ func HTTPServe(ctx context.Context, opts map[string]any) (int, error) {
 	return tcpAddr.Port, nil
 }
 
-// serverKnownOpts is the exact set of keys http.server accepts. It is both the
-// allow-list the validator checks against and the "(known: ...)" hint a typo
-// error prints, so the two never drift.
-var serverKnownOpts = []string{"dir", "mounts", "port"}
-
-// parseServerOptions validates the http.server options bag and returns the chosen
-// single-dir root (dir), the prefix->dir mount table (mounts), and the port.
-// Exactly one of dir/mounts is non-empty on success. It rejects unknown keys, a
-// missing or doubled dir/mounts choice, and mistyped values so a typo fails loudly
-// instead of falling through to a default.
-func parseServerOptions(opts map[string]any) (dir string, mounts map[string]string, port int, err error) {
-	var unknown []string
-	for k := range opts {
-		switch k {
-		case "dir", "mounts", "port":
-		default:
-			unknown = append(unknown, k)
-		}
-	}
-	if len(unknown) > 0 {
-		return "", nil, 0, unknownOptionsError(unknown)
-	}
-
-	_, hasDir := opts["dir"]
-	_, hasMounts := opts["mounts"]
+// parseServerOptions validates the http.server options and returns the chosen single-dir
+// root (dir), the prefix->dir mount table (mounts), and the port. Exactly one of
+// dir/mounts is non-empty on success; a missing or doubled choice fails loudly instead
+// of falling through to a default.
+func parseServerOptions(opts types.HTTPServerOptions) (dir string, mounts map[string]string, port int, err error) {
 	switch {
-	case hasDir && hasMounts:
-		return "", nil, 0, fmt.Errorf(`http.server: give either "dir" or "mounts", not both`)
-	case !hasDir && !hasMounts:
-		return "", nil, 0, fmt.Errorf(`http.server: one of "dir" or "mounts" is required`)
+	case opts.Dir != "" && len(opts.Mounts) > 0:
+		return "", nil, 0, fmt.Errorf(`http.server: give either dir or mounts, not both`)
+	case opts.Dir == "" && len(opts.Mounts) == 0:
+		return "", nil, 0, fmt.Errorf(`http.server: one of dir or mounts is required`)
 	}
-
-	if hasDir {
-		s, ok := opts["dir"].(string)
-		if !ok {
-			return "", nil, 0, fmt.Errorf(`http.server: "dir" must be a string, got %T`, opts["dir"])
-		}
-		if s == "" {
-			return "", nil, 0, fmt.Errorf(`http.server: "dir" must not be empty`)
-		}
-		dir = s
-	}
-
-	if hasMounts {
-		raw, ok := opts["mounts"].(map[string]any)
-		if !ok {
-			return "", nil, 0, fmt.Errorf(`http.server: "mounts" must be a map of string to string, got %T`, opts["mounts"])
-		}
-		if len(raw) == 0 {
-			return "", nil, 0, fmt.Errorf(`http.server: "mounts" must not be empty`)
-		}
-		mounts = make(map[string]string, len(raw))
-		for prefix, v := range raw {
-			s, ok := v.(string)
-			if !ok {
-				return "", nil, 0, fmt.Errorf(`http.server: mount %q must map to a string dir, got %T`, prefix, v)
-			}
-			mounts[prefix] = s
-		}
-	}
-
-	if v, ok := opts["port"]; ok {
-		switch n := v.(type) {
-		case int:
-			port = n
-		case int64:
-			port = int(n)
-		default:
-			return "", nil, 0, fmt.Errorf(`http.server: "port" must be an int, got %T`, v)
-		}
-	}
-
-	return dir, mounts, port, nil
-}
-
-// unknownOptionsError builds the typo error listing the offending keys (sorted for a
-// deterministic message) alongside the known set.
-func unknownOptionsError(unknown []string) error {
-	sort.Strings(unknown)
-	quoted := make([]string, len(unknown))
-	for i, k := range unknown {
-		quoted[i] = strconv.Quote(k)
-	}
-	label := "option"
-	if len(unknown) > 1 {
-		label = "options"
-	}
-	return fmt.Errorf("http.server: unknown %s %s (known: %s)",
-		label, strings.Join(quoted, ", "), strings.Join(serverKnownOpts, ", "))
+	return opts.Dir, opts.Mounts, opts.Port, nil
 }
 
 // mountsHandler builds the multi-root handler for a prefix->dir map. A request
@@ -448,14 +372,11 @@ func httpListen(port int) (net.Listener, error) {
 // sendHTTP sends one request through the module's client, the retrying one when o or
 // retryPolicy ask for anything the default lacks. label prefixes every error ("http.get").
 // The caller closes the body.
-func sendHTTP(ctx context.Context, label, method, url string, body io.Reader, headers map[string]string, o httpOpts, retryPolicy map[string]any) (*http.Response, error) {
+func sendHTTP(ctx context.Context, label, method, url string, body io.Reader, headers map[string]string, o httpOpts, retryPolicy types.HTTPRetry) (*http.Response, error) {
 	if config.Offline() {
 		return nil, fmt.Errorf("%s %s: MAGUS_OFFLINE is set, so no request is sent", label, url)
 	}
-	r, err := parseHTTPRetry(retryPolicy)
-	if err != nil {
-		return nil, err
-	}
+	r := parseHTTPRetry(retryPolicy)
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", label, err)
@@ -474,7 +395,7 @@ func sendHTTP(ctx context.Context, label, method, url string, body io.Reader, he
 	return resp, nil
 }
 
-func doRequest(ctx context.Context, method, url, body string, headers map[string]string, opts, retryPolicy map[string]any) (types.HTTPResponse, error) {
+func doRequest(ctx context.Context, method, url, body string, headers map[string]string, opts types.HTTPOptions, retryPolicy types.HTTPRetry) (types.HTTPResponse, error) {
 	if types.Tracing(ctx) {
 		return types.HTTPResponse{}, nil
 	}
@@ -542,7 +463,7 @@ type httpOpts struct {
 // response comes back.
 func (o httpOpts) custom() bool { return o.failEarly || o.timeout > 0 }
 
-// httpRetry is the parsed HttpRetry policy: the caller's answer to "how hard
+// httpRetry is the parsed Retry policy: the caller's answer to "how hard
 // should this try", separate from httpOpts, which is everything else.
 type httpRetry struct {
 	attempts    int
@@ -559,65 +480,33 @@ type httpRetry struct {
 // default without a separate flag saying so.
 func (r httpRetry) retries() bool { return r.attempts > 1 }
 
-// httpRetryKeys is every field HttpRetry declares. Kept beside the parser so an
-// added field cannot be silently unreadable.
-var httpRetryKeys = map[string]bool{
-	"attempts": true, "delay_ms": true, "max_delay_ms": true,
-	"max_elapsed_ms": true, "fixed": true, "all_errors": true, "conn_refused": true,
-}
-
-// parseHTTPRetry reads the HttpRetry object a caller passed. An absent map is the
-// zero policy: one attempt.
+// parseHTTPRetry reads the Retry policy a caller passed. The zero policy is one attempt.
 //
-// AN UNKNOWN KEY IS AN ERROR, matching what http.server already does with its own
-// options. It matters more here than anywhere else in this module: a policy with
-// a mistyped key name (say, "attempts" spelled wrong) does not fail, it just
-// never retries, and the only evidence is a build that gives up on the first blip
-// months after someone believed they had configured otherwise. The declared
-// HttpRetry object gives the checker the same field list, so a magusfile writing
-// HttpRetry{...} is caught earlier still; this is the backstop for the
-// map-literal form.
-//
-// Durations arrive in MILLISECONDS here while httpOpts.timeout is in seconds.
-// That is not an inconsistency to tidy away: timeout mirrors curl --max-time,
-// which is seconds, while a retry delay is routinely sub-second and expressing
-// 250ms as 0.25 invites a caller to write 250 and wait four minutes. The field
-// names carry the unit (delay_ms) so neither is guessable.
-func parseHTTPRetry(m map[string]any) (httpRetry, error) {
+// Durations arrive in MILLISECONDS here while the request timeout is in seconds. That is
+// not an inconsistency to tidy away: the timeout mirrors curl --max-time, which is
+// seconds, while a retry delay is routinely sub-second and expressing 250ms as 0.25
+// invites a caller to write 250 and wait four minutes. The field names carry the unit
+// so neither is guessable.
+func parseHTTPRetry(p types.HTTPRetry) httpRetry {
 	var r httpRetry
-	if m == nil {
-		return r, nil
+	if p.Attempts > 0 {
+		r.attempts = p.Attempts
 	}
-	unknown := make([]string, 0, len(m))
-	for k := range m {
-		if !httpRetryKeys[k] {
-			unknown = append(unknown, k)
-		}
-	}
-	if len(unknown) > 0 {
-		sort.Strings(unknown)
-		return r, fmt.Errorf("http: unknown retry option(s) %s (want attempts, delay_ms, max_delay_ms, max_elapsed_ms, fixed, all_errors, conn_refused)",
-			strings.Join(unknown, ", "))
-	}
-	if f, ok := retryFloat(m["attempts"]); ok && f > 0 {
-		r.attempts = int(f)
-	}
-	r.delay = httpMillis(m, "delay_ms")
-	r.maxDelay = httpMillis(m, "max_delay_ms")
-	r.maxElapsed = httpMillis(m, "max_elapsed_ms")
-	r.fixed = httpBool(m, "fixed")
-	r.allErrs = httpBool(m, "all_errors")
-	r.connRefused = httpBool(m, "conn_refused")
-	return r, nil
+	r.delay = httpMillis(p.DelayMs)
+	r.maxDelay = httpMillis(p.MaxDelayMs)
+	r.maxElapsed = httpMillis(p.MaxElapsedMs)
+	r.fixed = p.Fixed
+	r.allErrs = p.AllErrors
+	r.connRefused = p.ConnRefused
+	return r
 }
 
-// httpMillis reads key as a duration expressed in (possibly fractional) ms.
-func httpMillis(m map[string]any, key string) time.Duration {
-	f, ok := retryFloat(m[key])
-	if !ok || f <= 0 {
+// httpMillis reads a duration expressed in (possibly fractional) ms; zero or less is unset.
+func httpMillis(ms float64) time.Duration {
+	if ms <= 0 {
 		return 0
 	}
-	return time.Duration(f * float64(time.Millisecond))
+	return time.Duration(ms * float64(time.Millisecond))
 }
 
 // client builds the *http.Client for one call from the options and the retry
@@ -666,38 +555,7 @@ func (o httpOpts) client(r httpRetry) *http.Client {
 	return retry.NewHTTPClient(redirectGuardClient, ropts...)
 }
 
-const maxHTTPRedirects = 10
-
-var redirectGuardClient = &http.Client{CheckRedirect: guardRedirect}
-
-// guardRedirect covers what Go leaves: it strips only Authorization and Cookie, and a
-// caller may carry its credential in any header.
-func guardRedirect(next *http.Request, via []*http.Request) error {
-	if len(via) >= maxHTTPRedirects {
-		return fmt.Errorf("stopped after %d redirects", maxHTTPRedirects)
-	}
-	if via[len(via)-1].URL.Scheme == "https" && next.URL.Scheme != "https" {
-		return fmt.Errorf("refused a redirect from https to %s", next.URL.Redacted())
-	}
-	if next.URL.Host != via[0].URL.Host {
-		for name := range next.Header {
-			if isCredentialHeader(name) {
-				next.Header.Del(name)
-			}
-		}
-	}
-	return nil
-}
-
-func isCredentialHeader(name string) bool {
-	lower := strings.ToLower(name)
-	for _, word := range []string{"authorization", "cookie", "token", "secret", "key", "auth", "password", "credential"} {
-		if strings.Contains(lower, word) {
-			return true
-		}
-	}
-	return false
-}
+var redirectGuardClient = &http.Client{CheckRedirect: httpx.GuardRedirect}
 
 // shouldRetry is the retry policy derived from the curl-style options. Exactly
 // one of resp/err is non-nil. Transport errors retry on timeouts (and, when
@@ -730,42 +588,14 @@ func (o httpOpts) shouldRetry(r httpRetry, resp *http.Response, err error) bool 
 	return code >= 500 || code == http.StatusRequestTimeout || code == http.StatusTooManyRequests
 }
 
-// parseHTTPOptions reads the curl-style options map. Unknown keys are ignored;
-// durations are read in seconds (curl's unit) and may be fractional.
-func parseHTTPOptions(m map[string]any) httpOpts {
-	var o httpOpts
-	if m == nil {
-		return o
-	}
-	o.fail = httpBool(m, "fail")
-	o.failWithBody = httpBool(m, "fail_with_body")
-	o.failEarly = httpBool(m, "fail_early")
-	if d, ok := httpSeconds(m, "timeout"); ok {
-		o.timeout = d
+// parseHTTPOptions reads the curl-style options. The timeout is in seconds (curl's unit)
+// and may be fractional; zero or less keeps the default.
+func parseHTTPOptions(opts types.HTTPOptions) httpOpts {
+	o := httpOpts{fail: opts.Fail, failWithBody: opts.FailWithBody, failEarly: opts.FailEarly}
+	if opts.TimeoutSeconds > 0 {
+		o.timeout = time.Duration(opts.TimeoutSeconds * float64(time.Second))
 	}
 	return o
-}
-
-func httpBool(m map[string]any, key string) bool {
-	if v, ok := m[key]; ok {
-		if b, ok := v.(bool); ok {
-			return b
-		}
-	}
-	return false
-}
-
-// httpSeconds reads key as a duration expressed in (possibly fractional) seconds.
-func httpSeconds(m map[string]any, key string) (time.Duration, bool) {
-	v, ok := m[key]
-	if !ok {
-		return 0, false
-	}
-	f, ok := retryFloat(v)
-	if !ok || f < 0 {
-		return 0, false
-	}
-	return time.Duration(f * float64(time.Second)), true
 }
 
 // isConnRefused reports whether err is (or wraps) a connection-refused error.

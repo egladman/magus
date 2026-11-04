@@ -174,7 +174,7 @@ connection; an agent should not start a daemon merely to unlock a tool.
 
 | Need                                      | MCP                                                             | Disconnected fallback                                           |
 | ----------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| Find and inspect workspace entities       | `client` (`magus\query`, `explain`, `path`, `refs`, `describe`) | `magus query`, `explain`, `path`, `refs`, `describe`            |
+| Find and inspect workspace entities       | `client` (`magus\graph().query`, `explain`, `path`, `refs`, `describe`) | `magus query`, `explain`, `path`, `refs`, `describe`            |
 | Run and inspect a target                  | `client` (`magus\run`, `magus\output`)                          | `magus run`, `magus affected`, `magus query output <ref>`       |
 | Coordinate a job                          | `client` (`magus\job`)                                          | `magus job`                                                     |
 | Transform data already supplied by a tool | `buzz`                                                          | `magus buzz` with explicit input; the CLI has more host modules |
@@ -223,20 +223,20 @@ The magus module, through `client`:
 | `magus\run`                                       | Run a target for one or more projects, with the same arguments as `magus run`            |
 | `magus\clean`                                     | Remove declared outputs. Arguments are `magus clean`'s                                   |
 | `magus\where`                                     | Which project contains a directory                                                       |
-| `magus\affected`                                  | The affected project set                                                                 |
-| `magus\impact`                                    | The blast radius: why each project is in that set                                        |
+| `magus\change().affected`                                  | The affected project set                                                                 |
+| `magus\change().impact`                                    | The blast radius: why each project is in that set                                        |
 | `magus\output`                                    | Fetch one target execution's captured output by its `out...` ref                         |
 | `magus\doctor`                                    | Validate workspace health (config, cache, cycles, tool availability)                     |
 | `magus\insight`                                   | One report: hotspots, affinity, ownership, trend, volatility, unreferenced               |
-| `magus\query`, `explain`, `path`, `refs`, `stats` | Search the graph, one node, a path, a symbol's references, and the graph's shape         |
+| `magus\graph().query`, `explain`, `path`, `refs`, `stats` | Search the graph, one node, a path, a symbol's references, and the graph's shape         |
 | `magus\memory`                                    | User-owned per-repo memory shared across worktrees                                       |
 | `magus\job`                                       | The orchestrating agent's declared jobs; magus never enforces them                       |
-| `magus\vcs.checkpoint`                            | The working state's identity: revision, branch, dirty, patch digest; writes nothing      |
+| `magus\change().at`                            | The working state's identity: revision, branch, dirty, patch digest; writes nothing      |
 
 Example:
 
 ```json
-{"script": "import \"magus\"; fun main(args: [str]) > any !> str { return magus\\query(\"kind=spell\"); }"}
+{"script": "import \"magus\"; fun main(args: [str]) > any !> str { return magus\\graph().query(\"kind=spell\"); }"}
 ```
 
 Operations no member covers:
@@ -246,7 +246,7 @@ Operations no member covers:
 | `buzz`    | Transform supplied JSON with Buzz and return a JSON value                                                         |
 | `status`  | Report the live proc-server pool                                                                                  |
 | `config`  | Read the resolved workspace config (read-only)                                                                    |
-| `diff`    | Join the review session a person has open. `magus\diff` reads the working tree and does not write to that session |
+| `diff`    | Join the review session a person has open. `magus\change().diff` reads the working tree and does not write to that session |
 | `console` | Return a tokenless link to a local console app when the user asks to see it                                       |
 
 `buzz` transforms a result from another MCP tool without a shell. Pass that

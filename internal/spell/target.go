@@ -186,6 +186,19 @@ var ReleaseCycleSource string
 //go:embed gen/types/lifecycle.buzz
 var LifecycleSource string
 
+// The discover_projects records, leaves first: DiscoveryQuery.files is [DiscoveryFile] and
+// DiscoveredProject.notInferred is [DiscoveryGap].
+var (
+	//go:embed gen/types/discoveryfile.buzz
+	discoveryFileSource string
+	//go:embed gen/types/discoveryquery.buzz
+	discoveryQuerySource string
+	//go:embed gen/types/discoverygap.buzz
+	discoveryGapSource string
+	//go:embed gen/types/discoveredproject.buzz
+	discoveredProjectSource string
+)
+
 // The provider op records (types/provider_ops.go): what magus hands a provider op and what
 // the op returns. None references another, so their order in the bundle is free.
 //
@@ -257,8 +270,11 @@ var (
 // its fields name; ModelRow follows Price and PriceStep, and HarnessTools HarnessTool.
 //
 //go:generate go run ../../cmd/magus-utils types -type HarnessConfig -out gen/types/harnessconfig.buzz
+//go:generate go run ../../cmd/magus-utils types -type HarnessAsset -out gen/types/harnessasset.buzz
+//go:generate go run ../../cmd/magus-utils types -type Harness -out gen/types/harness.buzz
 //go:generate go run ../../cmd/magus-utils types -type HarnessSkills -out gen/types/harnessskills.buzz
 //go:generate go run ../../cmd/magus-utils types -type HookCommand -out gen/types/hookcommand.buzz
+//go:generate go run ../../cmd/magus-utils types -type HookBinding -out gen/types/hookbinding.buzz
 //go:generate go run ../../cmd/magus-utils types -type ManagedEntries -out gen/types/managedentries.buzz
 //go:generate go run ../../cmd/magus-utils types -type McpServer -out gen/types/mcpserver.buzz
 //go:generate go run ../../cmd/magus-utils types -type Price -out gen/types/price.buzz
@@ -274,10 +290,16 @@ var (
 var (
 	//go:embed gen/types/harnessconfig.buzz
 	harnessConfigSource string
+	//go:embed gen/types/harnessasset.buzz
+	harnessAssetSource string
+	//go:embed gen/types/harness.buzz
+	harnessSource string
 	//go:embed gen/types/harnessskills.buzz
 	harnessSkillsSource string
 	//go:embed gen/types/hookcommand.buzz
 	hookCommandSource string
+	//go:embed gen/types/hookbinding.buzz
+	hookBindingSource string
 	//go:embed gen/types/managedentries.buzz
 	managedEntriesSource string
 	//go:embed gen/types/mcpserver.buzz
@@ -346,10 +368,11 @@ var CharmModuleSource string
 // registration (modules.go) and the built-in loader (builtins.go), so the two can't drift
 // apart.
 var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, StubSyntaxSource, SyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource,
+	discoveryFileSource, discoveryQuerySource, discoveryGapSource, discoveredProjectSource,
 	emptySource, ackSource, secretRefSource, greenRunSource, stringsSource, ciGroupSource, ciGroupEndSource, ciAnnotationSource,
 	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource,
 	findReviewRequestSource, reviewDraftSource, publishReviewRequestSource, replyReviewRequestSource, reviewRefSource,
 	reviewTargetSource, reviewCommentSource, projectQuerySource,
-	harnessConfigSource, harnessSkillsSource, hookCommandSource, managedEntriesSource, mcpServerSource,
+	harnessConfigSource, harnessAssetSource, harnessSource, harnessSkillsSource, hookCommandSource, hookBindingSource, managedEntriesSource, mcpServerSource,
 	priceSource, priceStepSource, modelRowSource, harnessToolSource, harnessToolsSource,
 	agentFileSource, promptSource, settingSource, limitsSource, shippedAgentSource}, "\n")

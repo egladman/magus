@@ -9,6 +9,7 @@ import {
   reportHttpStatus,
 } from "../../../lib/server";
 import { errMessage, errName } from "../../../lib/guards";
+import { MagusError, fail, ok, type Result } from "../../../gen/magus/types";
 import { lensQuery, type Lens } from "./lens";
 
 export interface DiagramEntry {
@@ -110,12 +111,16 @@ async function read<T>(
   opts: DiagramClientOptions,
   url: string,
   what: string,
-  parse: (body: unknown) => T,
+  parse: (body: unknown) => Result<T>,
 ): Promise<DiagramRead<T>> {
   const doFetch = opts.fetch ?? fetch;
   let res: Response;
   try {
-    res = await doFetch(url, { headers: authHeaders(), cache: "no-store", signal: opts.signal });
+    res = await doFetch(url, {
+      headers: authHeaders(),
+      cache: "no-store",
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
   } catch (e) {
     // reported: reportFetchFailure is the toast, the read is the inline notice
     if (errName(e) === "AbortError") return { kind: "aborted" };
@@ -129,57 +134,93 @@ async function read<T>(
     else reportFailure(SOURCE, failure.detail, "diagrams:" + failure.kind + ":" + url);
     return failure;
   }
+  let body: unknown;
   try {
-    return { kind: "ok", value: parse(await res.json()) };
+    body = await res.json();
   } catch (e) {
-    const detail = "Could not read " + what + ": " + errMessage(e);
-    reportFailure(SOURCE, detail, "diagrams:parse:" + url);
-    return { kind: "unreadable", detail };
+    return unreadableBody(url, "Could not read " + what + ": " + errMessage(e));
   }
+  const parsed = parse(body);
+  if (parsed.error)
+    return unreadableBody(url, "Could not read " + what + ": " + parsed.error.message);
+  return { kind: "ok", value: parsed.value };
 }
 
-function record(v: unknown, what: string): Record<string, unknown> {
+function unreadableBody(url: string, detail: string): DiagramFailure {
+  reportFailure(SOURCE, detail, "diagrams:parse:" + url);
+  return { kind: "unreadable", detail };
+}
+
+function record(v: unknown, what: string): Result<Record<string, unknown>> {
   if (typeof v !== "object" || v === null || Array.isArray(v))
-    throw new Error(what + " is not an object");
-  return v as Record<string, unknown>;
+    return fail(new MagusError({ code: "", message: what + " is not an object" }));
+  return ok(Object.fromEntries(Object.entries(v)));
 }
 
-function str(v: unknown, what: string): string {
-  if (typeof v !== "string") throw new Error(what + " is not a string");
-  return v;
+function str(v: unknown, what: string): Result<string> {
+  if (typeof v !== "string")
+    return fail(new MagusError({ code: "", message: what + " is not a string" }));
+  return ok(v);
 }
 
-export function parseListing(body: unknown): DiagramEntry[] {
-  const list = record(body, "the listing").diagrams;
-  if (!Array.isArray(list)) throw new Error("the listing has no diagrams array");
-  return list.map((raw, i) => {
+export function parseListing(body: unknown): Result<DiagramEntry[]> {
+  const top = record(body, "the listing");
+  if (top.error) return top;
+  const list = top.value.diagrams;
+  if (!Array.isArray(list))
+    return fail(new MagusError({ code: "", message: "the listing has no diagrams array" }));
+  const entries: DiagramEntry[] = [];
+  for (const [i, raw] of list.entries()) {
     const e = record(raw, "diagram " + i);
-    const entry: { -readonly [K in keyof DiagramEntry]: DiagramEntry[K] } = {
-      id: str(e.id, "diagram " + i + " id"),
-      kind: str(e.kind, "diagram " + i + " kind"),
-      title: str(e.title, "diagram " + i + " title"),
-    };
-    if (typeof e.project === "string") entry.project = e.project;
-    if (typeof e.indexed === "boolean") entry.indexed = e.indexed;
-    return entry;
-  });
+    if (e.error) return e;
+    const id = str(e.value.id, "diagram " + i + " id");
+    if (id.error) return id;
+    const kind = str(e.value.kind, "diagram " + i + " kind");
+    if (kind.error) return kind;
+    const title = str(e.value.title, "diagram " + i + " title");
+    if (title.error) return title;
+    const project = e.value.project;
+    const indexed = e.value.indexed;
+    entries.push({
+      id: id.value,
+      kind: kind.value,
+      title: title.value,
+      ...(typeof project === "string" ? { project } : {}),
+      ...(typeof indexed === "boolean" ? { indexed } : {}),
+    });
+  }
+  return ok(entries);
 }
 
-export function parseRendered(body: unknown): RenderedDiagram {
-  const r = record(body, "the figure");
-  const nodes = Array.isArray(r.nodes) ? r.nodes : [];
-  return {
-    id: str(r.id, "the figure id"),
-    title: str(r.title, "the figure title"),
-    svg: str(r.svg, "the figure svg"),
-    nodes: nodes.map((raw, i) => {
-      const n = record(raw, "node " + i);
-      return {
-        id: str(n.id, "node " + i + " id"),
-        anchor: typeof n.anchor === "string" ? n.anchor : "",
-        label: typeof n.label === "string" ? n.label : str(n.id, "node " + i + " id"),
-      };
-    }),
+export function parseRendered(body: unknown): Result<RenderedDiagram> {
+  const top = record(body, "the figure");
+  if (top.error) return top;
+  const r = top.value;
+  const id = str(r.id, "the figure id");
+  if (id.error) return id;
+  const title = str(r.title, "the figure title");
+  if (title.error) return title;
+  const svg = str(r.svg, "the figure svg");
+  if (svg.error) return svg;
+  const nodes: DiagramNode[] = [];
+  for (const [i, raw] of (Array.isArray(r.nodes) ? r.nodes : []).entries()) {
+    const n = record(raw, "node " + i);
+    if (n.error) return n;
+    const nodeId = str(n.value.id, "node " + i + " id");
+    if (nodeId.error) return nodeId;
+    const anchor = n.value.anchor;
+    const label = n.value.label;
+    nodes.push({
+      id: nodeId.value,
+      anchor: typeof anchor === "string" ? anchor : "",
+      label: typeof label === "string" ? label : nodeId.value,
+    });
+  }
+  return ok({
+    id: id.value,
+    title: title.value,
+    svg: svg.value,
+    nodes,
     sourceUrl: typeof r.source_url === "string" ? r.source_url : "",
-  };
+  });
 }

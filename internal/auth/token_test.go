@@ -45,7 +45,7 @@ func (s *TokenSuite) TestRoundTrip() {
 
 	tok, err := GenerateOperator()
 	require.NoError(t, err)
-	kind, ok := credentialKind(tok)
+	kind, ok := credentialKind(tok.Reveal())
 	require.True(t, ok, "GenerateOperator must mint a well-formed token")
 	assert.Equal(t, types.KindOperator, kind)
 
@@ -96,7 +96,7 @@ func (s *TokenSuite) TestOldOperatorFileIsRefusedWithTheReissueCommand() {
 	// A valid store token copied into the operator file is refused too: its kind is wrong.
 	stored, err := mintSecret(types.KindStored)
 	require.NoError(t, err)
-	_, err = SaveOperator(stored)
+	_, err = SaveOperator(types.NewSecret(stored))
 	require.NoError(t, err)
 	_, err = LoadOperator()
 	assert.ErrorIs(t, err, types.OperatorTokenFormat)
@@ -131,14 +131,14 @@ func (s *TokenSuite) TestGuardHotReload() {
 	h, err := httpx.BearerGuard(rpcerr.FormatJSON, Verify, need, okHandler)
 	require.NoError(t, err)
 
-	assert.Equal(t, http.StatusOK, requestStatus(h, "Bearer "+a))
+	assert.Equal(t, http.StatusOK, requestStatus(h, "Bearer "+a.Reveal()))
 	b, _ := GenerateOperator()
 	_, err = SaveOperator(b)
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusUnauthorized, requestStatus(h, "Bearer "+a), "old token after rotate")
-	assert.Equal(t, http.StatusOK, requestStatus(h, "Bearer "+b))
+	assert.Equal(t, http.StatusUnauthorized, requestStatus(h, "Bearer "+a.Reveal()), "old token after rotate")
+	assert.Equal(t, http.StatusOK, requestStatus(h, "Bearer "+b.Reveal()))
 	require.NoError(t, RevokeOperator())
-	assert.Equal(t, http.StatusUnauthorized, requestStatus(h, "Bearer "+b), "after revoke")
+	assert.Equal(t, http.StatusUnauthorized, requestStatus(h, "Bearer "+b.Reveal()), "after revoke")
 }
 
 // EnsureOperator persists a token on first use and never writes the secret to the log.
@@ -164,7 +164,7 @@ func (s *TokenSuite) TestSaveNewOperatorRefusesOverwrite() {
 	first, _ := GenerateOperator()
 	_, err := SaveNewOperator(first)
 	require.NoError(t, err)
-	_, err = SaveNewOperator("other")
+	_, err = SaveNewOperator(types.NewSecret("other"))
 	assert.ErrorIs(t, err, os.ErrExist)
 	got, _ := LoadOperator()
 	assert.Equal(t, first, got, "token clobbered")
@@ -203,7 +203,7 @@ func TestTokenNamesInvalidateTheVerificationView(t *testing.T) {
 	require.NoError(t, err)
 	prior, priorToken, err := store.Mint(types.GrantOperator, MintRequest{Name: "prior", Grant: types.GrantConnector, TTL: time.Hour})
 	require.NoError(t, err)
-	credential, ok := Verify(prior)
+	credential, ok := Verify(prior.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, priorToken.Credential(), credential)
 	state, err := StateDir()
@@ -221,10 +221,10 @@ func TestTokenNamesInvalidateTheVerificationView(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []any{before.Size(), before.ModTime(), before.Mode()}, []any{after.Size(), after.ModTime(), after.Mode()}, "the stat fingerprint must stay unchanged")
 	assert.NotEqual(t, signature, statSignature(state), "entry names must invalidate the view")
-	credential, ok = Verify(fresh)
+	credential, ok = Verify(fresh.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, freshToken.Credential(), credential)
-	credential, ok = Verify(prior)
+	credential, ok = Verify(prior.Reveal())
 	assert.False(t, ok)
 	assert.Equal(t, types.Credential{}, credential)
 }

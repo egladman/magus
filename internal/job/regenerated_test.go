@@ -189,7 +189,7 @@ func TestRenderRegeneratedCapsTheListing(t *testing.T) {
 		want += fmt.Sprintf("  docs/ref/%d.md (docs:content-generate)\n", i)
 	}
 	want += "  and 3 more from 2 target(s); -o json lists every one\n" +
-		"  never hand-edit them: run the target named beside one and commit what it writes with the change, or leave it for the root to regenerate after integration\n"
+		"  never hand-edit or commit them: the integrator regenerates them, so unstage what the target named beside one writes\n"
 	assert.Equal(t, want, b.String())
 
 	b.Reset()

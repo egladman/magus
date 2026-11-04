@@ -130,7 +130,8 @@ function toggleGroupButtons(id: string): HTMLButtonElement[] {
 
 export function toggleGroupValue(id: string): boolean {
   const b = toggleGroupButtons(id);
-  return b.length === 2 && b[1].classList.contains("pf-m-selected");
+  const second = b[1];
+  return b.length === 2 && second !== undefined && second.classList.contains("pf-m-selected");
 }
 
 export function setToggleGroup(id: string, second: boolean): void {
@@ -149,7 +150,7 @@ export function flipToggleGroup(id: string): void {
   const b = toggleGroupButtons(id);
   if (b.length !== 2) return;
   const other = b[toggleGroupValue(id) ? 0 : 1];
-  if (!other.disabled) other.click();
+  if (other && !other.disabled) other.click();
 }
 
 export function isTyping(node: EventTarget | null): boolean {

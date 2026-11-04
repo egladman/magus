@@ -136,19 +136,10 @@ func (g goCall) linksMagus() bool {
 	return slices.ContainsFunc(g.args[1:], func(a string) bool { return path.Clean(a) == "cmd/magus" })
 }
 
-// magusUtilsGenerators are the cmd/magus-utils subcommands that write generated source, the
-// ones the *_generate targets and the go:generate directives they drive run. The rest
-// (cut, release-index, diffdemo) are release and demo tools, not part of regenerating a
-// tree.
-var magusUtilsGenerators = []string{
-	"api", "bindings", "boundarylist", "boundaryobjects", "cliflags", "completions", "config",
-	"jobschema", "mcptools", "moduledecls", "moduleset", "types",
-}
-
 // recoversMagus reports a command that rebuilds a checkout whose committed generated files
 // or binary lag its sources: the relink MGS1021 prints, `go build [-trimpath] -o magus
-// ./cmd/magus`, a `go generate` of packages inside the checkout, or `go run [-trimpath]
-// ./cmd/magus-utils` with one of magusUtilsGenerators.
+// ./cmd/magus`, or a `go generate` of packages inside the checkout. A generator is reached
+// through the go:generate lines that drive it, never by naming a module's own tool.
 func (g goCall) recoversMagus() bool {
 	if len(g.args) == 0 {
 		return false
@@ -171,9 +162,6 @@ func (g goCall) recoversMagus() bool {
 			}
 		}
 		return true
-	case "run":
-		args = trimpathOptional(args)
-		return len(args) >= 2 && path.Clean(args[0]) == "cmd/magus-utils" && slices.Contains(magusUtilsGenerators, args[1])
 	}
 	return false
 }
@@ -261,9 +249,10 @@ const ownRebuild = "`./magus run go-build .`"
 // when the bootstrap stands alone in a root with none.
 type ownBuildOutcome struct {
 	root string
-	// bootstrapArgv is the bootstrap as the call's directory runs it: with -C when root
-	// lies elsewhere.
+	// Remedies carry their root even when the call starts there: a host may report
+	// its session directory instead of the native shell tool's workdir on a retry.
 	bootstrapArgv []string
+	rebuild       string
 	bootstrap     bool
 	prefixed      bool
 	link          bool
@@ -304,18 +293,18 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 		return o.recoveryAdvisory
 	case o.staleBootstrap:
 		return o.staleBootstrapAdvisory
-	case o.hasBinary && (o.bootstrap || o.link):
-		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
-		v.Deny = fmt.Sprintf("magus workspace: not a bootstrap: %s already has a magus binary; rebuild with %s.", o.root, ownRebuild)
-		v.Next, v.Lead = nil, ""
-		return v
-	case o.hasBinary:
-		return v
 	case o.bootstrap && o.multipleCmds:
 		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
 		v.Deny = fmt.Sprintf("magus workspace: the bootstrap runs only alone on its line; drop %s.", dropList(o.others))
 		v.Next, v.Lead = nil, ""
 		return v.withRemedy(v.Deny, hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
+	case o.hasBinary && (o.bootstrap || o.link):
+		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
+		v.Deny = fmt.Sprintf("magus workspace: not a bootstrap: %s already has a magus binary; rebuild with `%s`, or name another checkout with `go -C <dir>`.", o.root, o.rebuild)
+		v.Next, v.Lead = nil, ""
+		return v
+	case o.hasBinary:
+		return v
 	case o.bootstrap && o.prefixed:
 		return o.advisory
 	}
@@ -392,11 +381,12 @@ func besideGoCall(command string, d Dialect) []string {
 func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, d Dialect, denied hint.Invocation, call goCall, root string, multipleCmds bool, cwd string) *ownBuildOutcome {
 	where := "this checkout"
 	argv := bootstrapArgv()
+	if env, goArgv, ok := bootstrapParts(); ok {
+		argv = slices.Concat([]string{env, "go", "-C", root}, goArgv[1:])
+	}
+	rebuild := hint.NextForDenyRemedy(string(denyRuleRawTool), []string{filepath.Join(root, "magus"), "--root", root, "run", "go-build", "."}, "").Run
 	if root != filepath.Clean(cwd) {
 		where = root
-		if env, goArgv, ok := bootstrapParts(); ok {
-			argv = slices.Concat([]string{env, "go", "-C", root}, goArgv[1:])
-		}
 	}
 	rule := denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(denied)}
 	workspaceShell := matchWorkspaceShell(deps.ShellRules, command, d)
@@ -411,6 +401,7 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		lease:         lease,
 		root:          root,
 		bootstrapArgv: argv,
+		rebuild:       rebuild,
 		bootstrap:     call.bootstrapsMagus(),
 		prefixed:      bootstrapLine(command, d),
 		link:          call.linksMagus(),
@@ -494,8 +485,9 @@ func rankOwnBuild(v ShellVerdict, oc *ownBuildOutcome) ShellVerdict {
 	return oc.apply(v)
 }
 
-// checkoutBootstrapDir is the checkout a line's magus call hands job.CheckoutBootstrapScript
-// with --checkout, resolved against cwd; ok is false for a line running no such call.
+// checkoutBootstrapDir is the checkout a line's magus call hands
+// job.CheckoutBootstrapScript, by --checkout or --here, resolved against cwd.
+// ok is false for a line running no such call.
 func checkoutBootstrapDir(cmds []hint.Invocation, cwd string) (string, bool) {
 	for _, c := range cmds {
 		words := magusSubcommandWords(c.Args)
@@ -504,6 +496,9 @@ func checkoutBootstrapDir(cmds []hint.Invocation, cwd string) (string, bool) {
 		}
 		rest := c.Args[slices.Index(c.Args, "--")+1:]
 		for i, a := range rest {
+			if a == "--here" {
+				return filepath.Clean(cwd), true
+			}
 			dir, joined := strings.CutPrefix(a, "--checkout=")
 			if !joined {
 				if a != "--checkout" || i+1 >= len(rest) {

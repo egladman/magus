@@ -174,7 +174,7 @@ export fun judge(helps: [Help], rows: {str: [any]}, baseline: [str]) > [Finding]
 // judged runs the built proofread's cli-help kind over text and returns its rows.
 fun judged(bin: str, table: str, text: str) > [any] !> any {
     final run = proc\exec(bin, args: ["cli-help", "--stdin", "--decisions", table],
-        opts: {"stdin": text, "quiet": true, "allow_failure": true});
+        opts: proc\ExecOptions{ stdin = text, quiet = true, allowFailure = true });
     // Exit 1 is a deny finding, written to stdout like any other.
     if (run.code != 0 and run.code != 1) {
         throw "proofread exited {run.code}: " + run.stderr.trim();

@@ -103,6 +103,7 @@ function serve(projects: unknown[], lifecycleState = "LIFECYCLE_STATE_LIVE"): vo
         }),
       );
     }
+    // platform double: fetch
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
 }
@@ -159,7 +160,7 @@ test("every toolchain row is a table row, with the wire mapped into its cells", 
       "Support",
     ],
   );
-  assert.deepEqual(table()[0].slice(0, 2), ["go", "."]);
+  assert.deepEqual(table()[0]?.slice(0, 2), ["go", "."]);
   const node = table().find((r) => r[0] === "node");
   assert.deepEqual(node?.slice(2, 7), [
     "v26.5.0",
@@ -189,8 +190,8 @@ test("the table shows the server's window text and violation flag, not its own r
     },
   ]);
   await mount();
-  assert.equal(table()[0][4], "whatever the server printed");
-  assert.equal(table()[0][6], "too old");
+  assert.equal(table()[0]?.[4], "whatever the server printed");
+  assert.equal(table()[0]?.[6], "too old");
   assert.equal(count(), "1 tool, 1 outside version window");
 });
 
@@ -299,6 +300,7 @@ test("a refresh that fails over a table on screen says how old the reading is", 
   await mount();
   assert.equal(host.querySelector(".console-tools__stale")?.childElementCount, 0);
 
+  // platform double: fetch
   globalThis.fetch = (() => Promise.reject(new Error("stub: refused"))) as typeof fetch;
   host.querySelector<HTMLButtonElement>(".console-tools__refresh")?.click();
   await settle();
@@ -316,6 +318,7 @@ test("a refresh that fails over a table on screen says how old the reading is", 
 
 test("a refused connection is the connect prompt with a retry, not an empty table", async () => {
   setDefaultHost(HOST);
+  // platform double: fetch
   globalThis.fetch = (() => Promise.reject(new Error("stub: refused"))) as typeof fetch;
   await mount();
   assert.equal(host.querySelector<HTMLElement>(".console-tools__table")?.hidden, true);

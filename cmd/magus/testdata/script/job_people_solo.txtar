@@ -45,6 +45,8 @@ stderr '^ref  out[0-9a-f]{12}$'
 exec sh -c 'ref=$(magus run test . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" "$WORK/result.in.json" > "$WORK/result.json"'
 stdin $WORK/result.json
 exec magus job exit refactor/pricing --stdin
+cp stdout $WORK/raw
+exec sh -c 'sed -e "s/out[0-9a-f]\{8,12\}/out<hex>/g" "$WORK/raw"'
 cmp stdout $WORK/exit.out
 
 cd ../shop-tax
@@ -58,6 +60,8 @@ cp stdout $WORK/raw
 exec sh -c 'sed -e "s|$WORK|~/src|g" -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
 cmp stdout $WORK/wait.out
 exec magus ls jobs --all
+cp stdout $WORK/raw
+exec sh -c 'sed -e "s|$WORK|~/src|g" "$WORK/raw"'
 cmp stdout $WORK/ls-done.out
 
 # Who holds what and since when: the checkout each job was taken in, the clock it was
@@ -143,8 +147,25 @@ refactor/pricing: 0 of 1 goal(s) met
 net lines: +0 -0 (+0)
 exports no goal declares: none
 left defined with no use: none
+goal commands
+  check: magus run test .
+the result `magus job exit refactor/pricing --stdin` reads
+{
+  "schema_version": 2,
+  "job": "refactor/pricing",
+  "changed_paths": [
+    "<each file you changed>"
+  ],
+  "validation": {
+    "command": "magus run test .",
+    "output_ref": "<ref its run printed>"
+  },
+  "unresolved_risks": []
+}
+A check the machine would not seat has no ref: set "output_ref": "" and "owed": "no seat" on its validation or gate_evidence entry.
 -- exit.out --
 exited refactor/pricing, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait refactor/pricing`
+  check: out<hex> is attempt out<hex>, which passed
 -- abandon.out --
 ended refactor/tax, recorded no_return: abandoned by its holder, which filed no result
 -- wait.out --
@@ -158,4 +179,6 @@ JOB               HOLDER        STATE      MODEL     PATHS  PROOF     CHECK
 refactor/pricing  shop-pricing  pass       standard  1      alone     magus run test .
 refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
+not merged onto main: 1
+  refactor/pricing at 58d5e2c: ~/src/shop-pricing holds 1 uncommitted path(s), first pricing/total.sh; commit them in ~/src/shop-pricing, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

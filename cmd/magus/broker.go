@@ -1,16 +1,21 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/egladman/magus/broker"
@@ -18,10 +23,14 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/internal/sys/pid"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -226,7 +235,10 @@ func brokerStatus(ctx context.Context, args []string) error {
 		if qerr != nil {
 			return exit.Reported(exit.Failure)
 		}
-		return emitFormatted(opts, st)
+		return emitRecord(opts, st, []string{strconv.Itoa(st.PID)})
+	}
+	if errors.Is(qerr, types.PeerFromAnotherBuild) {
+		return fmt.Errorf("broker status: %w", qerr)
 	}
 	if qerr != nil {
 		why := "a run starts one"
@@ -256,16 +268,26 @@ func brokerStop(ctx context.Context, args []string) error {
 	}); err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	c, err := broker.Dial(ctx, broker.DefaultAddr())
 	if err != nil {
-		slog.ErrorContext(ctx, "no broker is running", attr.Notice(""), attr.Component("magus"))
-		return exit.Reported(exit.Failure)
+		pid, err := stopUnanswering(ctx, f.Services, err)
+		if err == nil && opts.Format != outputText {
+			return emitRecord(opts, brokerStopOutput{Stopped: true, PID: pid}, []string{strconv.Itoa(pid)})
+		}
+		return err
 	}
 	defer func() { _ = c.Close() }()
 	if f.Services {
 		n, err := c.StopServices(ctx)
 		if err != nil {
 			return fmt.Errorf("broker stop: %w", err)
+		}
+		if opts.Format != outputText {
+			return emitRecord(opts, brokerStopOutput{Services: n}, []string{"services"})
 		}
 		slog.InfoContext(ctx, fmt.Sprintf("stopped %d hosted service(s); the broker is still running", n), attr.Notice(""), attr.Component("magus"))
 		return nil
@@ -283,8 +305,95 @@ func brokerStop(ctx context.Context, args []string) error {
 	} else if err != nil {
 		return fmt.Errorf("broker stop: %w", err)
 	}
+	if opts.Format != outputText {
+		return emitRecord(opts, brokerStopOutput{Stopped: true, PID: st.PID}, []string{strconv.Itoa(st.PID)})
+	}
 	slog.InfoContext(ctx, fmt.Sprintf("stopped broker (pid %d)", st.PID), attr.Notice(""), attr.Component("magus"))
 	return nil
+}
+
+type brokerStopOutput struct {
+	Stopped  bool `json:"stopped"`
+	PID      int  `json:"pid"`
+	Services int  `json:"services"`
+}
+
+// brokerDrainWait is how long a signalled broker gets per SIGTERM. A var so a
+// test can shorten it.
+var brokerDrainWait = stopTimeout
+
+// stopUnanswering stops whatever holds the broker socket when this build
+// cannot talk to it, as another build's broker refuses to. The kernel names
+// the holder.
+func stopUnanswering(ctx context.Context, services bool, dialErr error) (int, error) {
+	addr := broker.DefaultAddr()
+	sock := strings.TrimPrefix(addr, "unix://")
+	pid, err := broker.SocketPeer(ctx, addr)
+	if errors.Is(err, broker.ErrUnavailable) {
+		slog.ErrorContext(ctx, "no broker is running", attr.Notice(""), attr.Component("magus"))
+		return 0, exit.Reported(exit.Failure)
+	}
+	if err != nil {
+		return 0, unknownBrokerError(sock, err, dialErr)
+	}
+	if services {
+		return 0, fmt.Errorf("broker stop --services: broker (pid %d) does not answer this build, which cannot ask it to stop only its services, so `magus broker stop` stops it whole: %w", pid, dialErr)
+	}
+	command := processCommand(ctx, pid)
+	if !slices.Contains(strings.Fields(command), "broker") {
+		return 0, fmt.Errorf("broker stop: pid %d (%s) holds %s and is no broker, so magus signalled nothing, and under systemd it is the socket unit, so run `systemctl --user stop magus-broker.socket magus-broker.service`: %w",
+			pid, cmp.Or(command, "command unreadable"), sock, dialErr)
+	}
+	return pid, signalBrokerStop(ctx, pid, dialErr)
+}
+
+// unknownBrokerError says what to run when the kernel will not name the holder.
+func unknownBrokerError(sock string, err, dialErr error) error {
+	return fmt.Errorf("broker stop: something holds %s and does not answer this build, and its pid is unreadable here, so run `lsof -U`, take the pid on the line naming that socket, then `kill -TERM <pid>`: %w",
+		sock, fmt.Errorf("%w: %w", err, dialErr))
+}
+
+// signalBrokerStop sends pid SIGTERM, which every build's broker handles: the
+// first drains it and a second stops it now. It returns once pid is gone.
+func signalBrokerStop(ctx context.Context, pid int, dialErr error) error {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("broker stop: find broker (pid %d): %w", pid, err)
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("broker (pid %d) does not answer this build; sending it SIGTERM and waiting up to %s for it to drain",
+		pid, brokerDrainWait), attr.Error(dialErr), attr.Notice(""), attr.Component("magus"))
+	for range 2 {
+		if err := p.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			return fmt.Errorf("broker stop: signal broker (pid %d): %w", pid, err)
+		}
+		if waitProcessGone(ctx, pid, brokerDrainWait) {
+			slog.InfoContext(ctx, fmt.Sprintf("stopped broker (pid %d)", pid), attr.Notice(""), attr.Component("magus"))
+			return nil
+		}
+	}
+	return fmt.Errorf("broker stop: broker (pid %d) outlived two SIGTERMs, %s apart, so run `kill -KILL %d`", pid, brokerDrainWait, pid)
+}
+
+func waitProcessGone(ctx context.Context, procID int, bound time.Duration) bool {
+	deadline := time.Now().Add(bound)
+	for pid.Alive(procID) {
+		if time.Now().After(deadline) || ctx.Err() != nil {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return true
+}
+
+// processCommand is pid's command line, "" when it cannot be read.
+func processCommand(ctx context.Context, pid int) string {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ps", "-o", "command=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // queryBroker reads the broker's status, bounded so a wedged broker cannot hang a
@@ -396,8 +505,8 @@ func crashHint(v versionOutput) string {
 // starts a broker when a step or a service finds none, which is how a long-lived
 // process (`magus mcp`, the server) gets one back after the last idled out. announce
 // false keeps a detached server's notice out of its log.
-func newBrokerClient(announce bool) *broker.Client {
-	return broker.NewClient(broker.DefaultAddr(),
+func newBrokerClient(announce bool, opts ...broker.ClientOption) *broker.Client {
+	return broker.NewClient(broker.DefaultAddr(), append([]broker.ClientOption{
 		broker.WithIdentity(os.Args, version),
 		broker.WithCrashHint(crashHint(newVersionOutput())),
 		broker.WithStart(func(ctx context.Context) bool {
@@ -406,7 +515,8 @@ func newBrokerClient(announce bool) *broker.Client {
 				noticeBroker(ctx, pid)
 			}
 			return broker.Live(ctx, broker.DefaultAddr())
-		}))
+		}),
+	}, opts...)...)
 }
 
 var (
@@ -415,10 +525,58 @@ var (
 )
 
 // processBrokerClient is this process's one broker client: one connection per process
-// is what lets the broker release everything the process held when it exits.
+// is what lets the broker release everything the process held when it exits. It names
+// the lease the process's checkout binds, and whether the process is a gate.
 func processBrokerClient() *broker.Client {
-	processBrokerOnce.Do(func() { processBroker = newBrokerClient(true) })
+	processBrokerOnce.Do(func() {
+		processBroker = newBrokerClient(true, broker.WithLease(processLease(extractRootFlag(os.Args[1:]))), broker.WithGate(gateArgv(os.Args[1:])))
+	})
 	return processBroker
+}
+
+// processLease is the lease this process's runs act under, as job.ActingLease resolves it
+// in the checkout workspace.FindRoot(rootOverride) finds. Outside a workspace only BAGGAGE
+// can name one. A checkout whose job store cannot be placed is said, and BAGGAGE answers.
+func processLease(rootOverride string) string {
+	claim := trail.LeaseFromEnv()
+	root, err := workspace.FindRoot(rootOverride)
+	if err != nil {
+		return claim
+	}
+	loc, err := jobPlace(root)
+	if err != nil {
+		slog.Warn("the broker charges this process's runs to the lease BAGGAGE names, not the one this checkout binds",
+			attr.Component("broker"), attr.Error(err))
+		return claim
+	}
+	lease, _ := job.ActingLease(loc, claim)
+	return lease
+}
+
+// gateArgv reports whether args run the ci composition: `affected ci` or `run ci`. The
+// target is read with the command's own flags bound, so a flag value such as `-o json`
+// is never taken for it.
+func gateArgv(args []string) bool {
+	sub, subArgs := peekSub(args)
+	var bind func(*flag.FlagSet)
+	switch sub {
+	case "run":
+		bind = func(fs *flag.FlagSet) { bindRunFlags(fs, nil) }
+	case "affected":
+		bind = func(fs *flag.FlagSet) { flaggen.BindAffected(fs) }
+	default:
+		return false
+	}
+	raw, _, ok := splitTargetFromArgs(subArgs, bind)
+	if !ok {
+		return false
+	}
+	_, name := parseTarget(raw)
+	t, err := types.ParseTarget(name)
+	if err != nil {
+		return false
+	}
+	return canonicalTarget(t.Name) == string(types.TargetCI)
 }
 
 // brokerUnits is `magus broker units [systemd|launchd]`: print the files a supervisor
@@ -461,7 +619,11 @@ func brokerUnits(ctx context.Context, args []string) error {
 		return err
 	}
 	if opts.Format != outputText {
-		return emitFormatted(opts, units)
+		names := make([]string, len(units))
+		for i, u := range units {
+			names[i] = u.Path
+		}
+		return emitRecord(opts, units, names)
 	}
 	for i, u := range units {
 		if i > 0 {

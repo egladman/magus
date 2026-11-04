@@ -5,7 +5,7 @@
 #
 # BENCH_SKILL_FORM picks the installed skill form (both, short or full; default
 # both). BENCH_SKILLS_DIR, when set, is a skills directory copied in verbatim
-# instead of installing; the skills-* arms set these and reuse this recipe.
+# instead of installing; the skills-* arms set these and reuse this setup.
 set -eu
 
 # shellcheck disable=SC2034  # read by lib.sh, which shellcheck does not follow without -x

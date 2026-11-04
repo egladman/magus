@@ -46,6 +46,23 @@ func (f reworkFixture) spawn(t *testing.T) types.GuardJudgment {
 	}), Host: "claude-code"})
 }
 
+func TestSpawnWarmWorkerCountsAStoppedHolderAsWarm(t *testing.T) {
+	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
+	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateRunning, HolderStopped: time.Now().Unix(), WritePaths: []string{"internal/cache/machine.go"}})
+
+	v := f.spawn(t)
+	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
+	assert.Contains(t, v.Reason, "continue agent a1b2c3 with a message")
+}
+
+func TestSpawnWarmWorkerLeavesARunningHolderAlone(t *testing.T) {
+	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
+	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateRunning, WritePaths: []string{"internal/cache/machine.go"}})
+
+	v := f.spawn(t)
+	assert.NotEqual(t, string(denyRuleSpawnWarmWorker), v.Rule, v.Reason)
+}
+
 func TestSpawnWarmWorkerRefusesAFreshSpawnWhileTheWriterIsWarm(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -61,7 +78,8 @@ func TestSpawnWarmWorkerRefusesAFreshSpawnWhileTheWriterIsWarm(t *testing.T) {
 
 			require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
 			assert.Contains(t, v.Reason, "job regress-fix "+tc.link)
-			assert.Contains(t, v.Reason, "continue agent a1b2c3 with a message (SendMessage)")
+			assert.Contains(t, v.Reason, "continue agent a1b2c3 with a message, or set")
+			assert.NotContains(t, v.Reason, "SendMessage", "magus names no host's message tool")
 			assert.Contains(t, v.Reason, "magus job apply -f <record>")
 			assert.Contains(t, v.Reason, "TTL 5m0s: the provider default", "the TTL's source is said")
 		})

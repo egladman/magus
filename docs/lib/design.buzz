@@ -107,8 +107,8 @@ fun openSection(w: mut Walk, heading: str, n: int, problems: mut [DesignProblem]
         w.next = w.next + 1;
     } else if (SECTIONS.indexOf(heading) != null) {
         problems.append(DesignProblem{ line = n, message = "`## {heading}` is out of order; order the sections Enforced by, Good, Bad, See also" });
-    } else {
-        problems.append(DesignProblem{ line = n, message = "`## {heading}` is not a template section; make it an H3 under the argument or one of Enforced by, Good, Bad, See also" });
+    } else if (w.next > 0) {
+        problems.append(DesignProblem{ line = n, message = "`## {heading}` is not a template section; move it before Enforced by, into the argument, or make it an H3 under Enforced by, Good, Bad or See also" });
     }
     w.section = heading;
     w.sectionLine = n;
@@ -189,7 +189,7 @@ export fun designIndex(pages: [DesignPage]) > str {
         foreach (p in pages) {
             if (p.group == group) { members.append(p); }
         }
-        members.sort(fun (a: DesignPage, b: DesignPage) > bool => a.order < b.order or (a.order == b.order and a.file < b.file));
+        _ = members.sort(fun (a: DesignPage, b: DesignPage) > bool => a.order < b.order or (a.order == b.order and a.file < b.file));
         rows.append("");
         rows.append("### {GROUP_TITLES[group] ?? group}");
         rows.append("");

@@ -2,16 +2,29 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -548,4 +561,531 @@ func TestOutputDestinationSilentTee(t *testing.T) {
 			assert.Equal(t, record, string(got), "the tee file always holds the record")
 		})
 	}
+}
+
+// outputFormatsSuite pins docs/reference/output-formats.md: a command with a
+// record renders every format, and a command without one refuses -o.
+// A command's formats live in its Go, so the suite reads the package's source.
+type outputFormatsSuite struct {
+	suite.Suite
+	funcs    map[string]*ast.FuncDecl
+	parsedAt map[string]string // a FlagSet's name, or its literal prefix, to its func
+}
+
+func TestOutputFormatsSuite(t *testing.T) { suite.Run(t, new(outputFormatsSuite)) }
+
+func (s *outputFormatsSuite) SetupSuite() {
+	paths, err := filepath.Glob("*.go")
+	s.Require().NoError(err)
+	var files []*ast.File
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(path)
+		s.Require().NoError(err)
+		// The stub redefines selfUpdateCommand for the build that drops it.
+		if bytes.HasPrefix(src, []byte("//go:build noselfupdate")) {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, src, 0)
+		s.Require().NoError(err)
+		files = append(files, file)
+	}
+	s.load(files)
+}
+
+func (s *outputFormatsSuite) load(files []*ast.File) {
+	s.funcs, s.parsedAt = map[string]*ast.FuncDecl{}, map[string]string{}
+	for _, file := range files {
+		for _, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
+				// reach goes by name, so a func outranks a method.
+				if fn.Recv == nil || s.funcs[fn.Name.Name] == nil {
+					s.funcs[fn.Name.Name] = fn
+				}
+				s.recordParses(fn)
+			}
+		}
+	}
+}
+
+func (s *outputFormatsSuite) loadSource(src string) {
+	file, err := parser.ParseFile(token.NewFileSet(), "synthetic.go", src, 0)
+	s.Require().NoError(err)
+	s.load([]*ast.File{file})
+}
+
+func (s *outputFormatsSuite) recordParses(fn *ast.FuncDecl) {
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return true
+		}
+		switch sel := call.Fun.(type) {
+		case *ast.Ident:
+			if sel.Name != "commandParse" {
+				return true
+			}
+		case *ast.SelectorExpr:
+			if sel.Sel.Name != "NewFlagSet" {
+				return true
+			}
+		default:
+			return true
+		}
+		if name, ok := leadingString(call.Args[0]); ok {
+			s.parsedAt[name] = fn.Name.Name
+		}
+		return true
+	})
+}
+
+// leadingString is expr's string literal, or the one a concatenation opens.
+func leadingString(expr ast.Expr) (string, bool) {
+	switch e := expr.(type) {
+	case *ast.BinaryExpr:
+		return leadingString(e.X)
+	case *ast.BasicLit:
+		text, err := strconv.Unquote(e.Value)
+		return text, err == nil
+	}
+	return "", false
+}
+
+// handler finds the func serving a leaf. It never guesses from a name.
+// A FlagSet named the leaf wins, else its parent's switch names it.
+func (s *outputFormatsSuite) handler(leaf string) (string, bool) {
+	if fn, ok := servedBy[leaf]; ok {
+		return fn, true
+	}
+	if fn, ok := s.parsedAt[leaf]; ok {
+		return fn, true
+	}
+	parent, last, ok := cutLastWord(leaf)
+	if !ok {
+		return "", false
+	}
+	from, ok := s.handler(parent)
+	if !ok {
+		return "", false
+	}
+	for name := range s.reach(from, nil) {
+		if fn, ok := s.caseFunc(s.funcs[name], last); ok {
+			return fn, true
+		}
+	}
+	return "", false
+}
+
+// servedBy names the funcs whose dispatch the walk cannot read. Each entry
+// is a command root, or a leaf whose case label is computed.
+var servedBy = map[string]string{
+	"affected":         "affected",        // main routes it, no FlagSet named for it
+	"describe":         "describeCommand", // root of the describe nouns
+	"job":              "jobCommand",      // root, its case labels are hint calls
+	"job run":          "jobRunCatalog",   // label is hint.JobRun.Leaf()
+	"describe targets": "describeTargets", // its first named func is append
+	"ls":               "ls",              // root of the ls nouns
+	"ls job":           "lsJobs",          // the noun is plural in the func
+	"ls target":        "lsTargets",       // the noun is plural in the func
+	"ls targets":       "lsTargets",       // the leaf and its alias share a func
+	"query":            "queryCommand",    // root of the query nouns
+	"query invocation": "queryInvocation", // queryCommand picks it by flag
+	"query output":     "queryOutputRef",  // queryCommand picks it by flag
+	"queue":            "runQueue",        // root, the verb is chosen by assignment
+	"run":              "runTarget",       // main routes it, no FlagSet named for it
+	"server":           "serverCommand",   // root, its case labels are hint calls
+	"session":          "sessionCommand",  // root, ls is the default verb
+}
+
+var camelBoundary = regexp.MustCompile(`[A-Z][a-z0-9]*|[a-z0-9]+`)
+
+// labelNames reports whether a case label is word: a string literal, or a
+// computed label such as hint.ServerStop.Leaf() whose name words contain it.
+func labelNames(expr ast.Expr, word string) bool {
+	if text, ok := leadingString(expr); ok {
+		return text == word
+	}
+	var tokens []string
+	ast.Inspect(expr, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			for _, t := range camelBoundary.FindAllString(id.Name, -1) {
+				tokens = append(tokens, strings.ToLower(t))
+			}
+		}
+		return true
+	})
+	want := strings.Split(word, "-")
+	for i := 0; i+len(want) <= len(tokens); i++ {
+		if slices.Equal(tokens[i:i+len(want)], want) {
+			return true
+		}
+	}
+	return false
+}
+
+// caseFunc is the first func a case clause for word in fn names.
+func (s *outputFormatsSuite) caseFunc(fn *ast.FuncDecl, word string) (string, bool) {
+	var found string
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		clause, ok := n.(*ast.CaseClause)
+		if !ok || found != "" {
+			return found == ""
+		}
+		matches := slices.ContainsFunc(clause.List, func(e ast.Expr) bool {
+			return labelNames(e, word)
+		})
+		if !matches {
+			return true
+		}
+		for _, stmt := range clause.Body {
+			ast.Inspect(stmt, func(n ast.Node) bool {
+				id, ok := n.(*ast.Ident)
+				if ok && found == "" && s.funcs[id.Name] != nil && id.Name != fn.Name.Name {
+					found = id.Name
+				}
+				return found == ""
+			})
+		}
+		return false
+	})
+	return found, found != ""
+}
+
+func cutLastWord(path string) (rest, last string, ok bool) {
+	i := strings.LastIndex(path, " ")
+	if i < 0 {
+		return "", "", false
+	}
+	return path[:i], path[i+1:], true
+}
+
+// reach is every func of this package fn names, directly or through another.
+// It stops at stop, whose renders belong to other commands.
+func (s *outputFormatsSuite) reach(fn string, stop map[string]bool) map[string]bool {
+	seen := map[string]bool{fn: true}
+	for queue := []string{fn}; len(queue) > 0; queue = queue[1:] {
+		ast.Inspect(s.funcs[queue[0]], func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if ok && s.funcs[id.Name] != nil && !seen[id.Name] && !stop[id.Name] {
+				seen[id.Name] = true
+				queue = append(queue, id.Name)
+			}
+			return true
+		})
+	}
+	return seen
+}
+
+// othersHandlers is every leaf's handler but the one serving leaf.
+func (s *outputFormatsSuite) othersHandlers(leaf string) map[string]bool {
+	mine, _ := s.handler(leaf)
+	others := map[string]bool{}
+	cmdline.Walk(commands.Root, func(other string, c cmdline.Command) {
+		if fn, ok := s.handler(other); ok && fn != mine && len(c.Children) == 0 {
+			others[fn] = true
+		}
+	})
+	return others
+}
+
+func (s *outputFormatsSuite) TestEveryLeafRendersEveryFormatOrRefusesThem() {
+	cmdline.Walk(commands.Root, func(leaf string, c cmdline.Command) {
+		if len(c.Children) > 0 || c.UnstructuredOutput {
+			return
+		}
+		fn, ok := s.handler(leaf)
+		if !s.True(ok, "no commandParse or FlagSet is named %q: name one, or declare UnstructuredOutput on the command", leaf) {
+			return
+		}
+		reached := s.reach(fn, s.othersHandlers(leaf))
+		s.True(reached["writeFormatted"], "%s reaches no structured printer from %s: render a record or declare UnstructuredOutput on the command", leaf, fn)
+		s.True(reached["emitNames"], "%s reaches no -o name printer from %s", leaf, fn)
+	})
+}
+
+const dispatchSource = `package main
+
+func thing(args []string) error {
+	commandParse("thing", args, nil)
+	switch args[0] {
+	case "ls":
+		return lister(args)
+	case "rm":
+		return remover(args)
+	}
+	return nil
+}
+
+func lister(args []string) error { return writeFormatted(nil, nil, args) }
+
+func remover(args []string) error { return lister(args) }
+
+func thingMv(args []string) error { return writeFormatted(nil, nil, args) }
+`
+
+func (s *outputFormatsSuite) TestHandlerIsFoundByDispatchNotByName() {
+	var synthetic outputFormatsSuite
+	synthetic.SetT(s.T())
+	synthetic.loadSource(dispatchSource)
+	fn, ok := synthetic.handler("thing rm")
+	s.True(ok)
+	s.Equal("remover", fn)
+	_, ok = synthetic.handler("thing mv")
+	s.False(ok, "thingMv is named like the leaf and nothing dispatches to it")
+}
+
+func (s *outputFormatsSuite) TestEveryServedByNamesAFunc() {
+	for leaf, fn := range servedBy {
+		s.NotNil(s.funcs[fn], "servedBy[%q] names %q, which is no func", leaf, fn)
+	}
+}
+
+func (s *outputFormatsSuite) TestAComputedCaseLabelNamesItsWords() {
+	label, err := parser.ParseExpr("hint.ServerStop.Leaf()")
+	s.Require().NoError(err)
+	s.True(labelNames(label, "stop"))
+	s.False(labelNames(label, "top"))
+	label, err = parser.ParseExpr("job.NamePrunePreserved")
+	s.Require().NoError(err)
+	s.True(labelNames(label, "prune-preserved"))
+}
+
+func (s *outputFormatsSuite) TestASiblingsPrinterDoesNotReachALeaf() {
+	var synthetic outputFormatsSuite
+	synthetic.SetT(s.T())
+	synthetic.loadSource(dispatchSource)
+	s.True(synthetic.reach("remover", nil)["lister"])
+	s.False(synthetic.reach("remover", map[string]bool{"lister": true})["lister"])
+}
+
+func (s *outputFormatsSuite) TestEveryUnstructuredCommandRefusesOutput() {
+	cmdline.Walk(commands.Root, func(path string, c cmdline.Command) {
+		if !c.UnstructuredOutput {
+			return
+		}
+		s.Equal(exit.Usage, exit.Code(refuseOutputOnPath("json", strings.Fields(path))), path)
+		fs := flag.NewFlagSet(path, flag.ContinueOnError)
+		fs.String("o", "", "format")
+		s.Require().NoError(fs.Parse([]string{"-o", "json"}))
+		s.Equal(exit.Usage, exit.Code(checkOutputSupported(path, fs)), path)
+	})
+}
+
+func (s *outputFormatsSuite) TestNoFormatSwitchFallsThroughToText() {
+	for name, fn := range s.funcs {
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			sw, ok := n.(*ast.SwitchStmt)
+			if !ok || !isFormatField(sw.Tag) {
+				return true
+			}
+			var structured, named, fallback bool
+			for _, stmt := range sw.Body.List {
+				clause := stmt.(*ast.CaseClause)
+				fallback = fallback || clause.List == nil
+				for _, expr := range clause.List {
+					id, ok := expr.(*ast.Ident)
+					structured = structured || ok && id.Name == "outputJSON"
+					named = named || ok && id.Name == "outputName"
+				}
+			}
+			s.False(structured && !named && !fallback, "%s switches on -o with json and no name arm or default", name)
+			return true
+		})
+	}
+}
+
+func isFormatField(expr ast.Expr) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	return ok && sel.Sel.Name == "Format"
+}
+
+func (s *outputFormatsSuite) TestAFuncThatRendersARecordAlsoHandlesName() {
+	// emitRunResult's and emitExplainRecord's callers switch on -o name first.
+	exempt := map[string]bool{"emitFormatted": true, "emitRecord": true, "emitRunResult": true, "emitExplainRecord": true}
+	for name, fn := range s.funcs {
+		var renders, names bool
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok {
+				renders = renders || id.Name == "emitFormatted" || id.Name == "writeFormatted"
+				names = names || id.Name == "outputName" || id.Name == "emitRecord"
+			}
+			return true
+		})
+		s.False(renders && !names && !exempt[name], "%s renders a record and never decides -o name; use emitRecord", name)
+	}
+}
+
+func (s *outputFormatsSuite) TestNoCommandRefusesAFormatByName() {
+	for name, fn := range s.funcs {
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			s.False(ok && strings.Contains(lit.Value, "-o %s is not supported"), "%s refuses a format by name", name)
+			return true
+		})
+	}
+}
+
+func (s *outputFormatsSuite) TestOutputBeforeTheVerbIsRefused() {
+	err := refuseOutputOnPath("json", []string{"server", "start"})
+	s.Equal(exit.Usage, exit.Code(err))
+	s.ErrorContains(err, "magus server start: -o is not supported")
+}
+
+func (s *outputFormatsSuite) TestOutputOnAVerbWithARecordPasses() {
+	s.NoError(refuseOutputOnPath("json", []string{"--root", ".", "where", "x"}))
+}
+
+func (s *outputFormatsSuite) TestNoOutputPasses() {
+	s.NoError(refuseOutputOnPath("", []string{"server", "start"}))
+}
+
+func (s *outputFormatsSuite) TestAVerbThatReportsAnOutcomeIsNotRefused() {
+	s.NoError(refuseOutputOnPath("json", []string{"server", "stop"}))
+	s.NoError(refuseOutputOnPath("json", []string{"config", "set", "key=a,value=b"}))
+}
+
+func (s *outputFormatsSuite) TestEveryOutcomeRecordRendersEveryFormat() {
+	records := map[string]any{
+		"config set":  configSetOutput{Path: "magus.yaml", Key: "cache.mode", Value: "write"},
+		"server stop": serverStopOutput{Stopped: true, PID: 7, Address: "unix:///s"},
+		"job run":     jobRunOutput{Job: "sync-graph", Outcome: "no-server"},
+		"self place":  selfPlaceOutput{Commit: "abc", BuildDate: "d", Path: "/bin/magus"},
+	}
+	for verb, record := range records {
+		for _, format := range []string{"json", "yaml", "jsonl", "name", "template={{.}}"} {
+			opts, err := output.Parse(format)
+			s.Require().NoError(err, verb)
+			got := captureStdout(s.T(), func() {
+				s.Require().NoError(emitRecord(opts, record, []string{verb}), "%s -o %s", verb, format)
+			})
+			s.NotEmpty(got, "%s -o %s", verb, format)
+		}
+	}
+}
+
+func (s *outputFormatsSuite) TestConfigSetReportsTheKeyItWrote() {
+	s.T().Cleanup(snapshotGlobals())
+	s.T().Chdir(s.T().TempDir())
+	global.output = "json"
+	got := captureStdout(s.T(), func() {
+		s.Require().NoError(runConfigSet(context.Background(), []string{"key=cache.write.enabled,value=true"}))
+	})
+	s.Contains(got, `"key": "cache.write.enabled"`)
+	s.Contains(got, `"path": "magus.yaml"`)
+}
+
+func (s *outputFormatsSuite) TestJobRunReportsWhyNothingWasSubmitted() {
+	s.T().Cleanup(snapshotGlobals())
+	s.T().Chdir(s.T().TempDir())
+	globalCfg.Server.Address = filepath.Join(s.T().TempDir(), "absent.sock")
+	got := captureStdout(s.T(), func() {
+		s.Require().NoError(jobRunCatalog(context.Background(), []string{"-o", "json", "rotate-logs"}))
+	})
+	s.Contains(got, `"outcome": "no-server"`)
+	s.Contains(got, `"job": "rotate-logs"`)
+}
+
+func (s *outputFormatsSuite) TestCommandPathStopsAtTheDeepestChild() {
+	s.Equal("config cache prune", commandPath([]string{"config", "--x", "cache", "prune", "a"}))
+	s.Equal("refs", commandPath([]string{"refs", "--", "config"}))
+}
+
+func (s *outputFormatsSuite) TestEmitRecordRendersEveryFormat() {
+	record := whereOutput{Workspace: "/w", Count: 1, Matches: []whereMatch{{Path: "a"}}}
+	render := func(format string) string {
+		opts, err := output.Parse(format)
+		s.Require().NoError(err)
+		return captureStdout(s.T(), func() {
+			s.Require().NoError(emitRecord(opts, record, []string{"a"}))
+		})
+	}
+	s.Contains(render("json"), `"workspace": "/w"`)
+	s.Contains(render("yaml"), "workspace: /w")
+	s.Contains(render("jsonl"), `"path":"a"`)
+	s.Equal("a\n", render("name"))
+	s.Equal("yes a", render(`template={{if gt .count 0.0}}yes{{end}}{{range .matches}} {{.path}}{{end}}`))
+}
+
+func (s *outputFormatsSuite) TestHelpPrintsGroupsAndExamplesFromTheTree() {
+	var buf bytes.Buffer
+	fs := flag.NewFlagSet("refs", flag.ContinueOnError)
+	fs.SetOutput(&buf)
+	flaggen.BindRefs(fs)
+	printOwnDefaults(fs)
+	got := buf.String()
+	s.Contains(got, "Every site: magus refs <symbol> --occurrences [<path>...]\n  --limit int\n")
+	s.Contains(got, "Search text with no index: magus refs --text <pattern> [<path>...]")
+	s.Contains(got, "Examples:\n  magus refs Open\n")
+	s.NotContains(got, "--file")
+}
+
+func (s *outputFormatsSuite) TestHelpPointsAtTheReference() {
+	s.Contains(outputFormatHelp, "docs/reference/output-formats.md")
+	_, err := os.Stat("../../docs/reference/output-formats.md")
+	s.NoError(err)
+}
+
+type teeReplacementSuite struct{ suite.Suite }
+
+func TestTeeReplacement(t *testing.T) { suite.Run(t, new(teeReplacementSuite)) }
+
+func (s *teeReplacementSuite) SetupTest() {
+	s.T().Cleanup(snapshotGlobals())
+	global = globalFlags{tee: filepath.Join(s.T().TempDir(), "run.jsonl")}
+	s.Require().NoError(os.WriteFile(global.tee, []byte("previous run\n"), 0o600))
+}
+
+func (s *teeReplacementSuite) contents() string {
+	s.T().Helper()
+	data, err := os.ReadFile(global.tee)
+	s.Require().NoError(err)
+	return string(data)
+}
+
+func (s *teeReplacementSuite) emit(record string) {
+	s.T().Helper()
+	var stdout bytes.Buffer
+	w, close, err := outputDestination(&stdout)
+	s.Require().NoError(err)
+	_, err = w.Write([]byte(record))
+	s.Require().NoError(err)
+	s.Require().NoError(close())
+	s.Equal(record, stdout.String())
+}
+
+func (s *teeReplacementSuite) TestARecordReplacesThePreviousRun() {
+	s.emit("first\n")
+	s.Equal("first\n", s.contents())
+}
+
+func (s *teeReplacementSuite) TestMultipleEmissionsKeepEveryRecordInTheRun() {
+	s.emit("first\n")
+	s.emit("second\n")
+	s.Equal("first\nsecond\n", s.contents())
+}
+
+func (s *teeReplacementSuite) TestParsingTheSameTeeForAnotherInvocationStartsFresh() {
+	s.emit("first run\n")
+	_, err := commandParse("version", []string{"--tee", global.tee}, nil)
+	s.Require().NoError(err)
+	s.emit("second run\n")
+	s.Equal("second run\n", s.contents())
+}
+
+func (s *teeReplacementSuite) TestLazyStreamReplacesOnceAndKeepsEveryWrite() {
+	file := &lazyFile{path: global.tee}
+	_, err := file.Write([]byte("first\n"))
+	s.Require().NoError(err)
+	_, err = file.Write([]byte("second\n"))
+	s.Require().NoError(err)
+	s.Require().NoError(file.Close())
+	s.Equal("first\nsecond\n", s.contents())
+}
+
+func (s *teeReplacementSuite) TestAnUnusedLazyStreamLeavesExistingContentsAlone() {
+	file := &lazyFile{path: global.tee}
+	s.Require().NoError(file.Close())
+	s.Equal("previous run\n", s.contents())
 }

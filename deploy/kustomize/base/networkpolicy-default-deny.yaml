@@ -1,0 +1,14 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  labels:
+    app.kubernetes.io/name: magus
+    app.kubernetes.io/component: network
+  annotations:
+    kubernetes.io/description: Denies all ingress and egress for every pod in the namespace; each allow is its own policy.
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

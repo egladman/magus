@@ -1,6 +1,7 @@
 package types
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"path"
@@ -577,6 +578,9 @@ type JobResult struct {
 	GateEvidence    []GateEvidence      `json:"gate_evidence,omitempty" yaml:"gate_evidence,omitempty"`
 	Descendants     []string            `json:"descendants,omitempty" yaml:"descendants,omitempty"`
 	UnresolvedRisks []string            `json:"unresolved_risks" yaml:"unresolved_risks"`
+	// FollowUps is work the holder explicitly leaves for later. Each item
+	// stands until the row's Deferred answers it.
+	FollowUps []string `json:"follow_ups,omitempty" yaml:"follow_ups,omitempty"`
 	// ObservedGeneration is the job's Generation when the result was filed, stamped by the
 	// store rather than taken from the holder.
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
@@ -598,8 +602,9 @@ type JobResultValidation struct {
 	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
 }
 
-// OwedNoSeat is the one reason a worker files a check as owed: the machine's build budget
-// had no seat for it, and a worker never waits for one.
+// OwedNoSeat is the one reason a worker files a check as owed: the machine
+// would not seat it. Its budget was full (MGS3009) or its memory short
+// (MGS3053), and a worker waits on neither.
 const OwedNoSeat = "no seat"
 
 // JobStatus reports the result of verifying a job.
@@ -807,6 +812,11 @@ type Job struct {
 	// BriefFormat is the format a brief to this row's worker takes, over the workspace's
 	// agents.brief_format. Empty defers to magus.yaml.
 	BriefFormat BriefFormat `json:"brief_format,omitempty" yaml:"brief_format,omitempty"`
+	// Delivery is how the person chose to deliver this job's work, one of
+	// JobDeliveries; empty means nobody chose. Workspace policy judges it.
+	Delivery string `json:"delivery,omitempty" yaml:"delivery,omitempty"`
+	// ParentHead is the branch a stacked job's pull request is based on.
+	ParentHead string `json:"parent_head,omitempty" yaml:"parent_head,omitempty"`
 	// Follows is the job this one continues: follow-up work on what that job's worker wrote.
 	// FreshReason says why that worker's context is wrong for this job, which lets a fresh
 	// spawn pass while that worker is still warm (see the guard's spawn-warm-worker).
@@ -834,9 +844,16 @@ type Job struct {
 	// MaxClaims caps how many proved claims one attempt takes, chosen by whoever declares the
 	// job; zero takes the default. A fork raising it past jobs.max_claims is refused.
 	MaxClaims int `json:"max_claims,omitempty" yaml:"max_claims,omitempty"`
+	// Deferred answers the items the row's result left for later.
+	Deferred []JobDeferred `json:"deferred,omitempty" yaml:"deferred,omitempty"`
+	// LeftUnmerged is the stated reason the row's work stays off the merge
+	// branch. It exempts the row's work and its deferred items.
+	LeftUnmerged string `json:"left_unmerged,omitempty" yaml:"left_unmerged,omitempty"`
+	// Landed says a landing probe ended the row because its work reads the same
+	// on the base or in an integration. EndReason says where, for a person.
+	Landed bool `json:"landed,omitempty" yaml:"landed,omitempty"`
 	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
-	// MachineClaim and polls the budget weight/DefaultJobWeight times as often. In (0,1];
-	// zero reads as DefaultJobWeight.
+	// MachineClaim. In (0,1]; zero reads as DefaultJobWeight.
 	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
 	// Paused is the unix second a person paused the job, zero while it is not. A claim the
 	// holder already has finishes; exec and the guard refuse its next magus run.
@@ -895,6 +912,9 @@ type Job struct {
 	// Entries are the acknowledged writes into this row's write paths by somebody other
 	// than its holder, oldest first, at most two per job. Store-computed like Releases.
 	Entries []JobEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
+	// ReleaseRequests are refused forks asking the holder to release write
+	// paths. Store-computed, and here so a hook reads them without a fold.
+	ReleaseRequests []JobReleaseRequest `json:"release_requests,omitempty" yaml:"release_requests,omitempty" buzz:"-"`
 	// WriteProof is what the fork could prove about this job's write paths against the
 	// other live jobs bound to the checkout it was declared in. Store-computed and
 	// output-only like Releases: it is a fact about the plan at one instant, and a caller
@@ -929,11 +949,14 @@ type Job struct {
 	// caller, for the reason Created and Updated do not: a client-supplied timestamp is a
 	// fact about the client's clock.
 	Registered int64 `json:"registered,omitempty" yaml:"registered,omitempty"`
+	// HolderStopped is unix seconds, set when the holder's turn ended
+	// with the row open, and cleared by its next hook call. It ends nothing.
+	HolderStopped int64 `json:"holder_stopped,omitempty" yaml:"holder_stopped,omitempty"`
 	// CheckoutRoot is the absolute root of the checkout `magus job exec` took this job in,
 	// stamped by the store on that write. Once the directory is gone, nobody can be
 	// holding the job, and the store ends it.
 	CheckoutRoot string `json:"checkout_root,omitempty" yaml:"checkout_root,omitempty"`
-	// Worktree is the checkout a fork made for this job (see [Declaration.Checkout]), nil
+	// Worktree is the checkout a fork made or adopted for this job (see [Declaration.Checkout]), nil
 	// when the job works wherever it is taken. Store-computed like CheckoutRoot: only the
 	// fork that made it and the removal at the job's end write it.
 	Worktree *JobWorktree `json:"worktree,omitempty" yaml:"worktree,omitempty"`
@@ -994,9 +1017,9 @@ type Job struct {
 	WaiterEvidence *JobIntegration `json:"waiter_evidence,omitempty" yaml:"waiter_evidence,omitempty"`
 }
 
-// JobWorktree is a checkout `magus job fork --checkout` made for one job, which the job
-// owns: the job's holder takes it there and nowhere else, and magus removes it once the job
-// ends unless removing it would lose work.
+// JobWorktree is the checkout `magus job fork --checkout` made or adopted for one job: the
+// job's holder takes it there and nowhere else. One the fork made (Made) magus removes once
+// the job ends unless removing it would lose work.
 type JobWorktree struct {
 	// Root is the checkout's top level, absolute.
 	Root string `json:"root" yaml:"root"`
@@ -1015,6 +1038,10 @@ type JobWorktree struct {
 	// Kept is why magus left it standing after the job ended, "" until then or once it is
 	// removed.
 	Kept string `json:"kept,omitempty" yaml:"kept,omitempty"`
+	// Made is true when the job's fork created the checkout, the one kind magus removes once
+	// the job ends. A checkout the fork adopted, and a row recorded before Made existed, read
+	// false and stand until whoever made them removes them.
+	Made bool `json:"made,omitempty" yaml:"made,omitempty"`
 }
 
 // Standing reports whether the checkout has not been removed: it binds its job's holder,
@@ -1081,9 +1108,9 @@ type PriorAttempt struct {
 // the store to strip them afterwards.
 //
 // It is a DECLARATION and not a merge: every field it carries is written, so an omitted one
-// is cleared rather than kept. magus\job.put deliberately does the opposite,
-// since an agent advancing one field of a live row must not erase the rest (see
-// job.PutMerge).
+// is cleared rather than kept.
+// magus\workspace().putJob does the opposite (see job.PutMerge).
+// An agent advancing one field of a live row must not erase the rest.
 //
 // JSON only: this is decoded from stdin and never emitted, so it carries no yaml tags.
 //
@@ -1131,6 +1158,9 @@ type Declaration struct {
 	// BriefFormat is the format a brief to this job's worker takes; empty defers to
 	// magus.yaml's agents.brief_format. See [Job.BriefFormat].
 	BriefFormat BriefFormat `json:"brief_format,omitempty"`
+	// Delivery and ParentHead: see [Job.Delivery].
+	Delivery   string `json:"delivery,omitempty"`
+	ParentHead string `json:"parent_head,omitempty"`
 	// Follows and FreshReason name the job this one continues and why its worker is not
 	// resumed for it. See [Job.Follows].
 	Follows     string `json:"follows,omitempty" schema:"leaseid"`
@@ -1193,6 +1223,80 @@ type Declaration struct {
 	// one write path with the proof the store re-proves before it writes. A record carrying
 	// it declares nothing else.
 	Claim []JobClaimRequest `json:"claim,omitempty"`
+	// Deferred and LeftUnmerged turn the record into a settlement of the
+	// row ID names, ended or not. It declares nothing else.
+	Deferred     []JobDeferred `json:"deferred,omitempty"`
+	LeftUnmerged string        `json:"left_unmerged,omitempty"`
+}
+
+// JobDeferred answers one item of a row's result. Item is its exact text.
+// Exactly one of Row, the declared row carrying it, and Reason, why it is
+// dismissed, is set.
+type JobDeferred struct {
+	Item   string `json:"item"             yaml:"item"`
+	Row    string `json:"row,omitempty"    yaml:"row,omitempty" schema:"leaseid"`
+	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
+}
+
+// JobUnmerged is one fact against a row: work off the merge branch, or a
+// deferred item nothing answers. Head is empty when no commit could be read.
+type JobUnmerged struct {
+	Job  string `json:"job"            yaml:"job"`
+	Head string `json:"head,omitempty" yaml:"head,omitempty"`
+	// Item is the deferred item's text, empty for a fact about the work.
+	Item   string `json:"item,omitempty" yaml:"item,omitempty"`
+	Why    string `json:"why"            yaml:"why"`
+	Remedy string `json:"remedy"         yaml:"remedy"`
+}
+
+// JobUnmergedReport is what the checkout's branch does not hold. Unknown says
+// why the branch could not be read: Rows then holds deferred items only, and
+// a row absent from it is not thereby merged. Risks are unanswered unresolved
+// risks: listed for reading, and no work the branch lacks.
+type JobUnmergedReport struct {
+	Branch  string        `json:"branch,omitempty"  yaml:"branch,omitempty"`
+	Rows    []JobUnmerged `json:"rows,omitempty"    yaml:"rows,omitempty"`
+	Risks   []JobUnmerged `json:"risks,omitempty"   yaml:"risks,omitempty"`
+	Unknown string        `json:"unknown,omitempty" yaml:"unknown,omitempty"`
+}
+
+// JobForkFacts is what a fork leaves waiting: finished branches off the base
+// and commits since the last full test. It holds facts only, and repo policy
+// decides what they stop. BranchesUnknown and TestUnknown say why a side went
+// unread.
+type JobForkFacts struct {
+	// FinishedBranches names each as `<branch> (job <job>, <n> commit(s))`.
+	FinishedBranches []string `json:"finished_branches,omitempty" yaml:"finished_branches,omitempty"`
+	BranchesUnknown  string   `json:"branches_unknown,omitempty"  yaml:"branches_unknown,omitempty"`
+	// IntegrateRecord is the JSON job record an integration fork of them takes.
+	IntegrateRecord  string `json:"integrate_record,omitempty"   yaml:"integrate_record,omitempty"`
+	CommitsSinceTest int    `json:"commits_since_test"           yaml:"commits_since_test"`
+	LastTestRef      string `json:"last_test_ref,omitempty"      yaml:"last_test_ref,omitempty"`
+	LastTestRevision string `json:"last_test_revision,omitempty" yaml:"last_test_revision,omitempty"`
+	TestUnknown      string `json:"test_unknown,omitempty"       yaml:"test_unknown,omitempty"`
+}
+
+// Lines renders the report for a person, one line per fact, none when there
+// is nothing to say.
+func (r JobUnmergedReport) Lines() []string {
+	var out []string
+	if r.Unknown != "" {
+		out = append(out, "not merged: unknown, "+r.Unknown)
+	}
+	if len(r.Rows) > 0 {
+		out = append(out, fmt.Sprintf("not merged onto %s: %d", cmp.Or(r.Branch, "the branch"), len(r.Rows)))
+	}
+	for _, u := range r.Rows {
+		switch {
+		case u.Item != "":
+			out = append(out, fmt.Sprintf("  %s: %q: %s; %s", u.Job, u.Item, u.Why, u.Remedy))
+		case u.Head != "":
+			out = append(out, fmt.Sprintf("  %s at %s: %s; %s", u.Job, u.Head, u.Why, u.Remedy))
+		default:
+			out = append(out, fmt.Sprintf("  %s: %s; %s", u.Job, u.Why, u.Remedy))
+		}
+	}
+	return out
 }
 
 // JobClaimRequest is one write path a claim record asks for, and Because the proof:
@@ -1345,6 +1449,9 @@ func (r Declaration) Problems() JobProblems {
 	if len(r.Claim) > 0 {
 		return append(ps, r.claimProblems()...)
 	}
+	if r.Settles() {
+		return append(ps, r.settlementProblems()...)
+	}
 	if p := strings.TrimSpace(r.Parent); p != "" && !ValidJobID(p) {
 		invalid("parent", fmt.Sprintf("parent %q is not a lease id", r.Parent), "name the id of the job this one was forked under")
 	}
@@ -1376,6 +1483,14 @@ func (r Declaration) Problems() JobProblems {
 	if r.BriefFormat != "" && !r.BriefFormat.Valid() {
 		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", r.BriefFormat),
 			fmt.Sprintf("use one of %s, or leave it out for magus.yaml's agents.brief_format", strings.Join(r.BriefFormat.Values(), ", ")))
+	}
+	if r.Delivery != "" && !slices.Contains(JobDeliveries(), r.Delivery) {
+		invalid("delivery", fmt.Sprintf("delivery %q is not a delivery", r.Delivery),
+			"use one of "+strings.Join(JobDeliveries(), ", "))
+	}
+	if r.ParentHead != "" && r.Delivery != DeliveryStacked {
+		invalid("parent_head", "parent_head is the base of a stacked job's pull request, and this job is not stacked",
+			"drop parent_head, or set delivery to "+DeliveryStacked)
 	}
 	if r.Weight != nil && !ValidJobWeight(*r.Weight) {
 		invalid("weight", fmt.Sprintf("weight %v is outside (0,1]", *r.Weight),
@@ -1466,6 +1581,41 @@ func (r Declaration) claimProblems() JobProblems {
 		}
 		if _, err := ParseClaimEvidence(w.Because); err != nil {
 			invalid(at+".because", fmt.Sprintf("%s: %s", at, err), "name the proof the path rests on")
+		}
+	}
+	return ps
+}
+
+// Settles reports whether the record answers a row's deferred items or states
+// why its work stays unmerged, rather than declaring a spec.
+func (r Declaration) Settles() bool {
+	return len(r.Deferred) > 0 || r.LeftUnmerged != ""
+}
+
+func (r Declaration) settlementProblems() JobProblems {
+	var ps JobProblems
+	invalid := func(field, message, fix string) {
+		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
+	}
+	rest := r
+	rest.Schema, rest.ID, rest.Deferred, rest.LeftUnmerged = Schema{}, "", nil, ""
+	if !reflect.ValueOf(rest).IsZero() {
+		invalid("deferred", "a record carrying deferred or left_unmerged settles a job and declares nothing, so it carries only schema_version, id, deferred and left_unmerged",
+			"drop every other field, or drop deferred and left_unmerged")
+	}
+	if r.LeftUnmerged != "" && strings.TrimSpace(r.LeftUnmerged) == "" {
+		invalid("left_unmerged", "left_unmerged is blank", "state why the work stays off the merge branch")
+	}
+	for i, d := range r.Deferred {
+		at := fmt.Sprintf("deferred[%d]", i)
+		row, reason := strings.TrimSpace(d.Row), strings.TrimSpace(d.Reason)
+		switch {
+		case strings.TrimSpace(d.Item) == "":
+			invalid(at+".item", at+" names no item", "copy the item's text from the row's result")
+		case (row == "") == (reason == ""):
+			invalid(at, at+" answers with neither or both of row and reason", "name the declared row that carries it, or the reason it is dismissed")
+		case row != "" && !ValidJobID(row):
+			invalid(at+".row", fmt.Sprintf("%s row %q is not a lease id", at, d.Row), "name the declared row that carries it")
 		}
 	}
 	return ps
@@ -1768,6 +1918,21 @@ func (r Declaration) check() (LeaseCheck, bool, JobProblems) {
 	return LeaseCheck{}, false, nil
 }
 
+// The deliveries a person picks for a job's work.
+const (
+	// DeliveryFold folds the work into the parent's pull request.
+	DeliveryFold = "fold"
+	// DeliverySeparate opens its own pull request against the base branch.
+	DeliverySeparate = "separate"
+	// DeliveryStacked opens a pull request based on the parent's head.
+	DeliveryStacked = "stacked"
+)
+
+// JobDeliveries is the closed set [Job.Delivery] takes.
+func JobDeliveries() []string {
+	return []string{DeliveryFold, DeliverySeparate, DeliveryStacked}
+}
+
 // JobStateVocabulary is the closed set of job states, as an error quotes it. Shared by
 // Declaration.Validate and job.PutMerge, the two places a caller-supplied state is
 // checked against the set.
@@ -1799,6 +1964,8 @@ func (r Declaration) Apply(u *Job) {
 		u.Weight = *r.Weight
 	}
 	u.BriefFormat = r.BriefFormat
+	u.Delivery = r.Delivery
+	u.ParentHead = strings.TrimSpace(r.ParentHead)
 	u.Follows = strings.TrimSpace(r.Follows)
 	u.FreshReason = strings.TrimSpace(r.FreshReason)
 	// Validate refused an unparsable check before the row reached a store, so the problems
@@ -1957,6 +2124,20 @@ type JobEntry struct {
 	Consumed int64 `json:"consumed,omitempty" yaml:"consumed,omitempty"`
 }
 
+// JobReleaseRequest is a refused fork asking a row's holder to release File.
+type JobReleaseRequest struct {
+	// ID is the attention request filed beside it (see sessions.RequestID).
+	ID   string `json:"id" yaml:"id"`
+	File string `json:"file" yaml:"file"`
+	// Wanted are the fork's claims on File.
+	Wanted []string `json:"wanted,omitempty" yaml:"wanted,omitempty"`
+	// By is the lease the fork was made under, empty for an unbound fork.
+	By      string `json:"by,omitempty" yaml:"by,omitempty"`
+	Message string `json:"message" yaml:"message"`
+	// At is unix seconds, stamped by the store.
+	At int64 `json:"at" yaml:"at"`
+}
+
 // JobOverlap is two leases whose declared WritePaths intersect. A FACT the
 // reader is handed, never a verdict: two leases may share a path because their author
 // meant them to run in sequence, or because nobody noticed. Nothing here blocks,
@@ -2038,6 +2219,9 @@ type JobList struct {
 	// Unproposed are the caller's live jobs whose checkout is on a branch no change
 	// carries: work in flight that has no change yet.
 	Unproposed []string `json:"unproposed,omitempty" yaml:"unproposed,omitempty"`
+	// Unmerged is filled by `magus ls jobs` alone. It reads the version
+	// control per row, and every other door lists on a hot path.
+	Unmerged *JobUnmergedReport `json:"unmerged,omitempty" yaml:"unmerged,omitempty"`
 }
 
 // InflightChange is one open change as a person reads it: the provider's record joined to
@@ -2236,12 +2420,11 @@ func JobDescendants(rows []Job, id string) []Job {
 // never stored: an overlap is a relation between two rows, so storing it on either
 // one would mean a row that stopped being true when its neighbor changed.
 //
-// The registration facts take the opposite route and are NOT derived here. ReportedBase,
-// BaseVerdict and Registered describe one row against the checkpoint that row was handed,
-// so they belong on the row, are computed once when the worker registers, and reach every
-// reader of this list (magus\job.list, JobService's ListJobs) by riding
-// the leases. Deriving a second copy at read time would be a duplicate to keep true, which
-// is exactly what the overlap rule above avoids in the other direction.
+// The registration facts take the opposite route and are NOT derived here.
+// ReportedBase, BaseVerdict and Registered judge a row against its checkpoint.
+// So they live on the row and are computed once, when the worker registers.
+// They reach magus\workspace().jobs() and ListJobs by riding the leases.
+// A second copy derived at read time would be a duplicate to keep true.
 //
 // The single door onto a report, which is why the empty case is normalized HERE: an
 // unwritten ledger serves "jobs":[] rather than null, and the MCP tool and the HTTP
@@ -2586,7 +2769,12 @@ func (u Job) Clone() Job {
 	c.Claims = slices.Clone(u.Claims)
 	c.Unattributed = slices.Clone(u.Unattributed)
 	c.Entries = slices.Clone(u.Entries)
+	c.ReleaseRequests = slices.Clone(u.ReleaseRequests)
+	for i, r := range c.ReleaseRequests {
+		c.ReleaseRequests[i].Wanted = slices.Clone(r.Wanted)
+	}
 	c.Deviations = slices.Clone(u.Deviations)
+	c.Deferred = slices.Clone(u.Deferred)
 	if u.ModelTier != nil {
 		tier := *u.ModelTier
 		c.ModelTier = &tier
@@ -2597,6 +2785,7 @@ func (u Job) Clone() Job {
 		result.ChangedPaths = slices.Clone(u.Result.ChangedPaths)
 		result.Descendants = slices.Clone(u.Result.Descendants)
 		result.UnresolvedRisks = slices.Clone(u.Result.UnresolvedRisks)
+		result.FollowUps = slices.Clone(u.Result.FollowUps)
 		result.GateEvidence = slices.Clone(u.Result.GateEvidence)
 		c.Result = &result
 	}

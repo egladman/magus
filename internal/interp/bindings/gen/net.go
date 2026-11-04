@@ -22,8 +22,8 @@ func RegisterNet(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("waitForPort", vm.DirectValue("net.waitForPort", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		host := ffi.String(bzArgs, 0)
 		port := ffi.Int(bzArgs, 1, 0)
-		timeout_ms := ffi.Int(bzArgs, 2, 0)
-		ret0, err := std.NetWaitForPort(ctx, host, port, timeout_ms)
+		timeoutMs := ffi.Int(bzArgs, 2, 0)
+		ret0, err := std.NetWaitForPort(ctx, host, port, timeoutMs)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

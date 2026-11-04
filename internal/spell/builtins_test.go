@@ -1,10 +1,12 @@
 package spell
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -14,6 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"io/fs"
 	"maps"
 	"slices"
@@ -96,6 +99,30 @@ func TestBuiltinSessionRefusesHostImports(t *testing.T) {
 	_, err = compileBuiltin(t.Context(), "export fun mgs_getName() > str { return 1; }\n")
 	require.Error(t, err)
 	assert.False(t, errors.As(err, new(hostImportError)), "a type error is a broken spell: %v", err)
+}
+
+// A spell returning Results stays built-in: the module is no host import.
+func TestBuiltinSpellSharesTheResultModule(t *testing.T) {
+	spec, err := compileBuiltin(t.Context(), `import "magus/spell";
+import "result";
+
+fun versionOf(text: str) > result\Result::<str> {
+    if (text == "") {
+        return result\fail::<str>("no version in the output");
+    }
+    return result\ok::<str>(text);
+}
+
+export fun mgs_getName() > str {
+    final version = versionOf("fixture");
+    if (version.error -> err) {
+        return err.message;
+    }
+    return version.value!;
+}
+`)
+	require.NoError(t, err)
+	assert.Equal(t, "fixture", spec.Name)
 }
 
 // BenchmarkLoadShipped is the startup cost every workspace-loading process pays for
@@ -518,7 +545,7 @@ func TestGoFuzzOp(t *testing.T) {
 	assert.Equal(t, spells.Command{
 		Bin:     "go",
 		Args:    []string{"test", "-trimpath", "-run", "^$"},
-		EnvKeys: []string{"GOOS", "GOARCH", "GOARM", "GOAMD64"},
+		EnvKeys: []string{"GOOS", "GOARCH", "GOARM", "GOAMD64", "GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED"},
 		// A randomized run is never replayable; go-fuzz asks its target for skip_cache.
 		External: spells.ExternalReads,
 		Hints:    op.Hints,
@@ -561,8 +588,8 @@ func TestMagusDeclarationsRun(t *testing.T) {
 func TestMagusDeclSourceNamesDeclaredTypes(t *testing.T) {
 	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
-	sess.SetNativeModule("magus", vm.NewMap())
-	DeclareMagusTypes(sess, nil)
+	sess.SetNativeModule("magus", privateMembersModule(t))
+	require.NoError(t, DeclareMagusTypes(sess, nil))
 	require.NoError(t, sess.Exec(t.Context(), `import "magus";
 fun f(ctx: magus\Context, run: magus\Run) > magus\Exec { return ctx.withEnv({"k": run.trigger}); }`))
 }
@@ -570,10 +597,111 @@ fun f(ctx: magus\Context, run: magus\Run) > magus\Exec { return ctx.withEnv({"k"
 func TestDeclareMagusTypesDropsUnimplementedExterns(t *testing.T) {
 	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
-	sess.SetNativeModule("magus", vm.NewMap())
-	DeclareMagusTypes(sess, func(member string) bool { return member != "affected" })
+	sess.SetNativeModule("magus", privateMembersModule(t))
+	require.NoError(t, DeclareMagusTypes(sess, func(member string) bool { return member != "change" }))
 	require.NoError(t, sess.Exec(t.Context(), `import "magus";
 fun kept(opts: magus\DirsOptions) > str { return opts.language; }`))
-	err := sess.Exec(t.Context(), `fun dropped() > any { return magus\affected(); }`)
-	assert.ErrorContains(t, err, `module magus has no member "affected"`)
+	err := sess.Exec(t.Context(), `fun dropped() > any !> any { return magus\change().affected(); }`)
+	assert.ErrorContains(t, err, `module magus has no member "change"`)
+}
+
+// A built-in may import a host module only when it computes over its arguments alone.
+func (s *discoveredSuite) TestBuiltinParseModulesArePure() {
+	for importPath, name := range builtinParseModules {
+		reg, ok := bindgen.Modules[name]
+		s.Require().Truef(ok, "%s is a host module", name)
+		s.Truef(reg.Capabilities.Has(ffi.WASM), "%s computes over its arguments alone", name)
+		s.Equal(importPath, cmp.Or(reg.Path, name))
+	}
+}
+
+// A shipped spell that stops compiling as a built-in fails here by name, rather than
+// leaving every magusfile that imports it to report an unknown spell.
+func (s *discoveredSuite) TestSourceOnlyShippedSpellsAreTheOnesThatImportAHostModule() {
+	s.Equal([]string{"endoflife-date", "onepassword", "system-keychain"}, slices.Sorted(maps.Keys(sourceOnlySpells())))
+	s.Contains(sourceOnlySpells()["endoflife-date"], `imports "http"`)
+}
+
+func (s *discoveredSuite) TestDiscoverySpellsAreBuiltins() {
+	for _, name := range []string{"buf", "go", "python", "rust", "typescript"} {
+		_, ok := Builtins()[name]
+		s.Truef(ok, "%s is a built-in", name)
+	}
+}
+
+func TestCompileRecordsNamesTheRecordThatCannotRun(t *testing.T) {
+	_, err := compileRecords("export object Fine { n: int = 0, }\nexport object Broken { e: missing\\Thing? = null, }\n")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "magus record Broken cannot be defined")
+	assert.Contains(t, err.Error(), "BZZ")
+}
+
+func TestMagusRecordsDefine(t *testing.T) {
+	_, err := magusRecords()
+	require.NoError(t, err)
+}
+
+// privateMembersModule is a magus module whose every private extern answers
+// with its own name.
+func privateMembersModule(t *testing.T) vm.Value {
+	t.Helper()
+	records, err := magusRecords()
+	require.NoError(t, err)
+	mod := vm.NewMap()
+	for _, r := range records {
+		if !r.extern {
+			continue
+		}
+		name := r.name
+		mod.MapSet(name, vm.DirectValue(name, func(context.Context, []vm.Value) (vm.Value, error) {
+			return vm.StringValue(name), nil
+		}))
+	}
+	return mod
+}
+
+type magusRecordMethodsSuite struct {
+	suite.Suite
+}
+
+func TestMagusRecordMethods(t *testing.T) { suite.Run(t, new(magusRecordMethodsSuite)) }
+
+func (s *magusRecordMethodsSuite) session(mod vm.Value) (*buzz.Session, error) {
+	sess := buzz.NewSession(s.T().Context(), buzz.WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetNativeModule("magus", mod)
+	return sess, DeclareMagusTypes(sess, nil)
+}
+
+func (s *magusRecordMethodsSuite) TestARecordHoldingAMethodObjectDefines() {
+	records, err := magusRecords()
+	s.Require().NoError(err)
+	var names []string
+	for _, r := range records {
+		names = append(names, r.name)
+	}
+	s.Subset(names, []string{"Job", "JobList", "Change"})
+}
+
+func (s *magusRecordMethodsSuite) TestAMethodCallsTheSessionsModule() {
+	sess, err := s.session(privateMembersModule(s.T()))
+	s.Require().NoError(err)
+	s.Require().NoError(sess.Exec(s.T().Context(), `import "magus";
+export fun base() > str !> any { return magus\Change{}.mergeBase(); }`))
+
+	got, err := sess.CallValue(s.T().Context(), sess.Exports()["base"], nil)
+
+	s.Require().NoError(err)
+	s.Contains(got.AsString(), "mergeBase")
+}
+
+func (s *magusRecordMethodsSuite) TestAModuleWithoutAPrivateMemberIsRefusedAtTheCall() {
+	sess, err := s.session(vm.NewMap())
+	s.Require().NoError(err)
+	s.Require().NoError(sess.Exec(s.T().Context(), `import "magus";
+export fun base() > str !> any { return magus\Change{}.mergeBase(); }`))
+
+	_, err = sess.CallValue(s.T().Context(), sess.Exports()["base"], nil)
+
+	s.ErrorContains(err, "the magus module has no member")
 }

@@ -33,6 +33,14 @@ func RegisterMarkdown(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.StringVal(ret0), nil
 	}))
+	m.MapSet("sections", vm.DirectValue("markdown.sections", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		source := ffi.String(bzArgs, 0)
+		ret0, err := std.MarkdownSections(ctx, source)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.ObjectSlice(ret0, ObjectMarkdownSection), nil
+	}))
 	m.MapSet("stripFrontmatter", vm.DirectValue("markdown.stripFrontmatter", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		source := ffi.String(bzArgs, 0)
 		ret0, err := std.MarkdownStripFrontmatter(ctx, source)

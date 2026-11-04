@@ -292,7 +292,7 @@ func FilterServable(role Role, writePaths []string, next []types.NextStep) []typ
 // with no declaration, or one declaring a write, is a write.
 func declaredRead(n types.NextStep) bool {
 	stages := pipelineStages(n.Argv)
-	return n.Reads && len(stages) == 1 && len(stages[0]) >= 3 && slices.Equal(stages[0][1:2], Buzz.tokens)
+	return n.Reads && len(stages) == 1 && len(stages[0]) >= 3 && slices.Equal(stages[0][1:2], Buzz.words)
 }
 
 // readCommands is every declared Command that cannot change the tree. It is the
@@ -345,7 +345,7 @@ func mutatesTree(argv []string) bool {
 	if !ok {
 		return true
 	}
-	return !slices.ContainsFunc(readCommands, func(r Command) bool { return slices.Equal(r.tokens, ran.tokens) })
+	return !slices.ContainsFunc(readCommands, func(r Command) bool { return slices.Equal(r.words, ran.words) })
 }
 
 // longestCommand resolves args to the declared command it invokes, longest path
@@ -354,14 +354,14 @@ func mutatesTree(argv []string) bool {
 func longestCommand(args []string) (Command, bool) {
 	var best Command
 	for _, c := range AllCommands {
-		if len(args) < len(c.tokens) || len(c.tokens) <= len(best.tokens) {
+		if len(args) < len(c.words) || len(c.words) <= len(best.words) {
 			continue
 		}
-		if slices.Equal(args[:len(c.tokens)], c.tokens) {
+		if slices.Equal(args[:len(c.words)], c.words) {
 			best = c
 		}
 	}
-	return best, len(best.tokens) > 0
+	return best, len(best.words) > 0
 }
 
 // withinWritePaths reports whether every project a write names sits inside writePaths, so

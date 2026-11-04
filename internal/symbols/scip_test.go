@@ -8,6 +8,7 @@ import (
 	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/egladman/magus/types"
@@ -135,43 +136,90 @@ func TestParseIndexDoc(t *testing.T) {
 	}
 }
 
-// TestParseIndexSymbolDefinedPerOSKeepsEachDoc pins the merged per-GOOS index: one key
-// defined in two files, each document holding its own SymbolInformation. The windows
-// document comes last, as MergeIndexes appends it, so a last-wins read would pair its doc
-// with the unix Source.
-func TestParseIndexSymbolDefinedPerOSKeepsEachDoc(t *testing.T) {
-	const sym = "scip-go gomod example.com/foo v1 run()."
+const twinSymbol = "scip-go gomod example.com/foo v1 run()."
+
+// platformTwins parses run defined per OS, each document holding its own
+// SymbolInformation and body, and a caller in main.go. The windows document comes last,
+// as a per-GOOS merge appends it, so a last-wins read would pair its doc with the unix
+// Source.
+func (s *symbolsSuite) platformTwins() []types.KnowledgeSymbol {
 	doc := func(path string, line int32, text, signature string) *scip.Document {
 		return &scip.Document{
 			RelativePath: path,
 			Symbols: []*scip.SymbolInformation{{
-				Symbol: sym, DisplayName: "run", Documentation: []string{text},
+				Symbol: twinSymbol, DisplayName: "run", Documentation: []string{text},
 				SignatureDocumentation: &scip.Signature{Text: signature},
 			}},
-			Occurrences: []*scip.Occurrence{{Symbol: sym, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{line, 5, 8}}},
+			Occurrences: []*scip.Occurrence{{
+				Symbol: twinSymbol, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{line, 5, 8},
+				EnclosingRange: []int32{line, 0, line + 6, 1},
+			}},
 		}
 	}
 	idx := &scip.Index{Documents: []*scip.Document{
+		{RelativePath: "main.go", Occurrences: []*scip.Occurrence{{Symbol: twinSymbol, Range: []int32{3, 1, 4}}}},
 		doc("run_unix.go", 24, "run replaces the process.", "func run(argv []string) error"),
 		doc("run_windows.go", 9, "run starts a child and waits.", "func run(args []string) error"),
 	}}
+	syms, err := ParseIndex(s.T().Context(), marshalIndex(s.T(), idx), "", "")
+	s.Require().NoError(err)
+	s.Require().Len(syms, 2, "one symbol per defining file")
+	return syms
+}
 
-	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
+func (s *symbolsSuite) TestAPlatformTwinKeepsTheKeyInTheFirstFile() {
+	syms := s.platformTwins()
+	want := syms[1]
+	want.Key, want.Source, want.DefEndLine = "gomod example.com/foo run().", "run_unix.go:25", 31
+	want.Doc, want.Signature = "run replaces the process.", "func run(argv []string) error"
+	want.Defs = []string{"run_unix.go"}
+	s.Equal(want, syms[0], "the first twin is the second but for its own file's definition")
+}
 
-	require.NoError(t, err)
-	require.Len(t, syms, 1, "one key across both files")
-	s := syms[0]
-	// Identity, size and reference fields come from the parser paths other tests pin; this
-	// one controls where the doc, signature and definitions come from.
-	want := s
-	want.Source = "run_unix.go:25"
-	want.Doc = "run replaces the process."
-	want.Signature = "func run(argv []string) error"
-	want.Definitions = []types.KnowledgeSymbolDefinition{
-		{Source: "run_unix.go:25", Doc: "run replaces the process."},
-		{Source: "run_windows.go:10", Doc: "run starts a child and waits."},
+func (s *symbolsSuite) TestAPlatformTwinInAnotherFileIsItsOwnSymbol() {
+	syms := s.platformTwins()
+	want := syms[0]
+	want.Key, want.Source, want.DefEndLine = "gomod example.com/foo@run_windows.go run().", "run_windows.go:10", 16
+	want.Doc, want.Signature = "run starts a child and waits.", "func run(args []string) error"
+	want.Defs = []string{"run_windows.go"}
+	s.Equal(want, syms[1], "the twin's own body, measured apart from the first")
+}
+
+func (s *symbolsSuite) TestPlatformTwinsShareTheirReferences() {
+	syms := s.platformTwins()
+	s.Equal([]types.KnowledgeSymbolRef{{Path: "main.go", Count: 1, Lines: []int{4}}}, syms[0].Refs)
+	s.Equal(syms[0].Refs, syms[1].Refs)
+}
+
+func (s *symbolsSuite) TestTwinBaseStripsATwinsFile() {
+	s.Equal("gomod example.com/foo run().", TwinBase("gomod example.com/foo@run_windows.go run()."))
+	s.Equal("gomod example.com/foo `example.com/foo/mem`/Total#", TwinBase("gomod example.com/foo@mem/total_linux.go `example.com/foo/mem`/Total#"))
+}
+
+func (s *symbolsSuite) TestTwinBaseLeavesAKeyAlone() {
+	s.Equal("gomod example.com/foo run().", TwinBase("gomod example.com/foo run()."))
+	s.Equal("npm @scope/pkg `x`/Y#", TwinBase("npm @scope/pkg `x`/Y#"), "a scoped npm name opens with @")
+	s.Equal("noSpace.", TwinBase("noSpace."))
+}
+
+func (s *symbolsSuite) TestATwinsKeyReadsBackToItsBase() {
+	syms := s.platformTwins()
+	s.Equal(syms[0].Key, TwinBase(syms[1].Key))
+}
+
+func (s *symbolsSuite) TestAPackageDefinedInEveryFileStaysOneSymbol() {
+	const pkg = "scip-go gomod example.com/foo v1 `example.com/foo`/"
+	doc := func(path string) *scip.Document {
+		return &scip.Document{RelativePath: path, Occurrences: []*scip.Occurrence{
+			{Symbol: pkg, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{0, 8, 11}},
+		}}
 	}
-	assert.Equal(t, want, s, "the doc and signature come from the file Source names; each file's doc travels with its own definition")
+	idx := &scip.Index{Documents: []*scip.Document{doc("a.go"), doc("b.go")}}
+	syms, err := ParseIndex(s.T().Context(), marshalIndex(s.T(), idx), "", "")
+	s.Require().NoError(err)
+	s.Require().Len(syms, 1)
+	s.Equal([]string{"a.go", "b.go"}, syms[0].Defs)
+	s.Len(syms[0].Definitions, 2)
 }
 
 // TestParseIndexSymbolDefinedOnceListsNoDefinitions pins that Definitions stays empty for
@@ -780,4 +828,17 @@ func TestParseIndexSkipsEscapingDocuments(t *testing.T) {
 			assert.NotContains(t, r.Path, "..")
 		}
 	}
+}
+
+type OptInSuite struct {
+	suite.Suite
+}
+
+func TestOptInSuite(t *testing.T) {
+	suite.Run(t, new(OptInSuite))
+}
+
+func (s *OptInSuite) TestHintNamesTheSetting() {
+	s.Equal("no symbol index for typescript: scip-typescript is an external SCIP indexer and runs only when opted in; add typescript to spells.symbol_indexers in magus.yaml",
+		OptInHint("typescript", "typescript", "scip-typescript"))
 }

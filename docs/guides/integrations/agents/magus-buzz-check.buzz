@@ -14,16 +14,18 @@
 // --embedded, the mode the engine loads it in; any other .buzz file is checked strict. A
 // failure prints {"decision":"block","reason":...} on stdout, which the host hands the agent
 // as the reason to fix the file; a pass prints nothing. It always exits 0.
+// A check that could not run blocks too, naming the binary and why.
 //
 // REQUIRED argument: `-- --agent-name <host>`, named like every glue entry. Without it the
 // check still runs, and MGS3024 goes to stderr.
 //
 // NO magus-guard-coverage line: it judges a file the agent already wrote, not a call.
 //
-// magus-guard-template: 34
+// magus-guard-template: 36
 
 import "io";
 import "flags";
+import "fs";
 import "encoding/json";
 import "proc";
 import "std";
@@ -39,7 +41,7 @@ fun warn(message: str) > void {
 fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
-    foreach (word in parsed!.unknown) {
+    foreach (word in parsed!.unknown + parsed!.positionals) {
         warn("unsupported argument \"{word}\"; this hook takes only {AGENT_NAME_FLAG} <host>. Fix the hook command in your host config.");
     }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
@@ -85,6 +87,14 @@ fun relativeTo(path: str, root: str) > str {
     return path;
 }
 
+// fileWorkspace is the workspace an absolute path lies in, else session.
+// A subagent's cwd is the session's checkout while it writes in its own.
+fun fileWorkspace(path: str, session: str) > str {
+    if (!path.startsWith("/")) { return session; }
+    final found = hook\workspaceRootAt(fs\dirname(path));
+    return if (found != "") found else session;
+}
+
 // embedded reports whether the engine loads rel in embedded mode: a magusfile and the
 // spells, magusfiles and hack scripts beside it.
 fun embedded(rel: str) > bool {
@@ -108,22 +118,49 @@ fun main(args: [str]) > void {
     final cwd = hook\field(event, dotPath: "cwd");
     final root = hook\workspaceRootAt(if (cwd != "") cwd else ".");
     final bin = hook\resolveBin(cwd: cwd);
-    if (bin == "" or !hook\isExecutable(bin)) { return; }
+    final reply = blockReply(checkAll(bin, written: written, root: root));
+    if (reply != "") { io\stdout.write(reply + "\n") catch void; }
+}
 
+// checkAll checks every written .buzz file and returns each failure. A check
+// that could not run is a failure too, so the agent learns it did not happen.
+fun checkAll(bin: str, written: [str], root: str) > [str] {
+    final buzz = written.filter(fun (index: int, path: str) > bool => path.endsWith(".buzz"));
+    if (buzz.len() == 0) { return [<str>]; }
+    if (bin == "" or !hook\isExecutable(bin)) {
+        final named = if (bin == "") "magus" else bin;
+        return ["magus-buzz-check could not run `{named}`: no runnable magus was found, "
+            + "so {buzz.join(", ")} went unchecked. {hook\magusFix(root)}"];
+    }
     final failures = mut [<str>];
-    foreach (path in written) {
-        if (!path.endsWith(".buzz")) { continue; }
-        final rel = relativeTo(path, root: root);
+    foreach (path in buzz) {
+        final fileRoot = fileWorkspace(path, session: root);
+        final rel = relativeTo(path, root: fileRoot);
         final check = mut ["buzz", "--check"];
         if (embedded(rel)) { check.append("--embedded"); }
         check.append(rel);
-        final result = proc\exec(bin, args: check, dir: if (root != "") root else ".", opts: {"quiet": true, "allow_failure": true}) catch null;
-        if (result == null or result!.ok) { continue; }
-        failures.append("`magus {check.join(" ")}` failed:\n" + (result!.stdout + result!.stderr).trim());
+        final dir = if (fileRoot != "") fileRoot else ".";
+        var result: proc\ExecResult? = null;
+        var raised = "";
+        try {
+            result = proc\exec(bin, args: check, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
+        } catch (err: any) {
+            raised = "{err}";
+        }
+        if (result == null) {
+            failures.append("magus-buzz-check could not run `{bin} {check.join(" ")}`: {raised}");
+        } else if (!result!.ok) {
+            failures.append("`magus {check.join(" ")}` failed:\n" + (result!.stdout + result!.stderr).trim()
+                + "\nFix the file before you go on.");
+        }
     }
-    if (failures.len() == 0) { return; }
-    final reply = json\stringify({"decision": "block", "reason": failures.join("\n\n") + "\nFix the file before you go on."}) catch "";
-    if (reply != "") { io\stdout.write(reply + "\n") catch void; }
+    return failures;
+}
+
+// blockReply is the host's block for failures, "" when there are none.
+fun blockReply(failures: [str]) > str {
+    if (failures.len() == 0) { return ""; }
+    return json\stringify({"decision": "block", "reason": failures.join("\n\n")}) catch "";
 }
 
 test "a written path comes from the field the host names it in" {
@@ -146,4 +183,25 @@ test "the engine's own Buzz is checked embedded and everything else strict" {
     std\assert(embedded("spells/harness/codex/spell.buzz") and embedded("hack/dev/a.buzz") and embedded("magusfiles/a.buzz"), message: "spells and scripts");
     std\assert(!embedded("docs/guides/integrations/agents/magus-command.buzz"), message: "a standalone script is strict");
     std\assert(relativeTo("/r/spells/a.buzz", root: "/r") == "spells/a.buzz", message: "under the root");
+}
+
+test "a written file is read against its own workspace, not the session's" {
+    final spell = "{hook\workspaceRoot()}/spells/golang/spell.buzz";
+    final rel = relativeTo(spell, root: fileWorkspace(spell, session: "/elsewhere"));
+    std\assert(embedded(rel), message: rel);
+    std\assert(fileWorkspace("spells/a.buzz", session: "/elsewhere") == "/elsewhere", message: "a relative path stays the session's");
+    std\assert(fileWorkspace("/nowhere/a.buzz", session: "/elsewhere") == "/elsewhere", message: "no workspace above the path");
+}
+
+test "no runnable magus blocks with a reason naming the binary" {
+    final failures = checkAll("/nonexistent/magus", written: ["a.buzz", "b.go"], root: "");
+    std\assert(failures.len() == 1, message: failures.join("|"));
+    std\assert(failures[0].indexOf("could not run `/nonexistent/magus`") != null, message: failures[0]);
+    std\assert(failures[0].indexOf("a.buzz went unchecked") != null, message: failures[0]);
+    std\assert(blockReply(failures).indexOf("\"decision\":\"block\"") != null, message: blockReply(failures));
+}
+
+test "nothing written in Buzz needs no magus and blocks nothing" {
+    std\assert(checkAll("", written: ["b.go"], root: "").len() == 0, message: "no .buzz file");
+    std\assert(blockReply([<str>]) == "", message: "no failures");
 }

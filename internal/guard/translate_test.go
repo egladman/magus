@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestSearchTranslationDiagnostics pins the code-shaped arm: every row that denies names
@@ -545,4 +546,60 @@ func repositoryOperandTree(t *testing.T) string {
 		require.NoError(t, os.WriteFile(filepath.Join(root, rel), nil, 0o644))
 	}
 	return root
+}
+
+// ProgramSearchTranslationSuite pins an awk, sed or perl search for a code to
+// the query a grep gets. A filter or a substitution gets none.
+type ProgramSearchTranslationSuite struct {
+	suite.Suite
+}
+
+func TestProgramSearchTranslationSuite(t *testing.T) {
+	suite.Run(t, new(ProgramSearchTranslationSuite))
+}
+
+func (s *ProgramSearchTranslationSuite) SetupTest() {
+	s.T().Chdir(repositoryOperandTree(s.T()))
+}
+
+func (s *ProgramSearchTranslationSuite) translates(command string) {
+	v := Evaluate(strict(Dependencies{GraphIDs: diagnosticGraph}), command)
+	query := `query kind=diagnostic 'id=~^diagnostic:MGS30[23]\d$' -o name`
+	s.Equal(denyRule{Name: denyRuleSearchTranslation, Arg: query}, v.Rule)
+}
+
+func (s *ProgramSearchTranslationSuite) passes(command string) {
+	v := Evaluate(strict(Dependencies{GraphIDs: diagnosticGraph}), command)
+	s.Empty(v.Deny)
+}
+
+func (s *ProgramSearchTranslationSuite) TestAwkAddress() {
+	s.translates(`awk '/MGS30[23]/' docs/reference/codes/sandbox/README.md`)
+}
+
+func (s *ProgramSearchTranslationSuite) TestAwkAddressWithAFieldSeparator() {
+	s.translates(`awk -F, '/MGS30[23]/{print $1}' docs/reference/codes/sandbox/README.md`)
+}
+
+func (s *ProgramSearchTranslationSuite) TestSedQuietPrint() {
+	s.translates(`sed -n '/MGS30[23]/p' docs/reference/codes/sandbox/README.md`)
+}
+
+func (s *ProgramSearchTranslationSuite) TestPerlPrintIfWithInterpreterScriptOff() {
+	deps := strict(Dependencies{GraphIDs: diagnosticGraph})
+	deps.Builtins[string(denyRuleInterpreterScript)] = builtin.Setting{Decision: builtin.Off}
+	v := Evaluate(deps, `perl -ne 'print if /MGS30[23]/' docs/reference/codes/sandbox/README.md`)
+	s.Equal(denyRuleSearchTranslation, v.Rule.Name)
+}
+
+func (s *ProgramSearchTranslationSuite) TestAwkFilteringAPipeIsNotTranslated() {
+	s.passes(`cat notes.txt | awk '/MGS30[23]/'`)
+}
+
+func (s *ProgramSearchTranslationSuite) TestAwkFieldPrintIsNotTranslated() {
+	s.passes(`awk '{print $1}' docs/reference/codes/sandbox/README.md`)
+}
+
+func (s *ProgramSearchTranslationSuite) TestSedSubstitutionIsNotTranslated() {
+	s.passes(`sed 's/MGS30[23]/X/' docs/reference/codes/sandbox/README.md`)
 }

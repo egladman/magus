@@ -202,6 +202,7 @@ describe("Activity", () => {
   // Activity once read only the host the dashboard remembered, so an address set in Settings left
   // it saying "No server connected" until the dashboard had been opened.
   test("reads the Settings address, and follows it when it changes", async () => {
+    // platform double: fetch
     globalThis.fetch = (() => Promise.reject(new TypeError("refused"))) as typeof fetch;
     setDefaultHost(HOST);
     const host = mount();
@@ -219,7 +220,9 @@ describe("Activity", () => {
     let failFirst: (e: unknown) => void = () => {};
     globalThis.fetch = ((input: RequestInfo | URL) => {
       const url = String(input instanceof Request ? input.url : input);
+      // platform double: fetch
       if (url.includes(HOST)) return new Promise((_, reject) => (failFirst = reject));
+      // platform double: fetch
       return Promise.reject(new TypeError("refused"));
     }) as typeof fetch;
     setDefaultHost(HOST);
@@ -238,5 +241,16 @@ describe("Activity", () => {
       "the newer address still owns the page",
     );
     assert.ok(!(host.textContent ?? "").includes(HOST + " "), "the older address never painted");
+  });
+});
+
+describe("the command a way shows", () => {
+  test("is PF Clipboard copy text, never a bare pre that stretches the empty state", () => {
+    const slots = newSlots();
+    renderConnectPrompt(slots, { connection: "none" });
+    const code = slots.actions.querySelector("code");
+    assert.ok(code?.classList.contains("pf-v6-c-clipboard-copy__text"));
+    assert.ok(code?.parentElement?.classList.contains("pf-v6-c-clipboard-copy"));
+    assert.equal(slots.actions.querySelector("pre"), null);
   });
 });

@@ -110,7 +110,7 @@ func (s *Service) CreateToken(ctx context.Context, req *connect.Request[tokenv1.
 	if err != nil {
 		return nil, connectError(err)
 	}
-	return connect.NewResponse(&tokenv1.CreateTokenResponse{Token: storedInfo(rec), Secret: secret}), nil
+	return connect.NewResponse(&tokenv1.CreateTokenResponse{Token: storedInfo(rec), Secret: secret.Reveal()}), nil
 }
 
 // RevokeToken removes the token id names, by exact id or exact name, when it is within the

@@ -21,9 +21,18 @@ type exchangeRequest struct {
 	Code string `json:"code"`
 }
 
+// exchangeResponse holds the redeemed token as a Secret until MarshalJSON writes it to the
+// wire, the one place the exchange hands it out.
 type exchangeResponse struct {
-	Token     string `json:"token"`
-	ExpiresAt string `json:"expires_at"` // RFC 3339 UTC
+	token   types.Secret
+	expires time.Time
+}
+
+func (r exchangeResponse) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]string{
+		"token":      r.token.Reveal(),
+		"expires_at": r.expires.UTC().Format(time.RFC3339),
+	})
 }
 
 // newExchangeHandler returns the POST /api/v1/token/exchange handler, which trades a console
@@ -60,20 +69,20 @@ func newExchangeHandler(trailDir string, log *slog.Logger) http.Handler {
 		trail.AppendMint(r.Context(), trailDir, "link.redeem", trail.MintRecord{Minted: tok.Credential(), Expires: tok.Expires, Minter: code})
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		if err := json.NewEncoder(w).Encode(exchangeResponse{Token: secret, ExpiresAt: tok.Expires.UTC().Format(time.RFC3339)}); err != nil {
+		if err := json.NewEncoder(w).Encode(exchangeResponse{token: secret, expires: tok.Expires}); err != nil {
 			log.With(attr.Component("token")).WarnContext(r.Context(), "encode exchange response", attr.Error(err))
 		}
 	})
 }
 
-func redeem(code string) (string, auth.Token, error) {
+func redeem(code string) (types.Secret, auth.Token, error) {
 	dir, err := auth.StoreDir()
 	if err != nil {
-		return "", auth.Token{}, err
+		return types.Secret{}, auth.Token{}, err
 	}
 	store, err := auth.LoadStore(dir)
 	if err != nil {
-		return "", auth.Token{}, err
+		return types.Secret{}, auth.Token{}, err
 	}
 	return store.Redeem(code)
 }

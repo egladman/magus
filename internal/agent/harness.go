@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -73,15 +74,20 @@ type HarnessDescriptor struct {
 	SchemaVersion  int                    `json:"schema_version"`
 	ID             string                 `json:"id"`
 	Display        HarnessDisplay         `json:"display"`
+	Guard          string                 `json:"guard,omitempty"`
+	Assets         []HarnessRuntimeAsset  `json:"assets,omitempty"`
+	Probe          []string               `json:"probe,omitempty"`
 	Config         types.HarnessConfig    `json:"config"`
 	Skills         types.HarnessSkills    `json:"skills"`
 	ManagedEntries []types.ManagedEntries `json:"managed_entries,omitempty"`
 	// Hooks are what the managed entries run, as data. Verify checks each appears in them.
-	Hooks    []types.HookCommand `json:"hooks,omitempty"`
-	MCP      *types.McpServer    `json:"mcp,omitempty"`
-	Prompts  []types.Prompt      `json:"prompts,omitempty"`
-	Agents   []types.AgentFile   `json:"agents,omitempty"`
-	Settings []types.Setting     `json:"settings,omitempty"`
+	Hooks []types.HookCommand `json:"hooks,omitempty"`
+	// UnsupportedHooks are the points no hook binds, each with its reason.
+	UnsupportedHooks []types.HookBinding `json:"unsupported_hooks,omitempty"`
+	MCP              *types.McpServer    `json:"mcp,omitempty"`
+	Prompts          []types.Prompt      `json:"prompts,omitempty"`
+	Agents           []types.AgentFile   `json:"agents,omitempty"`
+	Settings         []types.Setting     `json:"settings,omitempty"`
 	// Limits reaches the hook through the limits file install writes beside the tool rows.
 	Limits types.Limits `json:"limits,omitzero"`
 	// Tools is the host's tool table, nil for a harness that declares none.
@@ -106,6 +112,46 @@ func ShortestForegroundMax(harnesses []HarnessDescriptor) (time.Duration, bool) 
 		}
 	}
 	return shortest, shortest > 0
+}
+
+// harnessChannel is one place a host's hook reply can put text, as types.Limits.Channels
+// names it. The names are the logger's: a display shows a record's message and drops its
+// why (internal/log/quiet), a capture keeps the whole record, and a notice is a line
+// addressed to the person (attr.Notice). Routing is decided where the reply is written,
+// as quiet.Wrap decides it at the display.
+type harnessChannel string
+
+const (
+	// channelDisplay is read by the person and the agent alike: a deny reason, a thrown
+	// tool error. It gets a deny's verdict line.
+	channelDisplay harnessChannel = "display"
+	// ChannelCapture is read by the agent alone, in the field a host keeps for
+	// context. It gets the whole deny.
+	ChannelCapture harnessChannel = "capture"
+	// channelNotice is read by the person alone: a systemMessage, Cursor's user_message.
+	channelNotice harnessChannel = attr.NoticeKey
+)
+
+// ParseHarnessChannels reads a harness's declared channels. An empty set, a repeat or a
+// name outside display, capture and notice is an error, since a reply routed on a guess
+// reaches the wrong reader.
+func ParseHarnessChannels(names []string) ([]harnessChannel, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("declares no channels: set limits.channels to the ones its hook replies reach, from %s, %s and %s",
+			channelDisplay, ChannelCapture, channelNotice)
+	}
+	out := make([]harnessChannel, 0, len(names))
+	for _, name := range names {
+		c := harnessChannel(name)
+		if c != channelDisplay && c != ChannelCapture && c != channelNotice {
+			return nil, fmt.Errorf("declares the unknown channel %q: the channels are %s, %s and %s", name, channelDisplay, ChannelCapture, channelNotice)
+		}
+		if slices.Contains(out, c) {
+			return nil, fmt.Errorf("declares the channel %s twice", name)
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 // HarnessDisplay is opaque metadata for host UIs. The core validates no
@@ -214,7 +260,7 @@ func wiredHarnessesFromContext(ctx context.Context) (ids []string, ok bool) {
 // LoadHarness resolves one validated descriptor, always from a harness spell:
 // there is no other source. When the context carries ContextWithWiredHarnesses,
 // a harness spell answers only if that id is wired; otherwise any registered
-// harness spell that exports mgs_getHarnessConfig answers (tests and callers that
+// harness spell that exports mgs_getHarness answers (tests and callers that
 // have not inspected the magusfile). A miss is an error either way.
 func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescriptor, source string, err error) {
 	if err = ctx.Err(); err != nil {
@@ -281,6 +327,9 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 	if d.Display.Name == "" {
 		return fmt.Errorf("display.name is required")
 	}
+	if err := validateHarnessRuntime(d); err != nil {
+		return err
+	}
 	if d.Config.Path != "" {
 		if filepath.IsAbs(d.Config.Path) || !isSafeRelativePath(d.Config.Path) {
 			return fmt.Errorf("config.path must be a workspace-relative path")
@@ -309,6 +358,9 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 		if h.Event == "" || h.Script == "" {
 			return fmt.Errorf("hooks[%d]: a hook names its event and its script", i)
 		}
+	}
+	if err := validateHookBindings(d); err != nil {
+		return err
 	}
 	if err := validateHarnessMCP(d.MCP); err != nil {
 		return err
@@ -381,18 +433,21 @@ func isSafeRelativePath(path string) bool {
 // another value, and a config that names no magus command are errors. MCP setup guidance is
 // carried as a hint only: magus never plans host MCP client config and never resolves its
 // secret ref.
-func PlanHarness(ctx context.Context, root, id string) (types.HarnessPlan, error) {
+func PlanHarness(ctx context.Context, root, id string) (types.HarnessInstallation, error) {
 	if err := ctx.Err(); err != nil {
-		return types.HarnessPlan{}, err
+		return types.HarnessInstallation{}, err
 	}
 	if root == "" {
-		return types.HarnessPlan{}, fmt.Errorf("workspace root is required")
+		return types.HarnessInstallation{}, fmt.Errorf("workspace root is required")
 	}
 	d, _, err := LoadHarness(ctx, root, id)
 	if err != nil {
-		return types.HarnessPlan{}, err
+		return types.HarnessInstallation{}, err
 	}
-	plan := types.HarnessPlan{ID: d.ID, Wired: []types.HarnessWired{}}
+	plan := types.HarnessInstallation{ID: d.ID, Guard: d.Guard, Wired: []types.HarnessWired{}}
+	if err := planHarnessAssets(root, d, &plan); err != nil {
+		return plan, err
+	}
 	if d.Config.Path != "" {
 		for _, group := range d.ManagedEntries {
 			plan.Wired = append(plan.Wired, types.HarnessWired{File: d.Config.Path, Key: strings.Join(group.Path, "."), Entries: group.Entries})
@@ -450,6 +505,9 @@ func PlanHarness(ctx context.Context, root, id string) (types.HarnessPlan, error
 	}
 	plan.MCPHint = hint
 	plan.Merge = harnessMergeCommand(d.ID, plan.Files)
+	if d.Guard == "plugin" && len(plan.Files) > 0 {
+		plan.Merge = "magus agent harness install --id " + d.ID
+	}
 	return plan, nil
 }
 
@@ -526,7 +584,7 @@ func fillConfigDefaults(config, defaults, fragment map[string]any, prefix []stri
 
 // addPlanFile records in p what path needs, folding it into what another source of the
 // same descriptor already asked of that file. A file needing nothing is left out.
-func addPlanFile(p *types.HarnessPlan, path string, file types.HarnessFile) error {
+func addPlanFile(p *types.HarnessInstallation, path string, file types.HarnessFile) error {
 	if len(file.Changes) == 0 {
 		return nil
 	}
@@ -538,7 +596,7 @@ func addPlanFile(p *types.HarnessPlan, path string, file types.HarnessFile) erro
 		p.Files[path] = file
 		return nil
 	}
-	if have.Content != "" || file.Content != "" {
+	if have.Content != "" || file.Content != "" || have.Bytes != nil || file.Bytes != nil {
 		return fmt.Errorf("%s: a descriptor may own a whole file or keys inside it, not both", path)
 	}
 	have.Fragment = mergeFragment(have.Fragment, file.Fragment)
@@ -691,11 +749,20 @@ func verifyHarnessHooks(d HarnessDescriptor) HarnessCheck {
 	return HarnessCheck{Status: HarnessVerified}
 }
 
-func entriesRunHook(groups []types.ManagedEntries, h types.HookCommand) bool {
+// harnessOwnedMarker ends a command the spell marks as its own.
+const harnessOwnedMarker = " # magus:harness"
+
+// hookInvocation is the tail of the command line that runs h.
+func hookInvocation(h types.HookCommand) string {
 	invocation := fmt.Sprintf("/%s.buzz", h.Script)
 	if len(h.Flags) > 0 {
 		invocation += " -- " + strings.Join(h.Flags, " ")
 	}
+	return invocation
+}
+
+func entriesRunHook(groups []types.ManagedEntries, h types.HookCommand) bool {
+	invocation := hookInvocation(h)
 	for _, group := range groups {
 		if len(group.Path) == 0 || group.Path[len(group.Path)-1] != h.Event {
 			continue
@@ -705,7 +772,9 @@ func entriesRunHook(groups []types.ManagedEntries, h types.HookCommand) bool {
 			if matcher != h.Matcher {
 				continue
 			}
-			if slices.ContainsFunc(commands, func(c string) bool { return strings.HasSuffix(c, invocation) }) {
+			if slices.ContainsFunc(commands, func(c string) bool {
+				return strings.HasSuffix(strings.TrimSuffix(c, harnessOwnedMarker), invocation)
+			}) {
 				return true
 			}
 		}
@@ -734,8 +803,8 @@ func pluginMissingReason(d HarnessDescriptor, enabled types.Setting, id string) 
 			source = repo
 		}
 	}
-	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere); run once in the host: /plugin install %s --marketplace %s",
-		id, enabled.Path, filepath.Join(claudeConfigDir(), "plugins", "installed_plugins.json"), name, source)
+	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere, and %s holds no cached %s); run once: claude plugin marketplace add %s (or trust the folder and start a session)", //nolint:hostagnostic // only the host spell that has plugins sets enabledPlugins
+		id, enabled.Path, filepath.Join(claudePluginsRoot(), "installed_plugins.json"), filepath.Join(claudePluginsRoot(), "cache", marketplace, name), name, source)
 	if registered, err := claudeMarketplaceKnown(marketplace); err == nil && !registered {
 		reason += fmt.Sprintf(" (marketplace %s is not registered either)", marketplace)
 	}
@@ -762,10 +831,19 @@ func claudeConfigDir() string {
 	return filepath.Join(home, ".claude")
 }
 
+// claudePluginsRoot is the directory holding the host's plugin store:
+// CLAUDE_CODE_PLUGIN_CACHE_DIR when set, else plugins under the config dir.
+func claudePluginsRoot() string {
+	if dir := os.Getenv("CLAUDE_CODE_PLUGIN_CACHE_DIR"); dir != "" {
+		return dir
+	}
+	return filepath.Join(claudeConfigDir(), "plugins")
+}
+
 // readClaudePluginStore decodes one JSON file of the host's plugin store. An absent file
 // reads as an empty document: a person who never installed a plugin has none.
 func readClaudePluginStore(name string) (map[string]any, error) {
-	path := filepath.Join(claudeConfigDir(), "plugins", name)
+	path := filepath.Join(claudePluginsRoot(), name)
 	body, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return map[string]any{}, nil
@@ -780,10 +858,9 @@ func readClaudePluginStore(name string) (map[string]any, error) {
 	return doc, nil
 }
 
-// claudePluginInstalled reads installed_plugins.json, which maps "<plugin>@<marketplace>"
-// to its installs (one per scope; a single object in the first file version). An install in
-// any scope counts: a project-scope install made from another checkout of the same
-// repository must not fail a worktree.
+// claudePluginInstalled counts an install in any scope, listed in installed_plugins.json,
+// or a version dir under cache/<marketplace>/<plugin>: the host caches a relative-path
+// marketplace's plugin without recording it.
 func claudePluginInstalled(id string) (bool, error) {
 	doc, err := readClaudePluginStore("installed_plugins.json")
 	if err != nil {
@@ -792,11 +869,23 @@ func claudePluginInstalled(id string) (bool, error) {
 	plugins, _ := doc["plugins"].(map[string]any)
 	switch v := plugins[id].(type) {
 	case []any:
-		return len(v) > 0, nil
+		if len(v) > 0 {
+			return true, nil
+		}
 	case map[string]any:
-		return len(v) > 0, nil
+		if len(v) > 0 {
+			return true, nil
+		}
 	}
-	return false, nil
+	name, marketplace, _ := strings.Cut(id, "@")
+	entries, err := os.ReadDir(filepath.Join(claudePluginsRoot(), "cache", marketplace, name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read plugin cache for %s: %w", id, err)
+	}
+	return slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.IsDir() }), nil
 }
 
 func claudeMarketplaceKnown(name string) (bool, error) {
@@ -810,6 +899,9 @@ func claudeMarketplaceKnown(name string) (bool, error) {
 
 func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, source string) (HarnessVerification, error) {
 	result := HarnessVerification{ID: d.ID, Descriptor: source}
+	if d.Guard == "plugin" {
+		return verifyHarnessPlugin(ctx, root, d, result)
+	}
 	if d.Config.Path == "" {
 		// A descriptor that names no config.path (skills-only) has wired no guard
 		// at all: validateHarnessDescriptor already refuses managed_entries
@@ -870,7 +962,7 @@ func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, 
 	// Presence is not proof: a config that carries the declared fragments verbatim
 	// still needs the wired command to actually answer. probeHarnessCommands runs it
 	// for real, against a synthetic event, and only THAT earns HarnessVerified.
-	result.Status, result.Reason = probeHarnessCommands(ctx, root, config)
+	result.Status, result.Reason = probeHarnessCommands(ctx, root, config, d.Hooks)
 	result.Guarded = result.Status == HarnessVerified
 	verifyHarnessMCP(d, &result)
 	return result, nil
@@ -1062,7 +1154,7 @@ func carriesOwnedMarker(command string) bool {
 // Narrower than invokesMagus on purpose: that one also answers true for a bare
 // `magus ...` line, which says nothing about who wrote it.
 func runsAShippedTemplate(command string) bool {
-	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz", "magus-buzz-check.buzz"} {
+	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "magus-duration", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz", "magus-buzz-check.buzz", "magus-reclaim-disk.buzz"} {
 		if strings.Contains(command, template) {
 			return true
 		}
@@ -1140,7 +1232,8 @@ func invokesMagus(command string) bool {
 	switch {
 	case strings.Contains(command, "magus-command"),
 		strings.Contains(command, "magus-path"),
-		strings.Contains(command, "magus-observe"):
+		strings.Contains(command, "magus-observe"),
+		strings.Contains(command, "magus-duration"):
 		return true
 	case strings.Contains(command, "cursor-hook."):
 		return true

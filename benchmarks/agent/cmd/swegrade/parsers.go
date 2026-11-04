@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 // The parsers below are ports of swebench/harness/log_parsers/python.py from
@@ -32,7 +34,8 @@ import (
 //
 // Each port keeps the upstream quirks on purpose: a verdict that differs from the
 // reference harness on the same log is a grading bug, not a cleanup. Only the
-// parsers SWE-bench Verified names in its log_parser column are here.
+// parsers SWE-bench Verified and the Go rows of SWE-bench Multilingual name in
+// their log_parser column are here.
 
 const (
 	statusFailed  = "FAILED"
@@ -62,6 +65,7 @@ var parsers = map[string]func(string) statusMap{
 	"parse_log_sympy":      parseSympy,
 	"parse_log_matplotlib": parseMatplotlib,
 	"parse_log_seaborn":    parseSeaborn,
+	"parse_log_gotest":     parseGoTest,
 }
 
 var skipSummaryCount = regexp.MustCompile(`^\[\d+\]$`)
@@ -270,6 +274,43 @@ var mouseButtons = strings.NewReplacer("MouseButton.LEFT", "1", "MouseButton.RIG
 
 func parseMatplotlib(log string) statusMap {
 	return parsePytest(mouseButtons.Replace(log))
+}
+
+var goTestResult = regexp.MustCompile(`^--- (PASS|FAIL|SKIP): (.+) \((.+)\)$`)
+
+var goTestStatuses = map[string]string{
+	"PASS": statusPassed, "FAIL": statusFailed, "SKIP": statusSkipped,
+	"pass": statusPassed, "fail": statusFailed, "skip": statusSkipped,
+}
+
+// goTestEvent is the part of a test2json event (go test -json) a verdict needs.
+type goTestEvent struct {
+	Action string `json:"Action"`
+	Test   string `json:"Test"`
+}
+
+// parseGoTest reads go test -v result lines as parse_log_gotest in upstream's
+// log_parsers/go.py does, and also go test -json events, which it does not. Every
+// Multilingual Go eval_script runs -v, and a -json line starts with "{" so the
+// -v pattern never matches one: on a -v log the verdict is upstream's.
+func parseGoTest(log string) statusMap {
+	m := statusMap{}
+	for _, line := range strings.Split(log, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "{") {
+			var ev goTestEvent
+			if json.Unmarshal([]byte(line), &ev) == nil && ev.Test != "" {
+				if status, ok := goTestStatuses[ev.Action]; ok {
+					m[ev.Test] = status
+				}
+			}
+			continue
+		}
+		if g := goTestResult.FindStringSubmatch(line); g != nil {
+			m[g[2]] = goTestStatuses[g[1]]
+		}
+	}
+	return m
 }
 
 func parseSeaborn(log string) statusMap {

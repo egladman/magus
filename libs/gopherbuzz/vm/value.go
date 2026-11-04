@@ -1069,6 +1069,20 @@ func (v Value) EnumDef() (name string, cases []string, ok bool) {
 	return def.Name, slices.Clone(def.Cases), true
 }
 
+// EnumCases returns an enum definition's cases in declaration order, the same
+// interned Values `Enum.case` evaluates to, so a case a host builds is the case
+// Buzz code compares against. It compiles and runs nothing. ok is false when v is
+// not an enum definition. A definition no session owns keeps its cases for the
+// life of the process, as the definition itself lasts. Not safe for concurrent
+// use with a VM running on the definition's session.
+func (v Value) EnumCases() (cases []Value, ok bool) {
+	if v.tag() != tagEnumDef {
+		return nil, false
+	}
+	var none *VM
+	return slices.Clone(none.enumCases(v)), true
+}
+
 // EnumCase returns an enum case's enum name (the same string EnumDef reports for
 // its definition) and the case's name, and whether v is an enum case at all. A
 // host reads which case a Buzz value names this way; EnumValue gives its

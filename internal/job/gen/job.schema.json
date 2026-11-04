@@ -109,6 +109,13 @@
       "enum": ["", "markdown", "buzz"],
       "description": "BriefFormat is the format a brief to this job's worker takes; empty defers to magus.yaml's agents.brief_format. See [Job.BriefFormat]."
     },
+    "delivery": {
+      "type": "string",
+      "description": "Delivery and ParentHead: see [Job.Delivery]."
+    },
+    "parent_head": {
+      "type": "string"
+    },
     "follows": {
       "type": "string",
       "pattern": "^[./0-9a-z-]+$",
@@ -395,6 +402,31 @@
         }
       },
       "description": "Claim turns the record into a proved claim of the job ID names: each entry adds one write path with the proof the store re-proves before it writes. A record carrying it declares nothing else."
+    },
+    "deferred": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item"],
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "row": {
+            "type": "string",
+            "pattern": "^[./0-9a-z-]+$",
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Deferred and LeftUnmerged turn the record into a settlement of the row ID names, ended or not. It declares nothing else."
+    },
+    "left_unmerged": {
+      "type": "string"
     }
   }
 }

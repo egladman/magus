@@ -117,8 +117,8 @@ func toolLine(t hint.ToolName, desc string) string {
 // descriptor names; member renders them as Buzz spells them.
 // TestServerInstructionsNameRealMembers holds each to a declared member.
 var clientMembers = []string{
-	"describe", "query", "explain", "path", "refs", "stats", "where",
-	"affected", "impact", "run", "clean", "output", "insight", "doctor", "job", "vcs",
+	"describe", "graph().query", "graph().explain", "graph().path", "graph().refs", "graph().stats", "where",
+	"change().affected", "change().impact", "run", "clean", "output", "history().hotspots", "history().affinity", "history().ownership", "history().trend", "workspace().volatility", "doctor", "job", "session",
 }
 
 // member renders one magus\ member as a script calls it.
@@ -150,8 +150,8 @@ var serverInstructions = strings.Join([]string{
 	toolLine(hint.ToolConsole, "return a local console link when a person asks to see it"),
 	"",
 	"Typical flow:",
-	fmt.Sprintf("  Discover through %s with the typed members (%s.project, .graph and .file, %s); they return records, not CLI text.", hint.ToolClient.String(), member("describe"), member("query")),
-	fmt.Sprintf("  Run through %s (%s); %s fetches a captured log by its ref.", hint.ToolClient.String(), members("affected", "run"), member("output")),
+	fmt.Sprintf("  Discover through %s with the typed members (%s.project, .graph and .file, %s); they return records, not CLI text.", hint.ToolClient.String(), member("describe"), member("graph().query")),
+	fmt.Sprintf("  Run through %s (%s); %s fetches a captured log by its ref.", hint.ToolClient.String(), members("change().affected", "run"), member("output")),
 	fmt.Sprintf("  Health: %s (%s), %s, %s.", hint.ToolClient.String(), member("doctor"), hint.ToolStatus.String(), hint.ToolConfig.String()),
 	"",
 	"Config mutation is intentionally not exposed. Use the magus CLI for that.",

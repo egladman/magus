@@ -42,6 +42,10 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 	}); err != nil {
 		return err
 	}
+	format, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	if bf.Bisect == "" {
 		return flag.ErrHelp
 	}
@@ -120,6 +124,18 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("bisect: %w", err)
 	}
 
+	if format.Format != outputText {
+		rec := affectedBisectOutput{Project: projectPath, Target: bf.Target, VCS: res.Name, Culprit: culprit.ID, Info: culprit.Info}
+		return emitRecord(format, rec, []string{rec.Culprit})
+	}
 	fmt.Printf("suspected culprit: %s  %s\n", culprit.ID, culprit.Info)
 	return nil
+}
+
+type affectedBisectOutput struct {
+	Project string `json:"project"`
+	Target  string `json:"target"`
+	VCS     string `json:"vcs"`
+	Culprit string `json:"culprit"`
+	Info    string `json:"info"`
 }

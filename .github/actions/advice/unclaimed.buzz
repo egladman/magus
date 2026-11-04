@@ -20,7 +20,7 @@ final section = "unclaimed";
 fun changed(base: str, head: str) > [str] !> any {
     advice\fetchBase(base, refspec: false);
     final res = vcs\cmd(["diff", "--name-only", "--diff-filter=d", advice\diffRange(base, head: head)],
-        opts: {"dir": ".", "quiet": true, "allow_failure": true});
+        opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
     var paths = mut [];
     foreach (line in res.stdout.split("\n")) {
         if (line != "") { paths.append(line); }

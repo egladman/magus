@@ -11,6 +11,7 @@ import (
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -44,7 +45,7 @@ func init() { //nolint:gochecknoinits // internal/interp cannot link the Buzz VM
 // ctx.needs/glob dependency primitives, plus cross-project handles),
 // spell_object.go (imported spell handles), modules.go (the host modules),
 // imports.go (project/spell import resolution), and pry.go (magus.pry).
-func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) {
+func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) error {
 	// One host-call observer for this registration, timing every magus.* native
 	// callable into magus.buzz.host.call. nil (a pure pass-through) when telemetry
 	// is disabled, so the VM's hot native-dispatch arm is untouched on one-shot runs.
@@ -71,7 +72,9 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// registerMagusModules layers the magus host methods onto Buzz's stdlib modules (a
 	// superset of them) and is shared with spell-loading, so a magusfile and a handler
 	// op spell see the same modules.
-	registerMagusModules(ctx, sess)
+	if err := registerMagusModules(ctx, sess); err != nil {
+		return err
+	}
 	// Built-in spells follow the same import idiom as std modules: each spell is
 	// reachable as `import "magus/spell/<name>"`, binding the spell handle under
 	// its basename.
@@ -85,11 +88,8 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		}
 		sess.SetNativeModule(spells.ModulePath(name), buzzSpellObject(name))
 	}
-	// Host-registered spells (the magusfile spell in internal/interp/magusfile.go,
-	// and any spell a plugin registers at runtime) aren't compiled built-ins, so the
-	// loop above doesn't reach them; expose each under the same import idiom. The
-	// handle carries only the name; magus.project resolves the spec by name from the
-	// host registry.
+	// A host-registered spell is no compiled built-in, so the loop misses it.
+	// The handle carries only the name: magus.project resolves the spec.
 	for _, sp := range project.DefaultSpellRegistry().All() {
 		if _, isBuiltin := builtins[sp.Name()]; isBuiltin {
 			continue
@@ -116,6 +116,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		}
 		return resolveLocalSpellImport(ctx, imports, importPath)
 	})
+	return nil
 }
 
 // magusMode names where the magus.* namespace is installed. A magusfile and a
@@ -172,20 +173,23 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	magus.MapSet("review", buildReview(ctx, obs))
 	lifecycle := buildLifecycle(ctx, obs)
 	magus.MapSet("lifecycle", lifecycle)
-	magus.MapSet("workspace", buildWorkspace(ctx, obs))
-	jobMap := buildJob(ctx, sess, obs)
-	magus.MapSet("job", jobMap)
+	magus.MapSet("workspaceProvider", buildWorkspaceProvider(ctx, obs))
+	registerModelTiers(ctx, sess, obs, magus)
+	registerModelTierMatrix(ctx, sess, obs, magus)
 	magus.MapSet("service", buildService(obs))
-	magus.MapSet("vcs", buildVCS(obs))
-	magus.MapSet("trail", buildTrail(obs))
-	magus.MapSet("skills", buildSkills(obs))
 	guard := buildGuard(ctx, sess, obs)
+	guard.MapSet("shape", directVal(obs, "magus.guard.shape", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		return ffi.StringVal(trail.CommandShape(ffi.String(args, 0))), nil
+	}))
+	guard.MapSet("shapes", directVal(obs, "magus.guard.shapes", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		return ffi.StringSliceVal(trail.CommandShapes(ffi.String(args, 0))), nil
+	}))
 	harness := buildHarness(ctx, obs)
 	magus.MapSet("guard", guard)
 	magus.MapSet("harness", harness)
 	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
 
-	magus.MapSet("describe", buildDescribe(obs, withheld))
+	magus.MapSet("describe", buildDescribe(sess, obs, withheld))
 
 	// magus.normalize(name): the canonical form of any magus entity name (a target, a
 	// charm, or a spell op). Exposed because the rule is only knowable by running it:
@@ -248,8 +252,8 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 		guard.MapSet("command", magusfileOnly(obs, `magus\guard.command`))
 		guard.MapSet("write", magusfileOnly(obs, `magus\guard.write`))
 		harness.MapSet("provider", magusfileOnly(obs, `magus\harness.provider`))
-		jobMap.MapSet("modelTiers", magusfileOnly(obs, `magus\job.modelTiers`))
-		jobMap.MapSet("modelTier", magusfileOnly(obs, `magus\job.modelTier`))
+		magus.MapSet("modelTiers", magusfileOnly(obs, `magus\modelTiers`))
+		magus.MapSet("modelTier", magusfileOnly(obs, `magus\modelTier`))
 	}
 	if len(withheld) > 0 {
 		magus = dropMembers(magus, withheld)

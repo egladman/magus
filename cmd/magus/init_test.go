@@ -71,7 +71,7 @@ func TestStarterMagusfileChecksClean(t *testing.T) {
 	defer func() { _ = sess.Close() }()
 	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(io.Discard))
 	bindings.RegisterMagusNamespace(ctx, sess)
-	bindings.RegisterSpellSourceModules(sess)
+	require.NoError(t, bindings.RegisterSpellSourceModules(sess))
 	require.NoError(t, sess.Exec(ctx, starterMagusfileBuzz),
 		"embedded starter magusfile must check clean under the magusfile engine")
 }

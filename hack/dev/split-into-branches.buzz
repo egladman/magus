@@ -34,6 +34,7 @@ import "flags";
 import "fs";
 import "magus";
 import "os";
+import "result";
 import "serialize";
 import "sort";
 import "std";
@@ -258,7 +259,7 @@ export fun plan(changes: [Change], deps: {str: [str]}, minFiles: int, prefix: st
 
     final live = mut [<str>];
     foreach (k in count.keys()) { live.append(k); }
-    live.sort(fun (a: str, b: str) > bool => below(a, b: b));
+    _ = live.sort(fun (a: str, b: str) > bool => below(a, b: b));
 
     final into = mut {<str: str>};
     var i = 0;
@@ -308,7 +309,7 @@ export fun plan(changes: [Change], deps: {str: [str]}, minFiles: int, prefix: st
             final h = landed(home[s]!);
             if (holders.indexOf(h) == null) { holders.append(h); }
         }
-        holders.sort(fun (a: str, b: str) > bool => below(a, b: b));
+        _ = holders.sort(fun (a: str, b: str) > bool => below(a, b: b));
         final key = holders[holders.len() - 1];
         home[c.path] = key;
         var verb = "are";
@@ -396,28 +397,36 @@ export fun pushCommands(stack: branchstack\BranchStack) > [str] {
     return cmds;
 }
 
-fun collect(base: str) > [Change] !> any {
-    final paths = mut [<str>];
-    foreach (p in vcs\changedFiles(base)) {
-        if (paths.indexOf(p.value) == null) { paths.append(p.value); }
-    }
-    if (paths.len() == 0) { return [<Change>]; }
-    final changes = mut [<Change>];
-    foreach (f in magus\describe.file(sort\strings(paths)).files) {
-        final claims = mut [<Claim>];
-        foreach (cl in f.claims) {
-            claims.append(Claim{ project = cl.project, target = cl.target, role = cl.role, glob = cl.glob });
+fun collect(base: str) > result\Result::<[Change]> {
+    try {
+        final paths = mut [<str>];
+        foreach (p in vcs\changedFiles(base)) {
+            if (paths.indexOf(p.value) == null) { paths.append(p.value); }
         }
-        changes.append(Change{ path = f.path, project = f.project, role = f.role, claims = claims });
+        if (paths.len() == 0) { return result\ok::<[Change]>([<Change>]); }
+        final changes = mut [<Change>];
+        foreach (f in magus\describe.file(sort\strings(paths)).files) {
+            final claims = mut [<Claim>];
+            foreach (cl in f.claims) {
+                claims.append(Claim{ project = cl.project, target = cl.target, role = cl.role, glob = cl.glob });
+            }
+            changes.append(Change{ path = f.path, project = f.project, role = f.role, claims = claims });
+        }
+        return result\ok::<[Change]>(changes);
+    } catch (err: any) {
+        return result\caught::<[Change]>(err, doing: "split-into-branches: read the changed files");
     }
-    return changes;
 }
 
-fun projectDeps() > {str: [str]} !> any {
-    final g = magus\projectGraph();
-    final deps = mut {<str: [str]>};
-    foreach (n in g.nodes) { deps[n] = g.dependsOn[n] ?? [<str>]; }
-    return deps;
+fun projectDeps() > result\Result::<{str: [str]}> {
+    try {
+        final g = magus\graph().projectGraph();
+        final deps = mut {<str: [str]>};
+        foreach (n in g.nodes) { deps[n] = g.dependsOn[n] ?? [<str>]; }
+        return result\ok::<{str: [str]}>(deps);
+    } catch (err: any) {
+        return result\caught::<{str: [str]}>(err, doing: "split-into-branches: read the project graph");
+    }
 }
 
 // LayerWrite is what one commit of the stack writes on top of the one below it: whole paths
@@ -430,88 +439,150 @@ export object LayerWrite {
     partial: {str: str},
 }
 
-fun gitIn(root: str, args: [str]) > str !> any {
-    return vcs\cmd(args, opts: {"quiet": true, "dir": root}).stdout.trim();
+fun gitIn(root: str, args: [str]) > result\Result::<str> {
+    try {
+        return result\ok::<str>(vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, dir = root }).stdout.trim());
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "git {args.join(" ")}");
+    }
+}
+
+// LayersBuilt is what the temporary index wrote.
+// It holds the commits in stack order, the top layer's tree and the
+// whole change's tree.
+object LayersBuilt {
+    commits: [str],
+    top: str,
+    whole: str,
+}
+
+fun commitLayers(root: str, mergeBase: str, layers: [LayerWrite], changed: [str], scratch: str) > result\Result::<LayersBuilt> {
+    var parent = mergeBase;
+    final commits = mut [<str>];
+    var top = "";
+    try {
+        foreach (l in layers) {
+            final read = gitIn(root, args: ["read-tree", parent]);
+            if (read.error -> err) { return result\Result::<LayersBuilt>{ error = err }; }
+            if (l.whole.len() > 0) {
+                // update-index reads each path from the working tree, and --remove drops the
+                // ones the change deleted.
+                final args = mut ["update-index", "--add", "--remove", "--"];
+                foreach (f in l.whole) { args.append(f); }
+                final updated = gitIn(root, args: args);
+                if (updated.error -> err) { return result\Result::<LayersBuilt>{ error = err }; }
+            }
+            foreach (p in sort\strings(l.partial.keys())) {
+                final tmp = "{scratch}/blob";
+                fs\writeFile(tmp, content: l.partial[p]!);
+                final blob = gitIn(root, args: ["hash-object", "-w", tmp]);
+                if (blob.error -> err) { return result\Result::<LayersBuilt>{ error = err }; }
+                final listed = gitIn(root, args: ["ls-tree", mergeBase, "--", p]);
+                if (listed.error -> err) { return result\Result::<LayersBuilt>{ error = err }; }
+                var mode = "100644";
+                if (listed.value! != "") { mode = listed.value!.split(" ")[0]; }
+                final cached = gitIn(root, args: ["update-index", "--add", "--cacheinfo", "{mode},{blob.value!},{p}"]);
+                if (cached.error -> err) { return result\Result::<LayersBuilt>{ error = err }; }
+            }
+            final tree = gitIn(root, args: ["write-tree"]);
+            if (tree.error -> err) { return result\Result::<LayersBuilt>{ error = err }; }
+            top = tree.value!;
+            final made = gitIn(root, args: ["commit-tree", top, "-p", parent, "-m", l.subject]);
+            if (made.error -> err) { return result\Result::<LayersBuilt>{ error = err }; }
+            parent = made.value!;
+            commits.append(parent);
+        }
+        final reread = gitIn(root, args: ["read-tree", mergeBase]);
+        if (reread.error -> err) { return result\Result::<LayersBuilt>{ error = err }; }
+        final args = mut ["update-index", "--add", "--remove", "--"];
+        foreach (f in changed) { args.append(f); }
+        final all = gitIn(root, args: args);
+        if (all.error -> err) { return result\Result::<LayersBuilt>{ error = err }; }
+        final whole = gitIn(root, args: ["write-tree"]);
+        if (whole.error -> err) { return result\Result::<LayersBuilt>{ error = err }; }
+        return result\ok::<LayersBuilt>(LayersBuilt{ commits = commits, top = top, whole = whole.value! });
+    } catch (err: any) {
+        return result\caught::<LayersBuilt>(err, doing: "split-into-branches: write the layers");
+    }
 }
 
 // writeLayers commits each layer on top of the one below it through a temporary index and
 // creates its branch, returning the commits in stack order. Every branch name is checked
 // before anything is written, and the top commit's tree must equal the whole change's tree:
 // a stack that does not add up to the change is refused before any branch exists.
-export fun writeLayers(root: str, mergeBase: str, layers: [LayerWrite], changed: [str]) > [str] !> any {
+export fun writeLayers(root: str, mergeBase: str, layers: [LayerWrite], changed: [str]) > result\Result::<[str]> {
     foreach (l in layers) {
-        gitIn(root, args: ["check-ref-format", "--branch", l.branch]);
-        final taken = vcs\cmd(["show-ref", "--verify", "--quiet", "refs/heads/{l.branch}"],
-            opts: {"quiet": true, "dir": root, "allow_failure": true});
-        if (taken.code == 0) {
-            throw "split-into-branches: branch {l.branch} already exists; delete it or pass another --prefix";
+        final named = gitIn(root, args: ["check-ref-format", "--branch", l.branch]);
+        if (named.error -> err) { return result\Result::<[str]>{ error = err }; }
+        var exists = false;
+        try {
+            final taken = vcs\cmd(["show-ref", "--verify", "--quiet", "refs/heads/{l.branch}"],
+                opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
+            exists = taken.code == 0;
+        } catch (err: any) {
+            return result\caught::<[str]>(err, doing: "git show-ref {l.branch}");
+        }
+        if (exists) {
+            return result\fail::<[str]>("split-into-branches: branch {l.branch} already exists; delete it or pass another --prefix");
         }
     }
-    var parent = mergeBase;
-    final commits = mut [<str>];
-    var whole = "";
-    var top = "";
-    final scratch = fs\tempDir("split-into-branches-");
+    var scratch = "";
+    var built: result\Result::<LayersBuilt> = result\fail::<LayersBuilt>("split-into-branches: the layers were not written");
     try {
-        os\withEnv({"GIT_INDEX_FILE": scratch + "/index"}, callback: fun () > void !> any {
-            foreach (n, l in layers) {
-                gitIn(root, args: ["read-tree", parent]);
-                if (l.whole.len() > 0) {
-                    // update-index reads each path from the working tree, and --remove drops the
-                    // ones the change deleted.
-                    final args = mut ["update-index", "--add", "--remove", "--"];
-                    foreach (f in l.whole) { args.append(f); }
-                    gitIn(root, args: args);
-                }
-                foreach (p in sort\strings(l.partial.keys())) {
-                    final tmp = "{scratch}/blob";
-                    fs\writeFile(tmp, content: l.partial[p]!);
-                    final blob = gitIn(root, args: ["hash-object", "-w", tmp]);
-                    final listed = gitIn(root, args: ["ls-tree", mergeBase, "--", p]);
-                    var mode = "100644";
-                    if (listed != "") { mode = listed.split(" ")[0]; }
-                    gitIn(root, args: ["update-index", "--add", "--cacheinfo", "{mode},{blob},{p}"]);
-                }
-                final tree = gitIn(root, args: ["write-tree"]);
-                top = tree;
-                parent = gitIn(root, args: ["commit-tree", tree, "-p", parent, "-m", l.subject]);
-                commits.append(parent);
-            }
-            gitIn(root, args: ["read-tree", mergeBase]);
-            final args = mut ["update-index", "--add", "--remove", "--"];
-            foreach (f in changed) { args.append(f); }
-            gitIn(root, args: args);
-            whole = gitIn(root, args: ["write-tree"]);
+        scratch = fs\tempDir("split-into-branches-");
+        os\withEnv({"GIT_INDEX_FILE": scratch + "/index"}, callback: fun () > void {
+            built = commitLayers(root, mergeBase: mergeBase, layers: layers, changed: changed, scratch: scratch);
         });
-    } catch (e) {
-        fs\removeAll(scratch);
-        throw e;
+    } catch (err: any) {
+        built = result\caught::<LayersBuilt>(err, doing: "split-into-branches: write the layers");
     }
-    fs\removeAll(scratch);
-    if (top != whole) {
-        throw "split-into-branches: the top layer's tree {top} is not the whole change's tree {whole}; nothing was created";
+    if (scratch != "") {
+        try {
+            fs\removeAll(scratch);
+        } catch (err: any) {
+            return result\caught::<[str]>(err, doing: "split-into-branches: remove {scratch}");
+        }
+    }
+    if (built.error -> err) { return result\Result::<[str]>{ error = err }; }
+    final layered = built.value!;
+    if (layered.top != layered.whole) {
+        return result\fail::<[str]>("split-into-branches: the top layer's tree {layered.top} is not the whole change's tree {layered.whole}; nothing was created");
     }
     foreach (n, l in layers) {
-        gitIn(root, args: ["branch", l.branch, commits[n]]);
+        final made = gitIn(root, args: ["branch", l.branch, layered.commits[n]]);
+        if (made.error -> err) { return result\Result::<[str]>{ error = err }; }
     }
-    return commits;
+    return result\ok::<[str]>(layered.commits);
 }
 
-fun requireGit() > void !> any {
-    if (vcs\name() != "git") {
-        throw "split-into-branches: --apply builds commits with git plumbing, and this checkout is {vcs\name()}";
+fun requireGit() > result\Result::<bool> {
+    try {
+        if (vcs\name() != "git") {
+            return result\fail::<bool>("split-into-branches: --apply builds commits with git plumbing, and this checkout is {vcs\name()}");
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "split-into-branches: name the version control system");
     }
 }
 
-fun applyProjects(groups: [Group], base: str, prefix: str, changed: [str]) > [str] !> any {
-    requireGit();
-    final root = vcs\root();
+fun applyProjects(groups: [Group], base: str, prefix: str, changed: [str]) > result\Result::<[str]> {
+    final git = requireGit();
+    if (git.error -> err) { return result\Result::<[str]>{ error = err }; }
+    var root = "";
+    try {
+        root = vcs\root();
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "split-into-branches: find the repository root");
+    }
     final writes = mut [<LayerWrite>];
     foreach (n, g in groups) {
         writes.append(LayerWrite{ branch = g.branch, subject = "{slug(g.key)}: part {n + 1} of {groups.len()} split from {prefix}",
             whole = g.files, partial = {<str: str>} });
     }
-    return writeLayers(root, mergeBase: gitIn(root, args: ["merge-base", base, "HEAD"]), layers: writes, changed: changed);
+    final merged = gitIn(root, args: ["merge-base", base, "HEAD"]);
+    if (merged.error -> err) { return result\Result::<[str]>{ error = err }; }
+    return writeLayers(root, mergeBase: merged.value!, layers: writes, changed: changed);
 }
 
 // The review budget --by symbols packs layers up to, in changed lines. The SmartBear study of
@@ -708,8 +779,8 @@ fun rebuildHunks(path: str, regions: [Region]) > [Hunk] {
     foreach (r in regions) {
         if (r.side == "old") { olds.append(r); } else { news.append(r); }
     }
-    olds.sort(fun (a: Region, b: Region) > bool => a.lo < b.lo);
-    news.sort(fun (a: Region, b: Region) > bool => a.lo < b.lo);
+    _ = olds.sort(fun (a: Region, b: Region) > bool => a.lo < b.lo);
+    _ = news.sort(fun (a: Region, b: Region) > bool => a.lo < b.lo);
     final hunks = mut [<Hunk>];
     var i = 1;
     var j = 1;
@@ -1278,7 +1349,7 @@ fun groupUnits(u: Units, change: SymbolChange, budget: int) > Groups {
                 if (comp.indexOf(findIn(g, k: k)) != null) { members.append(k); }
             }
             if (groupLines(members, units: units) <= budget) { continue; }
-            members.sort(fun (a: str, b: str) > bool => units[a]!.id < units[b]!.id);
+            _ = members.sort(fun (a: str, b: str) > bool => units[a]!.id < units[b]!.id);
             foreach (b in members) {
                 if (cutting or g.stubbable[b] == null) { continue; }
                 final callers = mut [<str>];
@@ -1349,18 +1420,18 @@ export fun kebab(name: str) > str {
     return parts.join("-");
 }
 
-// checkBranchName raises when name breaks the branch-name rule: lowercase words joined by
-// hyphens, no conventional type prefix, no commit hash.
-export fun checkBranchName(name: str) > void !> str {
-    if (name == "" or name.len() > 80) { throw "{name} is empty or longer than 80 bytes"; }
+// checkBranchName fails when name breaks the branch-name rule.
+// Lowercase words joined by hyphens, no type prefix, no commit hash.
+export fun checkBranchName(name: str) > result\Result::<bool> {
+    if (name == "" or name.len() > 80) { return result\fail::<bool>("{name} is empty or longer than 80 bytes"); }
     for (i: int = 0; i < name.len(); i = i + 1) {
         final b = name.sub(i, len: 1);
         if (!((b >= "a" and b <= "z") or (b >= "0" and b <= "9") or b == "-")) {
-            throw "{name} holds {b}; a branch name is lowercase words joined by hyphens";
+            return result\fail::<bool>("{name} holds {b}; a branch name is lowercase words joined by hyphens");
         }
     }
     foreach (t in TYPE_PREFIXES) {
-        if (name.startsWith("{t}-")) { throw "{name} opens with the commit type {t}"; }
+        if (name.startsWith("{t}-")) { return result\fail::<bool>("{name} opens with the commit type {t}"); }
     }
     foreach (word in name.split("-")) {
         var hex = word.len() >= 7;
@@ -1370,17 +1441,15 @@ export fun checkBranchName(name: str) > void !> str {
             if (b >= "0" and b <= "9") { digit = true; }
             if (!((b >= "0" and b <= "9") or (b >= "a" and b <= "f"))) { hex = false; }
         }
-        if (hex and digit) { throw "{name} carries {word}, which reads as a commit hash"; }
+        if (hex and digit) { return result\fail::<bool>("{name} carries {word}, which reads as a commit hash"); }
     }
+    return result\ok::<bool>(true);
 }
 
-// branchRaised is what checkBranchName raised, or "" for a good name.
+// branchRaised is why checkBranchName failed, or "" for a good name.
 fun branchRaised(name: str) > str {
-    try {
-        checkBranchName(name);
-    } catch (e: str) {
-        return e;
-    }
+    final checked = checkBranchName(name);
+    if (checked.error -> why) { return why.message; }
     return "";
 }
 
@@ -1555,7 +1624,7 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
         klassOf[r] = klass(r);
         dirOfGroup[r] = dominant(r);
     }
-    todo.sort(fun (a: str, b: str) > bool => first[a]! < first[b]!);
+    _ = todo.sort(fun (a: str, b: str) > bool => first[a]! < first[b]!);
     var lastDir = "";
     while (order.len() < todo.len()) {
         var pick = "";
@@ -1637,7 +1706,7 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
         foreach (r in groups) {
             foreach (k in members[r]!) { lu.append(units[k]!); }
         }
-        lu.sort(fun (a: Unit, b: Unit) > bool => a.id < b.id);
+        _ = lu.sort(fun (a: Unit, b: Unit) > bool => a.id < b.id);
         layerUnits.append(lu);
         branches.append("{stem}-{n + 1}-{layerTitle(lu)}");
     }
@@ -1905,102 +1974,127 @@ export fun layerWrites(p: SymPlan, change: SymbolChange, stem: str) > [LayerWrit
     return writes;
 }
 
-fun readTexts(root: str, mergeBase: str, paths: [str]) > {str: FileText} !> any {
+fun readTexts(root: str, mergeBase: str, paths: [str]) > result\Result::<{str: FileText}> {
     final texts = mut {<str: FileText>};
-    foreach (p in paths) {
-        final shown = vcs\cmd(["show", "{mergeBase}:{p}"], opts: {"quiet": true, "dir": root, "allow_failure": true});
-        var lost = 0;
-        if (shown.code == 0) {
-            // A captured stdout loses its trailing newlines; the blob's size says how many.
-            lost = (std\parseInt(gitIn(root, args: ["cat-file", "-s", "{mergeBase}:{p}"])) ?? 0) - shown.stdout.len();
+    try {
+        foreach (p in paths) {
+            final shown = vcs\cmd(["show", "{mergeBase}:{p}"], opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
+            var lost = 0;
+            if (shown.code == 0) {
+                // A captured stdout loses its trailing newlines; the blob's size says how many.
+                final size = gitIn(root, args: ["cat-file", "-s", "{mergeBase}:{p}"]);
+                if (size.error -> err) { return result\Result::<{str: FileText}>{ error = err }; }
+                lost = (std\parseInt(size.value!) ?? 0) - shown.stdout.len();
+            }
+            var pad = "";
+            if (lost > 0) { pad = "\n".repeat(lost); }
+            final was = shown.stdout + pad;
+            final full = "{root}/{p}";
+            final present = fs\isFile(full);
+            var now = "";
+            if (present) { now = fs\readFile(full); }
+            texts[p] = FileText{ old = was, new = now, oldAbsent = shown.code != 0, newAbsent = !present };
         }
-        var pad = "";
-        if (lost > 0) { pad = "\n".repeat(lost); }
-        final was = shown.stdout + pad;
-        final full = "{root}/{p}";
-        final present = fs\isFile(full);
-        var now = "";
-        if (present) { now = fs\readFile(full); }
-        texts[p] = FileText{ old = was, new = now, oldAbsent = shown.code != 0, newAbsent = !present };
+        return result\ok::<{str: FileText}>(texts);
+    } catch (err: any) {
+        return result\caught::<{str: FileText}>(err, doing: "split-into-branches: read the changed files");
     }
-    return texts;
 }
 
 // settledRegions reads the change's regions in root and settles each file's against its two
 // sides.
-fun settledRegions(root: str, base: str, texts: {str: FileText}) > [Region] !> any {
-    final byPath = mut {<str: [Region]>};
-    foreach (r in vcs\regions(base, dir: root)) {
-        final acc = mut [<Region>];
-        foreach (x in byPath[r.file.path] ?? [<Region>]) { acc.append(x); }
-        acc.append(Region{ path = r.file.path, side = r.side, lo = r.lines[0], hi = r.lines[1], declaration = r.declaration, driver = r.driver });
-        byPath[r.file.path] = acc;
+fun settledRegions(root: str, base: str, texts: {str: FileText}) > result\Result::<[Region]> {
+    try {
+        final byPath = mut {<str: [Region]>};
+        foreach (r in vcs\regions(base, dir: root)) {
+            final acc = mut [<Region>];
+            foreach (x in byPath[r.file.path] ?? [<Region>]) { acc.append(x); }
+            acc.append(Region{ path = r.file.path, side = r.side.value, lo = r.lines[0], hi = r.lines[1], declaration = r.declaration, driver = r.driver });
+            byPath[r.file.path] = acc;
+        }
+        final settled = mut [<Region>];
+        foreach (p in sort\strings(byPath.keys())) {
+            final t = texts[p] ?? FileText{ old = "", new = "", oldAbsent = true, newAbsent = true };
+            foreach (r in settleRegions(byPath[p]!, oldLines: splitLines(t.old), newLines: splitLines(t.new))) { settled.append(r); }
+        }
+        return result\ok::<[Region]>(settled);
+    } catch (err: any) {
+        return result\caught::<[Region]>(err, doing: "split-into-branches: read the changed regions");
     }
-    final result =mut [<Region>];
-    foreach (p in sort\strings(byPath.keys())) {
-        final t = texts[p] ?? FileText{ old = "", new = "", oldAbsent = true, newAbsent = true };
-        foreach (r in settleRegions(byPath[p]!, oldLines: splitLines(t.old), newLines: splitLines(t.new))) { result.append(r); }
-    }
-    return result;
 }
 
 // changedSymbols is every symbol the change touches as the index of the working tree knows
 // it, committed and uncommitted alike, with its definition line and its references.
-fun changedSymbols(base: str) > [Sym] !> any {
-    final seen = mut {<str: bool>};
-    final syms = mut [<Sym>];
-    final reviews = [magus\diff(opts: {"rev": "{base}...HEAD"}), magus\diff()];
-    foreach (d in reviews) {
-        foreach (f in d.files) {
-            foreach (s in f.symbols) {
-                if (seen[s.id] != null) { continue; }
-                seen[s.id] = true;
-                final r = magus\refs(s.id);
-                var line = 0;
-                foreach (def in r.defs) {
-                    if (def.file == f.path and def.lines.len() > 0) { line = def.lines[0]; }
+fun changedSymbols(base: str) > result\Result::<[Sym]> {
+    try {
+        final seen = mut {<str: bool>};
+        final syms = mut [<Sym>];
+        final reviews = [magus\change().diff(opts: magus\DiffOptions{ rev = "{base}...HEAD" }), magus\change().diff()];
+        foreach (d in reviews) {
+            foreach (f in d.files) {
+                foreach (s in f.symbols) {
+                    if (seen[s.id] != null) { continue; }
+                    seen[s.id] = true;
+                    final r = magus\graph().refs(s.id);
+                    var line = 0;
+                    foreach (def in r.defs) {
+                        if (def.file == f.path and def.lines.len() > 0) { line = def.lines[0]; }
+                    }
+                    final sites = mut [<Site>];
+                    foreach (ref in r.refs) {
+                        foreach (n in ref.lines) { sites.append(Site{ path = ref.file, line = n }); }
+                    }
+                    var how = s.change;
+                    if (how == "") { how = "body"; }
+                    syms.append(Sym{ id = s.id, label = s.label, path = f.path, change = how, line = line, refs = sites });
                 }
-                final sites = mut [<Site>];
-                foreach (ref in r.refs) {
-                    foreach (n in ref.lines) { sites.append(Site{ path = ref.file, line = n }); }
-                }
-                var how = s.change;
-                if (how == "") { how = "body"; }
-                syms.append(Sym{ id = s.id, label = s.label, path = f.path, change = how, line = line, refs = sites });
             }
         }
+        return result\ok::<[Sym]>(syms);
+    } catch (err: any) {
+        return result\caught::<[Sym]>(err, doing: "split-into-branches: read the changed symbols");
     }
-    return syms;
 }
 
 // indexedPaths are the changed paths whose references the index covers: those of a project it
 // indexed, written in a language (by diff driver) it reported a changed symbol in.
-fun indexedPaths(regions: [Region], syms: [Sym], files: [Change]) > [str] !> any {
-    final digest = magus\symbolIndexDigest();
-    final languages = mut [<str>];
-    final symPaths = mut {<str: bool>};
-    foreach (s in syms) { symPaths[s.path] = true; }
-    foreach (r in regions) {
-        if (symPaths[r.path] != null and r.driver != "" and languages.indexOf(r.driver) == null) { languages.append(r.driver); }
+fun indexedPaths(regions: [Region], syms: [Sym], files: [Change]) > result\Result::<[str]> {
+    try {
+        final digest = magus\graph();
+        final languages = mut [<str>];
+        final symPaths = mut {<str: bool>};
+        foreach (s in syms) { symPaths[s.path] = true; }
+        foreach (r in regions) {
+            if (symPaths[r.path] != null and r.driver != "" and languages.indexOf(r.driver) == null) { languages.append(r.driver); }
+        }
+        final projectOf = mut {<str: str>};
+        foreach (c in files) { projectOf[c.path] = c.project; }
+        final covered = mut [<str>];
+        foreach (r in regions) {
+            if (covered.indexOf(r.path) != null or languages.indexOf(r.driver) == null) { continue; }
+            if (digest.projects.indexOf(projectOf[r.path] ?? "") != null) { covered.append(r.path); }
+        }
+        return result\ok::<[str]>(covered);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "split-into-branches: read the symbol index digest");
     }
-    final projectOf = mut {<str: str>};
-    foreach (c in files) { projectOf[c.path] = c.project; }
-    final result =mut [<str>];
-    foreach (r in regions) {
-        if (result.indexOf(r.path) != null or languages.indexOf(r.driver) == null) { continue; }
-        if (digest.projects.indexOf(projectOf[r.path] ?? "") != null) { result.append(r.path); }
-    }
-    return result;
 }
 
-fun collectSymbols(base: str, mergeBase: str, root: str, files: [Change]) > SymbolChange !> any {
+fun collectSymbols(base: str, mergeBase: str, root: str, files: [Change]) > result\Result::<SymbolChange> {
     final paths = mut [<str>];
     foreach (c in files) { paths.append(c.path); }
     final texts = readTexts(root, mergeBase: mergeBase, paths: paths);
-    final regions = settledRegions(root, base: base, texts: texts);
+    if (texts.error -> err) { return result\Result::<SymbolChange>{ error = err }; }
+    final regions = settledRegions(root, base: base, texts: texts.value!);
+    if (regions.error -> err) { return result\Result::<SymbolChange>{ error = err }; }
     final syms = changedSymbols(base);
-    return SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexedPaths(regions, syms: syms, files: files),
-        texts = texts, languages = regionLanguages(regions) };
+    if (syms.error -> err) { return result\Result::<SymbolChange>{ error = err }; }
+    final indexed = indexedPaths(regions.value!, syms: syms.value!, files: files);
+    if (indexed.error -> err) { return result\Result::<SymbolChange>{ error = err }; }
+    final languages = regionLanguages(regions.value!);
+    if (languages.error -> err) { return result\Result::<SymbolChange>{ error = err }; }
+    return result\ok::<SymbolChange>(SymbolChange{ regions = regions.value!, symbols = syms.value!, files = files, indexed = indexed.value!,
+        texts = texts.value!, languages = languages.value! });
 }
 
 // The spell each diff driver's language belongs to.
@@ -2015,16 +2109,20 @@ export fun spellLanguage(syntax: magus\Syntax?) > Lang {
     return Lang{ stubs = stubs, comments = comments };
 }
 
-fun regionLanguages(regions: [Region]) > {str: Lang} !> any {
+fun regionLanguages(regions: [Region]) > result\Result::<{str: Lang}> {
     final langs = mut {<str: Lang>};
-    foreach (r in regions) {
-        final spell = DRIVER_SPELLS[r.driver];
-        if (spell == null or langs[r.driver] != null) { continue; }
-        foreach (sp in magus\describe.spell(spell!)) {
-            langs[r.driver] = spellLanguage(sp.syntax);
+    try {
+        foreach (r in regions) {
+            final spell = DRIVER_SPELLS[r.driver];
+            if (spell == null or langs[r.driver] != null) { continue; }
+            foreach (sp in magus\describe.spell(spell!)) {
+                langs[r.driver] = spellLanguage(sp.syntax);
+            }
         }
+        return result\ok::<{str: Lang}>(langs);
+    } catch (err: any) {
+        return result\caught::<{str: Lang}>(err, doing: "split-into-branches: read the spells' syntax");
     }
-    return langs;
 }
 
 export fun main(args: [str]) > void !> any {
@@ -2067,7 +2165,9 @@ export fun main(args: [str]) > void !> any {
     }
     final apply = parsed.values["--apply"] != null;
 
-    final changes = collect(base);
+    final collected = collect(base);
+    if (collected.error -> err) { throw err.message; }
+    final changes = collected.value!;
     if (changes.len() == 0) {
         std\print("read-only: nothing changed against {base}");
         return;
@@ -2075,10 +2175,13 @@ export fun main(args: [str]) > void !> any {
     final changed = mut [<str>];
     foreach (c in changes) { changed.append(c.path); }
     if (by == "project") {
-        final groups = plan(changes, deps: projectDeps(), minFiles: minFiles!, prefix: prefix, base: prBase(base));
+        final deps = projectDeps();
+        if (deps.error -> err) { throw err.message; }
+        final groups = plan(changes, deps: deps.value!, minFiles: minFiles!, prefix: prefix, base: prBase(base));
         var status = "planned";
         if (apply) {
-            applyProjects(groups, base: base, prefix: prefix, changed: changed);
+            final applied = applyProjects(groups, base: base, prefix: prefix, changed: changed);
+            if (applied.error -> err) { throw err.message; }
             status = "created";
         }
         final stack = projectStack(groups, base: prBase(base), status: status);
@@ -2087,10 +2190,9 @@ export fun main(args: [str]) > void !> any {
     }
 
     final stem = stemOfBranch(prefix);
-    try {
-        checkBranchName("{stem}-1-x");
-    } catch (e: str) {
-        throw "split-into-branches: --prefix {prefix} cannot name the stack: {e}\n{USAGE}";
+    final named = checkBranchName("{stem}-1-x");
+    if (named.error -> why) {
+        throw "split-into-branches: --prefix {prefix} cannot name the stack: {why.message}\n{USAGE}";
     }
     final failures = mut [<Failure>];
     foreach (spec in (parsed.values["--failed"] ?? "").split(",")) {
@@ -2106,21 +2208,26 @@ export fun main(args: [str]) > void !> any {
     foreach (p in (parsed.values["--pull"] ?? "").split(",")) {
         if (p != "") { pulls.append(p); }
     }
-    requireGit();
+    final git = requireGit();
+    if (git.error -> err) { throw err.message; }
     final root = vcs\root();
-    final mergeBase = gitIn(root, args: ["merge-base", base, "HEAD"]);
-    final change = collectSymbols(base, mergeBase: mergeBase, root: root, files: changes);
+    final merged = gitIn(root, args: ["merge-base", base, "HEAD"]);
+    if (merged.error -> err) { throw err.message; }
+    final mergeBase = merged.value!;
+    final symbolic = collectSymbols(base, mergeBase: mergeBase, root: root, files: changes);
+    if (symbolic.error -> err) { throw err.message; }
+    final change = symbolic.value!;
     final p = planSymbols(change, budget: budget!, stem: stem, base: prBase(base), failures: failures, pulls: pulls);
     foreach (l in p.layers) {
-        try {
-            checkBranchName(l.branch);
-        } catch (e: str) {
-            throw "split-into-branches: layer {l.branch}: {e}";
+        final layerName = checkBranchName(l.branch);
+        if (layerName.error -> why) {
+            throw "split-into-branches: layer {l.branch}: {why.message}";
         }
     }
     var stack = symbolStack(p, base: prBase(base));
     if (apply) {
-        writeLayers(root, mergeBase: mergeBase, layers: layerWrites(p, change: change, stem: stem), changed: changed);
+        final written = writeLayers(root, mergeBase: mergeBase, layers: layerWrites(p, change: change, stem: stem), changed: changed);
+        if (written.error -> err) { throw err.message; }
         final created = mut [<branchstack\StackLayer>];
         foreach (l in stack.layers) {
             var status = l.status;
@@ -2152,8 +2259,12 @@ fun report(stack: branchstack\BranchStack, format: str, text: str, applied: bool
     foreach (c in pushCommands(stack)) { std\print("  {c}"); }
 }
 
-fun fixture() > serialize\Boxed !> any {
-    return serialize\jsonDecode(fs\readFile("hack/testdata/split-into-branches.json"));
+fun fixture() > result\Result::<serialize\Boxed> {
+    try {
+        return result\ok::<serialize\Boxed>(serialize\jsonDecode(fs\readFile("hack/testdata/split-into-branches.json")));
+    } catch (err: any) {
+        return result\caught::<serialize\Boxed>(err, doing: "read the split fixture");
+    }
 }
 
 fun fixtureChanges(doc: serialize\Boxed, reversed: bool) > [Change] {
@@ -2181,9 +2292,9 @@ fun fixtureDeps(doc: serialize\Boxed) > {str: [str]} {
     return deps;
 }
 
-fun fixturePlan() > [Group] !> any {
-    final doc = fixture();
-    return plan(fixtureChanges(doc, reversed: false), deps: fixtureDeps(doc), minFiles: 3, prefix: "topic", base: "main");
+fun fixturePlan() > result\Result::<[Group]> {
+    final doc = fixture().value!;
+    return result\ok::<[Group]>(plan(fixtureChanges(doc, reversed: false), deps: fixtureDeps(doc), minFiles: 3, prefix: "topic", base: "main"));
 }
 
 fun findGroup(groups: [Group], path: str) > str {
@@ -2194,7 +2305,7 @@ fun findGroup(groups: [Group], path: str) > str {
 }
 
 test "the stack runs workspace config, then projects dependencies first, each on the branch below" {
-    final groups = fixturePlan();
+    final groups = fixturePlan().value!;
     final got = mut [<str>];
     foreach (g in groups) { got.append("{g.branch}<-{g.base}"); }
     assert\equal(got.join(" "),
@@ -2203,7 +2314,7 @@ test "the stack runs workspace config, then projects dependencies first, each on
 }
 
 test "every path lands in its owning project's group, and root-level config named by exact path in the workspace group" {
-    final groups = fixturePlan();
+    final groups = fixturePlan().value!;
     assert\equal(groups[0].files, want: [".gitattributes", "go.mod", "magus.yaml"], message: "workspace");
     assert\equal(groups[1].files, want: ["libs/core/a.go", "libs/core/b.go", "libs/core/c.go"], message: "libs/core");
     assert\equal(findGroup(groups, path: "README.md"), want: "topic-3-root", message: "a wildcard-claimed root file is root project content");
@@ -2214,7 +2325,7 @@ test "every path lands in its owning project's group, and root-level config name
 }
 
 test "an output travels with its generator's changed sources, the highest group when they span several" {
-    final groups = fixturePlan();
+    final groups = fixturePlan().value!;
     assert\equal(findGroup(groups, path: "internal/gen/x.go"), want: "topic-3-root", message: "same-project generator");
     assert\equal(findGroup(groups, path: "docs/reference/cli.md"), want: "topic-3-root", message: "docs output generated from root sources");
     assert\equal(findGroup(groups, path: "docs/reference/api.md"), want: "topic-4-docs", message: "sources in root and docs");
@@ -2226,7 +2337,7 @@ test "an output travels with its generator's changed sources, the highest group 
 }
 
 test "a group under --min-files folds into the first group above that depends on it, else the next one up" {
-    final groups = fixturePlan();
+    final groups = fixturePlan().value!;
     assert\equal(groups[2].projects, want: [".", "libs/extra", "libs/util"], message: "root absorbs util, which absorbed extra");
     assert\equal(groups[2].notes, want: [
         "folded libs/extra (1 file, under --min-files 3): nothing above depends on it, so it joins the next group up",
@@ -2236,13 +2347,13 @@ test "a group under --min-files folds into the first group above that depends on
     ], message: "root's notes");
     assert\equal(findGroup(groups, path: "console/src/app.ts"), want: "topic-4-docs", message: "console has no dependent, so it joins docs above it");
     assert\equal(groups[4].projects, want: ["proto"], message: "the top group has nothing above to fold into, so it stands at 2 files");
-    final doc = fixture();
+    final doc = fixture().value!;
     final strict = plan(fixtureChanges(doc, reversed: false), deps: fixtureDeps(doc), minFiles: 5, prefix: "topic", base: "main");
     assert\equal(strict[0].files, want: [".gitattributes", "go.mod", "magus.yaml"], message: "workspace config never folds");
 }
 
 test "the plan is a function of the change, not of the order it was listed in" {
-    final doc = fixture();
+    final doc = fixture().value!;
     final forward = render(plan(fixtureChanges(doc, reversed: false), deps: fixtureDeps(doc), minFiles: 3, prefix: "topic", base: "main"), base: "main");
     final backward = render(plan(fixtureChanges(doc, reversed: true), deps: fixtureDeps(doc), minFiles: 3, prefix: "topic", base: "main"), base: "main");
     assert\equal(backward, want: forward, message: "reversed input");
@@ -2250,7 +2361,7 @@ test "the plan is a function of the change, not of the order it was listed in" {
 }
 
 test "the push commands publish every branch and open each pull request against the branch below" {
-    final cmds = pushCommands(projectStack(fixturePlan(), base: "main", status: "planned"));
+    final cmds = pushCommands(projectStack(fixturePlan().value!, base: "main", status: "planned"));
     assert\equal(cmds.len(), want: 6, message: "one push and five pull requests");
     assert\equal(cmds[0], want: "git push -u origin topic-1-workspace topic-2-libs-core topic-3-root topic-4-docs topic-5-proto", message: "one push");
     assert\equal(cmds[1], want: "gh pr create --base main --head topic-1-workspace --fill", message: "the bottom targets the base");
@@ -2270,69 +2381,91 @@ object Repo {
     paths: [str],
 }
 
-fun writeTree(root: str, files: {str: serialize\Boxed}) > void !> any {
-    foreach (p, body in files) {
-        fs\mkdirAll(fs\dirname("{root}/{p}"));
-        fs\writeFile("{root}/{p}", content: body.stringValue());
+fun writeTree(root: str, files: {str: serialize\Boxed}) > result\Result::<bool> {
+    try {
+        foreach (p, body in files) {
+            fs\mkdirAll(fs\dirname("{root}/{p}"));
+            fs\writeFile("{root}/{p}", content: body.stringValue());
+        }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "write the fixture tree");
     }
+}
+
+// gitOut is the output of a git command a test expects to succeed.
+fun gitOut(root: str, args: [str]) > str {
+    return gitIn(root, args: args).value!;
 }
 
 // symbolRepo builds the --by symbols fixture as a real repository: the base committed on
 // main, the change left in the working tree, its regions read by vcs\regions in that tree.
 // The symbols and the classification stand in for an index and a workspace it cannot have.
-fun symbolRepo() > Repo !> any {
-    final doc = serialize\jsonDecode(fs\readFile("hack/testdata/split-into-branches-symbols.json"));
-    final files = mut [<Change>];
-    final paths = mut [<str>];
-    foreach (f in doc.q("files").listValue()) {
-        final claims = mut [<Claim>];
-        foreach (cl in f.q("claims").listValue()) {
-            claims.append(Claim{ project = cl.q("project").stringValue(), target = cl.q("target").string() ?? "",
-                role = cl.q("role").stringValue(), glob = cl.q("glob").stringValue() });
+fun symbolRepo() > result\Result::<Repo> {
+    try {
+        final doc = serialize\jsonDecode(fs\readFile("hack/testdata/split-into-branches-symbols.json"));
+        final files = mut [<Change>];
+        final paths = mut [<str>];
+        foreach (f in doc.q("files").listValue()) {
+            final claims = mut [<Claim>];
+            foreach (cl in f.q("claims").listValue()) {
+                claims.append(Claim{ project = cl.q("project").stringValue(), target = cl.q("target").string() ?? "",
+                    role = cl.q("role").stringValue(), glob = cl.q("glob").stringValue() });
+            }
+            final path = f.q("path").stringValue();
+            paths.append(path);
+            files.append(Change{ path = path, project = f.q("project").stringValue(), role = f.q("role").stringValue(), claims = claims });
         }
-        final path = f.q("path").stringValue();
-        paths.append(path);
-        files.append(Change{ path = path, project = f.q("project").stringValue(), role = f.q("role").stringValue(), claims = claims });
-    }
-    final syms = mut [<Sym>];
-    foreach (s in doc.q("symbols").listValue()) {
-        final sites = mut [<Site>];
-        foreach (r in s.q("refs").listValue()) {
-            sites.append(Site{ path = r.q("path").stringValue(), line = r.q("line").integerValue() });
+        final syms = mut [<Sym>];
+        foreach (s in doc.q("symbols").listValue()) {
+            final sites = mut [<Site>];
+            foreach (r in s.q("refs").listValue()) {
+                sites.append(Site{ path = r.q("path").stringValue(), line = r.q("line").integerValue() });
+            }
+            syms.append(Sym{ id = s.q("id").stringValue(), label = s.q("label").stringValue(), path = s.q("path").stringValue(),
+                change = s.q("change").stringValue(), line = s.q("line").integerValue(), refs = sites });
         }
-        syms.append(Sym{ id = s.q("id").stringValue(), label = s.q("label").stringValue(), path = s.q("path").stringValue(),
-            change = s.q("change").stringValue(), line = s.q("line").integerValue(), refs = sites });
+        final root = fs\tempDir("split-symbols-");
+        final based = writeTree(root, files: doc.q("base").mapValue());
+        if (based.error -> err) { return result\Result::<Repo>{ error = err }; }
+        var texts = {<str: FileText>};
+        var regions = [<Region>];
+        var failed: result\Diagnostic? = null;
+        os\withEnv(TEST_ENV, callback: fun () > void {
+            _ = gitOut(root, args: ["init", "-q", "-b", "main"]);
+            // Repository config, not `-c`: a leased worker's guard refuses inline config,
+            // which could move the work tree.
+            _ = gitOut(root, args: ["config", "core.hooksPath", "/dev/null"]);
+            _ = gitOut(root, args: ["add", "."]);
+            _ = gitOut(root, args: ["commit", "-qm", "base"]);
+            final headed = writeTree(root, files: doc.q("head").mapValue());
+            if (headed.error -> err) { failed = err; return; }
+            final read = readTexts(root, mergeBase: "main", paths: paths);
+            if (read.error -> err) { failed = err; return; }
+            texts = read.value!;
+            final settled = settledRegions(root, base: "main", texts: texts);
+            if (settled.error -> err) { failed = err; return; }
+            regions = settled.value!;
+        });
+        if (failed != null) { return result\Result::<Repo>{ error = failed }; }
+        final indexed = mut [<str>];
+        foreach (p in paths) { if (p.endsWith(".go")) { indexed.append(p); } }
+        final golang = magus\Syntax{
+            comments = magus\CommentSyntax{
+                lineComments = ["//"],
+                blockComments = [magus\CommentBlock{ open = "/*", close = "*/" }],
+                quotes = [magus\Quote{ open = "`", close = "`", ignoreEscape = true }, magus\Quote{ open = "\"", close = "\"" },
+                    magus\Quote{ open = "'", close = "'" }],
+            },
+            stubs = magus\StubSyntax{ kinds = ["Function", "Method"], bodyStyle = "brace",
+                body = "\{\n\tpanic(\"unimplemented: \{\{&Name\}\} lands in \{\{&Branch\}\}\")\n\}" },
+        };
+        final languages = {"golang": spellLanguage(golang)};
+        return result\ok::<Repo>(Repo{ root = root, change = SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexed,
+            texts = texts, languages = languages }, texts = texts, paths = paths });
+    } catch (err: any) {
+        return result\caught::<Repo>(err, doing: "build the symbol repository");
     }
-    final root = fs\tempDir("split-symbols-");
-    writeTree(root, files: doc.q("base").mapValue());
-    var texts = {<str: FileText>};
-    var regions = [<Region>];
-    os\withEnv(TEST_ENV, callback: fun () > void !> any {
-        gitIn(root, args: ["init", "-q", "-b", "main"]);
-        // Repository config, not `-c`: a leased worker's guard refuses inline config,
-        // which could move the work tree.
-        gitIn(root, args: ["config", "core.hooksPath", "/dev/null"]);
-        gitIn(root, args: ["add", "."]);
-        gitIn(root, args: ["commit", "-qm", "base"]);
-        writeTree(root, files: doc.q("head").mapValue());
-        texts = readTexts(root, mergeBase: "main", paths: paths);
-        regions = settledRegions(root, base: "main", texts: texts);
-    });
-    final indexed = mut [<str>];
-    foreach (p in paths) { if (p.endsWith(".go")) { indexed.append(p); } }
-    final golang = magus\Syntax{
-        comments = magus\CommentSyntax{
-            lineComments = ["//"],
-            blockComments = [magus\CommentBlock{ open = "/*", close = "*/" }],
-            quotes = [magus\Quote{ open = "`", close = "`", ignoreEscape = true }, magus\Quote{ open = "\"", close = "\"" },
-                magus\Quote{ open = "'", close = "'" }],
-        },
-        stubs = magus\StubSyntax{ kinds = ["Function", "Method"], bodyStyle = "brace",
-            body = "\{\n\tpanic(\"unimplemented: \{\{&Name\}\} lands in \{\{&Branch\}\}\")\n\}" },
-    };
-    final languages = {"golang": spellLanguage(golang)};
-    return Repo{ root = root, change = SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexed,
-        texts = texts, languages = languages }, texts = texts, paths = paths };
 }
 
 fun layerIds(p: SymPlan) > [str] {
@@ -2346,7 +2479,7 @@ fun layerIds(p: SymPlan) > [str] {
 }
 
 test "--by symbols layers declarations after what they reference, keeps atomic groups whole and packs to the budget" {
-    final repo = symbolRepo();
+    final repo = symbolRepo().value!;
     final p = planSymbols(repo.change, budget: 10, stem: "topic", base: "main", failures: [<Failure>], pulls: [<str>]);
     fs\removeAll(repo.root);
     assert\equal(layerIds(p), want: [
@@ -2370,7 +2503,7 @@ test "--by symbols layers declarations after what they reference, keeps atomic g
 }
 
 test "a cycle over budget is cut at a function that can be stubbed, its header kept byte for byte" {
-    final repo = symbolRepo();
+    final repo = symbolRepo().value!;
     final p = planSymbols(repo.change, budget: 10, stem: "topic", base: "main", failures: [<Failure>], pulls: [<str>]);
     fs\removeAll(repo.root);
     assert\equal(p.layers[1].reason, want: "stubs calc/calc.go#Helper until topic-3-calc-helper", message: "Mid's layer stubs Helper");
@@ -2385,7 +2518,7 @@ test "a cycle over budget is cut at a function that can be stubbed, its header k
 }
 
 test "a proof's undefined symbol is pulled when it fits, stubbed when it can be, else marks the layer needs-stub" {
-    final repo = symbolRepo();
+    final repo = symbolRepo().value!;
     final output = "# example.com/m/cmd\ncmd/main.go:6:10: undefined: calc.Top\ncmd/main.go:6:10: undefined: calc.Top\n";
     final failures = parseFailures(output, branch: "topic-2-calc-mid");
     assert\equal(failures.len(), want: 1, message: "a repeated line is one failure");
@@ -2414,35 +2547,36 @@ test "a proof's undefined symbol is pulled when it fits, stubbed when it can be,
 }
 
 test "--apply writes each layer's part of a file through a temporary index, and the top layer is the whole change" {
-    final repo = symbolRepo();
+    final repo = symbolRepo().value!;
     final p = planSymbols(repo.change, budget: 10, stem: "topic", base: "main", failures: [<Failure>], pulls: [<str>]);
     final writes = layerWrites(p, change: repo.change, stem: "topic");
     assert\equal(writes[0].partial.keys(), want: ["calc/calc.go"], message: "calc.go is split across layers 1 and 2");
     os\withEnv(TEST_ENV, callback: fun () > void !> any {
-        writeLayers(repo.root, mergeBase: gitIn(repo.root, args: ["rev-parse", "main"]), layers: writes, changed: repo.paths);
-        final first = gitIn(repo.root, args: ["show", "topic-1-calc-base:calc/calc.go"]);
+        final written = writeLayers(repo.root, mergeBase: gitOut(repo.root, args: ["rev-parse", "main"]), layers: writes, changed: repo.paths);
+        assert\isTrue(written.error == null, message: "the layers are written: {written.error?.message ?? ""}");
+        final first = gitOut(repo.root, args: ["show", "topic-1-calc-base:calc/calc.go"]);
         assert\equal(first, want: "package calc\n\nimport \"strings\"\n\nfunc Old(s string) string \{\n\treturn strings.ToUpper(s)\n\}\n\nfunc Keep() int \{\n\treturn len(Base())\n\}",
             message: "layer 1 has Keep's new body and still the old name");
-        final listed = gitIn(repo.root, args: ["ls-tree", "-r", "--name-only", "topic-1-calc-base"]);
+        final listed = gitOut(repo.root, args: ["ls-tree", "-r", "--name-only", "topic-1-calc-base"]);
         assert\equal(listed.split("\n"), want: [".gitattributes", "calc/base.go", "calc/calc.go", "cmd/main.go", "gen/top.txt", "go.mod"], message: "layer 1's tree");
-        final stubbedIn = gitIn(repo.root, args: ["show", "topic-2-calc-mid:calc/calc.go"]);
+        final stubbedIn = gitOut(repo.root, args: ["show", "topic-2-calc-mid:calc/calc.go"]);
         assert\equal(stubbedIn.indexOf("panic(\"unimplemented: Helper lands in topic-3-calc-helper\")") != null, want: true,
             message: "layer 2 builds against Helper's stub: {stubbedIn}");
-        assert\equal(gitIn(repo.root, args: ["show", "topic-3-calc-helper:calc/calc.go"]), want: splitLines(repo.texts["calc/calc.go"]!.new).join("\n"),
+        assert\equal(gitOut(repo.root, args: ["show", "topic-3-calc-helper:calc/calc.go"]), want: splitLines(repo.texts["calc/calc.go"]!.new).join("\n"),
             message: "layer 3 writes the real Helper over the stub");
-        final top = readTexts(repo.root, mergeBase: "topic-4-calc-top", paths: repo.paths);
+        final top = readTexts(repo.root, mergeBase: "topic-4-calc-top", paths: repo.paths).value!;
         foreach (path in repo.paths) {
             assert\equal(top[path]!.old, want: top[path]!.new, message: "the top layer holds the working tree's {path}");
         }
-        assert\equal(gitIn(repo.root, args: ["cat-file", "-s", "topic-1-calc-base:calc/calc.go"]), want: "{first.len() + 1}",
+        assert\equal(gitOut(repo.root, args: ["cat-file", "-s", "topic-1-calc-base:calc/calc.go"]), want: "{first.len() + 1}",
             message: "a partial file keeps its final newline");
-        assert\equal(gitIn(repo.root, args: ["diff", "--cached", "--name-only"]), want: "", message: "the real index is untouched");
+        assert\equal(gitOut(repo.root, args: ["diff", "--cached", "--name-only"]), want: "", message: "the real index is untouched");
     });
     fs\removeAll(repo.root);
 }
 
 test "the --by symbols plan is the branch stack merge-job-branches reads back" {
-    final repo = symbolRepo();
+    final repo = symbolRepo().value!;
     final p = planSymbols(repo.change, budget: 10, stem: "topic", base: "main", failures: [<Failure>], pulls: [<str>]);
     fs\removeAll(repo.root);
     final text = branchstack\writeStack(symbolStack(p, base: "main"));

@@ -1,7 +1,6 @@
 package knowledge
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -196,31 +196,73 @@ func guardRepository(t *testing.T) (root, cacheDir string, g *Graph, git func(ar
 
 var guardKinds = []string{GuardSymbol, types.KindDocSection, types.KindTarget, types.KindDiagnostic, types.KindFile}
 
-// An index answers only for the revision it was built at: a rewrite that moves HEAD and
-// touches no indexed file leaves every stamp holding, and still makes every kind stale.
-func TestGuardIndexStaleAtAnotherRevision(t *testing.T) {
-	root, cacheDir, g, git := guardRepository(t)
-	at := ReadGuardCheckout(t.Context(), root)
-	require.Equal(t, git("rev-parse", "HEAD"), at.Revision)
-	require.NoError(t, WriteGuardIndex(cacheDir, root, g, true, at))
+type guardIndexSuite struct{ suite.Suite }
 
-	x, err := ReadGuardIndex(cacheDir, root)
-	require.NoError(t, err)
-	assert.Empty(t, x.Stale())
-	for _, kind := range guardKinds {
-		assert.True(t, x.Fresh(kind), kind)
-	}
+func TestGuardIndexSuite(t *testing.T) { suite.Run(t, new(guardIndexSuite)) }
+
+// Staleness is per shard of sources: a commit that moves HEAD and touches no indexed file
+// leaves every stamp holding, so every kind still answers.
+func (s *guardIndexSuite) TestFreshAtAnotherRevisionWhenNoIndexedFileMoved() {
+	root, cacheDir, g, git := guardRepository(s.T())
+	at := ReadGuardCheckout(s.T().Context(), root)
+	s.Require().Equal(git("rev-parse", "HEAD"), at.Revision)
+	s.Require().NoError(WriteGuardIndex(cacheDir, root, g, true, at))
 
 	git("commit", "-q", "--amend", "-m", "one, reworded")
-	x, err = ReadGuardIndex(cacheDir, root)
-	require.NoError(t, err)
-	assert.Equal(t, fmt.Sprintf("the index was built at %s and the checkout is at %s", at.Revision[:12], git("rev-parse", "HEAD")[:12]), x.Stale())
+	x, err := ReadGuardIndex(cacheDir, root)
+	s.Require().NoError(err)
+	s.Empty(x.Stale())
 	for _, kind := range guardKinds {
-		assert.False(t, x.Fresh(kind), kind)
+		s.True(x.Fresh(kind), kind)
 	}
 	built, err := ReadGuardIndexCheckout(cacheDir, root)
-	require.NoError(t, err)
-	assert.Equal(t, at, built)
+	s.Require().NoError(err)
+	s.Equal(at, built)
+}
+
+// A commit that rewrites an indexed file fails that file's stamp, and with it the kinds
+// the file feeds.
+func (s *guardIndexSuite) TestStaleKindAfterACommitMovesItsShard() {
+	root, cacheDir, g, git := guardRepository(s.T())
+	s.Require().NoError(WriteGuardIndex(cacheDir, root, g, true, ReadGuardCheckout(s.T().Context(), root)))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "pkg/a.go"), []byte("package pkg\nfunc Moved() {}\n"), 0o644))
+	git("commit", "-q", "-am", "moved")
+
+	x, err := ReadGuardIndex(cacheDir, root)
+	s.Require().NoError(err)
+	s.Empty(x.Stale())
+	s.False(x.Fresh(GuardSymbol))
+	s.True(x.Fresh(types.KindDocSection), "no markdown moved")
+}
+
+func (s *guardIndexSuite) TestStaleAtSameRevision() {
+	s.Empty(GuardCheckout{Revision: "0123456789abcdef0123"}.StaleAt(GuardCheckout{Revision: "0123456789abcdef0123"}))
+}
+
+func (s *guardIndexSuite) TestStaleAtAbbreviatedRevision() {
+	s.Empty(GuardCheckout{Revision: "0123456789abcdef0123"}.StaleAt(GuardCheckout{Revision: "0123456"}))
+}
+
+func (s *guardIndexSuite) TestStaleAtAnotherRevision() {
+	s.Equal("the index was built at 0123456789ab and the checkout is at fedcba",
+		GuardCheckout{Revision: "0123456789abcdef0123"}.StaleAt(GuardCheckout{Revision: "fedcba"}))
+}
+
+func (s *guardIndexSuite) TestStaleAtUnrecordedBuildRevision() {
+	s.Equal("the index was built at no recorded revision and the checkout is at 0123456789ab",
+		GuardCheckout{}.StaleAt(GuardCheckout{Revision: "0123456789abcdef0123"}))
+}
+
+func (s *guardIndexSuite) TestStaleAtNoRevisionAsksOperationsAlone() {
+	s.Empty(GuardCheckout{Revision: "0123456789abcdef0123"}.StaleAt(GuardCheckout{}))
+}
+
+func (s *guardIndexSuite) TestStaleAtOperationUnderwayNow() {
+	s.Equal("a rebase is in progress", GuardCheckout{}.StaleAt(GuardCheckout{Operation: "rebase"}))
+}
+
+func (s *guardIndexSuite) TestStaleAtBuiltDuringAnOperation() {
+	s.Equal("the index was built during a merge", GuardCheckout{Operation: "merge"}.StaleAt(GuardCheckout{}))
 }
 
 // An index built while a rebase is stopped describes a tree the rebase is about to
@@ -261,24 +303,5 @@ func TestGuardIndexStaleDuringARebaseStoppedOnACleanPick(t *testing.T) {
 	assert.Equal(t, "a rebase is in progress", x.Stale())
 	for _, kind := range guardKinds {
 		assert.False(t, x.Fresh(kind), kind)
-	}
-}
-
-func TestGuardCheckoutStaleAt(t *testing.T) {
-	const rev = "0123456789abcdef0123"
-	for _, tt := range []struct {
-		built, now GuardCheckout
-		want       string
-	}{
-		{GuardCheckout{Revision: rev}, GuardCheckout{Revision: rev}, ""},
-		{GuardCheckout{Revision: rev}, GuardCheckout{Revision: "0123456"}, ""},
-		{GuardCheckout{}, GuardCheckout{}, ""},
-		{GuardCheckout{Revision: rev}, GuardCheckout{Revision: rev, Operation: "rebase"}, "a rebase is in progress"},
-		{GuardCheckout{Revision: rev, Operation: "merge"}, GuardCheckout{Revision: rev}, "the index was built during a merge"},
-		{GuardCheckout{Revision: rev}, GuardCheckout{Revision: "fedcba"}, "the index was built at 0123456789ab and the checkout is at fedcba"},
-		{GuardCheckout{Revision: rev}, GuardCheckout{}, "the index was built at 0123456789ab and the checkout is at no recorded revision"},
-		{GuardCheckout{}, GuardCheckout{Revision: rev}, "the index was built at no recorded revision and the checkout is at 0123456789ab"},
-	} {
-		assert.Equal(t, tt.want, tt.built.StaleAt(tt.now), "%+v at %+v", tt.built, tt.now)
 	}
 }

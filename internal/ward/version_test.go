@@ -12,7 +12,35 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// UnknownConfigKeySuite pins which MGS1040 failures a rebuild fixes.
+type UnknownConfigKeySuite struct {
+	suite.Suite
+}
+
+func TestUnknownConfigKeySuite(t *testing.T) {
+	suite.Run(t, new(UnknownConfigKeySuite))
+}
+
+func (s *UnknownConfigKeySuite) TestAKeyThisBuildPredatesIsStaleShaped() {
+	err := types.DiagnosticErrorf(types.UnknownConfigKey,
+		"magus.yaml has a key this magus does not know:\n  - guard.newest  (line 4)\n\nthis magus is older than the tree")
+	s.True(IsStaleBinary(err))
+}
+
+func (s *UnknownConfigKeySuite) TestASuggestedKeyIsATypoARebuildReportsAgain() {
+	err := types.DiagnosticErrorf(types.UnknownConfigKey,
+		"magus.yaml has a key this magus does not know:\n  - guard.lease  (line 4; did you mean %q?)", "guard.leases")
+	s.False(IsStaleBinary(err))
+}
+
+func (s *UnknownConfigKeySuite) TestARenamedKeyIsNotStaleShaped() {
+	err := types.DiagnosticErrorf(types.UnknownConfigKey,
+		"magus.yaml has a key this magus does not know:\n  - old  (line 2; renamed to %q)", "new")
+	s.False(IsStaleBinary(err))
+}
 
 func TestCheckRequiredVersion(t *testing.T) {
 	t.Run("a satisfied floor passes", func(t *testing.T) {
@@ -325,42 +353,64 @@ func TestExplainStaleBinary_NotesOnlyTheBranchItExplains(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(got.Error(), "Fix it:"), "the advice is stated once")
 }
 
+func TestPinnedRelease(t *testing.T) {
+	t.Parallel()
+	for constraint, want := range map[string]string{
+		"= 0.4.3":            "v0.4.3",
+		"0.4.3":              "v0.4.3",
+		"== v0.5.0-rc.1":     "v0.5.0-rc.1",
+		">= 0.4.3, < 0.5.0":  "v0.4.3",
+		">= 0.4.3, <= 0.4.9": "v0.4.3",
+		"~0.4.3":             "v0.4.3",
+		"^0.4.3":             "v0.4.3",
+		">= 0.4.4":           "",
+		"< 0.5.0":            "",
+		"> 0.4.3, < 0.5.0":   "",
+		">= 0.4.3 || 0.6.0":  "",
+		">= 0.5.0, < 0.4.0":  "",
+		"soon":               "",
+		"":                   "",
+	} {
+		assert.Equal(t, want, PinnedRelease(constraint), constraint)
+	}
+}
+
 // TestStaleBuildAdvice pins every rendering: the gap sentence names whichever fact is
 // unknown, and the fixes grow with what magus knows about the build and the tree.
 func TestStaleBuildAdvice(t *testing.T) {
 	t.Parallel()
 	const selfUpdate = "Fix it:\n  - released binary: magus self update"
-	const goBuild = "\n  - built from this checkout: ./magus run go-build ."
-	const bootstrap = "\n  - if that cannot load the tree either: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
+	const script = "\n  - this workspace's script for it: ./magus buzz hack/dev/bootstrap-checkout.buzz"
+	const bootstrap = "\n  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
+	served := []string{"./magus buzz hack/dev/bootstrap-checkout.buzz"}
 	for name, tc := range map[string]struct {
 		build StaleBuild
 		want  string
 	}{
-		"a dev build in a source tree, below the floor": {
-			build: StaleBuild{Running: "v0.4.3-122-g1a2b3c4", Floor: ">= 0.4.4", SourceTree: true},
-			want:  "This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + goBuild + bootstrap,
+		"a dev build with a served script, below the floor": {
+			build: StaleBuild{Running: "v0.4.3-122-g1a2b3c4", Floor: ">= 0.4.4", Scripts: served},
+			want:  "This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + script + bootstrap,
 		},
-		"a release in a source tree gets no bootstrap": {
-			build: StaleBuild{Running: "v0.4.3", Floor: ">= 0.4.4", SourceTree: true},
-			want:  "This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + goBuild,
+		"a release with a served script gets no bootstrap": {
+			build: StaleBuild{Running: "v0.4.3", Floor: ">= 0.4.4", Scripts: served},
+			want:  "This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + script,
 		},
-		"a release outside a source tree": {
+		"a release with no served script": {
 			build: StaleBuild{Running: "v0.4.3", Floor: ">= 0.4.4"},
 			want:  "This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate,
 		},
-		"a dev build outside a source tree": {
+		"a dev build with no served script": {
 			build: StaleBuild{Running: "v0.4.3-1-gabc", Floor: ">= 0.4.4"},
-			want: "This magus (v0.4.3-1-gabc) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate +
-				"\n  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
+			want:  "This magus (v0.4.3-1-gabc) is older than the workspace needs (>= 0.4.4).\n" + selfUpdate + bootstrap,
 		},
 		"a dev build that meets the floor": {
-			build: StaleBuild{Running: "v0.4.4-3-gabc", Floor: ">= 0.4.4", SourceTree: true},
+			build: StaleBuild{Running: "v0.4.4-3-gabc", Floor: ">= 0.4.4", Scripts: served},
 			want: "This magus (v0.4.4-3-gabc) meets the workspace floor (>= 0.4.4) but was likely built before the workspace changed.\n" +
-				selfUpdate + goBuild + bootstrap,
+				selfUpdate + script + bootstrap,
 		},
 		"an unknown running version is not a dev build": {
-			build: StaleBuild{Floor: ">= 0.4.4", SourceTree: true},
-			want:  "This magus's version is unknown here; the workspace needs >= 0.4.4.\n" + selfUpdate + goBuild,
+			build: StaleBuild{Floor: ">= 0.4.4", Scripts: served},
+			want:  "This magus's version is unknown here; the workspace needs >= 0.4.4.\n" + selfUpdate + script,
 		},
 		"nothing known": {
 			want: "This magus's version is unknown here, and the workspace declares no required_version floor.\n" + selfUpdate,
@@ -370,12 +420,20 @@ func TestStaleBuildAdvice(t *testing.T) {
 			want:  "This magus is v0.4.3; the workspace declares no required_version floor.\n" + selfUpdate,
 		},
 		"an unstamped build": {
-			build: StaleBuild{Running: DevVersion, Floor: ">= 0.4.4", SourceTree: true},
-			want:  "This magus is an unstamped build, so its version is unknown; the workspace needs >= 0.4.4.\n" + selfUpdate + goBuild + bootstrap,
+			build: StaleBuild{Running: DevVersion, Floor: ">= 0.4.4", Scripts: served},
+			want:  "This magus is an unstamped build, so its version is unknown; the workspace needs >= 0.4.4.\n" + selfUpdate + script + bootstrap,
 		},
 		"a floor that does not parse": {
 			build: StaleBuild{Running: "v0.4.3", Floor: "soon"},
 			want:  "This magus is v0.4.3; the workspace needs soon, and the two cannot be compared.\n" + selfUpdate,
+		},
+		"an exact pin names its release": {
+			build: StaleBuild{Running: "v0.4.2", Floor: "= 0.4.3"},
+			want:  "This magus (v0.4.2) is older than the workspace needs (= 0.4.3).\n" + selfUpdate + " --version v0.4.3",
+		},
+		"an upper-bounded range names its lower bound": {
+			build: StaleBuild{Running: "v0.4.2", Floor: ">= 0.4.3, < 0.5.0"},
+			want:  "This magus (v0.4.2) is older than the workspace needs (>= 0.4.3, < 0.5.0).\n" + selfUpdate + " --version v0.4.3",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -1,0 +1,273 @@
+// Tier 2, measured shape: a file the change touches may not hold more violations of a metric
+// the conformance ceiling policy checks than it held at the base revision; a drop is progress.
+// Tier 3, judgment: every other metric is advice.
+namespace conformanceceilingrule;
+
+import "assert";
+import "std";
+import "vcs";
+import "magus";
+import "magus/lint";
+import "hack/magusfile/conformance-ceiling" as ceiling;
+
+// reads keys lint-rules on every Go source the lens measures and the policy beside it: a
+// tree glob stops at a nested project, so each project holding Go is named.
+export fun reads() > [str] {
+    return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
+        "libs/figure/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/xdg/**/*.go",
+        "libs/cmdline/**/*.go", "hack/magusfile/conformance-ceiling.buzz", "magus.yaml"];
+}
+
+// check fails each conformance ceiling the change crossed and an index the lens could not
+// vouch for, and prints the advice metrics' violations.
+export fun check(files: [Path]) > [Finding] !> any {
+    final report = magus\change(vcs\base()).conformance(ceiling\POLICY.checks);
+    foreach (line in advice(report)) {
+        std\print(line);
+    }
+    return judge(report);
+}
+
+// indexFix is what makes an index current. An indexer that is not installed is fixed by
+// installing it, which a rebuild cannot do; status says so in the index's detail.
+export fun indexFix(op: str, detail: str) > str {
+    if (detail.indexOf("is not installed") != null) {
+        return "Install {op}, then rerun lint: {detail}.";
+    }
+    return "Rebuild it with `magus graph build`, then rerun lint.";
+}
+
+// judge is check's verdict over a magus\change(base).conformance report.
+export fun judge(report: magus\ConformanceReport) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final indexes = report.indexes;
+    foreach (idx in indexes) {
+        final freshness: str = idx.freshness.value;
+        if (freshness != "up-to-date") {
+            final project: str = idx.project.path;
+            final lang: str = idx.language;
+            found.append(Finding{ path = project,
+                message = "the {lang} symbol index of {project} is {freshness}, so its conformance cannot be judged",
+                fix = indexFix(idx.op, detail: idx.detail) });
+        }
+    }
+    final answer = report.answer;
+    if (answer.verdict == magus\KnowledgeVerdict.unknown) {
+        final reason: str = if (answer.reason.value == "") "no reason given" else answer.reason.value;
+        found.append(Finding{ path = ".", message = "magus\\change().conformance answered unknown ({reason}), so nothing was judged",
+            fix = "Rebuild the index with `magus graph build`, then rerun lint." });
+    }
+    if (found.len() > 0) {
+        return found;
+    }
+
+    final base: str = report.base;
+    final values = rowValues(report);
+    final ceilings = report.ceilings;
+    foreach (c in ceilings) {
+        final key = c.key;
+        final metric: str = key.metric.value;
+        final label = keyLabel(key);
+        final value = values[label] ?? 0;
+        final file: str = c.file;
+        final was = c.base;
+        final now = c.head;
+        final violations = c.violations;
+        foreach (v in violations) {
+            final at = position(v.source);
+            final id: str = v.id;
+            final measure = v.measure;
+            final home: str = v.home;
+            final rename: str = v.rename;
+            final concept = if (rename == "") "" else ", name the concept: {rename}";
+            final past = if (metric == "file-split") "with {home} at or under the floor of {value}" else "past the anchor of {value}";
+            found.append(Finding{ path = if (at.path == "") file else at.path, line = at.line,
+                message = "{label}: {id} measures {measure}, {past}{concept}; {file} holds {now}, up from {was} at {short(base)}",
+                fix = fixFor(metric, value: value, item: Item{ file = at.path, home = home, measure = measure,
+                    unshared = v.unshared, rename = rename }) });
+        }
+    }
+    return found;
+}
+
+// Item is what fixFor reads of a violation: its file, where the lens says it belongs ("" when it
+// names nowhere), its measure, for file-split whether it shares nothing with its root, and the
+// concept its file names when it names one (rename, "" otherwise).
+export object Item {
+    file: str = "",
+    home: str = "",
+    measure: int = 0,
+    unshared: bool = false,
+    rename: str = "",
+}
+
+// fixFor is how to clear a violation of metric past value. Bringing the file back to its count
+// at the base is always enough: the ceiling is that count, not zero.
+export fun fixFor(metric: str, value: int, item: Item) > str {
+    final home = item.home;
+    if (item.rename != "") {
+        return "Name the concept: `git mv {item.file} {item.rename}`, then fold {item.file} into it.";
+    }
+    if (metric == "file-split" and item.unshared) {
+        return "Rename it, it shares nothing with {home}: its name says it was split out of {home}.";
+    }
+    if (metric == "file-split") {
+        return "Put this in {home}, which would be {item.measure} lines; a split starts past {value}.";
+    }
+    if (metric == "main-logic") {
+        final where = if (home == "") "its file references no library package yet" else "{home}, which its file references most";
+        return "A main package only wires: parse flags, build dependencies, call a package, print the result. "
+            + "This computes and calls no other workspace package; move it into the package that owns its data ({where}).";
+    }
+    if (metric == "store-path-export") {
+        return "Only {home} may know where its store lives, and the measure counts the files outside it that do. "
+            + "Call {home}'s reader or writer instead, adding the verb there, then unexport this.";
+    }
+    return "Bring it under {value}, or the file back to its count at the base.";
+}
+
+// advice is a line per violation of a metric the policy does not check.
+fun advice(report: magus\ConformanceReport) > [str] {
+    final lines = mut [<str>];
+    final rows = report.rows;
+    foreach (row in rows) {
+        final key = row.key;
+        if (ceiling\POLICY.holds(key.metric.value)) {
+            continue;
+        }
+        final label = keyLabel(key);
+        final value = row.value;
+        final violations = row.violations;
+        foreach (v in violations) {
+            final source: str = v.source;
+            final id: str = v.id;
+            lines.append("advice: {label}: {id} measures {v.measure} at {source}, past {value}");
+        }
+    }
+    foreach (line in unmeasured(report)) {
+        lines.append(line);
+    }
+    return lines;
+}
+
+// unmeasured is a line per touched file the base was not measured for, then their count.
+fun unmeasured(report: magus\ConformanceReport) > [str] {
+    final files = report.unmeasured;
+    final lines = mut [<str>];
+    foreach (u in files) {
+        final file: str = u.file;
+        final language: str = u.language;
+        final reason: str = u.reason;
+        lines.append("unmeasured: {file} ({language}): {reason}");
+    }
+    if (files.len() > 0) {
+        lines.append("unmeasured: {files.len()} touched file(s) hold no conformance ceiling");
+    }
+    return lines;
+}
+
+// rowValues is each row's anchor under its label, for naming it beside a ceiling.
+fun rowValues(report: magus\ConformanceReport) > {str: int} {
+    final values = mut {<str: int>};
+    final rows = report.rows;
+    foreach (row in rows) {
+        values[keyLabel(row.key)] = row.value;
+    }
+    return values;
+}
+
+fun short(commit: str) > str {
+    return if (commit.len() > 12) commit.sub(0, len: 12) else commit;
+}
+
+// keyLabel names a row's metric, population and scope as a person reads them.
+fun keyLabel(key: magus\ConformanceKey) > str {
+    final metric: str = key.metric.value;
+    final population: str = key.population.value;
+    final scope: str = key.scope;
+    if (scope != "") {
+        return "{metric} {population} {scope}";
+    }
+    return "{metric} {population}";
+}
+
+// Position is an item's source split into a file and a line, 0 when the lens named none.
+object Position {
+    path: str,
+    line: int,
+}
+
+fun position(source: str) > Position {
+    final colon = source.indexOf(":");
+    if (colon == null) {
+        return Position{ path = source, line = 0 };
+    }
+    return Position{ path = source.sub(0, len: colon!),
+        line = std\parseInt(source.sub(colon! + 1, len: source.len() - colon! - 1)) ?? 0 };
+}
+
+fun fresh() > magus\SymbolIndexStatus {
+    return magus\SymbolIndexStatus{ freshness = magus\SymbolIndexFreshness.upToDate, language = "go", project = magus\ProjectRef{ path = "." }, op = "go-index" };
+}
+
+fun row(metric: magus\ConformanceMetric, value: int, violations: [magus\ConformanceItem]) > magus\ConformanceRow {
+    return magus\ConformanceRow{ key = magus\ConformanceKey{ metric = metric, population = magus\ConformancePopulation.source }, value = value, violations = violations };
+}
+
+fun violation(id: str, source: str, measure: int) > magus\ConformanceItem {
+    return magus\ConformanceItem{ id = id, source = source, measure = measure };
+}
+
+fun report(rows: [magus\ConformanceRow], ceilings: [magus\ConformanceCeiling]) > magus\ConformanceReport {
+    return magus\ConformanceReport{ indexes = [fresh()], answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.found }, base = "0123456789abcdef", rows = rows, ceilings = ceilings };
+}
+
+test "a crossed ceiling fails at each violation in the file, naming both counts" {
+    final v = violation("a.go#Long", source: "a.go:7", measure: 60);
+    final got = judge(report([row(magus\ConformanceMetric.funcLines, value: 52, violations: [v])],
+        ceilings: [magus\ConformanceCeiling{ key = magus\ConformanceKey{ metric = magus\ConformanceMetric.funcLines, population = magus\ConformancePopulation.source }, file = "a.go", base = 0, head = 1, violations = [v] }]));
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].path, want: "a.go", message: "at the file");
+    assert\equal(got[0].line, want: 7, message: "at the line");
+    assert\equal(got[0].message, want: "func-lines source: a.go#Long measures 60, past the anchor of 52; a.go holds 1, up from 0 at 0123456789ab",
+        message: "both counts and the base");
+}
+
+test "a violation no ceiling names passes" {
+    final v = violation("a.go#Long", source: "a.go:7", measure: 60);
+    assert\equal(judge(report([row(magus\ConformanceMetric.funcLines, value: 52, violations: [v])], ceilings: [])).len(), want: 0,
+        message: "held at its base count");
+}
+
+test "a stale index or an unknown answer fails instead of passing on what it lacks" {
+    final stale = magus\ConformanceReport{ indexes = [magus\SymbolIndexStatus{ freshness = magus\SymbolIndexFreshness.outOfDate, language = "go", project = magus\ProjectRef{ path = "." }, op = "go-index" }],
+        answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.found } };
+    assert\equal(judge(stale).len(), want: 1, message: "stale index");
+    final unknown = magus\ConformanceReport{ indexes = [fresh()], answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.unknown } };
+    assert\equal(judge(unknown).len(), want: 1, message: "unknown answer");
+}
+
+test "an advice metric is printed, never failed" {
+    final lines = advice(report([row(magus\ConformanceMetric.sharedReach, value: 7, violations: [violation("a.go#F", source: "a.go:3", measure: 9)])], ceilings: []));
+    assert\equal(lines, want: ["advice: shared-reach source: a.go#F measures 9 at a.go:3, past 7"], message: "one line");
+}
+
+test "a touched file with no base measure is named and counted, never failed" {
+    final r = magus\ConformanceReport{ indexes = [fresh()], answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.found },
+        unmeasured = [magus\ConformanceUnmeasured{ file = "console/a.ts", language = "typescript", reason = "no in-process index; ceiling not applied" }] };
+    assert\equal(unmeasured(r), want: ["unmeasured: console/a.ts (typescript): no in-process index; ceiling not applied",
+        "unmeasured: 1 touched file(s) hold no conformance ceiling"], message: "named and counted");
+    assert\equal(judge(r).len(), want: 0, message: "no finding");
+}
+
+test "a missing indexer is fixed by installing it, not by a rebuild" {
+    assert\equal(indexFix("scip-go", detail: "scip-go is not installed"), want: "Install scip-go, then rerun lint: scip-go is not installed.",
+        message: "install");
+}
+
+test "a file-split violation says to merge it, or to rename it when it shares nothing" {
+    assert\equal(fixFor("file-split", value: 1500, item: Item{ file = "a_b.go", home = "a.go", measure = 900 }),
+        want: "Put this in a.go, which would be 900 lines; a split starts past 1500.", message: "merge");
+    assert\equal(fixFor("file-split", value: 1500, item: Item{ file = "a_b.go", home = "a.go", unshared = true }),
+        want: "Rename it, it shares nothing with a.go: its name says it was split out of a.go.", message: "rename");
+}

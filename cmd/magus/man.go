@@ -38,6 +38,10 @@ func manCommand(args []string) error {
 	if fs.NArg() != 0 {
 		return fmt.Errorf("magus man install: unexpected argument %q", fs.Arg(0))
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	if *dir == "" {
 		def, err := defaultManDir()
 		if err != nil {
@@ -48,8 +52,15 @@ func manCommand(args []string) error {
 	root := commands.Root
 	root.Env = config.EnvVars()
 	pages := generate.Roff(root, "", version)
+	names := make([]string, 0, len(pages))
+	for _, page := range pages {
+		names = append(names, page.Name)
+	}
 	// Before MkdirAll: the destination is usually outside the repo, so describing
 	// it must not create it.
+	if *dryRun && opts.Format != outputText {
+		return emitRecord(opts, manInstallOutput{Dir: *dir, DryRun: true, Pages: names}, names)
+	}
 	if *dryRun {
 		for _, page := range pages {
 			fmt.Fprintf(os.Stdout, "would write %s\n", filepath.Join(*dir, page.Name))
@@ -66,8 +77,17 @@ func manCommand(args []string) error {
 			return fmt.Errorf("magus man install: write %s: %w", path, err)
 		}
 	}
+	if opts.Format != outputText {
+		return emitRecord(opts, manInstallOutput{Dir: *dir, Pages: names}, names)
+	}
 	fmt.Fprintf(os.Stdout, "Installed %d man pages to %s\n", len(pages), *dir)
 	return nil
+}
+
+type manInstallOutput struct {
+	Dir    string   `json:"dir"`
+	DryRun bool     `json:"dry_run"`
+	Pages  []string `json:"pages"`
 }
 
 func defaultManDir() (string, error) {

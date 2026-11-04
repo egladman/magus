@@ -15,7 +15,25 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// factOutcomeSuite pins the axis the push gate and owed checks compare on.
+type factOutcomeSuite struct {
+	suite.Suite
+}
+
+func TestFactOutcome(t *testing.T) {
+	suite.Run(t, new(factOutcomeSuite))
+}
+
+func (s *factOutcomeSuite) TestAPermitIsGreen() {
+	s.Equal(OutcomePass, factOutcome(journal.StatusPermitted))
+}
+
+func (s *factOutcomeSuite) TestAFailureIsRed() {
+	s.Equal(OutcomeFail, factOutcome(journal.StatusFail))
+}
 
 // emitFact pushes one event through h along the real capture path, rather than
 // hand-building the slog.Record. The attribute key that carries an Event is private to

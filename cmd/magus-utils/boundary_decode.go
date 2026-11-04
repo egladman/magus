@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run . boundarydecode -out ../../internal/interp/bindings/gen/decode/decode.go -list ../../internal/interp/bindings/gen/decode/inbound_list_test.go -bindings-pkg bindgen -ops ../../internal/interp/bindings/gen/boundary_ops.go -op-vars ../../internal/interp/bindings/gen/providerops/providerops.go
+//go:generate go run . boundarydecode -out ../../internal/interp/bindings/gen/decode/decode.go -list ../../internal/interp/bindings/gen/inbound_list_test.go -bindings-pkg bindgen -ops ../../internal/interp/bindings/gen/boundary_ops.go -op-vars ../../internal/interp/bindings/gen/providerops/providerops.go
 
 import (
 	"bytes"
@@ -59,6 +59,8 @@ var inboundTypes = []string{
 	"ReviewTarget",
 	"ReviewComment",
 	"Project",
+	"DiscoveryGap",
+	"DiscoveredProject",
 	// The queue script's answers, leaf first.
 	"Person",
 	"QueueIntegration",
@@ -86,8 +88,11 @@ var inboundTypes = []string{
 	"QueueReviews",
 	// The harness contract's answers (internal/spell/contract.go), leaf first.
 	"HarnessConfig",
+	"HarnessAsset",
+	"Harness",
 	"HarnessSkills",
 	"HookCommand",
+	"HookBinding",
 	"ManagedEntries",
 	"McpServer",
 	"Price",
@@ -99,6 +104,80 @@ var inboundTypes = []string{
 	"Prompt",
 	"Setting",
 	"Limits",
+	// The image module's arguments, leaf first: Spec holds the records before it, a
+	// Document a Descriptor, and RegistryAuth the Secret above.
+	"Platform",
+	"Digest",
+	"Descriptor",
+	"File",
+	"Tree",
+	"Symlink",
+	"Directory",
+	"Config",
+	"Spec",
+	"RegistryAuth",
+	"Dependency",
+	"Provenance",
+	"Document",
+	// The host doors' option records, each decoded strictly at its door.
+	"DirsOptions",
+	"NeighborhoodOptions",
+	"PathOptions",
+	"QueryOptions",
+	"RefsOptions",
+	"HistoryMetricsOptions",
+	"ExecOptions",
+	`magus\CommandOptions`,
+	`vcs\CommandOptions`,
+	`magus\DiffOptions`,
+	"DiagnosticCode",
+	"RaiseOptions",
+	"SkillsOptions",
+	`http\Options`,
+	`http\ServerOptions`,
+	`http\Retry`,
+	`archive\Options`,
+	"RetryOptions",
+	// The magus root constructors' records, which their methods take back as
+	// the receiver, and the options those take.
+	"ProjectRef",
+	"JobModelTier",
+	"JobClaim",
+	"ClaimEvidence",
+	"Origin",
+	"Credential",
+	"Grant",
+	"JobDeferred",
+	"PriorAttempt",
+	"GateStatus",
+	"JobDenial",
+	"RetryVerdict",
+	"JobRejection",
+	"LeaseCheck",
+	"Goal",
+	"JobRelease",
+	"JobUnattributedWrite",
+	"JobEntry",
+	"Deviation",
+	"JobWorktree",
+	"JobResult",
+	"JobResultValidation",
+	"GateEvidence",
+	"JobAttempt",
+	"JobGateAttempt",
+	"JobRun",
+	"JobIntegration",
+	"KnowledgeSymbolGap",
+	"Graph",
+	"VCSCheckpoint",
+	"ChangeOptions",
+	"Change",
+	"History",
+	"SessionOptions",
+	"Session",
+	"Workspace",
+	"TierOptions",
+	"Job",
 }
 
 // requiredMembers names, per inbound type, the members its decoder refuses an answer
@@ -106,6 +185,7 @@ var inboundTypes = []string{
 // what the provider meant to refuse: a change missing "fork" read as one from this
 // repository, a missing approval count as a base requiring no review.
 var requiredMembers = map[string][]string{
+	"DiscoveredProject":    {"path", "role"},
 	"QueueCapabilities":    {"stackMerge", "linearStacks", "methods", "requiredApprovals"},
 	"QueueSetup":           {"statusContext", "credential"},
 	"QueueSetupRefusal":    {"reason", "url", "app"},
@@ -123,6 +203,14 @@ var requiredMembers = map[string][]string{
 	"QueueArtifactListing": {"run", "complete", "artifacts"},
 	"QueueReview":          {"id", "reviewer", "commit"},
 	"QueueReviews":         {"head", "approving"},
+	"Platform":             {"os", "architecture"},
+	"Spec":                 {"platform"},
+	"File":                 {"source", "path", "mode"},
+	"Tree":                 {"source", "path", "modePolicy", "symlinks"},
+	"Symlink":              {"path", "target"},
+	"Directory":            {"path", "mode"},
+	"Document":             {"path", "descriptor"},
+	"Provenance":           {"builderID", "sourceRevision"},
 }
 
 // inboundBoundaryTypes resolves inboundTypes against the registry, in list order.
@@ -157,7 +245,7 @@ func inboundBoundaryTypes() ([]boundaryType, error) {
 func runBoundaryDecode(args []string) error {
 	fs := flag.NewFlagSet("boundarydecode", flag.ExitOnError)
 	outPath := fs.String("out", "", "output Go file path for the decoders")
-	listPath := fs.String("list", "", "output Go test file path for the inbound type list")
+	listPath := fs.String("list", "", "output Go test file path for the inbound type list, in the bindings package")
 	bindingsPkg := fs.String("bindings-pkg", "", "package clause of internal/interp/bindings/gen, whose encoders the list calls")
 	opsPath := fs.String("ops", "", "output Go file path for the ProviderOp type, in the bindings package")
 	opVarsPath := fs.String("op-vars", "", "output Go file path for package providerops")
@@ -252,7 +340,7 @@ func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 	fmt.Fprintln(&body, "\tif !ok {")
 	fmt.Fprintf(&body, "\t\treturn out, mismatch(path, %q, v)\n", entry.Name)
 	fmt.Fprintln(&body, "\t}")
-	required := requiredMembers[entry.Name]
+	required := requiredMembers[entry.key()]
 	declared := map[string]bool{}
 	for _, bf := range boundaryFields(t) {
 		declared[buzzVMFieldName(bf.StructField)] = true
@@ -527,20 +615,28 @@ func (e *decodeEmitter) listFile(entries []boundaryType, bindingsPkg string) ([]
 	var b bytes.Buffer
 	fmt.Fprintln(&b, "// Code generated by magus-utils boundarydecode. DO NOT EDIT.")
 	fmt.Fprintln(&b)
-	fmt.Fprintln(&b, "package decode")
+	// In the bindings package rather than decode: bindgen imports decode for typed host
+	// arguments, so a decode test calling bindgen's encoders would be an import cycle.
+	fmt.Fprintln(&b, "package "+bindingsPkg)
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "import (")
 	fmt.Fprintln(&b, `	"reflect"`)
 	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/gen/decode"`)
 	objects := newBuzzValueEmitter()
 	if slices.ContainsFunc(entries, func(entry boundaryType) bool { return objects.reachesEnum(entry.Type) }) {
 		fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/ffi"`)
 	}
-	fmt.Fprintf(&b, "\t%s \"github.com/egladman/magus/internal/interp/bindings/gen\"\n", bindingsPkg)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
-	// e.pkgs is exact here as well: every struct the decoders reach is an inbound entry,
-	// and every enum they reach is listed below.
-	b.WriteString(importLines(e.pkgs))
+	// Decoder-only scalar packages are not referenced by the type list.
+	pkgs := map[string]bool{}
+	for _, entry := range entries {
+		pkgs[typePackage(entry.Type).alias] = true
+	}
+	for _, en := range e.enums {
+		pkgs[typePackage(en.Type).alias] = true
+	}
+	b.WriteString(importLines(pkgs))
 	fmt.Fprintln(&b, ")")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "var inboundTypes = []inboundType{")
@@ -553,8 +649,8 @@ func (e *decodeEmitter) listFile(entries []boundaryType, bindingsPkg string) ([]
 		if objects.reachesEnum(t) {
 			enums = ", ffi.EnumBacking"
 		}
-		fmt.Fprintf(&b, "\t{Name: %q, Zero: %s{}, Encode: func(v any) vm.Value { return %s.Object%s(v.(%s)%s) }, Decode: func(v vm.Value) (any, error) { return Decode%s(v) }},\n",
-			entry.Name, q, bindingsPkg, typeIdent(t), q, enums, typeIdent(t))
+		fmt.Fprintf(&b, "\t{Name: %q, Zero: %s{}, Encode: func(v any) vm.Value { return Object%s(v.(%s)%s) }, Decode: func(v vm.Value) (any, error) { return decode.Decode%s(v) }},\n",
+			entry.key(), q, typeIdent(t), q, enums, typeIdent(t))
 	}
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)
@@ -609,8 +705,10 @@ func decodeString(v vm.Value, path string) (string, error) {
 }
 
 // decodeEnum accepts an enum case or its backing string: a spell writes the case, and
-// the encoder writes the string.
+// the encoder writes the string. An unset Go enum crosses as null or an empty
+// backing string, so both decode to its zero value.
 func decodeEnum(v vm.Value, path, typ string, cases []string) (string, error) {
+    if v.IsNull() || (v.IsString() && v.AsString() == "") { return "", nil }
 	if backing, ok := v.EnumValue(); ok {
 		v = backing
 	}

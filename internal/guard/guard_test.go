@@ -373,7 +373,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionDeny, reason: `isolation: "worktree"`},
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionPass},
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared, Worktree: &types.JobWorktree{Root: "/checkouts/footprint"}}}, decision: decisionPass},
 		{rule: "worker-builds-magus", name: "a worker rebuilds the binary", input: bash("./magus run go-build ."),
 			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: decisionDeny, reason: "a worker does not build magus"},
 		{rule: "worker-builds-magus", name: "a worker bootstraps the binary", input: bash("GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."),
@@ -381,10 +381,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "worker-builds-magus", name: "the orchestrator rebuilds the binary", input: bash("./magus run go-build ."), decision: decisionPass},
 		{rule: "brief-builds-magus", name: "a brief tells its worker to build", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Implement it, then run `./magus run go-build .` first.", "model": "sonnet", "isolation": "worktree",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionDeny, reason: "tells the worker to build magus"},
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared, Worktree: &types.JobWorktree{Root: "/checkouts/footprint"}}}, decision: decisionDeny, reason: "tells the worker to build magus"},
 		{rule: "brief-builds-magus", name: "a brief that names the build only to forbid it", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed.", "model": "sonnet", "isolation": "worktree",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionPass},
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared, Worktree: &types.JobWorktree{Root: "/checkouts/footprint"}}}, decision: decisionPass},
 		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
 			worker: "root/feat footprint", decision: decisionDeny, reason: "a worker does not build magus"},
 		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), binary: true, decision: decisionDeny, reason: "magus query output"},
@@ -411,6 +411,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 				row.Validated = 1
 				_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 				require.NoError(t, err)
+				if row.Worktree != nil {
+					_, err = store.RecordWorktree(t.Context(), row.ID, *row.Worktree)
+					require.NoError(t, err)
+				}
 			}
 			if tc.corruptStore {
 				p, err := store.Path()
@@ -436,7 +440,12 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			}
 			v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, input), Lease: tc.lease})
 			assert.Equal(t, tc.decision, v.Decision, v.Reason)
-			if tc.decision != decisionPass {
+			switch {
+			case tc.corruptStore:
+				// The shared-checkout check reads the same store and fails open too, so its
+				// advice leads and the policy's is added to it.
+				assert.Contains(t, v.Context, "the lease store did not read")
+			case tc.decision != decisionPass:
 				assert.Contains(t, []string{workspaceCommandRule, workspaceSpawnRule}, v.Rule, "the policy decided, not a built-in")
 			}
 			if tc.reason != "" {
@@ -495,9 +504,19 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.NotEqual(t, decisionDeny, v.Decision, v.Reason)
 	})
 
+	// judged is a workspace holding the built proofread, which a commit message is denied
+	// without.
+	judged := func(t *testing.T) string {
+		t.Helper()
+		ws := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(ws, "libs"), 0o755))
+		require.NoError(t, os.Symlink(filepath.Join(root, "libs", "proofread"), filepath.Join(ws, "libs", "proofread")))
+		return ws
+	}
+
 	covered["commit-subject"] = true
 	t.Run("commit-subject", func(t *testing.T) {
-		run := shellIn(t, "trim-key", "")
+		run := shellIn(t, "trim-key", judged(t))
 		for _, line := range []string{
 			`git -c user.name=x commit -q -m "URL-parse the port; keep the key"`,
 			`hg -R . --config ui.username=x commit -m "trim a fragment" -y`,
@@ -537,7 +556,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	})
 
 	t.Run("commit-subject on the base branch", func(t *testing.T) {
-		run := shellIn(t, "main", "")
+		run := shellIn(t, "main", judged(t))
 		for _, line := range []string{
 			`git commit -m "fix(cache): keep the key stable across runs"`,
 			`jj describe -m "feat: add a commit-msg hook"`,
@@ -611,8 +630,11 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 		citing := func(ref string) string {
 			return fmt.Sprintf("gh pr edit 9 --title \"fix(cache): pin the key\" --body \"Warm builds hit the cache again because the key now sorts its inputs; TestKey passed (%s).\"", ref)
 		}
+		// No voice file here: proofread's notice is the only advice.
 		v = run(citing(passed.Ref))
-		assert.Equal(t, decisionPass, v.Decision, fmt.Sprintf("a passing run this checkout holds: %s%s", v.Reason, v.Context))
+		assert.Equal(t, decisionAdvise, v.Decision, fmt.Sprintf("a passing run this checkout holds: %s%s", v.Reason, v.Context))
+		assert.Contains(t, v.Reason+v.Context, "proofread: no voice file at")
+		assert.NotContains(t, v.Reason+v.Context, "cites")
 		v = run(citing(failed.Ref))
 		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, fmt.Sprintf("`%s` cites a failed run (libs/conventions:go-test)", failed.Ref))
@@ -675,6 +697,21 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 		assert.Contains(t, v.Reason+v.Context, rule)
 		assert.NotContains(t, v.Reason+v.Context, "Skill(")
 		assert.NotContains(t, write("b.go", "package a\n\n// again\n").Context, rule, "once per session")
+
+		long := strings.Repeat("w ", 25) + "w."
+		longComment := fmt.Sprintf("package a\n\nfunc f() {\n\t// %s\n\tg()\n}\n", long)
+		v = write("c.go", longComment)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceWriteRule), unworded(v), v.Reason)
+		assert.Contains(t, v.Reason, "a sentence of 26 words, over the limit of 25")
+		v = write("d.buzz", fmt.Sprintf("// %s %s\nfun f() > void {}\n", long, long))
+		assert.Equal(t, decisionDeny, v.Decision, "a Buzz doc comment: %s", v.Reason)
+
+		repo := testkit.NewRepository(t, map[string]string{"README.md": "# a\n"})
+		require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "a.go"), []byte(longComment), 0o644))
+		repo.Git("add", "a.go")
+		v = shellIn(t, "trim-key", repo.Root())(`git commit -m "trim the key"`)
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), v.Reason)
+		assert.Contains(t, v.Reason, "a.go:4: comment inside a body, a sentence of 26 words, over the limit of 25")
 	})
 
 	covered["host-cursor-rules"] = true
@@ -760,6 +797,30 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 		assert.Equal(t, verdictWithRule(decisionDeny, workspaceCommandRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "no go-build stamp")
 		assert.Equal(t, decisionAdvise, judgeIn(t, ws, "./magus init --dry-run").Decision, "a dry run writes nothing")
+	})
+
+	// The rule reads the counter at the merge base with origin/main, so the workspace is a
+	// repository whose branch already bumped it once.
+	covered["version-bump-once"] = true
+	t.Run("version-bump-once", func(t *testing.T) {
+		testkit.Isolate(t)
+		const catalog = "internal/agent/catalog.go"
+		repo := testkit.NewRepository(t, map[string]string{catalog: "package agent\n\nconst skillStampFormat = 1\n"})
+		repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
+		repo.Git("switch", "-q", "-c", "bump-skills")
+		repo.Commit("bump the skill stamp format", map[string]string{catalog: "package agent\n\nconst skillStampFormat = 2\n"})
+		ws := repo.Root()
+		ctx := WithLocation(t.Context(), t.TempDir(), ws, ws)
+		edit := func(newText string) types.GuardJudgment {
+			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit",
+				"tool_input": map[string]any{"file_path": filepath.Join(ws, catalog), "old_string": "const skillStampFormat = 2", "new_string": newText},
+			})})
+		}
+		v := edit("const skillStampFormat = 3")
+		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"version-bump-once"), unworded(v), v.Reason)
+		assert.Contains(t, v.Reason, "this branch already bumped skill-stamp-format from 1 to 2")
+		assert.NotEqual(t, decisionDeny, edit("const skillStampFormat = 1").Decision, "back to the base value is allowed")
 	})
 
 	source, err := os.ReadFile(filepath.Join(root, "hack", "policy", "guard.buzz"))
@@ -1250,7 +1311,7 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 // recoverableRules are the compiled rules a caller recovers from by running the command the
 // refusal names. They deny by default (ADR 0013), and a workspace may set one to advise.
 var recoverableRules = []string{
-	"architecture-unbriefed", "brief-command", "brief-plain-commands", "buzz-unbriefed", "chained-run",
+	"ambiguous-ci-word", "architecture-unbriefed", "brief-command", "brief-plain-commands", "buzz-unbriefed", "chained-run",
 	"exit-status-echo", "filter-without-input", "grep-reader", "interpreter-rewrite", "interpreter-script", "magus-timeout",
 	"monitor-duplicate", "monitor-pile", "output-pipe", "output-redirect", "raw-tool", "read-navigation",
 	"read-paging", "search-translation", "sed-in-place", "sibling-checkout",
@@ -1272,7 +1333,7 @@ func strict(deps Dependencies) Dependencies {
 	for name, d := range builtin.Defaults() {
 		deps.Builtins[name] = builtin.Setting{Decision: d}
 	}
-	return deps
+	return indexReads(deps)
 }
 
 // advising returns deps with each named rule set to advise, the opt-out a workspace
@@ -1842,13 +1903,13 @@ func TestEffectiveBuiltinsWithoutAnApprovalAuthority(t *testing.T) {
 // A builtins declaration is policy: the digest moves with it, and declaring one alone is
 // enough for there to be one.
 func TestPolicyDigestCoversBuiltins(t *testing.T) {
-	none := buildPolicy(nil, false, false, false, nil, nil)
+	none := buildPolicy(nil, false, false, false, false, nil, nil)
 	assert.Empty(t, none.Digest)
 
-	off := buildPolicy(nil, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil)
-	deny := buildPolicy(nil, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}}, nil)
-	lines := buildPolicy(nil, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}}, nil)
-	moreLines := buildPolicy(nil, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}}, nil)
+	off := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil)
+	deny := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}}, nil)
+	lines := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}}, nil)
+	moreLines := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}}, nil)
 	assert.NotEmpty(t, off.Digest)
 	assert.Equal(t, 1, off.Builtins)
 	assert.NotEqual(t, off.Digest, deny.Digest)
@@ -1856,8 +1917,8 @@ func TestPolicyDigestCoversBuiltins(t *testing.T) {
 
 	shell := []workspace.ShellRule{{Name: "x", Decision: "deny", Program: "curl", Reason: "r"}}
 	assert.NotEqual(t,
-		buildPolicy(shell, false, false, false, nil, nil).Digest,
-		buildPolicy(shell, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil).Digest)
+		buildPolicy(shell, false, false, false, false, nil, nil).Digest,
+		buildPolicy(shell, false, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil).Digest)
 }
 
 func TestPendingSetCoversFilesUnderAnUntrackedDirectory(t *testing.T) {

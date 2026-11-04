@@ -1,12 +1,17 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,7 +33,14 @@ const workspaceMarker = "magus.yaml"
 // silently redefined the workspace as that subproject: `magus ls` from a nested
 // directory reported one project instead of the real set, and `affected` answered
 // confidently about a workspace that did not exist.
-var projectMarkers = []string{"magusfiles", "magusfile.buzz", "go.mod"}
+//
+// Only magus's own files belong here. A language's manifest (go.mod, package.json)
+// is a spell's knowledge, and `magus init` asks the spells for it.
+var projectMarkers = []string{"magusfiles", "magusfile.buzz"}
+
+// vcsRootWarned keeps the VCS-root fallback to one warning per root per process:
+// FindRoot runs several times in one command.
+var vcsRootWarned sync.Map
 
 // dirHasMarker reports whether dir carries any of the named markers. A stat error
 // other than "not found" is reported as PRESENT: refusing to walk past a directory we
@@ -50,9 +62,13 @@ func dirHasMarker(dir string, markers []string) bool {
 // rule .git follows, and the reason a git worktree nested inside its parent repo
 // resolves to itself rather than being swallowed by the parent.
 //
-// Absent any magus.yaml, the root is the outermost CONTIGUOUS project marker.
+// Absent any magus.yaml, the root is the outermost CONTIGUOUS magusfile marker.
 // Contiguous so a stray magusfile in an unrelated ancestor (a home directory, /tmp)
 // cannot silently adopt everything beneath it, which an unbounded walk would allow.
+//
+// With no magus file at all, the root is the nearest VCS checkout (.jj, .hg, .sl or
+// .git), and a warning names it and `magus init`. No language's manifest roots a
+// workspace.
 func FindRoot(dir string) (string, error) {
 	if dir == "" {
 		cwd, err := os.Getwd()
@@ -66,6 +82,7 @@ func FindRoot(dir string) (string, error) {
 		return "", err
 	}
 
+	start := cur
 	var contiguous string
 	runBroken := false
 	for {
@@ -90,7 +107,15 @@ func FindRoot(dir string) (string, error) {
 	if contiguous != "" {
 		return contiguous, nil
 	}
+	if checkout, ok := project.CheckoutRoot(start); ok {
+		if _, warned := vcsRootWarned.LoadOrStore(checkout, true); !warned {
+			slog.With(attr.Component("magus")).WarnContext(context.Background(),
+				"no magus.yaml or magusfile found, so the workspace root is the VCS checkout; run the fix to write them",
+				slog.String("root", checkout), slog.String("fix", hint.Init.String()))
+		}
+		return checkout, nil
+	}
 	return "", types.DiagnosticErrorf(types.NoWorkspaceRoot,
-		"could not locate workspace root (no magus.yaml, magusfiles/, magusfile.buzz, or go.mod found); "+
+		"could not locate workspace root (no magus.yaml, magusfiles/ or magusfile.buzz, and no VCS checkout); "+
 			"run `%s` to bootstrap one", hint.Init)
 }

@@ -1,4 +1,5 @@
 import type { CacheState, Spend, Ttl } from '../types'
+import { MagusError, fail, isRecord, ok, parseJSON, type Result } from './result'
 
 export type { CacheState, Spend, Ttl }
 
@@ -22,25 +23,60 @@ export const TTL_MS: Record<Ttl, number> = { '5m': 5 * 60_000, '1h': 60 * 60_000
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
 
-// Reads a rates file, throwing a message that names the first field it could not use, so
+// Reads a rates file, failing with a message that names the first field it could not use, so
 // an edit that breaks the table says where rather than silently pricing at zero.
-export function parseRates(text: string): RateTable {
-  const t = JSON.parse(text) as Partial<RateTable>
-  if (!t.cacheWriteMultiplier || !isNum(t.cacheWriteMultiplier['5m']) || !isNum(t.cacheWriteMultiplier['1h'])) {
-    throw new Error('rates: cacheWriteMultiplier needs numeric "5m" and "1h"')
+export function parseRates(text: string): Result<RateTable> {
+  const doc = parseJSON(text)
+  if (doc.error) return fail(new MagusError({ code: '', message: `rates: not JSON: ${doc.error.message}` }))
+  const t = doc.value
+  if (!isRecord(t)) return fail(new MagusError({ code: '', message: 'rates: the file must hold a JSON object' }))
+  const cw = t.cacheWriteMultiplier
+  if (!isRecord(cw) || !isNum(cw['5m']) || !isNum(cw['1h'])) {
+    return fail(new MagusError({ code: '', message: 'rates: cacheWriteMultiplier needs numeric "5m" and "1h"' }))
   }
-  if (!isNum(t.defaultCacheReadMultiplier)) throw new Error('rates: defaultCacheReadMultiplier must be a number')
-  if (!Array.isArray(t.models)) throw new Error('rates: models must be a list')
-  t.models.forEach((m, i) => {
-    if (typeof m.match !== 'string' || !m.match) throw new Error(`rates: models[${i}].match must name a model id prefix`)
-    if (!isNum(m.input) || !isNum(m.output)) throw new Error(`rates: models[${i}] (${m.match}) needs numeric input and output`)
-    m.tiers?.forEach((tier, j) => {
-      if (!isNum(tier.abovePromptTokens) || !isNum(tier.input) || !isNum(tier.output)) {
-        throw new Error(`rates: models[${i}].tiers[${j}] needs numeric abovePromptTokens, input and output`)
-      }
-    })
+  if (!isNum(t.defaultCacheReadMultiplier)) return fail(new MagusError({ code: '', message: 'rates: defaultCacheReadMultiplier must be a number' }))
+  if (!Array.isArray(t.models)) return fail(new MagusError({ code: '', message: 'rates: models must be a list' }))
+  const models: ModelRates[] = []
+  for (const [i, m] of t.models.entries()) {
+    const model = readModel(m, i)
+    if (model.error) return model
+    models.push(model.value)
+  }
+  return ok({
+    checked: String(t.checked ?? ''),
+    source: String(t.source ?? ''),
+    cacheWriteMultiplier: { '5m': cw['5m'], '1h': cw['1h'] },
+    defaultCacheReadMultiplier: t.defaultCacheReadMultiplier,
+    models,
   })
-  return { ...(t as RateTable), checked: String(t.checked ?? ''), source: String(t.source ?? '') }
+}
+
+function readModel(m: unknown, i: number): Result<ModelRates> {
+  if (!isRecord(m) || typeof m.match !== 'string' || !m.match) {
+    return fail(new MagusError({ code: '', message: `rates: models[${i}].match must name a model id prefix` }))
+  }
+  if (!isNum(m.input) || !isNum(m.output)) return fail(new MagusError({ code: '', message: `rates: models[${i}] (${m.match}) needs numeric input and output` }))
+  const model: ModelRates = { match: m.match, input: m.input, output: m.output }
+  if (m.cacheRead !== undefined) {
+    if (!isNum(m.cacheRead)) return fail(new MagusError({ code: '', message: `rates: models[${i}].cacheRead must be a number` }))
+    model.cacheRead = m.cacheRead
+  }
+  if (m.tiers === undefined) return ok(model)
+  if (!Array.isArray(m.tiers)) return fail(new MagusError({ code: '', message: `rates: models[${i}].tiers must be a list` }))
+  const tiers: Tier[] = []
+  for (const [j, tier] of m.tiers.entries()) {
+    if (!isRecord(tier) || !isNum(tier.abovePromptTokens) || !isNum(tier.input) || !isNum(tier.output)) {
+      return fail(new MagusError({ code: '', message: `rates: models[${i}].tiers[${j}] needs numeric abovePromptTokens, input and output` }))
+    }
+    const read: Tier = { abovePromptTokens: tier.abovePromptTokens, input: tier.input, output: tier.output }
+    if (tier.cacheRead !== undefined) {
+      if (!isNum(tier.cacheRead)) return fail(new MagusError({ code: '', message: `rates: models[${i}].tiers[${j}].cacheRead must be a number` }))
+      read.cacheRead = tier.cacheRead
+    }
+    tiers.push(read)
+  }
+  model.tiers = tiers
+  return ok(model)
 }
 
 // The table entry for model: the longest matching prefix wins, so `claude-opus-5-5` beats
@@ -125,13 +161,6 @@ export function cacheNotice(
   return { isExpired, usd, text }
 }
 
-// The cache's part of the status line; undefined before any response.
-export function cacheStatus(cache: CacheState | null, now: number): string | undefined {
-  const left = cacheRemainingMs(cache, now)
-  if (left === null) return undefined
-  return left > 0 ? `cache ${formatDuration(left)}` : 'cache expired'
-}
-
 export type StepNotice = { isPast: boolean; text: string }
 
 // The price step the next request meets, or null while the context is more than marginTokens
@@ -213,11 +242,6 @@ export function budgetNotice(s: Spend, budgetUsd: number): string | null {
 
 export function totalTokens(u: Usage): number {
   return u.input + u.output + u.cacheRead + u.cacheCreation
-}
-
-export function rateAgeDays(table: RateTable, now: number): number | null {
-  const t = Date.parse(table.checked)
-  return Number.isFinite(t) ? Math.floor((now - t) / 86_400_000) : null
 }
 
 export function formatTokens(n: number): string {

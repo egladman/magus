@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -235,12 +236,34 @@ type writeGrade struct {
 // the two ways to be wrong, blocking a human in their own checkout is the one that must
 // not happen.
 //
-// Every uncertainty fails OPEN with at most an advisory: no job store, no live leases, a file
-// that will not parse, a path outside every magus checkout. A rule the guard cannot evaluate
-// must not block a tool call. A lease's write into a DIFFERENT magus checkout is not an
+// Every uncertainty fails OPEN with an advisory that says so: a cache that did not resolve,
+// a store that will not parse. A rule the guard cannot evaluate must not
+// block a tool call, and must not pass it silently either. A path outside every magus
+// checkout is no uncertainty: nothing there is anyone's to grade. A lease's write into a DIFFERENT magus checkout is not an
 // uncertainty, and is denied; see denyOtherCheckout.
 func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, writePath string) writeGrade {
 	return gradeLeasedEdit(ctx, deps, actingLease, writePath, writeFields{})
+}
+
+// adviseUnresolvedCache is the grade of a write whose workspace cache did not resolve:
+// with no store to read, no lease boundary was checked, and the advisory says so. A write
+// outside every magus workspace, or a relative path no workspace can be found from, has
+// nothing to check and gets nothing.
+func adviseUnresolvedCache(deps Dependencies, writePath string) writeGrade {
+	if !filepath.IsAbs(writePath) {
+		return writeGrade{}
+	}
+	root, err := workspace.FindRoot(filepath.Dir(writePath))
+	if err != nil {
+		return writeGrade{}
+	}
+	_, err = deps.cacheDir(root)
+	if err == nil {
+		return writeGrade{}
+	}
+	return writeGrade{Decision: decisionAdvise,
+		Context: fmt.Sprintf("magus workspace: no lease boundary was checked, as the cache of the workspace at %s did not resolve (%v).", root, err),
+		Why:     "The guard fails open when it has no job store to read, so a write outside a lease's paths would pass unnoticed."}
 }
 
 // gradeLeasedEdit is gradeLeasedWrite for a write whose payload says what it changes. A
@@ -257,10 +280,15 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	}
 	location := hookLocation(ctx, deps)
 	if location.cacheDir == "" {
-		return writeGrade{}
+		return adviseUnresolvedCache(deps, writePath)
 	}
 	if d := denyUnknownRowMembers(ctx, deps, actingLease, ""); d.refused() {
 		return writeGrade{Decision: decisionDeny, Reason: d.Say, Why: d.Why, Rule: string(denyRuleLeaseRowUnknown)}
+	}
+	if actingLease == "" && deps.caller.Agent != "" {
+		if g := denyUnboundJobCheckout(ctx, location, writePath); g.Decision != "" {
+			return g
+		}
 	}
 	// The store's paths are relative to the checkout a lease was taken in, which for a
 	// worker isolated in its own worktree is not the checkout its hooks resolve, or, for a
@@ -285,7 +313,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		// lease whose boundary silently stopped being checked looks exactly like one
 		// nobody declared.
 		return writeGrade{Decision: decisionAdvise,
-			Context: fmt.Sprintf("magus workspace: no lease boundary was checked, as the job store could not be read (%v); re-declare the plan with magus\\job if leased work is running.", err),
+			Context: fmt.Sprintf("magus workspace: no lease boundary was checked, as the job store could not be read (%v); re-declare the plan with magus\\workspace().putJob if leased work is running.", err),
 			Why:     "The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff."}
 	}
 	// An id magus cannot parse is one it cannot look up either, so it is graded as absent.
@@ -313,52 +341,98 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	if len(live) == 0 && !enrolled {
 		return adviseUnleasedWorker(actingLease)
 	}
+	owners, unchecked := contendingOwners(owningLeases(leases, live), rel, checkout, checkoutProjects(ctx, deps, checkout))
+	return sayUnchecked(gradeOwnedEdit(ctx, deps, ownedEdit{
+		location: location, checkout: checkout, rel: rel, me: me, enrolled: enrolled,
+		leases: leases, owners: owners, fields: fields,
+	}), unchecked)
+}
 
-	if enrolled {
-		if reason := denyOverdueLease(me, time.Now().Unix()); reason != "" {
-			return writeGrade{Decision: decisionDeny, Reason: reason}
+// checkoutProjects loads checkout's projects once, on first ask, or says why it could not.
+func checkoutProjects(ctx context.Context, deps Dependencies, checkout string) job.Projects {
+	return sync.OnceValues(func() ([]*types.Project, string) {
+		repo, err := deps.inspect(ctx, checkout)
+		switch {
+		case err != nil:
+			return nil, fmt.Sprintf("the workspace at %s did not load: %v", checkout, err)
+		case repo == nil:
+			return nil, "no workspace loaded at " + checkout
 		}
-		owners := owningLeases(leases, live)
-		// A dead holder owns nothing against me: its path is the auto-claim's to grant.
-		dead := deadOwners(location, owners, rel, me.ID, time.Now())
-		owners = slices.DeleteFunc(owners, func(u types.Job) bool {
-			return slices.ContainsFunc(dead, func(d job.DeadHolder) bool { return d.Row.ID == u.ID })
-		})
-		enter := func(owner types.Job) (writeGrade, bool) {
-			return gradeEntry(ctx, deps, location, owner, rel)
-		}
-		claim := func(rel string) (writeGrade, string) {
-			return gradeClaimOutside(ctx, deps, location, checkout, me, leases, dead, rel)
-		}
-		knock := func(owner types.Job, rel string) string {
-			return knockHolder(ctx, deps, me, owner, rel)
-		}
-		g := gradeAgainstOwnLease(me, owners, rel, enter, knock, func() string { return deps.revision(ctx, checkout, "") }, claim)
-		if g.Decision == decisionDeny {
-			return g
-		}
-		if denied := gradeDeniedDeclarations(ctx, checkout, me, rel, fields); denied.Decision != "" {
-			return denied
-		}
-		if claimed := gradeClaimedDeclarations(ctx, checkout, me, owners, rel, fields); claimed.Decision != "" {
-			return claimed
-		}
-		if narrowed := gradeConfigNarrowing(ctx, location, checkout, me, owners, rel, fields); narrowed.Decision != "" {
-			return narrowed
-		}
-		// Graded whatever g says, so the root's row is filed even when another advisory
-		// takes the verdict.
-		who := hookAttribution{Host: deps.caller.Host, Session: deps.caller.Session, Agent: deps.caller.Agent}
-		compat := gradeCompatMarker(ctx, deps, location, who, me.ID, filepath.Join(checkout, filepath.FromSlash(rel)), fields)
-		if g.Decision != "" {
-			return g
-		}
-		return compat
+		return repo.All(), ""
+	})
+}
+
+// ownedEdit is one write gradeLeasedEdit has placed: the checkout and path it lands on,
+// the acting lease's row, and the live leases that own the path against it.
+type ownedEdit struct {
+	location location
+	checkout string
+	rel      string
+	me       types.Job
+	enrolled bool
+	leases   []types.Job
+	owners   []types.Job
+	fields   writeFields
+}
+
+// gradeOwnedEdit grades a placed write against the leases that own its path: as the
+// acting lease's own write when it is enrolled, else as an unattributed one.
+func gradeOwnedEdit(ctx context.Context, deps Dependencies, e ownedEdit) writeGrade {
+	if e.enrolled {
+		return gradeEnrolledEdit(ctx, deps, e)
 	}
+	return gradeUnattributedEdit(ctx, deps, e.location, e.owners, e.rel)
+}
+
+// gradeEnrolledEdit grades a placed write by the live lease it acts under.
+func gradeEnrolledEdit(ctx context.Context, deps Dependencies, e ownedEdit) writeGrade {
+	location, checkout, rel, me, fields := e.location, e.checkout, e.rel, e.me, e.fields
+	if reason := denyOverdueLease(me, time.Now().Unix()); reason != "" {
+		return writeGrade{Decision: decisionDeny, Reason: reason}
+	}
+	// A dead holder owns nothing against me: its path is the auto-claim's to grant.
+	dead := deadOwners(location, e.owners, rel, me.ID, time.Now())
+	owners := slices.DeleteFunc(e.owners, func(u types.Job) bool {
+		return slices.ContainsFunc(dead, func(d job.DeadHolder) bool { return d.Row.ID == u.ID })
+	})
+	enter := func(owner types.Job) (writeGrade, bool) {
+		return gradeEntry(ctx, deps, location, owner, rel)
+	}
+	claim := func(rel string) (writeGrade, string) {
+		return gradeClaimOutside(ctx, deps, location, checkout, me, e.leases, dead, rel)
+	}
+	knock := func(owner types.Job, rel string) string {
+		return knockHolder(ctx, deps, me, owner, rel)
+	}
+	g := gradeAgainstOwnLease(me, owners, rel, enter, knock, func() string { return deps.revision(ctx, checkout, "") }, claim)
+	if g.Decision == decisionDeny {
+		return g
+	}
+	if denied := gradeDeniedDeclarations(ctx, checkout, me, rel, fields); denied.Decision != "" {
+		return denied
+	}
+	if claimed := gradeClaimedDeclarations(ctx, checkout, me, owners, rel, fields); claimed.Decision != "" {
+		return claimed
+	}
+	if narrowed := gradeConfigNarrowing(ctx, location, checkout, me, owners, rel, fields); narrowed.Decision != "" {
+		return narrowed
+	}
+	// Graded whatever g says, so the root's row is filed even when another advisory
+	// takes the verdict.
+	who := hookAttribution{Host: deps.caller.Host, Session: deps.caller.Session, Agent: deps.caller.Agent}
+	compat := gradeCompatMarker(ctx, deps, location, who, me.ID, filepath.Join(checkout, filepath.FromSlash(rel)), fields)
+	if g.Decision != "" {
+		return g
+	}
+	return compat
+}
+
+// gradeUnattributedEdit grades a placed write no live lease is acting under.
+func gradeUnattributedEdit(ctx context.Context, deps Dependencies, location location, owners []types.Job, rel string) writeGrade {
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
 	// one would block work whose row in the store is simply stale.
-	owner, owned, err := findOwner(owningLeases(leases, live), rel, "")
+	owner, owned, err := findOwner(owners, rel, "")
 	if err != nil {
 		return adviseMalformedDeclaration(err)
 	}
@@ -424,7 +498,7 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: decisionAdvise, Kind: advisoryUnleasedWrite,
-		Context: fmt.Sprintf("magus workspace: this spawned process names no lease; declare the plan with magus\\job.put and export %s=<lease id> in each worker.", envHookLease),
+		Context: fmt.Sprintf("magus workspace: this spawned process names no lease; declare the plan with magus\\workspace().putJob and export %s=<lease id> in each worker.", envHookLease),
 		Why: "The job store holds no live lease, so the guard has no declared boundary to grade these writes against. " +
 			"Nothing records who owns which paths, so two workers editing one file is invisible until somebody reads the diff, and no checkpoint says which revision the work applies to.\n" +
 			"This is an advisory and never a block: the spawn chain is a claim the environment makes, so it may teach and may not judge. Load the magus-multi-agent skill for how a plan is partitioned."}
@@ -548,6 +622,9 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	if len(me.WritePaths) == 0 {
 		return writeGrade{}
 	}
+	if me.State == types.StateExited {
+		return denyExitedWrite(me, rel)
+	}
 	g, stop := claim(rel)
 	if g.Decision != "" {
 		return g
@@ -564,6 +641,19 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.\n"+
 			leaseActorWhy,
 			revoked, rel, me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID), rel),
+	}.full()}
+}
+
+// denyExitedWrite refuses a write outside an exited lease's paths. Its result
+// is filed, so magus claims nothing for it.
+func denyExitedWrite(me types.Job, rel string) writeGrade {
+	return writeGrade{Decision: decisionDeny, Reason: denial{
+		Say: fmt.Sprintf("magus workspace: %s is outside the paths lease %s was given (%s), and job %s is exited; `%s` re-takes it, then "+
+			leaseActorClause(fmt.Sprintf("widen it with `%s`", hint.JobApply)),
+			rel, me.ID, strings.Join(me.WritePaths, ", "), me.ID, hint.JobExec.With(me.ID)),
+		Why: fmt.Sprintf("You stay bound to lease %s after `%s`: its write paths still grade your writes until a wait ends it. "+
+			"`%s` shows what the job holds.\n"+leaseActorWhy,
+			me.ID, hint.JobExit.With(me.ID), hint.DescribeJob.With(me.ID)),
 	}.full()}
 }
 
@@ -666,7 +756,7 @@ func enterCall(id, rel string) string {
 
 // clientJobPut is a client tool script putting one key on row id.
 func clientJobPut(id, key, value string) string {
-	return fmt.Sprintf(`import "magus"; magus\job.put(%s, opts: {%q: %s});`, strconv.Quote(id), key, value)
+	return fmt.Sprintf(`import "magus"; magus\workspace().putJob(%s, opts: {%q: %s});`, strconv.Quote(id), key, value)
 }
 
 // entryIdle is how long a holder must go without a tool call before an entry into its
@@ -746,6 +836,42 @@ func owningLeases(rows, live []types.Job) []types.Job {
 		_, blocked := types.JobBlockedOn(rows, u)
 		return blocked
 	})
+}
+
+// contendingOwners is owners without each whose hold on rel [job.HeldApart] frees for a
+// writer in checkout, and the notes saying which holds stayed because the check could not
+// run.
+func contendingOwners(owners []types.Job, rel, checkout string, projects job.Projects) ([]types.Job, []string) {
+	var unchecked []string
+	kept := slices.DeleteFunc(slices.Clone(owners), func(u types.Job) bool {
+		decl, ok, _ := declarationCovering(u.HardPaths(), rel)
+		if !ok {
+			return false
+		}
+		apart, why := job.HeldApart(checkout, u, projects, rel, decl)
+		if why != "" {
+			unchecked = append(unchecked, why)
+		}
+		return apart
+	})
+	return kept, unchecked
+}
+
+// sayUnchecked appends to a deny's reason, or an advisory's context, each hold that stayed
+// because the generated-output scope check did not run. A grade with no verdict is left
+// alone: no hold cost the write anything.
+func sayUnchecked(g writeGrade, unchecked []string) writeGrade {
+	if len(unchecked) == 0 {
+		return g
+	}
+	note := fmt.Sprintf(" Also: %s.", strings.Join(unchecked, "; "))
+	switch g.Decision {
+	case decisionDeny:
+		g.Reason += note
+	case decisionAdvise:
+		g.Context += note
+	}
+	return g
 }
 
 // findOwner finds the live lease whose [types.Job.HardPaths] cover rel, skipping exclude.
@@ -835,7 +961,7 @@ func declarationCovering(decls []string, rel string) (string, bool, error) {
 // nothing about whether this write is legitimate, only that nothing graded it.
 func adviseMalformedDeclaration(err error) writeGrade {
 	return writeGrade{Decision: decisionAdvise,
-		Context: fmt.Sprintf("magus workspace: a declared lease path could not be matched (%v); fix the pattern with magus\\job.put, then retry this write.", err),
+		Context: fmt.Sprintf("magus workspace: a declared lease path could not be matched (%v); fix the pattern with magus\\workspace().putJob, then retry this write.", err),
 		Why:     "That boundary was not checked. The guard fails open on a pattern it cannot read, which means a write or deny path spelled this way is not being enforced at all."}
 }
 
@@ -885,13 +1011,74 @@ func denyOtherCheckout(checkout, lease, writePath string) writeGrade {
 		return writeGrade{}
 	}
 	other := findMagusCheckout(filepath.Dir(writePath))
-	if other == "" || samePath(other, checkout) {
+	if other == "" || samePath(other, checkout) || scratchWorkspace(other, checkout) {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: decisionDeny, Reason: denial{
 		Say: fmt.Sprintf("magus workspace: %s is in another checkout than lease %s's; write %s in %s.", writePath, lease, filepath.Base(writePath), checkout),
 		Why: fmt.Sprintf("%s is in %s, and the lease's write paths name files in the checkout it was taken in.", writePath, other),
 	}.full()}
+}
+
+// scratchWorkspace reports dir under the magus tmp dir in a repository
+// other than checkout's. A sibling checkout there stays refused.
+func scratchWorkspace(dir, checkout string) bool {
+	cache, err := xdg.CacheDir()
+	if err != nil {
+		return false
+	}
+	scratch := filepath.Join(cache, "magus", "tmp")
+	if dir == "" || samePath(dir, scratch) || !within(dir, scratch) {
+		return false
+	}
+	_, mine, ok := gitCheckout(checkout)
+	if !ok {
+		return false
+	}
+	_, there, inRepository := gitCheckout(dir)
+	return !inRepository || there != mine
+}
+
+// denyUnboundJobCheckout refuses a subagent holding no job a write into a
+// checkout a job's fork made. That checkout is the job's, and an unbound
+// write there is graded by nothing.
+func denyUnboundJobCheckout(ctx context.Context, at location, writePath string) writeGrade {
+	row, ok := jobCheckoutHolding(ctx, at, writePath)
+	if !ok {
+		return writeGrade{}
+	}
+	say := fmt.Sprintf("magus workspace: %s is in the checkout job %s's fork made, and you hold no job; run `%s`, then retry this write.",
+		writePath, row.ID, hint.JobExec.With(row.ID))
+	if row.State.Terminal() {
+		say = fmt.Sprintf("magus workspace: %s is in the checkout job %s's fork made, and that job is %s; %s",
+			writePath, row.ID, row.State, leaseActorClause("fork a job for this write"))
+	}
+	return writeGrade{Decision: decisionDeny, Reason: denial{
+		Say: say,
+		Why: fmt.Sprintf("%s holds job %s's work, and a write by an agent bound to no job is checked against no write paths. "+
+			"A person and the root session write there freely; a subagent writes there under the job.", row.Worktree.Root, row.ID),
+	}.full()}
+}
+
+// jobCheckoutHolding is the row whose standing fork-made checkout holds
+// writePath, whatever its state.
+func jobCheckoutHolding(ctx context.Context, at location, writePath string) (types.Job, bool) {
+	if !filepath.IsAbs(writePath) {
+		return types.Job{}, false
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return types.Job{}, false
+	}
+	for _, row := range rows {
+		if !row.Worktree.Standing() {
+			continue
+		}
+		if _, in := workspaceRelative(row.Worktree.Root, writePath); in {
+			return row, true
+		}
+	}
+	return types.Job{}, false
 }
 
 // findMagusCheckout is the nearest directory at or above dir holding a magusfile, "" when
@@ -1074,11 +1261,10 @@ var agentSources = []string{
 // adviseAgentSourceWrite routes an edit to one of the agentSources through the method
 // that maintains them, or returns "" for every other path.
 //
-// The gap it closes is the one the authoring method itself names: both failures here are
+// The gap it closes is the one the authoring method itself names, and it is
 // silent. A skill body is a text/template rendered per form, so a passage added
 // outside a branch changes both and a passage added inside one changes neither, and
-// nothing about the file says so. A content change without a SkillVersion bump leaves
-// every install reporting itself up to date while carrying the previous bytes.
+// nothing about the file says so.
 func adviseAgentSourceWrite(root, path string) advice {
 	rel, ok := workspaceRelativeFile(root, path)
 	if !ok || !magusOwnSourceTree() {
@@ -1092,7 +1278,7 @@ func adviseAgentSourceWrite(root, path string) advice {
 	return advice{
 		Say: fmt.Sprintf("magus workspace: load the magus-skill-authoring skill before editing %s: it holds the method these sources are maintained by.", rel),
 		Why: fmt.Sprintf("%s is a SOURCE of what agents are taught, and the skill is hand-authored, committed beside the installed skills. "+
-			"Both ways to get it wrong here are silent: a skill body is a template, so a passage lands in one form, both, or neither depending on the branch it sits in, and a content change with no SkillVersion bump leaves every install reporting itself up to date while carrying the old bytes.\n"+
+			"Getting it wrong here is silent: a skill body is a template, so a passage lands in one form, both, or neither depending on the branch it sits in.\n"+
 			"Verify against a freshly built binary rather than against the docs. That is the method's first rule, and it is there because the registry once advertised a dry run that regenerated files.", rel),
 	}
 }

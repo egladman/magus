@@ -23,6 +23,48 @@ func (v jjVCS) Name() string     { return "jj" }
 func (v jjVCS) Claims() []string { return []string{".jj"} }
 func (v jjVCS) Base() string     { return "trunk()" }
 
+// FastForward implements types.CheckoutFastForwarder with `jj new`. An empty
+// working copy stands for its parent. One holding a change moves only to its
+// own descendant, so the change stays an ancestor.
+func (v jjVCS) FastForward(ctx context.Context, root, rev string) error {
+	if err := checkRequiredRevsetRef(rev); err != nil {
+		return err
+	}
+	empty, err := vcsOutput(ctx, root, "jj", "log", "-r", "@", "--no-graph", "-T", `if(empty, "empty")`)
+	if err != nil {
+		return fmt.Errorf("jj log -r @: %w", err)
+	}
+	head := "@"
+	if empty != "" {
+		head = "@-"
+	}
+	descends, err := v.IsAncestor(ctx, root, head, rev)
+	if err != nil {
+		return err
+	}
+	if !descends {
+		return fmt.Errorf("jj: %s does not descend from %s in %s", rev, head, root)
+	}
+	return runVCS(ctx, "jj", root, []string{"new", "--", rev})
+}
+
+// BranchHeads implements types.BranchHeadReporter over local bookmarks. A
+// conflicted bookmark has no one target, so it is not listed.
+func (v jjVCS) BranchHeads(ctx context.Context, root string) (map[string]string, error) {
+	listed, err := vcsOutputRaw(ctx, root, "jj", "bookmark", "list", "-T",
+		`if(!remote && normal_target, normal_target.commit_id() ++ " " ++ name ++ "\n")`)
+	if err != nil {
+		return nil, fmt.Errorf("jj bookmark list: %w", err)
+	}
+	heads := map[string]string{}
+	for _, line := range splitLines([]byte(listed)) {
+		if id, name, ok := strings.Cut(line, " "); ok {
+			heads[name] = id
+		}
+	}
+	return heads, nil
+}
+
 // ReviewCommand diffs @ against its parent. jj has no staging step at all, its working
 // copy being the change, so there is nothing to record before reading it back.
 func (v jjVCS) ReviewCommand() string { return "jj diff --stat" }
@@ -72,8 +114,14 @@ func (v jjVCS) CreateCheckout(ctx context.Context, root, dir, rev, branch string
 	return recordMadeCheckout(ctx, filepath.Join(root, ".jj"), checkoutRecord{Dir: filepath.Clean(dir), Resolved: realPath(dir), Name: name})
 }
 
-// RemoveCheckout implements types.CheckoutProvisioner: it forgets the workspace, which
-// leaves its commits in the store, then deletes the directory.
+// DiscardCheckout implements types.CheckoutProvisioner. A workspace is
+// named for the job, not a bookmark, so nothing is left to delete.
+func (v jjVCS) DiscardCheckout(ctx context.Context, root, dir, _ string) error {
+	return v.RemoveCheckout(ctx, root, dir)
+}
+
+// RemoveCheckout implements types.CheckoutProvisioner: it forgets the
+// workspace, which leaves its commits in the store, then deletes the directory.
 func (v jjVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	if !filepath.IsAbs(dir) {
 		return fmt.Errorf("vcs: checkout %q is not an absolute path", dir)
@@ -434,19 +482,24 @@ func (v jjVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []s
 	return splitLines([]byte(out)), nil
 }
 
+// MissingCommits implements types.RangeReporter; see missingCommits.
+func (v jjVCS) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+	return missingCommits(ctx, v, dir, branch, head)
+}
+
 // RangeCommits implements types.RangeReporter. jj's base..head is git's: ancestors of
 // head that are not ancestors of base, and `jj log` lists newest first.
 func (v jjVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
 	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
-	args := append([]string{"log", "-r", fmt.Sprintf("%s..%s", base, head), "--no-graph", "-T", `commit_id ++ "\n"`},
+	args := append([]string{"log", "-r", fmt.Sprintf("%s..%s", base, head), "--no-graph", "-T", jjCommitTemplate + ` ++ "\0"`},
 		jjRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, "jj", args...)
 	if err != nil {
 		return nil, fmt.Errorf("jj log %s..%s: %w", base, head, err)
 	}
-	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+	return parseCommits(out), nil
 }
 
 // jjRootPaths spells repository-relative paths as literal root: filesets after `--`, or
@@ -610,6 +663,42 @@ func (v jjVCS) RemoveConflicts(_ context.Context, root string, paths []string) e
 // keeps the file, which is recoverable. The opposite error deletes something wanted.
 func (v jjVCS) IgnoredPaths(_ context.Context, _ string, _ []string) (map[string]bool, error) {
 	return map[string]bool{}, nil
+}
+
+// IgnoredFiles derives the answer, since jj cannot list what it ignores.
+// jj tracks every file it does not ignore, so an existing path with nothing
+// tracked at or under it is ignored. `file list` reads @, which snapshots.
+func (v jjVCS) IgnoredFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
+	if err != nil {
+		return nil, err
+	}
+	var tracked []string
+	for _, chunk := range gitPathChunks(paths) {
+		args := []string{"file", "list", "--"}
+		for _, p := range chunk {
+			args = append(args, prefix+p)
+		}
+		out, err := vcsOutput(ctx, root, "jj", args...)
+		if err != nil {
+			return nil, fmt.Errorf("jj file list: %w", err)
+		}
+		tracked = append(tracked, splitLines([]byte(out))...)
+	}
+	var ignored []string
+	for _, p := range paths {
+		full := prefix + strings.TrimSuffix(p, "/")
+		if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(full))); err != nil {
+			continue
+		}
+		if !slices.ContainsFunc(tracked, func(t string) bool { return t == full || strings.HasPrefix(t, full+"/") }) {
+			ignored = append(ignored, p)
+		}
+	}
+	return ignored, nil
 }
 
 // ConfiguredRemote implements types.RemoteConfigReporter for a COLOCATED workspace only,

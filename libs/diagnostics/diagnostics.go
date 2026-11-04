@@ -15,7 +15,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
+	"sync"
 )
 
 // Code is a stable diagnostic identifier, e.g. "MGS1001" or "BZZ0003". Its prefix and numbering are a
@@ -36,7 +38,11 @@ type Error struct {
 	// Why is the reasoning behind the diagnostic, for a reader who wants it: what the check
 	// protects, or why the obvious alternative is wrong. It is never part of the rendered
 	// error; a display that has room for it asks [Rationale].
-	Why   string
+	Why string
+	// Fix is the action that clears the diagnostic, stated for the reader to take: a
+	// command to run or a declaration to change. Like Why it is never rendered by Error;
+	// it crosses into Buzz through BuzzError.
+	Fix   string
 	url   string // docs URL, captured at construction by a Domain; empty for a bare errors.Is-target literal
 	cause error  // optional wrapped cause (see Domain.Wrapf), so errors.Is/As reach an underlying sentinel
 }
@@ -44,6 +50,12 @@ type Error struct {
 // WithWhy sets e's [Error.Why] and returns e, so it chains off Errorf and Wrapf.
 func (e *Error) WithWhy(why string) *Error {
 	e.Why = why
+	return e
+}
+
+// WithFix sets e's [Error.Fix] and returns e, so it chains off Errorf and Wrapf.
+func (e *Error) WithFix(fix string) *Error {
+	e.Fix = fix
 	return e
 }
 
@@ -70,7 +82,7 @@ func Rationale(err error) string {
 //	catch (e) { if (e.code == "MGS2001") { ... } }
 //
 // url is included when the domain captured one, so a magusfile can surface the same link
-// the CLI prints rather than reconstructing it.
+// the CLI prints rather than reconstructing it, and fix when the error carries one.
 func (e *Error) BuzzError() map[string]string {
 	f := map[string]string{
 		"code":    string(e.Code),
@@ -78,6 +90,9 @@ func (e *Error) BuzzError() map[string]string {
 	}
 	if e.url != "" {
 		f["url"] = e.url
+	}
+	if e.Fix != "" {
+		f["fix"] = e.Fix
 	}
 	return f
 }
@@ -109,6 +124,9 @@ func (e *Error) Is(target error) bool {
 	return false
 }
 
+// URL is the docs page the domain captured for e, or "" for a bare errors.Is target.
+func (e *Error) URL() string { return e.url }
+
 // Unwrap returns the wrapped cause (nil if none), so errors.Is/As can reach an underlying sentinel or
 // error a coded error was layered over. See Domain.Wrapf.
 func (e *Error) Unwrap() error { return e.cause }
@@ -128,6 +146,78 @@ func New(urlFn func(Code) string) *Domain {
 
 // URL returns the docs page for c under this domain.
 func (d *Domain) URL(c Code) string { return d.urlFn(c) }
+
+// registry maps each registered prefix to the owner that registered it.
+var (
+	registryMu sync.RWMutex
+	registry   = map[string]string{}
+)
+
+// Register reserves prefix for owner in this process, so no two catalogs can mint codes
+// that clash or that a reader could take for each other's. It fails on a prefix that is
+// not 2 to 8 capital letters, and on one that equals, starts or is started by a prefix
+// another owner registered: WSX1001 beside WS1001 would make a reader work out which
+// catalog owns which. Registering a prefix again for the same owner changes nothing.
+// Safe for concurrent use; the caller decides what a failure ends.
+func Register(prefix, owner string) error {
+	if len(prefix) < 2 || len(prefix) > 8 || Prefix(Code(prefix)) != prefix {
+		return fmt.Errorf("diagnostics: prefix %q for %s is not 2 to 8 capital letters", prefix, owner)
+	}
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	if registry[prefix] == owner {
+		return nil
+	}
+	for p, o := range registry {
+		if strings.HasPrefix(p, prefix) || strings.HasPrefix(prefix, p) {
+			return fmt.Errorf("diagnostics: prefix %s for %s collides with %s, which %s registered", prefix, owner, p, o)
+		}
+	}
+	registry[prefix] = owner
+	return nil
+}
+
+// RegisterCatalog registers every prefix codes carry for owner, the catalog's package
+// handing over its own enumeration. It stops at the first prefix Register refuses.
+func RegisterCatalog(owner string, codes []Code) error {
+	for _, c := range codes {
+		if err := Register(Prefix(c), owner); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Prefix is the run of ASCII capital letters c starts with: MGS for MGS1021, "" for a code
+// that starts with anything else.
+func Prefix(c Code) string {
+	s := string(c)
+	i := 0
+	for i < len(s) && 'A' <= s[i] && s[i] <= 'Z' {
+		i++
+	}
+	return s[:i]
+}
+
+// ReservedPrefixes lists, sorted, every prefix registered in this process.
+func ReservedPrefixes() []string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	out := make([]string, 0, len(registry))
+	for p := range registry {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Owner returns who registered c's prefix, and false when nobody did.
+func Owner(c Code) (string, bool) {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	o, ok := registry[Prefix(c)]
+	return o, ok
+}
 
 // Errorf builds an *Error with c, a formatted message, and c's docs URL captured for rendering.
 // An error argument carrying a coded *Error is formatted as Inline renders it, so the message
@@ -216,12 +306,25 @@ func (d *Domain) Format(c Code, msg string) string {
 	return fmt.Sprintf("[%s] %s (see %s)", c, msg, d.urlFn(c))
 }
 
-// Event is one diagnostic fired during a run: the code, a message, and the unit that emitted it
-// ("<project>:<target>", a project path, or empty).
+// Event is one diagnostic fired during a run: the code, a message, the unit that emitted it
+// ("<project>:<target>", a project path, or empty), and the docs page the raise captured. URL
+// travels with the event because only the raise knows it: a workspace code's page comes from
+// that workspace's configuration, which a reader of the run record does not load.
 type Event struct {
 	Code    Code   `json:"code"              yaml:"code"`
 	Message string `json:"message,omitempty" yaml:"message,omitempty"`
 	Unit    string `json:"unit,omitempty"    yaml:"unit,omitempty"`
+	URL     string `json:"url,omitempty"     yaml:"url,omitempty"`
+}
+
+// ErrorEvent is the event err's outermost coded error fires from unit, carrying its docs page,
+// and false when err carries no code.
+func ErrorEvent(err error, unit string) (Event, bool) {
+	var e *Error
+	if !errors.As(err, &e) {
+		return Event{}, false
+	}
+	return Event{Code: e.Code, Message: e.Msg, Unit: unit, URL: e.url}, true
 }
 
 // Sink records diagnostics fired during a run; it must be safe for concurrent use. A run installs one in

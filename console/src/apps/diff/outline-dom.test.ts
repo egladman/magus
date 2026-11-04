@@ -17,6 +17,7 @@ beforeEach(() => {
   sessionStorage.clear();
   document.body.replaceChildren();
   globalThis.fetch = (() => {
+    // platform double: fetch
     throw new Error("demo mode must not reach the network");
   }) as typeof fetch;
 });
@@ -189,6 +190,7 @@ test("Copy thread toasts the server's refusal and copies nothing", async () => {
 
 test("Copy thread toasts an unreachable server and a clipboard that refuses", async () => {
   globalThis.fetch = (async () => {
+    // platform double: fetch
     throw new TypeError("Failed to fetch");
   }) as typeof fetch;
   const unreachable = await toastsDuring(async () => {
@@ -204,6 +206,7 @@ test("Copy thread toasts an unreachable server and a clipboard that refuses", as
   const refused = await toastsDuring(async () => {
     assert.equal(
       await copyThreadText("127.0.0.1:7391", "t1", new AbortController().signal, async () => {
+        // platform double: navigator.clipboard.writeText
         throw new Error("denied");
       }),
       false,

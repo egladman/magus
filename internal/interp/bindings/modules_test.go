@@ -16,8 +16,10 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
@@ -46,7 +48,7 @@ func TestSupersetModules(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	registerMagusModules(ctx, sess)
+	require.NoError(t, registerMagusModules(ctx, sess))
 
 	hasKey := func(t *testing.T, module, key string) {
 		t.Helper()
@@ -239,7 +241,7 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	registerMagusModules(ctx, sess)
+	require.NoError(t, registerMagusModules(ctx, sess))
 
 	for _, m := range hostmodules.All() {
 		// "magus" is not a bare import; it is wired as the magus.* namespace in
@@ -339,18 +341,15 @@ func TestTemplatePartialsEndToEnd(t *testing.T) {
 // in context (the test harness) it is a no-op, so a clean run proves the binding
 // resolves.
 func TestMagusBustCacheReachable(t *testing.T) {
-	dir := t.TempDir()
-	writeMagusfile(t, dir, `
-import "magus";
-import "fs";
-export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    magus\bustCache();
-    fs\writeFile("ran", "ok");
-}
-`)
-	if err := runTargetIn(t, dir, "build"); err != nil {
-		t.Fatalf("magus.bustCache() should be bound and a no-op without a cache: %v", err)
-	}
+	ctx := types.WithWorkspace(t.Context(), &jobNamespaceWorkspace{root: t.TempDir()})
+	sess := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = sess.Close() })
+	RegisterModules(ctx, sess)
+	RegisterMagusNamespace(ctx, sess)
+	require.NoError(t, DeclareMagusTypes(sess))
+	require.NoError(t, sess.Exec(ctx, `import "magus"; fun clearCache() > void !> any { magus\workspace().bustCache(); }`))
+	_, err := sess.CallValue(ctx, sess.GetGlobal("clearCache"), nil)
+	require.NoError(t, err)
 }
 
 // TestCtxlessTargetRejected pins the ctx-form contract: an exported magusfile function
@@ -617,7 +616,7 @@ import "crypto";
 export fun verify(ctx: magus\Context, _opts: [str]) > void !> any {
     final joined = fs\join("a", "b", "c");
     final sc = proc\shell("printf hello");
-    final res = proc\exec(sc.bin, sc.args, "", {}).stdout;
+    final res = proc\exec(sc.bin, sc.args, "", null).stdout;
     final digest = crypto\hash(crypto\HashAlgorithm.Sha256, "").hex();
     fs\writeFile("ran", joined + "|" + res + "|" + digest);
 }
@@ -881,7 +880,7 @@ import "proc";
 
 export fun viash(ctx: magus\Context, _a: [str]) > void !> any {
     final c = proc\shell("true", "sh");
-    proc\exec(c.bin, c.args, "", {});
+    proc\exec(c.bin, c.args, "", null);
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "viash"))
@@ -1060,7 +1059,7 @@ func TestObjectAnnotationsCheckFields(t *testing.T) {
 		{"ExecResult", `proc\exec("echo", ["hi"])`, "stdout", "stduot", `import "proc";`},
 		{"Commit", `vcs\commit()`, "author", "auther", `import "vcs";`},
 		{"FileInfo", `fs\stat(".")`, "size", "sizes", `import "fs";`},
-		{"HttpResponse", `http\get("http://x")`, "status", "staus", `import "http";`},
+		{"Response", `http\get("http://x")`, "status", "staus", `import "http";`},
 		{"SemverVersion", `semver\parse("1.2.3")`, "major", "majr", `import "semver";`},
 		{"URL", `url\parse("http://x")`, "scheme", "sceme", `import "encoding/url";`},
 	}
@@ -1098,6 +1097,32 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 	}
 }
 
+// TestBuzzParseReadsAsTypedRecord calls buzz\parse from Buzz. The record's
+// fields type-check through its mirror, and a parse failure reads as a value.
+func TestBuzzParseReadsAsTypedRecord(t *testing.T) {
+	dir := t.TempDir()
+	sample := filepath.Join(dir, "sample.buzz")
+	require.NoError(t, os.WriteFile(sample, []byte("fun f() > void !> str {\n    throw \"x\";\n}\n"), 0o600))
+	broken := filepath.Join(dir, "broken.buzz")
+	require.NoError(t, os.WriteFile(broken, []byte("fun ( {\n"), 0o600))
+	writeMagusfile(t, dir, fmt.Sprintf(`
+import "magus";
+import "fs";
+import "buzz";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    final file: buzz\BuzzFile = buzz\parse(%q);
+    final fn = file.functions[0];
+    final bad = buzz\parse(%q);
+    final failed = if (bad.error != "") "error" else "none";
+    fs\writeFile("out", content: "{fn.name} {fn.line}-{fn.endLine} {fn.errorType} {fn.throws[0]} {failed}");
+}
+`, sample, broken))
+	require.NoError(t, runTargetIn(t, dir, "build"))
+	got, err := os.ReadFile(filepath.Join(dir, "out"))
+	require.NoError(t, err)
+	assert.Equal(t, "f 1-3 str 2 error", string(got))
+}
+
 func TestRunAndParse(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
@@ -1127,12 +1152,12 @@ import "proc";
 
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
     final ok = proc\shell("true");
-    final rc = proc\exec(ok.bin, ok.args, "", {"allow_failure": true}).code;
+    final rc = proc\exec(ok.bin, ok.args, "", proc\ExecOptions{allowFailure = true}).code;
     if (rc != 0) {
         throw "proc.shell('true') exited {rc}";
     }
     final bad = proc\shell("false");
-    final rc2 = proc\exec(bad.bin, bad.args, "", {"allow_failure": true}).code;
+    final rc2 = proc\exec(bad.bin, bad.args, "", proc\ExecOptions{allowFailure = true}).code;
     if (rc2 == 0) {
         throw "proc.shell('false') exited 0, expected non-zero";
     }
@@ -1153,7 +1178,7 @@ import "proc";
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
     os\withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void !> any {
         final ec = proc\shell("echo $MY_BUZZ_VAR");
-        final captured = proc\exec(ec.bin, ec.args, "", {}).stdout;
+        final captured = proc\exec(ec.bin, ec.args, "", null).stdout;
         if (captured != "hello") {
             throw "expected 'hello', got: [" + captured + "]";
         }
@@ -1469,14 +1494,14 @@ func TestEveryBoundaryTypeHasAMirror(t *testing.T) {
 		{"CommitRecord", "Commit"},
 		{"CommitAuthor", "CommitAuthor"},
 		{"FileInfo", "FileInfo"},
-		{"HTTPResponse", "HttpResponse"},
+		{"HTTPResponse", "Response"},
 		{"SemverVersion", "SemverVersion"},
 		{"URL", "URL"},
 		{"Tag", "Tag"},
 		{"ProjectEntry", "ProjectEntry"},
 		{"ProjectsOutput", "Projects"},
 		{"AffectedResult", "Affected"},
-		{"GraphView", "Graph"},
+		{"ProjectGraph", "Graph"},
 		{"TargetGraphOutput", "TargetGraph"},
 		{"ModuleFieldEntry", "ModuleFieldEntry"},
 		{"ModuleMethodEntry", "ModuleMethodEntry"},
@@ -1498,6 +1523,7 @@ func assertMirrorConstructs(t *testing.T, object string) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
+	buzzstd.Register(s)
 	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
 	require.NoError(t, s.Exec(ctx, fmt.Sprintf(`import "%s"; final __r = %s{};`, testBoundaryTypesPath, object)),
 		"%s{} must construct: the mirror is missing from the bundle, ordered after a type it references, or emitted with a field name that does not parse", object)
@@ -1518,7 +1544,7 @@ func TestMirrorFieldsMatchEncoder(t *testing.T) {
 	}{
 		{"Tag", bindgen.ObjectVCSTag(types.VCSTag{})},
 		{"Affected", bindgen.ObjectAffectedResult(types.AffectedResult{})},
-		{"Graph", bindgen.ObjectGraphView(types.GraphView{})},
+		{"ProjectGraph", bindgen.ObjectProjectGraph(types.ProjectGraph{})},
 		{"Projects", bindgen.ObjectProjectsOutput(types.ProjectsOutput{})},
 		{"ProjectEntry", bindgen.ObjectProjectEntry(types.ProjectEntry{})},
 		{"Module", bindgen.ObjectModuleEntry(types.ModuleEntry{})},
@@ -1546,6 +1572,7 @@ func assertMirrorReadsField(t *testing.T, object, field string) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
+	buzzstd.Register(s)
 	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
 	err := s.Exec(ctx, fmt.Sprintf(`import "%s"; final __r = %s{}.%s;`, testBoundaryTypesPath, object, field))
 	require.NoError(t, err, "%s has no field %q, but %s's BuzzObject emits that key: the mirror and the boundary map disagree", object, field, object)
@@ -1570,7 +1597,7 @@ func TestEveryEncodedTypeIsMirrored(t *testing.T) {
 	owners := []any{
 		types.ExecResult{}, types.CommitRecord{}, types.FileInfo{}, types.HTTPResponse{},
 		types.SemverVersion{}, types.URL{}, types.VCSTag{}, types.ProjectEntry{},
-		types.ProjectsOutput{}, types.AffectedResult{}, types.GraphView{}, types.TargetGraphOutput{},
+		types.ProjectsOutput{}, types.AffectedResult{}, types.ProjectGraph{}, types.TargetGraphOutput{},
 		types.ModuleFieldEntry{}, types.ModuleMethodEntry{}, types.ModuleEntry{},
 	}
 	for _, v := range owners {
@@ -1644,9 +1671,9 @@ import "std";
 import "http";
 
 test "construct a declared boundary object" {
-    final p = HttpRetry{ attempts = 3, delay_ms = 250.0 };
+    final p = http\Retry{ attempts = 3, delayMs = 250.0 };
     std\assert(p.attempts == 3, message: "field set");
-    std\assert(p.all_errors == false, message: "field default");
+    std\assert(!p.allErrors, message: "field default");
 }
 `)
 	require.NoError(t, err)
@@ -1660,8 +1687,8 @@ func TestDeclaringObjectsKeepsNativeMethods(t *testing.T) {
 	err := sess.Exec(context.Background(), `
 import "std";
 import "http";
-final _p = HttpRetry{ attempts = 2 };
-final port = http\server({"dir": "."}) catch -1;
+final _p = http\Retry{ attempts = 2 };
+final port = http\server(http\ServerOptions{ dir = "." }) catch -1;
 std\assert(port > 0, message: "native http.server still bound a port");
 `)
 	require.NoError(t, err)
@@ -1758,7 +1785,7 @@ func TestTermNotifyEnumResolvesThroughItsOwnNamespace(t *testing.T) {
 import "term";
 import "log";
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    term\notify("built", level: term\LogLevel.warn, ttl_ms: 10);
+    term\notify("built", level: term\LogLevel.warn, ttlMs: 10);
     term\notify("plain");
     log\info("also logged");
 }`)
@@ -1773,7 +1800,7 @@ func BenchmarkBindingsDeclareMagusTypes(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		sess := buzz.NewSession(b.Context(), buzz.WithEmbedded())
-		DeclareMagusTypes(sess)
+		require.NoError(b, DeclareMagusTypes(sess))
 		sess.Close()
 	}
 }
@@ -1788,11 +1815,11 @@ import "proc";
 
 export fun compound(ctx: magus\Context, _a: [str]) > void !> any {
     final c = proc\shell("cd . && git commit -m x");
-    proc\exec(c.bin, args: c.args, dir: "", opts: {});
+    proc\exec(c.bin, args: c.args, dir: "");
 }
 
 export fun wrapped(ctx: magus\Context, _a: [str]) > void !> any {
-    proc\exec("env", args: ["GIT_DIR=elsewhere", "hg", "status"], dir: "", opts: {});
+    proc\exec("env", args: ["GIT_DIR=elsewhere", "hg", "status"], dir: "");
 }
 `)
 	err := runTargetIn(t, dir, "compound")
@@ -1812,11 +1839,33 @@ import "fs";
 import "vcs";
 
 export fun inside(ctx: magus\Context, _a: [str]) > void !> any {
-    fs\writeFile("inside", content: vcs\cmd(["rev-parse", "--is-inside-work-tree"], opts: {"quiet": true}).stdout);
+    fs\writeFile("inside", content: vcs\cmd(["rev-parse", "--is-inside-work-tree"], opts: vcs\CommandOptions{quiet = true}).stdout);
 }
 `)
 	require.NoError(t, runTargetIn(t, dir, "inside"))
 	got, err := os.ReadFile(filepath.Join(dir, "inside"))
 	require.NoError(t, err)
 	assert.Equal(t, "true", string(got))
+}
+
+// magus and vcs both export CommandOptions. A qualified literal builds its own module's
+// record whatever else the script imports, so magus\cmd never decodes vcs's tty.
+func TestQualifiedCommandOptionsBuildTheirOwnModulesRecord(t *testing.T) {
+	ctx := t.Context()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+	require.NoError(t, sess.Exec(ctx, `
+import "vcs";
+import "magus";
+
+final m = magus\CommandOptions{ quiet = true };
+final v = vcs\CommandOptions{ tty = true };
+`))
+	m, err := decode.DecodeMagusCommandOptions(sess.GetGlobal("m"))
+	require.NoError(t, err)
+	assert.Equal(t, types.MagusCommandOptions{Quiet: true}, m)
+	v, err := decode.DecodeVCSCommandOptions(sess.GetGlobal("v"))
+	require.NoError(t, err)
+	assert.Equal(t, types.VCSCommandOptions{TTY: true}, v)
 }

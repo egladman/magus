@@ -1,4 +1,5 @@
 import "std";
+import "magus/spell";
 import "./spell" as buf;
 
 test "no op inherits a gen/** output" {
@@ -16,4 +17,147 @@ test "inputs still cover the proto sources and buf config" {
     }
     std\assert(needs.indexOf("**/*.proto") != null, message: "proto sources");
     std\assert(needs.indexOf("buf.gen.yaml") != null, message: "buf.gen.yaml");
+}
+
+fun marker(path: str, content: str) > DiscoveryFile {
+    return DiscoveryFile{path = path, content = content};
+}
+
+fun source(path: str) > DiscoveryFile {
+    return DiscoveryFile{path = path};
+}
+
+fun discover(files: [DiscoveryFile]) > [DiscoveredProject] {
+    return buf\discover_projects(Target{}, req: DiscoveryQuery{root = "/repo", files = files});
+}
+
+fun hasGap(claim: DiscoveredProject, file: str, part: str) > bool {
+    foreach (gap in claim.notInferred) {
+        if (gap.file == file and gap.why.indexOf(part) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+test "a v1 buf.yaml forms a project wired to build, lint and format" {
+    final claims = discover([
+        marker("buf.yaml", content: "version: v1\nlint:\n  use: [DEFAULT]\n"),
+        source("acme/v1/acme.proto"),
+    ]) catch [];
+    std\assert(claims.len() == 1, message: "one claim");
+    final root = claims[0];
+    std\assert(root.path == "." and root.role == DiscoveryRole.project, message: "the root is a project");
+    std\assert(root.targets["build"]![0] == "buf-build", message: "build");
+    std\assert(root.targets["lint"]![0] == "buf-lint", message: "lint");
+    std\assert(root.targets["format"]![0] == "buf-format", message: "format");
+    std\assert(root.targets["generate"] == null, message: "generate needs declared outputs");
+    std\assert(root.spans.len() == 0 and root.notInferred.len() == 0, message: "nothing spanned or missed");
+}
+
+test "a v2 buf.yaml spans its modules and reports a proto outside them" {
+    final claims = discover([
+        marker("buf.yaml", content: "version: v2\nmodules:\n  - path: proto\n  - path: ./third_party/googleapis/\n"),
+        source("proto/acme/v1/acme.proto"),
+        source("third_party/googleapis/google/api/http.proto"),
+        source("scratch/loose.proto"),
+    ]) catch [];
+    std\assert(claims.len() == 1, message: "one workspace claim");
+    final root = claims[0];
+    std\assert(root.spans.len() == 2, message: "two modules");
+    std\assert(root.spans[0] == "proto" and root.spans[1] == "third_party/googleapis", message: "cleaned and sorted");
+    std\assert(root.notInferred.len() == 1, message: "one gap");
+    std\assert(hasGap(root, file: "scratch/loose.proto", part: "in no module buf.yaml lists"), message: "the loose proto is named");
+}
+
+test "a v2 buf.yaml without modules is its own module" {
+    final claims = discover([marker("api/buf.yaml", content: "version: v2\n"), source("api/a.proto")]) catch [];
+    std\assert(claims.len() == 1 and claims[0].path == "api", message: "api is the project");
+    std\assert(claims[0].spans.len() == 0 and claims[0].notInferred.len() == 0, message: "the module is the project directory");
+}
+
+test "a buf.work.yaml claims its directories, not each module" {
+    final claims = discover([
+        marker("buf.work.yaml", content: "version: v1\ndirectories:\n  - proto\n  - vendor/protos\n"),
+        marker("proto/buf.yaml", content: "version: v1\n"),
+        marker("vendor/protos/buf.yaml", content: "version: v1\n"),
+        source("proto/a.proto"),
+        source("vendor/protos/b.proto"),
+    ]) catch [];
+    std\assert(claims.len() == 1 and claims[0].path == ".", message: "only the workspace forms a project");
+    std\assert(claims[0].spans.len() == 2, message: "both directories spanned");
+    std\assert(claims[0].notInferred.len() == 0, message: "every proto is in a module");
+}
+
+test "a v1 buf.yaml no workspace lists is a nested project" {
+    final claims = discover([
+        marker("buf.work.yaml", content: "version: v1\ndirectories: [proto]\n"),
+        marker("proto/buf.yaml", content: "version: v1\n"),
+        marker("tools/buf.yaml", content: "version: v1\n"),
+        source("tools/t.proto"),
+    ]) catch [];
+    std\assert(claims.len() == 2, message: "workspace and nested module");
+    std\assert(claims[0].path == "." and claims[1].path == "tools", message: "sorted by path");
+    std\assert(claims[1].role == DiscoveryRole.project and claims[1].notInferred.len() == 0, message: "tools owns its proto");
+}
+
+test "protos with no buf.yaml become one member claim per tree, with a gap" {
+    final claims = discover([
+        source("api/v1/a.proto"),
+        source("api/v1/b.proto"),
+        source("api/v2/c.proto"),
+        source("api/a.proto"),
+    ]) catch [];
+    std\assert(claims.len() == 1, message: "nested directories fold into api");
+    final member = claims[0];
+    std\assert(member.path == "api" and member.role == DiscoveryRole.member, message: "a member, not a project");
+    std\assert(member.targets.len() == 0, message: "nothing wired without a buf.yaml");
+    std\assert(member.notInferred.len() == 1, message: "one gap");
+    std\assert(member.notInferred[0].why.startsWith("4 .proto file(s) under api have no buf.yaml"), message: member.notInferred[0].why);
+}
+
+test "buf.gen.yaml outputs are a gap on the owning project" {
+    final claims = discover([
+        marker("buf.yaml", content: "version: v2\n"),
+        marker("buf.gen.yaml", content: "version: v2\nplugins:\n  - local: protoc-gen-go\n    out: gen/go\n  - remote: buf.build/connectrpc/go\n    out: gen/connect\n"),
+    ]) catch [];
+    std\assert(claims.len() == 1, message: "the gen file forms no claim of its own");
+    std\assert(hasGap(claims[0], file: "buf.gen.yaml", part: "(gen/go, gen/connect)"), message: "the outs are named");
+}
+
+test "a buf.gen.yaml outside every project becomes a member claim" {
+    final claims = discover([marker("codegen/buf.gen.yaml", content: "version: v1\nplugins: []\n")]) catch [];
+    std\assert(claims.len() == 1 and claims[0].path == "codegen", message: "claimed at its directory");
+    std\assert(claims[0].role == DiscoveryRole.member, message: "a member");
+    std\assert(hasGap(claims[0], file: "codegen/buf.gen.yaml", part: "no out: found"), message: "no outs named");
+}
+
+test "unreadable markers and escaping modules are gaps, never dropped" {
+    final claims = discover([
+        marker("buf.work.yaml", content: "version: v1\ndirectories: [../outside]\n"),
+        marker("broken/buf.yaml", content: "version: [v1\n"),
+        source("bare/buf.yaml"),
+    ]) catch [];
+    std\assert(claims.len() == 3, message: "every marker still claims its directory");
+    std\assert(hasGap(claims[0], file: "buf.work.yaml", part: "leaves the workspace root"), message: "escape reported");
+    std\assert(hasGap(claims[0], file: "buf.work.yaml", part: "lists no module"), message: "empty workspace reported");
+    std\assert(claims[1].path == "bare" and hasGap(claims[1], file: "bare/buf.yaml", part: "no content"), message: "missing content reported");
+    std\assert(claims[2].path == "broken" and hasGap(claims[2], file: "broken/buf.yaml", part: "not valid YAML"), message: "bad YAML reported");
+}
+
+test "buf-breaking captures, so a gate can read its report" {
+    final breaking = buf\mgs_listTargets()["buf-breaking"]!(Target{});
+    std\assert(breaking.capture, message: "a gate reads the record");
+    std\assert(breaking.charms["gha"] == null, message: "no charm swaps the reporter a gate reads");
+}
+
+test "every target names an op the spell declares" {
+    final ops = buf\mgs_listTargets();
+    final claims = discover([marker("buf.yaml", content: "version: v1\n")]) catch [];
+    foreach (name, keys in claims[0].targets) {
+        std\assert(name != "ci", message: "core composes ci");
+        foreach (key in keys) {
+            std\assert(ops[key] != null, message: "{name}: {key} is declared");
+        }
+    }
 }

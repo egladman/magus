@@ -17,11 +17,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
@@ -35,6 +37,78 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
+
+type indexesBehindSuite struct{ suite.Suite }
+
+func TestIndexesBehindSuite(t *testing.T) { suite.Run(t, new(indexesBehindSuite)) }
+
+func (s *indexesBehindSuite) TestAGapNoBuildClosesGetsNoCause() {
+	proto := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("proto", "/ws/proto"), Language: "protobuf", Unindexable: true},
+	})
+	s.Nil(withIndexCause(s.T().Context(), s.T().TempDir(), proto).IndexCause)
+}
+
+func (s *indexesBehindSuite) TestExplainMissDropsAGapHoldingNoTextOfTheName() {
+	proto := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("proto", "/ws/proto"), Language: "protobuf", Unindexable: true},
+	})
+	got := explainMissAnswer(s.T().Context(), s.T().TempDir(), "file:nosuch/go.mod", proto)
+	s.Equal(types.VerdictAbsent, got.Verdict)
+	s.Empty(got.Gaps)
+}
+
+func (s *indexesBehindSuite) TestExplainMissKeepsAGapWhoseProjectHoldsTheName() {
+	root := s.T().TempDir()
+	s.Require().NoError(os.MkdirAll(filepath.Join(root, "proto"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "proto", "a.proto"), []byte("message Wanted {}\n"), 0o644))
+	proto := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("proto", "/ws/proto"), Language: "protobuf", Unindexable: true},
+	})
+	got := explainMissAnswer(s.T().Context(), root, "Wanted", proto)
+	s.Equal(types.VerdictUnknown, got.Verdict)
+	s.Len(got.Gaps, 1)
+}
+
+func (s *indexesBehindSuite) TestACurrentAnswerIsNotBehind() {
+	s.False(types.ClassifyAnswer(true, "", nil).IndexBehind())
+}
+
+func (s *indexesBehindSuite) TestAGapNoBuildClosesIsNotBehind() {
+	s.False(types.KnowledgeAnswer{Gaps: []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("proto", "/ws/proto"), Language: "protobuf", Unindexable: true},
+		{Project: types.NewProjectRef("web", "/ws/web"), Language: "typescript", Hint: "install scip-typescript"},
+	}}.IndexBehind())
+}
+
+func (s *indexesBehindSuite) TestABuildableGapIsBehind() {
+	s.True(types.KnowledgeAnswer{Gaps: []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("libs/a", "/ws/libs/a"), Language: "go"},
+	}}.IndexBehind())
+}
+
+func (s *indexesBehindSuite) TestAStaleIndexIsBehind() {
+	s.True(types.KnowledgeAnswer{
+		StaleIndexes:      []string{"libs/a"},
+		StaleIndexDetails: []types.KnowledgeStaleIndex{{Project: "libs/a", Language: "go", Op: "scip"}},
+	}.IndexBehind())
+}
+
+func (s *indexesBehindSuite) TestTheStaleNoticeSaysWhatTheReadDidAboutIt() {
+	got := staleIndexNotice(types.KnowledgeAnswer{
+		StaleIndexes:      []string{"libs/a"},
+		StaleIndexDetails: []types.KnowledgeStaleIndex{{Project: "libs/a", Language: "go"}},
+		IndexCause:        &types.KnowledgeIndexCause{Why: "a refresh started in the background", Fix: "ask again"},
+	})
+	s.Contains(got, "a refresh started in the background\n  ask again\n")
+	s.NotContains(got, "refresh and ask again")
+}
+
+func (s *indexesBehindSuite) TestAnAnswerKeepsTheCauseTheReadGaveIt() {
+	mine := &types.KnowledgeIndexCause{Why: "a refresh started", Fix: "ask again"}
+	got := withIndexCause(s.T().Context(), s.T().TempDir(), types.KnowledgeAnswer{StaleIndexes: []string{"libs/a"}, IndexCause: mine})
+	s.Same(mine, got.IndexCause)
+}
 
 // captureStdout is testkit.CaptureStdout. showOutputIdentity prints straight to
 // os.Stdout (matching the rest of `magus query`'s text-format rendering), so swapping
@@ -443,7 +517,7 @@ func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config
 	ctx := context.Background()
 	g, err := loadWorkspaceGraph(ctx, ws, cfg, false, false, true)
 	require.NoError(tb, err)
-	b, err := json.Marshal(searchLoaded(ctx, g, read, measuredCoverage(ctx, ws, cfg)))
+	b, err := json.Marshal(searchLoaded(ctx, g, read, embedtable.Cached, measuredCoverage(ctx, ws, cfg)))
 	require.NoError(tb, err)
 	return string(b)
 }
@@ -496,7 +570,7 @@ func (f graphReadFixture) loadedAnswer(tb testing.TB, gs loadedGraphs, verb stri
 	}
 	switch verb {
 	case readQuery:
-		return searchLoaded(ctx, g, read, gs.coverage)
+		return searchLoaded(ctx, g, read, embedtable.Cached, gs.coverage)
 	case readExplain:
 		return explainLoaded(ctx, g, read, gs.coverage)
 	case readRefs:

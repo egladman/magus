@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 8,
-    "imports": 4
+    "flow": 0,
+    "imports": 0
   },
   "figure": "merge-queue-risk",
   "findings": [],
-  "stamp": "sha256:af87cf636bf8f25a99b041062981f50c1a7843b5c5a0c7b5751efb3b84bd8417"
+  "stamp": "sha256:1fcce515911d8d904ad7f4210b5cfd662398da4e8c55e9c36c01453cf2a48745"
 }

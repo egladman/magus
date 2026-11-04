@@ -1240,16 +1240,16 @@ func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Ch
 
 	res, err := vcs.Resolve(r.runContext(), r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no VCS to enumerate committed files with"}
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no VCS to enumerate committed files with; skipped"}
 	}
 	// "." is a pathspec for the whole tree, so this is one ls-files rather than one
 	// per candidate: the check has no candidate set until it has the file list.
 	files, err := res.VCS.TrackedFiles(r.runContext(), r.root, []string{"."})
 	if errors.Is(err, types.ErrVCSUnsupported) {
-		return types.Check{Name: name, Status: types.CheckOK, Message: res.Name + " cannot report tracked files"}
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: res.Name + " cannot report tracked files; skipped"}
 	}
 	if err != nil {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "could not list tracked files: " + err.Error()}
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "could not list tracked files; skipped: " + err.Error()}
 	}
 
 	var globs []types.Glob
@@ -2089,6 +2089,7 @@ var guardTemplateBasenames = []string{
 	"magus-command.buzz",
 	"magus-path.buzz",
 	"magus-observe.buzz",
+	"magus-duration.buzz",
 	"cursor-hook.buzz",
 	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
 	// the observe template's did: silently, as a store that looks like a repository
@@ -2272,6 +2273,58 @@ func (r *runner) checkGuardWiring() types.Check {
 	return checkGuardWiring(r.runContext(), r.ws.Root(), guardProbeBudget, wired...)
 }
 
+// checkHookBindings reads each wired harness's binding table, the one
+// agent.HookBindings builds, and fails on a point it neither binds nor
+// explains.
+func (r *runner) checkHookBindings() types.Check {
+	wired, err := workspace.WiredHarnesses(r.ws)
+	if err != nil {
+		return unknownWiring(hookBindingsCheck, err)
+	}
+	return checkHookBindings(r.runContext(), r.ws.Root(), wired...)
+}
+
+const hookBindingsCheck = "harness-hook-bindings"
+
+func checkHookBindings(ctx context.Context, root string, wiredNames ...string) types.Check {
+	ctx = agent.ContextWithWiredHarnesses(ctx, wiredNames)
+	ids, err := agent.KnownHarnesses(ctx, wiredNames...)
+	if err != nil {
+		return types.Check{Name: hookBindingsCheck, Status: types.CheckFail,
+			Message: "could not load harness descriptors", Details: []string{err.Error()}}
+	}
+	var problems, rows []string
+	for _, id := range ids {
+		d, _, err := agent.LoadHarness(ctx, root, id)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", id, err))
+			continue
+		}
+		table, err := agent.HookBindings(d)
+		if err != nil {
+			problems = append(problems, strings.Split(err.Error(), "\n")...)
+		}
+		for _, b := range table {
+			if b.Status == types.Unsupported {
+				rows = append(rows, fmt.Sprintf("%s %s: unsupported, %s", id, b.Point, b.Reason))
+			}
+		}
+	}
+	if len(problems) > 0 {
+		return types.Check{Name: hookBindingsCheck, Status: types.CheckFail,
+			Message: fmt.Sprintf("%d hook point(s) have no binding a harness can stand behind", len(problems)),
+			Details: problems}
+	}
+	if len(ids) == 0 {
+		return types.Check{Name: hookBindingsCheck, Status: types.CheckOK,
+			Message: "no harness is wired, so no hook point is owed a binding"}
+	}
+	return types.Check{Name: hookBindingsCheck, Status: types.CheckOK,
+		Message: fmt.Sprintf("%d harness(es) bind or explain every hook point; %d point(s) unsupported",
+			len(ids), len(rows)),
+		Details: rows}
+}
+
 // HookConfigs names the host hook config files IN THIS CHECKOUT that run a magus
 // hook, which is what a caller outside doctor needs to say whether a checkout's
 // rules are enforced by anything. It reads the same two markers the guard-wiring
@@ -2433,8 +2486,8 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 }
 
 // checkAgentSkills grades the INSTALLED agent skills against the running binary. An
-// upgrade that bumps the skill or knowledge-schema version leaves every checkout's copy
-// behind, and a stale skill does not fail loudly; it quietly teaches an agent last
+// upgrade changing a skill or the knowledge schema leaves every checkout's copy
+// behind. A stale skill does not fail loudly; it quietly teaches an agent last
 // release's verbs.
 //
 // AGENTS.md is graded too but can only ever be ADVICE: magus does not write that file, so
@@ -2559,14 +2612,17 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check 
 
 	res, err := vcs.Resolve(r.runContext(), r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no VCS resolved; nothing to check"}
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no VCS resolved; skipped"}
 	}
 	meta, err := res.VCS.Metadata(r.runContext(), r.root)
-	if err != nil || meta.ID == "" {
+	if err != nil {
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "could not read the current commit; skipped: " + err.Error()}
+	}
+	if meta.ID == "" {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no commit yet; nothing to check"}
 	}
 
-	var details []string
+	var details, unlisted []string
 	scanned := 0
 	for _, p := range projects {
 		rels := declaredOutputFiles(p)
@@ -2578,6 +2634,7 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check 
 			return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
 		}
 		if err != nil {
+			unlisted = append(unlisted, fmt.Sprintf("%s: could not list tracked outputs: %v", types.ProjectDisplayName(p.Path, p.Name, p.Dir), err))
 			continue
 		}
 		for _, rel := range tracked {
@@ -2591,6 +2648,10 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check 
 			details = append(details, fmt.Sprintf("%s: %s is committed and records this repository's own HEAD commit",
 				types.ProjectDisplayName(p.Path, p.Name, p.Dir), rel))
 		}
+	}
+	if len(details) == 0 && len(unlisted) > 0 {
+		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
+			Message: fmt.Sprintf("%d project(s) could not list their tracked outputs; skipped", len(unlisted)), Details: unlisted}
 	}
 	if len(details) == 0 {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no committed output records the current commit"}

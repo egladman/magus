@@ -1,0 +1,136 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: magus
+  labels:
+    app.kubernetes.io/name: magus
+    app.kubernetes.io/component: daemon
+  annotations:
+    kubernetes.io/description: The magus daemon, `magus server start --foreground`, for development.
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # The state volume is ReadWriteOnce and the job store has one writer: never run two pods.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: magus
+      app.kubernetes.io/component: daemon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: magus
+        app.kubernetes.io/component: daemon
+      annotations:
+        kubectl.kubernetes.io/default-container: magus
+    spec:
+      serviceAccountName: magus
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        # The distroless nonroot user the image runs as.
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: magus
+          image: ghcr.io/egladman/magus:v0.4.3
+          imagePullPolicy: IfNotPresent
+          args: ["server", "start", "--foreground"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: TMPDIR
+              value: /tmp
+            - name: XDG_CONFIG_HOME
+              value: /etc/xdg
+            - name: XDG_STATE_HOME
+              value: /var/lib/magus/state
+            - name: XDG_DATA_HOME
+              value: /var/lib/magus/data
+            - name: XDG_CACHE_HOME
+              value: /var/cache/magus
+            - name: XDG_RUNTIME_DIR
+              value: /run/magus
+          ports:
+            - name: http
+              containerPort: 7391
+              protocol: TCP
+          # Exec probes: the listener binds loopback, which a kubelet HTTP probe cannot reach.
+          startupProbe:
+            exec:
+              command: ["/magus", "server", "status"]
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            exec:
+              command: ["/magus", "server", "status"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["/magus", "server", "status"]
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+              ephemeral-storage: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+              ephemeral-storage: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: config
+              mountPath: /etc/xdg/magus
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/magus
+            - name: cache
+              mountPath: /var/cache/magus
+            - name: runtime
+              mountPath: /run/magus
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: magus-config
+            # 0444, in decimal: YAML 1.1 and 1.2 read a leading zero differently.
+            defaultMode: 292
+        - name: state
+          persistentVolumeClaim:
+            claimName: magus-state
+        # Regenerable: the cache may be lost with the pod, so it takes no claim.
+        - name: cache
+          emptyDir:
+            sizeLimit: 2Gi
+        - name: runtime
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

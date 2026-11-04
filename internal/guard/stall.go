@@ -156,7 +156,8 @@ func fileStallRow(ctx context.Context, at location, who hookAttribution, lease s
 			lease, verdict.Rule, firstLine(verdict.Reason), workerModel(ctx, at, who, lease), rec.Refusals),
 	}
 	origin := trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: who.Host, Session: who.Session, Agent: who.Agent})
-	_, _, _ = sessions.OpenRequest(dir, cmp.Or(who.Session, lease), open, sessions.InvocationStart{Origin: origin, Workspace: at.workspace, Lease: lease})
+	// MarkFired already said this block is new, and this runs inside a hook.
+	_ = sessions.AppendRequest(dir, cmp.Or(who.Session, lease), open, sessions.InvocationStart{Origin: origin, Workspace: at.workspace, Lease: lease})
 }
 
 // workerModel is the model a leased worker runs on as magus recorded it: what its spawn

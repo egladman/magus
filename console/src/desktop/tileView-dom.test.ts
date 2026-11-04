@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { createTileView, type TileDeps } from "./tileView";
 import { signal } from "./view";
 import type { PageController } from "./page";
+import { ok, type Result } from "../gen/magus/types";
 
 // Mounts are async (the real ones are a lazy import()), so every assertion about a mounted app
 // has to come after one turn of the event loop.
@@ -23,13 +24,13 @@ function stubDeps(titles: Record<string, ReturnType<typeof signal<string | null>
       { id: "logs", label: "Log Viewer", hint: "" },
       { id: "graph", label: "Graph Explorer", hint: "" },
     ],
-    async mountApp(pageId): Promise<PageController<unknown, unknown>> {
-      return {
+    async mountApp(pageId): Promise<Result<PageController<unknown, unknown>>> {
+      return ok({
         search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
         docTitle: titles[pageId],
         setVisible() {},
         deactivate() {},
-      };
+      });
     },
     onLayoutChange() {},
     onTitleChange(title, pageId) {
@@ -145,14 +146,15 @@ test("only the focused pane owns visibility while a tiled tab is shown", async (
   };
   const calls: [string, boolean][] = [];
   const { deps } = stubDeps(titles);
-  deps.mountApp = async (pageId) => ({
-    search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
-    docTitle: titles[pageId],
-    setVisible(visible) {
-      calls.push([pageId, visible]);
-    },
-    deactivate() {},
-  });
+  deps.mountApp = async (pageId) =>
+    ok({
+      search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
+      docTitle: titles[pageId],
+      setVisible(visible: boolean) {
+        calls.push([pageId, visible]);
+      },
+      deactivate() {},
+    });
   const tile = createTileView(deps);
   await mounted();
   tile.setVisible(true);

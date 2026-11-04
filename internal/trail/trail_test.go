@@ -168,6 +168,30 @@ func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 	require.Empty(t, events)
 }
 
+func TestAppendAgentCommand_RecordsHowLongTheGuardJudged(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Decision: "pass", GuardMs: 278})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, int64(278), events[0].GuardMs)
+	assert.Zero(t, events[0].DurationMs, "guard time is not tool time")
+}
+
+func TestAppendAgentCommand_RecordsHowLongTheToolRan(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Event: "PostToolUse", ToolMs: 1500})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	event := events[0]
+	event.Ts, event.Origin, event.Workspace = 0, types.Origin{}, ""
+	event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = "", "", 0, 0
+	assert.Equal(t, Event{Kind: KindAgentCommand, Action: "Bash", Outcome: OutcomeOK, DurationMs: 1500, Preview: "observed"}, event)
+}
+
 // A hook row names the magus that judged the call and the directory the host reported, and
 // leaves both off when the producer did not know them.
 func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {

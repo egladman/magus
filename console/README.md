@@ -309,7 +309,7 @@ between 0.04 and 0.09em, three weights, with adjacent labels on one app disagree
   does the separating. Both sizes are the 12px body token, the floor for any text.
 
 Write `text-transform: uppercase` yourself; it is the label's defining property, and the rule keys
-on it to require the three tokens. Which recipe an element takes is the author's call; what is not
+on it to require the three tokens. Which pattern an element takes is the author's call; what is not
 optional is taking one of them.
 
 ### Corner style (two tiers, locked house style)
@@ -332,8 +332,9 @@ is a step rounder, same tiers.
 
 ### Diagram figures (`--magus-diagram-*`)
 
-magus/figure paints an inlined figure with `var(--magus-diagram-<role>, <light hex>)`. The block at
-the end of `tokens.css` maps all nine roles (paper, fill, ink, muted, soft, rule, accent,
+magus/figure writes only concrete values in SVG attributes, because `var()` is invalid there.
+Theming goes through a `<style>` block whose role classes read `var(--magus-diagram-<role>, <hex>)`.
+The block at the end of `tokens.css` maps all nine roles (paper, fill, ink, muted, soft, rule, accent,
 accent-tint, link) onto theme-aware slots, so a figure follows the console's light and dark themes
 with no per-theme copy. `apps/graph/diagrams/view-dom.test.ts` fails if a role goes missing.
 

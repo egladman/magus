@@ -233,7 +233,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 	// Redaction is literal substring matching, so a child that logs the request path
 	// alone ("GET /<tok>/v1/models", the ordinary access-log shape) would print the
 	// token in the clear if only the composite URL were registered.
-	r.registerRedactable(tok)
+	r.Register(types.NewSecret(tok))
 
 	proxy := &httputil.ReverseProxy{
 		Rewrite:      r.rewrite(g, tok),
@@ -268,7 +268,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 	// forwarder that is exactly what it is: presenting the token authorizes an
 	// authenticated request, so a URL reaching a log, a cached output or a knowledge
 	// shard hands any local process the ability to spend the credential.
-	r.registerRedactable(base)
+	r.Register(types.NewSecret(base))
 
 	go func() { _ = srv.Serve(ln) }()
 
@@ -488,6 +488,6 @@ func (r *Resolver) forgetEndpoint(key endpointKey, tok, base string) {
 	}
 	r.endpointMu.Unlock()
 
-	r.unregisterRedactable(tok)
-	r.unregisterRedactable(base)
+	r.unregisterRedactable(types.NewSecret(tok))
+	r.unregisterRedactable(types.NewSecret(base))
 }

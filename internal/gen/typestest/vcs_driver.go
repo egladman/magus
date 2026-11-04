@@ -292,6 +292,74 @@ func (_c *MockVCSDriver_BranchChanges_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// BranchHeads provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) BranchHeads(ctx context.Context, root string) (map[string]string, error) {
+	ret := _mock.Called(ctx, root)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BranchHeads")
+	}
+
+	var r0 map[string]string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (map[string]string, error)); ok {
+		return returnFunc(ctx, root)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) map[string]string); ok {
+		r0 = returnFunc(ctx, root)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, root)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_BranchHeads_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BranchHeads'
+type MockVCSDriver_BranchHeads_Call struct {
+	*mock.Call
+}
+
+// BranchHeads is a helper method to define mock.On call
+//   - ctx context.Context
+//   - root string
+func (_e *MockVCSDriver_Expecter) BranchHeads(ctx interface{}, root interface{}) *MockVCSDriver_BranchHeads_Call {
+	return &MockVCSDriver_BranchHeads_Call{Call: _e.mock.On("BranchHeads", ctx, root)}
+}
+
+func (_c *MockVCSDriver_BranchHeads_Call) Run(run func(ctx context.Context, root string)) *MockVCSDriver_BranchHeads_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_BranchHeads_Call) Return(stringToString map[string]string, err error) *MockVCSDriver_BranchHeads_Call {
+	_c.Call.Return(stringToString, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_BranchHeads_Call) RunAndReturn(run func(ctx context.Context, root string) (map[string]string, error)) *MockVCSDriver_BranchHeads_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Bundle provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) Bundle(ctx context.Context, root string, file string, r types.BundleRange) error {
 	ret := _mock.Called(ctx, root, file, r)
@@ -1688,6 +1756,75 @@ func (_c *MockVCSDriver_DirtyFiles_Call) RunAndReturn(run func(ctx context.Conte
 	return _c
 }
 
+// DiscardCheckout provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) DiscardCheckout(ctx context.Context, root string, dir string, base string) error {
+	ret := _mock.Called(ctx, root, dir, base)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DiscardCheckout")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
+		r0 = returnFunc(ctx, root, dir, base)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockVCSDriver_DiscardCheckout_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DiscardCheckout'
+type MockVCSDriver_DiscardCheckout_Call struct {
+	*mock.Call
+}
+
+// DiscardCheckout is a helper method to define mock.On call
+//   - ctx context.Context
+//   - root string
+//   - dir string
+//   - base string
+func (_e *MockVCSDriver_Expecter) DiscardCheckout(ctx interface{}, root interface{}, dir interface{}, base interface{}) *MockVCSDriver_DiscardCheckout_Call {
+	return &MockVCSDriver_DiscardCheckout_Call{Call: _e.mock.On("DiscardCheckout", ctx, root, dir, base)}
+}
+
+func (_c *MockVCSDriver_DiscardCheckout_Call) Run(run func(ctx context.Context, root string, dir string, base string)) *MockVCSDriver_DiscardCheckout_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_DiscardCheckout_Call) Return(err error) *MockVCSDriver_DiscardCheckout_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockVCSDriver_DiscardCheckout_Call) RunAndReturn(run func(ctx context.Context, root string, dir string, base string) error) *MockVCSDriver_DiscardCheckout_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Drivers provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) Drivers(ctx context.Context, root string, paths []string) (map[string]string, error) {
 	ret := _mock.Called(ctx, root, paths)
@@ -1899,6 +2036,69 @@ func (_c *MockVCSDriver_ExportRevision_Call) Return(err error) *MockVCSDriver_Ex
 }
 
 func (_c *MockVCSDriver_ExportRevision_Call) RunAndReturn(run func(ctx context.Context, dir string, rev string, dstDir string) error) *MockVCSDriver_ExportRevision_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// FastForward provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) FastForward(ctx context.Context, root string, rev string) error {
+	ret := _mock.Called(ctx, root, rev)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FastForward")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, root, rev)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockVCSDriver_FastForward_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FastForward'
+type MockVCSDriver_FastForward_Call struct {
+	*mock.Call
+}
+
+// FastForward is a helper method to define mock.On call
+//   - ctx context.Context
+//   - root string
+//   - rev string
+func (_e *MockVCSDriver_Expecter) FastForward(ctx interface{}, root interface{}, rev interface{}) *MockVCSDriver_FastForward_Call {
+	return &MockVCSDriver_FastForward_Call{Call: _e.mock.On("FastForward", ctx, root, rev)}
+}
+
+func (_c *MockVCSDriver_FastForward_Call) Run(run func(ctx context.Context, root string, rev string)) *MockVCSDriver_FastForward_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_FastForward_Call) Return(err error) *MockVCSDriver_FastForward_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockVCSDriver_FastForward_Call) RunAndReturn(run func(ctx context.Context, root string, rev string) error) *MockVCSDriver_FastForward_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -3174,6 +3374,84 @@ func (_c *MockVCSDriver_Metadata_Call) Return(vCSMeta types.VCSMeta, err error) 
 }
 
 func (_c *MockVCSDriver_Metadata_Call) RunAndReturn(run func(ctx context.Context, dir string) (types.VCSMeta, error)) *MockVCSDriver_Metadata_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// MissingCommits provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) MissingCommits(ctx context.Context, dir string, branch string, head string) (int, error) {
+	ret := _mock.Called(ctx, dir, branch, head)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MissingCommits")
+	}
+
+	var r0 int
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (int, error)); ok {
+		return returnFunc(ctx, dir, branch, head)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) int); ok {
+		r0 = returnFunc(ctx, dir, branch, head)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = returnFunc(ctx, dir, branch, head)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_MissingCommits_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MissingCommits'
+type MockVCSDriver_MissingCommits_Call struct {
+	*mock.Call
+}
+
+// MissingCommits is a helper method to define mock.On call
+//   - ctx context.Context
+//   - dir string
+//   - branch string
+//   - head string
+func (_e *MockVCSDriver_Expecter) MissingCommits(ctx interface{}, dir interface{}, branch interface{}, head interface{}) *MockVCSDriver_MissingCommits_Call {
+	return &MockVCSDriver_MissingCommits_Call{Call: _e.mock.On("MissingCommits", ctx, dir, branch, head)}
+}
+
+func (_c *MockVCSDriver_MissingCommits_Call) Run(run func(ctx context.Context, dir string, branch string, head string)) *MockVCSDriver_MissingCommits_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_MissingCommits_Call) Return(n int, err error) *MockVCSDriver_MissingCommits_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockVCSDriver_MissingCommits_Call) RunAndReturn(run func(ctx context.Context, dir string, branch string, head string) (int, error)) *MockVCSDriver_MissingCommits_Call {
 	_c.Call.Return(run)
 	return _c
 }

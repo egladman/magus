@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,16 +10,244 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/types"
 )
+
+// standInReads counts reads of the healthy stand-in every test here starts on.
+// A test machine truly short of memory must not fail this package.
+var standInReads atomic.Int64
+
+func init() {
+	readPressure = func(context.Context) (string, error) {
+		standInReads.Add(1)
+		return "", nil
+	}
+}
+
+type MemoryPressureSuite struct {
+	suite.Suite
+	reads int
+}
+
+func TestMemoryPressureSuite(t *testing.T) {
+	suite.Run(t, new(MemoryPressureSuite))
+}
+
+// Neither variable may say this test binary sits under a parent magus.
+func (s *MemoryPressureSuite) SetupTest() {
+	s.T().Setenv("MAGUS_LEVEL", "0")
+	s.T().Setenv(spawn.AncestorsEnvVar, "")
+}
+
+func (s *MemoryPressureSuite) reading(reason string, err error) {
+	saved := readPressure
+	s.T().Cleanup(func() { readPressure = saved })
+	s.reads = 0
+	readPressure = func(context.Context) (string, error) {
+		s.reads++
+		return reason, err
+	}
+}
+
+const badMemory = "the memory compressor holds 97% of its segment limit"
+
+func (s *MemoryPressureSuite) gate() (*machineGate, *budgetAdmitter) {
+	b, _ := testBudget(s.T(), 10_000, 8)
+	return testGate(s.T(), b)
+}
+
+func (s *MemoryPressureSuite) TestABadReadingRefusesBeforeTheBudgetIsAsked() {
+	s.reading(badMemory, nil)
+	g, adm := s.gate()
+	_, err := g.acquire(s.T().Context(), types.MachineClaim{Project: "docs", Target: "test", PID: 100})
+	s.Require().ErrorIs(err, types.MemoryPressureHigh)
+	var exit types.ExitError
+	s.Require().ErrorAs(err, &exit)
+	s.Equal(ExitCodeMachineBusy, exit.Code)
+	s.Contains(err.Error(), "not starting docs test")
+	s.Contains(err.Error(), badMemory)
+	s.Contains(err.Error(), "Running steps keep going")
+	s.Zero(adm.requests, "the refusal reaches no budget, so no claim waits, a gate's included")
+}
+
+func (s *MemoryPressureSuite) TestARefusalOffersNoWaitForASeat() {
+	s.reading(badMemory, nil)
+	g, _ := s.gate()
+	_, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test"})
+	s.NotContains(err.Error(), "--wait")
+}
+
+func (s *MemoryPressureSuite) TestARefusalToALeasedWorkerNamesTheOwedFiling() {
+	s.T().Setenv("XDG_STATE_HOME", s.T().TempDir())
+	s.reading(badMemory, nil)
+	g, _ := s.gate()
+	_, err := g.acquire(types.WithJobLease(s.T().Context(), "wave/api"), types.MachineClaim{Target: "test"})
+	s.Require().ErrorIs(err, types.MemoryPressureHigh)
+	s.Contains(err.Error(), LeasedPressureNext("wave/api"))
+	s.NotContains(err.Error(), "never waits for a seat", "a seat is not what this lacks")
+}
+
+// owedGate refuses owed from an integration, so the refusal cannot stop there.
+func (s *MemoryPressureSuite) TestAnIntegrationIsToldToFreeMemory() {
+	s.Contains(LeasedPressureNext("integrate"), "An integration owns its checks, so free memory and run this again")
+}
+
+func (s *MemoryPressureSuite) TestAClaimHeldIntoBadMemoryHandsItsSeatBack() {
+	s.reading("", nil)
+	b, _ := testBudget(s.T(), 10_000, 8)
+	adm := &turningAdmitter{MachineAdmitter: &budgetAdmitter{budget: b}, turn: func() { s.reading(badMemory, nil) }}
+	g := &machineGate{admit: adm, log: newLogger("", 0)}
+	_, err := g.acquire(s.T().Context(), types.MachineClaim{Project: ".", Target: "ci", PID: 100})
+	s.Require().ErrorIs(err, types.MemoryPressureHigh)
+	s.Empty(b.Snapshot().Holders, "the seat went back")
+}
+
+func (s *MemoryPressureSuite) TestANestedRunPassesUnderItsRunningParent() {
+	s.reading(badMemory, nil)
+	g, _ := s.gate()
+	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{"1:parent"}})
+	s.Require().NoError(err)
+	release()
+	s.Zero(s.reads)
+}
+
+var underWrapper = "1:" + types.WrapperInvocation("exec")
+
+func (s *MemoryPressureSuite) TestARunUnderOnlyAWrapperIsRefused() {
+	s.reading(badMemory, nil)
+	g, adm := s.gate()
+	_, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{underWrapper}})
+	s.Require().ErrorIs(err, types.MemoryPressureHigh)
+	s.Zero(adm.requests, "no running step sits above it")
+}
+
+func (s *MemoryPressureSuite) TestARunUnderAStepUnderAWrapperPasses() {
+	s.reading(badMemory, nil)
+	g, _ := s.gate()
+	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{underWrapper, "2:parent"}})
+	s.Require().NoError(err)
+	release()
+	s.Zero(s.reads)
+}
+
+func (s *MemoryPressureSuite) TestARunUnderAWrapperUnderAStepPasses() {
+	s.T().Setenv("MAGUS_LEVEL", "1")
+	s.reading(badMemory, nil)
+	g, _ := s.gate()
+	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{underWrapper}})
+	s.Require().NoError(err)
+	release()
+}
+
+func (s *MemoryPressureSuite) TestANestedRunThatLostItsAncestryPassesToo() {
+	s.T().Setenv("MAGUS_LEVEL", "1")
+	s.reading(badMemory, nil)
+	g, _ := s.gate()
+	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+	s.Require().NoError(err)
+	release()
+}
+
+func (s *MemoryPressureSuite) TestAPartialReadingSaysSoOnceAndStillRefuses() {
+	s.reading(badMemory, errors.New("compressor segments are unread"))
+	g, _ := s.gate()
+	var logged bytes.Buffer
+	g.log = slog.New(slog.NewTextHandler(&logged, nil))
+	for range 2 {
+		_, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+		s.Require().ErrorIs(err, types.MemoryPressureHigh)
+	}
+	s.Equal(1, strings.Count(logged.String(), "compressor segments are unread"))
+}
+
+func (s *MemoryPressureSuite) TestATestGateReadsTheStandIn() {
+	before := standInReads.Load()
+	g, _ := s.gate()
+	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+	s.Require().NoError(err)
+	release()
+	s.Greater(standInReads.Load(), before)
+}
+
+func (s *MemoryPressureSuite) TestAHealthyReadingSeatsTheClaim() {
+	s.reading("", nil)
+	g, adm := s.gate()
+	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+	s.Require().NoError(err)
+	release()
+	s.Equal(1, adm.requests)
+}
+
+func (s *MemoryPressureSuite) TestAnUnreadableHostSaysSoOnceAndAdmits() {
+	s.reading("", errors.New("this platform has no memory-pressure reading"))
+	g, adm := s.gate()
+	var logged bytes.Buffer
+	g.log = slog.New(slog.NewTextHandler(&logged, nil))
+	for range 2 {
+		release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+		s.Require().NoError(err)
+		release()
+	}
+	s.Equal(2, adm.requests)
+	s.Equal(1, strings.Count(logged.String(), "memory reading is missing or partial"))
+	s.Contains(logged.String(), "this platform has no memory-pressure reading")
+}
+
+// A composer waiting on its members is a running step. Memory going bad while
+// it waited must not fail its retake.
+func (s *MemoryPressureSuite) TestARunningStepRetakesItsClaimUnderPressure() {
+	s.reading("", nil)
+	g, _ := s.gate()
+	claim := types.MachineClaim{Target: "ci", PID: 100}
+	id, release, err := g.claim(s.T().Context(), claim)
+	s.Require().NoError(err)
+	h := &machineHold{gate: g, claim: claim, id: id, release: release}
+	h.lend()
+	s.Empty(h.current())
+
+	s.reading(badMemory, nil)
+	s.Require().NoError(h.reclaim(s.T().Context()))
+	s.NotEmpty(h.current())
+	s.Zero(s.reads, "a retake reads no memory")
+	h.close()
+}
+
+func (s *MemoryPressureSuite) TestAdmitMachineRefusesHostWorkToo() {
+	s.reading(badMemory, nil)
+	_, adm := s.gate()
+	_, err := AdmitMachine(s.T().Context(), adm, types.MachineClaim{Project: ".", Target: "session-brief"}, false)
+	s.Require().ErrorIs(err, types.MemoryPressureHigh)
+}
+
+func (s *MemoryPressureSuite) TestNoAdmitterReadsNoMemory() {
+	s.reading(badMemory, nil)
+	release, err := AdmitMachine(s.T().Context(), nil, types.MachineClaim{Target: "test"}, false)
+	s.Require().NoError(err, "broker: off wires no admitter, and is the one way out of a machine stuck bad")
+	release()
+	s.Zero(s.reads)
+}
+
+// turningAdmitter runs turn during its Claim, as a machine going bad during a
+// held wait does.
+type turningAdmitter struct {
+	MachineAdmitter
+	turn func()
+}
+
+func (a *turningAdmitter) Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+	a.turn()
+	return a.MachineAdmitter.Claim(ctx, c)
+}
 
 func TestMachineRefusalNamesTheOversizedClaimAndTheWaitForm(t *testing.T) {
 	b, _ := testBudget(t, 4000, 8)
@@ -179,6 +408,12 @@ func (refusingAdmitter) Release(context.Context, string) {}
 
 func (refusingAdmitter) Overrun(context.Context, string) {}
 
+func (a refusingAdmitter) HoldGroup(context.Context, string, int, string) (string, error) {
+	return "", a.err
+}
+
+func (refusingAdmitter) ReleaseHold(context.Context, string) error { return nil }
+
 // overrunAdmitter sends each overrun it is told of on overruns.
 type overrunAdmitter struct {
 	refusingAdmitter
@@ -248,6 +483,7 @@ func (a *groupAdmitter) ReleaseHold(_ context.Context, id string) error {
 // unansweredHolder is a broker that records each hold on whatever context it was handed
 // and answers no release.
 type unansweredHolder struct {
+	MachineAdmitter
 	holdErr     error
 	holdHasTime bool
 }

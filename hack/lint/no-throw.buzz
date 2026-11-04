@@ -1,0 +1,279 @@
+// no-throw: a function returns one value carrying its result and its error.
+// Only the top-level entry throws. In TS and JS that is module scope,
+// unreachable(x: never), and each scope ENTRIES names. no-throw.mjs parses;
+// this judges against the counts in no-throw.jsonl, which may only fall.
+//
+// Tier 2, measured shape: no file holds more throws than its recorded count.
+namespace nothrow;
+
+import "assert";
+import "proc";
+import "std";
+import "encoding/json";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final THIS = "hack/lint/no-throw.buzz";
+final CEILING = "hack/lint/no-throw.jsonl";
+final PARSER = "hack/lint/no-throw.mjs";
+
+final FIX = "Return an error value; throw only in the top-level entry. "
+    + "A count in " + CEILING + " may only fall.";
+
+// Site is one throw as a parser reports it. scope is the dotted chain of
+// classes and functions around it, outermost first. Buzz sites join here once
+// buzz\parse lands, with an error signature as a second construct.
+export object Site {
+    path: str,
+    line: int = 0,
+    col: int = 0,
+    construct: str = "throw",
+    scope: str = "",
+    moduleScope: bool = false,
+    unreachable: bool = false,
+}
+
+// Entry is a scope the host calls as its entry, where a throw is the only
+// answer the host reads.
+export object Entry {
+    path: str,
+    scope: str,
+    why: str,
+}
+
+export final ENTRIES = [
+    Entry{ path = "spells/harness/opencode/plugins/magus.js", scope = "MagusGuard",
+        why = "a throw from the plugin entry is OpenCode's only way to refuse to load the guard" },
+];
+
+// Ceiling is one line of the count file, and the line it sits on.
+export object Ceiling {
+    path: str,
+    construct: str,
+    count: int,
+    line: int = 0,
+}
+
+export fun reads() > [str] {
+    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs", CEILING, PARSER];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final ceilingFile = support\named(files, p: CEILING);
+    if (ceilingFile == null) {
+        return [support\missing(CEILING)];
+    }
+    final sources = mut [<Path>];
+    foreach (f in files) {
+        if (scanned(f.value)) {
+            sources.append(f);
+        }
+    }
+    return judge(sites(sources), ceilings: ceilings(support\read(ceilingFile!)), entries: ENTRIES);
+}
+
+// scanned reports whether the parser reads p. testdata plants throws.
+export fun scanned(p: str) > bool {
+    if (("/" + p).indexOf("/testdata/") != null) {
+        return false;
+    }
+    foreach (ext in [".ts", ".tsx", ".js", ".mjs"]) {
+        if (p.endsWith(ext)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// sites runs the parser once per base directory the files sit under.
+export fun sites(files: [Path]) > [Site] !> any {
+    final byBase = mut {<str: mut [str]>};
+    foreach (f in files) {
+        final base = if (f.base == "") "." else f.base;
+        if (byBase[base] == null) {
+            byBase[base] = mut [<str>];
+        }
+        byBase[base]!.append(f.value);
+    }
+    final found = mut [<Site>];
+    foreach (base in support\sorted(byBase.keys())) {
+        final run = proc\exec("node", args: [PARSER, base],
+            opts: proc\ExecOptions{ stdin = byBase[base]!.join("\n"), quiet = true, allowFailure = true });
+        if (run.code != 0) {
+            throw "{PARSER} exited {run.code}: " + run.stderr.trim();
+        }
+        foreach (line in run.stdout.split("\n")) {
+            if (line != "") {
+                found.append(site(json\parse(line)));
+            }
+        }
+    }
+    return found;
+}
+
+fun site(row: {str: any}) > Site {
+    return Site{ path = row["path"] ?? "", line = std\toInt(row["line"] ?? 0), col = std\toInt(row["col"] ?? 0),
+        construct = row["construct"] ?? "throw", scope = row["scope"] ?? "",
+        moduleScope = row["moduleScope"] ?? false, unreachable = row["unreachable"] ?? false };
+}
+
+// ceilings reads the count file; the last line per path and construct wins.
+export fun ceilings(text: str) > {str: Ceiling} !> any {
+    final acc = mut {<str: Ceiling>};
+    var n = 0;
+    foreach (line in text.split("\n")) {
+        n = n + 1;
+        if (line.trim() == "") {
+            continue;
+        }
+        final row: {str: any} = json\parse(line);
+        final c = Ceiling{ path = row["path"] ?? "", construct = row["construct"] ?? "",
+            count = std\toInt(row["count"] ?? 0), line = n };
+        acc[key(c.path, construct: c.construct)] = c;
+    }
+    return acc;
+}
+
+fun key(path: str, construct: str) > str {
+    return construct + " " + path;
+}
+
+fun entryFor(s: Site, entries: [Entry]) > Entry? {
+    foreach (e in entries) {
+        if (e.path == s.path and e.scope == s.scope) {
+            return e;
+        }
+    }
+    return null;
+}
+
+// judge fails each site of a file over its count, a count above what its file
+// holds, and an entry no site uses.
+export fun judge(sites: [Site], ceilings: {str: Ceiling}, entries: [Entry]) > [Finding] {
+    final counted = mut {<str: mut [Site]>};
+    final used = mut {<str: bool>};
+    foreach (s in sites) {
+        final entry = entryFor(s, entries: entries);
+        if (entry -> e) {
+            used[e.path + " " + e.scope] = true;
+            continue;
+        }
+        if (s.moduleScope or s.unreachable) {
+            continue;
+        }
+        final k = key(s.path, construct: s.construct);
+        if (counted[k] == null) {
+            counted[k] = mut [<Site>];
+        }
+        counted[k]!.append(s);
+    }
+
+    final found = mut [<Finding>];
+    foreach (k in support\sorted(counted.keys())) {
+        final held = counted[k]!;
+        final allowed = ceilings[k]?.count ?? 0;
+        if (held.len() <= allowed) {
+            continue;
+        }
+        foreach (s in held) {
+            found.append(Finding{ path = s.path, line = s.line, col = s.col,
+                message = "{s.construct} in {s.scope}, below the top-level entry: {s.path} holds {held.len()}, "
+                    + "over the {allowed} {CEILING} records",
+                fix = FIX });
+        }
+    }
+    foreach (k in support\sorted(ceilings.keys())) {
+        final c = ceilings[k]!;
+        final held = counted[k]?.len() ?? 0;
+        if (held < c.count) {
+            found.append(Finding{ path = CEILING, line = c.line,
+                message = "records {c.count} {c.construct} for {c.path}, which holds {held}",
+                fix = if (held == 0) "Delete the line: the count only falls." else "Lower it to {held}: the count only falls." });
+        }
+    }
+    foreach (e in entries) {
+        if (used[e.path + " " + e.scope] == null) {
+            found.append(Finding{ path = THIS, message = "names {e.scope} in {e.path} as an entry, and it holds no throw",
+                fix = "Delete the entry from ENTRIES." });
+        }
+    }
+    return found;
+}
+
+final HELPER_TS = `export function parse(text: string): number \{
+  if (text === "") throw new Error("empty");
+  return Number(text);
+}
+export const load = async (): Promise<void> => \{
+  throw new Error("load");
+};
+class Store \{
+  get(key: string): string \{
+    throw new Error(key);
+  }
+}
+function unreachable(x: string): never \{
+  throw new Error(x);
+}
+`;
+
+final ENTRY_TS = `const port = Number(process.env.PORT);
+if (Number.isNaN(port)) \{
+  throw new Error("PORT is not a number");
+}
+export function unreachable(x: never): never \{
+  throw new Error("unreachable: " + String(x));
+}
+const note = "a throw in a string is not one";
+// throw in a comment is not one either
+`;
+
+fun lines(found: [Finding]) > [str] {
+    final acc = mut [<str>];
+    foreach (f in found) {
+        acc.append("{f.path}:{f.line} {f.message}");
+    }
+    return acc;
+}
+
+test "a throw at the module's top level or in unreachable(x: never) passes" {
+    final files = support\fixture({"entry.ts": ENTRY_TS});
+    assert\equal(lines(judge(sites(files), ceilings: {<str: Ceiling>}, entries: [<Entry>])), want: [<str>],
+        message: "entry throws");
+}
+
+test "a throw in a function, an arrow, a method or a mistyped unreachable fails" {
+    final files = support\fixture({"helper.ts": HELPER_TS});
+    final over = ", below the top-level entry: helper.ts holds 4, over the 0 hack/lint/no-throw.jsonl records";
+    assert\equal(lines(judge(sites(files), ceilings: {<str: Ceiling>}, entries: [<Entry>])), want: [
+        "helper.ts:2 throw in parse" + over,
+        "helper.ts:6 throw in load" + over,
+        "helper.ts:10 throw in Store.get" + over,
+        "helper.ts:14 throw in unreachable" + over,
+    ], message: "helper throws");
+}
+
+test "tsx and mjs parse as their own kinds" {
+    final files = support\fixture({"a.tsx": `export const A = () => \{ if (!ok) throw new Error("x"); return <div />; };`,
+        "b.mjs": `export function b() \{ throw new Error("b"); }`});
+    assert\equal(sites(files).len(), want: 2, message: "one throw each");
+}
+
+test "a file at its count passes, over it fails, and a count above the file fails" {
+    final helper = Site{ path = "a.ts", line = 3, scope = "f" };
+    final at = ceilings(`\{"path": "a.ts", "construct": "throw", "count": 1}`);
+    final over = "a.ts:3 throw in f, below the top-level entry: a.ts holds 2, over the 1 hack/lint/no-throw.jsonl records";
+    assert\equal(lines(judge([helper], ceilings: at, entries: [<Entry>])), want: [<str>], message: "at its count");
+    assert\equal(lines(judge([helper, helper], ceilings: at, entries: [<Entry>])), want: [over, over], message: "over it");
+    assert\equal(lines(judge([<Site>], ceilings: at, entries: [<Entry>])),
+        want: ["hack/lint/no-throw.jsonl:1 records 1 throw for a.ts, which holds 0"], message: "a stale count");
+}
+
+test "a named entry passes, and an entry with no throw fails" {
+    final entry = Entry{ path = "plugin.ts", scope = "Plugin.apply", why = "the host reads a throw" };
+    final s = Site{ path = "plugin.ts", line = 9, scope = "Plugin.apply" };
+    assert\equal(lines(judge([s], ceilings: {<str: Ceiling>}, entries: [entry])), want: [<str>], message: "used");
+    assert\equal(lines(judge([<Site>], ceilings: {<str: Ceiling>}, entries: [entry])),
+        want: ["hack/lint/no-throw.buzz:0 names Plugin.apply in plugin.ts as an entry, and it holds no throw"],
+        message: "unused");
+}

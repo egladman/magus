@@ -184,7 +184,7 @@ func TestEndpointClosesWithRun(t *testing.T) {
 // as a credential is. Otherwise a cached log or a knowledge shard hands a local
 // process the ability to spend the upstream key.
 //
-// Delete the registerRedactable call in startForwarder and this fails.
+// Delete the Register call in startForwarder and this fails.
 func TestEndpointURLIsRedactable(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
 

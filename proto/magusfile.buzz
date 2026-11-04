@@ -5,6 +5,7 @@ import "project/../docs";
 import "project/../console";
 import "../hack/magusfile/drift" as drift;
 import "../hack/magusfile/index" as index;
+import "../hack/magusfile/deviations" as deviations;
 import "fs";
 import "vcs";
 
@@ -25,9 +26,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // ../go.mod would rerun on every dependency bump; this wants a per-target version probe.
     ctx.needs(index_generate);
     // The TS client trees are declared here, not by docs and console: only this target
-    // produces them, and two claims on one path is MGS4002. gen/** is restated because
-    // writesFiles replaces the spell baseline.
-    ctx.writesFiles(["gen/**", docs\file("src/gen/**"), console\file("src/gen/**")]);
+    // produces them, and two claims on one path is MGS4002. The exception is types.ts,
+    // which each project's types-generate writes. gen/** is restated because writesFiles
+    // replaces the spell baseline.
+    ctx.writesFiles(["gen/**", docs\file("src/gen/**"), console\file("src/gen/**"),
+        docs\file("!src/gen/magus/types.ts"), console\file("!src/gen/magus/types.ts")]);
     // The root generate gate never runs buf, so this gates all three trees itself.
     final GENERATED = ["gen", fs\join("..", "docs", "src", "gen"),
                        fs\join("..", "console", "src", "gen")];
@@ -67,19 +70,34 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
     buf["buf-format"](ctx);
 }
 
-export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
+// Job lint goals pass written files, including generated Go and config files.
+// Buf accepts one module input; lint the module so these paths cannot become inputs.
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    buf["buf-lint"](ctx, {"args": ["."]});
+}
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate, lint);
+    ctx.readsFiles(["buf-breaking.deviations.jsonl", "**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"]);
+    final ledger = "buf-breaking.deviations.jsonl";
     // buf reads the baseline from git only.
     if (vcs\name() != "git") { return; }
+    // One read, so buf and the ledger cannot compare against different bases.
     final base = vcs\base();
-    // A ref from before the module existed has no schema to break.
     final schema = vcs\cmd(["cat-file", "-e", base + ":proto/buf.yaml"],
-                           opts: {"allow_failure": true, "quiet": true});
+                           opts: vcs\CommandOptions{allowFailure = true, quiet = true});
     if (base == "" or !schema["ok"]) {
-        magus\log.info("ci: no proto/buf.yaml at `{base}`; skipping buf-breaking");
-        return;
+        throw "ci: cannot read proto/buf.yaml at `{base}`, so buf-breaking has nothing to compare; "
+            + "fetch that ref, or set vcs.base_ref to one holding the schema";
     }
-    buf["buf-breaking"](ctx, {"args": ["--against",
-        vcs\root() + "/.git#ref={base},subdir=proto"]});
+    final run = buf["buf-breaking"](ctx, {"allowFailure": true, "args": ["--against",
+        vcs\root() + "/.git#ref={base},subdir=proto", "--error-format=gitlab-code-quality"]});
+    final shown = "proto/{ledger}";
+    final verdict = deviations\judge(run, findingsExit: 100, ledger: ledger, shown: shown, base: base);
+    if (verdict.failure != "") {
+        throw "ci: buf-breaking: {verdict.failure}";
+    }
+    if (verdict.permitted > 0) {
+        ctx.permitted(verdict.permitted);
+        magus\log.warn("proto ci: permitted {verdict.permitted} findings ({shown})");
+    }
 }

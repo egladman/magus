@@ -384,6 +384,9 @@ How it works, and where the guards sit:
   services (activity, metrics). It does NOT serve `/mcp`, the share endpoint, or any
   mutating route. The listener closes when the share expires (15 minutes by default,
   at most 24 hours; a longer request is refused), and on daemon shutdown.
+- **Plaintext HTTP on the LAN.** The listener has no TLS. Anyone on the network can
+  read the link's token and the traffic until the share expires, which is why the
+  default lifetime is short and the token binds to the first device that uses it.
 - **Short-lived, read-only token.** Each share mints a fresh `mgl_` token holding
   `console=read`, kept in daemon memory as a hash. The listener is bound 1:1 to that
   one token: it accepts nothing else. The operator token, stored tokens, an expired

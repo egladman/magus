@@ -1449,6 +1449,7 @@ func TestServerVersionSkewPoolParentRemedy(t *testing.T) {
 		Socket:    "unix:///tmp/magus-1314-deadbeef.sock",
 	}
 	got := serverVersionSkew(pool)
+	assert.True(t, strings.HasPrefix(got, "[MGS3048] version skew: "), got)
 	assert.Contains(t, got, "pool parent")
 	assert.Contains(t, got, "--pools")
 	assert.NotContains(t, got, "server start")
@@ -1459,6 +1460,7 @@ func TestServerVersionSkewPoolParentRemedy(t *testing.T) {
 		Socket:    "unix:///tmp/server.sock",
 	}
 	got = serverVersionSkew(server)
+	assert.True(t, strings.HasPrefix(got, "[MGS3048] version skew: "), got)
 	assert.Contains(t, got, "the server serving it")
 	assert.Contains(t, got, "server start")
 	assert.NotContains(t, got, "--pools")

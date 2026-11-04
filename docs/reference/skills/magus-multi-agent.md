@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 30696
-skill_short_bytes: 23760
+skill_full_bytes: 27062
+skill_short_bytes: 21296
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `147` |
-| `knowledge-schema-version` | `24` |
-| `skill-content` | `9035dd1fee96` |
+| `skill-stamp-format` | `1` |
+| `knowledge-schema-version` | `25` |
+| `skill-content` | `8bc9be4edad9` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -100,7 +100,7 @@ Disjoint write sets LICENSE parallelism; they do not require it. Every worker ca
 a fixed load before it reads a line of the diff.
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn.
-- For the rest, read the grouping lens (`magus\insight` through `client`,
+- For the rest, read the grouping metric (`magus\workspace().grouping` through `client`,
   or `grouping history` in `magus describe job <job>`) and weigh each measured shape
   against the others. It reports
   and never decides.
@@ -123,17 +123,10 @@ The loop: define, partition, hand out, observe, evaluate, course-correct, integr
 
 ## Keep worker records out of the user update
 
-Read a worker's structured result, not its whole event stream. Keep its job id,
-outcome, changed paths, validation refs and unresolved risks; reopen the relevant
-evidence when verification needs it. Persist the complete JSON or JSONL in the
-host capture or result file. Do not echo it into another tool call or the reply.
-
-For a job validation, project `problems`, `unchecked` and a count of `permitted`
-from `-o json` before it reaches your context. Keep the producer's failure status
-when piping. Inspect individual permitted deviations only when they affect a
-decision; `--dry-run` text intentionally previews the full record. Prepare the
-spec once in a scratch file (`job_spec` below); do not retype its full exception
-list on every retry:
+Read worker's structured result, never whole event stream. Keep job id, outcome, changed paths, validation refs, unresolved risks.
+Persist full JSON/JSONL in host capture or result file; never echo it into another call or reply.
+Job validation: project `problems`, `unchecked`, count of `permitted` from `-o json`; keep producer's failure status when piping.
+Inspect a permitted deviation only when it affects a decision. Spec once in scratch file (`job_spec`); never retype exception list per retry:
 
 ```sh
 set -o pipefail
@@ -141,13 +134,8 @@ magus job fork --stdin --dry-run -o json < "$job_spec" |
   jq -e 'if .job.id then {job: .job.id, problems, unchecked, permitted_count: (.permitted // [] | length)} else error("missing job validation") end'
 ```
 
-Tell the person what changed, what passed, what remains unverified, and any
-decision they need to make. A routine claim, handled denial, or already-recorded
-deviation is not a progress update. Collapse repeated events into the current
-blocker and next action. When a waiver skips validation or accepts a material
-risk, explain that consequence once in plain language and link the evidence;
-do not paste waiver objects, claim lists or guard transcripts. A detailed audit
-requested by the person can open those records.
+Tell person: what changed, passed, remains unverified, decisions needed. Routine claim, handled denial, recorded deviation: not an update; collapse repeats into current blocker + next action.
+Waiver skipping validation or accepting material risk: one plain sentence + evidence link, never pasted waiver objects, claim lists, guard transcripts.
 
 ## Declare the interface before any job forks
 
@@ -186,28 +174,13 @@ tree. Skipping the declaration because nothing is forked is the same failure.
 
 Before spawning, state the topology: the model per job, and whether isolated worktrees are available.
 
-- Fan-out and depth are not capped unless the workspace sets a cap. Spawn as many
-  jobs, nested as deep, as the partition supports.
-- A limit exists only when magus.yaml's `jobs` section sets one. Read it with
-  `magus config view` or `config`.
-  - `max_depth` and `max_live` make `magus job fork` refuse past them, naming the key.
-  - `default_timeout` bounds a fork that names no `--timeout`.
-  - Honor a cap the user states the same way.
-- Editing costs the workspace nothing; VALIDATION contends: the magus runs a job
-  triggers, which share the machine's build budget. An integrator waits for that budget,
-  explicitly (`magus status --wait` piped into its run) and for as long as it decided, never a worker; a spawn
-  or `magus job fork` into a full one says how full it is.
-  Serialize validations that share a worktree, even when their write sets are disjoint.
+- No cap on fan-out or depth unless magus.yaml `jobs` sets one (`magus config view`, `config`): `max_depth`, `max_live` refuse past them; `default_timeout` bounds a fork with no `--timeout`. User-stated cap: same.
+- Editing costs nothing; VALIDATION contends for machine build budget. Only integrator waits for it (`magus status --wait` piped into its run), never a worker; spawn or `magus job fork` into full budget says how full.
+- Serialize validations sharing a worktree, even with disjoint write sets.
 
-Assign the check from the pipeline the workspace composed, not from convention.
-`magus describe target ci <project>` names what `ci` chains and in what order.
-
-- A job gets the narrowest check that covers its edits: the target from that
-  decomposition. Scope it to the job's own tests with the runner's filter after `--`
-  where one exists. A go test check naming exactly the packages of the write paths
-  (`go::go-test . -- ./pkg/... -run 'Store'`) may filter their tests too. Never the full suite.
-- The integration job owns the full `go-test` and `lint`, and runs every check a merged
-  worker filed as owed. The integrator re-runs the described order, and `magus affected ci` re-proves the whole composition.
+Assign check from composed pipeline, never convention: `magus describe target ci <project>` names what `ci` chains, in order.
+- Job: narrowest target covering its edits, scoped with runner filter after `--` (`go::go-test . -- ./pkg/... -run 'Store'`). Never full suite.
+- Integration job: full `go-test`, `lint`, every check a merged worker filed owed; re-runs described order; `magus affected ci` re-proves composition.
 
 A job's check is that narrow target, never the gate. The root gates ONCE, in its own
 tree, after every unit lands.
@@ -253,14 +226,14 @@ that names one.
 When the tier is unclear, start at economy. A job that fails its criteria there is
 re-forked one tier up, not retried at the same one.
 
-Tiers are the workspace's. `--model` takes a tier or a
-model. magus never picks a model live: re-fork to change a tier.
+Tiers are the workspace's. `--model` takes a tier
+or a model. magus never picks a model live: re-fork to change a tier.
 
 | Shipped tier | Assign |
 |---|---|
 | principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and a bounded set of projects |
-| economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
+| standard | isolated implementation with a clear contract and a bounded set of projects, and tracing behavior through code |
+| economy | mechanical edits, fixtures, docs, inventory, and lookups the graph answers (exists, depends-on, is-generated) |
 
 If the host cannot select models or reasoning effort, keep its default. Tool access
 is a separate axis: evidence gathering, scouting, and review get read-only tools
@@ -276,8 +249,8 @@ To prove something, brute-force it at economy:
 - The principal tier only reconciles the claims where workers disagree.
 
 Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
-row) and carries no transcript. Where the brief names that size, the
-worker reports and stops before passing it.
+row) and carries no transcript.
+Where the brief names that size, the worker reports and stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map. A child reports its proposed descendants to its parent before it
@@ -301,7 +274,6 @@ magus affected <target> --plan
 
 For a proposed change whose paths are known but not yet edited, plan those paths
 instead of the current diff (`--stdin --plan`, one repo-relative path per line).
-
 Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`.
 Use a shard only as the first partition. If paths are unknown, query the task's symbols,
 files, and projects before producing a stdin plan.
@@ -321,8 +293,8 @@ Read the facts:
 - `claims[].target` names the target that regenerates a path. Generated outputs have
   one integration owner and are never hand-edited by workers.
 - `depends_on` carries the owner's direct edges.
-- Affinity stays with `client` (`magus\insight`, read affinity). Without MCP,
-  run `magus buzz -e` printing `magus\insight().affinity`.
+- Affinity stays with `client` (`magus\history().affinity`). Without MCP,
+  run `magus buzz -e` printing `magus\history().affinity()`.
 - Use `magus refs <symbol>` when two jobs may touch the same API.
 
 A read-only job has no write set, so it is outside this analysis.
@@ -411,18 +383,17 @@ Follow-up message to bound worker: only what changed.
 Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
 any cap the user set for the tree. Require the worker to:
 
-- export `BAGGAGE=magus.lease=<its id>` before it works: the guard grades its writes only when that is
-  set;
+- export `BAGGAGE=magus.lease=<its id>` before it works: the guard grades its writes only
+  when that is set;
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
 - never wait for the build budget, `magus status --wait` included. When a full budget refuses its check, it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `magus job wait` passes that result and the integration runs the check;
-- never exit its row or report back while it waits on a reply from you: an answer that lands after the row ended reaches nobody.
+- never exit its row while it waits on a reply from you: ending its turn with the question as its final text leaves the row open and the worker resumable.
 
 End every brief with the step that files the result, as the worker's LAST act before
 it reports back. A brief that leaves it out gets a prose report and a row that never
-moves. The step: `magus job exit <job> --stdin` with a record of `schema_version` 2, `job`,
-`changed_paths`, `validation` (`command` and `output_ref`), `gate_evidence` (one `gate_id` and `output_ref` per named gate), `descendants` and
-`unresolved_risks`; `magus job exit --schema` prints the shape.
+moves. The step: `magus job exit <job> --stdin`, filing the shape `magus job exec <row>` printed.
+Never inline the result fields in a brief; the row prints them filled in.
 Keep unresolved risks mandatory.
 
 A worker writes only its own row and the children it forks. Every other store write
@@ -436,7 +407,8 @@ After the spawn, the row carries the job:
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
 - Only a row with a check or a goal can pass. Fork a scout `--read-only`; it passes only
-  through a script check (reference.md), and a prose scout ends no_return by design.
+  through a script check (reference.md) or by filing a result: a read-only row whose holder files a result is
+  recorded pass, and only a row with nothing filed ends no_return.
 
 [reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
 job's boundary, how magus ends abandoned jobs, and what `magus job wait` checks.
@@ -461,38 +433,15 @@ Never message a worker to ask how it is going, only to CHANGE what it was handed
 ## Integrate and verify
 
 The root never builds. The integrator is a role, never a check: spawned `<parent>/integrate
-<job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits. As jobs finish:
+<job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits.
 
-1. Compare the store against the ACTUAL diff since each job's checkpoint, not the
-   paths it reported (`magus graph diff --rev <revision>` for the domain). A differing
-   dirty digest means it saw a tree you are not diffing.
-2. Run `magus job wait <job>` on each returned job BEFORE you read its result. It
-   checks what is mechanical:
-   - every changed path inside the declared write paths and outside the denied ones;
-   - a change set that is not empty on a row that writes;
-   - the descendants the store carries;
-   - the output ref, bound to a run of THAT JOB'S OWN CHECK which the store recorded
-     as PASSING.
-
-   A job that verifies is recorded `pass`. A rejection exits 1 naming every violation;
-   a result that will not decode exits 2. A holder does not verify its own job, or a
-   sibling's.
-
-   Then reopen the evidence yourself (`magus query output <ref>`). A worker's prose about its criteria is not that evidence.
-3. Resolve cross-job API changes centrally; never assign the same seam twice.
-4. Regenerate declared outputs once, after source work converges and before the full
-   test run, or a drift test fails for nothing.
-5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
-   invalidates the original partition, stop parallel integration and reconcile.
-6. Read the integrated changeset with `magus diff --impact` before landing it.
-   It is context, never a verdict: nothing gates on it.
-7. Validate once per wave, not once per fix:
-   - After a failed full run, read it (`magus query output <ref>`). Rerun only the
-     failing tests, with the runner's filter after `--`, until green; `magus-run`
-     lists one per runner. Then run the full suite once.
-   - Name a test that fails for an outside reason once, and do not rerun it.
-   - A failing set that repeats unchanged stops the wave and goes to the person.
-8. Run `magus affected ci` once, at the end, and evaluate the top-level acceptance criteria.
+As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
+`magus job wait <job>` before reading each result; reopen evidence with
+`magus query output <ref>`; resolve shared seams once; regenerate declared outputs
+once; re-plan with `magus affected <target> --plan` if the partition broke; read
+`magus diff --impact` for context only; validate once per wave; finish with
+`magus affected ci`. [reference.md](reference.md#integrate-and-verify) has the
+mechanical wait checks and the wave loop.
 ````
 
 
@@ -508,9 +457,9 @@ magus agent install --tar | tar -xO -f - magus-multi-agent-full/SKILL.md
 # Splitting work across agents
 
 Count the WRITE SETS your change needs (the distinct groups of files to edit), not the
-projects it invalidates. Getting this backwards is the standard fan-out failure: a
+projects it invalidates. Getting this backwards is the standard fan-out failure. A
 one-line edit in a central package invalidates half the workspace and is still one
-edit, and fanning it out produces several agents editing one file.
+edit; fanned out, it puts several agents on one file.
 
 `magus affected <target> --plan` partitions VALIDATION: which targets to run, grouped
 for runner balance. It is neither an edit assignment nor a proof of write isolation.
@@ -530,9 +479,8 @@ magus affected ci --plan --stdin            # plan PROPOSED paths, before editin
 You do not need to be asked to split work. "Split this across agents" is one way in;
 several disjoint write sets you can name is another.
 
-Fan-out is not inherently expensive. What costs is unbounded fan-out:
-workers that hand work on without a shrinking scope, jobs with no acceptance criteria
-so nobody can say when to stop, and a principal model assigned to mechanical edits. Each of those is a choice made below, not a property of fanning out. Say what a round
+What costs is unbounded fan-out, not fan-out: a hand-on without a shrinking scope,
+a job with no criteria, a principal model on mechanical edits. Say what a round
 costs when the user is deciding, and prefer the smallest fan-out that covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
@@ -565,16 +513,14 @@ The guard enforces this by role, and the role is the live lease: the root may ta
 ## Coalesce what the write sets allow
 
 Disjoint write sets LICENSE parallelism; they do not require it. Every worker carries
-a fixed load before it reads a line of the diff: a system
-prompt, the repository's instruction file, the routing index, the skills that
-load, and the graph queries it runs to find its own footing, spent identically
-whether the unit is fifty lines or five hundred. So after partitioning,
-ask whether each unit is big enough to be worth a worker.
+a fixed load before it reads a line of the diff (system prompt, instruction
+file, routing index, skills, its own graph queries), so ask whether each unit is big
+enough to be worth one.
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn.
   Two is two loads for one unit of work, and the second starts by rediscovering
   what the first just learned.
-- For the rest, read the grouping lens (`magus\insight` through `client`,
+- For the rest, read the grouping metric (`magus\workspace().grouping` through `client`,
   or `grouping history` in `magus describe job <job>`) and weigh each measured shape
   against the others: chained, split and solo each report the load before a
   first write and the context, wall time and collisions per group. It reports
@@ -589,19 +535,15 @@ ask whether each unit is big enough to be worth a worker.
 Prove it before you plan it. A claim a plan or brief rests on cites the output ref of
 a run that settled it. A guess nobody ran stays out of the plan.
 
-Graph engineering is a natural evolution of loop engineering: the graph improves
-the loop's partition and collision decisions, and does not replace the loop. The loop:
-state the goal and acceptance criteria, partition, hand out, observe, evaluate against
-the evidence, revise ownership or ordering, then integrate.
+The loop: state the goal and acceptance criteria, partition, hand out, observe,
+evaluate against the evidence, revise ownership or ordering, then integrate. Graph engineering
+is a natural evolution of loop engineering: it improves the partition, never replaces the loop.
 
 Acceptance evidence is an output ref the root reopens (`magus query output <ref>`),
-never a worker's prose. A worker that ran a filtered subset, or quietly restated its
-criteria into something it did pass, reports success either way, and a
-transcript cannot tell you which happened.
-
-An agent may report that its edits are done, but no job is complete until its
-acceptance criteria and assigned check pass. The root agent, not a worker,
-decides whether the top-level goal is complete.
+never a worker's prose: a worker that ran a filtered subset, or restated its criteria
+into ones it passed, reports success either way. No job is complete until its criteria
+and assigned check pass, and the root, not a worker, decides whether the top-level goal
+is complete.
 
 ## Keep worker records out of the user update
 
@@ -623,13 +565,11 @@ magus job fork --stdin --dry-run -o json < "$job_spec" |
   jq -e 'if .job.id then {job: .job.id, problems, unchecked, permitted_count: (.permitted // [] | length)} else error("missing job validation") end'
 ```
 
-Tell the person what changed, what passed, what remains unverified, and any
-decision they need to make. A routine claim, handled denial, or already-recorded
-deviation is not a progress update. Collapse repeated events into the current
-blocker and next action. When a waiver skips validation or accepts a material
-risk, explain that consequence once in plain language and link the evidence;
-do not paste waiver objects, claim lists or guard transcripts. A detailed audit
-requested by the person can open those records.
+Tell the person what changed, what passed, what remains unverified, and any decision
+they need to make. A routine claim, handled denial, or recorded deviation is not an
+update; collapse repeats into the current blocker and next action. A waiver that skips
+validation or accepts a material risk gets one plain sentence and its evidence link,
+never pasted waiver objects, claim lists or guard transcripts.
 
 ## Declare the interface before any job forks
 
@@ -666,9 +606,8 @@ Check each declared name with `magus refs` before forking. A bare name that reso
 to more than one definition is graded against one of them, silently.
 
 This applies with zero workers. A solo change across several call sites is a one-job
-tree. Skipping the declaration because nothing is forked is the same failure without
-a fork to blame. Write the table in the conversation, check it with `magus refs` when
-the edits land, and only then report the change done.
+tree. Skipping the declaration because nothing is forked is the same failure: write
+the table, check it with `magus refs` when the edits land, then report the change done.
 
 ## Set one topology boundary
 
@@ -708,9 +647,8 @@ writes. Mark that job's check ROOT-DEFERRED when you fork it:
 
 - the worker writes the tests, stops at the static checks its environment does run,
   and says so;
-- the root executes the job's target centrally before verifying. Leaving each worker to discover the wall
-  spends its budget once per worker, and its report reads "done" with nothing executed,
-  which `magus job wait` refuses to record as a pass.
+- the root executes the job's target centrally before verifying. Otherwise each
+  worker reports "done" with nothing executed, which `magus job wait` refuses to pass.
 
 A worker may fork part of its own job. It may not hand it out without shrinking the
 problem; that is the shape that does not terminate, and
@@ -745,28 +683,23 @@ cheaper.
 Naming it is the checkable half: every spawn names a model, or an agent definition
 that names one.
 
-- Inheriting the parent's model ON PURPOSE is fine and often right. A hard review
-  under a cheaper coordinator is exactly the case a weaker-only ordering would forbid.
+- Inheriting the parent's model ON PURPOSE is fine and often right, such as a hard review under a cheaper coordinator.
 - Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
   makes every unnamed spawn the most expensive one, and records no choice.
-  Measured 2026-09-15: five of nine workers that inherited the root's model did mechanical
-  work a cheaper model does as well.
 
 When the tier is unclear, start at economy. A job that fails its criteria there is
-re-forked one tier up, not retried at the same one. "Only ever spawn something
-weaker" was tried and withdrawn, because same-strength offload is legitimate, so this
-is a starting point and not a ceiling.
+re-forked one tier up, not retried at the same one. Economy is a starting
+point, not a ceiling: same-strength offload is legitimate.
 
-Tiers are the workspace's. A magusfile enum (`magus\job.modelTiers`, shipped as economy,
-standard, principal) maps each to every harness's model alias. `--model` takes a tier or a
-model. The row records tier, rank, source (row, matrix, default) and why, and the guard
-compares a spawn's tier by rank. magus never picks a model live: re-fork to change a tier.
+Tiers are the workspace's: a magusfile enum (`magus\modelTiers`) maps each to every
+harness's model alias, and the guard compares a spawn's tier by rank. `--model` takes a tier
+or a model. magus never picks a model live: re-fork to change a tier.
 
 | Shipped tier | Assign |
 |---|---|
 | principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and a bounded set of projects |
-| economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
+| standard | isolated implementation with a clear contract and a bounded set of projects, and tracing behavior through code |
+| economy | mechanical edits, fixtures, docs, inventory, and lookups the graph answers (exists, depends-on, is-generated) |
 
 If the host cannot select models or reasoning effort, keep its default. Tool access
 is a separate axis: evidence gathering, scouting, and review get read-only tools
@@ -783,9 +716,8 @@ fast as one principal worker, for far fewer tokens:
 - The principal tier only reconciles the claims where workers disagree.
 
 Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
-row) and carries no transcript. A worker resends its whole context every turn, and some
-providers raise a tier's price past a prompt size. Where the brief names that size, the
-worker reports and stops before passing it.
+row) and carries no transcript. Some providers raise a tier's price past a prompt size.
+Where the brief names that size, the worker reports and stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map. A child reports its proposed descendants to its parent before it
@@ -809,11 +741,6 @@ magus affected <target> --plan
 
 For a proposed change whose paths are known but not yet edited, plan those paths
 instead of the current diff (`--stdin --plan`, one repo-relative path per line).
-
-```sh
-printf '%s\n' <repo-relative-path>... | magus affected <target> --stdin --plan
-```
-
 Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`. A shard is a
 history-balanced execution group, not an edit assignment or proof of write isolation.
 Use a shard only as the first partition. If paths are unknown, query the task's symbols,
@@ -834,8 +761,8 @@ Read the facts:
 - `claims[].target` names the target that regenerates a path. Generated outputs have
   one integration owner and are never hand-edited by workers.
 - `depends_on` carries the owner's direct edges.
-- Affinity stays with `client` (`magus\insight`, read affinity). Without MCP,
-  run `magus buzz -e` printing `magus\insight().affinity`.
+- Affinity stays with `client` (`magus\history().affinity`). Without MCP,
+  run `magus buzz -e` printing `magus\history().affinity()`.
 - Use `magus refs <symbol>` when two jobs may touch the same API.
 
 A read-only job has no write set, so it is outside this analysis.
@@ -854,9 +781,8 @@ ONE WORKTREE PER WORKER wherever a write path touches workspace configuration: a
 project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
 
 magus READS those files to load the workspace. A half-saved one stops the workspace
-loading for everybody in that checkout at once. The rest lose `magus run`, `magus ls` and their own tests over an edit they
-cannot see. Measured 2026-09-17: one half-saved magusfile stopped three workers
-sharing a checkout.
+loading for everybody in that checkout, who lose `magus run`, `magus ls`
+and their own tests over an edit they cannot see.
 When `magus job fork` refuses one, the answer is a separate worktree, not a narrower
 boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
@@ -917,8 +843,7 @@ down: the projects the write paths reach, the declared
 output globs that land inside them, the paths a sibling job is holding, the build
 inputs and workspace configuration that have one owner, and the projects that
 change alongside the leased ones without declaring a dependency. Two renders of one
-row are byte-identical, which hand-typed prompts are not: seven of
-them disagreed about a dedup key and every one ended with the gate.
+row are byte-identical; hand-typed prompts are not.
 
 The guard grades every command a brief presents in a shell fence or a code span. One
 it would deny refuses the spawn, since the worker runs a brief's
@@ -929,33 +854,28 @@ commands as written. A line that names a command to forbid it ("never ...") is n
 A brief carries the JOB ID, the goal and why, the decisions made, and evidence refs.
 It leaves out skill loads, command style, the `BAGGAGE` export, write paths, the check,
 how to commit and push, and attribution: the guard, the harness and `magus describe job`
-supply or enforce each, and a refusal says what to do. Restated, a guard rule costs every
-worker tokens, goes stale, and crowds out the model's own judgment. When a worker keeps
-missing something, fix the guard rule or its message, not the brief. A follow-up message
-to a bound worker carries only what changed.
+supply or enforce each. A restated guard rule costs every worker tokens and goes stale;
+when a worker keeps missing something, fix the guard rule or its message, not the brief.
+A follow-up message to a bound worker carries only what changed.
 
 Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
 any cap the user set for the tree. Require the worker to:
 
-- export `BAGGAGE=magus.lease=<its id>` before it works: that is the W3C
-  Baggage channel, and the member is what tells the agent guard whose declared boundary
-  to grade a write against, so a worker that never exports it is graded as an editor
-  magus cannot attribute. Export `TRACEPARENT` too when your host has one, and add
-  `magus.spawner=<your label>` to the baggage: magus records the trace, the parent span
-  and the label as CLAIMS, so `magus session ls` can show who spawned whom, and no
-  verdict is ever keyed on them;
+- export `BAGGAGE=magus.lease=<its id>` before it works: the guard grades its writes only
+  when that is set. Add `magus.spawner=<your label>` to the baggage, and
+  `TRACEPARENT` where the host has one: magus records them as claims for
+  `magus session ls`, and no verdict is keyed on them;
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
 - never wait for the build budget, `magus status --wait` included. When a full budget refuses its check, it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `magus job wait` passes that result and the integration runs the check;
-- never exit its row or report back while it waits on a reply from you: an answer that lands after the row ended reaches nobody.
+- never exit its row while it waits on a reply from you: ending its turn with the question as its final text leaves the row open and the worker resumable.
 
 End every brief with the step that files the result, as the worker's LAST act before
 it reports back. A brief that leaves it out gets a prose report and a row that never
 moves: the store keeps the write paths held, `magus job wait`
 has nothing to verify, and nobody notices until a sibling is refused over a path
-the finished worker no longer needs. The step: `magus job exit <job> --stdin` with a record of `schema_version` 2, `job`,
-`changed_paths`, `validation` (`command` and `output_ref`), `gate_evidence` (one `gate_id` and `output_ref` per named gate), `descendants` and
-`unresolved_risks`; `magus job exit --schema` prints the shape, and
+the finished worker no longer needs. The step: `magus job exit <job> --stdin`, filing the shape `magus job exec <row>` printed.
+Never inline the result fields in a brief; the row prints them filled in, and
 [reference.md](reference.md) shows a record.
 A typed result makes verification mechanical. Keep unresolved risks mandatory, so a
 mis-scoped worker can say so instead of widening silently.
@@ -971,7 +891,8 @@ After the spawn, the row carries the job:
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
 - Only a row with a check or a goal can pass. Fork a scout `--read-only`; it passes only
-  through a script check (reference.md), and a prose scout ends no_return by design.
+  through a script check (reference.md) or by filing a result: a read-only row whose holder files a result is
+  recorded pass, and only a row with nothing filed ends no_return.
 
 [reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
 job's boundary, how magus ends abandoned jobs, and what `magus job wait` checks.
@@ -996,44 +917,15 @@ Never message a worker to ask how it is going, only to CHANGE what it was handed
 ## Integrate and verify
 
 The root never builds. The integrator is a role, never a check: spawned `<parent>/integrate
-<job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits. As jobs finish:
+<job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits.
 
-1. Compare the store against the ACTUAL diff since each job's checkpoint, not the
-   paths it reported (`magus graph diff --rev <revision>` for the domain). A differing
-   dirty digest means it saw a tree you are not diffing.
-2. Run `magus job wait <job>` on each returned job BEFORE you read its result. It
-   checks what is mechanical:
-   - every changed path inside the declared write paths and outside the denied ones;
-   - a change set that is not empty on a row that writes;
-   - the descendants the store carries;
-   - the output ref, bound to a run of THAT JOB'S OWN CHECK which the store recorded
-     as PASSING. There is no `passed` field on the result: wait reads the
-     ref's own recorded attempt from the output store and derives the outcome from
-     it, never from what the worker claims.
-
-   A job that verifies is recorded `pass`. A rejection exits 1 naming every violation;
-   a result that will not decode exits 2. A holder does not verify its own job, or a
-   sibling's.
-
-   Then reopen the evidence yourself (`magus query output <ref>`). Wait proves the ref
-   names a passing run of this job's own check, never that the work meets the job's
-   GOAL. A worker's prose about its criteria is not that evidence.
-3. Resolve cross-job API changes centrally; never assign the same seam twice.
-4. Regenerate declared outputs once, after source work converges and before the full
-   test run, or a drift test fails for nothing.
-5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
-   invalidates the original partition, stop parallel integration and reconcile.
-6. Read the integrated changeset with `magus diff --impact` before landing it.
-   It shows reach, other recent editors, a rebuild estimate from recorded run times,
-   advisors and anchored notes. It is context, never a verdict: nothing gates on it. An
-   empty section means nobody could measure it, not that nothing was found.
-7. Validate once per wave, not once per fix:
-   - After a failed full run, read it (`magus query output <ref>`). Rerun only the
-     failing tests, with the runner's filter after `--`, until green; `magus-run`
-     lists one per runner. Then run the full suite once.
-   - Name a test that fails for an outside reason once, and do not rerun it.
-   - A failing set that repeats unchanged stops the wave and goes to the person.
-8. Run `magus affected ci` once, at the end, and evaluate the top-level acceptance criteria.
+As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
+`magus job wait <job>` before reading each result; reopen evidence with
+`magus query output <ref>`; resolve shared seams once; regenerate declared outputs
+once; re-plan with `magus affected <target> --plan` if the partition broke; read
+`magus diff --impact` for context only; validate once per wave; finish with
+`magus affected ci`. [reference.md](reference.md#integrate-and-verify) has the
+mechanical wait checks and the wave loop.
 ````
 
 

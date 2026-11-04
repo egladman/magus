@@ -50,6 +50,22 @@ export function kebabIcon(): SVGElement {
 // menuToggle builds the trigger. A toggle with text carries the caret in __controls; an icon-only
 // plain toggle is just its icon.
 export function menuToggle(spec: MenuToggleSpec): HTMLButtonElement {
+  const button = toggleButton(spec);
+  if (spec.text !== undefined) appendText(button, spec.text);
+  return button;
+}
+
+// labeledMenuToggle is menuToggle for a toggle whose label the caller rewrites later, so it gets
+// the __text span back.
+export function labeledMenuToggle(spec: MenuToggleSpec & { text: string }): {
+  button: HTMLButtonElement;
+  text: HTMLElement;
+} {
+  const button = toggleButton(spec);
+  return { button, text: appendText(button, spec.text) };
+}
+
+function toggleButton(spec: MenuToggleSpec): HTMLButtonElement {
   const variant = spec.variant ?? "default";
   const button = document.createElement("button");
   button.type = "button";
@@ -67,18 +83,20 @@ export function menuToggle(spec: MenuToggleSpec): HTMLButtonElement {
     icon.append(spec.icon);
     button.append(icon);
   }
-  if (spec.text !== undefined) {
-    const text = document.createElement("span");
-    text.className = "pf-v6-c-menu-toggle__text";
-    text.textContent = spec.text;
-    button.append(text);
-    const controls = document.createElement("span");
-    controls.className = "pf-v6-c-menu-toggle__controls";
-    const caret = document.createElement("span");
-    caret.className = "pf-v6-c-menu-toggle__toggle-icon";
-    caret.append(glyph("0 0 20 20", ANGLE, "rotate(90 10 10)"));
-    controls.append(caret);
-    button.append(controls);
-  }
   return button;
+}
+
+function appendText(button: HTMLButtonElement, label: string): HTMLElement {
+  const text = document.createElement("span");
+  text.className = "pf-v6-c-menu-toggle__text";
+  text.textContent = label;
+  button.append(text);
+  const controls = document.createElement("span");
+  controls.className = "pf-v6-c-menu-toggle__controls";
+  const caret = document.createElement("span");
+  caret.className = "pf-v6-c-menu-toggle__toggle-icon";
+  caret.append(glyph("0 0 20 20", ANGLE, "rotate(90 10 10)"));
+  controls.append(caret);
+  button.append(controls);
+  return text;
 }

@@ -4,6 +4,8 @@
 
 Up: [workspace index](../../../../MAGUS.md)
 
+Depends on: [(workspace root)](../../../../MAGUS.md)
+
 Query: `magus query project=docs/guides/integrations/agents`
 
 | Target                    | What it does                                                                                                      |
@@ -12,6 +14,7 @@ Query: `magus query project=docs/guides/integrations/agents`
 | `cursor-schemas-generate` | Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.                                       |
 | `lint`                    | lint runs the TypeScript type-check, Biome, and a Buzz type-check of the templates.                               |
 | `test`                    | test runs the OpenCode plugin's transport cases under node; the test supplies Bun.spawn.                          |
+| `mod-test`                | mod-test runs the Claude Code mod's tests on the engine that loads it.                                            |
 | `ci`                      | The anchor `magus affected ci` keys off.                                                                          |
 | `format`                  | format owns this directory's Markdown; the docs project formatting it would be MGS3001.                           |
 | `install`                 | install installs node_modules through the typescript spell's pnpm-install op.                                     |

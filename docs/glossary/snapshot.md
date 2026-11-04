@@ -37,6 +37,7 @@ In the code (`magus refs <name>` lists every site):
 - `job.Snapshot` (Go)
 - `queue.Snapshot` (Go)
 - `race.snapshot` (Go)
+- `textbuf.snapshot` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

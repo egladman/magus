@@ -97,7 +97,7 @@ func TestRunCommandScopesAChildToItsProjectsSpells(t *testing.T) {
 	})
 	childEnv := func(projectSpells []string, opSpell string) string {
 		ctx := std.WithCurrentWorkingDirectory(sandbox.WithStep(sandbox.WithPolicy(t.Context(), p), projectSpells, nil), dir)
-		res, err := runCommand(ctx, spells.Op{Command: spells.Command{Bin: "env"}, Capture: true}, commandOpts{spell: opSpell})
+		res, err := runCommand(ctx, spells.Op{Command: spells.Command{Bin: "env", Capture: true}}, commandOpts{spell: opSpell})
 		require.NoError(t, err)
 		return res.Stdout
 	}
@@ -149,7 +149,7 @@ func streamOp(t *testing.T, script string, quiet bool) (res spawn.ExecResult, st
 	t.Helper()
 	var out, errOut bytes.Buffer
 	ctx := spawn.WithOutputWriters(std.WithCurrentWorkingDirectory(t.Context(), t.TempDir()), &out, &errOut)
-	op := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", script}, Capture: true, Quiet: quiet}, Capture: true}
+	op := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", script}, Capture: true, Quiet: quiet}}
 	res, err = runCommand(ctx, op, commandOpts{})
 	return res, out.String(), errOut.String(), err
 }

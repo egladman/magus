@@ -53,13 +53,13 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
      Do not make the connection a prerequisite for completing the work.
    - `{{tool "client"}}` (`{{buzz "run"}}`): run named projects, with the same arguments as `{{cmd "run"}}` (or the cwd
      project). Use when you know which projects to run.
-   - `{{tool "client"}}` (`{{buzz "affected"}}`): the projects a VCS change touched. It
+   - `{{tool "client"}}` (`{{buzz "change.affected"}}`): the projects a VCS change touched. It
      returns the set and does not run it. The gate is `{{cmd "affected"}} ci`.{{else}}1. Prefer MCP tools; call exposed tool directly. If missing or call fails -> CLI fallback below.
    - Do not gate that choice on `{{cmd "status"}} --probe=mcp`: tests loopback HTTP; host may use stdio or server Unix socket.
    - `{{cmd "status"}} --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
    - Hosts manage own connection; never start server for agent.
    - `{{tool "client"}}` (`{{buzz "run"}}`): run named projects, same arguments as `{{cmd "run"}}`.
-   - `{{tool "client"}}` (`{{buzz "affected"}}`): projects VCS change touched; returns set, does not run it.{{end}}
+   - `{{tool "client"}}` (`{{buzz "change.affected"}}`): projects VCS change touched; returns set, does not run it.{{end}}
 
 {{if .Full}}   `{{tool "client"}}` is bounded at 10 minutes when called directly. A host that
    supports MCP tasks can run it as a task without that bound. Send a long run (a
@@ -77,6 +77,9 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
 {{if .Full}}2. Verification is `ci`'s job, not a sequence you compose. `ci` is the one target
    name magus enforces: the command that composes the pipeline
    (typically generate, lint, build, test) in the order the magusfile declares.
+   Bare "ci" is also everyday shorthand for the host's CI/CD (GitHub Actions and
+   the rest). When the person says "ci" without naming one meaning, ask which; the
+   `ambiguous-ci-word` guard refuses a call that picks either until they clarify.
    - Run `{{cmd "run"}} ci <project>` for the project you are working in.
    - Run `{{cmd "affected"}} ci` as the final gate once the change is done; it runs the
      full pipeline over every project your change reaches, which is how you learn
@@ -88,6 +91,7 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
      pass. A check wired to the wrong path passes the same way.
    - Verify in place; never `git stash`/`reset` first (data-loss-prone and pointless: the tree is
      already what you want to verify).{{else}}2. Verification is `ci`'s job, not sequence you compose; `ci` is only target name magus enforces.
+   Bare "ci" also means host CI/CD (GitHub Actions, ...). Ambiguous -> ask which; `ambiguous-ci-word` refuses assuming either.
    - `{{cmd "run"}} ci <project>` for project you work in.
    - `{{cmd "affected"}} ci`: final gate once change done.
    - Never hand-run lint, format, test one at a time: re-derives order magusfile owns; forgotten step fails silently by omission.
@@ -126,18 +130,13 @@ magus affected test               # only projects affected by the VCS diff
 ```
 {{if .Full}}
 MCP equivalents: `{{tool "client"}}` (`{{buzz "run"}}`) with the arguments of `{{cmd "run"}}`.
-`{{buzz "affected"}}` returns the affected project set and does not run it. `{{buzz "impact"}}` is why each project is in that set. `{{buzz "where"}}` answers which project contains a directory.
+`{{buzz "change.affected"}}` returns the affected project set and does not run it. `{{buzz "change.impact"}}` is why each project is in that set. `{{buzz "where"}}` answers which project contains a directory.
 {{end}}
 {{if .Full}}WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
 hand-sequencing `{{cmd "run"}} lint`, `format`, `test` to check your own work.
 CORRECT: `{{cmd "run"}} ci <project>` while working, `{{cmd "affected"}} ci` once the
 change is done, and a single narrower target only to iterate on a failure.{{else}}Wrong: `go test ./...` after editing Go; hand-sequencing `{{cmd "run"}} lint`, `format`, `test` to check own work.
-Right: `{{cmd "run"}} ci <project>` while working; `{{cmd "affected"}} ci` once done.{{end}}{{if .Full}}
-
-To prove a command on Linux without opening a pull request, magus's own repository
-runs it on a GitHub Actions runner (`{{cmd "buzz"}} hack/remote/on-actions.buzz --
-<command>`) or in a local Podman container (`{{cmd "buzz"}} hack/remote/on-linux.buzz --
-<command>`).{{end}}
+Right: `{{cmd "run"}} ci <project>` while working; `{{cmd "affected"}} ci` once done.{{end}}
 
 {{if .Full}}## Output control: silence runs, read structure{{else}}## Output control{{end}}
 {{if .Full}}
@@ -299,12 +298,13 @@ at once, naming the holder.
 {{else}}Run whose project lock or machine budget another magus invocation holds: exits 75 at once, naming holder.{{end}}
 {{if .Full}}- Never write `sleep`/`ps`/`pgrep` polling loops. The guard denies `pgrep`,
   `pidof`, and `ps` for this reason.{{else}}- Never write `sleep`/`ps`/`pgrep` polling loops; guard denies `pgrep`, `pidof`, `ps`.{{end}}
-{{if .Full}}- `{{cmd "status"}} --watch=15s` reads that lock state continuously: holder PID,
-  command, directory, and age. Re-run once the lock releases.{{else}}- `{{cmd "status"}} --watch=15s`: reads lock state continuously: holder PID, command, directory, age. Re-run once lock releases.{{end}}
+{{if .Full}}- `{{cmd "status"}}` reads that lock state once: holder PID, command, directory,
+  and age. To wait, background your run as `{{cmd "job exec"}} --timeout <d> -- <command>`
+  and wait for its completion notice.{{else}}- `{{cmd "status"}}`: reads lock state once: holder PID, command, directory, age. To wait: background run as `{{cmd "job exec"}} --timeout <d> -- <command>`, wait for its completion notice.{{end}}
 {{if .Full}}- A long-running holder is not, by itself, evidence of a hang.{{else}}- Long-running holder alone: not evidence of hang.{{end}}
 
 ```sh
-magus status --watch=15s
+magus status
 ```
 
 {{if .Full}}If the lock has crossed its stale warning threshold, report the exact holder and

@@ -41,7 +41,20 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 24
+const KnowledgeSchemaVersion = 25
+
+// MarkdownSection mirrors one element of markdown.sections' result. It
+// holds a heading's anchor and level, its 1-based file lines counting the
+// frontmatter, and a digest of its extent. EndLine closes the section with
+// its sub-sections; BodyEndLine closes its own text.
+type MarkdownSection struct {
+	Anchor      string
+	Level       int
+	StartLine   int `buzz:"start_line"`
+	EndLine     int `buzz:"end_line"`
+	BodyEndLine int `buzz:"body_end_line"`
+	Digest      string
+}
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -179,8 +192,8 @@ const (
 	RelationAnnotates RelationID = "annotates" // note->any known entity, from the notes store
 )
 
-// RelationDepicts links a figure to each directory or project it draws, from the literal
-// magus\dir calls in the function that builds it.
+// RelationDepicts links a figure to each directory or project it draws.
+// It reads the literal magus\graph().dir calls in the function that builds it.
 const RelationDepicts RelationID = "depicts"
 
 // RelationCoChanges links two files changed in the same commits, from git history. It is
@@ -944,12 +957,20 @@ const (
 //
 // Language names which of the project's indexes is missing, empty when the declaration
 // does not say. Hint is the fix when the reason is an indexer that is not installed.
+// Unindexable marks a project whose language nothing indexes: no build closes that gap.
 type KnowledgeSymbolGap struct {
-	Project  ProjectRef           `json:"project"            yaml:"project"`
-	Language string               `json:"language,omitempty" yaml:"language,omitempty"`
-	State    SymbolIndexFreshness `json:"state"              yaml:"state"`
-	Detail   string               `json:"detail,omitempty"   yaml:"detail,omitempty"`
-	Hint     string               `json:"hint,omitempty"     yaml:"hint,omitempty"`
+	Project     ProjectRef           `json:"project"               yaml:"project"`
+	Language    string               `json:"language,omitempty"    yaml:"language,omitempty"`
+	State       SymbolIndexFreshness `json:"state"                 yaml:"state"`
+	Detail      string               `json:"detail,omitempty"      yaml:"detail,omitempty"`
+	Hint        string               `json:"hint,omitempty"        yaml:"hint,omitempty"`
+	Unindexable bool                 `json:"unindexable,omitzero"  yaml:"unindexable,omitempty"`
+}
+
+// Buildable reports whether `magus graph build` closes g: an index of a language something
+// indexes, whose indexer is installed.
+func (g KnowledgeSymbolGap) Buildable() bool {
+	return !g.Unindexable && g.Hint == ""
 }
 
 // Describe renders one gap as "libs/api (not-indexed)", or "libs/api (buzz index
@@ -1081,10 +1102,11 @@ type KnowledgeAnswer struct {
 	IndexCause *KnowledgeIndexCause `json:"index_cause,omitempty" yaml:"index_cause,omitempty"`
 }
 
-// IndexBehind reports whether the answer was drawn from a symbol index that is missing or
-// older than its sources, the condition IndexCause explains.
+// IndexBehind reports whether a run could bring the answer's index current,
+// the condition IndexCause explains: it is older than its sources, or a gap
+// a build closes.
 func (a KnowledgeAnswer) IndexBehind() bool {
-	return len(a.Gaps) > 0 || len(a.StaleIndexes) > 0
+	return len(a.StaleIndexes) > 0 || slices.ContainsFunc(a.Gaps, KnowledgeSymbolGap.Buildable)
 }
 
 // DescribeStale renders the answer's stale indexes as "libs/api (go index), docs", or ""
@@ -1376,6 +1398,12 @@ type KnowledgeDefinitionSite struct {
 	Status  KnowledgeDefinitionStatus `json:"status"             yaml:"status"`
 	// Source is the text of the lines, filled only on request (--source).
 	Source string `json:"source,omitempty" yaml:"source,omitempty"`
+	// SourceStartLine is Source's first line, 0 when it holds none.
+	SourceStartLine int `json:"source_start_line,omitempty" yaml:"source_start_line,omitempty"`
+	// SourceTotalLines is the whole window's length when a page cut it.
+	SourceTotalLines int `json:"source_total_lines,omitempty" yaml:"source_total_lines,omitempty"`
+	// SourceNote says what --source cut, or why it printed no lines.
+	SourceNote string `json:"source_note,omitempty" yaml:"source_note,omitempty"`
 }
 
 // KnowledgeDefinitionStatus says whether a definition's recorded range still bounds the
@@ -1445,6 +1473,14 @@ type SymbolOccurrence struct {
 	// reader whether the index is stale or the encoding assumption was wrong.
 	Text   string                 `json:"text,omitempty" yaml:"text,omitempty"`
 	Status SymbolOccurrenceStatus `json:"status"         yaml:"status"`
+	// Source is the site's lines and context, set only under --source.
+	Source string `json:"source,omitempty" yaml:"source,omitempty"`
+	// SourceStartLine is Source's first line, 0 when it holds none.
+	SourceStartLine int `json:"source_start_line,omitempty" yaml:"source_start_line,omitempty"`
+	// SourceTotalLines is the whole window's length when a page cut it.
+	SourceTotalLines int `json:"source_total_lines,omitempty" yaml:"source_total_lines,omitempty"`
+	// SourceNote says what --source cut, or why it printed no lines.
+	SourceNote string `json:"source_note,omitempty" yaml:"source_note,omitempty"`
 }
 
 // SymbolOccurrenceFile groups one file's occurrences. Occurrences are sorted by position,
@@ -1465,6 +1501,10 @@ type SymbolOccurrenceFile struct {
 	// magus can compute from the index alone detects that. Completeness rests on the
 	// index being current; `magus status` reports which indexes are.
 	Stale bool `json:"stale,omitempty" yaml:"stale,omitempty"`
+	// Generated marks a declared output: regenerate it, never hand-edit a site.
+	Generated bool `json:"generated,omitempty" yaml:"generated,omitempty"`
+	// Test marks a test file, by the path rule of IsTestPath.
+	Test bool `json:"test,omitempty" yaml:"test,omitempty"`
 }
 
 // KnowledgeOccurrencesOutput is the result of `magus refs <symbol> --occurrences`: every
@@ -1625,20 +1665,20 @@ type KnowledgePathOutput struct {
 	Steps         []KnowledgePathStep `json:"steps,omitempty" yaml:"steps,omitempty"`
 }
 
-// KnowledgePathOptions narrows `magus path` and magus\path.
+// KnowledgePathOptions narrows `magus path` and magus\graph().path.
 type KnowledgePathOptions struct {
 	// Relations are the only relations a hop may walk. Empty walks every relation, so
 	// Found false under a filter means no path of those relations, not no path at all.
 	Relations []RelationID `json:"relations,omitempty" yaml:"relations,omitempty"`
 }
 
-// KnowledgeNeighborhoodDefinition is the human-readable description of magus\neighborhood.
+// KnowledgeNeighborhoodDefinition describes magus\graph().neighborhood.
 const KnowledgeNeighborhoodDefinition = "neighborhood walks outward from one focus node " +
 	"up to a depth, along the chosen relations only, and optionally folds every node under " +
 	"a path prefix into that prefix's directory, so a figure or a reader sees a subsystem at " +
 	"the grain they asked for."
 
-// KnowledgeNeighborhoodOptions bounds magus\neighborhood.
+// KnowledgeNeighborhoodOptions bounds magus\graph().neighborhood.
 type KnowledgeNeighborhoodOptions struct {
 	// Depth is the most hops from the focus; 0 means 1.
 	Depth int `json:"depth,omitempty" yaml:"depth,omitempty"`
@@ -1653,9 +1693,9 @@ type KnowledgeNeighborhoodOptions struct {
 	Collapse []string `json:"collapse,omitempty" yaml:"collapse,omitempty"`
 }
 
-// KnowledgeNeighborhoodOutput is magus\neighborhood's result: the subgraph within Depth
-// hops of Focus, in the node-link shape KnowledgeQueryOutput uses, so it is itself a
-// valid export.
+// KnowledgeNeighborhoodOutput is magus\graph().neighborhood's result.
+// It is the subgraph within Depth hops of Focus, shaped as a query output.
+// So it is itself a valid export.
 type KnowledgeNeighborhoodOutput struct {
 	Definition    string `json:"definition"     yaml:"definition"`
 	SchemaVersion int    `json:"schema_version" yaml:"schema_version"`
@@ -1681,8 +1721,9 @@ type KnowledgeFold struct {
 	Folded int `json:"folded" yaml:"folded"`
 }
 
-// Dir is one workspace directory as the graph holds it, the record magus\dir, magus\dirs
-// and magus\layer return. It carries every fact a figure needs for a box and its edges.
+// Dir is one workspace directory as the graph holds it.
+// magus\graph()'s dir, dirs and layer return it.
+// It carries every fact a figure needs for a box and its edges.
 //
 // Every path in it is workspace-relative with forward slashes, "." for the root. Lists
 // are sorted and never nil.
@@ -1725,7 +1766,7 @@ type DirCall struct {
 	Source string `json:"source" yaml:"source"`
 }
 
-// DirsOptions narrows magus\dirs.
+// DirsOptions narrows magus\graph().dirs.
 type DirsOptions struct {
 	// Layer keeps only directories declared in this layer. An undeclared name raises
 	// LayerNotDeclared rather than matching nothing.
@@ -1737,8 +1778,8 @@ type DirsOptions struct {
 	Depth int `json:"depth,omitempty" yaml:"depth,omitempty"`
 }
 
-// Layer is one layer name magus.project's "layers" key declares and every directory it
-// covers, the record magus\layer returns. An undeclared name raises LayerNotDeclared.
+// Layer is one layer a "layers" key declares and every dir it covers.
+// magus\graph().layer returns it. An undeclared name raises LayerNotDeclared.
 type Layer struct {
 	Name string `json:"name" yaml:"name"`
 	// Declared are the directories and globs the declarations name for this layer,
@@ -1997,13 +2038,13 @@ type Case struct {
 	Imports []string `json:"imports,omitempty"`
 }
 
-// PrecedentReport is magus\precedents' answer: the rows mined from the workspace's merged
-// symbol indexes, and the freshness of each declared index judged just before the read. An
-// index that is not up to date contributed nothing or something old, so a caller that gates
-// on the rows checks Indexes first.
-type PrecedentReport struct {
-	Precedents []Precedent         `json:"precedents"`
-	Indexes    []SymbolIndexStatus `json:"indexes"`
+// Holds is magus\graph().precedents' answer, and later magus\holds'.
+// It is the majority shapes the indexes establish, and each one's freshness.
+// A stale index contributed nothing or something old, so check Indexes first.
+// ADR 0022: domain noun, not PrecedentReport.
+type Holds struct {
+	Holds   []Precedent         `json:"holds"`
+	Indexes []SymbolIndexStatus `json:"indexes"`
 }
 
 // SymbolDecl is one declaration a symbol index holds, with its doc comment as written. It is
@@ -2025,11 +2066,11 @@ type SymbolDecl struct {
 	Doc string `json:"doc"`
 }
 
-// SymbolReport is magus\symbols' answer: every declaration in the workspace's merged symbol
-// indexes, and the freshness of each declared index judged just before the read. An index
-// that is not up to date contributed nothing or something old, so a caller that gates on the
-// declarations checks Indexes first.
-type SymbolReport struct {
+// Symbols is magus\graph().symbols' answer: every declaration indexed.
+// It carries each index's freshness, judged just before the read.
+// A stale index contributed nothing or something old, so check Indexes first.
+// ADR 0022: domain noun, not SymbolReport.
+type Symbols struct {
 	Symbols []SymbolDecl        `json:"symbols"`
 	Indexes []SymbolIndexStatus `json:"indexes"`
 }

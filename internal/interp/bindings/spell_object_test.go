@@ -1,14 +1,17 @@
 package bindings
 
 import (
+	"bytes"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestSpellOptionsApplied guards declaration-versus-application drift: every file that
@@ -74,6 +77,82 @@ func TestSpellHandleCarriesNameGlobsAndOps(t *testing.T) {
 	assert.ElementsMatch(t, []string{"name", "needs", "provides", "listTargets", "test"}, h.MapKeys())
 	name, _ := h.MapGet("name")
 	assert.Equal(t, "myspell", name.AsString())
+}
+
+// allowFailureSuite calls a real op through its handle. Go cannot read a
+// DirectValue's record back, so each case asserts the error.
+type allowFailureSuite struct {
+	suite.Suite
+}
+
+func TestAllowFailure(t *testing.T) {
+	suite.Run(t, new(allowFailureSuite))
+}
+
+// call runs one op named "op" with the options table o.
+func (s *allowFailureSuite) call(cmd spells.Command, o vm.Value) error {
+	h := spellHandleFromMeta(spells.Descriptor{
+		Name: "myspell",
+		Ops:  map[string]spells.Op{"op": {Command: cmd}},
+	})
+	fn := requireDirect(s.T(), h, "op")
+	return callVoidDirect(s.T(), fn, execContextValue(nil, s.T().TempDir()), o)
+}
+
+func allowFailureOption(v vm.Value) vm.Value {
+	o := vm.NewMap()
+	o.MapSet("allowFailure", v)
+	return o
+}
+
+func exit100(capture bool) spells.Command {
+	return spells.Command{Bin: "sh", Args: []string{"-c", "exit 100"}, Capture: capture}
+}
+
+func (s *allowFailureSuite) TestANonZeroExitReturnsItsRecord() {
+	s.Require().NoError(s.call(exit100(true), allowFailureOption(vm.BoolValue(true))))
+}
+
+func (s *allowFailureSuite) TestANonZeroExitFailsWithoutTheOption() {
+	s.Require().Error(s.call(exit100(true), vm.NewMap()))
+}
+
+func (s *allowFailureSuite) TestFalseFailsLikeNoOption() {
+	s.Require().Error(s.call(exit100(true), allowFailureOption(vm.BoolValue(false))))
+}
+
+func (s *allowFailureSuite) TestABinaryThatNeverStartedStaysAnError() {
+	cmd := spells.Command{Bin: "magus-no-such-binary", Capture: true}
+	s.Require().Error(s.call(cmd, allowFailureOption(vm.BoolValue(true))))
+}
+
+func (s *allowFailureSuite) TestAnOpThatDoesNotCaptureIsRefused() {
+	err := s.call(exit100(false), allowFailureOption(vm.BoolValue(true)))
+	s.Require().ErrorContains(err, "capture = true")
+}
+
+// quietFailure exits 100 on a quiet op and returns the run's stderr.
+func (s *allowFailureSuite) quietFailure(allow bool) string {
+	var stdout, stderr bytes.Buffer
+	ctx := spawn.WithOutputWriters(s.T().Context(), &stdout, &stderr)
+	op := spells.Op{
+		Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo boom >&2; exit 100"}, Capture: true, Quiet: true},
+	}
+	_, _ = runCommand(ctx, op, commandOpts{cwd: s.T().TempDir(), allowFailure: allow})
+	return stderr.String()
+}
+
+func (s *allowFailureSuite) TestAnAllowedExitWritesNoFailureToTheLog() {
+	s.Empty(s.quietFailure(true))
+}
+
+func (s *allowFailureSuite) TestAnExitNotAllowedStillWritesItsStderr() {
+	s.Contains(s.quietFailure(false), "boom")
+}
+
+func (s *allowFailureSuite) TestANonBoolIsRefused() {
+	err := s.call(exit100(true), allowFailureOption(vm.StringValue("yes")))
+	s.Require().ErrorContains(err, "allowFailure must be a bool")
 }
 
 // execContextValue builds what ctx.withEnv/withCwd produce: a marked map carrying only

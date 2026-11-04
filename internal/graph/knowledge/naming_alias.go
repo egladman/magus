@@ -21,7 +21,7 @@ const (
 // aliasCheck reads an import that must be aliased as advice that a package name is wrong. It
 // reports two cases. One is an aliased import, in a file holding a symbol the change adds,
 // renames or re-signs, of a package past the alias-share or name-clash value
-// [types.ConformanceOptions.Effective] enforces and listed in no known entry of that metric.
+// [types.ConformanceOptions.Effective] enforces.
 // The other is a package the change introduces, every declaration of it new, whose package
 // clause an existing non-generated package already declares: the cheapest moment to rename it. The
 // index holds no base, so an aliased import already in the file is reported as well as one
@@ -50,7 +50,6 @@ func (aliasCheck) run(x *namingIndex) []finding {
 			measured[k.Metric][it.ID] = it.Measure
 		}
 	}
-	known := conformanceKnownItems(o.Ratchet.Known)
 	introduced := x.introducedPackages()
 
 	byFile := map[string]*namingDecl{}
@@ -68,9 +67,9 @@ func (aliasCheck) run(x *namingIndex) []finding {
 			}
 			var past []string
 			for _, m := range []types.ConformanceMetric{types.ConformanceNameClash, types.ConformanceAliasShare} {
-				value, src := o.Effective(couplingKey(m))
-				if v, ok := measured[m][p.dir]; ok && src != "" && v > value && !known[m][p.dir] {
-					past = append(past, fmt.Sprintf("%s source: %d, past the %s of %d", m, v, thresholdSource(src), value))
+				value, enforced := o.Effective(couplingKey(m))
+				if v, ok := measured[m][p.dir]; ok && enforced && v > value {
+					past = append(past, fmt.Sprintf("%s source: %d, past the configured anchor of %d", m, v, value))
 				}
 			}
 			if len(past) == 0 {
@@ -82,7 +81,7 @@ func (aliasCheck) run(x *namingIndex) []finding {
 			}
 			details := aliasImporters(p)
 			details = append(details, past...)
-			details = append(details, "rename the package, or record a known entry with the reason")
+			details = append(details, "rename the package")
 			out = append(out, finding{subject: byFile[file].id, score: score, message: aliasMessage(p.facts), details: details})
 		}
 	}

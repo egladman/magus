@@ -49,11 +49,11 @@ var Net = Module{
 	Methods: []Method{
 		{
 			Name: "wait_for_port",
-			Doc:  "Block until a TCP connection to host:port succeeds, then return true; return false when the timeout elapses first. Use it after starting a dev server or a container instead of sleeping a guessed number of seconds. timeout_ms defaults to 30000. Returns FALSE rather than raising on timeout, so a caller can fall back or report its own message; the run's cancellation is honored, so Ctrl-C does not wait out the timeout.",
+			Doc:  "Block until a TCP connection to host:port succeeds, then return true; return false when the timeout elapses first. Use it after starting a dev server or a container instead of sleeping a guessed number of seconds. timeoutMs defaults to 30000. Returns FALSE rather than raising on timeout, so a caller can fall back or report its own message; the run's cancellation is honored, so Ctrl-C does not wait out the timeout.",
 			Args: []Arg{
 				{Name: "host", Type: TypeString},
 				{Name: "port", Type: TypeInt},
-				{Name: "timeout_ms", Type: TypeInt, Optional: true},
+				{Name: "timeoutMs", Type: TypeInt, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeBool}},
 			Raises:  true,

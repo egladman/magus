@@ -20,7 +20,7 @@ it swaps, so the real binary is replaced underneath a link that keeps pointing
 at it. An existing mgs is left alone unless --force is given.`,
 	Flags: []cmdline.Flag{
 		{Name: "dir", Kind: cmdline.String, Doc: "Directory for the shorthand (default: the running binary's directory)"},
-		{Name: "force", Kind: cmdline.Bool, Doc: "Replace an existing file at the shorthand path"},
+		{Name: "force", Kind: cmdline.Bool, Default: false, Doc: "Replace an existing file at the shorthand path"},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Install mgs next to magus", Command: "magus self install-shorthand"},

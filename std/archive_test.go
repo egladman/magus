@@ -88,7 +88,7 @@ func TestArchiveUncompressTarGz(t *testing.T) {
 	})
 	dest := t.TempDir()
 
-	result, err := ArchiveUncompress(context.Background(), src, dest, nil)
+	result, err := ArchiveUncompress(context.Background(), src, dest, types.ArchiveOptions{})
 	require.NoError(t, err)
 	files := pathValues(result.Files)
 	assert.Equal(t, []string{"a.txt", "b.txt"}, files)
@@ -100,7 +100,7 @@ func TestArchiveUncompressTar(t *testing.T) {
 	src := makeTar(t, map[string]string{"hello.txt": "hi"})
 	dest := t.TempDir()
 
-	result, err := ArchiveUncompress(context.Background(), src, dest, nil)
+	result, err := ArchiveUncompress(context.Background(), src, dest, types.ArchiveOptions{})
 	require.NoError(t, err)
 	files := pathValues(result.Files)
 	assert.Equal(t, []string{"hello.txt"}, files)
@@ -124,7 +124,7 @@ func TestArchiveUncompressZip(t *testing.T) {
 	})
 	dest := t.TempDir()
 
-	result, err := ArchiveUncompress(context.Background(), src, dest, nil)
+	result, err := ArchiveUncompress(context.Background(), src, dest, types.ArchiveOptions{})
 	require.NoError(t, err)
 	files := pathValues(result.Files)
 	assert.Equal(t, []string{"x.txt", "y.txt"}, files)
@@ -137,7 +137,7 @@ func TestArchiveUncompressStrip(t *testing.T) {
 	})
 	dest := t.TempDir()
 
-	result, err := ArchiveUncompress(context.Background(), src, dest, map[string]any{"strip": 1})
+	result, err := ArchiveUncompress(context.Background(), src, dest, types.ArchiveOptions{Strip: 1})
 	require.NoError(t, err)
 	files := pathValues(result.Files)
 	assert.Equal(t, []string{"a.txt", filepath.Join("b", "c.txt")}, files)
@@ -151,7 +151,7 @@ func TestArchiveUncompressStripShallowEntrySkipped(t *testing.T) {
 	})
 	dest := t.TempDir()
 
-	result, err := ArchiveUncompress(context.Background(), src, dest, map[string]any{"strip": 1})
+	result, err := ArchiveUncompress(context.Background(), src, dest, types.ArchiveOptions{Strip: 1})
 	require.NoError(t, err)
 	files := pathValues(result.Files)
 	assert.Equal(t, []string{"a.txt"}, files)
@@ -174,7 +174,7 @@ func TestArchiveUncompressPathTraversalDotDot(t *testing.T) {
 	gw.Close()
 	f.Close()
 
-	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), nil)
+	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), types.ArchiveOptions{})
 	assert.Error(t, err, "expected error for path traversal entry")
 }
 
@@ -194,7 +194,7 @@ func TestArchiveUncompressPathTraversalAbsolute(t *testing.T) {
 	gw.Close()
 	f.Close()
 
-	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), nil)
+	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), types.ArchiveOptions{})
 	assert.Error(t, err, "expected error for absolute path entry")
 }
 
@@ -202,15 +202,15 @@ func TestArchiveUncompressMaxSize(t *testing.T) {
 	// Create a tar.gz with content that exceeds a tiny cap.
 	src := makeTarGz(t, map[string]string{"big.txt": "0123456789"}) // 10 bytes
 
-	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), map[string]any{"max_size": 5})
-	assert.Error(t, err, "expected error when uncompressed size exceeds max_size")
+	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), types.ArchiveOptions{MaxSize: 5})
+	assert.Error(t, err, "expected error when uncompressed size exceeds maxSize")
 }
 
 func TestArchiveUncompressZipUndersizedHeader(t *testing.T) {
 	// A malicious zip can declare a tiny uncompressed size in its central
 	// directory yet decompress to far more; the per-entry bound must catch
 	// the overrun instead of letting each entry write up to the whole
-	// max_size budget. zip.Writer always records accurate sizes, so forge
+	// maxSize budget. zip.Writer always records accurate sizes, so forge
 	// the bomb by patching the central directory's uncompressed-size field
 	// down after the fact.
 	path := filepath.Join(t.TempDir(), "bomb.zip")
@@ -233,10 +233,10 @@ func TestArchiveUncompressZipUndersizedHeader(t *testing.T) {
 	binary.LittleEndian.PutUint32(raw[idx+24:], 10)
 	require.NoError(t, os.WriteFile(path, raw, 0o644))
 
-	// max_size sits well above the forged declared size (10) so the
+	// maxSize sits well above the forged declared size (10) so the
 	// pre-extraction cumulative check passes and the per-entry bound is
 	// what must reject the overrun.
-	_, err = ArchiveUncompress(context.Background(), path, t.TempDir(), map[string]any{"max_size": 1000})
+	_, err = ArchiveUncompress(context.Background(), path, t.TempDir(), types.ArchiveOptions{MaxSize: 1000})
 	assert.Error(t, err, "expected error for entry exceeding its declared size")
 }
 
@@ -247,7 +247,7 @@ func TestArchiveUncompressLimiter(t *testing.T) {
 	lim := cache.NewLimiter(2)
 	ctx := cache.ContextWithLimiter(context.Background(), lim)
 
-	_, err := ArchiveUncompress(ctx, src, dest, nil)
+	_, err := ArchiveUncompress(ctx, src, dest, types.ArchiveOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, 0, lim.Snapshot().Running, "limiter Running after call")
 }
@@ -255,7 +255,7 @@ func TestArchiveUncompressLimiter(t *testing.T) {
 func TestArchiveUncompressNilLimiter(t *testing.T) {
 	src := makeTarGz(t, map[string]string{"f.txt": "hi"})
 	// No limiter in context — must work normally.
-	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), nil)
+	_, err := ArchiveUncompress(context.Background(), src, t.TempDir(), types.ArchiveOptions{})
 	require.NoError(t, err)
 }
 
@@ -277,14 +277,14 @@ func TestArchiveCompressTarGzRoundTrip(t *testing.T) {
 	})
 	dest := filepath.Join(t.TempDir(), "out.tar.gz")
 
-	result, err := ArchiveCompress(context.Background(), src, dest, nil)
+	result, err := ArchiveCompress(context.Background(), src, dest, types.ArchiveOptions{})
 	require.NoError(t, err)
 	files := pathValues(result.Files)
 	require.Len(t, files, 2, "compress files")
 
 	// Round-trip: extract and verify content.
 	out := t.TempDir()
-	res2, err := ArchiveUncompress(context.Background(), dest, out, nil)
+	res2, err := ArchiveUncompress(context.Background(), dest, out, types.ArchiveOptions{})
 	require.NoError(t, err)
 	extracted := pathValues(res2.Files)
 	sort.Strings(extracted)
@@ -297,11 +297,11 @@ func TestArchiveCompressTarZstRoundTrip(t *testing.T) {
 	src := makeTestDir(t, map[string]string{"x.txt": "zstd content"})
 	dest := filepath.Join(t.TempDir(), "out.tar.zst")
 
-	_, err := ArchiveCompress(context.Background(), src, dest, nil)
+	_, err := ArchiveCompress(context.Background(), src, dest, types.ArchiveOptions{})
 	require.NoError(t, err)
 
 	out := t.TempDir()
-	res, err := ArchiveUncompress(context.Background(), dest, out, nil)
+	res, err := ArchiveUncompress(context.Background(), dest, out, types.ArchiveOptions{})
 	require.NoError(t, err)
 	files := pathValues(res.Files)
 	require.Equal(t, []string{"x.txt"}, files, "round-trip files")
@@ -316,11 +316,11 @@ func TestArchiveCompressZipRoundTrip(t *testing.T) {
 	})
 	dest := filepath.Join(t.TempDir(), "out.zip")
 
-	_, err := ArchiveCompress(context.Background(), src, dest, nil)
+	_, err := ArchiveCompress(context.Background(), src, dest, types.ArchiveOptions{})
 	require.NoError(t, err)
 
 	out := t.TempDir()
-	res, err := ArchiveUncompress(context.Background(), dest, out, nil)
+	res, err := ArchiveUncompress(context.Background(), dest, out, types.ArchiveOptions{})
 	require.NoError(t, err)
 	files := pathValues(res.Files)
 	sort.Strings(files)
@@ -331,10 +331,10 @@ func TestArchiveCompressTarRoundTrip(t *testing.T) {
 	src := makeTestDir(t, map[string]string{"bare.txt": "no compression"})
 	dest := filepath.Join(t.TempDir(), "out.tar")
 
-	_, err := ArchiveCompress(context.Background(), src, dest, nil)
+	_, err := ArchiveCompress(context.Background(), src, dest, types.ArchiveOptions{})
 	require.NoError(t, err)
 	out := t.TempDir()
-	res, err := ArchiveUncompress(context.Background(), dest, out, nil)
+	res, err := ArchiveUncompress(context.Background(), dest, out, types.ArchiveOptions{})
 	require.NoError(t, err)
 	files := pathValues(res.Files)
 	require.Equal(t, []string{"bare.txt"}, files, "tar round-trip files")
@@ -352,7 +352,7 @@ func TestArchiveCompressMultiThreadZst(t *testing.T) {
 	lim := cache.NewLimiter(4)
 	ctx := cache.ContextWithLimiter(context.Background(), lim)
 
-	result, err := ArchiveCompress(ctx, src, dest, map[string]any{"threads": 4})
+	result, err := ArchiveCompress(ctx, src, dest, types.ArchiveOptions{Threads: 4})
 	require.NoError(t, err)
 	files := pathValues(result.Files)
 	require.Len(t, files, 4, "compress produced wrong file count")
@@ -360,7 +360,7 @@ func TestArchiveCompressMultiThreadZst(t *testing.T) {
 
 	// Verify decompression also works multi-threaded.
 	out := t.TempDir()
-	_, err = ArchiveUncompress(ctx, dest, out, map[string]any{"threads": 4})
+	_, err = ArchiveUncompress(ctx, dest, out, types.ArchiveOptions{Threads: 4})
 	require.NoError(t, err)
 }
 
@@ -373,7 +373,7 @@ func TestArchiveCompressThreadsExceedsPool(t *testing.T) {
 
 	// Requesting 100 threads with a cap=2 limiter: must be silently clamped,
 	// not error, since resolveThreads caps to limiter.cap.
-	_, err := ArchiveCompress(ctx, src, dest, map[string]any{"threads": 100})
+	_, err := ArchiveCompress(ctx, src, dest, types.ArchiveOptions{Threads: 100})
 	require.NoError(t, err, "threads clamped to pool cap should succeed")
 }
 
@@ -387,7 +387,7 @@ func TestArchiveCompressSandboxReadDenied(t *testing.T) {
 	}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
-	_, err := ArchiveCompress(ctx, src, dest, nil)
+	_, err := ArchiveCompress(ctx, src, dest, types.ArchiveOptions{})
 	assert.Error(t, err, "expected sandbox read denial")
 }
 
@@ -401,7 +401,7 @@ func TestArchiveCompressSandboxWriteDenied(t *testing.T) {
 	}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
-	_, err := ArchiveCompress(ctx, src, dest, nil)
+	_, err := ArchiveCompress(ctx, src, dest, types.ArchiveOptions{})
 	assert.Error(t, err, "expected sandbox write denial")
 }
 
@@ -419,7 +419,7 @@ func TestArchiveCompressSymlinkPivotOnOutput(t *testing.T) {
 	// and writes to the real path (not a security violation here — the symlink
 	// points within the same tmpdir tree). This test verifies no panic and that
 	// the output is actually written somewhere sensible.
-	_, err := ArchiveCompress(context.Background(), src, link, nil)
+	_, err := ArchiveCompress(context.Background(), src, link, types.ArchiveOptions{})
 	require.NoError(t, err)
 }
 
@@ -428,15 +428,15 @@ func TestArchiveCompressMaxSize(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "out.tar")
 
 	// Cap output at 1 byte — the tar header alone exceeds this.
-	_, err := ArchiveCompress(context.Background(), src, dest, map[string]any{"max_size": 1})
-	assert.Error(t, err, "expected max_size error")
+	_, err := ArchiveCompress(context.Background(), src, dest, types.ArchiveOptions{MaxSize: 1})
+	assert.Error(t, err, "expected maxSize error")
 }
 
 func TestArchiveCompressUnknownFormat(t *testing.T) {
 	src := makeTestDir(t, map[string]string{"f.txt": "x"})
 	dest := filepath.Join(t.TempDir(), "out.7z") // unsupported extension
 
-	_, err := ArchiveCompress(context.Background(), src, dest, nil)
+	_, err := ArchiveCompress(context.Background(), src, dest, types.ArchiveOptions{})
 	assert.Error(t, err, "expected error for unknown format")
 }
 
@@ -445,11 +445,11 @@ func TestArchiveCompressFormatOverride(t *testing.T) {
 	// Extension says .bin but format is overridden to tar.gz.
 	dest := filepath.Join(t.TempDir(), "out.bin")
 
-	_, err := ArchiveCompress(context.Background(), src, dest, map[string]any{"format": "tar.gz"})
+	_, err := ArchiveCompress(context.Background(), src, dest, types.ArchiveOptions{Format: "tar.gz"})
 	require.NoError(t, err)
 	// Round-trip: the file should be decompressible as .tar.gz regardless of extension.
 	out := t.TempDir()
-	_, err = ArchiveUncompress(context.Background(), dest, out, nil)
+	_, err = ArchiveUncompress(context.Background(), dest, out, types.ArchiveOptions{})
 	require.NoError(t, err, "uncompress of format-overridden archive")
 }
 
@@ -464,7 +464,7 @@ func TestArchiveUncompressMultiThreadZip(t *testing.T) {
 	lim := cache.NewLimiter(4)
 	ctx := cache.ContextWithLimiter(context.Background(), lim)
 
-	result, err := ArchiveUncompress(ctx, src, dest, map[string]any{"threads": 3})
+	result, err := ArchiveUncompress(ctx, src, dest, types.ArchiveOptions{Threads: 3})
 	require.NoError(t, err)
 	files := pathValues(result.Files)
 	require.Len(t, files, 3, "parallel zip extract files")
@@ -478,7 +478,7 @@ func TestArchiveUncompressLimiterAcquiresN(t *testing.T) {
 	lim := cache.NewLimiter(4)
 	ctx := cache.ContextWithLimiter(context.Background(), lim)
 
-	_, err := ArchiveUncompress(ctx, src, dest, map[string]any{"threads": 2})
+	_, err := ArchiveUncompress(ctx, src, dest, types.ArchiveOptions{Threads: 2})
 	require.NoError(t, err)
 	assert.Equal(t, 0, lim.Snapshot().Running, "limiter Running after call")
 }
@@ -491,7 +491,7 @@ func TestArchiveResultPathsCarryTheirBase(t *testing.T) {
 	src := makeZip(t, map[string]string{"a.txt": "hello"})
 	dest := t.TempDir()
 
-	un, err := ArchiveUncompress(context.Background(), src, dest, nil)
+	un, err := ArchiveUncompress(context.Background(), src, dest, types.ArchiveOptions{})
 	require.NoError(t, err)
 	require.NotEmpty(t, un.Files)
 	// Not an exact string compare against dest: the impl resolves the path first, and on
@@ -501,7 +501,7 @@ func TestArchiveResultPathsCarryTheirBase(t *testing.T) {
 	assert.FileExists(t, un.Files[0].Resolve().Value, "so Resolve alone finds it on disk")
 
 	out := filepath.Join(t.TempDir(), "out.tar.gz")
-	cm, err := ArchiveCompress(context.Background(), dest, out, nil)
+	cm, err := ArchiveCompress(context.Background(), dest, out, types.ArchiveOptions{})
 	require.NoError(t, err)
 	require.NotEmpty(t, cm.Files)
 	assert.NotEmpty(t, cm.Files[0].Base, "a compressed entry knows where it was read from")
@@ -533,7 +533,7 @@ func TestArchiveList(t *testing.T) {
 		{"zip", makeZip},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ArchiveList(ctx, tc.make(t, files), nil)
+			got, err := ArchiveList(ctx, tc.make(t, files), types.ArchiveOptions{})
 			require.NoError(t, err)
 			assert.Equal(t, []string{"a.txt", "dir/b.txt"}, archiveEntryNames(got))
 
@@ -563,7 +563,7 @@ func TestArchiveListSortsAcrossWriteOrder(t *testing.T) {
 	require.NoError(t, tw.Close())
 	require.NoError(t, f.Close())
 
-	got, err := ArchiveList(ctx, path, nil)
+	got, err := ArchiveList(ctx, path, types.ArchiveOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a.txt", "m.txt", "z.txt"}, archiveEntryNames(got))
 }
@@ -582,7 +582,7 @@ func TestArchiveListMarksDirectories(t *testing.T) {
 	require.NoError(t, tw.Close())
 	require.NoError(t, f.Close())
 
-	got, err := ArchiveList(ctx, path, nil)
+	got, err := ArchiveList(ctx, path, types.ArchiveOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"dir/", "dir/f.txt"}, archiveEntryNames(got))
 	assert.True(t, got[0].IsDir)
@@ -604,16 +604,16 @@ func TestArchiveReadFile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			src := tc.make(t, files)
 
-			got, err := ArchiveReadFile(ctx, src, "dir/b.txt", nil)
+			got, err := ArchiveReadFile(ctx, src, "dir/b.txt", types.ArchiveOptions{})
 			require.NoError(t, err)
 			assert.Equal(t, "bee", got)
 
-			got, err = ArchiveReadFile(ctx, src, "a.txt", nil)
+			got, err = ArchiveReadFile(ctx, src, "a.txt", types.ArchiveOptions{})
 			require.NoError(t, err)
 			assert.Equal(t, "alpha", got)
 
 			// A missing entry names the archive, so the error is actionable.
-			_, err = ArchiveReadFile(ctx, src, "nope.txt", nil)
+			_, err = ArchiveReadFile(ctx, src, "nope.txt", types.ArchiveOptions{})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "nope.txt")
 		})
@@ -628,7 +628,7 @@ func TestArchiveReadFileNothingExtracted(t *testing.T) {
 	before, err := os.ReadDir(dir)
 	require.NoError(t, err)
 
-	_, err = ArchiveReadFile(ctx, src, "a.txt", nil)
+	_, err = ArchiveReadFile(ctx, src, "a.txt", types.ArchiveOptions{})
 	require.NoError(t, err)
 
 	// The whole point: reading one entry writes nothing to disk.
@@ -643,11 +643,11 @@ func TestArchiveReadFileMaxSize(t *testing.T) {
 
 	// Over the cap raises rather than truncating: a silent prefix would look
 	// like a whole file to the caller.
-	_, err := ArchiveReadFile(ctx, src, "big.txt", map[string]any{"max_size": 10})
+	_, err := ArchiveReadFile(ctx, src, "big.txt", types.ArchiveOptions{MaxSize: 10})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "max_size")
+	assert.Contains(t, err.Error(), "maxSize")
 
-	got, err := ArchiveReadFile(ctx, src, "big.txt", map[string]any{"max_size": 100})
+	got, err := ArchiveReadFile(ctx, src, "big.txt", types.ArchiveOptions{MaxSize: 100})
 	require.NoError(t, err)
 	assert.Len(t, got, 100, "exactly at the cap is allowed")
 }
@@ -657,10 +657,10 @@ func TestArchiveListUnrecognized(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notanarchive.bin")
 	require.NoError(t, os.WriteFile(path, []byte("just some bytes"), 0o644))
 
-	_, err := ArchiveList(ctx, path, nil)
+	_, err := ArchiveList(ctx, path, types.ArchiveOptions{})
 	require.Error(t, err)
 
-	_, err = ArchiveList(ctx, filepath.Join(t.TempDir(), "missing.tar"), nil)
+	_, err = ArchiveList(ctx, filepath.Join(t.TempDir(), "missing.tar"), types.ArchiveOptions{})
 	require.Error(t, err)
 }
 
@@ -671,7 +671,7 @@ func TestArchiveListRespectsSandboxRead(t *testing.T) {
 	p := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
-	_, err := ArchiveList(ctx, src, nil)
+	_, err := ArchiveList(ctx, src, types.ArchiveOptions{})
 	require.Error(t, err, "a denied read must not be listable")
 }
 
@@ -693,7 +693,7 @@ func TestArchiveUncompressDoesNotFollowASymlinkAtTheDestination(t *testing.T) {
 
 			for _, entry := range []string{"a.txt", "sub/new.txt"} {
 				src := build(t, map[string]string{entry: "pwned"})
-				_, err := ArchiveUncompress(context.Background(), src, dest, nil)
+				_, err := ArchiveUncompress(context.Background(), src, dest, types.ArchiveOptions{})
 				assert.Error(t, err, entry)
 			}
 

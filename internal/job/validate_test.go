@@ -10,10 +10,68 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+// integratedDirectorySuite pins MGS3018 against a branch replacing a directory.
+type integratedDirectorySuite struct {
+	suite.Suite
+	repo  *testkit.Repo
+	store *Store
+}
+
+func TestIntegratedDirectory(t *testing.T) { suite.Run(t, new(integratedDirectorySuite)) }
+
+func (s *integratedDirectorySuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{
+		"skills/a/SKILL.md": "a\n",
+		"skills/keep.md":    "keep\n",
+		"shared/a/SKILL.md": "a\n",
+	})
+	s.store = NewStore(tempLocation(s.T(), s.repo.Root()))
+
+	s.repo.Git("checkout", "-q", "-b", "replaces-dir")
+	s.repo.Git("rm", "-q", "-r", "skills/a")
+	s.Require().NoError(os.Symlink("../shared/a", filepath.Join(s.repo.Root(), "skills", "a")))
+	s.repo.Git("add", "skills/a")
+	s.repo.Git("commit", "-q", "-m", "replace the directory with a symlink")
+	s.repo.Git("checkout", "-q", "-")
+}
+
+func (s *integratedDirectorySuite) row(write ...string) types.Job {
+	return types.Job{ID: "integrate", WritePaths: write}
+}
+
+func (s *integratedDirectorySuite) TestDirectoryABranchReplacesWithASymlinkPasses() {
+	ps := mergedDirectoryProblems(s.T().Context(), s.store, s.row("skills/a"), []string{"replaces-dir"})
+
+	s.Empty(ps)
+}
+
+func (s *integratedDirectorySuite) TestDirectoryTheBranchKeepsIsRefused() {
+	ps := mergedDirectoryProblems(s.T().Context(), s.store, s.row("skills/a", "shared/a"), []string{"replaces-dir"})
+
+	s.Equal([]types.DiagnosticCode{types.WritePathIsDirectory}, codes(ps))
+	s.Equal("write_paths[1]", ps[0].Field, "the index of the entry as the record wrote it")
+}
+
+func (s *integratedDirectorySuite) TestWithoutIntegratesTheDirectoryIsRefused() {
+	ps := mergedDirectoryProblems(s.T().Context(), s.store, s.row("skills/a"), nil)
+
+	s.Require().Len(ps, 1)
+	s.Equal(types.WritePathIsDirectory, ps[0].Code)
+}
+
+func (s *integratedDirectorySuite) TestBranchTheVCSCannotReadKeepsTheRefusal() {
+	ps := mergedDirectoryProblems(s.T().Context(), s.store, s.row("skills/a"), []string{"no-such-branch"})
+
+	s.Require().Len(ps, 1)
+	s.Equal(types.WritePathIsDirectory, ps[0].Code)
+}
 
 // validateWorkspace is regeneratedWorkspace with the targets its root project exports and a
 // ci chain that lints and tests, so every workspace check has something to read.
@@ -293,7 +351,7 @@ func TestValidateMergePermitsLintOnlyByItsExactSubject(t *testing.T) {
 	assert.Contains(t, codes(got.Permitted), types.GateNotRun)
 }
 
-func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {
+func TestResolveMergeAddsALintGoalAndSaysSo(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
@@ -315,8 +373,7 @@ func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {
 	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
 	assert.Equal(t, types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true,
 		Args: []string{"cli/registry.go", "docs/notes.md"}}, row.Goals[i].Check, "lint is scoped to the written files, sorted")
-	assert.Contains(t, note, `added the goal "lint"`)
-	assert.Contains(t, note, "magus run lint . --no-default-charms -- cli/registry.go docs/notes.md")
+	assert.Contains(t, note, `added the goal "lint" (2 files)`)
 
 	row, note = resolve(func(u *types.Job) {
 		declare("cli/registry.go")(u)
@@ -326,8 +383,28 @@ func TestResolveMergeAddsALintGoalForGoSourceAndSaysSo(t *testing.T) {
 	assert.Empty(t, note)
 
 	row, note = resolve(declare("docs/notes.md"))
-	assert.Empty(t, row.Goals, "no Go source, no lint goal")
+	assert.Empty(t, row.Goals, "no file lint declares it reads, no lint goal")
 	assert.Empty(t, note)
+}
+
+func TestResolveMergeAddsALintGoalForAnyLanguageLintReads(t *testing.T) {
+	t.Parallel()
+
+	root, projects := regeneratedWorkspace(t)
+	top := projects[0]
+	top.MagusfileTargets = []string{"ci", "lint", "test"}
+	top.TargetInputs["lint"] = []types.InputRef{{Glob: "**/*.ts"}}
+	top.TargetChains = map[string][]types.ChainStep{"ci": {{Target: "lint"}, {Target: "test"}}}
+	s := NewStore(tempLocation(t, root)).InWorkspace(Workspace{Projects: projects})
+
+	merged, err := resolveMerge(t.Context(), s, nil, "w", func(u *types.Job) { u.WritePaths, u.Check = []string{"web/app.ts"}, forkCheck() }, nil)
+	require.NoError(t, err)
+	var row types.Job
+	merged(&row)
+
+	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
+	assert.Equal(t, []string{"web/app.ts"}, row.Goals[i].Check.Args)
 }
 
 func TestFilesInScopesANestedProjectsLintToItsOwnFiles(t *testing.T) {

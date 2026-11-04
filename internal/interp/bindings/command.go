@@ -52,6 +52,9 @@ type commandOpts struct {
 	hasArgs    bool
 	ignoreDirs []string
 	refs       map[string]string
+	// allowFailure says the caller reads a non-zero exit from the record, so
+	// it is no failure to advise on.
+	allowFailure bool
 }
 
 // runCommand runs tgt.Bin as a subprocess with the base argv as reshaped by the
@@ -194,7 +197,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 	// it. spawn.Exec joins ctx.Err() into its error, so gating on err alone would advise a
 	// user who pressed Ctrl-C to go and authenticate, diagnosing a failure that never
 	// happened.
-	failed := res.Started && res.Code != 0 && ctx.Err() == nil
+	failed := res.Started && res.Code != 0 && ctx.Err() == nil && !opts.allowFailure
 	if failed && tgt.Quiet {
 		// A quiet op streamed nothing, so the captured stderr is the only copy of the
 		// tool's diagnosis. Writing it through the step's stderr puts it in the log and,

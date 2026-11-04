@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
@@ -24,44 +23,8 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
-
-// TestAdviseInstalledSkillWrite pins the discriminator: the STAMP decides, not
-// the path. Both files below sit in the same directory under a magus-* name,
-// and only one of them is magus's to overwrite.
-func TestAdviseInstalledSkillWrite(t *testing.T) {
-	dir := t.TempDir()
-	write := func(rel, body string) string {
-		path := filepath.Join(dir, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
-		return path
-	}
-
-	installed := write(".claude/skills/magus-run/SKILL.md", "---\nname: magus-run\nmetadata:\n  source: magus\n---\n\n# Running work\n")
-	got := adviseInstalledSkillWrite(installed)
-	assert.Contains(t, got.Say, "INSTALLED skill")
-	assert.Contains(t, got.Why, "magus-workspace-rules")
-
-	// A workspace's own skill lives in the same directory and must draw silence:
-	// telling an author their hand-written file is generated is worse than
-	// saying nothing.
-	local := write(".claude/skills/"+agent.LocalSkillName+"/SKILL.md", "---\nname: "+agent.LocalSkillName+"\nmetadata:\n  source: workspace\n---\n\n# Our rules\n")
-	assert.Empty(t, adviseInstalledSkillWrite(local))
-
-	// The embedded SOURCE an installed copy is generated from carries no frontmatter, and
-	// its prose may quote the stamp; only the frontmatter is the stamp.
-	source := write("internal/agent/skills/magus-workspace-rules/SKILL.md",
-		"# Adapting the agent integration\n\nIf a file's frontmatter says `source: magus`, it is not yours.\n\nsource: magus\n")
-	assert.Empty(t, adviseInstalledSkillWrite(source))
-	quoted := write(".claude/skills/team-rules/SKILL.md", "---\nname: team-rules\n---\n\nsource: magus\n")
-	assert.Empty(t, adviseInstalledSkillWrite(quoted), "a stamp in the body is prose")
-
-	// Not a skill file, not in a skill directory, and not there at all.
-	assert.Empty(t, adviseInstalledSkillWrite(write(".claude/skills/magus-run/README.md", "source: magus")))
-	assert.Empty(t, adviseInstalledSkillWrite(write("docs/SKILL.md", "source: magus")))
-	assert.Empty(t, adviseInstalledSkillWrite(filepath.Join(dir, ".claude", "skills", "magus-vcs-hygiene", "SKILL.md")))
-}
 
 // fleetFixture stands up a workspace root and a lease ledger holding leases, and
 // returns the context pinning both plus the root. Everything lands in temporary
@@ -334,7 +297,24 @@ func TestGradeLeasedWriteCorruptLedger(t *testing.T) {
 	assert.NotEqual(t, "deny", got.Decision, "a job store magus cannot read must never block an edit")
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "could not be read")
-	assert.Contains(t, got.Context, `magus\job`, "the advisory must name the tool that re-declares the plan")
+	assert.Contains(t, got.Context, `magus\workspace().putJob`, "the advisory must name the tool that re-declares the plan")
+}
+
+func TestGradeLeasedWriteSaysAnUnresolvedCache(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	deps := Dependencies{CacheDir: func(string) (string, error) { return "", fmt.Errorf("no state dir") }}
+
+	got := gradeLeasedWrite(context.Background(), deps, "lease-b", filepath.Join(root, "store.go"))
+	require.Equal(t, "advise", got.Decision)
+	assert.Contains(t, got.Context, "no lease boundary was checked")
+	assert.Contains(t, got.Context, "no state dir")
+}
+
+func TestGradeLeasedWriteOutsideEveryWorkspaceSaysNothing(t *testing.T) {
+	deps := Dependencies{CacheDir: func(string) (string, error) { return "", fmt.Errorf("no state dir") }}
+
+	assert.Equal(t, writeGrade{}, adviseUnresolvedCache(deps, filepath.Join(string(filepath.Separator), "nowhere", "store.go")))
 }
 
 // TestDeclarationCovering pins the glob vocabulary a denial rests on. The precision matters
@@ -781,7 +761,7 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 
 		require.Equal(t, writeGrade{Decision: "advise", Context: got.Context, Why: got.Why, Kind: advisoryUnleasedWrite}, got,
 			"the spawn chain is a claim, so it may teach and may never block; a standing fact, so it is held to one firing per session")
-		assert.Contains(t, got.Context, `magus\job.put`, "the advisory must name the tool that declares the plan")
+		assert.Contains(t, got.Context, `magus\workspace().putJob`, "the advisory must name the tool that declares the plan")
 		assert.Contains(t, got.Context, envHookLease, "and the channel a worker enrolls over")
 	})
 
@@ -842,7 +822,7 @@ func TestAdviseAgentSourceWrite(t *testing.T) {
 	} {
 		got := adviseAgentSourceWrite(".", rel)
 		assert.Contains(t, got.Say, "magus-skill-authoring", rel)
-		assert.Contains(t, got.Why, "SkillVersion", rel)
+		assert.Contains(t, got.Why, "a passage lands in one form, both, or neither", rel)
 	}
 
 	assert.Empty(t, adviseAgentSourceWrite(".", "internal/handler/mcp/diff.go"), "one handler is not the registry")
@@ -1151,7 +1131,7 @@ func TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath(t *testing.T) {
 
 	denied := gradeLeasedWrite(ctx, Dependencies{}, "orch", target)
 	require.Equal(t, "deny", denied.Decision)
-	assert.Contains(t, denied.Reason, `magus\job.put("orch/worker", opts: {"enter": "internal/ledger/store.go"})`)
+	assert.Contains(t, denied.Reason, `magus\workspace().putJob("orch/worker", opts: {"enter": "internal/ledger/store.go"})`)
 
 	_, err := store.Enter(ctx, "orch/worker", "internal/ledger/store.go")
 	require.NoError(t, err)
@@ -1572,4 +1552,170 @@ func TestHardenCoveringHandsOnlyTheEntriesCoveringThePath(t *testing.T) {
 		{ID: "other", SoftPaths: []string{"internal/guard/*_test.go", "docs/a.md"}},
 		{ID: "quiet", WritePaths: []string{"internal/guard/guard.go"}},
 	}, got)
+}
+
+// UnboundWriteInJobCheckoutSuite grades writes by a caller bound to no job
+// into the checkout a job's fork made: a subagent is denied, and a person or
+// the root session writes freely.
+type UnboundWriteInJobCheckoutSuite struct {
+	suite.Suite
+	ctx     context.Context
+	session string
+	own     string
+}
+
+func TestUnboundWriteInJobCheckoutSuite(t *testing.T) {
+	suite.Run(t, new(UnboundWriteInJobCheckoutSuite))
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) SetupTest() {
+	s.ctx, s.session = fleetFixture(s.T())
+	s.own = s.T().TempDir()
+	for _, dir := range []string{s.session, s.own} {
+		s.Require().NoError(os.MkdirAll(filepath.Join(dir, "std"), 0o755))
+		s.Require().NoError(os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+	}
+	s.pin(types.StateRunning)
+}
+
+// pin holds the job store at one row in state whose fork made s.own.
+func (s *UnboundWriteInJobCheckoutSuite) pin(state types.JobState) {
+	row := types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: state,
+		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1,
+		CheckoutRoot: s.own, Worktree: &types.JobWorktree{Root: s.own, Source: s.session}}
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+}
+
+// write is an editor Write of path by agent, or by the root session when
+// agent is "".
+func (s *UnboundWriteInJobCheckoutSuite) write(agent, path string) types.GuardJudgment {
+	env := map[string]any{"session_id": "8f2c6a1e", "cwd": s.session, "hook_event_name": "PreToolUse",
+		"tool_name": "Write", "tool_input": map[string]any{"file_path": path, "content": "package std\n"}}
+	if agent != "" {
+		env["agent_id"], env["agent_type"] = agent, "general-purpose"
+	}
+	return Judge(s.ctx, Dependencies{}, Request{Input: hookJSON(s.T(), env), Host: "claude-code"})
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestUnboundSubagentWriteInAJobMadeCheckoutIsDenied() {
+	v := s.write("a1b2c3", filepath.Join(s.own, "std", "module.go"))
+	got := withoutVolatile(v)
+	got.Lease = ""
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite)}, got)
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestDenyNamesTheJobAndJobExec() {
+	v := s.write("a1b2c3", filepath.Join(s.own, "std", "module.go"))
+	s.Contains(v.Reason, "the checkout job w's fork made")
+	s.Contains(v.Reason, "job exec w")
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestUnboundSubagentWriteAfterTerminalWaitIsDenied() {
+	s.pin(types.StatePass)
+	v := s.write("a1b2c3", filepath.Join(s.own, "std", "module.go"))
+	s.Equal(decisionDeny, v.Decision)
+	s.Contains(v.Reason, "that job is pass")
+	s.Contains(v.Reason, "ask your orchestrator to fork a job for this write")
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestPersonWriteInAJobMadeCheckoutPasses() {
+	v := Judge(s.ctx, Dependencies{}, Request{Input: filepath.Join(s.own, "std", "module.go"), IsPath: true})
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestRootSessionWriteInAJobMadeCheckoutPasses() {
+	v := s.write("", filepath.Join(s.own, "std", "module.go"))
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestRootSessionWriteInItsOwnCheckoutPasses() {
+	v := s.write("", filepath.Join(s.session, "std", "module.go"))
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestUnboundSubagentWriteOutsideEveryCheckoutPasses() {
+	v := s.write("a1b2c3", filepath.Join(s.T().TempDir(), "notes.txt"))
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+// The empty-lease arm of denyOtherCheckout: a magus checkout no job's fork
+// made is nobody's to grade for a caller holding no lease.
+func (s *UnboundWriteInJobCheckoutSuite) TestUnboundSubagentWriteInAnotherCheckoutNoJobMadePasses() {
+	other := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(other, "magusfile.buzz"), nil, 0o644))
+	v := s.write("a1b2c3", filepath.Join(other, "std", "module.go"))
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestDenyOtherCheckoutLeavesAnUnleasedWrite() {
+	other := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(other, "magusfile.buzz"), nil, 0o644))
+	s.Empty(denyOtherCheckout(s.session, "", filepath.Join(other, "std", "module.go")).Decision)
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestDenyOtherCheckoutLeavesARelativePath() {
+	s.Empty(denyOtherCheckout(s.session, "w", filepath.Join("std", "module.go")).Decision)
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestDenyOtherCheckoutLeavesAPathInNoMagusCheckout() {
+	s.Empty(denyOtherCheckout(s.session, "w", filepath.Join(s.T().TempDir(), "notes.txt")).Decision)
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) TestDenyOtherCheckoutLeavesTheLeasesOwnCheckout() {
+	s.Empty(denyOtherCheckout(s.own, "w", filepath.Join(s.own, "std", "module.go")).Decision)
+}
+
+// write is the holder's editor Write of path, from a session rooted at cwd.
+func (s *ExitedHolderBindingSuite) write(cwd, path string) types.GuardJudgment {
+	input := hookJSON(s.T(), map[string]any{"session_id": s.who.Session, "cwd": cwd, "hook_event_name": "PreToolUse",
+		"agent_id": s.who.Agent, "agent_type": "general-purpose",
+		"tool_name": "Write", "tool_input": map[string]any{"file_path": path, "content": "package x\n"}})
+	return Judge(s.ctx, Dependencies{}, Request{Input: input, Host: s.who.Host})
+}
+
+func (s *ExitedHolderBindingSuite) TestWriteOutsidePathsAfterOwnExitIsDenied() {
+	s.exitOwnJob()
+	v := s.write(s.root, filepath.Join(s.root, "cmd", "magus", "main.go"))
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite), Lease: heldJob}, withoutVolatile(v), "the exited row still grades the write")
+}
+
+func (s *ExitedHolderBindingSuite) TestWriteInsidePathsAfterOwnExitPasses() {
+	s.exitOwnJob()
+	v := s.write(s.root, filepath.Join(s.root, "internal", "held", "a.go"))
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *ExitedHolderBindingSuite) TestDenyAfterExitNamesTheExitedStateAndRemedy() {
+	s.exitOwnJob()
+	v := s.write(s.root, filepath.Join(s.root, "cmd", "magus", "main.go"))
+	s.Contains(v.Reason, "job held-job is exited")
+	s.Contains(v.Reason, "job exec held-job")
+	s.Contains(v.Reason, "ask your orchestrator to widen it")
+}
+
+// The 10-29 case: the holder's Edit, from the root checkout, into the
+// checkout its job's fork made, after its own exit.
+func (s *ExitedHolderBindingSuite) TestEditIntoTheJobCheckoutAfterOwnExitIsDenied() {
+	own := s.T().TempDir()
+	s.Require().NoError(os.MkdirAll(filepath.Join(own, "hack"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(own, "magusfile.buzz"), nil, 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(own, "hack", "README.md"), []byte("# hack\n"), 0o644))
+	_, err := s.store.Update(s.ctx, heldJob, func(cur *types.Job) { cur.CheckoutRoot = own })
+	s.Require().NoError(err)
+	_, err = s.store.RecordWorktree(s.ctx, heldJob, types.JobWorktree{Root: own, Source: s.root})
+	s.Require().NoError(err)
+	s.exitOwnJob()
+
+	input := hookJSON(s.T(), map[string]any{"session_id": s.who.Session, "cwd": s.root, "hook_event_name": "PreToolUse",
+		"agent_id": s.who.Agent, "agent_type": "general-purpose", "tool_name": "Edit",
+		"tool_input": map[string]any{"file_path": filepath.Join(own, "hack", "README.md"), "old_string": "# hack", "new_string": "# hack scripts"}})
+	v := Judge(s.ctx, Dependencies{}, Request{Input: input, Host: s.who.Host})
+	s.Equal(decisionDeny, v.Decision)
+	s.Contains(v.Reason, "job held-job is exited")
+}
+
+// withoutVolatile drops the fields of v that vary between runs.
+func withoutVolatile(v types.GuardJudgment) types.GuardJudgment {
+	v.SchemaVersion, v.Reason, v.Context, v.LeaseFrom, v.Next = 0, "", "", "", nil
+	return v
 }

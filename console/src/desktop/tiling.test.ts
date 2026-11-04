@@ -165,14 +165,14 @@ test("pickAxis splits a wide pane into a row and a tall pane into a col", () => 
 
 // A 2x2 grid of panes centered so the geometry is unambiguous: from the top-left pane, "right"
 // is top-right, "down" is bottom-left, and there is nothing further "left" or "up".
+const tl: Rect = { left: 0, top: 0, width: 100, height: 100 };
 const grid: { id: string; rect: Rect }[] = [
-  { id: "tl", rect: { left: 0, top: 0, width: 100, height: 100 } },
+  { id: "tl", rect: tl },
   { id: "tr", rect: { left: 100, top: 0, width: 100, height: 100 } },
   { id: "bl", rect: { left: 0, top: 100, width: 100, height: 100 } },
   { id: "br", rect: { left: 100, top: 100, width: 100, height: 100 } },
 ];
 const others = (id: string): { id: string; rect: Rect }[] => grid.filter((c) => c.id !== id);
-const tl = grid[0].rect;
 
 test("neighborInDirection picks the nearest centroid in the requested half-plane", () => {
   assert.equal(neighborInDirection(tl, others("tl"), "right"), "tr");

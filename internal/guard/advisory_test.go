@@ -2,20 +2,58 @@ package guard
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
-// TestSymbolSearchRefusesWhateverTheIndexState pins the condition the deny rests on. A
-// current index that defines the name refuses with refs. A stale one refuses too, serving
-// the rebuild first: the fail-open advice it used to give is what let every symbol search
-// through, since an index goes stale on the first edit. A current index that holds no such
-// name lets the search run, and only a workspace with no index at all is advised.
+// TestAdviseInstalledSkillWrite pins the discriminator: the STAMP decides, not
+// the path. Both files below sit in the same directory under a magus-* name,
+// and only one of them is magus's to overwrite.
+func TestAdviseInstalledSkillWrite(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, body string) string {
+		path := filepath.Join(dir, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+		return path
+	}
+
+	installed := write(".claude/skills/magus-run/SKILL.md", "---\nname: magus-run\nmetadata:\n  source: magus\n---\n\n# Running work\n")
+	got := adviseInstalledSkillWrite(installed)
+	assert.Contains(t, got.Say, "INSTALLED skill")
+	assert.Contains(t, got.Why, "magus-workspace-rules")
+
+	// A workspace's own skill must draw silence: calling a hand-written file
+	// generated is worse than saying nothing.
+	local := write(fmt.Sprintf(".claude/skills/%s/SKILL.md", agent.LocalSkillName), fmt.Sprintf("---\nname: %s\nmetadata:\n  source: workspace\n---\n\n# Our rules\n", agent.LocalSkillName))
+	assert.Empty(t, adviseInstalledSkillWrite(local))
+
+	// An embedded source has no frontmatter, and its prose may quote the stamp.
+	source := write("internal/agent/skills/magus-workspace-rules/SKILL.md",
+		"# Adapting the agent integration\n\nIf a file's frontmatter says `source: magus`, it is not yours.\n\nsource: magus\n")
+	assert.Empty(t, adviseInstalledSkillWrite(source))
+	quoted := write(".claude/skills/team-rules/SKILL.md", "---\nname: team-rules\n---\n\nsource: magus\n")
+	assert.Empty(t, adviseInstalledSkillWrite(quoted), "a stamp in the body is prose")
+
+	// Not a skill file, not in a skill directory, and not there at all.
+	assert.Empty(t, adviseInstalledSkillWrite(write(".claude/skills/magus-run/README.md", "source: magus")))
+	assert.Empty(t, adviseInstalledSkillWrite(write("docs/SKILL.md", "source: magus")))
+	assert.Empty(t, adviseInstalledSkillWrite(filepath.Join(dir, ".claude", "skills", "magus-vcs-hygiene", "SKILL.md")))
+}
+
+// TestSymbolSearchRefusesWhateverTheIndexState pins the condition the deny
+// rests on. A current index that defines the name refuses with refs. A stale
+// one does too: an index goes stale on the first edit, and refs refreshes it.
+// A current index that holds no such name lets the search run, and only a
+// workspace with no index at all is advised.
 func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 	verdict := func(defined, definitive bool) ShellVerdict {
 		return Evaluate(strict(Dependencies{
@@ -32,10 +70,10 @@ func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 
 	stale := verdict(true, false)
 	assert.Equal(t, denyRuleSymbolSearch, stale.Rule.Name, "a stale index still knows the name, so the search is refused")
-	assert.Contains(t, stale.Deny, fmt.Sprintf("the symbol index is older than the sources it covers; rebuild it: `%s`.", hint.GraphBuild.With("--silent")))
-	assert.Contains(t, stale.Why, fmt.Sprintf("Then `%s` answers this exactly.", hint.Refs.With("HandleRequest", "--occurrences")))
-	require.Len(t, stale.Next, 2, "the rebuild, then refs")
-	assert.Equal(t, hint.GraphBuild.With("--silent"), stale.Next[0].Run)
+	assert.Contains(t, stale.Deny, "The symbol index is older than the sources it covers; refs refreshes it as it answers.")
+	assert.NotContains(t, stale.Deny, "graph build", "refs refreshes it, so nobody is sent away to rebuild")
+	require.Len(t, stale.Next, 1, "refs alone")
+	assert.Equal(t, hint.Refs.With("HandleRequest", "--occurrences"), stale.Next[0].Run)
 	assert.Contains(t, stale.Lead, "Classified:", "the lead replaces the deny, so it carries the classification")
 
 	absent := verdict(false, true)

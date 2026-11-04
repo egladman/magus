@@ -29,28 +29,9 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 ## buf-breaking
 
-breaking checks the current schema against a baseline for backward-incompatible changes (wire and JSON compatibility). The caller names the baseline with `{"args": ["--against", <input>]}`: the op assumes neither a default branch nor a module at the git root, so a git input carries the caller's ref and, for a nested module, `subdir=`. This is the protobuf analogue of an API-contract gate: compose it into `ci` so a breaking .proto change fails alongside the other checks. The gha charm swaps buf's reporter to GitHub Actions annotations.
+breaking checks the current schema against a baseline for backward-incompatible changes (wire and JSON compatibility). The caller names the baseline with `{"args": ["--against", <input>]}`: the op assumes neither a default branch nor a module at the git root, so a git input carries the caller's ref and, for a nested module, `subdir=`. This is the protobuf analogue of an API-contract gate: compose it into `ci` so a breaking .proto change fails alongside the other checks. It captures so a gate can read buf's report: findings exit 100, a tool failure exits 1.
 
 **Command:** `buf breaking`
-
-### gha
-
-Appends `--error-format=github-actions`.
-
-<details class="charm-patch">
-<summary>JSON Patch</summary>
-
-```json
-[
-  {
-    "op": "add",
-    "path": "/-",
-    "value": "--error-format=github-actions"
-  }
-]
-```
-
-</details>
 
 ### Example
 

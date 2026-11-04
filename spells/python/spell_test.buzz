@@ -1,0 +1,169 @@
+import "std";
+import "magus/spell";
+import "./spell" as python;
+
+fun marker(path: str, content: str) > DiscoveryFile {
+    return DiscoveryFile{path = path, content = content};
+}
+
+fun source(path: str) > DiscoveryFile {
+    return DiscoveryFile{path = path};
+}
+
+fun discover(files: [DiscoveryFile]) > [DiscoveredProject] !> any { //nolint:no-throw // a test helper; a missing claim fails the test
+    return python\discover_projects(Target{}, req: DiscoveryQuery{root = "/w", files = files});
+}
+
+fun claimAt(claims: [DiscoveredProject], path: str) > DiscoveredProject !> str { //nolint:no-throw // a test helper; a missing claim fails the test
+    foreach (claim in claims) {
+        if (claim.path == path) {
+            return claim;
+        }
+    }
+    //nolint:no-throw // a test helper; a missing claim fails the test
+    throw "no claim at {path}";
+}
+
+fun gapsMention(claim: DiscoveredProject, text: str) > bool {
+    foreach (gap in claim.notInferred) {
+        if (gap.why.indexOf(text) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+test "pyproject declaring pytest and ruff wires lint, format, test and build" {
+    final claims = discover([marker("pyproject.toml", content: `[project]
+name = "Demo_App"
+dependencies = ["requests>=2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff==0.6.0"]
+
+[build-system]
+requires = ["hatchling"]
+`), source("demo/app.py")]) catch [];
+    std\assert(claims.len() == 1, message: "one claim");
+    final claim = claimAt(claims, path: ".") catch DiscoveredProject{};
+    std\assert(claim.role.value == "project", message: "a pyproject forms a project");
+    std\assert(claim.name == "Demo_App", message: "name from [project]");
+    std\assert(claim.targets["test"]![0] == "pytest", message: "pytest declared");
+    std\assert(claim.targets["lint"]![0] == "ruff-check", message: "ruff declared");
+    std\assert(claim.targets["format"]![0] == "ruff-format", message: "ruff formats");
+    std\assert(claim.targets["build"]![0] == "uv-build", message: "[build-system] builds");
+    std\assert(claim.notInferred.len() == 0, message: "nothing left unwired");
+    std\assert(claim.spans.len() == 1 and claim.spans[0] == "demo", message: "pytest walks demo/");
+}
+
+test "pyproject without pytest or ruff wires nothing and says why" {
+    final claim = claimAt(discover([marker("svc/pyproject.toml", content: "[project]\nname = \"svc\"\ndependencies = [\"mypy\"]\n")]) catch [],
+        path: "svc") catch DiscoveredProject{};
+    std\assert(claim.targets.len() == 0, message: "no target inferred");
+    std\assert(gapsMention(claim, text: "no ruff"), message: "lint gap");
+    std\assert(gapsMention(claim, text: "no pytest"), message: "test gap");
+    std\assert(gapsMention(claim, text: "mypy is declared"), message: "an unwired tool is named");
+    std\assert(claim.notInferred[0].file == "svc/pyproject.toml", message: "gaps name the file");
+}
+
+test "tool tables and pytest plugins count as declared" {
+    final claim = claimAt(discover([marker("pyproject.toml", content: `[dependency-groups]
+test = ["pytest-cov"]
+
+[tool.ruff]
+line-length = 100
+`)]) catch [], path: ".") catch DiscoveredProject{};
+    std\assert(claim.targets["test"]![0] == "pytest", message: "pytest-cov installs pytest");
+    std\assert(claim.targets["lint"]![0] == "ruff-check", message: "[tool.ruff] wires ruff");
+    std\assert(claim.targets["build"] == null, message: "no [build-system], no build");
+
+    final configured = claimAt(discover([marker("pyproject.toml", content: "[tool.pytest.ini_options]\naddopts = \"-q\"\n")]) catch [],
+        path: ".") catch DiscoveredProject{};
+    std\assert(configured.targets["test"]![0] == "pytest", message: "[tool.pytest.ini_options] wires pytest");
+}
+
+test "a poetry lock and task tables are reported" {
+    final claim = claimAt(discover([marker("pyproject.toml", content: `[tool.poetry]
+name = "poem"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8"
+
+[tool.poe.tasks]
+serve = "python -m poem"
+`), marker("poetry.lock", content: "")]) catch [], path: ".") catch DiscoveredProject{};
+    std\assert(claim.name == "poem", message: "name from [tool.poetry]");
+    std\assert(claim.targets["test"]![0] == "pytest", message: "poetry group dependency");
+    std\assert(gapsMention(claim, text: "does not read poetry.lock"), message: "lock mismatch");
+    std\assert(gapsMention(claim, text: "[tool.poe.tasks] serve"), message: "poe task");
+}
+
+test "uv path and workspace sources become dependencies" {
+    final claims = discover([
+        marker("apps/api/pyproject.toml", content: `[project]
+name = "api"
+dependencies = ["core", "models", "ghost", "vendored @ file:///w/vendored"]
+
+[tool.uv.sources]
+core = { workspace = true }
+models = { path = "../../libs/models" }
+ghost = { path = "../ghost" }
+`),
+        marker("libs/core/pyproject.toml", content: "[project]\nname = \"Core\"\n"),
+        marker("libs/models/pyproject.toml", content: "[project]\nname = \"models\"\n"),
+    ]) catch [];
+    std\assert(claims.len() == 3, message: "three projects");
+    final api = claimAt(claims, path: "apps/api") catch DiscoveredProject{};
+    std\assert(api.dependsOn.len() == 2, message: "two resolved sources");
+    std\assert(api.dependsOn.indexOf("libs/core") != null, message: "workspace source by normalized name");
+    std\assert(api.dependsOn.indexOf("libs/models") != null, message: "path source");
+    std\assert(gapsMention(api, text: "ghost: path source ../ghost"), message: "unresolved path source");
+    std\assert(gapsMention(api, text: "vendored @ file:///w/vendored: a direct reference"), message: "direct reference");
+}
+
+test "spans reach every directory a nested .py file sits under" {
+    final claim = claimAt(discover([marker("pyproject.toml", content: "[tool.ruff]\n"), source("web/tools/gen.py"), source("main.py")]) catch [],
+        path: ".") catch DiscoveredProject{};
+    std\assert(claim.spans.len() == 2, message: "web and web/tools");
+    std\assert(claim.spans[0] == "web" and claim.spans[1] == "web/tools", message: "sorted, ancestors included");
+}
+
+test "setup.py alone forms a project with no target" {
+    final claim = claimAt(discover([marker("legacy/setup.py", content: "from setuptools import setup\nsetup()\n")]) catch [],
+        path: "legacy") catch DiscoveredProject{};
+    std\assert(claim.role.value == "project", message: "setup.py is a marker");
+    std\assert(claim.targets.len() == 0, message: "uv reads only pyproject.toml");
+    std\assert(claim.notInferred[0].file == "legacy/setup.py", message: "gap names setup.py");
+}
+
+test "loose requirements and scripts join their owner as members" {
+    final claims = discover([
+        marker("pyproject.toml", content: "[tool.ruff]\n"),
+        source("src/a.py"),
+        marker("src/requirements.txt", content: "requests\n"),
+    ]) catch [];
+    std\assert(claims.len() == 1, message: "everything under . is owned by the root project");
+
+    final loose = discover([marker("tools/requirements.txt", content: "requests\n"), source("tools/run.py"), source("tools/other.py"),
+        source("tools/requirements-dev.txt")]) catch [];
+    std\assert(loose.len() == 1, message: "one member claim per directory");
+    final member = claimAt(loose, path: "tools") catch DiscoveredProject{};
+    std\assert(member.role.value == "member", message: "no manifest: member");
+    std\assert(member.notInferred.len() == 3, message: "one gap for the scripts, one per requirements file");
+}
+
+test "invalid TOML is a gap, not a failure" {
+    final claim = claimAt(discover([marker("pyproject.toml", content: "[[[")]) catch [], path: ".") catch DiscoveredProject{};
+    std\assert(claim.targets.len() == 0, message: "nothing inferred");
+    std\assert(gapsMention(claim, text: "not valid TOML"), message: "parse error reported");
+}
+
+test "a pyproject.toml without content is a contract violation" {
+    var threw = false;
+    try {
+        _ = discover([source("pyproject.toml")]);
+    } catch (err: any) {
+        threw = true;
+    }
+    std\assert(threw, message: "core must pass marker content");
+}

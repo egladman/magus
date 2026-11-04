@@ -38,6 +38,9 @@ type parser struct {
 	// readType must leave out of the annotation text it reconstructs (a function
 	// type's `!>` error set and `*>` yield type). Append-only for the parse.
 	typeTextSkips [][2]int
+	// eraseTypeArgs makes skipType drop an instantiation's type arguments from the
+	// reconstructed text; see readRuntimeType.
+	eraseTypeArgs bool
 	// importUsage tracks, for unused-import detection (BZZ3001), whether each
 	// top-level import's namespace-binding name (alias or basename; see
 	// registerImportBinding) was referenced anywhere in this parse. Populated by
@@ -766,21 +769,20 @@ func (p *parser) skipType() error {
 			}
 		}
 		// A generic instantiation: `Payload::<str, int>` (or the bare `Foo<T>`
-		// spelling). Type arguments are erased, so the identity is the bare name;
-		// the span is recorded for readType to drop, keeping `x is Payload::<str,
-		// int>` a test against `Payload`.
+		// spelling). An annotation keeps the arguments for the checker to
+		// substitute; a runtime type test drops them (see readRuntimeType).
 		if p.check(token.Colon) && p.peekAt(1).Kind == token.Colon && p.peekAt(2).Kind == token.Lt {
 			from := p.pos
 			if _, err := p.skipTypeParams(); err != nil {
 				return err
 			}
-			p.typeTextSkips = append(p.typeTextSkips, [2]int{from, p.pos})
+			p.skipTypeArgsText(from)
 		} else if p.check(token.Lt) {
 			from := p.pos
 			if err := p.skipGenericArgs(); err != nil {
 				return err
 			}
-			p.typeTextSkips = append(p.typeTextSkips, [2]int{from, p.pos})
+			p.skipTypeArgsText(from)
 		}
 		if p.check(token.Question) {
 			p.advance()
@@ -886,6 +888,25 @@ func (p *parser) readType() (string, error) {
 		return "", err
 	}
 	return p.joinTokens(before, p.pos), nil
+}
+
+// readRuntimeType reads a type the VM compares against a value's runtime type
+// (`is`, `as`, a catch clause, a `<T>` type value). The VM erases type
+// arguments, so they are dropped here and `x is Payload::<str, int>` tests
+// against `Payload`.
+func (p *parser) readRuntimeType() (string, error) {
+	outer := p.eraseTypeArgs
+	p.eraseTypeArgs = true
+	defer func() { p.eraseTypeArgs = outer }()
+	return p.readType()
+}
+
+// skipTypeArgsText drops the type-argument span from `from` to the current
+// position out of the reconstructed text while reading a runtime type.
+func (p *parser) skipTypeArgsText(from int) {
+	if p.eraseTypeArgs {
+		p.typeTextSkips = append(p.typeTextSkips, [2]int{from, p.pos})
+	}
 }
 
 // joinTokens concatenates the text of tokens[from:to].
@@ -1127,7 +1148,7 @@ func (p *parser) parseIf() (*ast.IfStmt, error) {
 			return nil, fmt.Errorf("buzz: line %d:%d: expected an identifier before ':' in an `as` binding, got the type %q", as.Pos.Line, as.Pos.Col, as.TypeName)
 		}
 		p.advance() // ':'
-		typStr, err := p.readType()
+		typStr, err := p.readRuntimeType()
 		if err != nil {
 			return nil, err
 		}
@@ -1185,7 +1206,7 @@ func (p *parser) parseTryCatch() (*ast.TryStmt, error) {
 			clause.ErrName = nameTok.Val
 			if p.check(token.Colon) {
 				p.advance()
-				if clause.TypeName, err = p.readType(); err != nil {
+				if clause.TypeName, err = p.readRuntimeType(); err != nil {
 					return nil, err
 				}
 			}
@@ -1783,7 +1804,17 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 			if err != nil {
 				return nil, err
 			}
-			conforms = append(conforms, id.Val)
+			name := id.Val
+			// `object<mod\Proto>` names a protocol another module declares.
+			for p.check(token.Backslash) {
+				p.advance()
+				seg, err := p.eatBindingIdent()
+				if err != nil {
+					return nil, err
+				}
+				name += `\` + seg.Val
+			}
+			conforms = append(conforms, name)
 			if !p.check(token.Comma) {
 				break
 			}
@@ -2111,7 +2142,7 @@ func (p *parser) parseComparison() (ast.Node, error) {
 			// `x is int?`, `x is a\Hello`, and `x is fun (id: int) > int`. A bare
 			// identifier covers none of those. `as` one case below already reads the
 			// full type; `is` had simply never been widened to match it.
-			typStr, err := p.readType()
+			typStr, err := p.readRuntimeType()
 			if err != nil {
 				return nil, err
 			}
@@ -2129,7 +2160,7 @@ func (p *parser) parseComparison() (ast.Node, error) {
 				// while gopherbuzz resolves the cast at runtime either way.
 				p.advance()
 			}
-			typStr, err := p.readType()
+			typStr, err := p.readRuntimeType()
 			if err != nil {
 				return nil, err
 			}
@@ -2247,7 +2278,7 @@ func (p *parser) parseUnary() (ast.Node, error) {
 	// comparison operator and the two uses never compete.
 	if p.check(token.Lt) {
 		t := p.advance()
-		annot, err := p.readType()
+		annot, err := p.readRuntimeType()
 		if err != nil {
 			return nil, err
 		}
@@ -2526,6 +2557,8 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 				return nil, err
 			}
 			lit.Namespace = namespace
+			lit.TypeArgs = pendingTypeArg
+			pendingTypeArg = ""
 			node = lit
 		default:
 			return node, nil

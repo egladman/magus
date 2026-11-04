@@ -19,16 +19,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestParseHTTPOpts checks the curl-style options map is decoded, including the
+// TestParseHTTPOpts checks the curl-style options record is read, including the
 // seconds-to-duration conversion. Retry settings are NOT here any more: they moved
-// to the typed HttpRetry policy, and a stray "retry" key in this map is now inert.
+// to the typed HttpRetry policy.
 func TestParseHTTPOpts(t *testing.T) {
 	t.Parallel()
-	o := parseHTTPOptions(map[string]any{
-		"fail":           true,
-		"fail_with_body": true,
-		"fail_early":     true,
-		"timeout":        float64(1.5),
+	o := parseHTTPOptions(types.HTTPOptions{
+		Fail:           true,
+		FailWithBody:   true,
+		FailEarly:      true,
+		TimeoutSeconds: float64(1.5),
 	})
 	assert.True(t, o.fail, "fail not set")
 	assert.True(t, o.failWithBody, "failWithBody not set")
@@ -36,11 +36,11 @@ func TestParseHTTPOpts(t *testing.T) {
 	assert.Equal(t, 1500*time.Millisecond, o.timeout)
 	assert.True(t, o.custom(), "an explicit timeout needs a client of its own")
 
-	// An empty/nil map is the default (non-custom) request.
-	assert.False(t, parseHTTPOptions(nil).custom(), "nil opts should not be custom")
+	// The zero record is the default (non-custom) request.
+	assert.False(t, parseHTTPOptions(types.HTTPOptions{}).custom(), "zero opts should not be custom")
 	assert.False(t, httpOpts{}.custom(), "zero opts should not be custom")
 	// fail/fail_with_body are applied after the response, so they need no client.
-	assert.False(t, parseHTTPOptions(map[string]any{"fail": true}).custom())
+	assert.False(t, parseHTTPOptions(types.HTTPOptions{Fail: true}).custom())
 }
 
 // TestHTTPOptsShouldRetry exercises the decider directly. It answers "is this
@@ -110,11 +110,11 @@ func TestHTTPClientTimeout(t *testing.T) {
 	assert.Equal(t, defaultHTTPTimeout, defaultHTTPClient.Timeout, "default client timeout")
 
 	// A client built for a retry policy still carries the default timeout.
-	o := parseHTTPOptions(nil)
+	o := parseHTTPOptions(types.HTTPOptions{})
 	assert.Equal(t, defaultHTTPTimeout, o.client(httpRetry{attempts: 2}).Timeout, "policy client default timeout")
 
 	// An explicit timeout opt overrides the default.
-	o = parseHTTPOptions(map[string]any{"timeout": float64(0.25)})
+	o = parseHTTPOptions(types.HTTPOptions{TimeoutSeconds: float64(0.25)})
 	assert.True(t, o.custom(), "timeout opt should make the request custom")
 	assert.Equal(t, 250*time.Millisecond, o.client(httpRetry{}).Timeout, "explicit timeout opt")
 }
@@ -134,9 +134,9 @@ func TestHTTPTimeoutBoundsSlowServer(t *testing.T) {
 	start := time.Now()
 	// No retry policy, so this is already a single attempt; the timeout is what
 	// bounds it.
-	_, err := HTTPGet(context.Background(), srv.URL, nil, map[string]any{
-		"timeout": float64(0.05), // 50ms
-	}, nil)
+	_, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{
+		TimeoutSeconds: float64(0.05), // 50ms
+	}, types.HTTPRetry{})
 	require.Error(t, err, "want a timeout error, not a hang")
 	assert.Less(t, time.Since(start), 5*time.Second, "request was not bounded by timeout")
 }
@@ -149,18 +149,18 @@ func TestHTTPFail(t *testing.T) {
 	defer srv.Close()
 
 	// Without fail: a 404 is a normal result map.
-	res, err := HTTPGet(context.Background(), srv.URL, nil, nil, nil)
+	res, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{}, types.HTTPRetry{})
 	require.NoError(t, err, "unexpected error without fail")
 	assert.Equal(t, http.StatusNotFound, res.Status)
 
 	// With fail: a 404 becomes an error, no body in the message.
-	_, err = HTTPGet(context.Background(), srv.URL, nil, map[string]any{"fail": true}, nil)
+	_, err = HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{Fail: true}, types.HTTPRetry{})
 	require.Error(t, err, "fail: want a 404 error")
 	assert.Contains(t, err.Error(), "404", "fail: want a 404 error")
 	assert.NotContains(t, err.Error(), "nope", "fail: body leaked into error")
 
 	// With fail_with_body: the body is surfaced in the error.
-	_, err = HTTPGet(context.Background(), srv.URL, nil, map[string]any{"fail_with_body": true}, nil)
+	_, err = HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{FailWithBody: true}, types.HTTPRetry{})
 	require.Error(t, err, "fail_with_body: want body in error")
 	assert.Contains(t, err.Error(), "nope", "fail_with_body: want body in error")
 }
@@ -176,15 +176,15 @@ func TestHTTPRefusesUnderMagusOffline(t *testing.T) {
 	defer srv.Close()
 
 	t.Setenv("MAGUS_OFFLINE", "1")
-	_, err := HTTPGet(context.Background(), srv.URL, nil, nil, nil)
+	_, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{}, types.HTTPRetry{})
 	require.ErrorContains(t, err, "MAGUS_OFFLINE")
-	_, err = HTTPDownload(context.Background(), srv.URL, filepath.Join(t.TempDir(), "out"), nil, nil, nil)
+	_, err = HTTPDownload(context.Background(), srv.URL, filepath.Join(t.TempDir(), "out"), nil, types.HTTPOptions{}, types.HTTPRetry{})
 	require.ErrorContains(t, err, "MAGUS_OFFLINE")
 	assert.Zero(t, hits, "no request may leave the process")
 
 	for _, off := range []string{"0", "false"} {
 		t.Setenv("MAGUS_OFFLINE", off)
-		res, err := HTTPGet(context.Background(), srv.URL, nil, nil, nil)
+		res, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{}, types.HTTPRetry{})
 		require.NoError(t, err, off)
 		assert.Equal(t, "online", res.Body, off)
 	}
@@ -201,7 +201,7 @@ func TestHTTPFailCarriesTheStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := HTTPGet(context.Background(), srv.URL, nil, map[string]any{"fail": true}, nil)
+	_, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{Fail: true}, types.HTTPRetry{})
 	require.Error(t, err)
 
 	var se *StatusError
@@ -216,7 +216,7 @@ func TestHTTPFailCarriesTheStatus(t *testing.T) {
 	assert.Contains(t, fields["message"], "server returned 404")
 	assert.NotContains(t, fields, "body", "fail without fail_with_body must not carry one")
 
-	_, err = HTTPGet(context.Background(), srv.URL, nil, map[string]any{"fail_with_body": true}, nil)
+	_, err = HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{FailWithBody: true}, types.HTTPRetry{})
 	require.ErrorAs(t, err, &se)
 	assert.Equal(t, "nope\n", se.BuzzError()["body"])
 }
@@ -233,10 +233,10 @@ func TestHTTPRetryThenSucceeds(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	res, err := HTTPGet(context.Background(), srv.URL, nil, nil, map[string]any{
-		"attempts": 3.0,
-		"delay_ms": 1.0, // keep the test fast
-		"fixed":    true,
+	res, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{}, types.HTTPRetry{
+		Attempts: 3.0,
+		DelayMs:  1.0, // keep the test fast
+		Fixed:    true,
 	})
 	require.NoError(t, err)
 	// The response headers are the transport's own (Date, Content-Length), not this test's to pin.
@@ -255,8 +255,8 @@ func TestHTTPFailEarlyDisablesStatusRetry(t *testing.T) {
 
 	// The policy would normally retry a 503; fail_early stops it at the first try.
 	res, err := HTTPGet(context.Background(), srv.URL, nil,
-		map[string]any{"fail_early": true},
-		map[string]any{"attempts": 5.0, "delay_ms": 1.0})
+		types.HTTPOptions{FailEarly: true},
+		types.HTTPRetry{Attempts: 5, DelayMs: 1})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusServiceUnavailable, res.Status)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&hits), "server hits (fail_early)")
@@ -274,10 +274,10 @@ func TestHTTPRetryAllErrors(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	res, err := HTTPGet(context.Background(), srv.URL, nil, nil, map[string]any{
-		"attempts":   3.0,
-		"delay_ms":   1.0,
-		"all_errors": true,
+	res, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{}, types.HTTPRetry{
+		Attempts:  3.0,
+		DelayMs:   1.0,
+		AllErrors: true,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, res.Status)
@@ -324,7 +324,7 @@ func TestHTTPServeSingleDir(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.html"), []byte("home page"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "note.txt"), []byte("a note"), 0o600))
 
-	port, err := HTTPServe(context.Background(), map[string]any{"dir": dir})
+	port, err := HTTPServe(context.Background(), types.HTTPServerOptions{Dir: dir})
 	require.NoError(t, err)
 	require.NotZero(t, port)
 
@@ -348,10 +348,8 @@ func TestHTTPServeMounts(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(docsDir, "shared.txt"), []byte("from docs"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(consoleDir, "shared.txt"), []byte("from console"), 0o600))
 
-	// mounts arrives from Buzz as map[string]any (host.AnyMap), so exercise that
-	// exact shape here rather than a map[string]string.
-	port, err := HTTPServe(context.Background(), map[string]any{
-		"mounts": map[string]any{
+	port, err := HTTPServe(context.Background(), types.HTTPServerOptions{
+		Mounts: map[string]string{
 			"/":         docsDir,
 			"/console/": consoleDir,
 		},
@@ -376,87 +374,33 @@ func TestParseServerOpts(t *testing.T) {
 	t.Parallel()
 
 	t.Run("dir only", func(t *testing.T) {
-		dir, mounts, port, err := parseServerOptions(map[string]any{"dir": "site"})
+		dir, mounts, port, err := parseServerOptions(types.HTTPServerOptions{Dir: "site"})
 		require.NoError(t, err)
 		assert.Equal(t, "site", dir)
 		assert.Nil(t, mounts)
 		assert.Equal(t, 0, port)
 	})
 	t.Run("mounts with port", func(t *testing.T) {
-		dir, mounts, port, err := parseServerOptions(map[string]any{
-			"mounts": map[string]any{"/": "docs/gen", "/console/": "console/gen"},
-			"port":   int64(9001),
+		dir, mounts, port, err := parseServerOptions(types.HTTPServerOptions{
+			Mounts: map[string]string{"/": "docs/gen", "/console/": "console/gen"},
+			Port:   9001,
 		})
 		require.NoError(t, err)
 		assert.Empty(t, dir)
 		assert.Equal(t, map[string]string{"/": "docs/gen", "/console/": "console/gen"}, mounts)
 		assert.Equal(t, 9001, port)
 	})
-	t.Run("plain int port", func(t *testing.T) {
-		_, _, port, err := parseServerOptions(map[string]any{"dir": "site", "port": 8080})
-		require.NoError(t, err)
-		assert.Equal(t, 8080, port)
-	})
 
-	t.Run("unknown key", func(t *testing.T) {
-		_, _, _, err := parseServerOptions(map[string]any{"mport": 8080})
-		require.Error(t, err)
-		assert.Equal(t, `http.server: unknown option "mport" (known: dir, mounts, port)`, err.Error())
-	})
-	t.Run("unknown keys sorted", func(t *testing.T) {
-		_, _, _, err := parseServerOptions(map[string]any{"dir": "x", "zed": 1, "abc": 2})
-		require.Error(t, err)
-		assert.Equal(t, `http.server: unknown options "abc", "zed" (known: dir, mounts, port)`, err.Error())
-	})
 	t.Run("neither dir nor mounts", func(t *testing.T) {
-		_, _, _, err := parseServerOptions(map[string]any{})
+		_, _, _, err := parseServerOptions(types.HTTPServerOptions{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "one of")
 	})
 	t.Run("both dir and mounts", func(t *testing.T) {
-		_, _, _, err := parseServerOptions(map[string]any{"dir": "x", "mounts": map[string]any{"/": "y"}})
+		_, _, _, err := parseServerOptions(types.HTTPServerOptions{Dir: "x", Mounts: map[string]string{"/": "y"}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not both")
 	})
-	t.Run("dir wrong type", func(t *testing.T) {
-		_, _, _, err := parseServerOptions(map[string]any{"dir": 42})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `"dir" must be a string`)
-	})
-	t.Run("empty dir", func(t *testing.T) {
-		_, _, _, err := parseServerOptions(map[string]any{"dir": ""})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `"dir" must not be empty`)
-	})
-	t.Run("mounts wrong type", func(t *testing.T) {
-		_, _, _, err := parseServerOptions(map[string]any{"mounts": "not-a-map"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `"mounts" must be a map`)
-	})
-	t.Run("empty mounts", func(t *testing.T) {
-		_, _, _, err := parseServerOptions(map[string]any{"mounts": map[string]any{}})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `"mounts" must not be empty`)
-	})
-	t.Run("mount value wrong type", func(t *testing.T) {
-		_, _, _, err := parseServerOptions(map[string]any{"mounts": map[string]any{"/": 7}})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must map to a string dir")
-	})
-	t.Run("port wrong type", func(t *testing.T) {
-		_, _, _, err := parseServerOptions(map[string]any{"dir": "x", "port": "8080"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `"port" must be an int`)
-	})
-}
-
-// TestHTTPServeRejectsBadOpts checks the top-level HTTPServe surfaces a validation
-// error (from parseServerOptions) rather than binding a server.
-func TestHTTPServeRejectsBadOpts(t *testing.T) {
-	t.Parallel()
-	_, err := HTTPServe(context.Background(), map[string]any{"mport": 8080})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `unknown option "mport"`)
 }
 
 // TestHTTPServeUnderTracingDoesNotBind checks a dry-run tracing context (as used
@@ -468,7 +412,7 @@ func TestHTTPServeUnderTracingDoesNotBind(t *testing.T) {
 	dir := t.TempDir()
 
 	ctx := types.WithTrace(context.Background())
-	port, err := HTTPServe(ctx, map[string]any{"dir": dir})
+	port, err := HTTPServe(ctx, types.HTTPServerOptions{Dir: dir})
 	require.NoError(t, err)
 	assert.Zero(t, port, "a dry run must not bind a real port")
 }
@@ -485,7 +429,7 @@ func TestHTTPDownloadStreamsBinaryToFile(t *testing.T) {
 
 	dest := filepath.Join(t.TempDir(), "nested", "out.bin")
 	status, err := HTTPDownload(context.Background(), srv.URL, dest,
-		map[string]string{"X-Test": "yes"}, nil, nil)
+		map[string]string{"X-Test": "yes"}, types.HTTPOptions{}, types.HTTPRetry{})
 	require.NoError(t, err)
 	assert.Equal(t, 200, status)
 
@@ -501,7 +445,7 @@ func TestHTTPDownloadNon2xxWritesNothing(t *testing.T) {
 	defer srv.Close()
 
 	dest := filepath.Join(t.TempDir(), "missing.bin")
-	status, err := HTTPDownload(context.Background(), srv.URL, dest, nil, nil, nil)
+	status, err := HTTPDownload(context.Background(), srv.URL, dest, nil, types.HTTPOptions{}, types.HTTPRetry{})
 	require.NoError(t, err)
 	assert.Equal(t, 404, status)
 
@@ -520,7 +464,7 @@ func TestHTTPDoesNotRetryByDefault(t *testing.T) {
 
 	// A 500 is squarely in the retryable set. With no policy it must still be
 	// requested exactly once; that is the default this asserts.
-	_, err := HTTPGet(context.Background(), srv.URL, nil, nil, nil)
+	_, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{}, types.HTTPRetry{})
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "no policy must mean one attempt")
 }
@@ -533,9 +477,9 @@ func TestHTTPRetryPolicyIsHonored(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := HTTPGet(context.Background(), srv.URL, nil, nil, map[string]any{
-		"attempts": 3.0,
-		"delay_ms": 1.0,
+	_, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{}, types.HTTPRetry{
+		Attempts: 3.0,
+		DelayMs:  1.0,
 	})
 	require.NoError(t, err)
 	// attempts counts TOTAL tries, not retries after the first.
@@ -550,7 +494,7 @@ func TestHTTPRetryAttemptsOneMeansOnce(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := HTTPGet(context.Background(), srv.URL, nil, nil, map[string]any{"attempts": 1.0})
+	_, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{}, types.HTTPRetry{Attempts: 1.0})
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
 }
@@ -564,18 +508,18 @@ func TestHTTPRetryDoesNotRetryClientErrorsWithoutAllErrors(t *testing.T) {
 	defer srv.Close()
 
 	// Retrying a 404 cannot succeed; it only delays the report.
-	_, err := HTTPGet(context.Background(), srv.URL, nil, nil, map[string]any{
-		"attempts": 3.0,
-		"delay_ms": 1.0,
+	_, err := HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{}, types.HTTPRetry{
+		Attempts: 3.0,
+		DelayMs:  1.0,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
 
 	atomic.StoreInt32(&calls, 0)
-	_, err = HTTPGet(context.Background(), srv.URL, nil, nil, map[string]any{
-		"attempts":   3.0,
-		"delay_ms":   1.0,
-		"all_errors": true,
+	_, err = HTTPGet(context.Background(), srv.URL, nil, types.HTTPOptions{}, types.HTTPRetry{
+		Attempts:  3.0,
+		DelayMs:   1.0,
+		AllErrors: true,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, int32(3), atomic.LoadInt32(&calls), "all_errors opts into retrying a 4xx")
@@ -593,9 +537,9 @@ func TestHTTPRetryDownloadUsesThePolicy(t *testing.T) {
 	defer srv.Close()
 
 	dest := filepath.Join(t.TempDir(), "out.bin")
-	status, err := HTTPDownload(context.Background(), srv.URL, dest, nil, nil, map[string]any{
-		"attempts": 5.0,
-		"delay_ms": 1.0,
+	status, err := HTTPDownload(context.Background(), srv.URL, dest, nil, types.HTTPOptions{}, types.HTTPRetry{
+		Attempts: 5.0,
+		DelayMs:  1.0,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 200, status)
@@ -605,44 +549,15 @@ func TestHTTPRetryDownloadUsesThePolicy(t *testing.T) {
 }
 
 func TestParseHTTPRetryZeroPolicyDoesNotRetry(t *testing.T) {
-	mustParse := func(m map[string]any) httpRetry {
-		t.Helper()
-		r, err := parseHTTPRetry(m)
-		require.NoError(t, err)
-		return r
-	}
-	assert.False(t, mustParse(nil).retries(), "an omitted policy runs once")
-	assert.False(t, mustParse(map[string]any{}).retries(), "an empty policy runs once")
-	assert.False(t, mustParse(map[string]any{"attempts": 0.0}).retries())
-	assert.False(t, mustParse(map[string]any{"attempts": 1.0}).retries())
-	assert.True(t, mustParse(map[string]any{"attempts": 2.0}).retries())
-}
-
-// A misspelled key must be LOUD. Silently ignoring it means the policy never
-// retries and nothing says so, which is the failure this whole type exists to
-// prevent.
-func TestParseHTTPRetryRejectsUnknownKeys(t *testing.T) {
-	_, err := parseHTTPRetry(map[string]any{"attemps": 3.0})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "attemps")
-	assert.Contains(t, err.Error(), "attempts", "the error should name the real field")
-
-	// It reaches the caller through the method, not just the parser.
-	_, err = HTTPGet(context.Background(), "https://example.invalid", nil, nil,
-		map[string]any{"delay": 100.0})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "delay")
+	assert.False(t, parseHTTPRetry(types.HTTPRetry{}).retries(), "an omitted policy runs once")
+	assert.False(t, parseHTTPRetry(types.HTTPRetry{Attempts: 1}).retries())
+	assert.True(t, parseHTTPRetry(types.HTTPRetry{Attempts: 2}).retries())
 }
 
 func TestParseHTTPRetryReadsMilliseconds(t *testing.T) {
 	// The unit is in the field name for a reason: a caller writing 250 must get
 	// 250ms, not 250 seconds.
-	r, err := parseHTTPRetry(map[string]any{
-		"delay_ms":       250.0,
-		"max_delay_ms":   2000.0,
-		"max_elapsed_ms": 10000.0,
-	})
-	require.NoError(t, err)
+	r := parseHTTPRetry(types.HTTPRetry{DelayMs: 250, MaxDelayMs: 2000, MaxElapsedMs: 10000})
 	assert.Equal(t, httpRetry{delay: 250 * time.Millisecond, maxDelay: 2 * time.Second, maxElapsed: 10 * time.Second}, r)
 }
 
@@ -661,7 +576,7 @@ func TestHTTPRedirectAcrossHostsDropsCredentialHeaders(t *testing.T) {
 
 	res, err := HTTPGet(context.Background(), origin.URL, map[string]string{
 		"Authorization": "Bearer s", "Cookie": "a=b", "X-Api-Key": "k", "Private-Token": "t", "X-Trace": "keep",
-	}, nil, nil)
+	}, types.HTTPOptions{}, types.HTTPRetry{})
 	require.NoError(t, err)
 	assert.Equal(t, "ok", res.Body)
 	for _, name := range []string{"Authorization", "Cookie", "X-Api-Key", "Private-Token"} {
@@ -682,19 +597,7 @@ func TestHTTPRedirectKeepsHeadersOnTheSameHost(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := HTTPGet(context.Background(), srv.URL+"/start", map[string]string{"X-Api-Key": "k"}, nil, nil)
+	_, err := HTTPGet(context.Background(), srv.URL+"/start", map[string]string{"X-Api-Key": "k"}, types.HTTPOptions{}, types.HTTPRetry{})
 	require.NoError(t, err)
 	assert.Equal(t, "k", seen.Get("X-Api-Key"))
-}
-
-func TestGuardRedirectRefusesHTTPSToHTTP(t *testing.T) {
-	t.Parallel()
-	secure, err := http.NewRequest(http.MethodGet, "https://a.example/x", nil)
-	require.NoError(t, err)
-	plain, err := http.NewRequest(http.MethodGet, "http://a.example/x", nil)
-	require.NoError(t, err)
-
-	require.Error(t, guardRedirect(plain, []*http.Request{secure}))
-	require.NoError(t, guardRedirect(secure, []*http.Request{plain}))
-	require.NoError(t, guardRedirect(plain, []*http.Request{plain}))
 }

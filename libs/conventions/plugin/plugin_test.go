@@ -9,8 +9,9 @@ import (
 )
 
 // TestPluginsRegister builds every plugin from a yaml-shaped settings block, the
-// path production runs, and checks the registered name matches the analyzer's:
-// golangci-lint's settings key, enable entry and //nolint name all have to agree.
+// path production runs, and checks the analyzer name starts with the registered name (the filenames
+// analyzer appends a vocabulary digest). The settings key, enable entry and
+// //nolint name all use the registered name.
 func TestPluginsRegister(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "cmd/app/main.go", "cmd/app/gen/gen.go")
 	for name, settings := range map[string]any{
@@ -35,6 +36,7 @@ func TestPluginsRegister(t *testing.T) {
 		"namewords":     map[string]any{"suffixes": []any{"Of"}, "short-forms": []any{"Cfg"}},
 		"providerio":    map[string]any{"module": "example.com/m", "dirs": []any{"cmd/app"}, "hint": "see docs"},
 		"ruletext":      map[string]any{"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:", "hint": "see docs"},
+		"secretfields":  map[string]any{"words": []any{"Token"}, "hint": "see docs"},
 		"stderrprint": map[string]any{
 			"module": "example.com/m", "usage-pattern": "(?i)usage$", "usage-fields": []any{"Usage"},
 			"callee-packages": []any{"example.com/m"}, "display": []any{"example.com/m/tty"},
@@ -58,7 +60,7 @@ func TestPluginsRegister(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(analyzers) != 1 || analyzers[0].Name != name {
+			if len(analyzers) != 1 || !strings.HasPrefix(analyzers[0].Name, name) {
 				t.Fatalf("plugin %q built %v", name, analyzers)
 			}
 			// Syntax loading leaves pass.Pkg nil, which every analyzer reads.

@@ -7,8 +7,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"log/slog"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -162,11 +168,11 @@ func TestReadMemoizesPerProviderAndReference(t *testing.T) {
 	var calls int
 	var mu sync.Mutex
 	withOpener(t, func(context.Context, string) (Provider, error) {
-		return providerFunc(func(context.Context, string) (Value, error) {
+		return providerFunc(func(context.Context, string) (types.Secret, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			calls++
-			return NewValue("resolved-value"), nil
+			return types.NewSecret("resolved-value"), nil
 		}), nil
 	})
 	r.SetProviderName("fake")
@@ -191,8 +197,8 @@ func TestReadReReadsWhenTheProviderChanges(t *testing.T) {
 	assert.Equal(t, "from-env", v.Reveal())
 
 	withOpener(t, func(context.Context, string) (Provider, error) {
-		return providerFunc(func(context.Context, string) (Value, error) {
-			return NewValue("from-vault"), nil
+		return providerFunc(func(context.Context, string) (types.Secret, error) {
+			return types.NewSecret("from-vault"), nil
 		}), nil
 	})
 	r.SetProviderName("vault")
@@ -212,12 +218,12 @@ func TestReadCollapsesConcurrentReadsOfOneReference(t *testing.T) {
 	calls := 0
 	release := make(chan struct{})
 	withOpener(t, func(context.Context, string) (Provider, error) {
-		return providerFunc(func(context.Context, string) (Value, error) {
+		return providerFunc(func(context.Context, string) (types.Secret, error) {
 			mu.Lock()
 			calls++
 			mu.Unlock()
 			<-release // hold every caller inside the provider so they genuinely overlap
-			return NewValue("one-value"), nil
+			return types.NewSecret("one-value"), nil
 		}), nil
 	})
 	r.SetProviderName("slow")
@@ -266,9 +272,11 @@ func TestRedactStringMatchesRedact(t *testing.T) {
 }
 
 // providerFunc adapts a function to [Provider].
-type providerFunc func(context.Context, string) (Value, error)
+type providerFunc func(context.Context, string) (types.Secret, error)
 
-func (f providerFunc) Fetch(ctx context.Context, ref string) (Value, error) { return f(ctx, ref) }
+func (f providerFunc) Fetch(ctx context.Context, ref string) (types.Secret, error) {
+	return f(ctx, ref)
+}
 
 // withOpener installs an opener for one test and restores the previous one after.
 // RegisterProviderOpener panics on a second call (correct for its real once-at-init
@@ -476,7 +484,7 @@ func TestReadSurfacesProviderOpenFailures(t *testing.T) {
 func TestReadRejectsAnEmptyValueFromAProvider(t *testing.T) {
 	ctx, r := withResolver(t)
 	withOpener(t, func(context.Context, string) (Provider, error) {
-		return providerFunc(func(context.Context, string) (Value, error) { return Value{}, nil }), nil
+		return providerFunc(func(context.Context, string) (types.Secret, error) { return types.Secret{}, nil }), nil
 	})
 	r.SetProviderName("blank")
 
@@ -594,4 +602,77 @@ func (r *Resolver) endpointCount() int {
 	r.endpointMu.Lock()
 	defer r.endpointMu.Unlock()
 	return len(r.endpoints)
+}
+
+// TestRegisterMasksAHeldCredential: a token magus holds without a provider read is masked
+// like a resolved secret, with the mask a types.Secret prints.
+func TestRegisterMasksAHeldCredential(t *testing.T) {
+	r := New()
+	r.Register(types.NewSecret("stdin-registry-token"))
+	assert.Equal(t, "push with "+mask, r.RedactString("push with stdin-registry-token"))
+	assert.Equal(t, mask, types.NewSecret("x").String())
+
+	var none *Resolver
+	none.Register(types.NewSecret("ignored-by-nil"))
+}
+
+// revealCeiling is how many Reveal calls production code makes. Each is a place a
+// credential stops protecting itself. Lower it when a call goes away; raising it is a
+// review question: could the Secret travel further before it is revealed?
+const revealCeiling = 35
+
+// TestRevealCallsStayCapped counts Reveal calls in the root module's non-test files.
+func TestRevealCallsStayCapped(t *testing.T) {
+	root := filepath.Join("..", "..")
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		t.Fatalf("the module root is not two levels up: %v", err)
+	}
+	var sites []string
+	fset := token.NewFileSet()
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if path != root && (strings.HasPrefix(name, ".") || name == "testdata" || name == "node_modules" || isModule(path)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return err
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok || len(call.Args) != 0 {
+				return true
+			}
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Reveal" {
+				sites = append(sites, fset.Position(call.Pos()).String())
+			}
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sites) > revealCeiling {
+		t.Fatalf("%d production Reveal calls, over the ceiling of %d; keep the Secret until the line that hands it out:\n%s",
+			len(sites), revealCeiling, strings.Join(sites, "\n"))
+	}
+	if len(sites) < revealCeiling {
+		t.Fatalf("%d production Reveal calls, under the ceiling of %d: lower revealCeiling to %d", len(sites), revealCeiling, len(sites))
+	}
+}
+
+// isModule reports whether dir holds its own go.mod, which makes it another module.
+func isModule(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "go.mod"))
+	return err == nil
 }

@@ -6,12 +6,13 @@ import "site/diagrams/buzz-stages" as _;
 import "site/diagrams/packages" as _;
 
 export fun volatilityFigure() > figure\Figure !> any {
-    final decide = magus\dir("internal/ci/volatility");
+    final decide = magus\graph().dir("internal/ci/volatility");
     final fail = figure\external("Target fails", look: figure\Look.plain);
     final report = figure\external("Report failure", look: figure\Look.plain);
-    final thin = codeStage(decide, symbol: "shouldRetry().", name: "enough history?", look: figure\Look.decision);
-    final touched = codeStage(decide, symbol: "shouldRetry().", name: "diff touched it?", look: figure\Look.decision);
-    final rate = codeStage(decide, symbol: "score().", name: "over threshold?", look: figure\Look.decision);
+    final shouldRetry = "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/shouldRetry().";
+    final thin = codeStage(decide, symbol: shouldRetry, name: "enough history?", look: figure\Look.decision);
+    final touched = codeStage(decide, symbol: shouldRetry, name: "diff touched it?", look: figure\Look.decision);
+    final rate = codeStage(decide, symbol: "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/score().", name: "over threshold?", look: figure\Look.decision);
     // invokeSpell in the root package reruns the target; codeStage cannot anchor a symbol there.
     final retry = figure\external("Retry once", sub: "the same target", look: figure\Look.plain);
     final volatile = figure\external("Record volatile", sub: "the run continues", look: figure\Look.plain);
@@ -25,7 +26,7 @@ export fun volatilityFigure() > figure\Figure !> any {
                 + "and the run continues; anything else is a suspected regression.",
             direction: figure\Direction.down)
         .actor(fail)
-        .box(decide, label: "Decide", sub: "on, and opted in?", symbol: magus\refs("Runtime#Decide()."))
+        .box(decide, label: "Decide", sub: "on, and opted in?", symbol: magus\graph().refs("symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/Runtime#Decide()."))
         .actor(report)
         .actor(thin)
         .actor(touched)
@@ -47,10 +48,10 @@ export fun volatilityFigure() > figure\Figure !> any {
         .flowAcross(retry, dst: regress, label: "fails again")
         .legend(figure\Look.focal, label: "wants a human")
         .scope(goPackages("internal/ci/**"))
-        .except([magus\dir("internal/ci")],
+        .except([magus\graph().dir("internal/ci")],
             why: "plans the CI fan-out and the gate; a retry is decided per target, inside a run")
-        .except([magus\dir("internal/ci/annotate")],
+        .except([magus\graph().dir("internal/ci/annotate")],
             why: "turns a retry already made into a CI notice; drawn in ci-providers")
-        .except([magus\dir("internal/ci/forecast")],
+        .except([magus\graph().dir("internal/ci/forecast")],
             why: "the run history Decide reads and Record appends to; drawn, it breaks the nine-box budget");
 }

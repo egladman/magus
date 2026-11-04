@@ -19,10 +19,12 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/internal/symbols"
@@ -60,6 +62,26 @@ const (
 	symbolIndexBackoffBase   = 2 * time.Minute  // first backoff after a failed run (doubles, capped)
 	symbolIndexBackoffMax    = 30 * time.Minute
 )
+
+// errMachineBuildHeld stops a background index when another build on this
+// machine holds the build lock. It never queues behind one.
+var errMachineBuildHeld = errors.New("another graph build holds this machine's build lock")
+
+// takeMachineBuildLock takes the machine's build lock for a background index
+// of root, or answers errMachineBuildHeld naming the holder. It records no
+// store, so a graph build queued behind it still builds.
+func takeMachineBuildLock(root string) (*maintenance.GraphBuildLock, error) {
+	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the background symbol index of " + root}
+	notices := slog.NewLogLogger(slog.Default().Handler(), slog.LevelInfo).Writer()
+	lock, holder, err := maintenance.TryMachineGraphBuild(me, notices)
+	if err != nil {
+		return nil, err
+	}
+	if holder != nil {
+		return nil, fmt.Errorf("%w: %s", errMachineBuildHeld, holder)
+	}
+	return lock, nil
+}
 
 // indexRef names one symbol index: a project and the indexer op that writes it. A project
 // bound to go and buzz holds two, scheduled, run and backed off apart, so a missing
@@ -243,8 +265,11 @@ func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 	si.mu.Unlock()
 
 	si.log.DebugContext(ctx, "background symbol index starting", slog.String("project", ref.project), slog.String("op", ref.op))
-	err := si.runIndex(ctx, ref)
+	si.settle(ctx, ref, si.runIndex(ctx, ref))
+}
 
+// settle records how one run of ref's op ended, deciding when it may run again.
+func (si *symbolIndexer) settle(ctx context.Context, ref indexRef, err error) {
 	si.mu.Lock()
 	defer si.mu.Unlock()
 	st := si.state[ref]
@@ -257,12 +282,23 @@ func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 		st.dirty = true
 		return
 	}
+	if errors.Is(err, errMachineBuildHeld) {
+		// Nothing ran, so no throttle: the next tick asks the lock again.
+		si.log.DebugContext(ctx, "background symbol index stopped", slog.String("project", ref.project), slog.String("op", ref.op), attr.Error(err))
+		st.dirty = true
+		return
+	}
 	// A run that actually executed (completed or failed) stamps lastRun to throttle re-runs.
 	st.lastRun = si.now()
 	if errors.Is(err, types.UndeclaredSourceModified) {
 		// An edit landed while the indexer read the sources. The indexer writes none of
 		// them, so this is a lost race, not a broken indexer, and backing off would keep
 		// the index stale for minutes whenever someone edits during a run.
+		st.dirty = true
+		return
+	}
+	if errors.Is(err, types.GateSuperseded) || lostTheLock(err) {
+		// A run wanted this project: no verdict on the indexer.
 		st.dirty = true
 		return
 	}
@@ -357,56 +393,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	if len(capable) == 0 {
 		return func() {}, nil
 	}
-	byRef := make(map[indexRef]projectIndex, len(capable))
-	refsByPath := map[string][]indexRef{}
-	for _, idx := range capable {
-		byRef[idx.ref()] = idx
-		refsByPath[idx.project.Path] = append(refsByPath[idx.project.Path], idx.ref())
-	}
-
-	quiet := defaultSymbolQuiet
-	if scfg.QuietSeconds > 0 {
-		quiet = time.Duration(scfg.QuietSeconds) * time.Second
-	}
-	minInterval := defaultSymbolMinInterval
-	if scfg.MinIntervalSeconds > 0 {
-		minInterval = time.Duration(scfg.MinIntervalSeconds) * time.Second
-	}
-
-	si := &symbolIndexer{
-		log:         slog.With(attr.Component("magus")),
-		quiet:       quiet,
-		minInterval: minInterval,
-		now:         time.Now,
-		state:       map[indexRef]*indexState{},
-		indexesForPath: func(abs string) []indexRef {
-			project, ok := matchProject(abs, capable)
-			if !ok {
-				return nil
-			}
-			return refsByPath[project]
-		},
-		runIndex: func(ctx context.Context, ref indexRef) error {
-			err := m.runTargets(ctx, []types.Target{{Path: ref.project, Name: ref.op}}, run{})
-			if err == nil {
-				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
-					slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", attr.Error(gerr))
-				}
-				if serr := m.WriteScriptsIndex(ctx); serr != nil {
-					slog.With(attr.Component("magus")).DebugContext(ctx, "scripts index not written", attr.Error(serr))
-				}
-			}
-			if err == nil || ctx.Err() != nil {
-				return err // a clean run, or a yield-cancel that carries no useful hint
-			}
-			idx := byRef[ref]
-			return symbolRunError(idx.projectRef(), idx.language, err)
-		},
-		status: m.SymbolIndexStatusByStamp,
-		// This watcher is what makes the freshness memo trustworthy: it drops the memo
-		// whenever a capable project's sources change or an index run finishes.
-		onChange: m.symbolStatus.invalidate,
-	}
+	si := m.newSymbolIndexer(scfg, capable)
 
 	wctx, cancel := context.WithCancel(ctx)
 	// BuiltinIgnore skips the cache dir (so the indexer's own output never triggers a
@@ -428,16 +415,87 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	}, nil
 }
 
+// newSymbolIndexer is the auto-indexer over capable, its windows from scfg.
+func (m *Magus) newSymbolIndexer(scfg config.SymbolIndexingConfig, capable []projectIndex) *symbolIndexer {
+	byRef := make(map[indexRef]projectIndex, len(capable))
+	refsByPath := map[string][]indexRef{}
+	for _, idx := range capable {
+		byRef[idx.ref()] = idx
+		refsByPath[idx.project.Path] = append(refsByPath[idx.project.Path], idx.ref())
+	}
+
+	quiet := defaultSymbolQuiet
+	if scfg.QuietSeconds > 0 {
+		quiet = time.Duration(scfg.QuietSeconds) * time.Second
+	}
+	minInterval := defaultSymbolMinInterval
+	if scfg.MinIntervalSeconds > 0 {
+		minInterval = time.Duration(scfg.MinIntervalSeconds) * time.Second
+	}
+
+	return &symbolIndexer{
+		log:         slog.With(attr.Component("magus")),
+		quiet:       quiet,
+		minInterval: minInterval,
+		now:         time.Now,
+		state:       map[indexRef]*indexState{},
+		indexesForPath: func(abs string) []indexRef {
+			project, ok := matchProject(abs, capable)
+			if !ok {
+				return nil
+			}
+			return refsByPath[project]
+		},
+		runIndex: func(ctx context.Context, ref indexRef) error {
+			return m.runBackgroundIndex(ctx, byRef[ref])
+		},
+		status: m.SymbolIndexStatusByStamp,
+		// The watcher makes the freshness memo trustworthy: it drops the
+		// memo when a capable project's sources change or an index run ends.
+		onChange: m.symbolStatus.invalidate,
+	}
+}
+
+// runBackgroundIndex runs idx's op under the machine's build lock, then writes
+// the indexes a guard hook reads.
+func (m *Magus) runBackgroundIndex(ctx context.Context, idx projectIndex) error {
+	lock, err := takeMachineBuildLock(m.Root())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Release() }()
+	if err := m.runTargets(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}}, run{Background: true}); err != nil {
+		if ctx.Err() != nil {
+			return err // a yield-cancel carries no useful hint
+		}
+		return symbolRunError(idx.projectRef(), idx.language, err)
+	}
+	// Claimed after the run: a step behind its own process's claim
+	// may never seat.
+	release, err := m.admitSymbolRefresh(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if gerr := m.WriteGuardIndex(ctx); gerr != nil {
+		slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", attr.Error(gerr))
+	}
+	if serr := m.WriteScriptsIndex(ctx); serr != nil {
+		slog.With(attr.Component("magus")).DebugContext(ctx, "scripts index not written", attr.Error(serr))
+	}
+	return nil
+}
+
 // projectIndexes is the symbol indexes p declares, one per indexer op among the spells it
 // binds (a spell that declares a symbol indexer), in binding order. The single source of
 // truth for "which indexes get built", so the auto-indexer, ReindexSymbols, and status
 // reporting cannot disagree. Two spells running under one op (go and python both declare
 // none, so both run under the default) share that op's index, and the first one's
 // language names it.
-func projectIndexes(p *types.Project) []projectIndex {
+func projectIndexes(p *types.Project, cfg config.SpellsConfig) []projectIndex {
 	var out []projectIndex
 	for _, sp := range p.ResolvedSpells {
-		op := sp.SymbolIndexOp()
+		op := runningIndexOp(sp, cfg)
 		if op == "" || slices.ContainsFunc(out, func(idx projectIndex) bool { return idx.op == op }) {
 			continue
 		}
@@ -446,9 +504,20 @@ func projectIndexes(p *types.Project) []projectIndex {
 	return out
 }
 
-// indexesSymbols reports whether target is one of p's indexer ops.
-func indexesSymbols(p *types.Project, target string) bool {
-	return target != "" && slices.ContainsFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.SymbolIndexOp() == target })
+// indexesSymbols reports whether target is one of p's indexer ops that runs here.
+func indexesSymbols(p *types.Project, target string, cfg config.SpellsConfig) bool {
+	return target != "" && slices.ContainsFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return runningIndexOp(s, cfg) == target })
+}
+
+// runningIndexOp is the op sp's symbol indexer runs under, or "" when sp declares none or
+// its indexer is an external SCIP command spells.symbol_indexers does not list. Every
+// question of which indexes exist goes through it, so an indexer the workspace has not
+// opted in is never built, keyed or reported as stale.
+func runningIndexOp(sp *spells.Spell, cfg config.SpellsConfig) string {
+	if !cfg.RunsSymbolIndexer(sp.Name(), sp.SymbolIndexer()) {
+		return ""
+	}
+	return sp.SymbolIndexOp()
 }
 
 // workspaceIndexes returns every symbol index the workspace's projects declare, so a
@@ -458,7 +527,7 @@ func (m *Magus) workspaceIndexes() []projectIndex {
 	ps := m.All()
 	out := make([]projectIndex, 0, len(ps))
 	for _, p := range ps {
-		out = append(out, projectIndexes(p)...)
+		out = append(out, projectIndexes(p, m.cfg.Spells)...)
 	}
 	return out
 }
@@ -531,16 +600,16 @@ func (m *Magus) SymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus
 // out-of-date. Charmless because ReindexSymbols runs the op with no RunOptions.
 func (m *Magus) symbolIndexStep(p *types.Project, op string, toolVersions []string, observations map[string]string) cache.Step {
 	step := m.buildStep(p, op)
-	applyRunKeying(&step, p, toolVersions, observationsForTarget(p, op, observations), nil)
+	applyRunKeying(&step, p, m.cfg.Spells, toolVersions, observationsForTarget(p, op, observations), nil)
 	return step
 }
 
 // symbolIndexSources is the source globs of each of p's spells whose indexer runs as op,
 // rooted at p: what buildStep keys that op on.
-func symbolIndexSources(p *types.Project, op string) []types.Glob {
+func symbolIndexSources(p *types.Project, op string, cfg config.SpellsConfig) []types.Glob {
 	var out []types.Glob
 	for _, s := range p.ResolvedSpells {
-		if s.SymbolIndexOp() != op {
+		if runningIndexOp(s, cfg) != op {
 			continue
 		}
 		// A spell whose globs do not parse contributed none to the project either.
@@ -641,6 +710,267 @@ func (m *Magus) ReindexSymbols(ctx context.Context) (int, error) {
 	return done, errors.Join(errs...)
 }
 
+const (
+	// SymbolRefreshBudget covers a cold index of a large repository. A plain
+	// read never waits on it: it answers now and refreshes in the background.
+	SymbolRefreshBudget = 3 * time.Minute
+	// How long past the budget `--refresh` waits for a run to honor
+	// cancellation before it answers anyway.
+	symbolRefreshAbandon = 2 * time.Second
+	// Beside an index, the record that its last refresh failed. A CLI
+	// has no loop to hold a backoff in, and every read would pay again.
+	symbolRefreshFailedSuffix = ".refresh-failed"
+	// The machine claim of a refresh's own process. Measured 2026-10-31
+	// on this repository: 1.74 GiB footprint. An indexer claims for itself.
+	symbolRefreshMemoryMB = 2048
+)
+
+// SymbolRefresh is what [Magus.RefreshSymbolIndexes] did.
+type SymbolRefresh struct {
+	Refreshed []string      // indexes brought current: "libs/api (go index)"
+	Problems  []string      // indexes that stayed behind, and why
+	Took      time.Duration // wall time
+	Swept     time.Duration // of Took, finding what is behind
+	Indexed   time.Duration // of Took, running the indexers
+}
+
+// RefreshSymbolIndexes brings the stale and never-built indexes up to the
+// tree, through the cache, so a current one replays. It returns within
+// SymbolRefreshBudget plus symbolRefreshAbandon and never fails a read:
+// what stayed behind is in Problems. A failed index waits
+// symbolIndexBackoffBase; a lost lock or a full machine waits for nothing.
+func (m *Magus) RefreshSymbolIndexes(ctx context.Context) SymbolRefresh {
+	cacheDir := resolveCacheDir(m.Root(), m.cfg)
+	r := symbolRefresher{
+		budget:  SymbolRefreshBudget,
+		abandon: symbolRefreshAbandon,
+		now:     time.Now,
+		admit:   m.admitSymbolRefresh,
+		status:  m.SymbolIndexStatusByStamp,
+		indexPath: func(s types.SymbolIndexStatus) string {
+			return symbols.IndexPath(cacheDir, cmp.Or(s.Project.Path, "."), s.Op)
+		},
+		run: func(ctx context.Context, s types.SymbolIndexStatus) error {
+			err := m.runTargets(ctx, []types.Target{{Path: cmp.Or(s.Project.Path, "."), Name: s.Op}}, run{Background: true})
+			if err == nil {
+				return nil
+			}
+			return symbolRunError(s.Project, s.Language, err)
+		},
+		after: func(ctx context.Context) {
+			log := slog.With(attr.Component("magus"))
+			if err := m.WriteGuardIndex(ctx); err != nil {
+				log.DebugContext(ctx, "guard index not written", attr.Error(err))
+			}
+			if err := m.WriteScriptsIndex(ctx); err != nil {
+				log.DebugContext(ctx, "scripts index not written", attr.Error(err))
+			}
+		},
+	}
+	return r.refresh(ctx)
+}
+
+// admitSymbolRefresh claims the machine budget for the refresh's own work.
+// A nil broker is `broker: off`, which arbitrates nothing.
+func (m *Magus) admitSymbolRefresh(ctx context.Context) (func(), error) {
+	if m.broker == nil {
+		return func() {}, nil
+	}
+	policy := cmp.Or(m.brokerPolicy, m.cfg.Broker)
+	return cache.AdmitMachine(ctx, m.broker, types.MachineClaim{
+		Project:  ".",
+		Target:   "symbol-refresh",
+		MemoryMB: symbolRefreshMemoryMB,
+		Dir:      m.Root(),
+	}, policy.Resolved() == types.BrokerRequired)
+}
+
+// symbolRefresher is RefreshSymbolIndexes' policy, its collaborators
+// injected so a run that hangs or fails is testable without a workspace.
+type symbolRefresher struct {
+	budget, abandon time.Duration
+	now             func() time.Time
+	admit           func(context.Context) (func(), error)
+	status          func(context.Context) []types.SymbolIndexStatus
+	indexPath       func(types.SymbolIndexStatus) string
+	run             func(context.Context, types.SymbolIndexStatus) error
+	after           func(context.Context) // once anything was refreshed
+}
+
+func (r symbolRefresher) refresh(ctx context.Context) SymbolRefresh {
+	started := r.now()
+	ctx, cancel := context.WithTimeout(ctx, r.budget)
+	defer cancel()
+
+	var t refreshTally
+	indexed, done := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		refreshed := r.work(ctx, t.report)
+		close(indexed)
+		if refreshed && r.after != nil {
+			// Past the budget this is left to finish or die with the process.
+			// Cancelling it would record its tool probes as failed.
+			afterCtx := context.WithoutCancel(ctx)
+			release, err := r.admit(afterCtx)
+			if err != nil {
+				t.report("", "guard and scripts indexes not written: "+types.InlineDiagnostic(err), 0, 0)
+				return
+			}
+			defer release()
+			r.after(afterCtx)
+		}
+	}()
+
+	finished := true
+	select {
+	case <-done:
+	case <-ctx.Done():
+		select {
+		case <-indexed:
+		case <-time.After(r.abandon):
+			finished = false
+		}
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !finished {
+		t.out.Problems = append(t.out.Problems, fmt.Sprintf("a run outlived the %s budget by %s, so this read stopped waiting for it", r.budget, r.abandon))
+	}
+	return SymbolRefresh{Refreshed: slices.Clone(t.out.Refreshed), Problems: slices.Clone(t.out.Problems), Took: r.now().Sub(started), Swept: t.out.Swept, Indexed: t.out.Indexed}
+}
+
+// refreshTally gathers a refresh's outcomes. A run past the budget keeps
+// reporting while the read that abandoned it returns.
+type refreshTally struct {
+	mu  sync.Mutex
+	out SymbolRefresh
+}
+
+func (t *refreshTally) report(refreshed, problem string, swept, indexed time.Duration) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if refreshed != "" {
+		t.out.Refreshed = append(t.out.Refreshed, refreshed)
+	}
+	if problem != "" {
+		t.out.Problems = append(t.out.Problems, problem)
+	}
+	t.out.Swept += swept
+	t.out.Indexed += indexed
+}
+
+// work refreshes each wanted index behind the tree, reporting each outcome,
+// and returns whether any landed.
+func (r symbolRefresher) work(ctx context.Context, report func(refreshed, problem string, swept, indexed time.Duration)) bool {
+	refreshed := false
+	started := r.now()
+	release, err := r.admit(ctx)
+	if err != nil {
+		report("", types.InlineDiagnostic(err), 0, 0)
+		return false
+	}
+	statuses := r.status(ctx)
+	// Handed back first: a step behind its own process's claim may never seat.
+	release()
+	report("", "", r.now().Sub(started), 0)
+	for _, s := range statuses {
+		if len(staleIndexRefs([]types.SymbolIndexStatus{s})) == 0 {
+			continue
+		}
+		name := types.KnowledgeStaleIndex{Project: cmp.Or(s.Project.Path, "."), Language: s.Language}.Describe()
+		index := r.indexPath(s)
+		if why := r.backedOff(index); why != "" {
+			report("", fmt.Sprintf("%s: %s", name, why), 0, 0)
+			continue
+		}
+		if ctx.Err() != nil {
+			report("", fmt.Sprintf("%s: not reached within the %s budget", name, r.budget), 0, 0)
+			continue
+		}
+		ran := r.now()
+		err := r.run(ctx, s)
+		took := r.now().Sub(ran)
+		switch {
+		case err == nil:
+			_ = os.Remove(index + symbolRefreshFailedSuffix)
+			refreshed = true
+			report(name, "", 0, took)
+		case errors.Is(err, types.GateSuperseded):
+			// The next index may share the lock the run is polling for.
+			report("", types.InlineDiagnostic(err), 0, took)
+			return refreshed
+		case lostTheLock(err):
+			report("", types.InlineDiagnostic(err), 0, took)
+		default:
+			why := types.InlineDiagnostic(err)
+			if ctx.Err() != nil {
+				why = fmt.Sprintf("%s: did not finish within the %s budget", name, r.budget)
+			}
+			recordRefreshFailure(index, why)
+			report("", why, 0, took)
+		}
+	}
+	return refreshed
+}
+
+// lostTheLock reports a run refused for another magus holding the project
+// lock or the machine budget, which says nothing about the indexer.
+func lostTheLock(err error) bool {
+	var busy interface{ ExitCode() int }
+	return errors.As(err, &busy) && busy.ExitCode() == lockContendedExit
+}
+
+// backedOff is why index is not tried again yet, "" when it may be.
+func (r symbolRefresher) backedOff(index string) string {
+	path := index + symbolRefreshFailedSuffix
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	age := r.now().Sub(info.ModTime())
+	if age >= symbolIndexBackoffBase {
+		return ""
+	}
+	why, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("its last refresh failed %s ago, and reads retry in %s: %s",
+		age.Round(time.Second), (symbolIndexBackoffBase - age).Round(time.Second), why)
+}
+
+// recordRefreshFailure starts index's backoff. A record that cannot be
+// written costs the next read another attempt and nothing else.
+func recordRefreshFailure(index, why string) {
+	path := index + symbolRefreshFailedSuffix
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return
+	}
+	_ = file.WriteFileAtomic(path, []byte(why), 0o644)
+}
+
+// RecentSymbolRefreshFailures is why each index under cacheDir last failed
+// to refresh, while its backoff holds. A read names them rather than
+// starting a refresh that would only back off.
+func RecentSymbolRefreshFailures(cacheDir string, now time.Time) []string {
+	records, err := filepath.Glob(filepath.Join(cacheDir, "symbols", "*", "*"+symbolRefreshFailedSuffix))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, record := range records {
+		info, err := os.Stat(record)
+		if err != nil || now.Sub(info.ModTime()) >= symbolIndexBackoffBase {
+			continue
+		}
+		if why, err := os.ReadFile(record); err == nil {
+			out = append(out, string(why))
+		}
+	}
+	return out
+}
+
 // symbolCapableIn is the symbol-capable projects among paths, by path.
 func (m *Magus) symbolCapableIn(paths []string) []string {
 	var out []string
@@ -688,16 +1018,7 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 	}
 	c := m.freshnessCache(ctx)
 	if c == nil {
-		var projects []string
-		for _, idx := range touched {
-			if name := idx.projectRef().Display(); !slices.Contains(projects, name) {
-				projects = append(projects, name)
-			}
-		}
-		return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
-			"symbol index not current for %s: the cache would not open; make the cache directory writable, then rerun",
-			strings.Join(projects, ", ")).
-			WithWhy(conformanceSkippedWhy + " The cache records whether an index is current, so without it nothing can vouch for the index.")
+		return cacheWouldNotOpen(touched)
 	}
 	// The step each probe keyed, so a rebuild inside a run is keyed exactly as the probe
 	// after it reads it back.
@@ -734,20 +1055,37 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 			return err
 		}
 		return m.buildSymbolIndex(ctx, idx, keyed[idx.ref()])
-	}, m.cfg.Cache.WriteEnabled(), func() string {
-		goMod, _ := os.ReadFile(filepath.Join(m.ws.Root, "go.mod"))
-		_, head, _ := m.CurrentRevision(ctx)
-		built := types.MagusBuildFromContext(ctx).Commit
-		return binaryTreeSkew(goMod, built, head, func() ([]string, error) {
-			res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
-			if err != nil {
-				return nil, err
-			}
-			if res.VCS == nil {
-				return nil, fmt.Errorf("no version control answered in %s", m.ws.Root)
-			}
-			return job.ChangedBuildInputs(ctx, res.VCS, m.ws.Root, built, head)
-		})
+	}, m.cfg.Cache.WriteEnabled(), func() string { return m.buildSkew(ctx) })
+}
+
+// cacheWouldNotOpen is the MGS7003 when no cache can vouch for touched.
+func cacheWouldNotOpen(touched []projectIndex) error {
+	var projects []string
+	for _, idx := range touched {
+		if name := idx.projectRef().Display(); !slices.Contains(projects, name) {
+			projects = append(projects, name)
+		}
+	}
+	return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
+		"symbol index not current for %s: the cache would not open; make the cache directory writable, then rerun",
+		strings.Join(projects, ", ")).
+		WithWhy(conformanceSkippedWhy + " The cache records whether an index is current, so without it nothing can vouch for the index.")
+}
+
+// buildSkew is binaryTreeSkew for this workspace and the running binary.
+func (m *Magus) buildSkew(ctx context.Context) string {
+	goMod, _ := os.ReadFile(filepath.Join(m.ws.Root, "go.mod"))
+	_, head, _ := m.CurrentRevision(ctx)
+	built := types.MagusBuildFromContext(ctx).Commit
+	return binaryTreeSkew(goMod, built, head, func() ([]string, error) {
+		res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+		if err != nil {
+			return nil, err
+		}
+		if res.VCS == nil {
+			return nil, fmt.Errorf("no version control answered in %s", m.ws.Root)
+		}
+		return job.ChangedBuildInputs(ctx, res.VCS, m.ws.Root, built, head)
 	})
 }
 
@@ -831,6 +1169,11 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 	if len(problems) == 0 {
 		return nil
 	}
+	return indexesNotCurrent(problems, writesOff, skewed)
+}
+
+// indexesNotCurrent is the MGS7003 naming each problem and its fix.
+func indexesNotCurrent(problems []string, writesOff, skewed bool) error {
 	fix := "fix it"
 	if len(problems) > 1 {
 		fix = "fix each"
@@ -891,13 +1234,13 @@ func uncoveredProjects(files []types.DiffFile, capable []string) []types.DiffUnc
 	return out
 }
 
-// toDiagnostic is err as a Diagnostic: its MGS code, message and docs link when err carries a
-// code, and the bare message otherwise. Its Why is the chain's rationale either way.
+// toDiagnostic is err as a Diagnostic: its MGS code, message, docs link and fix when err
+// carries a code, and the bare message otherwise. Its Why is the chain's rationale either way.
 func toDiagnostic(err error) types.Diagnostic {
 	var d *types.DiagnosticError
 	if errors.As(err, &d) {
 		f := d.BuzzError()
-		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"], Why: types.DiagnosticRationale(err)}
+		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"], Fix: f["fix"], Why: types.DiagnosticRationale(err)}
 	}
 	return types.Diagnostic{Message: err.Error(), Why: types.DiagnosticRationale(err)}
 }
@@ -912,7 +1255,7 @@ func toDiagnostic(err error) types.Diagnostic {
 // reports no version (MGS3035), never reached it either, and rerunning does not help, so it
 // gets no hint of either kind: the diagnostic says what to do.
 func symbolRunError(project types.ProjectRef, language string, err error) error {
-	if errors.Is(err, types.ProjectLockHeldByAncestor) || errors.Is(err, types.ToolUnprobeable) {
+	if errors.Is(err, types.ProjectLockHeldByAncestor) || errors.Is(err, types.ToolUnprobeable) || errors.Is(err, types.GateSuperseded) {
 		return fmt.Errorf("%s: %w", project.Display(), err)
 	}
 	var busy interface{ ExitCode() int }

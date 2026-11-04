@@ -47,55 +47,55 @@ var (
 var pinnedNeeds = map[string]types.Need{
 	"/mcp": {Scope: types.ScopeMCP, Level: types.LevelWrite},
 
-	"/api/":                 read, // the not-found fallback
-	"/api/v1/events":        read,
-	"/api/v1/insight":       read,
-	"/api/v1/graph":         read,
-	"/api/v1/diagrams":      read,
-	"/api/v1/diagrams/":     read,
-	"/api/v1/diff":          write,
-	"/api/v1/diff/patch":    write,
-	"/api/v1/diff/context":  write,
-	"/api/v1/diff/session":  write,
-	"/api/v1/diff/review":   write,
-	"/api/v1/diff/branches": write,
-	"/api/v1/diff/thread":   write,
-	"/api/v1/diff/run":      write,
-	"/api/v1/plan":          write,
-	"/api/v1/attention":     write,
-	"/api/v1/share":         write,
+	"/api/":                   read, // the not-found fallback
+	"/api/v1/events":          read,
+	"/api/v1/history-metrics": read,
+	"/api/v1/graph":           read,
+	"/api/v1/diagrams":        read,
+	"/api/v1/diagrams/":       read,
+	"/api/v1/diff":            write,
+	"/api/v1/diff/patch":      write,
+	"/api/v1/diff/context":    write,
+	"/api/v1/diff/session":    write,
+	"/api/v1/diff/review":     write,
+	"/api/v1/diff/branches":   write,
+	"/api/v1/diff/thread":     write,
+	"/api/v1/diff/run":        write,
+	"/api/v1/plan":            write,
+	"/api/v1/attention":       write,
+	"/api/v1/share":           write,
 
-	"/magus.activity.v1alpha1.ActivityService/ListActivityEvents":  read,
-	"/magus.activity.v1alpha1.ActivityService/GetPayload":          read,
-	"/magus.activity.v1alpha1.ActivityService/WatchActivityEvents": read,
-	"/magus.graph.v1alpha1.GraphService/QueryNodes":                read,
-	"/magus.graph.v1alpha1.GraphService/ResolveNodes":              read,
-	"/magus.graph.v1alpha1.GraphService/ExplainNode":               read,
-	"/magus.graph.v1alpha1.GraphService/FindPath":                  read,
-	"/magus.graph.v1alpha1.GraphService/FindDependents":            read,
-	"/magus.graph.v1alpha1.GraphService/FindAffected":              read,
-	"/magus.graph.v1alpha1.GraphService/GetGraphStats":             read,
-	"/magus.insight.v1alpha1.InsightService/GetInsight":            read,
-	"/magus.job.v1alpha1.JobService/ListJobs":                      read,
-	"/magus.job.v1alpha1.JobService/RunJob":                        write,
-	"/magus.metrics.v1alpha1.MetricsService/GetMetrics":            read,
-	"/magus.metrics.v1alpha1.MetricsService/StreamMetrics":         read,
-	"/magus.notes.v1alpha1.NotesService/ListNotes":                 read,
-	"/magus.notes.v1alpha1.NotesService/GetNote":                   read,
-	"/magus.status.v1alpha1.StatusService/GetStatus":               read,
-	"/magus.status.v1alpha1.StatusService/StreamStatus":            read,
-	"/magus.token.v1alpha1.TokenService/ListTokens":                tokens,
-	"/magus.token.v1alpha1.TokenService/CreateToken":               tokens,
-	"/magus.token.v1alpha1.TokenService/RevokeToken":               tokens,
-	"/magus.tool.v1alpha1.ToolService/ListTools":                   read,
-	"/magus.viewer.v1alpha1.ViewerService/GetInvocation":           read,
-	"/magus.viewer.v1alpha1.ViewerService/ListEvents":              read,
-	"/magus.viewer.v1alpha1.ViewerService/StreamEvents":            read,
-	"/magus.viewer.v1alpha1.ViewerService/ListOutputs":             read,
-	"/magus.viewer.v1alpha1.ViewerService/GetOutput":               read,
-	"/magus.viewer.v1alpha1.ViewerService/ListInvocations":         read,
-	"/magus.viewer.v1alpha1.ViewerService/GetJournal":              read,
-	"/magus.viewer.v1alpha1.ViewerService/GetSessionActivity":      read,
+	"/magus.activity.v1alpha1.ActivityService/ListActivityEvents":            read,
+	"/magus.activity.v1alpha1.ActivityService/GetPayload":                    read,
+	"/magus.activity.v1alpha1.ActivityService/WatchActivityEvents":           read,
+	"/magus.graph.v1alpha1.GraphService/QueryNodes":                          read,
+	"/magus.graph.v1alpha1.GraphService/ResolveNodes":                        read,
+	"/magus.graph.v1alpha1.GraphService/ExplainNode":                         read,
+	"/magus.graph.v1alpha1.GraphService/FindPath":                            read,
+	"/magus.graph.v1alpha1.GraphService/FindDependents":                      read,
+	"/magus.graph.v1alpha1.GraphService/FindAffected":                        read,
+	"/magus.graph.v1alpha1.GraphService/GetGraphStats":                       read,
+	"/magus.historymetrics.v1alpha1.HistoryMetricsService/GetHistoryMetrics": read,
+	"/magus.job.v1alpha1.JobService/ListJobs":                                read,
+	"/magus.job.v1alpha1.JobService/RunJob":                                  write,
+	"/magus.metrics.v1alpha1.MetricsService/GetMetrics":                      read,
+	"/magus.metrics.v1alpha1.MetricsService/StreamMetrics":                   read,
+	"/magus.notes.v1alpha1.NotesService/ListNotes":                           read,
+	"/magus.notes.v1alpha1.NotesService/GetNote":                             read,
+	"/magus.status.v1alpha1.StatusService/GetStatus":                         read,
+	"/magus.status.v1alpha1.StatusService/StreamStatus":                      read,
+	"/magus.token.v1alpha1.TokenService/ListTokens":                          tokens,
+	"/magus.token.v1alpha1.TokenService/CreateToken":                         tokens,
+	"/magus.token.v1alpha1.TokenService/RevokeToken":                         tokens,
+	"/magus.tool.v1alpha1.ToolService/ListTools":                             read,
+	"/magus.viewer.v1alpha1.ViewerService/GetInvocation":                     read,
+	"/magus.viewer.v1alpha1.ViewerService/ListEvents":                        read,
+	"/magus.viewer.v1alpha1.ViewerService/StreamEvents":                      read,
+	"/magus.viewer.v1alpha1.ViewerService/ListOutputs":                       read,
+	"/magus.viewer.v1alpha1.ViewerService/GetOutput":                         read,
+	"/magus.viewer.v1alpha1.ViewerService/ListInvocations":                   read,
+	"/magus.viewer.v1alpha1.ViewerService/GetJournal":                        read,
+	"/magus.viewer.v1alpha1.ViewerService/GetSessionActivity":                read,
 }
 
 // servedUnder pins routes a prefix mount answers without a mount of their own, each to the
@@ -154,7 +154,7 @@ func TestShareRoutesHoldTheLoopbackNeeds(t *testing.T) {
 	for _, path := range []string{
 		"/magus.activity.v1alpha1.ActivityService/",
 		"/magus.status.v1alpha1.StatusService/",
-		"/magus.insight.v1alpha1.InsightService/",
+		"/magus.historymetrics.v1alpha1.HistoryMetricsService/",
 		"/magus.viewer.v1alpha1.ViewerService/",
 		"/magus.metrics.v1alpha1.MetricsService/",
 	} {
@@ -165,7 +165,7 @@ func TestShareRoutesHoldTheLoopbackNeeds(t *testing.T) {
 			assert.True(t, types.GrantViewer.Allows(need), "%s on a share link needs %s", proc, need)
 		}
 	}
-	for _, path := range []string{"/api/v1/events", "/api/v1/insight"} {
+	for _, path := range []string{"/api/v1/events", "/api/v1/history-metrics"} {
 		assert.Equal(t, map[string]types.Need{path: pinnedNeeds[path]}, requireAPINeeds(path))
 	}
 	assert.Empty(t, serviceRoute("/magus.nothing.v1alpha1.NoService/", http.NotFoundHandler()).Needs,
@@ -212,7 +212,7 @@ func matrixBearers(t *testing.T) map[string]bearer {
 	mint := func(name string, g types.Grant) string {
 		secret, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: name, Grant: g, TTL: time.Hour})
 		require.NoError(t, err)
-		return secret
+		return secret.Reveal()
 	}
 	op, err := auth.LoadOperator()
 	require.NoError(t, err)
@@ -243,23 +243,23 @@ func matrixBearers(t *testing.T) map[string]bearer {
 	// Wrong class on loopback: a share secret, with a forged record holding its hash.
 	share, _, err := auth.MintShare(types.GrantOperator, time.Hour)
 	require.NoError(t, err)
-	plant(t, "forged-share", share, types.GrantConsole, time.Now().Add(time.Hour))
+	plant(t, "forged-share", share.Reveal(), types.GrantConsole, time.Now().Add(time.Hour))
 	// A forged viewer record holding the operator secret's hash: the operator still verifies
 	// as the operator, since an mgo_ string never reaches the store.
-	plant(t, "forged-operator", op, types.GrantViewer, time.Now().Add(time.Hour))
+	plant(t, "forged-operator", op.Reveal(), types.GrantViewer, time.Now().Add(time.Hour))
 	// The operator body restamped as a stored token: well-formed, and in no store.
-	restamped := "mgs_" + strings.TrimPrefix(op, "mgo_")
+	restamped := "mgs_" + strings.TrimPrefix(op.Reveal(), "mgo_")
 
 	broken := []byte(connector)
 	broken[len(broken)-1] ^= 1
 
 	bearers := map[string]bearer{
-		"operator":              {op, types.GrantOperator, true},
+		"operator":              {op.Reveal(), types.GrantOperator, true},
 		"connector":             {connector, types.GrantConnector, true},
 		"console":               {console, types.GrantConsole, true},
 		"viewer":                {viewer, types.GrantViewer, true},
-		"share on loopback":     {share, types.Grant{}, false},
-		"link code as a bearer": {code, types.Grant{}, false},
+		"share on loopback":     {share.Reveal(), types.Grant{}, false},
+		"link code as a bearer": {code.Reveal(), types.Grant{}, false},
 		"expired":               {expired, types.Grant{}, false},
 		"revoked":               {revoked, types.Grant{}, false},
 		"planted tokens=write":  {escalated, types.Grant{}, false},
@@ -411,6 +411,8 @@ func walkMatrix(t *testing.T, base string, paths []string, bearers map[string]be
 				assert.Equal(t, [2]any{http.StatusUnauthorized, "MGS9001"}, [2]any{status, reason}, cell)
 			case !b.grant.Allows(need):
 				assert.Equal(t, [2]any{http.StatusForbidden, "MGS9015"}, [2]any{status, reason}, cell)
+			case name == "operator" && need.Scope == types.ScopeConsole:
+				assert.Equal(t, [2]any{http.StatusForbidden, "MGS9015"}, [2]any{status, reason}, cell)
 			default:
 				assert.NotEqual(t, http.StatusUnauthorized, status, cell)
 				assert.NotContains(t, []string{"MGS9001", "MGS9011", "MGS9015"}, reason, cell)
@@ -494,7 +496,7 @@ func TestSecretsNeverRestInTheTrailLogsOrLists(t *testing.T) {
 		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/%s/%s", base, tokenv1alpha1connect.TokenServiceName, method), strings.NewReader(body))
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+op)
+		req.Header.Set("Authorization", "Bearer "+op.Reveal())
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -516,7 +518,7 @@ func TestSecretsNeverRestInTheTrailLogsOrLists(t *testing.T) {
 	call("RevokeToken", `{"name":"doomed"}`)
 	list := call("ListTokens", `{}`)
 
-	secrets := map[string]string{"operator": op, "cli mint": cliSecret, "console mint": minted.Secret, "revoked mint": doomed.Secret}
+	secrets := map[string]string{"operator": op.Reveal(), "cli mint": cliSecret.Reveal(), "console mint": minted.Secret, "revoked mint": doomed.Secret}
 	for name, secret := range secrets {
 		assert.NotContains(t, string(list), secret, "ListTokens carries the %s secret", name)
 		assert.NotContains(t, logs.String(), secret, "the server log carries the %s secret", name)

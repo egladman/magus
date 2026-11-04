@@ -1,0 +1,20 @@
+namespace: team
+namePrefix: x-
+nameSuffix: -v1
+commonLabels:
+  tier: back
+resources:
+  - app.yaml
+  - namespace.yaml
+configMapGenerator:
+  - name: settings
+    literals:
+      - LEVEL=debug
+patches:
+  - target:
+      kind: Deployment
+      name: app
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3

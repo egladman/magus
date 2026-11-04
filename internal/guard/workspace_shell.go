@@ -1,8 +1,11 @@
 package guard
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
+	"unicode"
 
 	"github.com/egladman/magus/internal/hint"
 )
@@ -27,9 +30,10 @@ type WorkspaceShellRule struct {
 const workspaceShellPrefix = "workspace:"
 
 // matchWorkspaceShell returns the strongest workspace match for command, or an
-// empty verdict. Unparseable lines fail open: workspace rules have no regex
-// fallback, because a raw-line pattern is exactly the tokenizing mistake
-// ParseCommands exists to retire.
+// empty verdict. Rules match no raw-line pattern, because that is exactly the
+// tokenizing mistake ParseCommands exists to retire, so a line that does not parse
+// cannot be matched. It is denied when it names a deny rule's program anywhere,
+// since the rule could not be checked; otherwise it passes.
 //
 // Among matches, the first deny in declaration order wins; otherwise the first
 // advise. Callers merge with a built-in verdict via strengthenWithWorkspace.
@@ -39,7 +43,7 @@ func matchWorkspaceShell(rules []WorkspaceShellRule, command string, d Dialect) 
 	}
 	cmds, parsed := ParseCommandsDialect(command, d)
 	if !parsed {
-		return ShellVerdict{}
+		return denyUnparsedWorkspaceShell(rules, command)
 	}
 	var advise ShellVerdict
 	for _, r := range rules {
@@ -59,6 +63,31 @@ func matchWorkspaceShell(rules []WorkspaceShellRule, command string, d Dialect) 
 		}
 	}
 	return advise
+}
+
+// denyUnparsedWorkspaceShell denies a line that did not parse when any of its words is
+// the program of a deny rule, or an empty verdict when none is. The words are split
+// on whitespace and shell punctuation, which over-matches by design: the rule's args
+// are not checked, because nothing parsed to check them against.
+func denyUnparsedWorkspaceShell(rules []WorkspaceShellRule, command string) ShellVerdict {
+	words := strings.FieldsFunc(command, func(r rune) bool {
+		return unicode.IsSpace(r) || strings.ContainsRune(`;|&()<>'"`+"`$", r)
+	})
+	for _, r := range rules {
+		prog := filepath.Base(r.Program)
+		if r.Decision != decisionDeny || prog == "" || prog == "." {
+			continue
+		}
+		if !slices.ContainsFunc(words, func(w string) bool { return w == r.Program || filepath.Base(w) == prog }) {
+			continue
+		}
+		return ShellVerdict{
+			Deny: fmt.Sprintf("magus workspace: this command did not parse, and workspace rule %s denies `%s`, so it is refused: %s",
+				r.Name, prog, r.Reason),
+			Rule: denyRule{Name: denyRuleName(workspaceShellPrefix + r.Name)},
+		}
+	}
+	return ShellVerdict{}
 }
 
 // workspaceShellMatches reports whether any resolved command has the rule's

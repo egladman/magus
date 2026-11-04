@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 15519
-skill_short_bytes: 8892
+skill_full_bytes: 15582
+skill_short_bytes: 9073
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `147` |
-| `knowledge-schema-version` | `24` |
-| `skill-content` | `d02272877e67` |
+| `skill-stamp-format` | `1` |
+| `knowledge-schema-version` | `25` |
+| `skill-content` | `784ed940daab` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -78,7 +78,7 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
    - `magus status --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
    - Hosts manage own connection; never start server for agent.
    - `client` (`magus\run`): run named projects, same arguments as `magus run`.
-   - `client` (`magus\affected`): projects VCS change touched; returns set, does not run it.
+   - `client` (`magus\change().affected`): projects VCS change touched; returns set, does not run it.
 
    `client` bounded at 10 minutes when called directly; host supporting MCP tasks can run it as task without bound.
    Long run (full `ci`, gate) -> CLI unless host runs `client` as task.
@@ -88,6 +88,7 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
    - `magus affected list`: set; `magus affected <target>`: run it.
    - Silence with `-s`. Do not stop; do not drop to raw language tool.
 2. Verification is `ci`'s job, not sequence you compose; `ci` is only target name magus enforces.
+   Bare "ci" also means host CI/CD (GitHub Actions, ...). Ambiguous -> ask which; `ambiguous-ci-word` refuses assuming either.
    - `magus run ci <project>` for project you work in.
    - `magus affected ci`: final gate once change done.
    - Never hand-run lint, format, test one at a time: re-derives order magusfile owns; forgotten step fails silently by omission.
@@ -196,11 +197,11 @@ Run generators before the full test run, so a drift test does not fail for nothi
 
 Run whose project lock or machine budget another magus invocation holds: exits 75 at once, naming holder.
 - Never write `sleep`/`ps`/`pgrep` polling loops; guard denies `pgrep`, `pidof`, `ps`.
-- `magus status --watch=15s`: reads lock state continuously: holder PID, command, directory, age. Re-run once lock releases.
+- `magus status`: reads lock state once: holder PID, command, directory, age. To wait: background run as `magus job exec --timeout <d> -- <command>`, wait for its completion notice.
 - Long-running holder alone: not evidence of hang.
 
 ```sh
-magus status --watch=15s
+magus status
 ```
 
 If lock crossed stale warning threshold -> report exact holder, inspect its captured target output.
@@ -280,7 +281,7 @@ VCS.
      Do not make the connection a prerequisite for completing the work.
    - `client` (`magus\run`): run named projects, with the same arguments as `magus run` (or the cwd
      project). Use when you know which projects to run.
-   - `client` (`magus\affected`): the projects a VCS change touched. It
+   - `client` (`magus\change().affected`): the projects a VCS change touched. It
      returns the set and does not run it. The gate is `magus affected ci`.
 
    `client` is bounded at 10 minutes when called directly. A host that
@@ -295,6 +296,9 @@ VCS.
 2. Verification is `ci`'s job, not a sequence you compose. `ci` is the one target
    name magus enforces: the command that composes the pipeline
    (typically generate, lint, build, test) in the order the magusfile declares.
+   Bare "ci" is also everyday shorthand for the host's CI/CD (GitHub Actions and
+   the rest). When the person says "ci" without naming one meaning, ask which; the
+   `ambiguous-ci-word` guard refuses a call that picks either until they clarify.
    - Run `magus run ci <project>` for the project you are working in.
    - Run `magus affected ci` as the final gate once the change is done; it runs the
      full pipeline over every project your change reaches, which is how you learn
@@ -337,17 +341,12 @@ magus affected test               # only projects affected by the VCS diff
 ```
 
 MCP equivalents: `client` (`magus\run`) with the arguments of `magus run`.
-`magus\affected` returns the affected project set and does not run it. `magus\impact` is why each project is in that set. `magus\where` answers which project contains a directory.
+`magus\change().affected` returns the affected project set and does not run it. `magus\change().impact` is why each project is in that set. `magus\where` answers which project contains a directory.
 
 WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
 hand-sequencing `magus run lint`, `format`, `test` to check your own work.
 CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
 change is done, and a single narrower target only to iterate on a failure.
-
-To prove a command on Linux without opening a pull request, magus's own repository
-runs it on a GitHub Actions runner (`magus buzz hack/remote/on-actions.buzz --
-<command>`) or in a local Podman container (`magus buzz hack/remote/on-linux.buzz --
-<command>`).
 
 ## Output control: silence runs, read structure
 
@@ -502,12 +501,13 @@ at once, naming the holder.
 
 - Never write `sleep`/`ps`/`pgrep` polling loops. The guard denies `pgrep`,
   `pidof`, and `ps` for this reason.
-- `magus status --watch=15s` reads that lock state continuously: holder PID,
-  command, directory, and age. Re-run once the lock releases.
+- `magus status` reads that lock state once: holder PID, command, directory,
+  and age. To wait, background your run as `magus job exec --timeout <d> -- <command>`
+  and wait for its completion notice.
 - A long-running holder is not, by itself, evidence of a hang.
 
 ```sh
-magus status --watch=15s
+magus status
 ```
 
 If the lock has crossed its stale warning threshold, report the exact holder and

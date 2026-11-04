@@ -1,45 +1,47 @@
 package types
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
 
-// RiskTier is how much of a change's gate magus can prove unnecessary, lowest first. A
-// tier is only ever assigned on proof; a path magus cannot bound is RiskFull.
-type RiskTier string
+// Tier is how much of a change's gate magus can prove unnecessary, lowest
+// first. A tier is only ever assigned on proof; a path magus cannot bound is
+// RiskFull.
+type Tier string
 
 const (
 	// RiskTrivial needs no gate: prose nothing reads, and generated output whose
 	// generator the same change left untouched.
-	RiskTrivial RiskTier = "trivial"
+	RiskTrivial Tier = "trivial"
 	// RiskMechanical changes no code semantics (comment-only, or code a prover showed
 	// equivalent to its base), so only the drift check and lint run.
-	RiskMechanical RiskTier = "mechanical"
+	RiskMechanical Tier = "mechanical"
 	// RiskScoped changes packages a prover placed, so the tests narrow to what can
 	// observe them.
-	RiskScoped RiskTier = "scoped"
+	RiskScoped Tier = "scoped"
 	// RiskFull runs the invoked target over every affected project.
-	RiskFull RiskTier = "full"
+	RiskFull Tier = "full"
 )
 
-// RiskEvidence is one reason behind a RiskReport. Path names a changed file, its class
-// and the tier it earned; without a Path, Project and Target name the gate step the
-// reason is about.
-type RiskEvidence struct {
-	Path    string   `json:"path,omitempty"    yaml:"path,omitempty"`
-	Project string   `json:"project,omitempty" yaml:"project,omitempty"`
-	Target  string   `json:"target,omitempty"  yaml:"target,omitempty"`
-	Class   string   `json:"class,omitempty"   yaml:"class,omitempty"`
-	Tier    RiskTier `json:"tier"              yaml:"tier"`
-	Why     string   `json:"why"               yaml:"why"`
+// TierEvidence is one reason behind a TierReport. Path names a changed file,
+// its class and the tier it earned; without a Path, Project and Target name
+// the gate step the reason is about.
+type TierEvidence struct {
+	Path    string `json:"path,omitempty"    yaml:"path,omitempty"`
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Target  string `json:"target,omitempty"  yaml:"target,omitempty"`
+	Class   string `json:"class,omitempty"   yaml:"class,omitempty"`
+	Tier    Tier   `json:"tier"              yaml:"tier"`
+	Why     string `json:"why"               yaml:"why"`
 	// Packages are the packages a scoped path put under test.
 	Packages []string `json:"packages,omitempty" yaml:"packages,omitempty"`
 }
 
 // Line renders the evidence as `<path>: <tier> (<class>: <why>)`, with the gate step as
 // its subject when it names no path, and no subject when it names neither.
-func (e RiskEvidence) Line() string {
+func (e TierEvidence) Line() string {
 	subject := e.Path
 	if subject == "" {
 		subject = strings.TrimSpace(fmt.Sprintf("%s %s", e.Project, e.Target))
@@ -55,9 +57,9 @@ func (e RiskEvidence) Line() string {
 	return fmt.Sprintf("%s: %s", subject, line)
 }
 
-// RiskGateStep is one runnable command of a sized gate. Argv is the whole command line;
-// the other fields are what it was built from.
-type RiskGateStep struct {
+// TierGateStep is one runnable command of a sized gate. Argv is the whole
+// command line; the other fields are what it was built from.
+type TierGateStep struct {
 	Target   string   `json:"target"             yaml:"target"`
 	Projects []string `json:"projects"           yaml:"projects"`
 	// Op, when set, is the spell op (`go::go-test`) whose package arguments a sized run
@@ -68,21 +70,41 @@ type RiskGateStep struct {
 	Argv     []string `json:"argv"               yaml:"argv"`
 }
 
-// RiskReport is a change's tier, the evidence for it, and Gate, the commands sufficient
-// to validate it. An empty Gate is only ever paired with RiskTrivial.
-type RiskReport struct {
+// TierReport is a change's tier, the evidence for it, and Gate, the commands
+// sufficient to validate it. An empty Gate pairs only with RiskTrivial.
+type TierReport struct {
 	// Base is the revision the change was measured from.
 	Base     string         `json:"base"     yaml:"base"`
 	Target   string         `json:"target"   yaml:"target"`
-	Tier     RiskTier       `json:"tier"     yaml:"tier"`
+	Tier     Tier           `json:"tier"     yaml:"tier"`
 	Affected []string       `json:"affected" yaml:"affected"`
-	Evidence []RiskEvidence `json:"evidence" yaml:"evidence"`
-	Gate     []RiskGateStep `json:"gate"     yaml:"gate"`
+	Evidence []TierEvidence `json:"evidence" yaml:"evidence"`
+	Gate     []TierGateStep `json:"gate"     yaml:"gate"`
+}
+
+// TierOptions are what a change is assessed against.
+// They are magus\change().tier's options, and the workspace's RiskAssessor's.
+type TierOptions struct {
+	// Base is the revision the change is measured from; empty is the configured affected
+	// base.
+	Base string `json:"base,omitempty" buzz:"-"`
+	// Paths replaces the version-control diff when non-nil: the change is these paths.
+	Paths []string `json:"paths,omitempty"`
+	// Checkout is the root of another checkout of the same repository whose change is
+	// assessed, such as a job's standing checkout; empty is the workspace's own.
+	Checkout string `json:"checkout,omitempty"`
+}
+
+// RiskAssessor is a workspace that proves a change's risk tier, recovered from the
+// workspace on a context by assertion because the package that implements it imports the
+// ones that need it.
+type RiskAssessor interface {
+	AssessRisk(ctx context.Context, target string, o TierOptions) (TierReport, error)
 }
 
 // Lines renders one line per evidence entry, every changed path included, because the
 // reader of a sized or skipped gate must be able to reconstruct the decision.
-func (r RiskReport) Lines() []string {
+func (r TierReport) Lines() []string {
 	out := make([]string, len(r.Evidence))
 	for i, e := range r.Evidence {
 		out[i] = e.Line()
@@ -92,7 +114,7 @@ func (r RiskReport) Lines() []string {
 
 // Commands renders the gate as the command lines a person runs, a narrowed step as
 // the whole target it narrows.
-func (r RiskReport) Commands() []string {
+func (r TierReport) Commands() []string {
 	out := make([]string, len(r.Gate))
 	for i, g := range r.Gate {
 		out[i] = strings.Join(g.Argv, " ")

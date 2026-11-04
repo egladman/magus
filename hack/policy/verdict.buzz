@@ -54,7 +54,7 @@ export fun opening(lead: str, problem: str) > str {
 // checked returns v after asserting that a deny carries the shape; an allow or an advisory
 // passes as it is, since only a denial prints as a verdict and a ref.
 export fun checked(v: GuardVerdict, label: str) > GuardVerdict {
-    if (v.decision == "deny") {
+    if (v.decision == magus\GuardDecision.deny) {
         assertVerdict(v.reason, label: label);
     }
     return v;
@@ -85,7 +85,7 @@ test "an opening quotes the first problem when it fits and points at the list wh
 }
 
 test "a deny is held to the shape, an allow and an advisory are not" {
-    checked(magus\guard.deny("read it whole: `magus query output <ref>`.\nwhy"), label: "deny");
-    checked(magus\guard.allow(), label: "allow");
-    checked(magus\guard.advise("You are reading one pull request's CI."), label: "advise");
+    _ = checked(magus\guard.deny("read it whole: `magus query output <ref>`.\nwhy"), label: "deny");
+    _ = checked(magus\guard.allow(), label: "allow");
+    _ = checked(magus\guard.advise("You are reading one pull request's CI."), label: "advise");
 }

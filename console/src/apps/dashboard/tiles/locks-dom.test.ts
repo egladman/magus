@@ -54,12 +54,12 @@ test("a stale holder is marked in words and a shape, not by its border alone", (
   );
   const rows = [...tile.el.querySelectorAll<HTMLElement>(".console-dashboard-row")];
   assert.equal(rows.length, 2);
-  assert.equal(rows[0].dataset.stale, "true");
-  const warn = rows[0].querySelector(".console-dashboard-row__warn");
+  assert.equal(rows[0]?.dataset.stale, "true");
+  const warn = rows[0]?.querySelector(".console-dashboard-row__warn");
   assert.match(warn?.textContent ?? "", /may be abandoned/);
   assert.ok(warn?.querySelector(".pf-v6-c-icon"), "a shape beside the sentence");
-  assert.equal(rows[1].dataset.stale, undefined);
-  assert.equal(rows[1].querySelector(".console-dashboard-row__warn"), null);
+  assert.equal(rows[1]?.dataset.stale, undefined);
+  assert.equal(rows[1]?.querySelector(".console-dashboard-row__warn"), null);
   tile.destroy();
 });
 

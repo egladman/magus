@@ -1,11 +1,10 @@
-// The one conventional-commit rule this repository enforces, shared by
-// the pull request title check (the pr-title target) and hack/git-hooks/commit-msg.buzz,
-// so the two cannot disagree about what a subject may look like.
+// The one conventional-commit rule this repository enforces. The pr-title
+// target and the guard's commit rule share it, so they cannot disagree.
 //
-// Squash merges make a pull request's title the subject that lands on main, so the title
-// is the enforcement point. Branch commits are squashed away and keep the repository's
-// lowercase imperative style with no prefix; the hook checks only commits made directly on
-// the base branch, which land as written.
+// Squash merges make a pull request's title the subject that lands on main,
+// so the title is the enforcement point. Branch commits are squashed away
+// and keep the lowercase imperative style with no prefix. The guard checks
+// only commits made directly on the base branch, which land as written.
 namespace commits;
 
 import "std";

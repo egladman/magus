@@ -64,7 +64,7 @@ fun mergeBase() > str {
     if (base == "") {
         return "";
     }
-    final found = vcs\cmd(["merge-base", "HEAD", base], opts: {"quiet": true, "allow_failure": true}) catch null;
+    final found = vcs\cmd(["merge-base", "HEAD", base], opts: vcs\CommandOptions{ quiet = true, allowFailure = true }) catch null;
     if (found == null or !found!.ok) {
         return "";
     }
@@ -73,7 +73,7 @@ fun mergeBase() > str {
 
 // fileAt is the file as the base commit held it, null when it did not exist there.
 fun fileAt(base: str, p: str) > str? {
-    final shown = vcs\cmd(["show", "{base}:./{p}"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    final shown = vcs\cmd(["show", "{base}:./{p}"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true }) catch null;
     if (shown == null or !shown!.ok) {
         return null;
     }

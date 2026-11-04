@@ -228,14 +228,15 @@ func driverPattern(p string) string {
 
 // unorderedFileShareProblems is every write path of row that would hand one claimable file
 // (no glob, not a directory, not a project root, with a diff driver) to two live, unordered
-// jobs at once, as WritePathFileShared: a candidate entry and a holder's entry name the same
-// file, still intersect (types.PathsIntersect), and neither row is the other's ancestor,
-// descendant, or depends_on partner. Each entry is reported once, against the first holder
+// jobs at once, as WritePathFileShared. Such a pair is a candidate entry and a holder's
+// entry that name the same file and still intersect (types.PathsIntersect), where neither
+// row is the other's ancestor, descendant, or depends_on partner. Each entry is reported once, against the first holder
 // found. The message names the holder's unused write paths ([unusedWritePaths]), and one
 // attention request asks the holder to release what it does not edit (see requestRelease).
 //
 // Left alone: a same-checkout or not-yet-taken holder (CheckoutRoot == ""), which
-// sharedCheckoutProblems and the overlap report already watch; a holder that exited, whose
+// sharedCheckoutProblems and the overlap report already watch; a generated output
+// ([HeldApart]); a holder that exited, whose
 // editing is over (see [Editing]); a holder blocked on
 // depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
 // no diff driver, for which depends_on is the only move. An integration row is
@@ -290,26 +291,46 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 			if !types.PathsIntersect(mine, theirs) || mergeLeftAlone(ctx, store, rows, holder, mine) {
 				continue
 			}
-			touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, file)
-			unused := unusedWritePaths(ctx, store, rows, holder)
-			wanted := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
-				other, ok := literalClaimableFile(store.root, entry)
-				return !ok || other != file
-			})
-			store.requestRelease(ctx, holder.ID, file, wanted, unused)
-			return types.JobProblem{
-				Code: types.WritePathFileShared,
-				Message: fmt.Sprintf("%s declares %q, and %s (%s, updated %s ago) already holds %q. Both are live and neither"+
-					" is the other's parent, child, or depends_on partner, so %s has one owner unless the rows"+
-					" say otherwise. %s has touched %s in it so far. %s",
-					row.ID, mine, holder.ID, holder.State, updatedAgo(holder), theirs,
-					file,
-					holder.ID, describeTouched(touched, unreadable), describeUnused(holder.ID, unused)),
-				Fix: splitAdvice(ctx, store, row, holder, file, touched) + narrowAdvice(holder.ID, unused),
-			}, true
+			apart, unchecked := HeldApart(WorkingCheckout(here, row), holder, store.workspaceProjects, mine, theirs)
+			if apart {
+				continue
+			}
+			return sharedFileRefusal(ctx, store, rows, row, holder, sharedFile{file: file, mine: mine, theirs: theirs, unchecked: unchecked}), true
 		}
 	}
 	return types.JobProblem{}, false
+}
+
+// sharedFile is one file two rows both hold: row's entry mine and holder's entry theirs,
+// and why the generated-output scope check did not run, when it did not.
+type sharedFile struct {
+	file, mine, theirs, unchecked string
+}
+
+// sharedFileRefusal is the WritePathFileShared problem for s, after asking holder to
+// release what it does not edit.
+func sharedFileRefusal(ctx context.Context, store *Store, rows []types.Job, row, holder types.Job, s sharedFile) types.JobProblem {
+	touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, s.file)
+	unused := unusedWritePaths(ctx, store, rows, holder)
+	wanted := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
+		other, ok := literalClaimableFile(store.root, entry)
+		return !ok || other != s.file
+	})
+	store.requestRelease(ctx, holder.ID, s.file, wanted, unused)
+	fix := splitAdvice(ctx, store, row, holder, s.file, touched) + narrowAdvice(holder.ID, unused)
+	if s.unchecked != "" {
+		fix += ". Also: " + s.unchecked
+	}
+	return types.JobProblem{
+		Code: types.WritePathFileShared,
+		Message: fmt.Sprintf("%s declares %q, and %s (%s, updated %s ago) already holds %q. Both are live and neither"+
+			" is the other's parent, child, or depends_on partner, so %s has one owner unless the rows"+
+			" say otherwise. %s has touched %s in it so far. %s",
+			row.ID, s.mine, holder.ID, holder.State, updatedAgo(holder), s.theirs,
+			s.file,
+			holder.ID, describeTouched(touched, unreadable), describeUnused(holder.ID, unused)),
+		Fix: fix,
+	}
 }
 
 // mergeLeftAlone reports whether holder is an integration row that has changed nothing the

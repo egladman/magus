@@ -172,7 +172,7 @@ func PRMergeFreeRange(history []types.Commit, green string) bool {
 type InheritFinding struct {
 	Run    string
 	Commit string
-	Report types.RiskReport
+	Report types.TierReport
 }
 
 // InheritProbe gathers the CI verdict-inheritance inputs. Dependencies are
@@ -188,7 +188,7 @@ type InheritProbe struct {
 	// green run worth inheriting.
 	History func(ctx context.Context) ([]types.Commit, error)
 	// Assess tiers the change between the working tree and the green commit.
-	Assess func(ctx context.Context, green string) (types.RiskReport, error)
+	Assess func(ctx context.Context, green string) (types.TierReport, error)
 }
 
 // Evaluate decides. ok=false means the plan proceeds exactly as it would

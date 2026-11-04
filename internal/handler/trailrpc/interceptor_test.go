@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	// Blank-imported so every magus.*.v1 service descriptor is registered in protoregistry.GlobalFiles
-	// for TestKnownVerbs to enumerate. This is the whole point of the ratchet: a new service/method
+	// for TestKnownVerbs to enumerate. This is the whole point of the arch test: a new service/method
 	// linked into the server is visible here, so an unclassified verb cannot ship unnoticed.
 	_ "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
@@ -67,7 +67,7 @@ func TestMethodName(t *testing.T) {
 	}
 }
 
-// TestKnownVerbs is the arch ratchet: every method on every magus.*.v1 service linked into this test
+// TestKnownVerbs is the arch test: every method on every magus.*.v1 service linked into this test
 // binary must classify to a KNOWN verb. A new RPC whose leading word is in neither the mutating nor the
 // read set fails here, forcing the author to add it to one bucket in interceptor.go, which is the moment
 // they decide whether it needs auditing. This is what keeps the audit boundary from silently drifting as

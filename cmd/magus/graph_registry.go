@@ -21,8 +21,11 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/types"
 )
 
@@ -84,16 +87,18 @@ func errorNoGraphDestination(verb string) error {
 // does, so a secret never becomes a flag argument that lands in a process listing, a
 // shell history, or a run log. The caller resolving it is the magusfile, through
 // magus\secret.read, which is what keeps the credential source pluggable: a workspace
-// picks its provider and this never learns which one.
-func readToken() (string, error) {
+// picks its provider and this never learns which one. The token never passed through
+// this run's resolver, so it is registered there for redaction.
+func readToken(ctx context.Context) (types.Secret, error) {
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		return "", fmt.Errorf("read token from stdin: %w", err)
+		return types.Secret{}, fmt.Errorf("read token from stdin: %w", err)
 	}
-	tok := strings.TrimSpace(string(raw))
-	if tok == "" {
-		return "", fmt.Errorf("no token on stdin, pipe one in the way graph-generate does (magus\\secret.read resolves it)")
+	tok := types.NewSecret(strings.TrimSpace(string(raw)))
+	if tok.IsZero() {
+		return types.Secret{}, fmt.Errorf("no token on stdin, pipe one in the way graph-generate does (magus\\secret.read resolves it)")
 	}
+	secret.ResolverFromContext(ctx).Register(tok)
 	return tok, nil
 }
 
@@ -105,6 +110,8 @@ func graphPush(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&user, "username", "", "the registry username; the token is read from stdin")
 		fs.BoolVar(&refresh, "refresh", false, "rebuild the graph before pushing instead of exporting what is cached")
 		fs.BoolVar(&table, "table", false, "publish the embedding table from the cache instead of the graph, tagged with its pin, write-once")
+		cmdline.NegatedBoolVar(fs, &refresh, "refresh")
+		cmdline.NegatedBoolVar(fs, &table, "table")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph push [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -131,20 +138,40 @@ func graphPush(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 
+	var rec graphRegistryOutput
 	if table {
 		if refresh {
 			return errors.New("graph push: -refresh rebuilds the graph, and -table publishes no graph")
 		}
-		return tablePush(ctx, ref, user)
+		rec, err = tablePush(ctx, ref, user)
+	} else {
+		rec, err = pushGraph(ctx, root, ref, user, refresh)
 	}
-	return pushGraph(ctx, root, ref, user, refresh)
+	if err != nil || opts.Format == outputText {
+		return err
+	}
+	return emitRecord(opts, rec, []string{rec.Ref})
+}
+
+type graphRegistryOutput struct {
+	Ref    string `json:"ref"`
+	Table  bool   `json:"table"`
+	Pushed bool   `json:"pushed,omitempty"`
+	Shards int    `json:"shards"`
+	Bytes  int    `json:"bytes"`
+	Path   string `json:"path,omitempty"`
 }
 
 // pushGraph publishes the knowledge graph to ref, rebuilding it first under refresh.
-func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error {
+func pushGraph(ctx context.Context, root, ref, user string, refresh bool) (graphRegistryOutput, error) {
+	var none graphRegistryOutput
 	if ref == "" {
-		return errorNoGraphDestination("push")
+		return none, errorNoGraphDestination("push")
 	}
 	// The tag --ref carries is the tag written. Recomputing a tag set here would mean two
 	// implementations of tag policy, and the caller's would lose; the magusfile already
@@ -153,34 +180,34 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error 
 	// string.
 	dest, err := graphReference(ref, graphFloatingTag)
 	if err != nil {
-		return err
+		return none, err
 	}
 	layers, err := graphLayers(ctx, root, refresh)
 	if err != nil {
-		return err
+		return none, err
 	}
 	var size int
 	for _, l := range layers {
-		size += len(l.Payload)
+		size += len(l.Data)
 	}
 
-	pass, err := readToken()
+	pass, err := readToken(ctx)
 	if err != nil {
-		return fmt.Errorf("graph push: %w", err)
+		return none, fmt.Errorf("graph push: %w", err)
 	}
 	client := &oci.Client{
-		HTTP:     &http.Client{Timeout: graphRegistryTimeout},
-		Username: user,
-		Password: pass,
+		HTTP:        &http.Client{Timeout: graphRegistryTimeout},
+		Credentials: oci.Credentials{Username: user, Password: pass},
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
-	if _, err := client.Push(ctx, dest, oci.Content{ArtifactType: graphArtifactType, Layers: layers}); err != nil {
-		return fmt.Errorf("graph push: %w", err)
+	repo := oci.Reference{Registry: dest.Registry, Repository: dest.Repository}
+	if _, err := client.PushArtifact(ctx, repo, oci.Artifact{ArtifactType: graphArtifactType, Blobs: layers}, dest.Tag); err != nil {
+		return none, fmt.Errorf("graph push: %w", err)
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pushed %s (%d shards, %d bytes)", dest, len(layers)-1, size), attr.Notice(""))
-	return nil
+	return graphRegistryOutput{Ref: dest.String(), Pushed: true, Shards: len(layers) - 1, Bytes: size}, nil
 }
 
 // graphLayers is the published artifact's content: the knowledge store's routing manifest,
@@ -195,7 +222,7 @@ func pushGraph(ctx context.Context, root, ref, user string, refresh bool) error 
 // The SCIP shards are the expensive half and are never committed, which is the whole
 // reason to publish; gen/knowledge-graph.json is a local build output that already
 // carries the domain graph, so republishing that alone would add nothing.
-func graphLayers(ctx context.Context, root string, refresh bool) ([]oci.Layer, error) {
+func graphLayers(ctx context.Context, root string, refresh bool) ([]oci.Blob, error) {
 	if _, err := loadKnowledgeGraph(ctx, root, refresh, false, true /* includeSymbols */); err != nil {
 		return nil, err
 	}
@@ -214,10 +241,10 @@ func graphLayers(ctx context.Context, root string, refresh bool) ([]oci.Layer, e
 	if err != nil {
 		return nil, fmt.Errorf("graph push: %w", err)
 	}
-	layers := make([]oci.Layer, 0, len(export.Shards)+1)
-	layers = append(layers, oci.Layer{Name: graphStoreLayer, MediaType: graphStoreMediaType, Payload: export.Manifest})
+	layers := make([]oci.Blob, 0, len(export.Shards)+1)
+	layers = append(layers, oci.Blob{Title: graphStoreLayer, MediaType: graphStoreMediaType, Data: export.Manifest})
 	for _, sh := range export.Shards {
-		layers = append(layers, oci.Layer{Name: sh.Key, MediaType: graphShardMediaType, Payload: sh.Bytes})
+		layers = append(layers, oci.Blob{Title: sh.Key, MediaType: graphShardMediaType, Data: sh.Bytes})
 	}
 	return layers, nil
 }
@@ -269,6 +296,7 @@ func graphPull(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&ref, "ref", "", "the artifact to pull, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
 		fs.StringVar(&out, "out", "", "write the graph here instead of stdout")
 		fs.BoolVar(&table, "table", false, "fetch the embedding table the binary pins into the cache instead of the graph")
+		cmdline.NegatedBoolVar(fs, &table, "table")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph pull [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -285,15 +313,26 @@ func graphPull(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 
 	if table {
 		if out != "" {
 			return errors.New("graph pull: -table writes the table to the cache, so --out names nothing")
 		}
-		return tablePull(ctx, ref)
+		rec, err := tablePull(ctx, ref)
+		if err != nil || opts.Format == outputText {
+			return err
+		}
+		return emitRecord(opts, rec, []string{rec.Ref})
 	}
 	if ref == "" {
 		return errorNoGraphDestination("pull")
+	}
+	if out == "" && opts.Format != outputText {
+		return exit.Usagef("magus graph pull: -o needs --out, since stdout is the graph")
 	}
 	src, err := graphReference(ref, graphFloatingTag)
 	if err != nil {
@@ -318,6 +357,9 @@ func graphPull(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("graph pull: %w", err)
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pulled %s into %s (%d bytes)", src, out, len(raw)), attr.Notice(""))
+	if opts.Format != outputText {
+		return emitRecord(opts, graphRegistryOutput{Ref: src.String(), Bytes: len(raw), Path: out}, []string{src.String()})
+	}
 	return nil
 }
 
@@ -334,54 +376,57 @@ func graphReference(ref, tag string) (oci.Reference, error) {
 // tablePush publishes the cached embedding table under its pin. The release runs it
 // after `magus run table libs/embed/train`; a table that does not hash to the pin is
 // refused, never published under a tag of its own.
-func tablePush(ctx context.Context, repo, user string) error {
+func tablePush(ctx context.Context, repo, user string) (graphRegistryOutput, error) {
+	var none graphRegistryOutput
 	dest, err := embedtable.Reference(repo)
 	if err != nil {
-		return fmt.Errorf("graph push -table: %w", err)
+		return none, fmt.Errorf("graph push -table: %w", err)
 	}
 	path, err := embedtable.Options{}.Path()
 	if err != nil {
-		return fmt.Errorf("graph push -table: %w", err)
+		return none, fmt.Errorf("graph push -table: %w", err)
 	}
-	pass, err := readToken()
+	pass, err := readToken(ctx)
 	if err != nil {
-		return fmt.Errorf("graph push -table: %w", err)
+		return none, fmt.Errorf("graph push -table: %w", err)
 	}
-	client := &oci.Client{HTTP: registryHTTP(), Username: user, Password: pass}
+	client := &oci.Client{HTTP: registryHTTP(), Credentials: oci.Credentials{Username: user, Password: pass}}
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
 	pushed, err := embedtable.Publish(ctx, client, dest, path)
 	if err != nil {
-		return fmt.Errorf("graph push -table: %w", err)
+		return none, fmt.Errorf("graph push -table: %w", err)
 	}
+	rec := graphRegistryOutput{Ref: dest.String(), Table: true, Pushed: pushed, Path: path}
 	if !pushed {
 		slog.InfoContext(ctx, fmt.Sprintf("kept %s, already published with the pinned table", dest), attr.Notice(""))
-		return nil
+		return rec, nil
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pushed %s from %s", dest, path), attr.Notice(""))
-	return nil
+	return rec, nil
 }
 
 // tablePull fetches the pinned embedding table into the cache, anonymously for the
 // reason graphPull is.
-func tablePull(ctx context.Context, repo string) error {
+func tablePull(ctx context.Context, repo string) (graphRegistryOutput, error) {
+	var none graphRegistryOutput
 	src, err := embedtable.Reference(repo)
 	if err != nil {
-		return fmt.Errorf("graph pull -table: %w", err)
+		return none, fmt.Errorf("graph pull -table: %w", err)
 	}
 	opts := embedtable.Options{}
 	path, err := opts.Path()
 	if err != nil {
-		return fmt.Errorf("graph pull -table: %w", err)
+		return none, fmt.Errorf("graph pull -table: %w", err)
 	}
 	client := &oci.Client{HTTP: registryHTTP()}
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
 	if err := embedtable.Pull(ctx, client, src, opts); err != nil {
-		return fmt.Errorf("graph pull -table: %w", err)
+		return none, fmt.Errorf("graph pull -table: %w", err)
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("pulled %s into %s", src, path), attr.Notice(""))
-	return nil
+	return graphRegistryOutput{Ref: src.String(), Table: true, Path: path}, nil
 }
 
 // pullMergedGraph fetches every shard the artifact names and merges them into the
@@ -397,7 +442,7 @@ func tablePull(ctx context.Context, repo string) error {
 // the cheap half. So does the git history each shard carries (types.KnowledgeVCS per file),
 // which is what lets the pulled graph answer ownership and churn without the repository.
 func pullMergedGraph(ctx context.Context, client *oci.Client, src oci.Reference, root string) ([]byte, error) {
-	art, err := client.Artifact(ctx, src, graphArtifactType)
+	art, err := client.GetArtifact(ctx, src, graphArtifactType)
 	if err != nil {
 		return nil, err
 	}

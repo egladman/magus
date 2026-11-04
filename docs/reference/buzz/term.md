@@ -73,15 +73,15 @@ Wrap s in the given style and close it again. Returns s UNCHANGED when the outpu
 
 Prompt the reader to choose one of items and return its index. Type to filter (matching every whitespace-separated token), arrow keys or Ctrl-N/Ctrl-P to move, Enter to choose. RAISES when there is no terminal to prompt on - guard with is_interactive - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D, so a cancel ends the run rather than quietly returning a choice nobody made. Renders to stderr.
 
-**Signature:** `term\pick(items, [prompt], [initial_filter], [initial], [max_rows]) -> int` - [source](https://github.com/egladman/magus/blob/main/std/term.go)
+**Signature:** `term\pick(items, [prompt], [initialFilter], [initial], [maxRows]) -> int` - [source](https://github.com/egladman/magus/blob/main/std/term.go)
 
-| Parameter        | Type       | Optional | Description |
-| ---------------- | ---------- | -------- | ----------- |
-| `items`          | `[]string` |          |             |
-| `prompt`         | `string`   | yes      |             |
-| `initial_filter` | `string`   | yes      |             |
-| `initial`        | `int`      | yes      |             |
-| `max_rows`       | `int`      | yes      |             |
+| Parameter       | Type       | Optional | Description |
+| --------------- | ---------- | -------- | ----------- |
+| `items`         | `[]string` |          |             |
+| `prompt`        | `string`   | yes      |             |
+| `initialFilter` | `string`   | yes      |             |
+| `initial`       | `int`      | yes      |             |
+| `maxRows`       | `int`      | yes      |             |
 
 **Returns:** int
 
@@ -113,15 +113,15 @@ std\print(term\colorize(choose(), style: term\TermStyle.brightGreen));
 
 ### notify
 
-Raise a notification into the band magus pins at the bottom of the terminal, where it shows for a few seconds and then disappears on its own. Unlike log.info it does not join the scrolling transcript: it is for something worth GLANCING at during a long run, not for the record. Returns immediately - the message expires on its own clock - and never raises: it is DROPPED when there is no terminal to show it on, or when the band has no room, so a piped or CI run is never given a repainted view it cannot use and no caller has to guard a notification. Log the same fact if it also needs recording. ttl_ms defaults to 5000; a negative ttl_ms pins the notification until newer ones push it out.
+Raise a notification into the band magus pins at the bottom of the terminal, where it shows for a few seconds and then disappears on its own. Unlike log.info it does not join the scrolling transcript: it is for something worth GLANCING at during a long run, not for the record. Returns immediately - the message expires on its own clock - and never raises: it is DROPPED when there is no terminal to show it on, or when the band has no room, so a piped or CI run is never given a repainted view it cannot use and no caller has to guard a notification. Log the same fact if it also needs recording. ttlMs defaults to 5000; a negative ttlMs pins the notification until newer ones push it out.
 
-**Signature:** `term\notify(message, [level], [ttl_ms])` - [source](https://github.com/egladman/magus/blob/main/std/term.go)
+**Signature:** `term\notify(message, [level], [ttlMs])` - [source](https://github.com/egladman/magus/blob/main/std/term.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
 | `message` | `string` |          |             |
 | `level`   | `string` | yes      |             |
-| `ttl_ms`  | `int`    | yes      |             |
+| `ttlMs`   | `int`    | yes      |             |
 
 **Example:**
 
@@ -137,10 +137,10 @@ term\notify("docs regenerated");
 term\notify("cache stampede on go-build", level: term\LogLevel.warn);
 
 // A longer ttl for something worth reading twice.
-term\notify("deploy skipped: no credentials", level: term\LogLevel.error, ttl_ms: 15000);
+term\notify("deploy skipped: no credentials", level: term\LogLevel.error, ttlMs: 15000);
 
 // A negative ttl keeps it until newer notifications push it out of the band.
-term\notify("server unreachable", level: term\LogLevel.error, ttl_ms: -1);
+term\notify("server unreachable", level: term\LogLevel.error, ttlMs: -1);
 ```
 
 ### clearScreen

@@ -60,13 +60,19 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 **--bisect** *string*
 : Drive VCS bisect to find the commit that broke \<project\>
 
+**--[no-]cache** (default: on)
+: Replay a cache hit; --no-cache forces a fresh run, which still refreshes the entry
+
+**--[no-]default-charms** (default: on)
+: Apply magus.yaml default_charms; --no-default-charms ignores them for this run
+
 **--depth** *int*
 : With --graph: cap displayed depth (0 = unlimited)
 
-**--detach**
+**--[no-]detach** (default: off)
 : Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server
 
-**--detail**
+**--[no-]detail** (default: off)
 : With --plan: add per-shard detail: the invocation, its spells, the files it declares it writes, and the skills its work routes to
 
 **--explain** *string*
@@ -75,10 +81,10 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 **--good** *string*
 : With --bisect: known-good commit SHA (auto-detected from history when empty)
 
-**--graph**
+**--[no-]graph** (default: off)
 : Render the dependency graph for the affected scope instead of executing
 
-**--impact**
+**--[no-]impact** (default: off)
 : Report the blast radius of the changeset (read-only; runs nothing)
 
 **--max-parallel-budget** *int*
@@ -87,19 +93,10 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 **--max-shards** *int* (default: 8)
 : With --plan: maximum CI shards (-1 = unlimited)
 
-**--no-cache**
-: Force a fresh run even on a cache hit; still refreshes the entry
-
-**--no-default-charms**
-: Ignore magus.yaml default_charms for this run
-
-**--no-redundancy-check**
-: Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only
-
-**--null**
+**--[no-]null** (default: off)
 : With --stdin: expect NUL-separated paths and double-NUL between batches
 
-**--open**
+**--[no-]open** (default: off)
 : Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
 
 **--plan** *string*
@@ -108,19 +105,22 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 **--race** *string*
 : Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time.
 
-**--stdin**
+**--[no-]redundancy-check** (default: on)
+: Let the ci gate defer or reduce its tier when a passing run is on record (MGS3010); --no-redundancy-check runs it in full. ci target only
+
+**--[no-]stdin** (default: off)
 : Read changed file paths from stdin instead of running a VCS diff
 
-**--step**
+**--[no-]step** (default: off)
 : Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)
 
 **--target** *string* (default: test)
 : With --bisect: magus target to bisect
 
-**--timeout** *duration*
-: Abort if the run has not finished within this duration (e.g. 5m, 1h30m)
+**--timeout** *value*
+: Abort if the run has not finished within this duration (e.g. 5m, 1h30m). Bare numbers are minutes.
 
-**--upstream**
+**--[no-]upstream** (default: off)
 : With --graph: show dependents instead of dependencies
 
 ## Operands
@@ -227,5 +227,5 @@ magus affected --bisect ./apps/myapp
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-gate**(1)](magus-gate.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

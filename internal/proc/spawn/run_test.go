@@ -52,7 +52,7 @@ func TestExecEmitsExecEventWithinStep(t *testing.T) {
 }
 
 // TestExecInjectsMAGUS pins that Exec exports MAGUS (the running binary's resolved
-// path) into the subprocess environment, so a spell or recipe can re-invoke magus
+// path) into the subprocess environment, so a spell or target can re-invoke magus
 // via "${MAGUS:-magus}" without relying on PATH (the GNU Make $(MAKE) convention).
 // Here the "running binary" is the test executable.
 func TestExecInjectsMAGUS(t *testing.T) {

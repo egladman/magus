@@ -235,9 +235,7 @@ type FlagParse struct {
 	Unknown []string
 }
 
-// Skill mirrors one element of magus\skills's result: a skill this workspace offers an
-// agent, as the text the agent loads.
-//
+// Skill mirrors one element of magus\workspace().skills(), as agents load it.
 // Source is "shipped" (magus's own catalog) or "local" (hand-authored in an installed
 // skills directory). Form is "short" or "full"; a local skill has one body and reports
 // "full", since nothing was withheld from it. Body is the SKILL.md text after its

@@ -1034,7 +1034,7 @@ func (vm *VM) enumCase(def Value, i int) Value { return vm.enumCases(def)[i] }
 // enumCases returns def's interned cases, building the table on first use. Each
 // case is charged to def's owner (allocEnumVal), not vm's: def keeps the table, and
 // a definition one session holds can be read from another, whose release would
-// otherwise free cases def still hands out.
+// otherwise free cases def still hands out. vm is nil for a host read outside any VM.
 func (vm *VM) enumCases(def Value) []Value {
 	d := def.asEnumDef()
 	if d.vals == nil {

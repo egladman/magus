@@ -176,6 +176,8 @@ type VCSDriver interface {
 	TreeMerger
 	GeneratedPathReporter
 	CheckoutProvisioner
+	CheckoutFastForwarder
+	BranchHeadReporter
 	CheckoutLister
 	CheckoutReporter
 	RevisionFetcher
@@ -434,6 +436,8 @@ const (
 	CapTreeMerger            VCSCapability = "TreeMerger"
 	CapGeneratedPathReporter VCSCapability = "GeneratedPathReporter"
 	CapCheckoutProvisioner   VCSCapability = "CheckoutProvisioner"
+	CapCheckoutFastForwarder VCSCapability = "CheckoutFastForwarder"
+	CapBranchHeadReporter    VCSCapability = "BranchHeadReporter"
 	CapCheckoutLister        VCSCapability = "CheckoutLister"
 	CapCheckoutReporter      VCSCapability = "CheckoutReporter"
 	CapRevisionFetcher       VCSCapability = "RevisionFetcher"
@@ -847,6 +851,10 @@ type RangeReporter interface {
 	// those with more than one parent. paths, when non-empty, keeps only the commits that
 	// changed one of those literal repository-relative paths.
 	RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]Commit, error)
+	// MissingCommits counts head's commits branch lacks a copy of, by ancestry,
+	// content or a same-subject commit carrying its changed lines. Reverted
+	// work reads as held; a rewritten squash later edited reads as missing.
+	MissingCommits(ctx context.Context, dir, branch, head string) (int, error)
 }
 
 // RegionReporter is the capability to say where inside each file a change landed: the
@@ -1139,6 +1147,21 @@ type GeneratedPathReporter interface {
 	GeneratedPaths(ctx context.Context, root, rev string, paths []string) (map[string]bool, error)
 }
 
+// CheckoutFastForwarder moves a checkout's current branch forward.
+type CheckoutFastForwarder interface {
+	// FastForward moves root's branch and working tree to rev.
+	// It moves nothing when rev does not descend from the head
+	// or a local change would be lost.
+	FastForward(ctx context.Context, root, rev string) error
+}
+
+// BranchHeadReporter reads every local branch in one call, for a caller
+// that would otherwise spend a subprocess per branch.
+type BranchHeadReporter interface {
+	// BranchHeads maps each local branch of root's repository to its full id.
+	BranchHeads(ctx context.Context, root string) (map[string]string, error)
+}
+
 // CheckoutProvisioner is the capability to create, list and remove secondary checkouts
 // that share the repository's store: what IsSecondaryCheckout detects (a git linked
 // worktree, an hg share, a jj workspace). It manages only the checkouts it created, and
@@ -1166,6 +1189,9 @@ type CheckoutProvisioner interface {
 	// remote-tracking ref reaches, and refuses the main checkout and any other; hg and jj
 	// refuse every one.
 	RemoveCheckout(ctx context.Context, root, dir string) error
+	// DiscardCheckout removes the checkout, then its branch while that
+	// still points at base. An unreadable branch is returned after.
+	DiscardCheckout(ctx context.Context, root, dir, base string) error
 	// Checkouts lists the checkouts CreateCheckout made, as absolute paths with symlinks
 	// resolved.
 	Checkouts(ctx context.Context, root string) ([]string, error)

@@ -81,7 +81,7 @@ func declaredCommands(t *testing.T) []string {
 			}
 			tokens = append(tokens, lit.Value[1:len(lit.Value)-1])
 		}
-		out = append(out, Command{tokens: tokens}.String())
+		out = append(out, Command{words: tokens}.String())
 		return true
 	})
 	if len(out) == 0 {

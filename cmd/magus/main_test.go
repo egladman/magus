@@ -25,13 +25,24 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// Every catalog the binary ships registers without a clash, so two built-in prefixes that
+// collide fail here rather than at a user's startup.
+func TestRegisterDiagnosticCatalogsReservesEveryShippedPrefix(t *testing.T) {
+	require.NoError(t, registerDiagnosticCatalogs())
+	require.NoError(t, registerDiagnosticCatalogs(), "registering again is a no-op")
+	assert.Subset(t, diagnostics.ReservedPrefixes(), []string{"BZZ", "MGS"})
+}
 
 // TestResolveProfileRunAffectedUsageSkipsForward pins the fix for the silent
 // `run -h` / `affected -h` / bare `affected` bug: a usage-only invocation of an
@@ -76,9 +87,8 @@ func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 		{"affected target still forwards", "affected", []string{"ci"}, full},
 		// A forensic mode runs nothing, so a forward buys no pool and costs the report:
 		// the server prints it on its own stdout and the client exits 0 with an empty one.
-		// That is what made magus\impact (which forks `affected --impact -o json`
-		// and decodes the child's stdout) fail with "decode report:" and an empty stderr
-		// whenever the caller had a server to forward to.
+		// magus\change().impact decodes such a child's stdout.
+		// With a server to forward to it failed with "decode report:".
 		{"affected --impact stays local", "affected", []string{"--impact"}, usageOnly},
 		{"affected --impact with a base stays local", "affected", []string{"--impact", "--base", "origin/main", "-o", "json"}, usageOnly},
 		{"affected --explain stays local", "affected", []string{"--explain", "docs"}, usageOnly},
@@ -399,6 +409,16 @@ func TestShellProfileSkipsTheWorkspacePreload(t *testing.T) {
 	}
 }
 
+// self update is what a stale binary tells its reader to run, and that binary may not
+// decode the workspace's magus.yaml.
+func TestSelfSkipsTheWorkspaceConfig(t *testing.T) {
+	for _, args := range [][]string{nil, {"update"}, {"update", "--help"}, {"update", "--version", "v1.2.3"}} {
+		if got := resolveProfile("self", args); got != (dispatchProfile{}) {
+			t.Errorf("resolveProfile(self, %q) = %+v, want no config", args, got)
+		}
+	}
+}
+
 func TestWantsUsage(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -437,7 +457,8 @@ func TestWantsUsage(t *testing.T) {
 // `magus diff -h`: the flag set is generated from the registry, but the
 // usage prose is hand-written, so a new flag lands in the binding and never in the help.
 // Deriving the expectation from the bound flags rather than a hand-list makes the help
-// self-check against what the command actually accepts.
+// self-check against what the command actually accepts. A generated --no-<name> is
+// covered by its bool, which the help names as --<name> or --[no-]<name>.
 func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
 	flaggen.BindDiff(fs)
@@ -445,8 +466,13 @@ func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 	diffUsage(&buf)
 	out := buf.String()
 	fs.VisitAll(func(f *flag.Flag) {
-		assert.Contains(t, out, "--"+f.Name,
-			"magus diff -h must name --%s; the hand-written help has drifted from the bound flags", f.Name)
+		name := f.Name
+		if base, ok := strings.CutPrefix(name, cmdline.NegationPrefix); ok && fs.Lookup(base) != nil {
+			return
+		}
+		named := strings.Contains(out, "--"+name) || strings.Contains(out, "--[no-]"+name)
+		assert.True(t, named,
+			"magus diff -h must name --%s; the hand-written help has drifted from the bound flags", name)
 	})
 }
 
@@ -825,6 +851,9 @@ func TestScripts(t *testing.T) {
 			// The cache store lives under the user cache dir, which HOME=/no-home cannot hold.
 			// Beside $WORK rather than in it, where a script's VCS status would list it.
 			e.Setenv("XDG_CACHE_HOME", e.WorkDir+"-cache")
+			// The machine's graph build lock lives under the state dir.
+			// One per script, so scripts never queue on each other's build.
+			e.Setenv("XDG_STATE_HOME", e.WorkDir+"-state")
 			// The shipped guard templates, by ABSOLUTE PATH to the real files.
 			// A script that copied them into its own archive would be testing a
 			// copy, and a copy of the artifact readers download is exactly what
@@ -1305,4 +1334,49 @@ func notices(t *testing.T, fn func()) string {
 	defer slog.SetDefault(prev)
 	fn()
 	return buf.String()
+}
+
+type ForwardFallbackSuite struct {
+	suite.Suite
+	buf bytes.Buffer
+	log *slog.Logger
+}
+
+func TestForwardFallbackSuite(t *testing.T) { suite.Run(t, new(ForwardFallbackSuite)) }
+
+func (s *ForwardFallbackSuite) SetupTest() {
+	s.buf.Reset()
+	s.log = slog.New(slog.NewTextHandler(&s.buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+func (s *ForwardFallbackSuite) lines() []string {
+	return strings.Split(strings.TrimSpace(s.buf.String()), "\n")
+}
+
+func (s *ForwardFallbackSuite) TestVersionMismatchWarnsOnceWithMGS3048() {
+	logForwardFallback(context.Background(), s.log, proc.ErrVersionMismatch)
+	lines := s.lines()
+	s.Require().Len(lines, 1, "one record, so the run says it once")
+	s.Contains(lines[0], "level=WARN")
+	s.Contains(lines[0], string(types.PeerFromAnotherBuild))
+}
+
+func (s *ForwardFallbackSuite) TestWrappedVersionMismatchStillWarns() {
+	logForwardFallback(context.Background(), s.log, fmt.Errorf("forward: %w", proc.ErrVersionMismatch))
+	s.Contains(s.buf.String(), "level=WARN")
+	s.Contains(s.buf.String(), string(types.PeerFromAnotherBuild))
+}
+
+func (s *ForwardFallbackSuite) TestNotAdoptableSubcommandStaysAtDebug() {
+	logForwardFallback(context.Background(), s.log, fmt.Errorf("%w: doctor", proc.ErrNotAdoptable))
+	lines := s.lines()
+	s.Require().Len(lines, 1)
+	s.Contains(lines[0], "level=DEBUG")
+	s.NotContains(lines[0], string(types.PeerFromAnotherBuild))
+}
+
+func (s *ForwardFallbackSuite) TestTransportFailureWarnsWithoutMGS3048() {
+	logForwardFallback(context.Background(), s.log, errors.New("dial unix: connection refused"))
+	s.Contains(s.buf.String(), "level=WARN")
+	s.NotContains(s.buf.String(), string(types.PeerFromAnotherBuild))
 }

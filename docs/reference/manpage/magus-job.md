@@ -11,7 +11,7 @@ Fork a job, take it, return it with its result, and verify that result
 
 ## Synopsis
 
-**magus** job \<fork|apply|exec|exit|wait|watch|run|rm|prune|pause|resume\> [flags]
+**magus** job \<fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume\> [flags]
 
 ## Description
 
@@ -103,13 +103,16 @@ them and magus describe job prints one job's terms.
 **--criteria** *string*
 : What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares
 
+**--delivery** *string*
+: How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)
+
 **--deny-paths** *string*
 : A path this job may not write, carved out of its write paths; repeatable or comma-separated
 
 **--depends-on** *string*
 : A job this one waits on; repeatable or comma-separated
 
-**--fix**
+**--[no-]fix** (default: off)
 : Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain
 
 **--model** *string*
@@ -118,30 +121,33 @@ them and magus describe job prints one job's terms.
 **--parent** *string*
 : The job this one is forked from
 
-**--read-only**
+**--[no-]read-only** (default: off)
 : A job that gathers evidence and writes nothing
 
 **--read-paths** *string*
 : A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)
 
-**--schema**
+**--[no-]schema** (default: off)
 : Print the JSON schema a job must satisfy, and exit
 
-**--stdin**
+**--[no-]stdin** (default: off)
 : Read one job as JSON on stdin instead of taking it from flags
 
-**--timeout** *duration*
-: Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout
+**--timeout** *value*
+: Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout. Bare numbers are minutes.
 
 **--write-paths** *\<file\>#\<declaration\>*
 : A path this job may write, or \<file\>#\<declaration\> to claim one declaration of a file (a path holding a literal # is spelled \`./a#b.md\` or \`a\\#b.md\`); repeatable or comma-separated
 
 ### job apply options
 
-**-f** *-*
-: The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line
+**--add-write-path** *\<file\>#\<declaration\>*
+: A path to add to the job's write paths, or \<file\>#\<declaration\> to claim one declaration of a file; repeatable or comma-separated
 
-**--fix**
+**-f** *file*
+: The records to apply: a file, or \`-\` for stdin; one JSON job, a JSON array, or one job per line
+
+**--[no-]fix** (default: off)
 : Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records
 
 ### job exec options
@@ -149,15 +155,15 @@ them and magus describe job prints one job's terms.
 **--slots** *int* (default: 1)
 : With --timeout: the machine budget slots the command takes while it runs
 
-**--timeout** *duration*
-: Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline
+**--timeout** *value*
+: Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline. Bare numbers are minutes.
 
 ### job exit options
 
-**--schema**
+**--[no-]schema** (default: off)
 : Print the JSON schema a result must satisfy, and exit
 
-**--stdin**
+**--[no-]stdin** (default: off)
 : Read this job's result from stdin; without it the job is abandoned
 
 ### job wait options
@@ -165,23 +171,28 @@ them and magus describe job prints one job's terms.
 **--evidence** *\<goal\>*
 : Grade check goal \<goal\> against the run \`\<ref\>\` recorded in THIS checkout instead of the job's own; \`check\` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
 
-**--integration**
+**--[no-]integration** (default: off)
 : Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state
 
-**--schema**
+**--[no-]schema** (default: off)
 : Print the JSON schema a result must satisfy, and exit
 
-**--stdin**
+**--[no-]stdin** (default: off)
 : Read the result from stdin instead of from the job, for one that was never filed
+
+### job graph options
+
+**--dir** *string*
+: Directory for the SVG files (default: job-graph/ in the workspace cache dir)
 
 ### job rm options
 
-**--force**
+**--[no-]force** (default: off)
 : Remove a row that already ended, destroying the record of what happened
 
 ### job prune options
 
-**--all**
+**--[no-]all** (default: off)
 : Also end a job a holder took and nobody touched within jobs.stale_after
 
 ### job pause options
@@ -194,10 +205,16 @@ them and magus describe job prints one job's terms.
 
 ### job grant options
 
-**--for** *duration*
-: End the grant after this long (e.g. 2h); unset, it lasts until the job ends
+**--commit** *string*
+: Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-ungated
 
-**--revoke**
+**--for** *value*
+: End the grant after this long (e.g. 2h); unset, it lasts until the job ends. Bare numbers are hours.
+
+**--reason** *string*
+: Why the gate was skipped, recorded with the waiver; required with --commit unless --revoke
+
+**--[no-]revoke** (default: off)
 : End the job's grant of the rule
 
 ## Subcommands
@@ -222,6 +239,9 @@ them and magus describe job prints one job's terms.
 
 **run**
 : Submit one of the server's own jobs and return
+
+**graph**
+: Draw the live plan, one figure per group of jobs
 
 **rm**
 : Remove one job from the plan
@@ -318,7 +338,19 @@ magus job prune --dry-run
 magus job pause session-load/core --reason 'release build needs the machine' --until 2h && magus job resume session-load/core
 ```
 
+*Push HEAD without the local gate, saying why*
+
+```sh
+magus job grant --commit HEAD push-ungated --reason "CI gates this release branch"
+```
+
+*Take that waiver back*
+
+```sh
+magus job grant --commit HEAD push-ungated --revoke
+```
+
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-gate**(1)](magus-gate.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

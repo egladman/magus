@@ -8,6 +8,9 @@
 export enum<str> SymbolFormat {
     none = "",
     scip = "scip",
+    goPackages = "go-packages",
+    buzzModule = "buzz-module",
+    shellScript = "shell-script",
 }
 
 export object SymbolIndexer {

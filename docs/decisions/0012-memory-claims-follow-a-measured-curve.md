@@ -305,3 +305,20 @@ steps from claiming.
 - A member larger than the whole budget is refused by name, as before.
 - `magus doctor`'s gate-fits check sizes ci and every same-project step it reaches with
   the admission sizer and fails on any step larger than the whole budget.
+
+### 2026-10-31: a failing machine refuses a new step
+
+This ADR relied on the 2026-10-16 brake row of the [record of refusals](../design/refusals.md)
+as standing. That row is reversed on new evidence. At 00:19 on 2026-10-31 the machine
+panicked with "73% of compressed pages limit (OK) and 100% of segments limit
+(BAD)". Jetsam killed thousands of small daemons and no magus process, and `watchdogd`
+stalled 90 seconds. Nothing declared or measured could see what filled that machine.
+
+- A new step is refused with [MGS3053](../reference/codes/sandbox/MGS3053.md) while the
+  kernel's reading is bad (`mem.ReadPressure`, read in `machineGate.claim`). The 75% and
+  25% in it are starting figures.
+- What this ADR decided is unchanged: claims follow the curve, and the budget packs them
+  without reading the host. No claim waits on host memory: a refusal is at once.
+- Determinism bends further: the same command can now reach a different verdict on a
+  machine the kernel says is failing. A retake (`machineHold.reclaim`) reads no memory, so
+  running work is never refused.

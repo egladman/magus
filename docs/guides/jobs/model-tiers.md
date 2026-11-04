@@ -37,7 +37,7 @@ names no model, and
 the default maps no harness to one: until a magusfile maps a harness with
 `hosts`, below, a tier has no model alias for any harness.
 
-`magus\job.modelTiers(null)` turns tiers off.
+`magus\modelTiers(null)` turns tiers off.
 
 ## Declare your own
 
@@ -75,7 +75,7 @@ fun skills(tier: ModelTier) > magus\SkillVariant {
 
 final cc = magus\harness.provider(claudecode);
 
-magus\job.modelTiers(ModelTier, default: ModelTier.standard,
+magus\modelTiers(ModelTier, default: ModelTier.standard,
     hosts: {cc: claudeCode},
     bounds: bounds, skills: skills);
 ```
@@ -106,7 +106,7 @@ project's magusfile instead of the root one.
 ## Which tier a job gets
 
 The store assigns the tier when a row is created or its `model` changes, whichever
-door writes it: `magus job fork`, `magus job apply`, or `magus\job.put` from a
+door writes it: `magus job fork`, `magus job apply`, or `magus\workspace().putJob` from a
 magusfile or the client MCP tool. It tries these in order and records which step
 decided:
 
@@ -117,7 +117,7 @@ decided:
    and no alias is kept as the row's word and the job takes the declared default's
    rank; hosts name their models differently, so the fork records the mismatch in
    the reason instead of refusing it. `magus job fork --model` takes either.
-2. **The matrix.** The function registered with `magus\job.modelTier`, when the
+2. **The matrix.** The function registered with `magus\modelTier`, when the
    row names no model (`matrix`). It may decline with `null`.
 3. **The default.** The declaration's default, with the skill variant the
    declaration gives it (`default`). A workspace that declares nothing records the
@@ -189,7 +189,7 @@ fun choose(req: ModelTierRequest) > Choice? {
     };
 }
 
-magus\job.modelTier(choose);
+magus\modelTier(choose);
 ```
 
 This one sends small, checked jobs to economy until economy has failed half of
@@ -207,5 +207,5 @@ can verify is the wrong place to try a cheaper model.
 ## Where to go next
 
 - [Jobs](../jobs.md): the plan a tier is recorded on.
-- [`magus\job.modelTiers`](../../reference/buzz/magus.md) and `magus\job.modelTier`
+- [`magus\modelTiers`](../../reference/buzz/magus.md) and `magus\modelTier`
   in the Buzz reference.

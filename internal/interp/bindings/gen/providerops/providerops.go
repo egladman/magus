@@ -68,6 +68,9 @@ var ReviewThreads = bindgen.ProviderOp[types.ReviewRef, []types.ReviewComment]{F
 // ListProjects is the workspace provider's required list_projects op.
 var ListProjects = bindgen.ProviderOp[types.ProjectQuery, []spells.ProvidedProject]{Family: "workspace", Name: "list_projects", Encode: bindgen.ObjectProjectQuery, Decode: decoded[[]spells.ProvidedProject](decode.ProviderFuncs, 17)}
 
+// DiscoverProjects is the discovery provider's required discover_projects op.
+var DiscoverProjects = bindgen.ProviderOp[spells.DiscoveryQuery, []spells.DiscoveredProject]{Family: "discovery", Name: "discover_projects", Encode: bindgen.ObjectDiscoveryQuery, Decode: decoded[[]spells.DiscoveredProject](decode.ProviderFuncs, 18)}
+
 // QueueDescribe is the queue provider's required describe op.
 var QueueDescribe = bindgen.ProviderOp[queuetypes.DescribeRequest, queuetypes.DescribeResult]{Family: "queue", Name: "describe", Encode: bindgen.ObjectQueueDescribeRequest, Decode: decoded[queuetypes.DescribeResult](decode.QueueFuncs, 0)}
 

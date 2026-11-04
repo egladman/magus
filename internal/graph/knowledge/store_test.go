@@ -1066,11 +1066,12 @@ func TestSymbolIndexDeclarationsWithoutAManifestAnswerNothing(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func humanOnlyFixture() types.HumanOnlyIndex {
-	return types.HumanOnlyIndex{
+func humanOnlyFixture() types.TargetPolicyIndex {
+	return types.TargetPolicyIndex{
 		Projects: []string{".", "pkg/a"},
-		Targets: []types.HumanOnlyTarget{{
+		Targets: []types.TargetPolicy{{
 			TargetRef: types.TargetRef{Project: ".", Target: "bench"},
+			HumanOnly: true,
 			Reason:    "launches paid sessions",
 			ReachedBy: []types.TargetRef{{Project: ".", Target: "bench-all"}},
 		}},
@@ -1079,13 +1080,13 @@ func humanOnlyFixture() types.HumanOnlyIndex {
 
 // ensureHumanOnly runs a read whose fast stamps are fast and whose full stamps are v1, with
 // the human_only targets behind a callback that counts its calls.
-func ensureHumanOnly(t *testing.T, cacheDir string, fast Stamps, in Inputs, declared types.HumanOnlyIndex) int {
+func ensureHumanOnly(t *testing.T, cacheDir string, fast Stamps, in Inputs, declared types.TargetPolicyIndex) int {
 	t.Helper()
 	calls := 0
 	_, err := Ensure(context.Background(), cacheDir, BuildOptions{
 		FastStamps: fast,
 		StampsFunc: func(context.Context) (Stamps, error) { return stampsAll("v1"), nil },
-		HumanOnlyFunc: func(context.Context) (types.HumanOnlyIndex, error) {
+		TargetPoliciesFunc: func(context.Context) (types.TargetPolicyIndex, error) {
 			calls++
 			return declared, nil
 		},
@@ -1099,20 +1100,20 @@ func TestHumanOnlyAnswersOnlyForTheRecordedDomainFastStamp(t *testing.T) {
 	store := NewStore(cacheDir, true, 0, nil, nil)
 	domain := "f2" + string(ClassDomain)
 
-	_, ok := store.HumanOnly("f1" + string(ClassDomain))
+	_, ok := store.TargetPolicies("f1" + string(ClassDomain))
 	assert.False(t, ok, "a store that never recorded the targets cannot vouch for them, whatever the stamp")
 
 	assert.Equal(t, 1, ensureHumanOnly(t, cacheDir, stampsAll("f2"), in, humanOnlyFixture()),
 		"the full stamps paid for the workspace, so the targets ride along")
-	got, ok := store.HumanOnly(domain)
+	got, ok := store.TargetPolicies(domain)
 	require.True(t, ok)
 	assert.Equal(t, humanOnlyFixture(), got)
 
-	_, ok = store.HumanOnly("f1" + string(ClassDomain))
+	_, ok = store.TargetPolicies("f1" + string(ClassDomain))
 	assert.False(t, ok, "the stamp the targets were recorded under has moved on")
-	_, ok = store.HumanOnly("f2" + string(ClassRuntime))
+	_, ok = store.TargetPolicies("f2" + string(ClassRuntime))
 	assert.False(t, ok, "only the domain stamp vouches for what a workspace declares")
-	_, ok = store.HumanOnly("")
+	_, ok = store.TargetPolicies("")
 	assert.False(t, ok, "a stamp the caller could not compute matches nothing")
 
 	assert.Zero(t, ensureHumanOnly(t, cacheDir, stampsAll("f2"), in, humanOnlyFixture()),
@@ -1123,37 +1124,37 @@ func TestHumanOnlyRecordsADeclarationOfNoneAndNothingWithoutProjects(t *testing.
 	cacheDir, in := seedFast(t)
 	store := NewStore(cacheDir, true, 0, nil, nil)
 
-	ensureHumanOnly(t, cacheDir, stampsAll("f2"), in, types.HumanOnlyIndex{})
-	_, ok := store.HumanOnly("f2" + string(ClassDomain))
+	ensureHumanOnly(t, cacheDir, stampsAll("f2"), in, types.TargetPolicyIndex{})
+	_, ok := store.TargetPolicies("f2" + string(ClassDomain))
 	assert.False(t, ok, "an index listing no project is no evaluation's answer and records nothing")
 
-	ensureHumanOnly(t, cacheDir, stampsAll("f3"), in, types.HumanOnlyIndex{Projects: []string{"."}})
-	got, ok := store.HumanOnly("f3" + string(ClassDomain))
+	ensureHumanOnly(t, cacheDir, stampsAll("f3"), in, types.TargetPolicyIndex{Projects: []string{"."}})
+	got, ok := store.TargetPolicies("f3" + string(ClassDomain))
 	assert.True(t, ok, "a workspace that declares no human_only target answers yes, with nothing")
 	assert.Empty(t, got.Targets)
 }
 
 func TestHumanOnlyRecordedByASyncAndKeptByOneWithout(t *testing.T) {
 	cacheDir, in := stampFixture(t)
-	in.HumanOnly = humanOnlyFixture()
+	in.TargetPolicies = humanOnlyFixture()
 	_, err := Ensure(context.Background(), cacheDir, BuildOptions{Stamps: stampsAll("v1"), FastStamps: stampsAll("f1")}, AllClasses,
 		func([]ShardClass) (Inputs, error) { return in, nil }, nil)
 	require.NoError(t, err)
-	got, ok := NewStore(cacheDir, true, 0, nil, nil).HumanOnly("f1" + string(ClassDomain))
+	got, ok := NewStore(cacheDir, true, 0, nil, nil).TargetPolicies("f1" + string(ClassDomain))
 	require.True(t, ok)
 	assert.Equal(t, humanOnlyFixture(), got)
 
-	in.HumanOnly = types.HumanOnlyIndex{}
+	in.TargetPolicies = types.TargetPolicyIndex{}
 	_, err = Ensure(context.Background(), cacheDir, BuildOptions{Stamps: stampsAll("v1"), FastStamps: stampsAll("f1"), Refresh: true}, AllClasses,
 		func([]ShardClass) (Inputs, error) { return in, nil }, nil)
 	require.NoError(t, err)
-	got, ok = NewStore(cacheDir, true, 0, nil, nil).HumanOnly("f1" + string(ClassDomain))
+	got, ok = NewStore(cacheDir, true, 0, nil, nil).TargetPolicies("f1" + string(ClassDomain))
 	require.True(t, ok, "a sync with no evaluated answer keeps the recorded one")
 	assert.Equal(t, humanOnlyFixture(), got)
 }
 
 func TestHumanOnlyWithoutAManifestAnswersNothing(t *testing.T) {
-	_, ok := NewStore(filepath.Join(t.TempDir(), ".magus"), true, 0, nil, nil).HumanOnly("f1" + string(ClassDomain))
+	_, ok := NewStore(filepath.Join(t.TempDir(), ".magus"), true, 0, nil, nil).TargetPolicies("f1" + string(ClassDomain))
 	assert.False(t, ok)
 }
 

@@ -19,13 +19,14 @@ import type { Section } from "./model";
 export function renderContent(host: HTMLElement, raw: string): void {
   const plain = stripAnsi(raw);
   const m = STATUS_RE.exec(plain);
-  if (!m) {
+  const status = m?.[1]?.toLowerCase();
+  if (!m || status === undefined) {
     fillAnsi(host, raw);
     return;
   }
   const badge = document.createElement("span");
-  badge.className = "console-render-badge console-render-badge--" + m[1].toLowerCase();
-  badge.textContent = m[1].toLowerCase();
+  badge.className = "console-render-badge console-render-badge--" + status;
+  badge.textContent = status;
   host.appendChild(badge);
   host.appendChild(document.createTextNode(plain.slice(m[0].length)));
 }

@@ -47,6 +47,8 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	str("model", &put.Model)
 	str("follows", &put.Follows)
 	str("fresh_reason", &put.FreshReason)
+	str("delivery", &put.Delivery)
+	str("parent_head", &put.ParentHead)
 	if v, ok, e := mergeString(params, "brief_format"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
@@ -193,6 +195,9 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 			set = append(set, func(u *types.Job) { u.BriefFormat = f })
 		}
 	}
+	delivery, derr := deliverySetters(p)
+	err = errors.Join(err, derr)
+	set = append(set, delivery...)
 	for _, l := range []struct {
 		v     *[]string
 		apply func(*types.Job, []string)
@@ -301,6 +306,24 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 	}, nil
 }
 
+// deliverySetters writes p's delivery and parent head, refusing a delivery
+// outside types.JobDeliveries.
+func deliverySetters(p types.JobPut) ([]func(*types.Job), error) {
+	var set []func(*types.Job)
+	if p.Delivery != nil {
+		d := strings.TrimSpace(*p.Delivery)
+		if d != "" && !slices.Contains(types.JobDeliveries(), d) {
+			return nil, fmt.Errorf("job: delivery %q is not one of %s, or empty to clear it", d, strings.Join(types.JobDeliveries(), ", "))
+		}
+		set = append(set, func(u *types.Job) { u.Delivery = d })
+	}
+	if p.ParentHead != nil {
+		h := strings.TrimSpace(*p.ParentHead)
+		set = append(set, func(u *types.Job) { u.ParentHead = h })
+	}
+	return set, nil
+}
+
 // declaredKeys names the fields p sets other than Enter, by the keys a put map spells
 // them with.
 func declaredKeys(p types.JobPut) []string {
@@ -315,7 +338,7 @@ func declaredKeys(p types.JobPut) []string {
 		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
 		{"goals", p.Goals != nil}, {"deviations", p.Deviations != nil}, {"read_only", p.ReadOnly != nil},
 		{"max_attempts", p.MaxAttempts != nil}, {"max_claims", p.MaxClaims != nil}, {"follows", p.Follows != nil}, {"fresh_reason", p.FreshReason != nil},
-		{"weight", p.Weight != nil},
+		{"weight", p.Weight != nil}, {"delivery", p.Delivery != nil}, {"parent_head", p.ParentHead != nil},
 	} {
 		if f.set {
 			keys = append(keys, f.key)
@@ -330,6 +353,7 @@ var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
 	"depends_on", "breaks", "model", "brief_format", "check", "validation", "goals", "deviations", "state", "read_only",
 	"timeout", "max_attempts", "max_claims", "weight", "enter", "follows", "fresh_reason",
+	"delivery", "parent_head",
 }
 
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly

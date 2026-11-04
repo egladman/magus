@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -47,15 +44,6 @@ func writeAndCommit(t *testing.T, repo *testkit.Repo, name, body, message string
 	repo.Commit(message, map[string]string{name: body})
 }
 
-// noFormatCheck stands in for the (formatGlobs, gofmtList) pair on a test that has
-// nothing to say about formatting: nil globs already short-circuit before gofmtList
-// would ever run, and the stub panics if that assumption ever breaks.
-var noFormatGlobs []types.Glob
-
-func noGofmtList(context.Context, string, []string) ([]string, error) {
-	panic("gofmtList must not be called when formatGlobs is empty")
-}
-
 // TestCheckDriftForCommit_Clean pins case 1: a source change with its matching output
 // change in the same commit prints nothing.
 func TestCheckDriftForCommit_Clean(t *testing.T) {
@@ -70,7 +58,7 @@ func TestCheckDriftForCommit_Clean(t *testing.T) {
 		{Path: "b.gen", Role: "output", OutputOf: []string{"."}},
 	})
 
-	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, noFormatGlobs, noGofmtList)
+	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify)
 	require.NoError(t, err)
 	assert.False(t, ok)
 	assert.Empty(t, notice)
@@ -96,7 +84,7 @@ func TestCheckDriftForCommit_UnpushedHead(t *testing.T) {
 		{Path: "api.proto", Role: "source", SourceOf: []string{"api"}},
 	})
 
-	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, noFormatGlobs, noGofmtList)
+	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Contains(t, notice, "magus run generate:rw api")
@@ -133,7 +121,7 @@ func TestCheckDriftForCommit_UnpushedNotHead(t *testing.T) {
 		return []types.FileEntry{{Path: "api.proto", Role: "source", SourceOf: []string{"api"}}}, nil
 	}
 
-	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, noFormatGlobs, noGofmtList)
+	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Contains(t, notice, "git commit --fixup="+hash)
@@ -161,86 +149,12 @@ func TestCheckDriftForCommit_Pushed(t *testing.T) {
 		{Path: "api.proto", Role: "source", SourceOf: []string{"api"}},
 	})
 
-	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, noFormatGlobs, noGofmtList)
+	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Contains(t, notice, hash+" is already pushed")
 	assert.NotContains(t, notice, "--amend")
 	assert.NotContains(t, notice, "--fixup")
-}
-
-// TestCheckDriftForCommit_FormattingOnly pins the formatting class end to end against a
-// stub gofmt, with no generated-output finding in play: formatGlobs narrows to Go files
-// the format target governs, gofmtList reports which are unformatted, and the notice
-// carries MGS4009 (not MGS4006, which is the other class) for it.
-func TestCheckDriftForCommit_FormattingOnly(t *testing.T) {
-	repo := testkit.NewRepository(t, nil)
-	dir := repo.Root()
-	writeAndCommit(t, repo, "a.go", "package a\n", "first")
-	writeAndCommit(t, repo, "b.go", "package a\n\nfunc B() {}\n", "second")
-
-	driver := resolveGitDriver(t, dir)
-	classify := fixedClassify(nil)
-	gofmtList := func(_ context.Context, gotRoot string, files []string) ([]string, error) {
-		assert.Equal(t, dir, gotRoot)
-		assert.Equal(t, []string{"b.go"}, files, "only the changed, format-governed Go file is checked")
-		return []string{"b.go"}, nil
-	}
-
-	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, types.MustParseGlobs("**/*.go"), gofmtList)
-	require.NoError(t, err)
-	require.True(t, ok)
-	assert.Contains(t, notice, "gofmt would reformat")
-	assert.Contains(t, notice, "b.go")
-	assert.Contains(t, notice, "magus run format:rw .")
-	assert.Contains(t, notice, "MGS4009")
-	assert.NotContains(t, notice, "MGS4006")
-	assert.NotContains(t, notice, "generate:rw")
-}
-
-// TestCheckDriftForCommit_FormatGlobsScopeTheCheck pins that a Go file outside the
-// format target's declared globs never reaches gofmtList at all: the narrowing happens
-// before the (only) live check runs.
-func TestCheckDriftForCommit_FormatGlobsScopeTheCheck(t *testing.T) {
-	repo := testkit.NewRepository(t, nil)
-	dir := repo.Root()
-	writeAndCommit(t, repo, "a.go", "package a\n", "first")
-	writeAndCommit(t, repo, "vendor/b.go", "package a\n", "second")
-
-	driver := resolveGitDriver(t, dir)
-	classify := fixedClassify(nil)
-
-	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, types.MustParseGlobs("internal/**/*.go"), noGofmtList)
-	require.NoError(t, err)
-	assert.False(t, ok)
-	assert.Empty(t, notice)
-}
-
-// TestCheckDriftForCommit_RealGofmt runs the actual gofmt binary (not a stub) against a
-// real misformatted file, end to end: this is the one live check the whole feature
-// performs, and it must stay read-only (no -w: b.go is byte-identical on disk
-// afterwards) and must stay scoped to the one file that changed.
-func TestCheckDriftForCommit_RealGofmt(t *testing.T) {
-	if _, err := exec.LookPath("gofmt"); err != nil {
-		t.Skip("gofmt not available")
-	}
-	repo := testkit.NewRepository(t, nil)
-	dir := repo.Root()
-	writeAndCommit(t, repo, "a.go", "package a\n", "first")
-	const misformatted = "package a\nfunc   B(){}\n" // gofmt -l flags this
-	writeAndCommit(t, repo, "b.go", misformatted, "second")
-
-	driver := resolveGitDriver(t, dir)
-	classify := fixedClassify(nil)
-
-	notice, ok, err := checkDriftForCommit(context.Background(), dir, driver, classify, types.MustParseGlobs("**/*.go"), realGofmtList)
-	require.NoError(t, err)
-	require.True(t, ok)
-	assert.Contains(t, notice, "b.go")
-
-	body, err := os.ReadFile(filepath.Join(dir, "b.go"))
-	require.NoError(t, err)
-	assert.Equal(t, misformatted, string(body), "gofmt -l must never rewrite the file")
 }
 
 // TestBuildDriftNoticeUnpushedHead pins the amend case's exact wording: the commit is
@@ -287,37 +201,6 @@ func TestBuildDriftNoticeMultipleProjects(t *testing.T) {
 	got := buildDriftNotice("abc1234", driftFinding{staleProjects: []string{"api", "web"}}, driftUnpushedHead)
 	assert.Contains(t, got, "magus run generate:rw api web")
 	assert.Contains(t, got, "(api web changed with no matching regeneration)")
-}
-
-// TestBuildDriftNoticeFormattingOnly pins the formatting-only wording: MGS4009 (a
-// sibling of MGS4006, minted for the commit-time question; see
-// docs/reference/codes/race/MGS4009.md), a plain sentence naming the files, and
-// format:rw as the remedy, distinct from generate:rw.
-func TestBuildDriftNoticeFormattingOnly(t *testing.T) {
-	got := buildDriftNotice("abc1234", driftFinding{unformatted: []string{"internal/foo.go"}}, driftUnpushedHead)
-	want := "[MGS4009] commit abc1234 left formatting stale (gofmt would reformat): internal/foo.go\n" +
-		"Reformat: magus run format:rw .\n" +
-		"Then fold it into abc1234 (unpushed, still HEAD):\n" +
-		"  git commit --amend --no-edit"
-	assert.Equal(t, want, got)
-	assert.NotContains(t, got, "MGS4006")
-	assert.NotContains(t, got, "generate:rw")
-}
-
-// TestBuildDriftNoticeBothClasses pins that both classes appear in ONE notice, each
-// carrying its own code and its own remedy, sharing the single amend-safety instruction
-// at the end rather than repeating it per class.
-func TestBuildDriftNoticeBothClasses(t *testing.T) {
-	got := buildDriftNotice("abc1234", driftFinding{
-		staleProjects: []string{"api"},
-		unformatted:   []string{"internal/foo.go", "internal/bar.go"},
-	}, driftPushed)
-	want := "[MGS4006] commit abc1234 left generated output stale (api changed with no matching regeneration).\n" +
-		"Regenerate: magus run generate:rw api\n" +
-		"[MGS4009] commit abc1234 also left formatting stale (gofmt would reformat): internal/foo.go, internal/bar.go\n" +
-		"Reformat: magus run format:rw .\n" +
-		"abc1234 is already pushed; do not amend or rebase published history. Commit the fix as a new, follow-up commit instead."
-	assert.Equal(t, want, got)
 }
 
 const driftRangePatch = "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n-a\n+b\n@@ -9 +9 @@\n-c\n+d\n"

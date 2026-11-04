@@ -82,7 +82,11 @@ test("coalesces a burst from one source into a single counted line", () => {
     1,
     "four lines saying the same thing is a wall of noise at distance",
   );
-  assert.match(rendered[0], /x4/, "the count must survive the collapse, or it is silent data loss");
+  assert.match(
+    rendered[0] ?? "",
+    /x4/,
+    "the count must survive the collapse, or it is silent data loss",
+  );
   rail.destroy();
 });
 
@@ -97,7 +101,11 @@ test("dedupes a repeated key so a re-detected failure does not re-alert every fr
     fire({ source: "Dashboard", kind: "error", key: "same", message: "svc/api:test failed." });
   }
   assert.equal(lines(rail.el).length, 1);
-  assert.doesNotMatch(lines(rail.el)[0], /x[2-9]/, "one event, re-observed, is still one event");
+  assert.doesNotMatch(
+    lines(rail.el)[0] ?? "",
+    /x[2-9]/,
+    "one event, re-observed, is still one event",
+  );
   rail.destroy();
 });
 
@@ -181,7 +189,7 @@ test("an action link is named for what it opens, not just 'Open'", () => {
     link: "../logs/#ref=out1",
   });
   const [action] = actions(rail.el);
-  assert.equal(action.textContent, "Open Dashboard", "a bare string link names its source");
-  assert.equal(action.getAttribute("aria-label"), "Open Dashboard: svc/api:test failed.");
+  assert.equal(action?.textContent, "Open Dashboard", "a bare string link names its source");
+  assert.equal(action?.getAttribute("aria-label"), "Open Dashboard: svc/api:test failed.");
   rail.destroy();
 });

@@ -14,6 +14,7 @@ namespace renamesymbol;
 import "encoding/json";
 import "flags";
 import "magus";
+import "result";
 import "std";
 
 import "assert";
@@ -39,14 +40,18 @@ export object Plan {
     sites: [Site],
 }
 
-export fun parsePlan(doc: str) > Plan !> any {
-    final v = json\parse(doc);
-    final sites = mut [<Site>];
-    foreach (s in v["sites"] ?? []) {
-        sites.append(Site{ path = s["path"], line = std\toInt(s["start"]["line"]), column = std\toInt(s["start"]["column"]) });
+export fun parsePlan(doc: str) > result\Result::<Plan> {
+    try {
+        final v = json\parse(doc);
+        final sites = mut [<Site>];
+        foreach (s in v["sites"] ?? []) {
+            sites.append(Site{ path = s["path"], line = std\toInt(s["start"]["line"]), column = std\toInt(s["start"]["column"]) });
+        }
+        return result\ok::<Plan>(Plan{ oldName = v["from"] ?? "", newName = v["to"] ?? "", applied = v["applied"] ?? false,
+            files = std\toInt(v["file_count"] ?? 0), sites = sites });
+    } catch (err: any) {
+        return result\caught::<Plan>(err, doing: "rename-symbol: read the rename plan");
     }
-    return Plan{ oldName = v["from"] ?? "", newName = v["to"] ?? "", applied = v["applied"] ?? false,
-        files = std\toInt(v["file_count"] ?? 0), sites = sites };
 }
 
 // render is the report: its first line says what was written, then one line per site.
@@ -64,25 +69,21 @@ export fun render(p: Plan) > [str] {
     return lines;
 }
 
-// checkIndex raises unless the index can answer for the symbol. A rename against a stale
-// index misses the sites written since it was built.
-export fun checkIndex(verdict: str, reason: str, stale: [str]) > void !> str {
+// checkIndex fails unless the index can answer for the symbol. A stale index
+// misses the sites written since it was built.
+export fun checkIndex(verdict: str, reason: str, stale: [str]) > result\Result::<bool> {
     if (verdict == "unknown") {
-        throw "the code index cannot answer: {reason}";
+        return result\fail::<bool>("the code index cannot answer: {reason}");
     }
     if (stale.len() > 0) {
-        throw "the code index is older than the tree in {stale.join(", ")}";
+        return result\fail::<bool>("the code index is older than the tree in {stale.join(", ")}");
     }
+    return result\ok::<bool>(true);
 }
 
-// indexRaised is what checkIndex raised, or "" when the index can answer.
+// indexRaised is the error checkIndex returned, or "" when the index answers.
 fun indexRaised(verdict: str, reason: str, stale: [str]) > str {
-    try {
-        checkIndex(verdict, reason: reason, stale: stale);
-    } catch (e: str) {
-        return e;
-    }
-    return "";
+    return checkIndex(verdict, reason: reason, stale: stale).error?.message ?? "";
 }
 
 export fun main(args: [str]) > void !> any {
@@ -99,7 +100,11 @@ export fun main(args: [str]) > void !> any {
     if (symbol == "" or to == "") {
         throw "rename-symbol: --symbol and --to are required\n{USAGE}";
     }
-    foreach (line in render(rename(symbol, newName: to, apply: parsed.values["--apply"] != null))) {
+    final plan = rename(symbol, newName: to, apply: parsed.values["--apply"] != null);
+    if (plan.error != null) {
+        throw plan.error!.message;
+    }
+    foreach (line in render(plan.value!)) {
         std\print(line);
     }
 }
@@ -107,19 +112,23 @@ export fun main(args: [str]) > void !> any {
 // rename renames symbol to newName at every verified occurrence, or with apply false only
 // reports where it would. It raises when the index cannot answer for the symbol, and with
 // each file's reason when `refs --rename` refuses.
-export fun rename(symbol: str, newName: str, apply: bool) > Plan !> any {
-    final r: magus\RefsResult = magus\refs(symbol);
+export fun rename(symbol: str, newName: str, apply: bool) > result\Result::<Plan> {
+    var r: magus\RefsResult? = null;
     try {
-        checkIndex(r.answer.verdict, reason: r.answer.reason, stale: r.answer.staleIndexes);
-    } catch (e: str) {
-        throw "rename-symbol: {e}; rebuild it with `magus graph build`, then run this again";
+        r = magus\graph().refs(symbol);
+    } catch (err: any) {
+        return result\caught::<Plan>(err, doing: "rename-symbol: look up {symbol}");
     }
-    if (r.defs.len() == 0) {
-        throw "rename-symbol: nothing in this workspace defines {symbol}";
+    final indexed = checkIndex(r!.answer.verdict.value, reason: r!.answer.reason.value, stale: r!.answer.staleIndexes);
+    if (indexed.error != null) {
+        return result\fail::<Plan>("rename-symbol: {indexed.error!.message}; rebuild it with `magus graph build`, then run this again");
+    }
+    if (r!.defs.len() == 0) {
+        return result\fail::<Plan>("rename-symbol: nothing in this workspace defines {symbol}");
     }
     // The resolved id, not the name typed: a bare name the index resolved once must not
     // resolve differently between the dry run and the write.
-    final argv = mut [r.symbol, "--rename", newName, "-o", "json"];
+    final argv = mut [r!.symbol, "--rename", newName, "-o", "json"];
     if (!apply) {
         argv.append("--dry-run");
     }
@@ -127,10 +136,10 @@ export fun rename(symbol: str, newName: str, apply: bool) > Plan !> any {
     // since the index was built, which the typed lookup above cannot see.
     var doc = "";
     try {
-        doc = magus\cmd("refs", args: argv, opts: {"quiet": true}).stdout;
+        doc = magus\cmd("refs", args: argv, opts: magus\CommandOptions{ quiet = true }).stdout;
     } catch (e) {
         final text = if (e is {str: any}) e["message"] ?? "{e}" else "{e}";
-        throw "rename-symbol: {withoutWarnings(text)}";
+        return result\fail::<Plan>("rename-symbol: {withoutWarnings(text)}");
     }
     return parsePlan(doc);
 }
@@ -162,7 +171,7 @@ final DRY_RUN = `\{
 \}`;
 
 test "a dry run reports every site and says nothing was written" {
-    final lines = render(parsePlan(DRY_RUN));
+    final lines = render(parsePlan(DRY_RUN).value!);
     assert\equal(lines, want: [
         "dry run: nothing changed; pass --apply to write",
         "interpreterRewriteDenial -> interpreterRewriteReason: 2 sites in 1 files",
@@ -172,7 +181,7 @@ test "a dry run reports every site and says nothing was written" {
 }
 
 test "an applied rename leads with what it wrote" {
-    final lines = render(parsePlan(DRY_RUN.replace(`"applied": false`, with: `"applied": true`)));
+    final lines = render(parsePlan(DRY_RUN.replace(`"applied": false`, with: `"applied": true`)).value!);
     assert\equal(lines[0], want: "renamed interpreterRewriteDenial to interpreterRewriteReason: 2 sites in 1 files", message: "effect line");
 }
 
@@ -191,8 +200,8 @@ test "an index that cannot answer is refused, not rebuilt" {
 // Read-only, and meaningful only where the index is current: a CI checkout with no index
 // has nothing to resolve against.
 test "this repository's index resolves a known symbol to its definition" {
-    final r: magus\RefsResult = magus\refs("FlagsParse");
-    if (indexRaised(r.answer.verdict, reason: r.answer.reason, stale: r.answer.staleIndexes) != "") {
+    final r: magus\RefsResult = magus\graph().refs("FlagsParse");
+    if (indexRaised(r.answer.verdict.value, reason: r.answer.reason.value, stale: r.answer.staleIndexes) != "") {
         return;
     }
     assert\equal(r.defs[0].file, want: "std/flags.go", message: "FlagsParse is defined in std/flags.go");

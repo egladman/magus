@@ -169,6 +169,7 @@ const (
 	Status_STATUS_PASS        Status = 1
 	Status_STATUS_FAIL        Status = 2
 	Status_STATUS_CACHED      Status = 3
+	Status_STATUS_PERMITTED   Status = 4
 )
 
 // Enum value maps for Status.
@@ -178,12 +179,14 @@ var (
 		1: "STATUS_PASS",
 		2: "STATUS_FAIL",
 		3: "STATUS_CACHED",
+		4: "STATUS_PERMITTED",
 	}
 	Status_value = map[string]int32{
 		"STATUS_UNSPECIFIED": 0,
 		"STATUS_PASS":        1,
 		"STATUS_FAIL":        2,
 		"STATUS_CACHED":      3,
+		"STATUS_PERMITTED":   4,
 	}
 )
 
@@ -2068,12 +2071,13 @@ const file_magus_viewer_v1alpha1_viewer_proto_rawDesc = "" +
 	"\x06Stream\x12\x16\n" +
 	"\x12STREAM_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rSTREAM_STDOUT\x10\x01\x12\x11\n" +
-	"\rSTREAM_STDERR\x10\x02*U\n" +
+	"\rSTREAM_STDERR\x10\x02*k\n" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vSTATUS_PASS\x10\x01\x12\x0f\n" +
 	"\vSTATUS_FAIL\x10\x02\x12\x11\n" +
-	"\rSTATUS_CACHED\x10\x03*\x8f\x01\n" +
+	"\rSTATUS_CACHED\x10\x03\x12\x14\n" +
+	"\x10STATUS_PERMITTED\x10\x04*\x8f\x01\n" +
 	"\aTrigger\x12\x17\n" +
 	"\x13TRIGGER_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vTRIGGER_RUN\x10\x01\x12\x14\n" +

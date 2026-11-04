@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // registerHarnessSpell decodes a JSON descriptor body — the same shape a
@@ -45,7 +47,7 @@ func registerHarnessSpell(t *testing.T, id, body string) {
 // mergeHarness plans id and merges the plan into the files with the semantics of the printed
 // command, standing in for the person who runs it. cmd/magus's
 // TestDescribeHarnessMergeCommandLeavesTheFileCurrent runs the command itself.
-func mergeHarness(t *testing.T, root, id string) types.HarnessPlan {
+func mergeHarness(t *testing.T, root, id string) types.HarnessInstallation {
 	t.Helper()
 	plan, err := PlanHarness(context.Background(), root, id)
 	require.NoError(t, err)
@@ -76,6 +78,32 @@ func requireCurrent(t *testing.T, root, id string) {
 	require.NoError(t, err)
 	assert.True(t, plan.Current(), "a merged plan leaves nothing to merge: %v", plan.Files)
 	assert.Empty(t, plan.Merge)
+}
+
+func TestParseHarnessChannelsReadsEachDeclaredChannel(t *testing.T) {
+	got, err := ParseHarnessChannels([]string{"display", "capture", "notice"})
+	require.NoError(t, err)
+	assert.Equal(t, []harnessChannel{channelDisplay, ChannelCapture, channelNotice}, got)
+}
+
+// The person-only channel is the logger's own notice key, so the two cannot drift apart.
+func TestTheNoticeChannelIsTheLoggersNoticeKey(t *testing.T) {
+	assert.Equal(t, attr.NoticeKey, string(channelNotice))
+}
+
+func TestParseHarnessChannelsRefusesAnEmptySet(t *testing.T) {
+	_, err := ParseHarnessChannels(nil)
+	require.ErrorContains(t, err, "declares no channels")
+}
+
+func TestParseHarnessChannelsRefusesAnUnknownChannel(t *testing.T) {
+	_, err := ParseHarnessChannels([]string{"capture", "pager"})
+	require.ErrorContains(t, err, `unknown channel "pager"`)
+}
+
+func TestParseHarnessChannelsRefusesARepeat(t *testing.T) {
+	_, err := ParseHarnessChannels([]string{"display", "display"})
+	require.ErrorContains(t, err, "twice")
 }
 
 func TestPlanHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
@@ -954,7 +982,7 @@ func TestVerifyHarnessReportsAnEnabledPluginNobodyInstalled(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Setting.Status, "the settings are in place; the install is the gap")
 	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
-	assert.Contains(t, result.Plugin.Reason, "/plugin install magus --marketplace egladman/magus")
+	assert.Contains(t, result.Plugin.Reason, "claude plugin marketplace add egladman/magus")
 	assert.Contains(t, result.Plugin.Reason, "magus@magus")
 	assert.Contains(t, result.Plugin.Reason, "not registered")
 }
@@ -978,6 +1006,64 @@ func TestVerifyHarnessReadsAnInstalledPluginAsCurrent(t *testing.T) {
 			assert.Empty(t, result.Plugin.Reason)
 		})
 	}
+}
+
+// TestVerifyHarnessCountsACachedPluginWithoutAnInstallRecord pins that a plugin Claude Code
+// cached from a relative-path marketplace is present although installed_plugins.json omits it.
+func TestVerifyHarnessCountsACachedPluginWithoutAnInstallRecord(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	writeClaudePluginStore(t, nil)
+	require.NoError(t, os.MkdirAll(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "plugins", "cache", "magus", "magus", "1.0.0"), 0o755))
+	mergeHarness(t, root, "moder")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Plugin.Status)
+	assert.Empty(t, result.Plugin.Reason)
+}
+
+// TestVerifyHarnessIgnoresAnEmptyPluginCacheDir pins that a plugin directory holding no
+// version dir is not an install.
+func TestVerifyHarnessIgnoresAnEmptyPluginCacheDir(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	writeClaudePluginStore(t, nil)
+	require.NoError(t, os.MkdirAll(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "plugins", "cache", "magus", "magus"), 0o755))
+	mergeHarness(t, root, "moder")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
+}
+
+// TestVerifyHarnessHonorsThePluginCacheDirVariable pins that CLAUDE_CODE_PLUGIN_CACHE_DIR
+// moves the plugins root: the install record and the cache are read there, not under the
+// config dir.
+func TestVerifyHarnessHonorsThePluginCacheDirVariable(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	writeClaudePluginStore(t, nil)
+	pluginsRoot := t.TempDir()
+	t.Setenv("CLAUDE_CODE_PLUGIN_CACHE_DIR", pluginsRoot)
+	mergeHarness(t, root, "moder")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
+	assert.Contains(t, result.Plugin.Reason, filepath.Join(pluginsRoot, "installed_plugins.json"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(pluginsRoot, "installed_plugins.json"),
+		[]byte(`{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`), 0o644))
+	result, err = VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Plugin.Status)
+
+	require.NoError(t, os.Remove(filepath.Join(pluginsRoot, "installed_plugins.json")))
+	require.NoError(t, os.MkdirAll(filepath.Join(pluginsRoot, "cache", "magus", "magus", "2.0.0"), 0o755))
+	result, err = VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Plugin.Status)
 }
 
 // TestVerifyHarnessIgnoresAPluginTheWorkspaceDoesNotEnable pins the silence: an unmerged
@@ -1029,7 +1115,7 @@ func TestVerifyHarnessPluginInstallLineFollowsTheDescriptor(t *testing.T) {
 	result, err := VerifyHarness(untimedProbes(), root, "other-mod")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
-	assert.Contains(t, result.Plugin.Reason, "/plugin install lint --marketplace acme/tools")
+	assert.Contains(t, result.Plugin.Reason, "claude plugin marketplace add acme/tools")
 	assert.NotContains(t, result.Plugin.Reason, "not registered")
 }
 
@@ -1362,10 +1448,10 @@ func TestShippedHostConfigsNameTheirHost(t *testing.T) {
 // magus does not render, so this is what keeps the two from drifting apart.
 func TestOpenCodePluginNamesTheSpellsHost(t *testing.T) {
 	name := harnessSpellName(t, "opencode")
-	body, err := os.ReadFile(filepath.Join(hookTemplateDir, "opencode-plugin.ts"))
+	body, err := os.ReadFile(filepath.Join("..", "..", "internal", "interp", "bindings", "opencode", "plugin.go"))
 	require.NoError(t, err)
-	named := regexp.MustCompile(`"--agent-name",\s*"([^"-][^"]*)"`).FindAllStringSubmatch(string(body), -1)
-	require.NotEmpty(t, named, "the plugin passes no --agent-name literal; the matcher stopped matching")
+	named := regexp.MustCompile(`agentName\s*=\s*"([^"]*)"`).FindAllStringSubmatch(string(body), -1)
+	require.NotEmpty(t, named, "the plugin declares no agentName; the matcher stopped matching")
 	for _, m := range named {
 		assert.Equal(t, name, m[1], "opencode-plugin.ts names a host its harness spell does not declare")
 	}
@@ -1569,10 +1655,10 @@ func requireWired(t *testing.T, path, event, matcher, script string) wiredHook {
 func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t *testing.T) {
 	const reply, guard = "proofread-reply.buzz", "magus-command.buzz"
 
-	// The repository's own configs hand-write the reply check; the config magus ships does not.
+	// Bootstrap installs the canonical guard wiring; a personal reply hook is optional.
 	t.Run("claude-code", func(t *testing.T) {
 		config := dogfoodedHookConfig
-		requireWired(t, config, "Stop", "", reply)
+		requireWired(t, config, "Stop", "", guard)
 		requireWired(t, config, "UserPromptSubmit", "", guard)
 		requireWired(t, config, "PreToolUse", "*", guard)
 		requireWired(t, config, "SubagentStop", "", guard)
@@ -1601,20 +1687,20 @@ func TestHarnessConfigsWirePromptAndSpawnHooksAndLeaveTheReplyCheckToThePerson(t
 
 	t.Run("cursor", func(t *testing.T) {
 		config := hostConfigFile["cursor"][0]
-		stop := requireWired(t, config, "stop", "", reply)
-		assert.Equal(t, "1", fmt.Sprint(stop.LoopLimit), "the reply check chains one followup at most")
+		requireWired(t, config, "stop", "", "cursor-hook.buzz")
 		requireWired(t, config, "beforeSubmitPrompt", "", "cursor-hook.buzz")
 		// The catch-all entry judges every tool, Task and Shell among them.
 		requireWired(t, config, "preToolUse", "*", "cursor-hook.buzz")
 		requireWired(t, config, "postToolUseFailure", "Shell", "cursor-hook.buzz")
 		for _, event := range []string{"preToolUse", "postToolUse", "postToolUseFailure"} {
 			for _, h := range wiredOn(t, config, event) {
-				assert.True(t, strings.HasSuffix(h.Command, " -- --agent-name cursor"),
+				// Harness-owned entries trail " # magus:harness"; that is not an argument.
+				cmd := strings.TrimSuffix(strings.TrimSpace(h.Command), harnessOwnedMarker)
+				assert.True(t, strings.HasSuffix(cmd, " -- --agent-name cursor"),
 					"the host name is the one argument; the spell says skill loads are seen: %s", h.Command)
 			}
 		}
-		assert.Empty(t, wiredOn(t, config, "subagentStop"),
-			"Cursor's subagentStop names no subagent id, which the usage record is filed under")
+		requireWired(t, config, "subagentStop", "", "cursor-hook.buzz")
 	})
 }
 
@@ -1626,10 +1712,10 @@ func TestHarnessScoutIsReadOnlyByConfigWhereTheHostHasAKnob(t *testing.T) {
 		require.NoError(t, err, rel)
 		return string(body)
 	}
-	assert.Contains(t, read(".codex/agents/magus-scout.toml"), "\nsandbox_mode = \"read-only\"\n")
+	assert.NotContains(t, read(".codex/agents/magus-scout.toml"), "sandbox_mode", "Codex ignores a sandbox in an agent file")
 	assert.Contains(t, read(".cursor/agents/magus-scout.md"), "\nreadonly: true\n")
 	assert.Contains(t, read(".opencode/agents/magus-scout.md"), "\npermission:\n  edit: deny\n")
-	assert.Contains(t, read(".claude/agents/magus-scout.md"), "\ntools: Read, Grep, Glob, Bash\n")
+	assert.Contains(t, read(".claude/agents/magus-scout.md"), "\ndisallowedTools: Write, Edit, MultiEdit, NotebookEdit, mcp__ccd_host__sync_with_base_branch, mcp__ccd_host__clean_up_worktrees, mcp__ccd_host__discard_kept_worktree\n")
 	assert.NotContains(t, read(".opencode/agents/magus-scout.md"), "bash:",
 		"the scout runs read-only magus commands, so bash stays at the session's setting")
 }
@@ -1657,4 +1743,28 @@ func TestVerifyHarnessHooksHoldsTheHookListToTheEntries(t *testing.T) {
 	assert.False(t, got.Failing(), "a skipped check did not run, so it fails nothing")
 
 	assert.Equal(t, HarnessCheck{}, verifyHarnessHooks(HarnessDescriptor{ID: "none"}), "no hooks, nothing to check")
+}
+
+type entriesRunHookSuite struct{ suite.Suite }
+
+func TestEntriesRunHookSuite(t *testing.T) {
+	suite.Run(t, new(entriesRunHookSuite))
+}
+
+func (s *entriesRunHookSuite) entries(command string) []types.ManagedEntries {
+	return []types.ManagedEntries{{Path: []string{"hooks", "PostToolUse"}, Entries: []map[string]any{{
+		"matcher": "Bash",
+		"hooks":   []any{map[string]any{"command": command}},
+	}}}}
+}
+
+func (s *entriesRunHookSuite) TestAHarnessOwnedMarkerAfterTheInvocationStillMatches() {
+	hook := types.HookCommand{Event: "PostToolUse", Matcher: "Bash", Script: "magus-duration", Flags: []string{"--agent-name", "h"}}
+	command := "magus buzz -s hooks/magus-duration.buzz -- --agent-name h" + harnessOwnedMarker
+	s.True(entriesRunHook(s.entries(command), hook))
+}
+
+func (s *entriesRunHookSuite) TestAnotherScriptDoesNotMatch() {
+	hook := types.HookCommand{Event: "PostToolUse", Matcher: "Bash", Script: "magus-duration"}
+	s.False(entriesRunHook(s.entries("magus buzz -s hooks/magus-observe.buzz"+harnessOwnedMarker), hook))
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
@@ -312,7 +313,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work, and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
-	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, rf.NoDefaultCharms)
+	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, !rf.DefaultCharms)
 	// ci dispatches through RunCI, which drops the write-granting charms. Report what
 	// runs, not what was asked for, or the header contradicts the run it introduces.
 	if targetName == "ci" {
@@ -336,7 +337,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// is idle. Inert off the ci target and when nothing is on record.
 	partial := rf.Shard != "" || rf.NShards > 0
 	gate := prepareGateRedundancy(ctx, m, targetName, targets, charms, partial)
-	if gateErr := gate.evaluate(ctx, rf.NoRedundancyCheck); gateErr != nil {
+	if gateErr := gate.evaluate(ctx, !rf.RedundancyCheck); gateErr != nil {
 		return gateErr
 	}
 
@@ -350,9 +351,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if len(charms) > 0 {
 		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
-	if rf.NoVolatilityRetry {
-		runOpts = append(runOpts, magus.WithNoVolatilityRetry())
-	}
+	runOpts = append(runOpts, magus.WithVolatilityRetry(rf.VolatilityRetry))
 	race, err := resolveRace(rf.Race)
 	if err != nil {
 		return err
@@ -366,9 +365,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if rf.Step {
 		runOpts = append(runOpts, magus.WithStep())
 	}
-	if rf.NoCache {
-		runOpts = append(runOpts, magus.WithNoCache())
-	}
+	runOpts = append(runOpts, magus.WithCache(rf.Cache))
 	runOpts = append(runOpts, magus.WithSink(sink))
 	ctx = processStdioContext(ctx)
 	if spellFilter != "" {
@@ -419,6 +416,20 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	if err != nil {
 		return err
+	}
+	if slices.Contains(charms, types.CharmReadWrite) {
+		loc, placeErr := jobPlace(m.Root())
+		lease, outside, readErr := "", []string(nil), placeErr
+		if placeErr == nil {
+			lease, outside, readErr = job.LeaseRewrites(ctx, loc, targetName, m.ResolveProjects(targets))
+		}
+		switch {
+		case readErr != nil:
+			slog.InfoContext(ctx, "what this run rewrote outside its lease was not read", attr.Error(readErr), attr.Notice("note"))
+		case len(outside) > 0:
+			slog.InfoContext(ctx, fmt.Sprintf("this run rewrote declared outputs outside lease %s's write paths, and a commit carrying one is refused: unstage it:\n  %s",
+				lease, strings.Join(outside, "\n  ")), attr.Notice("note"))
+		}
 	}
 	emitConcurrencyNudge(ctx, sink, m, os.Args[1:])
 	if global.silent && opts.Format == outputText {
@@ -1015,6 +1026,8 @@ type runOutput struct {
 	DryRun   bool         `json:"dry_run"          yaml:"dry_run"`
 	Count    int          `json:"count"            yaml:"count"`
 	Projects []runProject `json:"projects"         yaml:"projects"`
+	// Permitted counts targets that passed only by a deviation ledger.
+	Permitted int `json:"permitted,omitempty" yaml:"permitted,omitempty"`
 	// UndeclaredSeeds names the projects an affected run selected ONLY through changed
 	// files no project declares (MGS1028): targets whose answer could not have moved.
 	// Absent rather than empty when there are none, so a consumer counting the debt can
@@ -1032,7 +1045,7 @@ type runOutput struct {
 // target body under a tracing context: the value is real, and omitting it made
 // `-o json` claim "no return value" for a target that had just produced one.
 func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, target string, charms []string, selection []types.Target, returns types.Returns, undeclaredSeeds []string) error {
-	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, UndeclaredSeeds: undeclaredSeeds}
+	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, Permitted: m.CacheStats().Permitted, UndeclaredSeeds: undeclaredSeeds}
 	projects := m.ResolveProjects(selection)
 	out.Count = len(projects)
 

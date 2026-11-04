@@ -27,8 +27,6 @@ export type Probe = {
 export const BOOTSTRAP =
   'GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .'
 
-const short = (sha: string) => sha.slice(0, 9)
-
 export function assess(p: Probe): Issue[] {
   const issues: Issue[] = []
 
@@ -41,29 +39,6 @@ export function assess(p: Probe): Issue[] {
       fix: p.isMagusSource ? BOOTSTRAP : undefined,
     })
     return issues
-  }
-
-  if (p.isMagusSource && !p.hasLocalBinary) {
-    const built = p.binary ? ` (built at ${short(p.binary.commit)})` : ''
-    issues.push({
-      id: 'borrowed-binary',
-      level: 'warn',
-      label: 'no ./magus',
-      title: `No ./magus here: hooks run ${p.pathBinary}${built}, with another tree's guard rules`,
-      fix: BOOTSTRAP,
-    })
-  } else if (p.isMagusSource && p.binary && p.head && p.binary.commit !== p.head) {
-    const where =
-      p.behind === null
-        ? `built from ${short(p.binary.commit)}, HEAD is ${short(p.head)}`
-        : `${p.behind} commit${p.behind === 1 ? '' : 's'} behind HEAD`
-    issues.push({
-      id: 'stale-binary',
-      level: 'warn',
-      label: 'stale ./magus',
-      title: `./magus is ${where}`,
-      fix: './magus run go-build .',
-    })
   }
 
   const s = p.server
@@ -109,7 +84,7 @@ export function statusText(issues: Issue[]): string | undefined {
   return `⚠ ${issues.map(i => i.label).join(', ')}`
 }
 
-// A stable key for the set of issues, so Hide lasts until the set changes.
-export function signature(issues: Issue[]): string {
-  return issues.map(i => `${i.id}:${i.title}`).join('|')
+// Only these two reach the band; the rest wait in the status line.
+export function inBand(issues: Issue[]): Issue[] {
+  return issues.filter(i => i.id === 'guard-off' || i.id === 'server-skew')
 }

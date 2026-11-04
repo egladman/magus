@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/result"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,6 +42,27 @@ func TestRenderBuzzMirrorRenamesThroughTheRegistry(t *testing.T) {
 
 	assert.Contains(t, string(out), "types.HTTPResponse,")
 	assert.Contains(t, string(out), "export object HttpResponse {")
+}
+
+func TestRenderBuzzMirrorDeclaresResultGeneric(t *testing.T) {
+	entry, ok := boundaryTypeNamed("Result")
+	require.True(t, ok)
+	out, err := renderBuzzMirror("Result", entry.Type)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(out), "// Buzz mirror of github.com/egladman/magus/types.Result,")
+	assert.Contains(t, string(out), "export object Result::<T> {\n    value: T? = null,\n    error: Diagnostic? = null,\n}\n")
+}
+
+func TestResultModuleHoldsTheRenderedMirrors(t *testing.T) {
+	for _, name := range []string{"Diagnostic", "Result"} {
+		entry, ok := boundaryTypeNamed(name)
+		require.True(t, ok, name)
+		want, err := renderBuzzMirrorDecl(name, entry.Type)
+		require.NoError(t, err)
+		assert.Contains(t, result.Source, string(want),
+			"libs/result/result.buzz has drifted from types.%s: replace its %s object with this text", name, name)
+	}
 }
 
 func TestRunTypes(t *testing.T) {

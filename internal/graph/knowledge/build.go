@@ -2,12 +2,14 @@ package knowledge
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"runtime"
 	"slices"
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/types"
 )
@@ -51,10 +53,10 @@ type BuildOptions struct {
 	// Inputs.Reads), under the same rule as IndexesFunc: only once the evaluation is paid
 	// for, and only for a manifest that has none recorded.
 	ReadsFunc func(context.Context) (readlog.Reads, error)
-	// HumanOnlyFunc resolves what the workspace declares human_only (see Inputs.HumanOnly),
+	// TargetPoliciesFunc resolves what the workspace declares as target policy (see Inputs.TargetPolicies),
 	// under IndexesFunc's rule: only once the evaluation is paid for, and only for a
 	// manifest that has none recorded.
-	HumanOnlyFunc func(context.Context) (types.HumanOnlyIndex, error)
+	TargetPoliciesFunc func(context.Context) (types.TargetPolicyIndex, error)
 	// Root is the workspace root stamped onto the returned graph (see Graph.SetRoot).
 	Root string
 }
@@ -65,7 +67,7 @@ type BuildOptions struct {
 // build; steady state writes only the shards whose content changed.
 func Build(ctx context.Context, cacheDir string, opts BuildOptions, in Inputs, log *slog.Logger) (*Graph, error) {
 	opts.Stamps, opts.StampsFunc = nil, nil
-	opts.FastStamps, opts.FastStampsFunc, opts.IndexesFunc, opts.ReadsFunc, opts.HumanOnlyFunc = nil, nil, nil, nil, nil
+	opts.FastStamps, opts.FastStampsFunc, opts.IndexesFunc, opts.ReadsFunc, opts.TargetPoliciesFunc = nil, nil, nil, nil, nil
 	if opts.Root == "" {
 		opts.Root = in.Root
 	}
@@ -218,13 +220,13 @@ func (e *ensureRun) recordFastStamps(ctx context.Context, fresh []ShardClass) er
 		}
 		rec.indexes = indexes
 	}
-	if e.stampsResolved && e.opts.HumanOnlyFunc != nil && !e.man.humanOnlyKnown() {
-		humanOnly, err := e.opts.HumanOnlyFunc(ctx)
+	if e.stampsResolved && e.opts.TargetPoliciesFunc != nil && !e.man.targetPoliciesKnown() {
+		targetPolicies, err := e.opts.TargetPoliciesFunc(ctx)
 		if err != nil {
 			return err
 		}
-		if len(humanOnly.Projects) > 0 {
-			rec.humanOnly = &humanOnly
+		if len(targetPolicies.Projects) > 0 {
+			rec.targetPolicies = &targetPolicies
 		}
 	}
 	return e.store.recordFastStamps(ctx, e.man, rec)
@@ -245,6 +247,27 @@ func fastStaleClasses(man *manifest, fast Stamps, want []ShardClass, refresh boo
 	return out
 }
 
+// splitShardErrors keeps a failed shard out of the store so a read still
+// answers from the rest. Its error goes on the manifest for each read to state
+// and for `magus graph build` to fail on.
+func splitShardErrors(ctx context.Context, log *slog.Logger, shards []Shard) ([]Shard, map[ShardClass][]string) {
+	var errs map[ShardClass][]string
+	kept := make([]Shard, 0, len(shards))
+	for _, sh := range shards {
+		if sh.Err == nil {
+			kept = append(kept, sh)
+			continue
+		}
+		log.WarnContext(ctx, "knowledge shard left out of the graph", slog.String("shard", sh.Name), attr.Error(sh.Err))
+		if errs == nil {
+			errs = map[ShardClass][]string{}
+		}
+		c := shardClass(sh.Name)
+		errs[c] = append(errs[c], fmt.Sprintf("%s: %v", sh.Name, sh.Err))
+	}
+	return kept, errs
+}
+
 // assembleAndSync assembles the classes in stale, fingerprints every shard, and persists
 // them with their stamps.
 func (e *ensureRun) assembleAndSync(ctx context.Context, in Inputs, stale []ShardClass) ([]Shard, error) {
@@ -262,12 +285,7 @@ func (e *ensureRun) assembleAndSync(ctx context.Context, in Inputs, stale []Shar
 		}
 		in.Layers = layers
 	}
-	shards := AssembleClasses(in, stale)
-	for _, sh := range shards {
-		if sh.Err != nil {
-			return nil, sh.Err
-		}
-	}
+	shards, shardErrors := splitShardErrors(ctx, store.log, AssembleClasses(in, stale))
 
 	// optimization: fingerprint shards in parallel. Each fingerprint builds a
 	// temp graph, sorts, marshals, and hashes: independent CPU work done for
@@ -312,9 +330,9 @@ func (e *ensureRun) assembleAndSync(ctx context.Context, in Inputs, stale []Shar
 			fast = nil
 		}
 	}
-	plan := syncPlan{classes: stale, stamps: opts.Stamps, fastStamps: fast, indexes: in.Indexes, reads: in.Reads, extra: in.Extra, refresh: opts.Refresh}
-	if len(in.HumanOnly.Projects) > 0 {
-		plan.humanOnly = &in.HumanOnly
+	plan := syncPlan{classes: stale, stamps: opts.Stamps, fastStamps: fast, indexes: in.Indexes, reads: in.Reads, extra: in.Extra, shardErrors: shardErrors, refresh: opts.Refresh}
+	if len(in.TargetPolicies.Projects) > 0 {
+		plan.targetPolicies = &in.TargetPolicies
 	}
 	if err := store.syncClasses(ctx, shards, fps, plan); err != nil {
 		return nil, err

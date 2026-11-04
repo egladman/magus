@@ -16,6 +16,8 @@ import {
 } from "../lib/server";
 import { reportFailure } from "../lib/notifications";
 import { subscribeDefaultHost } from "../lib/settings";
+import { ok } from "../gen/magus/types";
+import { appLoadFailure } from "../ui/alert";
 import { emptyStateShell } from "../ui/empty-state";
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 import type { ConnectionState } from "./status";
@@ -125,9 +127,7 @@ function startWay(hint: string, controls: HTMLElement[]): HTMLElement {
   way.dataset.emptyWay = "";
   const label = h("span", undefined, "Start a server");
   label.dataset.emptyWayLabel = "";
-  const command = h("pre");
-  command.dataset.emptyCmd = "";
-  command.append(h("code", undefined, "magus server start"));
+  const command = commandBox("magus server start");
   const note = h("span", undefined, hint);
   note.dataset.emptyHint = "";
   const row = h("div");
@@ -135,6 +135,13 @@ function startWay(hint: string, controls: HTMLElement[]): HTMLElement {
   row.append(...controls);
   way.append(label, command, note, row);
   return way;
+}
+
+// PF's Clipboard copy text breaks anywhere, so a long command wraps.
+function commandBox(command: string): HTMLElement {
+  const box = h("div", "pf-v6-c-clipboard-copy pf-m-inline pf-m-block pf-m-readonly");
+  box.append(h("code", "pf-v6-c-clipboard-copy__text pf-m-code", command));
+  return box;
 }
 
 function demoWay(): HTMLElement {
@@ -182,7 +189,7 @@ export function requireServer<S, Q>(
   return {
     id: module.id,
     title: module.title,
-    activate: async (host) => gatedPage(module, host, need, ready()),
+    activate: async (host) => ok(gatedPage(module, host, need, ready())),
   };
 }
 
@@ -231,19 +238,18 @@ function gatePage(id: string): { page: HTMLElement; slots: EmptyStateSlots } {
 // that fixes it. notice says why a signed-in page came back here (a refused token).
 export function renderSignIn(slots: EmptyStateSlots, app: string, notice?: string): void {
   delete slots.actions.dataset.connectPrompt;
-  slots.title.textContent = "Sign in to this server";
+  slots.title.textContent = "This server needs a console token";
   slots.message.textContent =
     (notice ? notice + " " : "") +
-    "Every console route needs a token, and this page has none, so it cannot show anything true yet. Run this; it opens this page signed in. The token is read by your shell, never shown here.";
+    "Every console route needs a token, and this page has none, so it cannot show anything true yet. Run this; it opens this page with a token. The token is read by your shell, never shown here.";
   const way = h("div");
   way.dataset.emptyWay = "";
-  const label = h("span", undefined, "Open it signed in");
+  const label = h("span", undefined, "Open it with a token");
   label.dataset.emptyWayLabel = "";
   const cmd = signInCommand(appURL(app));
-  const command = h("pre");
-  command.dataset.emptyCmd = "";
-  command.dataset.signInCommand = "";
-  command.append(h("code", undefined, cmd));
+  const command = commandBox(cmd);
+  const code = command.querySelector<HTMLElement>("code");
+  if (code) code.dataset.signInCommand = "";
   const row = h("div");
   row.dataset.emptyWayActions = "";
   const copy = wayButton("pf-m-primary", "Copy command", () => {
@@ -253,7 +259,7 @@ export function renderSignIn(slots: EmptyStateSlots, app: string, notice?: strin
       },
       (e: unknown) =>
         reportFailure(
-          "Sign-in",
+          "Console token",
           "Could not copy the command (" + String(e) + "). Select it and copy it by hand.",
           "signin:copy",
         ),
@@ -289,8 +295,13 @@ function gatedPage<S, Q>(
     if (closed || inner || opening || !ready() || (!force && host.closest("[hidden]"))) return;
     opening = true;
     host.replaceChildren();
-    void module.activate(host).then((controller) => {
+    void module.activate(host).then((activated) => {
       opening = false;
+      if (activated.error) {
+        if (!closed) host.replaceChildren(appLoadFailure(module.id, activated.error));
+        return;
+      }
+      const controller = activated.value;
       if (closed) {
         controller.deactivate();
         return;
@@ -307,8 +318,15 @@ function gatedPage<S, Q>(
   };
   const unsubscribeHost = subscribeDefaultHost(() => open());
 
-  const onAuthLost = (): void => {
+  const onAuthLost = (e: Event): void => {
     if (closed || !signInRequired()) return;
+    const detail: unknown = e instanceof CustomEvent ? e.detail : undefined;
+    const hadToken = !(
+      typeof detail === "object" &&
+      detail !== null &&
+      "hadToken" in detail &&
+      detail.hadToken === false
+    );
     if (inner) {
       innerTitleUnsub?.();
       innerTitleUnsub = null;
@@ -316,7 +334,9 @@ function gatedPage<S, Q>(
       inner = null;
       for (const fn of titleListeners) fn(null);
     }
-    showGate("The server refused this page's token: it expired or was revoked.");
+    showGate(
+      hadToken ? "The server refused this page's token: it expired or was revoked." : undefined,
+    );
   };
   document.addEventListener(AUTH_LOST_EVENT, onAuthLost);
 

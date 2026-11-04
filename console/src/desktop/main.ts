@@ -13,7 +13,7 @@ import {
   WORKSPACE_ROOT as DEMO_WORKSPACE_ROOT,
   WORKSPACE_ROOTS as DEMO_WORKSPACES,
 } from "./demo-scenario";
-import { exchangeOperatorToken, redeemLinkCode } from "../lib/token-exchange";
+import { redeemLinkCode } from "../lib/token-exchange";
 import {
   openTab,
   closeTab,
@@ -102,6 +102,7 @@ import { browserInstallHost, createInstallStore } from "../lib/install";
 import { registerServiceWorker, watchServedBuild } from "../lib/sw";
 import { showRefreshToast } from "../lib/refresh-toast";
 import type { PageController, PageModule } from "./page";
+import { MagusError, fail, ok, type Result } from "../gen/magus/types";
 
 // The console's default tab keybindings. Flat commandId -> chord, layered over the user's persisted
 // "keymap" overrides (the same cell the apps read). mod = Cmd on macOS, Ctrl elsewhere. Cmd+Opt
@@ -544,27 +545,6 @@ export function startConsole(
   const readOnly = isReadOnly();
   document.documentElement.toggleAttribute("data-read-only", readOnly);
 
-  // Trade an operator token for a console token. The prefix decides: only an mgo_ token is
-  // sent, and nothing waits on it, since the console works either way. Every failure is
-  // surfaced, a refusal included, because each leaves the operator credential in the browser;
-  // the next load retries. Skipped for a read-only share session, which holds a share token.
-  //
-  // Here in the SHELL rather than in an app because each app is its own bundle: one
-  // exchange in the composition root covers every tab, and the storage it writes is what
-  // the other bundles read.
-  if (!readOnly) {
-    const serverHost = resolveServerHost();
-    if (serverHost)
-      void exchangeOperatorToken(serverHost).then((outcome) => {
-        if (outcome !== "failed") return;
-        reportFailure(
-          "Sign-in",
-          "Could not trade the operator token for a console token, so this browser still holds the operator token, which also reaches /mcp and token management. Reload to retry, or sign in with a console token: magus config console token create",
-          "token-exchange:failed",
-        );
-      });
-  }
-
   loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
   applyFocusRing(getFocusRing()); // apply the persisted focus-ring preference before anything renders
   // Before the graph mounts and reads the attribute. Motion is not here - theme.ts applies it
@@ -604,14 +584,14 @@ export function startConsole(
   const launcherStatus = makeStatusBar(false); // zero tabs, zero panes: no Panes tray button
 
   // mountApp is how a tile mounts one app into a pane host: resolve the registered module and
-  // activate it, returning its controller (or null if unknown). A tile calls this per leaf, so all
+  // activate it, returning its controller, or why it could not. A tile calls this per leaf, so all
   // the per-app lazy-import machinery (standalone/moduleApp) is reused unchanged.
   async function mountApp(
     pageId: string,
     host: HTMLElement,
-  ): Promise<PageController<unknown, unknown> | null> {
+  ): Promise<Result<PageController<unknown, unknown>>> {
     const m = registry.get(pageId);
-    if (!m) return null;
+    if (!m) return fail(new MagusError({ code: "", message: "no app is registered as " + pageId }));
     return await m.activate(host);
   }
 
@@ -821,7 +801,8 @@ export function startConsole(
     if (cur.tabs.length < 2) return;
     const i = cur.tabs.findIndex((t) => t.id === cur.activeId);
     if (i < 0) return;
-    activateTab(cur.tabs[(i + dir + cur.tabs.length) % cur.tabs.length].id);
+    const next = cur.tabs[(i + dir + cur.tabs.length) % cur.tabs.length];
+    if (next) activateTab(next.id);
   }
 
   // moveAppToTab is drag-to-adopt's shared orchestration, called from both a tab-on-tab drag
@@ -2034,8 +2015,8 @@ async function signInThenStart(
   const code = consumeLinkCode();
   if (code && (await redeemLinkCode(location.host, code)) === "failed")
     reportFailure(
-      "Sign-in",
-      "This sign-in link was already used, has expired (a link signs in once, within a minute), or the server could not be reached. Open a fresh one: magus graph export --open --follow, or the open line magus prints.",
+      "Console token",
+      "This link was already used, has expired (a link works once, within a minute), or the server could not be reached. Open a fresh one: magus graph export --open --follow, or the open line magus prints.",
       "link-code:failed",
     );
   startConsole(tabBarHost, outlet, statusHost);

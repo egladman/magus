@@ -10,6 +10,12 @@ import (
 // cmd/magus-utils's boundaryEnums names the same values for the Buzz mirror, and
 // TestBoundaryEnumsMatchTheirSets holds the two to one list.
 
+var diagnosticOrigins = enum.Set[DiagnosticOrigin]{"builtin", "workspace"}
+
+func (v DiagnosticOrigin) Values() []string { return diagnosticOrigins.Strings() }
+func (v DiagnosticOrigin) Valid() bool      { return diagnosticOrigins.Valid(v) }
+func (v DiagnosticOrigin) String() string   { return enum.String(v) }
+
 var signAlgorithms = enum.Set[SignAlgorithm]{"ed25519"}
 
 func (v SignAlgorithm) Values() []string { return signAlgorithms.Strings() }
@@ -170,6 +176,21 @@ func (v ToolCapability) String() string   { return enum.String(v) }
 // ToolCapabilities is every capability, each the name of one file in a tool rows directory.
 func ToolCapabilities() []ToolCapability { return slices.Clone(toolCapabilities) }
 
+var hookPoints = enum.Set[HookPoint]{
+	HookPointShell, HookPointEdit, HookPointStop, HookPointSubagentStop, HookPointSpawn,
+	HookPointSessionStart, HookPointCompact, HookPointMCP, HookPointAttach,
+}
+
+func (v HookPoint) Values() []string { return hookPoints.Strings() }
+func (v HookPoint) Valid() bool      { return hookPoints.Valid(v) }
+func (v HookPoint) String() string   { return enum.String(v) }
+
+var bindingStatuses = enum.Set[BindingStatus]{Bound, Unsupported}
+
+func (v BindingStatus) Values() []string { return bindingStatuses.Strings() }
+func (v BindingStatus) Valid() bool      { return bindingStatuses.Valid(v) }
+func (v BindingStatus) String() string   { return enum.String(v) }
+
 var mcpTransports = enum.Set[McpTransport]{McpStdio, McpHTTP}
 
 func (v McpTransport) Values() []string { return mcpTransports.Strings() }
@@ -236,9 +257,3 @@ var conformancePopulations = enum.Set[ConformancePopulation]{ConformancePopSourc
 func (v ConformancePopulation) Values() []string { return conformancePopulations.Strings() }
 func (v ConformancePopulation) Valid() bool      { return conformancePopulations.Valid(v) }
 func (v ConformancePopulation) String() string   { return enum.String(v) }
-
-var conformanceSources = enum.Set[ConformanceSource]{ConformanceFromRatchet, ConformanceFromAnchor}
-
-func (v ConformanceSource) Values() []string { return conformanceSources.Strings() }
-func (v ConformanceSource) Valid() bool      { return conformanceSources.Valid(v) }
-func (v ConformanceSource) String() string   { return enum.String(v) }

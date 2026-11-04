@@ -2,11 +2,17 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
@@ -14,6 +20,7 @@ import (
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -43,7 +50,7 @@ func (m *Magus) SandboxMode() types.SandboxMode { return m.cfg.Sandbox.Mode.Reso
 // go through here so a script and a target are confined by the same policy; Run calls it
 // too, so there is one condition rather than a copy per entry point. The write grant is
 // narrowed to the acting lease's row, resolved by job.ActingLease in the order the guard
-// hook resolves it.
+// hook resolves it. In every mode it installs the edit judge the fs writers consult.
 //
 // Nothing here confines this process: the policy's children are confined as each
 // starts (see sandbox.Command). Required mode is refused (MGS2012) here rather than at
@@ -52,7 +59,7 @@ func (m *Magus) SandboxMode() types.SandboxMode { return m.cfg.Sandbox.Mode.Reso
 func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	mode := m.cfg.Sandbox.Mode
 	if !mode.Enabled() {
-		return ctx, nil
+		return std.WithEditJudge(ctx, m.editJudge()), nil
 	}
 	loc := m.jobPlace()
 	// Every spell the workspace loaded, so a script, a magusfile body and a nested magus
@@ -82,7 +89,7 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 		ctx = sandbox.WithMetrics(ctx, prov)
 		recordRules(ctx, prov, p)
 	}
-	return sandbox.WithPolicy(ctx, p), nil
+	return std.WithEditJudge(sandbox.WithPolicy(ctx, p), m.editJudge()), nil
 }
 
 // serviceSpells names the loaded spells that serve magus rather than a target: the
@@ -120,7 +127,7 @@ func warnKernelUnavailable(ctx context.Context) {
 		}
 		slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
 			"kernel landlock unavailable; children run under magus's binding checks and env allowlist only"),
-			"reason", reason)
+			slog.String("reason", reason), attr.Unchecked())
 	})
 }
 
@@ -140,4 +147,76 @@ func recordRules(ctx context.Context, prov observability.Provider, p *sandbox.Po
 		EnvGlob:  int64(len(p.Env.Prefixes)),
 		Scope:    "workspace",
 	})
+}
+
+// editJudge grades a Buzz fs write to an existing workspace file
+// with guard.GradeEdit, the grader `refs --rename` uses.
+// The cache and temp dirs are not graded.
+// In a target run a declared output passes: the run makes it.
+func (m *Magus) editJudge() std.EditJudge {
+	root := canonical(m.Root())
+	rel := func(ctx context.Context, path string) (string, bool) {
+		real := canonical(path)
+		if real == "" || !within(root, real) {
+			return "", false
+		}
+		for _, dir := range []string{m.CacheDir(), os.TempDir(), sandbox.PolicyFromContext(ctx).TempBase()} {
+			// A temp dir holding the workspace would skip all of it.
+			if d := canonical(dir); d != "" && !within(d, root) && within(d, real) {
+				return "", false
+			}
+		}
+		r, err := filepath.Rel(root, real)
+		return filepath.ToSlash(r), err == nil
+	}
+	var once sync.Once
+	var deps guard.Dependencies
+	var depsErr error
+	return std.EditJudge{
+		Covers: func(ctx context.Context, path string) bool {
+			_, ok := rel(ctx, path)
+			return ok
+		},
+		Grade: func(ctx context.Context, path string, before, after []byte) error {
+			r, ok := rel(ctx, path)
+			if !ok {
+				return fmt.Errorf("fs write %s: refused: it left the workspace while being judged", path)
+			}
+			once.Do(func() { deps, depsErr = m.guardDependencies(ctx) })
+			if depsErr != nil {
+				return fmt.Errorf("fs write %s: refused: the guard rules that grade it did not load: %w", r, depsErr)
+			}
+			inRun := types.ActiveDispatchFromContext(ctx) != nil
+			rule, reason := guard.GradeEdit(ctx, deps, m, r, before, after, guard.EditGrade{InRun: inRun})
+			switch {
+			case reason == "":
+				return nil
+			case rule == "":
+				return fmt.Errorf("fs write %s: refused: %s", r, reason)
+			}
+			return fmt.Errorf("fs write %s: refused by the guard [%s]: %s", r, rule, reason)
+		},
+	}
+}
+
+// canonical is path absolute with symlinks resolved, "" when unresolvable.
+func canonical(path string) string {
+	if path == "" {
+		return ""
+	}
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return ""
+	}
+	abs, err := filepath.Abs(real)
+	if err != nil {
+		return ""
+	}
+	return abs
+}
+
+// within reports whether path is dir or lies under it.
+func within(dir, path string) bool {
+	r, err := filepath.Rel(dir, path)
+	return err == nil && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator))
 }

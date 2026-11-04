@@ -125,7 +125,7 @@ test("setLayout does not mutate its input and no-ops on an unknown tab", () => {
   const ws = openTab(emptyWorkspace, tab("a"));
   const leaf: Pane = { kind: "leaf", id: "a", pageId: "a" };
   setLayout(ws, "a", leaf);
-  assert.equal(ws.tabs[0].layout, undefined); // input untouched
+  assert.equal(ws.tabs[0]?.layout, undefined); // input untouched
   assert.equal(setLayout(ws, "zzz", leaf), ws); // unknown id returns the same reference
 });
 
@@ -141,14 +141,14 @@ test("renameTab keeps the rest of the tab (pageId, layout) intact", () => {
   const leaf: Pane = { kind: "leaf", id: "a", pageId: "logs" };
   const ws = setLayout(openTab(emptyWorkspace, tab("a", "logs")), "a", leaf);
   const next = renameTab(ws, "a", "out-1234");
-  assert.equal(next.tabs[0].pageId, "logs");
-  assert.deepEqual(next.tabs[0].layout, leaf);
+  assert.equal(next.tabs[0]?.pageId, "logs");
+  assert.deepEqual(next.tabs[0]?.layout, leaf);
 });
 
 test("renameTab does not mutate its input", () => {
   const ws = openTab(emptyWorkspace, tab("a"));
   renameTab(ws, "a", "renamed");
-  assert.equal(ws.tabs[0].title, "a");
+  assert.equal(ws.tabs[0]?.title, "a");
 });
 
 // The reducer feeds a persisted cell whose subscribers re-render, so an app re-reporting the

@@ -32,25 +32,23 @@ test("scope repeats, focus and depth follow, as the handler's parseLens reads th
 
 test("the form splits scope on commas and spaces and refuses what the server would", () => {
   assert.deepEqual(parseLensFields({ scope: " a/b, c  d ", focus: " x ", depth: "" }), {
-    ok: true,
-    lens: { scope: ["a/b", "c", "d"], focus: "x", depth: null },
+    value: { scope: ["a/b", "c", "d"], focus: "x", depth: null },
   });
   assert.deepEqual(parseLensFields({ scope: "", focus: "x", depth: "0" }), {
-    ok: true,
-    lens: { scope: [], focus: "x", depth: 0 },
+    value: { scope: [], focus: "x", depth: 0 },
   });
-  assert.deepEqual(parseLensFields({ scope: "", focus: "", depth: "2" }), {
-    ok: false,
-    error: "Depth needs a focus.",
-  });
-  assert.equal(parseLensFields({ scope: "", focus: "x", depth: "-1" }).ok, false);
-  assert.equal(parseLensFields({ scope: "", focus: "x", depth: "1.5" }).ok, false);
+  assert.equal(
+    parseLensFields({ scope: "", focus: "", depth: "2" }).error?.message,
+    "Depth needs a focus.",
+  );
+  assert.ok(parseLensFields({ scope: "", focus: "x", depth: "-1" }).error);
+  assert.ok(parseLensFields({ scope: "", focus: "x", depth: "1.5" }).error);
 });
 
 test("the form shows a lens the way it reads one", () => {
   const lens = { scope: ["a", "b"], focus: "x", depth: 3 };
   const parsed = parseLensFields(lensFields(lens));
-  assert.deepEqual(parsed, { ok: true, lens });
+  assert.deepEqual(parsed, { value: lens });
 });
 
 test("the fragment carries the view and keeps every other key", () => {
@@ -62,7 +60,7 @@ test("the fragment carries the view and keeps every other key", () => {
       .slice(1)
       .split("&")
       .map((p) => {
-        const [k, v = ""] = p.split("=");
+        const [k = "", v = ""] = p.split("=");
         return [decodeURIComponent(k), decodeURIComponent(v)];
       }),
   );
@@ -110,36 +108,36 @@ const chain: Declaration = {
 const anchors = (d: Declaration): string[] => d.nodes.map((n) => n.anchor);
 
 test("the cut walks both directions from the focus, as the server's does", () => {
-  const one = cutDeclaration(chain, { scope: [], focus: "libs/lib", depth: 1 });
-  assert.ok(one.ok);
-  assert.deepEqual(anchors(one.decl), ["app", "libs/lib", "libs/core"]);
-  assert.deepEqual(one.decl.edges, [
+  const one = cutDeclaration(chain, { scope: [], focus: "libs/lib", depth: 1 }).value;
+  assert.ok(one);
+  assert.deepEqual(anchors(one), ["app", "libs/lib", "libs/core"]);
+  assert.deepEqual(one.edges, [
     ["app", "libs-lib"],
     ["libs-lib", "libs-core"],
   ]);
 
-  const alone = cutDeclaration(chain, { scope: [], focus: "libs/lib", depth: 0 });
-  assert.ok(alone.ok);
-  assert.deepEqual(anchors(alone.decl), ["libs/lib"]);
-  assert.deepEqual(alone.decl.edges, []);
+  const alone = cutDeclaration(chain, { scope: [], focus: "libs/lib", depth: 0 }).value;
+  assert.ok(alone);
+  assert.deepEqual(anchors(alone), ["libs/lib"]);
+  assert.deepEqual(alone.edges, []);
 
-  const scoped = cutDeclaration(chain, { scope: ["libs/"], focus: "", depth: null });
-  assert.ok(scoped.ok);
-  assert.deepEqual(anchors(scoped.decl), ["libs/lib", "libs/core", "libs/base"]);
-  assert.equal(scoped.decl.edges.length, 2, "the app -> lib edge leaves with app");
+  const scoped = cutDeclaration(chain, { scope: ["libs/"], focus: "", depth: null }).value;
+  assert.ok(scoped);
+  assert.deepEqual(anchors(scoped), ["libs/lib", "libs/core", "libs/base"]);
+  assert.equal(scoped.edges.length, 2, "the app -> lib edge leaves with app");
 });
 
 test("scope drops a node before the walk can reach through it", () => {
-  const cut = cutDeclaration(chain, { scope: ["libs"], focus: "libs-lib", depth: 2 });
-  assert.ok(cut.ok);
-  assert.deepEqual(anchors(cut.decl), ["libs/lib", "libs/core", "libs/base"]);
+  const cut = cutDeclaration(chain, { scope: ["libs"], focus: "libs-lib", depth: 2 }).value;
+  assert.ok(cut);
+  assert.deepEqual(anchors(cut), ["libs/lib", "libs/core", "libs/base"]);
 });
 
 test("the cut refuses what the server refuses", () => {
-  assert.deepEqual(cutDeclaration(chain, { scope: [], focus: "", depth: 2 }), {
-    ok: false,
-    error: "depth needs a focus",
-  });
-  assert.equal(cutDeclaration(chain, { scope: [], focus: "nowhere", depth: null }).ok, false);
-  assert.equal(cutDeclaration(chain, { scope: ["tools"], focus: "app", depth: null }).ok, false);
+  assert.equal(
+    cutDeclaration(chain, { scope: [], focus: "", depth: 2 }).error?.message,
+    "depth needs a focus",
+  );
+  assert.ok(cutDeclaration(chain, { scope: [], focus: "nowhere", depth: null }).error);
+  assert.ok(cutDeclaration(chain, { scope: ["tools"], focus: "app", depth: null }).error);
 });

@@ -75,7 +75,7 @@ export fun parseWorkflow(path: str, text: str) > Workflow !> any {
         }
         jobs.append(Job{id = id, name = asStr(job["name"]), steps = steps});
     }
-    jobs.sort(fun (a: Job, b: Job) > bool => strings\compare(a.id, b: b.id) < 0);
+    _ = jobs.sort(fun (a: Job, b: Job) > bool => strings\compare(a.id, b: b.id) < 0);
     return Workflow{path = path, name = asStr(doc["name"]), events = parseEvents(doc["on"]), jobs = jobs};
 }
 
@@ -227,7 +227,7 @@ final base_query = `query($owner: String!, $name: String!, $expr: String!) {
 }`;
 
 fun gh(args: [str]) > str !> any {
-    return proc\exec("gh", args: args, dir: ".", opts: {"quiet": true}).stdout;
+    return proc\exec("gh", args: args, dir: ".", opts: proc\ExecOptions{ quiet = true }).stdout;
 }
 
 fun headWorkflows() > [Workflow] !> any {

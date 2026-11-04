@@ -134,11 +134,17 @@ func writeChildFlagsRoff(w *writer, path string, children []cmdline.Command) {
 
 func writeFlagListRoff(w *writer, command cmdline.Command) {
 	w.Indent()
-	visitFlags(command, func(f *flag.Flag) {
-		typeName, usage := flag.UnquoteUsage(f)
-		w.TP(roffFlagLabel(f.Name, typeName, f.DefValue), escape(usage))
-	})
+	for _, h := range flagHelp(command) {
+		w.TP(roffFlagLabel(h), escape(h.Usage))
+	}
 	w.Dedent()
+}
+
+// flagHelp binds command's flags on a throwaway FlagSet and describes them sorted.
+func flagHelp(command cmdline.Command) []cmdline.Help {
+	fs := flag.NewFlagSet(command.Name, flag.ContinueOnError)
+	command.BindFlags(fs)
+	return cmdline.FlagHelp(fs, nil)
 }
 
 // visitFlags binds command's flags on a throwaway FlagSet and visits them sorted.
@@ -211,13 +217,13 @@ func thSource(name, version string) string {
 	return fmt.Sprintf("%s %s", name, version)
 }
 
-func roffFlagLabel(name, typeName, defaultValue string) string {
-	label := fmt.Sprintf(`\fB%s\fR`, escapeHyphen(dashes(name)+name))
-	if typeName != "" && typeName != "bool" {
-		label += fmt.Sprintf(` \fI%s\fR`, typeName)
+func roffFlagLabel(h cmdline.Help) string {
+	label := fmt.Sprintf(`\fB%s\fR`, escapeHyphen(h.Name))
+	if h.Value != "" {
+		label += fmt.Sprintf(` \fI%s\fR`, h.Value)
 	}
-	if defaultValue != "" && defaultValue != "false" && defaultValue != "0" && defaultValue != "0s" {
-		label += fmt.Sprintf(` (default: %s)`, escape(defaultValue))
+	if h.Default != "" {
+		label += fmt.Sprintf(` (default: %s)`, escape(h.Default))
 	}
 	return label
 }

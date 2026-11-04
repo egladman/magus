@@ -10,9 +10,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/internal/stamp"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -73,16 +75,16 @@ func TestCacheIncludeDefaultsOff(t *testing.T) {
 
 func TestCacheIncludeExplicit(t *testing.T) {
 	t.Parallel()
-	on := Cache{Include: CacheInclude{
-		OS:   CacheIncludeFlag{Enabled: new(true)},
-		Arch: CacheIncludeFlag{Enabled: new(true)},
+	on := Cache{Include: cacheInclude{
+		OS:   cacheIncludeFlag{Enabled: new(true)},
+		Arch: cacheIncludeFlag{Enabled: new(true)},
 	}}
 	assert.True(t, on.IncludeOS())
 	assert.True(t, on.IncludeArch())
 
-	off := Cache{Include: CacheInclude{
-		OS:   CacheIncludeFlag{Enabled: new(false)},
-		Arch: CacheIncludeFlag{Enabled: new(false)},
+	off := Cache{Include: cacheInclude{
+		OS:   cacheIncludeFlag{Enabled: new(false)},
+		Arch: cacheIncludeFlag{Enabled: new(false)},
 	}}
 	assert.False(t, off.IncludeOS())
 	assert.False(t, off.IncludeArch())
@@ -132,17 +134,17 @@ func TestDefaults_ConformanceIsValidAndFlagless(t *testing.T) {
 
 	field, ok := reflect.TypeOf(cfg.Knowledge).FieldByName("Conformance")
 	require.True(t, ok)
-	assert.Equal(t, "-", field.Tag.Get("cli"), "a ratchet is committed policy: no flag, no env var")
+	assert.Equal(t, "-", field.Tag.Get("cli"), "an anchor is committed policy: no flag, no env var")
 }
 
 func TestConformanceDefaults(t *testing.T) {
 	t.Parallel()
 	c := Defaults().Knowledge.Conformance
-	// The ratchet is opt-in and an exclusion names one workspace's layout, so neither ships.
+	// An exclusion names one workspace's layout, so none ships.
 	assert.Equal(t, ConformanceConfig{
 		MinSample: 30,
 		Step:      0.05,
-		Gates:     ConformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Gates:     conformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks:    c.Checks, // pinned below
 	}, c)
 
@@ -194,11 +196,10 @@ func TestConformanceDefaultsAreNotShared(t *testing.T) {
 func TestConformanceOptions(t *testing.T) {
 	t.Parallel()
 	c := ConformanceConfig{
-		Ratchet:   "hack/policy/conformance.json",
 		MinSample: 12,
 		Step:      0.1,
 		Exclude:   []string{"vendor/**"},
-		Gates:     ConformanceGatesConfig{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
+		Gates:     conformanceGatesConfig{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
 			types.ConformanceFileLines:  {types.ConformancePopTest: {Percentile: 99, Anchor: 1900}},
 			types.ConformanceDepFanout:  {types.ConformancePopSource: {Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}},
@@ -216,11 +217,10 @@ func TestConformanceOptions(t *testing.T) {
 			scoped:    {Percentile: 95, Anchor: 89},
 			alias:     {Percentile: 95, Anchor: 100, MinSubject: 5},
 		},
-		RatchetPath: "hack/policy/conformance.json",
-		MinSample:   12,
-		Step:        0.1,
-		Exclude:     []string{"vendor/**"},
-		Gates:       types.ConformanceGates{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
+		MinSample: 12,
+		Step:      0.1,
+		Exclude:   []string{"vendor/**"},
+		Gates:     types.ConformanceGates{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
 	}
 	got := c.Options()
 	assert.Equal(t, want, got)
@@ -239,22 +239,15 @@ func TestConformanceScopedLimitKeepsTheAnchorTight(t *testing.T) {
 	c := Defaults().Knowledge.Conformance
 	c.Checks[types.ConformanceDepFanout][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}
 	o := c.Options()
-	o.RatchetPath = "hack/policy/conformance.json"
-	o.Ratchet = types.ConformanceRatchet{Schema: 1, Thresholds: []types.ConformanceThreshold{
-		{ConformanceKey: scoped, Value: 89, N: 1, Why: "pin", Line: 4},
-	}}
 	require.NoError(t, o.Validate())
 
-	v, src := o.Effective(scoped)
+	v, ok := o.Effective(scoped)
+	assert.True(t, ok)
 	assert.Equal(t, 89, v)
-	assert.Equal(t, types.ConformanceFromRatchet, src)
 
-	v, src = o.Effective(other)
+	v, ok = o.Effective(other)
+	assert.True(t, ok)
 	assert.Equal(t, 62, v)
-	assert.Equal(t, types.ConformanceFromAnchor, src)
-
-	o.Ratchet.Thresholds[0].Value = 90
-	assert.ErrorContains(t, o.Validate(), "looser than its anchor 89")
 }
 
 func TestConformanceLoadsFromYAML(t *testing.T) {
@@ -262,7 +255,6 @@ func TestConformanceLoadsFromYAML(t *testing.T) {
 	path := filepath.Join(t.TempDir(), Filename)
 	require.NoError(t, os.WriteFile(path, []byte(`knowledge:
   conformance:
-    ratchet: hack/policy/conformance.json
     min_sample: 10
     checks:
       dep-fanout:
@@ -276,10 +268,9 @@ func TestConformanceLoadsFromYAML(t *testing.T) {
 	require.NoError(t, err)
 	c := cfg.Knowledge.Conformance
 	assert.Equal(t, ConformanceConfig{
-		Ratchet:   "hack/policy/conformance.json",
 		MinSample: 10,
 		Step:      0.05,
-		Gates:     ConformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
+		Gates:     conformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
 			types.ConformanceDepFanout: {types.ConformancePopSource: {Percentile: 90, Anchor: 20, Scopes: map[string]int{"cmd/tool": 31}}},
 		},
@@ -332,4 +323,54 @@ func TestJobsMaxClaims(t *testing.T) {
 			assert.Equal(t, tc.want, cfg.Jobs.MaxClaims)
 		})
 	}
+}
+
+type SymbolIndexersSuite struct {
+	suite.Suite
+}
+
+func TestSymbolIndexersSuite(t *testing.T) {
+	suite.Run(t, new(SymbolIndexersSuite))
+}
+
+func (s *SymbolIndexersSuite) TestExternalIndexerWaitsForTheOptIn() {
+	si := &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "scip-typescript", Args: []string{"index"}}}
+	s.False(SpellsConfig{}.RunsSymbolIndexer("typescript", si))
+	s.False(SpellsConfig{SymbolIndexers: []string{"python"}}.RunsSymbolIndexer("typescript", si))
+	s.True(SpellsConfig{SymbolIndexers: []string{"typescript"}}.RunsSymbolIndexer("typescript", si))
+}
+
+func (s *SymbolIndexersSuite) TestInProcessGoIndexerNeedsNoOptIn() {
+	si := &spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages, Command: spells.Command{Bin: "go", Args: []string{"./..."}}}
+	s.True(SpellsConfig{}.RunsSymbolIndexer("go", si))
+}
+
+func (s *SymbolIndexersSuite) TestInProcessBuzzIndexerNeedsNoOptIn() {
+	si := &spells.SymbolIndexer{Format: spells.SymbolFormatBuzzModule}
+	s.True(SpellsConfig{}.RunsSymbolIndexer("buzz", si))
+}
+
+func (s *SymbolIndexersSuite) TestNoIndexerNeverRuns() {
+	s.False(SpellsConfig{SymbolIndexers: []string{"typescript"}}.RunsSymbolIndexer("typescript", nil))
+}
+
+func (s *SymbolIndexersSuite) TestLoadsBesideSpellImports() {
+	path := filepath.Join(s.T().TempDir(), Filename)
+	s.Require().NoError(os.WriteFile(path, []byte(`spells:
+  symbol_indexers: [typescript]
+  magus/spell/go:
+    path: spells/go
+`), 0o644))
+	cfg, err := LoadFile(path, true)
+	s.Require().NoError(err)
+	want := cfg.Spells // only the two keys the file sets are under test here
+	want.SymbolIndexers = []string{"typescript"}
+	want.Imports = map[string]SpellImport{"magus/spell/go": {Path: "spells/go"}}
+	s.Equal(want, cfg.Spells)
+}
+
+func (s *SymbolIndexersSuite) TestValidateRefusesADuplicate() {
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs,
+		Spells: SpellsConfig{SymbolIndexers: []string{"typescript", "typescript"}}}
+	s.ErrorContains(Validate(cfg), "spells.symbol_indexers")
 }

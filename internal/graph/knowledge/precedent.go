@@ -211,8 +211,8 @@ func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
 		dirs := slices.SortedFunc(maps.Keys(byDir), func(a, b string) int {
 			return cmp.Or(cmp.Compare(len(byDir[b]), len(byDir[a])), cmp.Compare(a, b))
 		})
-		bound, src := m.conformance.Effective(types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: layer})
-		if src == "" {
+		bound, enforced := m.conformance.Effective(types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: layer})
+		if !enforced {
 			continue
 		}
 		row := types.Precedent{

@@ -16,7 +16,7 @@ import (
 type contended struct{}
 
 func (contended) Error() string {
-	return "magus: project . is locked by another magus process (held by pid 41221 magus run test), not waiting"
+	return "magus: project . is locked by another magus process (held by pid 41221 magus run test), not waiting: this command succeeds once that run ends"
 }
 
 func (contended) ExitCode() int { return 75 }

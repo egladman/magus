@@ -49,7 +49,7 @@ type spellSecretProvider struct {
 // Fetch calls the spell's resolve_secret op and returns the value it produced. The value
 // decodes straight into a Secret and is wrapped at once, so it never passes through
 // InvokeResponse.Data or the JSON encoder that serializes Data for MCP.
-func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Value, error) {
+func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (types.Secret, error) {
 	// ANNOUNCED BEFORE THE PROVIDER RUNS, not after. A 1Password prompt appearing during
 	// what looked like an ordinary build, with nothing on screen explaining it, is a
 	// trust failure: the user cannot tell whether magus asked for it or something else
@@ -86,21 +86,21 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Valu
 			// The distinction worth drawing for the reader: it did not "time out", it had
 			// nobody to ask. Naming that is the difference between re-running it and
 			// wiring a service token.
-			return secret.Value{}, fmt.Errorf("provider %q needed %s and there is no terminal to prompt on, "+
+			return types.Secret{}, fmt.Errorf("provider %q needed %s and there is no terminal to prompt on, "+
 				"configure an unattended credential for it (a service-account token) or run this interactively",
 				p.name, timeout)
 		}
 		if ctx.Err() != nil {
-			return secret.Value{}, fmt.Errorf("provider %q did not answer within %s, it may be waiting on an "+
+			return types.Secret{}, fmt.Errorf("provider %q did not answer within %s, it may be waiting on an "+
 				"unlock nobody completed", p.name, timeout)
 		}
-		return secret.Value{}, err
+		return types.Secret{}, err
 	}
 	if !exported {
-		return secret.Value{}, fmt.Errorf("provider %q does not export %s(target: Target, req: SecretRef) > Secret", p.name, op.Name)
+		return types.Secret{}, fmt.Errorf("provider %q does not export %s(target: Target, req: SecretRef) > Secret", p.name, op.Name)
 	}
 	if got.Value == "" {
-		return secret.Value{}, fmt.Errorf("provider %q returned a Secret with no value (%s must set Secret.value)", p.name, op.Name)
+		return types.Secret{}, fmt.Errorf("provider %q returned a Secret with no value (%s must set Secret.value)", p.name, op.Name)
 	}
-	return secret.NewValue(got.Value), nil
+	return types.NewSecret(got.Value), nil
 }

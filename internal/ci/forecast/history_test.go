@@ -981,7 +981,7 @@ func TestLoad_versionTooNew(t *testing.T) {
 
 	var h History
 	err = h.Load(context.Background(), path)
-	require.Error(t, err)
+	require.ErrorIs(t, err, types.StoreRecordsNewer)
 	var skew *UnsupportedVersionError
 	require.ErrorAs(t, err, &skew)
 	assert.Equal(t, UnsupportedVersionError{Have: HistoryVersion + 1, Max: HistoryVersion, Path: path}, *skew)
@@ -1164,6 +1164,7 @@ func TestHistoryRefusesTheOldDocument(t *testing.T) {
 	var h History
 	err := h.Load(t.Context(), path)
 	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorIs(t, err, types.LegacyStorePresent)
 	require.ErrorContains(t, err, "preserve it")
 	require.ErrorContains(t, err, filepath.Join(dir, "v1.json"))
 	require.Error(t, UpdateHistory(t.Context(), path, recordDuration("svc", "go/test", 1)))
@@ -1529,7 +1530,7 @@ func TestMeasuredRunsWidth(t *testing.T) {
 	assert.Zero(t, all)
 }
 
-// TestMeasuredRunsWidthSaturation pins the ratchet a claim needs because a step runs Go
+// TestMeasuredRunsWidthSaturation pins the climb a claim needs because a step runs Go
 // only as wide as its slots: a run that kept 0.9 of its claim busy doubles the next
 // claim until a wider claim comes back unsaturated, and only unsaturated runs feed the
 // percentile.

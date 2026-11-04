@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -856,16 +857,17 @@ type WorkspacePolicy struct {
 	SpawnRule   bool
 	CommandRule bool
 	WriteRule   bool
+	StopRule    bool
 	// Builtins counts the compiled rules magus\guard.builtins set.
 	Builtins int
 }
 
-// buildPolicy describes a rule set. A spawn, command or write rule is code, so its digest
-// covers every file its load read: an edit to any of them counts as a policy change while
-// one is registered. Shell rules are data and count only for themselves.
-func buildPolicy(rules []workspace.ShellRule, spawn, command, write bool, builtins map[string]builtin.Setting, sources []interp.SourceFile) WorkspacePolicy {
-	policy := WorkspacePolicy{Sources: sources, ShellRules: len(rules), SpawnRule: spawn, CommandRule: command, WriteRule: write, Builtins: len(builtins)}
-	if len(rules) == 0 && !spawn && !command && !write && len(builtins) == 0 {
+// buildPolicy describes a rule set. A spawn, command, write or stop rule is code, so its
+// digest covers every file its load read: an edit to any of them counts as a policy change
+// while one is registered. Shell rules are data and count only for themselves.
+func buildPolicy(rules []workspace.ShellRule, spawn, command, write, stop bool, builtins map[string]builtin.Setting, sources []interp.SourceFile) WorkspacePolicy {
+	policy := WorkspacePolicy{Sources: sources, ShellRules: len(rules), SpawnRule: spawn, CommandRule: command, WriteRule: write, StopRule: stop, Builtins: len(builtins)}
+	if len(rules) == 0 && !spawn && !command && !write && !stop && len(builtins) == 0 {
 		return policy
 	}
 	h := sha256.New()
@@ -885,7 +887,10 @@ func buildPolicy(rules []workspace.ShellRule, spawn, command, write bool, builti
 	if write {
 		fmt.Fprintln(h, "rule write")
 	}
-	if spawn || command || write {
+	if stop {
+		fmt.Fprintln(h, "rule stop")
+	}
+	if spawn || command || write || stop {
 		for _, s := range sources {
 			fmt.Fprintf(h, "spawn %s %s\n", s.Path, s.ContentID)
 		}
@@ -1006,6 +1011,9 @@ func (r *WorkspaceRules) CommandRule() workspace.CommandRule { return r.registry
 // WriteRule returns the magus\guard.write rule, or nil.
 func (r *WorkspaceRules) WriteRule() workspace.WriteRule { return r.registry.WriteRule() }
 
+// StopRule returns the magus\guard.stop rule, or nil.
+func (r *WorkspaceRules) StopRule() workspace.StopRule { return r.registry.StopRule() }
+
 // Builtins returns the compiled rules magus\guard.builtins set, only those it named, or nil.
 func (r *WorkspaceRules) Builtins() map[string]builtin.Setting { return r.registry.Builtins() }
 
@@ -1026,7 +1034,7 @@ func (r *WorkspaceRules) DeclaredBuiltinSettings() map[string]string {
 
 // Policy describes the rules for the trail's lineage.
 func (r *WorkspaceRules) Policy() WorkspacePolicy {
-	return buildPolicy(r.registry.ShellRules(), r.SpawnRule() != nil, r.CommandRule() != nil, r.WriteRule() != nil, r.Builtins(), r.sources)
+	return buildPolicy(r.registry.ShellRules(), r.SpawnRule() != nil, r.CommandRule() != nil, r.WriteRule() != nil, r.StopRule() != nil, r.Builtins(), r.sources)
 }
 
 // policyState is Policy as the trail's lineage records it. The approved ids are left to a
@@ -1045,6 +1053,7 @@ func (r *WorkspaceRules) policyState() PolicyState {
 		SpawnRule:   policy.SpawnRule,
 		CommandRule: policy.CommandRule,
 		WriteRule:   policy.WriteRule,
+		StopRule:    policy.StopRule,
 		Sources: func(ctx context.Context) []PolicySource {
 			approved := r.approvedContentIDs(ctx, files)
 			if approved == nil {
@@ -1217,6 +1226,15 @@ func (r *WorkspaceRules) ApprovedWriteRule(ctx context.Context) (workspace.Write
 	return reg.WriteRule(), nil
 }
 
+// ApprovedStopRule is ApprovedSpawnRule for the magus\guard.stop rule.
+func (r *WorkspaceRules) ApprovedStopRule(ctx context.Context) (workspace.StopRule, error) {
+	reg, err := r.approvedIfChanged(ctx)
+	if err != nil || reg == nil {
+		return nil, err
+	}
+	return reg.StopRule(), nil
+}
+
 // Wiring is what NewDependencies takes from its caller: the facts this package cannot
 // resolve without importing the code that judges through it, as values and closures.
 type Wiring struct {
@@ -1230,10 +1248,10 @@ type Wiring struct {
 	// trail row. Binary may be "" when the caller is not a magus binary.
 	BinaryVersion string
 	Binary        string
-	// Inspect, HumanOnlyRecord and CacheDir become the Dependencies members of the same name.
-	Inspect         func(ctx context.Context, root string) (types.WorkspaceRepository, error)
-	HumanOnlyRecord func(ctx context.Context, root string) (types.HumanOnlyIndex, bool)
-	CacheDir        func(root string) (string, error)
+	// Inspect, TargetPolicies and CacheDir become the Dependencies members of the same name.
+	Inspect        func(ctx context.Context, root string) (types.WorkspaceRepository, error)
+	TargetPolicies func(ctx context.Context, root string) (types.TargetPolicyIndex, bool)
+	CacheDir       func(root string) (string, error)
 	// Trace starts the named phase of the caller's trace and returns its end. Nil traces
 	// nothing.
 	Trace func(ctx context.Context, phase string) (end func())
@@ -1268,19 +1286,23 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 	})
 	end()
 	deps := Dependencies{
-		Inspect:         w.Inspect,
-		HumanOnlyRecord: w.HumanOnlyRecord,
-		CacheDir:        w.CacheDir,
-		NotesShared:     w.Config.Knowledge.Notes.Shared,
-		Spells:          project.DefaultSpellRegistry().All,
-		Revision:        revisionAt,
-		TrackedFiles:    trackedFilesAt,
-		CheckoutState:   checkoutStateAt,
-		VCS:             w.vcsOptions(),
-		DefaultCharms:   w.Config.DefaultCharms,
-		BinaryVersion:   w.BinaryVersion,
-		Binary:          w.Binary,
-		RuleLoad:        loaded,
+		Inspect:        w.Inspect,
+		TargetPolicies: w.TargetPolicies,
+		CacheDir:       w.CacheDir,
+		NotesShared:    w.Config.Knowledge.Notes.Shared,
+		Spells:         project.DefaultSpellRegistry().All,
+		Revision:       revisionAt,
+		TrackedFiles:   trackedFilesAt,
+		CheckoutState:  checkoutStateAt,
+		VCS:            w.vcsOptions(),
+		DefaultCharms:  w.Config.DefaultCharms,
+		BinaryVersion:  w.BinaryVersion,
+		Binary:         w.Binary,
+		BinaryDirty:    buildinfo.Modified() || strings.HasSuffix(w.BinaryVersion, "-dirty"),
+		RuleLoad:       loaded,
+	}
+	if commit, _ := buildinfo.Commit(); commit != "unknown" {
+		deps.BinaryCommit = commit
 	}
 	// LoadAgents, not w.Config: only the workspace tier sets the brief format. A load that
 	// fails is reported by the builtins, which read the same section.
@@ -1299,6 +1321,8 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 		}
 		deps.WriteRule = rules.WriteRule()
 		deps.ApprovedWriteRule = rules.ApprovedWriteRule
+		deps.StopRule = rules.StopRule()
+		deps.ApprovedStopRule = rules.ApprovedStopRule
 		deps.Policy = rules.policyState
 		deps.Builtins = w.builtins(ctx, rules)
 		return deps, rules
@@ -1340,6 +1364,13 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 			return nil, err
 		}
 		return reg.WriteRule(), nil
+	}
+	deps.ApprovedStopRule = func(ctx context.Context) (workspace.StopRule, error) {
+		reg, err := registry(ctx)
+		if err != nil || reg == nil {
+			return nil, err
+		}
+		return reg.StopRule(), nil
 	}
 	return deps, nil
 }

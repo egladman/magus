@@ -133,7 +133,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 Now the canonical targets run the real toolchain:
 
 ```sh
-magus run format    # gofmt -l . (check only)
+magus run format    # gofmt -d (check only; fails on unformatted files)
 magus run lint      # go vet, golangci-lint, govulncheck
 magus run build     # go build
 magus run test      # go test ./...
@@ -142,7 +142,7 @@ magus run test      # go test ./...
 A note on read vs write: targets are read-only by default, so `magus run format` **checks** formatting rather than rewriting it. To mutate in place, attach the built-in `rw` charm:
 
 ```sh
-magus run format:rw   # gofmt -w . (rewrite files)
+magus run format:rw   # gofmt -w (rewrite files)
 magus run lint:rw     # golangci-lint --fix (apply autofixes)
 ```
 

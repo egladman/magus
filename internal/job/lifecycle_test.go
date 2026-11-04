@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestEndedReasonSaysWhichEnd: a read-only scout its holder finished, and a row the root
@@ -141,7 +142,6 @@ func TestWaitIgnoresASoftPathNobodyWrote(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Empty(t, rows[0].Releases, "and the exit gave up no path it held")
-	assert.Empty(t, rows[0].SoftPaths)
 }
 
 func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
@@ -176,72 +176,228 @@ func coveredRow() types.Job {
 	return row
 }
 
-// An exited job awaiting its wait holds only what its result changed, so a fork over a
-// file it never touched is not refused on its account; what it dropped is a release, and
-// the wait still grades the result clean. An abandonment keeps every path.
-func TestExitNarrowsToWhatTheResultChanged(t *testing.T) {
-	t.Parallel()
+// exitEvidenceSuite pins the evidence `job exit` files and refuses.
+type exitEvidenceSuite struct {
+	suite.Suite
+}
 
+func TestExitEvidence(t *testing.T) { suite.Run(t, new(exitEvidenceSuite)) }
+
+func (s *exitEvidenceSuite) row() types.Job {
 	row := acceptRow()
-	loc := declared(t, row)
+	row.Check = &types.LeaseCheck{Target: "go::go-test", Project: "."}
+	row.Validation = row.Check.String()
+	row.Goals = []types.Goal{types.Goal{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
+	return row
+}
+
+func (s *exitEvidenceSuite) exit(row types.Job, result types.JobResult, attempt types.JobAttempt) (types.Job, error) {
+	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+		attempt.Found, attempt.Ref, attempt.Project = true, ref, "."
+		attempt.TimestampMs = 9_999_999_999_999
+		return attempt, nil
+	}
+	return Exit(s.T().Context(), boundStore(declared(s.T(), row), row.ID).InWorkspace(goCheckWorkspace(".")), row.ID, &result, resolve)
+}
+
+func (s *exitEvidenceSuite) TestOwedGoalNeedsNoRef() {
+	row := s.row()
 	result := passingResult()
-	resolver := func(context.Context, string) (types.JobAttempt, error) {
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+
+	exited, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.Require().NoError(err)
+	s.Equal(types.StateExited, exited.State)
+	s.Empty(exited.GateAttempts)
+}
+
+func (s *exitEvidenceSuite) TestOwedGoalCitingARefIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat, OutputRef: "out9"}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "lint"})
+
+	s.ErrorContains(err, `goal "lint" is filed as owed and cites output ref "out9"`)
+}
+
+func (s *exitEvidenceSuite) TestOwedCheckCitingARefIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat, OutputRef: "out9"}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `files its check as owed and cites output ref "out9"`)
+}
+
+func (s *exitEvidenceSuite) TestGoalWithNeitherRefNorOwedIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint"}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `goal "lint" names neither output_ref nor owed`)
+}
+
+func (s *exitEvidenceSuite) TestGoalRefNamingAnotherCommandIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", OutputRef: "out9"}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "build"})
+
+	s.ErrorContains(err, `goal "lint" cites output ref "out9"`)
+	s.ErrorContains(err, "cite a run of that check, or file it as owed")
+}
+
+func (s *exitEvidenceSuite) TestCheckRefNamingAnotherCommandIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out9"}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "build"})
+
+	s.ErrorContains(err, `goal "check" cites output ref "out9"`)
+}
+
+// exitUnderDefaults is exit in a workspace setting default_charms: [rw].
+func (s *exitEvidenceSuite) exitUnderDefaults(row types.Job, attempt types.JobAttempt) (types.Job, error) {
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+	loc := declared(s.T(), row)
+	s.Require().NoError(os.WriteFile(filepath.Join(loc.Root, "magus.yaml"), []byte("default_charms: [rw]\n"), 0o644))
+	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+		attempt.Found, attempt.Ref, attempt.Project = true, ref, "."
+		attempt.TimestampMs = 9_999_999_999_999
+		return attempt, nil
+	}
+	return Exit(s.T().Context(), boundStore(loc, row.ID).InWorkspace(goCheckWorkspace(".")), row.ID, &result, resolve)
+}
+
+func (s *exitEvidenceSuite) TestRunUnderTheDefaultCharmsIsTheCheck() {
+	_, err := s.exitUnderDefaults(s.row(), types.JobAttempt{Target: "go-test:rw"})
+
+	s.NoError(err)
+}
+
+func (s *exitEvidenceSuite) TestRunSkippingTheDefaultCharmsIsRefused() {
+	_, err := s.exitUnderDefaults(s.row(), types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
+	s.ErrorContains(err, "go-test:rw")
+}
+
+func (s *exitEvidenceSuite) TestRunUnderDefaultsOfACheckOptingOutIsRefused() {
+	row := s.row()
+	row.Check.NoDefaultCharms = true
+
+	_, err := s.exitUnderDefaults(row, types.JobAttempt{Target: "go-test:rw"})
+
+	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
+}
+
+func (s *exitEvidenceSuite) TestRunOfACheckOptingOutOfDefaultsIsTheCheck() {
+	row := s.row()
+	row.Check.NoDefaultCharms = true
+
+	_, err := s.exitUnderDefaults(row, types.JobAttempt{Target: "go-test"})
+
+	s.NoError(err)
+}
+
+func (s *exitEvidenceSuite) TestACharmWithNoDefaultsIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test:rw"})
+
+	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
+}
+
+func (s *exitEvidenceSuite) TestTestFilterStaysTheSameCommand() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test", ExtraArgs: []string{"-run", "TestX"}})
+
+	s.NoError(err)
+}
+
+// rowKeepsItsPathsSuite pins a row's write paths through exit and re-take.
+type rowKeepsItsPathsSuite struct {
+	suite.Suite
+}
+
+func TestRowKeepsItsPaths(t *testing.T) { suite.Run(t, new(rowKeepsItsPathsSuite)) }
+
+func (s *rowKeepsItsPathsSuite) resolver(result types.JobResult) AttemptResolver {
+	return func(context.Context, string) (types.JobAttempt, error) {
 		attempt := passingRun
 		attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
 		return attempt, nil
 	}
+}
 
-	exited, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, resolver)
-	require.NoError(t, err)
-	require.Len(t, exited.Releases, 1)
-	assert.False(t, exited.Releases[0].Revoked, "the holder gave it up")
-	assert.Equal(t, 2, exited.Result.ObservedGeneration, "the evidence proved the wider spec, so it grades the narrowed one")
-	want := row
-	want.Version = types.JobSchemaVersion
-	want.WritePaths = []string{"internal/ledger", "cmd/magus/ledger.go"} // a directory covers what is under it
-	want.Releases = []types.JobRelease{{Path: "docs/reference/*.md", Digest: "absent", ReleasedAt: exited.Releases[0].ReleasedAt}}
-	want.Generation = 2 // narrowing is a spec change
-	want.Attempts, want.State = 1, types.StateExited
-	want.RegisteredBy, want.Created, want.Updated = exited.RegisteredBy, exited.Created, exited.Updated
-	want.Result, want.Attempt, want.GateAttempts = exited.Result, exited.Attempt, exited.GateAttempts
-	assert.Equal(t, want, exited)
+func (s *rowKeepsItsPathsSuite) exit(loc Location, id string, result types.JobResult) types.Job {
+	s.T().Helper()
+	exited, err := Exit(s.T().Context(), boundStore(loc, id), id, &result, s.resolver(result))
+	s.Require().NoError(err)
+	return exited
+}
 
-	status, err := Wait(t.Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
-	require.NoError(t, err)
-	assert.True(t, status.Verified, status.Violations)
+func (s *rowKeepsItsPathsSuite) TestExitKeepsAPathTheResultDoesNotName() {
+	row := acceptRow()
+	loc := declared(s.T(), row)
+	result := passingResult()
 
-	t.Run("a claim covers its file", func(t *testing.T) {
-		t.Parallel()
-		claims := acceptRow()
-		claims.WritePaths = []string{"run.go#A", "run.go#B", "other.go#C"}
-		loc := declared(t, claims)
-		changed := passingResult()
-		changed.ChangedPaths = []string{"run.go"}
-		exited, err := Exit(t.Context(), boundStore(loc, claims.ID), claims.ID, &changed, resolver)
-		require.NoError(t, err)
-		assert.Equal(t, []string{"run.go#A", "run.go#B"}, exited.WritePaths)
-	})
+	exited := s.exit(loc, row.ID, result)
 
-	t.Run("a result covering none of the paths keeps them for the grade to name", func(t *testing.T) {
-		t.Parallel()
-		stray := acceptRow()
-		loc := declared(t, stray)
-		off := passingResult()
-		off.ChangedPaths = []string{"elsewhere.go"}
-		exited, err := Exit(t.Context(), boundStore(loc, stray.ID), stray.ID, &off, resolver)
-		require.NoError(t, err)
-		assert.Equal(t, stray.WritePaths, exited.WritePaths)
-		assert.Empty(t, exited.Releases)
-	})
+	s.Equal(row.WritePaths, exited.WritePaths)
+	s.Empty(exited.Releases)
 
-	t.Run("an abandonment keeps every path", func(t *testing.T) {
-		t.Parallel()
-		kept := acceptRow()
-		loc := declared(t, kept)
-		stored, err := Exit(t.Context(), boundStore(loc, kept.ID), kept.ID, nil, nil)
-		require.NoError(t, err)
-		assert.Equal(t, kept.WritePaths, stored.WritePaths)
-	})
+	status, err := Wait(s.T().Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
+	s.Require().NoError(err)
+	s.True(status.Verified, status.Violations)
+}
+
+func (s *rowKeepsItsPathsSuite) TestAbandonmentKeepsEveryPath() {
+	kept := acceptRow()
+	loc := declared(s.T(), kept)
+	stored, err := Exit(s.T().Context(), boundStore(loc, kept.ID), kept.ID, nil, nil)
+	s.Require().NoError(err)
+	s.Equal(kept.WritePaths, stored.WritePaths)
+}
+
+func (s *rowKeepsItsPathsSuite) TestRejectionGivesUpOnlyAnUntouchedPathAnotherJobTook() {
+	taker := types.Job{ID: "taker", Criteria: "c", WritePaths: []string{"docs/reference/*.md"}, State: types.StateRunning}
+	row := acceptRow()
+	loc := declared(s.T(), row, taker)
+	result := passingResult()
+	s.exit(loc, row.ID, result)
+
+	empty := result
+	empty.ChangedPaths = nil
+	status, err := Wait(s.T().Context(), NewStore(loc), row.ID, &empty, s.resolver(result), nil, nil)
+	s.Require().NoError(err)
+	s.False(status.Verified)
+	s.Contains(strings.Join(status.Notes, "\n"), "gave up what it never touched")
+	s.Contains(strings.Join(status.Notes, "\n"), "docs/reference/*.md")
+
+	rows, err := NewStore(loc).List()
+	s.Require().NoError(err)
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
+	s.Equal(types.StateRunning, rows[i].State)
+	s.Equal([]string{"internal/ledger", "cmd/magus/ledger.go"}, rows[i].WritePaths)
 }
 
 func TestWaitKeepsARejectedJobOpen(t *testing.T) {

@@ -61,6 +61,32 @@ func WriteJudge(ctx context.Context, root string) stamp.Judge {
 	}
 }
 
+// dirtyReplacement returns the clean writer of a section that a dirty build
+// would replace with a different body. Every worktree shares these hooks.
+func dirtyReplacement(path string, m managedMarkers, body string, j stamp.Judge) (stamp.Writer, bool) {
+	if !strings.HasSuffix(j.Self.Version, "-dirty") {
+		return stamp.Writer{}, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return stamp.Writer{}, false
+	}
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	spans, err := managedSpans(text, m)
+	if err != nil || len(spans) != 1 {
+		return stamp.Writer{}, false
+	}
+	head, rest, _ := strings.Cut(text[spans[0].start:spans[0].end], "\n")
+	if strings.TrimSuffix(rest, "\n") == body+m.end {
+		return stamp.Writer{}, false
+	}
+	rec, ok := stamp.Parse(head)
+	if !ok || strings.HasSuffix(rec.Version, "-dirty") {
+		return stamp.Writer{}, false
+	}
+	return rec, true
+}
+
 // sectionBanner picks the banner a write of body into text's m section carries.
 //
 // A section whose content already equals body keeps its banner, and so its writer: a

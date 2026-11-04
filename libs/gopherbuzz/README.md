@@ -16,7 +16,7 @@ answers differently from upstream, or accepts source upstream refuses.
 
 ## Upstream parity
 
-Measured against `UpstreamRef` (`0.5.0-265-g294d8f9`) on 2026-08-12. Upstream ships
+Measured against `UpstreamRef` (`0.5.0-270-g14731dc`) on 2026-10-27. Upstream ships
 six test directories; three are measurable here, and all three numbers are below
 rather than only the flattering one.
 
@@ -158,7 +158,7 @@ Three embedding supersets sit beside it, none of which changes what a program me
 
 Read that list as "the shape parses and runs", not as "matches upstream in every
 detail". Several entries carry a caveat recorded under [Where the skeletons are](#where-the-skeletons-are): `as` coerces rather than asserts, a compound assign
-evaluates its target twice, and generics are erased.
+evaluates its target twice, and generics are erased outside an object's type arguments.
 
 ### What does not
 
@@ -211,9 +211,12 @@ reproducible difference at the pinned ref.
   fold to a CONSTANT: `1 + 1` duplicates `2`, while two conditions naming the same
   `final` do not. That is deliberately one-sided: an unfoldable condition is recorded
   and never reported, because a false positive here rejects a correct program.
-- **Generics are erased.** There is no reified type argument, so `assertOfType::<int>`
-  cannot inspect anything; gopherbuzz's own `testing` module takes a type NAME string
-  instead. This is the one "cannot accommodate" above that is a design choice.
+- **Generics are erased at run time, and in functions.** The checker substitutes an
+  object's type arguments as upstream does: a field of `Result::<int>` is an `int`, and
+  a `Result::<str>` is not a `Result::<int>`. A generic FUNCTION's parameters are still
+  erased, so `T` inside one matches anything, and the VM keeps no type argument, so
+  `x is Result::<int>` tests `Result` and `assertOfType::<int>` cannot inspect
+  anything; gopherbuzz's own `testing` module takes a type NAME string instead.
 
 **Narrower gaps.** Known, bounded, and unlikely to bite most programs.
 

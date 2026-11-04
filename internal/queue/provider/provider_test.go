@@ -201,7 +201,7 @@ func TestDescribePassesTheSetupQueryAndDecodesTheSetup(t *testing.T) {
 		},
 		Settings: []types.Setting{{Name: "allow_auto_merge", Value: "false", Want: "true"}},
 		App: &types.App{Slug: "q", ID: "812", ClientID: "Iv1", InstallURL: "https://github.com/apps/q/installations/new",
-			Environment: "magus-queue", Variable: "V", Secret: "S"},
+			Environment: "magus-queue", Variable: "V", SecretName: "S"},
 		Steps: []types.SetupStep{
 			{Title: "Install it", URL: "https://github.com/apps/q/installations/new"},
 			{Title: "Store it", Command: "gh secret set S"},
@@ -626,7 +626,7 @@ func TestDescribeGitHubPinsAGivenIDAndChecksIt(t *testing.T) {
 		App: &types.App{Slug: "q", ID: "2034567",
 			RegistrationURL: fmt.Sprintf("%s/settings/apps/new?name=acme-magus-queue&url=%s&public=false&webhook_active=false&contents=write&pull_requests=write&statuses=write&actions=write&workflows=write", web, strings.ToLower(url.QueryEscape(web+"/acme/widgets"))),
 			InstallURL:      web + "/apps/q/installations/new",
-			Environment:     "magus-queue", Variable: "MAGUS_QUEUE_APP_CLIENT_ID", Secret: "MAGUS_QUEUE_APP_PRIVATE_KEY"},
+			Environment:     "magus-queue", Variable: "MAGUS_QUEUE_APP_CLIENT_ID", SecretName: "MAGUS_QUEUE_APP_PRIVATE_KEY"},
 		Steps: []types.SetupStep{
 			{Title: "Install q on acme/widgets only", URL: web + "/apps/q/installations/new"},
 			{Title: "Create the magus-queue environment, whose secrets only main can read, so pull request runs never see the key",

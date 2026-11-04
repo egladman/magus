@@ -1,5 +1,6 @@
 import "magus/spell";
 import "magus/charm";
+import "path";
 
 export fun mgs_getName() > str { return "go"; }
 
@@ -58,19 +59,20 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // trivy gets is not available here.
 //
 // `supported` on go is a MINIMUM ONLY, and deliberately has no ceiling. It says what
-// these ops need to function - 1.21 is where the toolchain line in go.mod became
-// something the module ops rely on - not which Go a repo has qualified. A ceiling here
+// these ops need to function, not which Go a repo has
+// qualified. 1.26 is where gofmt -d began to exit 1 on drift. A ceiling here
 // would be this spell deciding that nobody may run a newer Go, which is a workspace's
 // call: the `tools` key on magus\project is where that goes, and the two are intersected.
 // On the project and NOT in magus.yaml, deliberately, because config merges a user-global
 // tier beneath the workspace and a bound living there would gate every workspace on one
 // machine from a file nobody else reads. types/project.go states the rule.
 //
-// golangci-lint is observed for the reason scip-go is: a version probe keys every target
+// golangci-lint is observed, not probed: a version probe keys every target
 // in the project, so a linter upgrade invalidated every go-test entry, and only the
-// golangci-lint op reads the binary. An observation hashes the whole line, commit and
-// build date included, so two builds of one release key apart; they are rare, and a
-// version probe's cost was every test key.
+// golangci-lint op reads the binary. `version --debug` is observed rather than
+// `--version`: it lists the Go toolchain the linter was built with and the checksum of
+// every linter compiled in, so two builds that print one version still key apart, and
+// a swapped binary never replays the old binary's findings.
 //
 // golangci-lint and govulncheck declare no window. Neither has a version below which
 // the ops are known to break, and inventing one to look thorough would fail builds over
@@ -78,12 +80,9 @@ export fun mgs_listRequiredGlobs() > [Path] {
 export fun mgs_getTools() > {str: Tool} {
     return {
         "go": Tool{probe = Command{bin = "go", args = ["version"]}, key = VersionKey{upTo = VersionComponent.patch},
-                   supported = VersionBounds{min = "1.21"}, lifecycle = "go"},
-        "golangci-lint": Tool{observe = Command{bin = "golangci-lint", args = ["--version"]}},
+                   supported = VersionBounds{min = "1.26"}, lifecycle = "go"},
+        "golangci-lint": Tool{observe = Command{bin = "golangci-lint", args = ["version", "--debug"]}},
         "govulncheck": Tool{observe = Command{bin = "govulncheck", args = ["-version"]}},
-        // Observed for the reason govulncheck is: only the scip op drives it, so its
-        // version keys the index and no build or test.
-        "scip-go": Tool{observe = Command{bin = "scip-go", args = ["--version"]}},
     };
 }
 
@@ -132,8 +131,10 @@ export fun mgs_getSandbox() > Sandbox {
         ]},
         caches = [
             // go re-dates a build cache entry it uses once the entry is an hour old.
-            // README, trim.txt and the fuzzer's cached inputs are not build entries.
-            SandboxCache{env = "GOCACHE", stampsUse = true, skip = ["README", "trim.txt", "fuzz/**"]},
+            // README, trim.txt and the fuzzer's cached inputs are not build entries. go's own
+            // trim drops only entries unused for five days, so the cache grows without bound
+            // while builds keep touching it; reclaiming disk holds it to 20 GiB.
+            SandboxCache{env = "GOCACHE", stampsUse = true, skip = ["README", "trim.txt", "fuzz/**"], trimMb = 20480},
             // A build reads the extracted tree and its .ziphash, never the zip, so zips
             // would double the bundle for nothing. VCS clones serve only direct fetches,
             // and the rest is go's own in-flight work.
@@ -218,9 +219,18 @@ final GO_MOD_HINTS = [
 // these names itself: a magusfile target composing the op has no reason to know it
 // needs its own ctx.envInputs("GOOS") beside the call, and a GOOS the shell set for one
 // run and not the next would otherwise replay a different platform's result.
-final GO_PLATFORM_ENV = ["GOOS", "GOARCH", "GOARM", "GOAMD64"];
+//
+// GOFLAGS carries -tags, so a tagged run and a plain run must not share a key.
+final GO_PLATFORM_ENV = ["GOOS", "GOARCH", "GOARM", "GOAMD64", "GOFLAGS",
+    "GOEXPERIMENT", "CGO_ENABLED"];
 
-fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV}; }
+// GO_TOOLCHAIN_ENV adds what GO_PLATFORM_ENV lacks for golangci-lint:
+// which toolchain loads packages. The linter records only its own.
+// Other ops key the version probe, so a box's GOTOOLCHAIN=local keys alike.
+final GO_TOOLCHAIN_ENV = ["GOROOT", "GOTOOLCHAIN"];
+
+// -trimpath is a default: without it each checkout's absolute path is baked into the build ID, so checkouts of one source never share cache entries.
+fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build", "-trimpath"], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV}; }
 // go rejects -cache/-testcache/-modcache/-fuzzcache combined with ANY package
 // pattern ("cannot be used with package arguments"), in any order, so
 // "./..." can only be safe on a fully bare invocation. defaultArgs cannot
@@ -233,9 +243,10 @@ fun goGenerate(target: Target) > Command { return Command{bin = "go", args = ["g
 fun goRun(target: Target) > Command { return Command{bin = "go", args = ["run"], hints = GO_MOD_HINTS}; }
 
 fun goFmt(target: Target) > Command {
-    final args = ["-l", "."];
-    return Command{bin = "gofmt", args = args, charms = {
-        "rw": set(args, "-l", "-w"),
+    final args = ["-d"];
+    // The walk keeps dot dirs, and .claude/worktrees holds other checkouts.
+    return Command{bin = "gofmt", args = args, sources = ["**/*.go", "!**/.*/**"], charms = {
+        "rw": set(args, "-d", "-w"),
     }};
 }
 // Invoked directly rather than through `go tool`: golangci-lint generates no code,
@@ -246,7 +257,7 @@ fun goFmt(target: Target) > Command {
 // (mise, asdf, a system package), and the spell's observe probe records which.
 fun golangCILint(target: Target) > Command {
     final args = ["run", "./..."];
-    return Command{bin = "golangci-lint", args = args, envKeys = GO_PLATFORM_ENV, charms = {
+    return Command{bin = "golangci-lint", args = args, envKeys = GO_PLATFORM_ENV + GO_TOOLCHAIN_ENV, charms = {
         "debug": append(["-v"]),
         "rw": after(args, "run", ["--fix"]),
     }};
@@ -259,7 +270,7 @@ fun golangCILint(target: Target) > Command {
 // bakes in this worktree's absolute path, so the cache can never hit from another
 // worktree at the same content.
 fun goTest(target: Target) > Command {
-    return Command{bin = "go", args = ["test", "-trimpath"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV, charms = {
+    return Command{testSelection = "go", bin = "go", args = ["test", "-trimpath"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV, charms = {
         "debug": append(["-v"]),
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};
@@ -301,7 +312,9 @@ fun goModJSON(target: Target) > Command {
     return Command{bin = "go", args = ["mod", "edit", "-json"], capture = true, quiet = true};
 }
 // -trimpath: see go-test above; keeps vet's cache key worktree-independent too.
-fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "-trimpath", "./..."], envKeys = GO_PLATFORM_ENV}; }
+// ./... trails because go vet reads no flag after a package, so any forwarded
+// arg drops it and the caller names the package.
+fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "-trimpath"], trailingArgs = ["./..."], envKeys = GO_PLATFORM_ENV}; }
 // Invoked directly rather than through `go tool`, for the same reason as golangCILint above:
 // `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is
@@ -314,20 +327,18 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 fun goVulncheck(target: Target) > Command {
     return Command{bin = "govulncheck", defaultArgs = ["./..."], capture = true, external = External.reads};
 }
-// magus injects MAGUS_SYMBOL_INDEX with the cache destination and records the index there
-// as the op's output, so a checkout at the same inputs replays it rather than running
-// scip-go; scip-go writes there via --output. The runner resolves the bare
-// $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.
-// scip-go loads packages through `go`, so the toolchain's version keys the index too.
-// One run per GOOS a file suffix names, merged by magus: a single run indexes only what
-// the host compiles, so a Mac never saw *_linux.go and nobody saw *_windows.go. GOARCH
-// stays the host's; amd64 and arm64 pair with all three.
+// goPackages selects magus's in-process go/types indexer, which loads the patterns in args
+// and re-indexes only the packages whose files moved. It loads packages through `go`, so
+// the toolchain's version keys the index. Each other GOOS indexes only the packages with a
+// file the host's build excludes and that GOOS selects. GOARCH stays the host's; amd64 and
+// arm64 pair with all three.
+// js pairs only with wasm, so it names both.
 export fun mgs_getSymbolIndexer() > SymbolIndexer {
     return SymbolIndexer{
-        format = SymbolFormat.scip,
-        command = Command{bin = "scip-go", args = ["--output", "$MAGUS_SYMBOL_INDEX"]},
+        format = SymbolFormat.goPackages,
+        command = Command{bin = "go", args = ["./..."]},
         uses = ["go"],
-        envs = [{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}],
+        envs = [{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}, {"GOOS": "js", "GOARCH": "wasm"}],
     };
 }
 
@@ -347,4 +358,398 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "go-vet": goVet,
         "govulncheck": goVulncheck,
     };
+}
+
+// GoScan is what discover_projects read of the query: each go.mod by directory, the first
+// .go and C file per directory, the root go.work, the modules that form projects and
+// whether go.work selected them, and the gaps no module owns yet.
+object GoScan {
+    mods: mut {str: DiscoveryFile},
+    goDirs: mut {str: str},
+    cgoFiles: mut {str: str},
+    gaps: mut [DiscoveryGap],
+    work: DiscoveryFile? = null,
+    selected: mut [str],
+    workspaceMode: bool = false,
+    dirByModule: mut {str: str},
+    workReplaces: mut {str: str},
+}
+
+// goScan sorts the query's files into a scan.
+fun goScan(req: DiscoveryQuery) > mut GoScan {
+    final scan = mut GoScan{mods = mut {}, goDirs = mut {}, cgoFiles = mut {}, gaps = mut [], selected = mut [],
+        dirByModule = mut {}, workReplaces = mut {}};
+    foreach (file in req.files) {
+        final base = goBase(file.path);
+        final dir = goDir(file.path);
+        if (base == "go.mod") {
+            scan.mods[dir] = file;
+        } else if (base == "go.work" and dir == ".") {
+            scan.work = file;
+        } else if (base == "go.work") {
+            scan.gaps.append(DiscoveryGap{file = file.path, why = "go.work below the root: only the root's use list is read"});
+        } else if (base.endsWith(".go")) {
+            scan.goDirs[dir] = scan.goDirs[dir] ?? file.path;
+        } else if ((base.endsWith(".c") or base.endsWith(".S")) and scan.cgoFiles[dir] == null) {
+            scan.cgoFiles[dir] = file.path;
+        }
+    }
+    return scan;
+}
+
+// goWorkUses selects go.work's use list, when the root holds one whose content was passed.
+fun goWorkUses(scan: mut GoScan) > void {
+    if (scan.work -> found) {
+        if (found.content -> content) {
+            scan.workspaceMode = true;
+            foreach (use in goDirectives(content).filter(fun (i: int, d: GoDirective) > bool => d.verb == "use")) {
+                final dir = path\clean(use.args[0]);
+                if (dir == ".." or dir.startsWith("../") or path\isAbs(dir)) {
+                    scan.gaps.append(DiscoveryGap{file = "go.work", why = "use {use.args[0]} leaves the workspace root"});
+                } else if (scan.mods[dir] == null) {
+                    scan.gaps.append(DiscoveryGap{file = "go.work", why = "use {use.args[0]} names a dir with no go.mod"});
+                } else if (scan.selected.indexOf(dir) == null) {
+                    scan.selected.append(dir);
+                }
+            }
+        } else {
+            scan.gaps.append(DiscoveryGap{file = "go.work", why = "content not passed, so every go.mod is read instead of its use list"});
+        }
+    }
+}
+
+// goSelect picks the modules that form projects: go.work's use list, else every go.mod
+// outside the dirs ./... skips.
+fun goSelect(scan: mut GoScan) > void {
+    goWorkUses(scan);
+    foreach (dir in goSortedKeys(scan.mods)) {
+        final skipped = goSkippedSegment(dir);
+        if (scan.workspaceMode) {
+            if (scan.selected.indexOf(dir) == null) {
+                scan.gaps.append(DiscoveryGap{file = scan.mods[dir]!.path, why = "not in go.work's use list, so workspace mode ignores it"});
+            }
+        } else if (skipped -> segment) {
+            scan.gaps.append(DiscoveryGap{file = scan.mods[dir]!.path, why = "under {segment}, which ./... skips, so it forms no project"});
+        } else {
+            scan.selected.append(dir);
+        }
+    }
+    _ = scan.selected.sort(fun (a: str, b: str) > bool => a < b);
+    if (scan.workspaceMode) {
+        foreach (r in goReplaces(goDirectives(scan.work!.content!))) {
+            if (goIsLocal(r.to)) {
+                scan.workReplaces[r.old] = path\clean(r.to);
+            }
+        }
+    }
+}
+
+// goOrphans hands each gap no module owned to the claim whose module holds its file, or to a
+// member claim at the root when no module formed: the contract carries a gap only on a claim.
+fun goOrphans(claims: [DiscoveredProject], scan: GoScan) > [DiscoveredProject] {
+    if (scan.gaps.len() == 0) {
+        return claims;
+    }
+    if (claims.len() == 0) {
+        return [DiscoveredProject{path = ".", role = DiscoveryRole.member, notInferred = scan.gaps}];
+    }
+    final owned = mut [<DiscoveredProject>];
+    foreach (claim in claims) {
+        final gaps = claim.notInferred.cloneMutable();
+        foreach (gap in scan.gaps) {
+            if (goOwner(gap.file, dirs: scan.selected) == claim.path) {
+                gaps.append(gap);
+            }
+        }
+        owned.append(DiscoveredProject{path = claim.path, role = claim.role, name = claim.name,
+            dependsOn = claim.dependsOn, targets = claim.targets, spans = claim.spans, notInferred = gaps});
+    }
+    return owned;
+}
+
+// discover_projects claims one project per Go module: go.work's use list when the root
+// holds one, else every go.mod outside the dirs ./... skips. It reads no .go content,
+// so whatever only content shows (build tags, go:generate) is reported per module.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] {
+    final scan = goScan(req);
+    goSelect(scan);
+    final parsed = mut {<str: GoModule>};
+    foreach (dir in scan.selected) {
+        final module = goModule(scan.mods[dir]!);
+        parsed[dir] = module;
+        if (module.path != "") {
+            scan.dirByModule[module.path] = dir;
+        }
+    }
+    final claims = mut [<DiscoveredProject>];
+    foreach (dir in scan.selected) {
+        claims.append(goClaim(dir, module: parsed[dir]!, scan: scan));
+    }
+    if (scan.goDirs.len() > 0 and scan.mods.len() == 0) {
+        scan.gaps.append(DiscoveryGap{file = scan.goDirs[goSortedKeys(scan.goDirs)[0]]!, why = "Go sources with no go.mod: GOPATH mode forms no project"});
+    }
+    return goOrphans(claims, scan: scan);
+}
+
+object GoDirective {
+    verb: str,
+    args: [str],
+}
+
+object GoReplace {
+    old: str,
+    to: str,
+}
+
+object GoModule {
+    file: str,
+    path: str,
+    requires: [str],
+    replaces: [GoReplace],
+    ignores: [str],
+    readable: bool,
+}
+
+fun goBase(file: str) > str {
+    final parts = file.split("/");
+    return parts[parts.len() - 1];
+}
+
+fun goDir(file: str) > str {
+    final parts = file.split("/");
+    if (parts.len() == 1) {
+        return ".";
+    }
+    return parts.sub(0, len: parts.len() - 1).join("/");
+}
+
+fun goWithin(dir: str, file: str) > bool {
+    return dir == "." or file == dir or file.startsWith(dir + "/");
+}
+
+// goOwner is the longest dir containing file, or the first dir when none does.
+fun goOwner(file: str, dirs: [str]) > str {
+    var best = "";
+    foreach (dir in dirs) {
+        if (goWithin(dir, file: file) and (best == "" or dir.len() > best.len())) {
+            best = dir;
+        }
+    }
+    if (best == "" and dirs.len() > 0) {
+        return dirs[0];
+    }
+    return best;
+}
+
+fun goSortedKeys(values: {str: any}) > [str] {
+    final keys = values.keys().cloneMutable();
+    keys.sort(fun (a: str, b: str) > bool => a < b);
+    return keys;
+}
+
+// goSkippedSegment names the first segment ./... refuses to descend into: testdata,
+// or a name starting with . or _. vendor is pruned by core through mgs_listIgnoreDirs.
+fun goSkippedSegment(rel: str) > str? {
+    if (rel == ".") {
+        return null;
+    }
+    foreach (segment in rel.split("/")) {
+        if (segment == "testdata" or segment == "vendor" or segment.startsWith(".") or segment.startsWith("_")) {
+            return segment;
+        }
+    }
+    return null;
+}
+
+fun goIsLocal(replacement: str) > bool {
+    return replacement == "." or replacement == ".." or replacement.startsWith("./") or replacement.startsWith("../") or replacement.startsWith("/");
+}
+
+fun goUnquote(token: str) > str {
+    if (token.len() >= 2 and ((token.startsWith("\"") and token.endsWith("\"")) or (token.startsWith("`") and token.endsWith("`")))) {
+        return token.sub(1, len: token.len() - 2);
+    }
+    return token;
+}
+
+// goDirectives reads go.mod and go.work syntax: one directive per line, or a verb
+// followed by a parenthesized block of argument lines.
+fun goDirectives(content: str) > [GoDirective] {
+    final directives = mut [<GoDirective>];
+    var block = "";
+    foreach (raw in content.split("\n")) {
+        var line = raw;
+        if (line.indexOf("//") -> at) {
+            line = line.sub(0, len: at);
+        }
+        final tokens = line.replace("\t", with: " ").replace("\r", with: " ").split(" ")
+            .filter(fun (i: int, t: str) > bool => t != "")
+            .map(fun (i: int, t: str) > str => goUnquote(t));
+        if (tokens.len() == 0) {
+            continue;
+        }
+        if (block != "") {
+            if (tokens[0] == ")") {
+                block = "";
+            } else {
+                directives.append(GoDirective{verb = block, args = tokens});
+            }
+        } else if (tokens.len() == 2 and tokens[1] == "(") {
+            block = tokens[0];
+        } else if (tokens.len() > 1) {
+            directives.append(GoDirective{verb = tokens[0], args = tokens.sub(1, len: tokens.len() - 1)});
+        }
+    }
+    return directives;
+}
+
+fun goReplaces(directives: [GoDirective]) > [GoReplace] {
+    final replaces = mut [<GoReplace>];
+    foreach (d in directives) {
+        if (d.verb == "replace") {
+            if (d.args.indexOf("=>") -> arrow) {
+                if (arrow > 0 and arrow + 1 < d.args.len()) {
+                    replaces.append(GoReplace{old = d.args[0], to = d.args[arrow + 1]});
+                }
+            }
+        }
+    }
+    return replaces;
+}
+
+fun goModule(file: DiscoveryFile) > GoModule {
+    if (file.content -> content) {
+        final directives = goDirectives(content);
+        var name = "";
+        final requires = mut [<str>];
+        final ignores = mut [<str>];
+        foreach (d in directives) {
+            if (d.verb == "module") {
+                name = d.args[0];
+            } else if (d.verb == "require") {
+                requires.append(d.args[0]);
+            } else if (d.verb == "ignore") {
+                ignores.append(d.args[0]);
+            }
+        }
+        return GoModule{file = file.path, path = name, requires = requires, replaces = goReplaces(directives), ignores = ignores, readable = true};
+    }
+    return GoModule{file = file.path, path = "", requires = [<str>], replaces = [<GoReplace>], ignores = [<str>], readable = false};
+}
+
+// goModuleOwner is the go.mod dir whose ./... compiles file: the longest containing one,
+// since a nested go.mod ends its parent's ./... whether or not it forms a project.
+fun goModuleOwner(file: str, modDirs: [str]) > str? {
+    var best: str? = null;
+    foreach (dir in modDirs) {
+        if (goWithin(dir, file: file) and (best == null or dir.len() > best!.len())) {
+            best = dir;
+        }
+    }
+    return best;
+}
+
+fun goRelative(dir: str, file: str) > str {
+    if (dir == ".") {
+        return file;
+    }
+    if (file == dir) {
+        return ".";
+    }
+    return file.sub(dir.len() + 1, len: file.len() - dir.len() - 1);
+}
+
+// goReplaceDeps draws a dependency for each local replace in dir's module that names a
+// selected module, and a gap for one that cannot.
+fun goReplaceDeps(dir: str, module: GoModule, scan: GoScan, deps: mut [str], gaps: mut [DiscoveryGap]) > void {
+    foreach (r in module.replaces) {
+        if (!goIsLocal(r.to)) {
+            continue;
+        }
+        if (r.to.startsWith("/")) {
+            gaps.append(DiscoveryGap{file = module.file, why = "replace {r.old} => {r.to} is absolute, so it is not a dependency inside the workspace"});
+            continue;
+        }
+        final to = path\clean(if (dir == ".") r.to else "{dir}/{r.to}");
+        if (to == ".." or to.startsWith("../")) {
+            gaps.append(DiscoveryGap{file = module.file, why = "replace {r.old} => {r.to} leaves the workspace root"});
+        } else if (scan.selected.indexOf(to) == null) {
+            gaps.append(DiscoveryGap{file = module.file, why = "replace {r.old} => {r.to} names {to}, which forms no Go project here"});
+        } else if (to != dir and deps.indexOf(to) == null) {
+            deps.append(to);
+        }
+    }
+}
+
+// goRequireDeps draws a dependency for each require that resolves to a selected module: in
+// workspace mode through go.work, else only with a local replace, which is a gap without.
+fun goRequireDeps(dir: str, module: GoModule, scan: GoScan, deps: mut [str], gaps: mut [DiscoveryGap]) > void {
+    final replaced = mut {<str: bool>};
+    foreach (r in module.replaces) {
+        replaced[r.old] = true;
+    }
+    foreach (req in module.requires) {
+        final local = scan.dirByModule[req];
+        if (scan.workspaceMode) {
+            final via = scan.workReplaces[req] ?? local;
+            if (via -> upstream) {
+                if (upstream != dir and scan.selected.indexOf(upstream) != null and deps.indexOf(upstream) == null) {
+                    deps.append(upstream);
+                }
+            }
+        } else if (local -> upstream) {
+            if (!(replaced[req] ?? false) and upstream != dir) {
+                gaps.append(DiscoveryGap{file = module.file, why = "requires {req}, the module at {upstream}, with no local replace, so go builds the published version and no dependency is drawn"});
+            }
+        }
+    }
+}
+
+// goSpans is each directory of .go files dir's module compiles, beside a gap for each one of
+// C or .S sources that needs cgo.
+fun goSpans(dir: str, scan: GoScan, gaps: mut [DiscoveryGap]) > [str] {
+    final modDirs = goSortedKeys(scan.mods);
+    final spans = mut [<str>];
+    foreach (goDir in goSortedKeys(scan.goDirs)) {
+        if (goDir != dir and goModuleOwner(goDir, modDirs: modDirs) == dir and goSkippedSegment(goRelative(dir, file: goDir)) == null) {
+            spans.append(goDir);
+        }
+    }
+    foreach (cgoDir in goSortedKeys(scan.cgoFiles)) {
+        if (goModuleOwner(cgoDir, modDirs: modDirs) == dir and goSkippedSegment(goRelative(dir, file: cgoDir)) == null) {
+            gaps.append(DiscoveryGap{file = scan.cgoFiles[cgoDir]!, why = "C or .S sources need cgo: a C toolchain and CGO_ENABLED=1 are not checked"});
+        }
+    }
+    return spans;
+}
+
+fun goClaim(dir: str, module: GoModule, scan: GoScan) > DiscoveredProject {
+    final gaps = mut [<DiscoveryGap>];
+    final deps = mut [<str>];
+    if (!module.readable) {
+        gaps.append(DiscoveryGap{file = module.file, why = "content not passed, so its name and dependencies are not read"});
+    } else if (module.path == "") {
+        gaps.append(DiscoveryGap{file = module.file, why = "no module directive, so the name derives from the path"});
+    }
+    goReplaceDeps(dir, module: module, scan: scan, deps: deps, gaps: gaps);
+    goRequireDeps(dir, module: module, scan: scan, deps: deps, gaps: gaps);
+    _ = deps.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (ignored in module.ignores) {
+        gaps.append(DiscoveryGap{file = module.file, why = "ignore {ignored}: ./... skips it, and spans do not apply it"});
+    }
+    final spans = goSpans(dir, scan: scan, gaps: gaps);
+
+    final targets = mut {"test": ["go-test"], "lint": ["go-vet"]};
+    if (scan.goDirs[dir] != null) {
+        targets["build"] = ["go-build"];
+    } else {
+        gaps.append(DiscoveryGap{file = module.file, why = "build not wired: go-build builds the module dir's own package, and it holds no .go file"});
+    }
+    gaps.append(DiscoveryGap{file = module.file, why = "build tags, -race and GOFLAGS are not inferred: .go content is not read, so go-test runs with none"});
+    gaps.append(DiscoveryGap{file = module.file, why = "tests needing a service, docker or network are not inferred: go-test runs every package"});
+    gaps.append(DiscoveryGap{file = module.file, why = "go:generate drift is not checked: no generate target is wired, so committed output is trusted"});
+    gaps.append(DiscoveryGap{file = module.file, why = "lint runs go-vet only: a golangci-lint config is outside this spell's globs"});
+
+    return DiscoveredProject{path = dir, role = DiscoveryRole.project, name = module.path, dependsOn = deps,
+        targets = targets, spans = spans, notInferred = gaps};
 }

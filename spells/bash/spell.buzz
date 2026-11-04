@@ -2,6 +2,16 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "bash"; }
 
+export fun mgs_getLanguage() > Language {
+    return Language{name = "shell", extensions = [".sh", ".bash"]};
+}
+
+// magus indexes the scripts in process, one unit per file, so the index runs no tool. It
+// rides under an op of its own so a project bound to another indexing spell keeps both.
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{format = SymbolFormat.shellScript, op = "shell-index"};
+}
+
 export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.sh"}, Path{value = "**/*.bash"}, Path{value = ".shellcheckrc"}];
 }
@@ -31,4 +41,52 @@ fun shellcheck(target: Target) > Command {
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"shellcheck": shellcheck};
+}
+
+fun isScript(path: str) > bool {
+    return path.endsWith(".sh") or path.endsWith(".bash");
+}
+
+fun dirOf(path: str) > str {
+    final parts = path.split("/");
+    if (parts.len() == 1) {
+        return ".";
+    }
+    return parts.sub(0, len: parts.len() - 1).join("/");
+}
+
+fun holds(dir: str, child: str) > bool {
+    return dir == "." or child == dir or child.startsWith("{dir}/");
+}
+
+// discover_projects claims a member at every directory holding a shell script, never
+// a project: a script marks no boundary, and core binds bash to whichever project owns
+// each directory, so scripts spread across two projects lint in both. A .shellcheckrc
+// with no script at or below its directory is reported, never dropped.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] {
+    final dirs = mut [<str>];
+    foreach (file in req.files) {
+        final dir = dirOf(file.path);
+        if (isScript(file.path) and dirs.indexOf(dir) == null) {
+            dirs.append(dir);
+        }
+    }
+    _ = dirs.sort(fun (left: str, right: str) > bool => left < right);
+
+    final claims = mut [<DiscoveredProject>];
+    foreach (dir in dirs) {
+        claims.append(DiscoveredProject{path = dir, role = DiscoveryRole.member, targets = {"lint": ["shellcheck"]}});
+    }
+    foreach (file in req.files) {
+        final dir = dirOf(file.path);
+        if (isScript(file.path) or dirs.filter(fun (index: int, scriptDir: str) > bool => holds(dir, child: scriptDir)).len() > 0) {
+            continue;
+        }
+        claims.append(DiscoveredProject{
+            path = dir,
+            role = DiscoveryRole.member,
+            notInferred = [DiscoveryGap{file = file.path, why = "no *.sh or *.bash file at or below it for shellcheck to read"}],
+        });
+    }
+    return claims;
 }

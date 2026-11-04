@@ -1,20 +1,31 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/proto"
 )
 
 // Which diagnostic this is does not matter; it is an edge endpoint.
@@ -135,6 +146,42 @@ func TestStripUnreproducibleDropsGitHistory(t *testing.T) {
 
 // ---- graph export --open ----
 
+type ExplorerOriginSuite struct{ suite.Suite }
+
+func TestExplorerOriginSuite(t *testing.T) {
+	suite.Run(t, new(ExplorerOriginSuite))
+}
+
+func (s *ExplorerOriginSuite) TestRefusesTheDefaultExplorerWithAnEmptyList() {
+	err := checkHostedPageOrigin(defaultExploreURL, nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "mcp.allowed_origins")
+}
+
+func (s *ExplorerOriginSuite) TestPassesAnOriginTheListNames() {
+	s.NoError(checkHostedPageOrigin(defaultExploreURL, []string{"https://eli.gladman.cc"}))
+}
+
+func (s *ExplorerOriginSuite) TestRefusesAnotherSchemeOfAListedOrigin() {
+	s.Error(checkHostedPageOrigin("http://site.example/graph/", []string{"https://site.example"}))
+}
+
+func (s *ExplorerOriginSuite) TestPassesLocalhost() {
+	s.NoError(checkHostedPageOrigin("http://localhost:9999/graph/", nil))
+}
+
+func (s *ExplorerOriginSuite) TestPassesALoopbackIP() {
+	s.NoError(checkHostedPageOrigin("http://127.0.0.1:9999/graph/", nil))
+}
+
+func (s *ExplorerOriginSuite) TestRefusesANameThatOnlyStartsLikeLoopback() {
+	s.Error(checkHostedPageOrigin("http://localhost.evil.example/graph/", nil))
+}
+
+func (s *ExplorerOriginSuite) TestRefusesARelativeBase() {
+	s.Error(checkHostedPageOrigin("graph/", nil))
+}
+
 // TestOpenViaBrowserEnv exercises the $BROWSER convention parsing: unset falls through
 // (error), a bogus command errors, and a real command (with or without %s) launches.
 func TestOpenViaBrowserEnv(t *testing.T) {
@@ -254,16 +301,203 @@ func TestGraphBuildFailsOnlyOnALockRefusal(t *testing.T) {
 		"project . is locked by the magus run this one is nested inside"))
 	missing := errors.New("docs: exit status 127; install scip-typescript")
 
-	require.NoError(t, reindexRefusals(missing), "a missing indexer stays a warning")
+	require.NoError(t, maintenance.ReindexRefusals(missing), "a missing indexer stays a warning")
 
-	got := reindexRefusals(errors.Join(missing, refusal))
+	got := maintenance.ReindexRefusals(errors.Join(missing, refusal))
 	require.ErrorIs(t, got, types.ProjectLockHeldByAncestor)
 	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
 
-	require.ErrorIs(t, reindexRefusals(refusal), types.ProjectLockHeldByAncestor, "an unjoined refusal counts too")
+	require.ErrorIs(t, maintenance.ReindexRefusals(refusal), types.ProjectLockHeldByAncestor, "an unjoined refusal counts too")
 
 	full := types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting scip: this machine's build budget is full")
-	got = reindexRefusals(errors.Join(missing, full))
+	got = maintenance.ReindexRefusals(errors.Join(missing, full))
 	require.ErrorIs(t, got, types.MachineBudgetExhausted, "a full budget fails the build")
 	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
+}
+
+type GraphReindexPressureSuite struct {
+	suite.Suite
+}
+
+func TestGraphReindexPressureSuite(t *testing.T) { suite.Run(t, new(GraphReindexPressureSuite)) }
+
+func (s *GraphReindexPressureSuite) TestARefusedReindexExitsTempFail() {
+	short := types.ExitError{Code: exit.TempFail, Err: types.DiagnosticErrorf(types.MemoryPressureHigh, "not starting scip: this machine is short of memory")}
+	missing := errors.New("docs: exit status 127; install scip-typescript")
+	got := maintenance.ReindexRefusals(errors.Join(missing, short))
+	s.Require().ErrorIs(got, types.MemoryPressureHigh)
+	s.NotContains(got.Error(), "scip-typescript", "only the refusal fails the build")
+	s.Equal(exit.TempFail, exit.Code(got))
+}
+
+// GraphExportSCIPSuite pins `magus graph export -o scip`: the symbol index as SCIP, for
+// tools that read it, written only where a binary stream belongs.
+type GraphExportSCIPSuite struct {
+	suite.Suite
+}
+
+func TestGraphExportSCIPSuite(t *testing.T) { suite.Run(t, new(GraphExportSCIPSuite)) }
+
+func (s *GraphExportSCIPSuite) TestRefusesASelection() {
+	err := graphExportSCIP(s.T().Context(), s.T().TempDir(), &bytes.Buffer{}, neverTerminalProbe{}, true)
+	s.ErrorContains(err, "drop --select")
+}
+
+func (s *GraphExportSCIPSuite) TestRefusesATerminal() {
+	f, err := os.Create(filepath.Join(s.T().TempDir(), "tty"))
+	s.Require().NoError(err)
+	defer f.Close()
+	err = graphExportSCIP(s.T().Context(), s.T().TempDir(), f, fixedSizeTerminal{w: 80, h: 24}, false)
+	s.ErrorContains(err, "redirect it to a file")
+}
+
+func (s *GraphExportSCIPSuite) TestWritesAnIndexRootedAtTheWorkspace() {
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
+	var out bytes.Buffer
+	s.Require().NoError(graphExportSCIP(s.T().Context(), w.Root(), &out, neverTerminalProbe{}, false))
+
+	var idx scip.Index
+	s.Require().NoError(proto.Unmarshal(out.Bytes(), &idx))
+	s.Equal("magus", idx.Metadata.ToolInfo.Name)
+	s.Contains(idx.Metadata.ProjectRoot, filepath.ToSlash(w.Root()))
+	s.Empty(idx.Documents, "a workspace no spell indexes exports no documents")
+}
+
+func TestGraphBuildWaitsOnAnotherCheckoutsMachineLock(t *testing.T) {
+	root := holdMachineRefresh(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	_, _, err := acquireGraphBuild(ctx, root)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Contains(t, err.Error(), "stopped waiting for the symbol refresh of /other")
+	store, err := knowledgeStoreDir(root)
+	require.NoError(t, err)
+	_, running := maintenance.RunningGraphBuild(store)
+	assert.False(t, running, "a waiter holds no store, so a read does not take it for a build")
+}
+
+// acquireBehindBuild runs acquireGraphBuild queued behind a holder of the
+// machine lock that wrote store, and returns who it can load from.
+func acquireBehindBuild(t *testing.T, store func(root string) string) *maintenance.GraphBuildHolder {
+	t.Helper()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	ahead := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the build ahead", Store: store(root)}
+	lock, _, err := maintenance.AcquireMachineGraphBuild(t.Context(), ahead, io.Discard, time.Millisecond)
+	require.NoError(t, err)
+
+	type result struct {
+		release  func() error
+		waitedOn *maintenance.GraphBuildHolder
+		err      error
+	}
+	got := make(chan result, 1)
+	go func() {
+		release, waitedOn, err := acquireGraphBuild(t.Context(), root)
+		got <- result{release, waitedOn, err}
+	}()
+	select {
+	case r := <-got:
+		t.Fatalf("it took the machine lock while another held it: %+v", r)
+	case <-time.After(50 * time.Millisecond):
+	}
+	require.NoError(t, lock.Release())
+	r := <-got
+	require.NoError(t, r.err)
+	require.NoError(t, r.release())
+	return r.waitedOn
+}
+
+func TestGraphBuildLoadsFromTheBuildAheadOnItsOwnStore(t *testing.T) {
+	waitedOn := acquireBehindBuild(t, func(root string) string {
+		store, err := knowledgeStoreDir(root)
+		require.NoError(t, err)
+		return store
+	})
+
+	require.NotNil(t, waitedOn)
+	assert.Equal(t, "the build ahead", waitedOn.By)
+}
+
+func TestGraphBuildStillBuildsBehindAnotherCheckout(t *testing.T) {
+	waitedOn := acquireBehindBuild(t, func(string) string { return "/other/knowledge" })
+
+	assert.Nil(t, waitedOn)
+}
+
+// scriptedSeats answers each Claim from verdicts in turn and records Awaits.
+type scriptedSeats struct {
+	verdicts []types.MachineVerdict
+	awaited  []types.MachineClaim
+	released []string
+}
+
+func (s *scriptedSeats) Claim(context.Context, types.MachineClaim) (types.MachineVerdict, error) {
+	v := s.verdicts[0]
+	s.verdicts = s.verdicts[1:]
+	return v, nil
+}
+
+func (s *scriptedSeats) Release(_ context.Context, id string) { s.released = append(s.released, id) }
+
+func (s *scriptedSeats) Overrun(context.Context, string) {}
+
+func (s *scriptedSeats) HoldGroup(context.Context, string, int, string) (string, error) {
+	return "", nil
+}
+
+func (s *scriptedSeats) ReleaseHold(context.Context, string) error { return nil }
+
+func (s *scriptedSeats) Await(_ context.Context, claims []types.MachineClaim, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+	s.awaited = append(s.awaited, claims...)
+	parked(claims[0], types.MachineVerdict{Fits: true, BudgetMB: 4096, HeldMB: 4096})
+	return types.MachineClaim{}, types.MachineVerdict{Granted: true}, nil
+}
+
+// graphBuildClaim names ancestors so the claim reads no real memory pressure.
+func graphBuildClaim() types.MachineClaim {
+	return types.MachineClaim{Project: ".", Target: "graph-build", MemoryMB: graphBuildMemoryMB, Ancestors: []string{"1:parent"}}
+}
+
+func TestGraphBuildSeatWaitsForRoomThenClaims(t *testing.T) {
+	seats := &scriptedSeats{verdicts: []types.MachineVerdict{{Fits: true}, {Granted: true, Fits: true, ID: "seat"}}}
+
+	release, err := awaitGraphBuildSeat(t.Context(), seats, graphBuildClaim(), false)
+
+	require.NoError(t, err)
+	require.Len(t, seats.awaited, 1)
+	assert.Equal(t, "graph-build", seats.awaited[0].Target)
+	assert.Empty(t, seats.verdicts, "it claimed again after the wait")
+	release()
+	assert.Equal(t, []string{"seat"}, seats.released)
+}
+
+func TestGraphBuildSeatRefusesWhatTheWholeBudgetCannotSeat(t *testing.T) {
+	seats := &scriptedSeats{verdicts: []types.MachineVerdict{{Fits: false, BudgetMB: 1024, BudgetSlots: 4}}}
+
+	_, err := awaitGraphBuildSeat(t.Context(), seats, graphBuildClaim(), false)
+
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	assert.Empty(t, seats.awaited, "no wait admits it")
+}
+
+type graphBuildShardSuite struct{ suite.Suite }
+
+func TestGraphBuildShard(t *testing.T) { suite.Run(t, new(graphBuildShardSuite)) }
+
+func (s *graphBuildShardSuite) TestNarrowedCoverageDoesNotFailASymbolRefresh() {
+	s.NoError(graphBuildShardFailure(s.T().Context(), []string{"@coverage: coverage profile omits 2 director(ies): run test unnarrowed"}))
+}
+
+func (s *graphBuildShardSuite) TestAnInvalidCoverageProfileStillFails() {
+	s.ErrorContains(graphBuildShardFailure(s.T().Context(), []string{"@coverage: invalid coverage mode"}), "invalid coverage mode")
+}
+
+func (s *graphBuildShardSuite) TestAnotherShardFailureIsNotHiddenByPartialCoverage() {
+	err := graphBuildShardFailure(s.T().Context(), []string{"@coverage: coverage profile omits 2 director(ies)", "@symbols: index unreadable"})
+	s.ErrorContains(err, "@symbols: index unreadable")
 }

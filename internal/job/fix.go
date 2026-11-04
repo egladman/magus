@@ -95,7 +95,12 @@ func problemEdits(ps types.JobProblems) []types.JobEdit {
 // quietDry is store's dry view with its notices discarded: a fix round validates the same
 // record several times, and the fork that follows says each notice once.
 func quietDry(store *Store) *Store {
-	quiet := store.dry()
+	return store.Quiet().dry()
+}
+
+// Quiet is s with its notices discarded, for a pass a later one repeats aloud.
+func (s *Store) Quiet() *Store {
+	quiet := s.view()
 	quiet.notices = io.Discard
 	return quiet
 }

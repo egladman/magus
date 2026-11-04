@@ -5,10 +5,39 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/types"
 )
+
+type inflightDetailSuite struct {
+	suite.Suite
+}
+
+func TestInflightDetail(t *testing.T) { suite.Run(t, new(inflightDetailSuite)) }
+
+func (s *inflightDetailSuite) TestOnePartitionNamesOnlyThePosition() {
+	s.Equal("pos 2", InflightDetail(types.InflightChange{Partition: 1, Position: 2}, 1))
+}
+
+func (s *inflightDetailSuite) TestSeveralPartitionsNameThePartition() {
+	s.Equal("partition 1 pos 2", InflightDetail(types.InflightChange{Partition: 1, Position: 2}, 3))
+}
+
+func (s *inflightDetailSuite) TestACodeWithAReasonOutranksTheMark() {
+	c := types.InflightChange{Position: 1, Code: "MGS1", Reason: "why", Mark: "needs_work"}
+
+	s.Equal("pos 1  MGS1: why", InflightDetail(c, 1))
+}
+
+func (s *inflightDetailSuite) TestAMarkReadsAsWords() {
+	s.Equal("needs work", InflightDetail(types.InflightChange{Mark: "needs_work"}, 0))
+}
+
+func (s *inflightDetailSuite) TestNothingToSayIsEmpty() {
+	s.Empty(InflightDetail(types.InflightChange{}, 0))
+}
 
 func inflightRows() []types.Job {
 	return []types.Job{

@@ -1,5 +1,4 @@
 import test from "node:test";
-import { must } from "./guards";
 import assert from "node:assert/strict";
 import {
   createNotificationStore,
@@ -31,10 +30,10 @@ test("records newest-first and defaults to ok kind (history tier)", () => {
   s.notify({ source: "Dashboard", message: "second", at: 2 });
   const list = s.list();
   assert.equal(list.length, 2);
-  assert.equal(list[0].message, "second"); // newest first
-  assert.equal(list[1].message, "first");
-  assert.equal(list[0].kind, "ok"); // default
-  assert.equal(list[0].source, "Dashboard");
+  assert.equal(list[0]?.message, "second"); // newest first
+  assert.equal(list[1]?.message, "first");
+  assert.equal(list[0]?.kind, "ok"); // default
+  assert.equal(list[0]?.source, "Dashboard");
 });
 
 test("only error-kind counts toward the unseen-dot; ok/warn record silently", () => {
@@ -78,7 +77,8 @@ test("dedupe: a repeated key is admitted once (only notify on transition)", () =
 test("dedupe survives a dismiss: a trimmed transition does not re-fire", () => {
   const s = createNotificationStore();
   const n = s.notify({ source: "Log Viewer", message: "fail", kind: "error", key: "fail:refABC" });
-  s.dismiss(must(n).id);
+  assert.ok(n);
+  s.dismiss(n.id);
   assert.equal(s.list().length, 0);
   const again = s.notify({
     source: "Log Viewer",
@@ -109,7 +109,8 @@ test("dismiss removes one; clear removes all", () => {
   const s = createNotificationStore();
   const a = s.notify({ source: "Share", message: "a" });
   s.notify({ source: "Share", message: "b" });
-  s.dismiss(must(a).id);
+  assert.ok(a);
+  s.dismiss(a.id);
   assert.deepEqual(
     s.list().map((n) => n.message),
     ["b"],
@@ -257,7 +258,7 @@ test("subscribe fires on change and unsubscribe stops it", () => {
   });
   s.notify({ source: "Dashboard", message: "a" });
   assert.equal(hits, 1);
-  s.dismiss(s.list()[0].id);
+  s.dismiss(s.list()[0]?.id ?? "");
   assert.equal(hits, 2);
   off();
   s.notify({ source: "Dashboard", message: "b" });
@@ -268,12 +269,11 @@ test("subscribe fires on change and unsubscribe stops it", () => {
 // say-so, so both branches are pinned: an undeclared file that looks like a build input rings the bell
 // (a cached verdict may replay under rules that no longer apply), and everything else records silently.
 test("undeclaredSeedNotice: an input-looking file rings the bell", () => {
-  const n = must(
-    undeclaredSeedNotice(
-      [{ project: ".", files: [".golangci.yml", "LICENSE"], inputs: [".golangci.yml"] }],
-      "../diff/#role=unclaimed",
-    ),
+  const n = undeclaredSeedNotice(
+    [{ project: ".", files: [".golangci.yml", "LICENSE"], inputs: [".golangci.yml"] }],
+    "../diff/#role=unclaimed",
   );
+  assert.ok(n);
   assert.equal(n.important, true);
   assert.equal(n.kind, "warn");
   assert.equal(n.source, "Affected");
@@ -282,9 +282,8 @@ test("undeclaredSeedNotice: an input-looking file rings the bell", () => {
 });
 
 test("undeclaredSeedNotice: no input-looking file records silently", () => {
-  const n = must(
-    undeclaredSeedNotice([{ project: ".", files: ["LICENSE", "NOTES.md"], inputs: [] }]),
-  );
+  const n = undeclaredSeedNotice([{ project: ".", files: ["LICENSE", "NOTES.md"], inputs: [] }]);
+  assert.ok(n);
   assert.equal(n.important, false);
   assert.equal(n.kind, "ok");
   assert.match(n.message, /2 changed file/);
@@ -298,21 +297,23 @@ test("undeclaredSeedNotice: nothing undeclared raises nothing", () => {
 
 test("undeclaredSeedNotice: the message counts past the names it spells out", () => {
   const inputs = ["a/.nvmrc", "b/mise.toml", "c/go.sum", "d/uv.lock"];
-  const n = must(undeclaredSeedNotice([{ project: ".", files: inputs, inputs }]));
+  const n = undeclaredSeedNotice([{ project: ".", files: inputs, inputs }]);
+  assert.ok(n);
   assert.match(n.message, /and 1 more/);
   assert.ok(!n.message.includes("uv.lock"), "the fourth name is counted, not listed");
 });
 
 test("undeclaredSeedNotice: the dedupe key follows the files, not the run", () => {
-  const first = must(
-    undeclaredSeedNotice([{ project: ".", files: ["mise.toml"], inputs: ["mise.toml"] }]),
-  );
-  const again = must(
-    undeclaredSeedNotice([{ project: ".", files: ["mise.toml"], inputs: ["mise.toml"] }]),
-  );
+  const first = undeclaredSeedNotice([
+    { project: ".", files: ["mise.toml"], inputs: ["mise.toml"] },
+  ]);
+  assert.ok(first);
+  const again = undeclaredSeedNotice([
+    { project: ".", files: ["mise.toml"], inputs: ["mise.toml"] },
+  ]);
+  assert.ok(again);
   assert.equal(first.key, again.key, "the same finding on a later run is the same entry");
-  const other = must(
-    undeclaredSeedNotice([{ project: ".", files: [".nvmrc"], inputs: [".nvmrc"] }]),
-  );
+  const other = undeclaredSeedNotice([{ project: ".", files: [".nvmrc"], inputs: [".nvmrc"] }]);
+  assert.ok(other);
   assert.notEqual(first.key, other.key);
 });

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // runLog writes one run log: a started event carrying argv and the version string, and a
@@ -57,7 +58,7 @@ func TestGateCoverageReadsTheRunLog(t *testing.T) {
 		// No finished event, which is what a run killed at the terminal leaves. It is
 		// not red and it is not green, and the deny must not call it either.
 		dir := t.TempDir()
-		runLog(t, dir, "a.jsonl", "v0.4.3-97-gabc1234", "", "run", "ci", ".")
+		runLog(t, dir, "a.jsonl", "v0.4.3-97-gabc1234", "", "affected", "ci")
 		assert.Equal(t, gateIncomplete, gateCoverageAt(dir, "abc1234"))
 		_, reason := gradePushWithoutGate(gateCoverageAt(dir, "abc1234"), "abc1234", "")
 		assert.NotContains(t, reason, "RED")
@@ -148,7 +149,7 @@ func TestGateMatchesEachBackendsRevision(t *testing.T) {
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
 			require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
-				Target: types.TargetCI, Commit: rev.full, Outcome: sessions.OutcomePass,
+				Target: types.TargetCI, Scope: sessions.GateScopeAffected, Commit: rev.full, Outcome: sessions.OutcomePass,
 			}, sessions.InvocationStart{Workspace: root}))
 			assert.Equal(t, gatePassed, gateVerdictAt(root, rev.short))
 
@@ -168,14 +169,14 @@ func TestGateVerdictSeesAGateRecordedAfterTheLastRead(t *testing.T) {
 	require.NoError(t, err)
 	const commit = "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8"
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
-		Target: types.TargetCI, Commit: commit, Outcome: sessions.OutcomeFail,
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Commit: commit, Outcome: sessions.OutcomeFail,
 	}, sessions.InvocationStart{Workspace: root}))
 	assert.Equal(t, gateFailed, gateVerdictAt(root, commit[:12]))
 
 	// Records order by millisecond; a later one puts the pass after the fail.
 	time.Sleep(2 * time.Millisecond)
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
-		Target: types.TargetCI, Commit: commit, Outcome: sessions.OutcomePass,
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Commit: commit, Outcome: sessions.OutcomePass,
 	}, sessions.InvocationStart{Workspace: root}))
 	assert.Equal(t, gatePassed, gateVerdictAt(root, commit[:12]))
 }
@@ -202,7 +203,7 @@ func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
 			require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
-				Target: types.TargetCI, Commit: "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", Outcome: sessions.OutcomeFail,
+				Target: types.TargetCI, Scope: sessions.GateScopeAffected, Commit: "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", Outcome: sessions.OutcomeFail,
 			}, sessions.InvocationStart{Workspace: root}))
 			assert.Equal(t, gateUnknown, gateVerdictAt(root, id))
 		})
@@ -607,7 +608,7 @@ func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gate
 	require.NoError(t, err)
 	gated = repo.Head()
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
-		Target: types.TargetCI, Ref: "main", Commit: gated, Outcome: sessions.OutcomePass, Inv: "inv-green",
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: gated, Outcome: sessions.OutcomePass, Inv: "inv-green",
 	}, sessions.InvocationStart{Workspace: repo.Root()}))
 	fixtureGit(t, repo.Root(), "commit", "-q", "--amend", "-m", "reworded")
 	replayed = fixtureGit(t, repo.Root(), "rev-parse", "HEAD")
@@ -627,7 +628,7 @@ func TestPushGateAcceptsAPassingGateOnTheIdenticalTree(t *testing.T) {
 	rec, ok := gateReplayAt(ctx, repo.Root(), repo.Root(), replayed)
 	require.True(t, ok)
 	assert.Equal(t, sessions.GateRecord{
-		GateResult: sessions.GateResult{Target: types.TargetCI, Ref: "main", Commit: gated, Outcome: sessions.OutcomePass, Inv: "inv-green"},
+		GateResult: sessions.GateResult{Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: gated, Outcome: sessions.OutcomePass, Inv: "inv-green"},
 		At:         rec.At,
 	}, rec)
 
@@ -655,4 +656,83 @@ func TestPushGateStillNeedsItsOwnGateForADifferentTree(t *testing.T) {
 	_, ok := gateReplayAt(ctx, repo.Root(), repo.Root(), changed)
 	assert.False(t, ok)
 	assert.Equal(t, gateAbsent, coverageAtPush(ctx, repo, changed))
+}
+
+// GateScopeSuite pins running-doc entry 277: a passing `magus run ci libs/cmdline` made
+// the branch read as gated, so the guard refused `magus affected ci` as a repeat and would
+// have let the push out, while the last `affected ci` had failed.
+type GateScopeSuite struct {
+	suite.Suite
+}
+
+func TestGateScopeSuite(t *testing.T) { suite.Run(t, new(GateScopeSuite)) }
+
+func (s *GateScopeSuite) recordAt(root string, g sessions.GateResult) {
+	dir, err := sessions.Dir(root)
+	s.Require().NoError(err)
+	s.Require().NoError(sessions.RecordGate(dir, g, sessions.InvocationStart{Workspace: root}))
+	time.Sleep(2 * time.Millisecond)
+}
+
+func (s *GateScopeSuite) projectPass(commit string) sessions.GateResult {
+	return sessions.GateResult{
+		Target: types.TargetCI, Scope: sessions.GateScopeProject, Ref: "main", Commit: commit,
+		Outcome: sessions.OutcomePass, Projects: []string{"libs/cmdline"}, Inv: "inv-cmdline",
+	}
+}
+
+func (s *GateScopeSuite) TestAProjectPassAfterARedAffectedGateLeavesTheBranchRed() {
+	ctx, repo := gateRepeatRepository(s.T(), 2, sessions.OutcomeFail)
+	s.recordAt(repo.Root(), s.projectPass(repo.Head()))
+
+	s.Empty(denyRepeatGate(ctx, Dependencies{}, "", "./magus affected ci"), "the affected gate is not a repeat of a green one")
+	s.Equal(gateFailed, coverageAtPush(ctx, repo, repo.Head()), "and the push is graded on the red affected verdict")
+}
+
+func (s *GateScopeSuite) TestAProjectPassAloneCoversNoPush() {
+	ctx, repo := gateRepeatRepository(s.T(), 0, sessions.OutcomeFail)
+	other := repo.Commit("more", map[string]string{"b.go": "package a\n"})
+	s.recordAt(repo.Root(), s.projectPass(other))
+
+	s.Equal(gateProjectScoped, coverageAtPush(ctx, repo, other))
+	decision, reason := gradePushWithoutGate(gateProjectScoped, other[:12], "")
+	s.Equal(decisionDeny, decision)
+	s.Contains(reason, "covered named projects, not every project the branch affects")
+}
+
+func (s *GateScopeSuite) TestAProjectPassIsNoReplayOfTheTree() {
+	ctx, repo := gateRepeatRepository(s.T(), 0, sessions.OutcomeFail)
+	gated := repo.Commit("more", map[string]string{"b.go": "package a\n"})
+	s.recordAt(repo.Root(), s.projectPass(gated))
+	fixtureGit(s.T(), repo.Root(), "commit", "-q", "--amend", "-m", "reworded")
+	replayed := fixtureGit(s.T(), repo.Root(), "rev-parse", "HEAD")
+
+	_, ok := gateReplayAt(ctx, repo.Root(), repo.Root(), replayed)
+	s.False(ok)
+}
+
+func (s *GateScopeSuite) TestAPreScopeVerdictSaysItReadsAsProjectScope() {
+	testkit.Isolate(s.T())
+	root := s.T().TempDir()
+	dir, err := sessions.Dir(root)
+	s.Require().NoError(err)
+	w, err := sessions.Open(dir, sessions.NewID(), sessions.InvocationStart{Workspace: root})
+	s.Require().NoError(err)
+	const commit = "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8"
+	s.Require().NoError(w.Append(sessions.KindGateResult, map[string]string{"target": "ci", "commit": commit, "outcome": sessions.OutcomePass}))
+
+	s.Equal(gateUnscoped, gateVerdictAt(root, commit[:12]))
+	decision, reason := gradePushWithoutGate(gateUnscoped, commit[:12], "")
+	s.Equal(decisionDeny, decision)
+	s.Contains(reason, "recorded before gate records named their scope, so it reads as project scope")
+}
+
+func (s *GateScopeSuite) TestARunLogOfAProjectGateCoversNoPush() {
+	const version = "v0.4.3-1-g42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8"
+	runs := s.T().TempDir()
+	runLog(s.T(), runs, "a.jsonl", version, "pass", "run", "ci", "libs/cmdline")
+	s.Equal(gateProjectScoped, gateCoverageAt(runs, "42a1c0cc84b2"))
+
+	runLog(s.T(), runs, "b.jsonl", version, "pass", "affected", "ci")
+	s.Equal(gatePassed, gateCoverageAt(runs, "42a1c0cc84b2"))
 }

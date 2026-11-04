@@ -26,6 +26,14 @@ approves because everybody was. A default that acts without saying so is a
 third: a decision nobody made. [No silent defaults](../judgment/no-silent-defaults.md)
 closes it.
 
+A person's approval means something only while it stays rare; past that it
+becomes the approval fatigue the loop page describes. So a point asks once per
+decision, not once per line. A
+[deviation ledger](a-deliberate-break-never-merges-red.md) stays one line per
+finding, and the one approval is the reviewed diff that carries them. A point
+asks only when the answer can change something, and it shows the reason and the
+blast radius beside the question.
+
 ## Enforced by
 
 - The guard's `ask` verdict puts a push at a commit no gate covers, or a run of

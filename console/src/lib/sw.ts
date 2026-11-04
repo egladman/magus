@@ -55,7 +55,8 @@ const CACHE_PREFIX = "magus-console-";
 // parseBuildId reads the BUILD_ID a sw.js source was stamped with, or null for an unstamped one.
 export function parseBuildId(workerSource: string): string | null {
   const m = workerSource.match(/const BUILD_ID = "([^"]+)";/);
-  return m && m[1] !== "unstamped" ? m[1] : null;
+  const id = m?.[1];
+  return id !== undefined && id !== "unstamped" ? id : null;
 }
 
 // servedBuildId fetches sw.js past every cache (the worker never serves it) and reads its build.
@@ -71,7 +72,8 @@ async function cachedBuildId(): Promise<string | null> {
   if (typeof navigator === "undefined" || !navigator.serviceWorker?.controller) return null;
   if (typeof caches === "undefined") return null;
   const keys = (await caches.keys()).filter((k) => k.startsWith(CACHE_PREFIX));
-  return keys.length === 1 ? keys[0].slice(CACHE_PREFIX.length) : null;
+  const [only] = keys;
+  return keys.length === 1 && only !== undefined ? only.slice(CACHE_PREFIX.length) : null;
 }
 
 // watchServedBuild calls onStale once when the server serves a build other than the one this page

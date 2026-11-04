@@ -11,15 +11,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The bare scip op's index keeps the name every cached run already recorded, and a second
-// indexing spell on the same project writes beside it rather than over it.
+// A second indexing spell on the same project writes beside the first rather than over it.
 func TestIndexPathIsOnePerIndexerOp(t *testing.T) {
 	cacheDir := t.TempDir()
 	goIndex := IndexPath(cacheDir, "libs/a", "scip")
 	buzzIndex := IndexPath(cacheDir, "libs/a", "scip-buzz")
 
-	assert.Equal(t, "index.scip", filepath.Base(goIndex))
-	assert.Equal(t, "scip-buzz.scip", filepath.Base(buzzIndex))
+	assert.Equal(t, "scip.pack", filepath.Base(goIndex))
+	assert.Equal(t, "scip-buzz.pack", filepath.Base(buzzIndex))
 	assert.Equal(t, filepath.Dir(goIndex), filepath.Dir(buzzIndex), "both live under the project's one cache dir")
 }
 

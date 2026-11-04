@@ -35,5 +35,5 @@ In the docs:
 ## See also
 
 - [MAGUS.md](magusmd.md)
-- [Insight](insight.md)
+- [History metrics](historymetrics.md)
 - [Knowledge graph](../concepts/knowledge.md)

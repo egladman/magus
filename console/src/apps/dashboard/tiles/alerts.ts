@@ -175,8 +175,9 @@ export function mountAlertRail(): AlertRail {
 
     const groups = [...bySource.entries()].slice(0, MAX_LINES);
     lines.replaceChildren(
-      ...groups.map(([source, group]) => {
+      ...groups.flatMap(([source, group]) => {
         const newest = group[group.length - 1];
+        if (!newest) return [];
         // A CARD, not a line of text. The rail began as one-line rows and read as a status strip -
         // something scrolling past rather than something addressed to you. At the size a wall
         // display needs, a bordered card with its own severity edge is what makes an alert look
@@ -204,7 +205,7 @@ export function mountAlertRail(): AlertRail {
           a.setAttribute("aria-label", newest.linkLabel + ": " + newest.message);
           card.append(a);
         }
-        return card;
+        return [card];
       }),
     );
 

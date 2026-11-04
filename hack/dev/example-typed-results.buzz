@@ -12,6 +12,7 @@ namespace exampletypedresults;
 
 import "flags";
 import "magus";
+import "result";
 import "std";
 
 import "assert";
@@ -24,55 +25,71 @@ final USAGE = "usage: magus buzz hack/dev/example-typed-results.buzz -- [--file 
 final HELP = "cost: needs the code index\n{USAGE}";
 
 // fileLines classifies paths the way `magus describe file` does: owning project and role.
-export fun fileLines(paths: [str]) > [str] !> any {
-    final report: magus\FileReport = magus\describe.file(paths);
-    final lines = mut [<str>];
-    foreach (f in report.files) {
-        lines.append("{f.path}: project {f.project}, {f.role}");
+export fun fileLines(paths: [str]) > result\Result::<[str]> {
+    try {
+        final report: magus\FileReport = magus\describe.file(paths);
+        final lines = mut [<str>];
+        foreach (f in report.files) {
+            lines.append("{f.path}: project {f.project}, {f.role}");
+        }
+        return result\ok::<[str]>(lines);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "example-typed-results: describe the files");
     }
-    return lines;
 }
 
 // queryLines are a knowledge-graph search's matches. Read the verdict before trusting an
 // empty list: `unknown` means part of the workspace had no index to search.
-export fun queryLines(terms: str) > [str] !> any {
-    final q: magus\QueryResult = magus\query(terms, opts: {"limit": 5});
-    final lines = mut ["{q.matchCount} matches ({q.answer.verdict})"];
-    foreach (m in q.matches) {
-        lines.append("  {m.kind} {m.label}");
+export fun queryLines(terms: str) > result\Result::<[str]> {
+    try {
+        final q: magus\QueryResult = magus\graph().query(terms, opts: magus\QueryOptions{ limit = 5 });
+        final lines = mut ["{q.matchCount} matches ({q.answer.verdict.value})"];
+        foreach (m in q.matches) {
+            lines.append("  {m.kind} {m.label}");
+        }
+        return result\ok::<[str]>(lines);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "example-typed-results: query {terms}");
     }
-    return lines;
 }
 
 // refsLines are where a code symbol is defined and how widely it is used.
-export fun refsLines(symbol: str) > [str] !> any {
-    final r: magus\RefsResult = magus\refs(symbol, opts: {"limit": 5});
-    final lines = mut ["{r.label}: {r.refCount} references in {r.fileCount} files ({r.answer.verdict})"];
-    foreach (d in r.defs) {
-        lines.append("  defined in {d.file}:{d.lines.join(",")}");
+export fun refsLines(symbol: str) > result\Result::<[str]> {
+    try {
+        final r: magus\RefsResult = magus\graph().refs(symbol, opts: magus\RefsOptions{ limit = 5 });
+        final lines = mut ["{r.label}: {r.refCount} references in {r.fileCount} files ({r.answer.verdict.value})"];
+        foreach (d in r.defs) {
+            lines.append("  defined in {d.file}:{d.lines.join(",")}");
+        }
+        return result\ok::<[str]>(lines);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "example-typed-results: refs {symbol}");
     }
-    return lines;
 }
 
 // jobLines count the job store's rows by state, and the write paths the declared ones hold.
-export fun jobLines() > [str] !> any {
-    final list: magus\JobList = magus\job.list();
-    final byState = mut {<str: int>};
-    final declared = mut [<str>];
-    foreach (j in list.jobs) {
-        byState[j.state] = (byState[j.state] ?? 0) + 1;
-        if (j.state == "declared" and j.writePaths.len() > 0) {
-            declared.append("  {j.id}: {j.writePaths.len()} write paths");
+export fun jobLines() > result\Result::<[str]> {
+    try {
+        final list: magus\JobList = magus\workspace().jobs();
+        final byState = mut {<str: int>};
+        final declared = mut [<str>];
+        foreach (j in list.jobs) {
+            byState[j.state.value] = (byState[j.state.value] ?? 0) + 1;
+            if (j.state == magus\JobState.declared and j.writePaths.len() > 0) {
+                declared.append("  {j.id}: {j.writePaths.len()} write paths");
+            }
         }
+        final lines = mut ["{list.jobs.len()} jobs"];
+        foreach (state, n in byState) {
+            lines.append("  {n} {state}");
+        }
+        foreach (line in declared) {
+            lines.append(line);
+        }
+        return result\ok::<[str]>(lines);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "example-typed-results: list the jobs");
     }
-    final lines = mut ["{list.jobs.len()} jobs"];
-    foreach (state, n in byState) {
-        lines.append("  {n} {state}");
-    }
-    foreach (line in declared) {
-        lines.append(line);
-    }
-    return lines;
 }
 
 export fun main(args: [str]) > void !> any {
@@ -94,18 +111,25 @@ export fun main(args: [str]) > void !> any {
     }
     sections.append(jobLines());
     foreach (s in sections) {
+        if (s.error != null) {
+            throw s.error!.message;
+        }
         std\print("");
-        foreach (line in s) {
+        foreach (line in s.value!) {
             std\print(line);
         }
     }
 }
 
 test "describe.file names a path's owning project and role" {
-    assert\equal(fileLines(["go.mod"]), want: ["go.mod: project ., source"], message: "go.mod");
+    assert\equal(fileLines(["go.mod"]).value!, want: ["go.mod: project ., source"], message: "go.mod");
 }
 
 test "a query result carries its verdict beside its matches" {
-    final lines = queryLines("kind=spell go");
+    final queried = queryLines("kind=spell go");
+    if (queried.error != null) {
+        throw queried.error!.message;
+    }
+    final lines = queried.value!;
     assert\equal(lines[0].endsWith("(found)"), want: true, message: lines[0]);
 }

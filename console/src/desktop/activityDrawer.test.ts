@@ -153,11 +153,11 @@ test("runningRows renders a pool slot as its argv and a lock as its holder", () 
     }),
     NOW,
   );
-  assert.equal(rows[0].title, "magus run build .");
-  assert.equal(rows[0].detail, "~/repo - compile - 3s");
+  assert.equal(rows[0]?.title, "magus run build .");
+  assert.equal(rows[0]?.detail, "~/repo - compile - 3s");
   // The holder's argv identifies it; two runs against the same tree differ only there.
-  assert.equal(rows[1].title, "magus run build svc/api");
-  assert.equal(rows[1].detail, "svc/api - pid 4242 - 9s");
+  assert.equal(rows[1]?.title, "magus run build svc/api");
+  assert.equal(rows[1]?.detail, "svc/api - pid 4242 - 9s");
 });
 
 test("runningRows tolerates an absent pool, absent locks, and an absent status", () => {
@@ -175,8 +175,8 @@ test("runningRows leaves an unreported start time out of the meta entirely", () 
     }),
     NOW,
   );
-  assert.equal(rows[0].detail, "compile", "no age is honest; '0s' would be a fabricated one");
-  assert.equal(rows[0].atMs, 0);
+  assert.equal(rows[0]?.detail, "compile", "no age is honest; '0s' would be a fabricated one");
+  assert.equal(rows[0]?.atMs, 0);
 });
 
 test("recentRows maps the store's failed flag to the row outcome", () => {
@@ -211,9 +211,9 @@ test("recentRows labels a run project:target, falling back when the project is e
     NOW,
   );
   // The charm suffix is preserved: "build:rw" and "build" are different invocations.
-  assert.equal(rows[0].title, "svc/api:build:rw");
-  assert.equal(rows[0].detail, "12.4s - 0s");
-  assert.equal(rows[1].title, "generate");
+  assert.equal(rows[0]?.title, "svc/api:build:rw");
+  assert.equal(rows[0]?.detail, "12.4s - 0s");
+  assert.equal(rows[1]?.title, "generate");
 });
 
 test("recentRows caps the list so the panel is read rather than scrolled", () => {
@@ -223,7 +223,7 @@ test("recentRows caps the list so the panel is read rather than scrolled", () =>
   const rows = recentRows(feed, NOW);
   assert.equal(rows.length, 25);
   assert.equal(
-    rows[0].id,
+    rows[0]?.id,
     "r0",
     "the cap keeps the newest, not the first 25 the feed happened to send",
   );
@@ -252,7 +252,9 @@ test("every row carries the phase-2 unit slot, unset until a producer fills it",
   for (const r of rows) assert.equal(r.unit, undefined);
   // The field is optional, so a producer can start stamping it without touching any producer that
   // does not know about units yet.
-  const tagged: ActivityRow = { ...rows[0], unit: "unit-3" };
+  const [first] = rows;
+  assert.ok(first);
+  const tagged: ActivityRow = { ...first, unit: "unit-3" };
   assert.equal(tagged.unit, "unit-3");
 });
 
@@ -275,8 +277,8 @@ test("whenLabel is relative under an hour, dated after, and empty for an unknown
 
 test("rows link to the run in the log viewer: a stored run by ref, a live one by invocation", () => {
   const recent = recentRows([run({ ref: "out a/b" })], NOW);
-  assert.equal(recent[0].href, "logs/#ref=out%20a%2Fb");
-  assert.equal(recentRows([run({ ref: "x" })], NOW, true)[0].href, "logs/#demo&ref=x");
+  assert.equal(recent[0]?.href, "logs/#ref=out%20a%2Fb");
+  assert.equal(recentRows([run({ ref: "x" })], NOW, true)[0]?.href, "logs/#demo&ref=x");
   const live = runningRows(
     status({
       runningTargets: [
@@ -293,8 +295,8 @@ test("rows link to the run in the log viewer: a stored run by ref, a live one by
 
 test("facts is the detail without its age, so the drawer can write the time once, its own way", () => {
   const rows = recentRows([run({ duration_ms: 820, timestamp_ms: NOW - 3000 })], NOW);
-  assert.equal(rows[0].detail, "820ms - 3s");
-  assert.equal(rows[0].facts, "820ms");
+  assert.equal(rows[0]?.detail, "820ms - 3s");
+  assert.equal(rows[0]?.facts, "820ms");
 });
 
 // ---- reading the feed ------------------------------------------------------

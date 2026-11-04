@@ -14,7 +14,9 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // deadlineAfter is the one clock read a deadline is stamped from. The apply funcs that call
@@ -118,6 +120,53 @@ type Applied struct {
 	Changed []string
 }
 
+// ChangeLines is one line per changed field: the entries a list field gained
+// and lost, or the field's name for a value that changed.
+func (a Applied) ChangeLines() []string {
+	lists := map[string][2][]string{
+		"write_paths": {a.Prev.WritePaths, a.Next.WritePaths},
+		"deny_paths":  {a.Prev.DenyPaths, a.Next.DenyPaths},
+		"read_paths":  {a.Prev.ReadPaths, a.Next.ReadPaths},
+		"depends_on":  {a.Prev.DependsOn, a.Next.DependsOn},
+		"integrates":  {a.Prev.Integrates, a.Next.Integrates},
+		"soft_paths":  {a.Prev.SoftPaths, a.Next.SoftPaths},
+		"breaks":      {a.Prev.Breaks, a.Next.Breaks},
+		"goals":       {goalIDs(a.Prev.Goals), goalIDs(a.Next.Goals)},
+	}
+	lines := make([]string, len(a.Changed))
+	for i, field := range a.Changed {
+		lines[i] = field + " changed"
+		if parts := listChange(lists[field]); len(parts) > 0 {
+			lines[i] = fmt.Sprintf("%s %s", field, strings.Join(parts, " "))
+		}
+	}
+	return lines
+}
+
+// listChange is what pair's second list gained, then what it lost.
+func listChange(pair [2][]string) []string {
+	var parts []string
+	for _, p := range pair[1] {
+		if !slices.Contains(pair[0], p) {
+			parts = append(parts, "+"+p)
+		}
+	}
+	for _, p := range pair[0] {
+		if !slices.Contains(pair[1], p) {
+			parts = append(parts, "-"+p)
+		}
+	}
+	return parts
+}
+
+func goalIDs(goals []types.Goal) []string {
+	ids := make([]string, len(goals))
+	for i, g := range goals {
+		ids[i] = g.ID
+	}
+	return ids
+}
+
 // Apply upserts each record's spec, in order, the way `kubectl apply` does: the record is
 // the whole spec, so a spec field it omits is cleared, while status (state, holder,
 // registration, results, releases) is never touched. checkpoint and timeout are the two
@@ -130,9 +179,11 @@ type Applied struct {
 // before it leave it, and the error joins every record's problems, each message prefixed by
 // its record id, so a stream with problems in its first and third records writes nothing
 // and names both. Each record is held to [validateMerge], with its checkpoint settled in the
-// same pass. A record carrying state, enter or checkout is a JobRecordInvalid problem: state
-// is status, and an entry and a checkout are `magus job fork`'s. So is one naming a job that
-// already ended without widening it, and one dropping every write path a live job holds. Who may write a record
+// same pass. A record carrying state or enter is a JobRecordInvalid problem:
+// state is status, and an entry is `magus job fork`'s.
+// So is a checkout other than the row's, and naming the row's changes nothing.
+// So is one naming a job that ended without widening it.
+// So is one dropping every write path a live job holds. Who may write a record
 // is judged first: the store's authorization refuses at once, as it did before the pass.
 // dryRun returns what would be written and writes nothing, a refusal's release request
 // included.
@@ -159,14 +210,16 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 			invalid("state", fmt.Sprintf("the record for %s carries state %q, which is status: apply writes the spec and never moves a job", rec.ID, rec.State),
 				fmt.Sprintf("drop state; a holder moves its own job with `%s` and `%s`", hint.JobExec.With(rec.ID), hint.JobExit.With(rec.ID)))
 		}
-		if rec.Checkout != "" {
-			invalid("checkout", fmt.Sprintf("the record for %s names checkout %s, which only a fork makes", rec.ID, rec.Checkout),
-				fmt.Sprintf("drop checkout, or feed this record to `%s`", hint.JobFork.With("--stdin")))
-		}
 		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
 		var prev types.Job
 		if i >= 0 {
 			prev = rows[i]
+		}
+		if rec.Checkout != "" {
+			if bound := boundCheckout(prev); !samePath(rec.Checkout, bound) {
+				message, fix := differentCheckout(rec, bound)
+				invalid("checkout", message, fix)
+			}
 		}
 		ended := i >= 0 && prev.State.Terminal()
 		redeclares := i >= 0 && (ended || prev.State == types.StateExited) && widensWritePaths(prev, rec)
@@ -247,6 +300,24 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		plan[k].Next = stored
 	}
 	return plan, nil
+}
+
+// boundCheckout is the checkout row is bound to or held in, "" when neither.
+func boundCheckout(row types.Job) string {
+	if row.Worktree.Standing() {
+		return row.Worktree.Root
+	}
+	return row.CheckoutRoot
+}
+
+// differentCheckout is the problem of rec naming a checkout its row lacks.
+func differentCheckout(rec types.Declaration, bound string) (message, fix string) {
+	if bound == "" {
+		return fmt.Sprintf("the record for %s names checkout %s, and no checkout is bound to that job, which only a fork makes", rec.ID, rec.Checkout),
+			fmt.Sprintf("drop checkout, or feed this record to `%s`", hint.JobFork.With("--stdin"))
+	}
+	return fmt.Sprintf("the record for %s names checkout %s, and that job is bound to %s", rec.ID, rec.Checkout, bound),
+		fmt.Sprintf("drop checkout, or fork a new job for %s with `%s`", rec.Checkout, hint.JobFork.With("--stdin"))
 }
 
 // widensWritePaths reports whether rec names a write path prev's do not cover.
@@ -464,7 +535,7 @@ func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string
 				out = os.Stderr
 			}
 			for _, g := range added {
-				fmt.Fprintf(out, "job: %s: added the goal %q (%s): the write paths include Go source and no check or goal runs lint\n", id, g.ID, g.Check)
+				fmt.Fprintf(out, "job: %s: added the goal %q (%d files): the write paths include Go source and no check or goal runs lint\n", id, g.ID, len(g.Check.Args))
 			}
 		}
 	}
@@ -540,6 +611,134 @@ func keepFrozenSignatures(row *types.Job, prev types.Job) {
 			}
 		}
 	}
+}
+
+// emptyResult reports a result with no changed path, evidence or risk.
+func emptyResult(r types.JobResult) bool {
+	return len(r.ChangedPaths) == 0 && r.Validation == (types.JobResultValidation{}) &&
+		len(r.GateEvidence) == 0 && len(r.UnresolvedRisks) == 0
+}
+
+// resultShape is the result row's holder files, as JSON naming the row's
+// goals, then how a check the machine would not seat is filed.
+func resultShape(row types.Job) string {
+	shape := types.JobResult{
+		Schema:          types.Schema{Version: types.JobResultSchemaVersion},
+		Job:             row.ID,
+		ChangedPaths:    []string{},
+		UnresolvedRisks: []string{},
+	}
+	if !row.ReadOnly {
+		shape.ChangedPaths = []string{"<each file you changed>"}
+	}
+	for _, goal := range row.EffectiveGoals() {
+		switch {
+		case goal.Kind != types.GoalKindCheck:
+		case goal.ID == types.PrimaryGoalID:
+			shape.Validation = types.JobResultValidation{Command: goal.Check.String(), OutputRef: "<ref its run printed>"}
+		default:
+			shape.GateEvidence = append(shape.GateEvidence, types.GateEvidence{GateID: goal.ID, OutputRef: "<ref its run printed>"})
+		}
+	}
+	encoded, err := json.MarshalIndent(shape, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("the shape did not encode: %v", err)
+	}
+	return fmt.Sprintf("%s\nA check the machine would not seat has no ref: set \"output_ref\": \"\" and \"owed\": %q on its validation or gate_evidence entry.",
+		encoded, types.OwedNoSeat)
+}
+
+// FiledShape is [resultShape] for the row named id, or where to read the
+// schema when no row has that name.
+func FiledShape(store *Store, id string) string {
+	rows, err := store.List()
+	if err == nil {
+		if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
+			return resultShape(rows[i])
+		}
+	}
+	return fmt.Sprintf("`%s` prints the schema", hint.JobExit.With("--schema"))
+}
+
+// RenderGoalCommands writes the exact command of each of row's check goals,
+// so a holder never guesses one a fork added, then the result it files.
+func RenderGoalCommands(out io.Writer, row types.Job) {
+	fmt.Fprintln(out, "goal commands")
+	for _, goal := range row.EffectiveGoals() {
+		if goal.Kind == types.GoalKindCheck {
+			fmt.Fprintf(out, "  %s: %s\n", goal.ID, goal.Check)
+		}
+	}
+	fmt.Fprintf(out, "the result `%s` reads\n%s\n", hint.JobExit.With(row.ID, "--stdin"), resultShape(row))
+}
+
+// RenderFiled writes the run each output ref of a filed result resolved to.
+// A ref names a step, and a rerun of that step takes the ref over, so only
+// the attempt id names one run.
+func RenderFiled(out io.Writer, row types.Job) {
+	line := func(id string, a types.JobAttempt) {
+		outcome := "passed"
+		if a.Failed {
+			outcome = "failed"
+		}
+		fmt.Fprintf(out, "  %s: %s is attempt %s, which %s\n", id, a.Ref, a.AttemptID, outcome)
+	}
+	if row.Attempt != nil {
+		line(types.PrimaryGoalID, *row.Attempt)
+	}
+	for _, gate := range row.GateAttempts {
+		line(gate.GateID, gate.Attempt)
+	}
+}
+
+// rewroteOutside is each of dirty, the checkout's uncommitted paths, that a
+// declared output of target matches and row's write paths do not hold, sorted.
+func rewroteOutside(row types.Job, projects []*types.Project, target string, dirty []string) []string {
+	var out []string
+	for _, p := range dirty {
+		if _, held := matching(row.WritePaths, p); held {
+			continue
+		}
+		for _, project := range projects {
+			if slices.ContainsFunc(project.TargetOutputs[target], func(ref types.OutputRef) bool { return ref.Rooted(project.Path).Match(p) }) {
+				out = append(out, p)
+				break
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// LeaseRewrites is [rewroteOutside] for a run of target on projects, under the
+// lease acting on ctx. No lease rewrites nothing. An error means the checkout's
+// changes or the lease's row could not be read.
+func LeaseRewrites(ctx context.Context, loc Location, target string, projects []*types.Project) (lease string, paths []string, err error) {
+	lease, _ = RunLease(ctx, loc)
+	if lease == "" {
+		return "", nil, nil
+	}
+	loc.DryRun = true
+	rows, err := NewStore(loc).List()
+	if err != nil {
+		return lease, nil, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == lease })
+	if i < 0 {
+		return lease, nil, nil
+	}
+	res, err := vcs.Resolve(ctx, loc.Root, "", types.VCSOptions{})
+	if err != nil {
+		return lease, nil, err
+	}
+	if res.VCS == nil {
+		return lease, nil, errVCSDisabled
+	}
+	dirty, err := res.VCS.DirtyFiles(ctx, loc.Root, nil)
+	if err != nil {
+		return lease, nil, err
+	}
+	return lease, rewroteOutside(rows[i], projects, target, dirty), nil
 }
 
 // RenderGates writes a gate report one gate per line, each unmet one followed by why, then

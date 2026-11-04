@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// TotalBytes reads MemTotal from /proc/meminfo, or 0 when it cannot.
+// totalBytes reads MemTotal from /proc/meminfo, or 0 when it cannot.
 //
 // MemTotal, not MemAvailable: the shard planner budgets against the machine class
 // the shards will run on, not against whatever happened to be free on the machine
@@ -18,7 +18,7 @@ import (
 //
 // ctx is unused here (reading /proc cannot block meaningfully) and present so the
 // signature matches darwin's, which forks a subprocess.
-func TotalBytes(_ context.Context) int64 {
+func totalBytes(_ context.Context) int64 {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return 0

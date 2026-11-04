@@ -38,6 +38,18 @@ Parse the leading YAML frontmatter block (a "---" fenced header at the top of th
 
 **Returns:** string
 
+### sections
+
+List the headings of a Markdown file as entries of {anchor, level, start_line, end_line, body_end_line, digest}. Anchors are the ids to_html renders, so a repeated heading carries goldmark's -1 suffix and a fenced # line is no heading. Lines are 1-based file lines (frontmatter counted); end_line closes the section with its sub-sections, body_end_line closes its own text, and digest hashes the lines start_line through end_line.
+
+**Signature:** `markdown\sections(source) -> [MarkdownSection]` - [source](https://github.com/egladman/magus/blob/main/std/markdown.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `source`  | `string` |          |             |
+
+**Returns:** any
+
 ### stripFrontmatter
 
 Return the Markdown body with any leading YAML frontmatter block removed (the source unchanged when none is present).

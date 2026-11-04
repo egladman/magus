@@ -3,6 +3,7 @@ namespace prunechangelogfragments;
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "serialize";
 import "sort";
 import "std";
@@ -17,7 +18,7 @@ final HELP = "cost: one git blame per path the fragments' commits changed, more 
 
 Plans which changes/unreleased fragments to drop or merge, each verdict proven from
 history: who still owns lines at HEAD (blame), who removed them, and which symbols those
-lines sit in (the symbol index, through magus\\diff).
+lines sit in (the symbol index, through magus\\change().diff).
 
   superseded  every line the fragment's commit wrote is gone, and one later commit that
               carries its own fragment removed or rewrote all of them
@@ -51,9 +52,9 @@ export object Line {
 // the HEAD symbols the given lines sit in, null when the index covers none of their files.
 // indexed names which of paths the symbol index covers, asked once for all of them.
 export object Probe {
-    blame: fun (path: str, rev: str, copies: bool) > [Line]? !> any,
-    symbols: fun (commit: str, lines: {str: [Line]}) > [str]? !> any,
-    indexed: fun (paths: [str]) > {str: bool} !> any,
+    blame: fun (path: str, rev: str, copies: bool) > result\Result::<[Line]?>,
+    symbols: fun (commit: str, lines: {str: [Line]}) > result\Result::<[str]?>,
+    indexed: fun (paths: [str]) > result\Result::<{str: bool}>,
 }
 
 export object Fragment {
@@ -127,14 +128,14 @@ export fun parseBlame(stdout: str) > [Line] {
     return lines;
 }
 
-// symbolPatch renders lines as a unified diff that adds them, so magus\diff maps exactly
-// those HEAD lines onto the HEAD symbol index.
+// symbolPatch renders lines as a unified diff that adds them.
+// So magus\change().diff maps exactly those lines onto the HEAD symbol index.
 export fun symbolPatch(lines: {str: [Line]}) > str {
     final patch = mut [<str>];
     foreach (path in sort\strings(lines.keys())) {
         final ls = mut [<Line>];
         foreach (l in lines[path]!) { ls.append(l); }
-        ls.sort(fun (a: Line, b: Line) > bool => a.line < b.line);
+        _ = ls.sort(fun (a: Line, b: Line) > bool => a.line < b.line);
         patch.append("diff --git a/{path} b/{path}");
         patch.append("--- a/{path}");
         patch.append("+++ b/{path}");
@@ -189,27 +190,31 @@ fun unproven(reason: str) > Trace {
 
 // trace answers whether what c wrote still exists at HEAD. full blames every evidence path
 // so a duplicate check can compare them; otherwise the first surviving line settles it.
-fun trace(ctx: Ctx, c: Commit, full: bool) > Trace !> any {
+fun trace(ctx: Ctx, c: Commit, full: bool) > result\Result::<Trace> {
     final ev = evidence(c, outputs: ctx.outputs);
     if (ev.len() == 0) {
-        return unproven("{short(c.id)} changed only changelog fragments and declared outputs, so there is nothing to trace");
+        return result\ok::<Trace>(unproven("{short(c.id)} changed only changelog fragments and declared outputs, so there is nothing to trace"));
     }
     final surviving = mut {<str: [Line]>};
     foreach (p in ev) {
-        final own = ownedBy(ctx.probe.blame(p, rev: "HEAD", copies: false), id: c.id);
+        final head = ctx.probe.blame(p, rev: "HEAD", copies: false);
+        if (head.error -> err) { return result\Result::<Trace>{ error = err }; }
+        final own = ownedBy(head.value, id: c.id);
         if (own.len() > 0) {
             surviving[p] = own;
             if (!full) { break; }
         }
     }
-    if (surviving.keys().len() > 0) { return lives(surviving, reason: ""); }
+    if (surviving.keys().len() > 0) { return result\ok::<Trace>(lives(surviving, reason: "")); }
 
     final written = mut [<str>];
     foreach (p in ev) {
-        if (ownedBy(ctx.probe.blame(p, rev: c.id, copies: false), id: c.id).len() > 0) { written.append(p); }
+        final wrote = ctx.probe.blame(p, rev: c.id, copies: false);
+        if (wrote.error -> err) { return result\Result::<Trace>{ error = err }; }
+        if (ownedBy(wrote.value, id: c.id).len() > 0) { written.append(p); }
     }
     if (written.len() == 0) {
-        return unproven("{short(c.id)} wrote no line in the paths it changed, only removals, and a removal leaves nothing at HEAD to trace");
+        return result\ok::<Trace>(unproven("{short(c.id)} wrote no line in the paths it changed, only removals, and a removal leaves nothing at HEAD to trace"));
     }
 
     final eliminated = mut {<str: str>};
@@ -218,7 +223,9 @@ fun trace(ctx: Ctx, c: Commit, full: bool) > Trace !> any {
         var by: Commit? = null;
         var removed = false;
         foreach (later in laterTouching(ctx, c: c, path: p)) {
-            final at = ctx.probe.blame(p, rev: later.id, copies: false);
+            final blamed = ctx.probe.blame(p, rev: later.id, copies: false);
+            if (blamed.error -> err) { return result\Result::<Trace>{ error = err }; }
+            final at = blamed.value;
             if (at == null or ownedBy(at, id: c.id).len() == 0) {
                 by = later;
                 removed = at == null;
@@ -226,19 +233,21 @@ fun trace(ctx: Ctx, c: Commit, full: bool) > Trace !> any {
             }
         }
         if (by == null) {
-            return unproven("HEAD's blame finds no line {short(c.id)} wrote in {p}, yet every later commit that touched it kept some");
+            return result\ok::<Trace>(unproven("HEAD's blame finds no line {short(c.id)} wrote in {p}, yet every later commit that touched it kept some"));
         }
         final moved = mut [<str>];
         foreach (f in by!.files) {
             if (!f.startsWith("changes/") and ctx.outputs[f] == null) { moved.append(f); }
         }
         if (moved.len() > MOVE_CAP) {
-            return unproven("{short(by!.id)} took {short(c.id)}'s lines out of {p} while changing {moved.len()} files; following where they moved stops at {MOVE_CAP}");
+            return result\ok::<Trace>(unproven("{short(by!.id)} took {short(c.id)}'s lines out of {p} while changing {moved.len()} files; following where they moved stops at {MOVE_CAP}"));
         }
         foreach (f in moved) {
-            final own = ownedBy(ctx.probe.blame(f, rev: "HEAD", copies: true), id: c.id);
+            final followed = ctx.probe.blame(f, rev: "HEAD", copies: true);
+            if (followed.error -> err) { return result\Result::<Trace>{ error = err }; }
+            final own = ownedBy(followed.value, id: c.id);
             if (own.len() > 0) {
-                return lives({f: own}, reason: "{short(by!.id)} moved its lines from {p} into {f}");
+                return result\ok::<Trace>(lives({f: own}, reason: "{short(by!.id)} moved its lines from {p} into {f}"));
             }
         }
         eliminated[p] = by!.id;
@@ -248,7 +257,7 @@ fun trace(ctx: Ctx, c: Commit, full: bool) > Trace !> any {
             proof.append("{p}: every line it wrote rewritten by {short(by!.id)} ({by!.subject})");
         }
     }
-    return Trace{ state = "gone", reason = "", surviving = {<str: [Line]>}, eliminated = eliminated, proof = proof };
+    return result\ok::<Trace>(Trace{ state = "gone", reason = "", surviving = {<str: [Line]>}, eliminated = eliminated, proof = proof });
 }
 
 fun livesReason(c: Commit, t: Trace) > str {
@@ -273,7 +282,7 @@ fun keep(f: Fragment, commit: str, kind: str, reason: str) > Verdict {
 
 // plan returns one verdict per fragment, in fragment path order. commits is newest first,
 // the order vcs\history returns.
-export fun plan(fragments: [Fragment], commits: [Commit], outputs: {str: bool}, probe: Probe) > [Verdict] !> any {
+export fun plan(fragments: [Fragment], commits: [Commit], outputs: {str: bool}, probe: Probe) > result\Result::<[Verdict]> {
     final index = mut {<str: int>};
     foreach (i, c in commits) { index[c.id] = i; }
     final ctx = Ctx{ commits = commits, index = index, outputs = outputs, probe = probe };
@@ -305,7 +314,7 @@ export fun plan(fragments: [Fragment], commits: [Commit], outputs: {str: bool}, 
     final live = mut [<Fragment>];
     final sorted = mut [<Fragment>];
     foreach (f in fragments) { sorted.append(f); }
-    sorted.sort(fun (a: Fragment, b: Fragment) > bool => a.path < b.path);
+    _ = sorted.sort(fun (a: Fragment, b: Fragment) > bool => a.path < b.path);
 
     foreach (f in sorted) {
         final c = adder[f.path];
@@ -319,7 +328,11 @@ export fun plan(fragments: [Fragment], commits: [Commit], outputs: {str: bool}, 
             continue;
         }
         final single = byCommit[c!.id]!.len() == 1;
-        if (traces[c!.id] == null) { traces[c!.id] = trace(ctx, c: c!, full: single); }
+        if (traces[c!.id] == null) {
+            final traced = trace(ctx, c: c!, full: single);
+            if (traced.error -> err) { return result\Result::<[Verdict]>{ error = err }; }
+            traces[c!.id] = traced.value!;
+        }
         final t = traces[c!.id]!;
         if (t.state == "unproven") {
             verdicts[f.path] = keep(f, commit: c!.id, kind: "unproven", reason: t.reason);
@@ -356,17 +369,18 @@ export fun plan(fragments: [Fragment], commits: [Commit], outputs: {str: bool}, 
         }
     }
 
-    duplicates(ctx, live: live, adder: adder, byCommit: byCommit, traces: traces, verdicts: verdicts);
+    final grouped = duplicates(ctx, live: live, adder: adder, byCommit: byCommit, traces: traces, verdicts: verdicts);
+    if (grouped.error -> err) { return result\Result::<[Verdict]>{ error = err }; }
 
     final ordered = mut [<Verdict>];
     foreach (f in sorted) { ordered.append(verdicts[f.path]!); }
-    return ordered;
+    return result\ok::<[Verdict]>(ordered);
 }
 
 // duplicates groups live single-fragment commits by the indexed files they still own lines
 // in, then by the symbols those lines sit in. Only an equal, non-empty symbol set is a
 // duplicate; the later commit's text is kept unless it is empty.
-fun duplicates(ctx: Ctx, live: [Fragment], adder: {str: Commit}, byCommit: {str: [str]}, traces: {str: Trace}, verdicts: mut {str: Verdict}) > void !> any {
+fun duplicates(ctx: Ctx, live: [Fragment], adder: {str: Commit}, byCommit: {str: [str]}, traces: {str: Trace}, verdicts: mut {str: Verdict}) > result\Result::<bool> {
     final groups = mut {<str: [Fragment]>};
     final indexedLines = mut {<str: {str: [Line]}>};
     final candidates = mut [<Fragment>];
@@ -380,7 +394,11 @@ fun duplicates(ctx: Ctx, live: [Fragment], adder: {str: Commit}, byCommit: {str:
         }
     }
     var covered = {<str: bool>};
-    if (asked.len() > 0) { covered = ctx.probe.indexed(sort\strings(asked)); }
+    if (asked.len() > 0) {
+        final indexed = ctx.probe.indexed(sort\strings(asked));
+        if (indexed.error -> err) { return result\Result::<bool>{ error = err }; }
+        covered = indexed.value!;
+    }
     foreach (f in candidates) {
         final c = adder[f.path]!;
         final t = traces[c.id]!;
@@ -412,7 +430,8 @@ fun duplicates(ctx: Ctx, live: [Fragment], adder: {str: Commit}, byCommit: {str:
             final id = adder[f.path]!.id;
             if (symbols[id] == null) {
                 final got = ctx.probe.symbols(id, lines: indexedLines[id]!);
-                symbols[id] = sort\strings(got ?? [<str>]).join("\n");
+                if (got.error -> err) { return result\Result::<bool>{ error = err }; }
+                symbols[id] = sort\strings(got.value ?? [<str>]).join("\n");
             }
             final set = symbols[id]!;
             if (set == "") {
@@ -437,6 +456,7 @@ fun duplicates(ctx: Ctx, live: [Fragment], adder: {str: Commit}, byCommit: {str:
             merge(same, adder: adder, index: ctx.index, verdicts: verdicts);
         }
     }
+    return result\ok::<bool>(true);
 }
 
 // merge keeps the latest fragment's text, or the latest non-empty one before it. The merge
@@ -446,7 +466,7 @@ fun merge(same: [Fragment], adder: {str: Commit}, index: {str: int}, verdicts: m
     final ordered = mut [<Fragment>];
     foreach (f in same) { ordered.append(f); }
     // Oldest first: a larger history index is an older commit.
-    ordered.sort(fun (a: Fragment, b: Fragment) > bool => index[adder[a.path]!.id]! > index[adder[b.path]!.id]!);
+    _ = ordered.sort(fun (a: Fragment, b: Fragment) > bool => index[adder[a.path]!.id]! > index[adder[b.path]!.id]!);
     final later = ordered[ordered.len() - 1];
     var merged = later.text;
     if (later.entry.trim() == "") {
@@ -530,70 +550,97 @@ fun encode(verdicts: [Verdict], applied: bool) > str {
         "drop": n["drop"] ?? 0, "rewrite": n["rewrite"] ?? 0, "keep": n["keep"] ?? 0, "verdicts": doc}));
 }
 
-fun apply(verdicts: [Verdict]) > void !> any {
-    final root = vcs\root();
-    foreach (v in verdicts) {
-        if (v.action == "drop") {
-            // jj tracks a deletion from the working copy itself and has no rm.
-            if (vcs\name() == "jj") {
-                fs\remove(v.fragment);
-            } else {
-                vcs\cmd(["rm", "--", v.fragment], opts: {"quiet": true, "dir": root});
+fun apply(verdicts: [Verdict]) > result\Result::<bool> {
+    try {
+        final root = vcs\root();
+        foreach (v in verdicts) {
+            if (v.action == "drop") {
+                // jj tracks a deletion from the working copy itself and has no rm.
+                if (vcs\name() == "jj") {
+                    fs\remove(v.fragment);
+                } else {
+                    _ = vcs\cmd(["rm", "--", v.fragment], opts: vcs\CommandOptions{ quiet = true, dir = root });
+                }
+            } else if (v.action == "rewrite") {
+                fs\writeFile(v.fragment, content: v.merged);
             }
-        } else if (v.action == "rewrite") {
-            fs\writeFile(v.fragment, content: v.merged);
         }
+        return result\ok::<bool>(true);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "prune-changelog-fragments: apply the verdicts");
     }
 }
 
-fun liveProbe() > Probe !> any {
-    final root = vcs\root();
+fun liveProbe() > result\Result::<Probe> {
+    var root = "";
+    try {
+        root = vcs\root();
+    } catch (err: any) {
+        return result\caught::<Probe>(err, doing: "prune-changelog-fragments: find the repository root");
+    }
     final blames = mut {<str: [Line]?>};
     final blamed = mut {<str: bool>};
-    return Probe{
-        blame = fun (path: str, rev: str, copies: bool) > [Line]? !> any {
+    return result\ok::<Probe>(Probe{
+        blame = fun (path: str, rev: str, copies: bool) > result\Result::<[Line]?> {
             final key = "{rev} {copies} {path}";
             if (blamed[key] == null) {
-                blamed[key] = true;
                 final args = mut ["blame", "-l", "-s", "-M"];
                 if (copies) { args.append("-C"); }
                 args.append(rev);
                 args.append("--");
                 args.append(path);
-                final res = vcs\cmd(args, opts: {"quiet": true, "dir": root, "allow_failure": true});
-                if (res.code != 0) {
-                    blames[key] = null;
-                } else {
-                    blames[key] = parseBlame(res.stdout);
+                try {
+                    final res = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
+                    if (res.code != 0) {
+                        blames[key] = null;
+                    } else {
+                        blames[key] = parseBlame(res.stdout);
+                    }
+                } catch (err: any) {
+                    return result\caught::<[Line]?>(err, doing: "git blame {path} at {rev}");
                 }
+                blamed[key] = true;
             }
-            return blames[key];
+            return result\ok::<[Line]?>(blames[key]);
         },
-        symbols = fun (commit: str, lines: {str: [Line]}) > [str]? !> any {
-            final d = magus\diff({"patch": symbolPatch(lines)});
-            final found = mut [<str>];
-            var covered = false;
-            foreach (f in d.files) {
-                if (f.visibility != "unknown") { covered = true; }
-                foreach (s in f.symbols) {
-                    if (found.indexOf(s.id) == null) { found.append(s.id); }
-                }
+        symbols = symbolsTouched,
+        indexed = filesIndexed,
+    });
+}
+
+fun symbolsTouched(commit: str, lines: {str: [Line]}) > result\Result::<[str]?> {
+    try {
+        final d = magus\change().diff(opts: magus\DiffOptions{ patch = symbolPatch(lines) });
+        final found = mut [<str>];
+        var covered = false;
+        foreach (f in d.files) {
+            if (f.visibility != "unknown") { covered = true; }
+            foreach (s in f.symbols) {
+                if (found.indexOf(s.id) == null) { found.append(s.id); }
             }
-            if (!covered) { return null; }
-            return found;
-        },
-        // One magus\diff over a line in each file: its visibility reads unknown exactly where no
-        // symbol index covers the file. magus\explain answers the same per path, but loads
-        // the whole symbol graph again on every call.
-        indexed = fun (paths: [str]) > {str: bool} !> any {
-            final probeLines = mut {<str: [Line]>};
-            foreach (p in paths) { probeLines[p] = [Line{ commit = "", line = 1, text = "" }]; }
-            final d = magus\diff({"patch": symbolPatch(probeLines)});
-            final covered = mut {<str: bool>};
-            foreach (f in d.files) { covered[f.path] = f.visibility != "unknown"; }
-            return covered;
-        },
-    };
+        }
+        if (!covered) { return result\ok::<[str]?>(null); }
+        return result\ok::<[str]?>(found);
+    } catch (err: any) {
+        return result\caught::<[str]?>(err, doing: "map the lines of {commit} onto the symbol index");
+    }
+}
+
+// One magus\change().diff over a line in each file.
+// Its visibility reads unknown exactly where no symbol index covers the file.
+// magus\graph().explain answers the same per path.
+// But it loads the whole symbol graph again on every call.
+fun filesIndexed(paths: [str]) > result\Result::<{str: bool}> {
+    try {
+        final probeLines = mut {<str: [Line]>};
+        foreach (p in paths) { probeLines[p] = [Line{ commit = "", line = 1, text = "" }]; }
+        final d = magus\change().diff(opts: magus\DiffOptions{ patch = symbolPatch(probeLines) });
+        final covered = mut {<str: bool>};
+        foreach (f in d.files) { covered[f.path] = f.visibility != "unknown"; }
+        return result\ok::<{str: bool}>(covered);
+    } catch (err: any) {
+        return result\caught::<{str: bool}>(err, doing: "ask the symbol index which files it covers");
+    }
 }
 
 // parseFragment splits a fragment into its group heading and its entry lines. The grammar
@@ -612,27 +659,35 @@ export fun parseFragment(path: str, text: str) > Fragment {
     return Fragment{ path = path, group = group, entry = entry.join("\n"), text = text };
 }
 
-fun readFragments() > [Fragment] !> any {
-    final found = mut [<Fragment>];
-    foreach (name in sort\strings(fs\listDir(FRAGMENT_DIR))) {
-        if (!name.endsWith(".md")) { continue; }
-        final path = FRAGMENT_DIR + name;
-        found.append(parseFragment(path, text: fs\readFile(path)));
+fun readFragments() > result\Result::<[Fragment]> {
+    try {
+        final found = mut [<Fragment>];
+        foreach (name in sort\strings(fs\listDir(FRAGMENT_DIR))) {
+            if (!name.endsWith(".md")) { continue; }
+            final path = FRAGMENT_DIR + name;
+            found.append(parseFragment(path, text: fs\readFile(path)));
+        }
+        return result\ok::<[Fragment]>(found);
+    } catch (err: any) {
+        return result\caught::<[Fragment]>(err, doing: "prune-changelog-fragments: read {FRAGMENT_DIR}");
     }
-    return found;
 }
 
-fun readHistory() > [Commit] !> any {
-    final found = mut [<Commit>];
-    foreach (c in vcs\history(limit: 0, first_parent: true)) {
-        found.append(Commit{ id = c.id, subject = c.subject, files = c.files });
+fun readHistory() > result\Result::<[Commit]> {
+    try {
+        final found = mut [<Commit>];
+        foreach (c in vcs\history(limit: 0, firstParent: true)) {
+            found.append(Commit{ id = c.id, subject = c.subject, files = c.files });
+        }
+        return result\ok::<[Commit]>(found);
+    } catch (err: any) {
+        return result\caught::<[Commit]>(err, doing: "prune-changelog-fragments: read the history");
     }
-    return found;
 }
 
 // declaredOutputs classifies every path the fragments' commits changed, so generated files
 // are left out of what a commit is held to have written.
-fun declaredOutputs(commits: [Commit], fragments: [Fragment]) > {str: bool} !> any {
+fun declaredOutputs(commits: [Commit], fragments: [Fragment]) > result\Result::<{str: bool}> {
     final wanted = mut {<str: bool>};
     final present = mut {<str: bool>};
     foreach (f in fragments) { present[f.path] = true; }
@@ -647,11 +702,15 @@ fun declaredOutputs(commits: [Commit], fragments: [Fragment]) > {str: bool} !> a
         }
     }
     final outputs = mut {<str: bool>};
-    if (wanted.keys().len() == 0) { return outputs; }
-    foreach (f in magus\describe.file(sort\strings(wanted.keys())).files) {
-        if (f.role == "output") { outputs[f.path] = true; }
+    if (wanted.keys().len() == 0) { return result\ok::<{str: bool}>(outputs); }
+    try {
+        foreach (f in magus\describe.file(sort\strings(wanted.keys())).files) {
+            if (f.role == "output") { outputs[f.path] = true; }
+        }
+    } catch (err: any) {
+        return result\caught::<{str: bool}>(err, doing: "prune-changelog-fragments: classify the changed paths");
     }
-    return outputs;
+    return result\ok::<{str: bool}>(outputs);
 }
 
 export fun main(args: [str]) > void !> any {
@@ -674,10 +733,23 @@ export fun main(args: [str]) > void !> any {
         throw "prune-changelog-fragments: no {FRAGMENT_DIR} here; run it from the repository root";
     }
     final applied = parsed.values["--apply"] != null;
-    final fragments = readFragments();
-    final commits = readHistory();
-    final verdicts = plan(fragments, commits: commits, outputs: declaredOutputs(commits, fragments: fragments), probe: liveProbe());
-    if (applied) { apply(verdicts); }
+    final read = readFragments();
+    if (read.error -> err) { throw err.message; }
+    final fragments = read.value!;
+    final history = readHistory();
+    if (history.error -> err) { throw err.message; }
+    final commits = history.value!;
+    final classified = declaredOutputs(commits, fragments: fragments);
+    if (classified.error -> err) { throw err.message; }
+    final probe = liveProbe();
+    if (probe.error -> err) { throw err.message; }
+    final planned = plan(fragments, commits: commits, outputs: classified.value!, probe: probe.value!);
+    if (planned.error -> err) { throw err.message; }
+    final verdicts = planned.value!;
+    if (applied) {
+        final done = apply(verdicts);
+        if (done.error -> err) { throw err.message; }
+    }
     if (format == "json") {
         std\print(encode(verdicts, applied: applied));
         return;
@@ -705,52 +777,60 @@ fun strings(b: serialize\Boxed) > [str] {
 
 // fixture builds a history from the JSON: blame lists each line's owner, keyed "<rev> <path>"
 // with " +C" appended for a copies-aware blame; a key it lacks is a path absent at that rev.
-fun fixture() > Fixture !> any {
-    final doc = serialize\jsonDecode(fs\readFile(FIXTURE));
-    final fragments = mut [<Fragment>];
-    foreach (path, text in doc.q("fragments").mapValue()) {
-        fragments.append(parseFragment(path, text: text.stringValue()));
+fun fixture() > result\Result::<Fixture> {
+    try {
+        final doc = serialize\jsonDecode(fs\readFile(FIXTURE));
+        final fragments = mut [<Fragment>];
+        foreach (path, text in doc.q("fragments").mapValue()) {
+            fragments.append(parseFragment(path, text: text.stringValue()));
+        }
+        final commits = mut [<Commit>];
+        foreach (c in doc.q("commits").listValue()) {
+            commits.append(Commit{ id = c.q("id").stringValue(), subject = c.q("subject").stringValue(), files = strings(c.q("files")) });
+        }
+        final outputs = mut {<str: bool>};
+        foreach (p in strings(doc.q("outputs"))) { outputs[p] = true; }
+        final indexedSet = strings(doc.q("indexed"));
+        final blame = doc.q("blame").mapValue();
+        final syms = doc.q("symbols").mapValue();
+        final asked = mut [<str>];
+        final probe = Probe{
+            blame = fun (path: str, rev: str, copies: bool) > result\Result::<[Line]?> {
+                var key = "{rev} {path}";
+                if (copies and blame["{key} +C"] != null) { key = "{key} +C"; }
+                if (blame[key] == null) { return result\ok::<[Line]?>(null); }
+                final lines = mut [<Line>];
+                foreach (i, owner in strings(blame[key]!)) {
+                    lines.append(Line{ commit = owner, line = i + 1, text = "{path}:{i + 1}" });
+                }
+                return result\ok::<[Line]?>(lines);
+            },
+            symbols = fun (commit: str, lines: {str: [Line]}) > result\Result::<[str]?> {
+                asked.append(commit);
+                if (syms[commit] == null) { return result\ok::<[str]?>(null); }
+                return result\ok::<[str]?>(strings(syms[commit]!));
+            },
+            indexed = fun (paths: [str]) > result\Result::<{str: bool}> {
+                final covered = mut {<str: bool>};
+                foreach (p in paths) { covered[p] = indexedSet.indexOf(p) != null; }
+                return result\ok::<{str: bool}>(covered);
+            },
+        };
+        return result\ok::<Fixture>(Fixture{ fragments = fragments, commits = commits, outputs = outputs, probe = probe, asked = asked });
+    } catch (err: any) {
+        return result\caught::<Fixture>(err, doing: "read {FIXTURE}");
     }
-    final commits = mut [<Commit>];
-    foreach (c in doc.q("commits").listValue()) {
-        commits.append(Commit{ id = c.q("id").stringValue(), subject = c.q("subject").stringValue(), files = strings(c.q("files")) });
-    }
-    final outputs = mut {<str: bool>};
-    foreach (p in strings(doc.q("outputs"))) { outputs[p] = true; }
-    final indexedSet = strings(doc.q("indexed"));
-    final blame = doc.q("blame").mapValue();
-    final syms = doc.q("symbols").mapValue();
-    final asked = mut [<str>];
-    final probe = Probe{
-        blame = fun (path: str, rev: str, copies: bool) > [Line]? !> any {
-            var key = "{rev} {path}";
-            if (copies and blame["{key} +C"] != null) { key = "{key} +C"; }
-            if (blame[key] == null) { return null; }
-            final lines = mut [<Line>];
-            foreach (i, owner in strings(blame[key]!)) {
-                lines.append(Line{ commit = owner, line = i + 1, text = "{path}:{i + 1}" });
-            }
-            return lines;
-        },
-        symbols = fun (commit: str, lines: {str: [Line]}) > [str]? !> any {
-            asked.append(commit);
-            if (syms[commit] == null) { return null; }
-            return strings(syms[commit]!);
-        },
-        indexed = fun (paths: [str]) > {str: bool} !> any {
-            final covered = mut {<str: bool>};
-            foreach (p in paths) { covered[p] = indexedSet.indexOf(p) != null; }
-            return covered;
-        },
-    };
-    return Fixture{ fragments = fragments, commits = commits, outputs = outputs, probe = probe, asked = asked };
 }
 
-fun fixturePlan() > {str: Verdict} !> any {
-    final fx = fixture();
+fun fixturePlan() > result\Result::<{str: Verdict}> {
+    final built = fixture();
+    if (built.error -> err) { return result\Result::<{str: Verdict}>{ error = err }; }
+    final fx = built.value!;
+    final planned = plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe);
+    if (planned.error -> err) { return result\Result::<{str: Verdict}>{ error = err }; }
     final byPath = mut {<str: Verdict>};
-    foreach (v in plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe)) { byPath[v.fragment] = v; }
-    return byPath;
+    foreach (v in planned.value!) { byPath[v.fragment] = v; }
+    return result\ok::<{str: Verdict}>(byPath);
 }
 
 fun frag(name: str) > str {
@@ -758,7 +838,7 @@ fun frag(name: str) > str {
 }
 
 test "a fragment whose lines one later fragment-carrying commit removed is superseded by that fragment" {
-    final v = fixturePlan()[frag("old-flag")]!;
+    final v = fixturePlan().value![frag("old-flag")]!;
     assert\equal(v.action, want: "drop", message: v.reason);
     assert\equal(v.kind, want: "superseded", message: v.reason);
     assert\equal(v.by, want: [frag("new-flag")], message: "names the successor");
@@ -766,7 +846,7 @@ test "a fragment whose lines one later fragment-carrying commit removed is super
 }
 
 test "a fragment whose lines are gone with no fragment-carrying successor is obsolete" {
-    final plan = fixturePlan();
+    final plan = fixturePlan().value!;
     final v = plan[frag("temp-cmd")]!;
     assert\equal(v.action, want: "drop", message: v.reason);
     assert\equal(v.kind, want: "obsolete", message: v.reason);
@@ -777,7 +857,7 @@ test "a fragment whose lines are gone with no fragment-carrying successor is obs
 }
 
 test "two single-fragment commits owning lines in the same symbols are duplicates, and the later text is kept" {
-    final plan = fixturePlan();
+    final plan = fixturePlan().value!;
     final older = plan[frag("guard-a")]!;
     assert\equal(older.action, want: "drop", message: older.reason);
     assert\equal(older.kind, want: "duplicate", message: older.reason);
@@ -788,9 +868,9 @@ test "two single-fragment commits owning lines in the same symbols are duplicate
 }
 
 test "what cannot be proven is kept, with the reason" {
-    final plan = fixturePlan();
-    fun reason(name: str) > str !> any => plan[frag(name)]!.reason;
-    fun action(name: str) > str !> any => plan[frag(name)]!.action;
+    final plan = fixturePlan().value!;
+    fun reason(name: str) > str => plan[frag(name)]!.reason;
+    fun action(name: str) > str => plan[frag(name)]!.action;
     foreach (name in ["moved", "draft", "lives", "removal-only", "moved-code", "dropped-x", "symbols-differ", "lives-twin", "bulk-a", "bulk-b"]) {
         assert\equal(action(name), want: "keep", message: "{name}: {reason(name)}");
     }
@@ -807,14 +887,14 @@ test "what cannot be proven is kept, with the reason" {
 }
 
 test "the symbol index is asked only about commits in a candidate group" {
-    final fx = fixture();
-    plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe);
+    final fx = fixture().value!;
+    assert\isTrue(plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe).error == null, message: "the plan runs");
     assert\equal(sort\strings(fx.asked), want: ["c04", "c07", "c08", "c14"], message: "symbols asked");
 }
 
 test "the first line says what would happen, and json is one document" {
-    final fx = fixture();
-    final verdicts = plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe);
+    final fx = fixture().value!;
+    final verdicts = plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe).value!;
     final texts = mut {<str: str>};
     foreach (f in fx.fragments) { texts[f.path] = f.text; }
     final text = render(verdicts, texts: texts, applied: false);

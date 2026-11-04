@@ -42,8 +42,8 @@ In the code (`magus refs <name>` lists every site):
 - `cache.Manifest` (Go)
 - `knowledge.manifest` (Go)
 - `selfupdate.Manifest` (Go)
+- `image.Manifest` (Go)
 - `spells.Manifest` (Go)
-- `v1.Manifest` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

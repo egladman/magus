@@ -30,13 +30,15 @@ func agentHarnessCommand(ctx context.Context, rootOverride string, args []string
 	switch args[0] {
 	case "install":
 		return agentHarnessInstallCommand(ctx, rootOverride, args[1:])
+	case "link":
+		return agentHarnessLinksCommand(ctx, rootOverride, args[1:])
 	case "verify":
 		return agentHarnessVerifyCommand(ctx, rootOverride, args[1:])
 	case "-h", "--help", "help":
 		agentHarnessUsage(os.Stdout)
 		return nil
 	default:
-		return exit.Usagef("magus agent harness: unknown subcommand %q (want install or verify; `magus describe harness` prints the host config to merge)", args[0])
+		return exit.Usagef("magus agent harness: unknown subcommand %q (want install, link, or verify)", args[0])
 	}
 }
 
@@ -62,33 +64,90 @@ func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args [
 	if lease != "" {
 		return fmt.Errorf("magus agent harness install: bound job %q cannot change a harness skill tree", lease)
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	text := opts.Format == outputText
 	ids, ctx, err := resolveHarnessIDs(ctx, rootOverride, *id)
 	if err != nil {
 		return fmt.Errorf("magus agent harness install: %w", err)
 	}
+	plans := make(map[string]types.HarnessInstallation, len(ids))
 	for _, harnessID := range ids {
-		skills, err := agent.LoadHarnessSkills(ctx, root, harnessID)
+		plan, err := agent.PlanHarness(ctx, root, harnessID)
 		if err != nil {
 			return fmt.Errorf("magus agent harness install: %w", err)
 		}
-		for _, path := range skills.Paths {
-			if err := installHarnessSkillPath(ctx, root, path, skills.Form, globalCfg.DryRun); err != nil {
-				return err
-			}
-		}
-		changed, err := agent.InstallHarnessTools(ctx, root, harnessID, globalCfg.DryRun)
+		plans[harnessID] = plan
+	}
+	rec := agentHarnessInstallOutput{DryRun: globalCfg.DryRun, Harnesses: []agentHarnessInstallResult{}}
+	for _, harnessID := range ids {
+		result, err := installHarness(ctx, root, harnessID, plans[harnessID], text)
 		if err != nil {
-			return fmt.Errorf("magus agent harness install: %w", err)
+			return err
 		}
-		verb := "wrote"
-		if globalCfg.DryRun {
-			verb = "would write"
+		if text {
+			printHarnessInstall(result)
 		}
-		for _, p := range changed {
-			fmt.Fprintf(os.Stdout, "%s %s tool rows: %s\n", verb, harnessID, p)
-		}
+		rec.Harnesses = append(rec.Harnesses, result)
+	}
+	if !text {
+		return emitRecord(opts, rec, ids)
 	}
 	return nil
+}
+
+// installHarness writes one harness's skills, tool rows and planned files.
+func installHarness(ctx context.Context, root, id string, plan types.HarnessInstallation, text bool) (agentHarnessInstallResult, error) {
+	result := agentHarnessInstallResult{ID: id, Skills: []string{}, Removed: []string{}}
+	if err := installHarnessSkills(ctx, root, &result, text); err != nil {
+		return result, err
+	}
+	changed, err := agent.InstallHarnessTools(ctx, root, id, globalCfg.DryRun)
+	if err != nil {
+		return result, fmt.Errorf("magus agent harness install: %w", err)
+	}
+	result.Tools = nonNil(changed)
+	installed, err := agent.ApplyHarnessInstallation(ctx, root, plan, globalCfg.DryRun)
+	if err != nil {
+		return result, fmt.Errorf("magus agent harness install: %w", err)
+	}
+	result.Files = nonNil(installed)
+	result.RestartRequired = plan.Guard == "plugin" && len(installed) > 0
+	return result, nil
+}
+
+func installHarnessSkills(ctx context.Context, root string, result *agentHarnessInstallResult, text bool) error {
+	skills, err := agent.LoadHarnessSkills(ctx, root, result.ID)
+	if err != nil {
+		return fmt.Errorf("magus agent harness install: %w", err)
+	}
+	for _, path := range skills.Paths {
+		written, removed, err := installHarnessSkillPath(ctx, root, path, skills.Form, globalCfg.DryRun, text)
+		if err != nil {
+			return err
+		}
+		result.Skills = append(result.Skills, written...)
+		result.Removed = append(result.Removed, removed...)
+	}
+	return nil
+}
+
+func printHarnessInstall(result agentHarnessInstallResult) {
+	installVerb, verb := "installed", "wrote"
+	if globalCfg.DryRun {
+		installVerb, verb = "would install", "would write"
+	}
+	for _, path := range result.Files {
+		fmt.Fprintf(os.Stdout, "%s %s: %s\n", installVerb, result.ID, path)
+	}
+	if result.RestartRequired {
+		fmt.Fprintf(os.Stdout, "restart %s to load the installed runtime\n", result.ID)
+	}
+	for _, p := range result.Tools {
+		fmt.Fprintf(os.Stdout, "%s %s tool rows: %s\n", verb, result.ID, p)
+	}
 }
 
 // installHarnessSkillPath writes one skill tree and prunes what this binary no
@@ -96,25 +155,27 @@ func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args [
 // asking, so what it writes and what it deletes is the only thing standing
 // between a person and a skill that left without being named. Same wording as
 // `magus agent install`, which reports the same two lists.
-func installHarnessSkillPath(ctx context.Context, root, path string, form types.SkillForm, dryRun bool) error {
+func installHarnessSkillPath(ctx context.Context, root, path string, form types.SkillForm, dryRun, text bool) (written, removed []string, err error) {
 	if dryRun {
 		planned, err := agentSkills.PlanSkillTree(root, path, form)
 		if err != nil {
-			return err
-		}
-		for _, file := range planned {
-			fmt.Fprintln(os.Stdout, file)
+			return nil, nil, err
 		}
 		stale, err := agentSkills.StaleSkillDirs(root, path, form)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
-		reportRemovedSkills(os.Stdout, stale, true)
-		return nil
+		if text {
+			for _, file := range planned {
+				fmt.Fprintln(os.Stdout, file)
+			}
+			reportRemovedSkills(os.Stdout, stale, true)
+		}
+		return planned, stale, nil
 	}
 	written, changed, err := agentSkills.WriteSkillTree(root, path, true, form)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	// Logged per file, so the line says whether this install moved that file's bytes.
 	// A reinstall that rewrites thirty unchanged files and one real update read the same
@@ -130,12 +191,106 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form types.
 		}
 		slog.With(attr.Component("agent harness install")).InfoContext(ctx, "wrote", slog.String("path", file))
 	}
-	removed, err := agentSkills.PruneSkillTree(root, path, form)
+	removed, err = agentSkills.PruneSkillTree(root, path, form)
+	if err != nil {
+		return nil, nil, err
+	}
+	if text {
+		reportRemovedSkills(os.Stdout, removed, false)
+	}
+	return written, removed, nil
+}
+
+type agentHarnessInstallOutput struct {
+	DryRun    bool                        `json:"dry_run"`
+	Harnesses []agentHarnessInstallResult `json:"harnesses"`
+}
+
+type agentHarnessInstallResult struct {
+	ID              string   `json:"id"`
+	Skills          []string `json:"skills"`
+	Removed         []string `json:"removed"`
+	Tools           []string `json:"tools"`
+	Files           []string `json:"files"`
+	RestartRequired bool     `json:"restart_required"`
+}
+
+const harnessLinksRequestLimit = 1 << 20
+
+type harnessLinksRequest struct {
+	Links map[string]string `json:"links"`
+}
+
+type harnessLinksOutput struct {
+	Files []string `json:"files"`
+}
+
+func agentHarnessLinksCommand(ctx context.Context, rootOverride string, args []string) error {
+	fset := flag.NewFlagSet("agent harness link", flag.ContinueOnError)
+	stdin := fset.Bool("stdin", false, "read destination-to-source links as JSON from stdin")
+	bindDisplayFlags(fset)
+	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
+	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+		return err
+	}
+	if len(fset.Args()) != 0 {
+		return exit.Usagef("magus agent harness link: positional arguments are not accepted")
+	}
+	if !*stdin {
+		return exit.Usagef("magus agent harness link: --stdin is required")
+	}
+	root := resolveRootOrEmpty(rootOverride)
+	if root == "" {
+		return fmt.Errorf("magus agent harness link: no workspace here: run it from inside one or pass --root <path>")
+	}
+	lease, _, err := checkoutLease(ctx, root)
+	if err != nil {
+		return fmt.Errorf("magus agent harness link: %w", err)
+	}
+	if lease != "" {
+		return fmt.Errorf("magus agent harness link: bound job %q cannot link workspace sources", lease)
+	}
+	links, err := readHarnessLinksRequest(os.Stdin)
+	if err != nil {
+		return fmt.Errorf("magus agent harness link: %w", err)
+	}
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
-	reportRemovedSkills(os.Stdout, removed, false)
+	files, err := agent.InstallHarnessSourceLinks(ctx, root, links, globalCfg.DryRun)
+	if err != nil {
+		return fmt.Errorf("magus agent harness link: %w", err)
+	}
+	if opts.Format != outputText {
+		return emitRecord(opts, harnessLinksOutput{Files: files}, files)
+	}
+	verb := "linked"
+	if globalCfg.DryRun {
+		verb = "would link"
+	}
+	for _, path := range files {
+		fmt.Fprintf(os.Stdout, "%s %s\n", verb, path)
+	}
 	return nil
+}
+
+func readHarnessLinksRequest(r io.Reader) (map[string]string, error) {
+	data, err := io.ReadAll(io.LimitReader(r, harnessLinksRequestLimit+1))
+	if err != nil {
+		return nil, fmt.Errorf("read stdin: %w", err)
+	}
+	if len(data) > harnessLinksRequestLimit {
+		return nil, fmt.Errorf("request exceeds %d bytes", harnessLinksRequestLimit)
+	}
+	var request harnessLinksRequest
+	if err := json.UnmarshalStrict(data, &request); err != nil {
+		return nil, fmt.Errorf("decode request: %w", err)
+	}
+	if request.Links == nil {
+		return nil, fmt.Errorf("request must contain a links object")
+	}
+	return request.Links, nil
 }
 
 // checkoutLease resolves the lease a CLI call acts under in root's checkout through
@@ -186,7 +341,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 	if err != nil {
 		return fmt.Errorf("magus describe harness: %w", err)
 	}
-	plans := make([]types.HarnessPlan, 0, len(ids))
+	plans := make([]types.HarnessInstallation, 0, len(ids))
 	for _, harnessID := range ids {
 		plan, err := agent.PlanHarness(ctx, root, harnessID)
 		if err != nil {
@@ -206,7 +361,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 		}
 		return emitFormatted(opts, plans)
 	case outputName:
-		return emitItemNames(os.Stdout, plans, func(p types.HarnessPlan) string { return p.ID })
+		return emitItemNames(os.Stdout, plans, func(p types.HarnessInstallation) string { return p.ID })
 	}
 	for i, plan := range plans {
 		if i > 0 {
@@ -219,7 +374,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 	return nil
 }
 
-func writeHarnessPlan(w io.Writer, plan types.HarnessPlan) error {
+func writeHarnessPlan(w io.Writer, plan types.HarnessInstallation) error {
 	var err error
 	printf := func(format string, args ...any) {
 		if err == nil {
@@ -249,7 +404,7 @@ func writeHarnessPlan(w io.Writer, plan types.HarnessPlan) error {
 				printf("    %s %s: %s\n", change.Op, change.Key, value)
 			}
 		}
-		printf("merge it yourself (magus never writes host config):\n  %s\n", plan.Merge)
+		printf("apply the installation:\n  %s\n", plan.Merge)
 	}
 	for _, wired := range plan.Wired {
 		printf("wired in %s %s:\n", wired.File, wired.Key)
@@ -355,6 +510,9 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 	if err != nil {
 		return err
 	}
+	if opts.Format == outputName {
+		return emitNames(w, []string{typed.ID})
+	}
 	if opts.Format != outputText {
 		return writeFormatted(w, opts, typed)
 	}
@@ -411,12 +569,13 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 }
 
 func agentHarnessUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent harness <install|verify> [--id <harness-id>] [flags]")
+	fmt.Fprintln(w, "Usage: magus agent harness <install|link|verify> [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Install the skill trees of, or verify, harnesses selected with magus\\harness.provider(<spell>).")
+	fmt.Fprintln(w, "Install or verify harnesses selected with magus\\harness.provider(<spell>), or link workspace source paths from JSON on stdin.")
 	fmt.Fprintln(w, "verify runs the wired guard command against a synthetic event rather than trusting")
-	fmt.Fprintln(w, "its presence in the config. The host config itself is yours: `magus describe harness`")
-	fmt.Fprintln(w, "prints what to merge and the command that merges it, and magus never writes it.")
+	fmt.Fprintln(w, "its presence in the config. `magus describe harness`")
+	fmt.Fprintln(w, "prints the same installation that install applies, preserving unrelated settings.")
+	fmt.Fprintln(w, "link reads a destination-to-source JSON map from stdin and creates in-workspace symlinks after preflight.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Omit --id to act on every wired provider (several hosts are fine when you bounce")
 	fmt.Fprintln(w, "between LLM tools). Or pass --id for one spell.")

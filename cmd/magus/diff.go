@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -323,7 +324,7 @@ func (t diffTUITerm) ok() bool { return t.Reads && t.Paints }
 // testable without a pty.
 func wantsTUI(rf *flaggen.DiffFlags, src diffInput, format output.Format, term diffTUITerm, enabled bool) bool {
 	switch {
-	case rf.NoTui, !enabled:
+	case !rf.Tui, !enabled:
 		return false
 	// All three END in output the viewer has nowhere to put: a receipt count, a report, and a
 	// bump. They are requests for an answer rather than for somewhere to read.
@@ -676,9 +677,9 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 	// workspace with no history simply reports no churn rather than failing the diff.
 	// Files: true is required; without it the lens ranks PROJECTS and the per-file list is
 	// empty, so every file would silently report no churn.
-	if hot, herr := m.Hotspots(ctx, types.InsightOptions{Commits: diffHistoryCommits, Files: true}); herr == nil {
+	if hot, herr := m.Hotspots(ctx, types.HistoryMetricsOptions{Commits: diffHistoryCommits, Files: true}); herr == nil {
 		var projects []types.TrendEntry
-		if tr, terr := m.Trend(ctx, types.InsightOptions{Commits: diffHistoryCommits}); terr == nil {
+		if tr, terr := m.Trend(ctx, types.HistoryMetricsOptions{Commits: diffHistoryCommits}); terr == nil {
 			projects = tr.Projects
 		}
 		rev.AttachChurn(hot.Files, projects)
@@ -1112,7 +1113,8 @@ func (diffStoreSync) close() {}
 // waited on, and drained in full at close.
 type diffBridge struct {
 	addr    string
-	token   string
+	token   types.Secret
+	tokenID string // revoked at close; empty when the bridge minted no record
 	session *types.DiffReview
 
 	cursors chan diffSessionOp
@@ -1123,6 +1125,11 @@ type diffBridge struct {
 	done chan struct{}
 	// cancel aborts the post on the wire once close has spent its budget.
 	cancel context.CancelFunc
+}
+
+// setBearer is where a review's console token leaves for the server's API.
+func setBearer(req *http.Request, token types.Secret) {
+	req.Header.Set("Authorization", "Bearer "+token.Reveal())
 }
 
 // diffBridgeAttach bounds the GET that annotates and attaches. It is the expensive route
@@ -1151,10 +1158,8 @@ const diffBridgeMarks = 64
 const diffBridgeClose = 3 * time.Second
 
 // dialDiffBridge attaches to the server's session, or returns nil when there is nothing to
-// join. No token file and a refused connection are ordinary (no server was ever set up or
-// started) and stay silent; a token that cannot load, a non-200 answer, an undecodable
-// session and a declined as-of each log a warning naming the cause, so a server that is up
-// but not joined is never mistaken for one that is absent.
+// join. A refused connection stays silent: no server was started.
+// Every other miss warns, so a server that is up is never read as absent.
 //
 // asOf is the digest of the patch about to be rendered, and the session is DECLINED unless
 // the server computed its changeset from the same bytes. Without that check a server serving
@@ -1165,26 +1170,29 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 	warn := func(msg string, why ...any) {
 		slog.WarnContext(ctx, msg, append([]any{attr.Notice(""), attr.Component("magus")}, why...)...)
 	}
-	token, err := auth.LoadOperator()
-	if errors.Is(err, auth.ErrNoToken) {
+	addr := mcpAddrString()
+	token, tokenID, ok := mintReviewToken(ctx, addr, reviewBridgeTokenTTL)
+	if !ok {
 		return nil
 	}
-	if err != nil {
-		warn("the review is not shared with the server: the operator token did not load", attr.Error(err))
-		return nil
-	}
+	joined := false
+	defer func() {
+		if !joined {
+			revokeReviewToken(ctx, tokenID)
+		}
+	}()
 	q := url.Values{}
 	for _, p := range paths {
 		q.Add("path", p)
 	}
-	b := &diffBridge{addr: mcpAddrString(), token: token}
+	b := &diffBridge{addr: addr, token: token, tokenID: tokenID}
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff?%s", b.addr, q.Encode()), nil)
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	setBearer(req, token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		if !errors.Is(err, syscall.ECONNREFUSED) {
@@ -1208,7 +1216,53 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 	}
 	b.session = &sess
 	b.start()
+	joined = true
 	return b
+}
+
+// reviewBridgeTokenTTL covers a reader who leaves a review open. A crash
+// leaves the record until then, and its secret died with the process.
+const reviewBridgeTokenTTL = 7 * 24 * time.Hour
+
+// reviewCallTokenTTL covers one request to a review route.
+const reviewCallTokenTTL = time.Minute
+
+// mintReviewToken mints the console token a CLI call to the review routes
+// carries: they refuse the operator token. ok is false with no server at
+// addr, which writes no record, or on a failed mint.
+// The caller revokes tokenID.
+func mintReviewToken(ctx context.Context, addr string, ttl time.Duration) (token types.Secret, tokenID string, ok bool) {
+	warn := func(msg string, why ...any) {
+		slog.WarnContext(ctx, msg, append([]any{attr.Notice(""), attr.Component("magus")}, why...)...)
+	}
+	probe := net.Dialer{Timeout: diffBridgeWrite}
+	conn, err := probe.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		if !errors.Is(err, syscall.ECONNREFUSED) {
+			warn("the review is not shared with the server: it did not answer", attr.Error(err))
+		}
+		return types.Secret{}, "", false
+	}
+	_ = conn.Close()
+	secret, rec, err := mintToken(auth.MintRequest{Grant: types.GrantConsole, TTL: ttl}, false)
+	if err != nil {
+		warn("the review is not shared with the server: its console token could not be minted", attr.Error(err))
+		return types.Secret{}, "", false
+	}
+	return types.NewSecret(secret), rec.ID, true
+}
+
+// revokeReviewToken deletes the record mintReviewToken wrote.
+// A record already gone, expired or revoked by hand, is what it wanted.
+func revokeReviewToken(ctx context.Context, tokenID string) {
+	store, err := openTokenStore()
+	if err == nil {
+		_, err = store.Revoke(types.GrantOperator, tokenID)
+	}
+	if err != nil && !errors.Is(err, auth.ErrTokenNotFound) {
+		slog.WarnContext(ctx, "a review's console token was not revoked; it expires on its own",
+			attr.Notice(""), attr.Component("magus"), attr.Why(tokenID), attr.Error(err))
+	}
 }
 
 // start wires the sender. Split from dialDiffBridge so the queue can be driven against a stub
@@ -1356,6 +1410,11 @@ func (b *diffBridge) drain(ctx context.Context) {
 // the post already on the wire. Left uncancelled, the goroutine went on talking to the server
 // about a session the reader had walked away from, with nothing left to receive the answer.
 func (b *diffBridge) close() {
+	defer func() {
+		if b.tokenID != "" {
+			revokeReviewToken(context.Background(), b.tokenID)
+		}
+	}()
 	defer b.cancel() // the drain finished inside its budget; nothing is on the wire to abort
 	close(b.stop)
 	select {
@@ -1398,7 +1457,7 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 	if err != nil {
 		return
 	}
-	req.Header.Set("Authorization", "Bearer "+b.token)
+	setBearer(req, b.token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1455,9 +1514,9 @@ func diffUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	tty.ProseItem(w, tty.SystemProbe, "  --generated   ", "include the folded declared outputs")
-	tty.ProseItem(w, tty.SystemProbe, "  --no-tui      ",
-		"print the report instead of opening the viewer.",
-		"At a terminal the viewer opens by default, joined to the session the console and an agent share:",
+	tty.ProseItem(w, tty.SystemProbe, "  --[no-]tui    ",
+		"open the viewer (default: on); --no-tui prints the report instead.",
+		"At a terminal the viewer opens joined to the session the console and an agent share:",
 		"] and [ walk hunks, v marks one read, q leaves.",
 		"Anywhere it cannot draw it stands aside on its own, so a script needs no flag.")
 	tty.ProseItem(w, tty.SystemProbe, "  --impact      ",
@@ -1936,7 +1995,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 
 	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
 	// sections of one report cannot describe two different windows of history.
-	if own, err := m.Ownership(ctx, types.InsightOptions{Commits: diffHistoryCommits}); err == nil {
+	if own, err := m.Ownership(ctx, types.HistoryMetricsOptions{Commits: diffHistoryCommits}); err == nil {
 		p.Ownership = listImpactOwners(own, rev.AffectedProjects)
 	}
 
@@ -2006,7 +2065,7 @@ func computeImpactReach(rev types.Diff) *impactReach {
 // Projects the lens has nothing to say about are DROPPED rather than listed with an empty
 // author: a project with no commits in the window has no owner to name, and a blank name
 // beside a path reads as a lookup that failed.
-func listImpactOwners(own types.OwnershipOutput, affected []types.ImpactProject) []impactOwner {
+func listImpactOwners(own types.Ownership, affected []types.ImpactProject) []impactOwner {
 	byPath := make(map[string]types.OwnershipEntry, len(own.Projects))
 	for _, e := range own.Projects {
 		byPath[e.Path] = e
@@ -2782,10 +2841,8 @@ func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev type
 	}
 	defer restore()
 
-	// The advisors ask magus about the workspace (magus\describe.file, magus\diff,
-	// magus\impact), which reads it off the context the way `magus buzz` does.
-	// The caller's already-loaded workspace is attached rather than loaded again:
-	// loadMagus is once-per-process and panics on a second call with a different root.
+	// The advisors read the workspace off the context, as `magus buzz` does.
+	// It is attached, not loaded again: loadMagus panics on a second root.
 	if m != nil {
 		ctx = types.WithWorkspace(ctx, viewInternals(m))
 	}
@@ -2871,9 +2928,9 @@ func setAdviceEnv(base string) (func(), error) {
 	}, nil
 }
 
-// adviceReviewEnv names the file holding the run's one review, which advice.buzz's review
-// reads in place of a fresh magus\diff. The action's review step sets the same name on the
-// forge.
+// adviceReviewEnv names the file holding the run's one review.
+// advice.buzz's review reads it in place of a fresh magus\change().diff.
+// The action's review step sets the same name on the forge.
 const adviceReviewEnv = "ADVICE_REVIEW"
 
 // shareReview writes rev where the advisors read it and returns the restore, which removes
@@ -2938,7 +2995,9 @@ func runAdvisor(ctx context.Context, dir, file string) (string, []string, error)
 	var out bytes.Buffer
 	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(&out))
 	bindings.RegisterMagusNamespace(ctx, sess)
-	bindings.RegisterSpellSourceModules(sess)
+	if err := bindings.RegisterSpellSourceModules(sess); err != nil {
+		return "", nil, err
+	}
 
 	if err := sess.Exec(ctx, string(src)); err != nil {
 		return out.String(), nil, err

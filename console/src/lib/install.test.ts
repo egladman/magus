@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { must } from "./guards";
 import {
   createInstallStore,
   type BeforeInstallPromptEvent,
@@ -26,7 +25,11 @@ function fakeHost(opts: Partial<Pick<InstallHost, "installed" | "hasPromptApi" |
       hasPromptApi: opts.hasPromptApi ?? (() => true),
       isIOS: opts.isIOS ?? (() => false),
     },
-    fire: (type, ev) => must(handlers.get(type))(ev),
+    fire: (type, ev) => {
+      const handler = handlers.get(type);
+      assert.ok(handler, `no ${type} handler`);
+      handler(ev);
+    },
   };
 }
 

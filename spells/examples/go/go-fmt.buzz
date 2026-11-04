@@ -1,4 +1,4 @@
-// go-fmt lists misformatted files; the rw charm rewrites them in place.
+// go-fmt fails on misformatted files; the rw charm rewrites them in place.
 // `magus run format` checks, `magus run format:rw` applies gofmt.
 import "magus";
 import "magus/spell/go";

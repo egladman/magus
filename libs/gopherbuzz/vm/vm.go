@@ -204,8 +204,17 @@ func NewVM(ctx context.Context) *VM {
 	// The VM is reachable from the context every host callable receives, which is
 	// what lets `gc\collect()` ask the interpreter about its own reachability. It is
 	// the only operation that needs this; everything else works from its arguments.
-	vm.ctx = context.WithValue(ctx, vmCtxKey{}, vm)
+	vm.SetContext(ctx)
 	return vm
+}
+
+// CallDirect calls a host function value from inside a host callable.
+func CallDirect(ctx context.Context, fn Value, args []Value) (Value, error) {
+	vm := FromContext(ctx)
+	if vm == nil || fn.tag() != tagDirect {
+		return Null, fmt.Errorf("buzz: %s is not a host function", fn.buzzKind())
+	}
+	return vm.asDirect(fn).Fn(ctx, args)
 }
 
 // newFiberVM creates a VM that runs as a fiber (OpYield suspends instead of
@@ -2311,6 +2320,44 @@ func (vm *VM) Call(callee Value, args []Value) error {
 	}
 }
 
+// Invoke runs receiver.name(args) to completion: the embedder's OpInvoke, resolving
+// through getMember as OpInvoke's slow path does. The call site is where Buzz checks
+// the method exists and the argument count, and an embedder skips it, so both are
+// checked here rather than leaving a short argument list to run with Null parameters.
+// Like Call it needs a VM with no frames of its own.
+func (vm *VM) Invoke(receiver Value, name string, args []Value) (Value, error) {
+	callee, err := getMember(vm, receiver, name)
+	if err != nil {
+		return Null, err
+	}
+	switch callee.tag() {
+	case tagFun:
+		fn := vm.asFun(callee)
+		if fn.Chunk == nil {
+			return Null, fmt.Errorf("buzz: method %s has no compiled chunk", name)
+		}
+		if want := len(fn.Chunk.Params); len(args) != want {
+			return Null, fmt.Errorf("buzz: method %s on %s takes %d argument(s), got %d", name, receiver.buzzKind(), want, len(args))
+		}
+		if err := vm.Call(callee, args); err != nil {
+			return Null, err
+		}
+		return vm.Exec()
+	case tagDirect:
+		// A builtin or a host closure runs in place and leaves no frame for Exec.
+		result, err := vm.asDirect(callee).Fn(vm.ctx, args)
+		if err != nil {
+			return Null, err
+		}
+		vm.adopt(result)
+		return result, nil
+	}
+	if callee.IsNull() && !hasStoredKey(vm, receiver, name) {
+		return Null, fmt.Errorf("buzz: unknown method %s on %s", name, receiver.buzzKind())
+	}
+	return Null, errorNotCallable(callee)
+}
+
 // buildObjectDef pops (name, closure) pairs and creates an objectDefObj. The
 // static-field (name, value) pairs sit above them on the stack, so they come off
 // first (see compileObjectDecl).
@@ -2667,8 +2714,11 @@ func (vm *VM) buzzCast(v Value, typeName string) (Value, error) {
 
 // --- Exported debug and control methods ---
 
-// SetContext updates the VM's context (used when resuming a fiber).
-func (vm *VM) SetContext(ctx context.Context) { vm.ctx = ctx }
+// SetContext replaces the VM's context, as a fiber resume does. FromContext
+// keeps finding the VM on the new one.
+func (vm *VM) SetContext(ctx context.Context) {
+	vm.ctx = context.WithValue(ctx, vmCtxKey{}, vm)
+}
 
 // SetStepHook installs cb to fire on events matching mask.
 func (vm *VM) SetStepHook(mask StepMask, cb func(StepEvent, DebugFrame)) {

@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -145,11 +145,11 @@ func (t trackedOnly) TrackedFiles(_ context.Context, _ string, paths []string) (
 // publish pushes a spell directory under tag v1 and returns the pin for it.
 func publish(t *testing.T, reg *registry, dir string) Ref {
 	t.Helper()
-	dest := oci.Reference{Registry: reg.host(), Repository: "team/spells/x", Tag: "v1"}
+	dest := oci.Reference{Registry: reg.host(), Repository: "team/spells/x"}
 	content, err := Build(t.Context(), dir, allTracked{}, Provenance{Title: "x"})
 	require.NoError(t, err)
-	c := &oci.Client{HTTP: reg.srv.Client(), Username: reg.user, Password: reg.pass}
-	d, err := c.Push(t.Context(), dest, content)
+	c := &oci.Client{HTTP: reg.srv.Client(), Credentials: oci.Credentials{Username: reg.user, Password: types.NewSecret(reg.pass)}}
+	d, err := c.PushArtifact(t.Context(), dest, content, "v1")
 	require.NoError(t, err)
 	ref, err := Pinned(reg.host()+"/team/spells/x", d)
 	require.NoError(t, err)
@@ -378,10 +378,10 @@ func TestWalkTarRefusesAmbiguousEntries(t *testing.T) {
 
 func TestResolveRefusesAnotherArtifactType(t *testing.T) {
 	reg := newRegistry(t)
-	dest := oci.Reference{Registry: reg.host(), Repository: "team/graph", Tag: "v1"}
-	d, err := (&oci.Client{HTTP: reg.srv.Client()}).Push(t.Context(), dest, oci.Content{
+	dest := oci.Reference{Registry: reg.host(), Repository: "team/graph"}
+	d, err := (&oci.Client{HTTP: reg.srv.Client()}).PushArtifact(t.Context(), dest, oci.Artifact{
 		ArtifactType: "application/vnd.someone-else.v1",
-		Layers:       []oci.Layer{{Name: layerTitle, MediaType: layerMediaType, Payload: []byte("x")}},
+		Blobs:        []oci.Blob{{Title: layerTitle, MediaType: layerMediaType, Data: []byte("x")}},
 	})
 	require.NoError(t, err)
 	ref, err := Pinned(reg.host()+"/team/graph", d)
@@ -403,9 +403,9 @@ func TestBuildOfOneCommitHasOneDigest(t *testing.T) {
 		require.NoError(t, err)
 		content, err := Build(t.Context(), dir, allTracked{}, prov)
 		require.NoError(t, err)
-		raw, d, err := content.Manifest()
+		m, err := content.Manifest()
 		require.NoError(t, err)
-		return raw, d
+		return m.Body, m.Digest
 	}
 	parent := t.TempDir()
 	a, b := filepath.Join(parent, "a", "cursor"), filepath.Join(parent, "b", "cursor")
@@ -507,7 +507,7 @@ func TestResolveAuthenticatesAPrivatePull(t *testing.T) {
 	_, err := Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()})
 	require.ErrorContains(t, err, "401", "an anonymous pull of a private repository is refused")
 
-	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client(), Username: "bot", Password: "s3cret-token"})
+	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client(), Credentials: oci.Credentials{Username: "bot", Password: types.NewSecret("s3cret-token")}})
 	require.NoError(t, err)
 }
 
@@ -529,9 +529,9 @@ func TestShippedMatchesBuild(t *testing.T) {
 		built, err := Build(t.Context(), filepath.Join("..", "..", "..", "spells", dir), allTracked{}, ShippedProvenance(dir))
 		require.NoError(t, err, dir)
 		assert.Equal(t, built, shipped, dir)
-		_, d, err := built.Manifest()
+		m, err := built.Manifest()
 		require.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf("ghcr.io/egladman/magus/spells/%s@%s", dir, d.String()), ref.String())
+		assert.Equal(t, fmt.Sprintf("ghcr.io/egladman/magus/spells/%s@%s", dir, m.Digest.String()), ref.String())
 		assert.Equal(t, map[string]string{
 			ocispec.AnnotationTitle:  dir,
 			ocispec.AnnotationSource: "https://github.com/egladman/magus",
@@ -610,6 +610,33 @@ func TestReadFork(t *testing.T) {
 			got, err := ReadFork(dir, "go", "golang")
 			require.NoError(t, err)
 			assert.Equal(t, c.want, got)
+		})
+	}
+}
+
+func TestPackBoundsRuntimeAssets(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		size      int
+		wantError bool
+	}{
+		{"runtime larger than the former source-only limit", 9 << 20, false},
+		{"runtime exceeding the bounded archive", 16 << 20, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			packed, err := packFiles("harness", []string{"spell.buzz", "gen/runtime.wasm"}, func(name string) ([]byte, error) {
+				if name == "spell.buzz" {
+					return []byte("// harness"), nil
+				}
+				return make([]byte, tc.size), nil
+			})
+			if tc.wantError {
+				require.ErrorContains(t, err, "over the 16777216 byte cap")
+				assert.Nil(t, packed)
+				return
+			}
+			require.NoError(t, err)
+			assert.Greater(t, len(packed), 8<<20)
 		})
 	}
 }

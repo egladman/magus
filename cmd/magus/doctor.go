@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -30,6 +31,9 @@ func doctorCommand(ctx context.Context, root string, rc runConfig, args []string
 			"Run the remedy each finding names, where one exists (see --dry-run to list them first)")
 		fs.BoolVar(&list, "list", false,
 			"Print every check magus would run - name, subject, and MGS code - without running any of them")
+		cmdline.NegatedBoolVar(fs, &probe, "probe")
+		cmdline.NegatedBoolVar(fs, &fix, "fix")
+		cmdline.NegatedBoolVar(fs, &list, "list")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus doctor [flags]")
 			fmt.Fprintln(os.Stderr, "")

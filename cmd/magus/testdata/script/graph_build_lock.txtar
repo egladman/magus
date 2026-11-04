@@ -10,8 +10,8 @@ stdout 'first=0 second=0'
 
 grep 'knowledge graph rebuilt' first.err
 ! grep 'waiting for' first.err
-grep 'magus graph build: waiting for `magus graph build` \(pid [0-9]+, started [0-9-]+ [0-9:]+\), which is building this workspace''s graph' second.err
-grep 'knowledge graph current, built by `magus graph build` \(pid [0-9]+' second.err
+grep 'magus graph build: waiting for `magus graph build` in .+ \(pid [0-9]+, started [0-9-]+ [0-9:]+\); interrupting stops the wait' second.err
+grep 'knowledge graph current, built by `magus graph build` in .+ \(pid [0-9]+' second.err
 ! grep 'took over' second.err
 
 # Each build released the lock, so no holder record is left for the next one to reclaim.

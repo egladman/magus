@@ -33,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -128,7 +129,14 @@ type storeConfig struct {
 	// workspace is what validation reads the record against (see [Store.InWorkspace]);
 	// nil names those checks unchecked.
 	workspace *Workspace
+	// migrations is [jobMigrations] outside a test.
+	migrations []migrate.Migration
 }
+
+// jobMigrations take a jobs.jsonl from each migration to the next, in order; see
+// [Store.migrate]. A migration rewrites stored rows once, so a change to a stored member's
+// name lands here and no reader keeps the old name.
+var jobMigrations []migrate.Migration
 
 // Location is where a Store lives: the repository whose rows these are, the state base
 // that places the file, and the checkout's cache directory.
@@ -215,7 +223,8 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
-		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext}}
+		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext,
+		migrations: jobMigrations}}
 	s.path, s.err = jobsPath(loc)
 	return s
 }
@@ -298,6 +307,10 @@ func (s *Store) Path() (string, error) { return s.path, s.err }
 // break no row-level requirement can express, and a reader lacking one refuses the file.
 type jobsFile struct {
 	types.Schema
+	// Migration is how many of [jobMigrations] the rows have been through; see
+	// [Store.migrate]. Unlike Schema.Version it never runs ahead of the reader: a file past
+	// this build's migrations is refused.
+	Migration int `json:"migration,omitzero"`
 	// Retained is when the last retention pass ran, in unix seconds; see [Store.retainDue].
 	Retained int64       `json:"retained,omitempty"`
 	Jobs     []types.Job `json:"-"`
@@ -324,8 +337,7 @@ func readOnly(row types.Job) error {
 	if lacks == nil {
 		return nil
 	}
-	return fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks, so it will not write that row:"+
-		" update magus, or run the command with the magus that wrote it",
+	return types.DiagnosticErrorf(types.StoreRecordsNewer, "%s requires %s, which this magus (schema %d) lacks: update magus",
 		row.ID, quoteAll(lacks), types.JobSchemaVersion)
 }
 
@@ -463,9 +475,14 @@ func (s *Store) Enter(ctx context.Context, id, rel string) (types.Job, error) {
 	return s.Update(ctx, id, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
 }
 
+// cleanPath is a path a version control or a person named, as a slash path.
+func cleanPath(p string) string {
+	return path.Clean(filepath.ToSlash(strings.TrimSpace(p)))
+}
+
 // entryPath cleans the path an entry names, refusing one that is not workspace-relative.
 func entryPath(rel string) (string, error) {
-	clean := path.Clean(filepath.ToSlash(strings.TrimSpace(rel)))
+	clean := cleanPath(rel)
 	if clean == "." || path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
 		return "", fmt.Errorf("job: enter %q: name one workspace-relative path inside the job's write paths", rel)
 	}
@@ -696,7 +713,10 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 				row.ReportedBase, row.BaseVerdict, row.Registered, row.CheckoutRoot = "", "", 0, ""
 			}
 			if kind != asObservation {
-				row.Unattributed = prev.Unattributed
+				row.Unattributed, row.ReleaseRequests = prev.Unattributed, prev.ReleaseRequests
+			}
+			if refork {
+				row.ReleaseRequests = nil
 			}
 			if kind != asObservation && !entering {
 				row.Entries = prev.Entries
@@ -706,8 +726,9 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.CheckoutRoot = ""
 		}
 		if i < 0 {
-			row.Entries = nil
+			row.Entries, row.ReleaseRequests = nil, nil
 		}
+		row.ReleaseRequests = heldRequests(row)
 		if kind == asDeclaration && i >= 0 {
 			keepDerived(&row, prev)
 		}
@@ -721,6 +742,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// as no_return gets from what the row had become, and a pass its holder's result made.
 		// A row brought back to life has none.
 		row.EndReason = prev.EndReason
+		row.Landed = prev.Landed && !row.State.Live()
 		switch {
 		case row.State.Live():
 			row.EndReason = ""
@@ -741,9 +763,12 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		row.Schema = prev.Schema
 		row.Version = max(prev.Version, types.JobSchemaVersion)
 		row.ModelTier = prev.ModelTier
-		// Only RecordWorktree and EndWorktrees write the worktree record. The next attempt
-		// keeps a checkout that still stands and forgets one magus removed.
-		row.Worktree = prev.Clone().Worktree
+		// Only RecordWorktree and EndWorktrees write the worktree record, and Exec rebinding
+		// an untaken row from an adopted checkout to another. The next attempt keeps a
+		// checkout that still stands and forgets one magus removed.
+		if kind != asExec || !rebindsAdopted(prev, row) {
+			row.Worktree = prev.Clone().Worktree
+		}
 		if refork && row.Worktree != nil {
 			row.Worktree.Kept = ""
 			if row.Worktree.Removed != 0 {
@@ -974,6 +999,7 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 // wiped in one second is one mistake being repeated, and the rows worth keeping are the
 // ones there now.
 func (s *Store) archive(f jobsFile) error {
+	f.Migration = len(s.migrations)
 	lines, err := encodeJobs(f)
 	if err != nil {
 		return err
@@ -1006,6 +1032,24 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, r
 		out = append(out, rel)
 	}
 	return out
+}
+
+// ReleasedUnderPattern says of each file row released that a pattern of its
+// write paths still names: the release stands, so the pattern does not hold it.
+func ReleasedUnderPattern(row types.Job) []string {
+	var notes []string
+	for _, r := range row.Releases {
+		file, decl := types.SplitClaim(r.Path)
+		if decl != "" || !heldByPattern(row, file) {
+			continue
+		}
+		if claims := claimsOnFile(row, file); len(claims) > 0 {
+			notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it: only its claims do (%s)", file, strings.Join(claims, ", ")))
+			continue
+		}
+		notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until write_paths name `%s#<declaration>`", file, file))
+	}
+	return notes
 }
 
 // digest identifies the content at a released path, resolved inside the workspace.
@@ -1175,6 +1219,7 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 // appended lines would make it [file.CompactDue].
 func (s *Store) write(f jobsFile, log jobsLog) error {
 	f.Version = max(f.Version, types.JobSchemaVersion)
+	f.Migration = len(s.migrations)
 	lines, err := encodeJobs(f)
 	if err != nil {
 		return err
@@ -1256,7 +1301,60 @@ func (s *Store) read() (jobsFile, error) {
 // ride in the row's Schema.Unknown and go back out on the next write, and authorizeRow and
 // jobOverlaps need only fields every version carries. A row requiring a feature this magus
 // lacks is read too, and only a write to it is refused (see readOnly).
+//
+// A file behind [jobMigrations] is migrated first, once, under the lock (see
+// [Store.migrate]); without wait the caller already holds it.
 func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
+	f, log, err := s.parse(wait)
+	if err != nil || f.Migration == len(s.migrations) || log.lines == 0 {
+		return f, log, err
+	}
+	if err := s.migrate(f.Migration, !wait); err != nil {
+		return jobsFile{}, jobsLog{}, err
+	}
+	return s.parse(wait)
+}
+
+// migrate brings the file at migration found to the last of s.migrations, taking the lock
+// unless held. A file past them is refused with MGS3051 before anything is locked.
+func (s *Store) migrate(found int, held bool) error {
+	st := migrate.Store{
+		Name:       "job store",
+		Path:       s.path,
+		Header:     func(e migrate.Entry) bool { _, ok := e["id"]; return !ok },
+		Migrations: s.migrations,
+	}
+	refuse := func(err error) error {
+		if newer, ok := errors.AsType[*migrate.NewerError](err); ok {
+			return types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s", newer.Error())
+		}
+		return err
+	}
+	if err := st.Check(found); err != nil {
+		return refuse(err)
+	}
+	apply := func() error {
+		res, err := st.Apply()
+		if err != nil {
+			return refuse(err)
+		}
+		if res.Migrated() {
+			out := s.notices
+			if out == nil {
+				out = os.Stderr
+			}
+			fmt.Fprintf(out, "job: %s\n", res)
+		}
+		return nil
+	}
+	if held {
+		return apply()
+	}
+	return s.locked(context.Background(), apply)
+}
+
+// parse reads the file as it stands; see [Store.readFile].
+func (s *Store) parse(wait bool) (jobsFile, jobsLog, error) {
 	if s.err != nil {
 		return jobsFile{}, jobsLog{}, s.err
 	}
@@ -1284,14 +1382,14 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 	for _, line := range read.Lines {
 		var row types.Job
 		if err := json.Unmarshal(line.Text, &row); err != nil {
-			return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s:%d: %w", s.path, line.N, err)
+			return jobsFile{}, jobsLog{}, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 		}
 		if row.ID == "" {
 			var header jobsFile
 			if err := json.Unmarshal(line.Text, &header); err != nil {
-				return jobsFile{}, jobsLog{}, fmt.Errorf("job: %s:%d: %w", s.path, line.N, err)
+				return jobsFile{}, jobsLog{}, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 			}
-			f.Schema, f.Retained, log.header = header.Schema, header.Retained, line.Text
+			f.Schema, f.Migration, f.Retained, log.header = header.Schema, header.Migration, header.Retained, line.Text
 			continue
 		}
 		log.rows[row.ID] = line.Text
@@ -1369,7 +1467,7 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 				" delete it anyway with --force, or leave it where a later reader can find it",
 				id, dropped.State)
 		}
-		if dropped.Worktree.Standing() {
+		if dropped.Worktree.Standing() && dropped.Worktree.Made {
 			here, _ := filepath.Abs(s.root)
 			others := slices.DeleteFunc(slices.Clone(f.Jobs), func(row types.Job) bool { return row.ID == id })
 			if kept := endCheckout(ctx, others, here, dropped, *dropped.Worktree, nil); kept != "" {

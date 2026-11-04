@@ -3,7 +3,6 @@ import { describe, expect, test } from 'claude-code/testing'
 import {
   budgetNotice,
   cacheNotice,
-  cacheStatus,
   formatDuration,
   formatTokens,
   formatUsd,
@@ -13,7 +12,6 @@ import {
   parseRates,
   priceStepNotice,
   pricedModel,
-  rateAgeDays,
   ratesFor,
   recacheUsd,
   requestUsd,
@@ -76,13 +74,12 @@ describe('inferTtl', () => {
   })
 })
 
-describe('cacheNotice and cacheStatus', () => {
+describe('cacheNotice', () => {
   const cache: CacheState = { lastResponseAt: 0, ttl: '5m', ttlSource: 'assumed', contextTokens: 182_000, model: 'claude-opus-5-5' }
   const at = (ms: number): CacheState => ({ ...cache, lastResponseAt: ms })
 
   test('nothing before the first response', async () => {
     expect(cacheNotice(cache, 1000, 5 * MIN, 50_000, DEFAULT_RATES)).toBeNull()
-    expect(cacheStatus(cache, 1000)).toBeUndefined()
   })
 
   test('quiet while more than the window is left, a countdown inside it, expired after', async () => {
@@ -94,8 +91,6 @@ describe('cacheNotice and cacheStatus', () => {
     const gone = cacheNotice(at(start), start + TTL_MS['5m'] + 4 * MIN, 5 * MIN, 50_000, DEFAULT_RATES)!
     expect(gone.isExpired).toBe(true)
     expect(gone.text).toContain('Cache expired 4m ago')
-    expect(cacheStatus(at(start), start + 2 * MIN)).toBe('cache 3m')
-    expect(cacheStatus(at(start), start + 6 * MIN)).toBe('cache expired')
   })
 
   test('a small context is not worth a warning', async () => {
@@ -201,42 +196,43 @@ describe('session spend', () => {
 
 describe('parseRates', () => {
   test('reads the default shape', async () => {
-    expect(parseRates(JSON.stringify(DEFAULT_RATES)).models).toHaveLength(4)
+    const rates = parseRates(JSON.stringify(DEFAULT_RATES))
+    expect(rates.value?.models ?? []).toHaveLength(4)
   })
   test('names the field it could not use', async () => {
     const bad = { ...DEFAULT_RATES, models: [{ match: 'claude-x', input: 'four', output: 20 }] }
-    expect(() => parseRates(JSON.stringify(bad))).toThrow('models[0] (claude-x) needs numeric input and output')
-    expect(() => parseRates('{"models":[]}')).toThrow('cacheWriteMultiplier')
+    const model = parseRates(JSON.stringify(bad))
+    expect(model.error?.message ?? '').toBe('rates: models[0] (claude-x) needs numeric input and output')
+    const multiplier = parseRates('{"models":[]}')
+    expect(multiplier.error?.message ?? '').toContain('cacheWriteMultiplier')
+    const garbled = parseRates('{')
+    expect(garbled.error?.message ?? '').toContain('rates: ')
   })
 })
 
-test('formatting and the rates age', async () => {
+test('formatting', async () => {
   expect(formatTokens(182_400)).toBe('182K')
   expect(formatTokens(1_250_000)).toBe('1.3M')
   expect(formatUsd(0.004)).toBe('<$0.01')
   expect(formatUsd(1.6)).toBe('$1.60')
   expect(formatDuration(45_000)).toBe('45s')
   expect(formatDuration(65 * MIN)).toBe('1h5m')
-  expect(rateAgeDays(DEFAULT_RATES, Date.parse('2026-10-20'))).toBe(10)
 })
 
 test('readSettings fills the documented defaults and ignores values outside the options', async () => {
   expect(readSettings({})).toEqual({
     cacheGate: 'warn',
-    cacheWarnMs: 2 * MIN,
     gateMinTokens: 50_000,
     cacheTtl: 'auto',
     priceStepGate: 'warn',
     priceStepMarginTokens: 10_000,
-    spawnGate: 'warn',
+    spawnGate: 'off',
     spawnMaxInputUsdPerMTok: 2,
     sessionBudgetUsd: 0,
     budgetGate: 'warn',
-    subagentTokenBudget: 100_000,
     ratesFile: '',
-    ratesStaleDays: 60,
   })
-  expect(readSettings({ cacheGate: 'loud', cacheTtl: '1h', cacheWarnMinutes: 2 })).toMatchObject({ cacheGate: 'warn', cacheTtl: '1h', cacheWarnMs: 2 * MIN })
+  expect(readSettings({ cacheGate: 'loud', cacheTtl: '1h' })).toMatchObject({ cacheGate: 'warn', cacheTtl: '1h' })
 })
 
 test('the new gates take their own words, and 0 is a value, not a missing one', async () => {
@@ -247,7 +243,7 @@ test('the new gates take their own words, and 0 is a value, not a missing one', 
     spawnMaxInputUsdPerMTok: 0,
   })
   expect(readSettings({ spawnGate: 'confirm', priceStepGate: 'deny', sessionBudgetUsd: -3 })).toMatchObject({
-    spawnGate: 'warn',
+    spawnGate: 'off',
     priceStepGate: 'warn',
     sessionBudgetUsd: 0,
   })

@@ -136,8 +136,8 @@ func labeledArg(ce *ast.CallExpr, label string) (ast.Node, bool) {
 	return nil, false
 }
 
-// figureCalls finds the figure\of calls in body and the directories its magus\dir
-// calls name, sorted and deduplicated. dirUnresolved reports a magus\dir argument that
+// figureCalls finds the figure\of calls in body and the directories its magus\graph().dir
+// calls name, sorted and deduplicated. dirUnresolved reports a magus\graph().dir argument that
 // does not fold to a string.
 func figureCalls(body ast.Node, figureNS, magusNS string, consts map[string]string) (calls []*ast.CallExpr, dirs []string, dirUnresolved bool) {
 	ast.Inspect(body, func(n ast.Node) bool {
@@ -147,13 +147,22 @@ func figureCalls(body ast.Node, figureNS, magusNS string, consts map[string]stri
 		if magusNS == "" {
 			return true
 		}
-		if ce, member, ok := namespaceCall(n, magusNS); ok && member == "dir" {
-			arg, _ := labeledArg(ce, "")
-			if dir, ok := literalString(arg, consts); ok {
-				dirs = append(dirs, strings.Trim(path.Clean(dir), "/"))
-			} else {
-				dirUnresolved = true
-			}
+		ce, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		method, ok := ce.Callee.(*ast.MemberExpr)
+		if !ok || method.Namespaced || method.Name != "dir" {
+			return true
+		}
+		if _, constructor, ok := namespaceCall(method.Object, magusNS); !ok || constructor != "graph" {
+			return true
+		}
+		arg, _ := labeledArg(ce, "")
+		if dir, ok := literalString(arg, consts); ok {
+			dirs = append(dirs, strings.Trim(path.Clean(dir), "/"))
+		} else {
+			dirUnresolved = true
 		}
 		return true
 	})
@@ -162,7 +171,7 @@ func figureCalls(body ast.Node, figureNS, magusNS string, consts map[string]stri
 }
 
 // appendFigures adds a node per figure\of call in d and a depicts edge from it to every
-// directory a magus\dir call in d names, and to the project rooted there when one is.
+// directory a magus\graph().dir call in d names, and to the project rooted there when one is.
 // An argument that does not fold to a string is listed in the node's unresolved attr,
 // never dropped: a figure with no literal id is keyed by its function instead.
 func (x *figureExtractor) appendFigures(s *Shard, rel string, d *ast.FunDecl, figureNS, magusNS string, consts map[string]string) {

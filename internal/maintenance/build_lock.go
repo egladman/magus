@@ -14,6 +14,8 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sys/pid"
+	"github.com/egladman/magus/libs/xdg"
+	"github.com/egladman/magus/types"
 )
 
 const (
@@ -29,6 +31,68 @@ type GraphBuildHolder struct {
 	// By names the build for a reader: "`magus graph build`" for a manual one, "the
 	// server's sync-graph job" for one the server runs inside its own process.
 	By string `json:"by"`
+	// Store is the knowledge store the work writes, empty when none. A build
+	// queued behind this holder loads from it only when the store is its own.
+	Store string `json:"store,omitempty"`
+}
+
+// machineGraphBuildDir holds this machine's one build lock, taken by every
+// graph build, symbol refresh and background symbol index. Take it before a
+// store's lock, so two builds never each hold one and wait on the other.
+func machineGraphBuildDir() (string, error) {
+	state, err := xdg.StateDir()
+	if err != nil {
+		return "", fmt.Errorf("maintenance: machine graph build lock: %w", err)
+	}
+	return filepath.Join(state, "magus", "graph-build"), nil
+}
+
+// AcquireMachineGraphBuild is [AcquireGraphBuild] on the machine's build lock.
+func AcquireMachineGraphBuild(ctx context.Context, me GraphBuildHolder, w io.Writer, every time.Duration) (*GraphBuildLock, *GraphBuildHolder, error) {
+	dir, err := machineGraphBuildDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	return AcquireGraphBuild(ctx, dir, me, w, every)
+}
+
+// TryMachineGraphBuild is [TryGraphBuild] on the machine's build lock.
+func TryMachineGraphBuild(me GraphBuildHolder, w io.Writer) (*GraphBuildLock, *GraphBuildHolder, error) {
+	dir, err := machineGraphBuildDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	return TryGraphBuild(dir, me, w)
+}
+
+// RunningMachineGraphBuild is [RunningGraphBuild] on the machine's build lock.
+// The error says the lock's place could not be resolved.
+func RunningMachineGraphBuild() (GraphBuildHolder, bool, error) {
+	dir, err := machineGraphBuildDir()
+	if err != nil {
+		return GraphBuildHolder{}, false, err
+	}
+	holder, running := RunningGraphBuild(dir)
+	return holder, running, nil
+}
+
+// ReindexRefusals is the part of a reindex failure that fails `graph build`:
+// each project refused for the outer run's lock (MGS3007), a full build budget
+// (MGS3009) or memory pressure (MGS3053). The index it wanted stayed stale,
+// and an exit 0 under magus\cmd's quiet hid that. A missing indexer stays a
+// warning. Nil when nothing was refused.
+func ReindexRefusals(err error) error {
+	errs := []error{err}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = joined.Unwrap()
+	}
+	var refused []error
+	for _, e := range errs {
+		if errors.Is(e, types.ProjectLockHeldByAncestor) || errors.Is(e, types.MachineBudgetExhausted) || errors.Is(e, types.MemoryPressureHigh) {
+			refused = append(refused, e)
+		}
+	}
+	return errors.Join(refused...)
 }
 
 func (h GraphBuildHolder) String() string {
@@ -59,6 +123,25 @@ type GraphBuildLock struct {
 //
 // It returns ctx's error when ctx ends first; the other build carries on.
 func AcquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w io.Writer, every time.Duration) (_ *GraphBuildLock, waitedOn *GraphBuildHolder, err error) {
+	lock, h, err := TryGraphBuild(dir, me, w)
+	if err != nil || h == nil {
+		return lock, nil, err
+	}
+	fmt.Fprintf(w, "magus graph build: waiting for %s; interrupting stops the wait, not that work\n", h)
+	fl := flock.New(filepath.Join(dir, graphBuildLockFile))
+	if got, err := fl.TryLockContext(ctx, every); err != nil || !got {
+		if ctx.Err() != nil {
+			return nil, nil, fmt.Errorf("maintenance: stopped waiting for %s: %w", h, ctx.Err())
+		}
+		return nil, nil, fmt.Errorf("maintenance: graph build lock %s: %w", fl.Path(), err)
+	}
+	lock, err = recordGraphBuild(fl, filepath.Join(dir, graphBuildHolderFile), me, w)
+	return lock, h, err
+}
+
+// TryGraphBuild is AcquireGraphBuild without the wait: when another holds
+// the lock it returns that holder and no lock.
+func TryGraphBuild(dir string, me GraphBuildHolder, w io.Writer) (_ *GraphBuildLock, holder *GraphBuildHolder, err error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("maintenance: graph build lock: %w", err)
 	}
@@ -74,19 +157,18 @@ func AcquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w i
 			return nil, nil, err
 		}
 		if !pid.Alive(h.PID) {
-			h = GraphBuildHolder{} // a dead build's record, which the live holder has yet to replace
+			h = GraphBuildHolder{} // a dead build's record, not yet replaced
 		}
-		waitedOn = &h
-		fmt.Fprintf(w, "magus graph build: waiting for %s, which is building this workspace's graph; interrupting stops the wait, not that build\n", h)
-		if got, err = fl.TryLockContext(ctx, every); err != nil || !got {
-			if ctx.Err() != nil {
-				return nil, nil, fmt.Errorf("maintenance: stopped waiting for %s: %w", h, ctx.Err())
-			}
-			return nil, nil, fmt.Errorf("maintenance: graph build lock %s: %w", fl.Path(), err)
-		}
+		return nil, &h, nil
 	}
+	lock, err := recordGraphBuild(fl, holderPath, me, w)
+	return lock, nil, err
+}
+
+// recordGraphBuild writes me as the holder of the lock fl holds.
+func recordGraphBuild(fl *flock.Flock, holderPath string, me GraphBuildHolder, w io.Writer) (*GraphBuildLock, error) {
 	if prev, ok, err := readGraphBuildHolder(holderPath); err != nil {
-		return nil, nil, errors.Join(err, fl.Unlock())
+		return nil, errors.Join(err, fl.Unlock())
 	} else if ok {
 		fmt.Fprintf(w, "magus graph build: took over the build lock from %s, which ended without releasing it\n", prev)
 	}
@@ -95,9 +177,9 @@ func AcquireGraphBuild(ctx context.Context, dir string, me GraphBuildHolder, w i
 		err = file.ReplaceFile(holderPath, data, 0o600)
 	}
 	if err != nil {
-		return nil, nil, errors.Join(fmt.Errorf("maintenance: record graph build holder: %w", err), fl.Unlock())
+		return nil, errors.Join(fmt.Errorf("maintenance: record graph build holder: %w", err), fl.Unlock())
 	}
-	return &GraphBuildLock{fl: fl, holderPath: holderPath}, waitedOn, nil
+	return &GraphBuildLock{fl: fl, holderPath: holderPath}, nil
 }
 
 // Release clears the holder record and drops the lock, in that order, so a waiter that

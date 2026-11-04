@@ -871,7 +871,7 @@ func testConformance() types.ConformanceOptions { return types.ConformanceOption
 
 func TestConformanceTakesTheGatesAsGiven(t *testing.T) {
 	g, id := thresholdFixture()
-	o := thresholdOptions()
+	o := thresholdOptions(8)
 	require.NotEmpty(t, g.ConformanceChecks(ConformanceChange{Conformance: o, Subjects: []string{id["Frobnicate"]}}))
 
 	o.Gates = types.ConformanceGates{}

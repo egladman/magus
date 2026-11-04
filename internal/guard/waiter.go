@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
 
@@ -236,75 +237,95 @@ func eachCall(f *syntax.File, d Dialect, fn func(*syntax.CallExpr, hint.Invocati
 	})
 }
 
-// refusedRetryWindow is how long after an MGS3009 refusal a rerun of the same command is a
-// retry loop rather than a fresh attempt: in two days of session records, 106 of 140
-// consecutive refusals came back inside it.
+// refusedRetryWindow is how long after a refusal a rerun of the same command is
+// a retry loop. In two days of session records, 106 of 140 consecutive MGS3009
+// refusals came back inside it.
 const refusedRetryWindow = 60 * time.Second
 
-// refusalCode is how a refusal's code reads inside a run log line, matched before the line
-// is decoded so a log full of output costs a byte search per line.
-var refusalCode = []byte(`"` + types.MachineBudgetExhausted + `"`)
+// refusalCodes are the refusals a retry of the same command cannot clear.
+var refusalCodes = []types.DiagnosticCode{types.MachineBudgetExhausted, types.MemoryPressureHigh}
 
-// refusedRun is a magus command this checkout's run log recorded refused with MGS3009.
+// refusedRun is a magus command this checkout's log recorded refused.
 type refusedRun struct {
 	argv []string
 	at   time.Time
+	code types.DiagnosticCode
 }
 
-// denyRefusedRetry refuses a magus run that repeats, argv for argv, one this checkout's run
-// log recorded refused with MGS3009 inside refusedRetryWindow, when that refusal is still
-// the newest run of the command. Nothing freed a seat on the caller's behalf in between,
-// so the rerun is the poll again with the caller's turn as its loop. A run a wait gates
-// (`magus status --wait | magus run ...`) passes, as does any line that runs no target.
-// The run log is read only for a line that runs one, and only logs written inside the
-// window are opened. A leased caller is told the pipe, whose wait holds the seat for the run it
-// feeds; the unbound root is told to fork a job instead, since orchestrator-groundwork
-// refuses it the run.
+// denyRefusedRetry refuses a magus run repeating a refusal this checkout's log
+// holds inside refusedRetryWindow, while it is the command's newest run.
+// Nothing freed a seat or memory meanwhile. A `status --wait` gate excuses
+// MGS3009 only.
 func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string) denial {
-	argvs := unwaitedRuns(command)
-	if len(argvs) == 0 {
+	unwaited, waited := magusRuns(command)
+	if len(unwaited) == 0 && len(waited) == 0 {
 		return denial{}
 	}
 	now := time.Now()
-	r, ok := recentRefusal(workspaceRunsDir(hookLocation(ctx, deps).cacheDir), argvs, now)
+	runsDir := workspaceRunsDir(hookLocation(ctx, deps).cacheDir)
+	r, ok := recentRefusal(runsDir, unwaited, now)
+	if !ok {
+		r, ok = recentRefusal(runsDir, waited, now)
+		ok = ok && r.code == types.MemoryPressureHigh
+	}
 	if !ok {
 		return denial{}
 	}
 	run := strings.Join(append([]string{hint.BinaryName()}, quoteArgs(r.argv)...), " ")
+	ago := now.Sub(r.at).Round(time.Second)
+	if r.code == types.MemoryPressureHigh {
+		next := "Free memory first, then run it once the minute has passed"
+		if deps.lease != "" {
+			next = cache.LeasedPressureNext(deps.lease)
+		}
+		return denial{
+			Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago: this machine is short of memory. %s.", run, r.code, ago, next),
+			Why: denyPressureRetryWhy,
+		}
+	}
 	if deps.lease == "" {
 		return denial{
 			Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; the root runs no target: fork a job for it: `%s`.",
-				run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.JobFork.String()),
+				run, r.code, ago, hint.JobFork.String()),
 			Why: denyRefusedRetryWhy,
 		}
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago; wait for a seat in the same call: `%s | %s`.",
-			run, types.MachineBudgetExhausted, now.Sub(r.at).Round(time.Second), hint.Status.With("--wait"), run),
+			run, r.code, ago, hint.Status.With("--wait"), run),
 		Why: denyRefusedRetryWhy + " `status --wait` sizes the piped run's claim, waits until the budget can seat it and reserves that seat for the run, so the run starts as soon as a seat frees instead of on the caller's next turn, and no one takes the seat in between.",
 	}
 }
 
-var denyRefusedRetryWhy = "A refusal frees no seat, and the same command run again inside a minute meets the same full budget: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
+var (
+	denyRefusedRetryWhy = "A refusal frees no seat, and the same command run again inside a minute meets the same full budget: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
 
-// unwaitedRuns is the argv of each magus run or affected on a line that no `magus status
-// --wait` gates (see seatWaits); nil for a line that runs neither.
-func unwaitedRuns(command string) [][]string {
+	denyPressureRetryWhy = "A refusal frees no memory, and a retry within the minute reads the same failing machine. On 2026-10-31 this state ended in a kernel panic, so an agent looping here spends turns on the machine least able to afford them."
+)
+
+// magusRuns is the argv of each magus run or affected on a line, split by
+// whether a `magus status --wait` gates it (see seatWaits).
+func magusRuns(command string) (unwaited, waited [][]string) {
 	f, err := parseFile(command, DialectBash)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	paired := seatWaits(f, DialectBash)
-	var argvs [][]string
 	eachCall(f, DialectBash, func(call *syntax.CallExpr, c hint.Invocation) {
-		if paired[call] || !isMagusInvocation(c) {
+		if !isMagusInvocation(c) {
 			return
 		}
-		if words := magusSubcommandWords(c.Args); len(words) > 0 && (words[0] == "run" || words[0] == "affected") {
-			argvs = append(argvs, c.Args)
+		words := magusSubcommandWords(c.Args)
+		if len(words) == 0 || (words[0] != "run" && words[0] != "affected") {
+			return
+		}
+		if paired[call] {
+			waited = append(waited, c.Args)
+		} else {
+			unwaited = append(unwaited, c.Args)
 		}
 	})
-	return argvs
+	return unwaited, waited
 }
 
 // commandAttempt is the newest run of one argv in the window, and its refusal if it was
@@ -315,9 +336,9 @@ type commandAttempt struct {
 	refused bool
 }
 
-// recentRefusal is the newest MGS3009 refusal in runsDir of any of argvs inside
-// refusedRetryWindow of now, counting a refusal only while no later run of the same argv
-// started: a run that passed, or is still running, after it got its seat.
+// recentRefusal is the newest refusal in runsDir of any of argvs inside
+// refusedRetryWindow of now. A later run of the same argv cancels it: one that
+// passed, or is still running.
 func recentRefusal(runsDir string, argvs [][]string, now time.Time) (refusedRun, bool) {
 	cutoff := now.Add(-refusedRetryWindow)
 	latest := map[string]commandAttempt{}
@@ -330,8 +351,8 @@ func recentRefusal(runsDir string, argvs [][]string, now time.Time) (refusedRun,
 		if prev, ok := latest[key]; ok && !at.After(prev.started) {
 			return
 		}
-		refusedAt, refused := readRefusal(rest)
-		latest[key] = commandAttempt{started: at, refusal: refusedRun{argv: started.Command.Arguments, at: refusedAt}, refused: refused}
+		refusedAt, code, refused := readRefusal(rest)
+		latest[key] = commandAttempt{started: at, refusal: refusedRun{argv: started.Command.Arguments, at: refusedAt, code: code}, refused: refused}
 	})
 	var newest refusedRun
 	found := false
@@ -343,18 +364,20 @@ func recentRefusal(runsDir string, argvs [][]string, now time.Time) (refusedRun,
 	return newest, found
 }
 
-// readRefusal reads the rest of one run log for a result carrying MGS3009, and when it
-// was recorded.
-func readRefusal(rest *bufio.Reader) (time.Time, bool) {
+// readRefusal reads the rest of one run log for a refused result: when it was
+// recorded and its code.
+func readRefusal(rest *bufio.Reader) (time.Time, types.DiagnosticCode, bool) {
 	for {
 		line, err := rest.ReadBytes('\n')
 		var ev journal.Event
-		if bytes.Contains(line, refusalCode) && json.Unmarshal(line, &ev) == nil &&
-			ev.Kind == journal.KindResult && ev.DiagnosticCode == string(types.MachineBudgetExhausted) {
-			return time.UnixMilli(ev.Ts), true
+		// The byte search before decoding keeps a log full of output cheap.
+		if slices.ContainsFunc(refusalCodes, func(code types.DiagnosticCode) bool { return bytes.Contains(line, fmt.Appendf(nil, `"%s"`, code)) }) &&
+			json.Unmarshal(line, &ev) == nil && ev.Kind == journal.KindResult &&
+			slices.Contains(refusalCodes, types.DiagnosticCode(ev.DiagnosticCode)) {
+			return time.UnixMilli(ev.Ts), types.DiagnosticCode(ev.DiagnosticCode), true
 		}
 		if err != nil {
-			return time.Time{}, false
+			return time.Time{}, "", false
 		}
 	}
 }
@@ -451,8 +474,7 @@ func BudgetFull(s types.MachineSnapshot, now time.Time) string {
 			text += ", has held its seat " + now.Sub(h.Since).Round(time.Second).String()
 		}
 	}
-	return fmt.Sprintf("%s. A seat frees as each run ends: wait for one (`%s` shows the pool) before starting a worker, since a worker whose check finds no seat reports and stops.",
-		text, hint.Status.With("--watch=15s"))
+	return text + ". A seat frees as each run ends: hold this worker until the completion notice of work you already started arrives, since a worker whose check finds no seat reports and stops."
 }
 
 // holdsNoBuildSeat reports whether the worker for row can never take a build seat: it writes
@@ -493,10 +515,97 @@ func sleepPollFires(cmds []hint.Invocation) bool {
 	return false
 }
 
+// waitBound is the --timeout for a backgrounded run of target. Measured, it is
+// took plus half again, rounded up to a minute: check-timeout's margin.
+// Unmeasured, it is ceiling, and note says it is no measurement.
+func waitBound(target string, took time.Duration, measured bool, ceiling time.Duration) (bound time.Duration, note string) {
+	if !measured {
+		return ceiling, fmt.Sprintf("nothing recorded here measures `%s` on these projects, so the bound is background-unbounded's %s ceiling, not a measurement", target, formatLimit(ceiling))
+	}
+	_, bound = checkMargin(took)
+	return bound, fmt.Sprintf("`%s` last ran %s here, and %s leaves half again for a cold cache or a loaded machine", target, took.Round(time.Second), formatLimit(bound))
+}
+
+// lastRunHere is the newest real run of r's target in root's session store,
+// the longest over several projects. One project with no run leaves the line
+// unmeasured. So does `affected`: no one project's run prices the diff's set.
+func lastRunHere(root string, r targetRun) (time.Duration, bool) {
+	if root == "" || r.verb != "run" {
+		return 0, false
+	}
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return 0, false
+	}
+	projects := r.projects
+	if len(projects) == 0 {
+		projects = []string{"."}
+	}
+	var last time.Duration
+	for _, p := range projects {
+		d, ok := sessions.LastRunDuration(dir, p, r.target)
+		if !ok {
+			return 0, false
+		}
+		last = max(last, d)
+	}
+	return last, true
+}
+
+// waitedRun is the one target run a line makes, spelled as written. False for
+// none, for several, and for a run the served line could not repeat. That is
+// a word the shell computes, or an environment assigned beside it.
+func waitedRun(command string, d Dialect) ([]string, targetRun, bool) {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return nil, targetRun{}, false
+	}
+	var argv []string
+	var r targetRun
+	found, repeatable := 0, false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		call, ok := n.(*syntax.CallExpr)
+		if !ok {
+			return true
+		}
+		words, ok := magusUnder(literalWords(call.Args), d)
+		if !ok {
+			return true
+		}
+		tr, ok := parseTargetRun(hint.Invocation{Name: words[0], Args: words[1:]})
+		if !ok {
+			return true
+		}
+		argv, r = words, tr
+		found++
+		repeatable = len(call.Assigns) == 0 && !slices.ContainsFunc(call.Args, func(w *syntax.Word) bool { return !readsAsWritten(w.Parts) })
+		return true
+	})
+	return argv, r, found == 1 && repeatable
+}
+
+// waitRemedy backgrounds a waiting line's target run under job exec. A line
+// waitedRun declines gets an empty lead, which withRemedy reads as no remedy.
+func waitRemedy(deps Dependencies, rule denyRuleName, command string, d Dialect) (string, types.NextStep) {
+	run, r, ok := waitedRun(command, d)
+	if !ok {
+		return "", types.NextStep{}
+	}
+	took, measured := lastRunHere(deps.scope.root, r)
+	bound, note := waitBound(r.target, took, measured, configuredBackgroundLimits(deps).ceiling)
+	argv := append([]string{run[0], "job", "exec", "--timeout", formatLimit(bound), "--"}, run...)
+	next := hint.NextForDenyRemedy(string(rule), argv,
+		"run it in the background: the host announces it when it ends, and job exec stops it at the bound.")
+	return fmt.Sprintf("this line polls for a run the host announces when it ends; run it in the background and wait for its notice: %s.", note), next
+}
+
 // sleepDuration is how long one sleep invocation waits: GNU's suffixed operands summed, a
 // bare number as seconds. false for anything else, including an operand it cannot read.
 func sleepDuration(c hint.Invocation) (time.Duration, bool) {
-	if path.Base(c.Name) != "sleep" || len(c.Args) == 0 {
+	if path.Base(c.Name) != "sleep" {
+		return sleepForm(c)
+	}
+	if len(c.Args) == 0 {
 		return 0, false
 	}
 	var total time.Duration
@@ -519,6 +628,130 @@ func sleepDuration(c hint.Invocation) (time.Duration, bool) {
 		total += time.Duration(n * float64(unit))
 	}
 	return total, true
+}
+
+// isSleeper reports a command whose job is to wait: `sleep`, or any spelling sleepForm
+// reads, whether or not its duration is readable.
+func isSleeper(c hint.Invocation) bool {
+	if path.Base(c.Name) == "sleep" {
+		return true
+	}
+	_, ok := sleepForm(c)
+	return ok
+}
+
+// runsSleeper reports whether body runs a sleeper anywhere, nested commands included.
+func runsSleeper(body []*syntax.Stmt, d Dialect) bool {
+	found := false
+	for _, stmt := range body {
+		syntax.Walk(stmt, func(n syntax.Node) bool {
+			if call, ok := n.(*syntax.CallExpr); ok && slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), isSleeper) {
+				found = true
+			}
+			return !found
+		})
+	}
+	return found
+}
+
+// oneLinerSleep is how one interpreter's inline script sleeps: the flags that carry the
+// script, and each spelling of a sleep in it.
+type oneLinerSleep struct {
+	flags    string
+	patterns []oneLinerPattern
+}
+
+// oneLinerPattern matches a sleep whose first group is a number of unit.
+type oneLinerPattern struct {
+	re   *regexp.Regexp
+	unit time.Duration
+}
+
+var (
+	sleepSeconds = regexp.MustCompile(`\bsleep\s*\(?\s*([0-9.]+)`)
+	sleepCall    = regexp.MustCompile(`\bsleep\s*\(\s*([0-9.]+)`)
+
+	oneLinerSleeps = map[string]oneLinerSleep{
+		"perl": {"eE", []oneLinerPattern{
+			{regexp.MustCompile(`select\s*\(\s*undef\s*,\s*undef\s*,\s*undef\s*,\s*([^)\s]+)\s*\)`), time.Second},
+			{sleepSeconds, time.Second},
+			{regexp.MustCompile(`\busleep\s*\(?\s*([0-9.]+)`), time.Microsecond},
+		}},
+		"ruby":    {"e", []oneLinerPattern{{sleepSeconds, time.Second}}},
+		"python":  {"c", []oneLinerPattern{{sleepCall, time.Second}}},
+		"python3": {"c", []oneLinerPattern{{sleepCall, time.Second}}},
+		"node": {"ep", []oneLinerPattern{
+			{regexp.MustCompile(`setTimeout\s*\([^;]*?,\s*([0-9.]+)\s*\)`), time.Millisecond},
+			{regexp.MustCompile(`Atomics\.wait\s*\([^;]*?,\s*([0-9.]+)\s*\)`), time.Millisecond},
+		}},
+	}
+)
+
+// sleepForm is how long a command that waits without being `sleep` waits. A
+// duration not stated as a number reads as sleepPollFloor. A wait on a pid is
+// not a sleep: it is refused only when a run holding a seat has that pid.
+// `timeout N sleep M` needs no spelling: timeout is peeled to the sleep it runs.
+func sleepForm(c hint.Invocation) (time.Duration, bool) {
+	name := path.Base(c.Name)
+	switch name {
+	case "caffeinate":
+		if hasFlag(c.Args, 'w', "") {
+			return 0, false
+		}
+		return flagSeconds(c.Args, "-t")
+	case "read":
+		return flagSeconds(c.Args, "-t")
+	}
+	spec, ok := oneLinerSleeps[name]
+	if !ok {
+		return 0, false
+	}
+	script, ok := inlineScript(c.Args, spec.flags)
+	if !ok {
+		return 0, false
+	}
+	for _, p := range spec.patterns {
+		if m := p.re.FindStringSubmatch(script); m != nil {
+			n, err := strconv.ParseFloat(m[1], 64)
+			if err != nil || n < 0 {
+				return sleepPollFloor, true
+			}
+			return time.Duration(n * float64(p.unit)), true
+		}
+	}
+	return 0, false
+}
+
+// flagSeconds is the seconds the word after flag carries, sleepPollFloor when that word is
+// not a number, and false when the flag is absent.
+func flagSeconds(args []string, flag string) (time.Duration, bool) {
+	i := slices.Index(args, flag)
+	if i < 0 {
+		return 0, false
+	}
+	if i+1 < len(args) {
+		if n, err := strconv.ParseFloat(args[i+1], 64); err == nil && n >= 0 {
+			return time.Duration(n * float64(time.Second)), true
+		}
+	}
+	return sleepPollFloor, true
+}
+
+// inlineScript is the script an interpreter's argv carries after one of flags (last in a
+// short bundle, as in `-we`) or after `--eval`.
+func inlineScript(args []string, flags string) (string, bool) {
+	for i, a := range args {
+		if a == "--eval" && i+1 < len(args) {
+			return args[i+1], true
+		}
+		if script, ok := strings.CutPrefix(a, "--eval="); ok {
+			return script, true
+		}
+		if len(a) >= 2 && a[0] == '-' && a[1] != '-' && strings.ContainsRune(flags, rune(a[len(a)-1])) && i+1 < len(args) {
+			return args[i+1], true
+		}
+	}
+	return "", false
 }
 
 // statusProbe reports a one-shot read of something running elsewhere: a process, the pool

@@ -53,7 +53,7 @@ final viaHost = fun() > void !> any { refuse(); };
 final thrown = fun() > void !> any { tick(); throw "flaky"; };
 `))
 	callback := func(name string) std.Callback { return CallbackArg(sess, []vm.Value{sess.GetGlobal(name)}, 0) }
-	fast := map[string]any{"backoff_ms": 0}
+	fast := types.RetryOptions{BackoffMs: new(0.0)}
 
 	_, err := std.OsRetry(ctx, 3, callback("viaHost"), fast)
 	var typed *types.NonRetryableError

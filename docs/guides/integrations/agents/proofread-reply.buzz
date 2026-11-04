@@ -31,11 +31,15 @@
 //     loop_count above 0 on cursor), because the findings this hook handed back are what
 //     started it, and judging that reply would loop;
 //   - the message is empty, the envelope is unreadable, or the turn did not complete;
-//   - proofread is missing, not executable, or exits 2 (it could not judge);
 //   - proofread finds nothing.
 //
-// It always exits 0. A missing proofread is silent because the hook fires on every turn: a
-// note on each would cost more than the advice.
+// A proofread that is missing, stale, exits 2 or prints unreadable JSON
+// judged nothing. That gets one notice per session naming the binary and its
+// fix, a systemMessage on claude-code and codex, else stderr. The reply is
+// never blocked. It always exits 0.
+//
+// In a checkout of magus the proofread it builds judges, checked for
+// staleness by that checkout's own proofread module.
 //
 // Arguments:
 //
@@ -57,7 +61,7 @@
 // NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
 // carries no verdict on any input.
 //
-// magus-guard-template: 34
+// magus-guard-template: 36
 
 import "io";
 import "fs";
@@ -167,10 +171,12 @@ fun readStop(input: str, host: str) > Stop {
     return Stop{ reply = reply, again = again };
 }
 
-// parseFindings reads proofread's JSON findings, whose source ends in `:<line>`. Output it
-// cannot read is no findings.
-fun parseFindings(stdout: str) > [Finding] {
-    final rows: [any] = json\parse(stdout) catch [<any>];
+// parseFindings reads proofread's JSON findings, whose source ends in
+// `:<line>`. Output it cannot read is null.
+fun parseFindings(stdout: str) > [Finding]? {
+    final parsed = json\parse(stdout) catch null;
+    final rows = parsed as? [any];
+    if (rows == null) { return null; }
     final found = mut [<Finding>];
     foreach (r in rows) {
         final source: str = r["source"] ?? "";
@@ -184,19 +190,78 @@ fun parseFindings(stdout: str) > [Finding] {
     return found;
 }
 
-// resolveBin is the --proofread path, else __PROOFREAD_BIN, else proofread on PATH; ""
-// when none is executable.
-fun resolveBin(flagged: str) > str {
-    var bin = flagged;
-    if (bin == "") { bin = hook\envOr("__PROOFREAD_BIN", fallback: ""); }
-    if (bin == "") { bin = proc\which("proofread") catch ""; }
-    if (bin == "" or !hook\isExecutable(bin)) { return ""; }
-    return bin;
+// A checkout of magus links its own proofread, relative to the root.
+final WORKSPACE_MODULE = "libs/proofread/proofread.buzz";
+final WORKSPACE_BINARY = "libs/proofread/gen/proofread";
+
+// STALE_SCRIPT asks the checkout's proofread module whether its build is
+// stale: the check judgeRunner makes, never a copy of it.
+// Each line carries a prefix: magus buzz drops a line printed empty.
+final STALE_SCRIPT = `import "std"; import "./libs/proofread/proofread" as p; std\print("build:" + p\build); std\print("stale:" + p\whyStale("libs/proofread"));`;
+
+final RELEASE_FIX = "Install proofread from https://github.com/egladman/magus/releases, "
+    + "or point --proofread or __PROOFREAD_BIN at it.";
+
+// Proofreader is the binary that judges replies. why is "" when it may run,
+// else why not, and fix says what makes it runnable.
+object Proofreader {
+    bin: str,
+    why: str = "",
+    fix: str = "",
 }
 
-// judge runs bin over reply, or finds nothing when it fails. With no decisions file it
-// grades the reply against MINIMUM; a decisions file sets the agent-reply minimum itself.
-fun judge(bin: str, decisions: str, reply: str) > [Finding] {
+// proofreader is the --proofread path, else __PROOFREAD_BIN, else the build a
+// checkout of magus links, else proofread on PATH.
+fun proofreader(flagged: str, root: str) > Proofreader {
+    var named = flagged;
+    if (named == "") { named = hook\envOr("__PROOFREAD_BIN", fallback: ""); }
+    if (named != "") {
+        if (hook\isExecutable(named)) { return Proofreader{ bin = named }; }
+        return Proofreader{ bin = named, why = "{named} is not an executable file", fix = RELEASE_FIX };
+    }
+    if (root != "" and (fs\isFile("{root}/{WORKSPACE_MODULE}") catch false)) {
+        return workspaceBuild(root);
+    }
+    final onPath = proc\which("proofread") catch "";
+    if (onPath == "") { return Proofreader{ bin = "proofread", why = "no proofread is on PATH", fix = RELEASE_FIX }; }
+    return Proofreader{ bin = onPath };
+}
+
+// workspaceBuild is the proofread root links, checked for staleness by the
+// magus that judges root.
+fun workspaceBuild(root: str) > Proofreader {
+    final bin = "{root}/{WORKSPACE_BINARY}";
+    final magus = hook\resolveBin(cwd: root);
+    if (magus == "" or !hook\isExecutable(magus)) {
+        return Proofreader{ bin = bin, why = "no runnable magus can tell whether {bin} is stale",
+            fix = hook\magusFix(root) };
+    }
+    final run = proc\exec(magus, args: ["buzz", "-C", root, "-s", "-e", STALE_SCRIPT], dir: root,
+        opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
+    final lines = if (run != null and run!.code == 0) run!.stdout.split("\n") else [<str>];
+    if (lines.len() < 2 or !lines[0].startsWith("build:") or !lines[1].startsWith("stale:")) {
+        var said = "it did not start";
+        if (run != null) { said = "it exited {run!.code}: {hook\firstLine(run!.stderr)}"; }
+        return Proofreader{ bin = bin, why = "{magus} could not tell whether {bin} is stale, as {said}",
+            fix = "Rebuild or update {magus}. {hook\magusFix(root)}" };
+    }
+    final stale = lines[1].sub(6, len: lines[1].len() - 6);
+    if (stale != "") {
+        final build = lines[0].sub(6, len: lines[0].len() - 6);
+        return Proofreader{ bin = bin, why = "proofread is stale: {stale}", fix = "Run `{build}`." };
+    }
+    return Proofreader{ bin = bin };
+}
+
+// Judgment is one proofread run: its findings, or why it could not judge.
+object Judgment {
+    found: [Finding],
+    failure: str = "",
+}
+
+// judge runs bin over reply. With no decisions file it grades the reply
+// against MINIMUM; a decisions file sets the agent-reply minimum itself.
+fun judge(bin: str, decisions: str, reply: str) > Judgment {
     final argv = mut ["agent-reply", "--stdin", "-o", "json"];
     if (decisions != "") {
         argv.append("--decisions");
@@ -206,12 +271,29 @@ fun judge(bin: str, decisions: str, reply: str) > [Finding] {
         argv.append("{MINIMUM}");
     }
     final run = proc\exec(bin, args: argv,
-        opts: {"stdin": reply, "quiet": true, "allow_failure": true}) catch null;
+        opts: proc\ExecOptions{stdin = reply, quiet = true, allowFailure = true}) catch null;
+    if (run == null) { return Judgment{ found = [<Finding>], failure = "{bin} did not start" }; }
     // Exit 1 is a deny finding, written to stdout like any other; 2 is a run that could not judge.
-    if (run == null or (run!.code != 0 and run!.code != 1)) {
-        return [<Finding>];
+    if (run!.code != 0 and run!.code != 1) {
+        return Judgment{ found = [<Finding>], failure = "{bin} exited {run!.code}: {hook\firstLine(run!.stderr)}" };
     }
-    return parseFindings(run!.stdout);
+    final found = parseFindings(run!.stdout);
+    if (found == null) {
+        return Judgment{ found = [<Finding>], failure = "{bin} printed output that is not JSON findings" };
+    }
+    return Judgment{ found = found! };
+}
+
+// noticeReply tells the person, once per session, that replies go unjudged.
+// The reply stays unblocked. Only Claude Code and Codex show a Stop notice.
+fun noticeReply(host: str, session: str, why: str, fix: str) > str {
+    if (!hook\noticeOnce(session, family: "proofread-reply", file: "proofread-reply.buzz")) { return ""; }
+    final text = "proofread-reply judges no reply: {why}. {fix}";
+    if (host == CLAUDE_CODE or host == CODEX) {
+        return json\stringify({"systemMessage": text}) catch "";
+    }
+    warn(text);
+    return "";
 }
 
 // lead opens the advice. claude-code keeps the reply it already sent; codex, cursor and
@@ -275,7 +357,7 @@ fun output(stop: Stop, host: str, judged: fun (reply: str) > [Finding]) > str {
 fun main(args: [str]) > void {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_FLAG, DECISIONS_FLAG, PROOFREAD_FLAG]) catch null;
     if (parsed == null) { return; }
-    foreach (word in parsed!.unknown) {
+    foreach (word in parsed!.unknown + parsed!.positionals) {
         warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_FLAG}, {DECISIONS_FLAG} and {PROOFREAD_FLAG}. "
             + "Fix the hook command in your host config.");
     }
@@ -293,17 +375,31 @@ fun main(args: [str]) > void {
     var decisions = parsed!.values[DECISIONS_FLAG] ?? "";
     if (decisions == "") { decisions = hook\envOr("__PROOFREAD_DECISIONS", fallback: ""); }
 
-    final stop = readStop(io\stdin.readAll() catch "", host: host);
+    final input = io\stdin.readAll() catch "";
+    final stop = readStop(input, host: host);
     if (stop.tool != "") {
         warn("the event is a call to tool \"{stop.tool}\", not a stop, so nothing was judged. Wire this hook to the host's stop event.");
         return;
     }
-    if (stop.again) { return; }
-    final bin = resolveBin(parsed!.values[PROOFREAD_FLAG] ?? "");
-    if (bin == "") { return; }
+    if (stop.again or stop.reply.trim() == "") { return; }
+    final doc = json\parse(input) catch null;
+    final session = hook\field(doc, dotPath: "session_id");
+    final cwd = hook\field(doc, dotPath: "cwd");
+    final root = hook\workspaceRootAt(if (cwd != "") cwd else ".");
+    final reader = proofreader(parsed!.values[PROOFREAD_FLAG] ?? "", root: root);
 
-    final printed = output(stop, host: host,
-        judged: fun (reply: str) > [Finding] => judge(bin, decisions: decisions, reply: reply));
+    var printed = "";
+    if (reader.why != "") {
+        printed = noticeReply(host, session: session, why: reader.why, fix: reader.fix);
+    } else {
+        final judgment = judge(reader.bin, decisions: decisions, reply: stop.reply);
+        if (judgment.failure != "") {
+            printed = noticeReply(host, session: session, why: judgment.failure,
+                fix: "Run `{reader.bin} agent-reply --stdin` on a reply and read why.");
+        } else {
+            printed = output(stop, host: host, judged: judging(judgment.found));
+        }
+    }
     if (printed != "") {
         std\print(printed);
     }
@@ -399,14 +495,36 @@ test "advice is capped at MAX_FINDINGS and counts the rest" {
 }
 
 test "proofread's findings are read with their line" {
-    final found = parseFindings("[\{\"source\":\"stdin:4\",\"rule\":\"bold-label\",\"message\":\"Open.\"}]");
+    final found = parseFindings("[\{\"source\":\"stdin:4\",\"rule\":\"bold-label\",\"message\":\"Open.\"}]") ?? [<Finding>];
     std\assert(found.len() == 1 and found[0].rule == "bold-label" and found[0].line == 4, message: "{found.len()}");
-    std\assert(parseFindings("not json").len() == 0, message: "unreadable output is no findings");
+    std\assert(parseFindings("not json") == null, message: "unreadable output is not a clean pass");
+    std\assert((parseFindings("[]") ?? [offer]).len() == 0, message: "an empty list is a clean pass");
 }
 
-test "a binary that is missing or fails finds nothing" {
-    std\assert(judge("/nonexistent/proofread", decisions: "", reply: "Done.").len() == 0, message: "missing binary");
-    std\assert(resolveBin("/nonexistent/proofread") == "", message: "a path that is not executable");
+test "a binary that is missing or fails says why it judged nothing" {
+    final missing = judge("/nonexistent/proofread", decisions: "", reply: "Done.");
+    std\assert(missing.failure.indexOf("/nonexistent/proofread") != null, message: missing.failure);
+    final named = proofreader("/nonexistent/proofread", root: "");
+    std\assert(named.why.indexOf("not an executable") != null and named.fix == RELEASE_FIX, message: named.why);
+}
+
+test "the notice reaches the person once per session and never blocks" {
+    final session = "proofread-reply-{std\random(min: 0, max: 1000000)}";
+    final first: {str: any} = json\parse(noticeReply(CLAUDE_CODE, session: session, why: "w", fix: "f")) catch {<str: any>};
+    std\assert(first["systemMessage"] == "proofread-reply judges no reply: w. f", message: "{first}");
+    std\assert(first["decision"] == null, message: "the reply is never blocked");
+    std\assert(noticeReply(CLAUDE_CODE, session: session, why: "w", fix: "f") == "", message: "once per session");
+}
+
+test "a checkout's own proofread is checked for staleness by its magus" {
+    final root = fs\tempDir("proofread-reply-root-");
+    fs\mkdirAll("{root}/libs/proofread");
+    fs\writeFile("{root}/{WORKSPACE_MODULE}", content: "");
+    fs\writeFile("{root}/magus.yaml", content: "");
+    final reader = proofreader("", root: root);
+    std\assert(reader.bin == "{root}/{WORKSPACE_BINARY}", message: reader.bin);
+    std\assert(reader.why != "", message: "a checkout with no runnable magus or build is never a clean pass");
+    fs\removeAll(root);
 }
 
 test "only the hosts with a reply shape are known" {

@@ -15,6 +15,12 @@ func TestNewVMNotNil(t *testing.T) {
 	require.NotNil(t, v, "NewVM() returned nil")
 }
 
+func TestSetContextKeepsVMOnContext(t *testing.T) {
+	v := NewVM(context.Background())
+	v.SetContext(context.Background())
+	assert.Same(t, v, FromContext(v.ctx), "FromContext(v.ctx) after SetContext")
+}
+
 func TestIsFiberIntIsFalse(t *testing.T) {
 	assert.False(t, IsFiber(IntValue(1)), "IsFiber(IntValue(1))")
 }

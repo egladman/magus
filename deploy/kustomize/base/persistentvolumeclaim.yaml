@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: magus-state
+  labels:
+    app.kubernetes.io/name: magus
+    app.kubernetes.io/component: state
+  annotations:
+    kubernetes.io/description: XDG state and data of the magus daemon (job store, sessions, knowledge graph).
+spec:
+  # ReadWriteOncePod would be stricter, but it needs a CSI driver, and local dev provisioners
+  # such as local-path are not one. The Deployment's Recreate strategy keeps one writer.
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 10Gi

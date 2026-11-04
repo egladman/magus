@@ -82,7 +82,7 @@ func (s *Session) ThrowIntoFiber(ctx context.Context, fiber vmpackage.Value, err
 // Nothing runs until the first resume, so a caller can arm its finalizer before any of
 // the body has executed. As with CallValue, fn and args become the session's.
 func (s *Session) NewFiber(ctx context.Context, fn vmpackage.Value, args []vmpackage.Value) (vmpackage.Value, error) {
-	vm := vmpackage.NewVM(ctx)
+	vm := vmpackage.NewVM(s.within(ctx))
 	vm.SetOwner(s.owner)
 	s.owner.Claim(fn)
 	for _, arg := range args {

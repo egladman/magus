@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent integration to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 12588
-skill_short_bytes: 8463
+skill_full_bytes: 12509
+skill_short_bytes: 8394
 ---
 
 # magus-workspace-rules
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `147` |
-| `knowledge-schema-version` | `24` |
-| `skill-content` | `75ee0a3e7a76` |
+| `skill-stamp-format` | `1` |
+| `knowledge-schema-version` | `25` |
+| `skill-content` | `6c37232f3cbe` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -180,21 +180,20 @@ Adapt one: declare override; change no import, no provider call.
    - MCP setup printed as guidance only; user owns host MCP client config. Token stays secret ref (`MAGUS_MCP_TOKEN`).
    - Commit `magus.yaml` entry and forked spell together.
 
-## Tightening a conformance threshold
+## Tightening a conformance anchor
 
-A workspace that commits a conformance ratchet (`knowledge.conformance.ratchet`) enforces the
-committed value, and the code usually drifts tighter than it. Two readings name the slack:
-the rows of `magus\conformance()` with `propose` above zero, and `magus doctor`'s
-`conformance-ratchet` check, which gives each row's ratchet `path:line`.
+A conformance ceiling holds each changed file to its count of violations at the base
+revision; no count is stored, so nothing needs pruning. The anchors in
+`knowledge.conformance.checks` are policy, and the code usually drifts tighter than them. Two
+readings name the slack: the rows of `magus\change().conformance()` with `propose` above zero, and
+`magus doctor`'s `conformance-ceiling` check, which names each row's magus.yaml key.
 
-1. Edit only the line doctor names. Copy the proposed `value`, the row's `n` and the
-   percentile, and put the measuring revision in `why`.
-2. Delete each known entry doctor reports as stale.
-3. Re-run doctor and read that the proposal is gone.
-4. Commit the ratchet alone. The commit is the review.
+1. Edit only the key doctor names, to the proposed value.
+2. Re-run doctor and read that the proposal is gone.
+3. Commit magus.yaml alone. The commit is the review.
 
-Never pick a number, never loosen a value, and never add a known entry to pass a check:
-fix the code, or ask the person.
+Never pick a number and never loosen an anchor to pass a check: fix the code, or ask the
+person.
 
 ## Prune
 
@@ -244,7 +243,7 @@ generator overwrites its output without asking.
 - Stamp every local instruction
 - Self-improvement: the checklist
 - Adapting a Buzz harness (no magus source edits)
-- Tightening a conformance threshold
+- Tightening a conformance anchor
 - Prune on a schedule you already have
 - Graduating an instruction upstream
 
@@ -419,24 +418,22 @@ the lock target with `:update`, and your workspace fork is unaffected until you
 deliberately rebase it. Additive policy that is not host-shaped stays in
 `magus\guard.shell({...})`, not in the harness spell.
 
-## Tightening a conformance threshold
+## Tightening a conformance anchor
 
-A workspace that commits a conformance ratchet (`knowledge.conformance.ratchet`) enforces the
-committed value, and the code usually drifts tighter than it. Two readings name the slack:
-the rows of `magus\conformance()` with `propose` above zero, and `magus doctor`'s
-`conformance-ratchet` check, which gives each row's ratchet `path:line`.
+A conformance ceiling holds each changed file to its count of violations at the base
+revision; no count is stored, so nothing needs pruning. The anchors in
+`knowledge.conformance.checks` are policy, and the code usually drifts tighter than them. Two
+readings name the slack: the rows of `magus\change().conformance()` with `propose` above zero, and
+`magus doctor`'s `conformance-ceiling` check, which names each row's magus.yaml key.
 
-1. Edit only the line doctor names. Copy the proposed `value`, the row's `n` and the
-   percentile, and put the measuring revision in `why`.
-2. Delete each known entry doctor reports as stale.
-3. Re-run doctor and read that the proposal is gone.
-4. Commit the ratchet alone. The commit is the review.
+1. Edit only the key doctor names, to the proposed value.
+2. Re-run doctor and read that the proposal is gone.
+3. Commit magus.yaml alone. The commit is the review.
 
-Never pick a number, never loosen a value, and never add a known entry to pass a check:
-fix the code, or ask the person. The ratchet is the one place a measurement
-becomes policy, so a person reads every change to it. An agent that edits the record to
-make a red check green has moved the bar instead of the code, and the diff looks like a
-routine config change.
+Never pick a number and never loosen an anchor to pass a check: fix the code, or ask the
+person. An anchor is the one place a measurement becomes policy, so a person reads
+every change to it. An agent that loosens one to make a red check green has moved the bar
+instead of the code, and the diff looks like a routine config change.
 
 ## Prune on a schedule you already have
 

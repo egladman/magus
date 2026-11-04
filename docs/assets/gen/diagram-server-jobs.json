@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 6,
+    "flow": 0,
     "imports": 0
   },
   "figure": "server-jobs",
   "findings": [],
-  "stamp": "sha256:e6b3c01d4d9e7683fc9cee225f3074969339cddfab44e9cb4c0c983e3064fb21"
+  "stamp": "sha256:50630ab06edc62e48178318638688dfac31990017e7c63f1925bf84f1c9ddc1b"
 }

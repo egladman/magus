@@ -167,7 +167,7 @@ func TestReadNavigationDeniesWholeReads(t *testing.T) {
 		{`cat internal/store/store.go`, deps, []string{
 			fmt.Sprintf("`%s` maps this file", hint.Explain.With("file:internal/store/store.go")),
 			"130 lines, 3 declarations",
-			hint.Refs.With("<name>", "--definition", "--source"),
+			hint.Refs.With("<name>", "--source"),
 			"`sed -n <first>,<last>p internal/store/store.go` prints a method by its lines",
 			storeMap,
 		}, nil},
@@ -344,7 +344,7 @@ func TestReadSymbolAdvisesBoundedReads(t *testing.T) {
 		assert.Equal(t, denyRule{Name: advisoryReadSymbol, Arg: tt.name}, v.Rule, tt.command)
 		assert.Empty(t, v.Deny, tt.command)
 		assert.Contains(t, v.Context, tt.lines, tt.command)
-		assert.Contains(t, v.Context, hint.Refs.With(tt.name, "--definition", "--source"), tt.command)
+		assert.Contains(t, v.Context, hint.Refs.With(tt.name, "--source"), tt.command)
 	}
 }
 

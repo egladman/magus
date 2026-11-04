@@ -42,11 +42,11 @@ Decode a percent-encoded URL query component; errors on malformed input.
 
 Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.
 
-**Signature:** `url\parse(raw_url) -> URL` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go)
+**Signature:** `url\parse(rawUrl) -> URL` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
-| `raw_url` | `string` |          |             |
+| `rawUrl`  | `string` |          |             |
 
 **Returns:** map[string]any
 

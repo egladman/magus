@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // openFileWriter opens path in append+create mode and wraps it in a Writer, the
@@ -228,6 +229,23 @@ func (b *blockingWriter) Write(p []byte) (int, error) {
 	<-b.ch
 	b.closed.Store(true)
 	return len(p), nil
+}
+
+// successStatusSuite pins that a permitted target never records as ok.
+type successStatusSuite struct {
+	suite.Suite
+}
+
+func TestSuccessStatus(t *testing.T) {
+	suite.Run(t, new(successStatusSuite))
+}
+
+func (s *successStatusSuite) TestAPermitIsNotOK() {
+	s.Equal(StatusPermitted, successStatus(&cache.Result{Permitted: 2}))
+}
+
+func (s *successStatusSuite) TestNoPermitIsOK() {
+	s.Equal("ok", successStatus(&cache.Result{}))
 }
 
 // TestFilterIncludeOnly admits only listed types.
@@ -553,6 +571,40 @@ func TestStructuredRunEventTypes(t *testing.T) {
 			assert.Equal(t, tc.event, reflect.ValueOf(got).Elem().Interface())
 		})
 	}
+}
+
+type RunSummaryRecordSuite struct {
+	suite.Suite
+	buf bytes.Buffer
+	w   *Writer
+}
+
+func TestRunSummaryRecordSuite(t *testing.T) { suite.Run(t, new(RunSummaryRecordSuite)) }
+
+func (s *RunSummaryRecordSuite) SetupTest() {
+	s.buf.Reset()
+	s.w = NewWriter(&s.buf, WithBlockOnFull())
+}
+
+func (s *RunSummaryRecordSuite) TestRecordsFilesAndSlots() {
+	want := RunSummary{Hits: 2, Misses: 1, Files: 771, Slots: 12, DurationMs: 160}
+	s.Require().NoError(recordAny(s.w, want))
+	s.Require().NoError(s.w.Close())
+
+	var got RunSummary
+	s.Require().NoError(json.Unmarshal(bytes.TrimSpace(s.buf.Bytes()), &got))
+	s.Equal(want, got)
+	s.Contains(s.buf.String(), `"files":771`)
+	s.Contains(s.buf.String(), `"slots":12`)
+}
+
+// The record states every count, so zero is what an unrecorded one reads as.
+func (s *RunSummaryRecordSuite) TestRecordsAnUnrecordedCountAsZero() {
+	s.Require().NoError(recordAny(s.w, RunSummary{Hits: 2, DurationMs: 160}))
+	s.Require().NoError(s.w.Close())
+
+	s.Contains(s.buf.String(), `"files":0`)
+	s.Contains(s.buf.String(), `"slots":0`)
 }
 
 // devNullWriter discards every write but counts bytes so the

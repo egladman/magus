@@ -78,9 +78,8 @@ func joinTrail[T ~string](values []T) string {
 	return strings.Join(parts, ", ")
 }
 
-// Trail is what the guard recorded about one session inside a window, as
-// magus\trail.read returns it: every call it judged and every subagent the session
-// started.
+// Trail is what the guard recorded about one session inside a window.
+// magus\session().trail() returns it: each call judged, each subagent started.
 type Trail struct {
 	// Session is the host's session id the observations belong to.
 	Session string
@@ -101,9 +100,9 @@ type Trail struct {
 	Spawns []TrailSpawn
 }
 
-// TrailReadOptions picks the session and window a trail read covers, the opts
-// magus\trail.read takes. Every field is text as a person writes it, and a value that does
-// not parse is an error, never the default.
+// TrailReadOptions picks the session and window a trail read covers.
+// magus\session(opts).trail() takes them.
+// Each field is text a person writes; one that does not parse is an error.
 type TrailReadOptions struct {
 	// Session is the host's session id; empty reads the most recent session in the window.
 	Session string `json:"session,omitempty"`

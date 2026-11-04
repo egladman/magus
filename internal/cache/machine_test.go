@@ -402,6 +402,76 @@ func TestMachineBudgetFreeSeatsOneChildPerStalledAncestor(t *testing.T) {
 	assert.True(t, b.Request(child(1)).Granted, "a sibling is seated as peers release")
 }
 
+// wrapped is a `magus job exec --timeout` hold, as the broker asserts it.
+func wrapped(pid int, ancestors ...string) types.MachineClaim {
+	return types.MachineClaim{
+		Target: "job exec", Slots: 1, PID: pid, Ancestors: ancestors,
+		Invocation: fmt.Sprintf("%d:%s", pid, types.WrapperInvocation("exec")),
+	}
+}
+
+// A wrapper's child takes the slot the wrapper holds, however little is free.
+func TestMachineBudgetSharesAWrappersClaimWithItsChild(t *testing.T) {
+	b, _ := testBudget(t, 0, 1)
+	w := wrapped(100)
+	b.Assert(w)
+	v := b.Request(types.MachineClaim{Project: "x", Target: "install", Slots: 1, PID: 200, Ancestors: []string{w.Invocation}})
+	assert.True(t, v.Granted, "the only slot is its wrapper's")
+
+	stranger := b.Request(types.MachineClaim{Project: "other", Target: "build", Slots: 1, PID: 300})
+	assert.False(t, stranger.Granted, "a stranger gets neither")
+}
+
+// A full machine has no stalled step to charge a wrapper's child a seat to.
+func TestMachineBudgetGivesAWrappersChildNoSeatOnAFullMachine(t *testing.T) {
+	b, _ := testBudget(t, 1000, 4)
+	require.True(t, b.Request(types.MachineClaim{Project: "other", Target: "test", MemoryMB: 900, Slots: 1, PID: 300}).Granted)
+	w := wrapped(100)
+	b.Assert(w)
+
+	v := b.Request(types.MachineClaim{Project: "x", Target: "test", MemoryMB: 500, Slots: 1, PID: 200, Ancestors: []string{w.Invocation}})
+	assert.False(t, v.Granted, "it would hold 1400 MB of a 1000 MB budget")
+	assert.True(t, v.Fits)
+	assert.False(t, v.OwnRun, "a stranger keeps it out, so it is refused")
+	assert.Equal(t, 900, b.Snapshot().HeldMB)
+}
+
+// The two-roots pair under wrappers: each blocked step keeps its child's seat.
+func TestMachineBudgetSeatsAChildOfEachStalledRootUnderAWrapper(t *testing.T) {
+	b, _ := testBudget(t, 12_000, 16)
+	seat := func(pid int, ancestors ...string) types.MachineVerdict {
+		return b.Request(types.MachineClaim{
+			Target: "test", MemoryMB: 7000, Slots: 1, PID: pid, Invocation: fmt.Sprintf("%d:child", pid), Ancestors: ancestors,
+		})
+	}
+	wrapA, wrapB := wrapped(100), wrapped(200)
+	b.Assert(wrapA)
+	b.Assert(wrapB)
+	require.True(t, b.Request(types.MachineClaim{Target: "ci", MemoryMB: 6000, Slots: 1, PID: 110, Invocation: "110:a", Ancestors: []string{wrapA.Invocation}}).Granted)
+	require.True(t, b.Request(types.MachineClaim{Target: "ci", MemoryMB: 6000, Slots: 1, PID: 210, Invocation: "210:b", Ancestors: []string{wrapB.Invocation}}).Granted)
+
+	assert.True(t, seat(120, wrapA.Invocation, "110:a").Granted)
+	assert.True(t, seat(220, wrapB.Invocation, "210:b").Granted)
+}
+
+// A wrapper under a step does not spend that step's seat; what it starts does.
+func TestMachineBudgetSeatsAChildThroughAWrapperUnderAStalledStep(t *testing.T) {
+	b, _ := testBudget(t, 1000, 8)
+	require.True(t, b.Request(types.MachineClaim{Target: "other", MemoryMB: 500, Slots: 1, PID: 300}).Granted)
+	require.True(t, b.Request(types.MachineClaim{Target: "ci", MemoryMB: 500, Slots: 1, PID: 100, Invocation: "100:run"}).Granted)
+	w := wrapped(200, "100:run")
+	b.Assert(w)
+
+	child := func(pid int) types.MachineClaim {
+		return types.MachineClaim{
+			Target: "test", MemoryMB: 700, Slots: 1, PID: pid,
+			Invocation: fmt.Sprintf("%d:child", pid), Ancestors: []string{"100:run", w.Invocation},
+		}
+	}
+	assert.True(t, b.Request(child(210)).Granted, "the step above the wrapper is blocked on it")
+	assert.False(t, b.Request(child(220)).Granted, "and that step has one seat")
+}
+
 func TestMachineBudgetFreeSeatIsNotABypassForWhatCanNeverFit(t *testing.T) {
 	b, _ := testBudget(t, 4000, 8)
 	require.True(t, b.Request(types.MachineClaim{
@@ -442,6 +512,12 @@ type budgetAdmitter struct {
 	released []string
 	overruns []string
 }
+
+func (*budgetAdmitter) HoldGroup(context.Context, string, int, string) (string, error) {
+	return "", nil
+}
+
+func (*budgetAdmitter) ReleaseHold(context.Context, string) error { return nil }
 
 func (f *budgetAdmitter) Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
 	f.mu.Lock()
@@ -828,7 +904,7 @@ func TestRunRefusesToExecuteAGoneLocalHit(t *testing.T) {
 	_, err = c.Run(t.Context(), Step{ProjectPath: ".", Target: "test"}, func(context.Context) error {
 		t.Error("a step admitted as a local hit must not execute")
 		return nil
-	}, replayLocal(strings.Repeat("0", 64)))
+	}, replayLocal(strings.Repeat("0", 64), 0))
 	require.ErrorIs(t, err, errLocalEntryGone)
 }
 
@@ -917,6 +993,35 @@ func TestMachineGateRequiredRefusesWhenTheArbiterIsGone(t *testing.T) {
 	require.ErrorAs(t, err, &stated)
 	assert.Equal(t, ExitCodeBrokerUnavailable, stated.ExitCode())
 	assert.Contains(t, err.Error(), "connection refused", "the cause stays on the error")
+}
+
+// A broker from another build is not reported as no broker.
+func TestMachineGateNamesABrokerFromAnotherBuild(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	g, adm := testGate(t, b)
+	var logged bytes.Buffer
+	g.log = slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	adm.fail = types.WrapDiagnostic(types.PeerFromAnotherBuild, errors.New("broker: expected a hello speaking protocol 2"), "hello")
+
+	release, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.NoError(t, err, "best-effort runs on without the broker")
+	release()
+	assert.Contains(t, logged.String(), string(types.PeerFromAnotherBuild))
+	assert.Contains(t, logged.String(), "a broker from another magus build answered")
+	assert.NotContains(t, logged.String(), "no broker answered")
+}
+
+func TestMachineGateRequiredRefusesABrokerFromAnotherBuild(t *testing.T) {
+	b, _ := testBudget(t, 10_000, 8)
+	g, adm := testGate(t, b)
+	g.required = true
+	adm.fail = types.WrapDiagnostic(types.PeerFromAnotherBuild, errors.New("broker: expected a hello speaking protocol 2"), "hello")
+
+	_, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.ErrorIs(t, err, types.PeerFromAnotherBuild)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeBrokerUnavailable, stated.ExitCode())
 }
 
 func TestMachineGateIsInertWithoutAnAdmitter(t *testing.T) {

@@ -3,7 +3,7 @@
 // request, lays out later lens changes in the page without a round trip.
 
 import { reportFailure } from "../../../lib/notifications";
-import { adoptServerOrigin, parseHash, resolveServerHost } from "../../../lib/server";
+import { adoptServerOrigin, parseHash, resolveServerHost, wantsDemo } from "../../../lib/server";
 import { subscribeDefaultHost } from "../../../lib/settings";
 import type { AppInstance } from "../../../desktop/standalone";
 import { h } from "../../../desktop/view";
@@ -13,10 +13,13 @@ import {
   renderDiagram,
   type DiagramEntry,
   type DiagramFailure,
+  type DiagramRead,
   type RenderedDiagram,
 } from "./api";
+import { demoDiagramList, renderDemoDiagram } from "./demo";
 import { decodeFigureLink } from "./figure-link";
 import { attachFigure, readEdges, neighbours, type FigureController } from "./interact";
+import { attachFlow, type Flow } from "./flow";
 import {
   EMPTY_LENS,
   fragmentForView,
@@ -27,6 +30,7 @@ import {
   type Declaration,
   type Lens,
 } from "./lens";
+import { ok, type Result } from "../../../gen/magus/types";
 import { markListFocus, notice, prepareSvg, renderNodeList, type NoticeTone } from "./view";
 import {
   anchorTemplate,
@@ -286,7 +290,7 @@ function command(before: string, cmd: string, after = "."): HTMLElement {
   return p;
 }
 
-const READ_NOTICE: Record<string, { tone: NoticeTone; title: string }> = {
+const READ_NOTICE: Record<DiagramFailure["kind"], { tone: NoticeTone; title: string }> = {
   refused: { tone: "warning", title: "This figure is too big to draw through this lens" },
   unindexed: { tone: "warning", title: "No symbol index to draw imports from" },
   "bad-lens": { tone: "warning", title: "The lens names something the figure does not have" },
@@ -298,12 +302,14 @@ const READ_NOTICE: Record<string, { tone: NoticeTone; title: string }> = {
 export function activate(host: HTMLElement): AppInstance {
   adoptServerOrigin();
   let serverHost = resolveServerHost(parseHash()) ?? "";
+  const demo = wantsDemo(parseHash());
   const refs = build(host);
   let entries: DiagramEntry[] = [];
   let figure: FigureState = { kind: "empty" };
   let runtimeState: RuntimeState = { kind: "off" };
   let base: Base | null = null;
   let controller: FigureController | null = null;
+  let flow: Flow | null = null;
   let current: AbortController | null = null;
   let lastNode: string | null = null;
   let stale = false;
@@ -330,8 +336,8 @@ export function activate(host: HTMLElement): AppInstance {
     const has = controller !== null;
     for (const b of [refs.fit, refs.zoomIn, refs.zoomOut, refs.focusNode]) b.disabled = !has;
     refs.clearFocus.disabled = !has || controller?.focused() == null;
-    const served = linkPayload === null && entries.length > 0;
-    refs.picker.disabled = !served;
+    const served = !demo && linkPayload === null && entries.length > 0;
+    refs.picker.disabled = !(served || (demo && entries.length > 0));
     refs.scope.disabled = !served;
     refs.focus.disabled = !served;
     refs.depth.disabled = !served;
@@ -375,8 +381,13 @@ export function activate(host: HTMLElement): AppInstance {
   };
 
   // A first figure fits; a re-layout of the same figure swaps in place keeping the reader's zoom.
-  const mount = (rendered: RenderedDiagram, keepView: boolean): void => {
-    const svg = prepareSvg(rendered.svg, { nodes: rendered.nodes, sourceUrl: rendered.sourceUrl });
+  const mount = (rendered: RenderedDiagram, keepView: boolean): Result<void> => {
+    const prepared = prepareSvg(rendered.svg, {
+      nodes: rendered.nodes,
+      sourceUrl: rendered.sourceUrl,
+    });
+    if (prepared.error) return prepared;
+    const svg = prepared.value;
     showState(null);
     const old = refs.frame.querySelector("svg");
     if (keepView && controller && old) {
@@ -392,6 +403,8 @@ export function activate(host: HTMLElement): AppInstance {
       refs.frame.replaceChildren(svg);
       controller = attachFigure({ frame: refs.frame, svg, reducedMotion, onFocusChange });
     }
+    flow?.stop();
+    flow = attachFlow(svg, { reducedMotion });
     refs.caption.textContent = rendered.title;
     renderNodeList(refs.nodes, {
       nodes: rendered.nodes,
@@ -400,11 +413,14 @@ export function activate(host: HTMLElement): AppInstance {
     });
     onFocusChange(controller?.focused() ?? null);
     syncControls();
+    return ok(undefined);
   };
 
   const clearFigure = (): void => {
     controller?.destroy();
     controller = null;
+    flow?.stop();
+    flow = null;
     refs.frame.replaceChildren();
     refs.caption.textContent = "";
     refs.nodes.replaceChildren();
@@ -425,7 +441,9 @@ export function activate(host: HTMLElement): AppInstance {
     // A figure already on screen stays (dimmed, busy) while the next one draws; only a frame with
     // nothing in it gets the spinner.
     if (controller === null) showState(stateView("loading", "Drawing the figure"));
-    const read = await renderDiagram({ host: serverHost, signal: ac.signal }, id, lens);
+    const read = demo
+      ? readDemo(renderDemoDiagram(id))
+      : await renderDiagram({ host: serverHost, signal: ac.signal }, id, lens);
     if (stale || current !== ac) return;
     refs.frame.removeAttribute("aria-busy");
     if (read.kind === "aborted") return;
@@ -443,10 +461,9 @@ export function activate(host: HTMLElement): AppInstance {
       ...read.value,
       nodes: drawnNodes(read.value.nodes, claim),
     };
-    try {
-      mount(rendered, sameFigure);
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
+    const mounted = mount(rendered, sameFigure);
+    if (mounted.error) {
+      const detail = mounted.error.message;
       reportFailure(SOURCE, "Could not show figure " + id + ": " + detail, "diagrams:mount:" + id);
       showNotice("danger", "Could not show the figure", detail);
       if (controller === null) refusedState();
@@ -503,12 +520,11 @@ export function activate(host: HTMLElement): AppInstance {
       nodes: cutNodes(base, out.svg),
     };
     clearNotices();
-    try {
-      mount(rendered, controller !== null);
-    } catch (e) {
+    const mounted = mount(rendered, controller !== null);
+    if (mounted.error) {
       reportFailure(
         SOURCE,
-        "The runtime's figure would not display: " + String(e),
+        "The runtime's figure would not display: " + mounted.error.message,
         "diagrams:relayout-mount:" + id,
       );
       return false;
@@ -528,7 +544,7 @@ export function activate(host: HTMLElement): AppInstance {
   };
 
   const loadList = async (): Promise<void> => {
-    if (!serverHost) {
+    if (!demo && !serverHost) {
       showState(
         stateView(
           "empty",
@@ -540,7 +556,9 @@ export function activate(host: HTMLElement): AppInstance {
       return;
     }
     showState(stateView("loading", "Loading the figures"));
-    const read = await listDiagrams({ host: serverHost });
+    const read: DiagramRead<DiagramEntry[]> = demo
+      ? { kind: "ok", value: demoDiagramList() }
+      : await listDiagrams({ host: serverHost });
     if (stale) return;
     if (read.kind === "aborted") return;
     if (read.kind !== "ok") {
@@ -584,11 +602,11 @@ export function activate(host: HTMLElement): AppInstance {
       focus: refs.focus.value,
       depth: refs.depth.value,
     });
-    if (!parsed.ok) {
-      showNotice("warning", "The lens is not complete", parsed.error);
+    if (parsed.error) {
+      showNotice("warning", "The lens is not complete", parsed.error.message);
       return;
     }
-    if (refs.picker.value) show(refs.picker.value, parsed.lens);
+    if (refs.picker.value) show(refs.picker.value, parsed.value);
   });
   refs.fit.addEventListener("click", () => controller?.fit());
   refs.zoomIn.addEventListener("click", () => controller?.zoom(1.25));
@@ -608,10 +626,10 @@ export function activate(host: HTMLElement): AppInstance {
     runtimeState = { kind: "loading" };
     syncRuntime();
     void (async () => {
-      try {
-        runtimeState = { kind: "ready", runtime: await ensureBuzz() };
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
+      const loaded = await ensureBuzz();
+      if (!loaded.error) runtimeState = { kind: "ready", runtime: loaded.value };
+      else {
+        const detail = loaded.error.message;
         reportFailure(SOURCE, "The Buzz runtime did not load: " + detail, "diagrams:runtime");
         runtimeState = { kind: "failed", detail };
       }
@@ -645,8 +663,8 @@ export function activate(host: HTMLElement): AppInstance {
       refusedState();
     };
     const read = decodeFigureLink(payload);
-    if (!read.ok) {
-      refuse("This figure link could not be read", read.error);
+    if (read.error) {
+      refuse("This figure link could not be read", read.error.message);
       return;
     }
     figure = { kind: "loading", id: LINK_ID, lens: EMPTY_LENS };
@@ -654,37 +672,37 @@ export function activate(host: HTMLElement): AppInstance {
     showState(stateView("loading", "Drawing the figure"));
     runtimeState = { kind: "loading" };
     syncRuntime();
-    let runtime: BuzzRuntime | null = null;
-    let loadError = "";
-    try {
-      runtime = await ensureBuzz();
-    } catch (e) {
-      loadError = e instanceof Error ? e.message : String(e);
-    }
+    const loaded = await ensureBuzz();
     if (stale || current !== ac) return;
     refs.frame.removeAttribute("aria-busy");
-    runtimeState = runtime ? { kind: "ready", runtime } : { kind: "failed", detail: loadError };
+    runtimeState = loaded.error
+      ? { kind: "failed", detail: loaded.error.message }
+      : { kind: "ready", runtime: loaded.value };
     syncRuntime();
-    if (!runtime) {
-      refuse("The runtime that draws this figure did not load", loadError);
+    if (loaded.error) {
+      refuse("The runtime that draws this figure did not load", loaded.error.message);
       return;
     }
-    const out = toRelayout(runtime.drawFigure(figureForLink(read.figure), ""));
+    const linkFigure = figureForLink(read.value);
+    if (linkFigure.error) {
+      refuse("This figure could not be drawn", linkFigure.error.message);
+      return;
+    }
+    const out = toRelayout(loaded.value.drawFigure(linkFigure.value, ""));
     if (out.kind !== "ok") {
       refuse("This figure could not be drawn", out.detail);
       return;
     }
     const rendered: RenderedDiagram = {
       id: LINK_ID,
-      title: read.figure.title,
+      title: read.value.title,
       svg: out.svg,
-      nodes: linkedRows(read.figure),
+      nodes: linkedRows(read.value),
       sourceUrl: "",
     };
-    try {
-      mount(rendered, false);
-    } catch (e) {
-      refuse("Could not show the figure", e instanceof Error ? e.message : String(e));
+    const mounted = mount(rendered, false);
+    if (mounted.error) {
+      refuse("Could not show the figure", mounted.error.message);
       return;
     }
     base = null;
@@ -703,7 +721,7 @@ export function activate(host: HTMLElement): AppInstance {
   else void loadList();
 
   const unsubscribeHost = subscribeDefaultHost(() => {
-    if (linkPayload !== null) return; // a link needs no server
+    if (demo || linkPayload !== null) return; // neither needs a server
     if (figure.kind === "shown") return; // a figure being read keeps the server it came from
     serverHost = resolveServerHost(parseHash()) ?? "";
     void loadList();
@@ -716,9 +734,14 @@ export function activate(host: HTMLElement): AppInstance {
       window.removeEventListener("hashchange", onHashChange);
       current?.abort();
       controller?.destroy();
+      flow?.stop();
       unsubscribeHost();
     },
   };
+}
+
+function readDemo(r: Result<RenderedDiagram>): DiagramRead<RenderedDiagram> {
+  return r.error ? { kind: "absent", detail: r.error.message } : { kind: "ok", value: r.value };
 }
 
 // cutNodes is the base's node rows for the boxes a re-layout actually drew, in figure order.

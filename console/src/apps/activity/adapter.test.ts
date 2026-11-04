@@ -4,7 +4,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Kind, Outcome, type ActivityEvent } from "@wire/activity/v1alpha1/activity_pb";
-import { must } from "../../lib/guards";
 import {
   PAYLOAD_MAX_BYTES,
   activityToModel,
@@ -93,8 +92,8 @@ test("an ok mcp call accents pass and heads with action+actor", () => {
   assert.equal(sec.meta?.status, "pass");
   assert.equal(sec.meta?.label, "mcp");
   assert.equal(sec.lines[0], sec.title);
-  assert.match(must(sec.title), /client {2}agent:claude/);
-  assert.match(must(sec.title), /mcp, ok/);
+  assert.match(sec.title ?? "", /client {2}agent:claude/);
+  assert.match(sec.title ?? "", /mcp, ok/);
 });
 
 test("an agent command observation renders as an agent event, not an execution result", () => {
@@ -109,8 +108,8 @@ test("an agent command observation renders as an agent event, not an execution r
   );
   assert.equal(sec.meta?.label, "agent");
   assert.equal(sec.meta?.status, "pass");
-  assert.match(must(sec.title), /Bash {2}session:abc/);
-  assert.match(must(sec.title), /agent, ok/);
+  assert.match(sec.title ?? "", /Bash {2}session:abc/);
+  assert.match(sec.title ?? "", /agent, ok/);
   assert.ok(sec.lines.includes("guard: deny"));
 });
 
@@ -119,7 +118,7 @@ test("an errored call accents fail and leads its body with the error text", () =
     ev({ action: "client", outcome: Outcome.ERROR, error: "target not found" }),
   );
   assert.equal(sec.meta?.status, "fail");
-  assert.match(must(sec.title), /, error/);
+  assert.match(sec.title ?? "", /, error/);
   assert.equal(sec.lines[1], "target not found");
 });
 
@@ -191,7 +190,7 @@ test("payloadLines clips a body past the bound and says so", () => {
   const out = payloadLines(body);
   assert.equal(out.clipped, true);
   assert.equal(out.lines.length, 1);
-  assert.equal(out.lines[0].length, PAYLOAD_MAX_BYTES);
+  assert.equal(out.lines[0]?.length, PAYLOAD_MAX_BYTES);
 });
 
 test("groupEventsByKind buckets in fixed order, drops empty kinds, keeps original indices", () => {
@@ -215,10 +214,10 @@ test("groupEventsByKind buckets in fixed order, drops empty kinds, keeps origina
     jobs?.events.map((e) => e.index),
     [0, 2],
   );
-  assert.equal(jobs?.events[0].event.action, "j0");
+  assert.equal(jobs?.events[0]?.event.action, "j0");
   // The sandbox denial keeps its index 3, so the view can reach section 3.
-  assert.equal(groups.find((g) => g.label === "Sandbox denials")?.events[0].index, 3);
-  assert.equal(groups.find((g) => g.label === "Agent commands")?.events[0].index, 4);
+  assert.equal(groups.find((g) => g.label === "Sandbox denials")?.events[0]?.index, 3);
+  assert.equal(groups.find((g) => g.label === "Agent commands")?.events[0]?.index, 4);
 });
 
 test("groupEventsByKind collects an unknown kind under Other", () => {
@@ -227,7 +226,7 @@ test("groupEventsByKind collects an unknown kind under Other", () => {
     groups.map((g) => g.label),
     ["Other"],
   );
-  assert.equal(groups[0].events[0].index, 0);
+  assert.equal(groups[0]?.events[0]?.index, 0);
 });
 
 // kindLabel and KIND_GROUP_ORDER are both hand-maintained switches/tables over the wire Kind
@@ -246,11 +245,11 @@ test("every non-UNSPECIFIED wire kind has a real label and a named group", () =>
     const groups = groupEventsByKind([ev({ kind })]);
     assert.equal(groups.length, 1, `Kind.${Kind[kind]} did not produce exactly one group`);
     assert.notEqual(
-      groups[0].label,
+      groups[0]?.label,
       "Other",
       `Kind.${Kind[kind]} is missing from KIND_GROUP_ORDER`,
     );
-    assert.equal(groups[0].kind, kind);
+    assert.equal(groups[0]?.kind, kind);
   }
 });
 
@@ -258,5 +257,5 @@ test("activityToModel titles every section and counts them", () => {
   const model = activityToModel([ev({ action: "a" }), ev({ action: "b", outcome: Outcome.ERROR })]);
   assert.equal(model.sections.length, 2);
   assert.equal(model.titled, 2);
-  assert.equal(model.sections[0].title, model.sections[0].lines[0]);
+  assert.equal(model.sections[0]?.title, model.sections[0]?.lines[0]);
 });

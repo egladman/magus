@@ -1,6 +1,8 @@
 package guard
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
@@ -21,7 +24,9 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestEvaluateBashGuard(t *testing.T) {
@@ -1225,7 +1230,7 @@ func TestGuardKnownHoles(t *testing.T) {
 		},
 		{
 			"make target that shells out", "make test",
-			"the recipe is in a Makefile; only the make invocation is visible",
+			"the steps are in a Makefile; only the make invocation is visible",
 		},
 	}
 	for _, tt := range holes {
@@ -1967,20 +1972,18 @@ func TestChainedRunAdvisesWherePipesProveNothing(t *testing.T) {
 	assert.Contains(t, v.Why, "cannot prove a pipe's upstream")
 }
 
-// In magus's own checkout go-build and build relink ./magus. Every pipe stage starts at
-// once, so the stage after one would run the binary being replaced; `&&` runs the new one.
-// The bootstrap link itself is raw-tool's, alone on its line.
+// A target that declares relinks replaces the binary a later pipe stage would run, since
+// every pipe stage starts at once; `&&` runs the new one. Only the declaration counts: a
+// target named build that declares nothing is refused toward the pipe like any other. The
+// bootstrap link itself is raw-tool's, alone on its line.
 func TestChainedRunAdvisesAfterRelinkingOwnBinary(t *testing.T) {
-	own := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(own, "go.mod"), []byte(fmt.Sprintf("module %s\n", ownModule)), 0o644))
 	deps := strict(testDependencies())
-	deps.scope = workspaceScope{root: own}
+	deps.scope = workspaceScope{root: t.TempDir()}
+	deps.TargetPolicies = func(context.Context, string) (types.TargetPolicyIndex, bool) { return magusRepoPolicies, true }
 
 	for _, cmd := range []string{
 		"./magus run go-build . && ./magus run generate:rw .",
 		"./magus run go_build . -s && ./magus run test .",
-		"./magus run build . ; ./magus run test .",
-		"./magus run go::go-build . -- -o ./magus ./cmd/magus && ./magus run test .",
 	} {
 		v := Evaluate(deps, cmd)
 		assert.Empty(t, v.Deny, cmd)
@@ -1988,11 +1991,8 @@ func TestChainedRunAdvisesAfterRelinkingOwnBinary(t *testing.T) {
 	}
 	assert.NotEmpty(t, Evaluate(deps, "./magus run test . && ./magus run go-build .").Deny,
 		"a relink in the LAST stage replaces nothing a later stage runs")
-
-	other := strict(testDependencies())
-	other.scope = workspaceScope{root: t.TempDir()}
-	assert.NotEmpty(t, Evaluate(other, "magus run build web && magus run test web").Deny,
-		"build relinks nothing another workspace's stages run")
+	assert.NotEmpty(t, Evaluate(deps, "./magus run build . ; ./magus run test .").Deny,
+		"a target named build that declares nothing relinks nothing")
 
 	assert.Equal(t, denyRuleRawTool, Evaluate(strict(testDependencies()), "go build -o magus ./cmd/magus && ./magus run go-build .").Rule.Name)
 }
@@ -2564,6 +2564,19 @@ func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 	dryRun := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename", "Bar", "--dry-run"}}
 	short := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename", "Bar", "-u"}}
 	write := hint.Invocation{Name: "./magus", Args: []string{"refs", "Foo", "--rename=Bar"}}
+	for _, args := range [][]string{
+		{"refs", "Foo", "-rename", "Bar"},
+		{"refs", "Foo", "-rename=Bar"},
+		{"refs", "Foo", "--rename", "Bar"},
+		{"refs", "-rename", "Bar", "Foo"},
+		{"refs", "Foo", "--rename", "Bar", "--dry-run=false"},
+		{"refs", "Foo", "--rename", "Bar", "--", "-u"},
+	} {
+		assert.False(t, graphReadOnly([]hint.Invocation{{Name: "./magus", Args: args}}), "%v writes", args)
+		assert.True(t, namesRename(args), "%v names a rename", args)
+	}
+	assert.False(t, namesRename([]string{"refs", "Foo", "--", "-rename"}), "past -- is an operand")
+	assert.True(t, graphReadOnly([]hint.Invocation{{Name: "./magus", Args: []string{"refs", "Foo", "-rename", "Bar", "-dry-run"}}}))
 	assert.True(t, graphReadOnly([]hint.Invocation{read}))
 	assert.True(t, graphReadOnly([]hint.Invocation{dryRun}))
 	assert.True(t, graphReadOnly([]hint.Invocation{short}))
@@ -2573,11 +2586,11 @@ func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 }
 
 // A rename's process names no session, so its writes are graded under the lease it claims,
-// and in a checkout where a lease is held, claiming none is refused rather than ungraded.
+// and in a checkout where one lease is held, claiming none is graded under that one.
 func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	edit := func(rel string) types.GuardJudgment {
-		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), false)
+		return judgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), false)
 	}
 
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
@@ -2589,24 +2602,15 @@ func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 
 	t.Setenv(trail.EnvBaggage, "")
 	assert.Equal(t, graded{}, gradedAs(edit("internal/ledger/store.go")), "no lease held in this checkout")
-
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, Root: root})
-	_, err := store.Update(t.Context(), "lease-c", func(cur *types.Job) {
-		*cur = types.Job{ID: "lease-c", WritePaths: []string{"web/**"}, State: types.StateRunning, CheckoutRoot: root}
-	})
-	require.NoError(t, err)
-	unnamed := edit("docs/readme.md")
-	assert.Equal(t, graded{Denied: true}, gradedAs(unnamed))
-	assert.Contains(t, unnamed.Reason, "lease lease-c holds write paths in this checkout")
 }
 
 // `refs --rename --dry-run` grades each file as the rename would and leaves no activity line.
-func TestJudgeEditDryRunRecordsNothing(t *testing.T) {
+func TestEditDryRunRecordsNothing(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	edit := func(rel string, dryRun bool) types.GuardJudgment {
-		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), dryRun)
+		return judgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), dryRun)
 	}
 	// The two calls may straddle a second, and a lease-write reason says how long ago the
 	// owner was updated.
@@ -2622,4 +2626,266 @@ func TestJudgeEditDryRunRecordsNothing(t *testing.T) {
 		assert.Equal(t, withoutAge(withoutVerdictRef(edit(rel, false))), withoutAge(preview), rel)
 	}
 	assert.Len(t, trailEvents(t, cacheDir, trail.KindAgentCommand), 2, "the rename itself is recorded")
+}
+
+type GradeEditSuite struct {
+	suite.Suite
+	ctx  context.Context
+	root string
+}
+
+func TestGradeEdit(t *testing.T) { suite.Run(t, new(GradeEditSuite)) }
+
+func (s *GradeEditSuite) SetupTest() {
+	s.ctx, s.root = fleetFixture(s.T(), fixture.FleetLeases()...)
+	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+}
+
+// workspace classifies rel as role.
+func (s *GradeEditSuite) workspace(rel, role string) *typestest.MockWorkspaceRepository {
+	ws := typestest.NewMockWorkspaceRepository(s.T())
+	entry := types.FileEntry{Path: rel, Role: role, Claims: []types.FileClaim{{Role: role, Project: ".", Target: "gen"}}}
+	ws.EXPECT().ClassifyFiles(mock.Anything, []string{rel}).Return([]types.FileEntry{entry}, nil)
+	ws.EXPECT().Root().Return(s.root).Maybe()
+	return ws
+}
+
+func (s *GradeEditSuite) grade(ws types.WorkspaceRepository, rel string, o EditGrade) (string, string) {
+	return GradeEdit(s.ctx, Dependencies{}, ws, rel, []byte("package x\n"), []byte("package y\n"), o)
+}
+
+func (s *GradeEditSuite) TestADeclaredOutputIsRefusedWithNoRule() {
+	rule, reason := s.grade(s.workspace("internal/ledger/store.go", types.DiffRoleOutput), "internal/ledger/store.go", EditGrade{})
+	s.Empty(rule)
+	s.Equal("a declared output of .:gen: change its source and regenerate it", reason)
+}
+
+func (s *GradeEditSuite) TestATargetRunWritesItsDeclaredOutput() {
+	rule, reason := s.grade(s.workspace("cmd/magus/main.go", types.DiffRoleOutput), "cmd/magus/main.go", EditGrade{InRun: true})
+	s.Empty(rule+reason, "the lease would refuse it, and the run's output passes before it is asked")
+}
+
+func (s *GradeEditSuite) TestAnUnclassifiedPathIsRefusedEvenInARun() {
+	ws := typestest.NewMockWorkspaceRepository(s.T())
+	ws.EXPECT().ClassifyFiles(mock.Anything, []string{"a.go"}).Return(nil, errors.New("no graph"))
+	_, reason := s.grade(ws, "a.go", EditGrade{InRun: true})
+	s.Equal("could not classify it against the workspace's declarations: no graph", reason)
+}
+
+func (s *GradeEditSuite) TestASourceOutsideTheLeaseMeetsTheLeaseRule() {
+	rule, reason := s.grade(s.workspace("cmd/magus/main.go", "source"), "cmd/magus/main.go", EditGrade{})
+	s.Equal(string(denyRuleLeaseWrite), rule, reason)
+}
+
+func (s *GradeEditSuite) TestASourceInsideTheLeasePasses() {
+	rule, reason := s.grade(s.workspace("internal/ledger/store.go", "source"), "internal/ledger/store.go", EditGrade{})
+	s.Empty(rule + reason)
+}
+
+func (s *GradeEditSuite) edit(rel string) types.GuardJudgment {
+	return judgeEdit(s.ctx, Dependencies{}, s.root, rel, []byte("package x\n"), []byte("package y\n"), false)
+}
+
+// `magus job exec` binds the checkout, which names the lease with no BAGGAGE.
+func (s *GradeEditSuite) TestTheCheckoutBindingNamesTheLease() {
+	s.T().Setenv(trail.EnvBaggage, "")
+	bindCaller(s.T(), s.ctx, hookAttribution{}, "lease-a")
+	s.Equal(graded{false, "lease-a", types.LeaseSourceMarker}, gradedAs(s.edit("internal/ledger/store.go")))
+	s.Equal(graded{true, "lease-a", types.LeaseSourceMarker}, gradedAs(s.edit("cmd/magus/main.go")))
+}
+
+func (s *GradeEditSuite) TestAnUnreadLeaseStoreRefusesLoudly() {
+	s.T().Setenv(trail.EnvBaggage, "")
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Err: errors.New("store locked")})
+	_, reason := s.grade(s.workspace("docs/readme.md", "source"), "docs/readme.md", EditGrade{})
+	s.Contains(reason, "store locked")
+}
+
+// PersonLeaseSuite grades the rewrite a magus process makes in a checkout
+// where jobs hold leases and the process names none.
+type PersonLeaseSuite struct {
+	suite.Suite
+	ctx  context.Context
+	root string
+}
+
+func TestPersonLease(t *testing.T) { suite.Run(t, new(PersonLeaseSuite)) }
+
+func (s *PersonLeaseSuite) SetupTest() {
+	s.ctx, s.root = fleetFixture(s.T(), fixture.FleetLeases()...)
+	s.T().Setenv(trail.EnvBaggage, "")
+}
+
+// holdHere records id as taken in this checkout, as `job exec` does.
+func (s *PersonLeaseSuite) holdHere(id string, paths ...string) {
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: hookLocation(s.ctx, Dependencies{}).cacheDir, Root: s.root})
+	_, err := store.Update(s.T().Context(), id, func(cur *types.Job) {
+		*cur = types.Job{ID: id, WritePaths: paths, State: types.StateRunning, CheckoutRoot: s.root}
+	})
+	s.Require().NoError(err)
+}
+
+func (s *PersonLeaseSuite) edit(rel string) types.GuardJudgment {
+	return judgeEdit(s.ctx, Dependencies{}, s.root, rel, []byte("package x\n"), []byte("package y\n"), false)
+}
+
+func (s *PersonLeaseSuite) TestOneLeaseHeldHereDoesNotBindThePerson() {
+	s.holdHere("lease-c", "web/**")
+	v := s.edit("docs/readme.md")
+	s.Equal(graded{}, gradedAs(v))
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *PersonLeaseSuite) TestSeveralLeasesHeldHereDoNotDenyThePerson() {
+	s.holdHere("lease-c", "web/**")
+	s.holdHere("lease-d", "docs/**")
+	v := s.edit("docs/readme.md")
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *PersonLeaseSuite) TestAPersonMayWriteTheHookWiringInALeasedCheckout() {
+	s.holdHere("lease-c", "web/**")
+	v := s.edit(".codex/hooks.json")
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.NotEqual(string(denyRuleHookWiringWrite), v.Rule)
+}
+
+func (s *PersonLeaseSuite) TestAClaimStillBindsTheProcess() {
+	s.holdHere("lease-c", "web/**")
+	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	s.Equal(graded{true, "lease-a", types.LeaseSourceEnv}, gradedAs(s.edit("cmd/magus/main.go")))
+}
+
+const (
+	renameDryRun    = "./magus refs ActingLease --rename ActingLeaseProbe --dry-run"
+	claimForLeaseA  = "export BAGGAGE=magus.lease=lease-a; "
+	buzzWritesAFile = "import \"fs\";\nfun main(args: [str]) > void !> any { fs\\writeFile(\"cmd/magus/main.go\", content: \"x\"); }\n"
+)
+
+// judgeBound judges command from a worker bound to lease-a by session alone.
+func (s *PersonLeaseSuite) judgeBound(command string) types.GuardJudgment {
+	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+	bindCaller(s.T(), s.ctx, who, "lease-a")
+	return s.judgeAs(who, command)
+}
+
+func (s *PersonLeaseSuite) judgeAs(who hookAttribution, command string) types.GuardJudgment {
+	input := hookJSON(s.T(), map[string]any{"session_id": who.Session, "agent_id": who.Agent, "agent_type": "general-purpose", "cwd": s.root,
+		"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": command}})
+	return Judge(s.ctx, Dependencies{}, Request{Input: input, Host: who.Host})
+}
+
+func (s *PersonLeaseSuite) script(rel, body string) {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, rel), []byte(body), 0o644))
+}
+
+func (s *PersonLeaseSuite) TestASessionBoundRenameDryRunIsRefusedUntilItNamesItsLease() {
+	v := s.judgeBound(renameDryRun)
+	s.Contains(v.Reason, "start the line with `export BAGGAGE=magus.lease=lease-a;`")
+	v.Reason = ""
+	s.Equal(types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionDeny, Rule: string(denyRuleEditUngraded), Lease: "lease-a", LeaseFrom: types.LeaseSourceAgent}, v)
+}
+
+func (s *PersonLeaseSuite) TestTheClaimedRenameGradesPathsOutsideTheRow() {
+	claimed := s.judgeBound(claimForLeaseA + renameDryRun)
+	s.NotEqual(decisionDeny, claimed.Decision, claimed.Reason)
+
+	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	s.Equal(graded{true, "lease-a", types.LeaseSourceEnv}, gradedAs(s.edit("cmd/magus/main.go")), "outside the row")
+	s.Equal(graded{false, "lease-a", types.LeaseSourceEnv}, gradedAs(s.edit("internal/ledger/store.go")), "inside the row")
+}
+
+func (s *PersonLeaseSuite) TestARewriteClaimingAnotherLeaseIsRefused() {
+	v := s.judgeBound("export BAGGAGE=magus.lease=lease-b; " + renameDryRun)
+	s.Equal(string(denyRuleEditUngraded), v.Rule, v.Reason)
+}
+
+func (s *PersonLeaseSuite) TestTheSessionsOwnClaimReachesTheProcess() {
+	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+	s.NotEqual(string(denyRuleEditUngraded), s.judgeBound(renameDryRun).Rule)
+}
+
+func (s *PersonLeaseSuite) TestABuzzScriptThatWritesNeedsTheClaim() {
+	s.script("writes.buzz", buzzWritesAFile)
+	s.Equal(string(denyRuleEditUngraded), s.judgeBound("./magus buzz writes.buzz").Rule)
+	s.NotEqual(string(denyRuleEditUngraded), s.judgeBound(claimForLeaseA+"./magus buzz writes.buzz").Rule)
+}
+
+func (s *PersonLeaseSuite) TestABuzzScriptAfterDashCNeedsTheClaim() {
+	s.script("writes.buzz", buzzWritesAFile)
+	s.Equal(string(denyRuleEditUngraded), s.judgeBound(fmt.Sprintf("./magus -C %s buzz writes.buzz", s.root)).Rule)
+}
+
+func (s *PersonLeaseSuite) TestAnInlineBuzzWriteNeedsTheClaim() {
+	v := s.judgeBound(`./magus buzz -e 'import "fs"; fs\appendFile("docs/a.md", content: "x");'`)
+	s.Equal(string(denyRuleEditUngraded), v.Rule, v.Reason)
+}
+
+func (s *PersonLeaseSuite) TestABuzzHeredocWriteNeedsTheClaim() {
+	v := s.judgeBound("./magus buzz - <<'EOF'\n" + buzzWritesAFile + "EOF")
+	s.Equal(string(denyRuleEditUngraded), v.Rule, v.Reason)
+}
+
+func (s *PersonLeaseSuite) TestABuzzScriptThatOnlyReadsPasses() {
+	s.script("reads.buzz", "import \"fs\";\nfun main(args: [str]) > void !> any { fs\\readFile(\"go.mod\"); }\n")
+	s.NotEqual(string(denyRuleEditUngraded), s.judgeBound("./magus buzz reads.buzz").Rule)
+}
+
+func (s *PersonLeaseSuite) TestABuzzCheckOfAWritingScriptPasses() {
+	s.script("writes.buzz", buzzWritesAFile)
+	s.NotEqual(string(denyRuleEditUngraded), s.judgeBound("./magus buzz --check writes.buzz").Rule)
+}
+
+func (s *PersonLeaseSuite) TestRenameHelpPasses() {
+	s.NotEqual(string(denyRuleEditUngraded), s.judgeBound("./magus refs --rename --help").Rule)
+}
+
+func (s *PersonLeaseSuite) TestAnUnboundCallerIsNotAskedForAClaim() {
+	s.holdHere("lease-c", "web/**")
+	v := s.judgeAs(hookAttribution{Host: "claude-code", Session: "unbound", Agent: "a1b2c3"}, renameDryRun)
+	s.NotEqual(string(denyRuleEditUngraded), v.Rule, v.Reason)
+}
+
+func (s *PersonLeaseSuite) TestACheckoutRecordGradesWithNoClaim() {
+	bindCaller(s.T(), s.ctx, hookAttribution{}, "lease-a")
+	s.NotEqual(string(denyRuleEditUngraded), s.judgeBound(renameDryRun).Rule)
+}
+
+func (s *PersonLeaseSuite) TestTheBootstrapScriptsTakeNoClaim() {
+	for _, script := range []string{placementScript, job.CheckoutBootstrapScript} {
+		s.Require().NoError(os.MkdirAll(filepath.Dir(filepath.Join(s.root, script)), 0o755))
+		s.script(script, buzzWritesAFile)
+		s.NotEqual(string(denyRuleEditUngraded), s.judgeBound("./magus buzz "+script).Rule, script)
+	}
+}
+
+// A workspace opened at a bare directory has no marker for the search to find.
+func (s *PersonLeaseSuite) TestAnOpenedWorkspaceIsNeverJudgedByTheProcessWorkingDirectory() {
+	s.T().Chdir(s.root)
+	own := s.T().TempDir()
+	var opened []string
+	deps := Dependencies{
+		Workspace: own,
+		CacheDir:  func(string) (string, error) { return filepath.Join(own, ".magus"), nil },
+		Inspect: func(_ context.Context, root string) (types.WorkspaceRepository, error) {
+			opened = append(opened, root)
+			return nil, errNoDependency
+		},
+	}
+	s.Equal(own, hookLocation(context.Background(), deps).workspace)
+	Judge(context.Background(), deps, Request{Input: "magus run build svc", Dir: own})
+	judgeEdit(context.Background(), deps, own, "a.txt", []byte("a\n"), []byte("b\n"), false)
+	s.NotContains(opened, s.root)
+}
+
+func (s *PersonLeaseSuite) TestTheWiringDenialToAnAgentNamesTheOrchestrator() {
+	g := gradeHookWiringWrite("/repo", "", true, ".codex/hooks.json")
+	s.Equal(decisionDeny, g.Decision)
+	s.Contains(g.Reason, "orchestrator")
+}
+
+func (s *PersonLeaseSuite) TestTheWiringAdviceToAPersonNamesNoOrchestrator() {
+	g := gradeHookWiringWrite("/repo", "", false, ".codex/hooks.json")
+	s.Equal(decisionAdvise, g.Decision)
+	s.NotContains(g.Context+g.Why, "orchestrator")
 }

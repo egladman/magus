@@ -441,10 +441,13 @@ func CheckDeclaration(sb spells.Sandbox) error {
 
 // checkCache refuses a cache that names no writable grant of sb, since a cache magus
 // carries or a box relocates is one the tool writes, and a skip glob that could reach
-// outside it.
+// outside it, and a negative trim size, which no cache can be trimmed back to.
 func checkCache(sb spells.Sandbox, c spells.SandboxCache) error {
 	if !envName(c.Env) {
 		return fmt.Errorf("env %q is not a variable name", c.Env)
+	}
+	if c.TrimMB < 0 {
+		return fmt.Errorf("trimMb is %d, want 0 to leave the cache alone or a size in MiB", c.TrimMB)
 	}
 	if !slices.ContainsFunc(sb.Allow, func(a spells.SandboxAllow) bool { return a.Env == c.Env && writable(a.Mode) }) {
 		return fmt.Errorf("no writable allow entry has env %s", c.Env)

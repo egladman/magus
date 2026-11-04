@@ -49,7 +49,7 @@ interface EventGroup {
   project: string;
   target: string;
   body: string[];
-  result: { status: Status; duration?: Duration; ref: string } | null;
+  result: { status: Status; duration?: Duration | undefined; ref: string } | null;
 }
 
 // buildModelFromEvents turns an event stream (a whole Journal's events, or the live events
@@ -128,6 +128,7 @@ export function statusName(s: Status): string {
   if (s === Status.PASS) return "pass";
   if (s === Status.FAIL) return "fail";
   if (s === Status.CACHED) return "cached";
+  if (s === Status.PERMITTED) return "permitted";
   return "";
 }
 

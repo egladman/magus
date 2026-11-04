@@ -13,9 +13,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/testkit"
@@ -83,11 +87,21 @@ func servedDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyR
 // The verdicts a stale-binary deny opens with, by cause and caller.
 const (
 	staleOwnSay    = "./magus is older than this workspace and cannot load its guard policy; rebuild ./magus with `./magus run go-build .`."
-	noBinaryOwnSay = "this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`."
 	staleWorkerSay = "./magus is older than this workspace and cannot load its guard policy; ask the main session to place a ./magus that loads this workspace."
 	// workerPlacementRun is the one command a leased worker is served in place of a build.
 	workerPlacementRun = `"<main checkout>/magus" buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from "<main checkout>"`
 )
+
+// noBinaryOwnSay is the verdict a checkout of magus at root with no ./magus opens with.
+func noBinaryOwnSay(root string) string {
+	return fmt.Sprintf("this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`.", shellQuoted(root))
+}
+
+// shellQuoted is path as one POSIX shell word, the way a remedy line names a checkout.
+func shellQuoted(path string) string {
+	q, _ := syntax.Quote(path, syntax.LangPOSIX) // only a NUL byte fails, and no temp dir holds one
+	return q
+}
 
 // A fresh worktree has no ./magus and no recorded policy: the magusfile showing a guard
 // rule is the only evidence there is, and the judge is a PATH magus that cannot load it.
@@ -99,7 +113,7 @@ func TestFreshWorktreeWithoutABinaryDeniesWrites(t *testing.T) {
 	deps := unloadedDependencies(errMissingMember)
 
 	for _, line := range []string{"touch notes.txt", "git commit -m x", "./magus agent install", "git push origin HEAD:topic"} {
-		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, noBinaryOwnSay)
+		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, noBinaryOwnSay(root))
 		assert.Contains(t, stored, "changes state, and the guard policy that would judge it is not running:", line)
 		assert.Contains(t, stored, "\n  worktree: the magusfile failed to load: "+errMissingMember.Error(), line)
 		assert.Contains(t, stored, "see: "+ruleDocsBase+"stale-binary/", line)
@@ -117,8 +131,8 @@ func TestFreshWorktreeWithoutABinaryDeniesWrites(t *testing.T) {
 	}
 
 	edit := Judge(ctx, deps, Request{Input: filepath.Join(root, "main.go"), IsPath: true, Host: "claude-code", Session: "s1"})
-	stored := shortDeny(t, cacheDir, edit, denyRuleStaleBinary, noBinaryOwnSay)
-	assert.True(t, strings.HasPrefix(stored, noBinaryOwnSay+"\nthis file write changes state"), stored)
+	stored := shortDeny(t, cacheDir, edit, denyRuleStaleBinary, noBinaryOwnSay(root))
+	assert.True(t, strings.HasPrefix(stored, noBinaryOwnSay(root)+"\nthis file write changes state"), stored)
 }
 
 // A failure that is not stale-shaped still denies in a checkout with no ./magus, and says
@@ -129,7 +143,7 @@ func TestUnloadedTreeWithoutABinaryNamesTheMissingBinary(t *testing.T) {
 	declareGuardRule(t, root)
 
 	v := judgeUnloaded(ctx, unloadedDependencies(errors.New("magusfile.buzz:3:1: expected expression")), "touch notes.txt")
-	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay)
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay(root))
 	assert.NotContains(t, stored, "older than")
 }
 
@@ -152,7 +166,7 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 
 	for _, line := range []string{"git push origin HEAD:topic", "./magus agent harness install", "./magus config set --global key=log.format,value=json", "touch notes.txt"} {
 		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, staleOwnSay)
-		assert.Contains(t, stored, "bootstrap over it, alone on its line: `"+ward.BootstrapCommand+"`", line)
+		assert.Contains(t, stored, fmt.Sprintf("bootstrap over it, alone on its line: `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`", shellQuoted(root)), line)
 		assert.NotContains(t, stored, "magus.old", line)
 	}
 
@@ -337,7 +351,7 @@ func TestHookRowsRecordTheJudgingBinaryAndCwd(t *testing.T) {
 		Binary:        "/work/tree/magus",
 		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
 		Cwd:           cwd,
-		Phases:        []trail.Phase{{Name: phaseJudge}},
+		Phases:        []trail.Phase{{Name: phaseBuiltinRules}, {Name: phaseNotices}, {Name: phaseJudge}},
 	}, clearVolatile(commands[0]))
 
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
@@ -391,19 +405,21 @@ func TestHookRowsRecordEachPhase(t *testing.T) {
 	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
 	require.Len(t, commands, 1)
 	phases := commands[0].Phases
-	require.Len(t, phases, 3)
+	require.Len(t, phases, 5)
 	assert.Equal(t, trail.Phase{Name: phaseLoadRules, ElapsedMs: 812, BudgetMs: 6500}, phases[0])
 	assert.Equal(t, phaseWorktreeRule, phases[1].Name)
 	assert.Positive(t, phases[1].BudgetMs)
 	assert.False(t, phases[1].Lapsed)
-	assert.Equal(t, phaseJudge, phases[2].Name)
+	assert.Equal(t, phaseBuiltinRules, phases[2].Name)
+	assert.Equal(t, phaseNotices, phases[3].Name)
+	assert.Equal(t, phaseJudge, phases[4].Name)
 }
 
 // clearVolatile zeroes what the clock, the OS account and the content-addressed blobs decide,
 // so a recorded event compares whole and a field added to it cannot be dropped unseen. A
 // phase keeps its name and whether it lapsed.
 func clearVolatile(e trail.Event) trail.Event {
-	e.Ts, e.Origin, e.Workspace, e.DurationMs = 0, types.Origin{}, "", 0
+	e.Ts, e.Origin, e.Workspace, e.GuardMs = 0, types.Origin{}, "", 0
 	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
 	e.Preview, e.VerdictRef = "", ""
 	phases := make([]trail.Phase, len(e.Phases))
@@ -428,6 +444,23 @@ func TestUnloadCause(t *testing.T) {
 	assert.Equal(t, unloadReason{}, unloadCause(typo, withBinary), "a typo is the author's to fix")
 	assert.Equal(t, unloadReason{}, unloadCause(nil, bare))
 	assert.Equal(t, unloadReason{}, unloadCause(stale, ""))
+}
+
+// UnloadCauseSuite pins which load failures only a different binary fixes.
+type UnloadCauseSuite struct {
+	suite.Suite
+}
+
+func TestUnloadCauseSuite(t *testing.T) {
+	suite.Run(t, new(UnloadCauseSuite))
+}
+
+func (s *UnloadCauseSuite) TestAnUnknownConfigKeyThisBuildPredatesIsStale() {
+	binary := testkit.NewWorkspace(s.T())
+	binary.WriteExecutable("magus", "#!/bin/sh\n")
+	err := types.DiagnosticErrorf(types.UnknownConfigKey,
+		"magus.yaml has a key this magus does not know:\n  - guard.newest  (line 4)")
+	s.Equal(unloadReason{Cause: unloadStale}, unloadCause(err, binary.Root()))
 }
 
 func TestDeclaresGuardRule(t *testing.T) {
@@ -536,6 +569,45 @@ func TestReadOnlyLine(t *testing.T) {
 }
 
 // awk reads when its program is on the line and neither redirects, pipes nor calls system().
+func TestReadOnlyLineReadsMagusListings(t *testing.T) {
+	for _, line := range []string{"./magus where docs", "./magus vcs ls-files -o name"} {
+		assert.True(t, readOnlyLine(line, DialectBash), line)
+	}
+	assert.False(t, readOnlyLine("./magus vcs resolve a.go", DialectBash))
+}
+
+// WorkerRouteSuite pins the one line a worker's own row can always run.
+type WorkerRouteSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestWorkerRouteSuite(t *testing.T) {
+	suite.Run(t, new(WorkerRouteSuite))
+}
+
+func (s *WorkerRouteSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus"), []byte("#!/bin/sh\n"), 0o755))
+}
+
+func (s *WorkerRouteSuite) TestACheckoutHoldingTheScriptNamesItsOwnBuild() {
+	placeFile(s.T(), s.root, job.CheckoutBootstrapScript, "namespace b;\n")
+	fix := binaryRemedy(true, s.root, "lease-a", false)
+	s.Contains(fix.say, job.CheckoutBootstrap(s.root))
+	s.Empty(fix.placeFor)
+}
+
+func (s *WorkerRouteSuite) TestACheckoutWithoutTheScriptAsksForAPlacement() {
+	fix := binaryRemedy(true, s.root, "lease-a", false)
+	s.Equal("lease-a", fix.placeFor)
+}
+
+func (s *WorkerRouteSuite) TestTheNamedLinePassesWithTheLeaseExportInFront() {
+	line := "export BAGGAGE=magus.lease=lease-a; " + job.CheckoutBootstrap(s.root)
+	s.True(recoveryLine(line, DialectBash, "lease-a", false, magusRepoAt))
+}
+
 // The first line is a read pipeline a lapse once denied as state-changing.
 func TestReadOnlyLineReadsAnAwkProgram(t *testing.T) {
 	for _, line := range []string{
@@ -625,6 +697,18 @@ func TestEveryMCPToolIsClassifiedForAStaleBinary(t *testing.T) {
 	assert.Len(t, mcpReadOnlyTools, len(hint.AllToolNames), "an entry names no tool")
 }
 
+// Memory and a scratchpad sit under no workspace, so no unloaded policy holds them back.
+func TestOutsideAnyWorkspace(t *testing.T) {
+	ws := testkit.NewWorkspace(t)
+	ws.Write("magus.yaml", "{}\n")
+	at := location{workspace: ws.Root(), dir: ws.Root()}
+	scratch := t.TempDir()
+	assert.True(t, outsideAnyWorkspace(filepath.Join(scratch, "notes", "memory.md"), at))
+	assert.False(t, outsideAnyWorkspace(filepath.Join(ws.Root(), "internal", "x.go"), at))
+	assert.False(t, outsideAnyWorkspace("relative.go", at), "relative to the workspace")
+	assert.False(t, outsideAnyWorkspace("$HOME/x", at), "a place the line does not determine")
+}
+
 func TestRecoveryLine(t *testing.T) {
 	for _, tc := range []struct {
 		line, lease string
@@ -637,7 +721,10 @@ func TestRecoveryLine(t *testing.T) {
 		{"git rebase --continue", "lease-a", false, true},
 		{"git revert --abort", "lease-a", false, true},
 		{"git worktree add ../scratch HEAD", "lease-a", false, true},
-		{"git cherry-pick abc123", "lease-a", false, false},
+		{"git cherry-pick abc123", "lease-a", false, true},
+		{"git cherry-pick -x abc123 def456", "lease-a", false, true},
+		{"git cherry-pick --skip", "lease-a", false, true},
+		{"git cherry-pick --strategy=ours abc123", "lease-a", false, false},
 		{"git cherry-pick --abort && git push", "lease-a", false, false},
 		{"FOO=1 git cherry-pick --continue", "lease-a", false, false},
 		{"git worktree remove ../scratch", "lease-a", false, false},
@@ -654,7 +741,7 @@ func TestRecoveryLine(t *testing.T) {
 		{workerPlacementRun, "lease-a", true, true},
 		{"./magus run test .", "lease-a", true, false},
 	} {
-		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.builds), "%s (lease %q, builds %v)", tc.line, tc.lease, tc.builds)
+		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.builds, magusRepoAt), "%s (lease %q, builds %v)", tc.line, tc.lease, tc.builds)
 	}
 	for _, tc := range []struct {
 		line, lease string
@@ -682,9 +769,12 @@ func TestRecoveryLine(t *testing.T) {
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from /repo", "lease-a", true},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from /repo && go build ./cmd/magus", "lease-a", false},
 		{"/repo/magus buzz hack/dev/other.buzz", "lease-a", false},
+		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", "lease-a", true},
+		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /w/a", "lease-a", true},
+		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- --here && git push", "lease-a", false},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job x --from /repo", "", true},
 	} {
-		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.lease == ""), "%s (lease %q)", tc.line, tc.lease)
+		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.lease == "", magusRepoAt), "%s (lease %q)", tc.line, tc.lease)
 	}
 }
 
@@ -695,8 +785,12 @@ func TestRecoveryLinePassesEveryCommandTheRemedyNames(t *testing.T) {
 		builds      bool
 	}{{"root", "", true}, {"integrator", "lease-a", true}, {"worker", "lease-a", false}} {
 		for _, hasBinary := range []bool{true, false} {
-			fix := binaryRemedy(true, hasBinary, tc.lease, tc.builds)
-			named := []string{ward.BootstrapCommand}
+			root := t.TempDir()
+			if hasBinary {
+				require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), nil, 0o755))
+			}
+			fix := binaryRemedy(true, root, tc.lease, tc.builds)
+			named := []string{ward.BootstrapCommand, config.SourceCommand(root, "", "", true)}
 			if tc.builds && hasBinary {
 				named = append(named, strings.Trim(ownRebuild, "`"))
 			}
@@ -705,8 +799,149 @@ func TestRecoveryLinePassesEveryCommandTheRemedyNames(t *testing.T) {
 				named[0] = strings.ReplaceAll(named[0], "<main checkout>", "/repo")
 			}
 			for _, line := range named {
-				assert.True(t, recoveryLine(line, DialectBash, tc.lease, tc.builds), "%s (binary %v) names %q: %s", tc.name, hasBinary, line, fix.say)
+				assert.True(t, recoveryLine(line, DialectBash, tc.lease, tc.builds, magusRepoAt), "%s (binary %v) names %q: %s", tc.name, hasBinary, line, fix.say)
 			}
 		}
 	}
+}
+
+// A rebuild judged while the knowledge store could not vouch for the target policies
+// carries the note saying how they were read into the stale-binary deny.
+func TestStaleBinaryDenialNamesThePolicyFallback(t *testing.T) {
+	at := location{policies: func() declaredIndex { return declaredIndex{note: policyUnreadNote} }}
+	call := commandCall(context.Background(), commandRuleInput{command: "./magus run go-build .", dialect: DialectBash}, at)
+	assert.Equal(t, policyUnreadNote, call.policyNote)
+
+	d := staleBinaryDenial(call, unloadReason{Cause: unloadStale}, nil, false, t.TempDir())
+	assert.True(t, strings.HasSuffix(d.Why, "\n"+policyUnreadNote), d.Why)
+}
+
+// LineWorkspaceSuite places shell lines run from a session checkout against a job checkout.
+type LineWorkspaceSuite struct {
+	suite.Suite
+	session, job string
+}
+
+func TestLineWorkspaceSuite(t *testing.T) {
+	suite.Run(t, new(LineWorkspaceSuite))
+}
+
+func (s *LineWorkspaceSuite) SetupTest() {
+	s.session = testkit.NewWorkspace(s.T()).Root()
+	s.job = testkit.NewWorkspace(s.T()).Root()
+	for _, root := range []string{s.session, s.job} {
+		s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	}
+}
+
+func (s *LineWorkspaceSuite) TestACdMovesTheLineIntoTheJobCheckout() {
+	s.Equal(s.job, LineWorkspace(fmt.Sprintf("cd %s && ./magus run lint . && git status", s.job), s.session))
+}
+
+func (s *LineWorkspaceSuite) TestARootFlagMovesAMagusCall() {
+	s.Equal(s.job, LineWorkspace(fmt.Sprintf("magus --root %s run lint .", s.job), s.session))
+}
+
+func (s *LineWorkspaceSuite) TestALineThatStaysIsTheSessionCheckout() {
+	s.Equal(s.session, LineWorkspace("./magus run lint .", s.session))
+}
+
+func (s *LineWorkspaceSuite) TestCallsInTwoCheckoutsPlaceNone() {
+	s.Empty(LineWorkspace(fmt.Sprintf("git status && cd %s && ./magus run lint .", s.job), s.session))
+}
+
+func (s *LineWorkspaceSuite) TestACdInsideAConditionalPlacesNone() {
+	s.Empty(LineWorkspace(fmt.Sprintf("if true; then cd %s; fi; ./magus run lint .", s.job), s.session))
+}
+
+func (s *LineWorkspaceSuite) TestALineWithNoCallPlacesNone() {
+	s.Empty(LineWorkspace("cd "+s.job, s.session))
+}
+
+func (s *LineWorkspaceSuite) TestARelativeSessionPlacesNone() {
+	s.Empty(LineWorkspace("./magus run lint .", "relative"))
+}
+
+// LoadRecoverySuite judges the ways back while ./magus cannot load
+// a checkout that is a git repository with two commits.
+type LoadRecoverySuite struct {
+	suite.Suite
+	ctx        context.Context
+	deps       Dependencies
+	checkpoint string
+}
+
+func TestLoadRecoverySuite(t *testing.T) {
+	suite.Run(t, new(LoadRecoverySuite))
+}
+
+func (s *LoadRecoverySuite) SetupTest() {
+	ctx, cacheDir := spawnFixture(s.T())
+	repo := testkit.NewRepository(s.T(), nil)
+	s.checkpoint = repo.Head()
+	repo.Commit("breaks the load", map[string]string{"notes.txt": "x\n"})
+	ctx = WithLocation(ctx, cacheDir, repo.Root(), repo.Root())
+	ownCheckout(s.T(), ctx, true)
+	declareGuardRule(s.T(), repo.Root())
+	s.ctx = s.pin(ctx, s.checkpoint)
+	s.deps = unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+}
+
+// pin answers the job store with one row recording checkpoint.
+func (s *LoadRecoverySuite) pin(ctx context.Context, checkpoint string) context.Context {
+	row := types.Job{ID: "base", State: types.StateRunning, Registered: 1, Checkpoint: checkpoint}
+	return job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
+}
+
+func (s *LoadRecoverySuite) judge(line string) types.GuardJudgment {
+	return Judge(s.ctx, s.deps, Request{Input: line, Host: "claude-code", Session: line})
+}
+
+func (s *LoadRecoverySuite) TestAnAbortPasses() {
+	for _, verb := range []string{"merge", "cherry-pick", "rebase"} {
+		v := s.judge(fmt.Sprintf("git %s --abort", verb))
+		s.NotEqual(decisionDeny, v.Decision, "%s: %s", verb, v.Reason)
+	}
+}
+
+func (s *LoadRecoverySuite) TestAKeepResetToACheckpointPasses() {
+	v := s.judge("git reset --keep " + s.checkpoint[:9])
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *LoadRecoverySuite) TestAMergeResetToACheckpointPasses() {
+	v := s.judge("git reset --merge " + s.checkpoint)
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *LoadRecoverySuite) TestAResetToARevisionNoRowRecordsIsDenied() {
+	s.Equal(decisionDeny, s.judge("git reset --keep HEAD").Decision)
+}
+
+func (s *LoadRecoverySuite) TestAResetToADirtyCheckpointIsDenied() {
+	s.ctx = s.pin(s.ctx, s.checkpoint+"+0123abcd")
+	s.Equal(decisionDeny, s.judge("git reset --keep "+s.checkpoint).Decision)
+}
+
+func (s *LoadRecoverySuite) TestASoftResetToACheckpointIsDenied() {
+	s.Equal(decisionDeny, s.judge("git reset --soft "+s.checkpoint).Decision)
+}
+
+func (s *LoadRecoverySuite) TestAChainedResetIsDenied() {
+	s.Equal(decisionDeny, s.judge(fmt.Sprintf("git reset --keep %s && touch x", s.checkpoint)).Decision)
+}
+
+func (s *LoadRecoverySuite) TestAnAppendOutsideEveryCheckoutPasses() {
+	memory := filepath.Join(s.T().TempDir(), "memory.md")
+	v := s.judge(fmt.Sprintf("cat >> %s <<'EOF'\nnote\nEOF", shellQuoted(memory)))
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *LoadRecoverySuite) TestARedirectIntoTheCheckoutIsDenied() {
+	s.Equal(decisionDeny, s.judge("echo x > notes.txt").Decision)
+}
+
+func (s *LoadRecoverySuite) TestAWriteOutsideByAProgramThatWritesIsDenied() {
+	memory := filepath.Join(s.T().TempDir(), "memory.md")
+	s.Equal(decisionDeny, s.judge("touch "+shellQuoted(memory)).Decision)
 }

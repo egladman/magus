@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -26,6 +27,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean drives the actual `magus buzz`
@@ -142,8 +144,8 @@ func TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox(t *testing.T) {
 	assert.Equal(t, 2, *opens)
 }
 
-// A script run carries one evaluation memo, which std's graph members read through, so two
-// magus\refs calls in one script build the symbol graph once rather than once each.
+// A script run carries one evaluation memo, which std's graph members read.
+// So two magus\graph().refs calls in one script build the symbol graph once.
 func TestBuzzRunContextCarriesOneEvalMemo(t *testing.T) {
 	ctx, err := buzzRunContext(t.Context(), t.TempDir())
 	require.NoError(t, err)
@@ -175,8 +177,9 @@ func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 }
 
 const (
-	buzzVanillaScript = "import \"std\";\n\nfun main(args: [str]) > void {\n    std\\print(\"hi\");\n}\n"
-	buzzMemberScript  = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final p = magus\\describe.project();\n    std\\print(\"{p.projects.len()}\");\n}\n"
+	buzzVanillaScript  = "import \"std\";\n\nfun main(args: [str]) > void {\n    std\\print(\"hi\");\n}\n"
+	buzzUnmergedScript = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final r = magus\\workspace().unmerged();\n    std\\print(\"rows={r.rows.len()}\");\n}\n"
+	buzzMemberScript   = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final p = magus\\describe.project();\n    std\\print(\"{p.projects.len()}\");\n}\n"
 )
 
 // countWorkspaceOpens swaps buzzLoadWorkspace for open, counting its calls.
@@ -238,6 +241,29 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 	assert.Equal(t, 1, *opens)
 }
 
+// The stop policy reads magus\workspace().unmerged() from a hook script.
+func TestBuzzCmd_WorkspaceHandleReadsTheScriptsWorkspace(t *testing.T) {
+	root, script := buzzLazyWorkspace(t, buzzUnmergedScript)
+	var m *magus.Magus
+	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
+		var err error
+		m, err = magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+		return m, err
+	})
+	t.Cleanup(func() {
+		if m != nil {
+			_ = m.Close()
+		}
+	})
+
+	var runErr error
+	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
+
+	require.NoError(t, runErr)
+	assert.Equal(t, "rows=0\n", stdout)
+	assert.Equal(t, 1, *opens)
+}
+
 // guardGlueScripts are the hook scripts a host wires to `magus buzz`, the highest-rate
 // callers `magus buzz` has: one runs on every shell command, every write and every file
 // an agent opens.
@@ -254,6 +280,7 @@ var guardGlueScripts = []string{
 	"magus-rehydrate.buzz",
 	"magus-session.buzz",
 	"cursor-hook.buzz",
+	"magus-reclaim-disk.buzz",
 }
 
 // guardGlueModules are files the ports import. They are not hooks, so the
@@ -1060,8 +1087,8 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 				label: event, host: "cursor", event: string(raw),
 				stub: "#!/bin/sh\ncat > \"$GREP_INPUT_RECORD\"\nprintf no > \"$RENDERS_ASK_RECORD\"\nprintf '%s' \"$GLUE_VERDICT\"\n",
 				env: map[string]string{
-					"GREP_INPUT_RECORD": record,
-					"GLUE_VERDICT": `{"decision":"advise","context":"use magus refs HandleRequest --definition --source"}`,
+					"GREP_INPUT_RECORD":     record,
+					"GLUE_VERDICT":          `{"decision":"advise","context":"use magus refs HandleRequest --source"}`,
 					"CURSOR_HOOK_STATE_DIR": t.TempDir(),
 				},
 			})
@@ -1074,19 +1101,93 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 				Cwd       string          `json:"cwd"`
 			}
 			require.NoError(t, json.Unmarshal(judged, &payload), "the native search must reach the shared guard as a tool call")
-			assert.Equal(t, "Grep", payload.ToolName)
-			assert.Equal(t, "grep-session", payload.SessionID)
-			assert.Equal(t, ".", payload.Cwd)
 			want, err := json.Marshal(input)
 			require.NoError(t, err)
-			assert.JSONEq(t, string(want), string(payload.Input), "context and scope must survive the Cursor adapter")
+			gotInput := payload.Input
+			payload.Input = nil
+			assert.Equal(t, struct {
+				ToolName  string          `json:"tool_name"`
+				Input     json.RawMessage `json:"tool_input"`
+				SessionID string          `json:"session_id"`
+				Cwd       string          `json:"cwd"`
+			}{ToolName: "Grep", SessionID: "grep-session", Cwd: "."}, payload)
+			assert.JSONEq(t, string(want), string(gotInput), "context and scope must survive the Cursor adapter")
 			if event == "preToolUse" {
 				assert.Equal(t, "allow", glueDecode(t, event, out).(map[string]any)["permission"])
 			} else {
-				assert.Contains(t, out, "use magus refs HandleRequest --definition --source")
+				assert.Contains(t, out, "use magus refs HandleRequest --source")
 			}
 		})
 	}
+}
+
+// cursorReadingListSuite runs cursor-hook.buzz on a WebSearch with a stand-in
+// magus that answers config view with a reading list and the link query with
+// citations.
+type cursorReadingListSuite struct {
+	suite.Suite
+}
+
+func TestCursorReadingListSuite(t *testing.T) {
+	suite.Run(t, new(cursorReadingListSuite))
+}
+
+const cursorReadingListStub = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\n" +
+	"case \"$1\" in\n  config) [ -n \"$CONFIG_FAILS\" ] && exit 2; printf '%s' \"$SOURCES_JSON\" ;;\n" +
+	"  query) printf '%s' \"$LINKS\" ;;\nesac\n"
+
+// hint is the additional_context the hook returns for a search of terms.
+func (s *cursorReadingListSuite) hint(terms string, env map[string]string) string {
+	event, err := json.Marshal(map[string]any{
+		"hook_event_name": "postToolUse", "conversation_id": "c",
+		"tool_name": "WebSearch", "tool_input": map[string]any{"search_term": terms},
+	})
+	s.Require().NoError(err)
+	env["CURSOR_HOOK_STATE_DIR"] = s.T().TempDir()
+	out, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{
+		label: terms, host: "cursor", event: string(event), stub: cursorReadingListStub, env: env,
+	})
+	var reply struct {
+		Context string `json:"additional_context"`
+	}
+	s.Require().NoError(json.Unmarshal([]byte(out), &reply), out)
+	return reply.Context
+}
+
+const cursorReadingList = `{"sources":[
+{"url":"https://blog.example/go","topic":"go modules","verdict":"caveat","why":"predates workspaces"},
+{"url":"https://spam.example/","topic":"go modules","verdict":"skip","why":"SEO"},
+{"url":"https://go.dev/ref/mod","topic":"go modules","verdict":"follow","why":"the reference"},
+{"url":"https://react.dev/","topic":"react hooks","verdict":"follow","why":""}]}`
+
+func (s *cursorReadingListSuite) TestRanksFollowBeforeCaveatAndDropsSkip() {
+	got := s.hint("go modules vendoring", map[string]string{"SOURCES_JSON": cursorReadingList})
+	s.Equal("Your reading list (sources in the user magus.yaml) covers this search. "+
+		"Prefer follow; read a caveat with its why in mind:\n"+
+		"  - follow https://go.dev/ref/mod\n"+
+		"  - caveat https://blog.example/go: predates workspaces", got)
+}
+
+func (s *cursorReadingListSuite) TestDropsACitationUnderASkipEntry() {
+	got := s.hint("go modules", map[string]string{
+		"SOURCES_JSON": cursorReadingList,
+		"LINKS":        "link:https://spam.example/go-modules\nlink:https://pkg.go.dev/cmd/go\n",
+	})
+	s.Contains(got, "  - https://pkg.go.dev/cmd/go")
+	s.NotContains(got, "spam.example")
+}
+
+func (s *cursorReadingListSuite) TestNamesNothingForAnUnrelatedSearch() {
+	s.Empty(s.hint("rust lifetimes", map[string]string{"SOURCES_JSON": cursorReadingList}))
+}
+
+func (s *cursorReadingListSuite) TestAWordInsideALongerWordNamesNothing() {
+	s.Empty(s.hint("mongo modules", map[string]string{"SOURCES_JSON": cursorReadingList}))
+}
+
+func (s *cursorReadingListSuite) TestSaysSoWhenConfigViewFails() {
+	got := s.hint("go modules", map[string]string{"CONFIG_FAILS": "1"})
+	s.Equal("Your reading list (sources in the user magus.yaml) was not applied: magus config view exited 2.", got)
 }
 
 // TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem grades what cursor-hook.buzz
@@ -1175,20 +1276,97 @@ func TestBuzzHookProfilesEachMagusApart(t *testing.T) {
 
 func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 	root := t.TempDir()
-	recordBuzzRun(t.Context(), root, "probe.buzz", "code", []string{"--x"}, false, []byte("hello\n"), time.Now(), nil)
+	require.NoError(t, recordBuzzRun(t.Context(), root, "probe.buzz", "code", []string{"--x"}, false, []byte("hello\n"), time.Now(), nil))
 
 	dir, err := magus.ResolveCacheDir(root)
 	require.NoError(t, err)
 	store := cache.NewOutputStore(dir)
-	ref := cache.PortableRef(buzzRunKey("probe.buzz", "code", []string{"--x"}))
+	lease, _, err := checkoutLease(t.Context(), root)
+	require.NoError(t, err)
+	ref := cache.PortableRef(buzzRunKey("probe.buzz", "code", lease, []string{"--x"}))
 	out, d, err := store.ByRef(ref)
 	require.NoError(t, err)
 	assert.Equal(t, "hello\n", string(out))
 	assert.Equal(t, "buzz probe.buzz", d.Target)
 	assert.False(t, d.Failed)
 
-	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", nil), buzzRunKey("probe.buzz", "code", []string{"--x"}),
+	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", lease, nil), buzzRunKey("probe.buzz", "code", lease, []string{"--x"}),
 		"different arguments are a different probe")
+	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", "job-a", nil), buzzRunKey("probe.buzz", "code", "job-b", nil),
+		"another job's run is another ref")
+}
+
+type BuzzRecordSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestBuzzRecordSuite(t *testing.T) { suite.Run(t, new(BuzzRecordSuite)) }
+
+func (s *BuzzRecordSuite) SetupTest() { s.root = s.T().TempDir() }
+
+func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
+	args := []string{"a", "b"}
+	s.Require().NoError(recordBuzzRun(s.T().Context(), s.root, "p.buzz", "code", args, false, nil, time.Now(), nil))
+
+	dir, err := magus.ResolveCacheDir(s.root)
+	s.Require().NoError(err)
+	lease, _, err := checkoutLease(s.T().Context(), s.root)
+	s.Require().NoError(err)
+	_, d, err := cache.NewOutputStore(dir).ByRef(cache.PortableRef(buzzRunKey("p.buzz", "code", lease, args)))
+	s.Require().NoError(err)
+	d.Ref, d.TimestampMs, d.DurationMs, d.PersistedNs, d.Attempt, d.Key, d.KeyVersion, d.Inv = "", 0, 0, 0, "", "", 0, ""
+	s.Equal(cache.OutputDescriptor{Project: ".", Target: "buzz p.buzz", ExtraArgs: args, Lease: lease}, d)
+}
+
+func scriptCheckRow(id, root, script string) types.Job {
+	return types.Job{ID: id, State: types.StateRunning, CheckoutRoot: root, Check: &types.LeaseCheck{Script: script}}
+}
+
+func (s *BuzzRecordSuite) TestHolderIsTheOneRowCheckingTheScriptHere() {
+	rows := []types.Job{scriptCheckRow("a", s.root, "p.buzz"), scriptCheckRow("b", s.root, "other.buzz")}
+	s.Equal("a", scriptCheckHolder(rows, s.root, "./p.buzz"))
+}
+
+func (s *BuzzRecordSuite) TestTwoRowsCheckingTheScriptNameNoHolder() {
+	rows := []types.Job{scriptCheckRow("a", s.root, "p.buzz"), scriptCheckRow("b", s.root, "p.buzz")}
+	s.Empty(scriptCheckHolder(rows, s.root, "p.buzz"))
+}
+
+func (s *BuzzRecordSuite) TestARowInAnotherCheckoutIsNoHolder() {
+	s.Empty(scriptCheckHolder([]types.Job{scriptCheckRow("a", s.T().TempDir(), "p.buzz")}, s.root, "p.buzz"))
+}
+
+func (s *BuzzRecordSuite) TestAnExitedRowIsNoHolder() {
+	row := scriptCheckRow("a", s.root, "p.buzz")
+	row.State = types.StateExited
+	s.Empty(scriptCheckHolder([]types.Job{row}, s.root, "p.buzz"))
+}
+
+func (s *BuzzRecordSuite) TestRecordPrintsItsRefOnStderrWhateverTheLogLevel() {
+	s.T().Setenv("MAGUS_LOG_SILENT", "true")
+	r, w, err := os.Pipe()
+	s.Require().NoError(err)
+	saved := os.Stderr
+	os.Stderr = w
+	recErr := recordBuzzRun(s.T().Context(), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil)
+	os.Stderr = saved
+	s.Require().NoError(w.Close())
+	printed, err := io.ReadAll(r)
+	s.Require().NoError(err)
+	s.Require().NoError(recErr)
+	s.Regexp(`^ref  \S+\n$`, string(printed))
+}
+
+func (s *BuzzRecordSuite) TestRecordReturnsTheReasonWhenTheStoreCannotWrite() {
+	dir, err := magus.ResolveCacheDir(s.root)
+	s.Require().NoError(err)
+	s.Require().NoError(os.MkdirAll(dir, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "outputs"), []byte("x"), 0o644))
+
+	err = recordBuzzRun(s.T().Context(), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "--record: store the run")
 }
 
 // A -t run is evidence a script check cites, so it is recorded like --record, under its
@@ -1215,7 +1393,9 @@ func TestBuzzTestRunIsRecordedWithItsTestLines(t *testing.T) {
 			captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-t", script}) })
 			assert.Equal(t, tc.failed, runErr != nil, "%v", runErr)
 
-			out, d, err := store.ByRef(cache.PortableRef(buzzRunKey(script, code, []string{"-t"})))
+			lease, _, err := checkoutLease(t.Context(), root)
+			require.NoError(t, err)
+			out, d, err := store.ByRef(cache.PortableRef(buzzRunKey(script, code, lease, []string{"-t"})))
 			require.NoError(t, err)
 			assert.Equal(t, cache.OutputDescriptor{Target: "buzz -t " + script, Failed: tc.failed}, cache.OutputDescriptor{Target: d.Target, Failed: d.Failed})
 			for _, line := range tc.lines {

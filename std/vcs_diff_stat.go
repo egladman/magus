@@ -9,9 +9,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// VcsDiffStat counts the lines each file changed in the checked-out revision past its
+// VCSDiffStat counts the lines each file changed in the checked-out revision past its
 // merge base with base, through the driver's DiffStat. dir "" is the target's cwd.
-func VcsDiffStat(ctx context.Context, base, dir string) ([]types.FileStat, error) {
+func VCSDiffStat(ctx context.Context, base, dir string) ([]types.FileStat, error) {
 	v, defaultBase, dir, err := vcsAt(ctx, "diffStat", dir)
 	if err != nil {
 		return nil, err

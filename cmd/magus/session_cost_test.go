@@ -53,6 +53,7 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		switch sec {
 		case 1:
 			c.ContextTokens = 100_000
+			c.ToolMs, c.ResultDigest = 40, "r1"
 			c.Decision, c.Rule, c.DelegableClass = "advise", "root-result-cap", types.DelegableSearch // answered by the spawn at 5s
 		case 15:
 			c.Decision, c.Rule, c.DelegableClass = "advise", "root-repeat", types.DelegableDiff // the next spawn is past the window
@@ -269,6 +270,7 @@ Cost, with the root as the main thread:
   advisories       0 given, 0 followed by a spawn within 10 calls, 0 ignored
   shadow           not measured: no call recorded what each profile would have decided
   dollars          $0.12 floor: cache reads of the root's 1 model call(s), metered
+  repeats          not measured: no tool-time row carried a result digest, so a repeated answer cannot be told from a changed one
 `, buf.String())
 }
 

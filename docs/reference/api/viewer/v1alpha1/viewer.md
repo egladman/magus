@@ -426,6 +426,7 @@ Source: [viewer.proto](https://github.com/egladman/magus/blob/main/proto/magus/v
 | `STATUS_PASS`        | 1 |             |
 | `STATUS_FAIL`        | 2 |             |
 | `STATUS_CACHED`      | 3 |             |
+| `STATUS_PERMITTED`   | 4 |             |
 
 Used by: [GetInvocation (response)](viewer.md#getinvocation), [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [ListInvocations (response)](viewer.md#listinvocations), [StreamEvents (response)](viewer.md#streamevents).
 

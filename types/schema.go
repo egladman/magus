@@ -86,7 +86,7 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
-	Added:   map[string]int{"worktree": 13, "validated": 13, "deviations": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claims": 13, "max_claims": 13, "paused": 13, "paused_by": 13, "pause_reason": 13, "paused_until": 13, "weight": 13},
+	Added:   map[string]int{"worktree": 13, "validated": 13, "deviations": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claims": 13, "max_claims": 13, "paused": 13, "paused_by": 13, "pause_reason": 13, "paused_until": 13, "weight": 13, "delivery": 13, "parent_head": 13, "release_requests": 13, "deferred": 13, "left_unmerged": 13, "holder_stopped": 13, "landed": 13},
 	// The four boundary renames and completion_gates, names only the JSON document an
 	// older magus kept the plan in carried, and waivers, the name deviations had first.
 	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers"},
@@ -104,7 +104,7 @@ var DeclarationSchema = SchemaLedger{
 	Name:    "declaration",
 	Type:    reflect.TypeFor[Declaration](),
 	Version: JobSchemaVersion,
-	Added:   map[string]int{"checkout": 13, "deviations": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claim": 13, "max_claims": 13, "weight": 13},
+	Added:   map[string]int{"checkout": 13, "deviations": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claim": 13, "max_claims": 13, "weight": 13, "delivery": 13, "parent_head": 13, "deferred": 13, "left_unmerged": 13},
 	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
 	// refused as an unknown member.
 	Reserved: []string{"completion_gates", "waivers"},
@@ -116,7 +116,7 @@ var JobResultSchema = SchemaLedger{
 	Name:    "job-result",
 	Type:    reflect.TypeFor[JobResult](),
 	Version: JobResultSchemaVersion,
-	Added:   map[string]int{"observed_generation": 2},
+	Added:   map[string]int{"observed_generation": 2, "follow_ups": 2},
 }
 
 // StoredOutputSchema is the ledger of the record `magus query output <ref> -o jsonl`

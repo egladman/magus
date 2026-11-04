@@ -54,7 +54,7 @@ func TestDryCheckParityWithEngine(t *testing.T) {
 
 			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 			t.Cleanup(func() { _ = sess.Close() })
-			installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps())
+			require.NoError(t, installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps()))
 			_, dryErr := sess.Compile(string(src))
 
 			assert.Equal(t, verdict(engineErr), verdict(dryErr))
@@ -161,7 +161,7 @@ func keySet(m vm.Value) map[string]bool {
 // the wrong type from a host call and the playground reported success; a Run button
 // that validates less than the language does teaches worse than none.
 func TestPlaygroundChecksHostCallTypes(t *testing.T) {
-	run := func(body string) Result {
+	run := func(body string) dryResult {
 		src := fmt.Sprintf("import \"magus\";\n%s\nexport fun work(ctx: magus\\Context, args: [str]) > void {}\n", body)
 		return Run(context.Background(), src, "work", nil)
 	}
@@ -177,7 +177,7 @@ func TestPlaygroundChecksHostCallTypes(t *testing.T) {
 
 // traceDetail concatenates the Detail of every op in a Result's trace, so a test
 // can assert a stubbed host member ran without caring about op ordering.
-func traceDetail(r Result) string {
+func traceDetail(r dryResult) string {
 	var b strings.Builder
 	for _, op := range r.Trace {
 		b.WriteString(op.Detail)
@@ -455,14 +455,14 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
     magus\describe.module("go");
     magus\log.hint("h");
     magus\pry();
-    magus\bustCache();
-    magus\impact("main");
+    magus\workspace().bustCache();
+    magus\change("main").impact();
     magus\describe.file(["magusfile.buzz"]);
     final _spells = magus\describe.spell("go");
     final _projects = magus\describe.project().projects;
     final _graph = magus\describe.graph().projects;
     final _index = magus\describe.graphMarkdown();
-    magus\insight({});
+    magus\history().hotspots();
     final _state = magus\describe.tool().lifecycle.state;
 }
 `
@@ -686,12 +686,12 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 // op after the first read of it. The trailing marker is the assertion: it is only
 // traced if the body survived the whole chain.
 func TestRun_insightLensesAreShaped(t *testing.T) {
-	for _, lens := range []string{"hotspots.nodes", "affinity.pairs", "ownership.projects", "trend.projects", "volatility.targets", "modelTiers.rows"} {
+	for _, lens := range []string{"history().hotspots().nodes", "history().affinity().pairs", "history().ownership().projects", "history().trend().projects", "workspace().volatility().targets", "workspace().tierOutcomes().rows"} {
 		t.Run(lens, func(t *testing.T) {
 			src := fmt.Sprintf(`
 import "magus";
 export fun work(ctx: magus\Context, args: [str]) > void !> any {
-    magus\log.info("{magus\insight({}).%s.len()}");
+    magus\log.info("{magus\%s.len()}");
     magus\log.info("reached-the-end");
 }
 `, lens)

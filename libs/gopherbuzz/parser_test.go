@@ -42,6 +42,20 @@ func TestParse_GenericCallTypeArg(t *testing.T) {
 	assert.Equal(t, "double", call.TypeArg, "CallExpr.TypeArg")
 }
 
+func TestParse_GenericObjectInstanceKeepsItsArguments(t *testing.T) {
+	prog, err := ParseEmbedded(`final r: Result::<[int], str> = Result::<[int], str>{}; final b = r is Result::<[int], str>;`)
+	require.NoError(t, err)
+	decl, ok := prog.Stmts[0].(*ast.DeclStmt)
+	require.Truef(t, ok, "stmt 0 is %T, want *ast.DeclStmt", prog.Stmts[0])
+	assert.Equal(t, "Result::<[int],str>", decl.TypeAnnot)
+	lit, ok := decl.Value.(*ast.ObjectLit)
+	require.Truef(t, ok, "decl value is %T, want *ast.ObjectLit", decl.Value)
+	assert.Equal(t, "[int],str", lit.TypeArgs)
+	is, ok := prog.Stmts[1].(*ast.DeclStmt).Value.(*ast.IsExpr)
+	require.True(t, ok)
+	assert.Equal(t, "Result", is.TypeName, "the VM erases type arguments, so `is` tests the bare name")
+}
+
 func TestParse_InvalidSyntax(t *testing.T) {
 	t.Run("incomplete function", func(t *testing.T) {
 		_, err := ParseEmbedded(`fun (`)

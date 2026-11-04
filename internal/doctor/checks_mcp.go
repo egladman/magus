@@ -40,7 +40,7 @@ func (*runner) checkTokens() types.Check {
 	case err != nil:
 		fails = append(fails, err.Error())
 	default:
-		parts = append(parts, fmt.Sprintf("operator token: present (id %s)", auth.TokenID(tok)))
+		parts = append(parts, fmt.Sprintf("operator token: present (id %s)", auth.SecretID(tok)))
 	}
 
 	stored, skipped, err := readStore()
@@ -61,12 +61,12 @@ func (*runner) checkTokens() types.Check {
 				if left < 24*time.Hour {
 					days = "<1d"
 				}
-				advice = append(advice, fmt.Sprintf("token %q (%s) expires in %s (%s); mint its replacement before then", t.Name, t.Grant, days, t.Expires.Format("2006-01-02")))
+				advice = append(advice, fmt.Sprintf("token %q (%s) expires in %s (%s); mint its replacement before then", t.Name, t.Grant, days, t.Expires.UTC().Format("2006-01-02")))
 			}
 		}
 		msg := fmt.Sprintf("%d stored token(s)", len(stored))
 		if !nearest.IsZero() {
-			msg += "; nearest expiry " + nearest.Format("2006-01-02")
+			msg += "; nearest expiry " + nearest.UTC().Format("2006-01-02")
 		}
 		parts = append(parts, msg)
 	}

@@ -1,0 +1,37 @@
+import "assert";
+import "fs";
+import "path";
+import "./coverage" as cov;
+
+test "a full run owns the base path" {
+    assert\equal(cov\profilePath(".magus/coverage.out", args: []), want: ".magus/coverage.out", message: "full");
+}
+
+test "a narrowed run writes beside the base path" {
+    final got = cov\profilePath(".magus/coverage.out", args: ["-run", "TestX"]);
+    assert\equal(got, want: ".magus/coverage.-run_TestX.out", message: "keyed by args");
+}
+
+test "path separators and pattern characters leave the key" {
+    final got = cov\profilePath(".magus/coverage.cmd.out", args: ["-run", "A|B/c"]);
+    assert\equal(got, want: ".magus/coverage.cmd.-run_A-B-c.out", message: "sanitized");
+}
+
+test "the test target's declaration covers every profile a run writes" {
+    final glob = ".magus/coverage*.out";
+    final declared = fs\readFile("magusfile.buzz") catch "";
+    assert\isTrue(declared.indexOf(`ctx.writesFiles(["{glob}"]);`) != null, message: "declared");
+    foreach (base in [".magus/coverage.out", ".magus/coverage.cmd.out"]) {
+        foreach (args in [[], ["-run", "A|B"], ["-run", "Test[AB]{1}"]]) {
+            final profile = cov\profilePath(base, args: args);
+            final matched = path\matches(glob, path: profile) catch false;
+            assert\isTrue(matched, message: profile);
+        }
+    }
+}
+
+test "two selections never share a path" {
+    final a = cov\profilePath(".magus/coverage.out", args: ["-run", "A"]);
+    final b = cov\profilePath(".magus/coverage.out", args: ["-run", "B"]);
+    assert\isTrue(a != b, message: "distinct");
+}

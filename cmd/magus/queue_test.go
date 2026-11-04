@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus"
@@ -149,6 +150,7 @@ func TestParseQueueSource(t *testing.T) {
 
 // A misuse is refused before anything is opened: the mock expects no call.
 func TestQueueMisuseIsAUsageError(t *testing.T) {
+	withOutput(t, "")
 	f := newQueueFixture(t, "", "")
 	for name, args := range map[string][]string{
 		"no subcommand":            {},
@@ -170,7 +172,7 @@ func TestQueueMisuseIsAUsageError(t *testing.T) {
 		"a zero depth":             {"plan", "--provider", "github", "--out", "p", "--depth", "0"},
 		"validate without a gate":  {"validate", "--stdin", "--verdicts", "v"},
 		"validate without --stdin": {"validate", "--gate", "true", "--verdicts", "v"},
-		"-o where nothing renders": {"ls", "--provider", "github", "--base", "main", "-o", "json"},
+		"-o where nothing renders": {"plan", "--provider", "github", "--out", "p", "-o", "json"},
 		"reviews without a change": {"reviews", "--provider", "github", "--base", "main"},
 		"reviews without a base":   {"reviews", "--provider", "github", "--change", "7"},
 		"reviews with an operand":  {"reviews", "--provider", "github", "--base", "main", "--change", "7", "extra"},
@@ -235,7 +237,7 @@ func TestQueueCacheReadHandsHooksTheProxyAndPinsTheTrustSet(t *testing.T) {
 	t.Cleanup(func() { _ = proxy.Close() })
 	assert.Equal(t, []string{
 		"ACTIONS_RESULTS_URL=" + proxy.URL,
-		"ACTIONS_RUNTIME_TOKEN=" + proxy.Token,
+		"ACTIONS_RUNTIME_TOKEN=" + proxy.Token.Reveal(),
 		"MAGUS_CACHE_REMOTE_TRUSTED_KEYS=k1,k2",
 		"MAGUS_CACHE_REMOTE_INSECURE=false",
 		"MAGUS_CACHE_REMOTE_WRITE_ENABLED=false",
@@ -271,6 +273,24 @@ func TestQueueLsPrintsTheProvidersChangesAsOneLine(t *testing.T) {
 	require.Len(t, got.Changes, 1)
 	assert.Equal(t, "https://example.invalid/acme/widgets.git", got.Changes[0].Repo, "the provider names the repository from the remote's URL")
 	assert.Equal(t, "https://example.invalid/acme/widgets.git", got.RemoteURL)
+}
+
+type QueueLsNamesSuite struct {
+	suite.Suite
+}
+
+func TestQueueLsNamesSuite(t *testing.T) {
+	suite.Run(t, new(QueueLsNamesSuite))
+}
+
+func (s *QueueLsNamesSuite) TestItPrintsTheChangesItLists() {
+	withOutput(s.T(), "")
+	change := fmt.Sprintf("[{\"id\": \"1\", \"repo\": req.remoteURL, \"head\": \"%s\", \"base\": \"main\", \"method\": \"squash\", \"fork\": false}]", queueHead("1"))
+	f := newQueueFixture(s.T(), change, "")
+	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
+	out, err := f.run(s.T(), "", "ls", "-o", "name", "--provider", "local.buzz", "--base", "main")
+	s.Require().NoError(err)
+	s.Equal("1\n", string(out))
 }
 
 func withOutput(t *testing.T, format string) {
@@ -447,12 +467,36 @@ func TestQueueDescribeWithoutAStatusContextReadsNoSetup(t *testing.T) {
 	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"atomic","linear_stacks":true,"methods":["squash"],"required_approvals":2}`+"\n", string(out))
 }
 
-func TestQueueDescribeRefusesAnOutputItDoesNotRender(t *testing.T) {
-	withOutput(t, "yaml")
-	f := newQueueFixture(t, "", "")
-	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main")
-	require.Equal(t, exit.Usage, exit.Code(err))
-	assert.ErrorContains(t, err, "-o yaml is not supported")
+func TestQueueDescribeRendersYAML(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "-o", "yaml", "--status-context", "", "--provider", "local.buzz", "--base", "main")
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "base: main")
+}
+
+func TestQueueDescribeRendersATemplate(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "-o", "template={{.base}}:{{.schema}}", "--status-context", "", "--provider", "local.buzz", "--base", "main")
+	require.NoError(t, err)
+	assert.Equal(t, "main:mergequeue.capabilities/v1", string(out))
+}
+
+func TestQueueDescribeBareTemplateListsTheDocumentsFields(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "-o", "template", "--status-context", "", "--provider", "local.buzz", "--base", "main")
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "required_approvals")
+}
+
+func TestQueueDescribeRendersItsBaseAsAName(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	out, err := f.run(t, "", "describe", "-o", "name", "--status-context", "", "--provider", "local.buzz", "--base", "main")
+	require.NoError(t, err)
+	assert.Equal(t, "main\n", string(out))
 }
 
 // The three steps as a workflow drives them, over nothing to merge: every path the
@@ -697,6 +741,9 @@ type workflowStep struct {
 	With map[string]string `yaml:"with"`
 }
 
+// harnessRunner is the script ci.yaml's gate runs magus through.
+const harnessRunner = "buzz hack/ci/run-with-harnesses.buzz "
+
 // workflowJob reads job's steps from the workflow file at path under the repository root.
 func workflowJob(t *testing.T, path, job string) []workflowStep {
 	t.Helper()
@@ -720,7 +767,8 @@ func ciShardBoxes(t *testing.T) ([][]string, []workflowStep) {
 	var steps []workflowStep
 	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
 		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(s.With["command"], "queue gate ") {
-			argvs = append(argvs, strings.Fields(regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")))
+			command := regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")
+			argvs = append(argvs, strings.Fields(strings.Replace(command, " -- magus "+harnessRunner+"-- ", " -- magus ", 1)))
 			steps = append(steps, s)
 		}
 	}

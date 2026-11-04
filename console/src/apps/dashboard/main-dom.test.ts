@@ -59,6 +59,7 @@ function serve(up: boolean): void {
     if (up && url.endsWith("/api/v1/events")) {
       return Promise.resolve(new Response(new ReadableStream({ start() {} }), { status: 200 }));
     }
+    // platform double: fetch
     return Promise.reject(new TypeError("Failed to fetch"));
   }) as typeof fetch;
 }
@@ -155,6 +156,7 @@ test("a signed-in dashboard on the server's own origin connects to that origin",
     asked.push(url);
     if (url.endsWith("/api/v1/events"))
       return Promise.resolve(new Response(new ReadableStream({ start() {} }), { status: 200 }));
+    // platform double: fetch
     return Promise.reject(new TypeError("Failed to fetch"));
   }) as typeof fetch;
   try {

@@ -101,7 +101,7 @@ function onLiveEvent(type: string, data: string): void {
       kind: "error",
       key: "fail:" + ev.ref,
       message: label + " failed.",
-      link,
+      ...(link ? { link } : {}),
     });
   }
   // The run's scope frame carries the projects it selected on files nothing declares (MGS1028). It rides
@@ -202,5 +202,5 @@ export function setLiveStatus(linkState: string): void {
   // The event count sits on the FAR RIGHT of the bar (its own item, like observing-since), not
   // appended to the connection state.
   const n = state.liveEvents.length;
-  publishStatus({ connection, label, count: n ? n + " events" : undefined });
+  publishStatus({ connection, label, ...(n ? { count: n + " events" } : {}) });
 }

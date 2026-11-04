@@ -8,9 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/image"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -238,8 +242,16 @@ var Fs = Module{
 			Impl:    FsAppendFile,
 		},
 		{
+			Name:    "mode",
+			Doc:     "Permission bits from octal (\"0755\", \"1777\") or ls notation (\"rwxr-xr-x\"), for chmod, mkdirAll and image placements. Zero and bits beyond setuid, setgid and sticky raise.",
+			Args:    []Arg{{Name: "notation", Type: TypeString}},
+			Returns: []Ret{{Type: TypeInt}},
+			Raises:  true,
+			Impl:    FsMode,
+		},
+		{
 			Name:    "chmod",
-			Doc:     "Change the permission bits of path to mode (octal integer, e.g. 0755).",
+			Doc:     "Change the permission bits of path to mode (an integer; fs\\mode(\"0755\") spells one).",
 			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "mode", Type: TypeInt}},
 			Returns: nil,
 			Raises:  true,
@@ -294,6 +306,35 @@ var Fs = Module{
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsWriteLines,
+		},
+		{
+			Name:    "disk_usage",
+			Doc:     "Return {path, totalBytes, freeBytes} for the filesystem holding path: statfs on unix, GetDiskFreeSpaceEx on Windows. freeBytes is what this process may still write, so it leaves out the blocks reserved for root.",
+			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "DiskUsage"}},
+			Raises:  true,
+			Impl:    FsDiskUsage,
+		},
+		{
+			Name:    "state_dir",
+			Doc:     "Return $XDG_STATE_HOME/magus/<purpose> (LocalAppData on Windows, else ~/.local/state), created 0700: the per-user home for state nothing can rebuild and that outlives any one workspace, such as a store several checkouts append to. purpose must be one path element.",
+			Args:    []Arg{{Name: "purpose", Type: TypeString}},
+			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
+			Impl:    FsStateDir,
+		},
+		{
+			Name: "trim_oldest",
+			Doc:  "Remove the least recently modified files under dir, whole hours of age at a time, until what is left fits in maxBytes, and return a TrimReport {dir, beforeBytes, afterBytes, removedFiles, removedBytes, cutoffMs, stopped}. Files modified within keepWithinMs, a whole number of hours and at least one, are never removed; stopped says when they alone pass the budget. Two walks with one counter per hour of age, so it suits a cache of millions of files. timeoutMs bounds the trim, which then stops between files and says so in stopped. Directories stay.",
+			Args: []Arg{
+				{Name: "dir", Type: TypeString},
+				{Name: "maxBytes", Type: TypeInt},
+				{Name: "keepWithinMs", Type: TypeInt},
+				{Name: "timeoutMs", Type: TypeInt, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "TrimReport"}},
+			Raises:  true,
+			Impl:    FsTrimOldest,
 		},
 	},
 }
@@ -397,6 +438,9 @@ func FsWriteFile(ctx context.Context, path string, content string) error {
 		return err
 	}
 	if err := checkSchemaDowngrade(ctx, path); err != nil {
+		return err
+	}
+	if err := checkEdit(ctx, path, replacing([]byte(content))); err != nil {
 		return err
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -529,6 +573,9 @@ func FsWriteFileAtomic(ctx context.Context, path string, content string) error {
 	if err := checkSchemaDowngrade(ctx, path); err != nil {
 		return err
 	}
+	if err := checkEdit(ctx, path, replacing([]byte(content))); err != nil {
+		return err
+	}
 	// 0644, matching write_file, so an atomically written file is not readable by a
 	// narrower set of users than a plain one.
 	if err := file.WriteFileAtomic(path, []byte(content), 0o644); err != nil {
@@ -617,6 +664,9 @@ func FsCopyFile(ctx context.Context, src, dst string) error {
 	if err := checkWrite(ctx, dst); err != nil {
 		return err
 	}
+	if err := checkEdit(ctx, dst, copying(src)); err != nil {
+		return err
+	}
 	if err := copyFile(src, dst); err != nil {
 		return fmt.Errorf("fs.copy_file %q -> %q: %w", src, dst, err)
 	}
@@ -657,6 +707,9 @@ func FsCopyDir(ctx context.Context, src, dst string) error {
 			return err
 		}
 		if err := checkWrite(ctx, target); err != nil {
+			return err
+		}
+		if err := checkEdit(ctx, target, copying(path)); err != nil {
 			return err
 		}
 		return copyFile(path, target)
@@ -719,6 +772,41 @@ func checkWrite(ctx context.Context, path string) error {
 	return nil
 }
 
+// checkEdit asks the edit judge on ctx about a write
+// that leaves the existing file path holding after(before).
+// A policy with no judge refuses: nothing would grade the write.
+func checkEdit(ctx context.Context, path string, after func(before []byte) ([]byte, error)) error {
+	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	j, ok := EditJudgeFromContext(ctx)
+	switch {
+	case !ok && sandbox.PolicyFromContext(ctx) != nil:
+		return fmt.Errorf("fs write %q: refused: this context carries a sandbox policy and no edit judge, so nothing grades the write", path)
+	case !ok, !j.Covers(ctx, path):
+		return nil
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("fs write %q: reading it for the edit judge: %w", path, err)
+	}
+	next, err := after(before)
+	if err != nil {
+		return err
+	}
+	return j.Grade(ctx, path, before, next)
+}
+
+// replacing is a checkEdit after for a write of content.
+func replacing(content []byte) func([]byte) ([]byte, error) {
+	return func([]byte) ([]byte, error) { return content, nil }
+}
+
+// copying is a checkEdit after for a copy of src.
+func copying(src string) func([]byte) ([]byte, error) {
+	return func([]byte) ([]byte, error) { return os.ReadFile(src) }
+}
+
 // schemaStampWindow bounds the read the downgrade guard makes. Every stamp the
 // renderers write lands in a document's opening prose or an export's leading
 // fields, so a window keeps the check off the size of a 2MB graph export.
@@ -770,7 +858,7 @@ func checkSchemaDowngrade(ctx context.Context, path string) error {
 	return types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus,
 		"refusing to overwrite %s: it carries knowledge-schema v%d and this build renders v%d, "+
 			"so regenerating it here would downgrade committed output. The running binary is %s. "+
-			"Build one from this checkout with `magus run go-build .` and re-run the target with `./magus`.",
+			"Re-run the target with a magus that renders it: `magus self update`, or rebuild ./magus the way this workspace builds it.",
 		path, stamped, types.KnowledgeSchemaVersion, self)
 }
 
@@ -905,6 +993,10 @@ func FsAppendFile(ctx context.Context, path, content string) error {
 	if err := checkWrite(ctx, path); err != nil {
 		return err
 	}
+	appended := func(before []byte) ([]byte, error) { return slices.Concat(before, []byte(content)), nil }
+	if err := checkEdit(ctx, path, appended); err != nil {
+		return err
+	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
 		return fmt.Errorf("fs.append_file %q: %w", path, err)
@@ -917,6 +1009,17 @@ func FsAppendFile(ctx context.Context, path, content string) error {
 		return fmt.Errorf("fs.append_file %q: %w", path, werr)
 	}
 	return nil
+}
+
+// FsMode parses a permission with image.ParseMode. It lives in fs because chmod,
+// mkdirAll and stat speak the same integer bits; the parser is libs/image's because a Go
+// caller assembling an image needs it without std.
+func FsMode(_ context.Context, notation string) (int, error) {
+	m, err := image.ParseMode(notation)
+	if err != nil {
+		return 0, fmt.Errorf("fs.mode: %w", err)
+	}
+	return int(m), nil
 }
 
 // FsChmod changes the permission bits of path, subject to the sandbox write policy.
@@ -1072,4 +1175,181 @@ func callbackTruthy(ret []any) bool {
 	default:
 		return true
 	}
+}
+
+// FsDiskUsage reads the filesystem holding path, subject to the sandbox read policy. The
+// record names path absolute, so two samples of one filesystem compare alike.
+func FsDiskUsage(ctx context.Context, path string) (types.DiskUsage, error) {
+	path = resolvePath(ctx, path)
+	if err := checkRead(ctx, path); err != nil {
+		return types.DiskUsage{}, err
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return types.DiskUsage{}, fmt.Errorf("fs.disk_usage: %w", err)
+	}
+	total, free, err := cache.StatDisk(abs)
+	if err != nil {
+		return types.DiskUsage{}, fmt.Errorf("fs.disk_usage: %w", err)
+	}
+	return types.DiskUsage{Path: abs, TotalBytes: total, FreeBytes: free}, nil
+}
+
+// FsStateDir is $XDG_STATE_HOME/magus/<purpose>, created 0700, subject to the sandbox
+// write policy.
+func FsStateDir(ctx context.Context, purpose string) (string, error) {
+	if purpose == "" || purpose != filepath.Base(purpose) || purpose == "." || purpose == ".." {
+		return "", fmt.Errorf("fs.state_dir: purpose %q must be one path element", purpose)
+	}
+	base, err := xdg.StateDir()
+	if err != nil {
+		return "", fmt.Errorf("fs.state_dir: %w", err)
+	}
+	dir := filepath.Join(base, "magus", purpose)
+	if err := checkWrite(ctx, dir); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("fs.state_dir: %w", err)
+	}
+	return dir, nil
+}
+
+// FsTrimOldest is TrimOldest subject to the sandbox write policy.
+func FsTrimOldest(ctx context.Context, dir string, maxBytes int, keepWithinMs int, timeoutMs int) (types.TrimReport, error) {
+	dir = resolvePath(ctx, dir)
+	if err := checkWrite(ctx, dir); err != nil {
+		return types.TrimReport{}, err
+	}
+	if timeoutMs < 0 {
+		return types.TrimReport{}, fmt.Errorf("fs.trim_oldest: timeoutMs is %d, and it takes a positive bound or 0 for none", timeoutMs)
+	}
+	return TrimOldest(ctx, dir, int64(maxBytes), time.Duration(keepWithinMs)*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, time.Now())
+}
+
+// TrimOldest removes the least recently modified files under dir, whole
+// hours of age at a time, until the rest fits in maxBytes. Files modified
+// within keepWithin stay, and Stopped says when they alone pass the budget.
+// keepWithin is whole hours, at least one: Go re-dates a used entry only
+// hourly. timeout bounds both walks; zero is none.
+func TrimOldest(ctx context.Context, dir string, maxBytes int64, keepWithin, timeout time.Duration, now time.Time) (types.TrimReport, error) {
+	report := types.TrimReport{Dir: dir}
+	if err := checkTrimBounds(dir, maxBytes, keepWithin); err != nil {
+		return report, err
+	}
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	keepHours := int(keepWithin / time.Hour)
+	byHour := map[int]int64{}
+	err := walkFiles(ctx, dir, func(_ string, info fs.FileInfo) error {
+		byHour[ageInHours(now, info.ModTime())] += info.Size()
+		report.BeforeBytes += info.Size()
+		return nil
+	})
+	if stopped, err := trimStopped(ctx, err); stopped != "" || err != nil {
+		report.AfterBytes, report.Stopped = report.BeforeBytes, stopped
+		return report, err
+	}
+	report.AfterBytes = report.BeforeBytes
+	if report.BeforeBytes <= maxBytes {
+		return report, nil
+	}
+	cutoff, fenced := trimCutoff(byHour, keepHours, maxBytes)
+	if fenced > maxBytes {
+		report.Stopped = fmt.Sprintf("files modified within %dh hold %d bytes, past the %d byte budget, and a trim never removes them", keepHours, fenced, maxBytes)
+	}
+	report.CutoffMs = float64(now.Add(-time.Duration(cutoff) * time.Hour).UnixMilli())
+	err = walkFiles(ctx, dir, func(path string, info fs.FileInfo) error {
+		if ageInHours(now, info.ModTime()) < cutoff {
+			return nil
+		}
+		if err := os.Remove(path); errors.Is(err, fs.ErrNotExist) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		report.RemovedFiles++
+		report.RemovedBytes += info.Size()
+		report.AfterBytes -= info.Size()
+		return nil
+	})
+	stopped, err := trimStopped(ctx, err)
+	if stopped != "" {
+		report.Stopped = stopped
+	}
+	return report, err
+}
+
+func checkTrimBounds(dir string, maxBytes int64, keepWithin time.Duration) error {
+	if maxBytes < 0 {
+		return fmt.Errorf("trim %s: maxBytes is %d, and it takes 0 or more", dir, maxBytes)
+	}
+	if keepWithin < time.Hour || keepWithin%time.Hour != 0 {
+		return fmt.Errorf("trim %s: keepWithin is %s, and it takes a whole number of hours, at least one", dir, keepWithin)
+	}
+	return nil
+}
+
+// trimCutoff is the youngest age in hours whose files go. Every hour inside
+// the fence is kept, and so is each younger hour that still fits the budget.
+// fenced is what the fence alone holds.
+func trimCutoff(byHour map[int]int64, keepHours int, maxBytes int64) (cutoff int, fenced int64) {
+	for hour, size := range byHour {
+		if hour < keepHours {
+			fenced += size
+		}
+	}
+	kept := fenced
+	for _, hour := range slices.Sorted(maps.Keys(byHour)) {
+		if hour < keepHours {
+			continue
+		}
+		if kept+byHour[hour] > maxBytes {
+			return hour, fenced
+		}
+		kept += byHour[hour]
+	}
+	return keepHours, fenced
+}
+
+func ageInHours(now, modified time.Time) int {
+	return max(0, int(now.Sub(modified)/time.Hour))
+}
+
+// trimStopped turns a walk's end into the report's Stopped line: the timeout is a reason
+// to stop, not a failure to raise.
+func trimStopped(ctx context.Context, err error) (string, error) {
+	if err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return "stopped at its timeout", nil
+	}
+	return "", err
+}
+
+// walkFiles calls fn with each regular file under dir, checking ctx between entries.
+func walkFiles(ctx context.Context, dir string, fn func(path string, info fs.FileInfo) error) error {
+	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if cerr := ctx.Err(); cerr != nil {
+			return cerr
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		info, err := d.Info()
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return fn(path, info)
+	})
 }

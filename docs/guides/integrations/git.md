@@ -99,9 +99,8 @@ Delete the section to remove the integration; the next `magus server start` puts
 
 `post-commit` and `pre-push` carry a second managed section, `magus-drift`, in the same
 shape: post a `check-drift` job that names the hook, return. The server compares the
-commit's changed sources against the outputs they produce and runs `gofmt -l` over its
-changed, format-governed files, then prints the fix and the command that folds it into the
-offending commit (MGS4006 stale output, MGS4009 stale formatting).
+commit's changed sources against the outputs they produce, then prints the fix and the
+command that folds it into the offending commit (MGS4006 stale output).
 
 What fires when:
 
@@ -172,7 +171,8 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-Save it as `hack/git-hooks/commit-msg.buzz` and run `magus run git-hooks-install:rw .`.
+Save it as `commit-msg.buzz` in the directory the targets above name, and run
+`magus run git-hooks-install:rw .`.
 Adding another hook later is the same two steps: the file, then the target.
 
 Both targets follow the [`rw` charm](../../concepts/charms.md#the-rw-charm): without it they
@@ -189,10 +189,8 @@ nothing. The rules they enforce:
 - The shim sets `BUZZ_INCLUDE_PATH` to the project directory, so a hook imports workspace
   Buzz by its project-relative path.
 
-The magus repository's own
-[`commit-msg.buzz`](https://github.com/egladman/magus/blob/main/hack/git-hooks/commit-msg.buzz)
-is the worked example: it refuses a commit made directly on the base branch whose subject
-is not a conventional commit, by the rule CI applies to pull request titles.
+The magus repository installs no hook of its own. Its commit subject rule lives in the
+guard, which judges only an agent's commit, so no git hook runs on a person's commit.
 
 Two limits worth knowing. A hook runs only where someone installed it and did not pass
 `--no-verify`, so anything that must hold belongs in CI as well. And `magus server start`
@@ -293,6 +291,12 @@ what git has staged, which is how the first version of this driver stopped every
 target that rebuilds the file, and the file itself, in `magus-owed-regeneration.json` in
 the worktree's git directory. Fifty kept files of one target are one entry.
 
+The driver exits 0, so git prints only `Auto-merging` and a cherry-pick or a clean merge
+commits at once, and that commit lacks the other side's change until the regeneration
+runs. For each kept file the driver warns on standard error, naming the file, the side
+it dropped and `magus vcs resolve`. If the record cannot be written, it keeps nothing:
+the file stays conflicted, with markers, for `magus vcs resolve` to settle.
+
 No hook runs the regeneration. `magus vcs resolve` with nothing conflicted does: it
 reads the record, runs each target it names, stages what the runs rewrote, and clears
 the record. All the projects of one target share a single
@@ -317,8 +321,8 @@ git commit -m 'regenerate after merging done-a and done-b'
 regeneration, naming each owed target and `magus vcs resolve`, since a check passed in
 that tree passed against output nobody rebuilt.
 
-Under Mercurial, Sapling and jj the driver logs the command to run before committing,
-and `magus vcs resolve` runs it. The merge queue merges trees without a checkout and
+Under Mercurial, Sapling and jj there is no record, so a generated file stays conflicted
+until `magus vcs resolve` settles it. The merge queue merges trees without a checkout and
 regenerates each candidate through its own hook, and the registration refresh a queue
 candidate cannot write is skipped, not reported.
 

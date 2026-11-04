@@ -1,0 +1,11 @@
+// `magus buzz manifests.buzz <kustomization dir> <file>` writes what the dir builds to
+// file as one YAML stream, for kubeconform to validate.
+import "fs";
+import "./kustomize" as kustomize;
+
+fun main(args: [str]) > void !> any {
+    if (args.len() != 2) {
+        throw "usage: magus buzz manifests.buzz <kustomization dir> <file>";
+    }
+    fs\writeFile(args[1], content: kustomize\manifests(kustomize\build(args[0])));
+}

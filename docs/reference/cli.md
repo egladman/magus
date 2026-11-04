@@ -23,11 +23,18 @@ This page groups them by the question you are asking rather than
 alphabetically, and covers the behavior that the per-command
 [reference pages](../reference/manpage/magus/) do not.
 
-Before anything else: **`-o json` works on every command that prints
-structured output**, as do `-o yaml`, `-o name`, and
-`-o template=<go-template>`. If you are scripting magus, or you are an agent
-reading its output, reach for that first instead of parsing the human format.
+Before anything else: **`-o json` works on every command that prints a
+record**, as do `-o yaml`, `-o jsonl`, `-o name`, and
+`-o template=<go-template>`; see [Output formats](output-formats.md). If you are
+scripting magus, or you are an agent reading its output, reach for that first
+instead of parsing the human format.
 The human format is allowed to change; the JSON shape is the contract.
+
+**Every boolean flag has an off spelling.** `-h` prints a boolean as
+`--[no-]cache (default: on)`: `--cache` turns it on, `--no-cache` turns it off,
+and the default says which one you get by typing neither. `--no-cache` takes no
+value, so `--no-cache=false` is an error; write `--cache`. A one-character flag
+such as `-v` has no off form.
 
 ## What is in this workspace?
 
@@ -121,8 +128,13 @@ Every run prints an output reference, on success and failure alike:
 [pass] docs (ran, 1m36s)
   magus run generate:rw docs
 out3a777178
-summary: 2 cached, 5 ran, 0 failed (1m46s)
+summary: 2 cached, 5 ran, 0 failed (1m46s on 771 files using 12 slots)
 ```
+
+The footer counts the input files the run's cache keys covered. It also
+counts the most [slots](../glossary/slot.md) any one target was granted. A
+slot is magus's claim on the pool, not a thread count, so a run that only
+replayed from cache shows no slots.
 
 `magus query output out3a777178` replays exactly what that run printed. A
 failure adds the reproduce command and an inspect hint:

@@ -71,6 +71,9 @@
 //   sealed-read (deny): a line that reads, lists, copies or searches the sealed proofread
 //     sets under $XDG_CACHE_HOME/proofread/calibration/sealed, however it spells the path.
 //     The labels beside them stay open.
+//   version-bump-once (deny, write): an edit that changes a schema or format counter this
+//     branch already changed against its merge base; the first bump, and a return to the
+//     base value, pass.
 //
 // Each rule lives beside its tests in the file named for what it guards: gh.buzz (the
 // GitHub calls), cadence.buzz (the gate and the push), branches.buzz (push-authority and
@@ -78,7 +81,8 @@
 // go-into-checkout, with worker-builds-magus run first), builds.buzz (what counts as compiling
 // magus, and both build rules), stale.buzz, spawn.buzz (brief-builds-magus runs there),
 // commits.buzz, pull_requests.buzz,
-// comments.buzz, host.buzz (a run log, and a directory named terminals) and sealed.buzz.
+// comments.buzz, host.buzz (a run log, and a directory named terminals), sealed.buzz and
+// version-bumps.buzz.
 // helpers.buzz holds the argv parsing they share. Imports are root-relative because `magus buzz -t` resolves an entry
 // file's imports against the working directory, not the file. An alias the root magusfile
 // already binds (github, changelog) shadows the one here, so these avoid them.
@@ -102,22 +106,97 @@ import "./hack/policy/comments" as comments;
 import "./hack/policy/host" as host;
 import "./hack/policy/sealed" as sealed;
 import "./hack/policy/branches" as branches;
+import "./hack/policy/mandate" as mandate;
+import "./hack/policy/version-bumps" as versions;
 import "./hack/magusfile/commits" as conventional;
 
-// judge is the command rule the root magusfile registers.
-export fun judge(req: CommandRequest) > GuardVerdict {
-    final programs = parsePrograms(req);
+// noForge is a verb that recognizes no command as opening a pull request.
+fun noForge(argv: [str]) > {str: str}? {
+    return null;
+}
+
+// refusedEarly is the first refusal of the sealed, delivery and mandate rules,
+// or null when all three allow req.
+fun refusedEarly(req: CommandRequest, programs: [helpers\Program], opens: fun (argv: [str]) > {str: str}?) > GuardVerdict? {
     final held = sealed\decideSealed(programs, line: req.command, roots: sealed\rootsFromEnv());
-    if (held.decision != "allow") {
+    if (held.decision != magus\GuardDecision.allow) {
         return held;
     }
-    var lease = "";
-    if (req.lease != null) {
-        lease = req.lease!.id;
+    var lease: pullRequests\Delivered? = null;
+    if (req.lease -> row) {
+        lease = pullRequests\Delivered{ id = row.id, delivery = row.delivery, parentHead = row.parentHead };
     }
-    final integrator = req.role == "integrator";
-    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, writePaths = leaseWrites(req) }, disk: binaries\onDisk(),
-        worker: !integrator and (req.role == "worker" or req.parent != "" or req.agent != ""));
+    final delivered = pullRequests\decideDelivery(programs, lease: lease, opens: opens);
+    if (delivered.decision != magus\GuardDecision.allow) {
+        return delivered;
+    }
+    final kept = mandateVerdict(req, programs: programs);
+    if (kept.decision != magus\GuardDecision.allow) {
+        return kept;
+    }
+    return null;
+}
+
+// forkVerdict is the fork limit's answer for req's line. Workers and the root
+// both reach it, because every agent shell command passes through judge.
+fun forkVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerdict {
+    final read = fun (path: str) > str {
+        final file = if (path.startsWith("/")) path else "{req.dir}/{path}";
+        return fs\readFile(file) catch "";
+    };
+    final facts = fun () > spawn\ForkCounts {
+        return forkCounts(req.workspace);
+    };
+    return spawn\decideForkLine(programs, line: req.command, read: read, facts: facts, limit: spawn\finishedBranchLimit);
+}
+
+// forkCounts is magus\workspace().forkFacts() for the fork rule.
+// A failed read leaves
+// both counts unknown, which refuses nothing.
+fun forkCounts(workspace: str) > spawn\ForkCounts {
+    try {
+        return countsFrom(magus\workspace(workspace).forkFacts());
+    } catch (e) {
+        final why = errorText(e);
+        return spawn\ForkCounts{ branchesUnknown = why, testUnknown = why };
+    }
+}
+
+fun countsFrom(facts: JobForkFacts) > spawn\ForkCounts {
+    return spawn\ForkCounts{
+        finishedBranches = facts.finishedBranches,
+        branchesUnknown = facts.branchesUnknown,
+        integrateRecord = facts.integrateRecord,
+        commitsSinceTest = facts.commitsSinceTest,
+        lastTest = "{facts.lastTestRef} at {facts.lastTestRevision}",
+        testUnknown = facts.testUnknown,
+    };
+}
+
+test "the fork counts read every fact the host hands over" {
+    final counts = countsFrom(JobForkFacts{
+        finishedBranches = ["done (job done, 1 commit(s))"],
+        integrateRecord = "\{\}",
+        commitsSinceTest = 4,
+        lastTestRef = "out1",
+        lastTestRevision = "abc",
+    });
+    std\assert(counts.finishedBranches.len() == 1 and counts.commitsSinceTest == 4, message: "counts");
+    std\assert(counts.lastTest == "out1 at abc" and counts.testUnknown == "", message: counts.lastTest);
+}
+
+// judge is the command rule the root magusfile registers. opens is the
+// pull request verb the delivery rule reads.
+export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > GuardVerdict {
+    final programs = parsePrograms(req);
+    if (refusedEarly(req, programs: programs, opens: opens) -> refused) {
+        return refused;
+    }
+    final forked = forkVerdict(req, programs: programs);
+    if (forked.decision == magus\GuardDecision.deny) {
+        return forked;
+    }
+    final denial = binariesDenial(req, programs: programs);
     if (denial != "") {
         return magus\guard.deny(denial);
     }
@@ -125,7 +204,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         return stale\hookBinary(req.workspace);
     };
     final write = stale\decideStateWrite(programs, bin: hook, onBase: stale\onBase(req.workspace));
-    if (write.decision != "allow") {
+    if (write.decision != magus\GuardDecision.allow) {
         return write;
     }
     var checkout: cadence\Checkout? = null;
@@ -139,6 +218,10 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     final once = fun (key: str) > bool {
         return magus\guard.once(key);
     };
+    final commented = pullRequests\decideCommitComments(programs, read: pullRequests\committedReader(req.dir));
+    if (commented.decision != magus\GuardDecision.allow) {
+        return commented;
+    }
     final pusher = requestPusher(req);
     final topic = fun () > branches\Topic {
         return branchTopic(req.dir);
@@ -149,10 +232,79 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         diff: pullRequests\pullRequestDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
         publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic },
         reads: host\readsFrom(req.workspace, dir: req.dir));
-    if (decided.decision != "allow" or stale\rebuilds(programs)) {
+    return lastWord(req, programs: programs, decided: decided, forked: forked, once: once);
+}
+
+// lastWord is judge's answer once nothing denied: another rule's verdict, then
+// the fork rule's note, then the stale binary's advice.
+fun lastWord(req: CommandRequest, programs: [helpers\Program], decided: GuardVerdict, forked: GuardVerdict, once: fun (key: str) > bool) > GuardVerdict {
+    if (decided.decision != magus\GuardDecision.allow) {
+        return decided;
+    }
+    if (forked.decision != magus\GuardDecision.allow) {
+        return forked;
+    }
+    if (stale\rebuilds(programs)) {
         return decided;
     }
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
+}
+
+// binariesDenial is the binaries rule's answer for req's programs, "" when it allows them.
+fun binariesDenial(req: CommandRequest, programs: [helpers\Program]) > str {
+    var lease = "";
+    if (req.lease != null) {
+        lease = req.lease!.id;
+    }
+    final integrator = req.role == magus\AgentRole.integrator;
+    return binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, writePaths = leaseWrites(req) }, disk: binaries\onDisk(),
+        worker: !integrator and (req.role == magus\AgentRole.worker or req.parent != "" or req.agent != ""));
+}
+
+// mandateVerdict is the mandate's answer for req's line (ADR 0019). The job store is read
+// only while a mandate is in force, since nothing else it judges needs it.
+fun mandateVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerdict {
+    final issued = mandate\loadMandate(req.workspace);
+    final now = mandate\now();
+    var jobs = [<mandate\Row>];
+    if (mandate\inForce(issued, now: now)) {
+        jobs = mandate\rows((magus\workspace().jobs() catch JobList{}).jobs);
+    }
+    final store = jobs;
+    final assess = fun (id: str) > mandate\Assessed {
+        return mandate\assess(id, jobs: store, measure: mandate\measured);
+    };
+    return mandate\decideCommand(programs, line: req.command, m: issued, jobs: jobs, now: now, assess: assess);
+}
+
+// judgeStop is the stop rule the root magusfile registers: the mandate's idle-stop rule
+// (ADR 0019 section 5) over the job store, counting refusals per session.
+export fun judgeStop(req: StopRequest) > GuardVerdict !> any {
+    if (req.workspace == "") {
+        return magus\guard.allow();
+    }
+    final list = magus\workspace().jobs() catch JobList{};
+    final blocked = mut [<str>];
+    foreach (b in list.blocked) {
+        blocked.append(b.job);
+    }
+    var unmerged = JobUnmergedReport{};
+    if (req.role.value == "root") {
+        try {
+            unmerged = magus\workspace(req.workspace).unmerged();
+        } catch (e: any) {
+            unmerged = JobUnmergedReport{ unknown = "magus\\workspace().unmerged raised: {e}" };
+        }
+    }
+    final count = fun (key: str) > int {
+        return magus\guard.count(key);
+    };
+    final now = mandate\now();
+    final file = fun (rows: [str]) > void {
+        mandate\fileAttention(req.workspace, rows: rows, now: now);
+    };
+    return mandate\decideStop(mandate\StopFacts{ role = req.role.value,stopHookActive = req.stopHookActive },
+        q: mandate\Queue{ jobs = mandate\rows(list.jobs), blocked = blocked, unmerged = unmerged }, m: mandate\loadMandate(req.workspace), now: now, count: count, file: file);
 }
 
 fun leaseWrites(req: CommandRequest) > [str] {
@@ -263,14 +415,15 @@ fun bodyFiles(programs: [helpers\Program], dir: str) > {str: str} {
     return files;
 }
 
-// judgeSpawn is the spawn rule the root magusfile registers. magus\job.list answers from the
-// rows the guard pinned for this hook call, and throws when the store could not be read.
+// judgeSpawn is the spawn rule the root magusfile registers.
+// magus\workspace().jobs() answers from the rows the guard pinned for the call.
+// It throws when the store could not be read.
 export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
     var jobs = [<Job>];
     var rows: [helpers\JobRow]? = null;
     var unreadable = "";
     try {
-        jobs = magus\job.list().jobs;
+        jobs = magus\workspace().jobs().jobs;
         rows = jobRows(jobs);
     } catch (e) {
         unreadable = errorText(e);
@@ -319,16 +472,16 @@ fun jobRows(jobs: [Job]) > [helpers\JobRow] {
 
 test "an integrate spawn for a row bound to another checkout is refused end to end and a matching checkout passes" {
     final rows = jobRows([
-        Job{ id = "land", state = "declared", checkoutRoot = "/w/other" },
-        Job{ id = "here", state = "declared", checkoutRoot = "/w/main" },
+        Job{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
+        Job{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
     ]);
     final facts = fun (title: str) > spawn\Spawn {
-        return spawnFacts(SpawnRequest{ kind = "spawn", description = title, checkout = "/w/main" });
+        return spawnFacts(SpawnRequest{ kind = magus\SpawnKind.spawn, description = title, checkout = "/w/main" });
     };
     final denied = spawn\decideSpawn(facts("orchestrator/integrate land"), rows: rows, unreadable: "");
-    std\assert(denied.decision == "deny" and denied.reason.indexOf("`/w/other`") != null, message: denied.decision + " " + denied.reason);
+    std\assert(denied.decision == magus\GuardDecision.deny and denied.reason.indexOf("`/w/other`") != null, message: denied.decision.value + " " + denied.reason);
     final allowed = spawn\decideSpawn(facts("orchestrator/integrate here"), rows: rows, unreadable: "");
-    std\assert(allowed.decision == "allow", message: allowed.reason);
+    std\assert(allowed.decision == magus\GuardDecision.allow, message: allowed.reason);
 }
 
 // errorText is a caught host error's message: a magus\* call throws a map, not a str.
@@ -356,9 +509,17 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
         before = "";
         after = req.content;
     }
+    final kept = mandate\decideWrite(req.path, workspace: req.workspace, m: mandate\loadMandate(req.workspace), now: mandate\now());
+    if (kept.decision != magus\GuardDecision.allow) {
+        return kept;
+    }
     final pathDenial = host\writePath(req.path);
     if (pathDenial != "") {
         return magus\guard.deny(pathDenial);
+    }
+    final bump = versions\judgeWrite(req);
+    if (bump -> v) {
+        return v;
     }
     if (!comments\hasComment(after)) {
         return magus\guard.allow();
@@ -386,24 +547,24 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 // capture's text and whether the workspace holds a ./magus.
 export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing, reads: host\Reads) > GuardVerdict {
     final hostVerdict = host\decideHost(programs, reads: reads);
-    if (hostVerdict.decision != "allow") {
+    if (hostVerdict.decision != magus\GuardDecision.allow) {
         return hostVerdict;
     }
     final authority = branches\decideAuthority(programs, caller: publishing.pusher);
-    if (authority.decision != "allow") {
+    if (authority.decision != magus\GuardDecision.allow) {
         return authority;
     }
     final cadenceVerdict = cadence\decideCadence(programs, caller: caller, checkout: checkout);
-    if (cadenceVerdict.decision != "allow") {
+    if (cadenceVerdict.decision != magus\GuardDecision.allow) {
         return cadenceVerdict;
     }
     final names = branches\decideNames(programs, current: publishing.current, remote: publishing.remote,
         topic: publishing.topic, once: once);
-    if (names.decision == "deny") {
+    if (names.decision == magus\GuardDecision.deny) {
         return names;
     }
     final rest = decideText(programs, baseBranch: baseBranch, line: line, files: files, diff: diff, judge: judge, once: once);
-    if (rest.decision == "allow") {
+    if (rest.decision == magus\GuardDecision.allow) {
         return names;
     }
     return rest;
@@ -413,18 +574,18 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
 // denials, the gh advisories, then the pull request text advisories.
 fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (head: str, base: str, number: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool) > GuardVerdict {
     final github = gh\decideGitHub(programs, once: once, line: line);
-    if (github.decision == "deny") {
+    if (github.decision == magus\GuardDecision.deny) {
         return github;
     }
     final commit = subjects\decideCommit(programs, baseBranch: baseBranch);
     final pull = pullRequests\decidePullRequest(programs, line: line, files: files, diff: diff, judge: judge, once: once);
-    if (commit.decision == "deny" and pull.decision == "deny") {
+    if (commit.decision == magus\GuardDecision.deny and pull.decision == magus\GuardDecision.deny) {
         return magus\guard.deny(commit.reason + "\n\n" + pull.reason);
     }
-    if (commit.decision == "deny") {
+    if (commit.decision == magus\GuardDecision.deny) {
         return commit;
     }
-    if (pull.decision == "deny" or github.decision == "allow") {
+    if (pull.decision == magus\GuardDecision.deny or github.decision == magus\GuardDecision.allow) {
         return pull;
     }
     return github;
@@ -454,31 +615,31 @@ test "a commit and a pull request text denied together open with one verdict" {
         return true;
     };
     final both = decideText(line, baseBranch: "", line: "", files: {<str: str>}, diff: diff, judge: judge, once: once);
-    std\assert(both.decision == "deny", message: both.reason);
+    std\assert(both.decision == magus\GuardDecision.deny, message: both.reason);
     verdict\assertVerdict(both.reason, label: "a commit and a pull request together");
     std\assert(both.reason.indexOf("this pull request text breaks") != null, message: "both rationales are kept: " + both.reason);
 }
 
 test "a write into a run log is denied with the verdict a command's read gets" {
     final write = judgeWrite(WriteRequest{ workspace = "/w", path = ".magus/logs/abc.log", content = "x" });
-    std\assert(write.decision == "deny", message: write.decision);
+    std\assert(write.decision == magus\GuardDecision.deny, message: write.decision);
     verdict\assertVerdict(write.reason, label: "a write into a run log");
 }
 
 test "a push is refused to a subagent the host names, under no lease and unseen spawning" {
     final push = CommandInvocation{ program = "git", args = ["push", "origin", "HEAD:x"],
         vcs = VCSInvocation{ tool = "git", subcommand = "push", args = ["origin", "HEAD:x"] } };
-    final main = CommandRequest{ session = "s1", role = "root", commands = [push] };
-    std\assert(branches\decideAuthority(parsePrograms(main), caller: requestPusher(main)).decision == "allow", message: "the main session");
+    final main = CommandRequest{ session = "s1", role = magus\AgentRole.root, commands = [push] };
+    std\assert(branches\decideAuthority(parsePrograms(main), caller: requestPusher(main)).decision == magus\GuardDecision.allow, message: "the main session");
 
-    final unseen = CommandRequest{ session = "s1", role = "root", agent = "a534fcfe", commands = [push] };
+    final unseen = CommandRequest{ session = "s1", role = magus\AgentRole.root, agent = "a534fcfe", commands = [push] };
     final refused = branches\decideAuthority(parsePrograms(unseen), caller: requestPusher(unseen));
-    std\assert(refused.decision == "deny", message: "a subagent magus never saw spawned");
+    std\assert(refused.decision == magus\GuardDecision.deny, message: "a subagent magus never saw spawned");
     std\assert(refused.reason.indexOf("subagent `a534fcfe`") != null, message: refused.reason);
 
-    final worker = CommandRequest{ session = "s1", role = "worker", lease = Job{ id = "guard-caller-identity" }, commands = [push] };
+    final worker = CommandRequest{ session = "s1", role = magus\AgentRole.worker, lease = Job{ id = "guard-caller-identity" }, commands = [push] };
     final leased = branches\decideAuthority(parsePrograms(worker), caller: requestPusher(worker));
-    std\assert(leased.decision == "deny", message: "a leased worker");
+    std\assert(leased.decision == magus\GuardDecision.deny, message: "a leased worker");
     std\assert(leased.reason.indexOf("lease guard-caller-identity") != null, message: leased.reason);
 }
 
@@ -486,14 +647,14 @@ test "the line judge refuses the sealed directory before any other rule, and lea
     final dir = sealed\sealedDir(sealed\rootsFromEnv());
     final read = CommandRequest{ command = "cat {dir}/round5/cases.txtar",
         commands = [CommandInvocation{ program = "cat", args = ["{dir}/round5/cases.txtar"] }] };
-    final refused = judge(read);
-    std\assert(refused.decision == "deny", message: "a cat of the sealed directory");
+    final refused = judge(read, opens: noForge);
+    std\assert(refused.decision == magus\GuardDecision.deny, message: "a cat of the sealed directory");
     verdict\assertVerdict(refused.reason, label: "a cat of the sealed directory");
     std\assert(refused.reason.indexOf("sealed until its round is scored") != null, message: refused.reason);
 
     final open = CommandRequest{ command = "cat {dir}/../labels/round4/scores.json",
         commands = [CommandInvocation{ program = "cat", args = ["{dir}/../labels/round4/scores.json"] }] };
-    std\assert(judge(open).decision == "allow", message: "the labels directory");
+    std\assert(judge(open, opens: noForge).decision == magus\GuardDecision.allow, message: "the labels directory");
 }
 
 test "the main session's cat of a task capture outside the workspace is denied naming the capture's ref" {
@@ -504,16 +665,16 @@ test "the main session's cat of a task capture outside the workspace is denied n
     final capture = "{host}/claude-501/project/session/tasks/bi3m8xyic.output";
     fs\writeFile(capture, content: "[fail] magus run (ran, 3s)\n  output: out1afa17d04e90\n");
     final cat = CommandInvocation{ program = "cat", args = [capture] };
-    final req = CommandRequest{ session = "s1", role = "root", dir = ws, workspace = ws, command = "cat {capture}", commands = [cat] };
+    final req = CommandRequest{ session = "s1", role = magus\AgentRole.root, dir = ws, workspace = ws, command = "cat {capture}", commands = [cat] };
 
     fs\writeFile("{ws}/magus", content: "");
-    final denied = judge(req);
-    std\assert(denied.decision == "deny", message: "a workspace holding ./magus: " + denied.decision + " " + denied.reason);
+    final denied = judge(req, opens: noForge);
+    std\assert(denied.decision == magus\GuardDecision.deny, message: "a workspace holding ./magus: " + denied.decision + " " + denied.reason);
     std\assert(denied.reason.split("\n")[0].indexOf("`magus query output out1afa17d04e90`") != null, message: denied.reason);
 
     fs\remove("{ws}/magus");
-    final allowed = judge(req);
-    std\assert(allowed.decision == "allow", message: "a workspace with no ./magus: " + allowed.decision + " " + allowed.reason);
+    final allowed = judge(req, opens: noForge);
+    std\assert(allowed.decision == magus\GuardDecision.allow, message: "a workspace with no ./magus: " + allowed.decision + " " + allowed.reason);
     fs\removeAll(ws);
     fs\removeAll(host);
 }

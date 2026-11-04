@@ -237,6 +237,12 @@ type Target struct {
 	// required for the reason SkipCacheReason is. The guard quotes it to the agent and
 	// to the person approving the run, so it carries any figure the author knows.
 	HumanOnlyReason string `json:"human_only_reason,omitempty" buzz:"human_only_reason"`
+	// Relinks is the binary a run replaces ("./magus"), "" for none. The guard reads it, not
+	// the name: no pipe stage may follow it, and it is the fix while that binary is stale.
+	Relinks string `json:"relinks,omitempty" buzz:"relinks"`
+	// Integrates is why a checkout's integrator runs this target to integrate work, such as
+	// a regeneration; "" for one it does not. The cost rule keeps such a run to one line.
+	Integrates string `json:"integrates,omitempty" buzz:"integrates"`
 	// IncludeOS and IncludeArch override cache.include.*.enabled for this target.
 	// nil inherits the workspace answer, which is what an undeclared target gets.
 	//

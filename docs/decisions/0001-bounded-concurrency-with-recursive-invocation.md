@@ -206,7 +206,7 @@ a structural rule.
 
 | System           | Recursion              | What is bounded                                                         | Nested wait                                                                         |
 | ---------------- | ---------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **GNU make**     | yes                    | one token per _job_                                                     | the recipe's token becomes the sub-make's implicit token: direct hand-off           |
+| **GNU make**     | yes                    | one token per _job_                                                     | the make rule's token becomes the sub-make's implicit token: direct hand-off        |
 | **Shake**        | yes                    | `shakeThreads` over running rules; `Resource` around the expensive part | `need` captures a continuation; no thread blocks                                    |
 | **Buck2 / DICE** | yes                    | permits around _command execution_                                      | an awaiting computation holds no thread; identifier semaphores taken before permits |
 | **Bazel**        | no, actions are leaves | `--jobs` over actions                                                   | not evidence about recursion                                                        |
@@ -303,3 +303,11 @@ sit on the job row, outside the budget:
 
 Priority ceiling protocols stay rejected for the reason given: neither control is a static
 map of nested work.
+
+### 2026-10-31: weight orders the broker's queue
+
+The broker now parks requests and wakes them, and no client retries, so the retry interval
+above no longer exists and `weight` was written and never read. It now orders parked
+requests: gates first, then the heavier job, in asking order within a weight. A request
+that goes ahead counts as overtaking, so `maxOvertakes` bounds how long a light job waits.
+Weight still decides no verdict, and a refused claim still holds no place in the queue.

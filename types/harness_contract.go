@@ -89,12 +89,15 @@ type HarnessSkills struct {
 // argv the script takes after `--`, and how long the host waits on it. A spell renders
 // each into its host's JSON through magus/harness, and magus checks every one appears in
 // the managed entries. An empty Matcher is an event that takes none.
+//
+// Points are the hook points this hook binds; a recorder binds none.
 type HookCommand struct {
-	Event    string   `json:"event"`
-	Matcher  string   `json:"matcher,omitempty"`
-	Script   string   `json:"script"`
-	Flags    []string `json:"flags,omitempty"`
-	TimeoutS int      `json:"timeout_s,omitempty"`
+	Event    string      `json:"event"`
+	Matcher  string      `json:"matcher,omitempty"`
+	Script   string      `json:"script"`
+	Flags    []string    `json:"flags,omitempty"`
+	TimeoutS int         `json:"timeout_s,omitempty"`
+	Points   []HookPoint `json:"points,omitempty"`
 }
 
 // ManagedEntries declares exact host-config fragments to merge under the object keys Path
@@ -145,8 +148,9 @@ type ModelRow struct {
 // HarnessTool is one row of a host's tool table: a tool by the host's own name, and what
 // it can do.
 type HarnessTool struct {
-	Name       string         `json:"name"`
-	Capability ToolCapability `json:"capability"`
+	Name                  string         `json:"name"`
+	Capability            ToolCapability `json:"capability"`
+	SpawnDescriptionField string         `json:"spawn_description_field,omitempty"`
 }
 
 // HarnessTools is the table of a host's own tools: Dir is the workspace-relative directory
@@ -229,12 +233,22 @@ type Setting struct {
 //
 // ObservesSkillLoads is true when the host's hook wiring sees it load a skill, so a rule
 // may require one before an act; without it those rules stand down.
+//
+// PayloadFields are top-level hook payload fields only this host
+// sends, per its docs. A payload with another host's field and none
+// of these was sent by that other host.
+//
+// Channels are where the host's hook replies can put text, in the logger's words: "display"
+// (both read it), "capture" (the agent alone), "notice" (the person alone). A host with no
+// "capture" gets each deny as one line.
 type Limits struct {
-	ForegroundDefaultMs     int64  `json:"foreground_default_ms,omitempty"`
-	ForegroundMaxMs         int64  `json:"foreground_max_ms,omitempty"`
-	HookTimeoutMs           int64  `json:"hook_timeout_ms,omitempty"`
-	ResumesOnBackgroundFrom string `json:"resumes_on_background_from,omitempty"`
-	ObservesSkillLoads      bool   `json:"observes_skill_loads,omitempty"`
+	ForegroundDefaultMs     int64    `json:"foreground_default_ms,omitempty"`
+	ForegroundMaxMs         int64    `json:"foreground_max_ms,omitempty"`
+	HookTimeoutMs           int64    `json:"hook_timeout_ms,omitempty"`
+	ResumesOnBackgroundFrom string   `json:"resumes_on_background_from,omitempty"`
+	ObservesSkillLoads      bool     `json:"observes_skill_loads,omitempty"`
+	PayloadFields           []string `json:"payload_fields,omitempty"`
+	Channels                []string `json:"channels,omitempty"`
 }
 
 // ShippedAgent is one subagent magus ships, as mgs_renderAgents receives it. Model is the
@@ -246,4 +260,21 @@ type ShippedAgent struct {
 	Instructions string `json:"instructions"`
 	Model        string `json:"model,omitempty"`
 	ReadOnly     bool   `json:"read_only"`
+}
+
+// Harness declares the complete runtime installation a harness needs. No config path
+// means no JSON hook document; Guard states independently whether a plugin is required.
+type Harness struct {
+	Config HarnessConfig  `json:"config"`
+	Guard  string         `json:"guard"`
+	Assets []HarnessAsset `json:"assets,omitempty"`
+	Probe  []string       `json:"probe,omitempty"`
+}
+
+// HarnessAsset installs a file from the spell's directory, or an explicitly named
+// embedded asset (magus:<path>). Exactly one of Source and Content must be set.
+type HarnessAsset struct {
+	Path    string `json:"path"`
+	Source  string `json:"source,omitempty"`
+	Content string `json:"content,omitempty"`
 }

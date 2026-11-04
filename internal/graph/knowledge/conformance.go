@@ -2,12 +2,11 @@ package knowledge
 
 import (
 	"cmp"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"maps"
 	"math"
 	"path"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,23 +19,21 @@ import (
 )
 
 // Conformance measures every conformance metric over g, one row per metric, population and scope,
-// and judges each row against the value o.Effective enforces: the committed ratchet value,
-// else the configured anchor. A live percentile is reported and may be proposed, never
-// enforced. A key with no configured value is measured only: no violations, no proposal.
+// and judges each row against the configured anchor o.Effective enforces. A live percentile is
+// reported and may be proposed, never enforced. A key with no configured value is measured only: no violations, no proposal.
 // file-split is a floor: an item at or under its value is past it, as is one whose name splits
 // more than one concept off its root, and it proposes nothing.
 // The mode-knobs row holds only the functions the coupling rule finds over-shared, so its n
-// is how many there are, zero included. A known item renamed or moved is judged under its
-// new ID when its recorded shape names it unambiguously (carryKnown).
+// is how many there are, zero included.
 //
 // Rows come back sorted by metric, population and scope, and every list inside them in a
 // fixed order, so two runs over one graph agree byte for byte. A graph with no symbols
 // answers unknown rather than an empty pass. A language with no BodyShape lexer
 // contributes no clone samples, and one with no package clause no main population. It
 // reads g only and writes nothing.
-func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput {
+func (g *Graph) Conformance(o types.ConformanceOptions) types.Conformance {
 	if !g.HasSymbols() {
-		return types.ConformanceOutput{Answer: types.ClassifyAnswer(false, types.ReasonSymbolIndexMissing, nil)}
+		return types.Conformance{Answer: types.ClassifyAnswer(false, types.ReasonSymbolIndexMissing, nil)}
 	}
 	samples := conformanceSamples(g, o)
 	loops, knobbed := sharedLoops(g, o)
@@ -44,15 +41,8 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 	samples[couplingKey(types.ConformanceModeKnobs)] = knobbed
 	maps.Copy(samples, aliasSamples(g, o))
 	groups := cloneGroups(g, o)
-	past := pastValue(o, samples, groups)
-	shapes := newConformanceIndex(g, o).itemShapes()
-	carry := carryKnown(o.Ratchet.Known, sampledIDs(samples), past, shapes)
-	known := conformanceKnownItems(carry.known)
 
-	out := types.ConformanceOutput{
-		Excluded: conformanceExcluded(g, o), Carried: carry.carried, Ambiguous: carry.ambiguous,
-		Shapes: listedShapes(carry.known, shapes),
-	}
+	out := types.Conformance{Excluded: conformanceExcluded(g, o)}
 	for _, key := range slices.SortedFunc(maps.Keys(samples), compareConformanceKeys) {
 		items := samples[key]
 		row := types.ConformanceRow{Key: key, N: len(items)}
@@ -65,31 +55,23 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 			nearestRank(measures, 95), nearestRank(measures, 99)
 		limit, limited := conformanceLimit(o, key)
 		if limited {
-			row.Live, row.Anchor = nearestRank(measures, limit.Percentile), limit.Anchor
+			row.Live = nearestRank(measures, limit.Percentile)
 		}
-		row.Value, row.Source = o.Effective(key)
-		if row.Source == "" {
+		value, enforced := o.Effective(key)
+		row.Value = value
+		if !enforced {
 			out.Rows = append(out.Rows, row)
 			continue
 		}
 		if key == cloneKey {
 			for _, grp := range groups {
-				if knownCloneGroup(grp, carry.known) {
-					row.Known++
-					continue
-				}
 				row.Violations = append(row.Violations, cloneItem(grp))
 			}
 		} else {
 			for _, it := range items {
-				if !itemPast(key.Metric, it, row.Value) {
-					continue
+				if itemPast(key.Metric, it, row.Value) {
+					row.Violations = append(row.Violations, it)
 				}
-				if known[key.Metric][it.ID] {
-					row.Known++
-					continue
-				}
-				row.Violations = append(row.Violations, it)
 			}
 		}
 		slices.SortFunc(row.Violations, func(a, b types.ConformanceItem) int {
@@ -100,7 +82,6 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.ConformanceOutput 
 		}
 		out.Rows = append(out.Rows, row)
 	}
-	out.Stale = staleKnown(carry.known, past, groups)
 	out.Answer = types.ClassifyAnswer(len(out.Rows) > 0, "", nil)
 	return out
 }
@@ -200,7 +181,8 @@ func cloneGroups(g *Graph, o types.ConformanceOptions) [][]types.ConformanceItem
 
 // exportScope is every Go exported top-level symbol, in a package under an internal
 // directory or in a main package, that no non-test file outside its package directory
-// references, in ID order. Methods are out of scope, since an interface may need them
+// references, in ID order. reachedExports counts use with no name.
+// Methods are out of scope, since an interface may need them
 // exported, and so is a module's root package, whose exports are its API.
 func exportScope(g *Graph, o types.ConformanceOptions) []types.ConformanceItem {
 	var out []types.ConformanceItem
@@ -422,7 +404,7 @@ func (x *conformanceIndex) callables() []conformanceSymbol {
 	return out
 }
 
-// symbolItemID names a symbol as a ratchet lists it: its file, then its path within the
+// symbolItemID names a symbol as a conformance item does: its file, then its path within the
 // namespace, "vcs/hg.go#hgVCS.Bisect".
 func symbolItemID(file string, local []descriptor) string {
 	names := make([]string, len(local))
@@ -536,13 +518,10 @@ func (x *conformanceIndex) packagePopulation(ns string) types.ConformancePopulat
 	return types.ConformancePopSource
 }
 
-// pinned reports whether k itself, not its unscoped fallback, has a configured or committed
-// value.
+// pinned reports whether k itself, not its unscoped fallback, has a configured value.
 func (x *conformanceIndex) pinned(k types.ConformanceKey) bool {
-	if _, ok := x.o.Limits[k]; ok {
-		return true
-	}
-	return slices.ContainsFunc(x.o.Ratchet.Thresholds, func(t types.ConformanceThreshold) bool { return t.ConformanceKey == k })
+	_, ok := x.o.Limits[k]
+	return ok
 }
 
 // layer is dir's declared layer, else its first path segment, as the precedent miner
@@ -564,8 +543,10 @@ type conformanceExport struct {
 
 func (x *conformanceIndex) exports() []conformanceExport {
 	dirs := x.packageDirs(true)
+	syms := x.symbols()
+	reached, enums := x.reachedExports(syms, dirs)
 	var out []conformanceExport
-	for _, s := range x.symbols() {
+	for _, s := range syms {
 		ns := s.node.Attrs[attrNamespace]
 		dir, placed := dirs[ns]
 		if s.pop == types.ConformancePopTest || !placed || s.node.Attrs[attrLanguage] != "go" || len(s.local) != 1 ||
@@ -576,13 +557,103 @@ func (x *conformanceIndex) exports() []conformanceExport {
 			continue
 		}
 		item := types.ConformanceItem{ID: s.itemID, Source: s.node.Source, Measure: 1}
-		if x.g.usedOutside(s.id, dir) > 0 {
+		enum, grouped := localConstType(s.node.Attrs[AttrSignature])
+		if x.g.usedOutside(s.id, dir) > 0 || reached[ns+s.local[0].Name] || grouped && enums[ns+enum] {
 			item.Measure = 0
 		}
 		out = append(out, conformanceExport{item: item, pop: s.pop})
 	}
 	slices.SortFunc(out, func(a, b conformanceExport) int { return cmp.Compare(a.item.ID, b.item.ID) })
 	return out
+}
+
+// reachedExports is what readers use without naming it, by namespace and name.
+// reached: types with a member read outside, or in a read symbol's signature.
+// enums: types with a constant read outside. Their constants are one unit.
+func (x *conformanceIndex) reachedExports(syms []conformanceSymbol, dirs map[string]string) (reached, enums map[string]bool) {
+	reached, enums = map[string]bool{}, map[string]bool{}
+	for _, s := range syms {
+		ns := s.node.Attrs[attrNamespace]
+		dir, placed := dirs[ns]
+		if !placed || s.pop == types.ConformancePopTest || s.node.Attrs[attrLanguage] != "go" || !x.readOutside(s.id, dir) {
+			continue
+		}
+		if len(s.local) == 2 {
+			reached[ns+s.local[0].Name] = true
+		}
+		sig := s.node.Attrs[AttrSignature]
+		for _, name := range signatureTypes(sig) {
+			reached[ns+name] = true
+		}
+		if enum, ok := localConstType(sig); ok {
+			enums[ns+enum] = true
+		}
+	}
+	return reached, enums
+}
+
+// readOutside reports a measured file outside dir referencing id. A test
+// proves no consumer, and a generated binder only follows the declaration.
+func (x *conformanceIndex) readOutside(id, dir string) bool {
+	for _, e := range x.g.in[id] {
+		if e.Relation != types.RelationReferences {
+			continue
+		}
+		ref := strings.TrimPrefix(e.Source, types.KindFile+":")
+		if pop, ok := x.population(ref); ok && pop != types.ConformancePopTest && path.Dir(ref) != dir {
+			return true
+		}
+	}
+	return false
+}
+
+// signatureTypes are the exported names of its own package a rendered
+// declaration uses as types. A qualified name belongs to another package.
+func signatureTypes(sig string) []string {
+	var text string
+	if params, result, ok := goFuncParts(sig); ok {
+		parts := make([]string, 0, 1+len(params))
+		parts = append(parts, result)
+		for _, p := range params {
+			parts = append(parts, p.Type)
+		}
+		text = strings.Join(parts, " ")
+	} else {
+		text = declaredType(sig)
+	}
+	var out []string
+	for _, word := range signatureWord.FindAllString(text, -1) {
+		if !strings.Contains(word, ".") && exportedName(word) {
+			out = append(out, word)
+		}
+	}
+	return out
+}
+
+// signatureWord matches an identifier, package-qualified or not.
+var signatureWord = regexp.MustCompile(`[\pL_][\pL\pN_.]*`)
+
+// declaredType is the type scip-go renders after a field, constant or variable
+// name, and "" for any other rendering. A constant's value follows " = ".
+func declaredType(sig string) string {
+	for _, prefix := range []string{"struct field ", "const ", "var "} {
+		if rest, ok := strings.CutPrefix(sig, prefix); ok {
+			_, typ, _ := strings.Cut(rest, " ")
+			typ, _, _ = strings.Cut(typ, " = ")
+			return typ
+		}
+	}
+	return ""
+}
+
+// localConstType is the type of a constant typed from its own package.
+// One of time.Duration, say, belongs to no group.
+func localConstType(sig string) (string, bool) {
+	if !strings.HasPrefix(sig, "const ") {
+		return "", false
+	}
+	typ := declaredType(sig)
+	return typ, typ != "" && !strings.Contains(typ, ".") && exportedName(typ)
 }
 
 func exportedName(name string) bool {
@@ -601,30 +672,6 @@ func moduleRoot(ns string) bool {
 	return ok && len(p) == 1 && p[0].Suffix == '/' && p[0].Name == parts[1]
 }
 
-// conformanceKnownItems indexes the known items by metric.
-func conformanceKnownItems(known []types.ConformanceKnown) map[types.ConformanceMetric]map[string]bool {
-	out := map[types.ConformanceMetric]map[string]bool{}
-	for _, k := range known {
-		if out[k.Metric] == nil {
-			out[k.Metric] = map[string]bool{}
-		}
-		for _, it := range k.Items {
-			out[k.Metric][it] = true
-		}
-	}
-	return out
-}
-
-// knownCloneGroup reports whether one known clone entry lists every member of grp: a copy
-// added to an accepted group makes the group a violation again.
-func knownCloneGroup(grp []types.ConformanceItem, known []types.ConformanceKnown) bool {
-	return slices.ContainsFunc(known, func(k types.ConformanceKnown) bool {
-		return k.Metric == types.ConformanceCloneTokens && !slices.ContainsFunc(grp, func(m types.ConformanceItem) bool {
-			return !slices.Contains(k.Items, m.ID)
-		})
-	})
-}
-
 // cloneItem is a clone group as one violation, named by its members.
 func cloneItem(grp []types.ConformanceItem) types.ConformanceItem {
 	ids := make([]string, len(grp))
@@ -632,244 +679,6 @@ func cloneItem(grp []types.ConformanceItem) types.ConformanceItem {
 		ids[i] = m.ID
 	}
 	return types.ConformanceItem{ID: strings.Join(ids, ", "), Source: grp[0].Source, Measure: grp[0].Measure}
-}
-
-// staleKnown is each known entry narrowed to the items no longer past their value, in
-// record order, without shapes. A clone entry is stale whole once no group shares two of
-// its members.
-func staleKnown(known []types.ConformanceKnown, past map[types.ConformanceMetric]map[string]bool, groups [][]types.ConformanceItem) []types.ConformanceKnown {
-	var out []types.ConformanceKnown
-	for _, k := range known {
-		k.Shapes = nil
-		if k.Metric == types.ConformanceCloneTokens {
-			if !slices.ContainsFunc(groups, func(grp []types.ConformanceItem) bool { return sharedMembers(grp, k.Items) >= 2 }) {
-				out = append(out, k)
-			}
-			continue
-		}
-		stale := k
-		stale.Items = nil
-		for _, it := range k.Items {
-			if !past[k.Metric][it] {
-				stale.Items = append(stale.Items, it)
-			}
-		}
-		if len(stale.Items) > 0 {
-			out = append(out, stale)
-		}
-	}
-	slices.SortStableFunc(out, func(a, b types.ConformanceKnown) int { return cmp.Compare(a.Line, b.Line) })
-	return out
-}
-
-// pastValue holds, per metric, every item a configured row finds past its value, and every
-// member of a clone group when the clone row is configured: a known item outside it is
-// stale.
-func pastValue(o types.ConformanceOptions, samples map[types.ConformanceKey][]types.ConformanceItem, groups [][]types.ConformanceItem) map[types.ConformanceMetric]map[string]bool {
-	past := map[types.ConformanceMetric]map[string]bool{}
-	mark := func(m types.ConformanceMetric, id string) {
-		if past[m] == nil {
-			past[m] = map[string]bool{}
-		}
-		past[m][id] = true
-	}
-	for key, items := range samples {
-		value, src := o.Effective(key)
-		if src == "" || key == cloneKey {
-			continue
-		}
-		for _, it := range items {
-			if itemPast(key.Metric, it, value) {
-				mark(key.Metric, it.ID)
-			}
-		}
-	}
-	if _, src := o.Effective(cloneKey); src != "" {
-		for _, grp := range groups {
-			for _, m := range grp {
-				mark(types.ConformanceCloneTokens, m.ID)
-			}
-		}
-	}
-	return past
-}
-
-// sampledIDs is every item ID measured, per metric, whatever its measure.
-func sampledIDs(samples map[types.ConformanceKey][]types.ConformanceItem) map[types.ConformanceMetric]map[string]bool {
-	out := map[types.ConformanceMetric]map[string]bool{}
-	for key, items := range samples {
-		if out[key.Metric] == nil {
-			out[key.Metric] = map[string]bool{}
-		}
-		for _, it := range items {
-			out[key.Metric][it.ID] = true
-		}
-	}
-	return out
-}
-
-// itemShapes is the fingerprint of every item a rename or a move can carry: a callable's
-// or type's body shape under its item ID, and a file's fileShape under its path. An item
-// ID two symbols share, such as a file's init functions, has none, and neither has a
-// package.
-func (x *conformanceIndex) itemShapes() map[string]string {
-	out := map[string]string{}
-	count := map[string]int{}
-	for _, s := range x.symbols() {
-		count[s.itemID]++
-		if shape := s.node.Attrs[AttrBodyShape]; shape != "" {
-			out[s.itemID] = shape
-		}
-	}
-	for id, n := range count {
-		if n > 1 {
-			delete(out, id)
-		}
-	}
-	for id, f := range x.g.nodes {
-		if f.Kind != types.KindFile || f.Attrs[attrLanguage] == "" {
-			continue
-		}
-		if _, ok := x.population(f.Source); !ok {
-			continue
-		}
-		var digests []string
-		for _, e := range x.g.out[id] {
-			if e.Relation != types.RelationDefines || len(x.local[e.Target]) == 0 {
-				continue
-			}
-			if d := x.g.nodes[e.Target].Attrs[AttrBodyDigest]; d != "" {
-				digests = append(digests, d)
-			}
-		}
-		if len(digests) > 0 {
-			out[f.Source] = fileShape(digests)
-		}
-	}
-	return out
-}
-
-// fileShape fingerprints the body digests of the symbols a file defines as a set: a file
-// moved whole keeps it, and one that gained, lost or changed a symbol does not. The
-// package clause is no symbol's body, so a move to another package keeps it too.
-func fileShape(digests []string) string {
-	slices.Sort(digests)
-	sum := sha256.Sum256([]byte(strings.Join(digests, "\n")))
-	return hex.EncodeToString(sum[:8])
-}
-
-// knownCarry is the known entries with each carried item re-keyed to its new ID, and the
-// pairs carryKnown found.
-type knownCarry struct {
-	known              []types.ConformanceKnown
-	carried, ambiguous []types.ConformanceCarry
-}
-
-// carryKnown follows known items through a rename or a move. A known item that matches no
-// sample of its metric and has a recorded shape is carried to the one item past its value
-// that no entry of the metric lists and whose current shape is equal. Two or more such
-// items, or one that a second known item also claims, carry nothing: the pair is
-// ambiguous, and the old ID stays stale beside a violation, as with no shape at all.
-// known itself is not modified.
-func carryKnown(known []types.ConformanceKnown, sampled, past map[types.ConformanceMetric]map[string]bool, shapes map[string]string) knownCarry {
-	listed := conformanceKnownItems(known)
-	var found []types.ConformanceCarry
-	seen := map[metricItem]bool{}
-	claims := map[metricItem]int{}
-	for _, k := range known {
-		for _, from := range k.Items {
-			shape := k.Shapes[from]
-			if shape == "" || sampled[k.Metric][from] || seen[metricItem{k.Metric, from}] {
-				continue
-			}
-			seen[metricItem{k.Metric, from}] = true
-			var to []string
-			for id := range past[k.Metric] {
-				if !listed[k.Metric][id] && shapes[id] == shape {
-					to = append(to, id)
-				}
-			}
-			if len(to) == 0 {
-				continue
-			}
-			slices.Sort(to)
-			for _, id := range to {
-				claims[metricItem{k.Metric, id}]++
-			}
-			found = append(found, types.ConformanceCarry{Metric: k.Metric, From: from, To: to})
-		}
-	}
-
-	out := knownCarry{known: known}
-	renamed := map[metricItem]string{}
-	for _, c := range found {
-		if len(c.To) == 1 && claims[metricItem{c.Metric, c.To[0]}] == 1 {
-			out.carried = append(out.carried, c)
-			renamed[metricItem{c.Metric, c.From}] = c.To[0]
-		} else {
-			out.ambiguous = append(out.ambiguous, c)
-		}
-	}
-	if len(renamed) > 0 {
-		out.known = rekeyKnown(known, renamed)
-	}
-	return out
-}
-
-// metricItem is one item under one metric.
-type metricItem struct {
-	metric types.ConformanceMetric
-	id     string
-}
-
-// rekeyKnown is a copy of known with each item renamed lists moved to its new ID, its
-// recorded shape with it where the entry has one.
-func rekeyKnown(known []types.ConformanceKnown, renamed map[metricItem]string) []types.ConformanceKnown {
-	out := make([]types.ConformanceKnown, len(known))
-	for i, k := range known {
-		k.Items = slices.Clone(k.Items)
-		k.Shapes = maps.Clone(k.Shapes)
-		for j, item := range k.Items {
-			to, ok := renamed[metricItem{k.Metric, item}]
-			if !ok {
-				continue
-			}
-			k.Items[j] = to
-			if shape, ok := k.Shapes[item]; ok {
-				k.Shapes[to] = shape
-				delete(k.Shapes, item)
-			}
-		}
-		out[i] = k
-	}
-	return out
-}
-
-// listedShapes is the current shape of each item known lists, where it has one, or nil
-// when none has.
-func listedShapes(known []types.ConformanceKnown, shapes map[string]string) map[string]string {
-	var out map[string]string
-	for _, k := range known {
-		for _, item := range k.Items {
-			if s := shapes[item]; s != "" {
-				if out == nil {
-					out = map[string]string{}
-				}
-				out[item] = s
-			}
-		}
-	}
-	return out
-}
-
-func sharedMembers(grp []types.ConformanceItem, items []string) int {
-	n := 0
-	for _, m := range grp {
-		if slices.Contains(items, m.ID) {
-			n++
-		}
-	}
-	return n
 }
 
 // packageReach counts, per package directory other than own, the distinct nodes at the far

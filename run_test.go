@@ -41,6 +41,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // A target declared `advisory` that fails inside a composite printed [fail] on its own
@@ -80,7 +81,7 @@ func TestDiagEventFromError(t *testing.T) {
 	de := types.DiagnosticErrorf(types.ExecDenied, "exec denied: /bin/x")
 	ev, ok := diagEventFromError("pkg/foo", "build", de)
 	assert.True(t, ok)
-	assert.Equal(t, types.DiagnosticEvent{Code: types.ExecDenied, Message: de.Msg, Unit: "pkg/foo:build"}, ev)
+	assert.Equal(t, types.DiagnosticEvent{Code: types.ExecDenied, Message: de.Msg, Unit: "pkg/foo:build", URL: types.CodeURL(types.ExecDenied)}, ev)
 
 	// A wrapped diagnostic error is still recognized (errors.As unwraps).
 	wrapped := fmt.Errorf("run failed: %w", de)
@@ -360,7 +361,7 @@ func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 	require.NoError(t, m.Run(ctx, targets), "first run")
 	assert.Equal(t, int32(1), calls.Load(), "first run: expected one real execution")
 
-	require.NoError(t, m.Run(ctx, targets, WithNoCache()), "second run (--no-cache)")
+	require.NoError(t, m.Run(ctx, targets, WithCache(false)), "second run (--no-cache)")
 	assert.Equal(t, int32(2), calls.Load(), "--no-cache run: a cached target must still genuinely re-execute")
 
 	require.NoError(t, m.Run(ctx, targets), "third run (ordinary)")
@@ -400,7 +401,7 @@ func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 	require.NoError(t, m.RunAffected(ctx, "build"), "second affected run (should hit cache)")
 	assert.Equal(t, int32(1), calls.Load(), "second run: cache hit must not re-execute")
 
-	require.NoError(t, m.RunAffected(ctx, "build", WithNoCache()), "third affected run (--no-cache)")
+	require.NoError(t, m.RunAffected(ctx, "build", WithCache(false)), "third affected run (--no-cache)")
 	assert.Equal(t, int32(2), calls.Load(), "affected --no-cache must still genuinely re-execute a cached target")
 
 	require.NoError(t, m.RunAffected(ctx, "build"), "fourth affected run (ordinary)")
@@ -713,7 +714,7 @@ func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 	assert.Equal(t, int32(1), composer.Load(), "second run: the composer replays")
 	assert.Equal(t, int32(2), gate.Load(), "a replayed composer must still run its gate")
 
-	require.NoError(t, m.Run(ctx, targets, WithNoCache()), "third run (--no-cache)")
+	require.NoError(t, m.Run(ctx, targets, WithCache(false)), "third run (--no-cache)")
 	assert.Equal(t, int32(2), composer.Load(), "--no-cache re-executes the composer")
 	assert.Equal(t, int32(3), gate.Load(),
 		"--no-cache still stores the entry, so the skip_cache member still runs before its key")
@@ -933,7 +934,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 	keyed := func(target string, charms ...string) cache.Step {
 		step := m.buildStep(p, target)
-		applyRunKeying(&step, p, nil, nil, charms)
+		applyRunKeying(&step, p, config.SpellsConfig{}, nil, nil, charms)
 		return step
 	}
 	assert.True(t, keyed("generate").VerifyOutputs, "the check form compares its outputs")
@@ -963,7 +964,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	require.NotNil(t, p, "root project")
 
 	step := m.buildStep(p, "generate")
-	applyRunKeying(&step, p, nil, nil, nil)
+	applyRunKeying(&step, p, config.SpellsConfig{}, nil, nil, nil)
 	assert.True(t, step.VerifyOutputs)
 }
 
@@ -1395,8 +1396,20 @@ func TestRunOptions(t *testing.T) {
 	assert.Equal(t, "main", r.BaseRef)
 	WithSpellFilter("go")(&r)
 	assert.Equal(t, "go", r.Spell)
-	WithNoVolatilityRetry()(&r)
-	assert.True(t, r.NoVolatilityRetry, "WithNoVolatilityRetry: NoVolatilityRetry = false, want true")
+	WithVolatilityRetry(false)(&r)
+	assert.False(t, r.VolatilityRetry, "WithVolatilityRetry(false): VolatilityRetry = true, want false")
+	WithCache(false)(&r)
+	assert.False(t, r.Cache, "WithCache(false): Cache = true, want false")
+}
+
+type magusSuite struct{ suite.Suite }
+
+func TestMagusSuite(t *testing.T) { suite.Run(t, new(magusSuite)) }
+
+func (s *magusSuite) TestApplyRunOptionsDefaultsToCachingAndRetry() {
+	r := applyRunOptions(nil)
+	s.True(r.Cache)
+	s.True(r.VolatilityRetry)
 }
 
 func TestWithWrite_SetsWriteCharm(t *testing.T) {
@@ -2104,6 +2117,7 @@ func TestRun_UnreadableHistoryIsSaid(t *testing.T) {
 	assert.Contains(t, got, "sizes claims from declarations and records no history")
 	assert.Contains(t, got, "preserve it")
 	assert.Contains(t, got, old)
+	assert.Contains(t, got, string(types.LegacyStorePresent))
 }
 
 // TestRun_NonRetryableFailureRecordsNotRetried pins the record a target opted into
@@ -2354,7 +2368,7 @@ func TestObservationsForTarget(t *testing.T) {
 // arrived first, and the key would lose an input with nothing to notice.
 func TestApplyRunKeyingCarriesObservations(t *testing.T) {
 	step := cache.Step{Target: "go-build", Observations: []string{"schema-rev=a1b2c3"}}
-	applyRunKeying(&step, &types.Project{Path: "."}, []string{"go:go:1.25"}, []string{"docker:trivy:db 2026-09-10"}, []string{"rw"})
+	applyRunKeying(&step, &types.Project{Path: "."}, config.SpellsConfig{}, []string{"go:go:1.25"}, []string{"docker:trivy:db 2026-09-10"}, []string{"rw"})
 
 	assert.Equal(t, cache.Step{
 		Target:       "go-build",
@@ -2372,14 +2386,30 @@ func TestApplyRunKeyingDropsToolVersionsForAnIndexerOp(t *testing.T) {
 		Format: spells.SymbolFormatSCIP, Op: "scip-buzz", Command: spells.Command{Bin: "scip-buzz"},
 	}))
 	p := &types.Project{Path: ".", ResolvedSpells: []*spells.Spell{sp}}
+	optedIn := config.SpellsConfig{SymbolIndexers: []string{"buzz"}}
 
 	indexer := cache.Step{Target: "scip-buzz"}
-	applyRunKeying(&indexer, p, []string{"buzz:buzz:1.0"}, nil, nil)
+	applyRunKeying(&indexer, p, optedIn, []string{"buzz:buzz:1.0"}, nil, nil)
 	assert.Empty(t, indexer.ToolVersions)
 
 	other := cache.Step{Target: "build"}
-	applyRunKeying(&other, p, []string{"buzz:buzz:1.0"}, nil, nil)
+	applyRunKeying(&other, p, optedIn, []string{"buzz:buzz:1.0"}, nil, nil)
 	assert.Equal(t, []string{"buzz:buzz:1.0"}, other.ToolVersions)
+}
+
+// An external SCIP indexer the workspace has not opted in is no index at all: its op keys
+// like any other target, so nothing builds, keys or reports it.
+func (s *magusSuite) TestAnIndexerNotOptedInIsAnOrdinaryOp() {
+	sp := spells.NewSpell("typescript", spells.WithSymbolIndexer(&spells.SymbolIndexer{
+		Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "scip-typescript"},
+	}))
+	p := &types.Project{Path: ".", ResolvedSpells: []*spells.Spell{sp}}
+
+	s.Empty(projectIndexes(p, config.SpellsConfig{}))
+	s.False(indexesSymbols(p, spells.DefaultSymbolIndexOp, config.SpellsConfig{}))
+	optedIn := config.SpellsConfig{SymbolIndexers: []string{"typescript"}}
+	s.Len(projectIndexes(p, optedIn), 1)
+	s.True(indexesSymbols(p, spells.DefaultSymbolIndexOp, optedIn))
 }
 
 // TestTargetDrivenEnvKeys pins the two ways an op's EnvKeys reach a target's key: composed
@@ -2744,9 +2774,84 @@ func TestLoadHistorySaysAnUnsupportedVersionOnce(t *testing.T) {
 		_, err := m.loadHistory(t.Context())()
 		var skew *forecast.UnsupportedVersionError
 		require.ErrorAs(t, err, &skew)
+		require.ErrorIs(t, err, types.StoreRecordsNewer)
 		assert.Equal(t, 99, skew.Have)
 	}
 	assert.Equal(t, 1, strings.Count(logs.String(), "run history is unreadable"))
+	assert.Contains(t, logs.String(), string(types.StoreRecordsNewer))
 	assert.Contains(t, logs.String(), "version 99")
 	assert.Contains(t, logs.String(), "left alone")
+}
+
+// The network-free targets of the distroless image example run as written: the
+// rootfs stage, then the image over it, then a replay from the cache.
+func TestImageExampleDistrolessRootfsRuns(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("std", "examples", "image", "distroless.buzz"))
+	require.NoError(t, err)
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(string(src))
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx := context.Background()
+	targets := []types.Target{{Path: ".", Name: "image-rootfs"}}
+	require.NoError(t, m.Run(ctx, targets))
+	index, err := os.ReadFile(w.Path("out", "image", "rootfs", "index.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(index), "application/vnd.oci.image.manifest.v1+json")
+
+	require.NoError(t, m.Run(ctx, targets), "a second run replays from the cache")
+	again, err := os.ReadFile(w.Path("out", "image", "rootfs", "index.json"))
+	require.NoError(t, err)
+	assert.Equal(t, index, again, "the layout is byte-identical")
+}
+
+// The single-project multi-stage shape the image examples teach: image needs build and
+// keys on build's SOURCES, never build's output (that trips MGS4010); without the
+// sources an edit replays a stale image. uuid makes each real execution visible.
+func TestStageInOneProjectCachesAndRekeysOnItsSource(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("src/app.txt", "one")
+	w.Magusfile(`import "magus";
+import "fs";
+import "uuid";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["src/**"]);
+    ctx.writesFiles(["out/bin/app"]);
+    fs\mkdirAll("out/bin");
+    fs\writeFile("out/bin/app", content: "{fs\readFile("src/app.txt")}:{uuid\v4()}");
+}
+export fun image(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(build);
+    ctx.readsFiles(["src/**"]);
+    ctx.writesFiles(["out/image/**"]);
+    fs\mkdirAll("out/image");
+    fs\writeFile("out/image/layer", content: "{fs\readFile("out/bin/app")}|{uuid\v4()}");
+}
+`)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx := context.Background()
+	targets := []types.Target{{Path: ".", Name: "image"}}
+	read := func() string {
+		data, err := os.ReadFile(w.Path("out", "image", "layer"))
+		require.NoError(t, err)
+		return string(data)
+	}
+
+	require.NoError(t, m.Run(ctx, targets), "first run")
+	first := read()
+	assert.True(t, strings.HasPrefix(first, "one:"), "the image placed what build wrote: %q", first)
+
+	require.NoError(t, m.Run(ctx, targets), "second run")
+	assert.Equal(t, first, read(), "an unchanged source replays the image from the cache")
+
+	w.Write("src/app.txt", "two")
+	require.NoError(t, m.Run(ctx, targets), "run after a source edit")
+	third := read()
+	assert.True(t, strings.HasPrefix(third, "two:"), "the edit reran build, then the image: %q", third)
+	assert.NotEqual(t, first, third)
 }

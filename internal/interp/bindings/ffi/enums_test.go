@@ -3,6 +3,7 @@ package ffi
 import (
 	"context"
 	"testing"
+	"time"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -78,4 +79,28 @@ func TestSessionEnumsPanicsOnAValueOutsideTheEnum(t *testing.T) {
 	enums := SessionEnums(context.Background(), shadeSession(t), "paint/shades")
 	assert.PanicsWithValue(t, `"purple" is not a case value of shades\Shade`, func() { enums.Case("Shade", "purple") })
 	assert.Panics(t, func() { enums.Case("Hue", "light") }, "an enum the module does not declare")
+}
+
+type countedCompiles struct{ phases int }
+
+func (c *countedCompiles) Phase(buzz.CompilePhase, time.Duration, error) { c.phases++ }
+
+func (c *countedCompiles) Import(string, buzz.ImportOutcome, time.Duration, error) {}
+
+// A hook reads cases on every call, so a session that imported the module already
+// reads them off its definition and compiles nothing.
+func TestSessionEnumsCompilesNothingOnceTheModuleIsImported(t *testing.T) {
+	ctx := context.Background()
+	sess := shadeSession(t)
+	_, err := sess.Eval(ctx, `import "paint/shades"; return shades\Shade.light;`)
+	require.NoError(t, err)
+	compiles := &countedCompiles{}
+	sess.AddCompileObserver(compiles)
+
+	got := SessionEnums(ctx, sess, "paint/shades").Case("Shade", "dark-ish")
+
+	_, name, ok := got.EnumCase()
+	require.True(t, ok, "got %s, not an enum case", got.Kind())
+	assert.Equal(t, "dark", name)
+	assert.Zero(t, compiles.phases)
 }

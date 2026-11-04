@@ -67,8 +67,8 @@ test("round-trip: import(build(p)) restores every value onto a different current
     nodeShapes: true,
     keymap: {},
   };
-  const res = importSettings(raw, current, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, current, baseLayout).value;
+  assert.ok(res);
   assert.deepEqual(res.next, base);
   assert.deepEqual(res.applied.sort(), [
     "focusRing",
@@ -86,8 +86,8 @@ test("import: unknown keys are ignored but reported, known keys still apply", ()
     schemaVersion: 1,
     settings: { poll: 60000, somethingNew: { nested: true }, fontSize: 14 },
   });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.equal(res.next.poll, 60000);
   assert.equal(res.next.host, base.host); // untouched
   assert.deepEqual(res.applied, ["poll"]);
@@ -100,8 +100,8 @@ test("import: a present-but-wrong-typed known key is reported as skipped, valid 
     schemaVersion: 1,
     settings: { poll: "fast", host: "10.0.0.2:9000" },
   });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.equal(res.next.host, "10.0.0.2:9000");
   assert.equal(res.next.poll, base.poll); // wrong-typed poll kept the current value
   assert.deepEqual(res.applied, ["host"]);
@@ -114,16 +114,16 @@ test("import: a malformed keymap is reported as skipped, not partially applied",
     schemaVersion: 1,
     settings: { host: "localhost:1", keymap: { a: 3 } },
   });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.deepEqual(res.next.keymap, base.keymap); // whole keymap kept, not the half-parsed one
   assert.deepEqual(res.skipped, ["keymap"]);
 });
 
 test("import: missing keys keep the current value and are not reported as skipped", () => {
   const raw = JSON.stringify({ schemaVersion: 1, settings: { theme: "light" } });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.equal(res.next.theme, "light");
   assert.equal(res.next.poll, base.poll);
   assert.equal(res.next.host, base.host);
@@ -140,21 +140,21 @@ test("import: a wrong-typed key is skipped, not applied (keeps current)", () => 
   });
   const res = importSettings(raw, base, baseLayout);
   // Every supplied key is malformed, so nothing is recognizable -> hard error rather than a silent no-op.
-  assert.equal(res.ok, false);
-  if (!res.ok) assert.match(res.error, /No recognizable settings/);
+  assert.ok(res.error);
+  assert.match(res.error.message, /No recognizable settings/);
 });
 
 test("import: a valid host trims surrounding whitespace", () => {
   const raw = JSON.stringify({ schemaVersion: 1, settings: { host: "  10.0.0.2:9000  " } });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.equal(res.next.host, "10.0.0.2:9000");
 });
 
 test("import: an empty host string is valid (clears the override)", () => {
   const raw = JSON.stringify({ schemaVersion: 1, settings: { host: "" } });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.equal(res.next.host, "");
   assert.deepEqual(res.applied, ["host"]);
 });
@@ -164,8 +164,8 @@ test("import: forward-compat - a newer schemaVersion still applies its known key
     schemaVersion: SETTINGS_SCHEMA_VERSION + 1,
     settings: { host: "localhost:1", futureThing: true },
   });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.equal(res.next.host, "localhost:1"); // never hard-fails on version alone; known keys still land
   assert.deepEqual(res.applied, ["host"]);
   assert.equal(res.newerSchema, SETTINGS_SCHEMA_VERSION + 1); // app can say the file is from a newer console
@@ -177,21 +177,21 @@ test("import: the current schemaVersion is not flagged as newer", () => {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     settings: { host: "localhost:1" },
   });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.equal(res.newerSchema, undefined);
 });
 
 test("import: invalid JSON is a hard error", () => {
   const res = importSettings("{not json", base, baseLayout);
-  assert.equal(res.ok, false);
-  if (!res.ok) assert.match(res.error, /not valid JSON/);
+  assert.ok(res.error);
+  assert.match(res.error.message, /not valid JSON/);
 });
 
 test("import: a non-object / missing settings object is a hard error", () => {
   for (const raw of ["42", '"str"', "null", "[]", "{}", JSON.stringify({ schemaVersion: 1 })]) {
     const res = importSettings(raw, base, baseLayout);
-    assert.equal(res.ok, false, "expected error for " + raw);
+    assert.ok(res.error, "expected error for " + raw);
   }
 });
 
@@ -200,8 +200,8 @@ test("import: a disabled binding (empty-string chord) survives the keymap type c
     schemaVersion: 1,
     settings: { keymap: { "console.pane.split": "" } },
   });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.deepEqual(res.next.keymap, { "console.pane.split": "" });
 });
 
@@ -218,7 +218,7 @@ const diffCtx: DiffContext = {
   nodeShapesLabel: (on) => (on ? "On" : "Off"),
   commandLabel: (id) => (id === "console.tab.close" ? "Close pane or tab" : id),
   effectiveChord: (keymap, id) => {
-    const chord = Object.prototype.hasOwnProperty.call(keymap, id) ? keymap[id] : "mod+w"; // "mod+w" = the default
+    const chord = Object.hasOwn(keymap, id) ? (keymap[id] ?? "") : "mod+w"; // "mod+w" = the default
     return chord === "" ? "None" : chord;
   },
   commandIds: ["console.tab.close"],
@@ -352,8 +352,8 @@ test("layout: round-trips through the envelope onto a different current", () => 
     collapsedCards: [],
     sidebarExpanded: false,
   };
-  const res = importSettings(raw, base, other);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, other).value;
+  assert.ok(res);
   assert.deepEqual(res.nextLayout, baseLayout);
   assert.deepEqual(res.appliedLayout.sort(), [
     "bigPictureSplit",
@@ -372,8 +372,8 @@ test("layout: an expanded rail of false imports rather than reading as absent", 
     settings: {},
     layout: { sidebarExpanded: false },
   });
-  const res = importSettings(raw, base, { ...baseLayout, sidebarExpanded: true });
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, { ...baseLayout, sidebarExpanded: true }).value;
+  assert.ok(res);
   assert.equal(res.nextLayout.sidebarExpanded, false);
   assert.ok(res.appliedLayout.includes("sidebarExpanded"));
 });
@@ -382,8 +382,8 @@ test("layout: an expanded rail of false imports rather than reading as absent", 
 // must still import - the section is additive, not required.
 test("layout: an envelope with no layout section still imports the settings", () => {
   const raw = JSON.stringify({ schemaVersion: SETTINGS_SCHEMA_VERSION, settings: { poll: 5000 } });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.equal(res.next.poll, 5000);
   assert.deepEqual(res.appliedLayout, []);
   assert.deepEqual(res.nextLayout, baseLayout, "an absent section keeps every current value");
@@ -396,7 +396,7 @@ test("layout: a wrong-typed value is skipped, not coerced", () => {
     layout: { splitMode: "diagonal", logsZoom: "big", collapsedCards: ["ok", 7] },
   });
   const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok === false || res.appliedLayout.length === 0);
+  assert.ok(res.error || res.value.appliedLayout.length === 0);
 });
 
 // Whole-or-nothing, like the keymap: one bad entry must not leave a pane at a nonsense position.
@@ -406,8 +406,8 @@ test("layout: a split map with one bad entry is skipped entirely", () => {
     settings: {},
     layout: { bigPictureSplit: { v: 1, cols: "wide" }, logsZoom: 1.5 },
   });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.deepEqual(res.nextLayout.bigPictureSplit, baseLayout.bigPictureSplit);
   assert.equal(res.nextLayout.logsZoom, 1.5, "the good sibling still applies");
   assert.ok(res.skipped.includes("bigPictureSplit"));
@@ -421,7 +421,7 @@ test("layout: an unknown layout key is reported, never applied", () => {
     settings: {},
     layout: { logsZoom: 1.1, "dashboard-collapse-seeded": ["cache"] },
   });
-  const res = importSettings(raw, base, baseLayout);
-  assert.ok(res.ok);
+  const res = importSettings(raw, base, baseLayout).value;
+  assert.ok(res);
   assert.ok(res.unknown.includes("dashboard-collapse-seeded"));
 });

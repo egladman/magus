@@ -4,7 +4,6 @@
 
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { must } from "../lib/guards";
 import { type Column, SortableTable } from "./table";
 
 interface Row {
@@ -131,7 +130,8 @@ describe("SortableTable", () => {
         sort: (r: Row) => r.name,
       }));
     const mode = (n: number): string | undefined => {
-      const table = must(new SortableTable(wide(n), opts).el.querySelector("table"));
+      const table = new SortableTable(wide(n), opts).el.querySelector("table");
+      assert.ok(table);
       return [...table.classList].find((c) => c.startsWith("pf-m-grid-"));
     };
     assert.equal(mode(3), "pf-m-grid-md");
@@ -141,7 +141,8 @@ describe("SortableTable", () => {
 
   test("the frame names the edges of the table that scroll out of view", () => {
     const t = new SortableTable(cols, opts);
-    const wrap = must(t.el.querySelector<HTMLElement>(".console-table__wrap"));
+    const wrap = t.el.querySelector<HTMLElement>(".console-table__wrap");
+    assert.ok(wrap);
     // Nothing overflows in the test document, so no edge is named.
     t.setRows(rows);
     assert.equal(t.el.dataset.more, undefined);

@@ -159,6 +159,10 @@ func runConfigSet(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	if fs.NArg() != 1 {
 		fs.Usage()
 		return exit.Usagef("magus config set: requires one argument in key=<key>,value=<value> form")
@@ -182,8 +186,17 @@ func runConfigSet(ctx context.Context, args []string) error {
 	if err := config.Save(vcs.WriteJudge(ctx, judgeDir("")), cfgPath, key, value); err != nil {
 		return err
 	}
+	if opts.Format != outputText {
+		return emitRecord(opts, configSetOutput{Path: cfgPath, Key: key, Value: value}, []string{key})
+	}
 	slog.InfoContext(ctx, fmt.Sprintf("wrote %s: %s = %s", cfgPath, key, value), attr.Notice(""))
 	return nil
+}
+
+type configSetOutput struct {
+	Path  string `json:"path"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 // parseConfigSetArg parses a single "key=<key>,value=<value>" argument.

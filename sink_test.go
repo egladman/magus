@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // sinkEvents is one sample of every event an invocation emits through its sink.
@@ -211,6 +212,7 @@ func TestTextSinkProse(t *testing.T) {
 		// An advisory member's failure is not the composite's.
 		{report.RunStep{Label: "magus", Target: "security", Status: "advisory", DurationMs: 5000}, "  [advisory] magus security (5.0s)\n"},
 		{report.RunSummary{Hits: 3, Misses: 1, DurationMs: 2000}, "summary: 3 cached, 1 ran, 0 failed (2.0s)\n"},
+		{report.RunSummary{Hits: 3, Misses: 1, Permitted: 1, DurationMs: 2000}, "summary: 3 cached, 1 ran, 1 permitted, 0 failed (2.0s)\n"},
 		// Nothing executed, so the dry footer says what would run; the plural is real.
 		{report.RunSummary{Dry: true, Planned: 3, DurationMs: 2}, "summary: dry run, 3 targets would run (2ms)\n"},
 		{report.RunSummary{Dry: true, Planned: 1, DurationMs: 1}, "summary: dry run, 1 target would run (1ms)\n"},
@@ -224,6 +226,43 @@ func TestTextSinkProse(t *testing.T) {
 	} {
 		assert.Equal(t, c.want, render(c.event), "%#v", c.event)
 	}
+}
+
+type TextSinkSummarySuite struct{ suite.Suite }
+
+func TestTextSinkSummarySuite(t *testing.T) { suite.Run(t, new(TextSinkSummarySuite)) }
+
+func (s *TextSinkSummarySuite) render(e report.RunSummary) string {
+	var out bytes.Buffer
+	sink, err := NewSink(output.Text, io.Discard, &out)
+	s.Require().NoError(err)
+	sink.emit(s.T().Context(), e)
+	return out.String()
+}
+
+func (s *TextSinkSummarySuite) TestNamesFilesAndSlots() {
+	got := s.render(report.RunSummary{Hits: 3, Misses: 1, Files: 771, Slots: 12, DurationMs: 160})
+	s.Equal("summary: 3 cached, 1 ran, 0 failed (160ms on 771 files using 12 slots)\n", got)
+}
+
+func (s *TextSinkSummarySuite) TestSingularFileAndSlot() {
+	got := s.render(report.RunSummary{Hits: 1, Misses: 1, Files: 1, Slots: 1, DurationMs: 20})
+	s.Equal("summary: 1 cached, 1 ran, 0 failed (20ms on 1 file using 1 slot)\n", got)
+}
+
+func (s *TextSinkSummarySuite) TestFullyCachedRunHasNoSlots() {
+	got := s.render(report.RunSummary{Hits: 4, Files: 90, DurationMs: 300})
+	s.Equal("summary: 4 cached, 0 ran, 0 failed (300ms on 90 files)\n", got)
+}
+
+func (s *TextSinkSummarySuite) TestLeavesOutFilesNobodyRecorded() {
+	got := s.render(report.RunSummary{Misses: 2, Slots: 4, DurationMs: 300})
+	s.Equal("summary: 0 cached, 2 ran, 0 failed (300ms using 4 slots)\n", got)
+}
+
+func (s *TextSinkSummarySuite) TestDryRunIgnoresCounts() {
+	got := s.render(report.RunSummary{Dry: true, Planned: 2, Files: 9, Slots: 3, DurationMs: 2})
+	s.Equal("summary: dry run, 2 targets would run (2ms)\n", got)
 }
 
 // -q and -s raise the level past progress, never past what explains a failure: notices,
@@ -426,4 +465,45 @@ func TestRaceDiagnosticsFollowTheSink(t *testing.T) {
 	require.Len(t, lines, 2)
 	assert.Contains(t, lines[0], `"type":"`+report.TypeOutputOverlapDetected+`"`)
 	assert.Contains(t, lines[1], `"type":"`+report.TypeMissingDependency+`"`)
+}
+
+// permitRecordsSuite runs a real magusfile through a real sink.
+type permitRecordsSuite struct {
+	suite.Suite
+}
+
+func TestPermitRecords(t *testing.T) {
+	suite.Run(t, new(permitRecordsSuite))
+}
+
+func (s *permitRecordsSuite) TestAPermitReachesTheRecordsAndTheSummary() {
+	root, cleanup := newGuideWorkspace(map[string]string{
+		"magusfile.buzz": `import "magus";
+
+export fun plain(ctx: magus\Context, args: [str]) > void {
+}
+
+export fun gate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.permitted(2);
+}
+`,
+	})
+	defer cleanup()
+	ctx := s.T().Context()
+	m, err := Open(ctx, root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	defer m.Close()
+
+	var records bytes.Buffer
+	sink, err := NewSink(output.JSONL, &records, io.Discard)
+	s.Require().NoError(err)
+	targets := []types.Target{{Path: ".", Name: "gate"}, {Path: ".", Name: "plain"}}
+	s.Require().NoError(m.Run(ctx, targets, WithSink(sink)))
+	s.Require().NoError(sink.Close())
+
+	s.T().Logf("records:\n%s", records.String())
+	s.Contains(records.String(), `"target":"gate","status":"permitted"`)
+	s.Contains(records.String(), `"target":"plain","status":"ok"`)
+	s.Contains(records.String(), `"permitted":1`)
+	s.Equal(1, m.CacheStats().Permitted)
 }

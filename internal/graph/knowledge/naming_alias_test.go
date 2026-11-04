@@ -51,7 +51,7 @@ func TestAliasCheckReportsAnAliasedImport(t *testing.T) {
 				Status:   types.CheckAdvice,
 				Evidence: types.EvidenceInferred,
 				Message:  tc.message,
-				Details:  append(tc.past, "rename the package, or record a known entry with the reason"),
+				Details:  append(tc.past, "rename the package"),
 			}, c)
 		})
 	}
@@ -61,17 +61,6 @@ func TestAliasCheckNamesMixedSpellings(t *testing.T) {
 	f := types.AliasFacts{Dir: "internal/proc/run", Name: "run", Importers: 43, Aliased: 21, Needed: 21,
 		Aliases: map[string]int{"procrun": 13, "runPkg": 7, "run": 1}}
 	assert.Equal(t, "internal/proc/run is aliased by 21 of its 43 importers in 3 spellings (procrun, runPkg, run): pick one name", aliasMessage(f))
-}
-
-func TestAliasCheckSkipsKnownPackages(t *testing.T) {
-	use := aliasUser("internal/use/q00.go")
-	o := aliasOptions()
-	o.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{
-		{Metric: types.ConformanceNameClash, Items: []string{"internal/queue/types"}, Reason: "rename pending"},
-		{Metric: types.ConformanceAliasShare, Items: []string{"internal/queue/types"}, Reason: "rename pending"},
-	}}
-
-	assert.Empty(t, aliasGraph(use).ConformanceChecks(ConformanceChange{Subjects: []string{symID(use)}, Conformance: o}))
 }
 
 // A new package is the cheapest one to rename: one taking an existing package's clause is

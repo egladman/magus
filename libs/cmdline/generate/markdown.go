@@ -2,7 +2,6 @@ package generate
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"strconv"
 	"strings"
@@ -126,10 +125,9 @@ func writeChildFlagsMD(m *mdBuf, path string, children []cmdline.Command) {
 }
 
 func writeFlagListMD(m *mdBuf, command cmdline.Command) {
-	visitFlags(command, func(f *flag.Flag) {
-		typeName, usage := flag.UnquoteUsage(f)
-		m.def(flagLabelMD(f.Name, typeName, f.DefValue), mdEsc(usage))
-	})
+	for _, h := range flagHelp(command) {
+		m.def(flagLabelMD(h), mdEsc(h.Usage))
+	}
 }
 
 func writeExitStatusMD(m *mdBuf, codes []cmdline.ExitCode) {
@@ -184,13 +182,13 @@ func writeSeeAlsoMD(m *mdBuf, root cmdline.Command, current string) {
 }
 
 // flagLabelMD builds the definition-list term for a flag.
-func flagLabelMD(name, typeName, defValue string) string {
-	label := mdB(dashes(name) + name)
-	if typeName != "" && typeName != "bool" {
-		label += " " + mdI(typeName)
+func flagLabelMD(h cmdline.Help) string {
+	label := mdB(h.Name)
+	if h.Value != "" {
+		label += " " + mdI(h.Value)
 	}
-	if defValue != "" && defValue != "false" && defValue != "0" && defValue != "0s" {
-		label += fmt.Sprintf(" (default: %s)", mdEsc(defValue))
+	if h.Default != "" {
+		label += fmt.Sprintf(" (default: %s)", mdEsc(h.Default))
 	}
 	return label
 }

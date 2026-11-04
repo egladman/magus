@@ -16,7 +16,9 @@ import { buildRows, byHunk } from "./rows";
 // the product uses produces this, so a header that disagrees with its body is its problem now.
 
 const files = fromWire(DEMO_FILES);
-const session = demoSession();
+const loaded = demoSession();
+assert.ok(!loaded.error, !loaded.error ? "" : loaded.error.message);
+const session = loaded.value;
 
 test("the generated changeset holds the files the showcase claims", () => {
   assert.deepEqual(

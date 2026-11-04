@@ -104,7 +104,7 @@ func readScriptsIndex(cacheDir string) (ScriptsIndex, bool) {
 const (
 	SituationEvent  = "event:"
 	SituationRule   = "rule:"
-	SituationMGS    = "mgs:"
+	SituationCode   = "code:"
 	SituationDoctor = "doctor:"
 	SituationNext   = "next:"
 	// situationReplaces is a command shape the script replaces: a program and the
@@ -112,7 +112,7 @@ const (
 	situationReplaces = "replaces:"
 )
 
-var situationFamilies = []string{SituationEvent, SituationRule, SituationMGS, SituationDoctor, SituationNext, situationReplaces}
+var situationFamilies = []string{SituationEvent, SituationRule, SituationCode, SituationDoctor, SituationNext, situationReplaces}
 
 // The events a script may serve. They have no registry of their own elsewhere, so
 // this list is it, and it is closed: an id not here is an error, not a situation that
@@ -193,7 +193,7 @@ func parseScriptDeclaration(src []byte) (scriptDeclaration, bool, error) {
 	}
 	var errs []error
 	for _, q := range quotedRe.FindAll(serves[1], -1) {
-		entry, err := strconv.Unquote(string(q))
+		entry, err := unquoteBuzz(q)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("SERVES entry %s: %w", q, err))
 			continue
@@ -216,8 +216,14 @@ func declaredString(re *regexp.Regexp, src []byte) (string, bool) {
 	if m == nil {
 		return "", false
 	}
-	s, err := strconv.Unquote(string(m[1]))
+	s, err := unquoteBuzz(m[1])
 	return s, err == nil
+}
+
+// unquoteBuzz reads a Buzz string literal as Go's strconv does, plus Buzz's \{ escape: a
+// placeholder like {checkout} is written \{checkout} so Buzz does not interpolate it.
+func unquoteBuzz(q []byte) (string, error) {
+	return strconv.Unquote(strings.ReplaceAll(string(q), `\{`, "{"))
 }
 
 func parseScriptSituation(entry string) (scriptSituation, error) {
@@ -310,7 +316,7 @@ func MissingScripts(cacheDir string) ([]string, bool) {
 }
 
 // scriptPlaceholders are the facts a script's args may name.
-var scriptPlaceholders = []string{"ref", "rule", "project", "file"}
+var scriptPlaceholders = []string{"ref", "rule", "project", "file", "checkout"}
 
 var placeholderRe = regexp.MustCompile(`\{([a-z]+)\}`)
 

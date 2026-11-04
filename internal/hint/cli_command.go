@@ -30,10 +30,10 @@ import (
 // the accepted form and the printed hint share one source of truth, the exact
 // drift that shipped the wrong ref hint.
 type Command struct {
-	tokens []string
+	words []string
 }
 
-func command(tokens ...string) Command { return Command{tokens: tokens} }
+func command(tokens ...string) Command { return Command{words: tokens} }
 
 // String renders the bare invocation, e.g. "magus query output". The binary is
 // spelled as this process was invoked (see BinaryName), so a hint copied out of a
@@ -49,7 +49,7 @@ func (c Command) With(args ...string) string { return c.WithAs(BinaryName(), arg
 // to the repo, generated once and read by whoever checks it out), the live
 // BinaryName would make the file's content depend on how it happened to be built.
 func (c Command) StringAs(bin string) string {
-	return fmt.Sprintf("%s %s", bin, strings.Join(c.tokens, " "))
+	return fmt.Sprintf("%s %s", bin, strings.Join(c.words, " "))
 }
 
 // WithAs is StringAs followed by trailing args.
@@ -65,25 +65,25 @@ func (c Command) WithAs(bin string, args ...string) string {
 // argument needing quotes differs between the two. argv[0] is [BinaryName], so it
 // follows how this process was invoked.
 func (c Command) Argv(args ...string) []string {
-	argv := make([]string, 0, 1+len(c.tokens)+len(args))
+	argv := make([]string, 0, 1+len(c.words)+len(args))
 	argv = append(argv, BinaryName())
-	argv = append(argv, c.tokens...)
+	argv = append(argv, c.words...)
 	return append(argv, args...)
 }
 
 // Head is the top-level subcommand token (e.g. "query" for "query output"), the
 // one cmd/magus's dispatchSub switches on. The drift test asserts it is real.
-func (c Command) Head() string { return c.tokens[0] }
+func (c Command) Head() string { return c.words[0] }
 
 // Leaf is the last token of the path (e.g. "output" for "query output"), the
 // positional a parent command matches to route here. Compare against this in a
 // dispatcher instead of a bare literal to keep it tied to the hint.
-func (c Command) Leaf() string { return c.tokens[len(c.tokens)-1] }
+func (c Command) Leaf() string { return c.words[len(c.words)-1] }
 
 // MatchedBy reports whether words, the bare subcommand words of a magus argv, begin with
 // this command's path. Words past the path are operands and do not stop a match.
 func (c Command) MatchedBy(words []string) bool {
-	return len(words) >= len(c.tokens) && slices.Equal(words[:len(c.tokens)], c.tokens)
+	return len(words) >= len(c.words) && slices.Equal(words[:len(c.words)], c.words)
 }
 
 // Canonical commands referenced from user-facing output. Register every new one
@@ -190,7 +190,7 @@ var (
 // process may have been invoked as ./magus, and that path means nothing there.
 func Lookup(path string) (Command, bool) {
 	for _, c := range AllCommands {
-		if strings.Join(c.tokens, " ") == path {
+		if strings.Join(c.words, " ") == path {
 			return c, true
 		}
 	}

@@ -108,7 +108,7 @@ Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/gr
 | `reason`  | string                           | 2 |             |
 | `gaps`    | [repeated SymbolGap](#symbolgap) | 3 |             |
 
-Used by: [GetInsight (response)](../../insight/v1alpha1/insight.md#getinsight), [QueryNodes (response)](graph.md#querynodes).
+Used by: [GetHistoryMetrics (response)](../../historymetrics/v1alpha1/historymetrics.md#gethistorymetrics), [QueryNodes (response)](graph.md#querynodes).
 
 ### Dependents
 
@@ -411,7 +411,7 @@ Source: [graph.proto](https://github.com/egladman/magus/blob/main/proto/magus/gr
 | `state`        | string | 3 |                                                               |
 | `detail`       | string | 4 |                                                               |
 
-Used by: [GetInsight (response)](../../insight/v1alpha1/insight.md#getinsight), [QueryNodes (response)](graph.md#querynodes).
+Used by: [GetHistoryMetrics (response)](../../historymetrics/v1alpha1/historymetrics.md#gethistorymetrics), [QueryNodes (response)](graph.md#querynodes).
 
 ## Enums
 

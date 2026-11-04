@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // lapsedRules is what the built-in rules that read only the call say of it, for a judgment
@@ -25,7 +26,7 @@ import (
 //
 // They are graded by the settings the judgment loaded when it got that far, else by the
 // ones the last judgment in this cache dir applied, else by the defaults.
-func lapsedRules(ctx context.Context, base Dependencies, log *phaseLog, req Request, env hookRequest, who hookAttribution, input string, isPath bool, cacheDir string) ShellVerdict {
+func lapsedRules(ctx context.Context, base Dependencies, log *phaseLog, req Request, env hookRequest, who hookAttribution, input string, isPath bool, cacheDir, callDir string) ShellVerdict {
 	deps := Dependencies{CacheDir: base.CacheDir, Spells: base.Spells, Builtins: recalledSettings(cacheDir)}
 	if loaded, ok := log.settled(); ok {
 		deps.Builtins, deps.ShellRules, deps.ShellDialect = loaded.Builtins, loaded.ShellRules, loaded.ShellDialect
@@ -40,11 +41,20 @@ func lapsedRules(ctx context.Context, base Dependencies, log *phaseLog, req Requ
 		}
 		d := denySpawnWaiter()
 		return deps.grade(ShellVerdict{Deny: d.Say, Why: d.Why, Rule: denyRule{Name: denyRuleSpawnWaiter}})
-	case isPath || env.IsContinue || input == "":
+	case isPath:
+		return lapsedLedgerWrite(deps, env, input)
+	case env.IsContinue || input == "":
 		return ShellVerdict{}
 	}
 	if v := Evaluate(deps, input); v.Deny != "" {
 		return v
+	}
+	dialect := effectiveDialect(deps.ShellDialect)
+	if reason := denyDeviationCommand(callDir, input, dialect); reason != "" {
+		return deps.grade(ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleDeviationAuthor}})
+	}
+	if g := denyAgentGrant(input, dialect); g.refused() {
+		return deps.grade(ShellVerdict{Deny: g.Say, Why: g.Why, Rule: denyRule{Name: denyRuleGrantIsAPersons}})
 	}
 	// The job store is what the judgment stalled on, so the waiter rules read none.
 	ctx = job.WithSnapshot(ctx, job.Snapshot{Err: context.DeadlineExceeded})
@@ -57,6 +67,61 @@ func lapsedRules(ctx context.Context, base Dependencies, log *phaseLog, req Requ
 		}
 	}
 	return ShellVerdict{}
+}
+
+// lapsedLedgerWrite is deviation-author on a host's write: the rule reads only
+// the call and the ledger, so a lapse has no reason to skip it.
+func lapsedLedgerWrite(deps Dependencies, env hookRequest, target string) ShellVerdict {
+	reason := denyDeviationWrite(target, env.Write)
+	for i := range env.Patch {
+		if reason != "" {
+			break
+		}
+		reason = denyDeviationWrite(env.Patch[i].Path, writeFields{Content: patchContent(env.Patch[i : i+1])})
+	}
+	if reason == "" {
+		return ShellVerdict{}
+	}
+	return deps.grade(ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleDeviationAuthor}})
+}
+
+// lapsedPolicyBudget bounds the policy read a lapse makes past the hook's own
+// budget: the host is still waiting, and little of its timeout is left.
+const lapsedPolicyBudget = 500 * time.Millisecond
+
+// lapsedPersonOnly reports a line that runs a target and is not shown clear
+// of human_only. A lapse never degrades it: nothing finished to ask the person.
+func lapsedPersonOnly(ctx context.Context, base Dependencies, log *phaseLog, root, line string) bool {
+	cmds, ok := ParseCommands(line)
+	if !ok {
+		return false
+	}
+	var runs []targetRun
+	for _, c := range cmds {
+		if r, ok := parseTargetRun(c); ok {
+			runs = append(runs, r)
+		}
+	}
+	if len(runs) == 0 {
+		return false
+	}
+	deps := base
+	if loaded, ok := log.settled(); ok {
+		deps = loaded
+	}
+	if deps.TargetPolicies == nil {
+		return true
+	}
+	wait, cancel := context.WithTimeout(ctx, lapsedPolicyBudget)
+	defer cancel()
+	ix, err := awaitDeadline(wait, func() (types.TargetPolicyIndex, error) {
+		ix, ok := deps.TargetPolicies(wait, root)
+		if !ok {
+			return ix, errNoDependency
+		}
+		return ix, nil
+	})
+	return err != nil || len(reachHumanOnly(indexedHumanOnly{ix}, runs)) > 0
 }
 
 // settingsFile holds the compiled-rule settings the last judgment in a cache dir applied, for

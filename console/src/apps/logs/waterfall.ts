@@ -1,4 +1,3 @@
-import { must } from "../../lib/guards";
 // waterfall.ts - the trace-waterfall (Timeline) view. A Datadog-style waterfall of the
 // invocation: the magus OTel model is invocation=trace, target-exec=span, step=child span. The
 // magus.viewer.v1alpha1 wire format carries no explicit trace_id/span_id, so the span tree is
@@ -38,7 +37,12 @@ const WF_CHAR_W = 7.2;
 const WF_BAR_LABEL_MIN = 64;
 
 // WF_WORD is the word a result is drawn with; the table twin and the bar both use it.
-const WF_WORD: Record<string, string> = { pass: "Passed", fail: "Failed", cached: "Cached" };
+const WF_WORD: Record<string, string> = {
+  pass: "Passed",
+  fail: "Failed",
+  cached: "Cached",
+  permitted: "Permitted",
+};
 
 // A domain (visible time window) - the full run span or a focus window.
 interface Domain {
@@ -162,10 +166,10 @@ function buildSpans(events: Event[], invocation: InvocationView): SpanTree {
     const label = (g.project && g.project !== "." ? g.project + ":" : "") + (g.target || "output");
     const steps: Step[] = [];
     const timed = g.execs.filter((x) => x.t !== null) as { t: number; text: string }[];
-    for (let i = 0; i < timed.length; i++) {
-      const ss = timed[i].t;
-      const ee = i + 1 < timed.length ? timed[i + 1].t : e;
-      steps.push({ label: timed[i].text || "step", s: ss, e: Math.max(ss, ee) });
+    for (const [i, step] of timed.entries()) {
+      const ss = step.t;
+      const ee = timed[i + 1]?.t ?? e;
+      steps.push({ label: step.text || "step", s: ss, e: Math.max(ss, ee) });
     }
     targets.push({
       label,
@@ -451,8 +455,8 @@ export function updateFocusUI(spans: SpanMulti | null): void {
   const active = state.timeline && !!spans && !!spans.groups && spans.groups.length > 0;
   if (sel) (sel as HTMLSelectElement).disabled = !active;
   if (win) {
-    if (state.focusWin && active) {
-      const d = clampFocus(must(spans));
+    if (state.focusWin && active && spans) {
+      const d = clampFocus(spans);
       win.textContent = durMsText(d.t1 - d.t0) + " window";
       win.hidden = false;
     } else win.hidden = true;

@@ -181,6 +181,8 @@ func targetStateToProto(s types.TargetRunState) statusv1.TargetRun_State {
 		return statusv1.TargetRun_STATE_FAILED
 	case types.TargetRunCached:
 		return statusv1.TargetRun_STATE_CACHED
+	case types.TargetRunPermitted:
+		return statusv1.TargetRun_STATE_PERMITTED
 	default:
 		return statusv1.TargetRun_STATE_UNSPECIFIED
 	}

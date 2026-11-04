@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 1,
-    "imports": 6
+    "flow": 0,
+    "imports": 0
   },
   "figure": "buzz-engine",
   "findings": [],
-  "stamp": "sha256:407f497bade37b1665d429295e72e7349cfa02c1a7d34fdd28d2a7ea02db9b06"
+  "stamp": "sha256:ce4d018f2e0d984c5d8dcca7be38f73cf392346e1a1be6a4c471290d817b6314"
 }

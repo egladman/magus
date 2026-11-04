@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,6 +21,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // newTestRegistry builds a wsRegistry with no janitor goroutine, suitable for exercising
@@ -29,6 +32,7 @@ func newTestRegistry() *wsRegistry {
 		ttl:     defaultIdleTTL,
 		now:     time.Now,
 		open:    openWorkspace,
+		leaseOf: func(string) string { return "" },
 		changed: make(chan struct{}),
 		stopCh:  make(chan struct{}),
 	}
@@ -375,4 +379,126 @@ func TestCompleteJobRowIgnoresAnAdoptedRun(t *testing.T) {
 	rows, err := serverJobStore.List()
 	require.NoError(t, err)
 	assert.Empty(t, rows)
+}
+
+// RegistryLeaseSuite pins which broker client a daemon workspace's runs are charged to:
+// the lease its checkout binds, so a worker's runs get its job's weight and caps.
+type RegistryLeaseSuite struct {
+	suite.Suite
+	r      *wsRegistry
+	shared *broker.Client
+	leases map[string]string
+	dialed []string
+	opened []*broker.Client
+	logged bytes.Buffer
+	prior  *slog.Logger
+}
+
+func TestRegistryLeaseSuite(t *testing.T) { suite.Run(t, new(RegistryLeaseSuite)) }
+
+func (s *RegistryLeaseSuite) SetupTest() {
+	s.r = newTestRegistry()
+	s.shared = broker.NewClient("unix:///nonexistent/shared")
+	s.r.broker = s.shared
+	s.leases, s.dialed, s.opened = map[string]string{}, nil, nil
+	s.r.leaseOf = func(root string) string { return s.leases[root] }
+	s.r.leasedBroker = func(lease string) *broker.Client {
+		s.dialed = append(s.dialed, lease)
+		return broker.NewClient("unix:///nonexistent/" + lease)
+	}
+	s.r.open = func(_ string, _ *cache.Limiter, b *broker.Client, _ observability.Provider) (*magus.Magus, error) {
+		s.opened = append(s.opened, b)
+		return &magus.Magus{}, nil
+	}
+	s.logged.Reset()
+	s.prior = slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&s.logged, nil)))
+}
+
+func (s *RegistryLeaseSuite) TearDownTest() {
+	slog.SetDefault(s.prior)
+	close(s.r.stopCh)
+}
+
+func (s *RegistryLeaseSuite) TestALeasedCheckoutOpensWithAClientOfItsOwn() {
+	root := s.T().TempDir()
+	s.leases[root] = "fix-parser"
+
+	e, err := s.r.acquire(root)
+
+	s.Require().NoError(err)
+	s.Equal([]string{"fix-parser"}, s.dialed)
+	s.Require().Len(s.opened, 1)
+	s.NotSame(s.shared, s.opened[0])
+	s.Same(s.opened[0], e.broker)
+	s.Equal("fix-parser", e.lease)
+}
+
+func (s *RegistryLeaseSuite) TestAnUnleasedCheckoutSharesTheServersClient() {
+	e, err := s.r.acquire(s.T().TempDir())
+
+	s.Require().NoError(err)
+	s.Empty(s.dialed)
+	s.Require().Len(s.opened, 1)
+	s.Same(s.shared, s.opened[0])
+	s.Nil(e.broker, "the shared client is the server's to close")
+}
+
+func (s *RegistryLeaseSuite) TestRebindReopensAnIdleWorkspaceWhoseLeaseMoved() {
+	root := s.T().TempDir()
+	e, err := s.r.acquire(root)
+	s.Require().NoError(err)
+	s.r.release(e)
+	s.leases[root] = "fix-parser"
+
+	s.r.rebind(root, s.r.leaseOf(root))
+	again, err := s.r.acquire(root)
+
+	s.Require().NoError(err)
+	s.NotSame(e, again)
+	s.Equal("fix-parser", again.lease)
+	s.Len(s.opened, 2)
+}
+
+func (s *RegistryLeaseSuite) TestRebindKeepsABusyWorkspace() {
+	root := s.T().TempDir()
+	e, err := s.r.acquire(root)
+	s.Require().NoError(err)
+	s.leases[root] = "fix-parser"
+
+	s.r.rebind(root, s.r.leaseOf(root))
+
+	s.Same(e, s.r.entries[root], "a run in flight keeps the lease it opened with")
+	s.Len(s.opened, 1)
+}
+
+func (s *RegistryLeaseSuite) TestRebindKeepsAWorkspaceWhoseLeaseHeld() {
+	root := s.T().TempDir()
+	s.leases[root] = "fix-parser"
+	e, err := s.r.acquire(root)
+	s.Require().NoError(err)
+	s.r.release(e)
+
+	s.r.rebind(root, s.r.leaseOf(root))
+
+	s.Same(e, s.r.entries[root])
+	s.Len(s.opened, 1)
+}
+
+func (s *RegistryLeaseSuite) TestAnUnleasedRunSaysSo() {
+	noticeRunLease(s.T().Context(), "", "")
+
+	s.Contains(s.logged.String(), "this run is unleased")
+}
+
+func (s *RegistryLeaseSuite) TestARunWhoseClaimTheCheckoutDoesNotBindSaysSo() {
+	noticeRunLease(s.T().Context(), "", "fix-parser")
+
+	s.Contains(s.logged.String(), "this run names lease fix-parser, but its checkout binds none")
+}
+
+func (s *RegistryLeaseSuite) TestALeasedRunSaysNothing() {
+	noticeRunLease(s.T().Context(), "fix-parser", "fix-parser")
+
+	s.Empty(s.logged.String())
 }

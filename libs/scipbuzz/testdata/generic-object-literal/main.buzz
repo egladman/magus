@@ -1,0 +1,12 @@
+import "./lib/box" as b;
+
+object Pair::<A, B> {
+    left: A,
+    right: B,
+}
+
+fun main() > void {
+    final _local = Pair::<int, str>{ left = 1, right = "x" };
+    final _nested = Pair::<int, [Pair::<int, int>]>{ left = 1, right = [] };
+    final _spaced = b\Box::<int>{ value = 2 };
+}

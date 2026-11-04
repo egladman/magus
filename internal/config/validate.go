@@ -15,8 +15,9 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/go-playground/validator/v10"
@@ -90,7 +91,10 @@ func Validate(cfg Config) error {
 	failures = append(failures, spellImportFailures(cfg.Spells.Imports)...)
 	failures = append(failures, cacheWriteFailures(cfg.Cache)...)
 	failures = append(failures, mcpHTTPFailures(cfg.MCP)...)
+	failures = append(failures, allowedOriginFailures(cfg.MCP.AllowedOrigins)...)
 	failures = append(failures, conformanceFailures(cfg.Knowledge.Conformance)...)
+	failures = append(failures, diagnosticsFailures(cfg.Diagnostics)...)
+	failures = append(failures, sourceFailures(cfg.Sources)...)
 	if !cfg.Broker.Valid() {
 		failures = append(failures, FieldFailure{Field: "broker", Tag: "oneof",
 			Param: strings.Join(cfg.Broker.Values(), " "), Value: string(cfg.Broker)})
@@ -163,6 +167,42 @@ func spellImportFailures(imports map[string]SpellImport) []FieldFailure {
 	return out
 }
 
+// diagnosticsFailures registers the workspace prefix, failing on one a code could not carry
+// or one colliding with a registered catalog's, and refuses a docs template with no {code}
+// in it, which would send every code to one page.
+func diagnosticsFailures(d Diagnostics) []FieldFailure {
+	var out []FieldFailure
+	if d.Prefix != "" {
+		if err := types.RegisterDiagnosticPrefix(d.Prefix); err != nil {
+			out = append(out, FieldFailure{Field: "diagnostics.prefix", Tag: "diagnostic_prefix", Param: err.Error(), Value: d.Prefix})
+		}
+	}
+	if d.Docs != "" && !strings.Contains(d.Docs, "{code}") {
+		out = append(out, FieldFailure{Field: "diagnostics.docs", Tag: "diagnostic_docs", Value: d.Docs})
+	}
+	if d.Docs != "" && d.Prefix == "" {
+		out = append(out, FieldFailure{Field: "diagnostics.docs", Tag: "diagnostic_docs_prefix", Value: d.Docs})
+	}
+	return out
+}
+
+// sourceFailures refuses an entry with no url or an unknown verdict.
+// Param carries the url so the error names the entry.
+func sourceFailures(sources []Source) []FieldFailure {
+	var out []FieldFailure
+	for i, s := range sources {
+		field := fmt.Sprintf("sources[%d]", i)
+		if s.URL == "" {
+			out = append(out, FieldFailure{Field: field + ".url", Tag: "required"})
+		}
+		if !s.Verdict.Valid() {
+			out = append(out, FieldFailure{Field: field + ".verdict", Tag: "source_verdict",
+				Param: s.URL, Value: string(s.Verdict)})
+		}
+	}
+	return out
+}
+
 // cacheWriteFailures refuses writing the remote tier with the local tier off: a
 // remote-tier entry is exported from the local-tier one, so it could never take effect.
 func cacheWriteFailures(c Cache) []FieldFailure {
@@ -181,15 +221,23 @@ func mcpHTTPFailures(m MCP) []FieldFailure {
 	return []FieldFailure{{Field: "mcp.http", Tag: "mcp_enabled_required", Value: "true"}}
 }
 
-// conformanceFailures checks what no tag can: the ratchet path, the exclusions, and the
-// metric, population and scope keys of knowledge.conformance.checks. An unknown key is named,
-// since a check that is never read would pass without anyone noticing.
+// allowedOriginFailures names each entry the server would refuse to start on.
+func allowedOriginFailures(origins []string) []FieldFailure {
+	var failures []FieldFailure
+	for _, origin := range origins {
+		if _, err := (httpx.AllowedSet{}).AllowOrigin(origin); err != nil {
+			failures = append(failures, FieldFailure{Field: "mcp.allowed_origins", Tag: "exact_origin", Value: origin})
+		}
+	}
+	return failures
+}
+
+// conformanceFailures checks what no tag can: the exclusions, and the metric, population and
+// scope keys of knowledge.conformance.checks. An unknown key is named, since a check that is
+// never read would pass without anyone noticing.
 func conformanceFailures(c ConformanceConfig) []FieldFailure {
 	const root = "knowledge.conformance"
 	var out []FieldFailure
-	if c.Ratchet != "" && !filepath.IsLocal(filepath.FromSlash(c.Ratchet)) {
-		out = append(out, FieldFailure{Field: root + ".ratchet", Tag: "conformance_ratchet_path", Value: c.Ratchet})
-	}
 	for i, pattern := range c.Exclude {
 		field := fmt.Sprintf("%s.exclude[%d]", root, i)
 		switch {
@@ -315,8 +363,6 @@ func humanReason(f FieldFailure) string {
 			key.WriteRune(r)
 		}
 		return fmt.Sprintf("must be greater than %s beside it (got %s)", key.String(), f.Value)
-	case "conformance_ratchet_path":
-		return fmt.Sprintf("must be a file inside the workspace, relative to magus.yaml (got %q)", f.Value)
 	case "conformance_exclude_glob":
 		return fmt.Sprintf("is not a valid glob, so it would exclude nothing (got %q)", f.Value)
 	case "conformance_metric":
@@ -355,6 +401,17 @@ func humanReason(f FieldFailure) string {
 		return "cannot be true while cache.write.enabled is false: the remote cache tier is written from the local tier, so there would be nothing to write; enable cache.write.enabled or set this false"
 	case "mcp_enabled_required":
 		return "cannot be true while mcp.enabled is false: the server serves no MCP at all then, so there is no HTTP endpoint to mount; enable mcp.enabled or drop this key"
+	case "exact_origin":
+		return fmt.Sprintf("must be an exact http or https scheme://host origin, as a browser sends it (got %q)", f.Value)
+	case "diagnostic_prefix":
+		return f.Param
+	case "diagnostic_docs":
+		return fmt.Sprintf("must hold {code}, which stands for the code being documented (got %q)", f.Value)
+	case "diagnostic_docs_prefix":
+		return "documents codes, but diagnostics.prefix declares none for the workspace to mint"
+	case "source_verdict":
+		return fmt.Sprintf("entry %s must be one of: %s (got %q)", f.Param,
+			strings.Join(SourceVerdict("").Values(), ", "), f.Value)
 	case "spell_path_nested":
 		return fmt.Sprintf("nests inside spells.%s; each remote spell is laid out as a directory named by its path, so one cannot hold another", f.Param)
 	default:

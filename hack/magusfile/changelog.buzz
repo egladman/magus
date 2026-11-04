@@ -499,7 +499,7 @@ test "read skips dotfiles, reports every bad file, and orders by name" {
     fs\writeFile(fs\join(dir, "notes.txt"), content: "### Added\n\n- **Wrong extension.**\n") catch void;
     var err = "";
     try {
-        read(dir);
+        _ = read(dir);
     } catch (e) {
         err = e;
     }

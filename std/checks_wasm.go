@@ -11,8 +11,8 @@ import (
 // calls before doing anything. On the native build they live in fs.go and consult
 // the policy on ctx; that file is //go:build !wasm, so the wasm build needs its own.
 //
-// They REFUSE rather than allow, and the reason is not that the sandbox denies it -
-// there is no policy in a browser - but that there is no filesystem to reach at all.
+// They REFUSE rather than allow, and the reason is not a sandbox denial.
+// There is no policy in a browser, and no filesystem to reach at all.
 // Returning nil would be defensible and is worse in practice: the call would sail
 // through the gate and fail deeper in, as a raw Go error about a path that could
 // never have existed, from a stack that says nothing about the browser.

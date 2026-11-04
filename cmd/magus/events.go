@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/eventstream"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
 
@@ -64,16 +66,9 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 		return exit.Usagef("magus events: unexpected argument %q (this command takes flags only)", rest[0])
 	}
 
-	// The stream IS the format: one event per line, forever, so there is no document to
-	// close and nothing json or yaml could wrap. -o was accepted and ignored here, which
-	// left `magus events -o json` looking like it had asked for something. --tee still
-	// works, because what it mirrors is already JSONL.
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
-	}
-	if opts.Format != outputText && opts.Format != outputJSONL {
-		return exit.Usagef("magus events: -o %s is not supported; the event stream is JSONL only (one event per line) and never closes, so there is no document to render", opts.Format)
 	}
 
 	filter, err := parseStreamFilter(ef.Type)
@@ -104,6 +99,10 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 	defer func() { _ = cleanup() }()
 	w := eventstream.NewWriter(destination, filter)
 	defer func() { _ = w.Close() }()
+	emit := w.Emit
+	if opts.Format != outputText && opts.Format != outputJSONL {
+		emit = eventRecordEmitter(opts, filter)
+	}
 
 	f := eventstream.NewFollower(filepath.Join(cacheDir, cache.RunsDir), workspace)
 	// --limit 0 means replay NOTHING, which is what a notifier wants: waking up and
@@ -116,11 +115,11 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 			return err
 		}
 	case ef.Limit < 0:
-		if err := f.Replay(0, w.Emit); err != nil {
+		if err := f.Replay(0, emit); err != nil {
 			return err
 		}
 	default:
-		if err := f.Replay(ef.Limit, w.Emit); err != nil {
+		if err := f.Replay(ef.Limit, emit); err != nil {
 			return err
 		}
 	}
@@ -131,7 +130,21 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 	// No signal handling here: watchInterrupts already cancels this ctx and turns
 	// the signal into magus's conventional 128+N exit. Registering a second
 	// handler for the same signals would fight it for no gain.
-	return f.Follow(ctx, ef.Interval, w.Emit)
+	return f.Follow(ctx, ef.Interval, emit)
+}
+
+// eventRecordEmitter renders each event alone as it arrives. The stream never
+// closes, so no document could wrap it. A -o name line is the event's type.
+func eventRecordEmitter(opts output.Options, filter types.StreamFilter) func(types.StreamEvent) error {
+	var mu sync.Mutex
+	return func(e types.StreamEvent) error {
+		if e.Body == nil || !filter.Allows(e.Body.StreamType()) {
+			return nil
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		return emitRecord(opts, e, []string{string(e.Body.StreamType())})
+	}
 }
 
 // parseStreamFilter turns the --type list into a filter, refusing an unknown

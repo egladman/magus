@@ -2,10 +2,13 @@ package std
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 func renderMD(t *testing.T, src string) string {
@@ -24,6 +27,20 @@ func TestMarkdownToHTMLTable(t *testing.T) {
 func TestMarkdownToHTMLHeadingID(t *testing.T) {
 	html := renderMD(t, "## Charm vs Target\n")
 	assert.Contains(t, html, `id="charm-vs-target"`, "auto heading id missing:\n%s", html)
+}
+
+func TestMarkdownSectionsMatchRenderedIDs(t *testing.T) {
+	src := "# Setup\n\n```sh\n# not a heading\n```\n\n## Setup\nbody\n"
+	got, err := MarkdownSections(context.Background(), src)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	html := renderMD(t, src)
+	for _, s := range got {
+		assert.Contains(t, html, fmt.Sprintf("id=%q", s.Anchor))
+	}
+	assert.NotEmpty(t, got[0].Digest)
+	assert.Equal(t, types.MarkdownSection{Anchor: "setup", Level: 1, StartLine: 1, EndLine: 8, BodyEndLine: 5, Digest: got[0].Digest}, got[0])
+	assert.Equal(t, "setup-1", got[1].Anchor)
 }
 
 func TestMarkdownToHTMLLinkRewrite(t *testing.T) {

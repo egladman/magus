@@ -774,7 +774,7 @@ func TestUnintegratedBranchesSkipsWorkTheBaseHolds(t *testing.T) {
 		"a squash-merged branch, a branch an integration job names whatever its state, and a passed integration job's own branch are integrated")
 }
 
-func TestIntegrationAdviceCountsOnlyTheForkersOwnTree(t *testing.T) {
+func TestForkFactsCountOnlyTheForkersOwnTree(t *testing.T) {
 	t.Parallel()
 	s, loc, repo := worktreeStore(t)
 	main := repo.Git("symbolic-ref", "--short", "HEAD")
@@ -794,19 +794,37 @@ func TestIntegrationAdviceCountsOnlyTheForkersOwnTree(t *testing.T) {
 	_, err = s.RecordWorktree(t.Context(), "peer", types.JobWorktree{Root: t.TempDir(), Source: peerRoot})
 	require.NoError(t, err)
 	seed(t, s, types.Job{ID: "peer-a", Parent: "peer", State: types.StatePass})
-	limits := config.Jobs{IntegrateAdviseAt: 2, IntegrateRefuseAt: 2}
-
-	advice, refuse, err := s.IntegrationAdvice(t.Context(), limits)
+	rows, err := s.List()
 	require.NoError(t, err)
-	assert.True(t, refuse, "the tree with two finished branches is at the threshold")
-	assert.Contains(t, advice, "mine-a (job mine-a, 1 commit(s)), mine-b (job mine-b, 1 commit(s)). Integrate them first",
-		"the refusal names this tree's branches and no peer's")
+
+	facts := ForkFacts(t.Context(), repo.Root(), rows, FullTest{})
+	assert.Equal(t, []string{"mine-a (job mine-a, 1 commit(s))", "mine-b (job mine-b, 1 commit(s))"}, facts.FinishedBranches,
+		"the peer's branch is not this tree's")
+	assert.Contains(t, facts.IntegrateRecord, `"integrates":["mine-a","mine-b"]`)
+	assert.Contains(t, facts.TestUnknown, "no passed full test", "no run on record says so rather than reading as zero")
 	waiting, err := s.UnintegratedBranches(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, []Unintegrated{{Job: "mine-a", Branch: "mine-a", Commits: 1}, {Job: "mine-b", Branch: "mine-b", Commits: 1}}, waiting,
-		"the peer's branch is not this tree's")
+	assert.Equal(t, []Unintegrated{{Job: "mine-a", Branch: "mine-a", Commits: 1}, {Job: "mine-b", Branch: "mine-b", Commits: 1}}, waiting)
 
-	advice, refuse, err = peer.IntegrationAdvice(t.Context(), limits)
+	peerRows, err := peer.List()
 	require.NoError(t, err)
-	assert.Equal(t, []any{"", false}, []any{advice, refuse}, "the peer's tree holds one finished branch, below the threshold")
+	assert.NotContains(t, ForkFacts(t.Context(), peerRoot, peerRows, FullTest{}).FinishedBranches, "mine-a (job mine-a, 1 commit(s))",
+		"another tree's backlog is not the peer's")
+}
+
+func TestForkFactsCountCommitsSinceTheLastFullTest(t *testing.T) {
+	t.Parallel()
+	_, _, repo := worktreeStore(t)
+	tested := strings.TrimSpace(repo.Git("rev-parse", "HEAD"))
+	repo.Commit("one", map[string]string{"one.txt": "1\n"})
+	repo.Commit("two", map[string]string{"two.txt": "2\n"})
+
+	facts := ForkFacts(t.Context(), repo.Root(), nil, FullTest{Ref: "out1", Revision: tested})
+	assert.Equal(t, 2, facts.CommitsSinceTest)
+	assert.Empty(t, facts.TestUnknown)
+	assert.Contains(t, ForkFactsLine(facts), fmt.Sprintf("2 commit(s) since the last full test (out1 at %s)", tested))
+	assert.Contains(t, ForkFactsLine(facts), "0 finished branches off the base")
+
+	gone := ForkFacts(t.Context(), repo.Root(), nil, FullTest{Ref: "out1", Revision: "0000000000000000000000000000000000000000"})
+	assert.NotEmpty(t, gone.TestUnknown, "a revision the history lost is unknown, not zero")
 }

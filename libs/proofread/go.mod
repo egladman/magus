@@ -6,3 +6,5 @@ require (
 	github.com/egladman/magus/libs/diagnostics v0.2.0
 	golang.org/x/tools v0.47.0
 )
+
+replace github.com/egladman/magus/libs/diagnostics => ../diagnostics

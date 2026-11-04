@@ -72,7 +72,7 @@ magus\project({
 
 The go spell's `govulncheck` op declares `External.reads`, which `magus doctor` reads
 to flag a cacheable target composing it (MGS1033). The op captures its output and
-defaults its package pattern to `./...`, so the recipe calls it with
+defaults its package pattern to `./...`, so the guide calls it with
 `{"args": ["-format", "json", "./..."]}` and reads the JSON from the result's `stdout`.
 
 ## 4. Classes
@@ -168,7 +168,7 @@ GitHub's dependency-review-action and osv-scanner's pull request mode make the s
 split. dependency-review-action reads GitHub's hosted dependency graph, which a private
 repository gets only with GitHub Advanced Security. osv-scanner scans the base and the
 head and diffs the two result sets, so every pull request pays for two scans. This
-recipe runs one scan and one manifest read, needs no hosted service, and covers a
+approach runs one scan and one manifest read, needs no hosted service, and covers a
 private repository and pnpm the same way.
 
 ## 9. Copy this

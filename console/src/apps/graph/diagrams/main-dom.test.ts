@@ -345,17 +345,17 @@ describe("the Diagrams app", () => {
     await settle();
     assert.equal(rt.figures.length, 1);
     const f = rt.figures[0];
-    assert.equal(f.graphEdges, true);
-    assert.equal(f.unscopedWhy, "");
+    assert.equal(f?.graphEdges, true);
+    assert.equal(f?.unscopedWhy, "");
     assert.deepEqual(
-      f.boxes.map((b) => [b.label, b.dir?.path, b.dir?.imports, b.dir?.importsIndexed, b.actor]),
+      f?.boxes.map((b) => [b.label, b.dir?.path, b.dir?.imports, b.dir?.importsIndexed, b.actor]),
       [
         ["internal/a", "internal/a", ["internal/b"], true, null],
         ["internal/b", "internal/b", [], true, null],
       ],
       "the scope cut c before layout, and each box carries the imports the SVG drew",
     );
-    assert.deepEqual(f.flows, []);
+    assert.deepEqual(f?.flows, []);
     instance.deactivate();
   });
 
@@ -394,14 +394,14 @@ describe("the Diagrams app", () => {
       assert.deepEqual(requests, [], "a link needs no server");
       assert.equal(rt.figures.length, 1);
       assert.deepEqual(
-        rt.figures[0].boxes.map((b) => [b.actor?.name, b.actor?.tag, b.actor?.look]),
+        rt.figures[0]?.boxes.map((b) => [b.actor?.name, b.actor?.tag, b.actor?.look]),
         [
           ["lib", "edited", "focal"],
           ["app", "", "plain"],
         ],
       );
       assert.deepEqual(
-        rt.figures[0].flows.map((f) => [f.src.actor?.name, f.dst.actor?.name]),
+        rt.figures[0]?.flows.map((f) => [f.src.actor?.name, f.dst.actor?.name]),
         [["lib", "app"]],
         "an edge runs dependency to dependent",
       );
@@ -642,7 +642,7 @@ test("server rows take the ids the figure draws", () => {
 });
 
 test("the actor record carries every value as data, however it is spelled", () => {
-  const f = buildFigure(
+  const built = buildFigure(
     {
       nodes: [
         { id: "external:a", anchor: "x/y", label: 'say "{hi}"' },
@@ -653,23 +653,23 @@ test("the actor record carries every value as data, however it is spelled", () =
     { id: "targets:app", title: "T", claim: "flow", anchorHref: "" },
     "scope x",
   );
+  assert.ok(!built.error);
+  const f = built.value;
   assert.equal(f.id, "targets-app");
   assert.equal(f.desc, "scope x");
-  assert.equal(f.boxes[0].actor?.name, 'say "{hi}"', "no quoting: the label crosses as a value");
-  assert.equal(f.boxes[0].actor?.look, "plain");
+  assert.equal(f.boxes[0]?.actor?.name, 'say "{hi}"', "no quoting: the label crosses as a value");
+  assert.equal(f.boxes[0]?.actor?.look, "plain");
   assert.deepEqual(
     f.flows.map((fl) => [fl.src.actor?.name, fl.dst.actor?.name]),
     [['say "{hi}"', "b"]],
   );
-  assert.throws(
-    () =>
-      buildFigure(
-        { nodes: [{ id: "external:a", anchor: "a", label: "a" }], edges: [["external:a", "gone"]] },
-        { id: "projects", title: "P", claim: "flow", anchorHref: "" },
-        "",
-      ),
-    /edge external:a->gone to no node/,
+  const dangling = buildFigure(
+    { nodes: [{ id: "external:a", anchor: "a", label: "a" }], edges: [["external:a", "gone"]] },
+    { id: "projects", title: "P", claim: "flow", anchorHref: "" },
+    "",
   );
+  assert.ok(dangling.error);
+  assert.match(dangling.error.message, /edge external:a->gone to no node/);
 });
 
 test("a draw result is a figure, a refusal or a failure", () => {
@@ -701,7 +701,9 @@ test("the runtime is globalThis.buzz with drawFigure, and the record crosses as 
   });
   assert.ok(rt);
   const meta = { id: "p", title: "P", claim: "flow", anchorHref: "" };
-  const f = buildFigure({ nodes: [], edges: [] }, meta, "");
+  const built = buildFigure({ nodes: [], edges: [] }, meta, "");
+  assert.ok(!built.error);
+  const f = built.value;
   assert.deepEqual(rt.drawFigure(f, ""), drew("<svg/>"));
   assert.deepEqual(JSON.parse(sent), f);
   const odd = runtimeFrom({ buzz: { drawFigure: () => 7 } });

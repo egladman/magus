@@ -25,7 +25,7 @@ func TestAnalyzer(t *testing.T) {
 
 // An allowed file is never reported for its writes, and an entry naming one file is
 // reported once that file has none left.
-func TestAnalyzerRatchetsAllowedFiles(t *testing.T) {
+func TestAnalyzerAllowListOnlyShrinks(t *testing.T) {
 	opts := sources
 	opts.Allow = []AllowEntry{
 		{File: "staged/staged.go", Reason: "staged"},

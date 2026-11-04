@@ -8,7 +8,7 @@ try {
         "https://httpbin.org/put",
         "hello",
         { "Content-Type": "text/plain" },
-        { "timeout": 10 },
+        http\Options{ timeoutSeconds = 10.0 },
     );
     std\print(r.status);
 } catch (e) {

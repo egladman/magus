@@ -1,13 +1,16 @@
 package guard
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -16,6 +19,50 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+// HookRowAppendSuite pins that the rows a hook files never read the session
+// store: a second open on disk shows no fold answered first.
+type HookRowAppendSuite struct {
+	suite.Suite
+	ctx  context.Context
+	root string
+	at   location
+}
+
+func TestHookRowAppendSuite(t *testing.T) {
+	suite.Run(t, new(HookRowAppendSuite))
+}
+
+func (s *HookRowAppendSuite) SetupTest() {
+	testkit.Isolate(s.T())
+	s.ctx, s.root = fleetFixture(s.T(), fixture.FleetLeases()...)
+	s.at = hookLocation(s.ctx, Dependencies{})
+}
+
+func (s *HookRowAppendSuite) assertTwoOpensOneRow() {
+	dir, err := sessions.Dir(s.root)
+	s.Require().NoError(err)
+	fold, err := sessions.ReadAll(dir)
+	s.Require().NoError(err)
+	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r sessions.Record) bool { return r.Kind != sessions.KindAttentionOpen })
+	s.Len(opens, 2)
+	s.Len(sessions.AttentionQueue(fold), 1)
+}
+
+func (s *HookRowAppendSuite) TestAStallRowAppends() {
+	who := hookAttribution{Host: "test-host", Session: "s"}
+	verdict := types.GuardJudgment{Rule: string(denyRuleLeaseWrite), Reason: "outside"}
+	fileStallRow(s.ctx, s.at, who, "lease-b", verdict, stallRecord{Refusals: 1})
+	fileStallRow(s.ctx, s.at, who, "lease-b", verdict, stallRecord{Refusals: 1})
+	s.assertTwoOpensOneRow()
+}
+
+func (s *HookRowAppendSuite) TestACompatRowAppends() {
+	who := hookAttribution{Host: "test-host", Session: "s"}
+	fileCompatRow(s.ctx, s.at, who, "lease-b", "cmd/magus/old.go", []string{"legacy:"})
+	fileCompatRow(s.ctx, s.at, who, "lease-b", "cmd/magus/old.go", []string{"legacy:"})
+	s.assertTwoOpensOneRow()
+}
 
 func TestStallLevel(t *testing.T) {
 	t.Parallel()

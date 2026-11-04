@@ -71,7 +71,7 @@ MF
 
 # ── Makefile ──────────────────────────────────────────────────────────────────
 # One target per project, each with its real prerequisites. The single .PHONY
-# `all` this replaced ran four recipe lines in sequence with no prerequisites,
+# `all` this replaced ran four make-rule lines in sequence with no prerequisites,
 # so `make -j8` got no parallelism and make rebuilt everything every time: it
 # was being compared on cold builds only, while every other tool was measured
 # with the incrementality it has.

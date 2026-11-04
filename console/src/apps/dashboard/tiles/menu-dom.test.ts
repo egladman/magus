@@ -20,7 +20,8 @@ function mount(runs: string[]) {
   return menu;
 }
 
-function key(el: Element, k: string): void {
+function key(el: Element | undefined, k: string): void {
+  assert.ok(el, `no element to press ${k} on`);
   el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
 }
 
@@ -53,7 +54,7 @@ test("choosing an item runs it and closes the menu", () => {
   const runs: string[] = [];
   const menu = mount(runs);
   menu.button.click();
-  items()[1].click();
+  items()[1]?.click();
   assert.deepEqual(runs, ["second"]);
   assert.equal(menu.el.querySelector<HTMLElement>(".pf-v6-c-menu")?.hidden, true);
   menu.dispose();
@@ -65,7 +66,7 @@ test("setActions replaces the rows without re-wiring", () => {
   menu.setActions([{ label: "Only", run: () => runs.push("only") }]);
   menu.button.click();
   assert.equal(items().length, 1);
-  items()[0].click();
+  items()[0]?.click();
   assert.deepEqual(runs, ["only"]);
   menu.dispose();
 });

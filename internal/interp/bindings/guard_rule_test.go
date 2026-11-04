@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"context"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
@@ -17,7 +18,7 @@ import "magus";
 
 magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     if (req.command == "named") {
-        return GuardVerdict{decision = "deny", reason = "Lead with the outcome.", rule = "pull-request-text"};
+        return GuardVerdict{decision = magus\GuardDecision.deny, reason = "Lead with the outcome.", rule = "pull-request-text"};
     }
     return magus\guard.deny("unnamed");
 });
@@ -33,6 +34,71 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 		require.NoError(t, err, command)
 		assert.Equal(t, want, got, command)
 	}
+}
+
+// A rule's deny reaches the guard as a deny: the decision crosses as an enum case.
+func TestCommandRuleDenyDenies(t *testing.T) {
+	rule, err := loadCommandRule(t, `
+import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    if (req.command == "git push") {
+        return magus\guard.deny("Ask before pushing.");
+    }
+    return magus\guard.allow();
+});
+`)
+	require.NoError(t, err)
+	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
+
+	got, err := rule(t.Context(), types.CommandRequest{Command: "git push"}, facts)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Ask before pushing."}, got)
+
+	got, err = rule(t.Context(), types.CommandRequest{Command: "ls"}, facts)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
+}
+
+// A rule that denies on the caller's role denies a worker and passes the root.
+func TestCommandRuleDeniesOnRole(t *testing.T) {
+	rule, err := loadCommandRule(t, `
+import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    if (req.role == magus\AgentRole.worker) {
+        return magus\guard.deny("A worker does not build.");
+    }
+    return magus\guard.allow();
+});
+`)
+	require.NoError(t, err)
+	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
+
+	got, err := rule(t.Context(), types.CommandRequest{Command: "go build", Role: types.AgentRoleWorker}, facts)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "A worker does not build."}, got)
+
+	got, err = rule(t.Context(), types.CommandRequest{Command: "go build", Role: types.AgentRoleRoot}, facts)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
+}
+
+// Comparing a boundary record's enum field to a string literal is always false, so a
+// rule that does it would never fire: the checker refuses it at load.
+func TestCommandRuleComparingAnEnumFieldToAStringFailsToLoad(t *testing.T) {
+	_, err := loadCommandRule(t, `
+import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    if (req.role == "worker") {
+        return magus\guard.deny("A worker does not build.");
+    }
+    return magus\guard.allow();
+});
+`)
+	require.ErrorContains(t, err, "BZZ1005")
+	require.ErrorContains(t, err, "== between an enum and `str` is always false")
 }
 
 // deny's and advise's opts name the rule.
@@ -51,7 +117,7 @@ func TestVerdictRuleOpt(t *testing.T) {
 // guard through deny's opts or a GuardVerdict the rule built itself.
 func TestGuardVerdictRuleNameIsValidated(t *testing.T) {
 	guardMap := vm.NewMap()
-	registerVerdictMembers(nil, guardMap)
+	registerVerdictMembers(context.Background(), nil, nil, guardMap)
 	deny := requireDirect(t, guardMap, "deny")
 	opts := func(key string, v vm.Value) vm.Value {
 		m := vm.NewMap()

@@ -225,16 +225,14 @@ func (u *ui) wireShare() {
 // wireDownload turns the file bar's Download button into a save of whatever is in
 // the editor. Nothing is uploaded and nothing is fetched: the click wraps the
 // textarea's value in a Blob, points a synthetic <a download> at an object URL for
-// it, and clicks that. Same property the Share button has - the snippet never
-// leaves the browser - reached the other way.
+// it, and clicks that. Like Share, the snippet never leaves the browser.
 //
 // Hidden rather than left inert where object URLs are missing, for wireShare's
 // reason: a button that cannot do its job should not be drawn.
 //
 // No outcome flash, unlike Share. A copy either reached the clipboard or did not,
-// and the promise says which; a save is handed to the browser, which may still put
-// up a dialog the visitor cancels - so "Saved" would be a claim this code cannot
-// check. The browser's own download UI is the report.
+// and the promise says which. A save goes to the browser, so "Saved" could not
+// be checked. The browser's own download UI is the report.
 func (u *ui) wireDownload() {
 	btn := u.doc.Call("getElementById", "download-btn")
 	if !btn.Truthy() {

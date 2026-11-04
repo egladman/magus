@@ -33,7 +33,7 @@ import (
 // and transcript path are opaque pointers, recorded so a PERSON can follow them with the
 // tool that wrote them.
 func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
-	fset := flag.NewFlagSet("checkpoint", flag.ContinueOnError)
+	fset := flag.NewFlagSet("session checkpoint", flag.ContinueOnError)
 	bindDisplayFlags(fset)
 	cf := flaggen.BindSessionCheckpoint(fset)
 	fset.Usage = func() { checkpointUsage(os.Stderr) }

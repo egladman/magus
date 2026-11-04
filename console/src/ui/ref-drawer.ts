@@ -1,6 +1,7 @@
 import { persisted } from "../lib/persist";
 import { createTextSearch, type TextSearchEntry } from "@magus/textsearch";
 import type { PageModule, PageController, SearchProvider } from "../desktop/page";
+import { ok, type Result } from "../gen/magus/types";
 
 // One docs-index record. It carries a url (for the result link) on top of the fields the
 // shared ranker reads; the engine ignores url and hands it back on each result. This is the
@@ -31,7 +32,7 @@ async function loadRefIndex(signal?: AbortSignal): Promise<RefEntry[] | null> {
     : ["../search-index.json", "search-index.json"];
   for (const url of candidates) {
     try {
-      const r = await fetch(url, { signal });
+      const r = await fetch(url, signal ? { signal } : {});
       if (!r.ok) continue;
       const data = (await r.json()) as RefEntry[];
       if (Array.isArray(data)) return data;
@@ -359,7 +360,8 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
           a.scrollIntoView({ block: "nearest" });
         } else a.removeAttribute("aria-selected");
       });
-      if (sel >= 0 && opts[sel]) searchInput.setAttribute("aria-activedescendant", opts[sel].id);
+      const selected = opts[sel];
+      if (selected) searchInput.setAttribute("aria-activedescendant", selected.id);
       else searchInput.removeAttribute("aria-activedescendant");
     };
 
@@ -493,9 +495,10 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
         sel = (sel <= 0 ? opts.length : sel) - 1;
         highlight();
       } else if (e.key === "Enter") {
-        if (sel >= 0 && opts[sel]) {
+        const selected = opts[sel];
+        if (selected) {
           e.preventDefault();
-          window.open(opts[sel].href, "_blank", "noopener");
+          window.open(selected.href, "_blank", "noopener");
         }
       } else if (e.key === "Escape" && !resultsEl.hidden) {
         // Swallow Escape while a result list is open so it closes the list, not the whole panel.
@@ -669,7 +672,7 @@ export function referenceApp(): PageModule<null, null> {
   return {
     id: "reference",
     title: "Reference",
-    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+    async activate(host: HTMLElement): Promise<Result<PageController<null, null>>> {
       const root = document.createElement("div");
       root.dataset.app = "reference";
       const body = document.createElement("div");
@@ -689,7 +692,7 @@ export function referenceApp(): PageModule<null, null> {
       }
       root.append(body);
       host.append(root);
-      return { search: noRefSearch, setVisible() {}, deactivate: () => {} };
+      return ok({ search: noRefSearch, setVisible() {}, deactivate: () => {} });
     },
   };
 }

@@ -70,6 +70,30 @@ export fun beta(ctx: magus\Context, args: [str]) > void !> any {
 	}
 }
 
+// A workspace opened at a bare directory has no marker, so the guard once
+// fell back to the cwd's workspace. This one keeps `build svc` for a person.
+func TestRunIsNeverJudgedByTheWorkspaceInTheCwd(t *testing.T) {
+	cwd := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "magus.yaml"), nil, 0o644))
+	writeProject(t, cwd, "svc", `
+import "magus";
+magus\project({"targets": {"build": {"human_only": "a person runs this"}}});
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`)
+	t.Chdir(cwd)
+
+	root := t.TempDir()
+	writeProject(t, root, "svc", "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void !> any {}\n")
+	ctx := context.Background()
+	m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
+	require.NoError(t, err, "Open")
+	defer func() { _ = m.Close() }()
+
+	targets, err := m.ExpandPath(types.Target{Name: "build"})
+	require.NoError(t, err, "ExpandPath")
+	require.NoError(t, m.Run(ctx, targets), "Run")
+}
+
 // TestRunToolchainChangeRebuilds is the R1 proof: a project's cached build is
 // replayed when nothing changes, but a change in the spell's probed toolchain
 // version (with identical sources) produces a miss and re-runs. The fake spell
@@ -147,7 +171,7 @@ import "proc";
 magus\project("svc", {});
 export fun hit(ctx: magus\Context, args: [str]) > void !> any {
     final c = proc\shell("printf x >> count");
-    proc\exec(c.bin, c.args, "", {});
+    proc\exec(c.bin, c.args, "", proc\ExecOptions{});
 }
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
@@ -250,7 +274,7 @@ import "os";
 import "proc";
 fun record(name: str) > void !> any {
     final c = proc\shell("printf '%s\n' " + name + " >> ci-order");
-    proc\exec(c.bin, c.args, "", {});
+    proc\exec(c.bin, c.args, "", proc\ExecOptions{});
 }
 export fun build(ctx: magus\Context, args: [str]) > void !> any { record("build"); }
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
@@ -289,7 +313,7 @@ import "proc";
 magus\project({"targets": {"ci": {"skip_cache": "test composer"}}});
 fun record(name: str) > void !> any {
     final c = proc\shell("printf '%s\n' " + name + " >> cache-order");
-    proc\exec(c.bin, c.args, "", {});
+    proc\exec(c.bin, c.args, "", proc\ExecOptions{});
 }
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["cache-order"]);
@@ -325,7 +349,7 @@ import "proc";
 magus\project({"targets": {"ci": {"skip_cache": "test composer"}}});
 fun record(name: str) > void !> any {
     final c = proc\shell("sleep 0.05; printf '%s\n' " + name + " >> " + name + "-runs");
-    proc\exec(c.bin, c.args, "", {});
+    proc\exec(c.bin, c.args, "", proc\ExecOptions{});
 }
 export fun a(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["a-runs"]);
@@ -377,12 +401,12 @@ magus\project({"targets": {
 }});
 fun record(name: str) > void !> any {
     final c = proc\shell("printf '%s\n' " + name + " >> ../generator-runs");
-    proc\exec(c.bin, c.args, "", {});
+    proc\exec(c.bin, c.args, "", proc\ExecOptions{});
 }
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["generated"]);
     final c = proc\shell("printf generated > generated");
-    proc\exec(c.bin, c.args, "", {});
+    proc\exec(c.bin, c.args, "", proc\ExecOptions{});
     record("generate");
 }
 export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(generate); }

@@ -39,7 +39,7 @@ fun conflicted(base: str, head: str) > [str] !> str {
     // author as their file.
     final res = vcs\cmd(["-c", "core.quotePath=false", "merge-tree",
         "--write-tree", "--name-only", "--no-messages", "origin/" + base, head],
-        opts: {"dir": ".", "quiet": true, "allow_failure": true});
+        opts: vcs\CommandOptions{ dir = ".", quiet = true, allowFailure = true });
     if (res.code == 0) { return mut [<str>]; }
     if (res.code != 1) { throw "merge-conflict-advice: git merge-tree: " + res.stderr; }
 

@@ -121,7 +121,6 @@ export fun mgs_getTools() > {str: Tool} {
         },
         "hadolint": Tool{
             probe = Command{bin = "hadolint", args = ["--version"]},
-            diagnostics = DiagnosticFormat.gnu,
         },
         "trivy": Tool{
             probe = Command{bin = "trivy", args = ["version"]},

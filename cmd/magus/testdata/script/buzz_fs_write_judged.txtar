@@ -1,0 +1,87 @@
+# A Buzz fs write to a computed path is judged at the write,
+# by the grader `refs --rename` uses.
+# A leased script rewriting a declaration another lease claims is refused
+# with the guard's rule; the claimant's own lease writes it.
+[!exec:git] skip 'the claims are placed by the golang git driver'
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd site
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'run.go with two functions'
+exec git worktree add -q ../ana
+exec git worktree add -q ../ben
+cd ../ana
+exec magus job fork wave/a --criteria 'change A' --write-paths 'run.go#A' --check 'lint .'
+exec magus job exec wave/a
+cd ../ben
+exec magus job fork wave/b --criteria 'change B' --write-paths 'run.go#B' --check 'lint .'
+exec magus job exec wave/b
+
+# The destination is argv, which the hook's static scan cannot read.
+# The process grades under the lease its line claims; one merely held here never binds it.
+env BAGGAGE=magus.lease=wave/b
+! exec magus buzz $WORK/edit.buzz run.go $WORK/run_a.go
+stderr 'refused by the guard \[claimed-declaration\]'
+stderr 'a declaration lease wave/a claims'
+cmp run.go $WORK/run.go
+
+cd ../ana
+env BAGGAGE=magus.lease=wave/a
+exec magus buzz $WORK/edit.buzz run.go $WORK/run_a.go
+cmp run.go $WORK/run_a.go
+
+-- edit.buzz --
+import "fs";
+
+fun main(args: [str]) > void !> any {
+    fs\writeFile(args[0], content: fs\readFile(args[1]));
+}
+-- site/.gitignore --
+.magus/
+-- site/.gitattributes --
+*.go diff=golang
+-- site/magus.yaml --
+concurrency: 2
+-- site/magusfile.buzz --
+import "magus";
+
+magus\project({"name": "site"});
+
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["**/*.go"]);
+}
+-- site/run.go --
+package run
+
+func A() {
+	a()
+}
+
+func B() {
+	b()
+}
+-- run.go --
+package run
+
+func A() {
+	a()
+}
+
+func B() {
+	b()
+}
+-- run_a.go --
+package run
+
+func A() {
+	a2()
+}
+
+func B() {
+	b()
+}

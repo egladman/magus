@@ -65,7 +65,11 @@ func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at locati
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		return advice{} // an unreadable plan is the guard's standing fail-open
+		return advice{
+			Say: fmt.Sprintf("magus workspace: the lease store did not read (%v), so nothing checked this checkout for live leases.", err),
+			Why: "The spawn goes ahead because the guard fails open on a store it cannot read, and an unchecked shared checkout looks exactly like an empty one. " +
+				"A worktree of its own keeps the new worker clear of any lease the store would have shown.",
+		}
 	}
 	held := job.HeldIn(rows, at.workspace)
 	if len(held) == 0 {
@@ -144,25 +148,6 @@ type pendingSpawn struct {
 	Spawner string       `json:"spawner,omitempty"`
 	// AgentType is the subagent type the spawn named, "" when it named none.
 	AgentType string `json:"agent_type,omitempty"`
-}
-
-// agentTypeKind keys the subagent type a child was spawned as, kept beside its spawn record.
-func agentTypeKind(agentID string) hint.MarkerKind {
-	return agentMarkerKind("agent-type-", agentID)
-}
-
-// agentTypeRecord is the body of an agentTypeKind marker.
-type agentTypeRecord struct {
-	Type string `json:"type"`
-}
-
-// spawnedAgentType is the subagent type agentID was spawned as, "" when it is not known.
-func spawnedAgentType(facts hint.Gate, agentID string) string {
-	if agentID == "" {
-		return ""
-	}
-	rec, _ := readMarker[agentTypeRecord](facts, agentTypeKind(agentID))
-	return rec.Type
 }
 
 // recordPendingSpawn files a spawn that passed, for the start of the child it makes to be

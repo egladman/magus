@@ -29,7 +29,7 @@ export fun reads() > [str] {
 
 export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<GeneratedPackage>];
-    final dirs: [magus\Dir] = magus\dirs("**/gen/**", opts: magus\DirsOptions{ language = "go" });
+    final dirs: [magus\Dir] = magus\graph().dirs("**/gen/**", opts: magus\DirsOptions{ language = "go" });
     foreach (d in dirs) {
         if (d.path.indexOf("testdata") != null) {
             continue;

@@ -40,7 +40,7 @@ func TestConsoleLinkCarriesAOneTimeCode(t *testing.T) {
 	require.NoError(t, err)
 	secret, tok, err := store.Redeem(code)
 	require.NoError(t, err)
-	cred, ok := auth.Verify(secret)
+	cred, ok := auth.Verify(secret.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, types.Credential{Kind: types.KindStored, ID: tok.ID, Name: tok.Name, Grant: types.GrantConsole}, cred)
 	assert.WithinDuration(t, time.Now().Add(console.LinkTokenLifetime), tok.Expires, time.Minute)

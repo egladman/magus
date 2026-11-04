@@ -304,19 +304,27 @@ Key properties:
   machine; `aggressive` reserves none of that, taking every usable megabyte down to a
   fixed 512 MiB floor for the kernel and its page cache. A CI job that asks for
   `aggressive` claims memory the same way it claims cores.
-- **Declared or measured, never observed live.** It arbitrates what targets say they
-  need ([`memory_mb`](targets.md) and `slots`) and what their recorded runs measured, so
-  the same command with the same history reaches the same verdict whatever else is
-  running. Observed pressure warns separately and never blocks. A declaration always
-  wins: `slots` is claimed as written, and `memory_mb` is a ceiling a measurement only
-  narrows. A target that declares nothing claims, once it has three successful measured
-  runs, 1.25 times their highest peak memory and the 75th percentile of their CPU time
-  over wall time as slots, rounded up; before that, no memory and one slot. A run that
-  kept 90% of its slots busy is saturated: its claim capped it, so it sits out the
-  percentile and the next claim doubles, up to the budget, until a run granted more
-  slots comes back unsaturated. A replayed
-  step claims nothing. [MGS3009](../reference/codes/sandbox/MGS3009.md) has the whole
-  rule, and `magus session -o json` records how each step's claim was sized.
+- **A claim is declared or measured; a failing machine refuses anyway.** The budget
+  arbitrates what targets say they need ([`memory_mb`](targets.md) and `slots`) and what
+  their recorded runs measured, so on a healthy machine the same command with the same
+  history reaches the same verdict whatever else is running. No declaration can see what
+  else fills the machine, so a new step is also refused
+  ([MGS3053](../reference/codes/sandbox/MGS3053.md), exit **75**) while the kernel says
+  memory is in a bad state: on macOS the compressor at 75% of its segment limit or
+  critical pressure, on Linux a full memory stall for 25% of the last 10 seconds. It
+  never queues, a gate included, and a step that waited for a seat reads memory again
+  once seated. Running steps are never stopped, and a run nested under one passes,
+  including through a `magus job exec --timeout` between them. A
+  missing or partial reading says so once per run. A low-headroom warning still speaks
+  separately while a run works. A declaration always wins: `slots` is claimed as
+  written, and `memory_mb` is a ceiling a measurement only narrows. A target that
+  declares nothing claims, once it has three successful measured runs, 1.25 times their
+  highest peak memory and the 75th percentile of their CPU time over wall time as slots,
+  rounded up; before that, no memory and one slot. A run that kept 90% of its slots busy
+  is saturated: its claim capped it, so it sits out the percentile and the next claim
+  doubles, up to the budget, until a run granted more slots comes back unsaturated. A
+  replayed step claims nothing. [MGS3009](../reference/codes/sandbox/MGS3009.md) has the
+  whole rule, and `magus session -o json` records how each step's claim was sized.
 - **A step runs Go as wide as it claims.** Every process a step starts gets
   `GOMAXPROCS` and `-p` equal to its slots, one included, since `go` reads no jobserver
   and would otherwise take every core the budget counted as free. So a Go target's
@@ -330,13 +338,28 @@ Key properties:
   for them, on the same terms as the lock. `magus status --wait` is the wait a caller
   asks for: it reserves the seat it sized for the run it pipes into, so that run is not
   refused, while a bare run still refuses at once.
+- **A gate goes first.** A gate is `magus affected ci` or `magus run ci`, and every magus
+  it runs. While a gate's claim waits, no other run is seated in the room it waits for:
+  that run is refused as if the gate already held it. The oldest gate on the machine,
+  counted from its first claim, waits for seats other invocations hold instead of
+  failing part-way, says what it waits for and who holds it, and gives up after 30
+  minutes with a refusal naming the bound. Every other gate still refuses at once, so two
+  gates never wait on each other. This covers the claims a gate makes after
+  `magus status --wait` reserved its first.
 - **A person can get one job out of a bind.** `magus job pause <job>...` refuses that
   job's holder its next magus run, through `magus job exec` and the guard, until
   `magus job resume <job>...`; a run already holding the budget finishes, since nothing
-  is preempted. A job's `weight`, in (0,1] on its record and 0.5 when omitted, leans
-  its waiters forward: a run bound to the job asks again every 100ms (500ms under
-  `status --wait`) divided by weight/0.5, so weight 1 asks twice as often. It is a lean,
-  never a guarantee: the broker keeps no queue, and the first ask after a release wins.
+  is preempted. A run is charged to the lease its checkout's `magus job exec` binds, else
+  to the one `BAGGAGE` names, and `magus status` names it, or says `unleased`. A job's
+  `weight`, in (0,1] on its record and 0.5 when omitted, orders the requests the broker
+  holds: a run's own waits and `status --wait`. A gate still goes first, then the heavier
+  job, and equal weights go in the order they asked. A run bound to no job weighs 0.5. A
+  heavier request passes one already waiting at most four times, so a light job is never
+  starved. Weight decides no verdict: a request nobody holds is still refused at once.
+- **`magus job exec --timeout` shares its slots and nothing else.** A magus under the
+  command runs in the slots the wrapper holds, so it never competes with them. The
+  wrapper runs no step, so a machine strangers fill refuses that magus as it would the
+  same command without the wrapper, and so does bad memory.
 - **What a missing broker means is a setting.** `broker: best-effort` (the default)
   leaves a run whose broker does not start, or dies mid-run, unarbitrated and
   finishing, having said once that it is. `broker: required` refuses the step instead

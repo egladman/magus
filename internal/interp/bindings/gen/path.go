@@ -53,7 +53,7 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("matches", vm.DirectValue("path.matches", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		pattern := ffi.String(bzArgs, 0)
 		path := ffi.String(bzArgs, 1)
-		ret0, err := std.PathMatch(ctx, pattern, path)
+		ret0, err := std.PathMatches(ctx, pattern, path)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

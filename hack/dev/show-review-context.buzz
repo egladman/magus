@@ -22,6 +22,7 @@ import "flags";
 import "fs";
 import "io";
 import "magus";
+import "result";
 import "std";
 import "strings";
 
@@ -130,37 +131,55 @@ fun say(line: str) > void {
     io\stderr.write(line + "\n") catch void;
 }
 
-fun readStdin() > str !> any {
-    final text = io\stdin.readAll();
-    if (text == null) {
-        return "";
+fun readStdin() > result\Result::<str> {
+    try {
+        final text = io\stdin.readAll();
+        if (text == null) {
+            return result\ok::<str>("");
+        }
+        return result\ok::<str>("{text}");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "show-review-context: read stdin");
     }
-    return "{text}";
 }
 
 // readDiff reads the changeset once. A patch or saved diff of - is read from stdin.
-export fun readDiff(input: Input) > magus\Diff !> any {
-    final opts = mut {<str: any>};
-    if (input.baseline != "") {
-        opts["baseline"] = input.baseline;
-    }
-    if (input.saved != "") {
-        var path = input.saved;
-        if (path == "-") {
-            path = fs\tempFile("show-review-context-");
-            fs\writeFile(path, content: readStdin());
+export fun readDiff(input: Input) > result\Result::<magus\Diff> {
+    var savedPath = "";
+    var patch = "";
+    var rev = "";
+    try {
+        if (input.saved != "") {
+            var path = input.saved;
+            if (path == "-") {
+                path = fs\tempFile("show-review-context-");
+                final piped = readStdin();
+                if (piped.error -> err) {
+                    return result\Result::<magus\Diff>{ error = err };
+                }
+                fs\writeFile(path, content: piped.value!);
+            }
+            savedPath = path;
+        } else if (input.patch != "") {
+            if (input.patch == "-") {
+                final piped = readStdin();
+                if (piped.error -> err) {
+                    return result\Result::<magus\Diff>{ error = err };
+                }
+                patch = piped.value!;
+            } else {
+                patch = fs\readFile(input.patch);
+            }
+            if (patch.trim() == "") {
+                return result\fail::<magus\Diff>("show-review-context: the patch in {input.patch} is empty\n{USAGE}");
+            }
+        } else if (input.rev != "") {
+            rev = input.rev;
         }
-        opts["from"] = path;
-    } else if (input.patch != "") {
-        final patch = if (input.patch == "-") readStdin() else fs\readFile(input.patch);
-        if (patch.trim() == "") {
-            throw "show-review-context: the patch in {input.patch} is empty\n{USAGE}";
-        }
-        opts["patch"] = patch;
-    } else if (input.rev != "") {
-        opts["rev"] = input.rev;
+        return result\ok::<magus\Diff>(magus\change().diff(opts: magus\DiffOptions{ baseline = input.baseline, from = savedPath, patch = patch, rev = rev }));
+    } catch (err: any) {
+        return result\caught::<magus\Diff>(err, doing: "show-review-context: read the changeset");
     }
-    return magus\diff(opts);
 }
 
 // namespaceSymbol reports a package or namespace, whose SCIP descriptor ends in a slash in
@@ -230,7 +249,7 @@ export fun select(all: [Candidate], budget: int) > Selection {
     foreach (c in all) {
         ranked.append(c);
     }
-    ranked.sort(fun (a: Candidate, b: Candidate) > bool => before(a, b: b));
+    _ = ranked.sort(fun (a: Candidate, b: Candidate) > bool => before(a, b: b));
     final carded = mut [<Candidate>];
     final omitted = mut [<Candidate>];
     foreach (i, c in ranked) {
@@ -262,17 +281,20 @@ export fun listed(name: str, items: [str], note: str) > Section {
 }
 
 // guarded runs one section's reads; a read magus cannot answer is an unknown, never a gap.
-fun guarded(name: str, read: fun () > Section !> any) > Section {
-    try {
-        return read();
-    } catch (e: any) {
-        return unknownSection(name, note: "magus could not answer: {e}");
+fun guarded(name: str, read: fun () > result\Result::<Section>) > Section {
+    final section = read();
+    if (section.error -> err) {
+        return unknownSection(name, note: "magus could not answer: {err.message}");
     }
-    return unknownSection(name, note: "unreachable");
+    return section.value!;
 }
 
-fun around(focus: str, relation: str, direction: str, depth: int) > magus\NeighborhoodResult !> any {
-    return magus\neighborhood(focus, opts: magus\NeighborhoodOptions{ depth = depth, relations = [relation], direction = direction, collapse = [<str>] });
+fun around(focus: str, relation: str, direction: str, depth: int) > result\Result::<magus\NeighborhoodResult> {
+    try {
+        return result\ok::<magus\NeighborhoodResult>(magus\graph().neighborhood(focus, opts: magus\NeighborhoodOptions{ depth = depth, relations = [magus\RelationID(relation)], direction = magus\EdgeDirection(direction), collapse = [<str>] }));
+    } catch (err: any) {
+        return result\caught::<magus\NeighborhoodResult>(err, doing: "read the neighbourhood of {focus}");
+    }
 }
 
 fun others(n: magus\NeighborhoodResult, focus: str) > [magus\KnowledgeNode] {
@@ -288,8 +310,8 @@ fun others(n: magus\NeighborhoodResult, focus: str) > [magus\KnowledgeNode] {
 // fromGraph is listed, except that nothing found where the graph admits a blind spot is
 // unknown rather than absent.
 fun fromGraph(name: str, n: magus\NeighborhoodResult, items: [str], note: str) > Section {
-    if (items.len() == 0 and n.answer.verdict == UNKNOWN) {
-        return unknownSection(name, note: "the graph cannot vouch for an empty answer: {n.answer.reason}");
+    if (items.len() == 0 and n.answer.verdict == magus\KnowledgeVerdict.unknown) {
+        return unknownSection(name, note: "the graph cannot vouch for an empty answer: {n.answer.reason.value}");
     }
     return listed(name, items: items, note: note);
 }
@@ -348,29 +370,41 @@ export fun exposureSection(c: Candidate) > Section {
         note: "referenced only inside its own project, and no caller within {DEPTH_CAP} calls crosses a package or project boundary");
 }
 
-export fun callersSection(id: str, depth: int) > Section !> any {
-    final n = around(id, relation: "calls", direction: "in", depth: 1);
+export fun callersSection(id: str, depth: int) > result\Result::<Section> {
+    final near = around(id, relation: "calls", direction: "in", depth: 1);
+    if (near.error -> err) {
+        return result\Result::<Section>{ error = err };
+    }
+    final n = near.value!;
     final items = mut [<str>];
     foreach (x in others(n, focus: id)) {
         items.append("{x.label} ({x.source})");
     }
     final s = fromGraph("callers", n: n, items: items, note: "no indexed call reaches it");
     if (depth < 2 or s.verdict != FOUND) {
-        return s;
+        return result\ok::<Section>(s);
     }
-    final wide = around(id, relation: "calls", direction: "in", depth: depth);
-    return Section{ name = s.name, verdict = s.verdict, note = "{others(wide, focus: id).len()} callers within {depth} calls", items = s.items, total = s.total };
+    final reach = around(id, relation: "calls", direction: "in", depth: depth);
+    if (reach.error -> err) {
+        return result\Result::<Section>{ error = err };
+    }
+    final wide = reach.value!;
+    return result\ok::<Section>(Section{ name = s.name, verdict = s.verdict, note = "{others(wide, focus: id).len()} callers within {depth} calls", items = s.items, total = s.total });
 }
 
 // calleesSection also returns the callees' signatures, where citations look for codes.
-export fun calleesSection(id: str, signatures: mut [str]) > Section !> any {
-    final n = around(id, relation: "calls", direction: "out", depth: 1);
+export fun calleesSection(id: str, signatures: mut [str]) > result\Result::<Section> {
+    final called = around(id, relation: "calls", direction: "out", depth: 1);
+    if (called.error -> err) {
+        return result\Result::<Section>{ error = err };
+    }
+    final n = called.value!;
     final items = mut [<str>];
     foreach (x in others(n, focus: id)) {
         items.append("{x.label} ({x.source})");
         signatures.append(x.attrs["signature"] ?? "");
     }
-    return fromGraph("callees", n: n, items: items, note: "it calls nothing the index recorded");
+    return result\ok::<Section>(fromGraph("callees", n: n, items: items, note: "it calls nothing the index recorded"));
 }
 
 // memberPrefix is a symbol ID up to its last type descriptor, which SCIP spells `#`, or ""
@@ -383,12 +417,16 @@ export fun memberPrefix(id: str) > str {
     return id.sub(0, len: id.len() - parts[parts.len() - 1].len());
 }
 
-export fun neighboursSection(c: Candidate) > Section !> any {
+export fun neighboursSection(c: Candidate) > result\Result::<Section> {
     final prefix = memberPrefix(c.id);
     if (prefix == "") {
-        return listed("neighbours", items: [<str>], note: "no type encloses it");
+        return result\ok::<Section>(listed("neighbours", items: [<str>], note: "no type encloses it"));
     }
-    final n = around("file:{c.path}", relation: "defines", direction: "out", depth: 1);
+    final defined = around("file:{c.path}", relation: "defines", direction: "out", depth: 1);
+    if (defined.error -> err) {
+        return result\Result::<Section>{ error = err };
+    }
+    final n = defined.value!;
     final items = mut [<str>];
     foreach (x in n.nodes) {
         if (x.id.startsWith(prefix) and x.id != c.id and x.id != prefix) {
@@ -396,7 +434,7 @@ export fun neighboursSection(c: Candidate) > Section !> any {
         }
     }
     final s = fromGraph("neighbours", n: n, items: items, note: "no other member of its type is defined in {c.path}");
-    return Section{ name = s.name, verdict = s.verdict, note = if (s.verdict == FOUND) "members of its type in {c.path}" else s.note, items = s.items, total = s.total };
+    return result\ok::<Section>(Section{ name = s.name, verdict = s.verdict, note = if (s.verdict == FOUND) "members of its type in {c.path}" else s.note, items = s.items, total = s.total });
 }
 
 export fun testsSection(node: magus\KnowledgeNode) > Section {
@@ -409,40 +447,54 @@ export fun testsSection(node: magus\KnowledgeNode) > Section {
 }
 
 // diagnosticCodes are the diagnostic codes the signatures spell, each once, in order.
-export fun diagnosticCodes(signatures: [str]) > [str] !> any {
-    // Four digits spelled out: a brace in a Buzz string interpolates, backticks included.
-    final code = std\pattern(`(?:MGS|BZZ)[0-9][0-9][0-9][0-9]`);
-    final acc = mut [<str>];
-    foreach (s in signatures) {
-        foreach (m in code.matchAll(s) ?? [<[str]>]) {
-            if (acc.indexOf(m[0]) == null) {
-                acc.append(m[0]);
+export fun diagnosticCodes(signatures: [str]) > result\Result::<[str]> {
+    try {
+        // Four digits spelled out: a brace in a Buzz string interpolates, backticks included.
+        final code = std\pattern(`(?:MGS|BZZ)[0-9][0-9][0-9][0-9]`);
+        final acc = mut [<str>];
+        foreach (s in signatures) {
+            foreach (m in code.matchAll(s) ?? [<[str]>]) {
+                if (acc.indexOf(m[0]) == null) {
+                    acc.append(m[0]);
+                }
             }
         }
+        return result\ok::<[str]>(acc);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "read the diagnostic codes");
     }
-    return acc;
 }
 
-export fun citationsSection(signatures: [str]) > Section !> any {
+export fun citationsSection(signatures: [str]) > result\Result::<Section> {
     final items = mut [<str>];
-    foreach (code in diagnosticCodes(signatures)) {
-        final n = around("diagnostic:{code}", relation: "documents", direction: "in", depth: 1);
+    final codes = diagnosticCodes(signatures);
+    if (codes.error -> err) {
+        return result\Result::<Section>{ error = err };
+    }
+    foreach (code in codes.value!) {
+        final documented = around("diagnostic:{code}", relation: "documents", direction: "in", depth: 1);
+        if (documented.error -> err) {
+            return result\Result::<Section>{ error = err };
+        }
         final docs = mut [<str>];
-        foreach (x in others(n, focus: "diagnostic:{code}")) {
+        foreach (x in others(documented.value!, focus: "diagnostic:{code}")) {
             docs.append(x.label);
         }
         items.append(if (docs.len() > 0) "{code}, documented by {docs.join(", ")}" else "{code}, which no doc documents");
     }
-    return listed("citations", items: items, note: "no diagnostic code in its or its callees' signatures");
+    return result\ok::<Section>(listed("citations", items: items, note: "no diagnostic code in its or its callees' signatures"));
 }
 
-export fun notesSection(id: str) > Section !> any {
-    final n = around(id, relation: "annotates", direction: "in", depth: 1);
+export fun notesSection(id: str) > result\Result::<Section> {
+    final annotated = around(id, relation: "annotates", direction: "in", depth: 1);
+    if (annotated.error -> err) {
+        return result\Result::<Section>{ error = err };
+    }
     final items = mut [<str>];
-    foreach (x in others(n, focus: id)) {
+    foreach (x in others(annotated.value!, focus: id)) {
         items.append(x.label);
     }
-    return listed("notes", items: items, note: "no note annotates it");
+    return result\ok::<Section>(listed("notes", items: items, note: "no note annotates it"));
 }
 
 // card reads one symbol's sections. Each read that fails becomes that section's unknown.
@@ -450,10 +502,10 @@ export fun card(c: Candidate, depth: int) > Card {
     var node = magus\KnowledgeNode{ id = c.id, kind = "symbol", label = c.label, doc = "", source = "", attrs = {<str: str>} };
     var explained = "";
     try {
-        final e: magus\ExplainResult = magus\explain(c.id);
+        final e: magus\ExplainResult = magus\graph().explain(c.id);
         node = e.node;
     } catch (e: any) {
-        explained = "{e}";
+        explained = result\caught::<bool>(e).error!.message;
     }
     final kind = node.attrs["symbol_kind"] ?? UNKNOWN_KIND;
     final signatures = mut [c.signature];
@@ -461,19 +513,19 @@ export fun card(c: Candidate, depth: int) > Card {
     sections.append(signatureSection(c, node: node));
     sections.append(exposureSection(c));
     if (callable(kind)) {
-        sections.append(guarded("callers", read: fun () > Section !> any => callersSection(c.id, depth: depth)));
-        sections.append(guarded("callees", read: fun () > Section !> any => calleesSection(c.id, signatures: signatures)));
+        sections.append(guarded("callers", read: fun () > result\Result::<Section> => callersSection(c.id, depth: depth)));
+        sections.append(guarded("callees", read: fun () > result\Result::<Section> => calleesSection(c.id, signatures: signatures)));
     } else {
         final why = "calls connect callables, and a {kind} is referenced rather than called";
         sections.append(listed("callers", items: [<str>], note: why));
         sections.append(listed("callees", items: [<str>], note: why));
     }
-    sections.append(guarded("neighbours", read: fun () > Section !> any => neighboursSection(c)));
+    sections.append(guarded("neighbours", read: fun () > result\Result::<Section> => neighboursSection(c)));
     sections.append(unknownSection("implementers", note: "SCIP implementation relationships are not ingested yet"));
     sections.append(if (explained == "") testsSection(node) else unknownSection("tests", note: "magus could not explain it: {explained}"));
-    sections.append(guarded("citations", read: fun () > Section !> any => citationsSection(signatures)));
+    sections.append(guarded("citations", read: fun () > result\Result::<Section> => citationsSection(signatures)));
     sections.append(unknownSection("docs", note: "the graph records no doc-to-symbol edge, and a text match would guess"));
-    sections.append(guarded("notes", read: fun () > Section !> any => notesSection(c.id)));
+    sections.append(guarded("notes", read: fun () > result\Result::<Section> => notesSection(c.id)));
     var span = node.source;
     if (node.attrs["def_end_line"] != null) {
         span = "{span}-{node.attrs["def_end_line"]!}";
@@ -482,16 +534,20 @@ export fun card(c: Candidate, depth: int) > Card {
 }
 
 // symbolCandidate resolves a name or ID to the one symbol the symbol step cards.
-export fun symbolCandidate(name: str) > Candidate !> any {
-    final r: magus\RefsResult = magus\refs(name, opts: {"limit": 1});
-    if (r.symbol == "") {
-        throw "show-review-context: no indexed symbol answers to {name} ({r.answer.verdict} {r.answer.reason})";
+export fun symbolCandidate(name: str) > result\Result::<Candidate> {
+    try {
+        final r: magus\RefsResult = magus\graph().refs(name, opts: magus\RefsOptions{ limit = 1 });
+        if (r.symbol == "") {
+            return result\fail::<Candidate>("show-review-context: no indexed symbol answers to {name} ({r.answer.verdict.value} {r.answer.reason.value})");
+        }
+        return result\ok::<Candidate>(Candidate{
+            id = r.symbol, label = r.label, qualified = r.label, path = if (r.defs.len() > 0) r.defs[0].file else "",
+            project = "", change = "", signature = "", refCount = r.refCount, fileCount = r.fileCount,
+            publicBeyondWorkspace = false, publicTo = [<str>], reaches = [<Reach>],
+        });
+    } catch (err: any) {
+        return result\caught::<Candidate>(err, doing: "show-review-context: resolve {name}");
     }
-    return Candidate{
-        id = r.symbol, label = r.label, qualified = r.label, path = if (r.defs.len() > 0) r.defs[0].file else "",
-        project = "", change = "", signature = "", refCount = r.refCount, fileCount = r.fileCount,
-        publicBeyondWorkspace = false, publicTo = [<str>], reaches = [<Reach>],
-    };
 }
 
 fun changedDirs(d: magus\Diff) > [str] {
@@ -523,50 +579,61 @@ export fun projectsSection(d: magus\Diff, deps: {str: [str]}) > Section {
 }
 
 // dependenciesSection lists the package imports the change adds, against the baseline's.
-export fun dependenciesSection(d: magus\Diff, baseline: str) > Section !> any {
+export fun dependenciesSection(d: magus\Diff, baseline: str) > result\Result::<Section> {
     if (baseline == "") {
-        return unknownSection("dependencies", note: "needs --baseline <graph.json>, a `magus graph export --symbols -o json` of the base");
+        return result\ok::<Section>(unknownSection("dependencies", note: "needs --baseline <graph.json>, a `magus graph export --symbols -o json` of the base"));
     }
     final base = mut {<str: bool>};
-    foreach (l in json\parse(fs\readFile(baseline))["links"] ?? []) {
-        final src = "{l["source"]}";
-        final dst = "{l["target"]}";
-        if (l["relation"] == "imports" and src.startsWith("dir:") and dst.startsWith("dir:")) {
-            base["{src.sub(4)}>{dst.sub(4)}"] = true;
+    var head: magus\ImportGraph? = null;
+    try {
+        foreach (l in json\parse(fs\readFile(baseline))["links"] ?? []) {
+            final src = "{l["source"]}";
+            final dst = "{l["target"]}";
+            if (l["relation"] == "imports" and src.startsWith("dir:") and dst.startsWith("dir:")) {
+                base["{src.sub(4)}>{dst.sub(4)}"] = true;
+            }
         }
+        if (base.size() > 0) {
+            head = magus\graph().imports();
+        }
+    } catch (err: any) {
+        return result\caught::<Section>(err, doing: "read the dependencies against {baseline}");
     }
     if (base.size() == 0) {
-        return unknownSection("dependencies", note: "the baseline {baseline} carries no directory imports to compare against");
+        return result\ok::<Section>(unknownSection("dependencies", note: "the baseline {baseline} carries no directory imports to compare against"));
     }
-    final head: magus\ImportGraph = magus\importGraph();
-    if (!head.indexed) {
-        return unknownSection("dependencies", note: "no symbol index was ingested for this tree");
+    if (!head!.indexed) {
+        return result\ok::<Section>(unknownSection("dependencies", note: "no symbol index was ingested for this tree"));
     }
     final items = mut [<str>];
     foreach (dir in changedDirs(d)) {
-        foreach (t in head.packages[dir] ?? [<str>]) {
+        foreach (t in head!.packages[dir] ?? [<str>]) {
             if (base["{dir}>{t}"] == null) {
                 items.append("{dir} now imports {t}");
             }
         }
     }
-    return listed("dependencies", items: items, note: "no changed directory imports a package it did not import at the base");
+    return result\ok::<Section>(listed("dependencies", items: items, note: "no changed directory imports a package it did not import at the base"));
 }
 
-export fun coChangeSection(d: magus\Diff, deps: {str: [str]}) > Section !> any {
-    final report: magus\InsightReport = magus\insight();
-    final items = mut [<str>];
-    foreach (p in report.affinity.pairs) {
-        final touched = d.seedProjects.indexOf(p.a) != null or d.seedProjects.indexOf(p.b) != null;
-        final declared = (deps[p.a] ?? [<str>]).indexOf(p.b) != null or (deps[p.b] ?? [<str>]).indexOf(p.a) != null;
-        if (touched and !declared) {
-            items.append("{p.a} and {p.b} changed together in {p.count} commits, and neither declares the other");
+export fun coChangeSection(d: magus\Diff, deps: {str: [str]}) > result\Result::<Section> {
+    try {
+        final aff: magus\Affinity = magus\history().affinity();
+        final items = mut [<str>];
+        foreach (p in aff.pairs) {
+            final touched = d.seedProjects.indexOf(p.a) != null or d.seedProjects.indexOf(p.b) != null;
+            final declared = (deps[p.a] ?? [<str>]).indexOf(p.b) != null or (deps[p.b] ?? [<str>]).indexOf(p.a) != null;
+            if (touched and !declared) {
+                items.append("{p.a} and {p.b} changed together in {p.count} commits, and neither declares the other");
+            }
         }
+        return result\ok::<Section>(listed("co-change", items: items, note: "every project this change edits co-changes only with projects it declares"));
+    } catch (err: any) {
+        return result\caught::<Section>(err, doing: "read the co-change report");
     }
-    return listed("co-change", items: items, note: "every project this change edits co-changes only with projects it declares");
 }
 
-export fun ownersSection(d: magus\Diff) > Section !> any {
+export fun ownersSection(d: magus\Diff) > result\Result::<Section> {
     final count = mut {<str: int>};
     var read = 0;
     foreach (i, f in d.files) {
@@ -574,24 +641,23 @@ export fun ownersSection(d: magus\Diff) > Section !> any {
             break;
         }
         // A file the graph has no node for, a new one, has no owner edge to read.
-        try {
-            final n = around("file:{f.path}", relation: "owns", direction: "in", depth: 1);
-            read = read + 1;
-            foreach (x in others(n, focus: "file:{f.path}")) {
-                count[x.label] = (count[x.label] ?? 0) + 1;
-            }
-        } catch {
+        final owned = around("file:{f.path}", relation: "owns", direction: "in", depth: 1);
+        if (owned.error != null) {
             continue;
+        }
+        read = read + 1;
+        foreach (x in others(owned.value!, focus: "file:{f.path}")) {
+            count[x.label] = (count[x.label] ?? 0) + 1;
         }
     }
     if (read == 0) {
-        return unknownSection("owners", note: "the graph holds none of the changed files");
+        return result\ok::<Section>(unknownSection("owners", note: "the graph holds none of the changed files"));
     }
     final items = mut [<str>];
     foreach (owner, n in count) {
         items.append("{owner} owns {n} changed files");
     }
-    return listed("owners", items: items, note: "no CODEOWNERS entry covers the changed files");
+    return result\ok::<Section>(listed("owners", items: items, note: "no CODEOWNERS entry covers the changed files"));
 }
 
 // apiGrowthSection counts, per directory, the symbols the change adds and how many of them
@@ -616,18 +682,18 @@ export fun apiGrowthSection(all: [Candidate]) > Section {
     return listed("api growth", items: items, note: "the change adds no symbol");
 }
 
-export fun layersSection(d: magus\Diff) > Section !> any {
+export fun layersSection(d: magus\Diff) > result\Result::<Section> {
     final items = mut [<str>];
     foreach (dir in changedDirs(d)) {
-        final info: magus\Dir = magus\dir(dir) catch magus\Dir{ path = dir, id = "", layer = "", language = "", imports = [<str>], importedBy = [<str>], importsIndexed = false, calls = [<magus\DirCall>], calledBy = [<magus\DirCall>], children = [<str>], files = 0 };
+        final info: magus\Dir = magus\graph().dir(dir) catch magus\Dir{ path = dir, id = "", layer = "", language = "", imports = [<str>], importedBy = [<str>], importsIndexed = false, calls = [<magus\DirCall>], calledBy = [<magus\DirCall>], children = [<str>], files = 0 };
         if (info.layer != "") {
             items.append("{dir} is in layer {info.layer}");
         }
     }
     if (items.len() == 0) {
-        return unknownSection("layers", note: "the workspace declares no layer for these directories");
+        return result\ok::<Section>(unknownSection("layers", note: "the workspace declares no layer for these directories"));
     }
-    return listed("layers", items: items, note: "");
+    return result\ok::<Section>(listed("layers", items: items, note: ""));
 }
 
 export fun architecture(d: magus\Diff, all: [Candidate], baseline: str) > [Section] {
@@ -639,11 +705,11 @@ export fun architecture(d: magus\Diff, all: [Candidate], baseline: str) > [Secti
     }
     return [
         projectsSection(d, deps: deps),
-        guarded("dependencies", read: fun () > Section !> any => dependenciesSection(d, baseline: baseline)),
-        guarded("co-change", read: fun () > Section !> any => coChangeSection(d, deps: deps)),
-        guarded("owners", read: fun () > Section !> any => ownersSection(d)),
+        guarded("dependencies", read: fun () > result\Result::<Section> => dependenciesSection(d, baseline: baseline)),
+        guarded("co-change", read: fun () > result\Result::<Section> => coChangeSection(d, deps: deps)),
+        guarded("owners", read: fun () > result\Result::<Section> => ownersSection(d)),
         apiGrowthSection(all),
-        guarded("layers", read: fun () > Section !> any => layersSection(d)),
+        guarded("layers", read: fun () > result\Result::<Section> => layersSection(d)),
     ];
 }
 
@@ -698,8 +764,17 @@ export fun terms(all: [Candidate]) > [str] {
 
 // vocabularyTerm is what a word already means in the workspace: the glossary entries and the
 // targets, spells, ops, diagnostics and docs whose names carry it.
-export fun vocabularyTerm(term: str) > Term !> any {
-    final q: magus\QueryResult = magus\query(term, opts: {"limit": 20});
+export fun vocabularyTerm(term: str) > result\Result::<Term> {
+    var q: magus\QueryResult? = null;
+    try {
+        q = magus\graph().query(term, opts: magus\QueryOptions{ limit = 20 });
+    } catch (err: any) {
+        return result\caught::<Term>(err, doing: "query {term}");
+    }
+    return result\ok::<Term>(termFrom(term, q: q!));
+}
+
+fun termFrom(term: str, q: magus\QueryResult) > Term {
     final meanings = mut [<str>];
     foreach (m in q.matches) {
         if (m.kind == "symbol" or m.kind == "file" or splitWords(m.label).indexOf(term) == null) {
@@ -719,8 +794,8 @@ export fun vocabularyTerm(term: str) > Term !> any {
         }
         return Term{ term = term, verdict = FOUND, note = "already names {meanings.len()} things here", meanings = shown };
     }
-    if (q.answer.verdict == UNKNOWN) {
-        return Term{ term = term, verdict = UNKNOWN, note = q.answer.reason, meanings = [<str>] };
+    if (q.answer.verdict == magus\KnowledgeVerdict.unknown) {
+        return Term{ term = term, verdict = UNKNOWN, note = q.answer.reason.value, meanings = [<str>] };
     }
     return Term{ term = term, verdict = ABSENT, note = "nothing in the workspace is named with it yet", meanings = [<str>] };
 }
@@ -728,7 +803,12 @@ export fun vocabularyTerm(term: str) > Term !> any {
 export fun vocabulary(all: [Candidate]) > [Term] {
     final acc = mut [<Term>];
     foreach (t in terms(all)) {
-        acc.append(vocabularyTerm(t) catch Term{ term = t, verdict = UNKNOWN, note = "the query failed", meanings = [<str>] });
+        final asked = vocabularyTerm(t);
+        if (asked.error -> err) {
+            acc.append(Term{ term = t, verdict = UNKNOWN, note = "the query failed: {err.message}", meanings = [<str>] });
+        } else {
+            acc.append(asked.value!);
+        }
     }
     return acc;
 }
@@ -905,7 +985,7 @@ fun fileRows(d: magus\Diff) > [FileRow] {
 }
 
 // diffBundle builds the bundle for one changeset.
-export fun diffBundle(d: magus\Diff, rev: str, lens: str, budget: int, depth: int, baseline: str) > Bundle !> any {
+export fun diffBundle(d: magus\Diff, rev: str, lens: str, budget: int, depth: int, baseline: str) > Bundle {
     final all = foldMembers(candidates(d));
     final selection = select(all, budget: budget);
     final cards = mut [<Card>];
@@ -926,16 +1006,16 @@ export fun diffBundle(d: magus\Diff, rev: str, lens: str, budget: int, depth: in
         selection = selection, cards = cards, architecture = arch, vocabulary = vocab };
 }
 
-fun positive(parsed: flags\FlagParse, flag: str, fallback: int) > int !> any {
+fun positive(parsed: flags\FlagParse, flag: str, fallback: int) > result\Result::<int> {
     final raw = parsed.values[flag];
     if (raw == null) {
-        return fallback;
+        return result\ok::<int>(fallback);
     }
     final n = std\parseInt(raw!);
     if (n == null or n! < 1) {
-        throw "show-review-context: {flag} takes a positive integer\n{USAGE}";
+        return result\fail::<int>("show-review-context: {flag} takes a positive integer\n{USAGE}");
     }
-    return n!;
+    return result\ok::<int>(n!);
 }
 
 export fun main(args: [str]) > void !> any {
@@ -968,8 +1048,16 @@ export fun main(args: [str]) > void !> any {
     if (sources > 1) {
         throw "show-review-context: --rev, --patch and --from each name a changeset, so give one\n{USAGE}";
     }
-    final budget = positive(parsed, flag: "--budget", fallback: 12);
-    final asked = positive(parsed, flag: "--depth", fallback: 2);
+    final budgeted = positive(parsed, flag: "--budget", fallback: 12);
+    if (budgeted.error -> err) {
+        throw err.message;
+    }
+    final budget = budgeted.value!;
+    final deep = positive(parsed, flag: "--depth", fallback: 2);
+    if (deep.error -> err) {
+        throw err.message;
+    }
+    final asked = deep.value!;
     final depth = if (asked > DEPTH_CAP) DEPTH_CAP else asked;
     final lens = parsed.values["--lens"] ?? "all";
     if (LENSES.indexOf(lens) == null) {
@@ -989,14 +1077,22 @@ export fun main(args: [str]) > void !> any {
         if (sources > 0) {
             throw "show-review-context: the symbol step reads no changeset\n{USAGE}";
         }
-        final c = symbolCandidate(symbol!);
+        final resolved = symbolCandidate(symbol!);
+        if (resolved.error -> err) {
+            throw err.message;
+        }
+        final c = resolved.value!;
         say("carding {c.qualified}");
         bundle = Bundle{ base = "", rev = "", lens = "code", files = [<FileRow>], notes = [<str>],
             selection = Selection{ carded = [c], omitted = [<Candidate>] }, cards = [card(c, depth: depth)],
             architecture = [<Section>], vocabulary = [<Term>] };
     } else {
         say("reading the change");
-        bundle = diffBundle(readDiff(input), rev: input.rev, lens: lens, budget: budget, depth: depth, baseline: input.baseline);
+        final read = readDiff(input);
+        if (read.error -> err) {
+            throw err.message;
+        }
+        bundle = diffBundle(read.value!, rev: input.rev, lens: lens, budget: budget, depth: depth, baseline: input.baseline);
     }
     if (format == "json") {
         say(headline(bundle!));
@@ -1017,12 +1113,12 @@ fun labels(cs: [Candidate]) > [str] {
 }
 
 test "a card goes only to a touched symbol: never unchanged, generated or a package" {
-    final d = magus\diff({"from": FIXTURE});
+    final d = magus\change().diff(opts: magus\DiffOptions{ from = FIXTURE });
     assert\equal(labels(candidates(d)), want: ["Render", "NewWidget", "parse_widget_name"], message: "carded");
 }
 
 test "the budget cuts the narrowest and names what it cut" {
-    final d = magus\diff({"from": FIXTURE});
+    final d = magus\change().diff(opts: magus\DiffOptions{ from = FIXTURE });
     final s = select(candidates(d), budget: 2);
     assert\equal(labels(s.carded), want: ["NewWidget", "parse_widget_name"], message: "added or re-signed first");
     assert\equal(labels(s.omitted), want: ["Render"], message: "cut");
@@ -1065,7 +1161,7 @@ test "names split on case and underscores into lowercase words" {
 }
 
 test "a diagnostic code is read from a signature, once" {
-    assert\equal(diagnosticCodes(["func f() error // MGS1022 or MGS1022", "func g() // BZZ1006", "func h()"]),
+    assert\equal(diagnosticCodes(["func f() error // MGS1022 or MGS1022", "func g() // BZZ1006", "func h()"]).value!,
         want: ["MGS1022", "BZZ1006"], message: "codes");
 }
 
@@ -1091,7 +1187,7 @@ test "a member's prefix is its ID through the enclosing type" {
 }
 
 test "-o json keeps its shape" {
-    final d = magus\diff({"from": FIXTURE});
+    final d = magus\change().diff(opts: magus\DiffOptions{ from = FIXTURE });
     final b = Bundle{ base = d.base, rev = "main...HEAD", lens = "all", files = fileRows(d), notes = d.notes,
         selection = select(candidates(d), budget: 1), cards = [<Card>], architecture = [<Section>], vocabulary = [<Term>] };
     final shape = json\parse(json\stringify(bundleJSON(b)));
@@ -1099,7 +1195,7 @@ test "-o json keeps its shape" {
     foreach (k, v in shape) {
         keys.append("{k}");
     }
-    keys.sort(fun (a: str, b: str) > bool => a < b);
+    _ = keys.sort(fun (a: str, b: str) > bool => a < b);
     assert\equal(keys, want: ["architecture", "base", "cards", "files", "lens", "omitted", "rev", "schema", "unknowns", "vocabulary"], message: "keys");
     assert\equal(shape["schema"], want: 1, message: "schema");
     assert\equal(shape["omitted"][0]["label"], want: "parse_widget_name", message: "omitted");
@@ -1108,12 +1204,12 @@ test "-o json keeps its shape" {
 }
 
 test "a patch is read as the changeset" {
-    final d = readDiff(Input{ rev = "", patch = "hack/testdata/show-review-context.patch", saved = "", baseline = "" });
+    final d = readDiff(Input{ rev = "", patch = "hack/testdata/show-review-context.patch", saved = "", baseline = "" }).value!;
     assert\equal(d.files[0].path, want: "hack/README.md", message: "the patch's file");
 }
 
 test "a live card answers every section, in order" {
-    final c = symbolCandidate("symbol:gomod github.com/egladman/magus `github.com/egladman/magus/project/impact`/Enrich().");
+    final c = symbolCandidate("symbol:gomod github.com/egladman/magus `github.com/egladman/magus/project/impact`/Enrich().").value!;
     final names = mut [<str>];
     foreach (s in card(c, depth: 1).sections) {
         names.append(s.name);

@@ -1,13 +1,14 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/exec"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -25,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
@@ -118,10 +121,9 @@ func graphUsage() {
 // because an outer run holds the project's lock (MGS3007), or because the machine's build
 // budget is full (MGS3009), fails the build once the rest is done.
 func graphBuild(ctx context.Context, root string, args []string) (err error) {
-	var skipSymbols, skipSessions bool
+	var bf *flaggen.GraphBuildFlags
 	_, err = commandParse("graph build", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&skipSymbols, "no-symbols", false, "rebuild the domain graph only; do not reindex code symbols")
-		fs.BoolVar(&skipSessions, "no-sessions", false, "do not run the declared agent-session adapters first")
+		bf = flaggen.BindGraphBuild(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph build [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -139,11 +141,15 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	lock, waitedOn, err := acquireGraphBuild(ctx, root)
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, lock.Release()) }()
+	release, waitedOn, err := acquireGraphBuild(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, release()) }()
 	if waitedOn != nil {
 		if current, err := loadBuiltGraph(ctx, root, *waitedOn); current || err != nil {
 			return err
@@ -151,25 +157,34 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	}
 
 	var refused error
-	if !skipSymbols {
+	var reindexed int
+	if bf.Symbols {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = m.Close() }()
 		n, rerr := m.ReindexSymbols(ctx)
+		reindexed = n
 		slog.InfoContext(ctx, fmt.Sprintf("reindexed %d symbol index(es)", n), attr.Notice(""))
 		if rerr != nil {
 			// A missing or failing indexer must not block the domain-graph rebuild.
 			// Surface the actionable hints and carry on.
 			interactive.Hint(ctx, "some projects were not reindexed", attr.Error(rerr))
-			refused = reindexRefusals(rerr)
+			refused = maintenance.ReindexRefusals(rerr)
 		}
 	}
 
-	if !skipSessions {
+	if bf.Sessions {
 		ingestSessions(ctx, root)
 	}
+
+	// Claimed only now: a step behind its own process's claim may never seat.
+	seated, err := admitGraphBuild(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer seated()
 
 	g, err := loadKnowledgeGraph(ctx, root, true /* refresh */, false, false)
 	if err != nil {
@@ -179,9 +194,25 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	slog.InfoContext(ctx, fmt.Sprintf("knowledge graph rebuilt: %d nodes, %d edges", out.NodeCount, out.EdgeCount), attr.Notice(""))
 	scriptsErr := writeGuardIndexes(ctx, root)
 	if refused != nil {
-		return errors.Join(scriptsErr, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused))
+		scriptsErr = errors.Join(scriptsErr, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused))
+	}
+	omitted := knowledge.ShardErrors(config.CacheDir(root, globalCfg))
+	scriptsErr = errors.Join(scriptsErr, graphBuildShardFailure(ctx, omitted))
+	if opts.Format != outputText {
+		rec := graphBuildOutput{Nodes: out.NodeCount, Edges: out.EdgeCount, Reindexed: reindexed, Refused: refused != nil, OmittedShards: omitted}
+		if err := emitRecord(opts, rec, []string{root}); err != nil {
+			scriptsErr = errors.Join(scriptsErr, err)
+		}
 	}
 	return scriptsErr
+}
+
+type graphBuildOutput struct {
+	Nodes         int      `json:"nodes"`
+	Edges         int      `json:"edges"`
+	Reindexed     int      `json:"reindexed"`
+	Refused       bool     `json:"refused"`
+	OmittedShards []string `json:"omitted_shards,omitempty"`
 }
 
 // skipIndex says what was not written and why, and answers nil: an index a hook reads is
@@ -215,32 +246,17 @@ func writeGuardIndexes(ctx context.Context, root string) error {
 	return nil
 }
 
-// reindexRefusals is the part of a reindex failure that fails `graph build`: each project
-// refused because the run this one is nested inside holds its lock (MGS3007), or because the
-// machine's build budget could not seat the indexer (MGS3009). A missing indexer is the
-// machine's state and stays a warning. A refusal means the index it wanted stayed stale, and
-// an exit 0 under magus\cmd's quiet hid that. Nil when nothing was refused.
-func reindexRefusals(err error) error {
-	errs := []error{err}
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		errs = joined.Unwrap()
-	}
-	var refused []error
-	for _, e := range errs {
-		if errors.Is(e, types.ProjectLockHeldByAncestor) || errors.Is(e, types.MachineBudgetExhausted) {
-			refused = append(refused, e)
-		}
-	}
-	return errors.Join(refused...)
-}
+const (
+	// graphBuildPoll is how often a waiting graph build retries.
+	graphBuildPoll = 250 * time.Millisecond
+	// A build's own process while it assembles the graph. Measured 2026-10-31
+	// here: 1.83 and 2.13 GiB resident, 2.28 GiB in that day's memory panic.
+	graphBuildMemoryMB = 2400
+)
 
-// graphBuildPoll is how often a waiting graph build retries the build lock.
-const graphBuildPoll = 250 * time.Millisecond
-
-// acquireGraphBuild takes the build lock on the workspace's knowledge store, waiting for
-// the build that holds it, manual or the server's sync-graph job. The holder it returns
-// names that build, nil when the lock was free.
-func acquireGraphBuild(ctx context.Context, root string) (*maintenance.GraphBuildLock, *maintenance.GraphBuildHolder, error) {
+// acquireGraphBuild takes the machine's build lock, then the store's, waiting
+// on each and saying so. waitedOn is the build whose work this one can load.
+func acquireGraphBuild(ctx context.Context, root string) (release func() error, waitedOn *maintenance.GraphBuildHolder, err error) {
 	wsRoot := resolveRootOrEmpty(root)
 	if wsRoot == "" {
 		return nil, nil, errors.New("magus graph build: no workspace root here, so no knowledge store to build")
@@ -249,12 +265,63 @@ func acquireGraphBuild(ctx context.Context, root string) (*maintenance.GraphBuil
 	if err != nil {
 		return nil, nil, fmt.Errorf("magus graph build: %w", err)
 	}
-	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build`"}
+	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build` in " + wsRoot, Store: dir}
 	if proc.IsJob(ctx) {
-		me.By = "the server's sync-graph job"
+		me.By = "the server's sync-graph job in " + wsRoot
 	}
-	return maintenance.AcquireGraphBuild(ctx, dir, me,
-		noticeLines{ctx: ctx, level: slog.LevelInfo, label: "magus graph build", prefix: "magus graph build: "}, graphBuildPoll)
+	notices := noticeLines{ctx: ctx, level: slog.LevelInfo, label: "magus graph build", prefix: "magus graph build: "}
+	machine, behind, err := maintenance.AcquireMachineGraphBuild(ctx, me, notices, graphBuildPoll)
+	if err != nil {
+		return nil, nil, fmt.Errorf("magus graph build: %w", err)
+	}
+	store, waitedOn, err := maintenance.AcquireGraphBuild(ctx, dir, me, notices, graphBuildPoll)
+	if err != nil {
+		return nil, nil, errors.Join(err, machine.Release())
+	}
+	// The build ahead released this store first, so its lock read free.
+	if waitedOn == nil && behind != nil && behind.Store == dir {
+		waitedOn = behind
+	}
+	return func() error { return errors.Join(store.Release(), machine.Release()) }, waitedOn, nil
+}
+
+// admitGraphBuild claims the machine budget for assembling the graph, under
+// the workspace's broker policy.
+func admitGraphBuild(ctx context.Context, root string) (func(), error) {
+	policy := globalCfg.Broker.Resolved()
+	if policy == types.BrokerOff {
+		return func() {}, nil
+	}
+	claim := types.MachineClaim{Project: ".", Target: "graph-build", MemoryMB: graphBuildMemoryMB, Dir: resolveRootOrEmpty(root)}
+	return awaitGraphBuildSeat(ctx, processBrokerClient(), claim, policy == types.BrokerRequired)
+}
+
+// budgetSeats is the broker as a graph build reaches it.
+type budgetSeats interface {
+	cache.MachineAdmitter
+	Await(ctx context.Context, claims []types.MachineClaim, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error)
+}
+
+// awaitGraphBuildSeat claims c, waiting and saying so while another run fills
+// the budget: the indexing a refusal would discard is already paid for. Any
+// other refusal stands, since no broker wait can clear it.
+func awaitGraphBuildSeat(ctx context.Context, seats budgetSeats, c types.MachineClaim, required bool) (func(), error) {
+	wait := func(ctx context.Context, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
+		return seats.Await(ctx, []types.MachineClaim{c}, parked)
+	}
+	waiting := func(msg string) { slog.InfoContext(ctx, msg, attr.Notice("magus graph build")) }
+	for {
+		release, err := cache.AdmitMachine(ctx, seats, c, required)
+		var refused types.ExitError
+		if !errors.Is(err, types.MachineBudgetExhausted) || !errors.As(err, &refused) || refused.Code != cache.ExitCodeMachineBusy {
+			return release, err
+		}
+		if err := cache.AwaitMachine(ctx, wait, waiting); err != nil {
+			return nil, err
+		}
+		// Await judges by snapshot, so room there can still lose the claim.
+		time.Sleep(graphBuildPoll)
+	}
 }
 
 // noticeLines logs each line written to it as a notice. It stands in for os.Stderr where a
@@ -387,31 +454,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	var ef *flaggen.GraphExportFlags
 	pos, err := commandParse("graph export", args, func(fs *flag.FlagSet) {
 		ef = flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{URL: defaultExploreURL, Budget: knowledge.DefaultBudget})
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, types.KnowledgeGraphDefinition)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Emits the merged graph: -o json for the node-link form, -o graphml for")
-			fmt.Fprintln(os.Stderr, "GraphML (Gephi, yEd, and other graph viewers read both directly). The")
-			fmt.Fprintln(os.Stderr, "graph is cache-backed under <cache>/knowledge; only shards whose sources")
-			fmt.Fprintln(os.Stderr, "changed are rebuilt.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--open sends the same graph to the interactive Graph Explorer instead of")
-			fmt.Fprintln(os.Stderr, "stdout. It never leaves your machine: by default it rides in the link's URL")
-			fmt.Fprintln(os.Stderr, "fragment (#data=...), which browsers never transmit; --serve hands it over an")
-			fmt.Fprintln(os.Stderr, "ephemeral 127.0.0.1 loopback server instead (no size limit). --targets opens")
-			fmt.Fprintln(os.Stderr, "the target dependency graph, and takes an optional project path to scope it.")
-			fmt.Fprintf(os.Stderr, "--follow keeps the view updating from the running server (%s);\n", hint.ServerStart)
-			fmt.Fprintln(os.Stderr, "with no mode flag and a reachable server it is chosen automatically.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
-			fmt.Fprintf(os.Stderr, "the engine behind `%s`. -o dot renders only with\n", hint.Query.String())
-			fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for that layout to be legible.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
+		fs.Usage = func() { graphExportUsage(fs) }
 	})
 	if err != nil {
 		return err
@@ -432,9 +475,12 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		}, pos)
 	}
 
-	opts, err := output.Parse(global.output, outputGraphML, outputDot)
+	opts, err := output.Parse(global.output, outputGraphML, outputDot, outputSCIP)
 	if err != nil {
 		return err
+	}
+	if opts.Format == outputSCIP {
+		return graphExportSCIP(ctx, root, os.Stdout, tty.SystemProbe, ef.Select != "")
 	}
 	// dot is a graph-layout format; on the whole graph (1000s of nodes) it is
 	// unreadable, so it requires a --select neighborhood to scope down.
@@ -455,9 +501,6 @@ func graphExport(ctx context.Context, root string, args []string) error {
 			slog.WarnContext(ctx, fmt.Sprintf("no nodes matched --select %q", ef.Select), attr.Notice("magus graph export"))
 		}
 	}
-	if ef.Static {
-		ef.Reproducible = true
-	}
 	if ef.Reproducible {
 		stripUnreproducible(&out)
 	}
@@ -476,6 +519,10 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		out.SourceBaseURL = deriveSourceBase(ctx, root)
 	}
 
+	return writeGraphExport(opts, out)
+}
+
+func writeGraphExport(opts output.Options, out types.KnowledgeGraphOutput) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
@@ -490,20 +537,55 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		}
 		return emitNames(os.Stdout, names)
 	}
-
-	// text / wide: a routing summary, not a data dump (counts by kind and relation).
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("knowledge graph (schema v%d): %d nodes, %d edges\n\n", out.SchemaVersion, out.NodeCount, out.EdgeCount)
-	fmt.Println("nodes by kind:")
-	for _, kv := range countBy(len(out.Nodes), func(i int) string { return out.Nodes[i].Kind }) {
-		fmt.Printf("  %-11s %d\n", kv.key, kv.n)
-	}
-	fmt.Println("\nedges by relation:")
-	for _, kv := range countBy(len(out.Links), func(i int) string { return string(out.Links[i].Relation) }) {
-		fmt.Printf("  %-11s %d\n", kv.key, kv.n)
-	}
-	fmt.Println("\nRun with -o json (node-link) or -o graphml for the full graph.")
+	knowledge.WriteSummary(os.Stdout, out)
 	return nil
+}
+
+func graphExportUsage(fs *flag.FlagSet) {
+	fmt.Fprintln(os.Stderr, "Usage: magus graph export [flags]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, types.KnowledgeGraphDefinition)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Emits the merged graph: -o json for the node-link form, -o graphml for")
+	fmt.Fprintln(os.Stderr, "GraphML (Gephi, yEd, and other graph viewers read both directly). The")
+	fmt.Fprintln(os.Stderr, "graph is cache-backed under <cache>/knowledge; only shards whose sources")
+	fmt.Fprintln(os.Stderr, "changed are rebuilt. -o scip writes the symbol index instead, as one binary")
+	fmt.Fprintln(os.Stderr, "SCIP index for code-intelligence tools: redirect it to a file.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "--open sends the same graph to the interactive Graph Explorer instead of")
+	fmt.Fprintln(os.Stderr, "stdout. It never leaves your machine: by default it rides in the link's URL")
+	fmt.Fprintln(os.Stderr, "fragment (#data=...), which browsers never transmit; --serve hands it over an")
+	fmt.Fprintln(os.Stderr, "ephemeral 127.0.0.1 loopback server instead (no size limit). --targets opens")
+	fmt.Fprintln(os.Stderr, "the target dependency graph, and takes an optional project path to scope it.")
+	fmt.Fprintf(os.Stderr, "--follow keeps the view updating from the running server (%s);\n", hint.ServerStart)
+	fmt.Fprintln(os.Stderr, "with no mode flag and a reachable server it is chosen automatically.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "--select \"<terms>\" narrows the export to a query's neighborhood, sharing")
+	fmt.Fprintf(os.Stderr, "the engine behind `%s`. -o dot renders only with\n", hint.Query.String())
+	fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for that layout to be legible.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	printOwnDefaults(fs)
+}
+
+// outputSCIP is graph export's SCIP protobuf index, for code-intelligence tools.
+const outputSCIP output.Format = "scip"
+
+// graphExportSCIP writes the workspace's symbol indexes to out as one SCIP index, judging
+// out a terminal by probe. --select narrows the knowledge graph, which this export does
+// not carry, so it is refused rather than ignored.
+func graphExportSCIP(ctx context.Context, root string, out io.Writer, probe tty.Probe, selected bool) error {
+	if selected {
+		return fmt.Errorf("-o %s exports the whole symbol index, and --select narrows the knowledge graph, which it does not carry: drop --select", outputSCIP)
+	}
+	if tty.IsTerminalWriter(out, probe) {
+		return fmt.Errorf("-o %[1]s writes a binary SCIP index: redirect it to a file, as in magus graph export -o %[1]s > index.scip", outputSCIP)
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+	return m.ExportSCIP(ctx, out)
 }
 
 // stripUnreproducible removes everything from an exported graph that is not a function of
@@ -727,26 +809,6 @@ func loadRefsGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config
 	return g, nil
 }
 
-type keyCount struct {
-	key string
-	n   int
-}
-
-// countBy tallies n items by the key each index maps to, returning counts sorted
-// by key for stable output.
-func countBy(n int, keyOf func(i int) string) []keyCount {
-	m := map[string]int{}
-	for i := 0; i < n; i++ {
-		m[keyOf(i)]++
-	}
-	out := make([]keyCount, 0, len(m))
-	for k, v := range m {
-		out = append(out, keyCount{k, v})
-	}
-	slices.SortFunc(out, func(a, b keyCount) int { return cmp.Compare(a.key, b.key) })
-	return out
-}
-
 // ---- project-DAG rendering shared by graph deps, run --graph, and affected --graph ----
 
 type graphRenderOptions struct {
@@ -887,6 +949,9 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 				attr.Why("--targets reads the target graph directly from the magusfile; there is no knowledge store to refresh."))
 			return exit.Reported(exit.Usage)
 		}
+		if err := hostedPageAllowed(ctx, "graph explorer", "magus graph export --open", base, printOnly); err != nil {
+			return err
+		}
 		return graphOpenTargets(ctx, root, base, printOnly, pos)
 	}
 
@@ -905,6 +970,9 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	}
 	if follow {
 		return graphOpenFollow(ctx, root, printOnly, useTargets)
+	}
+	if err := hostedPageAllowed(ctx, "graph explorer", "magus graph export --open", base, printOnly); err != nil {
+		return err
 	}
 
 	// The explorer shows the domain graph; symbol shards would bloat it, so exclude them.
@@ -952,6 +1020,46 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 		return exit.Reported(exit.Failure)
 	}
 	return nil
+}
+
+// hostedPageAllowed refuses to open a page mcp.allowed_origins does not name.
+// The page receives workspace data, so opening it is a trust decision.
+// --print opens nothing, so it passes.
+func hostedPageAllowed(ctx context.Context, page, notice, base string, printOnly bool) error {
+	if printOnly {
+		return nil
+	}
+	err := checkHostedPageOrigin(base, globalCfg.MCP.AllowedOrigins)
+	if err == nil {
+		return nil
+	}
+	slog.ErrorContext(ctx, "refused to open the "+page, attr.Notice(notice), attr.Error(err),
+		attr.Why("Add the origin to mcp.allowed_origins in magus.yaml, pass --url a loopback mirror, or use --print for the link alone."))
+	return exit.Reported(exit.Failure)
+}
+
+// checkHostedPageOrigin passes a loopback base and an origin named in allowed.
+func checkHostedPageOrigin(base string, allowed []string) error {
+	origin, err := httpx.ParseOrigin(base)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(allowed, origin) || isLoopbackOrigin(origin) {
+		return nil
+	}
+	return fmt.Errorf("the page at %s is not in mcp.allowed_origins", origin)
+}
+
+func isLoopbackOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	if u.Hostname() == "localhost" {
+		return true
+	}
+	ip, err := netip.ParseAddr(u.Hostname())
+	return err == nil && ip.Unmap().IsLoopback()
 }
 
 // graphOpenTargets opens the workspace's target dependency graph in the hosted
@@ -1197,9 +1305,8 @@ func liveBridgeReachable(ctx context.Context) bool {
 // There is no #live= host directive and no hosted explorer base: the --url flag governs only
 // the static (--data/--targets/--serve) modes, not --follow.
 //
-// The link carries a one-time code in the URL fragment (which browsers do not transmit in HTTP
-// requests), never a token: the page trades it once, within a minute, for a console=write token
-// living console.LinkTokenLifetime, so the opener's argv holds nothing worth stealing.
+// The link's fragment carries a one-time code, never a token. The page trades
+// it within seconds, so the opener's argv holds nothing worth stealing.
 func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets bool) error {
 	hostPort := mcpAddrString()
 
@@ -1247,6 +1354,23 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return exit.Reported(exit.Failure)
+	}
+	return nil
+}
+
+// A narrowed test leaves coverage incomplete without invalidating the refreshed symbols.
+// Keep that gap visible, while a corrupt profile or any other shard failure still fails.
+func graphBuildShardFailure(ctx context.Context, omitted []string) error {
+	var failed []string
+	for _, message := range omitted {
+		if strings.HasPrefix(message, "@coverage: coverage profile omits ") {
+			interactive.Hint(ctx, "graph refreshed without complete coverage", attr.Error(errors.New(message)))
+			continue
+		}
+		failed = append(failed, message)
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("magus graph build: left out of the graph: %s", strings.Join(failed, "; "))
 	}
 	return nil
 }

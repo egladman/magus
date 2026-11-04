@@ -17,8 +17,8 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/libs/embed"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/xdg"
 )
 
@@ -129,7 +129,7 @@ func Pull(ctx context.Context, client *oci.Client, ref oci.Reference, opts Optio
 }
 
 func pull(ctx context.Context, client *oci.Client, ref oci.Reference, path, pin string) error {
-	art, err := client.Artifact(ctx, ref, artifactType)
+	art, err := client.GetArtifact(ctx, ref, artifactType)
 	if err != nil {
 		return err
 	}
@@ -178,7 +178,7 @@ func publish(ctx context.Context, client *oci.Client, ref oci.Reference, tablePa
 		return false, err
 	}
 	if published {
-		art, err := client.Artifact(ctx, ref, artifactType)
+		art, err := client.GetArtifact(ctx, ref, artifactType)
 		if err != nil {
 			return false, err
 		}
@@ -187,17 +187,17 @@ func publish(ctx context.Context, client *oci.Client, ref oci.Reference, tablePa
 		}
 		return false, nil
 	}
-	content := oci.Content{ArtifactType: artifactType, Layers: []oci.Layer{{Name: fileName, MediaType: layerMediaType, Payload: data}}}
-	if _, err := client.Push(ctx, ref, content); err != nil {
+	content := oci.Artifact{ArtifactType: artifactType, Blobs: []oci.Blob{{Title: fileName, MediaType: layerMediaType, Data: data}}}
+	if _, err := client.PushArtifact(ctx, oci.Reference{Registry: ref.Registry, Repository: ref.Repository}, content, ref.Tag); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func pinnedLayer(art *oci.Artifact, ref oci.Reference, pin string) (ocispec.Descriptor, error) {
+func pinnedLayer(art *oci.ArtifactReader, ref oci.Reference, pin string) (ocispec.Descriptor, error) {
 	desc, ok := art.Find(fileName)
 	if !ok {
-		return desc, fmt.Errorf("%s: %s: %w", ref, fileName, oci.ErrLayerMiss)
+		return desc, fmt.Errorf("%s: %s: %w", ref, fileName, oci.ErrNoBlob)
 	}
 	if want := digest.NewDigestFromEncoded(digest.SHA256, pin); desc.Digest != want {
 		return desc, fmt.Errorf("embedtable: %s carries layer %s, the pin is %s", ref, desc.Digest, want)

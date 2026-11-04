@@ -36,20 +36,20 @@ type ShareToken struct {
 // the link. A share link holds [types.GrantViewer]. It refuses a minter whose grant does not
 // include that (ErrExceedsGrant, coded GrantInsufficient) and a ttl outside [MinShareTTL,
 // MaxShareTTL] (ErrShareLifetime, coded TokenLifetimeOutOfRange).
-func MintShare(minter types.Grant, ttl time.Duration) (secret string, tok ShareToken, err error) {
+func MintShare(minter types.Grant, ttl time.Duration) (secret types.Secret, tok ShareToken, err error) {
 	if !types.GrantViewer.Within(minter) {
-		return "", ShareToken{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
+		return types.Secret{}, ShareToken{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
 			"auth: a share link needs %s, the minter holds %s", types.GrantViewer, grantOrNothing(minter))
 	}
 	if ttl < MinShareTTL || ttl > MaxShareTTL {
-		return "", ShareToken{}, types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrShareLifetime,
+		return types.Secret{}, ShareToken{}, types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrShareLifetime,
 			"auth: a share link lives between 1 minute and 24 hours; asked for %s", ttl)
 	}
-	secret, err = mintSecret(types.KindShare)
+	plain, err := mintSecret(types.KindShare)
 	if err != nil {
-		return "", ShareToken{}, err
+		return types.Secret{}, ShareToken{}, err
 	}
-	return secret, ShareToken{SHA256: digest(secret), Expires: time.Now().Add(ttl).UTC()}, nil
+	return types.NewSecret(plain), ShareToken{SHA256: digest(plain), Expires: time.Now().Add(ttl).UTC()}, nil
 }
 
 // Expired reports whether now is past the token's expiry.

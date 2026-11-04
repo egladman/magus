@@ -7,6 +7,7 @@ import "magus";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/builds" as builds;
 import "./hack/policy/verdict" as verdict;
+import "./hack/policy/mandate" as mandate;
 
 final isolationDenial = "a worker that changes code would share this checkout; spawn it with "
     + "`isolation: \"worktree\"`.\n"
@@ -27,7 +28,7 @@ final integrateRole = "integrate";
 // Spawn is what the rules read of one spawn, copied out of the request because a Buzz test
 // cannot build the host's SpawnRequest: constructing its Job fails on a nested default.
 export object Spawn {
-    kind: str,
+    kind: magus\SpawnKind,
     title: str,
     isolated: bool,
     model: str = "",
@@ -40,6 +41,9 @@ export object Spawn {
     // ownBuild: the spawned job owns its checkout and its write paths cover a build input of
     // ./cmd/magus there, so its worker builds ./magus (see builds\OwnBuild).
     ownBuild: bool = false,
+    // agentType is the host's subagent type. No rule reads it: the type is the
+    // orchestrator's choice, and the host enforces the tools it carries.
+    agentType: str = "",
 }
 
 // Lineage is a `<parent>/<role> <job>` title taken apart, or null for any other form.
@@ -64,11 +68,11 @@ fun lineage(title: str) > Lineage? {
 // unreadable says why: the row rule then advises and never denies. A continue starts
 // nothing, so it passes both.
 export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
-    if (spawn.kind != "spawn") {
+    if (spawn.kind != magus\SpawnKind.spawn) {
         return magus\guard.allow();
     }
     final row = decideJobRow(spawn, rows: rows, unreadable: unreadable);
-    if (row.decision == "deny") {
+    if (row.decision == magus\GuardDecision.deny) {
         return row;
     }
     if (!spawn.isolated and changeRoles.indexOf(helpers\titleRole(spawn.title)) != null) {
@@ -112,8 +116,8 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
             + "Neither `{line!.job}` nor `{line!.parent}/{line!.job}` is a row, so the guard has no lease "
             + "to bind this spawn's child to. " + remedy(spawn, line: line));
     }
-    if (["declared", "running", "exited"].indexOf(found!.state) == null) {
-        return magus\guard.deny("the row `{found!.id}` has ended ({found!.state}); fork a live one\n"
+    if ([magus\JobState.declared, magus\JobState.running, magus\JobState.exited].indexOf(found!.state) == null) {
+        return magus\guard.deny("the row `{found!.id}` has ended ({found!.state.value}); fork a live one\n"
             + "A child bound to an ended row is graded by nothing. " + remedy(spawn, line: line));
     }
     if (spawn.lease != "" and !descends(rows!, job: found!.id, ancestor: spawn.lease)) {
@@ -170,7 +174,7 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
         model = spawn.model;
     }
     var fork = "magus job fork {id}";
-    var tool = "magus\\job.put(\"{id}\", .\{ ";
+    var tool = "magus\\workspace().putJob(\"{id}\", .\{ ";
     if (parent != "orchestrator") {
         fork = fork + " --parent {parent}";
         tool = tool + "parent = \"{parent}\", ";
@@ -197,19 +201,19 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
 }
 
 fun request(title: str, isolated: bool) > Spawn {
-    return Spawn{ kind = "spawn", title = title, isolated = isolated, model = "opus" };
+    return Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = isolated, model = "opus" };
 }
 
-final store = helpers\jobRows([
-    ["guard-command", "running"],
-    ["naming-advisory", "declared"],
-    ["changelog-fragments", "exited"],
-    ["v050-prep", "running"],
-    ["v050-prep/scout-callers", "declared", "v050-prep"],
-    ["drop-improve", "pass", "v050-prep"],
-    ["footprint", "no_return"],
-    ["elsewhere", "running"],
-]);
+final store = [
+    helpers\JobRow{ id = "guard-command", state = magus\JobState.running },
+    helpers\JobRow{ id = "naming-advisory", state = magus\JobState.declared },
+    helpers\JobRow{ id = "changelog-fragments", state = magus\JobState.exited },
+    helpers\JobRow{ id = "v050-prep", state = magus\JobState.running },
+    helpers\JobRow{ id = "v050-prep/scout-callers", state = magus\JobState.declared, parent = "v050-prep" },
+    helpers\JobRow{ id = "drop-improve", state = magus\JobState.pass, parent = "v050-prep" },
+    helpers\JobRow{ id = "footprint", state = magus\JobState.noReturn },
+    helpers\JobRow{ id = "elsewhere", state = magus\JobState.running },
+];
 
 // judged is decideSpawn with every denial held to the verdict shape.
 fun judged(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
@@ -219,24 +223,24 @@ fun judged(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdic
 test "a live row passes" {
     foreach (title in ["orchestrator/review naming-advisory", "orchestrator/feat guard-command", "orchestrator/docs changelog-fragments"]) {
         final v = judged(request(title, isolated: true), rows: store, unreadable: "");
-        std\assert(v.decision == "allow", message: title);
+        std\assert(v.decision == magus\GuardDecision.allow, message: title);
     }
 }
 
 test "a spawn with no lineage title is denied, naming the fork" {
-    final v = judged(Spawn{ kind = "spawn", title = "audit the store", isolated = true }, rows: store, unreadable: "");
-    std\assert(v.decision == "deny", message: "no title grammar");
+    final v = judged(Spawn{ kind = magus\SpawnKind.spawn, title = "audit the store", isolated = true }, rows: store, unreadable: "");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "no title grammar");
     std\assert(v.reason.indexOf("magus job fork <job> --model <tier or model> --write-paths <paths>") != null, message: "names the fork");
     std\assert(v.reason.indexOf("`orchestrator/<role> <job>`") != null, message: "names the retitle");
-    std\assert(v.reason.indexOf("magus\\job.put(\"<job>\"") != null, message: "names the client tool write");
+    std\assert(v.reason.indexOf("magus\\workspace().putJob(\"<job>\"") != null, message: "names the client tool write");
     std\assert(v.reason.indexOf("magus_job") == null, message: "names no retired MCP tool");
 }
 
 test "a title naming a missing row is denied with the real command" {
     final v = judged(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
-    std\assert(v.decision == "deny", message: "missing row");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "missing row");
     std\assert(v.reason.indexOf("magus job fork nothing-here --parent v050-prep --model opus --read-only") != null, message: v.reason);
-    std\assert(v.reason.indexOf("magus\\job.put(\"nothing-here\", .\{ parent = \"v050-prep\"") != null, message: "names the client write");
+    std\assert(v.reason.indexOf("magus\\workspace().putJob(\"nothing-here\", .\{ parent = \"v050-prep\"") != null, message: "names the client write");
     std\assert(v.reason.indexOf("read_only = true") != null, message: "names the read-only field");
     std\assert(v.reason.indexOf("`v050-prep/scout nothing-here`") != null, message: "names the retitle");
 }
@@ -244,22 +248,22 @@ test "a title naming a missing row is denied with the real command" {
 test "an ended row is denied" {
     foreach (title in ["v050-prep/refactor drop-improve", "orchestrator/fix footprint"]) {
         final v = judged(request(title, isolated: true), rows: store, unreadable: "");
-        std\assert(v.decision == "deny", message: title);
+        std\assert(v.decision == magus\GuardDecision.deny, message: title);
         std\assert(v.reason.indexOf("has ended") != null, message: "says why");
     }
 }
 
 test "a nested id resolves under the title's parent" {
     final v = judged(request("v050-prep/scout scout-callers", isolated: false), rows: store, unreadable: "");
-    std\assert(v.decision == "allow", message: "v050-prep/scout-callers");
+    std\assert(v.decision == magus\GuardDecision.allow, message: "v050-prep/scout-callers");
 }
 
 test "a leased spawner hands out only its own tree" {
-    final mine = Spawn{ kind = "spawn", title = "v050-prep/scout scout-callers", isolated = false, lease = "v050-prep" };
-    std\assert(judged(mine, rows: store, unreadable: "").decision == "allow", message: "a child of the lease");
-    final other = Spawn{ kind = "spawn", title = "v050-prep/review elsewhere", isolated = false, lease = "v050-prep" };
+    final mine = Spawn{ kind = magus\SpawnKind.spawn, title = "v050-prep/scout scout-callers", isolated = false, lease = "v050-prep" };
+    std\assert(judged(mine, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a child of the lease");
+    final other = Spawn{ kind = magus\SpawnKind.spawn, title = "v050-prep/review elsewhere", isolated = false, lease = "v050-prep" };
     final v = judged(other, rows: store, unreadable: "");
-    std\assert(v.decision == "deny", message: "a row outside the lease");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "a row outside the lease");
     std\assert(v.reason.indexOf("--parent v050-prep") != null, message: "forks beneath the lease");
     std\assert(v.reason.indexOf("a child of `v050-prep`") != null, message: "says the fork is a child the store grades");
     final unleased = judged(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
@@ -268,45 +272,59 @@ test "a leased spawner hands out only its own tree" {
 
 test "an unreadable store advises and never denies" {
     final v = judged(request("orchestrator/review anything", isolated: false), rows: null, unreadable: "job store schema 10 is newer than 9");
-    std\assert(v.decision == "advise", message: "fails open");
+    std\assert(v.decision == magus\GuardDecision.advise, message: "fails open");
     std\assert(v.reason.indexOf("schema 10") != null, message: "names the cause");
-    std\assert(judged(request("orchestrator/feat anything", isolated: false), rows: null, unreadable: "x").decision == "deny", message: "isolation still denies");
+    std\assert(judged(request("orchestrator/feat anything", isolated: false), rows: null, unreadable: "x").decision == magus\GuardDecision.deny, message: "isolation still denies");
 }
 
 test "a code-changing spawn without its own checkout is denied" {
     foreach (title in ["orchestrator/feat guard-command", "v050-prep/fix naming-advisory", "orchestrator/docs changelog-fragments"]) {
         final v = judged(request(title, isolated: false), rows: store, unreadable: "");
-        std\assert(v.decision == "deny", message: title);
+        std\assert(v.decision == magus\GuardDecision.deny, message: title);
         std\assert(v.reason.indexOf("isolation: \"worktree\"") != null, message: "names the fix");
     }
 }
 
 test "an integrate spawn is refused for a row bound to another checkout, naming where to spawn it" {
     final rows = [
-        helpers\JobRow{ id = "land", state = "declared", checkoutRoot = "/w/other" },
-        helpers\JobRow{ id = "here", state = "declared", checkoutRoot = "/w/main" },
-        helpers\JobRow{ id = "unbound", state = "declared" },
+        helpers\JobRow{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
+        helpers\JobRow{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
+        helpers\JobRow{ id = "unbound", state = magus\JobState.declared },
     ];
     final at = fun (title: str) > Spawn {
-        return Spawn{ kind = "spawn", title = title, isolated = false, checkout = "/w/main" };
+        return Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = false, checkout = "/w/main" };
     };
     final denied = judged(at("orchestrator/integrate land"), rows: rows, unreadable: "");
-    std\assert(denied.decision == "deny", message: "bound elsewhere");
+    std\assert(denied.decision == magus\GuardDecision.deny, message: "bound elsewhere");
     std\assert(denied.reason.indexOf("`/w/other`") != null and denied.reason.indexOf("magus job fork land-here") != null, message: denied.reason);
-    std\assert(judged(at("orchestrator/integrate here"), rows: rows, unreadable: "").decision == "allow", message: "bound here");
-    std\assert(judged(at("orchestrator/integrate unbound"), rows: rows, unreadable: "").decision == "allow", message: "bound to none");
-    std\assert(judged(Spawn{ kind = "spawn", title = "orchestrator/integrate land", isolated = false }, rows: rows, unreadable: "").decision == "allow",
+    std\assert(judged(at("orchestrator/integrate here"), rows: rows, unreadable: "").decision == magus\GuardDecision.allow, message: "bound here");
+    std\assert(judged(at("orchestrator/integrate unbound"), rows: rows, unreadable: "").decision == magus\GuardDecision.allow, message: "bound to none");
+    std\assert(judged(Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/integrate land", isolated = false }, rows: rows, unreadable: "").decision == magus\GuardDecision.allow,
         message: "a spawn whose checkout is unread");
 }
 
 test "a thinking role, an isolated worker and a continue pass" {
-    std\assert(judged(request("v050-prep/review naming-advisory", isolated: false), rows: store, unreadable: "").decision == "allow", message: "a review");
-    std\assert(judged(request("orchestrator/feat guard-command", isolated: true), rows: store, unreadable: "").decision == "allow", message: "isolated");
-    std\assert(judged(Spawn{ kind = "continue", title = "", isolated = false }, rows: store, unreadable: "").decision == "allow", message: "a continue");
+    std\assert(judged(request("v050-prep/review naming-advisory", isolated: false), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a review");
+    std\assert(judged(request("orchestrator/feat guard-command", isolated: true), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "isolated");
+    std\assert(judged(Spawn{ kind = magus\SpawnKind.continuation, title = "", isolated = false }, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a continue");
+}
+
+test "a spawn differing only in agent type gets the same verdict" {
+    final rows = [helpers\JobRow{ id = "guard-command", state = magus\JobState.running }];
+    foreach (title in ["orchestrator/review guard-command", "orchestrator/feat guard-command", "orchestrator/review nothing-here"]) {
+        foreach (isolated in [true, false]) {
+            final plain = judged(Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = isolated }, rows: rows, unreadable: "");
+            foreach (agentType in ["general-purpose", "Explore", "magus-scout", "a-type-nobody-ships"]) {
+                final typed = judged(Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = isolated, agentType = agentType }, rows: rows, unreadable: "");
+                std\assert(typed.decision == plain.decision, message: "{title} {isolated} {agentType}");
+                std\assert(typed.reason == plain.reason, message: "reason for {title} {agentType}");
+            }
+        }
+    }
 }
 
 fun briefed(prompt: str) > Spawn {
-    return Spawn{ kind = "spawn", title = "orchestrator/feat guard-command", isolated = true, prompt = prompt };
+    return Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/feat guard-command", isolated = true, prompt = prompt };
 }
 
 test "a brief that tells the worker to build magus is denied, naming the script" {
@@ -316,18 +334,18 @@ test "a brief that tells the worker to build magus is denied, naming the script"
         "```sh\ngo build -o magus ./cmd/magus\n```",
     ]) {
         final v = judged(briefed(prompt), rows: store, unreadable: "");
-        std\assert(v.decision == "deny", message: prompt);
+        std\assert(v.decision == magus\GuardDecision.deny, message: prompt);
         std\assert(v.reason.indexOf("hack/dev/bootstrap-worktree.buzz") != null, message: "names the script");
         std\assert(v.reason.indexOf("one binary per base commit") != null, message: "says the orchestrator places it");
     }
     final unreadable = judged(briefed("Run `magus run go-build .` first."), rows: null, unreadable: "x");
-    std\assert(unreadable.decision == "deny", message: "an unreadable store does not excuse the brief");
+    std\assert(unreadable.decision == magus\GuardDecision.deny, message: "an unreadable store does not excuse the brief");
 }
 
 test "an integrate spawn shares the checkout and its brief may build magus" {
-    final integrate = Spawn{ kind = "spawn", title = "orchestrator/integrate guard-command", isolated = false, prompt = "Run `magus run go-build .` once the units land." };
+    final integrate = Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/integrate guard-command", isolated = false, prompt = "Run `magus run go-build .` once the units land." };
     final v = judged(integrate, rows: store, unreadable: "");
-    std\assert(v.decision != "deny", message: v.reason);
+    std\assert(v.decision != magus\GuardDecision.deny, message: v.reason);
 }
 
 test "a brief that forbids the build or builds something else passes" {
@@ -337,15 +355,198 @@ test "a brief that forbids the build or builds something else passes" {
         "Run `go run ./cmd/magus-utils` and `./magus run buzz-test .`.",
         "",
     ]) {
-        std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == "allow", message: prompt);
+        std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: prompt);
     }
-    final continued = Spawn{ kind = "continue", title = "", isolated = false, prompt = "Run `magus run go-build .`" };
-    std\assert(judged(continued, rows: store, unreadable: "").decision == "allow", message: "a continue starts nothing");
+    final continued = Spawn{ kind = magus\SpawnKind.continuation, title = "", isolated = false, prompt = "Run `magus run go-build .`" };
+    std\assert(judged(continued, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a continue starts nothing");
 }
 
 test "a spawn whose job builds its own binary may brief the build" {
     final prompt = "Run `magus run go-build .` first.";
-    final own = Spawn{ kind = "spawn", title = "orchestrator/feat guard-command", isolated = true, prompt = prompt, ownBuild = true };
-    std\assert(judged(own, rows: store, unreadable: "").decision == "allow", message: "its own build");
-    std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == "deny", message: "the same brief for any other job");
+    final own = Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/feat guard-command", isolated = true, prompt = prompt, ownBuild = true };
+    std\assert(judged(own, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "its own build");
+    std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == magus\GuardDecision.deny, message: "the same brief for any other job");
+}
+
+// A starting guess, not a measurement: change it here when it stops fitting.
+// magus only reports this count. Refusing on it is this repository's call.
+export final finishedBranchLimit = 10;
+
+// ForkCounts is what the rules read of magus\workspace().forkFacts().
+// It is copied out like Spawn.
+// An unknown side says why it went unread, and never refuses.
+export object ForkCounts {
+    finishedBranches: [str] = [],
+    branchesUnknown: str = "",
+    integrateRecord: str = "",
+    commitsSinceTest: int = 0,
+    lastTest: str = "",
+    testUnknown: str = "",
+}
+
+// decideFork refuses a top-level fork at limit. Integrating and child forks
+// pass, since they clear the backlog. A record no reader could see passes with
+// a note, because refusing on its shape would stop forks that integrate.
+export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > GuardVerdict {
+    if (counts.branchesUnknown != "" or counts.finishedBranches.len() < limit) {
+        return magus\guard.allow();
+    }
+    if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
+        return magus\guard.allow();
+    }
+    final facts = "{counts.finishedBranches.len()} finished branch(es) off the base: {counts.finishedBranches.join(", ")}; "
+        + "{describeTest(counts)}. The limit is {limit} branches, a starting guess: "
+        + "change finishedBranchLimit in hack/policy/spawn.buzz if it is wrong.";
+    if (!fork.known) {
+        return magus\guard.advise("this fork's record could not be read, so it passes unjudged, though it would be refused if it does not integrate. {facts}");
+    }
+    return magus\guard.deny("too many finished branches wait off the base, so this fork is refused\n{facts} "
+        + "Integrate them first with `./magus job fork --stdin --checkout <dir>`, given this record: {counts.integrateRecord}");
+}
+
+fun describeTest(counts: ForkCounts) > str {
+    if (counts.testUnknown != "") {
+        return "commits since the last full test: unknown, {counts.testUnknown}";
+    }
+    return "{counts.commitsSinceTest} commit(s) since the last full test, {counts.lastTest}";
+}
+
+// decideForkLine judges each `magus job fork` on a line. facts runs only for a
+// fork that could be refused, since it reads the version control per row.
+export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (path: str) > str, facts: fun () > ForkCounts, limit: int) > GuardVerdict {
+    foreach (index, p in programs) {
+        final ops = helpers\magusOperands(p.args);
+        if (p.name != "magus" or ops.len() < 2 or ops[0] != "job" or ops[1] != "fork") {
+            continue;
+        }
+        final fork = mandate\readFork(p, body: forkRecord(programs, at: index, line: line, read: read));
+        if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
+            continue;
+        }
+        final judged = decideFork(fork, counts: facts(), limit: limit);
+        if (judged.decision != magus\GuardDecision.allow) {
+            return judged;
+        }
+    }
+    return magus\guard.allow();
+}
+
+// forkRecord is the --stdin record of the fork at programs[at], from a heredoc,
+// a redirected file, or an `echo` or `cat` piped to it. "" when none is
+// readable.
+fun forkRecord(programs: [helpers\Program], at: int, line: str, read: fun (path: str) > str) > str {
+    final bodies = mandate\plainHeredocs(line);
+    if (bodies.len() > 0) {
+        return bodies[0];
+    }
+    final redirect = line.indexOf(" < ");
+    if (redirect != null) {
+        final rest = line.sub(redirect! + 3).trim().split(" ")[0];
+        return read(rest.replace("'", with: "").replace("\"", with: ""));
+    }
+    if (at == 0 or line.indexOf("|") == null) {
+        return "";
+    }
+    final before = programs[at - 1];
+    if (before.name == "echo") {
+        return before.args.join(" ");
+    }
+    if (before.name == "cat" and before.args.len() == 1) {
+        return read(before.args[0]);
+    }
+    return "";
+}
+
+fun waiting(branches: int, commits: int = 3) > ForkCounts {
+    final names = mut [<str>];
+    for (var i = 0; i < branches; i = i + 1) {
+        names.append("done-{i} (job done-{i}, 1 commit(s))");
+    }
+    return ForkCounts{
+        finishedBranches = names,
+        integrateRecord = "\{\"schema_version\":13,\"id\":\"integrate-branches\"\}",
+        commitsSinceTest = commits,
+        lastTest = "out1a2b3c at abc123",
+    };
+}
+
+fun forkProgram(args: [str]) > helpers\Program {
+    return helpers\Program{ name = "magus", args = ["job", "fork"] + args, repeats = false };
+}
+
+fun noFile(path: str) > str {
+    return "";
+}
+
+test "a top-level fork at the limit is refused, printing both counts, the last test and the file" {
+    final v = verdict\checked(decideFork(mandate\Fork{ id = "next" }, counts: waiting(10), limit: finishedBranchLimit), label: "at the limit");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "at the branch limit");
+    foreach (want in ["10 finished branch(es)", "done-9 (job done-9", "3 commit(s)", "out1a2b3c at abc123", "hack/policy/spawn.buzz", "integrate-branches"]) {
+        std\assert(v.reason.indexOf(want) != null, message: "{want} in {v.reason}");
+    }
+}
+
+test "raising the limit lets the same fork through" {
+    final v = decideFork(mandate\Fork{ id = "next" }, counts: waiting(10), limit: finishedBranchLimit + 1);
+    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+}
+
+test "commits alone never refuse" {
+    final v = decideFork(mandate\Fork{ id = "next" }, counts: waiting(0, commits: 100000), limit: finishedBranchLimit);
+    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+}
+
+test "below the limit, integrating, or a child of a job passes" {
+    final over = waiting(10);
+    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: waiting(9), limit: 10).decision == magus\GuardDecision.allow, message: "below");
+    std\assert(decideFork(mandate\Fork{ id = "land", integrates = ["done-0"] }, counts: over, limit: 10).decision == magus\GuardDecision.allow, message: "integrates");
+    std\assert(decideFork(mandate\Fork{ id = "child", parent = "next" }, counts: over, limit: 10).decision == magus\GuardDecision.allow, message: "child");
+}
+
+test "a branch count that could not be read never refuses" {
+    final unknown = ForkCounts{ branchesUnknown = "version control is disabled here" };
+    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: unknown, limit: 0).decision == magus\GuardDecision.allow, message: "unknown");
+}
+
+test "a line reads the fork's record from a heredoc, a redirect, an echo or a cat" {
+    final over = fun () > ForkCounts {
+        return waiting(10);
+    };
+    final integrating = "\{\"id\":\"land\",\"integrates\":[\"done-0\"]\}";
+    final plain = "\{\"id\":\"next\"\}";
+    final file = fun (path: str) > str {
+        return if (path == "land.json") integrating else plain;
+    };
+    final stdin = forkProgram(["--stdin"]);
+    final heredoc = "./magus job fork --stdin <<'EOF'\n{integrating}\nEOF";
+    std\assert(decideForkLine([stdin], line: heredoc, read: noFile, facts: over, limit: 10).decision == magus\GuardDecision.allow, message: "heredoc");
+    std\assert(decideForkLine([stdin], line: "./magus job fork --stdin < land.json", read: file, facts: over, limit: 10).decision == magus\GuardDecision.allow, message: "redirect");
+    std\assert(decideForkLine([stdin], line: "./magus job fork --stdin < plain.json", read: file, facts: over, limit: 10).decision == magus\GuardDecision.deny, message: "a redirected plain fork");
+    final echo = helpers\Program{ name = "echo", args = [integrating], repeats = false };
+    std\assert(decideForkLine([echo, stdin], line: "echo x | ./magus job fork --stdin", read: noFile, facts: over, limit: 10).decision == magus\GuardDecision.allow, message: "echo");
+    final cat = helpers\Program{ name = "cat", args = ["plain.json"], repeats = false };
+    std\assert(decideForkLine([cat, stdin], line: "cat plain.json | ./magus job fork --stdin", read: file, facts: over, limit: 10).decision == magus\GuardDecision.deny, message: "cat");
+}
+
+test "a record no reader can see passes with a note past the limit" {
+    final over = fun () > ForkCounts {
+        return waiting(10);
+    };
+    final v = decideForkLine([forkProgram(["--stdin"])], line: "./magus job fork --stdin", read: noFile, facts: over, limit: 10);
+    std\assert(v.decision == magus\GuardDecision.advise, message: v.reason);
+    std\assert(v.reason.indexOf("hack/policy/spawn.buzz") != null, message: v.reason);
+}
+
+test "a named fork is judged, a child reads no facts, and another command passes" {
+    final over = fun () > ForkCounts {
+        return waiting(10);
+    };
+    final refused = decideForkLine([forkProgram(["next", "--read-only"])], line: "./magus job fork next --read-only", read: noFile, facts: over, limit: 10);
+    std\assert(refused.decision == magus\GuardDecision.deny, message: "a named fork");
+    final unread = fun () > ForkCounts {
+        std\assert(false, message: "a child reads no facts");
+        return ForkCounts{};
+    };
+    std\assert(decideForkLine([forkProgram(["kid", "--parent", "next"])], line: "./magus job fork kid --parent next", read: noFile, facts: unread, limit: 10).decision == magus\GuardDecision.allow, message: "a child");
+    std\assert(decideForkLine([helpers\Program{ name = "magus", args = ["ls", "jobs"], repeats = false }], line: "./magus ls jobs", read: noFile, facts: unread, limit: 10).decision == magus\GuardDecision.allow, message: "another verb");
 }

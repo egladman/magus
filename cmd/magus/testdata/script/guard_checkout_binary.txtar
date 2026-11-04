@@ -1,0 +1,66 @@
+# A job checkout whose magusfile reaches for a binding this magus does not ship is judged
+# by the checkout's own ./magus when that was built at the checkout's HEAD, and the verdict
+# names the binary that judged. A placed ./magus behind HEAD is not asked: this magus
+# judges, cannot load the tree, and refuses the run as stale-binary, naming the bootstrap.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env XDG_CACHE_HOME=$WORK/home/cache
+cd session
+exec git init -q
+
+cd $WORK/job
+exec git init -q
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git add magus.yaml magusfile.buzz go.mod
+exec git commit -q -m base
+exec git commit -q --allow-empty -m 'extend the bindings'
+chmod 755 magus
+cd $WORK/session
+exec sh -c 'printf "{\"session_id\":\"checkout-binary\",\"hook_event_name\":\"PreToolUse\",\"cwd\":\"%s\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"magus --root %s/job run go-test .\"}}\n" "$PWD" "$WORK" > call.json'
+
+stdin call.json
+exec magus shell --agent-name claude-code --transport buzz
+stdout '^judged by .*/job/magus for .*magus'
+
+env STUB_BUILT_AT=HEAD~1
+stdin call.json
+! exec magus shell --agent-name claude-code --transport buzz -o json
+stdout '"rule": "stale-binary"'
+stdout 'bootstrap'
+stdout 'not by .*/job/magus: it was built at [0-9a-f]+, which is neither the checkout''s HEAD [0-9a-f]+ nor a commit after it'
+
+-- session/magus.yaml --
+{}
+-- session/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "fixture workspace: only the session side of a delegated judgment matters here",
+});
+-- job/magus.yaml --
+{}
+-- job/go.mod --
+module github.com/egladman/magus
+
+go 1.25
+-- job/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "fixture workspace: a tree that extends the bindings past this magus",
+});
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    return magus\guard.verdictFromTheFuture();
+});
+-- job/magus --
+#!/bin/sh
+here=$(cd "$(dirname "$0")" && pwd)
+if [ "$1" = version ]; then
+    git -C "$here" rev-parse "${STUB_BUILT_AT:-HEAD}"
+    exit 0
+fi
+cat >/dev/null
+echo "judged by $here/magus for $__MAGUS_DELEGATED_BY"

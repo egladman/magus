@@ -269,6 +269,7 @@ var profiles = map[types.GuardProfile]map[string]Setting{
 // refuses. A workspace that wants a rule softer sets it to advise or off by name.
 var defaults = map[string]decision{
 	// Recoverable: the served command answers what the refused one asked.
+	"ambiguous-ci-word":      Deny,
 	"architecture-unbriefed": Deny,
 	"brief-command":          Deny,
 	"brief-plain-commands":   Deny,
@@ -306,9 +307,11 @@ var defaults = map[string]decision{
 	backgroundUnbounded:     Deny,
 	"backtick-substitution": Deny,
 	"busy-wait":             Deny,
+	"cache-clear":           Deny,
 	"cache-dir-write":       Deny,
 	"claimed-declaration":   Deny,
 	"credential-verb":       Deny,
+	"edit-ungraded":         Deny,
 	"focus-read":            Deny,
 	"heredoc-write":         Deny,
 	"hook-wiring-write":     Deny,
@@ -326,9 +329,11 @@ var defaults = map[string]decision{
 	"lease-claim":           Deny,
 	"lease-row-unknown":     Deny,
 	"grant-is-a-persons":    Deny,
+	"conflict-commit":       Deny,
 	"conflict-rewrite":      Deny,
 	"merge-side-checkout":   Deny,
 	"notes-author":          Deny,
+	"deviation-author":      Deny,
 	"policy-unloaded":       Deny,
 	"process-poll":          Deny,
 	"process-signal":        Deny,
@@ -337,12 +342,12 @@ var defaults = map[string]decision{
 	"sleep-poll":            Deny,
 	"spawn-duplicate":       Deny,
 	"spawn-unvalidated":     Deny,
+	"spawn-unisolated-row":  Deny,
 	"spawn-warm-worker":     Deny,
 	spawnAboveParentTier:    Deny,
 	"stale-binary":          Deny,
 	"token-state":           Deny,
 	"vcs-off-switch":        Deny,
-	"waiver-is-a-persons":   Deny,
 	"whole-tree":            Deny,
 	"worker-background-run": Deny,
 	"worker-check-only":     Deny,
@@ -427,7 +432,6 @@ var fixed = map[string]string{
 	"workspace-spawn-failed":   "it is how a workspace learns that a spawn rule of its own judged nothing, so it can be neither silenced nor promoted",
 	"workspace-write-failed":   "it is how a workspace learns that a write rule of its own judged nothing, so it can be neither silenced nor promoted",
 	"grant-is-a-persons":       "a grant is a person's approval, so no workspace setting may let an agent issue one",
-	"waiver-is-a-persons":      "a gate waiver is a person's approval, so no workspace setting may let an agent issue one",
 }
 
 // removal is why a rule the guard no longer has under its name is gone, and the name it

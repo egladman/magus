@@ -42,7 +42,7 @@ func TestCheckTokens(t *testing.T) {
 		_, err = auth.SaveNewOperator(tok)
 		require.NoError(t, err)
 		got := (&runner{}).checkTokens()
-		assert.Contains(t, got.Message, "operator token: present (id "+auth.TokenID(tok))
+		assert.Contains(t, got.Message, "operator token: present (id "+auth.TokenID(tok.Reveal()))
 	})
 
 	t.Run("a token expiring within 14 days is advice", func(t *testing.T) {

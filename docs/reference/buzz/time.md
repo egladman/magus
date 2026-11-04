@@ -18,12 +18,12 @@ Timestamp formatting/parsing and duration parsing (Go time, UTC).
 
 Render Unix-millis as a string using a Go reference layout (UTC).
 
-**Signature:** `time\format(layout, unix_millis) -> string` - [source](https://github.com/egladman/magus/blob/main/std/time.go)
+**Signature:** `time\format(layout, unixMillis) -> string` - [source](https://github.com/egladman/magus/blob/main/std/time.go)
 
-| Parameter     | Type      | Optional | Description |
-| ------------- | --------- | -------- | ----------- |
-| `layout`      | `string`  |          |             |
-| `unix_millis` | `float64` |          |             |
+| Parameter    | Type      | Optional | Description |
+| ------------ | --------- | -------- | ----------- |
+| `layout`     | `string`  |          |             |
+| `unixMillis` | `float64` |          |             |
 
 **Returns:** string
 
@@ -64,12 +64,12 @@ Return the current UTC time as an RFC 3339 string. For the raw epoch-millis valu
 
 Add a Go duration string (e.g. "24h", "-1h30m") to a Unix-millis timestamp; returns the new Unix-millis timestamp.
 
-**Signature:** `time\add(unix_millis, duration) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/time.go)
+**Signature:** `time\add(unixMillis, duration) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/time.go)
 
-| Parameter     | Type      | Optional | Description |
-| ------------- | --------- | -------- | ----------- |
-| `unix_millis` | `float64` |          |             |
-| `duration`    | `string`  |          |             |
+| Parameter    | Type      | Optional | Description |
+| ------------ | --------- | -------- | ----------- |
+| `unixMillis` | `float64` |          |             |
+| `duration`   | `string`  |          |             |
 
 **Returns:** float64
 

@@ -23,6 +23,8 @@ const (
 	ResultKey = "result"
 	// HintLabel is the [Notice] label of advice. See [Hint].
 	HintLabel = "hint"
+	// UncheckedLabel is the [Notice] label of a check that did not run. See [Unchecked].
+	UncheckedLabel = "unchecked"
 	// ErrorKey carries the error a record reports. See [Error].
 	ErrorKey = "error"
 )
@@ -61,3 +63,8 @@ func Error(err error) slog.Attr { return slog.Any(ErrorKey, err) }
 // Hint marks a record as advice, printed "hint: message". A quiet display keeps an info
 // hint, since a hint is what -s still surfaces.
 func Hint() slog.Attr { return Notice(HintLabel) }
+
+// Unchecked marks a record that says a check did not run: it failed open, fell back or
+// was skipped. A quiet display keeps it at every level, so -s and log.silent never hide
+// that something went unjudged.
+func Unchecked() slog.Attr { return Notice(UncheckedLabel) }

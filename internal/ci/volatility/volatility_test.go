@@ -248,7 +248,7 @@ func TestBuildReportEmptyPath(t *testing.T) {
 	t.Parallel()
 	report, err := BuildReport(context.Background(), "", Config{Threshold: 0.2})
 	require.NoError(t, err)
-	assert.Equal(t, types.VolatilityReport{Threshold: 0.2}, report)
+	assert.Equal(t, types.Volatility{Threshold: 0.2}, report)
 }
 
 // TestBuildReport scores every recorded (project, target) pair and returns them sorted

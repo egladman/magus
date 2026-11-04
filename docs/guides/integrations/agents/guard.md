@@ -214,9 +214,9 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   through. Giving a path back cannot widen a role, and whether a particular
   shrink is legitimate is the store's judgment. Recording the base a lease
   landed on passes, because it is a procedure the write path demands.
-  Reading is untouched: `magus\job.list` and `magus ls jobs`.
+  Reading is untouched: `magus\workspace().jobs` and `magus ls jobs`.
 
-  The guard parses a `client` script and renders each literal `magus\job.put`,
+  The guard parses a `client` script and renders each literal `magus\workspace().putJob`,
   `register`, `clear` and `wait` call as a line the lease rules read, so a
   worker's widening or forged checkpoint is refused before the store sees it.
   Only a call addressed to the magus server (`mcp__magus__<tool>`)
@@ -226,7 +226,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   ([worker-background-run](../../../reference/rules/worker-background-run.md)). A
   worker that backgrounds its check ends its turn with the run pending and parks there,
   and nobody is told the result. The wiring reports what the call asked of the host
-  (`--call-background`, `--call-timeout-ms`), and a `magus run` or `magus affected` by a
+  (`--call-background`, `--call-timeout`), and a `magus run` or `magus affected` by a
   worker under a live lease that does not integrate the checkout is refused when the host would
   run it in the background. A wiring that reports nothing leaves the rule silent.
 - **A backgrounded shell command with nothing to end it**
@@ -838,9 +838,10 @@ caller that passes `--renders-ask`, the claim that its reply puts the call in fr
 the person or refuses it. Every other caller gets `deny` with a reason saying the hook
 predates approval prompts, because a glue older than the decision renders an ask as
 nothing and its host reads nothing as allow. The shipped templates and the OpenCode
-plugin pass the flag; a `HOST_RESPONSE` you wrote yourself does not. Today the push gate
-is its one source: a push at a commit no passing gate covers, from a session no job
-lease binds, gets `ask`, and the reason names the commit and the gate state. The gate
+plugin pass the flag; a `HOST_RESPONSE` you wrote yourself does not. It has two sources.
+A run of a `human_only` target, from a session no job lease binds, gets `ask`. So does a
+push at a commit no passing gate covers, from such a session, and the reason names the
+commit and the gate state. The gate
 covers every backend magus drives: `git push`, `hg push`, `sl push` (with or without
 `--to`) and `jj git push`, relocated with `git -C`, `hg -R`, `sl -R` or `jj -R` too. It
 matches the gate to the revision by content hash (git and Mercurial nodes, jj commit

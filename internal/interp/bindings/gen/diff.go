@@ -20,10 +20,10 @@ func RegisterDiff(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("unified", vm.DirectValue("diff.unified", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		a := ffi.String(bzArgs, 0)
 		b := ffi.String(bzArgs, 1)
-		from_label := ffi.String(bzArgs, 2)
-		to_label := ffi.String(bzArgs, 3)
+		fromLabel := ffi.String(bzArgs, 2)
+		toLabel := ffi.String(bzArgs, 3)
 		context := ffi.Int(bzArgs, 4, 0)
-		ret0, err := std.DiffUnified(ctx, a, b, from_label, to_label, context)
+		ret0, err := std.DiffUnified(ctx, a, b, fromLabel, toLabel, context)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

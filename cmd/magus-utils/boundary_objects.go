@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/format"
 	"reflect"
+	"slices"
 	"sort"
 
 	"github.com/egladman/magus/internal/generate/emit"
@@ -44,7 +45,7 @@ func runBoundaryObjects(args []string) error {
 	mods := hostmodules.All()
 	sort.Slice(mods, func(i, j int) bool { return mods[i].Name < mods[j].Name })
 	for _, m := range mods {
-		for _, meth := range m.Methods {
+		for _, meth := range slices.Concat(m.Methods, m.ObjectExterns()) {
 			if meth.Extern || meth.Impl == nil {
 				continue
 			}

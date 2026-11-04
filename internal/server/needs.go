@@ -36,8 +36,8 @@ var procedureNeeds = map[protoreflect.FullName]map[protoreflect.Name]types.Need{
 		"FindAffected":   needConsoleRead,
 		"GetGraphStats":  needConsoleRead,
 	},
-	"magus.insight.v1alpha1.InsightService": {
-		"GetInsight": needConsoleRead,
+	"magus.historymetrics.v1alpha1.HistoryMetricsService": {
+		"GetHistoryMetrics": needConsoleRead,
 	},
 	"magus.job.v1alpha1.JobService": {
 		"ListJobs": needConsoleRead,
@@ -82,23 +82,23 @@ var procedureNeeds = map[protoreflect.FullName]map[protoreflect.Name]types.Need{
 // The rest serve unreviewed source, every target's name, or an action, so they need
 // console=write.
 var apiNeeds = map[string]types.Need{
-	"/api/v1/events":        needConsoleRead,
-	"/api/v1/insight":       needConsoleRead,
-	"/api/v1/graph":         needConsoleRead,
-	"/api/v1/diagrams":      needConsoleRead,
-	"/api/v1/diagrams/":     needConsoleRead,
-	"/api/v1/diff":          needConsoleWrite,
-	"/api/v1/diff/patch":    needConsoleWrite,
-	"/api/v1/diff/context":  needConsoleWrite,
-	"/api/v1/diff/session":  needConsoleWrite,
-	"/api/v1/diff/review":   needConsoleWrite,
-	"/api/v1/diff/branches": needConsoleWrite,
-	"/api/v1/diff/thread":   needConsoleWrite,
-	"/api/v1/diff/run":      needConsoleWrite,
-	"/api/v1/plan":          needConsoleWrite,
-	"/api/v1/attention":     needConsoleWrite,
-	"/api/v1/share":         needConsoleWrite,
-	"/api/":                 needConsoleRead,
+	"/api/v1/events":          needConsoleRead,
+	"/api/v1/history-metrics": needConsoleRead,
+	"/api/v1/graph":           needConsoleRead,
+	"/api/v1/diagrams":        needConsoleRead,
+	"/api/v1/diagrams/":       needConsoleRead,
+	"/api/v1/diff":            needConsoleWrite,
+	"/api/v1/diff/patch":      needConsoleWrite,
+	"/api/v1/diff/context":    needConsoleWrite,
+	"/api/v1/diff/session":    needConsoleWrite,
+	"/api/v1/diff/review":     needConsoleWrite,
+	"/api/v1/diff/branches":   needConsoleWrite,
+	"/api/v1/diff/thread":     needConsoleWrite,
+	"/api/v1/diff/run":        needConsoleWrite,
+	"/api/v1/plan":            needConsoleWrite,
+	"/api/v1/attention":       needConsoleWrite,
+	"/api/v1/share":           needConsoleWrite,
+	"/api/":                   needConsoleRead,
 }
 
 // lookupAPINeeds is the one-entry needs map a guard over the JSON route at path takes.

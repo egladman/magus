@@ -12,7 +12,7 @@ import (
 const execMessage = "`Exec` (157 lines) is shared by 6 packages 3 import hops apart (cmd/termcast, internal/a, internal/b, ...), " +
 	"and `CancelGrace` is set only by internal/queue, `TTYCols` is set only by cmd/termcast, `TTYRows` is set only by cmd/termcast. " +
 	"Share it only when its callers have the same failure semantics and policy knobs, so a bug in one is a bug in the other; " +
-	"otherwise give each caller its own copy with one line saying why, or record why it stays shared as a mode-knobs known entry"
+	"otherwise give each caller its own copy with one line saying why"
 
 func execID() string { return symbolID(conformanceNS(runPkg) + "Exec().") }
 
@@ -46,17 +46,6 @@ func TestCouplingCheckScoresTheMergeHigher(t *testing.T) {
 			assert.InDelta(t, tc.want, found[0].score, 0)
 		})
 	}
-}
-
-func TestCouplingCheckSkipsAKnownEntry(t *testing.T) {
-	g := couplingGraph(execShape()...)
-	o := couplingOptions()
-	o.Ratchet = types.ConformanceRatchet{Schema: 1, Known: []types.ConformanceKnown{{
-		Metric: types.ConformanceModeKnobs, Items: []string{"internal/proc/run/exec.go#Exec"},
-		Reason: "one process primitive: TTY sizing is termcast's knob, CancelGrace the queue's",
-	}}}
-
-	assert.Empty(t, g.ConformanceChecks(ConformanceChange{Subjects: []string{execID()}, Conformance: o}))
 }
 
 // What the doctrine keeps shared stays silent: a small utility far callers share, a decision

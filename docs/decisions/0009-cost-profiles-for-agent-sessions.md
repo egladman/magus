@@ -126,7 +126,7 @@ and web fetches. The root may always spawn, run the `magus job` verbs, read a re
 ### The spawn rules read model tiers
 
 _Done._ A job row records the model tier it was forked at: its name and rank in the
-workspace's model-tier declaration (`magus\job.modelTiers`, or the shipped `magus/modeltiers`
+workspace's model-tier declaration (`magus\modelTiers`, or the shipped `magus/modeltiers`
 module), the source that chose it, the reason and the declaration's line. The spawn rules
 resolve a spawn's model to a tier through the spawning harness's aliases in that declaration
 and compare ranks, never model names or prices.

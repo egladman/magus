@@ -45,6 +45,7 @@
 {"name":"Magus.All","reason":"workspace accessor the CLI or std calls on the loaded handle"}
 {"name":"Magus.ApplySandbox","reason":"cache, sandbox and lock state the CLI reports or manages"}
 {"name":"Magus.AssessChange","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.AssessRisk","reason":"types.RiskAssessor, which std reaches magus\\risk.assess through, needs it exported"}
 {"name":"Magus.AutoResolvable","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
 {"name":"Magus.AutoResolve","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
 {"name":"Magus.AutoResolveGlobs","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
@@ -64,6 +65,8 @@
 {"name":"Magus.ConcurrencyNudge","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.Conformance","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.ConformanceOptions","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.ConformanceCeilings","reason":"the conformance lens magus\\conformance reads through the std workspace interface"}
+{"name":"Magus.MeasureConformanceBase","reason":"the base measure magus\\conformanceBase runs through the std workspace interface"}
 {"name":"Magus.Context","reason":"workspace accessor a Go program uses to call the graph doors in std without running a target"}
 {"name":"Magus.ContextWithSecrets","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
 {"name":"Magus.CurrentRevision","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
@@ -71,6 +74,7 @@
 {"name":"Magus.DiffAgainst","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
 {"name":"Magus.DiffTUIEnabled","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
 {"name":"Magus.DiffWith","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.DiskReclaim","reason":"cache, sandbox and lock state the CLI reports or manages"}
 {"name":"Magus.Duplication","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.EvaluateProjects","reason":"workspace accessor the CLI or std calls on the loaded handle"}
 {"name":"Magus.EvaluateTarget","reason":"workspace accessor the CLI or std calls on the loaded handle"}
@@ -78,7 +82,9 @@
 {"name":"Magus.ExpandAffectedSet","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.ExpandPath","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.ExportCache","reason":"cache, sandbox and lock state the CLI reports or manages"}
+{"name":"Magus.ExportSCIP","reason":"symbol index export as SCIP for code-intelligence tools, behind magus graph export -o scip"}
 {"name":"Magus.FileAt","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
+{"name":"Magus.FileDiskAttention","reason":"cache, sandbox and lock state the CLI reports or manages"}
 {"name":"Magus.FindOutputProducer","reason":"captured output lookup behind query output and the run ref"}
 {"name":"Magus.FreshenSymbolIndexes","reason":"symbol index query or refresh for refs and the conformance lens"}
 {"name":"Magus.Get","reason":"workspace accessor the CLI or std calls on the loaded handle"}
@@ -121,6 +127,7 @@
 {"name":"Magus.PublishOutput","reason":"captured output lookup behind query output and the run ref"}
 {"name":"Magus.RangeDiff","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
 {"name":"Magus.RefMatchCommand","reason":"captured output lookup behind query output and the run ref"}
+{"name":"Magus.RefreshSymbolIndexes","reason":"symbol index query or refresh for refs and the conformance lens"}
 {"name":"Magus.Regions","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.ReindexSymbols","reason":"symbol index query or refresh for refs and the conformance lens"}
 {"name":"Magus.ResolveProjects","reason":"workspace accessor the CLI or std calls on the loaded handle"}
@@ -168,6 +175,7 @@
 {"name":"OutputDescriptor","reason":"value type a Run or query result returns to the caller"}
 {"name":"PlanOptions","reason":"option type taken by Open, Run, Plan or a declaration"}
 {"name":"ProjectOption","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"RecentSymbolRefreshFailures","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"ResolveCacheDir","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
 {"name":"RetryOnVolatile","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"RunOption","reason":"option type taken by Open, Run, Plan or a declaration"}
@@ -188,6 +196,8 @@
 {"name":"SpawnRule","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"SpellCache","reason":"value type a Run or query result returns to the caller"}
 {"name":"SymbolOccurrenceRead","reason":"value type a Run or query result returns to the caller"}
+{"name":"SymbolRefresh","reason":"value type a Run or query result returns to the caller"}
+{"name":"SymbolRefreshBudget","reason":"constant a caller compares against or pins"}
 {"name":"TargetHandler","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"TargetLabel","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"TargetOption","reason":"option type taken by Open, Run, Plan or a declaration"}
@@ -195,6 +205,7 @@
 {"name":"WithBaseRef","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithBroker","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithBrokerPolicy","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithCache","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithCacheBackend","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithCharms","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithCommandLine","reason":"functional option that configures a Run, a Target or a Project declaration"}
@@ -209,8 +220,6 @@
 {"name":"WithGraphHistory","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithGraphInput","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithMetricsCollection","reason":"functional option that configures a Run, a Target or a Project declaration"}
-{"name":"WithNoCache","reason":"functional option that configures a Run, a Target or a Project declaration"}
-{"name":"WithNoVolatilityRetry","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithObserver","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithOutputs","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithRace","reason":"functional option that configures a Run, a Target or a Project declaration"}
@@ -229,6 +238,7 @@
 {"name":"WithUpstream","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithVCSDriver","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithVersion","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithVolatilityRetry","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithWatchIgnore","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithWorkspaceRegistry","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithWorkspaceRegistryContext","reason":"functional option that configures a Run, a Target or a Project declaration"}

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -48,8 +48,9 @@ type staleGraph struct {
 
 // graphMoved reports why the graph a deny would route to no longer describes this
 // checkout: a merge, rebase, cherry-pick or revert is underway, or the guard index was
-// built at another revision. A deny over a stale graph would push the reader from a
-// correct grep to a wrong answer. With no revision to compare, the index's stamps decide.
+// built during one. A deny over a stale graph would push the reader from a correct grep to
+// a wrong answer. The revision the index was built at is not compared: a commit moves it
+// without moving a file, and the index's per-file stamps already say which files moved.
 func graphMoved(deps Dependencies) staleGraph {
 	if deps.scope.root == "" {
 		return staleGraph{}
@@ -58,28 +59,13 @@ func graphMoved(deps Dependencies) staleGraph {
 	if !ok {
 		return staleGraph{}
 	}
+	if deps.GraphMoved == nil {
+		return staleGraph{}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), graphMovedBudget)
 	defer cancel()
-	if op := knowledge.ReadGuardOperation(ctx, root); op != "" {
-		return staleGraph{reason: knowledge.GuardCheckout{}.StaleAt(knowledge.GuardCheckout{Operation: op}), underway: true}
-	}
-	// The index header is a file read; the revision starts processes, so it waits on one.
-	cacheDir, err := deps.cacheDir(root)
-	if err != nil {
-		return staleGraph{}
-	}
-	built, err := knowledge.ReadGuardIndexCheckout(cacheDir, root)
-	if err != nil {
-		return staleGraph{}
-	}
-	if built.Operation != "" {
-		return staleGraph{reason: built.StaleAt(knowledge.GuardCheckout{})}
-	}
-	rev := deps.revision(ctx, root, "")
-	if rev == "" {
-		return staleGraph{}
-	}
-	return staleGraph{reason: built.StaleAt(knowledge.GuardCheckout{Revision: rev})}
+	reason, underway := deps.GraphMoved(ctx, root)
+	return staleGraph{reason: reason, underway: underway}
 }
 
 // verdict is graph-stale's advice in place of the deny: the search runs, and the rebuild
@@ -150,19 +136,16 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 	return ShellVerdict{}, false
 }
 
-// symbolSearchVerdict refuses a search the judgment routed, serving the rebuild first when
-// the index is behind or describes another revision. A rebase still underway advises
-// instead: a rebuild then would describe a tree about to move again.
+// symbolSearchVerdict refuses a search the judgment routed. An index behind
+// the tree still routes to refs, which refreshes it as it answers. A rebase
+// underway advises: the tree is about to move again.
 func symbolSearchVerdict(deps Dependencies, dir string, c hint.Invocation, js searchJudgment, piped bool) ShellVerdict {
 	moved := graphMoved(deps)
-	switch {
-	case moved.underway:
+	if moved.underway {
 		return moved.verdict()
-	case js.stale || moved.reason != "":
-		js.stale = true
-		return staleSymbolVerdict(deps, c, js, moved, piped)
 	}
-	return treeSymbolVerdict(deps, dir, c, js, piped)
+	js.stale = js.stale || moved.reason != ""
+	return treeSymbolVerdict(deps, dir, c, js, moved, piped)
 }
 
 // searchReach is how far a search reaches, which decides whether the graph replaces it.
@@ -222,13 +205,14 @@ func isNamedFile(dir, p string) bool {
 }
 
 // indexedExtensions are the file extensions of every language a spell in the catalog
-// declares a symbol indexer for: the files refs can answer for. Buzz is source no indexer
-// reads, so a search of Buzz files is text to refs, which would answer with a symbol of
-// another language that shares the name. An unwired catalog indexes nothing.
+// declares a symbol indexer for that runs in this workspace: the files refs can answer
+// for. An external SCIP indexer the workspace's magus.yaml does not opt in builds no
+// index, so a search of its files is text to refs. An unwired catalog indexes nothing.
 func indexedExtensions(deps Dependencies) map[string]bool {
+	optIns := workspaceSpellsConfig(deps.scope.root)
 	out := map[string]bool{}
 	for _, s := range deps.spells() {
-		if s == nil || s.SymbolIndexer() == nil {
+		if s == nil || !optIns.RunsSymbolIndexer(s.Name(), s.SymbolIndexer()) {
 			continue
 		}
 		for _, ext := range s.LanguageExtensions() {
@@ -236,6 +220,20 @@ func indexedExtensions(deps Dependencies) map[string]bool {
 		}
 	}
 	return out
+}
+
+// workspaceSpellsConfig is the spells section root's own magus.yaml declares. A root that
+// is unknown or whose config does not load opts nothing in, which can only send fewer
+// searches to refs: the one direction a guard that could not read its input may err in.
+func workspaceSpellsConfig(root string) config.SpellsConfig {
+	if root == "" {
+		return config.SpellsConfig{}
+	}
+	cfg, err := config.LoadWorkspaceOnly(root)
+	if err != nil {
+		return config.SpellsConfig{}
+	}
+	return cfg.Spells
 }
 
 // nonCodeDirs are directories whose contents no symbol index describes.
@@ -497,7 +495,7 @@ func declarationRoutes(deps Dependencies, root, dir string, c hint.Invocation, i
 	var routes []searchRoute
 	for _, ident := range idents {
 		if defined, definitive := deps.symbolDefined(ident); defined && definitive {
-			routes = append(routes, searchRoute{name: ident, run: hint.Refs.With(ident, "--definition", "--source"), indexed: true})
+			routes = append(routes, searchRoute{name: ident, run: hint.Refs.With(ident, "--source"), indexed: true})
 			continue
 		}
 		found := liveDeclarations(deps, root, dir, c, ident)
@@ -629,24 +627,31 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 
 // treeSymbolVerdict denies a search of the tree for names the index vouches for, and
 // carries the index's own answer when it has one: every site under the searched paths.
+// An index behind the tree carries none, since its list could be short.
 // A pipe after the search is named as not reproduced; the answer is never filtered.
-func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js searchJudgment, piped bool) ShellVerdict {
+func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js searchJudgment, moved staleGraph, piped bool) ShellVerdict {
 	routes := js.routes
 	textNote, textNext := textRemedy(c, js)
 	d := denySymbolSearch(routes, js)
-	v := ShellVerdict{Deny: d.Say + textNote, Why: d.Why, Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
-	if answer, ok := treeSymbolAnswer(deps, dir, c, routes); ok {
-		// The answer stays inline with the verdict, since it is what the search was for;
-		// a lead would drop it.
-		v.Deny += fmt.Sprintf("\n%s%s", answerBlock("Its answer", answer), pipeNote(piped))
-		return v
+	behind := ""
+	if js.stale {
+		behind = fmt.Sprintf(" The symbol index %s; refs refreshes it as it answers.", symbolIndexCause(moved))
+	}
+	v := ShellVerdict{Deny: fmt.Sprintf("%s%s%s", d.Say, behind, textNote), Why: d.Why, Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
+	if !js.stale {
+		if answer, ok := treeSymbolAnswer(deps, dir, c, routes); ok {
+			// The answer stays inline with the verdict, since it is what the search was for;
+			// a lead would drop it.
+			v.Deny += fmt.Sprintf("\n%s%s", answerBlock("Its answer", answer), pipeNote(piped))
+			return v
+		}
 	}
 	v.Deny += pipeNote(piped)
 	next := routeNexts(routes)
 	if len(next) > 0 {
 		next = append(next, textNext...)
 	}
-	return v.withRemedy(fmt.Sprintf("%s, which the graph answers exactly. %s%s", denySymbolSearchLead, classifiedLine(js), textNote), next...)
+	return v.withRemedy(fmt.Sprintf("%s, which the graph answers exactly.%s %s%s", denySymbolSearchLead, behind, classifiedLine(js), textNote), next...)
 }
 
 // routeNexts serves each route as a remedy, or none when one of them cannot be.
@@ -828,21 +833,6 @@ func pipeNote(piped bool) string {
 	return "\nThe pipe after the search is not reproduced: run it over the command's output."
 }
 
-// asSearch reads `git grep` as the recursive grep it is, so its patterns and paths are
-// judged by the same parser. Every other command is returned unchanged, and so is a `git
-// grep` relocated by -C, --git-dir or --work-tree, which searches a tree this workspace's
-// graph does not describe, or one carrying -c, which can change the pattern dialect.
-func asSearch(c hint.Invocation) hint.Invocation {
-	if path.Base(c.Name) != "git" {
-		return c
-	}
-	g := parseGit(c.Args)
-	if g.sub != "grep" || len(g.dirs) > 0 || g.opaque || g.configured {
-		return c
-	}
-	return hint.Invocation{Name: "grep", Args: append([]string{"-r"}, g.rest...)}
-}
-
 // provableRoutes answers every alternative of c's patterns with a graph command, or
 // reports false when any one of them has none. A case-insensitive search is never
 // provable: the graph matches case exactly, so it would answer a narrower question.
@@ -870,159 +860,247 @@ func provableRoutes(deps Dependencies, c hint.Invocation) ([]searchRoute, bool) 
 	return routes, len(routes) > 0
 }
 
-// regexMode is how a search tool reads its pattern, which decides what separates two
-// alternatives.
-type regexMode int
-
-const (
-	regexBasic    regexMode = iota // `\|` separates
-	regexExtended                  // `|` separates
-	regexFixed                     // nothing does
-)
-
-func searchMode(c hint.Invocation) regexMode {
-	name := path.Base(c.Name)
-	switch {
-	case name == "fgrep" || hasFlag(c.Args, 'F', "fixed-strings"),
-		name == "ag" && hasFlag(c.Args, 'Q', "literal"):
-		return regexFixed
-	case name == "egrep" || name == "rg" || name == "ag":
-		return regexExtended
-	// rg's -E names an encoding, so only grep's spelling reaches here.
-	case hasFlag(c.Args, 'E', "extended-regexp") || hasFlag(c.Args, 'P', "perl-regexp"):
-		return regexExtended
-	}
-	return regexBasic
+// searchJudgment is what the index made of one search's alternatives.
+type searchJudgment struct {
+	routes []searchRoute
+	// stale reports a route the index could not vouch for as current, so the
+	// deny carries no answer and names the refresh refs makes.
+	stale bool
+	texts []searchAlt // the alternatives that are text, served on their own
+	// classified is one clause per alternative naming what it was taken for and why, so a
+	// false positive is disputable from the deny alone.
+	classified []string
+	// noGraph names a name that would have routed to the graph, when the workspace has no
+	// symbol index at all to route it to.
+	noGraph string
+	folded  bool
 }
 
-func splitAlternation(p string, mode regexMode) []string {
-	switch mode {
-	case regexBasic:
-		return strings.Split(p, `\|`)
-	case regexExtended:
-		var out []string
-		start := 0
-		for i := 0; i < len(p); i++ {
-			switch p[i] {
-			case '\\':
-				i++
-			case '|':
-				out = append(out, p[start:i])
-				start = i + 1
+// judgeSearch decides, alternative by alternative, which ones the graph answers. A current
+// index decides outright. A stale one still vouches for the names it holds, and for a
+// declaration lookup or a call it has not indexed yet, since that is the name a branch is
+// adding; anything else it does not hold stays text. With no index at all nothing routes.
+func judgeSearch(deps Dependencies, c hint.Invocation) searchJudgment {
+	js := searchJudgment{folded: hasFlag(c.Args, 'i', "ignore-case")}
+	var built *bool
+	indexBuilt := func() bool {
+		if built == nil {
+			b := symbolIndexBuilt(deps)
+			built = &b
+		}
+		return *built
+	}
+	text := func(a searchAlt, why string) {
+		js.texts = append(js.texts, a)
+		js.classified = append(js.classified, fmt.Sprintf("`%s` is text (%s)", a.raw, why))
+	}
+	route := func(a searchAlt, r searchRoute, why string) {
+		if !slices.Contains(js.routes, r) {
+			js.routes = append(js.routes, r)
+		}
+		js.classified = append(js.classified, fmt.Sprintf("`%s` is a name (%s)", a.raw, why))
+	}
+	for _, a := range searchAlts(c) {
+		switch a.kind {
+		case altText:
+			text(a, a.how)
+			continue
+		case altDiagnostic:
+			if codes, ok := graphDiagnostics(deps); ok && slices.Contains(codes, a.ident) && !js.folded {
+				node := fmt.Sprintf("%s:%s", string(types.KindDiagnostic), a.ident)
+				route(a, searchRoute{name: node, run: hint.Explain.With(node), indexed: true}, "a diagnostic code with a graph node")
+			} else {
+				text(a, "a code the graph holds no node for")
 			}
+			continue
 		}
-		return append(out, p[start:])
-	}
-	return []string{p}
-}
-
-// whitespaceClassRe matches the regex spellings of "some whitespace", so `func\s+Foo`
-// reads as the definition lookup it is.
-var whitespaceClassRe = regexp.MustCompile(`(?:\\s|\[\[:space:\]\]| )[+*]?`)
-
-// normalizeAlternative strips the anchors and word boundaries that narrow a match without
-// changing which name it looks for, and a trailing call paren.
-func normalizeAlternative(alt string) string {
-	alt = strings.TrimSpace(whitespaceClassRe.ReplaceAllString(alt, " "))
-	for {
-		before := alt
-		for _, prefix := range []string{"^", `\b`, `\<`} {
-			alt = strings.TrimPrefix(alt, prefix)
+		if js.folded && !a.strong {
+			text(a, a.how+", widened by -i to text in any case")
+			continue
 		}
-		for _, suffix := range []string{"$", `\b`, `\>`, `\(`, "(", " "} {
-			alt = strings.TrimSuffix(alt, suffix)
+		r := searchRoute{name: a.ident, run: hint.Refs.With(a.ident, "--occurrences"), indexed: true}
+		if a.kind == altDefinition {
+			// A declaration lookup wants the body next; --source prints it in place of the
+			// grep-then-sed pair.
+			r.run = hint.Refs.With(a.ident, "--source")
 		}
-		if alt == before {
-			return strings.TrimSpace(alt)
+		defined, definitive := deps.symbolDefined(a.ident)
+		ids := deps.symbolIDs(a.ident)
+		if len(ids) > 1 {
+			// refs on a name that several symbols carry lists them and stops.
+			r.run = strings.Replace(r.run, " "+a.ident, fmt.Sprintf(" '%s'", ids[0]), 1)
 		}
-	}
-}
-
-// altKind is what one alternative of a search pattern looks for.
-type altKind int
-
-const (
-	altText       altKind = iota
-	altName               // a name: a call, a member, a word search, or an identifier's shape
-	altDefinition         // a declaration lookup: func X, type X, class X, def X
-	altDiagnostic
-)
-
-// searchAlt is one alternative of a search's patterns, classified by its syntax alone. Whether
-// a name is a symbol is the index's call, made in judgeSearch.
-type searchAlt struct {
-	raw   string
-	ident string
-	kind  altKind
-	// strong reports a name whose own shape says identifier (CamelCase, snake_case, or a
-	// declaration keyword before it), which a stale index may vouch for before it has
-	// indexed it. A plain word is as likely prose, so only a current index may call it one.
-	strong bool
-	// explicit reports syntax that can only be naming a symbol, a declaration keyword or a
-	// call of a CamelCase name: the one shape a stale index may route before indexing it,
-	// since it is the name a branch is adding. A bare CamelCase word is as often a string
-	// constant's value or a hook event name.
-	explicit bool
-	how      string // the syntax that decided it, said in the deny
-}
-
-// declLookupRe is a declaration lookup in the languages a symbol index covers: the keyword
-// is what separates a lookup from prose.
-// Buzz's `fun`, `object` and `protocol` are absent: no symbol index reads Buzz, so refs
-// would answer with a Go or TypeScript symbol that merely shares the name.
-var declLookupRe = regexp.MustCompile(`^(?:export |pub |async )?(?:func|type|class|def|function|fn|interface|struct|enum|trait|const|var|let) (?:\\?\([^()]*\\?\) ?)?([A-Za-z_][A-Za-z0-9_]*)(?: (?:struct|interface)\b.*)?$`)
-
-// fileExts are the trailing segments that make `a.b` a file name rather than a member.
-var fileExts = map[string]bool{
-	"go": true, "buzz": true, "md": true, "yaml": true, "yml": true, "json": true, "jsonl": true, "ts": true,
-	"tsx": true, "js": true, "toml": true, "txt": true, "sh": true, "py": true, "css": true, "html": true,
-	"lock": true, "mod": true, "sum": true, "proto": true, "log": true, "png": true, "svg": true,
-}
-
-// searchAlts splits c's patterns into alternatives and classifies each. A pattern whose
-// alternation sits inside a group is one regular expression, so it stays whole: splitting
-// it would read `kg\.\(AddNode` as a name.
-func searchAlts(c hint.Invocation) []searchAlt {
-	mode := searchMode(c)
-	word := hasFlag(c.Args, 'w', "word-regexp")
-	var out []searchAlt
-	for _, p := range hint.Patterns(c) {
-		parts := splitAlternation(p, mode)
-		if len(parts) > 1 && slices.ContainsFunc(parts, func(a string) bool { return !groupsBalanced(a, mode) }) {
-			parts = []string{p}
-		}
-		for _, a := range parts {
-			out = append(out, classifyAlternative(a, mode, word))
-		}
-	}
-	return out
-}
-
-// groupsBalanced reports whether alt opens as many regex groups as it closes, ignoring a
-// trailing call paren, which is a literal the name is followed by.
-func groupsBalanced(alt string, mode regexMode) bool {
-	open, closeTok := "(", ")"
-	if mode == regexBasic {
-		open, closeTok = `\(`, `\)`
-	}
-	if mode == regexFixed {
-		return true
-	}
-	trimmed := strings.TrimSuffix(strings.TrimSuffix(alt, `\(`), "(")
-	depth := 0
-	for i := 0; i < len(trimmed); i++ {
 		switch {
-		case mode != regexBasic && trimmed[i] == '\\':
-			i++
-		case strings.HasPrefix(trimmed[i:], open):
-			depth++
-			i += len(open) - 1
-		case strings.HasPrefix(trimmed[i:], closeTok):
-			depth--
-			i += len(closeTok) - 1
+		case definitive && defined:
+			route(a, r, a.how+", defined in the index")
+		case definitive:
+			text(a, a.how+", but the index holds no symbol by that name")
+		case defined:
+			js.stale = true
+			route(a, r, a.how+", defined in an index behind the tree")
+		case a.explicit && indexBuilt():
+			js.stale = true
+			route(a, r, a.how+", not indexed yet")
+		case !indexBuilt() && js.noGraph == "":
+			js.noGraph = a.ident
+			text(a, a.how+", with no symbol index to ask")
+		default:
+			text(a, a.how+", not in the index")
 		}
 	}
-	return depth == 0
+	return js
+}
+
+// symbolIndexBuilt reports whether `magus graph build` has written an index holding symbols
+// for this workspace, current or not. An index built with none cannot answer `magus refs`,
+// so a search stays text there.
+func symbolIndexBuilt(deps Dependencies) bool {
+	if deps.scope.root == "" {
+		return false
+	}
+	root, ok := resolvedRoot(deps.scope.root)
+	if !ok || deps.SymbolIndexBuilt == nil {
+		return false
+	}
+	return deps.SymbolIndexBuilt(root)
+}
+
+// symbolIndexCause is why the symbol index cannot vouch for every site, as a clause
+// completing "the symbol index ...". It is the one place that cause is worded.
+func symbolIndexCause(moved staleGraph) string {
+	if moved.reason != "" {
+		return fmt.Sprintf("describes another tree (%s)", moved.reason)
+	}
+	return "is older than the sources it covers"
+}
+
+// classifiedLine is the deny's account of each alternative.
+func classifiedLine(js searchJudgment) string {
+	return fmt.Sprintf("Classified: %s.", strings.Join(js.classified, "; "))
+}
+
+// textRemedy serves each text alternative as the literal search magus runs, when it is a
+// literal; a regular expression is named, not translated.
+func textRemedy(c hint.Invocation, js searchJudgment) (string, []types.NextStep) {
+	if len(js.texts) == 0 {
+		return "", nil
+	}
+	sc, _ := parseSearchCall(c)
+	paths := invocationPaths(c)
+	if sc.tool != "" {
+		paths = sc.paths
+	}
+	var names []string
+	var next []types.NextStep
+	for _, t := range js.texts {
+		names = append(names, fmt.Sprintf("`%s`", t.raw))
+		lit := t.raw
+		if searchMode(c) != regexFixed {
+			lit = strings.ReplaceAll(lit, `\.`, ".")
+		}
+		if js.folded || strings.ContainsAny(lit, `\^$*+?()[]{}|`) || strings.TrimSpace(lit) == "" {
+			continue
+		}
+		argv := append([]string{hint.BinaryName(), "refs", "--text", lit}, paths...)
+		next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "a literal search over the same paths, for the text the graph does not hold."))
+	}
+	return fmt.Sprintf("\nThe text alternatives (%s) are not symbols: search them on their own.", strings.Join(names, ", ")), next
+}
+
+// noGraphVerdict advises a search for a name in a workspace with no symbol index to route
+// it to: the one case the rule fails open, since a deny there would route nowhere. It
+// carries no brief: a repeat saying the index is still missing changes nothing for a
+// reader already told how to build one.
+func noGraphVerdict(ident string) ShellVerdict {
+	return ShellVerdict{
+		Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
+		Why:     precedentSearchAdviceWhy,
+		Kind:    advisoryPrecedent,
+	}
+}
+
+// definitionLookupRe matches `func X`, `func (r *T) X` and `type X`, receiver escaped or
+// not. The keyword is what separates a lookup from prose, so X needs only an identifier's
+// shape rather than precedentIdentRe's.
+var definitionLookupRe = regexp.MustCompile(`^(?:func|type) (?:\\?\([^()]*\\?\) ?)?([A-Za-z_][A-Za-z0-9_]*)$`)
+
+// graphDiagnostics are the codes of the graph's diagnostic nodes, definitive on graphIDs'
+// terms. They come from the graph and not this binary's catalog: the two differ once the
+// checkout moves past the build the graph describes, as it does mid-rebase.
+func graphDiagnostics(deps Dependencies) ([]string, bool) {
+	ids, definitive := deps.graphIDs(context.Background(), types.KindDiagnostic)
+	if !definitive {
+		return nil, false
+	}
+	codes := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if code, ok := strings.CutPrefix(id, types.KindDiagnostic+":"); ok {
+			codes = append(codes, code)
+		}
+	}
+	return codes, true
+}
+
+func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
+	if types.IsDiagnosticCode(alt) {
+		if codes, ok := graphDiagnostics(deps); !ok || !slices.Contains(codes, alt) {
+			return searchRoute{}, false
+		}
+		node := fmt.Sprintf("%s:%s", string(types.KindDiagnostic), alt)
+		return searchRoute{name: node, run: hint.Explain.With(node), indexed: true}, true
+	}
+	var ident string
+	definition := false
+	switch m := definitionLookupRe.FindStringSubmatch(alt); {
+	case len(m) > 1 && hint.IsIdentifier(m[1]):
+		ident, definition = m[1], true
+	case len(alt) >= precedentIdentMin && precedentIdentRe.MatchString(alt):
+		ident = alt
+	default:
+		return searchRoute{}, false
+	}
+	if defined, definitive := deps.symbolDefined(ident); !defined || !definitive {
+		return searchRoute{}, false
+	}
+	if definition {
+		// A `func X` lookup wants the body next; --source prints it in place of the
+		// grep-then-sed pair.
+		return searchRoute{name: ident, run: hint.Refs.With(ident, "--source"), indexed: true}, true
+	}
+	return searchRoute{name: ident, run: hint.Refs.With(ident, "--occurrences"), indexed: true}, true
+}
+
+func routeNames(routes []searchRoute) string {
+	names := make([]string, len(routes))
+	for i, r := range routes {
+		names[i] = r.name
+	}
+	return strings.Join(names, ",")
+}
+
+// routeClause is the commands, one per name, and the verb that agrees with them.
+func routeClause(routes []searchRoute) string {
+	runs := make([]string, len(routes))
+	for i, r := range routes {
+		runs[i] = fmt.Sprintf("`%s`", r.run)
+	}
+	verb := "answers"
+	if len(routes) > 1 {
+		verb = "answer"
+	}
+	return fmt.Sprintf("%s %s", strings.Join(runs, ", "), verb)
+}
+
+// denySymbolSearchLead names what the search is for; the classification after it is what
+// makes a false positive disputable.
+const denySymbolSearchLead = "this text search is for an indexed name"
+
+// denySymbolSearch names the commands, one per name, since that is the whole correction.
+func denySymbolSearch(routes []searchRoute, js searchJudgment) denial {
+	return denial{
+		Say: fmt.Sprintf("%s; %s it exactly. %s", denySymbolSearchLead, routeClause(routes), classifiedLine(js)),
+		Why: "The graph checks every site against the tree rather than matching it. Every name searched for is indexed here, so the graph knows every definition, reference and document, including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it.",
+	}
 }
 
 // classifyAlternative reads one alternative as a declaration lookup, a diagnostic code, a
@@ -1033,7 +1111,7 @@ func classifyAlternative(raw string, mode regexMode, word bool) searchAlt {
 	if mode == regexFixed {
 		norm = strings.TrimSpace(raw)
 	}
-	if diagnosticCodeRe.MatchString(norm) {
+	if types.IsDiagnosticCode(norm) {
 		a.kind, a.ident, a.how = altDiagnostic, norm, "a diagnostic code"
 		return a
 	}
@@ -1118,371 +1196,4 @@ func classifyAlternative(raw string, mode regexMode, word bool) searchAlt {
 	a.how = how
 	a.kind = altName
 	return a
-}
-
-// lowerWordRe is a single lowercase word, the declaration names refs cannot pin to one.
-var lowerWordRe = regexp.MustCompile(`^[a-z]+$`)
-
-// camelIdentRe is a CamelCase identifier: a lowercase letter or digit followed by a capital.
-var camelIdentRe = regexp.MustCompile(`^[A-Za-z0-9]*[a-z0-9][A-Z][A-Za-z0-9]*$`)
-
-// stdlibQualifiers are the standard-library packages and globals a member access through
-// them selects: the name belongs to the language, and refs would resolve a workspace symbol
-// that merely shares it.
-var stdlibQualifiers = map[string]bool{
-	"os": true, "io": true, "fmt": true, "strings": true, "strconv": true, "bytes": true, "filepath": true,
-	"path": true, "time": true, "json": true, "http": true, "url": true, "context": true, "errors": true,
-	"sort": true, "sync": true, "atomic": true, "regexp": true, "exec": true, "slices": true, "maps": true,
-	"bufio": true, "log": true, "slog": true, "math": true, "rand": true, "reflect": true, "runtime": true,
-	"signal": true, "syscall": true, "testing": true, "unicode": true, "utf8": true, "hex": true,
-	"base64": true, "net": true, "ioutil": true, "fs": true, "template": true, "flag": true,
-	"ast": true, "token": true, "parser": true, "printer": true, "scanner": true, "cmp": true, "iter": true,
-	"binary": true, "big": true, "bits": true, "sha256": true, "crypto": true, "tls": true, "gzip": true,
-	"zip": true, "tar": true, "csv": true, "xml": true, "html": true, "mime": true, "embed": true,
-	"unsafe": true, "httptest": true, "fstest": true,
-	"Object": true, "Math": true, "JSON": true, "console": true, "process": true, "Promise": true,
-}
-
-// memberName splits a qualified name, `opts.Jobs`, `\.Member` or `s.lim.Acquire`, into the
-// segment before the member and the member, reporting false for anything else, a file name
-// such as `queue.yaml` among them.
-func memberName(core string) (qualifier, member string, ok bool) {
-	s := strings.ReplaceAll(core, `\.`, ".")
-	if !strings.Contains(s, ".") {
-		return "", "", false
-	}
-	segs := strings.Split(strings.TrimPrefix(s, "."), ".")
-	last := segs[len(segs)-1]
-	if fileExts[strings.ToLower(last)] {
-		return "", "", false
-	}
-	for _, seg := range segs {
-		if seg == "" || !segmentRe.MatchString(seg) {
-			return "", "", false
-		}
-	}
-	if len(segs) > 1 {
-		qualifier = segs[len(segs)-2]
-	}
-	return qualifier, last, true
-}
-
-var segmentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
-// searchJudgment is what the index made of one search's alternatives.
-type searchJudgment struct {
-	routes []searchRoute
-	// stale reports a route the index could not vouch for as current, so the deny serves a
-	// rebuild before the graph command.
-	stale bool
-	texts []searchAlt // the alternatives that are text, served on their own
-	// classified is one clause per alternative naming what it was taken for and why, so a
-	// false positive is disputable from the deny alone.
-	classified []string
-	// noGraph names a name that would have routed to the graph, when the workspace has no
-	// symbol index at all to route it to.
-	noGraph string
-	folded  bool
-}
-
-// judgeSearch decides, alternative by alternative, which ones the graph answers. A current
-// index decides outright. A stale one still vouches for the names it holds, and for a
-// declaration lookup or a call it has not indexed yet, since that is the name a branch is
-// adding; anything else it does not hold stays text. With no index at all nothing routes.
-func judgeSearch(deps Dependencies, c hint.Invocation) searchJudgment {
-	js := searchJudgment{folded: hasFlag(c.Args, 'i', "ignore-case")}
-	var built *bool
-	indexBuilt := func() bool {
-		if built == nil {
-			b := symbolIndexBuilt(deps)
-			built = &b
-		}
-		return *built
-	}
-	text := func(a searchAlt, why string) {
-		js.texts = append(js.texts, a)
-		js.classified = append(js.classified, fmt.Sprintf("`%s` is text (%s)", a.raw, why))
-	}
-	route := func(a searchAlt, r searchRoute, why string) {
-		if !slices.Contains(js.routes, r) {
-			js.routes = append(js.routes, r)
-		}
-		js.classified = append(js.classified, fmt.Sprintf("`%s` is a name (%s)", a.raw, why))
-	}
-	for _, a := range searchAlts(c) {
-		switch a.kind {
-		case altText:
-			text(a, a.how)
-			continue
-		case altDiagnostic:
-			if codes, ok := graphDiagnostics(deps); ok && slices.Contains(codes, a.ident) && !js.folded {
-				node := fmt.Sprintf("%s:%s", string(types.KindDiagnostic), a.ident)
-				route(a, searchRoute{name: node, run: hint.Explain.With(node), indexed: true}, "a diagnostic code with a graph node")
-			} else {
-				text(a, "a code the graph holds no node for")
-			}
-			continue
-		}
-		if js.folded && !a.strong {
-			text(a, a.how+", widened by -i to text in any case")
-			continue
-		}
-		r := searchRoute{name: a.ident, run: hint.Refs.With(a.ident, "--occurrences"), indexed: true}
-		if a.kind == altDefinition {
-			// A declaration lookup wants the body next; --source prints it in place of the
-			// grep-then-sed pair.
-			r.run = hint.Refs.With(a.ident, "--definition", "--source")
-		}
-		defined, definitive := deps.symbolDefined(a.ident)
-		ids := deps.symbolIDs(a.ident)
-		if len(ids) > 1 {
-			// refs on a name that several symbols carry lists them and stops.
-			r.run = strings.Replace(r.run, " "+a.ident, fmt.Sprintf(" '%s'", ids[0]), 1)
-		}
-		switch {
-		case definitive && defined:
-			route(a, r, a.how+", defined in the index")
-		case definitive:
-			text(a, a.how+", but the index holds no symbol by that name")
-		case defined:
-			js.stale = true
-			route(a, r, a.how+", defined in an index behind the tree")
-		case a.explicit && indexBuilt():
-			js.stale = true
-			route(a, r, a.how+", not indexed yet")
-		case !indexBuilt() && js.noGraph == "":
-			js.noGraph = a.ident
-			text(a, a.how+", with no symbol index to ask")
-		default:
-			text(a, a.how+", not in the index")
-		}
-	}
-	return js
-}
-
-// symbolIndexBuilt reports whether `magus graph build` has written an index holding symbols
-// for this workspace, current or not. An index built with none cannot answer `magus refs`,
-// so a search stays text there.
-func symbolIndexBuilt(deps Dependencies) bool {
-	if deps.scope.root == "" {
-		return false
-	}
-	root, ok := resolvedRoot(deps.scope.root)
-	if !ok {
-		return false
-	}
-	cacheDir, err := deps.cacheDir(root)
-	if err != nil {
-		return false
-	}
-	has, err := knowledge.GuardIndexHasSymbols(cacheDir, root)
-	return err == nil && has
-}
-
-// symbolIndexCause is why the symbol index cannot vouch for every site, as a clause
-// completing "the symbol index ...". It is the one place that cause is worded.
-func symbolIndexCause(moved staleGraph) string {
-	if moved.reason != "" {
-		return fmt.Sprintf("describes another tree (%s)", moved.reason)
-	}
-	return "is older than the sources it covers"
-}
-
-// indexCauseNote is what deps observed about why the index fell behind and what keeps it
-// current, on a line of its own, or "" when it observed nothing within its budget.
-func indexCauseNote(deps Dependencies) string {
-	if deps.IndexCause == nil {
-		return ""
-	}
-	if cause := deps.IndexCause(); cause != "" {
-		return "\n" + cause
-	}
-	return ""
-}
-
-// classifiedLine is the deny's account of each alternative.
-func classifiedLine(js searchJudgment) string {
-	return fmt.Sprintf("Classified: %s.", strings.Join(js.classified, "; "))
-}
-
-// textRemedy serves each text alternative as the literal search magus runs, when it is a
-// literal; a regular expression is named, not translated.
-func textRemedy(c hint.Invocation, js searchJudgment) (string, []types.NextStep) {
-	if len(js.texts) == 0 {
-		return "", nil
-	}
-	sc, _ := parseSearchCall(c)
-	paths := invocationPaths(c)
-	if sc.tool != "" {
-		paths = sc.paths
-	}
-	var names []string
-	var next []types.NextStep
-	for _, t := range js.texts {
-		names = append(names, fmt.Sprintf("`%s`", t.raw))
-		lit := t.raw
-		if searchMode(c) != regexFixed {
-			lit = strings.ReplaceAll(lit, `\.`, ".")
-		}
-		if js.folded || strings.ContainsAny(lit, `\^$*+?()[]{}|`) || strings.TrimSpace(lit) == "" {
-			continue
-		}
-		argv := append([]string{hint.BinaryName(), "refs", "--text", lit}, paths...)
-		next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "a literal search over the same paths, for the text the graph does not hold."))
-	}
-	return fmt.Sprintf("\nThe text alternatives (%s) are not symbols: search them on their own.", strings.Join(names, ", ")), next
-}
-
-// staleSymbolVerdict denies a search for names a stale index vouches for, serving the
-// rebuild and then the graph command for each name.
-func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment, moved staleGraph, piped bool) ShellVerdict {
-	build := hint.GraphBuild.With("--silent")
-	textNote, textNext := textRemedy(c, js)
-	wait := hint.Status.With("--wait")
-	rebuild, leadRebuild := fmt.Sprintf("rebuild it: `%s`", build), "rebuild it, then ask the graph. "
-	full := budgetFullText()
-	// A worker never waits for a seat outside the call that spends it, so its remedy is the
-	// report its check would make.
-	worker := full != "" && deps.worker
-	switch {
-	case worker:
-		rebuild = fmt.Sprintf("the rebuild has no seat (%s); report that and stop, as a worker's check does", full)
-		leadRebuild = "the rebuild has no seat; report that and stop. "
-	case full != "":
-		rebuild = fmt.Sprintf("the rebuild has no seat (%s); wait for one: `%s`, then rebuild it: `%s`", full, wait, build)
-		leadRebuild = "wait for a seat, then rebuild it and ask the graph. "
-	}
-	v := ShellVerdict{
-		Deny: fmt.Sprintf("%s, and the symbol index %s; %s.", denySymbolSearchLead, symbolIndexCause(moved), rebuild),
-		Why: fmt.Sprintf("Then %s this exactly.\n%s\nrefs checks every site against the tree, the generated and cross-language ones a pattern misses included.%s%s%s",
-			routeClause(js.routes), classifiedLine(js), indexCauseNote(deps), textNote, pipeNote(piped)),
-		Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(js.routes)},
-	}
-	argv := servedArgv(build)
-	if len(argv) == 0 || worker {
-		return v
-	}
-	var next []types.NextStep
-	if full != "" {
-		next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), servedArgv(wait), "waits for a seat in the build budget; the rebuild after it then has one."))
-	}
-	next = append(next, hint.NextForDenyRemedy(string(denyRuleSymbolSearch), argv, "brings the symbol index up to the tree, so the next command answers exactly."))
-	routes := routeNexts(js.routes)
-	if len(routes) == 0 {
-		return v
-	}
-	next = append(append(next, routes...), textNext...)
-	// The lead replaces the deny when the remedy is served, so it carries the classification:
-	// it is what makes a false positive disputable.
-	return v.withRemedy(fmt.Sprintf("%s, and the symbol index %s; %s%s%s", denySymbolSearchLead, symbolIndexCause(moved), leadRebuild, classifiedLine(js), textNote), next...)
-}
-
-// budgetFullText words the machine build budget when it has no seat for a rebuild, "" when
-// it has one or no broker answers.
-func budgetFullText() string {
-	s, err := budgetSnapshot(context.Background())
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSuffix(strings.SplitN(BudgetFull(s, time.Now()), ". ", 2)[0], ".")
-}
-
-// noGraphVerdict advises a search for a name in a workspace with no symbol index to route
-// it to: the one case the rule fails open, since a deny there would route nowhere. It
-// carries no brief: a repeat saying the index is still missing changes nothing for a
-// reader already told how to build one.
-func noGraphVerdict(ident string) ShellVerdict {
-	return ShellVerdict{
-		Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
-		Why:     precedentSearchAdviceWhy,
-		Kind:    advisoryPrecedent,
-	}
-}
-
-// definitionLookupRe matches `func X`, `func (r *T) X` and `type X`, receiver escaped or
-// not. The keyword is what separates a lookup from prose, so X needs only an identifier's
-// shape rather than precedentIdentRe's.
-var definitionLookupRe = regexp.MustCompile(`^(?:func|type) (?:\\?\([^()]*\\?\) ?)?([A-Za-z_][A-Za-z0-9_]*)$`)
-
-// diagnosticCodeRe matches a diagnostic code. A BZZ code is recognized so it is never
-// mistaken for a symbol, and never provable: the graph carries no node for one.
-var diagnosticCodeRe = regexp.MustCompile(`^(?:MGS|BZZ)[0-9]{4}$`)
-
-// graphDiagnostics are the codes of the graph's diagnostic nodes, definitive on graphIDs'
-// terms. They come from the graph and not this binary's catalog: the two differ once the
-// checkout moves past the build the graph describes, as it does mid-rebase.
-func graphDiagnostics(deps Dependencies) ([]string, bool) {
-	ids, definitive := deps.graphIDs(context.Background(), types.KindDiagnostic)
-	if !definitive {
-		return nil, false
-	}
-	codes := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if code, ok := strings.CutPrefix(id, types.KindDiagnostic+":"); ok {
-			codes = append(codes, code)
-		}
-	}
-	return codes, true
-}
-
-func provableRoute(deps Dependencies, alt string) (searchRoute, bool) {
-	if diagnosticCodeRe.MatchString(alt) {
-		if codes, ok := graphDiagnostics(deps); !ok || !slices.Contains(codes, alt) {
-			return searchRoute{}, false
-		}
-		node := fmt.Sprintf("%s:%s", string(types.KindDiagnostic), alt)
-		return searchRoute{name: node, run: hint.Explain.With(node), indexed: true}, true
-	}
-	var ident string
-	definition := false
-	switch m := definitionLookupRe.FindStringSubmatch(alt); {
-	case len(m) > 1 && hint.IsIdentifier(m[1]):
-		ident, definition = m[1], true
-	case len(alt) >= precedentIdentMin && precedentIdentRe.MatchString(alt):
-		ident = alt
-	default:
-		return searchRoute{}, false
-	}
-	if defined, definitive := deps.symbolDefined(ident); !defined || !definitive {
-		return searchRoute{}, false
-	}
-	if definition {
-		// A `func X` lookup wants the body next; --source prints it in place of the
-		// grep-then-sed pair.
-		return searchRoute{name: ident, run: hint.Refs.With(ident, "--definition", "--source"), indexed: true}, true
-	}
-	return searchRoute{name: ident, run: hint.Refs.With(ident, "--occurrences"), indexed: true}, true
-}
-
-func routeNames(routes []searchRoute) string {
-	names := make([]string, len(routes))
-	for i, r := range routes {
-		names[i] = r.name
-	}
-	return strings.Join(names, ",")
-}
-
-// routeClause is the commands, one per name, and the verb that agrees with them.
-func routeClause(routes []searchRoute) string {
-	runs := make([]string, len(routes))
-	for i, r := range routes {
-		runs[i] = fmt.Sprintf("`%s`", r.run)
-	}
-	verb := "answers"
-	if len(routes) > 1 {
-		verb = "answer"
-	}
-	return fmt.Sprintf("%s %s", strings.Join(runs, ", "), verb)
-}
-
-// denySymbolSearchLead names what the search is for; the classification after it is what
-// makes a false positive disputable.
-const denySymbolSearchLead = "this text search is for an indexed name"
-
-// denySymbolSearch names the commands, one per name, since that is the whole correction.
-func denySymbolSearch(routes []searchRoute, js searchJudgment) denial {
-	return denial{
-		Say: fmt.Sprintf("%s; %s it exactly. %s", denySymbolSearchLead, routeClause(routes), classifiedLine(js)),
-		Why: "The graph checks every site against the tree rather than matching it. Every name searched for is indexed here, so the graph knows every definition, reference and document, including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it.",
-	}
 }

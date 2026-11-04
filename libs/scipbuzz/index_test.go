@@ -12,7 +12,17 @@ import (
 	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/scip-code/scip/bindings/go/scip/testutil"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
+
+// encoded is idx in the SCIP protobuf wire format, deterministically, as a pack of it is
+// cached and published by content.
+func encoded(t *testing.T, idx *scip.Index) []byte {
+	t.Helper()
+	data, err := proto.MarshalOptions{Deterministic: true}.Marshal(idx)
+	require.NoError(t, err)
+	return data
+}
 
 const (
 	snapshotInput = "testdata/snapshots/input"
@@ -143,9 +153,7 @@ func TestIndexIsDeterministic(t *testing.T) {
 	encode := func() []byte {
 		idx, _, err := indexDir(snapshotInput)
 		require.NoError(t, err)
-		var buf bytes.Buffer
-		require.NoError(t, Write(&buf, idx))
-		return buf.Bytes()
+		return encoded(t, idx)
 	}
 	first := encode()
 	require.NotEmpty(t, first)
@@ -278,9 +286,7 @@ func TestIndexBytesDoNotDependOnTheCheckoutPath(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(project, "app.buzz"), []byte("import \"shared\";\n\nexport fun run() > int {\n    return shared\\one();\n}\n"), 0o644))
 		idx, err := Index(context.Background(), Options{ProjectRoot: project})
 		require.NoError(t, err)
-		var buf bytes.Buffer
-		require.NoError(t, Write(&buf, idx))
-		return buf.Bytes()
+		return encoded(t, idx)
 	}
 	first := encode(t.TempDir())
 	second := encode(filepath.Join(t.TempDir(), "another", "checkout"))

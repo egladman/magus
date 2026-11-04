@@ -233,6 +233,10 @@ type session struct {
 	holds map[string]*heldWork
 	// seat is the run this connection holds a validation seat for in hello.Tree, "" for none.
 	seat string
+	// gateAsked is when a gate connection asked for its first claim, and gateRun the run
+	// those claims belong to; see [server.markGateLocked].
+	gateAsked time.Time
+	gateRun   string
 	// files hands over the descriptors the connection has passed so far.
 	files func() []*os.File
 }
@@ -518,7 +522,8 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 				_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v, Seat: wait})
 				return
 			}
-			v = s.budget.Request(c)
+			s.markGateLocked(sess, c)
+			v = s.requestLocked(sess, c)
 		}
 		if v.Granted {
 			sess.claims[v.ID] = max(c.Slots, 1)

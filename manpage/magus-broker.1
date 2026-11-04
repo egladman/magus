@@ -45,8 +45,8 @@ the next one.
 .SH OPTIONS
 .RS
 .TP
-\fB\-\-idle\-exit\fR \fIduration\fR (default: 10m0s)
-Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive
+\fB\-\-idle\-exit\fR \fIvalue\fR (default: 10m0s)
+Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive. Bare numbers are minutes.
 .TP
 \fB\-\-log\fR \fIstring\fR
 Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log
@@ -54,7 +54,7 @@ Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts
 .SS broker stop options
 .RS
 .TP
-\fB\-\-services\fR
+\fB\-\-[no\-]services\fR (default: off)
 Stop the broker's hosted services, leaving the broker running
 .RE
 .SH SUBCOMMANDS
@@ -115,7 +115,6 @@ magus run test . --broker off
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

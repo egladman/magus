@@ -1,0 +1,873 @@
+// Cost: one graph neighborhood per symbol, one explain per test found,
+// and a read of the profile and sources; writes nothing.
+//
+// Reports which tests reach each symbol in scope by directed calls, their
+// layer signals, and the statements the profile says never ran. A layer is
+// a signal, not a verdict. A link no record holds prints as not recorded.
+namespace tests;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "magus";
+import "std";
+import "time";
+import "vcs";
+
+final USAGE = "usage: magus buzz hack/retro/tests.buzz -- (--symbol <name|id>... | --file <path> | --package <dir>) [--profile <coverage profile>] [--depth <n>] [--limit <n>] [--jsonl]";
+final HELP = "cost: one graph neighborhood per symbol, one explain per test found, and a read of the profile and the sources named; writes nothing\n{USAGE}\n"
+    + "--profile defaults to .magus/coverage.hand.out, which only an unnarrowed `./magus run test .` writes. --depth bounds the walk up the calls edges (default 4).\n"
+    + "--limit caps the tests listed per symbol, nearest first (default 12); the layer counts cover every test found.";
+
+// Sym is one function or method. line and end are 1-based, inclusive.
+export object Sym {
+    id: str,
+    label: str,
+    file: str,
+    line: int,
+    end: int,
+    testRefs: int = 0,
+    signature: str = "",
+}
+
+export object Call {
+    caller: str,
+    callee: str,
+}
+
+// Block is one profile block. at is its 1-based line in the profile;
+// count sums every profile line for the block.
+export object Block {
+    file: str,
+    start: int,
+    end: int,
+    span: str,
+    stmts: int,
+    count: int,
+    at: int,
+}
+
+// Reach is one test reaching a symbol; via runs from the test to it.
+export object Reach {
+    root: Sym,
+    depth: int,
+    via: [str],
+    packages: [str],
+    helpers: [str],
+    signals: [str],
+    layer: str,
+    asserts: int,
+}
+
+export object Finding {
+    sym: Sym,
+    blocks: int,
+    covered: int,
+    total: int,
+    uncovered: [Block],
+    operands: [str],
+    reach: [Reach],
+    worklist: [str],
+}
+
+fun isTestFile(file: str) > bool {
+    return file.endsWith("_test.go");
+}
+
+fun isRoot(s: Sym) > bool {
+    return isTestFile(s.file) and s.label.startsWith("Test");
+}
+
+// packageOf is the package a Go symbol id names, less the module.
+export fun packageOf(id: str, module: str) > str {
+    final open = id.indexOf("`");
+    if (open == null) {
+        return "";
+    }
+    final rest = id.sub(open! + 1);
+    final close = rest.indexOf("`") ?? rest.len();
+    final pkg = rest.sub(0, len: close);
+    return if (pkg.startsWith(module + "/")) pkg.sub(module.len() + 1) else pkg;
+}
+
+// parseProfile keys a Go coverage profile by workspace file.
+// Lines outside module are dropped.
+export fun parseProfile(text: str, module: str) > [Block] {
+    final byKey = mut {<str: Block>};
+    final order = mut [<str>];
+    var at = 0;
+    foreach (raw in text.split("\n")) {
+        at = at + 1;
+        final line = raw.trim();
+        if (line == "" or line.startsWith("mode:") or !line.startsWith(module + "/")) {
+            continue;
+        }
+        final colon = line.indexOf(".go:");
+        if (colon == null) {
+            continue;
+        }
+        final file = line.sub(module.len() + 1, len: colon! + 3 - module.len() - 1);
+        final fields = line.sub(colon! + 4).split(" ");
+        if (fields.len() != 3) {
+            continue;
+        }
+        final ends = fields[0].split(",");
+        final start = std\parseInt(ends[0].split(".")[0]) ?? 0;
+        final end = std\parseInt(ends[1].split(".")[0]) ?? 0;
+        final count = std\parseInt(fields[2]) ?? 0;
+        final key = "{file}:{fields[0]}";
+        final seen = byKey[key];
+        if (seen != null) {
+            byKey[key] = Block{ file = file, start = start, end = end, span = fields[0], stmts = seen!.stmts, count = seen!.count + count, at = seen!.at };
+            continue;
+        }
+        byKey[key] = Block{ file = file, start = start, end = end, span = fields[0], stmts = std\parseInt(fields[1]) ?? 0, count = count, at = at };
+        order.append(key);
+    }
+    final blocks = mut [<Block>];
+    foreach (key in order) {
+        blocks.append(byKey[key]!);
+    }
+    return blocks;
+}
+
+fun body(sources: {str: str}, s: Sym) > str {
+    final text = sources[s.file];
+    if (text == null) {
+        return "";
+    }
+    final lines = text!.split("\n");
+    final last = if (s.end > s.line and s.end <= lines.len()) s.end else s.line;
+    return lines.sub(s.line - 1, len: last - s.line + 1).join("\n");
+}
+
+fun has(text: str, needles: [str]) > bool {
+    foreach (needle in needles) {
+        if (text.indexOf(needle) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun addUnique(list: mut [str], value: str) > void {
+    if (value != "" and list.indexOf(value) == null) {
+        list.append(value);
+    }
+}
+
+// signalsIn names the layer signals in one body; where names whose.
+// mocks are the generated mock packages the body's file imports.
+fun signalsIn(text: str, where: str, mocks: [str], found: mut [str]) > void {
+    if (has(text, needles: ["testscript.", "script.Run("])) {
+        addUnique(found, value: "runs the binary ({where})");
+    }
+    if (has(text, needles: ["exec.Command(", "exec.CommandContext("])) {
+        addUnique(found, value: "runs a process ({where})");
+    }
+    if (has(text, needles: ["t.TempDir()", "os.WriteFile(", "os.MkdirAll(", "os.MkdirTemp("])) {
+        addUnique(found, value: "real filesystem ({where})");
+    }
+    if (has(text, needles: ["\"git\"", "git init", "vcs.Resolve("])) {
+        addUnique(found, value: "real vcs ({where})");
+    }
+    if (has(text, needles: ["NewMock", "mock.Mock", ".EXPECT()"])) {
+        addUnique(found, value: "mock ({where})");
+    }
+    foreach (pkg in mocks) {
+        if (text.indexOf(pkg + ".") != null) {
+            addUnique(found, value: "mock {pkg} ({where})");
+        }
+    }
+}
+
+// mockPackages names each generated mock package a test file imports, by the
+// name its body uses.
+fun mockPackages(sources: {str: str}, file: str) > [str] {
+    final found = mut [<str>];
+    foreach (line in (sources[file] ?? "").split("\n")) {
+        final t = line.trim();
+        if (t.startsWith("func ")) {
+            break;
+        }
+        final quote = t.indexOf("\"");
+        if (quote == null or t.indexOf("/gen/") == null or !t.endsWith("test\"")) {
+            continue;
+        }
+        final alias = t.sub(0, len: quote!).trim();
+        final path = t.sub(quote! + 1, len: t.len() - quote! - 2).split("/");
+        addUnique(found, value: if (alias != "" and alias != "import") alias else path[path.len() - 1]);
+    }
+    return found;
+}
+
+fun fileSignals(sources: {str: str}, file: str, found: mut [str]) > void {
+    foreach (line in (sources[file] ?? "").split("\n")) {
+        final t = line.trim();
+        if (t.startsWith("func ")) {
+            return;
+        }
+        if (t.startsWith("//go:build") and t.indexOf("e2e") != null) {
+            addUnique(found, value: "e2e build tag ({file})");
+        }
+    }
+}
+
+fun countAsserts(text: str) > int {
+    var n = 0;
+    foreach (line in text.split("\n")) {
+        if (has(line, needles: [".Equal(", ".True(", ".False(", ".Contains(", ".Empty(", ".NotEmpty(", ".Error(", ".ErrorContains(",
+            ".NoError(", ".Nil(", ".NotNil(", ".Len(", ".ElementsMatch(", ".JSONEq(", "t.Fatal", "t.Error"])) {
+            n = n + 1;
+        }
+    }
+    return n;
+}
+
+// layerOf maps signals to a candidate tier: the binary or an e2e tag reads
+// as e2e, a process, a real filesystem or VCS as integration.
+fun layerOf(signals: [str]) > str {
+    foreach (s in signals) {
+        if (s.startsWith("runs the binary") or s.startsWith("e2e build tag")) {
+            return "e2e";
+        }
+    }
+    foreach (s in signals) {
+        if (s.startsWith("runs a process") or s.startsWith("real filesystem") or s.startsWith("real vcs")) {
+            return "integration";
+        }
+    }
+    return "unit";
+}
+
+fun operandLines(sources: {str: str}, file: str, blocks: [Block]) > [str] {
+    final text = sources[file];
+    if (text == null) {
+        return [<str>];
+    }
+    final lines = text!.split("\n");
+    final found = mut [<str>];
+    final seen = mut {<int: bool>};
+    foreach (b in blocks) {
+        if (b.count == 0) {
+            continue;
+        }
+        for (var n = b.start; n <= b.end and n <= lines.len(); n = n + 1) {
+            final t = lines[n - 1].trim();
+            final joined = if (t.indexOf(" || ") != null) "||" else if (t.indexOf(" && ") != null) "&&" else "";
+            if (joined == "" or seen[n] != null or !(t.startsWith("if ") or t.startsWith("} else if ") or t.startsWith("return "))) {
+                continue;
+            }
+            seen[n] = true;
+            found.append("{file}:{n} `{t}` joins conditions with {joined}; its block ran {b.count} time(s), and which operand fired is not recorded");
+        }
+    }
+    return found;
+}
+
+fun shortList(items: [str], n: int) > str {
+    if (items.len() <= n) {
+        return items.join(", ");
+    }
+    return items.sub(0, len: n).join(", ") + " and {items.len() - n} more";
+}
+
+fun signalText(signals: [str]) > str {
+    return if (signals.len() > 0) shortList(signals, n: 3) else "no boundary signal";
+}
+
+fun tierCounts(reach: [Reach]) > {str: int} {
+    final counts = mut {"unit": 0, "integration": 0, "e2e": 0};
+    foreach (r in reach) {
+        counts[r.layer] = (counts[r.layer] ?? 0) + 1;
+    }
+    return counts;
+}
+
+fun layerItem(f: Finding) > str {
+    final label = f.sym.label;
+    final nearest = f.reach[0];
+    var direct = 0;
+    foreach (r in f.reach) {
+        if (r.depth == 1) {
+            direct = direct + 1;
+        }
+    }
+    if (direct == 0) {
+        return "layer mismatch? no test calls {label} directly; the nearest, {nearest.root.label}, reaches it at depth {nearest.depth} via "
+            + "{nearest.via.join(" -> ")} as {nearest.layer} ({signalText(nearest.signals)}); is a direct test of {label} the closest falsifying boundary?";
+    }
+    final counts = tierCounts(f.reach);
+    return "layer mismatch? {direct} test(s) call {label} directly; signals across all {f.reach.len()}: unit {counts["unit"]}, "
+        + "integration {counts["integration"]}, e2e {counts["e2e"]}; does each tier match the contract it proves?";
+}
+
+fun uncoveredItem(f: Finding) > str {
+    final spans = mut [<str>];
+    var stmts = 0;
+    foreach (b in f.uncovered) {
+        spans.append("{b.start}-{b.end}");
+        stmts = stmts + b.stmts;
+    }
+    return "happy-path-only? {stmts} statement(s) in {f.uncovered.len()} block(s) of {f.sym.file} never ran ({shortList(spans, n: 8)}); "
+        + "which failure branch does no test take, and which tier should own it?";
+}
+
+fun namesFailure(f: Finding) > bool {
+    var named = false;
+    foreach (r in f.reach) {
+        if (has(r.root.label.lower(), needles: ["deny", "denies", "refuse", "fail", "error", "reject", "invalid", "missing", "block", "catch"])) {
+            named = true;
+        }
+    }
+    return named;
+}
+
+fun assertItem(f: Finding) > str {
+    final shown = mut [<str>];
+    foreach (r in f.reach) {
+        if (shown.len() < 3) {
+            shown.append("{r.root.label} {r.root.file}:{r.root.line}-{r.root.end} ({r.asserts} assertion line(s))");
+        }
+    }
+    return "assertions observe the outcome? read {shown.join("; ")}; does each compare the whole result, not one field?";
+}
+
+fun mockUsers(f: Finding) > [str] {
+    final mocks = mut [<str>];
+    foreach (r in f.reach) {
+        foreach (s in r.signals) {
+            if (s.startsWith("mock")) {
+                addUnique(mocks, value: r.root.label);
+            }
+        }
+    }
+    return mocks;
+}
+
+fun worklist(f: Finding, depth: int) > [str] {
+    if (f.reach.len() == 0) {
+        return ["untested? no test reaches {f.sym.label} within depth {depth} of calls edges; which tier should own its contract?"];
+    }
+    final items = mut [layerItem(f)];
+    if (f.uncovered.len() > 0) {
+        items.append(uncoveredItem(f));
+    }
+    if (!namesFailure(f)) {
+        items.append("happy-path-only? no reaching test names a failure (deny, refuse, fail, error, reject, invalid, missing); read their asserts");
+    }
+    foreach (o in f.operands) {
+        items.append("operand? {o}; does a test fail when one operand is flipped?");
+    }
+    items.append(assertItem(f));
+    final mocks = mockUsers(f);
+    if (mocks.len() > 0) {
+        items.append("fake where the real thing is cheap? {shortList(mocks, n: 4)} use a mock; does it preserve the contract, and is the real collaborator cheap here?");
+    }
+    return items;
+}
+
+// Index is what a reach reads about the graph and the sources.
+object Index {
+    nodes: {str: Sym},
+    callees: {str: mut [str]},
+    sources: {str: str},
+    module: str,
+}
+
+fun addEdge(map: mut {str: mut [str]}, key: str, value: str) > void {
+    if (map[key] == null) {
+        map[key] = mut [<str>];
+    }
+    if (map[key]!.indexOf(value) == null) {
+        map[key]!.append(value);
+    }
+}
+
+// walkUp fills dist with each caller within depth of start and next with
+// the callee it was reached from.
+fun walkUp(start: str, callers: {str: mut [str]}, depth: int, dist: mut {str: int}, next: mut {str: str}) > void {
+    final todo = mut [start];
+    var head = 0;
+    while (head < todo.len()) {
+        final at = todo[head];
+        head = head + 1;
+        if (dist[at]! >= depth) {
+            continue;
+        }
+        foreach (caller in callers[at] ?? mut [<str>]) {
+            if (dist[caller] == null) {
+                dist[caller] = dist[at]! + 1;
+                next[caller] = at;
+                todo.append(caller);
+            }
+        }
+    }
+}
+
+// route is the symbol ids from a test down its calls edges to start.
+fun route(id: str, start: str, next: {str: str}) > [str] {
+    final ids = mut [id];
+    var walk = id;
+    while (walk != start) {
+        walk = next[walk]!;
+        ids.append(walk);
+    }
+    return ids;
+}
+
+fun reachOf(id: str, d: int, root: Sym, start: str, next: {str: str}, ix: Index) > Reach {
+    final via = mut [<str>];
+    final packages = mut [<str>];
+    foreach (step in route(id, start: start, next: next)) {
+        via.append(ix.nodes[step]?.label ?? step);
+        addUnique(packages, value: packageOf(step, module: ix.module));
+    }
+    final signals = mut [<str>];
+    final text = body(ix.sources, s: root);
+    signalsIn(text, where: root.label, mocks: mockPackages(ix.sources, file: root.file), found: signals);
+    fileSignals(ix.sources, file: root.file, found: signals);
+    final helpers = mut [<str>];
+    foreach (callee in ix.callees[id] ?? mut [<str>]) {
+        final h = ix.nodes[callee];
+        if (h != null and isTestFile(h!.file) and !isRoot(h!)) {
+            helpers.append(h!.label);
+            signalsIn(body(ix.sources, s: h!), where: h!.label, mocks: mockPackages(ix.sources, file: h!.file), found: signals);
+        }
+    }
+    return Reach{ root = root, depth = d, via = via, packages = packages, helpers = helpers, signals = signals,
+        layer = layerOf(signals), asserts = countAsserts(text) };
+}
+
+fun reachTo(sym: Sym, callers: {str: mut [str]}, depth: int, ix: Index) > [Reach] {
+    final dist = mut {sym.id: 0};
+    final next = mut {<str: str>};
+    walkUp(sym.id, callers: callers, depth: depth, dist: dist, next: next);
+    final reach = mut [<Reach>];
+    foreach (id, d in dist) {
+        final root = ix.nodes[id];
+        if (root != null and isRoot(root!)) {
+            reach.append(reachOf(id, d: d, root: root!, start: sym.id, next: next, ix: ix));
+        }
+    }
+    return reach.sort(fun (a: Reach, b: Reach) > bool => a.depth < b.depth or (a.depth == b.depth and a.root.label < b.root.label));
+}
+
+fun finding(sym: Sym, reach: [Reach], blocks: [Block], sources: {str: str}, depth: int) > Finding {
+    final mine = mut [<Block>];
+    final uncovered = mut [<Block>];
+    var covered = 0;
+    var total = 0;
+    foreach (b in blocks) {
+        if (b.file == sym.file and b.start >= sym.line and b.end <= sym.end) {
+            mine.append(b);
+            total = total + b.stmts;
+            if (b.count > 0) {
+                covered = covered + b.stmts;
+            } else {
+                uncovered.append(b);
+            }
+        }
+    }
+    final f = mut Finding{ sym = sym, blocks = mine.len(), covered = covered, total = total, uncovered = uncovered,
+        operands = operandLines(sources, file: sym.file, blocks: mine), reach = reach, worklist = [<str>] };
+    f.worklist = worklist(f, depth: depth);
+    return f;
+}
+
+// report walks calls edges up from each symbol to the tests reaching it.
+// A test's helpers are its callees in test files. Reach sorts nearest first.
+export fun report(scope: [Sym], nodes: {str: Sym}, calls: [Call], blocks: [Block], sources: {str: str}, module: str, depth: int) > [Finding] {
+    final callers = mut {<str: mut [str]>};
+    final callees = mut {<str: mut [str]>};
+    foreach (c in calls) {
+        addEdge(callers, key: c.callee, value: c.caller);
+        addEdge(callees, key: c.caller, value: c.callee);
+    }
+    final ix = Index{ nodes = nodes, callees = callees, sources = sources, module = module };
+    final found = mut [<Finding>];
+    foreach (sym in scope) {
+        found.append(finding(sym, reach: reachTo(sym, callers: callers, depth: depth, ix: ix), blocks: blocks, sources: sources, depth: depth));
+    }
+    return found;
+}
+
+
+
+// checkProfile refuses a profile with no block for a file in scope.
+// Read as is, it would call every symbol there untested.
+export fun checkProfile(blocks: [Block], files: [str], profile: str) > void !> str {
+    foreach (file in files) {
+        var held = false;
+        foreach (b in blocks) {
+            if (b.file == file) {
+                held = true;
+                break;
+            }
+        }
+        if (!held) {
+            throw "tests: {profile} holds no block for {file}, so it is narrower than the scope: a narrowed run wrote it, or that file "
+                + "has no statements. An unnarrowed `./magus run test .` writes .magus/coverage.hand.out; name another with --profile";
+        }
+    }
+}
+
+fun cmdExplain(id: str) > str {
+    return "./magus explain '{id}'";
+}
+
+fun appendCoverage(lines: mut [str], f: Finding, profile: str) > void {
+    final s = f.sym;
+    if (f.blocks == 0) {
+        lines.append("  coverage: not recorded: {profile} holds no block inside {s.file}:{s.line}-{s.end}");
+    } else {
+        lines.append("  coverage: {f.covered}/{f.total} statement(s) in {f.blocks} block(s) [{profile}]");
+    }
+    foreach (b in f.uncovered) {
+        lines.append("  never ran: {b.file}:{b.span}, {b.stmts} statement(s) [{profile}:{b.at}]");
+    }
+}
+
+fun depthCounts(reach: [Reach], depth: int) > str {
+    final byDepth = mut {<int: int>};
+    foreach (r in reach) {
+        byDepth[r.depth] = (byDepth[r.depth] ?? 0) + 1;
+    }
+    final depths = mut [<str>];
+    for (var d = 1; d <= depth; d = d + 1) {
+        depths.append("{d}: {byDepth[d] ?? 0}");
+    }
+    return depths.join(", ");
+}
+
+fun appendTests(lines: mut [str], f: Finding, limit: int, depth: int) > void {
+    final counts = tierCounts(f.reach);
+    lines.append("  tests by depth: {depthCounts(f.reach, depth: depth)}");
+    lines.append("  layer signals (not a verdict): unit {counts["unit"]}, integration {counts["integration"]}, e2e {counts["e2e"]}");
+    var shown = 0;
+    foreach (r in f.reach) {
+        if (shown >= limit) {
+            break;
+        }
+        shown = shown + 1;
+        final helpers = if (r.helpers.len() > 0) "; helpers {r.helpers.join(", ")}" else "";
+        final signals = if (r.signals.len() > 0) r.signals.join(", ") else signalText(r.signals);
+        lines.append("  depth {r.depth} {r.root.label}  {r.root.file}:{r.root.line}-{r.root.end}  [{cmdExplain(r.root.id)}]");
+        lines.append("    via {r.via.join(" -> ")}; packages {r.packages.join(", ")}{helpers}");
+        lines.append("    {r.layer}: {signals}; {r.asserts} assertion line(s)");
+    }
+    if (f.reach.len() > shown) {
+        lines.append("  {f.reach.len() - shown} more test(s) found; --limit lists them");
+    }
+}
+
+fun appendFinding(lines: mut [str], f: Finding, profile: str, limit: int, depth: int) > void {
+    final s = f.sym;
+    lines.append("symbol {s.label}  {s.file}:{s.line}-{s.end}  [{cmdExplain(s.id)}]");
+    if (s.signature != "") {
+        lines.append("  signature: {s.signature}");
+    }
+    final named = if (s.testRefs == 0) "no test file names it" else "{s.testRefs} test file(s) name it";
+    lines.append("  test_refs: {s.testRefs} ({named})");
+    appendCoverage(lines, f: f, profile: profile);
+    foreach (o in f.operands) {
+        lines.append("  operand: {o}");
+    }
+    appendTests(lines, f: f, limit: limit, depth: depth);
+    lines.append("");
+}
+
+export fun render(findings: [Finding], profile: str, limit: int, depth: int) > [str] {
+    final lines = mut [<str>];
+    foreach (f in findings) {
+        appendFinding(lines, f: f, profile: profile, limit: limit, depth: depth);
+    }
+    lines.append("worklist: for an agent to judge through the magus-test-design skill; magus calls no model");
+    final ranked = findings.cloneMutable().sort(fun (a: Finding, b: Finding) > bool => (a.total - a.covered) > (b.total - b.covered));
+    foreach (f in ranked) {
+        foreach (w in f.worklist) {
+            lines.append("  {f.sym.label}: {w}");
+        }
+    }
+    lines.append("");
+    lines.append("not recorded");
+    foreach (m in missing(findings, depth: depth)) {
+        lines.append("  not recorded: {m}");
+    }
+    return lines;
+}
+
+
+fun missing(findings: [Finding], depth: int) > [str] {
+    final found = mut [
+        "which test ran which block: the profile is one aggregate; attributing a block takes one `-run '^TestX$' -coverprofile` per test",
+        "calls through an interface method or a func value: SCIP records no calls edge for dynamic dispatch, so a test reaching a symbol only that way is missing",
+        "txtar scripts: no graph node maps an `exec magus` line to the verb it runs, so cmd/magus script tests are not counted",
+        "tests more than {depth} calls edges away: --depth widens the walk",
+        "a boundary deeper than the helpers a test calls directly: signals read the test and those helpers only",
+        "whether the profile was written from this tree: a profile carries no commit, so its line ranges are trusted as given",
+    ];
+    foreach (f in findings) {
+        if (f.operands.len() > 0) {
+            found.append("which operand of a joined condition fired in {f.sym.label}: Go coverage counts statements, not conditions");
+        }
+    }
+    return found;
+}
+
+export fun jsonLines(findings: [Finding], profile: str, depth: int) > [str] !> any {
+    final lines = mut [<str>];
+    foreach (f in findings) {
+        final tests = mut [<any>];
+        foreach (r in f.reach) {
+            tests.append({"test": r.root.label, "id": r.root.id, "source": "{r.root.file}:{r.root.line}-{r.root.end}", "depth": r.depth,
+                "via": r.via, "packages": r.packages, "helpers": r.helpers, "signals": r.signals, "layer": r.layer, "asserts": r.asserts});
+        }
+        final never = mut [<any>];
+        foreach (b in f.uncovered) {
+            never.append({"span": "{b.file}:{b.span}", "stmts": b.stmts, "cite": "{profile}:{b.at}"});
+        }
+        final row: {str: any} = {
+            "kind": "symbol", "symbol": f.sym.label, "id": f.sym.id, "source": "{f.sym.file}:{f.sym.line}-{f.sym.end}",
+            "signature": f.sym.signature, "test_refs": f.sym.testRefs,
+            "coverage": {"covered": f.covered, "total": f.total, "blocks": f.blocks, "profile": profile, "never_ran": never},
+            "operands": f.operands, "tests": tests, "worklist": f.worklist,
+        };
+        lines.append(json\stringify(row));
+    }
+    final tail: {str: any} = {"kind": "not_recorded", "items": missing(findings, depth: depth)};
+    lines.append(json\stringify(tail));
+    return lines;
+}
+
+fun intAttr(n: magus\KnowledgeNode, key: str) > int {
+    return std\parseInt(n.attrs[key] ?? "") ?? 0;
+}
+
+fun symOf(n: magus\KnowledgeNode) > Sym {
+    final colon = n.source.indexOf(":") ?? n.source.len();
+    final file = n.source.sub(0, len: colon);
+    final line = if (colon < n.source.len()) std\parseInt(n.source.sub(colon + 1)) ?? 0 else 0;
+    final end = intAttr(n, key: "def_end_line");
+    return Sym{ id = n.id, label = n.label, file = file, line = line, end = if (end > 0) end else line,
+        testRefs = intAttr(n, key: "test_refs"), signature = n.attrs["signature"] ?? "" };
+}
+
+fun isFunc(n: magus\KnowledgeNode) > bool {
+    return (n.attrs["signature"] ?? "").startsWith("func ") and n.source.indexOf(":") != null;
+}
+
+fun definedIn(file: str) > [str] !> any {
+    final card = magus\graph().explain(file);
+    if (card.resolution != magus\KnowledgeResolution.path) {
+        throw "tests: {file} is not a file the graph holds (resolved {card.resolution.value} to {card.node.id})";
+    }
+    final ids = mut [<str>];
+    foreach (o in card.out) {
+        if (o.relation == magus\RelationID.defines and o.otherKind == "symbol") {
+            ids.append(o.other);
+        }
+    }
+    return ids;
+}
+
+fun resolveSymbol(name: str) > str !> any {
+    if (name.startsWith("symbol:")) {
+        return name;
+    }
+    final q = magus\graph().query("kind=symbol id=~[/#]{name}\\(\\)\\.$");
+    final ids = mut [<str>];
+    foreach (m in q.nodes) {
+        if (m.kind == "symbol" and !isTestFile(m.source) and (m.id.endsWith("/{name}().") or m.id.endsWith("#{name}()."))) {
+            addUnique(ids, value: m.id);
+        }
+    }
+    if (ids.len() == 0) {
+        throw "tests: no non-test function or method is named {name} (query verdict {q.answer.verdict.value}); pass its symbol id";
+    }
+    if (ids.len() > 1) {
+        throw "tests: {name} names {ids.len()} symbols; pass one id:\n  {ids.join("\n  ")}";
+    }
+    return ids[0];
+}
+
+// Request is the command line once checked.
+object Request {
+    help: bool,
+    symbols: [str],
+    file: str? = null,
+    dir: str? = null,
+    profile: str,
+    depth: int,
+    limit: int,
+    jsonl: bool,
+}
+
+fun parseRequest(args: [str]) > Request !> any {
+    final parsed = flags\parse(args, switches: ["--help", "--jsonl"], valued: ["--file", "--package", "--profile", "--depth", "--limit"], repeated: ["--symbol"]);
+    if (parsed.values["--help"] != null) {
+        return Request{ help = true, symbols = [<str>], profile = "", depth = 0, limit = 0, jsonl = false };
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "tests: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final symbols = parsed.lists["--symbol"] ?? [<str>];
+    var kinds = if (symbols.len() > 0) 1 else 0;
+    foreach (k in ["--file", "--package"]) {
+        if (parsed.values[k] != null) {
+            kinds = kinds + 1;
+        }
+    }
+    if (kinds != 1) {
+        throw "tests: name exactly one scope: --symbol (repeatable), --file or --package\n{USAGE}";
+    }
+    final depth = std\parseInt(parsed.values["--depth"] ?? "4") ?? 0;
+    final limit = std\parseInt(parsed.values["--limit"] ?? "12") ?? 0;
+    if (depth < 1 or limit < 1) {
+        throw "tests: --depth and --limit take a positive integer\n{USAGE}";
+    }
+    return Request{ help = false, symbols = symbols, file = parsed.values["--file"], dir = parsed.values["--package"],
+        profile = parsed.values["--profile"] ?? ".magus/coverage.hand.out", depth = depth, limit = limit, jsonl = parsed.values["--jsonl"] != null };
+}
+
+fun scopeIds(req: Request) > [str] !> any {
+    final ids = mut [<str>];
+    if (req.symbols.len() > 0) {
+        foreach (name in req.symbols) {
+            addUnique(ids, value: resolveSymbol(name));
+        }
+    } else if (req.file != null) {
+        foreach (id in definedIn(req.file!)) {
+            addUnique(ids, value: id);
+        }
+    } else {
+        foreach (file in magus\graph().dir(req.dir!).files) {
+            if (file.endsWith(".go") and !isTestFile(file)) {
+                foreach (id in definedIn(file)) {
+                    addUnique(ids, value: id);
+                }
+            }
+        }
+    }
+    return ids;
+}
+
+// gather reads the calls edges above each id into nodes and calls, and
+// the ids themselves into scope.
+fun gather(ids: [str], depth: int, nodes: mut {str: Sym}, calls: mut [Call], scope: mut [Sym]) > void !> any {
+    final gaps = mut [<str>];
+    foreach (id in ids) {
+        final nb = magus\graph().neighborhood(id, opts: magus\NeighborhoodOptions{ depth = depth, relations = [magus\RelationID.calls], direction = magus\EdgeDirection.inward });
+        foreach (g in nb.answer.gaps) {
+            if (g.language == "go") {
+                addUnique(gaps, value: "{g.project.path} ({g.state.value})");
+            }
+        }
+        foreach (n in nb.nodes) {
+            if (n.kind == "symbol" and isFunc(n)) {
+                nodes[n.id] = symOf(n);
+                if (n.id == nb.focus) {
+                    scope.append(symOf(n));
+                }
+            }
+        }
+        foreach (l in nb.links) {
+            if (l.relation == magus\RelationID.calls) {
+                calls.append(Call{ caller = l.source, callee = l.target });
+            }
+        }
+    }
+    if (gaps.len() > 0) {
+        throw "tests: no Go symbol index for {gaps.join(", ")}; reach would read as none. Run `./magus graph build`";
+    }
+}
+
+// addTestCallees adds the calls edges out of each test, and the test
+// helpers they reach.
+fun addTestCallees(nodes: mut {str: Sym}, calls: mut [Call]) > void !> any {
+    final explained = mut {<str: bool>};
+    foreach (id, s in nodes.clone()) {
+        if (!isRoot(s)) {
+            continue;
+        }
+        foreach (o in magus\graph().explain(id).out) {
+            if (o.relation != magus\RelationID.calls) {
+                continue;
+            }
+            calls.append(Call{ caller = id, callee = o.other });
+            if (nodes[o.other] == null and explained[o.other] == null) {
+                explained[o.other] = true;
+                final card = magus\graph().explain(o.other);
+                if (isFunc(card.node) and isTestFile(symOf(card.node).file)) {
+                    nodes[o.other] = symOf(card.node);
+                }
+            }
+        }
+    }
+}
+
+fun profilePathOf(profile: str, root: str) > str !> str {
+    final path = if (profile.startsWith("/")) profile else fs\join(root, name: profile);
+    if (!fs\exists(path)) {
+        throw "tests: no coverage profile at {path}; an unnarrowed `./magus run test .` writes .magus/coverage.hand.out, or name one with --profile";
+    }
+    return path;
+}
+
+fun loadBlocks(path: str, module: str, scope: [Sym], profile: str) > [Block] !> any {
+    final blocks = parseProfile(fs\readFile(path), module: module);
+    final files = mut [<str>];
+    foreach (s in scope) {
+        addUnique(files, value: s.file);
+    }
+    checkProfile(blocks, files: files, profile: profile);
+    return blocks;
+}
+
+fun readSources(root: str, nodes: {str: Sym}) > {str: str} !> any {
+    final sources = mut {<str: str>};
+    foreach (id, s in nodes) {
+        if (sources[s.file] == null) {
+            final path = fs\join(root, name: s.file);
+            sources[s.file] = if (fs\exists(path)) fs\readFile(path) else "";
+        }
+    }
+    return sources;
+}
+
+fun printReport(req: Request, findings: [Finding], symbols: int, calls: int, profilePath: str) > void !> any {
+    if (req.jsonl) {
+        foreach (line in jsonLines(findings, profile: req.profile, depth: req.depth)) {
+            std\print(line);
+        }
+        return;
+    }
+    final info = fs\stat(profilePath);
+    final written = time\format("2006-01-02 15:04:05", unixMillis: info.mtime) catch "{info.mtime}";
+    std\print("read-only: {symbols} symbol(s), {calls} calls edge(s) within depth {req.depth}, profile {req.profile} ({info.size} bytes, written {written} UTC)");
+    std\print("");
+    foreach (line in render(findings, profile: req.profile, limit: req.limit, depth: req.depth)) {
+        std\print(line);
+    }
+}
+
+export fun main(args: [str]) > void !> any {
+    final req = parseRequest(args);
+    if (req.help) {
+        std\print(HELP);
+        return;
+    }
+    final root = vcs\root();
+    final module = (fs\readFile(fs\join(root, name: "go.mod")).split("\n")[0]).replace("module ", with: "").trim();
+    final ids = scopeIds(req);
+    final nodes = mut {<str: Sym>};
+    final calls = mut [<Call>];
+    final scope = mut [<Sym>];
+    gather(ids, depth: req.depth, nodes: nodes, calls: calls, scope: scope);
+    addTestCallees(nodes, calls: calls);
+    final profilePath = profilePathOf(req.profile, root: root);
+    final blocks = loadBlocks(profilePath, module: module, scope: scope, profile: req.profile);
+    final findings = report(scope, nodes: nodes, calls: calls, blocks: blocks, sources: readSources(root, nodes: nodes), module: module, depth: req.depth);
+    printReport(req, findings: findings, symbols: scope.len(), calls: calls.len(), profilePath: profilePath);
+}
+

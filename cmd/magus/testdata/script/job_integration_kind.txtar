@@ -2,8 +2,8 @@
 # fork from what the branches changed since the checkpoint, never declared; a live job
 # holding one of those files is a note naming the holder, never a refusal; and a whole
 # magusfile is allowed, since the merge writes the merged file. Finished branches off the
-# base are counted: from jobs.integrate_advise_at a fork of any other job advises the
-# integration fork, and from jobs.integrate_refuse_at it is refused until one names them.
+# base are counted, and a fork of any other job prints them with the integration fork
+# that takes them. A workspace with no policy is told and never stopped.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 env GIT_AUTHOR_NAME=Ana
@@ -25,24 +25,23 @@ exec git switch -q main
 # A live job on main holds the file done-a changed.
 exec magus job fork editor --write-paths pricing.txt --check 'test .' --criteria 'edit pricing'
 
-# One finished branch off the base reaches integrate_advise_at: the next fork advises.
+# One finished branch off the base: the next fork reports it and the commits since a full test.
 stdin $WORK/done-a.json
 exec magus job fork --stdin
 exec magus job fork reader --read-only --criteria 'read the tax code'
-stderr 'advice: 1 finished branch\(es\) wait off the base \(jobs.integrate_advise_at 1, jobs.integrate_refuse_at 2\): done-a \(job done-a, 1 commit\(s\)\)'
+stderr 'note: 1 finished branch\(es\) off the base: done-a \(job done-a, 1 commit\(s\)\); commits since the last full test: unknown, '
 stderr '"integrates":\["done-a"\]'
 stderr 'magus job fork --stdin --checkout <dir>'
 
 # The brief counts them too.
 exec magus session --brief
-stdout '^finished branches off the base: 1 \(a fork advises at 1, refuses at 2\): done-a$'
+stdout '^finished branches off the base: 1: done-a$'
 
-# Two reach integrate_refuse_at: a fork of anything but an integration job is refused.
+# However many wait, magus only reports them: no policy here, so the fork goes through.
 stdin $WORK/done-b.json
 exec magus job fork --stdin
-! exec magus job fork writer --read-only --criteria 'read the tests'
-stderr '2 finished branch\(es\) wait off the base'
-stderr 'done-a \(job done-a, 1 commit\(s\)\), done-b \(job done-b, 1 commit\(s\)\)'
+exec magus job fork writer --read-only --criteria 'read the tests'
+stderr '2 finished branch\(es\) off the base: done-a \(job done-a, 1 commit\(s\)\), done-b \(job done-b, 1 commit\(s\)\)'
 
 # An integration job naming write paths is refused: they are computed, never declared.
 stdin $WORK/declares-paths.json
@@ -68,7 +67,7 @@ stdout '^  pricing.txt$'
 
 # Named by a live integration job, the branches no longer count, and forks go through.
 exec magus job fork writer --read-only --criteria 'read the tests'
-! stderr 'advice:'
+stderr '0 finished branches off the base'
 
 # A regeneration a merge left owed in the checkout refuses the integration's pass until
 # `magus vcs resolve` runs it once and its result is committed.
@@ -120,9 +119,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 .magus/
 -- shop/magus.yaml --
 concurrency: 2
-jobs:
-  integrate_advise_at: 1
-  integrate_refuse_at: 2
 -- shop/pricing.txt --
 apples 1
 -- shop/magusfile.buzz --

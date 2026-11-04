@@ -3,6 +3,8 @@ package job
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -13,7 +15,52 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type ScriptEvidenceSuite struct {
+	suite.Suite
+	row  types.Job
+	gate types.Goal
+}
+
+func TestScriptEvidenceSuite(t *testing.T) { suite.Run(t, new(ScriptEvidenceSuite)) }
+
+func (s *ScriptEvidenceSuite) SetupTest() {
+	s.row = types.Job{ID: "job-a"}
+	s.gate = types.Goal{ID: "g", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Script: "p.buzz", Args: []string{"x"}}}
+}
+
+func (s *ScriptEvidenceSuite) attempt(lease string, args []string) types.JobAttempt {
+	return types.JobAttempt{Found: true, Project: ".", Target: "buzz p.buzz", Lease: lease, ExtraArgs: args}
+}
+
+func (s *ScriptEvidenceSuite) TestRunOfThisJobWithTheCheckArgsVerifies() {
+	got := verifyGate(s.row, s.gate, "ref", s.attempt("job-a", []string{"x"}), Observed{})
+	s.True(got.Verified, "%v", got.Violations)
+}
+
+func (s *ScriptEvidenceSuite) TestRunWithOtherArgsDoesNotVerify() {
+	got := verifyGate(s.row, s.gate, "ref", s.attempt("job-a", []string{"y"}), Observed{})
+	s.False(got.Verified)
+}
+
+func (s *ScriptEvidenceSuite) TestRunWithNoArgsDoesNotSatisfyACheckWithArgs() {
+	got := verifyGate(s.row, s.gate, "ref", s.attempt("job-a", nil), Observed{})
+	s.False(got.Verified)
+}
+
+func (s *ScriptEvidenceSuite) TestRunUnderAnotherLeaseNamesThatJob() {
+	got := verifyGate(s.row, s.gate, "ref", s.attempt("job-b", []string{"x"}), Observed{})
+	s.False(got.Verified)
+	s.Contains(strings.Join(got.Violations, "\n"), "another job's evidence")
+}
+
+func (s *ScriptEvidenceSuite) TestRunUnderNoLeaseSaysSo() {
+	got := verifyGate(s.row, s.gate, "ref", s.attempt("", []string{"x"}), Observed{})
+	s.False(got.Verified)
+	s.Contains(strings.Join(got.Violations, "\n"), "acted under no lease")
+}
 
 func acceptRow() types.Job {
 	check := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
@@ -51,7 +98,7 @@ func verifyClaim(row types.Job, rep types.JobResult, att types.JobAttempt, decla
 }
 
 func claimed(rep types.JobResult) Observed {
-	return Observed{Changed: rep.ChangedPaths, ChangedKnown: true}
+	return Observed{Changed: rep.ChangedPaths, ChangedKnown: true, TestSelection: goCheckSelection}
 }
 
 func goalRow() types.Job {
@@ -413,7 +460,7 @@ func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
 	}
 
 	lint := types.LeaseCheck{Target: "go::lint", Project: "."}
-	assert.False(t, ranCheck(lint, types.JobAttempt{Found: true, Project: ".", Target: "lint", Spell: "go", ExtraArgs: []string{"-run", "X"}}, nil),
+	assert.False(t, ranCheck(lint, types.JobAttempt{Found: true, Project: ".", Target: "lint", Spell: "go", ExtraArgs: []string{"-run", "X"}}, nil, goCheckSelection),
 		"-run scopes go test only")
 }
 
@@ -478,12 +525,12 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	} {
 		c, err := types.ParseLeaseRunLine(line)
 		require.NoError(t, err, line)
-		assert.True(t, ranCheck(c, att, nil), line)
+		assert.True(t, ranCheck(c, att, nil, goCheckSelection), line)
 	}
 
 	c, err := types.ParseLeaseRunLine("magus run test cmd/magus")
 	require.NoError(t, err)
-	assert.False(t, ranCheck(c, att, nil), "another project is another run")
+	assert.False(t, ranCheck(c, att, nil, goCheckSelection), "another project is another run")
 }
 
 // A script check binds to the run `magus buzz --record` stored for that script, and to no
@@ -492,10 +539,10 @@ func TestScriptCheckBindsToItsRecordedRun(t *testing.T) {
 	t.Parallel()
 
 	c := types.LeaseCheck{Script: "probes/key.buzz"}
-	assert.True(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/key.buzz"}, []string{"rw"}))
-	assert.True(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz ./probes/key.buzz"}, nil), "one path spelled two ways")
-	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/other.buzz"}, nil), "another script")
-	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "test"}, nil), "a target run")
+	assert.True(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/key.buzz"}, []string{"rw"}, goCheckSelection))
+	assert.True(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz ./probes/key.buzz"}, nil, goCheckSelection), "one path spelled two ways")
+	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/other.buzz"}, nil, goCheckSelection), "another script")
+	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "test"}, nil, goCheckSelection), "a target run")
 }
 
 // Passing tests and a passing main are different facts, so a test check binds to the
@@ -508,11 +555,11 @@ func TestScriptTestCheckBindsOnlyToItsTestRun(t *testing.T) {
 	script := types.LeaseCheck{Script: "probes/key.buzz"}
 	tested := types.LeaseCheck{Script: "probes/key.buzz", Test: true}
 
-	assert.True(t, ranCheck(tested, tests, nil))
-	assert.False(t, ranCheck(tested, main, nil), "a main run is not evidence of passing tests")
-	assert.True(t, ranCheck(script, main, nil))
-	assert.False(t, ranCheck(script, tests, nil), "a test run is not evidence of a passing main")
-	assert.False(t, ranCheck(tested, types.JobAttempt{Found: true, Project: ".", Target: "buzz -t probes/other.buzz"}, nil), "another script")
+	assert.True(t, ranCheck(tested, tests, nil, goCheckSelection))
+	assert.False(t, ranCheck(tested, main, nil, goCheckSelection), "a main run is not evidence of passing tests")
+	assert.True(t, ranCheck(script, main, nil, goCheckSelection))
+	assert.False(t, ranCheck(script, tests, nil, goCheckSelection), "a test run is not evidence of a passing main")
+	assert.False(t, ranCheck(tested, types.JobAttempt{Found: true, Project: ".", Target: "buzz -t probes/other.buzz"}, nil, goCheckSelection), "another script")
 }
 
 // A CHARM is part of a run's identity, not a spelling of it. The store records what was
@@ -527,13 +574,13 @@ func TestCheckBindsOnCharm(t *testing.T) {
 
 	charmless, err := types.ParseLeaseRunLine("magus run generate .")
 	require.NoError(t, err)
-	assert.False(t, ranCheck(charmless, written, nil), "a written run is not evidence of a gated one")
-	assert.True(t, ranCheck(charmless, gated, nil))
+	assert.False(t, ranCheck(charmless, written, nil, goCheckSelection), "a written run is not evidence of a gated one")
+	assert.True(t, ranCheck(charmless, gated, nil, goCheckSelection))
 
 	rw, err := types.ParseLeaseRunLine("magus run generate:rw .")
 	require.NoError(t, err)
-	assert.True(t, ranCheck(rw, written, nil))
-	assert.False(t, ranCheck(rw, gated, nil), "a gated run is not evidence of a written one")
+	assert.True(t, ranCheck(rw, written, nil, goCheckSelection))
+	assert.False(t, ranCheck(rw, gated, nil, goCheckSelection), "a gated run is not evidence of a written one")
 }
 
 // A check is resolved the way `magus run` resolves it, so in a workspace whose
@@ -568,7 +615,7 @@ func TestCheckBindsUnderDefaultCharms(t *testing.T) {
 			c, err := types.ParseLeaseRunLine(tc.check)
 			require.NoError(t, err)
 			tc.att.Found = true
-			assert.Equal(t, tc.want, ranCheck(c, tc.att, defaults))
+			assert.Equal(t, tc.want, ranCheck(c, tc.att, defaults, goCheckSelection))
 		})
 	}
 }
@@ -584,12 +631,12 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 	written := types.JobAttempt{Found: true, Project: ".", Target: "generate:rw"}
 
 	optOut := types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}
-	assert.True(t, ranCheck(optOut, gated, defaults), "the --no-default-charms run")
-	assert.False(t, ranCheck(optOut, written, defaults), "a written run is not evidence of a gated one")
+	assert.True(t, ranCheck(optOut, gated, defaults, goCheckSelection), "the --no-default-charms run")
+	assert.False(t, ranCheck(optOut, written, defaults, goCheckSelection), "a written run is not evidence of a gated one")
 
 	plain := types.LeaseCheck{Target: "generate", Project: "."}
-	assert.True(t, ranCheck(plain, written, defaults), "a plain check still binds the default-charm run")
-	assert.False(t, ranCheck(plain, gated, defaults))
+	assert.True(t, ranCheck(plain, written, defaults, goCheckSelection), "a plain check still binds the default-charm run")
+	assert.False(t, ranCheck(plain, gated, defaults, goCheckSelection))
 
 	assert.Equal(t, "magus run generate . --no-default-charms", optOut.String())
 	assert.True(t, strings.HasSuffix(gateCommand(optOut), " run generate . --no-default-charms"), gateCommand(optOut))
@@ -1144,6 +1191,17 @@ func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "status --wait | <the check>`")
 }
 
+func TestAnIntegrationOwingACheckIsToldWhatClearsMemoryToo(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "integrate", Integrates: []string{"a"}, Check: acceptRow().Check}
+	rep := passingResult()
+	rep.Job = "integrate"
+	rep.Validation = types.JobResultValidation{Command: acceptRow().Validation, Owed: types.OwedNoSeat}
+	v := VerifyGates(row, rep, types.JobAttempt{}, nil, nil, Observed{})
+	assert.Contains(t, strings.Join(v.Violations, "\n"), "after MGS3053, which no seat clears, frees memory and runs the check again")
+}
+
 // A worker that found no build seat files its checks as owed, and the integration that
 // merges its branch runs each one its own full go-test and lint do not already cover.
 func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
@@ -1170,4 +1228,177 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 	}
 	assert.Equal(t, want, got, "the scoped go-test and lint ride the full runs; a check paid for and a branch not merged add nothing")
 	assert.Empty(t, owedGoals(types.Job{ID: "w"}, []types.Job{worker}, nil), "a job that integrates nothing owes nothing")
+}
+
+// narrowedRunSuite pins a file-scoped goal grading what the row changed.
+type narrowedRunSuite struct {
+	suite.Suite
+}
+
+func TestNarrowedRun(t *testing.T) { suite.Run(t, new(narrowedRunSuite)) }
+
+func (s *narrowedRunSuite) row(args ...string) types.Job {
+	row := acceptRow()
+	row.Goals = []types.Goal{types.Goal{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true, Args: args}}.Resolve()}
+	return row
+}
+
+func (s *narrowedRunSuite) grade(row types.Job, seen Observed, args ...string) Status {
+	seen.TestSelection = goCheckSelection
+	check := types.JobAttempt{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"-run", "Ledger"}}
+	lint := types.JobAttempt{Found: true, Target: "lint", Project: ".", Ref: "out2", ExtraArgs: args}
+	rep := passingResult()
+	rep.GateEvidence = []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}}
+	return VerifyGates(row, rep, check, []types.JobGateAttempt{{GateID: "lint", Attempt: lint}}, nil, seen)
+}
+
+func (s *narrowedRunSuite) seen(changed ...string) Observed {
+	return Observed{Changed: changed, ChangedKnown: true, changedFiles: changed}
+}
+
+func (s *narrowedRunSuite) TestRunOverTheChangedFilesPassesAWiderGoal() {
+	row := s.row("cmd/magus/ledger.go", "internal/ledger/report.go", "internal/ledger/report_test.go", "internal/ledger/other_test.go")
+
+	v := s.grade(row, s.seen("internal/ledger/report.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go", "internal/ledger/report.go")
+
+	s.True(v.Verified, "%v", v.Violations)
+	s.Contains(strings.Join(v.Notes, "\n"), `goal "lint" was graded on output ref "out2", a run over the files this job changed`)
+}
+
+func (s *narrowedRunSuite) TestGoalWithNoArgsTakesARunOverTheChangedFiles() {
+	v := s.grade(s.row(), s.seen("internal/ledger/report.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go", "internal/ledger/report.go")
+
+	s.True(v.Verified, "%v", v.Violations)
+}
+
+func (s *narrowedRunSuite) TestRunMissingAChangedFileIsRefused() {
+	v := s.grade(s.row("cmd/magus/ledger.go", "internal/ledger/report.go"), s.seen("internal/ledger/report.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go")
+
+	s.False(v.Verified)
+	s.Contains(strings.Join(v.Violations, "\n"), "leaves out what this job changed: internal/ledger/report.go")
+}
+
+func (s *narrowedRunSuite) TestRunOverTheGoalsArgsMissingAChangedFileIsRefused() {
+	v := s.grade(s.row("cmd/magus/ledger.go"), s.seen("internal/ledger/report_test.go", "cmd/magus/ledger.go"), "cmd/magus/ledger.go")
+
+	s.False(v.Verified, "the goal's own list is no answer for a file the row went on to change")
+	s.Contains(strings.Join(v.Violations, "\n"), "internal/ledger/report_test.go")
+}
+
+func (s *narrowedRunSuite) TestUnknownChangeIsRefused() {
+	v := s.grade(s.row("cmd/magus/ledger.go", "internal/ledger/report.go"), Observed{ChangedKnown: true}, "cmd/magus/ledger.go")
+
+	s.False(v.Verified, "a run narrowed against nothing anyone read cannot pass")
+}
+
+func (s *narrowedRunSuite) TestWholeRunStillPasses() {
+	v := s.grade(s.row("cmd/magus/ledger.go"), s.seen("internal/ledger/report.go", "cmd/magus/ledger.go"))
+
+	s.True(v.Verified, "%v", v.Violations)
+}
+
+func (s *narrowedRunSuite) TestStaleRunIsStillRefused() {
+	seen := s.seen("internal/ledger/report.go", "cmd/magus/ledger.go")
+	seen.Stale = map[string]string{"out2": "the changed paths read now as the run read them"}
+
+	v := s.grade(s.row(), seen, "cmd/magus/ledger.go", "internal/ledger/report.go")
+
+	s.False(v.Verified)
+	s.Contains(strings.Join(v.Violations, "\n"), "predates the job's last write")
+}
+
+func (s *narrowedRunSuite) TestNestedProjectReadsItsOwnFiles() {
+	c := types.LeaseCheck{Target: "lint", Project: "libs/x", Args: []string{"a.go", "b.go"}}
+	run := types.JobAttempt{Found: true, Target: "lint", Project: "libs/x", ExtraArgs: []string{"a.go"}}
+
+	s.True(ranOver(c, run, nil, []string{"libs/x/a.go", "cli/other.go"}, nil, goCheckSelection), "a file outside the project is not this goal's")
+	s.False(ranOver(c, run, nil, []string{"libs/x/b.go"}, nil, goCheckSelection))
+}
+
+func (s *narrowedRunSuite) TestCheckOverFilesGetsTheSameAnswer() {
+	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "b.go"}}
+	run := types.JobAttempt{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
+
+	s.True(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go", "b.go")(c), goCheckSelection))
+}
+
+// named writes files into a checkout and answers [namedFiles] over a check.
+func (s *narrowedRunSuite) named(files ...string) func(types.LeaseCheck, ...string) map[string]bool {
+	tree := s.T().TempDir()
+	for _, f := range files {
+		s.Require().NoError(os.WriteFile(filepath.Join(tree, f), nil, 0o644))
+	}
+	return func(c types.LeaseCheck, changed ...string) map[string]bool {
+		return namedFiles(tree, []types.Goal{{Kind: types.GoalKindCheck, Check: c}}, changed)
+	}
+}
+
+func (s *narrowedRunSuite) TestAnArgumentNamingNoFileIsComparedVerbatim() {
+	c := types.LeaseCheck{Target: "deploy-check", Project: ".", Args: []string{"staging"}}
+	run := types.JobAttempt{Found: true, Target: "deploy-check", Project: ".", ExtraArgs: []string{"a.go"}}
+
+	s.False(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go")(c, "a.go"), goCheckSelection))
+}
+
+func (s *narrowedRunSuite) TestAFileTheRowDeletedStillNamesAFile() {
+	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "gone.go"}}
+	run := types.JobAttempt{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
+
+	s.True(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go")(c, "gone.go"), goCheckSelection))
+}
+
+func (s *narrowedRunSuite) TestADirectoryIsNotAFile() {
+	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"pkg"}}
+	run := types.JobAttempt{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"pkg/a.go"}}
+
+	s.False(ranOver(c, run, nil, []string{"pkg/a.go"}, s.named()(c), goCheckSelection))
+}
+
+func (s *narrowedRunSuite) TestAnArgumentResolvesAgainstItsProject() {
+	c := types.LeaseCheck{Target: "format", Project: "libs/x", Args: []string{"a.go"}}
+
+	s.Equal(map[string]bool{"libs/x/a.go": true}, s.named()(c, "libs/x/a.go"))
+}
+
+func (s *narrowedRunSuite) TestNoArgCheckThatIsNotLintStaysWhole() {
+	vet := types.LeaseCheck{Target: "go-vet", Project: "."}
+	narrowed := types.JobAttempt{Found: true, Target: "go-vet", Project: ".", ExtraArgs: []string{"a.go"}}
+
+	s.False(ranOver(vet, narrowed, nil, []string{"a.go"}, nil, goCheckSelection))
+}
+
+func (s *narrowedRunSuite) TestRunWithAFlagIsAnotherRun() {
+	c := types.LeaseCheck{Target: "lint", Project: ".", Args: []string{"a.go"}}
+	run := types.JobAttempt{Found: true, Target: "lint", Project: ".", ExtraArgs: []string{"--fix", "a.go"}}
+
+	s.False(ranOver(c, run, nil, []string{"a.go"}, nil, goCheckSelection))
+}
+
+func (s *narrowedRunSuite) TestScriptArgsStayItsArgv() {
+	c := types.LeaseCheck{Script: "probes/key.buzz", Args: []string{"a.go", "b.go"}}
+	run := types.JobAttempt{Found: true, Target: "buzz probes/key.buzz", Project: ".", ExtraArgs: []string{"a.go"}}
+
+	s.False(ranOver(c, run, nil, []string{"a.go"}, nil, goCheckSelection))
+}
+
+func (s *narrowedRunSuite) TestPackageArgumentDoesNotScopeGoTest() {
+	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "./other"}}
+	run := types.JobAttempt{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"./pkg"}}
+
+	s.False(ranOver(c, run, nil, []string{"pkg/a.go"}, nil, goCheckSelection))
+}
+
+func (s *narrowedRunSuite) TestRowFilesPreferWhatLanded() {
+	tree := s.T().TempDir()
+	for _, f := range []string{"own.go", "claimed.go", "gen.go", "merged.go"} {
+		s.Require().NoError(os.WriteFile(filepath.Join(tree, f), []byte("x\n"), 0o644))
+	}
+	seen := Observed{Changed: []string{"own.go", "merged.go"}, ChangedKnown: true, Landed: []string{"own.go", "gen.go", "deleted.go"}, LandedKnown: true}
+	result := types.JobResult{ChangedPaths: []string{"claimed.go"}}
+	generated := func(p string) bool { return p == "gen.go" }
+
+	s.Equal([]string{"claimed.go", "own.go"}, rowFiles(tree, seen, result, generated), "a merged line's file is not the row's")
+
+	seen.LandedKnown = false
+	s.Equal([]string{"claimed.go", "merged.go", "own.go"}, rowFiles(tree, seen, result, generated), "the diff answers when nothing read the branch")
 }

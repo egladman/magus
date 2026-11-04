@@ -1,11 +1,15 @@
 package knowledge
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"strings"
 	"testing"
 )
 
@@ -102,6 +106,63 @@ func TestDocHeadingsIgnoresCodeFences(t *testing.T) {
 	assert.Equal(t, "Real", got[0].text)
 }
 
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+type DocSectionsSuite struct {
+	suite.Suite
+}
+
+func TestDocSectionsSuite(t *testing.T) { suite.Run(t, new(DocSectionsSuite)) }
+
+// sectionsPage has a repeated heading, a fenced "#" line, a setext heading
+// and frontmatter.
+const sectionsPage = "---\ntitle: T\n---\n" +
+	"# Setup\n\n```sh\n# not a heading\n```\n\n" +
+	"## Setup\ntext\n\n" +
+	"Other\n=====\nlast\n"
+
+func (s *DocSectionsSuite) TestAnchorsMatchGoldmarkWithDuplicatesAndFences() {
+	var anchors []string
+	for _, sec := range DocSections(sectionsPage) {
+		anchors = append(anchors, sec.Anchor)
+	}
+	s.Equal([]string{"setup", "setup-1", "other"}, anchors)
+}
+
+func (s *DocSectionsSuite) TestExtentsAreFileLines() {
+	got := DocSections(sectionsPage)
+	s.Require().Len(got, 3)
+	s.Equal([]int{4, 10, 13}, []int{got[0].StartLine, got[1].StartLine, got[2].StartLine})
+	s.Equal([]int{11, 11, 15}, []int{got[0].EndLine, got[1].EndLine, got[2].EndLine},
+		"a section ends before the next heading of its level or above, trailing blanks dropped")
+	s.Equal([]int{8, 11, 15}, []int{got[0].BodyEndLine, got[1].BodyEndLine, got[2].BodyEndLine},
+		"a parent's body stops at its first sub-section")
+}
+
+func (s *DocSectionsSuite) TestDigestCoversTheExtent() {
+	lines := strings.Split(sectionsPage, "\n")
+	got := DocSections(sectionsPage)
+	s.Require().Len(got, 3)
+	s.Equal(sha256Hex(strings.Join(lines[3:11], "\n")), got[0].Digest)
+	s.Equal(sha256Hex(strings.Join(lines[9:11], "\n")), got[1].Digest)
+	s.NotEqual(got[0].Digest, DocSections(strings.Replace(sectionsPage, "text", "TEXT", 1))[0].Digest)
+}
+
+func (s *DocSectionsSuite) TestNodeAttrsCarryTheExtent() {
+	ws := testkit.NewWorkspace(s.T())
+	ws.Write("docs/p.md", sectionsPage)
+	out := mergeAll([]Shard{docShard(ws.Root(), nil, "")}).Output()
+	n, ok := nodeByID(out, "docsection:docs/p.md#setup-1")
+	s.Require().True(ok)
+	s.Equal("10", n.Attrs[attrStartLine])
+	s.Equal("11", n.Attrs[attrEndLine])
+	s.Equal("11", n.Attrs[attrBodyEndLine])
+	s.NotEmpty(n.Attrs[attrDigest])
+}
+
 // TestAssembleDocsEmitsSectionNodes checks the retrieval unit: a page node plus one node per
 // heading, each a citable pointer, with a heading contained by its enclosing heading rather
 // than by the page, so the graph mirrors the outline and a nested query stays scoped.
@@ -120,7 +181,11 @@ func TestAssembleDocsEmitsSectionNodes(t *testing.T) {
 		Kind:   types.KindDocSection,
 		Label:  "Top",
 		Source: "docs/guide.md#top",
-		Attrs:  map[string]string{attrAnchor: "top", attrLevel: "1"},
+		Attrs: map[string]string{
+			attrAnchor: "top", attrLevel: "1",
+			attrStartLine: "4", attrEndLine: "10", attrBodyEndLine: "6",
+			attrDigest: sha256Hex("# Top\n\nintro\n\n## Sub\n\nbody"),
+		},
 	}
 	assert.Equal(t, wantTop, top)
 

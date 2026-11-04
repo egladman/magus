@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,7 +12,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -21,11 +24,13 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -76,11 +81,15 @@ type lazyWorkspaceContext struct {
 	once      sync.Once
 	workspace types.WorkspaceRepository
 	trailBase string
+	// judge is the one ApplySandbox installs, set once attached.
+	judge    std.EditJudge
+	judgeErr error
 }
 
 var (
 	workspaceContextKey = contextKeyReadBy(func(ctx context.Context) { types.WorkspaceFromContext(ctx) })
 	trailContextKey     = contextKeyReadBy(func(ctx context.Context) { trail.BaseFromContext(ctx) })
+	editJudgeContextKey = contextKeyReadBy(func(ctx context.Context) { std.EditJudgeFromContext(ctx) })
 )
 
 func newLazyWorkspaceContext(parent context.Context, root string) *lazyWorkspaceContext {
@@ -101,8 +110,44 @@ func (c *lazyWorkspaceContext) Value(key any) any {
 			return nil
 		}
 		return c.trailBase
+	case editJudgeContextKey:
+		return c.editJudge()
 	}
 	return c.Context.Value(key)
+}
+
+// editJudge defers the open to the first write into the workspace,
+// so a write to a temp or env file opens nothing.
+// A workspace that fails to open refuses the write.
+func (c *lazyWorkspaceContext) editJudge() std.EditJudge {
+	return std.EditJudge{
+		Covers: func(ctx context.Context, path string) bool {
+			root, err := workspace.FindRoot(c.root)
+			if err != nil || !inDir(root, path) {
+				return false
+			}
+			c.once.Do(c.attach)
+			return c.judge.Covers == nil || c.judge.Covers(ctx, path)
+		},
+		Grade: func(ctx context.Context, path string, before, after []byte) error {
+			c.once.Do(c.attach)
+			if c.judge.Grade == nil {
+				return fmt.Errorf("fs write %s: refused: the workspace that grades it did not open: %w", path,
+					cmp.Or(c.judgeErr, errors.New("it attached no edit judge")))
+			}
+			return c.judge.Grade(ctx, path, before, after)
+		},
+	}
+}
+
+// inDir reports whether path, made absolute, lies under dir.
+func inDir(dir, path string) bool {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(dir, abs)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // attach opens against the parent context, so the open cannot re-enter Value and
@@ -110,6 +155,7 @@ func (c *lazyWorkspaceContext) Value(key any) any {
 func (c *lazyWorkspaceContext) attach() {
 	m, err := buzzLoadWorkspace(c.Context, c.root)
 	if err != nil {
+		c.judgeErr = err
 		warnWorkspaceNotAttached(err)
 		return
 	}
@@ -118,6 +164,13 @@ func (c *lazyWorkspaceContext) attach() {
 	}
 	c.workspace = viewInternals(m)
 	c.trailBase = m.CacheDir()
+	// The judge the eager door gets, the sandbox being off here.
+	sctx, err := m.ApplySandbox(c.Context)
+	if err != nil {
+		c.judgeErr = err
+		return
+	}
+	c.judge, _ = std.EditJudgeFromContext(sctx)
 }
 
 // keyRecorder is a context that records the last key looked up in it.
@@ -192,9 +245,9 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 		}
 	}
 	isRepl := bf.E == "" && !bf.Test && !bf.Check && len(rest) == 0
-	if !isRepl && bf.NoAutoload {
+	if !isRepl && !bf.Autoload {
 		return exit.Usagef("magus buzz: --%s applies to the REPL, not to a script, -%s, or -%s",
-			flaggen.FlagBuzzNoAutoload, flaggen.FlagBuzzE, flaggen.FlagBuzzT)
+			"no-"+flaggen.FlagBuzzAutoload, flaggen.FlagBuzzE, flaggen.FlagBuzzT)
 	}
 	if bf.Coverprofile != "" && !bf.Test {
 		return exit.Usagef("magus buzz: --%s requires -%s", flaggen.FlagBuzzCoverprofile, flaggen.FlagBuzzT)
@@ -240,7 +293,7 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	// --embedded is a no-op on this path: a REPL is top-level statements by nature,
 	// so the session is always embedded regardless of the flag.
 	if isRepl && stdinIsTerminal() {
-		return buzzRepl(ctx, bf.NoAutoload)
+		return buzzRepl(ctx, !bf.Autoload)
 	}
 
 	code, name, scriptArgs, err := buzzSource(bf.E, rest)
@@ -277,7 +330,11 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 		scriptOut = io.MultiWriter(scriptOut, &recorded)
 		records = io.MultiWriter(records, &recorded)
 		started := time.Now()
-		defer func() { recordBuzzRun(ctx, root, name, code, scriptArgs, bf.Test, recorded.Bytes(), started, retErr) }()
+		defer func() {
+			if err := recordBuzzRun(ctx, root, name, code, scriptArgs, bf.Test, recorded.Bytes(), started, retErr); err != nil {
+				retErr = errors.Join(retErr, err)
+			}
+		}()
 	}
 	in, _ := pipeRecordsIn(ctx)
 	ctx = report.WithStage(ctx, report.Stage{In: in, Out: records, Prose: scriptOut})
@@ -302,7 +359,10 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	}
 	tr := traceFromContext(ctx)
 	addProfileObserver(ctx, sess)
-	installBuzzHost(ctx, sess, code, scriptOut, tr)
+	lateErr, err := installBuzzHost(ctx, sess, code, scriptOut, tr)
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
 	var cov *buzz.LineCoverage
 	if bf.Coverprofile != "" {
 		if path := buzzCoverPath(name); path != "" {
@@ -314,6 +374,9 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	stopExec := tr.phase("buzz.exec")
 	if err := sess.Exec(ctx, code); err != nil {
 		stopExec()
+		if declErr := lateErr(); declErr != nil {
+			return fmt.Errorf("%s: %w", name, declErr)
+		}
 		// Strict mode refuses both a raising call and a try at the top level, so the
 		// fix is the one place a raise may go, which -e can hold as well as a file.
 		if d := (*diagnostics.Error)(nil); errors.As(err, &d) && d.Code == buzz.UnhandledRaise {
@@ -369,27 +432,31 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 // buzzRunKey is the output-store key of a --record run: the script's source and its
 // arguments, so rerunning one probe adds an attempt under the same ref and a changed probe
 // gets a new one.
-func buzzRunKey(name, code string, args []string) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("buzz\x00%s\x00%s\x00%s", name, code, strings.Join(args, "\x00"))))
+func buzzRunKey(name, code, lease string, args []string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("buzz\x00%s\x00%s\x00%s\x00%s", name, code, lease, strings.Join(args, "\x00"))))
 	return hex.EncodeToString(sum[:])
 }
 
 // recordBuzzRun keeps what a recorded run printed in the output store and prints its ref
 // on stderr, so a plan, a review or a job's notes can cite the run instead of describing it.
-// A test run is stored as `buzz -t <script>`, apart from the script's main. A store it
-// cannot reach is reported and leaves the run's own outcome alone.
-func recordBuzzRun(ctx context.Context, root, name, code string, args []string, test bool, out []byte, started time.Time, runErr error) {
+// A test run is stored as `buzz -t <script>`, apart from the script's main.
+// The record holds the args and the lease, so a check binds to both.
+// A failure to record is returned. The ref skips slog, which silent mode drops.
+func recordBuzzRun(ctx context.Context, root, name, code string, args []string, test bool, out []byte, started time.Time, runErr error) error {
 	if root == "" {
 		root = "."
 	}
 	dir, err := magus.ResolveCacheDir(root, cliOptions()...)
 	if err != nil {
-		slog.WarnContext(ctx, "--record: no output store here", attr.Notice(""), attr.Component("magus buzz"), attr.Error(err))
-		return
+		return fmt.Errorf("magus buzz: --record: no output store here: %w", err)
 	}
-	target, key := "buzz "+name, buzzRunKey(name, code, args)
+	lease, err := recordLease(ctx, root, name)
+	if err != nil {
+		return fmt.Errorf("magus buzz: --record: %w", err)
+	}
+	target, key := "buzz "+name, buzzRunKey(name, code, lease, args)
 	if test {
-		target, key = "buzz -t "+name, buzzRunKey(name, code, append([]string{"-t"}, args...))
+		target, key = "buzz -t "+name, buzzRunKey(name, code, lease, append([]string{"-t"}, args...))
 	}
 	d := cache.OutputDescriptor{
 		Project:     ".",
@@ -397,16 +464,69 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 		Failed:      runErr != nil,
 		TimestampMs: started.UnixMilli(),
 		DurationMs:  time.Since(started).Milliseconds(),
+		ExtraArgs:   slices.Clone(args),
+		Lease:       lease,
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
 	}
 	stored, err := cache.NewOutputStore(dir).Persist(ctx, key, out, d)
 	if err != nil {
-		slog.WarnContext(ctx, "--record", attr.Notice(""), attr.Component("magus buzz"), attr.Error(err))
-		return
+		return fmt.Errorf("magus buzz: --record: store the run: %w", err)
 	}
-	slog.InfoContext(ctx, "ref  "+stored.Ref, attr.Notice(""))
+	_, err = fmt.Fprintln(os.Stderr, "ref  "+stored.Ref)
+	return err
+}
+
+// recordLease is the lease a recorded run of script acts under.
+func recordLease(ctx context.Context, root, script string) (string, error) {
+	here, err := resolvedDir(root)
+	if err != nil {
+		return "", err
+	}
+	lease, _, err := checkoutLease(ctx, here)
+	if err != nil || lease != "" {
+		return lease, err
+	}
+	rows, err := readJobRows(ctx, here)
+	if err != nil {
+		return "", err
+	}
+	return scriptCheckHolder(rows, here, script), nil
+}
+
+// scriptCheckHolder names the one live row here whose goal checks script.
+// A CLI process cannot see the host session a hook bound its worker by.
+// Two such rows leave it empty: the run cannot say whose it was.
+func scriptCheckHolder(rows []types.Job, root, script string) string {
+	here, err := resolvedDir(root)
+	if err != nil {
+		return ""
+	}
+	holder := ""
+	for _, row := range rows {
+		there, err := resolvedDir(row.CheckoutRoot)
+		if err != nil || there != here || !job.Editing(row) || !slices.ContainsFunc(row.EffectiveGoals(), func(g types.Goal) bool {
+			return g.Check.Script != "" && path.Clean(g.Check.Script) == path.Clean(script)
+		}) {
+			continue
+		}
+		if holder != "" {
+			return ""
+		}
+		holder = row.ID
+	}
+	return holder
+}
+
+// resolvedDir is dir absolute with symlinks followed: exec records the
+// resolved checkout, and a shell's cwd may name it through a link.
+func resolvedDir(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(abs)
 }
 
 // buzzCoverPath returns a stable, slash-separated path for LCOV SF: records.
@@ -631,7 +751,10 @@ func buzzFindImport(p, dir string, includeDirs []string) string {
 // A script whose import closure reaches magus gets the mirrors up front, so a later
 // file's type of the same name still wins and an aliased import sees them. The
 // resolver below covers an import the closure scan could not follow.
-func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scriptOut io.Writer, tr *startupTracer) {
+//
+// The eager path returns a declaration failure at once. The lazy resolver
+// cannot return one, so lateErr reports it once the script has run.
+func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scriptOut io.Writer, tr *startupTracer) (lateErr func() error, err error) {
 	stop := tr.phase("buzz.register_modules")
 	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(scriptOut))
 	stop()
@@ -640,12 +763,15 @@ func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scrip
 	stop()
 	if buzzReachesMagus(sess, code) {
 		stop = tr.phase("buzz.register_namespace")
+		defer stop()
 		bindings.RegisterMagusNamespace(ctx, sess)
-		bindings.DeclareMagusTypes(sess)
-		stop()
-		return
+		if err := bindings.DeclareMagusTypes(sess); err != nil {
+			return nil, err
+		}
+		return func() error { return nil }, nil
 	}
 	var once sync.Once
+	var declErr error
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
 		if importPath != "magus" {
 			var zero vm.Value
@@ -654,12 +780,17 @@ func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scrip
 		once.Do(func() {
 			stop := tr.phase("buzz.register_namespace")
 			bindings.RegisterMagusNamespace(ctx, sess)
-			bindings.DeclareMagusTypes(sess)
+			declErr = bindings.DeclareMagusTypes(sess)
 			stop()
 		})
+		if declErr != nil {
+			var zero vm.Value
+			return zero, false
+		}
 		v, ok := sess.NativeModule("magus")
 		return v, ok
 	})
+	return func() error { return declErr }, nil
 }
 
 // scriptImportDir is the directory a file script's imports resolve against.
@@ -838,10 +969,9 @@ func buzzScriptContext(ctx context.Context, root string) (context.Context, error
 	return trail.ContextWithBase(sctx, m.CacheDir()), nil
 }
 
-// buzzRunContext is the context a script runs under: buzzScriptContext's, plus one
-// evaluation memo for the whole run, so every graph read (magus\refs, magus\dir, ...)
-// answers from one build of the graph the way a spell invocation's do. Without it each
-// magus\refs call rebuilt the symbol graph, about 12s apiece on this repository.
+// buzzRunContext is buzzScriptContext's context plus one memo for the run.
+// So every magus\graph() read answers from one build, as a spell's do.
+// Without it each refs call rebuilt the symbol graph, about 12s apiece here.
 func buzzRunContext(ctx context.Context, root string) (context.Context, error) {
 	ctx, err := buzzScriptContext(ctx, root)
 	if err != nil {
@@ -919,9 +1049,15 @@ func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diag
 	// imported module's top level, which Diagnostics executes; that is incidental to
 	// the answer and must not be mixed into stdout with it.
 	addProfileObserver(ctx, sess)
-	installBuzzHost(ctx, sess, string(data), os.Stderr, traceFromContext(ctx))
+	lateErr, err := installBuzzHost(ctx, sess, string(data), os.Stderr, traceFromContext(ctx))
+	if err != nil {
+		return nil, err
+	}
 
 	diags := sess.Diagnostics(string(data))
+	if err := lateErr(); err != nil {
+		return nil, err
+	}
 	wd, _ := os.Getwd()
 	for i := range diags {
 		switch f := diags[i].File; {

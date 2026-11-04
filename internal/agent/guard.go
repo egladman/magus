@@ -244,7 +244,15 @@ var guardInputs = []string{"command", "path", "mcp"}
 // --observes-skill-loads, --foreground-default-ms, --foreground-max-ms, --tool-rows and
 // --resumes-on-background-from. A 34 copy under a 33 config reports each as unsupported
 // and judges without it; a 33 copy forwards them to a magus shell that no longer takes them.
-const GuardTemplateVersion = 34
+//
+// 35: cursor-hook.buzz reads the user's reading list from `magus config view`.
+// Its web hint names follow entries first and caveats with their why. It drops
+// skip entries and kind=link citations under them. A 34 copy ignores the list.
+// An ask is the host's own prompt, and a deny where no prompt can happen.
+// magus-command.buzz asks only under default, acceptEdits and auto.
+// cursor-hook.buzz renders an ask only on beforeShellExecution and
+// beforeMCPExecution. A 34 copy can let either run with no prompt.
+const GuardTemplateVersion = 36
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

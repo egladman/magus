@@ -80,17 +80,23 @@ const ciTarget = "ci"
 // target RegeneratedOutside already lists is left out because the root regenerates it. A
 // script check covers nothing: what it runs is not a target.
 //
+// A file in a project whose own target reads it gates there, so an
+// ancestor's check does not cover it. The ancestor's target gates it too
+// when it spells the path out.
+//
 // Each goal is graded by the installed [CheckGrader] before it is offered: the form a
 // worker may run, else none, with the gate marked IntegratorGates. A workspace with no root
 // project, or one whose root has no ci chain, yields nil.
 func UnrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput) []UnrunGate {
-	return unrunGates(root, row, projects, regenerated, gradeWith(installedCheckGrader(), root, row))
+	gates, _ := unrunGates(root, row, projects, regenerated, gradeWith(installedCheckGrader(), root, row))
+	return gates
 }
 
-// unrunGates is [UnrunGates] graded by grade.
-func unrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput, grade gradeFunc) []UnrunGate {
+// unrunGates is [UnrunGates] graded by grade. The second result names each
+// gate an ancestor kept because its owner's targets could not be listed.
+func unrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput, grade gradeFunc) ([]UnrunGate, []string) {
 	if row.ReadOnly || len(row.WritePaths) == 0 {
-		return nil
+		return nil, nil
 	}
 	byPath := map[string]*types.Project{}
 	for _, p := range projects {
@@ -99,39 +105,166 @@ func unrunGates(root string, row types.Job, projects []*types.Project, regenerat
 	lookup := func(path string) *types.Project { return byPath[path] }
 	top := byPath["."]
 	if top == nil {
-		return nil
+		return nil, nil
 	}
 
 	run := runTargets(row, lookup)
 	var (
-		written []string
-		walked  bool
-		found   []unrunFound
+		written   []string
+		walked    bool
+		found     []unrunFound
+		undecided []string
 	)
+	listed := map[string]bool{}
 	_ = types.WalkChain(top, ciTarget, lookup, func(v types.ChainVisit) error {
-		if v.Depth == 0 || run[v.Key()] {
-			return nil
-		}
-		label := fmt.Sprintf("%s:%s", v.Project.Path, v.Target)
-		if slices.ContainsFunc(regenerated, func(o RegeneratedOutput) bool { return o.Target == label }) {
+		if v.Depth == 0 {
 			return nil
 		}
 		if !walked {
 			written, walked = writtenFiles(root, row), true
 		}
-		sources, _ := targetSources(v.Project, v.Target)
-		source, _, ok := sourcedBy(sources, written)
-		if !ok {
-			return nil
+		for _, note := range undecidedOwners(projects, v, written) {
+			undecided = appendUnique(undecided, note)
 		}
-		found = append(found, unrunFound{
-			gate:  UnrunGate{Target: v.Target, Project: v.Project.Path, Source: source.String()},
-			visit: v,
-		})
+		for _, owned := range byOwningProject(projects, v, written) {
+			key := owned.visit.Key()
+			label := fmt.Sprintf("%s:%s", owned.visit.Project.Path, v.Target)
+			if run[key] || listed[key] || slices.ContainsFunc(regenerated, func(o RegeneratedOutput) bool { return o.Target == label }) {
+				continue
+			}
+			gate, ok := foundGate(owned, v.Target)
+			if !ok {
+				continue
+			}
+			listed[key] = true
+			found = append(found, gate)
+		}
 		return nil
 	})
 
-	return offeredGates(found, row, lookup, grade)
+	return offeredGates(found, row, lookup, grade), undecided
+}
+
+// foundGate is the gate owned comes to when target reads one of its files.
+func foundGate(owned ownedGate, target string) (unrunFound, bool) {
+	sources, _ := targetSources(owned.visit.Project, target)
+	source, _, ok := sourcedBy(sources, owned.files)
+	if !ok {
+		return unrunFound{}, false
+	}
+	return unrunFound{
+		gate:  UnrunGate{Target: target, Project: owned.visit.Project.Path, Source: source.String()},
+		visit: owned.visit,
+	}, true
+}
+
+// undecidedOwners names each project owning a file v reads that cannot say
+// whether it runs v's target: its spells are unresolved, so v stands in.
+func undecidedOwners(projects []*types.Project, v types.ChainVisit, written []string) []string {
+	sources, _ := targetSources(v.Project, v.Target)
+	var out []string
+	for _, file := range written {
+		owner := owningProject(projects, file)
+		if owner == nil || owner == v.Project || !spellsUnresolved(owner) || slices.Contains(owner.MagusfileTargets, v.Target) {
+			continue
+		}
+		if slices.ContainsFunc(sources, func(g types.Glob) bool { return g.Match(file) }) {
+			out = appendUnique(out, fmt.Sprintf("whether project %q runs `%s`: it binds spells it carries unresolved, so `%s %s` gates its files",
+				owner.Path, v.Target, v.Target, v.Project.Path))
+		}
+	}
+	return out
+}
+
+// spellsUnresolved reports a project whose spell ops cannot be listed.
+func spellsUnresolved(p *types.Project) bool {
+	return len(p.ResolvedSpells) == 0 && len(p.Spells) > 0
+}
+
+// ownedGate is the gate a target over some written files comes to.
+type ownedGate struct {
+	visit types.ChainVisit
+	files []string
+}
+
+// byOwningProject splits the files v reads by the project gating each.
+// A project whose own target reads a file gates it.
+// v keeps a gate as well when it spells the path out ([spellsOutPath]).
+func byOwningProject(projects []*types.Project, v types.ChainVisit, written []string) []ownedGate {
+	sources, _ := targetSources(v.Project, v.Target)
+	var out []ownedGate
+	add := func(gate types.ChainVisit, file string) {
+		i := slices.IndexFunc(out, func(o ownedGate) bool { return o.visit.Project == gate.Project })
+		if i < 0 {
+			out = append(out, ownedGate{visit: gate})
+			i = len(out) - 1
+		}
+		out[i].files = append(out[i].files, file)
+	}
+	for _, file := range written {
+		if !slices.ContainsFunc(sources, func(g types.Glob) bool { return g.Match(file) }) {
+			continue
+		}
+		owner := owningProject(projects, file)
+		if owner == nil || owner == v.Project || !gatesFile(owner, v.Target, file) {
+			add(v, file)
+			continue
+		}
+		gate := v
+		gate.Project = owner
+		add(gate, file)
+		if spellsOutPath(v.Project, sources, file) {
+			add(v, file)
+		}
+	}
+	return out
+}
+
+// spellsOutPath reports whether a source of p reading file names a path
+// below p's root, as `libs/**/*.go` does. `**/*.go` is a language default
+// that a nested module's files happen to match.
+func spellsOutPath(p *types.Project, sources []types.Glob, file string) bool {
+	root := 0
+	if p.Path != "." {
+		root = len(p.Path)
+	}
+	return slices.ContainsFunc(sources, func(g types.Glob) bool {
+		return g.Match(file) && len(types.LiteralPrefix(g.Pattern)) > root
+	})
+}
+
+// gatesFile reports whether p runs target over file.
+func gatesFile(p *types.Project, target, file string) bool {
+	if !runsTarget(p, target) {
+		return false
+	}
+	sources, _ := targetSources(p, target)
+	return slices.ContainsFunc(sources, func(g types.Glob) bool { return g.Match(file) })
+}
+
+// owningProject is the deepest project containing file, nil when none does.
+func owningProject(projects []*types.Project, file string) *types.Project {
+	var owner *types.Project
+	for _, p := range projects {
+		inside := p.Path == "." || strings.HasPrefix(file, p.Path+"/")
+		if inside && (owner == nil || owner.Path == "." || len(p.Path) > len(owner.Path)) {
+			owner = p
+		}
+	}
+	return owner
+}
+
+// runsTarget reports whether p declares target or a spell it binds does.
+func runsTarget(p *types.Project, target string) bool {
+	if slices.Contains(p.MagusfileTargets, target) {
+		return true
+	}
+	for _, s := range p.ResolvedSpells {
+		if slices.ContainsFunc(s.Targets(), func(op string) bool { return types.Normalize(op) == target }) {
+			return true
+		}
+	}
+	return false
 }
 
 // offeredGates drops the found gates another found gate composes, and gives each one left

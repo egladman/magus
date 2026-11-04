@@ -33,11 +33,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// workspace is the narrow slice of *magus.Magus the handler needs: where the trail lives and how
-// big the build cache is. Satisfied structurally by *magus.Magus.
+// workspace is the narrow slice of *magus.Magus the handler needs: where the trail lives, how
+// big the build cache is, and the projects a job listing scopes its overlaps by. Satisfied
+// structurally by *magus.Magus.
 type workspace interface {
 	CacheDir() string
 	CacheDiskBytes() int64
+	Root() string
+	All() []*types.Project
 }
 
 // Service implements jobv1alpha1connect.JobServiceHandler. It submits jobs to the server's own proc
@@ -131,14 +134,24 @@ func (s *Service) report(ctx context.Context) types.JobList {
 	}
 	staleAfter, err := s.store.StaleAfter()
 	if err != nil {
-		slog.WarnContext(ctx, "reading jobs.stale_after failed; no row is flagged stale",
+		slog.WarnContext(ctx, "reading jobs.stale_after failed; no row is flagged stale", attr.Unchecked(),
 			attr.Error(err))
 	}
-	list, err := s.store.Report(ctx, time.Now().Unix(), staleAfter)
+	list, err := s.store.InWorkspace(s.jobWorkspace(ctx)).Report(ctx, time.Now().Unix(), staleAfter)
 	if err != nil {
 		return types.NewJobList(nil)
 	}
 	return list
+}
+
+// jobWorkspace is the served workspace as the job store's checks read it, Unavailable when
+// it lists no projects, so those checks say they did not run.
+func (s *Service) jobWorkspace(ctx context.Context) jobstore.Workspace {
+	projects := s.ws.All()
+	if len(projects) == 0 {
+		return jobstore.Workspace{Unavailable: fmt.Sprintf("the workspace at %s lists no projects", s.ws.Root())}
+	}
+	return jobstore.Workspace{Projects: projects, Ignored: jobstore.VCSIgnored(ctx, s.ws.Root())}
 }
 
 // rows reads the job store, empty when there is none or it will not read; see [Service.report].

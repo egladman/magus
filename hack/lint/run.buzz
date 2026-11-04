@@ -22,6 +22,7 @@ import "fs";
 import "os";
 import "path";
 import "std";
+import "vcs";
 import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/lint/banned-words" as bannedwords;
@@ -30,7 +31,7 @@ import "hack/lint/buzz-sources-pass-the-static-check" as buzzcheck;
 import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
 import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
 import "hack/lint/code-follows-mined-precedents" as precedents;
-import "hack/lint/code-stays-within-the-conformance-ratchet" as conformanceratchet;
+import "hack/lint/code-stays-within-the-conformance-ceiling" as conformanceceiling;
 import "hack/lint/diagnostic-codes-have-docs-pages" as codepages;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
@@ -38,11 +39,13 @@ import "hack/lint/generated-go-packages-name-their-owner" as generatedpackages;
 import "hack/lint/hack-scripts-parse-argv-with-flags" as scriptflags;
 import "hack/lint/hack-scripts-start-with-a-verb" as hackverbs;
 import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
+import "hack/lint/local-skills-reach-every-host" as localskills;
 import "hack/lint/lockfiles-are-sorted" as lockfiles;
 import "hack/lint/magusfile-modules-have-no-main" as magusfilemodules;
 import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
 import "hack/lint/markdown-carries-no-mermaid" as nomermaid;
 import "hack/lint/markdown-proofread" as markdownproofread;
+import "hack/lint/no-throw" as nothrow;
 import "hack/lint/package-install-targets-never-replay" as installs;
 import "hack/lint/package-manifests-carry-no-scripts" as manifestscripts;
 import "hack/lint/proofread-case-moves-name-their-origin" as casemoves;
@@ -56,8 +59,9 @@ import "hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as qu
 import "hack/lint/skill-renders-follow-markdown-and-description-budgets" as skillrenders;
 import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
 import "hack/lint/symbol-docs-follow-proofread-rules" as symbolproofread;
-import "hack/lint/testlayout-pairing-has-no-exemptions" as testpairing;
+import "hack/lint/testpairing-pairing-has-no-exemptions" as testpairing;
 import "hack/lint/tool-descriptions-follow-proofread-rules" as tooldesc;
+import "hack/lint/typescript-never-throws" as typescriptthrows;
 import "hack/lint/trusted-jobs-restore-no-actions-cache" as trustedcache;
 import "hack/lint/whole-tree-targets-key-on-the-go-tree" as wholetree;
 
@@ -80,6 +84,7 @@ export fun rules() > [Rule] {
         Rule{ name = "whole-tree-targets-key-on-the-go-tree", reads = wholetree\reads(), check = wholetree\check },
         Rule{ name = "root-project-declares-the-configs-its-tools-read", reads = rootconfigs\reads(), check = rootconfigs\check },
         Rule{ name = "skills-generate-declares-every-shipped-skill", reads = skills\reads(), check = skills\check },
+        Rule{ name = "local-skills-reach-every-host", reads = localskills\reads(), check = localskills\check },
         Rule{ name = "generate-drift-throw-names-the-engine-drift-code", reads = generatedrift\reads(), check = generatedrift\check },
         Rule{ name = "generated-go-packages-name-their-owner", reads = generatedpackages\reads(), check = generatedpackages\check },
         Rule{ name = "landing-rotator-slots-match-headline-count", reads = landing\reads(), check = landing\check },
@@ -88,6 +93,7 @@ export fun rules() > [Rule] {
         Rule{ name = "markdown-carries-no-mermaid", reads = nomermaid\reads(), check = nomermaid\check },
         Rule{ name = "markdown-proofread", reads = markdownproofread\reads(), check = markdownproofread\check },
         Rule{ name = "banned-words", reads = bannedwords\reads(), check = bannedwords\check },
+        Rule{ name = "no-throw", reads = nothrow\reads(), check = nothrow\check },
         Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
         Rule{ name = "hack-scripts-parse-argv-with-flags", reads = scriptflags\reads(), check = scriptflags\check },
@@ -95,10 +101,10 @@ export fun rules() > [Rule] {
         Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
         Rule{ name = "buzz-sources-pass-the-static-check", reads = buzzcheck\reads(), check = buzzcheck\check },
         Rule{ name = "diagnostic-codes-have-docs-pages", reads = codepages\reads(), check = codepages\check },
-        Rule{ name = "testlayout-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },
+        Rule{ name = "testpairing-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },
         Rule{ name = "prose-names-targets-that-exist", reads = prosetargets\reads(), check = prosetargets\check },
         Rule{ name = "code-follows-mined-precedents", reads = precedents\reads(), check = precedents\check },
-        Rule{ name = "code-stays-within-the-conformance-ratchet", reads = conformanceratchet\reads(), check = conformanceratchet\check },
+        Rule{ name = "code-stays-within-the-conformance-ceiling", reads = conformanceceiling\reads(), check = conformanceceiling\check },
         Rule{ name = "symbol-docs-follow-proofread-rules", reads = symbolproofread\reads(), check = symbolproofread\check },
         Rule{ name = "cli-help-follows-proofread-rules", reads = clihelp\reads(), check = clihelp\check },
         Rule{ name = "tool-descriptions-follow-proofread-rules", reads = tooldesc\reads(), check = tooldesc\check },
@@ -106,15 +112,16 @@ export fun rules() > [Rule] {
         Rule{ name = "proofread-case-moves-name-their-origin", reads = casemoves\reads(), check = casemoves\check },
         Rule{ name = "rules-name-their-tier", reads = ruletiers\reads(), check = ruletiers\check },
         Rule{ name = "sdk-exports", reads = sdkexports\reads(), check = sdkexports\check },
+        Rule{ name = "typescript-never-throws", reads = typescriptthrows\reads(), check = typescriptthrows\check },
     ];
 }
 
-// PRUNED are the directories the walk never enters: VCS metadata, local state, installed
-// dependencies and generated output hold nothing this repository authors.
-final PRUNED = {".git": true, ".magus": true, "node_modules": true, "gen": true};
+// PRUNED are the directories the walk never enters, ignored or not. gen is
+// tracked output the ignore rules cannot exclude; the rest spare the VCS query.
+final PRUNED = {".git": true, ".magus": true, "node_modules": true, ".pnpm-store": true, ".testcache": true, "gen": true};
 
 // PRUNED_PATHS are pruned by their whole path: other checkouts of this repository, whose
-// files would each be reported twice.
+// files would each be reported twice. They are untracked, not always ignored.
 final PRUNED_PATHS = {".claude/worktrees": true};
 
 // KEPT_PATHS are generated trees walked despite PRUNED, because a rule reads them: the
@@ -122,21 +129,41 @@ final PRUNED_PATHS = {".claude/worktrees": true};
 // registry magus generates.
 final KEPT_PATHS = {"docs/site/diagrams/gen": true, "internal/handler/mcp/gen": true};
 
-// walk returns every file under root outside the pruned trees, as root-relative paths.
+// KEPT_IGNORED are ignored trees walked anyway: each checkout installs
+// .claude, and the rules read its settings and skills. Everything under
+// one inherits its ignore, so the walk stops asking the VCS there.
+final KEPT_IGNORED = {".claude": true};
+
+// walk returns every file under root outside the pruned trees and the
+// VCS ignore rules, as root-relative paths.
 export fun walk(root: str) > [str] !> any {
     final acc = mut [<str>];
-    walkInto(root, rel: "", acc: acc);
+    walkInto(root, rel: "", kept: false, acc: acc);
     return acc;
 }
 
-fun walkInto(root: str, rel: str, acc: mut [str]) > void !> any {
+fun walkInto(root: str, rel: str, kept: bool, acc: mut [str]) > void !> any {
     final dir = if (rel == "") root else root + "/" + rel;
-    foreach (name in fs\listDir(dir)) {
+    final names = fs\listDir(dir);
+    final ignored = mut {<str, bool>};
+    if (!kept) {
+        final paths = mut [<str>];
+        foreach (name in names) {
+            paths.append(if (rel == "") name else rel + "/" + name);
+        }
+        foreach (p in vcs\ignoredFiles(paths, dir: root)) {
+            ignored[p] = true;
+        }
+    }
+    foreach (name in names) {
         final p = if (rel == "") name else rel + "/" + name;
+        if (ignored[p] != null and KEPT_IGNORED[p] == null) {
+            continue;
+        }
         if (!fs\isDir(root + "/" + p)) {
             acc.append(p);
         } else if ((PRUNED[name] == null or KEPT_PATHS[p] != null) and PRUNED_PATHS[p] == null) {
-            walkInto(root, rel: p, acc: acc);
+            walkInto(root, rel: p, kept: kept or ignored[p] != null, acc: acc);
         }
     }
 }
@@ -338,8 +365,18 @@ export fun parse(args: [str], names: [str]) > Selection !> any {
         }
         paths.append(word);
     }
+    // A bare word ends the flags, so a flag after a path arrives here.
+    // Read as a path, it would match no rule and pass in silence.
+    final first = args.len() - parsed.positionals.len();
+    var literal = first > 0 and args[first - 1] == "--";
     foreach (word in parsed.positionals) {
-        paths.append(word);
+        if (!literal and word == "--") {
+            literal = true;
+        } else if (!literal and word.startsWith("-")) {
+            throw "lint: flag {word} follows a path; flags go first\n{usage}";
+        } else {
+            paths.append(word);
+        }
     }
     // walk yields paths with no ./ prefix, and at() compares against them.
     final clean = mut [<str>];
@@ -452,7 +489,7 @@ export fun main(args: [str]) > void !> any {
 // refusal is the message parse throws for args, or "" when it accepts them.
 fun refusal(args: [str]) > str {
     try {
-        parse(args, names: ["a", "b"]);
+        _ = parse(args, names: ["a", "b"]);
     } catch (e) {
         return "{e}";
     }
@@ -465,10 +502,12 @@ test "a bare run selects every rule over the whole tree" {
     assert\equal(sel.paths.len(), want: 0, message: "no paths");
 }
 
-test "paths and --rule parse in any order, and a dashed path follows --" {
-    final sel = parse(["./x.lock", "--rule", "b", "docs/y.lock", "--", "-odd.lock"], names: ["a", "b"]);
+test "--rule precedes the paths, and a dashed path follows --" {
+    final sel = parse(["--rule", "b", "./x.lock", "docs/y.lock", "--", "-odd.lock"], names: ["a", "b"]);
     assert\equal(sel.rule!, want: "b", message: "rule");
     assert\equal(sel.paths, want: ["x.lock", "docs/y.lock", "-odd.lock"], message: "paths, ./ dropped");
+    assert\equal(parse(["--", "-odd.lock", "-also.lock"], names: ["a"]).paths, want: ["-odd.lock", "-also.lock"], message: "a leading --");
+    assert\equal(refusal(["x.lock", "--rule", "b"]), want: "lint: flag --rule follows a path; flags go first\n" + usage, message: "a flag after a path");
 }
 
 test "an unknown flag and an unknown rule are refused" {
@@ -565,9 +604,25 @@ test "the walk prunes what no rule reads" {
         fs\mkdirAll(fs\dirname(root + "/" + p));
         fs\writeFile(root + "/" + p, content: "");
     }
+    _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
     final got = walk(root);
     assert\equal(got.len(), want: 3, message: "three files survive");
     assert\contains(got, item: "a.lock", message: "top level");
     assert\contains(got, item: ".claude/settings.json", message: ".claude outside worktrees");
     assert\contains(got, item: "docs/site/diagrams/gen/e.buzz", message: "a gen tree a rule reads");
+}
+
+test "the walk skips what the VCS ignores and keeps what it does not" {
+    final root = fs\tempDir("lint-ignore-");
+    foreach (p in [".gitignore", "tracked.lock", "kept.lock", "installed/a.js", "stray.log", ".claude/skills/a/SKILL.md"]) {
+        fs\mkdirAll(fs\dirname(root + "/" + p));
+        fs\writeFile(root + "/" + p, content: if (p == ".gitignore") "installed/\n*.log\n/.claude/\n" else "");
+    }
+    _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    _ = vcs\cmd(["add", "tracked.lock"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    final got = walk(root);
+    assert\contains(got, item: "tracked.lock", message: "tracked file");
+    assert\contains(got, item: "kept.lock", message: "untracked, not ignored");
+    assert\contains(got, item: ".claude/skills/a/SKILL.md", message: "a file deep in a kept ignored tree");
+    assert\equal(got.len(), want: 4, message: "ignored dir and file skipped");
 }

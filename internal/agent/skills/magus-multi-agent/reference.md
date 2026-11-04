@@ -43,7 +43,7 @@ The check is `<target> <project> [-- args]` with the `{{cmd "run"}}` implied (`"
 A record's check may name a Buzz script instead, `{"script": "<probe>.buzz"}`, which a
 run of `{{cmd "buzz"}} --record <probe>.buzz` satisfies.
 
-Fork with `{{tool "client"}}` (`{{buzz "job.put"}}`) from an agent, or `{{cmd "job fork"}}` from a
+Fork with `{{tool "client"}}` (`{{buzz "workspace.putJob"}}`) from an agent, or `{{cmd "job fork"}}` from a
 terminal{{if .Full}}: the same store and the same authorization either way, so a
 job forked by hand and one an agent forked are indistinguishable to everything that
 reads them{{end}}. A worker holding a lease forks its own units the same way, naming its
@@ -178,7 +178,7 @@ one file{{else}}. Widening is how two workers end up owning one file{{end}}.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker done writing a
 contested path announces the release at once, then carries on validating. It shrinks
-the job's `write_paths` with another `{{tool "client"}}` (`{{buzz "job.put"}}`) write, or messages
+the job's `write_paths` with another `{{tool "client"}}` (`{{buzz "workspace.putJob"}}`) write, or messages
 the orchestrator if the host supports it{{if .Full}}. A waiting job
 starts against the released file while the first is still running tests, which
 is most of a worker's lifetime; holding every path to exit serializes agents on
@@ -303,7 +303,7 @@ until every one verifies.
 
 - Goals are data: write them in the job record's `goals`, never as flags.
 - `{{cmd "job fork"}}` refuses a job that writes and declares neither a check nor a goal.
-- `{{tool "client"}}` (`{{buzz "job.put"}}`) takes the same `goals` array.
+- `{{tool "client"}}` (`{{buzz "workspace.putJob"}}`) takes the same `goals` array.
 
 A record on stdin declares a `paths` goal and two `symbol` goals:
 
@@ -428,7 +428,7 @@ A blocked worker RAISES; it never stalls quietly.
   with `{{cmd "session dispose"}} <id> --reason "<why>"`{{if .Full}}. There is no expiry and no auto-dispose, because a
   request magus could answer on its own would not have needed a person{{end}}.
 - A worker that raised one waits for the disposition; it never chooses for itself.
-  It does not exit its row or report back first, because a reply that lands after the row ended reaches nobody.
+  It does not exit its row first: ending its turn leaves the row open and the worker resumable.
 
 `{{cmd "session"}}` is how the root audits what a job RAN, as opposed to what it reported.
 `{{cmd "session"}} --since 2h -o json` answers what the fleet has been doing.
@@ -453,4 +453,33 @@ process controls.{{else}}Re-plan when nesting, dependencies, ownership, failing 
 services change. Update the jobs before resuming affected work, and never act on a
 guessed or stale PID.{{end}} A running worker keeps the constraints it was handed.
 Tightening them means cancel and respawn, not a message sent mid-flight.
+
+## Integrate and verify
+
+`{{cmd "job wait"}} <job>` checks what is mechanical before you read a result:
+
+- every changed path inside the declared write paths and outside the denied ones;
+- a change set that is not empty on a row that writes;
+- the descendants the store carries;
+- the output ref, bound to a run of THAT JOB'S OWN CHECK which the store recorded
+  as PASSING{{if .Full}}. There is no `passed` field on the result: wait reads the
+  ref's own recorded attempt from the output store and derives the outcome from
+  it, never from what the worker claims{{end}}.
+
+A job that verifies is recorded `pass`. A rejection exits 1 naming every violation;
+a result that will not decode exits 2. A holder does not verify its own job, or a
+sibling's. Then reopen the evidence yourself (`{{cmd "query output"}} <ref>`).{{if .Full}}
+Wait proves the ref names a passing run of this job's own check, never that the
+work meets the job's GOAL.{{end}} A worker's prose about its criteria is not that evidence.
+
+Also: resolve cross-job API changes centrally; regenerate declared outputs once
+after source converges; re-run `{{cmd "affected"}} <target> --plan` over the actual
+diff and stop parallel integration if the partition broke; read
+`{{cmd "diff"}} --impact` as context never a verdict{{if .Full}} (empty section means
+nobody could measure it, not that nothing was found){{end}}.
+
+Validate once per wave, not once per fix: after a failed full run, reopen it and
+rerun only the failing tests (runner filter after `--`) until green, then the full
+suite once; name an outside-reason failure once and do not rerun it; a failing set
+that repeats unchanged stops the wave. Finish with `{{cmd "affected"}} ci`.
 

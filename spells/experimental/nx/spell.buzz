@@ -52,24 +52,24 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 }
 
 // list_projects is the workspace-provider contract magus invokes by name.
-export fun list_projects(target: Target, req: ProjectQuery) > [Project] !> any {
+export fun list_projects(target: Target, req: ProjectQuery) > [Project] !> any { //nolint:no-throw // magus invokes it by name and reads the raise
     final r = req.root;
 
     var projects = mut [<Project>];
     // Belt and suspenders around the two exec calls below: NX_NO_CLOUD skips the
     // cloud-onboarding prompt, NX_TUI and NX_INTERACTIVE keep nx from trying to
     // draw a terminal UI while magus captures its output.
-    os\withEnv({"NX_NO_CLOUD": "true", "NX_TUI": "false", "NX_INTERACTIVE": "false"}, callback: fun() > void !> any {
+    os\withEnv({"NX_NO_CLOUD": "true", "NX_TUI": "false", "NX_INTERACTIVE": "false"}, callback: fun() > void !> any { //nolint:no-throw // the raise passes through to list_projects
         // quiet, because this runs on the LOAD PATH of every magus command: proc.exec's
         // default streams what it captures, so without it nx's JSON is echoed to the
         // console before any command has printed its own output.
         final listed = proc\exec("npx", args: ["--no-install", "nx", "show", "projects", "--json"], dir: r,
-            opts: {"quiet": true});
+            opts: proc\ExecOptions{quiet = true});
         final names = json\parse(listed.stdout);
 
         foreach (name in names as [str]) {
             final shown = proc\exec("npx", args: ["--no-install", "nx", "show", "project", name, "--json"], dir: r,
-                opts: {"quiet": true});
+                opts: proc\ExecOptions{quiet = true});
             final detail = json\parse(shown.stdout) as? {str: any};
             projects.append(Project{
                 path   = ((detail?["root"]) as? str) ?? "",

@@ -13,9 +13,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/script"
 	"github.com/egladman/magus/types"
@@ -26,7 +30,7 @@ import (
 func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
 	defs, err := agentSkills.EmbeddedSkills()
 	require.NoError(t, err)
-	require.Len(t, defs, 16)
+	require.Len(t, defs, 17)
 	for _, def := range defs {
 		skill, err := agentSkills.Render(def, types.SkillVariantFull)
 		require.NoError(t, err)
@@ -348,7 +352,7 @@ func TestStampSkillInjectsProvenanceInsideFrontmatter(t *testing.T) {
 	assert.Contains(t, out, "\n---\nbody\n", "closing --- and body follow the provenance")
 	fmStart := strings.Index(out, "---")
 	fmEnd := strings.Index(out[fmStart+3:], "\n---")
-	assert.Contains(t, out[:fmStart+3+fmEnd], "agent-skill-version:", "version metadata is within the frontmatter")
+	assert.Contains(t, out[:fmStart+3+fmEnd], "skill-stamp-format:", "version metadata is within the frontmatter")
 }
 
 func TestCheckSkillStatusesNothingInstalled(t *testing.T) {
@@ -699,4 +703,29 @@ func TestAgentEval(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestHarnessSourceLinksRefuseBoundCommandBeforeReadingStdin(t *testing.T) {
+	saved := globalCfg
+	t.Cleanup(func() { globalCfg = saved })
+	globalCfg = config.Config{}
+	t.Setenv(trail.EnvBaggage, "")
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	bindCheckout(t, cacheDir, "fleet/bound")
+
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	defer reader.Close()
+	defer writer.Close()
+	previous := os.Stdin
+	os.Stdin = reader
+	t.Cleanup(func() { os.Stdin = previous })
+	err = agentHarnessLinksCommand(context.Background(), root, []string{"--stdin"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
+	_, err = writer.Write([]byte(`{"links":{}}`))
+	assert.NoError(t, err, "stdin remains unread while the checkout is bound")
 }

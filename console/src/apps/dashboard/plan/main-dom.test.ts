@@ -124,6 +124,7 @@ function serve(routes: {
       // tests need the read to SUCCEED, not to carry rows.
       return ok({ outputs: [] });
     }
+    // platform double: fetch
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
 }
@@ -486,7 +487,7 @@ test("the stage is drawn at its own size rather than scaled to the pane", async 
   try {
     await settle();
     const svg = host.querySelector<SVGSVGElement>(".console-plan-stage__svg");
-    const [, , w, h] = (svg?.getAttribute("viewBox") ?? "").split(" ").map(Number);
+    const [, , w = NaN, h = NaN] = (svg?.getAttribute("viewBox") ?? "").split(" ").map(Number);
     assert.equal(svg?.style.width, `${Math.round(w)}px`);
     assert.equal(svg?.style.height, `${Math.round(h)}px`);
   } finally {
@@ -1273,6 +1274,7 @@ test("a listing that answers after the switch to Targets cannot paint it", async
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("JobService/ListJobs")) return held as Promise<Response>;
     if (url.includes("/api/v1/plan")) return Promise.resolve(okPlan(RUN_BODY)() as Response);
+    // platform double: fetch
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
 

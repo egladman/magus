@@ -24,7 +24,7 @@ import type {
   Sandbox,
   Sample as ProtoSample,
 } from "@wire/metrics/v1alpha1/metrics_pb";
-import type { Insight } from "@wire/insight/v1alpha1/insight_pb";
+import type { GetHistoryMetricsResponse } from "@wire/historymetrics/v1alpha1/historymetrics_pb";
 import type { ConnState } from "../../lib/server";
 
 // ---- formatters ------------------------------------------------------------
@@ -100,11 +100,13 @@ export interface ConnView {
 
 // ---- status view-model (SSE) -----------------------------------------------
 
+const UNKNOWN_HEALTH = { label: "unknown", cls: "" };
+
 const HEALTH: Record<number, { label: string; cls: string }> = {
   [Health.HEALTHY]: { label: "healthy", cls: "ok" },
   [Health.DEGRADED]: { label: "degraded", cls: "warn" },
   [Health.DOWN]: { label: "down", cls: "fail" },
-  [Health.UNSPECIFIED]: { label: "unknown", cls: "" },
+  [Health.UNSPECIFIED]: UNKNOWN_HEALTH,
 };
 
 export interface HealthView {
@@ -126,7 +128,7 @@ export interface CacheView {
 export interface RunningTargetView {
   args: string[];
   step: string;
-  startTime?: Timestamp;
+  startTime?: Timestamp | undefined;
   invocation: string;
   // Which workspace this unit of work belongs to. The wire has carried it all along; the mapping
   // dropped it, which is why nothing downstream could be scoped to a workspace. Running targets and
@@ -136,13 +138,13 @@ export interface RunningTargetView {
 }
 export interface WorkspaceView {
   root: string;
-  hits?: number;
-  misses?: number;
-  errors?: number;
-  lastAccessTime?: Timestamp;
+  hits?: number | undefined;
+  misses?: number | undefined;
+  errors?: number | undefined;
+  lastAccessTime?: Timestamp | undefined;
   // Name of the selected secret-provider spell; "" or undefined means the built-in
   // environment provider. The NAME only - the wire carries no reference and no value.
-  secretProvider?: string;
+  secretProvider?: string | undefined;
 }
 export interface ServiceView {
   id: string;
@@ -151,7 +153,7 @@ export interface ServiceView {
   ports: string[];
   state: string;
   dependents: number;
-  startedAt?: Timestamp;
+  startedAt?: Timestamp | undefined;
 }
 // LockView is one held per-project workspace lock and the process holding it.
 //
@@ -164,7 +166,7 @@ export interface LockView {
   pid: number;
   command: string;
   dir: string;
-  acquireTime?: Timestamp;
+  acquireTime?: Timestamp | undefined;
   // Supplied by the server so this renderer cannot drift from the CLI's judgment.
   staleAfterSeconds: number;
 }
@@ -183,7 +185,7 @@ export interface ClaimView {
   memoryMb: number;
   dir: string;
   command: string;
-  startTime?: Timestamp;
+  startTime?: Timestamp | undefined;
 }
 
 // BrokerView is the per-user process holding this host's slots, declared memory and shared
@@ -194,7 +196,7 @@ export interface BrokerView {
   protocol: number;
   socket: string;
   executable: string;
-  startTime?: Timestamp;
+  startTime?: Timestamp | undefined;
   budgetSlots: number;
   heldSlots: number;
   budgetMb: number;
@@ -210,7 +212,7 @@ export interface ServerView {
   version: string;
   socket: string;
   executable: string;
-  startTime?: Timestamp;
+  startTime?: Timestamp | undefined;
   listeners: { kind: string; address: string }[];
   watch: string[];
 }
@@ -223,7 +225,14 @@ export type BrokerPolicy = "required" | "best-effort" | "off";
 // tile's CSS class suffixes (.gantt-bar.running, .gantt-bar.passed, ...). Kept in
 // lockstep with magus.status.v1alpha1.TargetRun.State but stringly-typed so tiles never
 // import the proto enum.
-export type TargetState = "unspecified" | "queued" | "running" | "passed" | "failed" | "cached";
+export type TargetState =
+  | "unspecified"
+  | "queued"
+  | "running"
+  | "passed"
+  | "failed"
+  | "cached"
+  | "permitted";
 
 // TargetRunView is one target's execution within a run: its state, its wall-clock
 // window (startMs unset while QUEUED, endMs unset while active), and, once finished,
@@ -292,6 +301,7 @@ const TARGET_STATE: Record<number, TargetState> = {
   [TargetRun_State.PASSED]: "passed",
   [TargetRun_State.FAILED]: "failed",
   [TargetRun_State.CACHED]: "cached",
+  [TargetRun_State.PERMITTED]: "permitted",
 };
 
 function mapTargetRun(t: TargetRun): TargetRunView {
@@ -301,7 +311,8 @@ function mapTargetRun(t: TargetRun): TargetRunView {
     target: t.target || "",
     label: t.project ? t.project + ":" + t.target : t.target || "",
     state,
-    terminal: state === "passed" || state === "failed" || state === "cached",
+    terminal:
+      state === "passed" || state === "failed" || state === "cached" || state === "permitted",
     startMs: t.startTime ? tsMillisOrNow(t.startTime) : null,
     endMs: t.endTime ? tsMillisOrNow(t.endTime) : null,
     outputRef: t.outputRef || "",
@@ -334,7 +345,7 @@ function mapCache(cache: Pool["cache"] | undefined): CacheView {
 export function mapStatus(st: Status): StatusView {
   const pool = st.pool;
   return {
-    health: HEALTH[st.health] || HEALTH[Health.UNSPECIFIED],
+    health: HEALTH[st.health] ?? UNKNOWN_HEALTH,
     pool: {
       capacity: pool ? pool.capacity : 0,
       running: pool ? pool.running : 0,
@@ -698,12 +709,12 @@ export function mapSample(s: ProtoSample): SampleView {
   };
 }
 
-// ---- insight view-model (magus.insight.v1alpha1) ---------------------------------
-// InsightService.GetInsight returns the six lenses as a generated proto message, so
-// this axis has no hand-written wire shape: mapInsight folds magus.insight.v1alpha1.Insight
-// into the camelCase view-models the tiles read. Times are google.protobuf.Timestamp
-// with a zero time.Time mapped to UNSET at the server boundary, so an absent time is
-// simply an absent field rather than the year-0001 sentinel the JSON route emitted.
+// ---- history-metrics board (magus.historymetrics.v1alpha1) ------------------------
+// GetHistoryMetrics returns the metrics as a generated proto message, so this axis has
+// no hand-written wire shape: mapHistoryMetrics folds the response into the camelCase
+// view-models the tiles read. Times are google.protobuf.Timestamp with a zero time.Time
+// mapped to UNSET at the server boundary, so an absent time is simply an absent field
+// rather than the year-0001 sentinel the JSON route emitted.
 
 // fmtDate renders a wire Timestamp as a local date, blank when unset.
 export function fmtDate(ts: Timestamp | undefined): string {
@@ -781,8 +792,8 @@ export interface ModelTierRowView {
   forksPerId: number;
   reworkPerJob: number;
   wideningsPerJob: number;
-  meanCostUsd?: number;
-  medianTokens?: number;
+  meanCostUsd?: number | undefined;
+  medianTokens?: number | undefined;
 }
 export interface ModelTierView {
   rows: ModelTierRowView[];
@@ -831,8 +842,9 @@ export interface ToolsView {
   lifecycle: LifecycleView;
 }
 
-export interface InsightView {
-  commits: number; // the git-history window shared by the four VCS lenses
+// Board payload for the history-metrics poll: per-metric view-models, not an Insight product.
+export interface HistoryMetricsBoard {
+  commits: number; // the git-history window shared by the four VCS metrics
   hotspots: HotspotNodeView[];
   hotspotFiles: FileHotspotView[];
   affinity: AffinityPairView[];
@@ -843,7 +855,7 @@ export interface InsightView {
   modelTiers: ModelTierView | null;
 }
 
-export function mapInsight(w: Insight): InsightView {
+export function mapHistoryMetrics(w: GetHistoryMetricsResponse): HistoryMetricsBoard {
   return {
     commits: w.hotspots?.commits ?? 0,
     hotspots: (w.hotspots?.nodes ?? []).map((n) => ({
@@ -1068,7 +1080,7 @@ export function mapAgentActivity(events: AgentEventWire[], now: number): AgentAc
 
 // ---- the store shape -------------------------------------------------------
 // One value published on every tick. Slices are filled independently: `status`
-// arrives on the SSE frame, `metrics`/`samples` on the Connect stream, `insight`
+// arrives on the SSE frame, `metrics`/`samples` on the Connect stream, `historyMetrics`
 // on a polled Connect unary read. Tiles read only the slice they render.
 // `liveHost` deep-links running calls into live logs.
 
@@ -1078,17 +1090,15 @@ export interface DashboardState {
   status: StatusView | null;
   metrics: MetricsView | null;
   samples: SampleView[];
-  insight: InsightView | null;
-  // Why the insight lenses have no data, or null when they do. A tile with `insight === null` cannot
-  // tell "the server has not answered yet" from "it answered and the window is empty", and the two
-  // want opposite copy: the first is unknown, the second is a measured absence.
-  // "Note" and not "Error": most of its values are not errors. It carries not-connected, reading,
-  // and failed alike - whatever the reason there is nothing to show. transport.ts owns every
-  // transition; nothing else writes it.
-  insightNote: string | null;
-  // When the insight lenses last actually answered (epoch ms), so the reader can tell a fresh
-  // read from a stale one without pressing Refresh to find out. null until the first success.
-  insightUpdatedAt: number | null;
+  historyMetrics: HistoryMetricsBoard | null;
+  // Why the history metrics have no data, or null when they do. A tile with
+  // `historyMetrics === null` cannot tell "the server has not answered yet" from "it answered
+  // and the window is empty", and the two want opposite copy: the first is unknown, the second
+  // is a measured absence. "Note" and not "Error": most of its values are not errors. It carries
+  // not-connected, reading, and failed alike. transport.ts owns every transition.
+  historyMetricsNote: string | null;
+  // When the history metrics last answered (epoch ms). null until the first success.
+  historyMetricsUpdatedAt: number | null;
   tools: ToolsView | null;
   // Agent traffic seen in the recent window (mapAgentActivity). null until the activity poll has
   // produced a frame, or when the server serves no trail.
@@ -1115,11 +1125,11 @@ export function initialState(): DashboardState {
     status: null,
     metrics: null,
     samples: [],
-    insight: null,
+    historyMetrics: null,
     // Not "Reading history..." - at construction no server is attached and nothing is reading.
-    // startInsight sets that once a poll actually begins.
-    insightNote: "Not connected.",
-    insightUpdatedAt: null,
+    // startHistoryMetrics sets that once a poll actually begins.
+    historyMetricsNote: "Not connected.",
+    historyMetricsUpdatedAt: null,
     tools: null,
     agents: null,
     logLines: [],

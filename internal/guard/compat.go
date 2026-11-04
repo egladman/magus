@@ -115,7 +115,8 @@ func fileCompatRow(ctx context.Context, at location, who hookAttribution, lease,
 			lease, quotedList(markers), writePath, workerModel(ctx, at, who, lease)),
 	}
 	origin := trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: who.Host, Session: who.Session, Agent: who.Agent})
-	_, _, _ = sessions.OpenRequest(dir, cmp.Or(who.Session, lease), open, sessions.InvocationStart{Origin: origin, Workspace: at.workspace, Lease: lease})
+	// MarkFired already said this block is new, and this runs inside a hook.
+	_ = sessions.AppendRequest(dir, cmp.Or(who.Session, lease), open, sessions.InvocationStart{Origin: origin, Workspace: at.workspace, Lease: lease})
 }
 
 func quotedList(items []string) string {

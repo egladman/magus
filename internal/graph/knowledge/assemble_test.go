@@ -2,7 +2,10 @@ package knowledge
 
 import (
 	"fmt"
+	"log/slog"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -11,7 +14,65 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type manifestFilesSuite struct {
+	suite.Suite
+	root     string
+	projects []types.TargetGraphProject
+}
+
+func TestManifestFilesSuite(t *testing.T) { suite.Run(t, new(manifestFilesSuite)) }
+
+func (s *manifestFilesSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.projects = []types.TargetGraphProject{{Path: "."}, {Path: "libs/a"}}
+	s.write("go.mod", "module m\n")
+	s.write("libs/a/package.json", "{}\n")
+}
+
+func (s *manifestFilesSuite) write(rel, content string) {
+	p := filepath.Join(s.root, rel)
+	s.Require().NoError(os.MkdirAll(filepath.Dir(p), 0o755))
+	s.Require().NoError(os.WriteFile(p, []byte(content), 0o644))
+}
+
+func (s *manifestFilesSuite) TestManifestsJoinTheirProjectAndLocksStayWorkspaceRelative() {
+	got := ManifestFiles(types.ProjectsOutput{Projects: []types.ProjectEntry{
+		{Path: ".", Manifests: []string{"go.mod"}, Lockfiles: []string{"go.sum"}},
+		{Path: "libs/a", Manifests: []string{"package.json"}, Lockfiles: []string{"pnpm-lock.yaml"}},
+		{Path: "libs/b", Manifests: []string{"package.json"}, Lockfiles: []string{"pnpm-lock.yaml"}},
+	}})
+	s.Equal([]string{"go.mod", "go.sum", "libs/a/package.json", "libs/b/package.json", "pnpm-lock.yaml"}, got)
+}
+
+func (s *manifestFilesSuite) TestEachIsAFileNodeItsProjectContains() {
+	got := assembleManifestFiles(s.root, []string{"go.mod", "libs/a/package.json"}, s.projects)
+	ids := map[string]types.KnowledgeNode{}
+	for _, n := range got.Nodes {
+		ids[n.ID] = n
+	}
+	s.Equal(types.KindFile, ids["file:go.mod"].Kind)
+	s.Equal("1", ids["file:go.mod"].Attrs[AttrLines])
+	s.Equal(types.KindFile, ids["file:libs/a/package.json"].Kind)
+	s.Contains(got.Edges, extractedEdge(projectID("."), "file:go.mod", types.RelationContains, "go.mod"))
+	s.Contains(got.Edges, extractedEdge(projectID("libs/a"), "file:libs/a/package.json", types.RelationContains, "libs/a/package.json"))
+}
+
+func (s *manifestFilesSuite) TestAnUnreadablePathGetsNoNode() {
+	s.Empty(assembleManifestFiles(s.root, []string{"nosuch.lock"}, s.projects).Nodes)
+}
+
+func (s *manifestFilesSuite) TestTheDomainClassHoldsThem() {
+	in := sampleInputs()
+	in.Root, in.ManifestFiles = s.root, []string{"go.mod"}
+	var found bool
+	for _, sh := range assembleDomain(in) {
+		found = found || sh.Name == manifestsShardName
+	}
+	s.True(found)
+}
 
 // sampleInputs is a small but edge-covering fixture: two projects with a
 // project-level dependency, an intra-project target dep, a cross-project target
@@ -569,7 +630,7 @@ fun helper() > void {
 import "magus/figure";
 
 fun aFigure() > figure\Figure !> any {
-    return figure\of("a", title: "A").box(magus\dir("pkg/a"), label: "a");
+    return figure\of("a", title: "A").box(magus\graph().dir("pkg/a"), label: "a");
 }
 `)
 
@@ -819,6 +880,57 @@ func BenchmarkAssembleShards(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = AssembleShards(in)
 	}
+}
+
+func TestCoverageGapsFailTheCoverageShard(t *testing.T) {
+	in := Inputs{
+		Coverage:     []FileCoverage{{Path: "internal/foo/foo.go", Covered: 1, Total: 1}},
+		CoverageGaps: []string{"internal/guard"},
+	}
+
+	shards := AssembleClasses(in, []ShardClass{ClassCoverage})
+
+	require.Len(t, shards, 1)
+	require.Error(t, shards[0].Err)
+	assert.Contains(t, shards[0].Err.Error(), "internal/guard")
+}
+
+func TestEnsureAnswersAroundAFailedShardAndRecordsWhy(t *testing.T) {
+	dir := t.TempDir()
+	in := Inputs{
+		Coverage:     []FileCoverage{{Path: "internal/foo/foo.go", Covered: 1, Total: 1}},
+		CoverageGaps: []string{"internal/guard"},
+	}
+	gather := func([]ShardClass) (Inputs, error) { return in, nil }
+
+	_, err := Ensure(t.Context(), dir, BuildOptions{}, []ShardClass{ClassCoverage}, gather, slog.Default())
+
+	require.NoError(t, err)
+	errs := ShardErrors(dir)
+	require.Len(t, errs, 1)
+	assert.Contains(t, errs[0], "internal/guard")
+}
+
+func TestASyncWithoutTheFailureClearsTheRecordedError(t *testing.T) {
+	dir := t.TempDir()
+	cov := []FileCoverage{{Path: "internal/foo/foo.go", Covered: 1, Total: 1}}
+	build := func(in Inputs) {
+		gather := func([]ShardClass) (Inputs, error) { return in, nil }
+		_, err := Ensure(t.Context(), dir, BuildOptions{Refresh: true}, []ShardClass{ClassCoverage}, gather, slog.Default())
+		require.NoError(t, err)
+	}
+
+	build(Inputs{Coverage: cov, CoverageGaps: []string{"internal/guard"}})
+	require.NotEmpty(t, ShardErrors(dir))
+
+	build(Inputs{Coverage: cov})
+	assert.Empty(t, ShardErrors(dir))
+}
+
+func TestNoCoverageProfileIsNotAGapFailure(t *testing.T) {
+	in := Inputs{CoverageGaps: []string{"internal/guard"}}
+
+	assert.Empty(t, AssembleClasses(in, []ShardClass{ClassCoverage}))
 }
 
 func BenchmarkMergeOutput(b *testing.B) {

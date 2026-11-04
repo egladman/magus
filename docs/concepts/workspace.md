@@ -20,16 +20,15 @@ The split is deliberate. The workspace is the unit of _discovery, caching, and a
 
 ## What a workspace is
 
-The workspace root is the nearest ancestor directory carrying a root marker. `FindRoot` walks up from the current directory and stops at the first directory that contains any of these, in priority order:
+`FindRoot` walks up from the current directory and picks the root by the first of these rules that matches:
 
-| Marker           | Why it roots a workspace                      |
-| ---------------- | --------------------------------------------- |
-| `magusfiles/`    | a split-magusfile directory                   |
-| `magusfile.buzz` | a magusfile at the root                       |
-| `magus.yaml`     | the workspace config file                     |
-| `go.mod`         | the Go-module root, as a last-resort fallback |
+| Marker                          | The directory that roots the workspace                                                       |
+| ------------------------------- | -------------------------------------------------------------------------------------------- |
+| `magus.yaml`                    | the nearest one, so a worktree nested inside its parent repo keeps its own                   |
+| `magusfile.buzz`, `magusfiles/` | the outermost of an unbroken run of directories holding one, so a stray ancestor never joins |
+| `.jj`, `.hg`, `.sl`, `.git`     | the nearest VCS checkout, with a warning that names `magus init`                             |
 
-magus markers precede `go.mod`, so an explicit `magus.yaml` or `magusfile.buzz` always wins over a stray module boundary. `magus.yaml` (workspace configuration; see [config.md](../reference/config.md)) lives at the root; it is optional, and its absence does not stop discovery once a root is found by another marker.
+No language's manifest roots a workspace: a `go.mod` or `package.json` is a spell's knowledge, never core's, so a multi-module repo does not split at each module. With none of these markers, magus fails with [MGS3008](../reference/codes/sandbox/MGS3008.md). `magus.yaml` (workspace configuration; see [config.md](../reference/config.md)) lives at the root; it is optional, and its absence does not stop discovery once a root is found by another marker.
 
 The root is **canonicalised at discovery** (symlinks resolved via `filepath.EvalSymlinks`). Every project path is then computed relative to that real path, and the sandbox enforces access against resolved paths (see [sandbox.md](sandbox.md) and [targets.md#symlinks](targets.md#symlinks)).
 
@@ -47,7 +46,7 @@ A project owns:
 
 `project.Discover` walks the workspace root once with `filepath.WalkDir` and registers every directory that `hasDeclaration` reports true. The rules:
 
-- **A magusfile registers a project.** A directory with `magusfile.buzz` (or a matching `magusfiles/*.buzz`) becomes a project. Nothing else registers one: auto-detection from tool markers such as a stray `go.mod` or `package.json` has been retired. If you want a directory to be a project, give it a magusfile, or have another tool report it, which is the one other route in and is never inferred: a [workspace provider](workspace/providers.md) the magusfile explicitly wires (`magus\workspace.provider(nx)`) supplies projects for a repo whose structure is owned by nx, gradle, pnpm or cargo. Those are folded in after discovery, and a magusfile always wins over a provider for the same directory.
+- **A magusfile registers a project.** A directory with `magusfile.buzz` (or a matching `magusfiles/*.buzz`) becomes a project. Nothing else registers one on load: a `go.mod` or `package.json` never makes a project by itself being there. To get magusfiles for an existing repo, run `magus init`: it asks each spell for the projects its own manifests mark, writes one magusfile per project directory, and reports the targets it could not infer. The files it writes are ordinary magusfiles you commit and edit. If you want a directory to be a project, give it a magusfile, or have another tool report it, which is the one other route in and is never inferred: a [workspace provider](workspace/providers.md) the magusfile explicitly wires (`magus\workspaceProvider(nx)`) supplies projects for a repo whose structure is owned by nx, gradle, pnpm or cargo. Those are folded in after discovery, and a magusfile always wins over a provider for the same directory.
 - **The root is the project `.`.** The workspace root, if it carries a magusfile, is the project whose path is `.`.
 - **Well-known directories are pruned.** Discovery skips a fixed set of ignore directories at any depth and does not descend into them: `.git`, `.hg`, `.sl`, `.jj`, `.magus`, `.build`, `vendor`, `node_modules`, `target`, and `gen`. A magusfile buried inside one of these is invisible. (`gen` is treated as machine-written output, never a discoverable project.)
 - **Symlinked directories are not followed.** `WalkDir` does not traverse symlinks, so a symlinked directory is silently skipped and never registered as a project.
@@ -311,6 +310,45 @@ The workspace/project model is the substrate the affected engine and the cache b
 - **The cache** is content-addressed per target. A target's key includes its own inputs plus the `dep:` keys of its upstream projects, so cross-project dependencies invalidate transitively without rerunning unaffected work. This page does not restate the key format; see [cache.md](cache.md).
 
 Together, discovery gives magus the set of projects, `depends_on` gives it the edges, and the cache gives it the memory, so a run touches only the minimum the change demands.
+
+## The workspace's own diagnostic codes
+
+A workspace mints codes of its own under one prefix that `magus.yaml` declares:
+
+```yaml
+diagnostics:
+  prefix: WS
+  docs: docs/codes/{code}.md
+```
+
+- `prefix` is 2 to 8 capital letters. Every code catalog magus ships registers its own prefix (MGS for magus, BZZ for Buzz), and a workspace prefix that equals, starts or is started by one of them is a load-time error.
+- `docs` is the page for a code, with `{code}` standing for it: a URL or a workspace path. Without it a raised code prints no `see:` line.
+- `magus\diagnosticCode("WS1003")` mints a code under the prefix and refuses any other, and `magus\raise` takes what it returns. A spell a workspace imports raises under that workspace's prefix.
+- A workspace code never replaces a built-in one: the CLI marks its origin, and its page comes only from `docs`.
+
+## Scripts the guard and doctor serve
+
+magus never guesses a workspace's own remedy from its layout. A script says which situations it serves, and magus names it there:
+
+```buzz
+final SUMMARY = "build ./magus in a checkout at its own revision";
+final SERVES = ["code:MGS1021 -- --checkout \{checkout}"];
+```
+
+`magus graph build` indexes every tracked script that declares `SUMMARY` and `SERVES`. Each entry is a situation, optionally followed by `--` and the arguments the script is served with. The families:
+
+| Family      | Serves                                                 | Example               |
+| ----------- | ------------------------------------------------------ | --------------------- |
+| `rule:`     | a guard denial, by [rule](../reference/rules/index.md) | `rule:stale-binary`   |
+| `code:`     | a diagnostic, by code, built-in or the workspace's     | `code:MGS1021`        |
+| `doctor:`   | a `magus doctor` check, by name                        | `doctor:guard-binary` |
+| `event:`    | a moment magus names: disk-low, pre-pr, session-end    | `event:disk-low`      |
+| `next:`     | a breadcrumb id on a result                            | `next:jobs-exited`    |
+| `replaces:` | a command shape the script stands in for               | `replaces:sed -i`     |
+
+- Arguments may name `{ref}`, `{rule}`, `{project}`, `{file}` and `{checkout}`, which the serving site fills. Write `\{` in Buzz so the string is not interpolated.
+- `final EFFECT = "read";` marks a script that changes nothing, which a reviewer may run under any role. A script that declares none is a write.
+- `magus doctor`'s served-scripts check fails on an indexed script that is gone.
 
 ## Glossary
 

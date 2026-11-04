@@ -93,14 +93,14 @@ func (g *Graph) Nodes() []string { return g.repo.Nodes() }
 // Project returns the project at path, or nil when the graph holds none there.
 func (g *Graph) Project(path string) *Project { return g.projects[path] }
 
-// GraphView is the boundary object magus.graph returns: the project dependency
+// ProjectGraph is the boundary object magus.graph returns: the project dependency
 // DAG flattened to plain data a magusfile can walk.
 //
 // Nodes are in topological order, so a caller that just iterates gets a valid
 // build order without sorting anything itself, which is the question a magusfile
 // asks the graph most often. dependsOn is the direct-predecessor set per node, so
 // the caller can still reconstruct the edges.
-type GraphView struct {
+type ProjectGraph struct {
 	Nodes     []string
 	DependsOn map[string][]string
 	// BlastRadius is how many projects each node can affect, transitively. It is
@@ -116,7 +116,7 @@ type GraphView struct {
 // build order needs the reverse, which is what Nodes gives. (Measured, not assumed:
 // for web depending on api, TopoSort returns [. web api] and Successors(web) is
 // [api].)
-func (g *Graph) View() GraphView {
+func (g *Graph) View() ProjectGraph {
 	topo := g.TopoSort()
 	nodes := make([]string, len(topo))
 	for i, n := range topo {
@@ -126,5 +126,5 @@ func (g *Graph) View() GraphView {
 	for _, n := range nodes {
 		dependsOn[n] = g.Successors(n)
 	}
-	return GraphView{Nodes: nodes, DependsOn: dependsOn, BlastRadius: g.BlastRadius()}
+	return ProjectGraph{Nodes: nodes, DependsOn: dependsOn, BlastRadius: g.BlastRadius()}
 }

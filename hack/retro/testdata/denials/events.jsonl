@@ -1,0 +1,6 @@
+{"ts":1700000001000,"kind":"agent_command","entry_point":"hook","action":"shell.command","outcome":"ok","request_ref":"agent01","preview":"guard: pass","decided_by":"builtin"}
+{"ts":1700000002000,"kind":"agent_command","entry_point":"hook","action":"shell.command","outcome":"ok","request_ref":"agent02","preview":"guard: deny","verdict_ref":"grdstage1","decided_by":"builtin"}
+{"ts":1700000003000,"kind":"agent_command","entry_point":"hook","action":"shell.command","outcome":"ok","request_ref":"agent03","preview":"guard: deny","verdict_ref":"grdstage2","decided_by":"builtin"}
+{"ts":1700000004000,"kind":"agent_command","entry_point":"hook","action":"shell.command","outcome":"ok","request_ref":"agent04","preview":"guard: deny","decided_by":"builtin"}
+{"ts":1700000005000,"kind":"agent_command","entry_point":"hook","action":"file.write","outcome":"ok","request_ref":"agent05","preview":"guard: deny","verdict_ref":"grdgone","decided_by":"approved"}
+{"ts":1700000006000,"kind":"agent_command","entry_point":"hook","action":"shell.command","outcome":"ok","request_ref":"agent06","preview":"guard: deny","verdict_ref":"grdpipe","decided_by":"builtin"}

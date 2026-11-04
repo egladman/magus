@@ -10,7 +10,8 @@ import (
 
 const validJudgment = `{"id":"a","query":"q","verb":"query","date":"2026-01-01","source":"transcript","session":"s1","eval_set":"agent-agreement","shape":"prose","gold":{"file:x":1}}`
 
-func TestReadJudgments(t *testing.T) {
+func (s *rankevalSuite) TestReadJudgments() {
+	t := s.T()
 	text := validJudgment + "\n\n" +
 		`{"id":"b","query":"ParseManifest","verb":"refs","date":"2026-09-01","source":"transcript","session":"s2","eval_set":"agent-agreement","shape":"identifier","gold":{"file:pkg/manifest/parse.go":3,"dir:pkg/manifest":1}}` + "\n"
 	got, err := ReadJudgments(strings.NewReader(text))
@@ -35,7 +36,8 @@ func TestReadJudgments(t *testing.T) {
 	assert.Equal(t, got[1:], back, "a judgment round-trips")
 }
 
-func TestReadJudgmentsRejects(t *testing.T) {
+func (s *rankevalSuite) TestReadJudgmentsRejects() {
+	t := s.T()
 	cases := map[string]struct {
 		line string
 		want string
@@ -69,18 +71,21 @@ func TestReadJudgmentsRejects(t *testing.T) {
 	}
 }
 
-func TestReadJudgmentsEmpty(t *testing.T) {
+func (s *rankevalSuite) TestReadJudgmentsEmpty() {
+	t := s.T()
 	got, err := ReadJudgments(strings.NewReader("\n\n"))
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
 
-func TestReadJudgmentsMarshalRefusesInvalid(t *testing.T) {
+func (s *rankevalSuite) TestReadJudgmentsMarshalRefusesInvalid() {
+	t := s.T()
 	_, err := marshalJSON(Judgment{ID: "a"})
 	require.ErrorContains(t, err, "judgment a: empty query")
 }
 
-func TestJudgmentResolvedDropsUnknownGold(t *testing.T) {
+func (s *rankevalSuite) TestJudgmentResolvedDropsUnknownGold() {
+	t := s.T()
 	j := Judgment{ID: "j", Gold: map[string]int{"file:a.go": 3, "file:gone.go": 2, "dir:a": 1}}
 	known := map[string]bool{"file:a.go": true, "dir:a": true}
 

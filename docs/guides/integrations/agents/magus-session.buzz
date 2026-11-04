@@ -31,7 +31,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 34
+// magus-guard-template: 36
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
@@ -48,7 +48,7 @@ fun envFilePath(args: [str]) > str {
         warn("could not read the arguments {args}; PATH is unchanged. Fix the hook command in your host config.");
         return "";
     }
-    foreach (word in parsed!.unknown) {
+    foreach (word in parsed!.unknown + parsed!.positionals) {
         warn("unsupported argument \"{word}\"; this hook accepts only {ENV_FILE_FLAG}. "
             + "Fix the hook command in your host config.");
     }
@@ -96,7 +96,7 @@ fun unloadableNotice(root: str, bin: str, why: str, fix: str) > str {
         if (why != "") { cause = "{bin} cannot load {root}: {why}"; }
     }
     return "the magus guard is not judging this session; {fix}.\n{cause}\n"
-        + "Every edit, spawn, push and state-changing command is denied until a magus loads the tree; reads, `git status` and the fix still run.";
+        + "Every edit, spawn, push and state-changing command is denied until a magus loads the tree; reads and the bootstrap line still run.";
 }
 
 fun contextReply(text: str) > str {
@@ -124,9 +124,9 @@ fun firstLine(text: str) > str {
 // loadFailure loads the workspace with bin, the way any command would, and returns the error
 // it printed. "" means it loaded; a binary that would not even start reports that.
 fun loadFailure(bin: str, root: str) > str {
-    final result = proc\exec(bin, args: ["--root", root, "ls", "-o", "name"], dir: root, opts: {
-        "quiet": true,
-        "allow_failure": true,
+    final result = proc\exec(bin, args: ["--root", root, "ls", "-o", "name"], dir: root, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null) { return "it could not be started"; }
     if (result!.code == 0) { return ""; }

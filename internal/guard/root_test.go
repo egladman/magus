@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
@@ -107,7 +108,7 @@ func TestFreeCallsEscapeTheBudgetRules(t *testing.T) {
 	t.Parallel()
 	st := costState{Tokens: 900_000, Streak: 20, Repeats: map[string]int{}}
 	call := func(line string) mainCall {
-		return mainCall{from: types.ThreadReported, window: 1_000_000, class: delegableClass(line), free: costFree(line), line: line}
+		return mainCall{from: types.ThreadReported, window: 1_000_000, class: delegableClass(line, magusRepoAt), free: costFree(line, magusRepoAt), line: line}
 	}
 	for _, level := range []types.GuardProfile{types.GuardProfileLight, types.GuardProfileStandard, types.GuardProfileStrict} {
 		for _, line := range costFreeLines {
@@ -117,7 +118,7 @@ func TestFreeCallsEscapeTheBudgetRules(t *testing.T) {
 		}
 	}
 	for line := range costBoundLines {
-		if delegableClass(line) == "" {
+		if delegableClass(line, magusRepoAt) == "" {
 			continue
 		}
 		rules := denyByRule(mainFindings(levelSetting(types.GuardProfileStrict), st, call(line)))
@@ -246,7 +247,7 @@ func TestOrchestratorGroundworkByRole(t *testing.T) {
 	at, notes := orchestratorFixture(t)
 	st := costState{Tokens: 900_000, Streak: 20}
 	call := func(line string, o types.Orchestration) mainCall {
-		return mainCall{from: types.ThreadReported, window: 1_000_000, class: delegableClass(line), free: costFree(line), line: line,
+		return mainCall{from: types.ThreadReported, window: 1_000_000, class: delegableClass(line, magusRepoAt), free: costFree(line, magusRepoAt), line: line,
 			orchestration: o, work: rootWorkClass(line, at)}
 	}
 	strict := levelSetting(types.GuardProfileStrict)
@@ -440,6 +441,8 @@ func TestOrchestrationFollowsTheLiveRows(t *testing.T) {
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	writeCostState(facts, costState{Forked: []string{"own"}, Forks: map[string]int64{"own": 1}})
 	require.Equal(t, types.OrchestrationProven, role(at))
+	fixtureGit(t, at.workspace, "init", "-q", "-b", "main")
+	commitCheckout(t, at.workspace)
 	bindOnExec(t.Context(), at, who, "./magus job exec own")
 	assert.Empty(t, readCostState(facts).Forked, "a row the session takes itself is no longer handed out")
 	assert.Empty(t, readCostState(facts).Forks)
@@ -607,6 +610,57 @@ func TestSpawnNamesModelResolvesAHarnessRowsAlias(t *testing.T) {
 	assert.Contains(t, v.Reason, "this spawn runs opus, model tier principal (rank 2), and job scout was forked at economy (rank 0)")
 }
 
+func TestSpawnNamesModelAppliesToLeasedNestedSpawns(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		model      string
+		off        bool
+		decision   string
+		rule       string
+		reasonPart string
+	}{
+		{
+			name:       "missing model is denied",
+			decision:   decisionDeny,
+			rule:       string(denyRuleSpawnNamesModel),
+			reasonPart: "this spawn names no model",
+		},
+		{
+			name:       "principal model is denied for economy row",
+			model:      "opus",
+			decision:   decisionDeny,
+			rule:       string(denyRuleSpawnNamesModel),
+			reasonPart: "model tier principal (rank 2), and job scout was forked at economy (rank 0)",
+		},
+		{
+			name:     "economy model matches row",
+			model:    "haiku",
+			decision: decisionPass,
+		},
+		{
+			name:     "off keeps model omission allowed",
+			off:      true,
+			decision: decisionPass,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			set := testModelTiers(t, "claude-code")
+			ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+			deps := strictDeps(t)
+			deps.ModelTiers = func() *types.ModelTierSet { return set }
+			if tc.off {
+				deps.Builtins[string(denyRuleSpawnNamesModel)] = builtin.Setting{Decision: builtin.Off}
+			}
+			v := judgeLeasedNestedSpawn(ctx, t, deps, tc.model)
+			assert.Equal(t, tc.decision, v.Decision)
+			assert.Equal(t, tc.rule, v.Rule)
+			if tc.reasonPart != "" {
+				assert.Contains(t, v.Reason, tc.reasonPart)
+			}
+		})
+	}
+}
+
 func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 	if _, registered := project.DefaultSpellRegistry().Lookup("claude-code"); !registered {
 		t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell("claude-code") })
@@ -687,7 +741,7 @@ func TestSpawnNamesModelNamesTheHostEntryToAdd(t *testing.T) {
 
 	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnNamesModel)}, judgedAs(v))
 	assert.Contains(t, v.Reason, "maps no model for harness claude-code: its hosts are other-host")
-	assert.Contains(t, v.Reason, "add a claude-code entry to the hosts magus\\job.modelTiers declares")
+	assert.Contains(t, v.Reason, "add a claude-code entry to the hosts magus\\modelTiers declares")
 }
 
 // A spawn on a tier ranked above its row's is advised, never refused, and one at or below
@@ -801,4 +855,63 @@ func judgeSpawn(ctx context.Context, t *testing.T, deps Dependencies, model stri
 	return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 		"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": input,
 	})})
+}
+
+func judgeLeasedNestedSpawn(ctx context.Context, t *testing.T, deps Dependencies, model string) types.GuardJudgment {
+	t.Helper()
+	who := hookAttribution{Host: "claude-code", Session: "s", Agent: "worker"}
+	require.True(t, recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.skillsKey()), multiAgentSkill.String()))
+	input := map[string]any{"description": "orchestrator/scout scout", "prompt": "Read internal/job and report."}
+	if model != "" {
+		input["model"] = model
+	}
+	return Judge(ctx, deps, Request{
+		Host: "claude-code", Session: "s", Agent: "worker", Lease: "scout", ObservesSkillLoads: true,
+		Input: hookJSON(t, map[string]any{
+			"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent", "tool_input": input,
+		}),
+	})
+}
+
+// RootGroundworkSuite judges a root whose bound spawn proves it hands out a live row.
+type RootGroundworkSuite struct {
+	suite.Suite
+	ctx  context.Context
+	deps Dependencies
+}
+
+func TestRootGroundworkSuite(t *testing.T) { suite.Run(t, new(RootGroundworkSuite)) }
+
+func (s *RootGroundworkSuite) SetupTest() {
+	s.ctx, _ = fleetFixture(s.T(), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	s.deps = levelDeps(s.T(), types.GuardProfileLight)
+	hostGate(hookLocation(s.ctx, s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	s.Require().NotEqual(decisionDeny, judgeSpawn(s.ctx, s.T(), s.deps, "haiku").Decision)
+}
+
+func (s *RootGroundworkSuite) judge(line string) types.GuardJudgment {
+	return Judge(s.ctx, s.deps, Request{Input: line, Host: "claude-code", Session: "s"})
+}
+
+// The root must reopen the acceptance evidence a worker names by ref.
+func (s *RootGroundworkSuite) TestRootReadsAnOutputRefWhileARowIsLive() {
+	s.NotEqual(string(denyRuleOrchestratorGroundwork), s.judge("./magus -C /w query output r1a2b3c4").Rule)
+}
+
+func (s *RootGroundworkSuite) TestRootReadsAnOutputRefWithIdentity() {
+	s.NotEqual(string(denyRuleOrchestratorGroundwork), s.judge("./magus query output --identity r1a2b3c4").Rule)
+}
+
+func (s *RootGroundworkSuite) TestRootReadsAnOutputRefWithProblems() {
+	s.NotEqual(string(denyRuleOrchestratorGroundwork), s.judge("./magus query output --problems r1a2b3c4").Rule)
+}
+
+func (s *RootGroundworkSuite) TestRootDiffReadWhileARowIsLiveIsStillGroundwork() {
+	v := s.judge("git show HEAD")
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleOrchestratorGroundwork)}, judgedAs(v))
+}
+
+func (s *RootGroundworkSuite) TestRootOutputRefThatWritesAFileIsStillGroundwork() {
+	v := s.judge("./magus --tee out.log query output r1a2b3c4")
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleOrchestratorGroundwork)}, judgedAs(v))
 }

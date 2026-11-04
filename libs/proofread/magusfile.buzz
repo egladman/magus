@@ -75,7 +75,11 @@ export fun proofread_build(ctx: magus\Context, args: [str]) > void !> any {
     // Literal, as magus reads outputs statically: proofread\binary and proofread\inputsFile.
     ctx.writesFiles(["gen/proofread", "gen/proofread.inputs"]);
     go["go-build"](ctx, {"args": ["-trimpath", "-o", proofread\binary, "./" + proofread\command]});
-    fs\writeFile(proofread\inputsFile, content: proofread\inputs(".") + "\n");
+    final digest = proofread\inputs(".");
+    if (digest.error -> e) {
+        throw e.message;
+    }
+    fs\writeFile(proofread\inputsFile, content: digest.value! + "\n");
 }
 // Runs the suite; the root merges coverage.out into its coverage badge.
 export fun test(ctx: magus\Context, args: [str]) > void {

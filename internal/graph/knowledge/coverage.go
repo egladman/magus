@@ -1,6 +1,8 @@
 package knowledge
 
 import (
+	"fmt"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -266,4 +268,46 @@ func enclosingDef(defs []fileSymbolDef, startLine int) int {
 		found = i
 	}
 	return found
+}
+
+// coverageGapError is why a profile that omits whole directories is left out.
+func coverageGapError(gaps []string) error {
+	shown := gaps
+	if len(shown) > 5 {
+		shown = shown[:5]
+	}
+	return fmt.Errorf("coverage profile omits %d director(ies) with indexed functions, e.g. %s: "+
+		"a narrower run wrote it, so run `magus run test .` unnarrowed or delete .magus/coverage.out",
+		len(gaps), strings.Join(shown, ", "))
+}
+
+// CoverageGaps names directories with Go functions the profile has no file for.
+// A narrower run wrote such a profile, so a caller refuses it. Types and
+// constants hold no statements and never count.
+func CoverageGaps(cov []FileCoverage, symbols map[string][]types.KnowledgeSymbol) []string {
+	profiled := map[string]bool{}
+	for _, fc := range cov {
+		profiled[path.Dir(fc.Path)] = true
+	}
+	seen := map[string]bool{}
+	for _, syms := range symbols {
+		for _, sym := range syms {
+			if !strings.EqualFold(sym.SymbolKind, "function") && !strings.EqualFold(sym.SymbolKind, "method") {
+				continue
+			}
+			file, _, ok := splitPathLine(sym.Source)
+			if !ok || !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
+				continue
+			}
+			if dir := path.Dir(file); !profiled[dir] {
+				seen[dir] = true
+			}
+		}
+	}
+	gaps := make([]string, 0, len(seen))
+	for dir := range seen {
+		gaps = append(gaps, dir)
+	}
+	slices.Sort(gaps)
+	return gaps
 }

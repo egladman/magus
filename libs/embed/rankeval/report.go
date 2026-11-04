@@ -1,10 +1,15 @@
 package rankeval
 
 import (
+	"bytes"
 	"cmp"
+	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"math"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"text/tabwriter"
@@ -99,11 +104,26 @@ type QueryScore struct {
 	CondensedNDCG10 float64 `json:"condensed_ndcg_at_10"`
 }
 
+// Config names the retrieval configuration a SetReport was replayed under. A
+// baseline holds one SetReport per set and Config.
+type Config string
+
+const (
+	// ConfigEmbedOn ranks with the embed table loaded.
+	ConfigEmbedOn Config = "embed=on"
+	// ConfigEmbedOff ranks without the embed list.
+	ConfigEmbedOff Config = "embed=off"
+)
+
+// Configs is every Config in report order.
+var Configs = []Config{ConfigEmbedOn, ConfigEmbedOff}
+
 // SetReport is one eval set's Metrics overall, per shape and per verb, its node-level
-// report where it has one, and its per-query scores. Absent says why a set has no
-// runs, such as a file not built yet or a holdout left sealed.
+// report where it has one, and its per-query scores, replayed under Config. Absent
+// says why a set has no runs, such as a file not built yet or a holdout left sealed.
 type SetReport struct {
 	Set     EvalSet                `json:"eval_set"`
+	Config  Config                 `json:"config"`
 	Absent  string                 `json:"absent,omitempty"`
 	Overall Metrics                `json:"overall"`
 	Shapes  map[QueryShape]Metrics `json:"shapes,omitempty"`
@@ -112,9 +132,89 @@ type SetReport struct {
 	Scores  []QueryScore           `json:"scores,omitempty"`
 }
 
-// Report holds one SetReport per named set, in EvalSets order.
+// MarshalJSON refuses a report that would not read back.
+func (s SetReport) MarshalJSON() ([]byte, error) {
+	if err := s.validate(); err != nil {
+		return nil, err
+	}
+	type plain SetReport
+	return marshalJSON(plain(s))
+}
+
+// UnmarshalJSON is strict: an unknown or repeated field is an error, as is any report
+// MarshalJSON would refuse.
+func (s *SetReport) UnmarshalJSON(b []byte) error {
+	type plain SetReport
+	return decodeStrict(b, s, func(p plain) SetReport { return SetReport(p) })
+}
+
+func (s SetReport) validate() error {
+	switch {
+	case !slices.Contains(EvalSets, s.Set):
+		return fmt.Errorf("set report: eval set %q is not one of %v", s.Set, EvalSets)
+	case !slices.Contains(Configs, s.Config):
+		return fmt.Errorf("set report %s: config %q is not one of %v", s.Set, s.Config, Configs)
+	}
+	return nil
+}
+
+// Report holds SetReports in EvalSets order, one per set under each Config it was
+// replayed with.
 type Report struct {
 	Sets []SetReport `json:"sets"`
+}
+
+// ReadBaseline reads JSON Lines, one SetReport per non-blank line. The last line per
+// set and Config wins; the result keeps the order of each key's first line.
+func ReadBaseline(r io.Reader) (Report, error) {
+	rows, err := readLines[SetReport](r, "baseline")
+	if err != nil {
+		return Report{}, err
+	}
+	type key struct {
+		set    EvalSet
+		config Config
+	}
+	index := map[key]int{}
+	var rep Report
+	for _, row := range rows {
+		k := key{row.Set, row.Config}
+		if i, ok := index[k]; ok {
+			rep.Sets[i] = row
+			continue
+		}
+		index[k] = len(rep.Sets)
+		rep.Sets = append(rep.Sets, row)
+	}
+	return rep, nil
+}
+
+// WriteBaseline writes rep to path as JSON Lines, one SetReport per line, through a
+// temporary file renamed over path so a reader sees the old file or the new, never half.
+func WriteBaseline(path string, rep Report) error {
+	var buf bytes.Buffer
+	for _, s := range rep.Sets {
+		line, err := marshalJSON(s)
+		if err != nil {
+			return err
+		}
+		buf.Write(append(line, '\n'))
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
+	if err != nil {
+		return err
+	}
+	_, err = tmp.Write(buf.Bytes())
+	if err = errors.Join(err, tmp.Close()); err == nil {
+		err = os.Chmod(tmp.Name(), 0o644)
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), path)
+	}
+	if err != nil {
+		return errors.Join(err, os.Remove(tmp.Name()))
+	}
+	return nil
 }
 
 // Summarize scores every run of set. It only reports: nothing here passes or fails.
@@ -293,6 +393,9 @@ func (r Report) Text() string {
 		if s.Set.ReportOnly() {
 			heading += " (report-only)"
 		}
+		if s.Config != "" {
+			heading += " [" + string(s.Config) + "]"
+		}
 		if s.Absent != "" {
 			fmt.Fprintf(&b, "== %s: %s\n", heading, s.Absent)
 			continue
@@ -338,6 +441,7 @@ const (
 // a set has no test, such as fewer than 2 pairs.
 type Comparison struct {
 	Set      EvalSet `json:"eval_set"`
+	Config   Config  `json:"config"`
 	Metric   string  `json:"metric"`
 	Pairs    int     `json:"pairs"`
 	Sessions int     `json:"sessions,omitzero"`
@@ -355,19 +459,23 @@ type Comparison struct {
 // Compare tests nDCG@10 and condensed nDCG@10 of every set both reports scored, in
 // EvalSets order. A set either report lacks is left out.
 func Compare(base, now Report) []Comparison {
-	baseSets := map[EvalSet]SetReport{}
+	type key struct {
+		set    EvalSet
+		config Config
+	}
+	baseSets := map[key]SetReport{}
 	for _, s := range base.Sets {
-		baseSets[s.Set] = s
+		baseSets[key{s.Set, s.Config}] = s
 	}
 	out := make([]Comparison, 0, 2*len(now.Sets))
 	for _, s := range now.Sets {
-		b, ok := baseSets[s.Set]
+		b, ok := baseSets[key{s.Set, s.Config}]
 		if !ok || s.Absent != "" || b.Absent != "" {
 			continue
 		}
 		out = append(out,
-			compareScores(s.Set, "ndcg@10", b.Scores, s.Scores, func(q QueryScore) float64 { return q.NDCG10 }),
-			compareScores(s.Set, "condensed ndcg@10", b.Scores, s.Scores, func(q QueryScore) float64 { return q.CondensedNDCG10 }))
+			compareScores(s.Set, s.Config, "ndcg@10", b.Scores, s.Scores, func(q QueryScore) float64 { return q.NDCG10 }),
+			compareScores(s.Set, s.Config, "condensed ndcg@10", b.Scores, s.Scores, func(q QueryScore) float64 { return q.CondensedNDCG10 }))
 	}
 	ps := make([]float64, 0, len(out))
 	tested := make([]int, 0, len(out))
@@ -377,14 +485,14 @@ func Compare(base, now Report) []Comparison {
 			tested = append(tested, i)
 		}
 	}
-	for j, p := range holm(ps) {
+	for j, p := range Holm(ps) {
 		out[tested[j]].PHolm = p
 	}
 	return out
 }
 
-func compareScores(set EvalSet, metric string, base, now []QueryScore, value func(QueryScore) float64) Comparison {
-	c := Comparison{Set: set, Metric: metric}
+func compareScores(set EvalSet, config Config, metric string, base, now []QueryScore, value func(QueryScore) float64) Comparison {
+	c := Comparison{Set: set, Config: config, Metric: metric}
 	byID := make(map[string]QueryScore, len(base))
 	for _, q := range base {
 		byID[q.ID] = q
@@ -415,12 +523,12 @@ func compareScores(set EvalSet, metric string, base, now []QueryScore, value fun
 		return c
 	}
 	if clustered {
-		c.Delta, c.P = clusteredRandomization(a, b, clusters, randomizationSamples, randomizationSeed)
+		c.Delta, c.P = ClusteredRandomization(a, b, clusters, randomizationSamples, randomizationSeed)
 	} else {
-		c.Delta, c.P = pairedRandomization(a, b, randomizationSamples, randomizationSeed)
+		c.Delta, c.P = PairedRandomization(a, b, randomizationSamples, randomizationSeed)
 	}
-	_, c.Lo, c.Hi = pairedTInterval(ia, ib, 0.95)
-	c.Effect = effectSize(ia, ib)
+	_, c.Lo, c.Hi = PairedTInterval(ia, ib, 0.95)
+	c.Effect = EffectSize(ia, ib)
 	return c
 }
 
@@ -450,18 +558,18 @@ func clusterMeans(a, b []float64, clusters []string) (ma, mb []float64) {
 func ComparisonText(cs []Comparison) string {
 	var b strings.Builder
 	w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "set\tmetric\tpairs\tsessions\tbase\tnow\tdelta\t95% CI\td_z\tp\tp (Holm)")
+	fmt.Fprintln(w, "set\tconfig\tmetric\tpairs\tsessions\tbase\tnow\tdelta\t95% CI\td_z\tp\tp (Holm)")
 	for _, c := range cs {
 		if c.Skipped != "" {
-			fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%.3f\t%.3f\t\t\t\t\tnot tested: %s\n", c.Set, c.Metric, c.Pairs, c.Sessions, c.Base, c.Now, c.Skipped)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%.3f\t%.3f\t\t\t\t\tnot tested: %s\n", c.Set, c.Config, c.Metric, c.Pairs, c.Sessions, c.Base, c.Now, c.Skipped)
 			continue
 		}
 		effect := "n/a"
 		if !math.IsNaN(c.Effect) && !math.IsInf(c.Effect, 0) {
 			effect = fmt.Sprintf("%.2f", c.Effect)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%.3f\t%.3f\t%+.3f\t[%+.3f, %+.3f]\t%s\t%.4f\t%.4f\n",
-			c.Set, c.Metric, c.Pairs, c.Sessions, c.Base, c.Now, c.Delta, c.Lo, c.Hi, effect, c.P, c.PHolm)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%.3f\t%.3f\t%+.3f\t[%+.3f, %+.3f]\t%s\t%.4f\t%.4f\n",
+			c.Set, c.Config, c.Metric, c.Pairs, c.Sessions, c.Base, c.Now, c.Delta, c.Lo, c.Hi, effect, c.P, c.PHolm)
 	}
 	_ = w.Flush()
 	return b.String()

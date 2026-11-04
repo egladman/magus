@@ -62,7 +62,8 @@ func (s *Store) noteEnded(id, reason string) {
 
 // EndSession ends the job c's record binds it to, now that c's session is over, and
 // turns the record into a tombstone so nothing is graded as c until a session binds
-// again. It reports the row and true when it ended one.
+// again. It reports the row and true when it ended one. A subagent's stop never
+// comes here: [Store.StampHolderStopped] takes it.
 //
 // Only a row c took and is still editing ends: a declared row nobody took is the
 // forker's, and an exited one already returned its result. The end_reason opens with
@@ -120,6 +121,67 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, erro
 		return ended, true, err
 	}
 	return ended, true, nil
+}
+
+// StampHolderStopped records that the holder of c's row ended its
+// turn. The row stays running and the binding stays live, so a holder
+// its host continues is still bound. Updated stays, since a stop is
+// not work and jobs.stale_after reads that clock.
+func (s *Store) StampHolderStopped(ctx context.Context, c Caller) error {
+	if !c.Identified() {
+		return nil
+	}
+	b := readBinding(s.record(c))
+	if b.Job == "" || b.Gone {
+		return nil
+	}
+	now := s.now().Unix()
+	return s.update(ctx, func(f *jobsFile) error {
+		i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == b.Job })
+		if i < 0 || !Editing(f.Jobs[i]) || f.Jobs[i].Registered == 0 || f.Jobs[i].Holder.OrSession() == types.HolderServer {
+			return file.ErrSkipWrite
+		}
+		if err := readOnly(f.Jobs[i]); err != nil {
+			return err
+		}
+		f.Jobs[i].HolderStopped = now
+		return nil
+	})
+}
+
+// ClearHolderStopped takes the stamp off c's row, now its holder made
+// a call. Updated moves: a dead-holder claim compares it, and refuses
+// the take once the holder is back. It reads before it locks, since
+// every hook call runs it and few rows carry a stamp.
+func (s *Store) ClearHolderStopped(ctx context.Context, c Caller) error {
+	if !c.Identified() {
+		return nil
+	}
+	b := readBinding(s.record(c))
+	if b.Job == "" || b.Gone {
+		return nil
+	}
+	rows, err := s.read()
+	if err != nil {
+		return err
+	}
+	stamped := func(r types.Job) bool { return r.ID == b.Job && r.HolderStopped != 0 }
+	if !slices.ContainsFunc(rows.Jobs, stamped) {
+		return nil
+	}
+	now := s.now().Unix()
+	return s.update(ctx, func(f *jobsFile) error {
+		i := slices.IndexFunc(f.Jobs, stamped)
+		if i < 0 {
+			return file.ErrSkipWrite
+		}
+		if err := readOnly(f.Jobs[i]); err != nil {
+			return err
+		}
+		f.Jobs[i].HolderStopped = 0
+		f.Jobs[i].Updated = now
+		return nil
+	})
 }
 
 // TreeRoot is the root of the job tree id belongs to: its topmost ancestor, or id itself

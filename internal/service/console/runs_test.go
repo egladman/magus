@@ -153,6 +153,7 @@ func TestRunRegistryPrunesAfterRetention(t *testing.T) {
 func TestResultState(t *testing.T) {
 	require.Equal(t, types.TargetRunPassed, resultState(journal.StatusPass))
 	require.Equal(t, types.TargetRunCached, resultState(journal.StatusCached))
+	require.Equal(t, types.TargetRunPermitted, resultState(journal.StatusPermitted))
 	require.Equal(t, types.TargetRunFailed, resultState(journal.StatusFail))
 	require.Equal(t, types.TargetRunState(""), resultState("some-future-status"))
 }

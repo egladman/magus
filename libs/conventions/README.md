@@ -41,7 +41,7 @@ origin once.
 
 golangci-lint stops at a `go.mod`, so the root `lint` target runs it once more in
 each module under `libs/`, on the same config, with only `filenames`,
-`hostagnostic`, `namewords`, `stutter`, `testifylint`, `testlayout` and
+`hostagnostic`, `namewords`, `stutter`, `testifylint`, `testpairing` and
 `testpair` enabled, plus `errmsg` outside gopherbuzz: the rules that hold in
 every module. The rest name root-module paths.
 

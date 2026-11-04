@@ -14,7 +14,7 @@ A job holding write paths another fork was refused for, with a release request o
 
 ## Why
 
-A fork refused for a file a live job holds (MGS3032, MGS3036, MGS3046) files an attention request naming that job and the write paths its diff has not touched. The holder is told once a session, on its own calls and never on a deny, which fork wanted what and the `magus job apply -f <record>` that narrows it. It reads the attention queue, never a diff, and a session with no lease never sees it. Disposing of the request silences it.
+A fork refused for a file a live job holds (MGS3032, MGS3036, MGS3046) files a request on that job's row and in the attention queue, naming the write paths its diff has not touched. The holder is told once a lease, on its own calls and never on a deny, which fork wanted what and the `magus job apply -f <record>` that narrows it. It reads the row, never a diff or the session store, and a session with no lease never sees it. Narrowing past the file or disposing of the request silences it.
 
 ## Default and override
 

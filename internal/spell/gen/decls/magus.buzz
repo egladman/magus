@@ -6,11 +6,267 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export enum<str> DiagnosticOrigin {
+    unknown = "",
+    builtin = "builtin",
+    workspace = "workspace",
+}
+
 export enum<str> CheckStatus {
     none = "",
     ok = "ok",
     fail = "fail",
     advice = "advice",
+}
+
+export enum<str> Evidence {
+    none = "",
+    measured = "measured",
+    declared = "declared",
+    inferred = "inferred",
+    unknown = "unknown",
+}
+
+export enum<str> SymbolIndexFreshness {
+    none = "",
+    upToDate = "up-to-date",
+    outOfDate = "out-of-date",
+    notIndexed = "not-indexed",
+    unvouched = "unvouched",
+}
+
+export enum<str> SkillVariant {
+    short = "short",
+    full = "full",
+}
+
+export enum<str> ModelTierSource {
+    row = "row",
+    matrix = "matrix",
+    default = "default",
+}
+
+export enum<str> ClaimKind {
+    none = "",
+    refs = "refs",
+    test = "test",
+    output = "output",
+    released = "released",
+    dead = "dead",
+}
+
+export enum<str> CredentialKind {
+    none = "",
+    operator = "operator",
+    stored = "stored",
+    share = "share",
+    exchange = "exchange",
+    stdio = "stdio",
+    socketPeer = "socket-peer",
+}
+
+export enum<str> EntryPoint {
+    none = "",
+    cli = "cli",
+    hook = "hook",
+    mcp = "mcp",
+    rpc = "rpc",
+    server = "server",
+}
+
+export enum<str> RetryChange {
+    none = "",
+    config = "config",
+    widening = "widening",
+    person = "person",
+    upgrade = "upgrade",
+}
+
+export enum<str> JobState {
+    none = "",
+    declared = "declared",
+    running = "running",
+    exited = "exited",
+    pass = "pass",
+    fail = "fail",
+    noReturn = "no_return",
+}
+
+export enum<str> GoalKind {
+    none = "",
+    check = "check",
+    paths = "paths",
+    symbol = "symbol",
+}
+
+export enum<str> GoalExpect {
+    none = "",
+    passed = "passed",
+    changed = "changed",
+    present = "present",
+    absent = "absent",
+    unreferenced = "unreferenced",
+    signature = "signature",
+}
+
+export enum<str> BriefFormat {
+    none = "",
+    markdown = "markdown",
+    buzz = "buzz",
+}
+
+export enum<str> JobHolder {
+    none = "",
+    server = "server",
+    session = "session",
+}
+
+export enum<str> JobWriteProof {
+    none = "",
+    alone = "alone",
+    disjoint = "disjoint",
+    overlapping = "overlapping",
+}
+
+export enum<str> JobBaseVerdict {
+    none = "",
+    matches = "match",
+    revisionMatch = "revision-match",
+    diverged = "diverged",
+    unknown = "unknown",
+}
+
+export enum<str> InflightAttention {
+    unset = "",
+    author = "author",
+    review = "review",
+    queue = "queue",
+    none = "none",
+}
+
+export enum<str> JobKind {
+    check = "check",
+    symbol = "symbol",
+    paths = "paths",
+    script = "script",
+    prose = "prose",
+}
+
+export enum<str> GroupingShape {
+    none = "",
+    chained = "chained",
+    split = "split",
+    solo = "solo",
+}
+
+export enum<str> GroupingVerdict {
+    none = "",
+    measured = "measured",
+    unknown = "unknown",
+}
+
+export enum<str> SkillForm {
+    none = "",
+    both = "both",
+    short = "short",
+    full = "full",
+}
+
+export enum<str> LeaseSource {
+    none = "",
+    flag = "flag",
+    agent = "agent",
+    marker = "marker",
+    contested = "contested",
+    env = "env",
+}
+
+export enum<str> RelationID {
+    none = "",
+    dependsOn = "depends_on",
+    contains = "contains",
+    uses = "uses",
+    references = "references",
+    documents = "documents",
+    calls = "calls",
+    implements = "implements",
+    imports = "imports",
+    rationaleFor = "rationale_for",
+    emits = "emits",
+    owns = "owns",
+    defines = "defines",
+    produces = "produces",
+    consumes = "consumes",
+    authored = "authored",
+    annotates = "annotates",
+    depicts = "depicts",
+    coChanges = "co_changes",
+    splits = "splits",
+}
+
+export enum<str> KnowledgeVerdict {
+    none = "",
+    found = "found",
+    absent = "absent",
+    unknown = "unknown",
+}
+
+export enum<str> KnowledgeUnknownReason {
+    none = "",
+    symbolIndexMissing = "symbol-index-missing",
+    symbolsNotLoaded = "symbols-not-loaded",
+    coverageUnknown = "coverage-unknown",
+    indexStale = "index-stale",
+}
+
+export enum<str> EdgeDirection {
+    none = "",
+    outward = "out",
+    inward = "in",
+}
+
+export enum<str> KnowledgeResolution {
+    none = "",
+    id = "id",
+    path = "path",
+    fuzzy = "fuzzy",
+}
+
+export enum<str> PrecedentFamily {
+    none = "",
+    depDirection = "dep-direction",
+    depFanout = "dep-fanout",
+    errSentinelName = "err-sentinel-name",
+    testPackageName = "test-package-name",
+    paramNameByType = "param-name-by-type",
+    paramOrder = "param-order",
+    ctxFirst = "ctx-first",
+    errorLast = "error-last",
+}
+
+export enum<str> DuplicationPlacement {
+    none = "",
+    member = "member",
+    dependency = "dependency",
+    newPackage = "new-package",
+    blocked = "blocked",
+    unknown = "unknown",
+}
+
+export enum<str> DuplicationShape {
+    none = "",
+    parameterize = "parameterize",
+    sharedCore = "shared-core",
+    siblingHelper = "sibling-helper",
+    leave = "leave",
+}
+
+export enum<str> Tier {
+    none = "",
+    trivial = "trivial",
+    mechanical = "mechanical",
+    scoped = "scoped",
+    full = "full",
 }
 
 export enum<str> DiffWhyRelation {
@@ -46,66 +302,106 @@ export enum<str> DiffReadState {
     unknown = "unknown",
 }
 
-export enum<str> KnowledgeResolution {
+export enum<str> ConformanceMetric {
     none = "",
-    id = "id",
-    path = "path",
-    fuzzy = "fuzzy",
+    fileLines = "file-lines",
+    funcLines = "func-lines",
+    typeMethods = "type-methods",
+    fileSymbols = "file-symbols",
+    depFanout = "dep-fanout",
+    cloneTokens = "clone-tokens",
+    exportScope = "export-scope",
+    callSequence = "call-sequence",
+    sharedBody = "shared-body",
+    sharedReach = "shared-reach",
+    callerSpread = "caller-spread",
+    modeKnobs = "mode-knobs",
+    aliasShare = "alias-share",
+    nameClash = "name-clash",
+    mainLogic = "main-logic",
+    storePathExport = "store-path-export",
+    fileSplit = "file-split",
 }
 
-export enum<str> SymbolIndexFreshness {
+export enum<str> ConformancePopulation {
     none = "",
-    upToDate = "up-to-date",
-    outOfDate = "out-of-date",
-    notIndexed = "not-indexed",
-    unvouched = "unvouched",
+    source = "source",
+    main = "main",
+    test = "test",
 }
 
-export enum<str> JobKind {
-    check = "check",
-    symbol = "symbol",
-    paths = "paths",
-    script = "script",
-    prose = "prose",
+export enum<str> ChangeStatus {
+    none = "",
+    added = "added",
+    modified = "modified",
+    deleted = "deleted",
+    renamed = "renamed",
 }
 
-export enum<str> GroupingShape {
+export enum<str> RegionSide {
     none = "",
-    chained = "chained",
-    split = "split",
-    solo = "solo",
+    old = "old",
+    new = "new",
 }
 
-export enum<str> GroupingVerdict {
+export enum<str> TrailSection {
     none = "",
-    measured = "measured",
+    refused = "refused",
+    advised = "advised",
+    unguarded = "unguarded",
+    nextNotTaken = "next-not-taken",
+}
+
+export enum<str> TrailVerdict {
+    none = "",
+    shouldDeny = "should-deny",
+    shouldAdvise = "should-advise",
+    wrongDeny = "wrong-deny",
+    fine = "fine",
+}
+
+export enum<str> GuardDecision {
+    none = "",
+    allow = "allow",
+    advise = "advise",
+    deny = "deny",
+}
+
+export enum<str> ContextSource {
+    none = "",
+    transcript = "transcript",
+}
+
+export enum<str> SpawnKind {
+    none = "",
+    spawn = "spawn",
+    continuation = "continue",
+}
+
+export enum<str> AgentRole {
+    none = "",
+    root = "root",
+    worker = "worker",
+    integrator = "integrator",
+}
+
+export enum<str> AgentThread {
+    none = "",
+    main = "main",
+    sub = "sub",
     unknown = "unknown",
 }
 
-export enum<str> SkillVariant {
-    short = "short",
-    full = "full",
-}
-
-export enum<str> ModelTierSource {
-    row = "row",
-    matrix = "matrix",
-    default = "default",
-}
-
-export enum<str> ClaimKind {
+export enum<str> ThreadSource {
     none = "",
-    refs = "refs",
-    test = "test",
-    output = "output",
-    released = "released",
-    dead = "dead",
+    reported = "reported",
+    inferred = "inferred",
 }
 
-export enum<str> BriefFormat {
+export enum<str> Orchestration {
     none = "",
-    markdown = "markdown",
-    buzz = "buzz",
+    inferred = "inferred",
+    proven = "proven",
 }
 
 export enum<str> BriefRefKind {
@@ -117,13 +413,75 @@ export enum<str> BriefRefKind {
     commit = "commit",
 }
 
-export object Affected {
+export enum<str> DriftPolicy {
+    none = "",
+    fail = "fail",
+    warn = "warn",
+    off = "off",
+}
+
+export enum<str> HarnessChangeOp {
+    none = "",
+    add = "add",
+    replace = "replace",
+    retire = "retire",
+    set = "set",
+    write = "write",
+}
+
+export object ChangeOptions {
+    rev: str = "",
+    patch: str = "",
+}
+
+export object VCSCheckpoint {
+    revision: str = "",
+    branch: str = "",
+    dirty: bool = false,
+    patchDigest: str = "",
+    untrackedDigest: str = "",
+    vcs: str = "",
+    preserved: str = "",
+}
+
+export object Change {
     base: str = "",
-    changed: [str] = [],
-    seed: [str] = [],
-    filesBySeed: {str: [str]} = {},
-    affected: [str] = [],
-    undeclaredBySeed: {str: [str]} = {},
+    rev: str = "",
+    patch: str = "",
+    at: VCSCheckpoint = VCSCheckpoint{},
+    files: {str: str} = {},
+
+    fun tier(target: str, opts: TierOptions? = null) > TierReport !> any {
+        return magus__Change__tier(this, target: target, opts: opts);
+    }
+
+    fun diff(opts: DiffOptions? = null) > Diff !> any {
+        return magus__Change__diff(this, opts: opts);
+    }
+
+    fun impact(opts: CommandOptions? = null) > Impact !> any {
+        return magus__Change__impact(this, opts: opts);
+    }
+
+    fun affected() > Affected !> any {
+        return magus__Change__affected(this);
+    }
+
+    fun conformance(checks: [str] = [<str>]) > ConformanceReport !> any {
+        return magus__Change__conformance(this, checks: checks);
+    }
+
+    fun mergeBase() > str !> any {
+        return magus__Change__mergeBase(this);
+    }
+}
+
+export object CommandOptions {
+    root: str = "",
+    dir: str = "",
+    stdin: str = "",
+    quiet: bool = false,
+    allowFailure: bool = false,
 }
 
 export object CleanReport {
@@ -137,6 +495,780 @@ export object ExecResult {
     stderr: str = "",
     code: int = 0,
     ok: bool = false,
+}
+
+export object DiagnosticCode {
+    code: str = "",
+    origin: DiagnosticOrigin = DiagnosticOrigin.unknown,
+}
+
+export object Check {
+    name: str = "",
+    status: CheckStatus = CheckStatus.none,
+    message: str = "",
+    details: [str] = [],
+    evidence: Evidence = Evidence.none,
+    fix: [str] = [],
+}
+
+export object DoctorSummary {
+    ok: int = 0,
+    fail: int = 0,
+    advice: int = 0,
+    unknown: int = 0,
+}
+
+export object DoctorReport {
+    workspace: str = "",
+    checks: [Check] = [],
+    summary: DoctorSummary = DoctorSummary{},
+}
+
+export object ProjectRef {
+    path: str = "",
+    name: str = "",
+    dir: str = "",
+}
+
+export object KnowledgeSymbolGap {
+    project: ProjectRef = ProjectRef{},
+    language: str = "",
+    state: SymbolIndexFreshness = SymbolIndexFreshness.none,
+    detail: str = "",
+    hint: str = "",
+    unindexable: bool = false,
+}
+
+export object Graph {
+    digest: str = "",
+    indexed: bool = false,
+    projects: [str] = [],
+    gaps: [KnowledgeSymbolGap] = [],
+
+    fun query(query: str, opts: QueryOptions? = null) > QueryResult !> any {
+        return magus__Graph__query(this, query: query, opts: opts);
+    }
+
+    fun explain(node: str) > ExplainResult !> any {
+        return magus__Graph__explain(this, node: node);
+    }
+
+    fun path(node: str, to: str, opts: PathOptions? = null) > PathResult !> any {
+        return magus__Graph__path(this, node: node, to: to, opts: opts);
+    }
+
+    fun refs(symbol: str, opts: RefsOptions? = null) > RefsResult !> any {
+        return magus__Graph__refs(this, symbol: symbol, opts: opts);
+    }
+
+    fun stats(kind: str = "") > KnowledgeStats !> any {
+        return magus__Graph__stats(this, kind: kind);
+    }
+
+    fun neighborhood(focus: str, opts: NeighborhoodOptions? = null) > NeighborhoodResult !> any {
+        return magus__Graph__neighborhood(this, focus: focus, opts: opts);
+    }
+
+    fun dir(path: str) > Dir !> any {
+        return magus__Graph__dir(this, path: path);
+    }
+
+    fun dirs(glob: str, opts: DirsOptions? = null) > [Dir] !> any {
+        return magus__Graph__dirs(this, glob: glob, opts: opts);
+    }
+
+    fun layer(name: str) > Layer !> any {
+        return magus__Graph__layer(this, name: name);
+    }
+
+    fun projectGraph() > ProjectGraph !> any {
+        return magus__Graph__projectGraph(this);
+    }
+
+    fun imports() > ImportGraph !> any {
+        return magus__Graph__imports(this);
+    }
+
+    fun symbols() > Symbols !> any {
+        return magus__Graph__symbols(this);
+    }
+
+    fun precedents() > Holds !> any {
+        return magus__Graph__precedents(this);
+    }
+
+    fun unreferenced() > Unreferenced !> any {
+        return magus__Graph__unreferenced(this);
+    }
+
+    fun duplication() > Duplication !> any {
+        return magus__Graph__duplication(this);
+    }
+}
+
+export object HistoryMetricsOptions {
+    dir: str = "",
+    commits: int = 0,
+    since: str = "",
+    files: bool = false,
+}
+
+export object History {
+    dir: str = "",
+    commits: int = 0,
+    since: str = "",
+    files: bool = false,
+
+    fun hotspots() > Hotspots !> any {
+        return magus__History__hotspots(this);
+    }
+
+    fun affinity() > Affinity !> any {
+        return magus__History__affinity(this);
+    }
+
+    fun ownership() > Ownership !> any {
+        return magus__History__ownership(this);
+    }
+
+    fun trend() > Trend !> any {
+        return magus__History__trend(this);
+    }
+}
+
+export object JobModelTier {
+    name: str = "",
+    rank: int = 0,
+    skills: SkillVariant = SkillVariant.short,
+    source: ModelTierSource = ModelTierSource.row,
+    reason: str = "",
+    site: str = "",
+    model: str = "",
+}
+
+export object ClaimEvidence {
+    kind: ClaimKind = ClaimKind.none,
+    subject: str = "",
+}
+
+export object Grant {
+    tokens: int = 0,
+    mcp: int = 0,
+    console: int = 0,
+}
+
+export object Credential {
+    class: CredentialKind = CredentialKind.none,
+    id: str = "",
+    name: str = "",
+    grant: Grant = Grant{},
+}
+
+export object Origin {
+    user: str = "",
+    uid: str = "",
+    entryPoint: EntryPoint = EntryPoint.none,
+    host: str = "",
+    session: str = "",
+    agent: str = "",
+    credential: Credential = Credential{},
+}
+
+export object JobClaim {
+    path: str = "",
+    evidence: ClaimEvidence = ClaimEvidence{},
+    proof: str = "",
+    at: int = 0,
+    by: Origin = Origin{},
+}
+
+export object JobDeferred {
+    item: str = "",
+    row: str = "",
+    reason: str = "",
+}
+
+export object GateStatus {
+    id: str = "",
+    verified: bool = false,
+    outputRef: str = "",
+    scope: str = "",
+    owed: str = "",
+    violations: [str] = [],
+}
+
+export object JobDenial {
+    rule: str = "",
+    reason: str = "",
+    action: str = "",
+    verdictRef: str = "",
+    ts: int = 0,
+}
+
+export object RetryVerdict {
+    retryable: bool = false,
+    change: RetryChange = RetryChange.none,
+    reason: str = "",
+    code: str = "",
+}
+
+export object PriorAttempt {
+    n: int = 0,
+    state: JobState = JobState.none,
+    observedGeneration: int = 0,
+    endReason: str = "",
+    modelTier: str = "",
+    checkpoint: str = "",
+    reportedBase: str = "",
+    ended: int = 0,
+    reworkRounds: int = 0,
+    widenings: int = 0,
+    unmet: [GateStatus] = [],
+    violations: [str] = [],
+    unresolvedRisks: [str] = [],
+    failingRefs: [str] = [],
+    denials: [JobDenial] = [],
+    denialsKnown: bool = false,
+    retry: RetryVerdict = RetryVerdict{},
+}
+
+export object JobRejection {
+    unmet: [GateStatus] = [],
+    violations: [str] = [],
+    at: int = 0,
+    observedGeneration: int = 0,
+}
+
+export object LeaseCheck {
+    target: str = "",
+    script: str = "",
+    project: str = "",
+    args: [str] = [],
+    noDefaultCharms: bool = false,
+    test: bool = false,
+}
+
+export object Goal {
+    id: str = "",
+    description: str = "",
+    dependsOn: [str] = [],
+    kind: GoalKind = GoalKind.none,
+    expect: GoalExpect = GoalExpect.none,
+    check: LeaseCheck = LeaseCheck{},
+    paths: [str] = [],
+    symbols: [str] = [],
+    signature: str = "",
+}
+
+export object JobRelease {
+    path: str = "",
+    digest: str = "",
+    releasedAt: int = 0,
+    revoked: bool = false,
+    takenBy: str = "",
+    deadBecause: str = "",
+}
+
+export object JobUnattributedWrite {
+    path: str = "",
+    digest: str = "",
+    at: int = 0,
+}
+
+export object JobEntry {
+    path: str = "",
+    by: Origin = Origin{},
+    at: int = 0,
+    consumed: int = 0,
+}
+
+export object Deviation {
+    code: str = "",
+    subject: str = "",
+    reason: str = "",
+}
+
+export object JobWorktree {
+    root: str = "",
+    source: str = "",
+    base: str = "",
+    created: int = 0,
+    binary: str = "",
+    removed: int = 0,
+    kept: str = "",
+    made: bool = false,
+}
+
+export object JobResultValidation {
+    command: str = "",
+    outputRef: str = "",
+    owed: str = "",
+}
+
+export object GateEvidence {
+    gateID: str = "",
+    outputRef: str = "",
+    owed: str = "",
+}
+
+export object JobResult {
+    schemaVersion: int = 0,
+    requires: [str] = [],
+    job: str = "",
+    changedPaths: [str] = [],
+    validation: JobResultValidation = JobResultValidation{},
+    gateEvidence: [GateEvidence] = [],
+    descendants: [str] = [],
+    unresolvedRisks: [str] = [],
+    followUps: [str] = [],
+    observedGeneration: int = 0,
+}
+
+export object JobAttempt {
+    found: bool = false,
+    ref: str = "",
+    timestampMs: int = 0,
+    project: str = "",
+    target: str = "",
+    spell: str = "",
+    failed: bool = false,
+    attemptID: str = "",
+    durationMs: int = 0,
+    revision: str = "",
+    dirty: bool = false,
+    lease: str = "",
+    extraArgs: [str] = [],
+    observedGeneration: int = 0,
+}
+
+export object JobGateAttempt {
+    gateID: str = "",
+    attempt: JobAttempt = JobAttempt{},
+}
+
+export object JobRun {
+    invocation: str = "",
+    ended: int = 0,
+    durationMs: int = 0,
+    ok: bool = false,
+    error: str = "",
+    itemsRemoved: int = 0,
+    bytesReclaimed: int = 0,
+}
+
+export object JobIntegration {
+    checkout: str = "",
+    at: int = 0,
+    verified: bool = false,
+    gates: [GateStatus] = [],
+    observedGeneration: int = 0,
+}
+
+export object Job {
+    schemaVersion: int = 0,
+    requires: [str] = [],
+    id: str = "",
+    parent: str = "",
+    criteria: str = "",
+    checkpoint: str = "",
+    writePaths: [str] = [],
+    denyPaths: [str] = [],
+    softPaths: [str] = [],
+    readPaths: [str] = [],
+    dependsOn: [str] = [],
+    integrates: [str] = [],
+    breaks: [str] = [],
+    model: str = "",
+    modelTier: JobModelTier? = null,
+    briefFormat: BriefFormat = BriefFormat.none,
+    delivery: str = "",
+    parentHead: str = "",
+    follows: str = "",
+    freshReason: str = "",
+    reworkRounds: int = 0,
+    widenings: int = 0,
+    claims: [JobClaim] = [],
+    generation: int = 0,
+    maxAttempts: int = 0,
+    maxClaims: int = 0,
+    deferred: [JobDeferred] = [],
+    leftUnmerged: str = "",
+    landed: bool = false,
+    weight: double = 0.0,
+    paused: int = 0,
+    pausedBy: Origin = Origin{},
+    pauseReason: str = "",
+    pausedUntil: int = 0,
+    attempts: int = 0,
+    prior: [PriorAttempt] = [],
+    rejection: JobRejection? = null,
+    check: LeaseCheck? = null,
+    validation: str = "",
+    goals: [Goal] = [],
+    state: JobState = JobState.none,
+    holder: JobHolder = JobHolder.none,
+    readOnly: bool = false,
+    releases: [JobRelease] = [],
+    unattributed: [JobUnattributedWrite] = [],
+    entries: [JobEntry] = [],
+    writeProof: JobWriteProof = JobWriteProof.none,
+    deviations: [Deviation] = [],
+    validated: int = 0,
+    reportedBase: str = "",
+    baseVerdict: JobBaseVerdict = JobBaseVerdict.none,
+    registeredBy: Origin = Origin{},
+    registered: int = 0,
+    holderStopped: int = 0,
+    checkoutRoot: str = "",
+    worktree: JobWorktree? = null,
+    endReason: str = "",
+    created: int = 0,
+    updated: int = 0,
+    deadline: int = 0,
+    result: JobResult? = null,
+    attempt: JobAttempt? = null,
+    gateAttempts: [JobGateAttempt] = [],
+    lastRun: JobRun? = null,
+    integration: JobIntegration? = null,
+    waiterEvidence: JobIntegration? = null,
+
+    fun exit(result: {str: any} = {<str: any>}) > Job !> any {
+        return magus__Job__exit(this, result: result);
+    }
+
+    fun wait(result: {str: any} = {<str: any>}) > JobStatus !> any {
+        return magus__Job__wait(this, result: result);
+    }
+
+    fun register() > JobRegistration !> any {
+        return magus__Job__register(this);
+    }
+}
+
+export object OutputRecord {
+    ref: str = "",
+    project: str = "",
+    target: str = "",
+    failed: bool = false,
+    durationMs: int = 0,
+    output: str = "",
+}
+
+export object RaiseOptions {
+    cause: any? = null,
+    url: str = "",
+}
+
+export object SessionOptions {
+    session: str = "",
+    since: str = "",
+    @"until": str = "",
+}
+
+export object Session {
+    session: str = "",
+    since: str = "",
+    @"until": str = "",
+
+    fun trail() > Trail !> any {
+        return magus__Session__trail(this);
+    }
+
+    fun marks() > [TrailMark] !> any {
+        return magus__Session__marks(this);
+    }
+
+    fun mark(mark: TrailMark) > TrailMark !> any {
+        return magus__Session__mark(this, mark: mark);
+    }
+}
+
+export object Workspace {
+    root: str = "",
+    dir: str = "",
+
+    fun jobs() > JobList !> any {
+        return magus__Workspace__jobs(this);
+    }
+
+    fun putJob(id: str, opts: {str: any} = {<str: any>}) > Job !> any {
+        return magus__Workspace__putJob(this, id: id, opts: opts);
+    }
+
+    fun clearJobs() > int !> any {
+        return magus__Workspace__clearJobs(this);
+    }
+
+    fun forkFacts() > JobForkFacts !> any {
+        return magus__Workspace__forkFacts(this);
+    }
+
+    fun unmerged() > JobUnmergedReport !> any {
+        return magus__Workspace__unmerged(this);
+    }
+
+    fun tierOutcomes() > ModelTiers !> any {
+        return magus__Workspace__tierOutcomes(this);
+    }
+
+    fun grouping() > Grouping !> any {
+        return magus__Workspace__grouping(this);
+    }
+
+    fun volatility() > Volatility !> any {
+        return magus__Workspace__volatility(this);
+    }
+
+    fun skills(opts: SkillsOptions? = null) > [Skill] !> any {
+        return magus__Workspace__skills(this, opts: opts);
+    }
+
+    fun attention(args: [str], opts: CommandOptions? = null) > AttentionList !> any {
+        return magus__Workspace__attention(this, args: args, opts: opts);
+    }
+
+    fun fileDiskAttention(message: str) > void !> any {
+        magus__Workspace__fileDiskAttention(this, message: message);
+    }
+
+    fun diskReclaim() > DiskReclaim !> any {
+        return magus__Workspace__diskReclaim(this);
+    }
+
+    fun bustCache(projectPath: str = "") > void !> any {
+        magus__Workspace__bustCache(this, projectPath: projectPath);
+    }
+
+    fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any {
+        return magus__Workspace__diagnoseDrift(this, outputs: outputs, inputs: inputs);
+    }
+}
+
+export object JobOverlapFootprint {
+    verdict: str = "",
+    shared: [str] = [],
+    reason: str = "",
+}
+
+export object JobOverlap {
+    jobA: str = "",
+    jobB: str = "",
+    pathsA: [str] = [],
+    pathsB: [str] = [],
+    claims: str = "",
+    footprint: JobOverlapFootprint? = null,
+}
+
+export object JobBlock {
+    job: str = "",
+    on: str = "",
+    state: JobState = JobState.none,
+}
+
+export object JobReadOnly {
+    job: str = "",
+    lacks: [str] = [],
+}
+
+export object InflightNeighbour {
+    id: str = "",
+    evidence: str = "",
+    paths: [str] = [],
+    declarations: [str] = [],
+    units: [str] = [],
+    base: str = "",
+}
+
+export object InflightChange {
+    id: str = "",
+    title: str = "",
+    author: str = "",
+    head: str = "",
+    branch: str = "",
+    base: str = "",
+    fork: bool = false,
+    jobs: [str] = [],
+    intent: str = "",
+    mark: str = "",
+    decision: str = "",
+    code: str = "",
+    reason: str = "",
+    partition: int = 0,
+    position: int = 0,
+    below: str = "",
+    mine: bool = false,
+    attention: InflightAttention = InflightAttention.unset,
+    neighbours: [InflightNeighbour] = [],
+}
+
+export object InflightFetch {
+    provider: str = "",
+    host: str = "",
+    base: str = "",
+    tip: str = "",
+    at: int = 0,
+    elapsedMS: int = 0,
+}
+
+export object JobUnmerged {
+    job: str = "",
+    head: str = "",
+    item: str = "",
+    why: str = "",
+    remedy: str = "",
+}
+
+export object JobUnmergedReport {
+    branch: str = "",
+    rows: [JobUnmerged] = [],
+    risks: [JobUnmerged] = [],
+    unknown: str = "",
+}
+
+export object JobList {
+    jobs: [Job] = [],
+    overlaps: [JobOverlap] = [],
+    overdue: [str] = [],
+    orphans: [str] = [],
+    stale: [str] = [],
+    blocked: [JobBlock] = [],
+    readOnly: [JobReadOnly] = [],
+    changes: [InflightChange] = [],
+    fetched: InflightFetch? = null,
+    unproposed: [str] = [],
+    unmerged: JobUnmergedReport? = null,
+}
+
+export object JobForkFacts {
+    finishedBranches: [str] = [],
+    branchesUnknown: str = "",
+    integrateRecord: str = "",
+    commitsSinceTest: int = 0,
+    lastTestRef: str = "",
+    lastTestRevision: str = "",
+    testUnknown: str = "",
+}
+
+export object ModelTierRecord {
+    rank: int = 0,
+    modelTier: str = "",
+    kind: JobKind = JobKind.check,
+    jobs: int = 0,
+    pass: int = 0,
+    fail: int = 0,
+    noReturn: int = 0,
+    passLower: double = 0.0,
+    checksPerJob: double = 0.0,
+    forksPerID: double = 0.0,
+    reworkPerJob: double = 0.0,
+    wideningsPerJob: double = 0.0,
+    meanCostUSD: double? = null,
+    medianTokens: int? = null,
+    firstAttempts: int = 0,
+    firstPass: int = 0,
+    firstPassLower: double = 0.0,
+    notRetryable: int = 0,
+}
+
+export object ModelTiers {
+    definition: str = "",
+    rows: [ModelTierRecord] = [],
+}
+
+export object GroupingRecord {
+    shape: GroupingShape = GroupingShape.none,
+    verdict: GroupingVerdict = GroupingVerdict.none,
+    jobs: int = 0,
+    groups: int = 0,
+    known: int = 0,
+    passLower: double? = null,
+    setupTokensMedian: int? = null,
+    setupShare: double? = null,
+    contextPerGroup: double? = null,
+    wallMsPerGroup: double? = null,
+    denialsPerJob: double? = null,
+    unattributedPerJob: double? = null,
+    reworkPerJob: double? = null,
+    wideningsPerJob: double? = null,
+}
+
+export object Grouping {
+    definition: str = "",
+    minSample: int = 0,
+    unclassified: int = 0,
+    rows: [GroupingRecord] = [],
+}
+
+export object VolatilityTarget {
+    project: str = "",
+    target: str = "",
+    score: double = 0.0,
+    volatile: bool = false,
+    pass: int = 0,
+    fail: int = 0,
+    volatileCount: int = 0,
+    samples: int = 0,
+    lastPass: str = "",
+}
+
+export object Volatility {
+    threshold: double = 0.0,
+    targets: [VolatilityTarget] = [],
+}
+
+export object SkillsOptions {
+    name: str = "",
+    form: SkillForm = SkillForm.none,
+}
+
+export object Skill {
+    name: str = "",
+    description: str = "",
+    source: str = "",
+    form: str = "",
+    body: str = "",
+    current: bool = false,
+}
+
+export object FileRef {
+    value: str = "",
+    isDir: bool = false,
+}
+
+export object AttentionRequest {
+    id: str = "",
+    invocation: str = "",
+    openedMs: int = 0,
+    outcome: str = "",
+    severity: str = "",
+    source: str = "",
+    where: str = "",
+    lease: str = "",
+    leaseFrom: LeaseSource = LeaseSource.none,
+    files: [FileRef] = [],
+    message: str = "",
+    disposed: bool = false,
+    disposedMs: int = 0,
+    disposedBy: str = "",
+    note: str = "",
+    disposes: int = 0,
+}
+
+export object AttentionList {
+    requests: [AttentionRequest] = [],
+    store: str = "",
+}
+
+export object SpellCache {
+    spell: str = "",
+    env: str = "",
+    dir: str = "",
+    trimMb: int = 0,
+}
+
+export object DiskReclaim {
+    caches: [SpellCache] = [],
+    listCommand: str = "",
 }
 
 export object Path {
@@ -153,19 +1285,447 @@ export object DriftResult {
     files: [Path] = [],
 }
 
+export object QueryOptions {
+    budget: int = 0,
+    limit: int = 0,
+    offset: int = 0,
+}
+
+export object KnowledgeTermScore {
+    term: str = "",
+    field: str = "",
+    score: double = 0.0,
+}
+
+export object KnowledgeListRank {
+    list: str = "",
+    rank: int = 0,
+}
+
+export object KnowledgeMatchWhy {
+    matched: int = 0,
+    of: int = 0,
+    terms: [KnowledgeTermScore] = [],
+    lists: [KnowledgeListRank] = [],
+    seeds: [str] = [],
+    prior: double = 0.0,
+}
+
+export object Match {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    score: int = 0,
+    why: KnowledgeMatchWhy? = null,
+    staleness: str = "",
+    outrunDays: int = 0,
+}
+
+export object KnowledgeNode {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    doc: str = "",
+    source: str = "",
+    attrs: {str: str} = {},
+}
+
+export object KnowledgeEdge {
+    source: str = "",
+    target: str = "",
+    relation: RelationID = RelationID.none,
+    confidence: str = "",
+    score: double = 0.0,
+    provenance: str = "",
+    attrs: {str: str} = {},
+}
+
+export object KnowledgeTextPresence {
+    hits: int = 0,
+    files: int = 0,
+    sites: [str] = [],
+    more: int = 0,
+}
+
+export object KnowledgeIndexCause {
+    why: str = "",
+    fix: str = "",
+}
+
+export object KnowledgeAnswer {
+    verdict: KnowledgeVerdict = KnowledgeVerdict.none,
+    reason: KnowledgeUnknownReason = KnowledgeUnknownReason.none,
+    gaps: [KnowledgeSymbolGap] = [],
+    staleIndexes: [str] = [],
+    text: KnowledgeTextPresence? = null,
+    indexCause: KnowledgeIndexCause? = null,
+}
+
+export object KnowledgeRanking {
+    weights: str = "",
+    reader: [str] = [],
+    skipped: [str] = [],
+    note: str = "",
+}
+
+export object QueryResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    query: str = "",
+    budget: int = 0,
+    matchCount: int = 0,
+    offset: int = 0,
+    matches: [Match] = [],
+    nodes: [KnowledgeNode] = [],
+    links: [KnowledgeEdge] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+    ranking: KnowledgeRanking? = null,
+}
+
+export object EdgeRef {
+    relation: RelationID = RelationID.none,
+    direction: EdgeDirection = EdgeDirection.none,
+    other: str = "",
+    otherKind: str = "",
+    otherLabel: str = "",
+    provenance: str = "",
+    attrs: {str: str} = {},
+}
+
+export object PublicSymbol {
+    id: str = "",
+    label: str = "",
+    dir: str = "",
+    signature: str = "",
+    usedBy: int = 0,
+}
+
+export object ExplainResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    node: KnowledgeNode = KnowledgeNode{},
+    blastRadius: int = 0,
+    @"out": [EdgeRef] = [],
+    @"in": [EdgeRef] = [],
+    docsURL: str = "",
+    resolution: KnowledgeResolution = KnowledgeResolution.none,
+    publicAPI: [PublicSymbol] = [],
+    publicAPIGap: str = "",
+}
+
+export object PathOptions {
+    relations: [RelationID] = [],
+}
+
+export object PathStep {
+    @"from": str = "",
+    to: str = "",
+    relation: RelationID = RelationID.none,
+    forward: bool = false,
+}
+
+export object PathResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    @"from": str = "",
+    to: str = "",
+    found: bool = false,
+    steps: [PathStep] = [],
+}
+
+export object RefsOptions {
+    limit: int = 0,
+    offset: int = 0,
+}
+
+export object RefSite {
+    file: str = "",
+    count: int = 0,
+    lines: [int] = [],
+}
+
+export object RefsResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    symbol: str = "",
+    label: str = "",
+    fileCount: int = 0,
+    refCount: int = 0,
+    defs: [RefSite] = [],
+    refs: [RefSite] = [],
+    signature: str? = null,
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object KnowledgeGodNode {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    degree: int = 0,
+    @"in": int = 0,
+    @"out": int = 0,
+}
+
+export object KnowledgeOrphan {
+    id: str = "",
+    kind: str = "",
+    label: str = "",
+    reason: str = "",
+}
+
+export object KnowledgeDocCoverage {
+    kind: str = "",
+    total: int = 0,
+    documented: int = 0,
+    percent: int = 0,
+    undocumented: [str] = [],
+}
+
+export object KnowledgeStats {
+    definition: str = "",
+    nodeCount: int = 0,
+    edgeCount: int = 0,
+    gods: [KnowledgeGodNode] = [],
+    orphans: [KnowledgeOrphan] = [],
+    coverage: [KnowledgeDocCoverage] = [],
+    isolatedCount: int = 0,
+    componentCount: int = 0,
+    largestComponentSize: int = 0,
+}
+
+export object NeighborhoodOptions {
+    depth: int = 0,
+    relations: [RelationID] = [],
+    direction: EdgeDirection = EdgeDirection.none,
+    collapse: [str] = [],
+}
+
+export object KnowledgeFold {
+    prefix: str = "",
+    node: str = "",
+    folded: int = 0,
+}
+
+export object NeighborhoodResult {
+    definition: str = "",
+    schemaVersion: int = 0,
+    focus: str = "",
+    resolution: KnowledgeResolution = KnowledgeResolution.none,
+    options: NeighborhoodOptions = NeighborhoodOptions{},
+    nodes: [KnowledgeNode] = [],
+    links: [KnowledgeEdge] = [],
+    folds: [KnowledgeFold] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object DirCall {
+    dir: str = "",
+    transport: str = "",
+    marker: str = "",
+    source: str = "",
+}
+
+export object Dir {
+    path: str = "",
+    id: str = "",
+    layer: str = "",
+    language: str = "",
+    imports: [str] = [],
+    importedBy: [str] = [],
+    importsIndexed: bool = false,
+    calls: [DirCall] = [],
+    calledBy: [DirCall] = [],
+    children: [str] = [],
+    files: int = 0,
+}
+
+export object DirsOptions {
+    layer: str = "",
+    language: str = "",
+    depth: int = 0,
+}
+
+export object Layer {
+    name: str = "",
+    declared: [str] = [],
+    dirs: [Dir] = [],
+}
+
+export object ProjectGraph {
+    nodes: [str] = [],
+    dependsOn: {str: [str]} = {},
+    blastRadius: {str: int} = {},
+}
+
+export object ImportGraph {
+    indexed: bool = false,
+    packages: {str: [str]} = {},
+    languages: {str: str} = {},
+}
+
+export object SymbolDecl {
+    node: str = "",
+    source: str = "",
+    language: str = "",
+    name: str = "",
+    kind: str = "",
+    owner: str = "",
+    doc: str = "",
+}
+
+export object SymbolIndexStatus {
+    project: ProjectRef = ProjectRef{},
+    op: str = "",
+    language: str = "",
+    freshness: SymbolIndexFreshness = SymbolIndexFreshness.none,
+    detail: str = "",
+    changed: [str] = [],
+    changedCount: int = 0,
+}
+
+export object Symbols {
+    symbols: [SymbolDecl] = [],
+    indexes: [SymbolIndexStatus] = [],
+}
+
+export object PrecedentScope {
+    layers: [str] = [],
+    language: str = "",
+}
+
+export object PrecedentKey {
+    @"from": str = "",
+    to: str = "",
+    maxImports: int = 0,
+    prefix: str = "",
+    @"type": str = "",
+    name: str = "",
+    order: [str] = [],
+}
+
+export object Case {
+    node: str = "",
+    source: str = "",
+    imports: [str] = [],
+}
+
+export object Precedent {
+    family: PrecedentFamily = PrecedentFamily.none,
+    scope: PrecedentScope = PrecedentScope{},
+    key: PrecedentKey = PrecedentKey{},
+    follow: int = 0,
+    cohort: int = 0,
+    share: double = 0.0,
+    established: bool = false,
+    cited: [Case] = [],
+    departures: [Case] = [],
+}
+
+export object Holds {
+    holds: [Precedent] = [],
+    indexes: [SymbolIndexStatus] = [],
+}
+
+export object UnreferencedEntry {
+    id: str = "",
+    label: str = "",
+    source: str = "",
+    kind: str = "",
+    language: str = "",
+}
+
+export object Unreferenced {
+    definition: str = "",
+    symbols: [UnreferencedEntry] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object DuplicationSite {
+    id: str = "",
+    label: str = "",
+    source: str = "",
+    endLine: int = 0,
+    distinct: [str] = [],
+    callers: int = 0,
+    foreignFiles: int = 0,
+    tested: bool = false,
+}
+
+export object DuplicationHistory {
+    commits: int = 0,
+    together: int = 0,
+    apart: int = 0,
+}
+
+export object DuplicationGroup {
+    members: [DuplicationSite] = [],
+    score: double = 0.0,
+    shared: [str] = [],
+    packages: [str] = [],
+    placement: DuplicationPlacement = DuplicationPlacement.none,
+    home: str = "",
+    shape: DuplicationShape = DuplicationShape.none,
+    removable: int = 0,
+    siblings: bool = false,
+    history: DuplicationHistory? = null,
+}
+
+export object Duplication {
+    definition: str = "",
+    groups: [DuplicationGroup] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
+export object TierOptions {
+    paths: [str] = [],
+    checkout: str = "",
+}
+
+export object TierEvidence {
+    path: str = "",
+    project: str = "",
+    target: str = "",
+    class: str = "",
+    tier: Tier = Tier.none,
+    why: str = "",
+    packages: [str] = [],
+}
+
+export object TierGateStep {
+    target: str = "",
+    projects: [str] = [],
+    op: str = "",
+    packages: [str] = [],
+    argv: [str] = [],
+}
+
+export object TierReport {
+    base: str = "",
+    target: str = "",
+    tier: Tier = Tier.none,
+    affected: [str] = [],
+    evidence: [TierEvidence] = [],
+    gate: [TierGateStep] = [],
+}
+
+export object DiffOptions {
+    root: str = "",
+    dir: str = "",
+    stdin: str = "",
+    quiet: bool = false,
+    allowFailure: bool = false,
+    @"from": str = "",
+    baseline: str = "",
+    rev: str = "",
+    patch: str = "",
+    minCohort: int = 0,
+    minShare: double = 0.0,
+}
+
 export object ImpactCoverage {
     ratio: double = 0.0,
     covered: int = 0,
     total: int = 0,
-}
-
-export object Check {
-    name: str = "",
-    status: CheckStatus = CheckStatus.none,
-    message: str = "",
-    details: [str] = [],
-    evidence: str = "",
-    fix: [str] = [],
 }
 
 export object DiffPublicPath {
@@ -316,16 +1876,6 @@ export object DiffOrder {
     count: DiffOrderCount = DiffOrderCount{},
 }
 
-export object VCSCheckpoint {
-    revision: str = "",
-    branch: str = "",
-    dirty: bool = false,
-    patchDigest: str = "",
-    untrackedDigest: str = "",
-    vcs: str = "",
-    preserved: str = "",
-}
-
 export object DiffReviewed {
     at: VCSCheckpoint = VCSCheckpoint{},
     files: int = 0,
@@ -335,6 +1885,7 @@ export object Diagnostic {
     code: str = "",
     message: str = "",
     url: str = "",
+    fix: str = "",
 }
 
 export object DiffUncovered {
@@ -363,86 +1914,6 @@ export object Diff {
     unread: DiffUnread? = null,
 }
 
-export object DirCall {
-    dir: str = "",
-    transport: str = "",
-    marker: str = "",
-    source: str = "",
-}
-
-export object Dir {
-    path: str = "",
-    id: str = "",
-    layer: str = "",
-    language: str = "",
-    imports: [str] = [],
-    importedBy: [str] = [],
-    importsIndexed: bool = false,
-    calls: [DirCall] = [],
-    calledBy: [DirCall] = [],
-    children: [str] = [],
-    files: int = 0,
-}
-
-export object DirsOptions {
-    layer: str = "",
-    language: str = "",
-    depth: int = 0,
-}
-
-export object DoctorSummary {
-    ok: int = 0,
-    fail: int = 0,
-    advice: int = 0,
-    unknown: int = 0,
-}
-
-export object DoctorReport {
-    workspace: str = "",
-    checks: [Check] = [],
-    summary: DoctorSummary = DoctorSummary{},
-}
-
-export object KnowledgeNode {
-    id: str = "",
-    kind: str = "",
-    label: str = "",
-    doc: str = "",
-    source: str = "",
-    attrs: {str: str} = {},
-}
-
-export object EdgeRef {
-    relation: str = "",
-    direction: str = "",
-    other: str = "",
-    otherKind: str = "",
-    otherLabel: str = "",
-    provenance: str = "",
-    attrs: {str: str} = {},
-}
-
-export object PublicSymbol {
-    id: str = "",
-    label: str = "",
-    dir: str = "",
-    signature: str = "",
-    usedBy: int = 0,
-}
-
-export object ExplainResult {
-    definition: str = "",
-    schemaVersion: int = 0,
-    node: KnowledgeNode = KnowledgeNode{},
-    blastRadius: int = 0,
-    @"out": [EdgeRef] = [],
-    @"in": [EdgeRef] = [],
-    docsURL: str = "",
-    resolution: KnowledgeResolution = KnowledgeResolution.none,
-    publicAPI: [PublicSymbol] = [],
-    publicAPIGap: str = "",
-}
-
 export object ImpactSymbol {
     file: str = "",
     symbol: str = "",
@@ -468,10 +1939,66 @@ export object Impact {
     notes: [str] = [],
 }
 
-export object ImportGraph {
-    indexed: bool = false,
-    packages: {str: [str]} = {},
-    languages: {str: str} = {},
+export object Affected {
+    base: str = "",
+    changed: [str] = [],
+    seed: [str] = [],
+    filesBySeed: {str: [str]} = {},
+    affected: [str] = [],
+    undeclaredBySeed: {str: [str]} = {},
+}
+
+export object ConformanceKey {
+    metric: ConformanceMetric = ConformanceMetric.none,
+    population: ConformancePopulation = ConformancePopulation.none,
+    scope: str = "",
+}
+
+export object ConformanceItem {
+    id: str = "",
+    source: str = "",
+    measure: int = 0,
+    home: str = "",
+    unshared: bool = false,
+    rename: str = "",
+}
+
+export object ConformanceRow {
+    key: ConformanceKey = ConformanceKey{},
+    n: int = 0,
+    p50: int = 0,
+    p90: int = 0,
+    p95: int = 0,
+    p99: int = 0,
+    live: int = 0,
+    value: int = 0,
+    propose: int = 0,
+    violations: [ConformanceItem] = [],
+}
+
+export object ConformanceCeiling {
+    key: ConformanceKey = ConformanceKey{},
+    file: str = "",
+    base: int = 0,
+    head: int = 0,
+    violations: [ConformanceItem] = [],
+}
+
+export object ConformanceUnmeasured {
+    file: str = "",
+    language: str = "",
+    reason: str = "",
+}
+
+export object ConformanceReport {
+    definition: str = "",
+    rows: [ConformanceRow] = [],
+    excluded: int = 0,
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+    base: str = "",
+    ceilings: [ConformanceCeiling] = [],
+    unmeasured: [ConformanceUnmeasured] = [],
+    indexes: [SymbolIndexStatus] = [],
 }
 
 export object Node {
@@ -555,426 +2082,95 @@ export object Trend {
     projects: [TrendEntry] = [],
 }
 
-export object VolatilityTarget {
-    project: str = "",
-    target: str = "",
-    score: double = 0.0,
-    volatile: bool = false,
-    pass: int = 0,
-    fail: int = 0,
-    volatileCount: int = 0,
-    samples: int = 0,
-    lastPass: str = "",
-}
-
-export object Volatility {
-    threshold: double = 0.0,
-    targets: [VolatilityTarget] = [],
-}
-
-export object UnreferencedEntry {
-    id: str = "",
-    label: str = "",
-    source: str = "",
-    kind: str = "",
-    language: str = "",
-}
-
-export object ProjectRef {
+export object FileChange {
     path: str = "",
-    name: str = "",
-    dir: str = "",
+    prevPath: str = "",
+    status: ChangeStatus = ChangeStatus.none,
 }
 
-export object KnowledgeSymbolGap {
-    project: ProjectRef = ProjectRef{},
-    language: str = "",
-    state: SymbolIndexFreshness = SymbolIndexFreshness.none,
-    detail: str = "",
-    hint: str = "",
-}
-
-export object KnowledgeTextPresence {
-    hits: int = 0,
-    files: int = 0,
-    sites: [str] = [],
-    more: int = 0,
-}
-
-export object KnowledgeIndexCause {
-    why: str = "",
-    fix: str = "",
-}
-
-export object KnowledgeAnswer {
-    verdict: str = "",
-    reason: str = "",
-    gaps: [KnowledgeSymbolGap] = [],
-    staleIndexes: [str] = [],
-    text: KnowledgeTextPresence? = null,
-    indexCause: KnowledgeIndexCause? = null,
-}
-
-export object Unreferenced {
-    definition: str = "",
-    symbols: [UnreferencedEntry] = [],
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-}
-
-export object DuplicationSite {
-    id: str = "",
-    label: str = "",
-    source: str = "",
-    endLine: int = 0,
-    distinct: [str] = [],
-    callers: int = 0,
-    foreignFiles: int = 0,
-    tested: bool = false,
-}
-
-export object DuplicationHistory {
-    commits: int = 0,
-    together: int = 0,
-    apart: int = 0,
-}
-
-export object DuplicationGroup {
-    members: [DuplicationSite] = [],
-    score: double = 0.0,
-    shared: [str] = [],
-    packages: [str] = [],
-    placement: str = "",
-    home: str = "",
-    shape: str = "",
-    removable: int = 0,
-    siblings: bool = false,
-    history: DuplicationHistory? = null,
-}
-
-export object Duplication {
-    definition: str = "",
-    groups: [DuplicationGroup] = [],
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-}
-
-export object ConformanceKey {
-    metric: str = "",
-    population: str = "",
-    scope: str = "",
-}
-
-export object ConformanceItem {
-    id: str = "",
-    source: str = "",
-    measure: int = 0,
-    home: str = "",
-    unshared: bool = false,
-    rename: str = "",
-}
-
-export object ConformanceRow {
-    key: ConformanceKey = ConformanceKey{},
-    n: int = 0,
-    p50: int = 0,
-    p90: int = 0,
-    p95: int = 0,
-    p99: int = 0,
-    live: int = 0,
-    value: int = 0,
-    anchor: int = 0,
-    propose: int = 0,
-    known: int = 0,
-    source: str = "",
-    violations: [ConformanceItem] = [],
-}
-
-export object ConformanceKnown {
-    metric: str = "",
-    items: [str] = [],
-    reason: str = "",
-    shapes: {str: str} = {},
-}
-
-export object ConformanceCarry {
-    metric: str = "",
-    @"from": str = "",
-    to: [str] = [],
-}
-
-export object Conformance {
-    definition: str = "",
-    rows: [ConformanceRow] = [],
-    stale: [ConformanceKnown] = [],
-    carried: [ConformanceCarry] = [],
-    ambiguous: [ConformanceCarry] = [],
-    shapes: {str: str} = {},
-    excluded: int = 0,
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-}
-
-export object ModelTierRecord {
-    rank: int = 0,
-    modelTier: str = "",
-    kind: JobKind = JobKind.check,
-    jobs: int = 0,
-    pass: int = 0,
-    fail: int = 0,
-    noReturn: int = 0,
-    passLower: double = 0.0,
-    checksPerJob: double = 0.0,
-    forksPerID: double = 0.0,
-    reworkPerJob: double = 0.0,
-    wideningsPerJob: double = 0.0,
-    meanCostUSD: double? = null,
-    medianTokens: int? = null,
-    firstAttempts: int = 0,
-    firstPass: int = 0,
-    firstPassLower: double = 0.0,
-    notRetryable: int = 0,
-}
-
-export object ModelTierOutput {
-    definition: str = "",
-    rows: [ModelTierRecord] = [],
-}
-
-export object GroupingRecord {
-    shape: GroupingShape = GroupingShape.none,
-    verdict: GroupingVerdict = GroupingVerdict.none,
-    jobs: int = 0,
-    groups: int = 0,
-    known: int = 0,
-    passLower: double? = null,
-    setupTokensMedian: int? = null,
-    setupShare: double? = null,
-    contextPerGroup: double? = null,
-    wallMsPerGroup: double? = null,
-    denialsPerJob: double? = null,
-    unattributedPerJob: double? = null,
-    reworkPerJob: double? = null,
-    wideningsPerJob: double? = null,
-}
-
-export object Grouping {
-    definition: str = "",
-    minSample: int = 0,
-    unclassified: int = 0,
-    rows: [GroupingRecord] = [],
-}
-
-export object InsightReport {
-    hotspots: Hotspots = Hotspots{},
-    affinity: Affinity = Affinity{},
-    ownership: Ownership = Ownership{},
-    trend: Trend = Trend{},
-    volatility: Volatility = Volatility{},
-    unreferenced: Unreferenced = Unreferenced{},
-    duplication: Duplication = Duplication{},
-    conformance: Conformance = Conformance{},
-    modelTiers: ModelTierOutput = ModelTierOutput{},
-    grouping: Grouping = Grouping{},
-}
-
-export object Layer {
-    name: str = "",
-    declared: [str] = [],
-    dirs: [Dir] = [],
-}
-
-export object NeighborhoodOptions {
-    depth: int = 0,
-    relations: [str] = [],
-    direction: str = "",
-    collapse: [str] = [],
-}
-
-export object KnowledgeEdge {
-    source: str = "",
-    target: str = "",
-    relation: str = "",
-    confidence: str = "",
-    score: double = 0.0,
-    provenance: str = "",
-    attrs: {str: str} = {},
-}
-
-export object KnowledgeFold {
-    prefix: str = "",
-    node: str = "",
-    folded: int = 0,
-}
-
-export object NeighborhoodResult {
-    definition: str = "",
-    schemaVersion: int = 0,
-    focus: str = "",
-    resolution: KnowledgeResolution = KnowledgeResolution.none,
-    options: NeighborhoodOptions = NeighborhoodOptions{},
-    nodes: [KnowledgeNode] = [],
-    links: [KnowledgeEdge] = [],
-    folds: [KnowledgeFold] = [],
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-}
-
-export object OutputRecord {
-    ref: str = "",
-    project: str = "",
-    target: str = "",
-    failed: bool = false,
-    durationMs: int = 0,
-    output: str = "",
-}
-
-export object PathOptions {
-    relations: [str] = [],
-}
-
-export object PathStep {
-    @"from": str = "",
-    to: str = "",
-    relation: str = "",
-    forward: bool = false,
-}
-
-export object PathResult {
-    definition: str = "",
-    schemaVersion: int = 0,
-    @"from": str = "",
-    to: str = "",
-    found: bool = false,
-    steps: [PathStep] = [],
-}
-
-export object Graph {
-    nodes: [str] = [],
-    dependsOn: {str: [str]} = {},
-    blastRadius: {str: int} = {},
-}
-
-export object KnowledgeTermScore {
-    term: str = "",
-    field: str = "",
-    score: double = 0.0,
-}
-
-export object KnowledgeListRank {
-    list: str = "",
-    rank: int = 0,
-}
-
-export object KnowledgeMatchWhy {
-    matched: int = 0,
-    of: int = 0,
-    terms: [KnowledgeTermScore] = [],
-    lists: [KnowledgeListRank] = [],
-    seeds: [str] = [],
-    prior: double = 0.0,
-}
-
-export object Match {
-    id: str = "",
-    kind: str = "",
-    label: str = "",
-    score: int = 0,
-    why: KnowledgeMatchWhy? = null,
-    staleness: str = "",
-    outrunDays: int = 0,
-}
-
-export object KnowledgeRanking {
-    weights: str = "",
-    reader: [str] = [],
-    skipped: [str] = [],
-    note: str = "",
-}
-
-export object QueryResult {
-    definition: str = "",
-    schemaVersion: int = 0,
-    query: str = "",
-    budget: int = 0,
-    matchCount: int = 0,
-    offset: int = 0,
-    matches: [Match] = [],
-    nodes: [KnowledgeNode] = [],
-    links: [KnowledgeEdge] = [],
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
-    ranking: KnowledgeRanking? = null,
-}
-
-export object RefSite {
-    file: str = "",
-    count: int = 0,
+export object RegionChange {
+    file: FileChange = FileChange{},
+    side: RegionSide = RegionSide.none,
     lines: [int] = [],
+    declaration: str = "",
+    driver: str = "",
 }
 
-export object RefsResult {
-    definition: str = "",
-    schemaVersion: int = 0,
-    symbol: str = "",
-    label: str = "",
-    fileCount: int = 0,
-    refCount: int = 0,
-    defs: [RefSite] = [],
-    refs: [RefSite] = [],
-    signature: str? = null,
-    answer: KnowledgeAnswer = KnowledgeAnswer{},
+export object JobStatus {
+    job: str = "",
+    verified: bool = false,
+    violations: [str] = [],
+    unresolvedRisks: [str] = [],
+    command: str = "",
+    gates: [GateStatus] = [],
+    notes: [str] = [],
+    staleIndexes: [str] = [],
+    footprint: [RegionChange] = [],
+    footprintKnown: bool = false,
+    footprintReason: str = "",
+    footprintUnclaimed: [str] = [],
+    entries: [JobEntry] = [],
+    linesAdded: int = 0,
+    linesDeleted: int = 0,
+    undeclaredExports: [str] = [],
+    leftUnreferenced: [str] = [],
+    symbolDeltaKnown: bool = false,
+    observedGeneration: int = 0,
+    priorGeneration: int = 0,
 }
 
-export object Skill {
-    name: str = "",
-    description: str = "",
-    source: str = "",
-    form: str = "",
-    body: str = "",
-    current: bool = false,
+export object JobRegistration {
+    job: Job = Job{},
+    advice: str = "",
 }
 
-export object KnowledgeGodNode {
+export object TrailObservation {
+    at: int = 0,
+    agent: str = "",
+    lease: str = "",
+    tool: str = "",
+    command: str = "",
+    path: str = "",
+    decision: str = "",
+    rule: str = "",
+    nexts: [str] = [],
+    preauthorizedBy: str = "",
+    shape: str = "",
+    shapes: [str] = [],
+}
+
+export object TrailSpawn {
+    at: int = 0,
+    agent: str = "",
+    child: str = "",
+    lease: str = "",
+    model: str = "",
+}
+
+export object Trail {
+    session: str = "",
+    host: str = "",
+    start: int = 0,
+    end: int = 0,
+    checkouts: [str] = [],
+    observations: [TrailObservation] = [],
+    spawns: [TrailSpawn] = [],
+}
+
+export object TrailMark {
     id: str = "",
-    kind: str = "",
-    label: str = "",
-    degree: int = 0,
-    @"in": int = 0,
-    @"out": int = 0,
-}
-
-export object KnowledgeOrphan {
-    id: str = "",
-    kind: str = "",
-    label: str = "",
-    reason: str = "",
-}
-
-export object KnowledgeDocCoverage {
-    kind: str = "",
-    total: int = 0,
-    documented: int = 0,
-    percent: int = 0,
-    undocumented: [str] = [],
-}
-
-export object KnowledgeStats {
-    definition: str = "",
-    nodeCount: int = 0,
-    edgeCount: int = 0,
-    gods: [KnowledgeGodNode] = [],
-    orphans: [KnowledgeOrphan] = [],
-    coverage: [KnowledgeDocCoverage] = [],
-    isolatedCount: int = 0,
-    componentCount: int = 0,
-    largestComponentSize: int = 0,
-}
-
-export object SymbolIndexDigest {
-    digest: str = "",
-    indexed: bool = false,
-    projects: [str] = [],
-    gaps: [KnowledgeSymbolGap] = [],
+    section: TrailSection = TrailSection.none,
+    key: str = "",
+    rule: str = "",
+    verdict: TrailVerdict = TrailVerdict.none,
+    note: str = "",
+    session: str = "",
+    at: int = 0,
+    examples: [str] = [],
 }
 
 export object GuardVerdict {
-    decision: str = "",
+    decision: GuardDecision = GuardDecision.none,
     reason: str = "",
     rule: str = "",
 }
@@ -984,294 +2180,11 @@ export object GuardBinary {
     stamp: str = "",
 }
 
-export object JobModelTier {
-    name: str = "",
-    rank: int = 0,
-    skills: SkillVariant = SkillVariant.short,
-    source: ModelTierSource = ModelTierSource.row,
-    reason: str = "",
-    site: str = "",
-    model: str = "",
-}
-
-export object ClaimEvidence {
-    kind: ClaimKind = ClaimKind.none,
-    subject: str = "",
-}
-
-export object Grant {
-    tokens: int = 0,
-    mcp: int = 0,
-    console: int = 0,
-}
-
-export object Credential {
-    class: str = "",
-    id: str = "",
-    name: str = "",
-    grant: Grant = Grant{},
-}
-
-export object Origin {
-    user: str = "",
-    uid: str = "",
-    entryPoint: str = "",
-    host: str = "",
-    session: str = "",
-    agent: str = "",
-    credential: Credential = Credential{},
-}
-
-export object JobClaim {
-    path: str = "",
-    evidence: ClaimEvidence = ClaimEvidence{},
-    proof: str = "",
-    at: int = 0,
-    by: Origin = Origin{},
-}
-
-export object GateStatus {
-    id: str = "",
-    verified: bool = false,
-    outputRef: str = "",
-    scope: str = "",
-    owed: str = "",
-    violations: [str] = [],
-}
-
-export object JobDenial {
-    rule: str = "",
-    reason: str = "",
-    action: str = "",
-    verdictRef: str = "",
-    ts: int = 0,
-}
-
-export object RetryVerdict {
-    retryable: bool = false,
-    change: str = "",
-    reason: str = "",
-    code: str = "",
-}
-
-export object PriorAttempt {
-    n: int = 0,
-    state: str = "",
-    observedGeneration: int = 0,
-    endReason: str = "",
-    modelTier: str = "",
-    checkpoint: str = "",
-    reportedBase: str = "",
-    ended: int = 0,
-    reworkRounds: int = 0,
-    widenings: int = 0,
-    unmet: [GateStatus] = [],
-    violations: [str] = [],
-    unresolvedRisks: [str] = [],
-    failingRefs: [str] = [],
-    denials: [JobDenial] = [],
-    denialsKnown: bool = false,
-    retry: RetryVerdict = RetryVerdict{},
-}
-
-export object JobRejection {
-    unmet: [GateStatus] = [],
-    violations: [str] = [],
-    at: int = 0,
-    observedGeneration: int = 0,
-}
-
-export object LeaseCheck {
-    target: str = "",
-    script: str = "",
-    project: str = "",
-    args: [str] = [],
-    noDefaultCharms: bool = false,
-    test: bool = false,
-}
-
-export object Goal {
-    id: str = "",
-    description: str = "",
-    dependsOn: [str] = [],
-    kind: str = "",
-    expect: str = "",
-    check: LeaseCheck = LeaseCheck{},
-    paths: [str] = [],
-    symbols: [str] = [],
-    signature: str = "",
-}
-
-export object JobRelease {
-    path: str = "",
-    digest: str = "",
-    releasedAt: int = 0,
-    revoked: bool = false,
-    takenBy: str = "",
-    deadBecause: str = "",
-}
-
-export object JobUnattributedWrite {
-    path: str = "",
-    digest: str = "",
-    at: int = 0,
-}
-
-export object JobEntry {
-    path: str = "",
-    by: Origin = Origin{},
-    at: int = 0,
-    consumed: int = 0,
-}
-
-export object Deviation {
-    code: str = "",
-    subject: str = "",
-    reason: str = "",
-}
-
-export object JobWorktree {
-    root: str = "",
-    source: str = "",
-    base: str = "",
-    created: int = 0,
-    binary: str = "",
-    removed: int = 0,
-    kept: str = "",
-}
-
-export object JobResultValidation {
-    command: str = "",
-    outputRef: str = "",
-    owed: str = "",
-}
-
-export object GateEvidence {
-    gateID: str = "",
-    outputRef: str = "",
-    owed: str = "",
-}
-
-export object JobResult {
-    schemaVersion: int = 0,
-    requires: [str] = [],
-    job: str = "",
-    changedPaths: [str] = [],
-    validation: JobResultValidation = JobResultValidation{},
-    gateEvidence: [GateEvidence] = [],
-    descendants: [str] = [],
-    unresolvedRisks: [str] = [],
-    observedGeneration: int = 0,
-}
-
-export object JobAttempt {
-    found: bool = false,
-    ref: str = "",
-    timestampMs: int = 0,
-    project: str = "",
-    target: str = "",
-    spell: str = "",
-    failed: bool = false,
-    attemptID: str = "",
-    durationMs: int = 0,
-    revision: str = "",
-    dirty: bool = false,
-    lease: str = "",
-    extraArgs: [str] = [],
-    observedGeneration: int = 0,
-}
-
-export object JobGateAttempt {
-    gateID: str = "",
-    attempt: JobAttempt = JobAttempt{},
-}
-
-export object JobRun {
-    invocation: str = "",
-    ended: int = 0,
-    durationMs: int = 0,
-    ok: bool = false,
-    error: str = "",
-    itemsRemoved: int = 0,
-    bytesReclaimed: int = 0,
-}
-
-export object JobIntegration {
-    checkout: str = "",
-    at: int = 0,
-    verified: bool = false,
-    gates: [GateStatus] = [],
-    observedGeneration: int = 0,
-}
-
-export object Job {
-    schemaVersion: int = 0,
-    requires: [str] = [],
-    id: str = "",
-    parent: str = "",
-    criteria: str = "",
-    checkpoint: str = "",
-    writePaths: [str] = [],
-    denyPaths: [str] = [],
-    softPaths: [str] = [],
-    readPaths: [str] = [],
-    dependsOn: [str] = [],
-    integrates: [str] = [],
-    breaks: [str] = [],
-    model: str = "",
-    modelTier: JobModelTier? = null,
-    briefFormat: BriefFormat = BriefFormat.none,
-    follows: str = "",
-    freshReason: str = "",
-    reworkRounds: int = 0,
-    widenings: int = 0,
-    claims: [JobClaim] = [],
-    generation: int = 0,
-    maxAttempts: int = 0,
-    maxClaims: int = 0,
-    weight: double = 0.0,
-    paused: int = 0,
-    pausedBy: Origin = Origin{},
-    pauseReason: str = "",
-    pausedUntil: int = 0,
-    attempts: int = 0,
-    prior: [PriorAttempt] = [],
-    rejection: JobRejection? = null,
-    check: LeaseCheck? = null,
-    validation: str = "",
-    goals: [Goal] = [],
-    state: str = "",
-    holder: str = "",
-    readOnly: bool = false,
-    releases: [JobRelease] = [],
-    unattributed: [JobUnattributedWrite] = [],
-    entries: [JobEntry] = [],
-    writeProof: str = "",
-    deviations: [Deviation] = [],
-    validated: int = 0,
-    reportedBase: str = "",
-    baseVerdict: str = "",
-    registeredBy: Origin = Origin{},
-    registered: int = 0,
-    checkoutRoot: str = "",
-    worktree: JobWorktree? = null,
-    endReason: str = "",
-    created: int = 0,
-    updated: int = 0,
-    deadline: int = 0,
-    result: JobResult? = null,
-    attempt: JobAttempt? = null,
-    gateAttempts: [JobGateAttempt] = [],
-    lastRun: JobRun? = null,
-    integration: JobIntegration? = null,
-    waiterEvidence: JobIntegration? = null,
-}
-
 export object ContextWindow {
     tokens: int = 0,
     window: int = 0,
     model: str = "",
-    source: str = "",
+    source: ContextSource = ContextSource.none,
 }
 
 export object SpawnTarget {
@@ -1284,7 +2197,7 @@ export object SpawnTarget {
 }
 
 export object SpawnRequest {
-    kind: str = "",
+    kind: SpawnKind = SpawnKind.none,
     host: str = "",
     session: str = "",
     model: str = "",
@@ -1297,12 +2210,12 @@ export object SpawnRequest {
     checkout: str = "",
     agent: str = "",
     parent: str = "",
-    role: str = "",
+    role: AgentRole = AgentRole.none,
     lease: Job? = null,
     modelTier: JobModelTier? = null,
-    thread: str = "",
-    threadFrom: str = "",
-    orchestration: str = "",
+    thread: AgentThread = AgentThread.none,
+    threadFrom: ThreadSource = ThreadSource.none,
+    orchestration: Orchestration = Orchestration.none,
     window: ContextWindow? = null,
     target: SpawnTarget? = null,
 }
@@ -1335,11 +2248,11 @@ export object CommandRequest {
     commands: [CommandInvocation] = [],
     agent: str = "",
     parent: str = "",
-    role: str = "",
+    role: AgentRole = AgentRole.none,
     lease: Job? = null,
-    thread: str = "",
-    threadFrom: str = "",
-    orchestration: str = "",
+    thread: AgentThread = AgentThread.none,
+    threadFrom: ThreadSource = ThreadSource.none,
+    orchestration: Orchestration = Orchestration.none,
     window: ContextWindow? = null,
     checkout: CheckoutState? = null,
     dir: str = "",
@@ -1352,17 +2265,36 @@ export object WriteRequest {
     session: str = "",
     agent: str = "",
     parent: str = "",
-    role: str = "",
+    role: AgentRole = AgentRole.none,
     lease: Job? = null,
-    thread: str = "",
-    threadFrom: str = "",
-    orchestration: str = "",
+    thread: AgentThread = AgentThread.none,
+    threadFrom: ThreadSource = ThreadSource.none,
+    orchestration: Orchestration = Orchestration.none,
     window: ContextWindow? = null,
     path: str = "",
     workspace: str = "",
     content: str = "",
     oldText: str = "",
     newText: str = "",
+}
+
+export object StopRequest {
+    host: str = "",
+    session: str = "",
+    agent: str = "",
+    parent: str = "",
+    role: AgentRole = AgentRole.none,
+    lease: Job? = null,
+    thread: AgentThread = AgentThread.none,
+    threadFrom: ThreadSource = ThreadSource.none,
+    orchestration: Orchestration = Orchestration.none,
+    window: ContextWindow? = null,
+    event: str = "",
+    stopHookActive: bool = false,
+    transcript: str = "",
+    checkout: CheckoutState? = null,
+    dir: str = "",
+    workspace: str = "",
 }
 
 export object BriefDecision {
@@ -1382,146 +2314,6 @@ export object Brief {
     why: str = "",
     decisions: [BriefDecision] = [],
     evidence: [BriefRef] = [],
-}
-
-export object JobOverlapFootprint {
-    verdict: str = "",
-    shared: [str] = [],
-    reason: str = "",
-}
-
-export object JobOverlap {
-    jobA: str = "",
-    jobB: str = "",
-    pathsA: [str] = [],
-    pathsB: [str] = [],
-    claims: str = "",
-    footprint: JobOverlapFootprint? = null,
-}
-
-export object JobBlock {
-    job: str = "",
-    on: str = "",
-    state: str = "",
-}
-
-export object JobReadOnly {
-    job: str = "",
-    lacks: [str] = [],
-}
-
-export object InflightNeighbour {
-    id: str = "",
-    evidence: str = "",
-    paths: [str] = [],
-    declarations: [str] = [],
-    units: [str] = [],
-    base: str = "",
-}
-
-export object InflightChange {
-    id: str = "",
-    title: str = "",
-    author: str = "",
-    head: str = "",
-    branch: str = "",
-    base: str = "",
-    fork: bool = false,
-    jobs: [str] = [],
-    intent: str = "",
-    mark: str = "",
-    decision: str = "",
-    code: str = "",
-    reason: str = "",
-    partition: int = 0,
-    position: int = 0,
-    below: str = "",
-    mine: bool = false,
-    attention: str = "",
-    neighbours: [InflightNeighbour] = [],
-}
-
-export object InflightFetch {
-    provider: str = "",
-    host: str = "",
-    base: str = "",
-    tip: str = "",
-    at: int = 0,
-    elapsedMS: int = 0,
-}
-
-export object JobList {
-    jobs: [Job] = [],
-    overlaps: [JobOverlap] = [],
-    overdue: [str] = [],
-    orphans: [str] = [],
-    stale: [str] = [],
-    blocked: [JobBlock] = [],
-    readOnly: [JobReadOnly] = [],
-    changes: [InflightChange] = [],
-    fetched: InflightFetch? = null,
-    unproposed: [str] = [],
-}
-
-export object FileChange {
-    path: str = "",
-    prevPath: str = "",
-    status: str = "",
-}
-
-export object RegionChange {
-    file: FileChange = FileChange{},
-    side: str = "",
-    lines: [int] = [],
-    declaration: str = "",
-    driver: str = "",
-}
-
-export object JobStatus {
-    job: str = "",
-    verified: bool = false,
-    violations: [str] = [],
-    unresolvedRisks: [str] = [],
-    command: str = "",
-    gates: [GateStatus] = [],
-    notes: [str] = [],
-    staleIndexes: [str] = [],
-    footprint: [RegionChange] = [],
-    footprintKnown: bool = false,
-    footprintReason: str = "",
-    footprintUnclaimed: [str] = [],
-    entries: [JobEntry] = [],
-    linesAdded: int = 0,
-    linesDeleted: int = 0,
-    undeclaredExports: [str] = [],
-    leftUnreferenced: [str] = [],
-    symbolDeltaKnown: bool = false,
-    observedGeneration: int = 0,
-    priorGeneration: int = 0,
-}
-
-export object ModelTierRequest {
-    id: str = "",
-    parent: str = "",
-    criteria: str = "",
-    readOnly: bool = false,
-    check: LeaseCheck? = null,
-    goals: [Goal] = [],
-    kind: JobKind = JobKind.check,
-    writePaths: [str] = [],
-    writeProjects: [str] = [],
-    readPaths: [str] = [],
-    dependsOn: [str] = [],
-    writeFiles: int = 0,
-    parentRank: int? = null,
-    declaredRank: int? = null,
-    declaredModel: str = "",
-    history: [ModelTierRecord] = [],
-}
-
-export object ModelTierBounds {
-    maxLive: int = 0,
-    maxContext: int = 0,
 }
 
 export object CharmDeclaration {
@@ -1580,7 +2372,7 @@ export object Target {
     slots: int = 0,
     memory_mb: int = 0,
     timeout: str = "",
-    drift: str = "",
+    drift: DriftPolicy = DriftPolicy.none,
     drift_reason: str = "",
     retry_on_volatile: bool = false,
     retry_on_volatile_reason: str = "",
@@ -1588,6 +2380,8 @@ export object Target {
     advisory_reason: str = "",
     human_only: bool = false,
     human_only_reason: str = "",
+    relinks: str = "",
+    integrates: str = "",
 }
 
 export object EvaluatedProject {
@@ -1722,12 +2516,13 @@ export object TargetGraph {
 }
 
 export object HarnessChange {
-    op: str = "",
+    op: HarnessChangeOp = HarnessChangeOp.none,
     key: str = "",
     value: any? = null,
 }
 
 export object HarnessFile {
+    bytes: [int] = [],
     exists: bool = false,
     fragment: {str: any?} = {},
     content: str = "",
@@ -1740,8 +2535,9 @@ export object HarnessWired {
     entries: [{str: any?}] = [],
 }
 
-export object HarnessPlan {
+export object HarnessInstallation {
     id: str = "",
+    guard: str = "",
     files: {str: HarnessFile} = {},
     merge: str = "",
     mcpHint: str = "",
@@ -1775,11 +2571,18 @@ export object ModuleMethodEntry {
     buzzStdlib: str = "",
 }
 
+export object ModuleObjectEntry {
+    name: str = "",
+    doc: str = "",
+    methods: [ModuleMethodEntry] = [],
+}
+
 export object Module {
     name: str = "",
     doc: str = "",
     fields: [ModuleFieldEntry] = [],
     methods: [ModuleMethodEntry] = [],
+    objects: [ModuleObjectEntry] = [],
 }
 
 export object ProjectEntry {
@@ -1807,7 +2610,7 @@ export object Rule {
     decision: str = "",
     workspace: str = "",
     fixed: bool = false,
-    verdicts: [str] = [],
+    verdicts: [GuardDecision] = [],
     catches: str = "",
     why: str = "",
 }
@@ -1928,86 +2731,98 @@ export object ServiceLease {
     idle: str = "",
 }
 
-export object TrailMark {
+export object ModelTierRequest {
     id: str = "",
-    section: str = "",
-    key: str = "",
-    rule: str = "",
-    verdict: str = "",
-    note: str = "",
-    session: str = "",
-    at: int = 0,
-    examples: [str] = [],
+    parent: str = "",
+    criteria: str = "",
+    readOnly: bool = false,
+    check: LeaseCheck? = null,
+    goals: [Goal] = [],
+    kind: JobKind = JobKind.check,
+    writePaths: [str] = [],
+    writeProjects: [str] = [],
+    readPaths: [str] = [],
+    dependsOn: [str] = [],
+    writeFiles: int = 0,
+    parentRank: int? = null,
+    declaredRank: int? = null,
+    declaredModel: str = "",
+    history: [ModelTierRecord] = [],
 }
 
-export object TrailObservation {
-    at: int = 0,
-    agent: str = "",
-    lease: str = "",
-    tool: str = "",
-    command: str = "",
-    path: str = "",
-    decision: str = "",
-    rule: str = "",
-    nexts: [str] = [],
-    preauthorizedBy: str = "",
-    shape: str = "",
-    shapes: [str] = [],
+export object ModelTierBounds {
+    maxLive: int = 0,
+    maxContext: int = 0,
 }
 
-export object TrailSpawn {
-    at: int = 0,
-    agent: str = "",
-    child: str = "",
-    lease: str = "",
-    model: str = "",
-}
+extern fun magus__Workspace__jobs(recv: Workspace) > JobList !> any;
+extern fun magus__Workspace__putJob(recv: Workspace, id: str, opts: {str: any} = {<str: any>}) > Job !> any;
+extern fun magus__Workspace__clearJobs(recv: Workspace) > int !> any;
+extern fun magus__Workspace__forkFacts(recv: Workspace) > JobForkFacts !> any;
+extern fun magus__Workspace__unmerged(recv: Workspace) > JobUnmergedReport !> any;
+extern fun magus__Workspace__tierOutcomes(recv: Workspace) > ModelTiers !> any;
+extern fun magus__Workspace__grouping(recv: Workspace) > Grouping !> any;
+extern fun magus__Workspace__volatility(recv: Workspace) > Volatility !> any;
+extern fun magus__Workspace__skills(recv: Workspace, opts: SkillsOptions? = null) > [Skill] !> any;
+extern fun magus__Workspace__attention(recv: Workspace, args: [str], opts: CommandOptions? = null) > AttentionList !> any;
+extern fun magus__Workspace__fileDiskAttention(recv: Workspace, message: str) > void !> any;
+extern fun magus__Workspace__diskReclaim(recv: Workspace) > DiskReclaim !> any;
+extern fun magus__Workspace__bustCache(recv: Workspace, projectPath: str = "") > void !> any;
+extern fun magus__Workspace__diagnoseDrift(recv: Workspace, outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
+extern fun magus__Graph__query(recv: Graph, query: str, opts: QueryOptions? = null) > QueryResult !> any;
+extern fun magus__Graph__explain(recv: Graph, node: str) > ExplainResult !> any;
+extern fun magus__Graph__path(recv: Graph, node: str, to: str, opts: PathOptions? = null) > PathResult !> any;
+extern fun magus__Graph__refs(recv: Graph, symbol: str, opts: RefsOptions? = null) > RefsResult !> any;
+extern fun magus__Graph__stats(recv: Graph, kind: str = "") > KnowledgeStats !> any;
+extern fun magus__Graph__neighborhood(recv: Graph, focus: str, opts: NeighborhoodOptions? = null) > NeighborhoodResult !> any;
+extern fun magus__Graph__dir(recv: Graph, path: str) > Dir !> any;
+extern fun magus__Graph__dirs(recv: Graph, glob: str, opts: DirsOptions? = null) > [Dir] !> any;
+extern fun magus__Graph__layer(recv: Graph, name: str) > Layer !> any;
+extern fun magus__Graph__projectGraph(recv: Graph) > ProjectGraph !> any;
+extern fun magus__Graph__imports(recv: Graph) > ImportGraph !> any;
+extern fun magus__Graph__symbols(recv: Graph) > Symbols !> any;
+extern fun magus__Graph__precedents(recv: Graph) > Holds !> any;
+extern fun magus__Graph__unreferenced(recv: Graph) > Unreferenced !> any;
+extern fun magus__Graph__duplication(recv: Graph) > Duplication !> any;
+extern fun magus__Change__tier(recv: Change, target: str, opts: TierOptions? = null) > TierReport !> any;
+extern fun magus__Change__diff(recv: Change, opts: DiffOptions? = null) > Diff !> any;
+extern fun magus__Change__impact(recv: Change, opts: CommandOptions? = null) > Impact !> any;
+extern fun magus__Change__affected(recv: Change) > Affected !> any;
+extern fun magus__Change__conformance(recv: Change, checks: [str] = [<str>]) > ConformanceReport !> any;
+extern fun magus__Change__mergeBase(recv: Change) > str !> any;
+extern fun magus__History__hotspots(recv: History) > Hotspots !> any;
+extern fun magus__History__affinity(recv: History) > Affinity !> any;
+extern fun magus__History__ownership(recv: History) > Ownership !> any;
+extern fun magus__History__trend(recv: History) > Trend !> any;
+extern fun magus__Job__exit(recv: Job, result: {str: any} = {<str: any>}) > Job !> any;
+extern fun magus__Job__wait(recv: Job, result: {str: any} = {<str: any>}) > JobStatus !> any;
+extern fun magus__Job__register(recv: Job) > JobRegistration !> any;
+extern fun magus__Session__trail(recv: Session) > Trail !> any;
+extern fun magus__Session__marks(recv: Session) > [TrailMark] !> any;
+extern fun magus__Session__mark(recv: Session, mark: TrailMark) > TrailMark !> any;
 
-export object Trail {
-    session: str = "",
-    host: str = "",
-    start: int = 0,
-    end: int = 0,
-    checkouts: [str] = [],
-    observations: [TrailObservation] = [],
-    spawns: [TrailSpawn] = [],
-}
-
-export extern fun affected(base: str = "") > Affected !> any;
-export extern fun attention(args: [str], opts: {str: any} = {<str: any>}) > {str: any} !> any;
-export extern fun bustCache(project_path: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
-export extern fun clean(args: [str], opts: {str: any} = {<str: any>}) > CleanReport !> any;
-export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
-export extern fun conformance() > {str: any} !> any;
-export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
-export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
-export extern fun dir(path: str) > Dir !> any;
-export extern fun dirs(glob: str, opts: DirsOptions = {<str: any>}) > [Dir] !> any;
-export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
-export extern fun explain(node: str) > ExplainResult !> any;
+export extern fun change(base: str = "", opts: ChangeOptions? = null) > Change !> any;
+export extern fun clean(args: [str], opts: CommandOptions? = null) > CleanReport !> any;
+export extern fun cmd(sub: str, args: [str], opts: CommandOptions? = null) > ExecResult !> any;
+export extern fun diagnosticCode(text: str) > DiagnosticCode !> any;
+export extern fun doctor(args: [str], opts: CommandOptions? = null) > DoctorReport !> any;
 export extern fun fatal(msg: str = "") > void;
+export extern fun graph() > Graph !> any;
 export extern fun hasCharm(name: str) > bool;
-export extern fun impact(base: str = "", opts: {str: any} = {<str: any>}) > Impact !> any;
-export extern fun importGraph() > ImportGraph !> any;
-export extern fun insight(opts: {str: any} = {<str: any>}) > InsightReport !> any;
-export extern fun layer(name: str) > Layer !> any;
-export extern fun neighborhood(focus: str, opts: NeighborhoodOptions = {<str: any>}) > NeighborhoodResult !> any;
+export extern fun history(opts: HistoryMetricsOptions? = null) > History !> any;
+export extern fun job(id: str) > Job !> any;
+export extern fun modelTier(matrix: fun (req: ModelTierRequest) > any !> any) > void;
+export extern fun modelTiers(tiers: any, default: any = null, hosts: any = null, bounds: any = null, skills: any = null) > void;
 export extern fun output(ref: str) > OutputRecord !> any;
-export extern fun path(node: str, to: str, opts: PathOptions = {<str: any>}) > PathResult !> any;
-export extern fun precedents() > {str: any} !> any;
 export extern fun project(config: any, opts: any = null) > void;
-export extern fun projectGraph() > Graph !> any;
 export extern fun pry() > void;
-export extern fun query(query: str, opts: {str: any} = {<str: any>}) > QueryResult !> any;
-export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
-export extern fun refs(symbol: str, opts: {str: any} = {<str: any>}) > RefsResult !> any;
-export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
-export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
-export extern fun stats(kind: str = "") > KnowledgeStats !> any;
-export extern fun symbolIndexDigest() > SymbolIndexDigest !> any;
-export extern fun symbols() > {str: any} !> any;
+export extern fun raise(code: DiagnosticCode, message: str, opts: RaiseOptions? = null) > void !> any;
+export extern fun run(args: [str], opts: CommandOptions? = null) > ExecResult !> any;
+export extern fun session(opts: SessionOptions? = null) > Session !> any;
 export extern fun where(dir: str) > str !> any;
+export extern fun workspace(dir: str = "") > Workspace !> any;
+export extern fun workspaceProvider(spell: {str: any}) > void;
 // Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this module hard to read.
 export object log {
     static extern fun debug(msg: str = "", fields: {str: str} = {<str: str>}) > void;
@@ -2038,12 +2853,15 @@ export object guard {
     static extern fun deny(text: str, opts: {str: any} = {<str: any>}) > GuardVerdict;
     static extern fun once(key: str) > bool;
     static extern fun profile(level: str) > void;
+    static extern fun shape(command: str) > str;
+    static extern fun shapes(command: str) > [str];
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: fun (req: SpawnRequest) > GuardVerdict !> any) > void;
+    static extern fun stop(rule: fun (req: StopRequest) > GuardVerdict !> any) > void;
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
 }
 
-// Agent-host harness selection. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarnessConfig, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.
+// Agent-host harness selection. A harness is a spell that exports the harness contract's mgs_ functions (mgs_getHarness, mgs_listEntries, mgs_getMcp, ...), the same family as cache.remote and ci.provider.
 export object harness {
     static extern fun provider(spell: {str: any}) > str;
 }
@@ -2065,59 +2883,28 @@ export object lifecycle {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// Workspace-level declarations made from the root magusfile.
-export object workspace {
-    static extern fun provider(spell: {str: any}) > void;
-}
-
-// The declared job store: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the client MCP tool (magus\job) and `magus job` (fork, exec, exit, wait) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildJob), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
-export object job {
-    static extern fun clear() > int !> any;
-    static extern fun exit(id: str, result: {str: any} = {<str: any>}) > Job !> any;
-    static extern fun list() > JobList !> any;
-    static extern fun modelTier(matrix: fun (req: ModelTierRequest) > any !> any) > void;
-    static extern fun modelTiers(tiers: any, default: any = null, hosts: any = null, bounds: any = null, skills: any = null) > void;
-    static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
-    static extern fun register(id: str) > {str: any} !> any;
-    static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
-}
-
 // Typed reads of what `magus describe <noun>` prints, one method per noun: `magus\describe.spell("go")` returns the Spell records `magus describe spell go -o json` carries. A method whose noun takes a name takes it as an optional SELECTOR and returns a collection either way, so detailing one reads `[0]`. A report that carries more than its collection (a file classification's overlaps, the tools' lifecycle state) comes back whole. The methods that fork a nested magus work from a `magus buzz` script with no workspace loaded; opts.root and opts.dir are as for magus\run. Bound by hand in internal/interp/bindings (buildDescribe): a Namespace's methods are Extern by construction. A noun with no method here is reached through magus\cmd("describe", [...]).
 export object describe {
-    static extern fun charm(name: str = "", opts: {str: any} = {<str: any>}) > [CharmEntry] !> any;
-    static extern fun evaluatedProject(path: str = "", opts: {str: any} = {<str: any>}) > [EvaluatedProject] !> any;
-    static extern fun evaluatedTarget(ref: str, opts: {str: any} = {<str: any>}) > [EvaluatedTarget] !> any;
-    static extern fun file(paths: [str], opts: {str: any} = {<str: any>}) > FileReport !> any;
-    static extern fun graph(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
-    static extern fun graphMarkdown(projects: [str] = [<str>], opts: {str: any} = {<str: any>}) > str !> any;
-    static extern fun harness(id: str) > HarnessPlan !> any;
-    static extern fun mcpTool(name: str = "", opts: {str: any} = {<str: any>}) > [MCPTool] !> any;
+    static extern fun charm(name: str = "", opts: CommandOptions? = null) > [CharmEntry] !> any;
+    static extern fun evaluatedProject(path: str = "", opts: CommandOptions? = null) > [EvaluatedProject] !> any;
+    static extern fun evaluatedTarget(ref: str, opts: CommandOptions? = null) > [EvaluatedTarget] !> any;
+    static extern fun file(paths: [str], opts: CommandOptions? = null) > FileReport !> any;
+    static extern fun graph(opts: CommandOptions? = null) > TargetGraph !> any;
+    static extern fun graphMarkdown(projects: [str] = [<str>], opts: CommandOptions? = null) > str !> any;
+    static extern fun harness(id: str) > HarnessInstallation !> any;
+    static extern fun mcpTool(name: str = "", opts: CommandOptions? = null) > [MCPTool] !> any;
     static extern fun module(name: str = "") > [Module] !> any;
     static extern fun project() > Projects !> any;
-    static extern fun rule(name: str = "", opts: {str: any} = {<str: any>}) > [Rule] !> any;
-    static extern fun spell(name: str = "", opts: {str: any} = {<str: any>}) > [Spell] !> any;
-    static extern fun target(opts: {str: any} = {<str: any>}) > [TargetEntry] !> any;
+    static extern fun rule(name: str = "", opts: CommandOptions? = null) > [Rule] !> any;
+    static extern fun spell(name: str = "", opts: CommandOptions? = null) > [Spell] !> any;
+    static extern fun target(opts: CommandOptions? = null) > [TargetEntry] !> any;
     static extern fun tool() > ToolReport !> any;
-    static extern fun workspace(opts: {str: any} = {<str: any>}) > [WorkspaceEntry] !> any;
+    static extern fun workspace(opts: CommandOptions? = null) > [WorkspaceEntry] !> any;
 }
 
 // Shared services a `magus buzz` script holds, the way a target holds one through ctx.needs: routed to the broker when one is up, so the service stays warm past the script, and hosted in-process otherwise. Every lease a script still holds is released when it ends, however it ends. Raises MGS1022 outside a workspace, and from a magusfile, where ctx.needs is the way to hold one. Bound by hand in internal/interp/bindings (buildService), for the reason magus\job is.
 export object service {
     static extern fun acquire(spell: str, op: str) > ServiceLease !> any;
     static extern fun release(lease: ServiceLease) > void !> any;
-}
-
-// Facts about the workspace's version control that only magus computes. The `vcs` host module is the repository itself; this namespace is magus's reading of it. Bound by hand in internal/interp/bindings (buildVCS).
-export object vcs {
-    static extern fun checkpoint() > VCSCheckpoint !> any;
-}
-
-// A session's guard record, read from the activity trail, and the verdicts a person gives its rows. Bound by hand in internal/interp/bindings (buildTrail).
-export object trail {
-    static extern fun mark(mark: TrailMark) > TrailMark !> any;
-    static extern fun marks() > [TrailMark] !> any;
-    static extern fun read(opts: {str: any} = {<str: any>}) > Trail !> any;
-    static extern fun shape(command: str) > str;
-    static extern fun shapes(command: str) > [str];
 }
 

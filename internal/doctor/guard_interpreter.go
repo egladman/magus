@@ -133,15 +133,14 @@ func worktreeWithoutBinary(root, cacheDir string) (types.Check, bool) {
 	}
 	details := []string{
 		"its guard hooks judge with the magus on PATH, which may not load this tree",
-		"the main session builds one ./magus per base and places a copy here",
 	}
 	served, _ := hint.MatchScripts(cacheDir, hint.SituationDoctor+guardBinaryCheck, nil)
 	for _, n := range served {
 		details = append(details, fmt.Sprintf("place it, from the main checkout: %s, to %s", n.Run, n.Why))
 	}
-	if info, err := os.Stat(filepath.Join(root, "cmd", "magus")); err == nil && info.IsDir() {
-		details = append(details,
-			fmt.Sprintf("on your own: build one with %s, or bootstrap it with the command the guard prints", hint.Run.With("build", ".")))
+	if len(served) == 0 {
+		details = append(details, fmt.Sprintf("no script in this workspace declares SERVES %q, so magus names none of its own",
+			hint.SituationDoctor+guardBinaryCheck))
 	}
 	return types.Check{
 		Name:    guardBinaryCheck,
@@ -215,7 +214,7 @@ func interpreterSkew(ctx context.Context, bin, own string) (types.Check, bool) {
 			Status:  types.CheckFail,
 			Message: fmt.Sprintf("the hook interpreter %s did not answer `version` (%s), so no guard hook it runs can render a verdict", bin, reason),
 			Details: []string{"rebuild: " + hint.Run.With("build", ".")},
-			Fix:     hint.Run.Argv("go-build", "."),
+			Fix:     hint.Run.Argv("build", "."),
 		}, true
 	}
 	if fields[1] == own {
@@ -230,6 +229,6 @@ func interpreterSkew(ctx context.Context, bin, own string) (types.Check, bool) {
 			"a hook runs the session root's ./magus when it is executable, else the first magus on PATH",
 			fmt.Sprintf("rebuild ./magus (%s), or put the right magus first on PATH; a live session keeps the binary it started with", hint.Run.With("build", ".")),
 		},
-		Fix: hint.Run.Argv("go-build", "."),
+		Fix: hint.Run.Argv("build", "."),
 	}, true
 }

@@ -137,11 +137,10 @@ final UP = "../";
 // pages answer "what can I run here"; this answers "what does changing it reach", which
 // no page showed before.
 //
-// It reads magus\projectGraph()'s typed view: nodes already in topological order (so the table
-// IS a valid build order, sorted by nobody here), each node's direct dependencies, and
-// its blast radius - the count of projects a change can transitively affect, which is
-// the number that tells a contributor whether an edit is contained or workspace-wide.
-fun workspaceDependencies(graph: magus\Graph) > str {
+// It reads magus\graph().projectGraph(), whose nodes are already in topological order.
+// So the table is a valid build order that nobody here sorts.
+// A node's blast radius says whether an edit is contained or workspace-wide.
+fun workspaceDependencies(graph: magus\ProjectGraph) > str {
     final nodes = graph.nodes;
     if (nodes.len() == 0) { return ""; }
 

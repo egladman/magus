@@ -1,10 +1,11 @@
 package types
 
-// HarnessPlan is what a host needs merged for one harness descriptor, computed against
-// the files on disk. Magus prints it and never writes it: the person runs Merge.
+// HarnessInstallation is what a host needs merged for one harness descriptor, computed against
+// the files on disk. Describe prints it; install and bootstrap apply the same changes.
 // `magus describe harness` prints it and magus\describe.harness returns it.
-type HarnessPlan struct {
-	ID string `json:"id"`
+type HarnessInstallation struct {
+	ID    string `json:"id"`
+	Guard string `json:"guard,omitempty"`
 	// Files is keyed by workspace-relative path and holds only the files missing something.
 	Files map[string]HarnessFile `json:"files,omitempty"`
 	// Merge is one POSIX shell command that brings every file in Files current, empty when
@@ -22,7 +23,7 @@ type HarnessPlan struct {
 }
 
 // Current reports whether every host file already carries what the descriptor declares.
-func (p HarnessPlan) Current() bool { return len(p.Files) == 0 }
+func (p HarnessInstallation) Current() bool { return len(p.Files) == 0 }
 
 // HarnessWired is one managed array in one host file: the file, the dotted key inside it,
 // and the entries the descriptor declares there, verbatim host JSON.
@@ -37,6 +38,8 @@ type HarnessWired struct {
 // Content as the whole file. A managed array appears in Fragment whole, with the entries a
 // person added kept in place, so replacing the array on disk is exactly the merge.
 type HarnessFile struct {
+	// Bytes is a whole binary file. JSON encodes it as base64; nil means absent.
+	Bytes    []byte          `json:"bytes"`
 	Exists   bool            `json:"exists"`
 	Fragment map[string]any  `json:"fragment,omitempty"`
 	Content  string          `json:"content,omitempty"`

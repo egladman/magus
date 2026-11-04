@@ -46,7 +46,10 @@ import { buildPanel, panelBehavior } from "./panel";
 // Each option is a different intent: show someone now, leave it up for a sitting, leave it up
 // today.
 const HOUR = 60 * 60;
+// auth.DefaultShareTTL, so the picker's default is the server's.
+const DEFAULT_SECONDS = 15 * 60;
 const DURATIONS: readonly { label: string; seconds: number }[] = [
+  { label: "15 minutes", seconds: DEFAULT_SECONDS },
   { label: "1 hour", seconds: HOUR },
   { label: "8 hours", seconds: 8 * HOUR },
   { label: "1 day", seconds: 24 * HOUR },
@@ -76,7 +79,7 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
   const body = shell.body;
   document.body.append(shell.el);
 
-  let selectedSeconds = DURATIONS[0].seconds;
+  let selectedSeconds = DEFAULT_SECONDS; // the first entry of DURATIONS
 
   // Dismissed by Escape, the close button, or an outside click. Sharing is a task with a half-made
   // choice in it, so focus moves in on open and back to the share button on close. The picker is
@@ -88,7 +91,7 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
       renderPicker();
       return body.querySelector<HTMLElement>("button");
     },
-    onChange: options.onChange,
+    ...(options.onChange ? { onChange: options.onChange } : {}),
   });
 
   // renderPicker draws phase 1: the duration toggle-group + Generate + a disclosure.
@@ -132,7 +135,7 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
     const note = document.createElement("p");
     note.className = "console-shell-share__note";
     note.textContent =
-      "Any device on the same network can open the link. It is read-only, and expires on its own.";
+      "Any device on the same network can open the link. It is read-only, and expires on its own. It travels over plaintext HTTP, so anyone on this network can read it.";
     body.append(note);
 
     const gen = document.createElement("button");
@@ -161,14 +164,15 @@ export function mountSharePanel(options: ShareOptions = {}): SharePanel {
     const canvas = document.createElement("canvas");
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", "QR code for the share link");
-    try {
-      encodeToCanvas(canvas, url, 240);
-    } catch {
-      // reported: the QR frame shows its failed state, and the link below still works.
-      // A payload too large for the encoder should never happen for a LAN URL, but
-      // never let a QR failure hide the URL itself - the copy line below still works.
+    const drawn = encodeToCanvas(canvas, url, 240);
+    if (drawn.error) {
+      // A failed QR never hides the URL: the copy line below still works.
       qrFrame.dataset.failed = "";
-      showToast("Share", "Could not draw the QR code. The link below still works.", "warn");
+      showToast(
+        "Share",
+        `Could not draw the QR code. ${drawn.error.message} The link below still works.`,
+        "warn",
+      );
     }
     qrFrame.append(canvas);
     body.append(qrFrame);

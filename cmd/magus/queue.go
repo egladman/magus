@@ -4,6 +4,7 @@ package main
 // flags, opens what each step needs, and hands over.
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -22,6 +23,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/client"
@@ -191,7 +193,7 @@ func queueParse[F any](e *queueEnv, verb, usage string, args []string, bind func
 			bind(own)
 			fmt.Fprintln(e.stderr, "Usage: "+usage)
 			fmt.Fprintln(e.stderr, "\nFlags (magus's global flags apply too; see magus -h):")
-			own.PrintDefaults()
+			printOwnDefaults(own)
 			if verb == "apply" {
 				fmt.Fprint(e.stderr, "\n"+queueSourceUsage)
 			}
@@ -285,9 +287,6 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if opts.Format != outputText && opts.Format != outputJSON && opts.Format != outputJSONL {
-		return exit.Usagef("magus queue describe: -o %s is not supported (want text, json or jsonl)", opts.Format)
-	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
 		return err
@@ -312,7 +311,11 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	if opts.Format != outputText {
-		return queue.WriteCapabilities(e.stdout, f.Base, caps)
+		var doc bytes.Buffer
+		if err := queue.WriteCapabilities(&doc, f.Base, caps); err != nil {
+			return err
+		}
+		return e.writeDocument(opts, doc.Bytes(), queue.CapabilitiesDoc{}, []string{f.Base})
 	}
 	if err := caps.Check(); err != nil {
 		return fmt.Errorf("%s: %w", types.SchemaCapabilities, err)
@@ -392,6 +395,10 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if err := queueRequired("ls", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
+	opts, err := output.Parse(global.output)
+	if err != nil {
+		return err
+	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
 		return err
@@ -415,10 +422,26 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 		At: started.Unix(), ElapsedMS: time.Since(started).Milliseconds(),
 	}
 	// One line, so a document on stdout is itself a JSONL record.
-	if err := queue.WriteChanges(e.stdout, changes); err != nil {
+	var doc bytes.Buffer
+	if err := queue.WriteChanges(&doc, changes); err != nil {
 		return err
 	}
-	// Kept for every offline reader: ls jobs, describe job and magus\job.list.
+	if opts.Format == outputText {
+		_, err = e.stdout.Write(doc.Bytes())
+	} else {
+		names := make([]string, 0, len(changes.Changes)+len(changes.Unqueued))
+		for _, c := range changes.Changes {
+			names = append(names, c.ID)
+		}
+		for _, c := range changes.Unqueued {
+			names = append(names, c.ID)
+		}
+		err = e.writeDocument(opts, doc.Bytes(), types.Changes{}, names)
+	}
+	if err != nil {
+		return err
+	}
+	// Kept for every offline reader: ls jobs and magus\workspace().jobs().
 	if err := queue.WriteSnapshot(cl.Root, queue.Snapshot{Fetched: fetch, Changes: changes}); err != nil {
 		return fmt.Errorf("keep the snapshot: %w", err)
 	}
@@ -486,9 +509,6 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	if opts.Format != outputText && opts.Format != outputJSON && opts.Format != outputJSONL {
-		return exit.Usagef("magus queue reviews: -o %s is not supported (want text, json or jsonl)", opts.Format)
-	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
 		return err
@@ -518,9 +538,36 @@ func queueReviews(ctx context.Context, e *queueEnv, args []string) error {
 		return err
 	}
 	if opts.Format != outputText {
-		return queue.WriteReviews(e.stdout, report)
+		var doc bytes.Buffer
+		if err := queue.WriteReviews(&doc, report); err != nil {
+			return err
+		}
+		return e.writeDocument(opts, doc.Bytes(), types.ReviewReport{}, []string{f.Base})
 	}
 	return queue.WriteReviewLines(e.stdout, report)
+}
+
+// writeDocument renders one schema document the queue package encoded.
+// Json and jsonl keep its bytes: a provider's workflow reads that one line.
+// shape is the document's type, which a bare -o template lists, since a
+// decoded document has lost its field types.
+func (e *queueEnv) writeDocument(opts output.Options, doc []byte, shape any, names []string) error {
+	switch opts.Format {
+	case outputJSON, outputJSONL:
+		_, err := e.stdout.Write(doc)
+		return err
+	case outputName:
+		return emitNames(e.stdout, names)
+	case output.Template:
+		if opts.Template == "" {
+			return writeFormatted(e.stdout, opts, shape)
+		}
+	}
+	var record map[string]any
+	if err := json.Unmarshal(doc, &record); err != nil {
+		return err
+	}
+	return writeFormatted(e.stdout, opts, record)
 }
 
 // remoteHost is the host a remote URL names, "" when it names none. It reads URL forms
@@ -657,9 +704,9 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 // base's, pinned for the hooks: a candidate's own magus.yaml cannot widen it or turn
 // verification off.
 func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.CacheReadProxy, []string, error) {
-	upstream, token := os.Getenv("ACTIONS_RESULTS_URL"), os.Getenv("ACTIONS_RUNTIME_TOKEN")
+	upstream, token := os.Getenv("ACTIONS_RESULTS_URL"), magustypes.NewSecret(os.Getenv("ACTIONS_RUNTIME_TOKEN"))
 	switch {
-	case upstream == "" || token == "":
+	case upstream == "" || token.IsZero():
 		return nil, nil, exit.Usagef("magus queue validate: --remote-cache-read reads through the runner's cache service, and ACTIONS_RESULTS_URL or ACTIONS_RUNTIME_TOKEN is not set; GitHub Actions gives them to an action, not a run: step, so export them to this step")
 	case remote.Insecure:
 		return nil, nil, exit.Usagef("magus queue validate: --remote-cache-read hands hooks only entries a trusted key signed, and cache.remote.insecure turns that check off")

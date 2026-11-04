@@ -6,6 +6,16 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export object MarkdownSection {
+    anchor: str = "",
+    level: int = 0,
+    start_line: int = 0,
+    end_line: int = 0,
+    body_end_line: int = 0,
+    digest: str = "",
+}
+
 export extern fun frontmatter(source: str) > str !> any;
+export extern fun sections(source: str) > [MarkdownSection];
 export extern fun stripFrontmatter(source: str) > str;
 export extern fun toHtml(source: str) > str;

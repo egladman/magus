@@ -11,10 +11,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// maxOvertakes is how many requests a release may seat ahead of the request at the head
-// of the queue. A smaller claim that fits the room a release freed goes first, which
-// keeps the host busy; once this many have, everything behind the head is judged as if
-// the head already held its seat, so a stream of small claims cannot starve a large one.
+// maxOvertakes is how many requests may go ahead of a parked one: a smaller
+// claim fitting freed room, or a heavier job's. Past it, everything behind the
+// head is judged as if the head held its seat.
 const maxOvertakes = 4
 
 // outcome is what one try of a parked request came to.
@@ -45,6 +44,8 @@ type parked struct {
 	// why is what kept it out at its last try.
 	why       parkedReply
 	overtaken int
+	// gate is a claim run under a gate, which queues ahead of every other request.
+	gate bool
 }
 
 type reply struct {
@@ -62,10 +63,14 @@ func (s *server) park(p *parked) {
 		_ = p.w.write(typeError, p.id, s.drainingError())
 		return
 	}
-	r, o := s.judgeLocked(p, s.starvedHeadLocked())
+	if p.kind == "claim" {
+		s.markGateLocked(p.sess, p.claim)
+		p.gate = s.gateLocked(p.sess, p.claim) != nil
+	}
+	r, o := s.judgeLocked(p, s.aheadLocked(p, false))
 	why := p.why
 	if o == waiting {
-		s.queue = append(s.queue, p)
+		s.enqueueLocked(p)
 		s.armWakeLocked()
 	}
 	s.mu.Unlock()
@@ -115,11 +120,7 @@ func (s *server) wake() {
 	s.mu.Lock()
 	for i := 0; i < len(s.queue); {
 		p := s.queue[i]
-		starved := s.starvedHeadLocked()
-		if i == 0 {
-			starved = nil
-		}
-		r, o := s.judgeLocked(p, starved)
+		r, o := s.judgeLocked(p, s.aheadLocked(p, i == 0))
 		if o == waiting {
 			i++
 			continue
@@ -146,7 +147,11 @@ func (s *server) armWakeLocked() {
 	if len(s.queue) == 0 || s.closing {
 		return
 	}
-	if at, ok := s.budget.NextChange(); ok {
+	at, ok := s.budget.NextChange()
+	if gate, waits := s.gateDeadlineLocked(); waits && (!ok || gate.Before(at)) {
+		at, ok = gate, true
+	}
+	if ok {
 		s.wakeTimer = time.AfterFunc(time.Until(at), s.wake)
 	}
 }
@@ -210,8 +215,8 @@ func (s *server) waitingLocked(now time.Time) []types.MachineWaiter {
 }
 
 // claimTry seats c for sess, parking it while only its own run or its job tree's
-// validation seat keeps it out. Any other refusal answers at once: magus never waits on
-// another invocation.
+// validation seat keeps it out, or while it runs under the oldest gate (see
+// [server.gateWaitLocked]). Any other refusal answers at once.
 func (s *server) claimTry(sess *session, c types.MachineClaim) func(*parked) (reply, outcome) {
 	return func(p *parked) (reply, outcome) {
 		if wait := s.seatLocked(sess, c, false); wait != nil {
@@ -226,6 +231,12 @@ func (s *server) claimTry(sess *session, c types.MachineClaim) func(*parked) (re
 		case v.Fits && v.OwnRun:
 			p.why = parkedReply{Verdict: v}
 			return reply{}, waiting
+		}
+		if r, o, ok := s.gateWaitLocked(p, v); ok {
+			if o == answered {
+				s.ledger.claimed(s.conns, sess, c, v, time.Now())
+			}
+			return r, o
 		}
 		s.ledger.claimed(s.conns, sess, c, v, time.Now())
 		return reply{typeClaimReply, claimReply{Verdict: v}}, answered

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
@@ -24,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	store "github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -180,6 +180,13 @@ func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
 		fs.Bool("private", false, "Only your own notes")
 }
 
+// negateScopeFlags binds --no-shared and --no-private for the subcommands whose
+// declared flags carry the pair.
+func negateScopeFlags(fs *flag.FlagSet, shared, private *bool) {
+	cmdline.NegatedBoolVar(fs, shared, "shared")
+	cmdline.NegatedBoolVar(fs, private, "private")
+}
+
 func notesScope(shared, private bool) (string, error) {
 	switch {
 	case shared && private:
@@ -268,6 +275,8 @@ func notesList(ctx context.Context, root string, args []string) error {
 	_, err := commandParse("notes ls", args, func(fs *flag.FlagSet) {
 		onlyShared, onlyPrivate = notesScopeFlags(fs)
 		reproducible = fs.Bool("reproducible", false, "Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed")
+		negateScopeFlags(fs, onlyShared, onlyPrivate)
+		cmdline.NegatedBoolVar(fs, reproducible, "reproducible")
 		fs.Var(&tags, "tag", "Only notes carrying this tag; repeatable, a note must carry every one (gap/open lists open gaps)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus notes ls [flags]")
@@ -845,8 +854,10 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&name, "name", "", "Note name (defaults to review-<patch digest>)")
 		fs.Var(&tags, "tag", "Tag to set on the note; repeatable")
 		fs.BoolVar(&gap, "gap", false, "Capture a harness gap: positional arguments are the refs it was seen in, and every --anchor must resolve")
+		cmdline.NegatedBoolVar(fs, &gap, "gap")
 		fs.Var(&anchors, "anchor", "With --gap, what the gap is about (repeatable): symbol:<key>, file:<path>#<decl>, diagnostic:<code>, or any note anchor")
 		shared, private = notesScopeFlags(fs)
+		negateScopeFlags(fs, shared, private)
 	})
 	if err != nil {
 		return err
@@ -1143,17 +1154,19 @@ func storedDiffReview(cacheDir, patch string) (*types.DiffReview, error) {
 // hands back the attached session as it stands, which is all a transcript needs, and answers
 // 409 when nothing is attached.
 func serverDiffReview(ctx context.Context) *types.DiffReview {
-	token, err := auth.LoadOperator()
-	if err != nil {
+	addr := mcpAddrString()
+	token, tokenID, ok := mintReviewToken(ctx, addr, reviewCallTokenTTL)
+	if !ok {
 		return nil
 	}
+	defer revokeReviewToken(ctx, tokenID)
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/session", mcpAddrString()), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/session", addr), nil)
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	setBearer(req, token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil
@@ -1191,17 +1204,19 @@ func reviewComments(ctx context.Context, m *magus.Magus) ([]types.ReviewComment,
 // could not understand part of it. That is the one case a caller must not pass over quietly: a
 // transcript silently missing a colleague's remark is worse than no transcript.
 func serverReviewComments(ctx context.Context) (comments []types.ReviewComment, reason string, served bool) {
-	token, err := auth.LoadOperator()
-	if err != nil {
+	addr := mcpAddrString()
+	token, tokenID, ok := mintReviewToken(ctx, addr, reviewCallTokenTTL)
+	if !ok {
 		return nil, "", false
 	}
+	defer revokeReviewToken(ctx, tokenID)
 	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/review", mcpAddrString()), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/diff/review", addr), nil)
 	if err != nil {
 		return nil, "", false
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	setBearer(req, token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, "", false

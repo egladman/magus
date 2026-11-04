@@ -18,6 +18,7 @@ namespace showmemorykills;
 import "flags";
 import "os";
 import "proc";
+import "result";
 import "std";
 
 import "assert";
@@ -61,29 +62,33 @@ export object Report {
     events: [Event],
 }
 
-export fun parse(args: [str]) > Options? !> any {
-    final parsed = flags\parse(args, switches: ["--all", "--help"], valued: ["--since", "--until", "--name"]);
-    if (parsed.values["--help"] != null) {
-        return null;
+export fun parse(args: [str]) > result\Result::<Options> {
+    try {
+        final parsed = flags\parse(args, switches: ["--all", "--help"], valued: ["--since", "--until", "--name"]);
+        if (parsed.values["--help"] != null) {
+            return result\Result::<Options>{};
+        }
+        if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+            return result\fail::<Options>("show-memory-kills: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}");
+        }
+        final since = parsed.values["--since"] ?? "1h";
+        final stop = parsed.values["--until"] ?? "";
+        if (since == "") {
+            return result\fail::<Options>("show-memory-kills: --since needs a duration or a timestamp\n{USAGE}");
+        }
+        // `log show --last` counts from the end of the log, not --end.
+        // A duration with --until would name a window the log does not read.
+        if (stop != "" and DURATION.match(since) != null) {
+            return result\fail::<Options>("show-memory-kills: --until needs --since as a timestamp, not a duration");
+        }
+        return result\ok::<Options>(Options{
+            window = Window{ since = since, stop = stop },
+            name = parsed.values["--name"] ?? "",
+            all = parsed.values["--all"] != null,
+        });
+    } catch (err: any) {
+        return result\caught::<Options>(err, doing: "show-memory-kills: read the arguments");
     }
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "show-memory-kills: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
-    }
-    final since = parsed.values["--since"] ?? "1h";
-    final stop = parsed.values["--until"] ?? "";
-    if (since == "") {
-        throw "show-memory-kills: --since needs a duration or a timestamp\n{USAGE}";
-    }
-    // `log show --last` counts back from the end of the log, not from --end, so a duration
-    // with --until would name a window the log does not read.
-    if (stop != "" and DURATION.match(since) != null) {
-        throw "show-memory-kills: --until needs --since as a timestamp, not a duration";
-    }
-    return Options{
-        window = Window{ since = since, stop = stop },
-        name = parsed.values["--name"] ?? "",
-        all = parsed.values["--all"] != null,
-    };
 }
 
 final MAC_KILL = std\pattern(`^(\S+ \S+)\s.*memorystatus: killing_\w+ pid (\d+) \[([^\]]+)\] \(([\w-]+)`);
@@ -212,7 +217,7 @@ export fun verdict(r: Report) > str {
     return "memory pressure killed {kills} and suspended {suspends} process(es) {span(r.window)} in {r.source}";
 }
 
-fun readMac(w: Window) > str !> any {
+fun readMac(w: Window) > result\Result::<str> {
     final args = mut ["show", "--style", "compact",
         "--predicate", `process == "kernel" AND (eventMessage CONTAINS "memorystatus" OR eventMessage CONTAINS "swap")`];
     if (DURATION.match(w.since) != null) {
@@ -226,11 +231,20 @@ fun readMac(w: Window) > str !> any {
         args.append("--end");
         args.append(w.stop);
     }
-    return proc\exec("log", args: args, opts: {"quiet": true}).stdout;
+    try {
+        return result\ok::<str>(proc\exec("log", args: args, opts: proc\ExecOptions{ quiet = true }).stdout);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "show-memory-kills: run log show");
+    }
+}
+
+object Kernel {
+    output: str,
+    source: str,
 }
 
 // readLinux returns the kernel log and which command it came from.
-fun readLinux(w: Window) > obj{ output: str, source: str } !> any {
+fun readLinux(w: Window) > result\Result::<Kernel> {
     // systemd.time reads "-1h" as an hour before now.
     final since = if (DURATION.match(w.since) != null) "-" + w.since else w.since;
     final args = mut ["-k", "--no-pager", "-o", "short-iso", "--since", since];
@@ -238,42 +252,60 @@ fun readLinux(w: Window) > obj{ output: str, source: str } !> any {
         args.append("--until");
         args.append(w.stop);
     }
-    final journal = proc\exec("journalctl", args: args, opts: {"quiet": true, "allow_failure": true});
-    if (journal.ok) {
-        return .{ output = journal.stdout, source = "journalctl -k" };
+    try {
+        final journal = proc\exec("journalctl", args: args, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        if (journal.ok) {
+            return result\ok::<Kernel>(Kernel{ output = journal.stdout, source = "journalctl -k" });
+        }
+        final ring = proc\exec("dmesg", args: ["--time-format", "iso"], opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        if (!ring.ok) {
+            return result\fail::<Kernel>("show-memory-kills: neither journalctl -k nor dmesg is readable here; run it as a user in the systemd-journal group, or with sudo");
+        }
+        return result\ok::<Kernel>(Kernel{ output = ring.stdout, source = "dmesg, which keeps no window: every kill since boot" });
+    } catch (err: any) {
+        return result\caught::<Kernel>(err, doing: "show-memory-kills: read the kernel log");
     }
-    final ring = proc\exec("dmesg", args: ["--time-format", "iso"], opts: {"quiet": true, "allow_failure": true});
-    if (!ring.ok) {
-        throw "show-memory-kills: neither journalctl -k nor dmesg is readable here; run it as a user in the systemd-journal group, or with sudo";
-    }
-    return .{ output = ring.stdout, source = "dmesg, which keeps no window: every kill since boot" };
 }
 
 // memoryKills reads this host's OS log for the window o names.
-export fun memoryKills(o: Options) > Report !> any {
+export fun memoryKills(o: Options) > result\Result::<Report> {
     final host = os\platform()[0];
     var events = [<Event>];
     var source = "";
     if (host == "darwin") {
-        events = macEvents(readMac(o.window), all: o.all);
+        final log = readMac(o.window);
+        if (log.error != null) {
+            return result\Result::<Report>{ error = log.error };
+        }
+        events = macEvents(log.value!, all: o.all);
         source = "log show";
     } else if (host == "linux") {
         final kernel = readLinux(o.window);
-        events = linuxEvents(kernel.output);
-        source = kernel.source;
+        if (kernel.error != null) {
+            return result\Result::<Report>{ error = kernel.error };
+        }
+        events = linuxEvents(kernel.value!.output);
+        source = kernel.value!.source;
     } else {
-        throw "show-memory-kills: reads macOS and Linux logs, and this host is {host}";
+        return result\fail::<Report>("show-memory-kills: reads macOS and Linux logs, and this host is {host}");
     }
-    return Report{ window = o.window, source = source, events = collapse(named(events, name: o.name)) };
+    return result\ok::<Report>(Report{ window = o.window, source = source, events = collapse(named(events, name: o.name)) });
 }
 
 export fun main(args: [str]) > void !> any {
     final o = parse(args);
-    if (o == null) {
+    if (o.error != null) {
+        throw o.error!.message;
+    }
+    if (o.value == null) {
         std\print(HELP);
         return;
     }
-    final report = memoryKills(o!);
+    final found = memoryKills(o.value!);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    final report = found.value!;
     std\print(verdict(report));
     foreach (e in report.events) {
         std\print(render(e));
@@ -351,15 +383,10 @@ test "the verdict counts kills and suspensions over the window" {
 }
 
 test "flags: defaults, --help, and a duration --since refused beside --until" {
-    final o = parse([<str>])!;
+    final o = parse([<str>]).value!;
     assert\equal(o.window.since, want: "1h", message: "default window");
-    assert\equal(parse(["--help"]), want: null, message: "help");
+    assert\equal(parse(["--help"]).value, want: null, message: "help");
     assert\isTrue(HELP.startsWith("cost: "), message: "the first help line is the cost");
-    var refused = "";
-    try {
-        parse(["--since", "2h", "--until", "2026-09-30 15:00:00"]);
-    } catch (e) {
-        refused = "{e}";
-    }
+    final refused = parse(["--since", "2h", "--until", "2026-09-30 15:00:00"]).error?.message ?? "";
     assert\equal(refused, want: "show-memory-kills: --until needs --since as a timestamp, not a duration", message: "until");
 }

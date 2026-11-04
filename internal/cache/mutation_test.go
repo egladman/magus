@@ -8,9 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // rewriteMain replaces the test project's source from inside a running target,
@@ -56,6 +58,60 @@ func TestRunReportsUndeclaredSourceMutationWithItsReason(t *testing.T) {
 		}
 	}
 	assert.Contains(t, failure, " why="+why)
+}
+
+// permitsSuite pins that a permit reaches the result and never the cache.
+type permitsSuite struct {
+	suite.Suite
+}
+
+func TestPermits(t *testing.T) {
+	suite.Run(t, new(permitsSuite))
+}
+
+func permitOne(ctx context.Context) error {
+	journal.RecordPermits(ctx, 1)
+	return nil
+}
+
+func (s *permitsSuite) TestAPermitReachesTheResult() {
+	root, _, c := newMutableCache(s.T())
+	writeMain(s.T(), root, "package main")
+	res, err := c.Run(s.T().Context(), makeStep(root), permitOne)
+	s.Require().NoError(err)
+	s.Equal(1, res.Permitted)
+}
+
+func (s *permitsSuite) TestAPermitIsCountedApartFromAMiss() {
+	root, _, c := newMutableCache(s.T())
+	writeMain(s.T(), root, "package main")
+	_, err := c.Run(s.T().Context(), makeStep(root), permitOne)
+	s.Require().NoError(err)
+	s.Equal(1, c.Stats().Permitted)
+	s.Zero(c.Stats().Miss)
+}
+
+func (s *permitsSuite) TestAPermitIsNeverReplayed() {
+	root, _, c := newMutableCache(s.T())
+	writeMain(s.T(), root, "package main")
+	_, err := c.Run(s.T().Context(), makeStep(root), permitOne)
+	s.Require().NoError(err)
+	res, err := c.Run(s.T().Context(), makeStep(root), permitOne)
+	s.Require().NoError(err)
+	s.False(res.Hit, "the second run judges the base again")
+	s.Equal(1, res.Permitted)
+}
+
+func (s *permitsSuite) TestAPlainStepPermitsNothingAndIsReplayed() {
+	root, _, c := newMutableCache(s.T())
+	writeMain(s.T(), root, "package main")
+	noop := func(context.Context) error { return nil }
+	_, err := c.Run(s.T().Context(), makeStep(root), noop)
+	s.Require().NoError(err)
+	res, err := c.Run(s.T().Context(), makeStep(root), noop)
+	s.Require().NoError(err)
+	s.True(res.Hit)
+	s.Zero(res.Permitted)
 }
 
 // The declaration is what separates a formatter from the footgun: editsExistingSource

@@ -489,11 +489,11 @@ func runReleaseIndex(args []string) error {
 	// An unset key is fatal rather than a warning. A release job that quietly skipped
 	// the signature is how index.json.sig came to 404 for every user of v0.3.0; a
 	// caller that genuinely wants the unsigned file asks for it with -no-sign.
-	keyHex := os.Getenv("MAGUS_SIGNING_KEY")
-	if keyHex == "" {
+	signingKey := types.NewSecret(os.Getenv("MAGUS_SIGNING_KEY"))
+	if signingKey.IsZero() {
 		return fmt.Errorf("MAGUS_SIGNING_KEY is not set, pass -no-sign to write index.json without a signature")
 	}
-	keyBytes, err := hex.DecodeString(keyHex)
+	keyBytes, err := hex.DecodeString(signingKey.Reveal())
 	if err != nil {
 		return fmt.Errorf("decode MAGUS_SIGNING_KEY: %w", err)
 	}

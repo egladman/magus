@@ -235,17 +235,17 @@ func hgRangeFiles(ctx context.Context, prog, dir, base, head string, paths []str
 // hgRangeCommits is RangeCommits for hg and Sapling. only(head,base) is ascending,
 // and reverse() makes it newest first. "path:" makes each path literal and relative to the
 // repository root, as RangeFiles reports them.
-func hgRangeCommits(ctx context.Context, v types.VCSDriver, prog, dir, base, head string, paths []string) ([]types.Commit, error) {
+func hgRangeCommits(ctx context.Context, prog, dir, base, head string, paths []string) ([]types.Commit, error) {
 	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
-	args := append([]string{"log", "-r", fmt.Sprintf("reverse(only(%s,%s))", head, base), "--template", "{node}\n"},
+	args := append([]string{"log", "-r", fmt.Sprintf("reverse(only(%s,%s))", head, base), "--template", hgCommitTemplate + `\0`},
 		hgRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, prog, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s log only(%s,%s): %w", prog, head, base, err)
 	}
-	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+	return parseCommits(out), nil
 }
 
 // hgRootPaths spells repository-relative paths as literal "path:" patterns after

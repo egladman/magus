@@ -32,7 +32,7 @@ import "magus";
 import "magus/figure";
 
 export fun cacheReadFigure() > figure\Figure !> any {
-    final cache = magus\dir("internal/cache");
+    final cache = magus\graph().dir("internal/cache");
     final run = figure\external("Run target", look: figure\Look.plain);
     return figure\of("cache-read", title: "A hit skips the run")
         .box(cache, label: "Cache key", focal: true)
@@ -41,7 +41,7 @@ export fun cacheReadFigure() > figure\Figure !> any {
 }
 ```
 
-`magus\dir` raises MGS7005 when the graph holds no such directory, naming the
+`magus\graph().dir` raises MGS7005 when the graph holds no such directory, naming the
 nearest one, so a typo fails at the line that made it. Register the figure in
 `docs/site/diagrams/all.buzz` (the import and an `allFigures()` entry), then
 embed it on a page with `<!--diagram:cache-read-->`.
@@ -50,8 +50,8 @@ embed it on a page with `<!--diagram:cache-read-->`.
 
 - `box(dir, label:, sub:, focal:, look:)` draws one directory.
 - `group(dirs, label:)` draws every directory in a list as one box. Take the
-  directories as records: `magus\layer("handler").dirs` is every directory a
-  declared layer covers, `magus\dirs("internal/queue/*")` every directory a
+  directories as records: `magus\graph().layer("handler").dirs` is every directory a
+  declared layer covers, `magus\graph().dirs("internal/queue/*")` every directory a
   glob matches. `+` joins two lists, and `figure\without(dirs, drop: [...])`
   leaves some out. A package added to the layer joins the group with no edit to
   the figure.
@@ -89,7 +89,7 @@ scope: `magus query 'kind=~^(dir|project|package)$ how does a target reach the c
 To check whether a figure already answers it, ask for figures:
 `magus query 'kind=figure how does the Buzz engine load a spell'`. The graph
 reads each figure's id, title, eyebrow and description from its `figure\of`
-call, and links the figure to every directory a `magus\dir` call in the same
+call, and links the figure to every directory a `magus\graph().dir` call in the same
 function names. The query only suggests. A figure draws what its source names,
 so rendering never reads the ranking and the same source draws the same figure.
 

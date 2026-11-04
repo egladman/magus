@@ -8,4 +8,4 @@
 
 export extern fun equal(a: str, b: str) > bool;
 export extern fun stat(a: str, b: str) > str;
-export extern fun unified(a: str, b: str, from_label: str = "", to_label: str = "", context: int = 0) > str;
+export extern fun unified(a: str, b: str, fromLabel: str = "", toLabel: str = "", context: int = 0) > str;

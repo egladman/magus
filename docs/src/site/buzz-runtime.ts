@@ -8,6 +8,8 @@
 // The module-level promise is the whole point - whoever calls ensureBuzz() first
 // pays for the load, everyone after that awaits the same promise.
 
+import { MagusError, fail, ok, type Result } from "../gen/magus/types.js";
+
 // The playground WASM exposes window.buzz.* inside its Go main(), and wasm_exec.js
 // defines window.Go; declare just the members these modules touch.
 export interface BuzzOp {
@@ -50,7 +52,14 @@ declare global {
 // /magus/ subpath and local preview alike.
 export const ROOT = import.meta.url.replace(/main\.js(\?.*)?$/, "");
 
-let wasmPromise: Promise<void> | null = null;
+const loaded: Result<null> = ok(null);
+
+function loadFailed(cause: unknown): Result<null> {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return fail(new MagusError({ code: "", message }, { cause }));
+}
+
+let wasmPromise: Promise<Result<null>> | null = null;
 
 // buzzReady reports whether the runtime is already usable, so a caller can take a
 // synchronous path instead of awaiting a promise that would resolve immediately.
@@ -58,12 +67,12 @@ export function buzzReady(): boolean {
   return !!(window.buzz && typeof window.buzz.evalBuzz === "function");
 }
 
-// ensureBuzz resolves once window.buzz is ready. Safe to call repeatedly and from
-// several modules; the first call does the work.
-export function ensureBuzz(): Promise<void> {
-  if (buzzReady()) return Promise.resolve();
+// ensureBuzz resolves once window.buzz is ready, or with the reason the load failed. Safe to call repeatedly and from
+// several modules; the first call does the work. The promise never rejects.
+export function ensureBuzz(): Promise<Result<null>> {
+  if (buzzReady()) return Promise.resolve(loaded);
   if (wasmPromise) return wasmPromise;
-  wasmPromise = new Promise<void>(function (resolve, reject) {
+  const load = new Promise<Result<null>>(function (resolve) {
     // wasm_exec.js is a classic script that defines globalThis.Go; append it,
     // wait for load, then instantiate buzz.wasm exactly like playground.html.
     const s = document.createElement("script");
@@ -78,13 +87,13 @@ export function ensureBuzz(): Promise<void> {
           // for it to appear before resolving (Go's main is async under asyncify).
           const deadline = Date.now() + 5000;
           (function wait() {
-            if (buzzReady()) return resolve();
-            if (Date.now() > deadline) return reject(new Error("buzz.evalBuzz not ready"));
+            if (buzzReady()) return resolve(loaded);
+            if (Date.now() > deadline) return resolve(loadFailed("buzz.evalBuzz not ready"));
             setTimeout(wait, 30);
           })();
         };
         if (WebAssembly.instantiateStreaming) {
-          WebAssembly.instantiateStreaming(loader, go.importObject).then(startWith).catch(reject);
+          WebAssembly.instantiateStreaming(loader, go.importObject).then(startWith).catch((e) => resolve(loadFailed(e)));
         } else {
           loader
             .then(function (r) {
@@ -94,21 +103,22 @@ export function ensureBuzz(): Promise<void> {
               return WebAssembly.instantiate(bs, go.importObject);
             })
             .then(startWith)
-            .catch(reject);
+            .catch((e) => resolve(loadFailed(e)));
         }
       } catch (e) {
-        reject(e);
+        resolve(loadFailed(e));
       }
     };
     s.onerror = function () {
-      reject(new Error("wasm_exec.js failed to load"));
+      resolve(loadFailed("wasm_exec.js failed to load"));
     };
     document.head.appendChild(s);
   });
   // A transient load failure must not poison every later attempt; drop the cache so
-  // the next call retries. The caller still sees this attempt's rejection.
-  wasmPromise.catch(() => {
-    wasmPromise = null;
+  // the next call retries. The caller still sees this attempt's failure.
+  wasmPromise = load.then((result) => {
+    if (result.error) wasmPromise = null;
+    return result;
   });
   return wasmPromise;
 }
@@ -123,9 +133,7 @@ export function ensureBuzz(): Promise<void> {
 export function warmBuzz(): void {
   if (buzzReady() || wasmPromise) return;
   const start = function () {
-    ensureBuzz().catch(function () {
-      /* speculative: the on-demand path reports for real */
-    });
+    void ensureBuzz(); // speculative: the on-demand path reports a failure for real
   };
   // requestIdleCallback keeps the 4.2 MB fetch off the critical path so it cannot
   // compete with the page's own render. Safari has no requestIdleCallback, hence

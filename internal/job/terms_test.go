@@ -10,7 +10,41 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type termsDeliverySuite struct {
+	suite.Suite
+}
+
+func TestTermsDelivery(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(termsDeliverySuite))
+}
+
+func (s *termsDeliverySuite) TestAStackedJobNamesTheBranchItIsBasedOn() {
+	row := briefRow()
+	row.Delivery, row.ParentHead = types.DeliveryStacked, "feat/parent"
+	s.Contains(NewTerms(row, TermsFacts{}).String(), "delivery: stacked on feat/parent\n")
+}
+
+func (s *termsDeliverySuite) TestAFoldedJobNamesItsDelivery() {
+	row := briefRow()
+	row.Delivery = types.DeliveryFold
+	s.Contains(NewTerms(row, TermsFacts{}).String(), "delivery: fold\n")
+}
+
+func (s *termsDeliverySuite) TestARowWithNoDeliveryPrintsNoLine() {
+	s.NotContains(NewTerms(briefRow(), TermsFacts{}).String(), "delivery:")
+}
+
+func (s *termsDeliverySuite) TestARetryKeepsTheDeliveryAndTheParentHead() {
+	row := briefRow()
+	row.Delivery, row.ParentHead = types.DeliveryStacked, "feat/parent"
+	want := RetryDeclaration(briefRow())
+	want.Delivery, want.ParentHead = types.DeliveryStacked, "feat/parent"
+	s.Equal(want, RetryDeclaration(row))
+}
 
 func briefRow() types.Job {
 	return types.Job{

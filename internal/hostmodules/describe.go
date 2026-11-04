@@ -1,6 +1,7 @@
 package hostmodules
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -39,24 +40,45 @@ func Describe(name string) []types.ModuleEntry {
 		}
 		entry := types.ModuleEntry{Name: m.Name, Doc: m.Doc}
 		if name != "" {
-			for _, f := range m.Fields {
-				entry.Fields = append(entry.Fields, types.ModuleFieldEntry{
-					Name: f.Name, Type: f.Type.GoType(), Doc: f.Doc,
-				})
-			}
-			for _, meth := range m.Methods {
-				me := types.ModuleMethodEntry{
-					Name: meth.Name,
-					Doc:  meth.Doc,
-					Buzz: std.BuzzSignature(m, meth),
-				}
-				if equiv, dup := std.BuzzStdlibEquiv(m.Name, meth.Name); dup {
-					me.BuzzStdlib = equiv
-				}
-				entry.Methods = append(entry.Methods, me)
-			}
+			entry = moduleDetail(m)
 		}
 		out = append(out, entry)
 	}
 	return out
+}
+
+func moduleDetail(m std.Module) types.ModuleEntry {
+	entry := types.ModuleEntry{Name: m.Name, Doc: m.Doc}
+	for _, f := range m.Fields {
+		entry.Fields = append(entry.Fields, types.ModuleFieldEntry{
+			Name: f.Name, Type: f.Type.GoType(), Doc: f.Doc,
+		})
+	}
+	for _, meth := range m.Methods {
+		me := types.ModuleMethodEntry{
+			Name: meth.Name,
+			Doc:  meth.Doc,
+			Buzz: std.BuzzSignature(m, meth),
+		}
+		if equiv, dup := std.BuzzStdlibEquiv(m.Name, meth.Name); dup {
+			me.BuzzStdlib = equiv
+		}
+		entry.Methods = append(entry.Methods, me)
+	}
+	for _, o := range m.Objects {
+		entry.Objects = append(entry.Objects, objectEntry(o))
+	}
+	return entry
+}
+
+func objectEntry(o std.Object) types.ModuleObjectEntry {
+	entry := types.ModuleObjectEntry{Name: o.Name, Doc: o.Doc}
+	for _, meth := range o.Methods {
+		entry.Methods = append(entry.Methods, types.ModuleMethodEntry{
+			Name: fmt.Sprintf("%s.%s", o.Name, o.MethodName(meth)),
+			Doc:  meth.Doc,
+			Buzz: o.Signature(meth),
+		})
+	}
+	return entry
 }

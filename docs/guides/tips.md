@@ -116,6 +116,15 @@ magus describe projects -o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}
 
 The field names are always the json keys, and `-o json` and `-o template` share one vocabulary, so `-o json` output doubles as the field reference.
 
+The `json` template function encodes a nested value with the same JSON codec as
+`-o json`, including lists, objects, escaped strings, and null:
+
+```sh
+magus describe projects -o template='{{json .projects}}'
+```
+
+It also accepts a pipeline: `{{.projects | json}}`.
+
 ## Where typed data lives: built-in commands versus your targets
 
 The section above is about **built-in commands**. They declare an output type, so `-o json` and `-o template` render real fields and a bare `-o template` lists them. Your own targets are a different shape, and the difference decides how you should structure a magusfile:

@@ -27,7 +27,7 @@ var tool = cmdline.Command{
 			Short: "run a target",
 			Usage: "tool run <target> [flags]",
 			Flags: []cmdline.Flag{
-				{Name: "dry-run", Kind: cmdline.Bool, Doc: "Print what would run"},
+				{Name: "dry-run", Kind: cmdline.Bool, Default: false, Doc: "Print what would run"},
 				{Name: "jobs", Kind: cmdline.Int, Default: 4, Doc: "Run at most `N` at once"},
 			},
 			Operands: []cmdline.Operand{{Name: "build", Short: "Build it"}},
@@ -41,7 +41,7 @@ var tool = cmdline.Command{
 				Name: "cache", Short: "the cache",
 				Children: []cmdline.Command{{
 					Name: "prune", Short: "prune it",
-					Flags: []cmdline.Flag{{Name: "older-than", Kind: cmdline.Duration, Doc: "Prune entries older than this"}},
+					Flags: []cmdline.Flag{{Name: "older-than", Kind: cmdline.Duration, Unit: "h", Doc: "Prune entries older than this"}},
 				}},
 			}},
 		},
@@ -71,6 +71,7 @@ func TestRoff(t *testing.T) {
 	run := pages["tool-run.1"]
 	contains(t, run, ".SH OPTIONS")
 	contains(t, run, `\fB\-\-jobs\fR \fIN\fR (default: 4)`)
+	contains(t, run, `\fB\-\-[no\-]dry\-run\fR (default: off)`)
 	contains(t, run, ".SH OPERANDS")
 	contains(t, run, ".SH EXAMPLES")
 	notContains(t, run, ".SH ENVIRONMENT")

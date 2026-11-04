@@ -39,20 +39,22 @@
 
 // PF's core breakpoints (patternfly-base), keyed by the pf-m-show-on-<bp> suffix. rem so the media
 // query tracks the root font size exactly the way PF's own @media rules do.
-const BREAKPOINTS: Record<string, string> = {
-  sm: "36rem",
-  md: "48rem",
-  lg: "62rem",
-  xl: "75rem",
-  "2xl": "90.625rem",
-};
+const LG = "62rem";
+const BREAKPOINTS = new Map([
+  ["sm", "36rem"],
+  ["md", "48rem"],
+  ["lg", LG],
+  ["xl", "75rem"],
+  ["2xl", "90.625rem"],
+]);
 
 function readBreakpoint(group: HTMLElement): string {
   for (const cls of Array.from(group.classList)) {
     const m = /^pf-m-show-on-(sm|md|lg|xl|2xl)$/.exec(cls);
-    if (m) return BREAKPOINTS[m[1]];
+    const width = BREAKPOINTS.get(m?.[1] ?? "");
+    if (width) return width;
   }
-  return BREAKPOINTS.lg; // sane default if the class is ever dropped
+  return LG; // sane default if the class is ever dropped
 }
 
 function setupOne(group: HTMLElement): void {

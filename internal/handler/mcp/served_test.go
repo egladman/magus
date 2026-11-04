@@ -167,6 +167,6 @@ func TestServedReportsAReplacedExecutable(t *testing.T) {
 	assert.Equal(t, []servedSkew{{Kind: "build", Executable: exe}}, servedMeta(t, res).Skew)
 	assert.Equal(t, []string{
 		`{"ok":true}`,
-		fmt.Sprintf("magus skew: %s was rebuilt after this server started at v0.4.3-234; restart the MCP server", exe),
+		fmt.Sprintf("magus skew: [MGS3048] %s was rebuilt after this server started at v0.4.3-234; restart the MCP server", exe),
 	}, textParts(res))
 }

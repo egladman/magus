@@ -34,7 +34,7 @@ In the docs:
 - [An operation is a command or a service](../concepts/spells.md#an-operation-is-a-command-or-a-service)
 - [ActivityService](../reference/api/activity/v1alpha1/activity.md#activityservice)
 - [GraphService](../reference/api/graph/v1alpha1/graph.md#graphservice)
-- [InsightService](../reference/api/insight/v1alpha1/insight.md#insightservice)
+- [HistoryMetricsService](../reference/api/historymetrics/v1alpha1/historymetrics.md#historymetricsservice)
 - [JobService](../reference/api/job/v1alpha1/job.md#jobservice)
 
 In the code (`magus refs <name>` lists every site):
@@ -42,7 +42,7 @@ In the code (`magus refs <name>` lists every site):
 - `magus-protodocs.service` (Go)
 - `activity.Service` (Go)
 - `graph.Service` (Go)
-- `insight.Service` (Go)
+- `historymetrics.service` (Go)
 - `job.Service` (Go)
 
 <!-- END GLOSSARY USAGE -->

@@ -29,7 +29,9 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 ## go-build
 
-**Command:** `go build`
+-trimpath is a default: without it each checkout's absolute path is baked into the build ID, so checkouts of one source never share cache entries.
+
+**Command:** `go build -trimpath`
 
 ### Example
 
@@ -69,11 +71,11 @@ export fun clean(ctx: magus\Context, args: [str]) > void {
 
 ## go-fmt
 
-**Command:** `gofmt -l .`
+**Command:** `gofmt -d`
 
 ### rw
 
-Replaces `-l` with `-w`.
+Replaces `-d` with `-w`.
 
 <details class="charm-patch">
 <summary>JSON Patch</summary>
@@ -94,7 +96,7 @@ Replaces `-l` with `-w`.
 
 <!-- magus-run-recorder -->
 ```buzz
-// go-fmt lists misformatted files; the rw charm rewrites them in place.
+// go-fmt fails on misformatted files; the rw charm rewrites them in place.
 // `magus run format` checks, `magus run format:rw` applies gofmt.
 import "magus";
 import "magus/spell/go";
@@ -325,7 +327,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 
 ## go-vet
 
--trimpath: see go-test above; keeps vet's cache key worktree-independent too.
+-trimpath: see go-test above; keeps vet's cache key worktree-independent too. ./... trails because go vet reads no flag after a package, so any forwarded arg drops it and the caller names the package.
 
 **Command:** `go vet -trimpath ./...`
 
@@ -432,7 +434,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## scip
 
-magus injects MAGUS_SYMBOL_INDEX with the cache destination and records the index there as the op's output, so a checkout at the same inputs replays it rather than running scip-go; scip-go writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it. scip-go loads packages through `go`, so the toolchain's version keys the index too. One run per GOOS a file suffix names, merged by magus: a single run indexes only what the host compiles, so a Mac never saw *_linux.go and nobody saw *_windows.go. GOARCH stays the host's; amd64 and arm64 pair with all three.
+goPackages selects magus's in-process go/types indexer, which loads the patterns in args and re-indexes only the packages whose files moved. It loads packages through `go`, so the toolchain's version keys the index. Each other GOOS indexes only the packages with a file the host's build excludes and that GOOS selects. GOARCH stays the host's; amd64 and arm64 pair with all three. js pairs only with wasm, so it names both.
 
-**Command:** `scip-go --output $MAGUS_SYMBOL_INDEX`
+**Command:** `go ./...`
 

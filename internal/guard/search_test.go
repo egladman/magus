@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -62,7 +63,7 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 		{`grep -rni 'HandleRequest\|ParseConfig' .`, "HandleRequest,ParseConfig"},
 		{`grep -rni '\bJudge\b' .`, ""},
 		{`grep -rn 'func Unknown' .`, ""},
-		// A stale index still knows the name, and the deny serves the rebuild first.
+		// A stale index still knows the name, and the deny says refs refreshes it.
 		{`grep -rn 'func Judge' internal/`, "stale"},
 		// Another tree is not this workspace's graph.
 		{`grep -rn 'func Judge' /tmp/other-repo`, ""},
@@ -80,7 +81,7 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: want}, v.Rule, tt.command)
-		assert.Equal(t, tt.arg == "stale", strings.Contains(v.Deny, "graph build --silent"), "%q: only a stale index serves the rebuild", tt.command)
+		assert.Equal(t, tt.arg == "stale", strings.Contains(v.Deny, "refs refreshes it as it answers"), "%q: only a stale index says refs refreshes it", tt.command)
 		for _, name := range strings.Split(want, ",") {
 			assert.Contains(t, denial{Say: v.Deny, Why: v.Why}.full(), name, "%q: one command per name", tt.command)
 		}
@@ -129,7 +130,7 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 	}{
 		{`grep -n HandleRequest internal/api/handler.go`, deps, "refs HandleRequest --occurrences` answers this for every file."},
 		{`rg -n 'HandleRequest\(' internal/api/handler.go`, deps, "refs HandleRequest --occurrences`"},
-		{`grep -n 'func HandleRequest' internal/api/handler.go`, deps, "refs HandleRequest --definition --source`"},
+		{`grep -n 'func HandleRequest' internal/api/handler.go`, deps, "refs HandleRequest --source`"},
 		{`grep -n ParseConfig internal/api/handler.go`, deps, "refs ParseConfig --occurrences`"},
 		// A pipe changes nothing: the search still runs as typed.
 		{`grep -n HandleRequest internal/api/handler.go | head -1`, deps, "refs HandleRequest --occurrences`"},
@@ -191,12 +192,12 @@ func TestGrepReaderDeniesContextReads(t *testing.T) {
 		deps    Dependencies
 		serves  []string // the commands served, nil for no deny
 	}{
-		{`grep -n 'func HandleRequest' -A 20 internal/api/handler.go`, deps, []string{"magus refs HandleRequest --definition --source"}},
-		{`grep -nA20 'func HandleRequest' internal/api/handler.go`, deps, []string{"magus refs HandleRequest --definition --source"}},
-		{`grep -rn --after-context=40 '^type Config struct' internal/`, deps, []string{"magus refs Config --definition --source"}},
-		{`rg -C5 'func HandleRequest|type Config' internal/api`, deps, []string{"magus refs HandleRequest --definition --source", "magus refs Config --definition --source"}},
-		{`grep -n -5 'func HandleRequest' internal/api/handler.go`, deps, []string{"magus refs HandleRequest --definition --source"}},
-		{`grep -n 'func HandleRequest' -A20 internal/api/handler.go | grep serve`, deps, []string{"magus refs HandleRequest --definition --source"}},
+		{`grep -n 'func HandleRequest' -A 20 internal/api/handler.go`, deps, []string{"magus refs HandleRequest --source"}},
+		{`grep -nA20 'func HandleRequest' internal/api/handler.go`, deps, []string{"magus refs HandleRequest --source"}},
+		{`grep -rn --after-context=40 '^type Config struct' internal/`, deps, []string{"magus refs Config --source"}},
+		{`rg -C5 'func HandleRequest|type Config' internal/api`, deps, []string{"magus refs HandleRequest --source", "magus refs Config --source"}},
+		{`grep -n -5 'func HandleRequest' internal/api/handler.go`, deps, []string{"magus refs HandleRequest --source"}},
+		{`grep -n 'func HandleRequest' -A20 internal/api/handler.go | grep serve`, deps, []string{"magus refs HandleRequest --source"}},
 		// A stale index gets the declaration's lines from a parse of the file.
 		{`grep -n 'func HandleRequest' -A 20 internal/api/handler.go`, stale, []string{"sed -n 3,4p internal/api/handler.go"}},
 		{`grep -n 'func HandleRequest' -A 20 internal/api/*.go`, stale, []string{"sed -n 3,4p internal/api/handler.go"}},
@@ -428,36 +429,39 @@ func TestGraphBackedDeniesAdviseWhileARebaseLeavesTheIndexStale(t *testing.T) {
 	}
 }
 
-// An index built at another revision than HEAD advises in place of the translation and
-// reader denies, and turns symbol-search's deny into one that serves the rebuild first;
-// one built at HEAD, named by its full id or an abbreviation, denies as usual.
-func TestGraphBackedDeniesAdviseOnAnIndexFromAnotherRevision(t *testing.T) {
+// An index built at another revision than HEAD denies as usual: a commit moves the
+// revision without moving a file, and the index's per-file stamps say which files moved.
+func TestGraphBackedDeniesHoldOnAnIndexFromAnotherRevision(t *testing.T) {
 	root, deps := staleGraphTree(t)
 	cacheDir := t.TempDir()
-	const built = "0123456789abcdef0123"
-	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{Revision: built}))
+	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{Revision: "0123456789abcdef0123"}))
+	deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
+	deps.Revision = func(context.Context, string, string) string { return "fedcba9" }
+
+	for _, tt := range staleGraphCommands {
+		v := Evaluate(strict(deps), tt.command)
+		assert.Equal(t, tt.rule, v.Rule.Name, tt.command)
+		assert.NotContains(t, v.Deny, "describes another tree", tt.command)
+	}
+}
+
+// An index built while a rebase was underway advises in place of the denies: it describes
+// a tree the rebase went on to move.
+func TestGraphBackedDeniesAdviseOnAnIndexBuiltMidRebase(t *testing.T) {
+	root, deps := staleGraphTree(t)
+	cacheDir := t.TempDir()
+	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{Operation: "rebase"}))
 	deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
 
-	for _, head := range []string{built, "0123456"} {
-		deps.Revision = func(context.Context, string, string) string { return head }
-		for _, tt := range staleGraphCommands {
-			assert.Equal(t, tt.rule, Evaluate(strict(deps), tt.command).Rule.Name, "%s at %s", tt.command, head)
-		}
-	}
-
-	deps.Revision = func(context.Context, string, string) string { return "fedcba9" }
 	for _, tt := range staleGraphCommands {
 		v := Evaluate(strict(deps), tt.command)
 		if tt.rule == denyRuleSymbolSearch {
-			assert.Equal(t, denyRuleSymbolSearch, v.Rule.Name, tt.command)
-			assert.Contains(t, v.Deny, "graph build --silent`.", tt.command)
-			assert.Contains(t, v.Deny, "the symbol index describes another tree (the index was built at 0123456789ab and the checkout is at fedcba9)", tt.command)
+			assert.Contains(t, v.Deny, "The symbol index describes another tree (the index was built during a rebase)", tt.command)
 			continue
 		}
 		assert.Empty(t, v.Deny, tt.command)
 		assert.Equal(t, advisoryGraphStale, v.Kind, tt.command)
-		assert.Contains(t, v.Brief, "the graph is stale, the index was built at 0123456789ab and the checkout is at fedcba9.", tt.command)
-		assert.NotContains(t, v.Brief, "once that is finished", tt.command)
+		assert.Contains(t, v.Brief, "the graph is stale, the index was built during a rebase.", tt.command)
 	}
 }
 
@@ -617,10 +621,11 @@ func TestSearchIntentOnRecordedCommands(t *testing.T) {
 	}
 }
 
-// TestSymbolSearchOnAStaleIndex pins the rows the index state decides: a name the stale
-// index holds and a declaration it has not reached yet are refused with the rebuild served
-// first; a bare CamelCase word it does not hold is as often a string, and runs; with no
-// index at all, or one built with no symbols, the search runs, advised.
+// TestSymbolSearchOnAStaleIndex pins the rows the index state decides.
+// A name the stale index holds is refused with refs served.
+// So is a declaration it has not reached yet.
+// A bare CamelCase word it does not hold is as often a string, and runs.
+// With no index, or one built with no symbols, the search runs, advised.
 func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 	root := recordedSearchTree(t)
 	cacheDir := t.TempDir()
@@ -663,19 +668,26 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 		}
 		require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: tt.arg}, v.Rule, "%q: %s", tt.command, v.Context)
 		require.NotEmpty(t, v.Next, tt.command)
-		assert.Equal(t, hint.GraphBuild.With("--silent"), v.Next[0].Run, "%q: the rebuild comes first", tt.command)
+		assert.Contains(t, v.Next[0].Run, " refs "+tt.arg, "%q: refs is served, never a rebuild", tt.command)
+		assert.Contains(t, v.Deny+v.Why, "refs refreshes it as it answers", tt.command)
 	}
 }
 
-// The files refs answers for are the languages a spell declares a symbol indexer for, read
-// from the catalog rather than a list in the guard: Go, TypeScript and Buzz here.
+// The files refs answers for are the languages a spell declares a symbol indexer for that
+// runs here, read from the catalog rather than a list in the guard. TypeScript's is an
+// external SCIP indexer, so its files count only where magus.yaml opts it in.
 func TestIndexedExtensionsFollowTheSpellCatalog(t *testing.T) {
 	exts := indexedExtensions(Dependencies{Spells: spellCatalog})
 	assert.True(t, exts[".go"], "%v", exts)
-	assert.True(t, exts[".ts"], "%v", exts)
-	assert.True(t, exts[".buzz"], "the buzz spell declares scip-buzz")
+	assert.False(t, exts[".ts"], "scip-typescript runs only when opted in: %v", exts)
+	assert.True(t, exts[".buzz"], "the buzz spell indexes in process")
 	assert.False(t, exts[".md"])
 	assert.Empty(t, indexedExtensions(Dependencies{}))
+
+	optedIn := testkit.NewWorkspace(t)
+	optedIn.Write("magus.yaml", "spells:\n  symbol_indexers: [typescript]\n")
+	exts = indexedExtensions(Dependencies{Spells: spellCatalog, scope: workspaceScope{root: optedIn.Root()}})
+	assert.True(t, exts[".ts"], "a workspace that opts typescript in indexes its files: %v", exts)
 
 	root := recordedSearchTree(t)
 	deps := Dependencies{
@@ -731,22 +743,206 @@ func TestMixedSearchServesTheTextOnItsOwn(t *testing.T) {
 	assert.Contains(t, runs, hint.BinaryName()+" refs --text Heartbeat internal/job")
 }
 
-// A stale-index deny carries what was observed about why the index fell behind, so the
-// person learns what keeps it current rather than only that it is old; a cause the
-// lookup could not name in budget leaves the deny as it was.
-func TestStaleSymbolDenyCarriesTheIndexCause(t *testing.T) {
-	stale := func(cause string) ShellVerdict {
-		return Evaluate(strict(Dependencies{
-			SymbolDefined: func(string) (bool, bool) { return true, false },
-			IndexCause:    func() string { return cause },
-		}), "grep -r HandleRequest internal/")
+// indexReads wires the guard-index reads cmd/magus/shell.go supplies, over deps.CacheDir as
+// it stands now: a test that changes CacheDir calls strict again.
+func indexReads(deps Dependencies) Dependencies {
+	cacheDir := deps.CacheDir
+	if cacheDir == nil {
+		cacheDir = func(string) (string, error) { return "", errNoDependency }
 	}
-	const cause = "Why: no server is running, so the refresh hook synced nothing. Fix: `magus server start`."
-	named := stale(cause)
-	require.Equal(t, denyRuleSymbolSearch, named.Rule.Name)
-	assert.Contains(t, named.Why, "pattern misses included.\n"+cause)
+	deps.GraphMoved = func(ctx context.Context, root string) (string, bool) {
+		if op := knowledge.ReadGuardOperation(ctx, root); op != "" {
+			return knowledge.GuardCheckout{}.StaleAt(knowledge.GuardCheckout{Operation: op}), true
+		}
+		dir, err := cacheDir(root)
+		if err != nil {
+			return "", false
+		}
+		built, err := knowledge.ReadGuardIndexCheckout(dir, root)
+		if err != nil {
+			return "", false
+		}
+		return built.StaleAt(knowledge.GuardCheckout{}), false
+	}
+	deps.SymbolIndexBuilt = func(root string) bool {
+		dir, err := cacheDir(root)
+		if err != nil {
+			return false
+		}
+		has, err := knowledge.GuardIndexHasSymbols(dir, root)
+		return err == nil && has
+	}
+	return deps
+}
 
-	unnamed := stale("")
-	assert.NotContains(t, unnamed.Why, "Why:")
-	assert.Contains(t, unnamed.Deny, "the symbol index is older than the sources it covers")
+// ProgramSearchSuite pins awk, sed, perl, ag and ack read as grep. A program
+// that prints the lines a regex matches over files is a search. A filter of
+// piped output, a substitution or a field split is not.
+type ProgramSearchSuite struct {
+	suite.Suite
+	deps Dependencies
+}
+
+func TestProgramSearchSuite(t *testing.T) {
+	suite.Run(t, new(ProgramSearchSuite))
+}
+
+func (s *ProgramSearchSuite) SetupTest() {
+	indexed := map[string]bool{"HandleRequest": true, "Judge": true, "ParseConfig": true}
+	s.deps = Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return indexed[name], true },
+		GraphIDs:      diagnosticGraph,
+		Spells:        spellCatalog,
+	}
+}
+
+func (s *ProgramSearchSuite) deniesNames(command string, names ...string) {
+	v := Evaluate(strict(s.deps), command)
+	s.Equal(denyRule{Name: denyRuleSymbolSearch, Arg: strings.Join(names, ",")}, v.Rule)
+	for _, name := range names {
+		s.Contains(denial{Say: v.Deny, Why: v.Why}.full(), "refs "+name)
+	}
+}
+
+// deniesPerlNames sets interpreter-script off, since by default it refuses
+// every perl program before a search rule reads it.
+func (s *ProgramSearchSuite) deniesPerlNames(command string, names ...string) {
+	deps := strict(s.deps)
+	deps.Builtins[string(denyRuleInterpreterScript)] = builtin.Setting{Decision: builtin.Off}
+	v := Evaluate(deps, command)
+	s.Equal(denyRule{Name: denyRuleSymbolSearch, Arg: strings.Join(names, ",")}, v.Rule)
+	for _, name := range names {
+		s.Contains(denial{Say: v.Deny, Why: v.Why}.full(), "refs "+name)
+	}
+}
+
+func (s *ProgramSearchSuite) TestPerlSearchIsAnInterpreterScriptByDefault() {
+	v := Evaluate(strict(s.deps), `perl -ne 'print if /HandleRequest/' internal/*.go`)
+	s.Equal(denyRuleInterpreterScript, v.Rule.Name)
+}
+
+func (s *ProgramSearchSuite) passes(command string) {
+	v := Evaluate(strict(s.deps), command)
+	s.NotEqual(denyRuleSymbolSearch, v.Rule.Name)
+	s.NotEqual(denyRuleSearchTranslation, v.Rule.Name)
+}
+
+func (s *ProgramSearchSuite) TestAwkAddress() {
+	s.deniesNames(`awk '/func Judge/' internal/guard/*.go`, "Judge")
+}
+
+func (s *ProgramSearchSuite) TestAwkAddressWithAPrintAction() {
+	s.deniesNames(`awk '/HandleRequest/ {print FILENAME": "$0}' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestAwkWithAFieldSeparator() {
+	s.deniesNames(`awk -F, '/HandleRequest/{print $1}' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestAwkAlternationWithAVariable() {
+	s.deniesNames(`awk -F: -v x=1 '/HandleRequest|ParseConfig/' internal/*.go`, "HandleRequest", "ParseConfig")
+}
+
+func (s *ProgramSearchSuite) TestGawk() {
+	s.deniesNames(`gawk '/HandleRequest/' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestMawk() {
+	s.deniesNames(`mawk '/HandleRequest/' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestSedQuietPrint() {
+	s.deniesNames(`sed -n '/func Judge/p' internal/guard/*.go`, "Judge")
+}
+
+func (s *ProgramSearchSuite) TestSedQuietPrintAsAnExpression() {
+	s.deniesNames(`sed -n -e '/HandleRequest/p' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestSedExtendedAlternation() {
+	s.deniesNames(`sed -n -E '/HandleRequest|ParseConfig/p' internal/*.go`, "HandleRequest", "ParseConfig")
+}
+
+func (s *ProgramSearchSuite) TestPerlPrintIf() {
+	s.deniesPerlNames(`perl -ne 'print if /HandleRequest/' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestPerlPrintIfAnExplicitMatch() {
+	s.deniesPerlNames(`perl -ane 'print if m/func Judge/' internal/*.go`, "Judge")
+}
+
+func (s *ProgramSearchSuite) TestPerlPrintIfTheTopicMatches() {
+	s.deniesPerlNames(`perl -lne 'print $_ if $_ =~ /HandleRequest/' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestPerlMatchAndPrint() {
+	s.deniesPerlNames(`perl -nle '/HandleRequest/ and print' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestPerlWithASeparateProgramFlag() {
+	s.deniesPerlNames(`perl -n -e 'print if /HandleRequest/' internal/*.go`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestAg() {
+	s.deniesNames(`ag 'HandleRequest|ParseConfig' internal`, "HandleRequest", "ParseConfig")
+}
+
+func (s *ProgramSearchSuite) TestAck() {
+	s.deniesNames(`ack HandleRequest internal`, "HandleRequest")
+}
+
+func (s *ProgramSearchSuite) TestAwkFilteringAPipeIsNotASearch() {
+	s.passes(`go list ./... | awk '/HandleRequest/'`)
+}
+
+func (s *ProgramSearchSuite) TestSedFilteringAPipeIsNotASearch() {
+	s.passes(`git log --oneline | sed -n '/Judge/p'`)
+}
+
+func (s *ProgramSearchSuite) TestAwkFieldPrintIsNotASearch() {
+	s.passes(`awk '{print $1}' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestAwkFieldSplitIsNotASearch() {
+	s.passes(`awk -F, '{print $1}' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestAwkNegationIsNotASearch() {
+	s.passes(`awk '!/HandleRequest/' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestAwkRangeIsNotASearch() {
+	s.passes(`awk '/Judge/,/HandleRequest/' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestAwkProgramFileIsNotASearch() {
+	s.passes(`awk -f prog.awk internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestSedSubstitutionIsNotASearch() {
+	s.passes(`sed 's/HandleRequest/Serve/' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestSedInPlaceEditIsNotASearch() {
+	s.passes(`sed -i 's/HandleRequest/Serve/' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestSedPrintWithoutQuietIsNotASearch() {
+	s.passes(`sed '/HandleRequest/p' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestSedLineRangeIsNotASearch() {
+	s.passes(`sed -n '1,5p' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestPerlSubstitutionIsNotASearch() {
+	s.passes(`perl -pe 's/HandleRequest/Serve/' internal/*.go`)
+}
+
+func (s *ProgramSearchSuite) TestPerlOverStdinIsNotASearch() {
+	s.passes(`perl -ne 'print if /HandleRequest/'`)
+}
+
+func (s *ProgramSearchSuite) TestPerlExtendedRegexIsNotASearch() {
+	s.passes(`perl -ne 'print if /HandleRequest/x' internal/*.go`)
 }

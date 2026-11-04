@@ -15,13 +15,14 @@ import (
 // TokenServer is a running loopback server on an ephemeral 127.0.0.1 port for one browser
 // page. Every route admits only a loopback peer, CORS-locked to the page's origin, that
 // presents the per-run token the server minted, as a bearer header or a `?token=` query
-// param (a browser EventSource cannot set headers).
+// param (a browser EventSource cannot set headers). A forged Host or any Origin
+// but the page's is refused first: DNS rebinding reaches loopback too.
 //
 // The guard stack is assembled here once, so a server handing data to a page cannot be
 // built with a guard missing.
 type TokenServer struct {
 	srv    *Server
-	token  string
+	token  types.Secret
 	cancel context.CancelFunc
 	done   chan struct{} // closed once the background Serve has fully shut down
 }
@@ -29,6 +30,10 @@ type TokenServer struct {
 // StartTokenServer binds the port, mints the token, registers routes (pattern to handler)
 // behind the guards, and serves in the background until Close.
 func StartTokenServer(origin string, routes map[string]http.Handler) (*TokenServer, error) {
+	allowed, err := AllowedHosts(netip.AddrPort{}).AllowOrigin(origin)
+	if err != nil {
+		return nil, err
+	}
 	s, err := NewServer(netip.AddrPort{})
 	if err != nil {
 		return nil, err
@@ -37,16 +42,16 @@ func StartTokenServer(origin string, routes map[string]http.Handler) (*TokenServ
 	if _, err := rand.Read(raw); err != nil {
 		return nil, fmt.Errorf("httpx: mint token: %w", err)
 	}
-	t := &TokenServer{srv: s, token: hex.EncodeToString(raw), done: make(chan struct{})}
+	t := &TokenServer{srv: s, token: types.NewSecret(hex.EncodeToString(raw)), done: make(chan struct{})}
 	// The per-run token reads its one page's data and nothing more.
-	verify := SingleTokenVerifier(func() (string, error) { return t.token, nil }, types.GrantViewer)
+	verify := SingleTokenVerifier(func() (string, error) { return t.token.Reveal(), nil }, types.GrantViewer)
 	need := types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
 	for pattern, h := range routes {
 		guarded, err := BearerGuardWithQueryToken(rpcerr.FormatJSON, verify, need, h)
 		if err != nil {
 			return nil, err
 		}
-		s.Handle(pattern, RequireLoopbackPeer(CORS(origin)(guarded)))
+		s.Handle(pattern, RequireLoopbackPeer(GuardRebind(rpcerr.FormatJSON, allowed, CORS(origin)(guarded))))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.cancel = cancel
@@ -65,4 +70,4 @@ func (t *TokenServer) Close() {
 func (t *TokenServer) Addr() string { return t.srv.Addr().String() }
 
 // Token is the per-run token a page must present.
-func (t *TokenServer) Token() string { return t.token }
+func (t *TokenServer) Token() string { return t.token.Reveal() }

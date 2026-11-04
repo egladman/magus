@@ -17,6 +17,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/register"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -24,16 +26,15 @@ import (
 // order however the registry was filled: they used to follow the built-ins' map order, so
 // `describe targets -o json` flipped between runs.
 func TestDescribeTargets_SpellsSorted(t *testing.T) {
+	// No two built-in spells share a target, so the fixture registers two that do, the
+	// later name first.
+	later := register.Spell(t, "zz-shared-target", spells.WithTargets("shared"))
+	earlier := register.Spell(t, "aa-shared-target", spells.WithTargets("shared"))
 	w := testkit.NewWorkspace(t)
-	w.Magusfile(`import "magus";
-import "magus/spell/typescript";
-import "magus/spell/go";
-import "magus/spell/bash";
-import "magus/spell/markdown";
-
-magus\project({"spells": [typescript, go, markdown, bash]})
-`)
-	m, err := magus.Open(t.Context(), w.Root(), magus.WithSpawnRule(magus.TierCeiling))
+	w.Magusfile("")
+	reg := magus.NewWorkspaceRegistry()
+	reg.RegisterProject(".", magus.WithSpell(later), magus.WithSpell(earlier))
+	m, err := magus.Open(t.Context(), w.Root(), magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

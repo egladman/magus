@@ -9,7 +9,7 @@ stdout 'first=137'
 exists .magus/knowledge/graph-build.holder.json
 
 exec magus graph build --no-sessions
-stderr 'magus graph build: took over the build lock from `magus graph build` \(pid [0-9]+, started [0-9-]+ [0-9:]+\), which ended without releasing it'
+stderr 'magus graph build: took over the build lock from `magus graph build` in .+ \(pid [0-9]+, started [0-9-]+ [0-9:]+\), which ended without releasing it'
 ! stderr 'waiting for'
 stderr 'knowledge graph rebuilt'
 ! exists .magus/knowledge/graph-build.holder.json

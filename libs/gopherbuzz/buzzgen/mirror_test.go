@@ -146,3 +146,41 @@ func TestRenderFields_SkipsUnexportedAndOptedOut(t *testing.T) {
 	assert.NotContains(t, got, "dropped")
 	assert.NotContains(t, got, "hidden")
 }
+
+type genericDiag struct{ Code string }
+
+type genericResult[V any] struct {
+	Value V
+	Error *genericDiag `buzz:"error"`
+}
+
+type genericPair[V any] struct {
+	Items []V
+	Last  *V
+}
+
+// A type parameter is declared once on the object; a field of it is nullable with no zero.
+func TestObjectDecl_Generic(t *testing.T) {
+	t.Parallel()
+
+	opts := DefaultOptions()
+	opts.Namer = func(reflect.Type) string { return "Diagnostic" }
+
+	got, err := ObjectDecl("Result", reflect.TypeFor[genericResult[T]](), opts)
+	require.NoError(t, err)
+	assert.Equal(t, "export object Result::<T> {\n    value: T? = null,\n    error: Diagnostic? = null,\n}\n", string(got))
+
+	got, err = ObjectDecl("Pair", reflect.TypeFor[genericPair[T]](), DefaultOptions())
+	require.NoError(t, err)
+	assert.Equal(t, "export object Pair::<T> {\n    items: [T?] = [],\n    last: T? = null,\n}\n", string(got))
+
+	assert.Empty(t, TypeParams(reflect.TypeFor[genericDiag]()))
+}
+
+// Its Buzz spelling needs type arguments reflect cannot name.
+func TestFieldType_GenericInstanceRefused(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := FieldType(reflect.TypeFor[genericResult[int]](), DefaultOptions())
+	require.ErrorContains(t, err, "generic instance")
+}

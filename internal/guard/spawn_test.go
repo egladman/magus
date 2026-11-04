@@ -158,6 +158,19 @@ func TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld(t *testing.T) {
 	})
 }
 
+func TestSpawnIsAdvisedWhenTheLeaseStoreDoesNotRead(t *testing.T) {
+	ctx, _ := fleetFixture(t)
+	path, err := fleetLedger(t, ctx).Path()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
+	at := hookLocation(ctx, Dependencies{})
+
+	got := adviseSharedCheckoutSpawn(ctx, hint.NewGate(at.cacheDir, "orchestrator"), at)
+	assert.Contains(t, got.Say, "the lease store did not read")
+	assert.Contains(t, got.Why, "worktree")
+}
+
 // A spawn_agent call reaches the guard as the payload a Codex PreToolUse writes: the
 // prompt is `message` (or text `items`), and there is no `prompt` key.
 func TestDecodeHookEnvelopeSpawnCodex(t *testing.T) {

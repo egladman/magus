@@ -1,4 +1,3 @@
-import { must } from "../../lib/guards";
 // render.ts - the pretty/raw log views and the DOM plumbing around them. render() is the one
 // entry every mode calls to repaint the body: it dispatches to the waterfall in timeline mode,
 // to a flat line-numbered dump in raw mode, and otherwise to the stylized structural view
@@ -45,14 +44,15 @@ export function render(): void {
   if (!state.pretty) {
     // RAW: in Journal mode, the exact reconstructed output (what `magus query <ref>` prints);
     // in heuristic mode, the parsed section lines. Flat, line-numbered, no folds/badges.
-    const flat = state.rawLines || must(state.model).sections.flatMap((s) => s.lines);
+    const flat = state.rawLines || (state.model?.sections.flatMap((s) => s.lines) ?? []);
     let n = 0;
     for (const raw of flat) bodyEl.appendChild(renderSectionLine(raw, ++n, onLineNumberClick));
     applyLineHighlight();
     return;
   }
 
-  const model = must(state.model);
+  const model = state.model;
+  if (!model) return;
   // The active filter narrows the pretty view: non-matching lines and whole target groups are
   // hidden. lineNo still advances over hidden rows so line numbers (and #L links) stay stable.
   const q = state.filterParsed;
@@ -187,8 +187,10 @@ function lineRangeFromHash(): { start: number; end: number } | null {
   for (const part of location.hash.replace(/^#/, "").split("&")) {
     const m = /^L(\d+)(?:-L?(\d+))?$/.exec(part);
     if (!m) continue;
-    const a = parseInt(m[1], 10);
-    const b = m[2] ? parseInt(m[2], 10) : a;
+    const [, startText, endText] = m;
+    if (startText === undefined) continue;
+    const a = parseInt(startText, 10);
+    const b = endText ? parseInt(endText, 10) : a;
     return { start: Math.min(a, b), end: Math.max(a, b) };
   }
   return null;
@@ -202,7 +204,7 @@ export function applyLineHighlight(): void {
   if (!range) return;
   let first: HTMLElement | null = null;
   for (const ln of bodyEl.querySelectorAll(".console-render-line__gutter")) {
-    const n = parseInt(must(ln.textContent), 10);
+    const n = parseInt(ln.textContent ?? "", 10);
     if (!(n >= range.start && n <= range.end)) continue;
     // A body line, or the section head for a head row (its gutter sits inside the toggle).
     const row = (ln.closest(".console-render-section__head") ?? ln.parentElement) as HTMLElement;

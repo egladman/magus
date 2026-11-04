@@ -84,9 +84,23 @@ export fun rootPrefix(srcRel: str, site: Site) > str {
 }
 
 test "rootPrefix climbs out of the README's /development/ home" {
-    final s = mut Site{};
-    s.docs = "docs";
-    s.blog = "blog";
+    final s = mut Site{
+        docs = "docs",
+        blog = "blog",
+        metaCommits = mut {},
+        metaHistory = mut {},
+        searchRecords = mut [<str>],
+        aliasTarget = mut {},
+        pageUrls = mut {},
+        tagPages = mut {},
+        pageAxes = mut {},
+        writtenPaths = mut {},
+        blogPosts = mut [<BlogPost>],
+        docPages = mut [<DocPage>],
+        pageTerms = mut {},
+        demoBySlug = mut {},
+        releases = mut [<Release>],
+    };
     assert\equal(rootPrefix("README.md", s), "../", "README renders one level deep");
     assert\equal(rootPrefix(LANDING_SRC, s), "", "the landing sits at gen's root");
 }

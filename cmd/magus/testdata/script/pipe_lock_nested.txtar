@@ -30,7 +30,7 @@ magus\project({
 });
 
 export fun outerstdin(ctx: magus\Context, args: [str]) > void !> any {
-    magus\run(["consume", "."], {"stdin": "x"});
+    magus\run(["consume", "."], opts: magus\CommandOptions{ stdin = "x" });
 }
 
 export fun outerpipe(ctx: magus\Context, args: [str]) > void !> any {

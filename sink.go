@@ -523,9 +523,19 @@ func (t textEncoder) summary(ctx context.Context, e report.RunSummary) {
 		lead = "\nSummary: "
 	}
 	elapsed := cache.FormatDuration(time.Duration(e.DurationMs) * time.Millisecond)
-	footer := fmt.Sprintf("%s%d cached, %d ran, %d failed (%s)\n", lead, e.Hits, e.Misses, e.Errors, elapsed)
 	if e.Dry {
-		footer = fmt.Sprintf("%sdry run, %s would run (%s)\n", lead, plural(e.Planned, "target"), elapsed)
+		_ = t.term.EndRun(ctx, fmt.Sprintf("%sdry run, %s would run (%s)\n", lead, plural(e.Planned, "target"), elapsed))
+		return
+	}
+	if e.Files > 0 {
+		elapsed += " on " + plural(e.Files, "file")
+	}
+	if e.Slots > 0 {
+		elapsed += " using " + plural(e.Slots, "slot")
+	}
+	footer := fmt.Sprintf("%s%d cached, %d ran, %d failed (%s)\n", lead, e.Hits, e.Misses, e.Errors, elapsed)
+	if e.Permitted > 0 {
+		footer = fmt.Sprintf("%s%d cached, %d ran, %d permitted, %d failed (%s)\n", lead, e.Hits, e.Misses, e.Permitted, e.Errors, elapsed)
 	}
 	_ = t.term.EndRun(ctx, footer)
 }

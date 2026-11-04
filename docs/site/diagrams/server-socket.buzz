@@ -5,8 +5,8 @@ import "magus/figure";
 import "site/diagrams/packages" as _;
 
 export fun serverSocketFigure() > figure\Figure !> any {
-    final sock = magus\dir("internal/proc");
-    final share = magus\dir("internal/share");
+    final sock = magus\graph().dir("internal/proc");
+    final share = magus\graph().dir("internal/share");
     final cli = figure\external("magus CLI", sub: "run, status, query", tag: "shell");
     final pool = figure\external("Concurrency pool", look: figure\Look.plain);
     final ws = figure\external("Workspace registry", sub: "graph, SCIP, cache", look: figure\Look.store);
@@ -34,12 +34,12 @@ export fun serverSocketFigure() > figure\Figure !> any {
         .legend(figure\Look.optional, label: "spawned on demand")
         .scope(goPackages("internal/proc/**"))
         .scope(goPackages("internal/share/**"))
-        .except([magus\dir("internal/proc/endpoint")],
+        .except([magus\graph().dir("internal/proc/endpoint")],
             why: "parses the transport address a client dials, a value type the CLI and config share")
-        .except([magus\dir("internal/proc/environ")],
+        .except([magus\graph().dir("internal/proc/environ")],
             why: "one run's environment for the env host module; nothing on the socket reads it")
-        .except([magus\dir("internal/proc/spawn")],
+        .except([magus\graph().dir("internal/proc/spawn")],
             why: "the subprocess helper spells run tools through, under the pool rather than at the socket")
-        .except([magus\dir("internal/proc/sockdir")],
+        .except([magus\graph().dir("internal/proc/sockdir")],
             why: "picks the 0700 directory the socket lives in, which the box's sub names");
 }

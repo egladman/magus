@@ -207,7 +207,7 @@ fun branches(stack: BranchStack) > str {
 
 fun raised(stack: BranchStack) > str {
     try {
-        orderLayers(stack);
+        _ = orderLayers(stack);
     } catch (e) {
         return "{e}";
     }
@@ -246,7 +246,7 @@ test "writeStack and readStack round-trip every member" {
 
 fun refused(text: str) > str {
     try {
-        readStack(text);
+        _ = readStack(text);
     } catch (e) {
         return "{e}";
     }

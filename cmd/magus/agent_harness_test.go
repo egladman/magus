@@ -32,7 +32,8 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false))
+	_, _, err := installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false, true)
+	require.NoError(t, err)
 	assert.Contains(t, log.String(), `msg=wrote component="agent harness install"`)
 
 	// An orphan from an earlier release: magus stamped it, so this install prunes it.
@@ -43,7 +44,8 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 
 	log.Reset()
 	out := captureStdout(t, func() {
-		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false))
+		_, _, err := installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, false, true)
+		require.NoError(t, err)
 	})
 	assert.NoDirExists(t, orphan)
 	assert.Equal(t, fmt.Sprintf("removed skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")), out)
@@ -53,7 +55,8 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
 		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort), 0o644))
 	out = captureStdout(t, func() {
-		require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, true))
+		_, _, err := installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, true, true)
+		require.NoError(t, err)
 	})
 	assert.DirExists(t, orphan)
 	assert.Contains(t, out, fmt.Sprintf("would remove skill this binary no longer ships: %s\n", filepath.Join(dest, "magus-retired")))
@@ -98,11 +101,11 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 }
 
 // TestDescribeHarnessPrintsEachChangeAndTheMergeCommand pins the text a person reads before
-// merging: every file, every entry it gains or loses, and the command, which magus prints
-// and never runs.
+// installing: every file, every entry it gains or loses, and the command.
+// Describe prints that command and never runs it.
 func TestDescribeHarnessPrintsEachChangeAndTheMergeCommand(t *testing.T) {
 	var out bytes.Buffer
-	require.NoError(t, writeHarnessPlan(&out, types.HarnessPlan{
+	require.NoError(t, writeHarnessPlan(&out, types.HarnessInstallation{
 		ID: "claude-code",
 		Files: map[string]types.HarnessFile{
 			".claude/settings.json": {
@@ -124,18 +127,18 @@ func TestDescribeHarnessPrintsEachChangeAndTheMergeCommand(t *testing.T) {
     retire hooks.Stop: {"command":"magus buzz -s old/magus-checkpoint.buzz"}
   .codex/rules/magus.rules (missing)
     write the whole file
-merge it yourself (magus never writes host config):
+apply the installation:
   merge-command
 mcp claude-code (user-owned; Magus does not write host MCP config):
 register it
 `, out.String())
 
 	out.Reset()
-	require.NoError(t, writeHarnessPlan(&out, types.HarnessPlan{ID: "cursor"}))
+	require.NoError(t, writeHarnessPlan(&out, types.HarnessInstallation{ID: "cursor"}))
 	assert.Equal(t, "cursor harness: current\n", out.String())
 
 	out.Reset()
-	require.NoError(t, writeHarnessPlan(&out, types.HarnessPlan{
+	require.NoError(t, writeHarnessPlan(&out, types.HarnessInstallation{
 		ID: "claude-code",
 		Wired: []types.HarnessWired{{File: ".claude/settings.json", Key: "hooks.PreToolUse", Entries: []map[string]any{
 			{"matcher": "Bash", "hooks": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}}},
@@ -164,6 +167,8 @@ func TestDescribeHarnessMergeCommandLeavesTheFileCurrent(t *testing.T) {
 			e.Setenv("MAGUS_SERVER_ENABLED", "false")
 			e.Setenv("MAGUS_BROKER", "off")
 			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			// The merge's fs writes are judged, which opens the workspace.
+			e.Setenv("XDG_CACHE_HOME", filepath.Join(e.WorkDir, ".cache"))
 			return nil
 		},
 	})
@@ -191,8 +196,8 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "script-host"; }
 
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = "hooks.json"};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = "hooks.json"}, guard = "hooks"};
 }
 
 export fun mgs_getSkills() > HarnessSkills {
@@ -265,6 +270,8 @@ func TestShippedHarnessEntriesRetireWhenRewritten(t *testing.T) {
 			e.Setenv("MAGUS_SERVER_ENABLED", "false")
 			e.Setenv("MAGUS_BROKER", "off")
 			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			// The merge's fs writes are judged, which opens the workspace.
+			e.Setenv("XDG_CACHE_HOME", filepath.Join(e.WorkDir, ".cache"))
 			for _, id := range []string{"claude-code", "codex", "cursor"} {
 				spell := filepath.Join("spells", "harness", id, "spell.buzz")
 				body, err := os.ReadFile(filepath.Join("..", "..", spell))
@@ -295,7 +302,7 @@ grep '"SubagentStop"' .codex/hooks.json
 ! grep '"matcher": "Read"' .codex/hooks.json
 grep '"UserPromptSubmit"' .codex/hooks.json
 grep '"beforeSubmitPrompt"' .cursor/hooks.json
-grep 'sandbox_mode = "read-only"' .codex/agents/magus-scout.toml
+! grep 'sandbox_mode' .codex/agents/magus-scout.toml
 grep -count=1 'proofread-reply.buzz' .claude/settings.json
 grep -count=1 'proofread-reply.buzz' .codex/hooks.json
 grep -count=1 'proofread-reply.buzz' .cursor/hooks.json
@@ -309,7 +316,7 @@ grep -count=1 'proofread-reply.buzz' .claude/settings.json
 grep -count=1 'proofread-reply.buzz' .codex/hooks.json
 grep -count=1 'proofread-reply.buzz' .cursor/hooks.json
 grep -count=1 'collaborationspawn_agent' .codex/hooks.json
-grep -count=2 'magus-rehydrate.buzz' .codex/hooks.json
+grep -count=3 'magus-rehydrate.buzz' .codex/hooks.json
 exec magus describe harness claude-code
 stdout '^claude-code harness: current$'
 exec magus describe harness codex
@@ -345,13 +352,13 @@ for f in .claude/settings.json .codex/hooks.json .cursor/hooks.json; do
 done
 `
 
-// TestAgentHarnessHasNoWritingVerb pins that no verb writes host config: magus prints it
-// through `describe harness` and the person merges it.
+// TestAgentHarnessHasNoWritingVerb pins that apply and remove are gone.
+// Install, link and verify are the only verbs, and the error lists them.
 func TestAgentHarnessHasNoWritingVerb(t *testing.T) {
 	for _, verb := range []string{"apply", "remove"} {
 		err := agentHarnessCommand(context.Background(), t.TempDir(), []string{verb, "--id", "x"})
 		require.Error(t, err, verb)
 		assert.Contains(t, err.Error(), "unknown subcommand", verb)
-		assert.Contains(t, err.Error(), "magus describe harness", verb)
+		assert.Contains(t, err.Error(), "want install, link, or verify", verb)
 	}
 }

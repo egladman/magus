@@ -28,16 +28,16 @@ type Files struct {
 
 // File settles one conflicted file, path, workspace-relative. A file magus.yaml's
 // vcs.auto_resolve opts in is merged three ways when every region both sides changed is
-// low risk. A declared output keeps the version the VCS already staged, which marks the
-// conflict resolved without merging generated hunks by hand. A non-nil error leaves the
-// file conflicted, with markers.
+// low risk. A declared output keeps the version the VCS staged, and warns.
+// A non-nil error leaves the file conflicted, with markers.
+// A declared output with no regeneration record gets that error too.
 //
 // It deliberately does NOT regenerate. git runs a driver inside its own index
 // manipulation, once per conflicted file, while the owning project's generate target writes
 // every output that project declares, which mid-rebase left the tree dirty against what git
 // had staged, so `git rebase --continue` refused. A loop by construction, at one full build
-// per conflicted file. It takes a side and records the owed regeneration instead; the
-// settle hooks run the record once the operation has the whole tree (see Hook).
+// per conflicted file. It takes a side and records the regeneration instead.
+// `magus vcs resolve` runs the record once the operation has the whole tree.
 func File(ctx context.Context, m *magus.Magus, f Files, path string) error {
 	absPath := filepath.Join(m.Root(), filepath.FromSlash(path))
 	p := m.FindOutputProducer(absPath)
@@ -63,6 +63,19 @@ func File(ctx context.Context, m *magus.Magus, f Files, path string) error {
 		return f.leaveConflicted(fmt.Errorf("merge-driver: no target in %s rebuilds %q, so magus cannot settle it after the merge, resolve it by hand",
 			types.ProjectLabel(p.Path, p.Dir), path))
 	}
+	// Keeping a side is safe only while a record says the file
+	// is owed a rebuild. With no record, nothing would ever say so.
+	recorded, err := vcs.RecordOwedRegeneration(ctx, m.Root(), vcs.OwedRegeneration{
+		Project: projectKey(p), Target: target, Paths: []string{path},
+	})
+	switch {
+	case err != nil:
+		return f.leaveConflicted(fmt.Errorf("merge-driver: %s stays conflicted for `%s`, since its regeneration cannot be recorded: %w",
+			path, hint.VCSResolve.String(), err))
+	case !recorded:
+		return f.leaveConflicted(fmt.Errorf("merge-driver: %s stays conflicted for `%s`, since only git records a regeneration",
+			path, hint.VCSResolve.String()))
+	}
 	if f.Output != f.Ours {
 		// The VCS reads the result from its own output file, so keeping the current version
 		// means copying it there.
@@ -74,28 +87,10 @@ func File(ctx context.Context, m *magus.Magus, f Files, path string) error {
 			return fmt.Errorf("merge-driver: %w", err)
 		}
 	}
-
-	// %A already holds the current version and is the file the VCS reads back, so leaving it
-	// untouched IS the resolution: there is nothing to write to the tree. What is written is
-	// the owed regeneration, in the git dir, which the hooks settle once the merge is over.
-	regenerate := hint.Run.With(target+":rw", projectKey(p))
-	recorded, err := vcs.RecordOwedRegeneration(ctx, m.Root(), vcs.OwedRegeneration{
-		Project: projectKey(p), Target: target, Paths: []string{path},
-	})
-	switch {
-	case err != nil:
-		// Failing here would turn a settled file back into conflict markers over a
-		// bookkeeping write, so the merge proceeds and the person gets the command.
-		slog.With(attr.Component("merge-driver")).WarnContext(ctx, "kept the current version of a generated file but could not record its regeneration; regenerate before committing",
-			slog.String("path", path), slog.String("regenerate", regenerate), attr.Error(err))
-	case !recorded:
-		// No git dir, so no settle hook; hg, Sapling and jj regenerate by hand.
-		slog.With(attr.Component("merge-driver")).InfoContext(ctx, "kept the current version of a generated file; regenerate before committing",
-			slog.String("path", path), slog.String("regenerate", regenerate))
-	default:
-		slog.With(attr.Component("merge-driver")).InfoContext(ctx, "kept the current version of a generated file; the settle hook regenerates it once the merge has the whole tree",
-			slog.String("path", path), slog.String("regenerate", regenerate))
-	}
+	// git prints only "Auto-merging" for a driver that exits 0, and
+	// may commit at once. This is the merge's one notice of the drop.
+	slog.With(attr.Component("merge-driver")).WarnContext(ctx, "kept our side of a generated file and dropped theirs; it stays stale until the settle command runs",
+		slog.String("path", path), slog.String("settle", hint.VCSResolve.String()), slog.String("regenerates", hint.Run.With(target+":rw", projectKey(p))))
 	return nil
 }
 

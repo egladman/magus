@@ -76,12 +76,15 @@ export interface SigilSpec {
 
 // Three to eight folds. Two reads as a leaf rather than a figure; past eight the wedges are too narrow
 // for the motif to show at the size this renders at.
-const FOLDS = [3, 4, 5, 6, 7, 8];
+const FOLDS: readonly [number, ...number[]] = [3, 4, 5, 6, 7, 8];
+const CORES: readonly [0, 1, 2] = [0, 1, 2];
 
 export function sigilSpec(seed: string): SigilSpec {
   const next = stepper(hash(seed));
   const pick = (n: number): number => next() % n;
-  const folds = FOLDS[pick(FOLDS.length)];
+  // choose draws one element; the fallback to the first is unreachable, since pick stays in range.
+  const choose = <T>(xs: readonly [T, ...T[]]): T => xs[pick(xs.length)] ?? xs[0];
+  const folds = choose(FOLDS);
   // Quantized rather than continuous: a motif that can land anywhere produces near-identical marks
   // that differ by a pixel, which is worse than a smaller set of clearly distinct ones.
   const edge = 0.42 + pick(4) * 0.12;
@@ -98,21 +101,22 @@ export function sigilSpec(seed: string): SigilSpec {
   if (!motif.some((q) => Math.abs(q.r - edge) >= REACH)) {
     const i = pick(motif.length);
     const out = edge < 0.6 ? edge + REACH : edge - REACH;
-    motif[i] = { t: motif[i].t, r: Math.max(0.12, Math.min(0.98, out)) };
+    const p = motif[i];
+    if (p) motif[i] = { t: p.t, r: Math.max(0.12, Math.min(0.98, out)) };
   }
   // Never zero: a straight-sided figure is the crystalline look this deliberately moves away from.
   // The sign is seeded too, so some workspaces bloom outward and others cup inward.
-  const BULGES = [-0.34, -0.22, -0.13, 0.13, 0.22, 0.34, 0.46];
+  const BULGES: readonly [number, ...number[]] = [-0.34, -0.22, -0.13, 0.13, 0.22, 0.34, 0.46];
   return {
     folds,
     mirror: pick(2) === 0,
     edge,
     motif,
-    core: pick(3) as 0 | 1 | 2,
+    core: choose(CORES),
     ring: pick(4) > 0,
-    bulge: BULGES[pick(BULGES.length)],
+    bulge: choose(BULGES),
     orbs: pick(3) === 0,
-    hue: SIGIL_HUES[pick(SIGIL_HUES.length)],
+    hue: choose(SIGIL_HUES),
   };
 }
 
@@ -219,10 +223,10 @@ export function renderSigil(spec: SigilSpec, size = 44): string {
   // QUADRATICS, not straight segments. Each control point sits at the midpoint pushed along the radius
   // by `bulge`, so a segment bows outward into a petal or inward into a cusp. This is the whole
   // difference between a spiky star and something grown - the symmetry is identical either way.
-  const d: string[] = ["M" + ring[0][0].toFixed(2) + " " + ring[0][1].toFixed(2)];
-  for (let i = 1; i <= ring.length; i++) {
-    const [x0, y0] = ring[i - 1];
-    const [x1, y1] = ring[i % ring.length];
+  const start = ring[0] ?? [c, c];
+  const d: string[] = ["M" + start[0].toFixed(2) + " " + start[1].toFixed(2)];
+  for (const [i, [x0, y0]] of ring.entries()) {
+    const [x1, y1] = ring[(i + 1) % ring.length] ?? start;
     const mx = (x0 + x1) / 2;
     const my = (y0 + y1) / 2;
     // Push along the line from the center through the midpoint, which keeps the bow radial and so
@@ -239,9 +243,9 @@ export function renderSigil(spec: SigilSpec, size = 44): string {
   // figure competing with it.
   if (spec.orbs) {
     const tipR = Math.max(...inWedge.map((q) => q.r));
-    const tip = inWedge.findIndex((q) => q.r === tipR);
+    const tip = inWedge.find((q) => q.r === tipR) ?? { t: 0, r: spec.edge };
     for (let k = 0; k < spec.folds; k++) {
-      const [x, y] = at(inWedge[tip].t, inWedge[tip].r, k);
+      const [x, y] = at(tip.t, tip.r, k);
       parts.push(
         '<circle cx="' +
           x.toFixed(2) +

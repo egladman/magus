@@ -9,7 +9,6 @@ import {
   type Output,
 } from "@wire/viewer/v1alpha1/viewer_pb";
 import { createServerTransport } from "../../lib/server";
-import { must } from "../../lib/guards";
 // runtree.ts - the Log Viewer's run browser: a PatternFly TreeView down the left of the viewer
 // that lists prior runs so a reader can find one WITHOUT a ref somebody printed on a terminal.
 // Two orderings of the same rows, switched in the panel header: "Runs" nests invocation ->
@@ -435,7 +434,7 @@ function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
     const group = document.createElement("ul");
     group.className = "pf-v6-c-tree-view__list";
     group.setAttribute("role", "group");
-    for (const child of must(spec.children)) group.append(makeNode(child, ctx));
+    for (const child of spec.children ?? []) group.append(makeNode(child, ctx));
     li.append(group);
   }
 
@@ -577,8 +576,9 @@ export function renderRunTree(
   const ctx: TreeCtx = { root: tree, state, order: [], onSelect };
   // The first branch opens on load so the newest run's targets are visible without a click. Only
   // on a FIRST paint: once the reader has opened or closed anything, their state is the answer.
-  if (!state.expanded.size && specs.length && specs[0].children?.length) {
-    state.expanded.add(specs[0].id);
+  const firstSpec = specs[0];
+  if (!state.expanded.size && firstSpec?.children?.length) {
+    state.expanded.add(firstSpec.id);
   }
   for (const spec of specs) list.append(makeNode(spec, ctx));
   tree.append(list);
@@ -1034,7 +1034,7 @@ export function initRunBrowser(deps: RunBrowserDeps): RunBrowserHandle {
       // The feeds read a refused connection as an empty list, so nothing answering at the address
       // is asked separately: "nothing kept yet" would send the reader to run a target.
       if (nextRuns.length === 0 && nextLogs.length === 0) {
-        nextUnreachable = !(await probeServer(deps.host)).ok;
+        nextUnreachable = (await probeServer(deps.host)).error !== undefined;
       }
     }
     // A newer load, or a closed panel, owns the answer now.

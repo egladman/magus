@@ -33,24 +33,23 @@ var Flags = Module{
 			Doc: "Parse argv against the declared flags, returning {values, lists, positionals, unknown}: " +
 				"switches take no value and record \"true\", valued flags take the next word or an " +
 				"=value suffix (a repeated valued flag records the last), flags named in repeated take " +
-				"a value each time and collect them in order into lists, everything after `--` is a " +
-				"positional, and every argument that was not declared is returned in unknown rather " +
-				"than guessed at. A flag is declared as it is typed, dashes included (\"--file\", not " +
-				"\"file\"), and values and lists are keyed the same way. A bare word before `--` is " +
-				"unknown, not a positional; `magus buzz <file> -- <args>` consumes its own `--`, so a " +
-				"script taking paths is run with a second one. With command set, the first bare word " +
-				"instead starts a command, the way sudo, env and Go's flag package read argv: it and " +
-				"every word after it are positionals, verbatim, flags included. Errors when a valued " +
-				"flag is given no value, and when a flag named in required is absent or given an empty " +
-				"value: a workflow passing an unset variable (`--issue \"$ISSUE\"`) is refused rather " +
-				"than read as a choice.",
+				"a value each time and collect them in order into lists, the first bare word (one that " +
+				"does not start with a dash) ends the flags and it and every word after it are " +
+				"positionals, verbatim, flags included, the way sudo, env and Go's flag package read " +
+				"argv, and a lone `--` ends the flags too, so a positional that starts with a dash " +
+				"follows it. A dashed word that was not declared, and an empty argument, are returned " +
+				"in unknown rather than guessed at. A flag is declared as it is typed, dashes " +
+				"included (\"--file\", not \"file\"), and values and lists are keyed the same way. " +
+				"`magus buzz <file> -- <args>` consumes its own `--`, so a script taking paths needs " +
+				"no second one. Errors when a valued flag is given no value, and when a flag named in required is " +
+				"absent or given an empty value: a workflow passing an unset variable " +
+				"(`--issue \"$ISSUE\"`) is refused rather than read as a choice.",
 			Args: []Arg{
 				{Name: "argv", Type: TypeStringSlice},
 				{Name: "switches", Type: TypeStringSlice},
 				{Name: "valued", Type: TypeStringSlice},
 				{Name: "required", Type: TypeStringSlice, Optional: true},
 				{Name: "repeated", Type: TypeStringSlice, Optional: true},
-				{Name: "command", Type: TypeBool, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "FlagParse"}},
 			Raises:  true,
@@ -63,13 +62,13 @@ var Flags = Module{
 //
 // The separator ends flag parsing entirely, which is what `--` means everywhere else: a
 // word after it is data even when it is spelled like a flag this script declares.
-func FlagsParse(_ context.Context, argv, switches, valued, required, repeated []string, command bool) (types.FlagParse, error) {
+func FlagsParse(_ context.Context, argv, switches, valued, required, repeated []string) (types.FlagParse, error) {
 	for _, name := range required {
 		if !slices.Contains(valued, name) && !slices.Contains(repeated, name) {
 			return types.FlagParse{}, fmt.Errorf("flags.parse: %s is required but not declared valued or repeated, a switch cannot be required", name)
 		}
 	}
-	parsed, err := flagsParse(argv, switches, valued, repeated, command)
+	parsed, err := flagsParse(argv, switches, valued, repeated)
 	if err != nil {
 		return types.FlagParse{}, err
 	}
@@ -85,7 +84,7 @@ func FlagsParse(_ context.Context, argv, switches, valued, required, repeated []
 	return parsed, nil
 }
 
-func flagsParse(argv, switches, valued, repeated []string, command bool) (types.FlagParse, error) {
+func flagsParse(argv, switches, valued, repeated []string) (types.FlagParse, error) {
 	kind := make(map[string]byte, len(switches)+len(valued)+len(repeated))
 	for _, name := range switches {
 		kind[name] = 's'
@@ -142,9 +141,9 @@ func flagsParse(argv, switches, valued, repeated []string, command bool) (types.
 				record(name, value)
 				continue
 			}
-			// In command mode a bare word starts the command, and the command keeps its
-			// own flags: `on-linux --arch arm64 magus run test -s` runs `magus run test -s`.
-			if command && !strings.HasPrefix(word, "-") {
+			// A bare word starts the positionals, flags included.
+			// An empty word stays unknown so an unset variable shows.
+			if word != "" && !strings.HasPrefix(word, "-") {
 				parsed.Positionals = append(parsed.Positionals, word)
 				parsed.Positionals = append(parsed.Positionals, rest...)
 				return parsed, nil

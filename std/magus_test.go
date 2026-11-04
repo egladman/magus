@@ -24,7 +24,23 @@ import (
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// stdSuite is the package's one testify suite: add tests here as methods.
+type stdSuite struct {
+	suite.Suite
+}
+
+func TestStdSuite(t *testing.T) {
+	suite.Run(t, new(stdSuite))
+}
+
+// SetupSuite registers the MGS catalog as magus's startup does, so a raise can tell a
+// built-in code from the workspace's.
+func (s *stdSuite) SetupSuite() {
+	s.Require().NoError(diagnostics.RegisterCatalog(types.DiagnosticOwnerMagus, types.AllDiagnosticCodes()))
+}
 
 // TestMagusCmdWarnsForTypedSubcommands verifies the escape hatch nudges authors
 // toward the dedicated method when the subcommand has one, and stays quiet otherwise. The nested exec itself is allowed to fail — the warning is
@@ -82,16 +98,15 @@ func TestResolveRunDir(t *testing.T) {
 	cases := []struct {
 		name string
 		cwd  string
-		opts map[string]any
+		opts types.MagusCommandOptions
 		want string
 	}{
-		{"no opts keeps the contextual dir", "/ws/api", nil, "/ws/api"},
-		{"empty dir keeps the contextual dir", "/ws/api", map[string]any{"dir": ""}, "/ws/api"},
-		{"relative dir joins onto it", "/ws/api", map[string]any{"dir": "scripts"}, "/ws/api/scripts"},
-		{"parent-relative dir joins too", "/ws/api", map[string]any{"dir": "../web"}, "/ws/web"},
-		{"absolute dir wins outright", "/ws/api", map[string]any{"dir": "/elsewhere"}, "/elsewhere"},
-		{"no contextual dir uses opts.dir as given", "", map[string]any{"dir": "scripts"}, "scripts"},
-		{"a non-string dir is ignored", "/ws/api", map[string]any{"dir": 7}, "/ws/api"},
+		{"no opts keeps the contextual dir", "/ws/api", types.MagusCommandOptions{}, "/ws/api"},
+		{"empty dir keeps the contextual dir", "/ws/api", types.MagusCommandOptions{Dir: ""}, "/ws/api"},
+		{"relative dir joins onto it", "/ws/api", types.MagusCommandOptions{Dir: "scripts"}, "/ws/api/scripts"},
+		{"parent-relative dir joins too", "/ws/api", types.MagusCommandOptions{Dir: "../web"}, "/ws/web"},
+		{"absolute dir wins outright", "/ws/api", types.MagusCommandOptions{Dir: "/elsewhere"}, "/elsewhere"},
+		{"no contextual dir uses opts.dir as given", "", types.MagusCommandOptions{Dir: "scripts"}, "scripts"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -110,15 +125,12 @@ func TestResolveRunDir(t *testing.T) {
 func TestNestedExecOptionsCarriesStdin(t *testing.T) {
 	ctx := WithCurrentWorkingDirectory(context.Background(), "/ws/api")
 
-	fed := nestedExecOptions(ctx, map[string]any{"stdin": "ghp_token", "quiet": true}, nil)
+	fed := nestedExecOptions(ctx, types.MagusCommandOptions{Stdin: "ghp_token", Quiet: true}, nil)
 	// A nested magus is always captured; the caller reads its output.
 	assert.Equal(t, spawn.ExecOptions{Dir: "/ws/api", Capture: true, Quiet: true, Stdin: "ghp_token"}, fed)
 
-	bare := nestedExecOptions(ctx, nil, nil)
+	bare := nestedExecOptions(ctx, types.MagusCommandOptions{}, nil)
 	assert.Empty(t, bare.Stdin, "no opt means the child inherits nothing on stdin")
-
-	wrong := nestedExecOptions(ctx, map[string]any{"stdin": 7}, nil)
-	assert.Empty(t, wrong.Stdin, "a non-string stdin is ignored rather than rendered")
 }
 
 // TestNestedResultHonorsAllowFailure pins magus.cmd/run/describe to proc.exec's
@@ -127,179 +139,188 @@ func TestNestedResultHonorsAllowFailure(t *testing.T) {
 	full := []string{"status"}
 	failed := spawn.ExecResult{Stdout: "partial\n", Stderr: "boom\n", Code: 3, Started: true}
 
-	_, err := nestedResult("cmd", full, failed, nil, nil)
+	_, err := nestedResult("cmd", full, failed, nil, types.MagusCommandOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "magus.cmd: status exited with code 3")
 
-	got, err := nestedResult("cmd", full, failed, nil, map[string]any{"allow_failure": true})
+	got, err := nestedResult("cmd", full, failed, nil, types.MagusCommandOptions{AllowFailure: true})
 	require.NoError(t, err)
 	assert.Equal(t, types.ExecResult{Stdout: "partial", Stderr: "boom", Code: 3, OK: false}, got)
 
 	notStarted := spawn.ExecResult{Code: -1}
-	_, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), nil)
+	_, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), types.MagusCommandOptions{})
 	require.ErrorContains(t, err, "no such file")
-	got, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), map[string]any{"allow_failure": true})
+	got, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), types.MagusCommandOptions{AllowFailure: true})
 	require.NoError(t, err)
 	assert.Equal(t, -1, got.Code)
 	assert.False(t, got.OK)
 
-	_, err = nestedResult("cmd", full, spawn.ExecResult{Code: -1}, types.ExecDenied, map[string]any{"allow_failure": true})
+	_, err = nestedResult("cmd", full, spawn.ExecResult{Code: -1}, types.ExecDenied, types.MagusCommandOptions{AllowFailure: true})
 	assert.ErrorIs(t, err, types.ExecDenied, "a sandbox denial is never swallowed")
 
-	ok, err := nestedResult("cmd", full, spawn.ExecResult{Stdout: "fine", Started: true}, nil, nil)
+	ok, err := nestedResult("cmd", full, spawn.ExecResult{Stdout: "fine", Started: true}, nil, types.MagusCommandOptions{})
 	require.NoError(t, err)
 	assert.True(t, ok.OK)
 }
 
-// TestMagusRaise covers the contract a magusfile author depends on: the code and url
-// survive onto the caught value as fields, and the MGS namespace is closed to them.
-func TestMagusRaise(t *testing.T) {
-	t.Run("carries code, message and url onto the caught value", func(t *testing.T) {
-		err := MagusRaise(context.Background(), "ACME1001", "registry rejected the manifest", raiseOptions(nil, "https://acme.dev/codes/ACME1001"))
-		require.Error(t, err)
-
-		var de *diagnostics.Error
-		require.ErrorAs(t, err, &de, "must be a diagnostics.Error so Buzz sees structured fields")
-		assert.Equal(t, map[string]string{
-			"code":    "ACME1001",
-			"message": "registry rejected the manifest",
-			"url":     "https://acme.dev/codes/ACME1001",
-		}, de.BuzzError())
-		assert.Equal(t, "[ACME1001] registry rejected the manifest\n  see: https://acme.dev/codes/ACME1001", de.Error())
-	})
-
-	t.Run("omits url when none was supplied", func(t *testing.T) {
-		err := MagusRaise(context.Background(), "ACME1002", "no url", raiseOptions(nil, ""))
-		var de *diagnostics.Error
-		require.ErrorAs(t, err, &de)
-		assert.Equal(t, map[string]string{"code": "ACME1002", "message": "no url"}, de.BuzzError(),
-			"an absent url must be absent, not an empty field a caller has to test for")
-	})
-
-	// The whole point of refusing MGS: a workspace code must never render like magus's
-	// own, because explain and the docs URL map resolve MGS against a closed catalog.
-	for _, code := range []string{"MGS9999", "mgs1001", "Mgs0001"} {
-		t.Run("refuses the magus namespace: "+code, func(t *testing.T) {
-			err := MagusRaise(context.Background(), code, "impersonating magus", nil)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "MGS namespace")
-			var de *diagnostics.Error
-			assert.NotErrorIs(t, err, diagnostics.ErrSentinel, "the refusal is a usage error, not a minted diagnostic")
-			assert.False(t, errors.As(err, &de), "refusing must not produce the very diagnostic it rejected")
-		})
-	}
-
-	t.Run("requires a code and a message", func(t *testing.T) {
-		assert.ErrorContains(t, MagusRaise(context.Background(), "", "msg", raiseOptions(nil, "")), "needs a code")
-		assert.ErrorContains(t, MagusRaise(context.Background(), "ACME1001", "", raiseOptions(nil, "")), "needs a message")
-	})
+// diagnosticsWorkspace is a workspace whose magus.yaml declares the WS prefix and a docs
+// template, the declaration magus\diagnosticCode and magus\raise read.
+type diagnosticsWorkspace struct {
+	types.WorkspaceRepository
+	root string
 }
 
-// TestMagusRaiseCause covers wrapping: the cause has to stay reachable for errors.Is and
-// stay VISIBLE in the rendered message, which Wrapf alone does not do.
-func TestMagusRaiseCause(t *testing.T) {
-	t.Run("splices a string cause and unwraps to it", func(t *testing.T) {
-		err := MagusRaise(context.Background(), "ACME1001", "push failed", raiseOptions("exec docker: exit 1", ""))
-		assert.EqualError(t, err, "[ACME1001] push failed: exec docker: exit 1")
-		assert.ErrorContains(t, errors.Unwrap(err), "exec docker: exit 1")
-	})
+func (w diagnosticsWorkspace) Root() string { return w.root }
 
-	// The realistic shape: an inner catch hands back the map BuzzError built, and the
-	// inner code must keep matching once the outer one wraps it.
-	t.Run("keeps a coded cause matchable underneath the new code", func(t *testing.T) {
-		inner := map[string]any{"code": "MGS2001", "message": "spell not found", "url": "https://x/MGS2001"}
-		err := MagusRaise(context.Background(), "ACME1001", "build failed", raiseOptions(inner, ""))
-		assert.EqualError(t, err, "[ACME1001] build failed: [MGS2001] spell not found")
-		assert.ErrorIs(t, err, diagnostics.Code("MGS2001"),
-			"the inner code must still match after wrapping, which is the point of a cause")
-	})
-
-	t.Run("an absent cause changes nothing", func(t *testing.T) {
-		for _, empty := range []any{nil, "", map[string]any{}} {
-			err := MagusRaise(context.Background(), "ACME1001", "plain", raiseOptions(empty, ""))
-			assert.EqualError(t, err, "[ACME1001] plain")
-		}
-	})
+// raiseContext is a context whose workspace declares the WS prefix.
+func (s *stdSuite) raiseContext() context.Context {
+	root := s.T().TempDir()
+	yaml := "diagnostics:\n  prefix: WS\n  docs: https://ws.example/codes/{code}/\n"
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(yaml), 0o644))
+	return types.WithWorkspace(s.T().Context(), diagnosticsWorkspace{root: root})
 }
 
-// raiseOptions builds the opts map the way a magusfile would, keeping the tests readable
-// now that cause and url are keys rather than positions.
-func raiseOptions(cause any, url string) map[string]any {
-	o := map[string]any{}
-	if cause != nil {
-		o["cause"] = cause
-	}
-	if url != "" {
-		o["url"] = url
-	}
-	if len(o) == 0 {
-		return nil
-	}
-	return o
+// wsCode is the DiagnosticCode object magus\diagnosticCode would mint for text.
+func wsCode(text string) types.DiagnosticCodeRef {
+	return types.DiagnosticCodeRef{Code: text, Origin: types.DiagnosticOriginWorkspace}
+}
+
+func (s *stdSuite) TestDiagnosticCodeMintsAWorkspaceCode() {
+	got, err := MagusDiagnosticCode(s.raiseContext(), "WS1003")
+	s.Require().NoError(err)
+	s.Equal(wsCode("WS1003"), got)
+}
+
+func (s *stdSuite) TestDiagnosticCodeRefusesAnMGSCode() {
+	_, err := MagusDiagnosticCode(s.raiseContext(), "MGS1021")
+	s.ErrorContains(err, "MGS catalog magus ships")
+}
+
+func (s *stdSuite) TestDiagnosticCodeRefusesAForeignPrefix() {
+	_, err := MagusDiagnosticCode(s.raiseContext(), "ACME1001")
+	s.ErrorContains(err, "not under this workspace's prefix WS")
+}
+
+func (s *stdSuite) TestDiagnosticCodeOutsideAWorkspaceNamesTheKey() {
+	_, err := MagusDiagnosticCode(s.T().Context(), "WS1003")
+	s.ErrorContains(err, "diagnostics.prefix in magus.yaml")
+}
+
+func (s *stdSuite) TestRaiseCarriesCodeMessageAndTheWorkspacePage() {
+	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "registry rejected the manifest", raiseOptions(nil, ""))
+	var de *diagnostics.Error
+	s.Require().ErrorAs(err, &de, "must be a diagnostics.Error so Buzz sees structured fields")
+	s.Equal(map[string]string{
+		"code":    "WS1001",
+		"message": "registry rejected the manifest",
+		"url":     "https://ws.example/codes/WS1001/",
+	}, de.BuzzError())
+}
+
+func (s *stdSuite) TestRaiseURLOverridesTheWorkspacePage() {
+	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "boom", raiseOptions(nil, "https://other.example/WS1001"))
+	s.Equal("[WS1001] boom\n  see: https://other.example/WS1001", err.Error())
+}
+
+func (s *stdSuite) TestRaiseOmitsTheURLWhenNoPageIsDeclared() {
+	root := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("diagnostics:\n  prefix: WS\n"), 0o644))
+	ctx := types.WithWorkspace(s.T().Context(), diagnosticsWorkspace{root: root})
+	var de *diagnostics.Error
+	s.Require().ErrorAs(MagusRaise(ctx, wsCode("WS1002"), "no url", raiseOptions(nil, "")), &de)
+	s.Equal(map[string]string{"code": "WS1002", "message": "no url"}, de.BuzzError(),
+		"an absent url must be absent, not an empty field a caller has to test for")
+}
+
+func (s *stdSuite) TestRaiseRechecksAnMGSCodeInTheObject() {
+	err := MagusRaise(s.raiseContext(), types.DiagnosticCodeRef{Code: "MGS9999"}, "impersonating magus", types.RaiseOptions{})
+	s.ErrorContains(err, "MGS catalog magus ships")
+	var de *diagnostics.Error
+	s.False(errors.As(err, &de), "refusing must not produce the very diagnostic it rejected")
+}
+
+func (s *stdSuite) TestRaiseRequiresAMessage() {
+	s.ErrorContains(MagusRaise(s.raiseContext(), wsCode("WS1001"), "", raiseOptions(nil, "")), "needs a message")
+}
+
+func (s *stdSuite) TestRaiseSplicesAStringCauseAndUnwrapsToIt() {
+	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "push failed", raiseOptions("exec docker: exit 1", ""))
+	s.ErrorContains(err, "[WS1001] push failed: exec docker: exit 1")
+	s.ErrorContains(errors.Unwrap(err), "exec docker: exit 1")
+}
+
+func (s *stdSuite) TestRaiseKeepsACodedCauseMatchable() {
+	inner := map[string]any{"code": "MGS2001", "message": "spell not found", "url": "https://x/MGS2001"}
+	err := MagusRaise(s.raiseContext(), wsCode("WS1001"), "build failed", raiseOptions(inner, ""))
+	s.ErrorIs(err, diagnostics.Code("MGS2001"), "the inner code must still match after wrapping")
+}
+
+// raiseOptions builds the RaiseOptions record a magusfile would pass.
+func raiseOptions(cause any, url string) types.RaiseOptions {
+	return types.RaiseOptions{Cause: cause, URL: url}
 }
 
 // recordingAnalyzer is a workspace that can answer the insight lenses, recording the
 // options it was handed so a test can prove they arrived.
 type recordingAnalyzer struct {
-	groupingLens types.GroupingOutput
+	groupingLens types.Grouping
 	types.WorkspaceRepository
-	got             types.InsightOptions
+	got             types.HistoryMetricsOptions
 	failTrend       bool
 	failConformance error
-	conformanceLens types.ConformanceOutput
+	conformanceLens types.Conformance
 }
 
-func (f *recordingAnalyzer) Hotspots(_ context.Context, o types.InsightOptions) (types.HotspotOutput, error) {
+func (f *recordingAnalyzer) Hotspots(_ context.Context, o types.HistoryMetricsOptions) (types.Hotspots, error) {
 	f.got = o
-	return types.HotspotOutput{Definition: "hot"}, nil
+	return types.Hotspots{Definition: "hot"}, nil
 }
-func (f *recordingAnalyzer) Affinity(context.Context, types.InsightOptions) (types.AffinityOutput, error) {
-	return types.AffinityOutput{}, nil
+func (f *recordingAnalyzer) Affinity(_ context.Context, o types.HistoryMetricsOptions) (types.Affinity, error) {
+	f.got = o
+	return types.Affinity{}, nil
 }
-func (f *recordingAnalyzer) Ownership(context.Context, types.InsightOptions) (types.OwnershipOutput, error) {
-	return types.OwnershipOutput{}, nil
+func (f *recordingAnalyzer) Ownership(context.Context, types.HistoryMetricsOptions) (types.Ownership, error) {
+	return types.Ownership{}, nil
 }
-func (f *recordingAnalyzer) Trend(context.Context, types.InsightOptions) (types.TrendOutput, error) {
+func (f *recordingAnalyzer) Trend(context.Context, types.HistoryMetricsOptions) (types.Trend, error) {
 	if f.failTrend {
-		return types.TrendOutput{}, errors.New("no history")
+		return types.Trend{}, errors.New("no history")
 	}
-	return types.TrendOutput{}, nil
+	return types.Trend{}, nil
 }
-func (f *recordingAnalyzer) Volatility(context.Context) (types.VolatilityReport, error) {
-	return types.VolatilityReport{}, errors.New("no run history")
+func (f *recordingAnalyzer) Volatility(context.Context) (types.Volatility, error) {
+	return types.Volatility{}, errors.New("no run history")
 }
-func (f *recordingAnalyzer) Unreferenced(context.Context) (types.UnreferencedOutput, error) {
-	return types.UnreferencedOutput{}, errors.New("no symbol index")
-}
-
-func (f *recordingAnalyzer) Duplication(context.Context) (types.DuplicationOutput, error) {
-	return types.DuplicationOutput{}, errors.New("no symbol index")
+func (f *recordingAnalyzer) Unreferenced(context.Context) (types.Unreferenced, error) {
+	return types.Unreferenced{}, errors.New("no symbol index")
 }
 
-func (f *recordingAnalyzer) Conformance(context.Context) (types.ConformanceOutput, error) {
+func (f *recordingAnalyzer) Duplication(context.Context) (types.Duplication, error) {
+	return types.Duplication{}, errors.New("no symbol index")
+}
+
+func (f *recordingAnalyzer) Conformance(context.Context) (types.Conformance, error) {
 	return f.conformanceLens, f.failConformance
 }
 
-func (f *recordingAnalyzer) ModelTierLens(context.Context) (types.ModelTierOutput, error) {
-	return types.ModelTierOutput{}, errors.New("no run history")
+func (f *recordingAnalyzer) ModelTierLens(context.Context) (types.ModelTiers, error) {
+	return types.ModelTiers{}, errors.New("no run history")
 }
 
-func (f *recordingAnalyzer) GroupingLens(context.Context) (types.GroupingOutput, error) {
+func (f *recordingAnalyzer) GroupingLens(context.Context) (types.Grouping, error) {
 	return f.groupingLens, nil
 }
 
-func TestInsightIsServedInProcess(t *testing.T) {
+func TestAffinityIsServedInProcess(t *testing.T) {
 	t.Parallel()
 
-	a := &recordingAnalyzer{groupingLens: types.GroupingOutput{Definition: types.GroupingDefinition}}
+	a := &recordingAnalyzer{}
 	ctx := types.WithWorkspace(t.Context(), a)
 
-	report, err := MagusInsight(ctx, nil)
-	require.NoError(t, err, "a workspace that analyses answers here, with no subprocess")
-	assert.Equal(t, "hot", report.Hotspots.Definition)
-	assert.Equal(t, types.GroupingDefinition, report.Grouping.Definition, "the report carries the grouping lens")
-	assert.Equal(t, 500, a.got.Commits, "the window the removed subcommand defaulted to")
-	assert.True(t, a.got.Files, "the report always carries the per-file ranking")
+	got, err := MagusAffinity(ctx, types.HistoryMetricsOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, types.Affinity{}, got)
+	assert.Equal(t, 500, a.got.Commits)
 }
 
 // cannedToolReporter is a workspace that reports its tools, so magus\describe.tool() can be shown
@@ -327,85 +348,22 @@ func TestMagusToolsIsServedInProcess(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-// TestInsightNeedsAWorkspace pins the cost of removing the subcommand: there is no
-// longer a nested magus to fall back to, so a caller with no workspace on the
-// context is told so rather than silently getting a different answer.
-func TestInsightNeedsAWorkspace(t *testing.T) {
+func TestAffinityNeedsAWorkspace(t *testing.T) {
 	t.Parallel()
-
-	_, err := MagusInsight(t.Context(), nil)
-	require.Error(t, err, "no workspace on the context is an error, not a fork")
-}
-
-// TestInsightRejectsAnUnknownOption keeps a mistyped key from being ignored:
-// silently dropping `comits` would quietly answer the 500-commit question instead.
-// Asserted through the exported entry point, which is the only way a caller reaches
-// the decoder: an earlier version tested a flag parser production could not reach.
-func TestInsightRejectsAnUnknownOption(t *testing.T) {
-	t.Parallel()
-
-	ctx := types.WithWorkspace(t.Context(), &recordingAnalyzer{})
-	for _, opts := range []map[string]any{
-		{"comits": 50.0},
-		{"layoutStyle": "safe"},
-		{"workspace": true},
-		{"commits": "not a number"},
-		{"since": 90.0},
-	} {
-		_, err := MagusInsight(ctx, opts)
-		assert.Error(t, err, "opts %v must be reported, not ignored", opts)
-	}
-}
-
-// TestInsightMapsTheOptionsItTakes proves the window reaches the analyzer, rather
-// than only checking the struct the decoder returned.
-func TestInsightMapsTheOptionsItTakes(t *testing.T) {
-	t.Parallel()
-
-	a := &recordingAnalyzer{}
-	ctx := types.WithWorkspace(t.Context(), a)
-	// A Buzz number arrives as float64; an int is what a Go caller would pass.
-	_, err := MagusInsight(ctx, map[string]any{"commits": 42.0, "since": "90d"})
-	require.NoError(t, err)
-	assert.Equal(t, types.InsightOptions{Commits: 42, Since: "90d", Files: true}, a.got) // Files defaults on, as the CLI did
-
-	// int64 is what a Buzz integer literal actually arrives as; float64 above covers
-	// a Buzz float. A decoder handling only float64 rejects `{commits = 50}` outright.
-	_, err = MagusInsight(ctx, map[string]any{"commits": int64(50)})
-	require.NoError(t, err, "a Buzz integer arrives as int64")
-	assert.Equal(t, 50, a.got.Commits)
-}
-
-// TestInsightReportKeepsTheBestEffortSections pins the rule the CLI kept: a lens
-// whose source is missing omits its section rather than failing the whole report.
-func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
-	t.Parallel()
-
-	a := &recordingAnalyzer{}
-	report, err := buildInsightReport(t.Context(), a, types.InsightOptions{Commits: 500})
-	require.NoError(t, err, "volatility and unreferenced failing must not fail the report")
-	assert.Equal(t, "hot", report.Hotspots.Definition)
-
-	// A required lens failing IS an error: the four VCS lenses are the report.
-	a.failTrend = true
-	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
+	_, err := MagusAffinity(t.Context(), types.HistoryMetricsOptions{})
 	require.Error(t, err)
 }
 
-// TestInsightReportCarriesConformanceAndItsMisconfiguration pins that the conformance lens rides the
-// report, and that a configuration it cannot honor fails the report rather than hiding as a
-// clean section.
-func TestInsightReportCarriesConformanceAndItsMisconfiguration(t *testing.T) {
+func TestAffinityMapsTheOptionsItTakes(t *testing.T) {
 	t.Parallel()
-
-	a := &recordingAnalyzer{conformanceLens: types.ConformanceOutput{Definition: "conformance"}}
-	report, err := buildInsightReport(t.Context(), a, types.InsightOptions{})
+	a := &recordingAnalyzer{}
+	ctx := types.WithWorkspace(t.Context(), a)
+	_, err := MagusAffinity(ctx, types.HistoryMetricsOptions{Commits: 42, Since: "90d"})
 	require.NoError(t, err)
-	assert.Equal(t, "conformance", report.Conformance.Definition)
+	assert.Equal(t, types.HistoryMetricsOptions{Commits: 42, Since: "90d"}, a.got)
 
-	a.failConformance = errors.New("conformance: hack/policy/conformance.json: no such file")
-	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
-	assert.ErrorContains(t, err, "conformance.json")
+	_, err = MagusAffinity(ctx, types.HistoryMetricsOptions{Commits: -1})
+	require.ErrorContains(t, err, "commits must not be negative")
 }
 
 // ledgerWorkspace is a workspace that can back a job Store: it
@@ -491,8 +449,8 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	assert.Equal(t, "on-disk", report.Jobs[0].ID, "nothing was written through the snapshot")
 }
 
-// magus\job.list measures overlaps through the function `magus ls jobs` calls, so the
-// typed call's footprints are exactly job.MeasureOverlaps over the same rows.
+// magus\workspace().jobs() measures overlaps as `magus ls jobs` does.
+// So its footprints are exactly job.MeasureOverlaps over the same rows.
 func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
@@ -537,6 +495,30 @@ func TestLedgerNeedsAWorkspace(t *testing.T) {
 	require.Error(t, err)
 }
 
+// A stop rule runs under the rows the guard pinned.
+func TestJobUnmergedAnswersFromThePinnedRows(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "r", State: types.StatePass, ReadOnly: true, Result: &types.JobResult{FollowUps: []string{"later"}}}
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []types.Job{row}})
+
+	got, err := MagusUnmergedJob(ctx, t.TempDir())
+
+	require.NoError(t, err)
+	require.Len(t, got.Rows, 1)
+	assert.Equal(t, "later", got.Rows[0].Item)
+}
+
+func TestJobUnmergedRaisesAPinnedReadError(t *testing.T) {
+	t.Parallel()
+
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Err: errors.New("unreadable")})
+
+	_, err := MagusUnmergedJob(ctx, t.TempDir())
+
+	require.ErrorContains(t, err, "unreadable")
+}
+
 // TestLedgerNeedsACacheDir covers the workspace that answers the reading verbs
 // (ls, affected, ...) but was never given a cache directory: a test double, not the
 // real *magus.Magus.
@@ -548,7 +530,7 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 	assert.ErrorContains(t, err, "cache directory")
 }
 
-// decodedPut decodes a magus\job.put opts map the way the binding does.
+// decodedPut decodes a magus\workspace().putJob opts map as the binding does.
 func decodedPut(t *testing.T, opts map[string]any) types.JobPut {
 	t.Helper()
 	put, err := job.DecodePut(opts)
@@ -556,8 +538,8 @@ func decodedPut(t *testing.T, opts map[string]any) types.JobPut {
 	return put
 }
 
-// TestPutLedgerMergesRatherThanReplaces proves a put decoded from magus\job.put's map
-// merges: a later put naming only `state` must not erase the goal an earlier put declared.
+// TestPutLedgerMergesRatherThanReplaces proves a decoded putJob map merges.
+// A later put naming only `state` must not erase an earlier put's goal.
 // Not parallel, and the env is why: see TestLedgerIsServedInProcess above. A root of
 // "" hashes to the same state directory in every checkout, so these rows would land in
 // the developer's own store and the clear below would drop what it found there.
@@ -633,10 +615,10 @@ func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	assert.Equal(t, "fleet/bound", store.Actor().Lease)
 }
 
-// TestLedgerBindingAndStoreAgree pins that magus\job.put and the store are two doors
-// onto the same file: a row put through the binding is visible through the store,
-// and internal/job.Store's own path derivation (CacheDir/ledger/leases.json)
-// is what makes that true without either side naming the other.
+// TestLedgerBindingAndStoreAgree pins that putJob and the store share one file.
+// A row put through magus\workspace().putJob shows in the store.
+// internal/job.Store's own path derivation makes that true.
+// Neither side names the other.
 func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	stateBase := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateBase)
@@ -709,11 +691,11 @@ func TestGraphMembersAreServedInProcess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "target:pkg/a:build", x.Node.ID)
 
-	p, err := MagusPath(ctx, "target:pkg/a:build", "target:pkg/a:test", nil)
+	p, err := MagusPath(ctx, "target:pkg/a:build", "target:pkg/a:test", types.KnowledgePathOptions{})
 	require.NoError(t, err)
 	assert.True(t, p.Found)
 
-	unlinked, err := MagusPath(ctx, "project:pkg/a", "project:pkg/b", nil)
+	unlinked, err := MagusPath(ctx, "project:pkg/a", "project:pkg/b", types.KnowledgePathOptions{})
 	require.NoError(t, err, "a resolved pair with no connection is an answer")
 	assert.False(t, unlinked.Found)
 
@@ -728,7 +710,7 @@ func TestGraphMembersRaiseOnWhatDoesNotResolve(t *testing.T) {
 
 	_, err := MagusExplain(ctx, "target:pkg/z:nope")
 	require.Error(t, err)
-	_, err = MagusPath(ctx, "target:pkg/a:build", "target:pkg/z:nope", nil)
+	_, err = MagusPath(ctx, "target:pkg/a:build", "target:pkg/z:nope", types.KnowledgePathOptions{})
 	require.Error(t, err)
 	_, err = MagusQuery(ctx, " ", types.KnowledgeQueryOptions{})
 	require.Error(t, err)
@@ -802,18 +784,18 @@ func TestWorkspaceMembersNeedAWorkspace(t *testing.T) {
 	ctx := t.Context()
 
 	calls := map[string]func() error{
-		"query":          func() error { _, err := MagusQuery(ctx, "x", types.KnowledgeQueryOptions{}); return err },
-		"explain":        func() error { _, err := MagusExplain(ctx, "x"); return err },
-		"path":           func() error { _, err := MagusPath(ctx, "x", "y", nil); return err },
-		"refs":           func() error { _, err := MagusRefs(ctx, "x", types.KnowledgeRefsOptions{}); return err },
-		"stats":          func() error { _, err := MagusStats(ctx, ""); return err },
-		"importGraph":    func() error { _, err := MagusImportGraph(ctx); return err },
-		"dir":            func() error { _, err := MagusDir(ctx, "x"); return err },
-		"dirs":           func() error { _, err := MagusDirs(ctx, "**", nil); return err },
-		"layer":          func() error { _, err := MagusLayer(ctx, "x"); return err },
-		"neighborhood":   func() error { _, err := MagusNeighborhood(ctx, "x", nil); return err },
-		"output":         func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
-		"vcs.checkpoint": func() error { _, err := MagusVCSCheckpoint(ctx); return err },
+		"query":        func() error { _, err := MagusQuery(ctx, "x", types.KnowledgeQueryOptions{}); return err },
+		"explain":      func() error { _, err := MagusExplain(ctx, "x"); return err },
+		"path":         func() error { _, err := MagusPath(ctx, "x", "y", types.KnowledgePathOptions{}); return err },
+		"refs":         func() error { _, err := MagusRefs(ctx, "x", types.KnowledgeRefsOptions{}); return err },
+		"stats":        func() error { _, err := MagusStats(ctx, ""); return err },
+		"importGraph":  func() error { _, err := MagusImportGraph(ctx); return err },
+		"dir":          func() error { _, err := MagusDir(ctx, "x"); return err },
+		"dirs":         func() error { _, err := MagusDirs(ctx, "**", types.DirsOptions{}); return err },
+		"layer":        func() error { _, err := MagusLayer(ctx, "x"); return err },
+		"neighborhood": func() error { _, err := MagusNeighborhood(ctx, "x", types.KnowledgeNeighborhoodOptions{}); return err },
+		"output":       func() error { _, err := MagusOutput(ctx, "out1a2b3c"); return err },
+		"change":       func() error { _, err := MagusChangeOpen(ctx, "", types.ChangeOptions{}); return err },
 	}
 	for member, call := range calls {
 		assert.ErrorIsf(t, call(), types.MagusfileOnlyMember, "magus\\%s", member)
@@ -862,6 +844,31 @@ func TestOutputReadsTheStoreAGuardPinned(t *testing.T) {
 	require.ErrorIs(t, err, types.MagusfileOnlyMember, "the pin opens the output store and no other member")
 }
 
+// With no store, "no passed full test" claims a read nobody made.
+func (s *stdSuite) TestForkFactsRefusesPinnedRowsWithNoPinnedStore() {
+	ctx := job.WithSnapshot(s.T().Context(), job.Snapshot{})
+	_, err := MagusForkFactsJob(ctx, s.T().TempDir())
+	s.Require().ErrorIs(err, types.MagusfileOnlyMember)
+}
+
+func (s *stdSuite) TestForkFactsRefusesAWorkspaceWithNoCacheDirectory() {
+	ctx := job.WithSnapshot(types.WithWorkspace(s.T().Context(), checkoutWorkspace{}), job.Snapshot{})
+	_, err := MagusForkFactsJob(ctx, s.T().TempDir())
+	s.Require().ErrorContains(err, "this workspace has no cache directory")
+}
+
+func (s *stdSuite) TestForkFactsReadsThePinnedStore() {
+	cacheDir := s.T().TempDir()
+	ctx := job.WithSnapshot(types.WithOutputCacheDir(s.T().Context(), cacheDir), job.Snapshot{})
+	desc, err := cache.NewOutputStore(cacheDir).Persist(ctx, strings.Repeat("ef", 32),
+		[]byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test", Revision: "abc"})
+	s.Require().NoError(err)
+
+	facts, err := MagusForkFactsJob(ctx, s.T().TempDir())
+	s.Require().NoError(err)
+	s.Equal(desc.Ref, facts.LastTestRef)
+}
+
 // checkoutWorkspace is a workspace rooted at this package's own checkout.
 type checkoutWorkspace struct {
 	types.WorkspaceRepository
@@ -870,18 +877,18 @@ type checkoutWorkspace struct {
 func (checkoutWorkspace) Root() string                 { return "." }
 func (checkoutWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
 
-// The member and `magus vcs checkpoint` resolve the same tree the same way, so the two
-// cannot describe it differently.
-func TestVCSCheckpointAgreesWithTheCLI(t *testing.T) {
+// A Change records the tree the way `magus vcs checkpoint` resolves it, so
+// the two cannot describe it differently.
+func TestChangeRecordsTheCheckpointTheCLIPrints(t *testing.T) {
 	t.Parallel()
 	ctx := types.WithWorkspace(t.Context(), checkoutWorkspace{})
 
-	got, gotErr := MagusVCSCheckpoint(ctx)
+	c, gotErr := MagusChangeOpen(ctx, "", types.ChangeOptions{})
 
 	res, err := vcs.Resolve(ctx, ".", "", types.VCSOptions{})
 	require.NoError(t, err)
 	want, wantErr := vcs.Checkpoint(ctx, ".", res, false)
-	assert.Equal(t, want, got)
+	assert.Equal(t, want, c.At)
 	assert.Equal(t, wantErr, gotErr)
 }
 
@@ -918,9 +925,9 @@ func withJobGrader(t *testing.T, g job.CheckGrader) {
 	t.Cleanup(func() { job.SetCheckGrader(previous) })
 }
 
-// magus\job.put forks by merge, and the multi-agent skill sends agents through it, so it is
-// held to the guard's verdict on the check the way `magus job fork` is: the grader the
-// composition root installed refuses a denied check, with nothing written.
+// magus\workspace().putJob forks by merge, and the multi-agent skill uses it.
+// So it is held to the guard's verdict on the check, as `magus job fork` is.
+// The installed grader refuses a denied check, with nothing written.
 func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	testkit.Isolate(t)
 	var roots []string

@@ -63,8 +63,8 @@ export function closeTab(ws: Workspace, id: string): Workspace {
   if (ws.activeId !== id) return { tabs, activeId: ws.activeId };
   if (tabs.length === 0) return { tabs, activeId: null };
   // Prefer the tab now sitting where the closed one's left neighbor was.
-  const nextIdx = Math.max(0, idx - 1);
-  return { tabs, activeId: tabs[nextIdx].id };
+  const next = tabs[Math.max(0, idx - 1)];
+  return { tabs, activeId: next ? next.id : null };
 }
 
 // setActive focuses an existing tab; an unknown id is a no-op (returns the input),

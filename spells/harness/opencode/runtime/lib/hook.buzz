@@ -1,0 +1,492 @@
+// Shared glue for the Buzz hook templates in the directory above this one.
+//
+// One copy of the walk up to the workspace root, the event-field readers, and the
+// once-per-session notice. Per-template copies drifted: a comment shortened in
+// one file, a warn dropped in another, and a reader could not tell which copy was
+// the one a measurement had justified.
+//
+// This file imports no magus module and no spell. That is what keeps a hook's
+// workspace CLOSED. Opening one costs roughly 700ms, and a read or a shell hook
+// pays it on every tool call. Importing this file does not open the workspace:
+// it is Buzz beside the template, resolved relative to it, so a hook whose
+// working directory is the host's session directory still finds it.
+//
+// A template imports it as `hook`. The alias keeps a template's own names
+// (observe's string-only field, each template's warn) from colliding with these.
+
+import "encoding/json";
+import "env";
+import "fs";
+import "io";
+import "os";
+import "path";
+import "proc";
+import "std";
+
+// The namespace a host gives a tool served over MCP. wholeEvent matches it so an
+// MCP call is forwarded whole rather than reduced to a command field it happens
+// to carry.
+final MCP_TOOL_PREFIX = "mcp__";
+
+export fun envOr(name: str, fallback: str) > str {
+    final value = env\get(name) catch "";
+    if (value == "") { return fallback; }
+    return value;
+}
+
+fun digKey(node: any?, key: str) > any? {
+    final m = node as? {str: any};
+    if (m == null) { return null; }
+    return m![key];
+}
+
+// dig walks a dot-path and returns null where the field is absent.
+export fun dig(event: any?, dotPath: str) > any? {
+    var cur = event;
+    foreach (key in dotPath.split(".")) {
+        cur = digKey(cur, key: key);
+        if (cur == null) { return null; }
+    }
+    return cur;
+}
+
+// render prints a string bare and anything else as JSON, so a number reaches magus
+// without quotes.
+fun render(value: any) > str {
+    if (value is str) { return value as str; }
+    return json\stringify(value) catch "null";
+}
+
+// field is the absent-as-empty read. rawField leaves an absent field as the
+// literal "null"; its callers reach it only once wholeEvent has found a string.
+export fun field(event: any?, dotPath: str) > str {
+    final value = dig(event, dotPath: dotPath);
+    if (value == null) { return ""; }
+    return render(value);
+}
+
+export fun rawField(event: any?, dotPath: str) > str {
+    final value = dig(event, dotPath: dotPath);
+    if (value == null) { return "null"; }
+    return render(value);
+}
+
+// wholeEvent decides which of the two payloads magus shell gets: the whole
+// envelope, or the one string a dot-path selects out of it.
+//
+// The envelope is the default, and the shipped wiring never selects: every tool
+// reaches the guard, and the guard judges a call by its tool's name and the shape
+// of its whole input. A field taken out of the envelope loses the tool name, and a
+// read restated as the path it reads would be judged as a write.
+//
+// dotPath is HOST_EVENT_PATH, for a host whose envelope magus's decoder does not
+// know, and "" when it is unset. Even then a field is selected only when two facts
+// hold at once:
+//
+//   1. The tool is not an MCP call. magus shell reads an MCP call off the tool
+//      name, ahead of any command in the params, so a params object that happens
+//      to carry a command key must not be reduced to that key. mcp__<server>__
+//      <tool> is the naming convention the hosts wired here use, and matching
+//      the namespace only ever adds a whole-envelope answer.
+//   2. The dot-path selects a string. A spawn is a prompt plus a subagent type,
+//      a skill load is a skill name, an MCP call is a tool name plus params:
+//      none of them carries the selected field, so the field is absent and the
+//      envelope goes whole. Present but not a string takes the same road.
+export fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
+    if (dotPath == "") { return true; }
+    if (field(event, dotPath: toolPath).startsWith(MCP_TOOL_PREFIX)) { return true; }
+    final value = dig(event, dotPath: dotPath);
+    if (value == null) { return true; }
+    return !(value is str);
+}
+
+export fun commandPath(event: any?) > str {
+    if (field(event, dotPath: "tool_input.command") != "") { return "tool_input.command"; }
+    return "tool_input.cmd";
+}
+
+// A shell tool's directory overrides its session directory; an MCP parameter does not.
+export fun commandDir(event: any?, cwd: str, commandPath: str, toolPath: str) > str {
+    if (wholeEvent(event, dotPath: commandPath, toolPath: toolPath)) { return cwd; }
+    final dir = field(event, dotPath: "tool_input.workdir");
+    if (dir == "") { return cwd; }
+    if (path\isAbs(dir) or cwd == "") { return path\clean(dir); }
+    return path\clean("{cwd}/{dir}");
+}
+
+test "native command fields select their own working directory" {
+    final event = {"tool_name": "exec_command", "tool_input": {"cmd": "git stash", "workdir": "/worktree"}};
+    std\assert(commandPath(event) == "tool_input.cmd");
+    std\assert(commandDir(event, cwd: "/session", commandPath: commandPath(event), toolPath: "tool_name") == "/worktree");
+    std\assert(commandPath({"tool_input": {"command": "first", "cmd": "second"}}) == "tool_input.command");
+    final relative = {"tool_input": {"command": "git stash", "workdir": "nested"}};
+    std\assert(commandDir(relative, cwd: "/session", commandPath: commandPath(relative), toolPath: "tool_name") == "/session/nested");
+    final mcp = {"tool_name": "mcp__server__tool", "tool_input": {"cmd": "git stash", "workdir": "/other"}};
+    std\assert(commandDir(mcp, cwd: "/session", commandPath: commandPath(mcp), toolPath: "tool_name") == "/session");
+}
+
+// trimTrailingNewlines matches shell command substitution, which drops every
+// trailing newline from a captured verdict.
+export fun trimTrailingNewlines(s: str) > str {
+    var end = s.len();
+    while (end > 0 and s.sub(end - 1, len: 1) == "\n") { end = end - 1; }
+    return s.sub(0, len: end);
+}
+
+export fun firstLine(s: str) > str {
+    return s.split("\n")[0];
+}
+
+// isExecutable answers "could proc\exec run this", which a directory cannot: one
+// named magus at the workspace root carries the execute bits too, and accepting
+// it sent the caller to the arm that names a path it then cannot run.
+//
+// 73 is 0111, the three execute bits. Parenthesized for the reader, not the
+// parser: Buzz binds `&` tighter than `!=`, which is the opposite of C and Go.
+export fun isExecutable(candidate: str) > bool {
+    final info = fs\stat(candidate) catch null;
+    if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
+    final mode = info!.mode as? int;
+    if (mode == null) { return false; }
+    return (mode! & 73) != 0;
+}
+
+// parentDir strips the last path element and yields the empty string at the top,
+// which is what ends the walk. fs\dirname answers "/" there and the walk would
+// never terminate.
+//
+// Both separators, because a split on `/` alone makes `C:\...` one part, so the
+// walk never runs and resolveBin falls through to PATH.
+export fun parentDir(dir: str) > str {
+    var i = dir.len() - 1;
+    while (i >= 0) {
+        final ch = dir.sub(i, len: 1);
+        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
+        i = i - 1;
+    }
+    return "";
+}
+
+// workspaceRoot is the workspace root above the hook's own working directory, or ""
+// when the walk never finds one. A hook's working directory is the host's session
+// directory, which is not always the workspace root.
+export fun workspaceRoot() > str {
+    return workspaceRootAt(path\abs(".") catch "");
+}
+
+// nearestWith is the nearest directory at or above dir holding the file name, "" when
+// none does.
+fun nearestWith(name: str, dir: str) > str {
+    var at = dir;
+    while (at != "") {
+        final found = fs\isFile("{at}/{name}") catch false;
+        if (found) { return at; }
+        at = parentDir(at);
+    }
+    return "";
+}
+
+// workspaceRootAt is workspaceRoot walked up from dir instead of the hook's own
+// working directory.
+//
+// The marker is magus.yaml, the file magus.FindRoot treats as "the workspace starts
+// here". The nearest magusfile.buzz is wrong: console/, docs/, libs/* and the agents
+// guide directory each have one and no binary, so a call from any of them resolved
+// no ./magus and fell to PATH. The nearest magus.yaml also never climbs into a parent
+// checkout, since a worktree nested under one holds its own. Only a tree with no
+// magus.yaml above dir falls back to the nearest magusfile.buzz.
+export fun workspaceRootAt(dir: str) > str {
+    final declared = nearestWith("magus.yaml", dir: dir);
+    if (declared != "") { return declared; }
+    return nearestWith("magusfile.buzz", dir: dir);
+}
+
+// resolveBin prefers the workspace's own ./magus over PATH. A repository that
+// builds magus, or pins a newer one than is installed, keeps its rules in that
+// binary, and an older PATH copy does not fail loudly when it lacks them. It
+// does not recognize the config key that arms a rule, warns about an unknown
+// field, and returns pass: silent non-enforcement at exit 0. Measured 2026-08-13,
+// when a write into a declared notes store was allowed by a binary that predated
+// the knowledge.notes key while magus doctor reported the guard as fine.
+//
+// The walk is up to the workspace root (magus.yaml), not a test of ./magus alone.
+// Measured 2026-08-27, when a piped `magus affected ci` that the rules do deny ran
+// unjudged because the session directory was not the workspace root.
+//
+// cwd, the directory the host says the call runs in, is walked first: a host runs a
+// subagent's hooks from the session's directory while the subagent works in its own
+// worktree, whose binary is the one that tree builds.
+//
+// A workspace with no runnable ./magus falls through to PATH, and the PATH
+// copy may predate the checkout's rules. fallbackNote says so.
+export fun resolveBin(cwd: str = "") > str {
+    final declared = env\get("__MAGUS_BIN") catch "";
+    if (declared != "") { return declared; }
+    final root = binRoot(cwd);
+    if (root == "") { return proc\which("magus") catch ""; }
+    final candidate = "{root}/magus";
+    if (isExecutable(candidate)) { return candidate; }
+    // The root was found and the binary beside it cannot be run. Falling through to
+    // PATH here is the same answer the walk's `break` gave: do not keep climbing into
+    // a parent checkout.
+    return proc\which("magus") catch "";
+}
+
+// binRoot is the workspace root a hook judges in: above cwd, else above
+// the hook's own directory.
+export fun binRoot(cwd: str) > str {
+    var root = "";
+    if (cwd != "") { root = workspaceRootAt(cwd); }
+    if (root == "") { root = workspaceRoot(); }
+    return root;
+}
+
+// fallbackNote says why resolveBin fell back from the checkout's ./magus, or
+// "" when it did not. It names a ./magus that cannot run, and a checkout of
+// magus with none. Anywhere else PATH is where magus is meant to come from.
+export fun fallbackNote(cwd: str = "") > str {
+    if ((env\get("__MAGUS_BIN") catch "") != "") { return ""; }
+    final root = binRoot(cwd);
+    if (root == "") { return ""; }
+    final candidate = "{root}/magus";
+    if (isExecutable(candidate)) { return ""; }
+    final onPath = proc\which("magus") catch "";
+    if ((fs\stat(candidate) catch null) != null) {
+        return "{candidate} exists but is not executable, so the magus on PATH judges, "
+            + "which may predate this checkout's rules; run `chmod +x {candidate}`";
+    }
+    if (onPath != "" and buildsMagus(root)) {
+        return "{root} has no ./magus, so the magus on PATH judges, "
+            + "{describeBin(onPath)}, which may predate this checkout's rules";
+    }
+    return "";
+}
+
+// buildsMagus reports whether root is a checkout of magus, which judges with the ./magus it
+// builds.
+fun buildsMagus(root: str) > bool {
+    final mod = fs\readFile("{root}/go.mod") catch "";
+    return mod.startsWith("module github.com/egladman/magus\n");
+}
+
+// BOOTSTRAP is ward.BootstrapCommand: a hook with no magus cannot ask for it.
+// cmd/magus/shell_test.go pins the copy.
+final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
+// isBootstrap is a string comparison, so no second shell classifier exists
+// beside the Go judge.
+export fun isBootstrap(command: str) > bool {
+    return command.trim() == BOOTSTRAP;
+}
+
+final SETUP_URL = "https://eli.gladman.cc/magus/guides/setup/";
+
+// magusFix says how to get a runnable magus for root. A checkout of
+// magus gets the bootstrap, anywhere else the install page.
+export fun magusFix(root: str) > str {
+    if (root != "" and buildsMagus(root)) {
+        return "Build ./magus in {root}: `{BOOTSTRAP}`.";
+    }
+    return "Install magus ({SETUP_URL}), or set __MAGUS_BIN to its path.";
+}
+
+final REFUSAL_FALLBACK = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not judge this call"}}`;
+
+// refusal is the Claude Code PreToolUse deny of a call no magus judged. The
+// display gets the verdict, the agent the fix, and the person both.
+export fun refusal(verdict: str, fix: str) > str {
+    return json\stringify({"systemMessage": "{verdict}\n{fix}", "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": "{verdict}; refused, since this call may change state.",
+        "additionalContext": fix,
+    }}) catch REFUSAL_FALLBACK;
+}
+
+// unrecordedNotice is the reply of a recorder hook that has no runnable bin,
+// said once per session across every recorder. Claude Code and Codex get a
+// systemMessage; another host gets stderr and "".
+export fun unrecordedNotice(bin: str, session: str, host: str, file: str, root: str) > str {
+    if (bin != "" and isExecutable(bin)) { return ""; }
+    if (!noticeOnce(session, family: "unrecorded", file: file)) { return ""; }
+    final text = "{file} recorded nothing: no runnable magus was found. {magusFix(root)}";
+    if (host == "claude-code" or host == "codex") {
+        return json\stringify({"systemMessage": text}) catch "";
+    }
+    io\stderr.write("{text}\n") catch void;
+    return "";
+}
+
+// withNotice adds text to a JSON reply's systemMessage, the notice the person
+// reads. An empty reply becomes one; a reply that is not a JSON object is
+// left whole, since a host would reject the merge.
+export fun withNotice(reply: str, text: str) > str {
+    if (text == "") { return reply; }
+    if (reply.trim() == "") { return json\stringify({"systemMessage": text}) catch reply; }
+    final parsed = json\parse(reply) catch null;
+    final doc = parsed as? {str: any};
+    if (doc == null) { return reply; }
+    final merged = mut {<str: any>};
+    foreach (key, value in doc!) { merged[key] = value; }
+    final held = (doc!["systemMessage"] as? str) ?? "";
+    merged["systemMessage"] = if (held == "") text else "{text}\n{held}";
+    return json\stringify(merged) catch reply;
+}
+
+// describeBin names bin and, when it is a link, where the link points.
+fun describeBin(bin: str) > str {
+    final target = fs\readlink(bin) catch "";
+    if (target == "") { return bin; }
+    return "{bin} (a link to {target})";
+}
+
+fun fileSafe(key: str) > str {
+    final parts = mut [<str>];
+    foreach (i in 0..key.len()) {
+        final ch = key.sub(i, len: 1);
+        final ok = (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9") or ch == "-" or ch == "_";
+        if (ok) { parts.append(ch); } else { parts.append("x"); }
+    }
+    return parts.join("");
+}
+
+fun olderThanWindow(marker: str) > bool {
+    final window = envOr("__MAGUS_NOTICE_WINDOW", fallback: "120");
+    final minutes = std\parseDouble(window) ?? 120.0;
+    final info = fs\stat(marker) catch null;
+    if (info == null) { return true; }
+    final mtime = info!.mtime as? double;
+    if (mtime == null) { return true; }
+    return os\time() - mtime! > minutes * 60000.0;
+}
+
+// tempBase is the directory fs\tempDir makes its directories in. No std member
+// names it, so a probe is made and removed.
+fun tempBase() > str {
+    final probe = fs\tempDir("magus-guard-notices-") catch "";
+    if (probe == "") { return envOr("TMPDIR", fallback: "/tmp"); }
+    fs\removeAll(probe) catch void;
+    return fs\dirname(probe);
+}
+
+// noticeOnce holds a broken-installation notice to one firing per session.
+//
+// The notices report a broken installation. That is a fact for the person, and
+// there is nothing in it an agent can act on, so a repeat is noise: measured at
+// 2,741 firings over recent sessions, 99% of them same-session repeats.
+//
+// The marker lives in the temp dir fs\tempDir uses, per user, because a
+// world-writable /tmp lets anyone pre-create someone else's marker and silence
+// their notices. Under the sandbox that is the policy's private temp dir, fixed per
+// workspace: the shared TMPDIR is granted to no sandboxed run. This runs when
+// magus cannot be asked for a place to put it. A host that reports no
+// session id shares one marker, aged out after __MAGUS_NOTICE_WINDOW minutes, so
+// the first session cannot silence every later one.
+//
+// file is the port's own name, written on the stderr line. A host shows that
+// line with the entry's matcher at best, and a reader with several entries
+// needs to know which file said it.
+export fun noticeOnce(session: str, family: str, file: str) > bool {
+    final dir = "{tempBase()}/magus-guard-notices-{fileSafe(envOr("USER", fallback: "anon"))}";
+    var key = session;
+    if (key == "") { key = "anon"; }
+    final marker = "{dir}/{fileSafe(key)}.{fileSafe(family)}";
+    fs\mkdirAll(dir) catch void;
+    final exists = fs\isFile(marker) catch false;
+    if (exists) {
+        if (session != "") { return false; }
+        if (!olderThanWindow(marker)) { return false; }
+    }
+    fs\writeFile(marker, content: "") catch void;
+    if (!(fs\isFile(marker) catch false)) {
+        io\stderr.write("{file}: could not write {marker}, so a guard notice cannot be held to one firing "
+            + "per session; reporting it here instead of in the reply\n") catch void;
+        return false;
+    }
+    return true;
+}
+
+// plantBinary leaves an executable ./magus in dir.
+fun plantBinary(dir: str) > void !> any {
+    fs\writeFile("{dir}/magus", content: "#!/bin/sh\n");
+    fs\chmod("{dir}/magus", mode: 493);
+}
+
+test "a call from a nested project resolves the workspace root's binary" {
+    final root = fs\tempDir("hook-root-");
+    fs\writeFile("{root}/magus.yaml", content: "");
+    plantBinary(root);
+    fs\mkdirAll("{root}/console/src");
+    fs\writeFile("{root}/console/magusfile.buzz", content: "");
+    std\assert(workspaceRootAt("{root}/console/src") == root, message: "the magus.yaml directory is the root, not the project");
+    std\assert(resolveBin(cwd: "{root}/console/src") == "{root}/magus", message: "the root's binary");
+    std\assert(resolveBin(cwd: "{root}/console") == "{root}/magus", message: "from the project directory itself");
+    fs\removeAll(root);
+}
+
+test "a fallback from the checkout's ./magus is named, and only then" {
+    final root = fs\tempDir("hook-unrunnable-");
+    final bare = fs\tempDir("hook-no-binary-");
+    fs\writeFile("{root}/magus.yaml", content: "");
+    fs\writeFile("{bare}/magus.yaml", content: "");
+    fs\writeFile("{root}/magus", content: "#!/bin/sh\n");
+    std\assert(fallbackNote(root).indexOf("chmod +x {root}/magus") != null, message: fallbackNote(root));
+    std\assert(fallbackNote(bare) == "", message: "a checkout that does not build magus expects PATH's");
+    plantBinary(root);
+    std\assert(fallbackNote(root) == "", message: "a runnable ./magus is no fallback");
+    fs\removeAll(root);
+    fs\removeAll(bare);
+}
+
+test "the fix for a missing magus is the bootstrap in a checkout of magus, else the install page" {
+    final root = fs\tempDir("hook-fix-");
+    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
+    std\assert(magusFix(root).indexOf(BOOTSTRAP) != null, message: magusFix(root));
+    fs\writeFile("{root}/go.mod", content: "module example.com/other\n");
+    std\assert(magusFix(root).indexOf(SETUP_URL) != null, message: magusFix(root));
+    std\assert(magusFix("").indexOf(SETUP_URL) != null, message: "no root");
+    fs\removeAll(root);
+}
+
+test "a notice joins the reply the person reads" {
+    std\assert(withNotice("", text: "n") == `{"systemMessage":"n"}`, message: withNotice("", text: "n"));
+    final denied = json\parse(withNotice(`{"decision":"block","systemMessage":"m"}`, text: "n")) catch null;
+    std\assert(dig(denied, dotPath: "decision") == "block", message: "the verdict stays");
+    std\assert(dig(denied, dotPath: "systemMessage") == "n\nm", message: "the notice leads");
+    std\assert(withNotice("plain", text: "n") == "plain", message: "a reply that is not JSON is left whole");
+    std\assert(withNotice(`{"a":1}`, text: "") == `{"a":1}`, message: "no notice, no change");
+}
+
+test "a worktree under another checkout never climbs into it" {
+    final parent = fs\tempDir("hook-parent-");
+    fs\writeFile("{parent}/magus.yaml", content: "");
+    plantBinary(parent);
+    final worktree = "{parent}/.claude/worktrees/job";
+    fs\mkdirAll("{worktree}/console");
+    fs\writeFile("{worktree}/magus.yaml", content: "");
+    fs\writeFile("{worktree}/console/magusfile.buzz", content: "");
+    std\assert(workspaceRootAt("{worktree}/console") == worktree, message: "its own magus.yaml is the nearest");
+    std\assert(resolveBin(cwd: "{worktree}/console") != "{parent}/magus", message: "the parent's binary is never the answer");
+    plantBinary(worktree);
+    std\assert(resolveBin(cwd: "{worktree}/console") == "{worktree}/magus", message: "its own binary once it has one");
+    fs\removeAll(parent);
+}
+
+test "a tree with no magus.yaml falls back to the nearest magusfile" {
+    final root = fs\tempDir("hook-bare-");
+    fs\mkdirAll("{root}/sub/deep");
+    fs\writeFile("{root}/sub/magusfile.buzz", content: "");
+    std\assert(workspaceRootAt("{root}/sub/deep") == "{root}/sub", message: "the nearest magusfile");
+    std\assert(workspaceRootAt(root) == "", message: "none above");
+    fs\removeAll(root);
+}
+
+test "the whole envelope goes to magus unless a host names a field to select" {
+    final bash = json\parse("\{\"tool_name\":\"Bash\",\"tool_input\":\{\"command\":\"ls\"}}") catch null;
+    std\assert(wholeEvent(bash, dotPath: "", toolPath: "tool_name"), message: "no HOST_EVENT_PATH: the tool name travels with the call");
+    std\assert(!wholeEvent(bash, dotPath: "tool_input.command", toolPath: "tool_name"), message: "a named string field is selected");
+    final mcp = json\parse("\{\"tool_name\":\"mcp__other__run\",\"tool_input\":\{\"command\":\"ls\"}}") catch null;
+    std\assert(wholeEvent(mcp, dotPath: "tool_input.command", toolPath: "tool_name"), message: "an MCP call is never reduced to a field");
+    final todo = json\parse("\{\"tool_name\":\"TodoWrite\",\"tool_input\":\{\"todos\":[]}}") catch null;
+    std\assert(wholeEvent(todo, dotPath: "tool_input.command", toolPath: "tool_name"), message: "an absent field sends the envelope");
+}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
@@ -304,7 +305,8 @@ func TestBudgetFullSaysHowFullAndWhatHoldsIt(t *testing.T) {
 	assert.Contains(t, full, "the build budget is full (mem ")
 	assert.NotContains(t, full, "slots", "only the half that is spent")
 	assert.Contains(t, full, "held by 1 run(s); the oldest, go-test . in /w/a, has held its seat 1m30s")
-	assert.Contains(t, full, hint.Status.With("--watch=15s"))
+	assert.Contains(t, full, "hold this worker until the completion notice of work you already started arrives")
+	assert.NotContains(t, full, "--watch", "a worker is refused a watch")
 }
 
 func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
@@ -340,9 +342,19 @@ func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 // when refused and passed otherwise, last written at at.
 func writeRefusalLog(t *testing.T, runsDir, inv string, at time.Time, refused bool, args ...string) {
 	t.Helper()
-	result := journal.Event{Ts: at.UnixMilli(), Inv: inv, Project: ".", Target: "go-test:rw", Kind: journal.KindResult, Status: journal.StatusPass}
+	var code types.DiagnosticCode
 	if refused {
-		result.Status, result.DiagnosticCode = journal.StatusFail, string(types.MachineBudgetExhausted)
+		code = types.MachineBudgetExhausted
+	}
+	writeCodedLog(t, runsDir, inv, at, code, args...)
+}
+
+// writeCodedLog is writeRefusalLog naming the code; "" passes the target.
+func writeCodedLog(t *testing.T, runsDir, inv string, at time.Time, code types.DiagnosticCode, args ...string) {
+	t.Helper()
+	result := journal.Event{Ts: at.UnixMilli(), Inv: inv, Project: ".", Target: "go-test:rw", Kind: journal.KindResult, Status: journal.StatusPass}
+	if code != "" {
+		result.Status, result.DiagnosticCode = journal.StatusFail, string(code)
 	}
 	var body []byte
 	for _, ev := range []journal.Event{
@@ -358,6 +370,72 @@ func writeRefusalLog(t *testing.T, runsDir, inv string, at time.Time, refused bo
 	path := filepath.Join(runsDir, inv+".jsonl")
 	require.NoError(t, os.WriteFile(path, body, 0o644))
 	require.NoError(t, os.Chtimes(path, at, at))
+}
+
+type PressureRetrySuite struct {
+	suite.Suite
+}
+
+func TestPressureRetrySuite(t *testing.T) {
+	suite.Run(t, new(PressureRetrySuite))
+}
+
+const pressureRetry = "./magus run lint ."
+
+func (s *PressureRetrySuite) refusedAgo(ago time.Duration) context.Context {
+	cacheDir := s.T().TempDir()
+	runsDir := filepath.Join(cacheDir, "runs")
+	s.Require().NoError(os.MkdirAll(runsDir, 0o755))
+	writeCodedLog(s.T(), runsDir, "invrefused", time.Now().Add(-ago), types.MemoryPressureHigh, "run", "lint", ".")
+	return context.WithValue(s.T().Context(), locationKey{}, location{cacheDir: cacheDir})
+}
+
+func (s *PressureRetrySuite) TestALeasedRetryIsToldTheOwedFilingAndNotTheWait() {
+	d := denyRefusedRetry(s.refusedAgo(10*time.Second), Dependencies{lease: "figures"}, "", pressureRetry)
+	s.Require().True(d.refused())
+	s.Contains(d.Say, "refused with MGS3053 10s ago")
+	s.Contains(d.Say, cache.LeasedPressureNext("figures"), "the guard and the refusal say one thing")
+	s.NotContains(d.Say, "status --wait", "no seat clears this")
+}
+
+func (s *PressureRetrySuite) TestAWaitGatedRetryIsStillRefused() {
+	line := "./magus status --wait | " + pressureRetry
+	s.True(denyRefusedRetry(s.refusedAgo(10*time.Second), Dependencies{lease: "figures"}, "", line).refused())
+}
+
+func (s *PressureRetrySuite) TestAWaitGatedRetryOfAFullBudgetPasses() {
+	cacheDir := s.T().TempDir()
+	runsDir := filepath.Join(cacheDir, "runs")
+	s.Require().NoError(os.MkdirAll(runsDir, 0o755))
+	writeCodedLog(s.T(), runsDir, "invrefused", time.Now().Add(-10*time.Second), types.MachineBudgetExhausted, "run", "lint", ".")
+	ctx := context.WithValue(s.T().Context(), locationKey{}, location{cacheDir: cacheDir})
+	s.False(denyRefusedRetry(ctx, Dependencies{lease: "figures"}, "", "./magus status --wait | "+pressureRetry).refused())
+}
+
+func (s *PressureRetrySuite) TestEachListedCodeIsReadBack() {
+	for _, code := range refusalCodes {
+		runsDir := s.T().TempDir()
+		writeCodedLog(s.T(), runsDir, "inv", time.Now(), code, "run", "lint", ".")
+		got, ok := recentRefusal(runsDir, [][]string{{"run", "lint", "."}}, time.Now())
+		s.Require().True(ok, code)
+		s.Equal(code, got.code)
+	}
+}
+
+func (s *PressureRetrySuite) TestTheRuleTextNamesBothRefusals() {
+	s.Contains(ruleDocSleepPoll.Why, "refused with MGS3009 or MGS3053")
+	s.Contains(ruleDocSleepPoll.Why, "After MGS3053 no seat clears it")
+}
+
+func (s *PressureRetrySuite) TestAnUnboundRetryIsToldToFreeMemoryAndNotToFork() {
+	d := denyRefusedRetry(s.refusedAgo(10*time.Second), Dependencies{}, "", pressureRetry)
+	s.Require().True(d.refused())
+	s.Contains(d.Say, "Free memory first")
+	s.NotContains(d.Say, "fork a job")
+}
+
+func (s *PressureRetrySuite) TestARetryAfterTheMinutePasses() {
+	s.False(denyRefusedRetry(s.refusedAgo(90*time.Second), Dependencies{}, "", pressureRetry).refused())
 }
 
 // TestDenyRefusedRetry: a run this checkout saw refused with MGS3009 inside the minute is
@@ -510,6 +588,22 @@ func TestEveryServedWaitPassesTheGuardForEveryRole(t *testing.T) {
 	}
 }
 
+func TestProcessPollOnALineWithARunServesThatRunInTheBackground(t *testing.T) {
+	v := Evaluate(strict(testDependencies()), "kill -0 4242 && ./magus run go-test .")
+	assert.Equal(t, denyRuleProcessPoll, v.Rule.Name)
+	require.Len(t, v.Next, 1)
+	assert.Contains(t, v.Next[0].Run, "job exec --timeout")
+	assert.Contains(t, v.Next[0].Run, "-- ./magus run go-test .")
+	assert.Contains(t, v.Why, "never waits")
+}
+
+func TestProcessPollWithNoRunOnTheLineReadsStatus(t *testing.T) {
+	v := Evaluate(strict(testDependencies()), "pgrep -fl magus")
+	assert.Equal(t, denyRuleProcessPoll, v.Rule.Name)
+	require.Len(t, v.Next, 1)
+	assert.Equal(t, hint.Status.String(), v.Next[0].Run)
+}
+
 // A wait on the pid of a run holding a seat spends the budget wait outside the call that
 // runs; a pid no run holds is some other process.
 func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
@@ -528,8 +622,6 @@ func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
 	}
 	probe := Judge(ctx, Dependencies{}, Request{Input: "kill -0 4242 && ./magus run go-test .", Lease: worker.ID})
 	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleProcessPoll)}, judgedAs(probe))
-	require.Len(t, probe.Next, 1)
-	assert.Equal(t, hint.Status.String(), probe.Next[0].Run)
 	for _, line := range []string{
 		"caffeinate -w 9999",
 		"wait 9999",
@@ -558,4 +650,271 @@ func TestRefusedRetryServesTheRootAForkedJob(t *testing.T) {
 	require.True(t, leased.refused())
 	assert.Contains(t, leased.Say, "status --wait | ")
 	assert.NotContains(t, leased.Say, hint.JobFork.String())
+}
+
+// SleepFormSuite pins how long each spelling of a sleep that is not `sleep`
+// waits, and the near misses that are not sleeps at all.
+type SleepFormSuite struct {
+	suite.Suite
+}
+
+func TestSleepFormSuite(t *testing.T) {
+	suite.Run(t, new(SleepFormSuite))
+}
+
+func (s *SleepFormSuite) waits(line string, want time.Duration) {
+	cmds, parsed := ParseCommands(line)
+	s.Require().True(parsed, line)
+	got, ok := sleepDuration(cmds[0])
+	s.True(ok, line)
+	s.Equal(want, got, line)
+}
+
+func (s *SleepFormSuite) isNoSleep(line string) {
+	cmds, parsed := ParseCommands(line)
+	s.Require().True(parsed, line)
+	_, ok := sleepDuration(cmds[0])
+	s.False(ok, line)
+}
+
+func (s *SleepFormSuite) TestSleep() {
+	s.waits("sleep 30", 30*time.Second)
+}
+
+func (s *SleepFormSuite) TestCaffeinateForSeconds() {
+	s.waits("caffeinate -t 90", 90*time.Second)
+}
+
+func (s *SleepFormSuite) TestPerlSelect() {
+	s.waits("perl -e 'select(undef,undef,undef,45)'", 45*time.Second)
+}
+
+func (s *SleepFormSuite) TestPerlSelectForAFraction() {
+	s.waits("perl -e 'select(undef, undef, undef, 0.25)'", 250*time.Millisecond)
+}
+
+func (s *SleepFormSuite) TestPerlSleep() {
+	s.waits("perl -e 'sleep 60'", time.Minute)
+}
+
+func (s *SleepFormSuite) TestPythonTimeSleep() {
+	s.waits("python3 -c 'import time; time.sleep(120)'", 2*time.Minute)
+}
+
+func (s *SleepFormSuite) TestRubySleep() {
+	s.waits("ruby -e 'sleep 15'", 15*time.Second)
+}
+
+func (s *SleepFormSuite) TestNodeSetTimeout() {
+	s.waits("node -e 'setTimeout(()=>{}, 20000)'", 20*time.Second)
+}
+
+func (s *SleepFormSuite) TestReadWithATimeout() {
+	s.waits("read -t 30 line", 30*time.Second)
+}
+
+func (s *SleepFormSuite) TestPerlPrintIsNoSleep() {
+	s.isNoSleep("perl -e 'print 1'")
+}
+
+func (s *SleepFormSuite) TestPythonPrintIsNoSleep() {
+	s.isNoSleep("python3 -c 'print(1)'")
+}
+
+func (s *SleepFormSuite) TestCaffeinateAroundACommandIsNoSleep() {
+	s.isNoSleep("caffeinate -i make")
+}
+
+func (s *SleepFormSuite) TestTailFollowIsNoSleep() {
+	s.isNoSleep("tail -f out.log")
+}
+
+func (s *SleepFormSuite) TestReadWithoutATimeoutIsNoSleep() {
+	s.isNoSleep("read line")
+}
+
+func (s *SleepFormSuite) TestCaffeinateOnAPidIsNoSleep() {
+	s.isNoSleep("caffeinate -w 4242 -t 90")
+}
+
+func (s *SleepFormSuite) TestWaitOnAPidIsNoSleep() {
+	s.isNoSleep("wait 4242")
+}
+
+func (s *SleepFormSuite) TestTailOnAPidIsNoSleep() {
+	s.isNoSleep("tail --pid=4242 -f out.log")
+}
+
+// SleepFormPollSuite pins that each spelling of a sleep before a status read
+// is refused as the poll a plain `sleep` would be.
+type SleepFormPollSuite struct {
+	suite.Suite
+}
+
+func TestSleepFormPollSuite(t *testing.T) {
+	suite.Run(t, new(SleepFormPollSuite))
+}
+
+func (s *SleepFormPollSuite) refusesBeforeAStatusRead(sleeper string) {
+	v := Evaluate(Dependencies{}, sleeper+"; ./magus status")
+	s.Equal(denyRuleSleepPoll, v.Rule.Name, sleeper)
+}
+
+func (s *SleepFormPollSuite) TestCaffeinate() {
+	s.refusesBeforeAStatusRead("caffeinate -t 30")
+}
+
+func (s *SleepFormPollSuite) TestPerlSelect() {
+	s.refusesBeforeAStatusRead("perl -e 'select(undef,undef,undef,30)'")
+}
+
+func (s *SleepFormPollSuite) TestPython() {
+	s.refusesBeforeAStatusRead("python3 -c 'import time; time.sleep(30)'")
+}
+
+func (s *SleepFormPollSuite) TestRuby() {
+	s.refusesBeforeAStatusRead("ruby -e 'sleep 30'")
+}
+
+func (s *SleepFormPollSuite) TestNode() {
+	s.refusesBeforeAStatusRead("node -e 'setTimeout(()=>{}, 30000)'")
+}
+
+func (s *SleepFormPollSuite) TestTimeoutAroundASleep() {
+	s.refusesBeforeAStatusRead("timeout 60 sleep 30")
+}
+
+func (s *SleepFormPollSuite) TestRead() {
+	s.refusesBeforeAStatusRead("read -t 30 line")
+}
+
+// WaitRemedySuite pins the fix a waiting line is served: its own target run,
+// backgrounded under its measured bound. Unmeasured, the ceiling is named.
+type WaitRemedySuite struct {
+	suite.Suite
+	root string
+}
+
+func TestWaitRemedySuite(t *testing.T) {
+	suite.Run(t, new(WaitRemedySuite))
+}
+
+func (s *WaitRemedySuite) SetupTest() {
+	s.root = s.T().TempDir()
+}
+
+func (s *WaitRemedySuite) evaluate(line string) ShellVerdict {
+	return Evaluate(Dependencies{scope: workspaceScope{root: s.root}}, line)
+}
+
+func (s *WaitRemedySuite) TestBoundIsTheMeasuredRunWithHalfAgain() {
+	bound, note := waitBound("test", 80*time.Second, true, 30*time.Minute)
+	s.Equal(2*time.Minute, bound, "80s and half again is 2m, already on the minute")
+	s.Contains(note, "`test` last ran 1m20s here, and 2m leaves half again")
+}
+
+func (s *WaitRemedySuite) TestBoundRoundsUpToTheMinute() {
+	bound, _ := waitBound("test", 5*time.Minute, true, 30*time.Minute)
+	s.Equal(8*time.Minute, bound, "7m30s rounds up")
+}
+
+func (s *WaitRemedySuite) TestUnmeasuredBoundIsTheCeilingAndSaysSo() {
+	bound, note := waitBound("test", 0, false, 30*time.Minute)
+	s.Equal(30*time.Minute, bound)
+	s.Contains(note, "nothing recorded here measures `test`")
+	s.Contains(note, "background-unbounded's 30m ceiling, not a measurement")
+}
+
+func (s *WaitRemedySuite) TestOneUnmeasuredProjectLeavesTheLineUnmeasured() {
+	recordRun(s.T(), s.root, "docs", "test", 5*time.Minute)
+	v := s.evaluate("until ./magus run test docs console; do sleep 30; done")
+	s.Require().Len(v.Next, 1)
+	s.Contains(v.Next[0].Run, "--timeout 30m")
+	s.Contains(v.Lead, "not a measurement")
+}
+
+func (s *WaitRemedySuite) TestAffectedIsNeverPricedByTheRootsRun() {
+	recordRun(s.T(), s.root, ".", "ci", 5*time.Minute)
+	v := s.evaluate("until ./magus affected ci; do sleep 30; done")
+	s.Require().Len(v.Next, 1)
+	s.Equal("./magus job exec --timeout 30m -- ./magus affected ci", v.Next[0].Run)
+	s.Contains(v.Lead, "not a measurement")
+}
+
+func (s *WaitRemedySuite) TestComputedWordServesNothing() {
+	v := s.evaluate(`until ./magus run test "$project"; do sleep 30; done`)
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Empty(v.Next, "the served line would drop the project")
+}
+
+func (s *WaitRemedySuite) TestAssignedEnvironmentServesNothing() {
+	v := s.evaluate("until GOFLAGS=-race ./magus run test .; do sleep 30; done")
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Empty(v.Next, "job exec would run it without GOFLAGS")
+}
+
+func (s *WaitRemedySuite) TestFilterAfterTheSeparatorStaysQuoted() {
+	v := s.evaluate("until ./magus run test . -- -run 'TestA|TestB'; do sleep 30; done")
+	s.Require().Len(v.Next, 1)
+	s.Equal(`./magus job exec --timeout 30m -- ./magus run test . -- -run "TestA|TestB"`, v.Next[0].Run)
+}
+
+func (s *WaitRemedySuite) TestServedLineIsNotRefused() {
+	v := s.evaluate("until ./magus run test .; do sleep 30; done")
+	s.Require().Len(v.Next, 1)
+	s.Empty(s.evaluate(v.Next[0].Run).Deny)
+}
+
+func (s *WaitRemedySuite) TestBusyWaitOnAMeasuredRunServesItBounded() {
+	recordRun(s.T(), s.root, ".", "test", 5*time.Minute)
+	v := s.evaluate("until ./magus run test .; do sleep 30; done")
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Require().Len(v.Next, 1)
+	s.Equal(hint.NextForDenyRemedy(string(denyRuleBusyWait),
+		[]string{"./magus", "job", "exec", "--timeout", "8m", "--", "./magus", "run", "test", "."},
+		"run it in the background: the host announces it when it ends, and job exec stops it at the bound."), v.Next[0])
+	s.Contains(v.Lead, "`test` last ran 5m0s here, and 8m leaves half again")
+	s.Contains(v.Deny, "<command>", "the deny stays whole for a reader the remedy is dropped for")
+}
+
+func (s *WaitRemedySuite) TestBusyWaitOnAnUnmeasuredRunNamesTheCeiling() {
+	v := s.evaluate("while ! ./magus run lint libs/xdg -- --fix; do sleep 10; done")
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Require().Len(v.Next, 1)
+	s.Equal("./magus job exec --timeout 30m -- ./magus run lint libs/xdg -- --fix", v.Next[0].Run)
+	s.Contains(v.Lead, "nothing recorded here measures `lint` on these projects, so the bound is background-unbounded's 30m ceiling, not a measurement")
+}
+
+func (s *WaitRemedySuite) TestMeasuredOnAnotherProjectIsUnmeasuredHere() {
+	recordRun(s.T(), s.root, "docs", "test", 5*time.Minute)
+	v := s.evaluate("until ./magus run test .; do sleep 30; done")
+	s.Require().Len(v.Next, 1)
+	s.Contains(v.Next[0].Run, "--timeout 30m")
+}
+
+func (s *WaitRemedySuite) TestBusyWaitWithNoTargetRunServesNothing() {
+	v := s.evaluate("until test -f out.log; do sleep 5; done")
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Empty(v.Next)
+	s.Empty(v.Lead)
+}
+
+func (s *WaitRemedySuite) TestBusyWaitOnTwoRunsServesNothing() {
+	v := s.evaluate("until ./magus run test . && ./magus run lint .; do sleep 30; done")
+	s.Equal(denyRuleBusyWait, v.Rule.Name)
+	s.Empty(v.Next)
+}
+
+func (s *WaitRemedySuite) TestSleepPollOnAStatusReadServesNothing() {
+	v := s.evaluate("sleep 30; ./magus status")
+	s.Equal(denyRuleSleepPoll, v.Rule.Name)
+	s.Empty(v.Next, "the work it polls is not on the line")
+}
+
+func (s *WaitRemedySuite) TestSleepPollBesideARunServesThatRun() {
+	recordRun(s.T(), s.root, ".", "test", 80*time.Second)
+	v := s.evaluate("sleep 30; ./magus status; ./magus run test .")
+	s.Equal(denyRuleSleepPoll, v.Rule.Name)
+	s.Require().Len(v.Next, 1)
+	s.Equal("./magus job exec --timeout 2m -- ./magus run test .", v.Next[0].Run)
 }

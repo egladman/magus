@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"os"
 	"path"
@@ -26,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -165,13 +167,14 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 }
 
 // refuseLeftStop refuses a subagent's stop over tasks still running, naming each with the
-// call that stops it and the one wait a subagent has for its own run.
+// call that stops it and the one wait a subagent has for its own run. The first line is
+// the one a host shows the person.
 func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
 	return types.GuardJudgment{
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      decisionDeny,
 		Rule:          string(denyRuleBackgroundLeft),
-		Reason: fmt.Sprintf("magus workspace: stop each background task before you finish, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
+		Reason: fmt.Sprintf("magus workspace: this stop is refused while background tasks still run\nStop each, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
 			stoppableTasks(tasks, now), why),
 	}
 }
@@ -246,6 +249,22 @@ func partAt(v []int, i int) int {
 	return 0
 }
 
+// JobBackgroundCommands lists the background commands the session holding row
+// still runs, each with the call that stops it, leaving out those that end on
+// their own. "" for none, and for a transcript it cannot read.
+func JobBackgroundCommands(workspace string, row types.Job, now time.Time) string {
+	s, ok := newestStamp(row, workspace)
+	if !ok || s.Transcript == "" {
+		return ""
+	}
+	tasks, err := liveBackgroundTasks(s.Transcript, "", now)
+	if err != nil {
+		return ""
+	}
+	tasks = slices.DeleteFunc(tasks, func(t backgroundTask) bool { return endsOnItsOwn(t.Command) })
+	return stoppableTasks(tasks, now)
+}
+
 // endsOnItsOwn reports a backgrounded line of runs under `magus job exec --timeout`, which
 // check-timeout serves and which stop at their deadline, or of commits whose hooks outlast a
 // foreground call. Its completion notice is how the agent hears the result, so refusing the
@@ -287,10 +306,8 @@ func committing(sub string) bool {
 	return slices.Contains([]string{"commit", "ci", "merge", "cherry-pick", "revert"}, sub)
 }
 
-// sessionEnded reports whether raw ends its caller's agent session: a subagent's stop
-// (a SubagentStop) or a SessionEnd. A root session's Stop ends a turn, not the session. A
-// host that fires neither in print mode, or whose idle event is a pause, ends a job with its
-// checkout or its deadline.
+// sessionEnded reports whether raw is a SessionEnd. A subagent's stop
+// is a pause, since its parent can continue it. A root's Stop ends a turn.
 func sessionEnded(raw string) bool {
 	if !strings.HasPrefix(strings.TrimSpace(raw), "{") {
 		return false
@@ -298,22 +315,30 @@ func sessionEnded(raw string) bool {
 	var env struct {
 		HookEventName string `json:"hook_event_name"`
 	}
-	if json.Unmarshal([]byte(raw), &env) == nil && env.HookEventName == "SessionEnd" {
-		return true
-	}
+	return json.Unmarshal([]byte(raw), &env) == nil && env.HookEventName == "SessionEnd"
+}
+
+// subagentStopped reports a subagent's stop. Cursor's stop names no
+// agent, so its row reads as it did before the stop.
+func subagentStopped(raw string) bool {
 	stop, ok := decodeStop(raw)
 	return ok && stop.AgentID != ""
 }
 
-// endStoppedSession ends the job caller c's session held when raw ends that session and
-// the guard did not refuse the stop: a refused stop leaves the agent running, and so does a
-// subagent stop the host resumes (see resumedStop).
+// endStoppedSession settles c's row when the guard let raw stand. A
+// SessionEnd ends the row and reports true. A subagent's stop stamps it,
+// unless the host resumes the subagent itself (see resumedStop).
 func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw, resumesFrom string, v types.GuardJudgment) (bool, error) {
-	if v.Decision == decisionDeny || !sessionEnded(raw) || resumedStop(raw, resumesFrom, time.Now()) {
+	switch {
+	case v.Decision == decisionDeny:
 		return false, nil
+	case sessionEnded(raw):
+		_, ended, err := store.EndSession(ctx, c)
+		return ended, err
+	case subagentStopped(raw) && !resumedStop(raw, resumesFrom, time.Now()):
+		return false, store.StampHolderStopped(ctx, c)
 	}
-	_, ended, err := store.EndSession(ctx, c)
-	return ended, err
+	return false, nil
 }
 
 // resumedStop reports a subagent stop that leaves a background task running on a host that
@@ -566,7 +591,8 @@ func readBackgroundTranscript(transcript, cacheDir string, now time.Time) (trans
 		return transcriptTasks{}, err
 	}
 	defer f.Close()
-	store := taskCheckpointPath(cacheDir, transcript)
+	storePath := taskCheckpointPath(cacheDir, transcript)
+	store := checkpointLog(storePath)
 	r, start, saved := resumeTaskReader(store, transcript, f)
 	if _, err := f.Seek(start, io.SeekStart); err != nil {
 		return transcriptTasks{}, err
@@ -588,7 +614,7 @@ func readBackgroundTranscript(transcript, cacheDir string, now time.Time) (trans
 		offset += int64(len(line))
 		r.fold(line)
 	}
-	if store != "" && offset > start {
+	if storePath != "" && offset > start {
 		r.prune()
 		if head, err := transcriptHead(f, offset); err == nil {
 			r.save(store, saved, taskCheckpoint{Transcript: transcript, Offset: offset, Head: head})
@@ -650,27 +676,28 @@ func transcriptHead(f *os.File, n int64) (string, error) {
 // resumeTaskReader is a reader holding store's newest checkpoint of transcript and the
 // offset to read on from, or an empty reader and 0 when no checkpoint matches f. It also
 // returns the store's lines as read, which save needs to append or compact.
-func resumeTaskReader(store, transcript string, f *os.File) (*taskReader, int64, file.Lines) {
+func resumeTaskReader(store file.Log[taskCheckpoint], transcript string, f *os.File) (*taskReader, int64, savedCheckpoints) {
 	r := &taskReader{
 		commands: map[string]backgroundTask{},
 		live:     map[string]*backgroundTask{},
 		endedIDs: map[string]bool{},
 		heard:    map[string]time.Time{},
 	}
-	if store == "" {
-		return r, 0, file.Lines{}
+	if store.Path == "" {
+		return r, 0, savedCheckpoints{}
 	}
-	saved, err := file.ReadLines(store)
+	entries, err := store.Load()
 	if err != nil {
-		return r, 0, file.Lines{}
+		// The next save starts the store over and says so.
+		return r, 0, savedCheckpoints{loadErr: err}
 	}
+	saved := savedCheckpoints{entries: entries}
 	info, err := f.Stat()
 	if err != nil {
 		return r, 0, saved
 	}
-	for _, line := range slices.Backward(saved.Lines) {
-		var cp taskCheckpoint
-		if json.Unmarshal(line.Text, &cp) != nil || cp.Transcript != transcript || cp.Offset > info.Size() {
+	for _, cp := range slices.Backward(entries) {
+		if cp.Transcript != transcript || cp.Offset > info.Size() {
 			continue
 		}
 		if head, err := transcriptHead(f, cp.Offset); err != nil || head != cp.Head {
@@ -691,26 +718,38 @@ func resumeTaskReader(store, transcript string, f *os.File) (*taskReader, int64,
 // to that one entry once it is due compaction. A failed write is dropped: the next call
 // reads the transcript from the last checkpoint that did land, which is slower, never
 // wrong.
-func (r *taskReader) save(store string, saved file.Lines, cp taskCheckpoint) {
+func (r *taskReader) save(store file.Log[taskCheckpoint], saved savedCheckpoints, cp taskCheckpoint) {
 	cp.Pending = r.commands
 	cp.Heard = r.heard
 	cp.HostVersion = r.version
 	for _, callID := range r.order {
 		cp.Live = append(cp.Live, checkpointTask{CallID: callID, Task: *r.live[callID]})
 	}
-	line, err := json.Marshal(cp)
-	if err != nil {
+	ctx := context.Background()
+	if saved.loadErr != nil {
+		slog.With(attr.Component("magus")).WarnContext(ctx, "background task checkpoint store is corrupt; reset it, so this read folded its transcript from the start",
+			slog.String("path", store.Path), attr.Error(saved.loadErr))
+		_ = os.Remove(store.Path)
+	}
+	if len(saved.entries) == 0 {
+		sweepCheckpoints(filepath.Dir(store.Path))
+	}
+	if store.Append(ctx, cp) != nil {
 		return
 	}
-	if len(saved.Lines) == 0 && !saved.Partial {
-		sweepCheckpoints(filepath.Dir(store))
-	}
-	if saved.Partial || file.CompactDue(len(saved.Lines)+1, 1) {
-		_ = file.RewriteLines(store, [][]byte{line}, 0o644)
-		return
-	}
-	// One write per hook call: a sync would cost more than the checkpoint saves.
-	_ = file.AppendLines(store, [][]byte{line}, 0o644, file.WithoutSync())
+	_, _ = store.Compact(ctx)
+}
+
+// savedCheckpoints is a store as resumeTaskReader read it.
+type savedCheckpoints struct {
+	entries []taskCheckpoint
+	loadErr error
+}
+
+// checkpointLog keeps the newest checkpoint. Its appends skip the sync, since
+// one write per hook call would cost more than a checkpoint saves.
+func checkpointLog(path string) file.Log[taskCheckpoint] {
+	return file.Log[taskCheckpoint]{Path: path, Perm: 0o644, Keep: 1, SkipSync: true}
 }
 
 // checkpointRetention is how long a session's checkpoint store outlives its last write,

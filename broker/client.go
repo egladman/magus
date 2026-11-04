@@ -10,6 +10,7 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -48,6 +49,19 @@ type ClientOption func(*Client)
 // shows beside each claim it holds. The default argv is os.Args.
 func WithIdentity(argv []string, version string) ClientOption {
 	return func(c *Client) { c.hello.Argv, c.hello.Version = argv, version }
+}
+
+// WithLease names the lease the client's runs act under, which the broker charges each
+// claim to: the one the checkout's marker binds, as job.ActingLease resolves it. Without
+// it the client names the lease its BAGGAGE carries, if any.
+func WithLease(lease string) ClientOption {
+	return func(c *Client) { c.hello.Lease = lease }
+}
+
+// WithGate marks the client's process as running the ci composition, whose claims
+// outrank other runs' for seats (see [GateWait]).
+func WithGate(gate bool) ClientOption {
+	return func(c *Client) { c.hello.Gate = gate }
 }
 
 // WithStart sets how a client brings up a broker when none answers a Request or an
@@ -190,8 +204,10 @@ func (c *Client) Request(ctx context.Context, claim types.MachineClaim) (types.M
 
 // Claim is Request, except that a claim kept out only by its own process's or run's
 // claims, or by its job tree's validation seat, is held by the broker until a release
-// makes room, and answered then. It blocks on the connection meanwhile, and ctx ending
-// cancels the wait and returns ctx's error. Any other refusal answers at once.
+// makes room, and answered then. So is a claim of the oldest gate's run, until it has
+// waited gateWaitBound, when the error is a [types.ExitError] of exit 75 naming the bound.
+// It blocks on the connection meanwhile, and ctx ending cancels the wait and returns
+// ctx's error. Any other refusal answers at once.
 func (c *Client) Claim(ctx context.Context, claim types.MachineClaim) (types.MachineVerdict, error) {
 	return c.claim(ctx, claim, true)
 }
@@ -210,10 +226,18 @@ func (c *Client) claim(ctx context.Context, claim types.MachineClaim, park bool)
 	}
 	if park {
 		request := claimRequest{Claim: claim, Park: true}
-		parked := func(p parkedReply) { c.noteSeat(ctx, p.Seat) }
+		parked := func(p parkedReply) {
+			c.noteSeat(ctx, p.Seat)
+			if p.Gate != nil {
+				slog.InfoContext(ctx, p.Gate.String(), attr.Notice("broker"))
+			}
+		}
 		err = c.parkedCall(ctx, cn, typeClaim, request, typeClaimReply, &reply, parked, late)
 	} else {
 		err = cn.roundTrip(ctx, c.next(), typeClaim, claimRequest{Claim: claim}, typeClaimReply, &reply, late)
+	}
+	if refused := (*Error)(nil); errors.As(err, &refused) && refused.Code == CodeGateTimeout {
+		return types.MachineVerdict{}, gateRefusal(refused.Message)
 	}
 	if err != nil {
 		return types.MachineVerdict{}, err
@@ -501,9 +525,49 @@ func (c *Client) sayHello(ctx context.Context, cn *conn, sock string) error {
 		if errors.As(err, &refusal) && refusal.Code == CodeHandshake {
 			return refused(err)
 		}
+		if refusal != nil && refusal.Code == CodeProtocol {
+			return types.WrapDiagnostic(types.PeerFromAnotherBuild, err,
+				"the broker at %s is from another magus build (%v, this magus speaks protocol %d): it refuses every request; `magus broker stop` stops it",
+				sock, err, ProtocolVersion)
+		}
 		return fmt.Errorf("hello: %w", err)
 	}
 	return nil
+}
+
+// SocketPeer is the pid of the process listening at addr, read from the
+// kernel without a word to it, so it answers for a broker of any build. The
+// error wraps ErrUnavailable when nothing accepts the connection. Under socket
+// activation the listener is the supervisor, not a broker.
+func SocketPeer(ctx context.Context, addr string) (int, error) {
+	ep, err := endpoint.Parse(addr)
+	if err != nil {
+		return 0, fmt.Errorf("broker: %w", err)
+	}
+	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
+	nc, err := ep.Dial(dctx)
+	if err != nil {
+		return 0, fmt.Errorf("%w: dial %s: %w", ErrUnavailable, ep, err)
+	}
+	defer func() { _ = nc.Close() }()
+	sc, ok := nc.(syscall.Conn)
+	if !ok {
+		return 0, fmt.Errorf("broker: %s has no descriptor to ask the kernel about", ep)
+	}
+	raw, err := sc.SyscallConn()
+	if err != nil {
+		return 0, fmt.Errorf("broker: %w", err)
+	}
+	pid := 0
+	var peerErr error
+	if err := raw.Control(func(fd uintptr) { pid, peerErr = peerPID(int(fd)) }); err != nil {
+		return 0, fmt.Errorf("broker: %w", err)
+	}
+	if peerErr != nil {
+		return 0, fmt.Errorf("read the pid at %s: %w", ep, peerErr)
+	}
+	return pid, nil
 }
 
 func (c *Client) connect(ctx context.Context) (*conn, error) {

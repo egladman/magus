@@ -3,11 +3,10 @@ import type { PluginOptions } from 'claude-code'
 import type { Ttl } from '../types'
 
 export type Gate = 'off' | 'warn' | 'confirm'
-export type SpawnGate = 'off' | 'warn' | 'deny'
+export type SpawnGate = 'off' | 'deny'
 
 export type Settings = {
   cacheGate: Gate
-  cacheWarnMs: number
   gateMinTokens: number
   cacheTtl: 'auto' | Ttl
   priceStepGate: Gate
@@ -16,9 +15,7 @@ export type Settings = {
   spawnMaxInputUsdPerMTok: number
   sessionBudgetUsd: number
   budgetGate: Gate
-  subagentTokenBudget: number
   ratesFile: string
-  ratesStaleDays: number
 }
 
 const num = (v: unknown, fallback: number): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback)
@@ -33,17 +30,14 @@ export function readSettings(o: PluginOptions): Settings {
   const ttl = o.cacheTtl
   return {
     cacheGate: pick(o.cacheGate, ['off', 'warn', 'confirm'], 'warn'),
-    cacheWarnMs: num(o.cacheWarnMinutes, 2) * 60_000,
     gateMinTokens: num(o.gateMinTokens, 50_000),
     cacheTtl: ttl === '5m' || ttl === '1h' ? ttl : 'auto',
     priceStepGate: pick(o.priceStepGate, ['off', 'warn', 'confirm'], 'warn'),
     priceStepMarginTokens: num(o.priceStepMarginTokens, 10_000),
-    spawnGate: pick(o.spawnGate, ['off', 'warn', 'deny'], 'warn'),
+    spawnGate: pick(o.spawnGate, ['off', 'deny'], 'off'),
     spawnMaxInputUsdPerMTok: num(o.spawnMaxInputUsdPerMTok, 2),
     sessionBudgetUsd: num(o.sessionBudgetUsd, 0),
     budgetGate: pick(o.budgetGate, ['off', 'warn', 'confirm'], 'warn'),
-    subagentTokenBudget: num(o.subagentTokenBudget, 100_000),
     ratesFile: typeof o.ratesFile === 'string' ? o.ratesFile.trim() : '',
-    ratesStaleDays: num(o.ratesStaleDays, 60),
   }
 }

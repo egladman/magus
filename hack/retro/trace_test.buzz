@@ -1,0 +1,134 @@
+import "assert";
+import "./trace" as retro;
+
+final EVENTS = "hack/retro/testdata/events.jsonl";
+final BLOBS = "hack/retro/testdata";
+
+fun records() > [retro\Record] !> any {
+    return retro\loadTrail(EVENTS, blobs: BLOBS, start: 1700000000000, end: 1700000100000);
+}
+
+fun job() > retro\JobFacts {
+    return retro\JobFacts{
+        id = "demo-job", state = "exited", checkout = "/w/demo", writePaths = ["a.buzz", "lib.buzz#helper"],
+        created = 1700000001, registered = 1700000011, updated = 1700000095, reworkRounds = 1, widenings = 0,
+        releasedPaths = [<str>], releasedAt = 0,
+    };
+}
+
+fun commit() > retro\CommitFacts {
+    return retro\CommitFacts{ sha = "c0ffee1234", short = "c0ffee1", subject = "fix the docs", at = 1700000090500, files = ["README.md", "b.go"] };
+}
+
+fun whats(t: retro\Trace) > [str] {
+    final found = mut [<str>];
+    foreach (s in t.steps) {
+        found.append(s.what);
+    }
+    return found;
+}
+
+final CHAIN = [
+    "agent-a on demo-job:",
+    "  exit: 11-14 22:14:10 events.jsonl:10 reqexit",
+    "  release: before the exit, inferred from the lease field: the last leased call is events.jsonl:9 reqschema at 11-14 22:14:00"
+        + " (`cd /w/demo && ./magus job exit demo-job --schema`), the first without it events.jsonl:10 reqexit at 11-14 22:14:10",
+    "  resumed by the root: 11-14 22:14:20 events.jsonl:11 spawncontinue",
+    "  writes with no lease: 2 call(s) on 2 file(s), events.jsonl:12 reqwriteout first",
+    "  allow at the empty-lease path: 1 passed naming no rule, 1 denied",
+];
+
+test "a commit traces back through exit, release, resume and unleased writes" {
+    final t = retro\trace(retro\Seed{ kind = "commit", value = "c0ffee1", at = 1700000091500 }, records: records(), jobs: [job()], commit: commit());
+    assert\equal(t.agents, want: ["agent-a"], message: "agents");
+    assert\equal(t.jobs, want: ["demo-job"], message: "jobs");
+    assert\equal(whats(t), want: [
+        "root forks demo-job, guard passes, naming no rule",
+        "row demo-job created (job fork)",
+        "root spawns a general-purpose worker whose prompt names demo-job: \"JOB ID: demo-job. Take the row with ./magus job exec demo-job.\"",
+        "agent-a: calls carry lease demo-job from here (lease_from agent)",
+        "agent-a takes demo-job (job exec) under lease demo-job, guard passes, naming no rule",
+        "row demo-job records a holder's base (job exec)",
+        "agent-a writes a.buzz, inside demo-job's write paths under lease demo-job, guard passes, naming no rule",
+        "agent-a: shell.command under lease demo-job, guard denies (builtin)",
+        "agent-a: 2 more call(s) under lease demo-job, guard passes, naming no rule",
+        "agent-a asks job exit for its schema (job exit demo-job --schema) under lease demo-job, guard passes, naming no rule",
+        "agent-a: calls stop carrying lease demo-job; the last that did is events.jsonl:9 reqschema at 11-14 22:14:00: `cd /w/demo && ./magus job exit demo-job --schema`",
+        "agent-a exits demo-job (job exit) with no lease, guard passes, naming no rule",
+        "root resumes agent-a by agent.continue: \"Fix the docs too; widen with job apply.\"; the verdict carried no response",
+        "agent-a writes README.md, outside demo-job's write paths with no lease, guard passes, naming no rule",
+        "agent-a writes b.go, outside demo-job's write paths with no lease, guard denies (worktree)",
+        "agent-a runs git commit \"fix the docs\" with no lease, guard passes, naming no rule",
+        "commit c0ffee1 \"fix the docs\" lands 2 file(s): README.md, b.go; 2 outside demo-job's write paths",
+        "row demo-job last written (after the event): state exited, rework_rounds 1, widenings 0",
+    ], message: "timeline");
+    assert\equal(t.chain, want: CHAIN, message: "chain");
+}
+
+test "every trail line cites its record and the command that reopens it" {
+    final t = retro\trace(retro\Seed{ kind = "commit", value = "c0ffee1", at = 1700000091500 }, records: records(), jobs: [job()], commit: commit());
+    foreach (s in t.steps) {
+        assert\equal(s.cite != "" and s.reopen != "", want: true, message: s.what);
+    }
+    assert\equal(t.steps[7].cite, want: "events.jsonl:5 reqdeny", message: "deny cite");
+    assert\equal(t.steps[7].reopen, want: "./magus query output reqdeny; ./magus query output grdfixture", message: "deny reopen");
+}
+
+test "the links no record holds are listed as not recorded" {
+    final t = retro\trace(retro\Seed{ kind = "commit", value = "c0ffee1", at = 1700000091500 }, records: records(), jobs: [job()], commit: commit());
+    assert\equal(t.missing, want: [
+        "demo-job's earlier states: the job store keeps only the latest row (updated 11-14 22:14:55), so an exit before a re-file shows only in the trail",
+        "which spawn started agent agent-a: a spawn record holds the prompt, not the agent id the host gives the child",
+        "when agent-a's lease binding was released: the store deletes the binding file and records no event, so the release is read off the trail's lease field",
+        "which judge branch passed a write with no lease: the trail names decided_by only on a deny",
+        "whether the root was told agent-a's job state when it resumed it at 11-14 22:14:20: events.jsonl:11 spawncontinue carries no response",
+        "the sha a git commit produced: the trail records the command, not its result, so commit c0ffee1 is linked by its subject",
+        "whether a hook record is the host's own call or an envelope replayed on stdin: both are recorded with entry_point hook",
+    ], message: "not recorded");
+}
+
+test "a job id seeds the same chain" {
+    final t = retro\trace(retro\Seed{ kind = "job", value = "demo-job", at = 1700000096000 }, records: records(), jobs: [job()], commit: null);
+    assert\equal(t.agents, want: ["agent-a"], message: "agents");
+    assert\equal(t.chain, want: CHAIN, message: "chain");
+}
+
+test "a record id seeds a trace that ends at that record" {
+    final t = retro\trace(retro\Seed{ kind = "record", value = "reqwriteout", at = 1700000100000 }, records: records(), jobs: [job()], commit: null);
+    assert\equal(t.anchor, want: 1700000070000, message: "anchor");
+    assert\equal(t.chain[4], want: "  writes with no lease: 1 call(s) on 1 file(s), events.jsonl:12 reqwriteout first", message: "writes");
+}
+
+test "a path and a time seed the latest write to that path" {
+    final t = retro\trace(retro\Seed{ kind = "path", value = "b.go", at = 1700000100000 }, records: records(), jobs: [job()], commit: null);
+    assert\equal(t.anchor, want: 1700000080000, message: "anchor");
+}
+
+test "a trace cut before the resume says the resume is not recorded" {
+    final t = retro\trace(retro\Seed{ kind = "record", value = "reqexit", at = 1700000100000 }, records: records(), jobs: [job()], commit: null);
+    assert\equal(t.chain[3], want: "  resumed by the root: not recorded: no continue to agent-a after the exit in the window", message: "resume");
+    assert\equal(t.chain[4], want: "  writes with no lease: none recorded after the exit", message: "writes");
+}
+
+test "a seed nothing matches raises rather than tracing nothing" {
+    final got = retro\trace(retro\Seed{ kind = "record", value = "nope", at = 1700000100000 }, records: records(), jobs: [job()], commit: null) catch null;
+    assert\equal(got == null, want: true, message: "raised");
+    final none = retro\trace(retro\Seed{ kind = "job", value = "nope", at = 1700000100000 }, records: records(), jobs: [job()], commit: null) catch null;
+    assert\equal(none == null, want: true, message: "unknown job raised");
+}
+
+test "a job id matches only as a whole word" {
+    assert\equal(retro\mentions("./magus job exit demo-job --stdin", id: "demo-job"), want: true, message: "whole");
+    assert\equal(retro\mentions("./magus job exit demo-job-2", id: "demo-job"), want: false, message: "prefix");
+    assert\equal(retro\mentions("JOB ID: demo-job.", id: "demo-job"), want: true, message: "sentence");
+}
+
+test "a write is placed against the job's checkout and write paths" {
+    assert\equal(retro\where("/w/demo/lib.buzz", j: job()), want: "lib.buzz, inside demo-job's write paths", message: "symbol claim");
+    assert\equal(retro\where("/elsewhere/x", j: job()), want: "/elsewhere/x, outside demo-job's checkout", message: "other checkout");
+}
+
+test "a checkout with no trail raises" {
+    final got = retro\loadTrail("hack/retro/testdata/missing.jsonl", blobs: BLOBS, start: 0, end: 1) catch null;
+    assert\equal(got == null, want: true, message: "raised");
+}

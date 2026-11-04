@@ -110,12 +110,12 @@ func configTokenGenerate(args []string) error {
 	if err != nil {
 		return err
 	}
-	operator := types.Credential{Kind: types.KindOperator, ID: auth.TokenID(tok), Grant: types.GrantOperator}
+	operator := types.Credential{Kind: types.KindOperator, ID: auth.SecretID(tok), Grant: types.GrantOperator}
 	auditMint("cli.generate", trail.MintRecord{Minted: operator, Minter: operator})
 
 	// The secret goes to stdout alone, once; repeating it on stderr would put it in every
 	// terminal log that captures both.
-	fmt.Printf("%s\n", tok)
+	fmt.Println(tok.Reveal())
 	slog.Info("wrote "+path, attr.Notice(""), attr.Component("magus config token generate"))
 	slog.Info("A running server picks this up automatically - no restart needed.", attr.Notice(""))
 	slog.Info("For an MCP client, mint a scoped token instead:", attr.Notice(""), attr.Next(hint.ConfigMCPConnectorCreate.String()))
@@ -133,40 +133,82 @@ func configTokenPrint(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(tok)
+	fmt.Println(tok.Reveal())
 	return nil
 }
 
 func configTokenRevoke(args []string) error {
-	if err := noFlags("config token revoke", args); err != nil {
+	rest, err := commandParse("config token revoke", args, nil)
+	if err != nil {
 		return err
 	}
-	if err := auth.RevokeOperator(); err != nil {
+	if err := noFlags("config token revoke", rest); err != nil {
 		return err
 	}
-	slog.Info("token removed", attr.Notice(""), attr.Component("magus config token revoke"))
-	return nil
-}
-
-func configTokenStatus(args []string) error {
-	if err := noFlags("config token status", args); err != nil {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
 		return err
 	}
 	path, err := auth.OperatorPath()
 	if err != nil {
 		return err
 	}
+	if err := auth.RevokeOperator(); err != nil {
+		return err
+	}
+	if opts.Format != outputText {
+		return emitRecord(opts, configTokenRevokeOutput{Path: path, Revoked: true}, []string{path})
+	}
+	slog.Info("token removed", attr.Notice(""), attr.Component("magus config token revoke"))
+	return nil
+}
+
+type configTokenRevokeOutput struct {
+	Path    string `json:"path"`
+	Revoked bool   `json:"revoked"`
+}
+
+type configTokenStatusOutput struct {
+	Present bool   `json:"present"`
+	ID      string `json:"id,omitempty"`
+	Path    string `json:"path"`
+}
+
+func configTokenStatus(args []string) error {
+	rest, err := commandParse("config token status", args, nil)
+	if err != nil {
+		return err
+	}
+	if err := noFlags("config token status", rest); err != nil {
+		return err
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	path, err := auth.OperatorPath()
+	if err != nil {
+		return err
+	}
+	status := configTokenStatusOutput{Path: path}
 	tok, err := auth.LoadOperator()
-	if errors.Is(err, auth.ErrNoToken) {
+	switch {
+	case errors.Is(err, auth.ErrNoToken):
+	case err != nil:
+		return err
+	default:
+		status.Present, status.ID = true, auth.SecretID(tok)
+	}
+	if opts.Format != outputText {
+		return emitRecord(opts, status, []string{path})
+	}
+	if !status.Present {
 		fmt.Printf("token:       absent (the server mints one on next start)\n")
 		fmt.Printf("path:        %s\n", path)
 		return nil
 	}
-	if err != nil {
-		return err
-	}
 	fmt.Printf("token:       present\n")
-	fmt.Printf("id:          %s\n", auth.TokenID(tok))
+	fmt.Printf("id:          %s\n", status.ID)
 	fmt.Printf("path:        %s\n", path)
 	return nil
 }

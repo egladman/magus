@@ -83,14 +83,140 @@ var mgs = diagnostics.New(func(c DiagnosticCode) string {
 		return fmt.Sprintf("%s%s/", diagnosticRaceBase, string(c))
 	case strings.HasPrefix(string(c), "MGS1"):
 		return fmt.Sprintf("%s%s/", diagnosticMagusfileBase, string(c))
-	default:
+	// The sandbox family holds the workspace-scope codes too: MGS3### pages live beside MGS2###.
+	case strings.HasPrefix(string(c), "MGS2"), strings.HasPrefix(string(c), "MGS3"):
 		return fmt.Sprintf("%s%s/", diagnosticSandboxBase, string(c))
+	default:
+		return ""
 	}
 })
 
-// CodeURL returns the documentation URL for an MGS code. (URL resolution is domain-specific, so it is a
-// function on the magus domain rather than a method on the shared Code type.)
-func CodeURL(c DiagnosticCode) string { return mgs.URL(c) }
+// The owners a prefix is registered under: magus's own catalog, and whichever workspace
+// declares a diagnostics.prefix.
+const (
+	DiagnosticOwnerMagus     = "magus"
+	DiagnosticOwnerWorkspace = "workspace"
+)
+
+// mgsPrefix is the MGS catalog's prefix, read off a code in it.
+var mgsPrefix = diagnostics.Prefix(NoCITarget)
+
+// DiagnosticOrigin says who minted a diagnostic code: a catalog compiled into magus, or the
+// workspace, under the prefix its magus.yaml declares.
+type DiagnosticOrigin string
+
+const (
+	// DiagnosticOriginUnknown is a code under a prefix nobody registered: a program that
+	// never ran magus's startup, or a code that is neither magus's nor its workspace's.
+	DiagnosticOriginUnknown   DiagnosticOrigin = ""
+	DiagnosticOriginBuiltin   DiagnosticOrigin = "builtin"
+	DiagnosticOriginWorkspace DiagnosticOrigin = "workspace"
+)
+
+// CodeOrigin derives c's origin from its prefix. MGS is builtin whatever the registry holds,
+// since this package owns that catalog; any other prefix is builtin or the workspace's by
+// who registered it, and unknown when nobody did. Nothing stores an origin beside a code,
+// so a workspace cannot claim builtin by saying so.
+func CodeOrigin(c DiagnosticCode) DiagnosticOrigin {
+	if diagnostics.Prefix(c) == mgsPrefix {
+		return DiagnosticOriginBuiltin
+	}
+	owner, ok := diagnostics.Owner(c)
+	switch {
+	case !ok:
+		return DiagnosticOriginUnknown
+	case owner == DiagnosticOwnerWorkspace:
+		return DiagnosticOriginWorkspace
+	default:
+		return DiagnosticOriginBuiltin
+	}
+}
+
+// DiagnosticDocs is the one docs resolver for a diagnostic code, keyed by prefix: MGS
+// resolves through magus's own pages, the workspace's declared Prefix through its Docs
+// template, and any other prefix to "". The zero value resolves MGS codes only.
+type DiagnosticDocs struct {
+	// Prefix is the workspace's declared code prefix (magus.yaml diagnostics.prefix).
+	Prefix string
+	// Docs is the page template for a workspace code, with {code} standing for the code
+	// (magus.yaml diagnostics.docs). Empty means the workspace documents no codes.
+	Docs string
+}
+
+// URL is c's docs page, or "" when neither magus nor the workspace documents c.
+func (d DiagnosticDocs) URL(c DiagnosticCode) string {
+	switch p := diagnostics.Prefix(c); {
+	case p == mgsPrefix:
+		return mgs.URL(c)
+	case p != "" && p == d.Prefix && d.Docs != "":
+		return strings.ReplaceAll(d.Docs, "{code}", string(c))
+	}
+	return ""
+}
+
+// CodeURL returns the documentation URL for an MGS code, and "" for any other: a workspace
+// code's page is DiagnosticDocs.URL's to resolve.
+func CodeURL(c DiagnosticCode) string { return DiagnosticDocs{}.URL(c) }
+
+// RegisterDiagnosticPrefix reserves a workspace's declared prefix, refusing one that is
+// malformed or collides with a prefix a registered catalog holds. It registers the MGS
+// catalog first, so a program that never ran magus's startup still refuses MGS.
+func RegisterDiagnosticPrefix(prefix string) error {
+	if err := diagnostics.RegisterCatalog(DiagnosticOwnerMagus, allDiagnosticCodes); err != nil {
+		return fmt.Errorf("register the MGS catalog: %w", err)
+	}
+	if err := diagnostics.Register(prefix, DiagnosticOwnerWorkspace); err != nil {
+		return fmt.Errorf("diagnostics.prefix: %w", err)
+	}
+	return nil
+}
+
+// WorkspaceDiagnosticCode validates text as a code under the workspace's declared prefix:
+// the prefix followed by four digits. It refuses every code when prefix is empty, naming
+// the magus.yaml key that declares one, and refuses a built-in or foreign prefix. The
+// prefix is registered on the way, so the code it returns reads as the workspace's.
+func WorkspaceDiagnosticCode(prefix, text string) (DiagnosticCode, error) {
+	c := DiagnosticCode(text)
+	if prefix == "" {
+		return "", fmt.Errorf("%q: this workspace declares no diagnostic prefix, which diagnostics.prefix in magus.yaml sets", text)
+	}
+	if err := RegisterDiagnosticPrefix(prefix); err != nil {
+		return "", err
+	}
+	got := diagnostics.Prefix(c)
+	if CodeOrigin(c) == DiagnosticOriginBuiltin {
+		return "", fmt.Errorf("%q is in the %s catalog magus ships, which only magus mints, so use this workspace's prefix %s", text, got, prefix)
+	}
+	if got != prefix {
+		return "", fmt.Errorf("%q is not under this workspace's prefix %s (diagnostics.prefix in magus.yaml)", text, prefix)
+	}
+	digits := text[len(got):]
+	if len(digits) != 4 || strings.Trim(digits, "0123456789") != "" {
+		return "", fmt.Errorf("%q is not %s followed by four digits", text, prefix)
+	}
+	return c, nil
+}
+
+// IsDiagnosticCode reports whether text is shaped as a code, capitals then four digits,
+// under a prefix this process knows: MGS, or one a catalog or the workspace registered.
+// A pattern routes as a code only when its prefix is declared, so ACME1001 in a workspace
+// that never declared ACME stays text.
+func IsDiagnosticCode(text string) bool {
+	p := diagnostics.Prefix(DiagnosticCode(text))
+	digits := text[len(p):]
+	if len(p) < 2 || len(digits) != 4 || strings.Trim(digits, "0123456789") != "" {
+		return false
+	}
+	return CodeOrigin(DiagnosticCode(text)) != DiagnosticOriginUnknown
+}
+
+// DiagnosticCodeRef is a code as it crosses into Buzz: the magus\DiagnosticCode object that
+// magus\diagnosticCode mints and magus\raise takes, so a typo is a type error rather than a
+// string that renders like a real code.
+type DiagnosticCodeRef struct {
+	Code   string           `json:"code" yaml:"code"`
+	Origin DiagnosticOrigin `json:"origin" yaml:"origin"`
+}
 
 const NoCITarget DiagnosticCode = "MGS1001"
 const SpellShadowed DiagnosticCode = "MGS1002"
@@ -316,12 +442,10 @@ const CarryApprovalsInvalid DiagnosticCode = "MGS1050"
 // mgs_ function it does not know is a declaration it would silently ignore.
 const SpellContractViolated DiagnosticCode = "MGS1051"
 
-// ModelTierDeclarationUnusable is a magus\job.modelTiers or magus\job.modelTier call the
-// load cannot use: tiers that are not an enum, a default that is not one of its cases, a
-// host key naming no harness the magusfile wired, a mapping function that raises or
-// answers the wrong type, a second call, or a call outside the root magusfile. The load
-// stops, because a declaration that silently failed to register leaves a workspace that
-// reads as tiered when its jobs get the default.
+// ModelTierDeclarationUnusable is a magus\modelTiers or magus\modelTier call
+// the load cannot use: a bad enum, default, host key or mapping function.
+// A second call and a call outside the root magusfile land here too.
+// The load stops: a declaration that silently failed would read as tiered.
 const ModelTierDeclarationUnusable DiagnosticCode = "MGS1052"
 
 // FootprintDeclaredBothWays is one target declaring a path, or two overlapping globs,
@@ -652,9 +776,42 @@ const GateNotRun DiagnosticCode = "MGS3045"
 // working in: a half-saved load file stops `magus run` for every job there.
 const CheckoutConfigHeld DiagnosticCode = "MGS3046"
 
+// StoreRecordsNewer is a magus record a newer magus wrote with a requirement or schema
+// version this build lacks: a job row, a stored output, or the run history. The record is
+// kept on disk unchanged. A job row stays listed and graded but is not written; a stored
+// output is not read; a run sizes its claims from declarations and records no history.
+const StoreRecordsNewer DiagnosticCode = "MGS3047"
+
+// PeerFromAnotherBuild is a magus process that answered from another build: a broker
+// that speaks another protocol, or a server, pool parent or MCP server started by another
+// magus. The command goes on without what that peer serves, or under `broker: required`
+// stops. The old socket protocol (ServerProtocolOutdated) is one cause of it.
+const PeerFromAnotherBuild DiagnosticCode = "MGS3048"
+
+// LegacyStorePresent is a store's file from an older magus left beside the file that
+// replaced it. Neither is touched: two files would be two accounts of the same records
+// while an older magus still writes the old one.
+const LegacyStorePresent DiagnosticCode = "MGS3049"
+
+// StoreLineUndecodable is a line in a magus store that is not a record at all: not JSON,
+// cut short, or of the wrong shape. The store is not read, and the error names its path
+// and line: skipping the line could drop a lease. A record a newer magus wrote decodes and
+// is StoreRecordsNewer instead.
+const StoreLineUndecodable DiagnosticCode = "MGS3050"
+
 // JobStoreWriterOlder is a job store whose header requires a schema feature this magus
 // lacks: nothing is read or written until a magus that implements it runs.
 const JobStoreWriterOlder DiagnosticCode = "MGS3051"
+
+// DiskFull is a failure saying the disk is out of space while the filesystem
+// it ran on is below the critical floor, or a fork refused for that. Text alone
+// cannot tell a fixture printing it from a full disk.
+const DiskFull DiagnosticCode = "MGS3052"
+
+// MemoryPressureHigh is a step magus did not start because the kernel says
+// memory is in a bad state right now. It exits 75 like MGS3009, but no seat
+// clears it: the cause may be nothing magus holds.
+const MemoryPressureHigh DiagnosticCode = "MGS3053"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -689,16 +846,6 @@ const UndeclaredSourceModified DiagnosticCode = "MGS4007"
 // is the composing body's own, and only ctx.needs can express it.
 const UnorderedSameStepWrite DiagnosticCode = "MGS4008"
 
-// UnformattedCommit is a commit that changed a Go file without leaving it correctly
-// formatted (gofmt -l still names it). A COMMIT-TIME question, not "is this file
-// formatted right now": golangci-lint's formatters already answer that one, against
-// the whole tree, on demand. This fires once per commit, scoped to the files that
-// commit touched, from the drift-notice hooks (post-commit, pre-push); see
-// checkDriftForCommit in cmd/magus. Sibling of MGS4006 (generated-output drift, the
-// other class the same notice carries) and distinct from MGS4007 (a target rewriting
-// an undeclared source, checked after a target runs, not after a commit is made).
-const UnformattedCommit DiagnosticCode = "MGS4009"
-
 // SelfInvalidatingKey is a target whose key reads a file its own run generates after the
 // key is taken, so every run succeeds and none is cached. A moved input no target
 // declares as an output is a concurrent writer instead, and stays an uncoded notice.
@@ -724,12 +871,12 @@ const SymbolIndexNotCurrent DiagnosticCode = "MGS7003"
 // The graph build fails naming the file, the line and the known families.
 const UnknownMarkerFamily DiagnosticCode = "MGS7004"
 
-// DirNotInGraph is magus\dir asked for a path the graph holds no dir node for. A typo
-// and a directory outside every project both land here; neither is an empty Dir.
+// DirNotInGraph is magus\graph().dir asked for a path with no dir node.
+// A typo and a directory outside every project land here, never an empty Dir.
 const DirNotInGraph DiagnosticCode = "MGS7005"
 
-// LayerNotDeclared is a layer name no magus.project "layers" key declares, asked for
-// through magus\layer or a DirsOptions filter.
+// LayerNotDeclared is a layer name no magus.project "layers" key declares.
+// It is asked for through magus\graph().layer or a DirsOptions filter.
 const LayerNotDeclared DiagnosticCode = "MGS7006"
 const OutputRefMissing DiagnosticCode = "MGS8001"
 const OutputRefAmbiguous DiagnosticCode = "MGS8002"
@@ -995,7 +1142,13 @@ var allDiagnosticCodes = []DiagnosticCode{
 	OutputOutsideWritePaths,
 	GateNotRun,
 	CheckoutConfigHeld,
+	StoreRecordsNewer,
+	PeerFromAnotherBuild,
+	LegacyStorePresent,
+	StoreLineUndecodable,
 	JobStoreWriterOlder,
+	DiskFull,
+	MemoryPressureHigh,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,
@@ -1004,7 +1157,6 @@ var allDiagnosticCodes = []DiagnosticCode{
 	StaleGeneratedOutput,
 	UndeclaredSourceModified,
 	UnorderedSameStepWrite,
-	UnformattedCommit,
 	SelfInvalidatingKey,
 	NearDuplicateServices,
 	ServiceOpDetached,
@@ -1081,6 +1233,7 @@ var retryTable = map[DiagnosticCode]RetryChange{
 	OutputOutsideWritePaths:  RetryAfterConfig,
 	GateNotRun:               RetryAfterConfig,
 	CheckoutConfigHeld:       RetryAfterConfig,
+	StoreRecordsNewer:        RetryAfterUpgrade,
 	JobStoreWriterOlder:      RetryAfterUpgrade,
 	BearerRejected:           RetryAfterPerson,
 	NoAuthToken:              RetryAfterPerson,
@@ -1130,6 +1283,12 @@ func WithDiagnosticSink(ctx context.Context, s DiagnosticSink) context.Context {
 	return diagnostics.WithSink(ctx, s)
 }
 
+// ErrorDiagnosticEvent is the event err's outermost coded error fires from unit, its docs page
+// included, and false when err carries no code.
+func ErrorDiagnosticEvent(err error, unit string) (DiagnosticEvent, bool) {
+	return diagnostics.ErrorEvent(err, unit)
+}
+
 // EmitDiagnostic records ev to the sink in ctx, or is a no-op when none is
 // installed (the common CLI path).
 func EmitDiagnostic(ctx context.Context, ev DiagnosticEvent) {
@@ -1162,4 +1321,7 @@ type Diagnostic struct {
 	// that chooses what to show. Not mirrored into Buzz: a caught error's map carries no
 	// why, and this type mirrors that map.
 	Why string `json:"why,omitempty" yaml:"why,omitempty" buzz:"-"`
+	// Fix is the action that clears the diagnostic ([diagnostics.Error.Fix]), omitted when
+	// the error named none.
+	Fix string `json:"fix,omitempty" yaml:"fix,omitempty" buzz:"fix"`
 }

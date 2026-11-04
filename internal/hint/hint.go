@@ -157,13 +157,9 @@ var (
 	// suggestion can route it to `magus refs` (the occurrence-precise symbol answer)
 	// rather than a free-text query.
 	bareIdentRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{2,}$`)
-	// diagnosticCodeRe and buzzOpRe route a pattern to `magus query` instead of `magus refs`,
-	// because refs resolves only compiled-language symbols. Measured against real session history:
-	// a grep for MGS2011 (a diagnostic) or mgs_listManifests (a Buzz spell op) has a graph answer,
-	// but it is a diagnostic/function node that query finds and refs misses. See the guard doc's
-	// adoption section for the measurement.
-	diagnosticCodeRe = regexp.MustCompile(`^MGS[0-9]{4}$`)
-	buzzOpRe         = regexp.MustCompile(`^mgs_[A-Za-z0-9_]+$`)
+	// buzzOpRe, like types.IsDiagnosticCode, routes to `magus query`: a Buzz op or a code is
+	// a graph node refs misses, since refs resolves only compiled-language symbols.
+	buzzOpRe = regexp.MustCompile(`^mgs_[A-Za-z0-9_]+$`)
 )
 
 const (
@@ -810,7 +806,7 @@ func textSuggestion(pat string, sa searchArgs) (Suggestion, bool) {
 // why the routing exists and why every branch hedges.
 func (t *Translator) routePattern(pat string, sa searchArgs, scope string) []Suggestion {
 	switch {
-	case diagnosticCodeRe.MatchString(pat):
+	case types.IsDiagnosticCode(pat):
 		return []Suggestion{{
 			Run:        fmt.Sprintf("magus query %s%s", pat, scope),
 			Why:        "a diagnostic code has a graph node with its docs",

@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // spawnRuleProbe is a workspace rule that records what it was asked and answers as told.
@@ -825,7 +826,7 @@ func TestSubagentStopRecordsOnlyReportedUsage(t *testing.T) {
 }
 
 // The rule reads the same job rows the guard graded the call against, through the
-// snapshot magus\job.list answers from.
+// snapshot magus\workspace().jobs answers from.
 func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
 	row := types.Job{ID: "guard-facts", Criteria: "the seam", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
@@ -1339,12 +1340,13 @@ func TestExecBindsTheCallersIdentity(t *testing.T) {
 	running := func(id string) types.Job {
 		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}, Registered: 1, ReportedBase: "77aa01c"}
 	}
-	ctx, _ := fleetFixture(t, running("session-job"), running("agent-job"), running("tool-job"))
+	ctx, root := fleetFixture(t, running("session-job"), running("agent-job"), running("tool-job"))
+	commitCheckout(t, root)
 
 	Judge(ctx, Dependencies{}, Request{Input: "magus job exec session-job", Host: "codex", Session: "s1"})
 	Judge(ctx, Dependencies{}, Request{Input: "magus --root . job exec agent-job", Host: "claude-code", Session: "s2", Agent: "a1"})
 	tool := hookJSON(t, map[string]any{"session_id": "s3", "hook_event_name": "PreToolUse", "tool_name": "mcp__magus__client",
-		"tool_input": map[string]any{"script": `import "magus"; magus\job.register("tool-job");`}})
+		"tool_input": map[string]any{"script": `import "magus"; magus\job("tool-job").register();`}})
 	Judge(ctx, Dependencies{}, Request{Input: tool, Host: "claude-code"})
 
 	got := map[string]string{}
@@ -1736,4 +1738,64 @@ func TestSpawnIntoAFullBudgetSkipsAdviceForAWorkerThatRunsNoTarget(t *testing.T)
 			assert.Equal(t, tc.advise, v.Rule == string(denyRuleSleepPoll), v.Context)
 		})
 	}
+}
+
+type SpawnUnisolatedSuite struct {
+	suite.Suite
+}
+
+func TestSpawnUnisolatedSuite(t *testing.T) { suite.Run(t, new(SpawnUnisolatedSuite)) }
+
+func (s *SpawnUnisolatedSuite) spawn(row types.Job, isolated bool, own func(root string) *types.JobWorktree) types.GuardJudgment {
+	t := s.T()
+	ctx, root := fleetFixture(t, row)
+	at := hookLocation(ctx, Dependencies{})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
+	_, err := store.Update(ctx, row.ID, func(u *types.Job) { u.Validated = 1 })
+	require.NoError(t, err)
+	if own != nil {
+		_, err = store.RecordWorktree(ctx, row.ID, *own(root))
+		require.NoError(t, err)
+	}
+	input := map[string]any{"description": "orchestrator/impl guard-facts", "prompt": "Carry the job."}
+	if isolated {
+		input["isolation"] = "worktree"
+	}
+	return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, map[string]any{
+		"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Agent",
+		"tool_input": input,
+	}), Host: "claude-code"})
+}
+
+func (s *SpawnUnisolatedSuite) writer() types.Job {
+	return types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"a/**"}}
+}
+
+func (s *SpawnUnisolatedSuite) TestIsolatedWritingRowWithNoCheckoutIsDenied() {
+	v := s.spawn(s.writer(), true, nil)
+	require.Equal(s.T(), types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnUnisolatedRow)}, judgedAs(v), v.Context)
+	assert.Contains(s.T(), v.Reason, "magus job fork guard-facts --checkout <dir>")
+}
+
+func (s *SpawnUnisolatedSuite) TestRowWhoseCheckoutIsTheSpawnersIsDenied() {
+	v := s.spawn(s.writer(), true, func(root string) *types.JobWorktree { return &types.JobWorktree{Root: root} })
+	assert.Equal(s.T(), string(denyRuleSpawnUnisolatedRow), v.Rule)
+}
+
+func (s *SpawnUnisolatedSuite) TestReadOnlyRowPasses() {
+	row := s.writer()
+	row.ReadOnly = true
+	row.WritePaths = nil
+	v := s.spawn(row, true, nil)
+	assert.NotEqual(s.T(), string(denyRuleSpawnUnisolatedRow), v.Rule)
+}
+
+func (s *SpawnUnisolatedSuite) TestRowWithItsOwnCheckoutPasses() {
+	v := s.spawn(s.writer(), true, func(root string) *types.JobWorktree { return &types.JobWorktree{Root: root + "-own"} })
+	assert.NotEqual(s.T(), string(denyRuleSpawnUnisolatedRow), v.Rule)
+}
+
+func (s *SpawnUnisolatedSuite) TestNonIsolatedSpawnPasses() {
+	v := s.spawn(s.writer(), false, nil)
+	assert.NotEqual(s.T(), string(denyRuleSpawnUnisolatedRow), v.Rule)
 }

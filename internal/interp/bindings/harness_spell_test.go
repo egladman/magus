@@ -3,18 +3,23 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 const scoutDescription = "Answers standalone lookups and proves or refutes claims about a magus workspace with read-only magus queries, reporting each command and its output ref. Use for where-is, what-depends-on, is-this-generated and did-this-pass questions; not for edits or design."
@@ -39,7 +44,7 @@ func harnessSource(t *testing.T, name, body string) string {
 		body += "\nexport fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }\n"
 	}
 	return register.Spell(t, name, spells.WithFuncSource(fmt.Sprintf("import \"magus/spell\";\n"+
-		"export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{}; }\n%s", body)))
+		"export fun mgs_getHarness() > Harness { return Harness{config = HarnessConfig{}, guard = \"\"}; }\n%s", body)))
 }
 
 func scoutInstructions(t *testing.T) string {
@@ -63,11 +68,11 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 	}{
 		{"claude-code", types.AgentFile{
 			Path:    ".claude/agents/magus-scout.md",
-			Content: fmt.Sprintf("---\nname: \"magus-scout\"\ndescription: %s\ntools: Read, Grep, Glob, Bash\n---\n\n%s", quoted, instructions),
+			Content: fmt.Sprintf("---\nname: \"magus-scout\"\ndescription: %s\ndisallowedTools: Write, Edit, MultiEdit, NotebookEdit, mcp__ccd_host__sync_with_base_branch, mcp__ccd_host__clean_up_worktrees, mcp__ccd_host__discard_kept_worktree\n---\n\n%s", quoted, instructions),
 		}},
 		{"codex", types.AgentFile{
 			Path:    ".codex/agents/magus-scout.toml",
-			Content: fmt.Sprintf("name = \"magus-scout\"\ndescription = %s\nsandbox_mode = \"read-only\"\ndeveloper_instructions = '''\n%s'''\n", quoted, instructions),
+			Content: fmt.Sprintf("name = \"magus-scout\"\ndescription = %s\ndeveloper_instructions = '''\n%s'''\n", quoted, instructions),
 			Hint:    "magus-scout runs on agents.default_subagent_model; set it under [agents] in ~/.codex/config.toml to a cheaper model to run lookups for less",
 		}},
 		{"cursor", types.AgentFile{
@@ -110,6 +115,140 @@ func TestHarnessSpellsRenderEveryHookTheyList(t *testing.T) {
 	}
 	opencode := loadShippedHarness(t, "opencode")
 	assert.Equal(t, "skipped: opencode declares no config path", agentHookCheck(opencode).Reason)
+}
+
+type hookEntry struct {
+	Matcher string `json:"matcher"`
+	Hooks   []struct {
+		Command string `json:"command"`
+	} `json:"hooks"`
+}
+
+type hookSettings struct {
+	Hooks map[string][]hookEntry `json:"hooks"`
+}
+
+// renderHarnessHookConfig uses the production plan and installer over the descriptor
+// compiled from the canonical Buzz spell. Its empty temp root makes the resulting file
+// independent of whichever host wiring happens to be installed in this checkout.
+func renderHarnessHookConfig(t *testing.T, id string) (string, agent.HarnessDescriptor) {
+	t.Helper()
+	d := loadShippedHarness(t, id)
+	previous := agent.RegisterHarnessSpellLoader(func(_ context.Context, requested string) (agent.HarnessDescriptor, string, bool, error) {
+		return d, "spell:" + id, requested == id, nil
+	})
+	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(previous) })
+
+	root := t.TempDir()
+	ctx := agent.ContextWithWiredHarnesses(context.Background(), []string{id})
+	plan, err := agent.PlanHarness(ctx, root, id)
+	require.NoError(t, err)
+	_, err = agent.ApplyHarnessInstallation(ctx, root, plan, false)
+	require.NoError(t, err)
+	require.NotEmpty(t, d.Config.Path, "%s has no hook config", id)
+	return filepath.Join(root, d.Config.Path), d
+}
+
+func configJobs(t *testing.T, path string, declared []types.HookCommand) map[string]bool {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err, "read %s", path)
+	var cfg hookSettings
+	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+	require.NotEmpty(t, cfg.Hooks, "%s wires no events at all", path)
+
+	found := map[string]bool{}
+	for _, entries := range cfg.Hooks {
+		for _, entry := range entries {
+			for _, h := range entry.Hooks {
+				for _, hook := range declared {
+					name := strings.TrimSuffix(filepath.Base(hook.Script), ".buzz")
+					if name == "" || !strings.Contains(h.Command, name+".buzz") {
+						continue
+					}
+					if strings.Contains(entry.Matcher, "mcp__") {
+						name += " on mcp__magus__"
+					}
+					found[name] = true
+				}
+			}
+		}
+	}
+	require.NotEmpty(t, found, "%s recognizes no declared hook", path)
+	return found
+}
+
+var hookConfigExemptions = map[string]map[string]string{
+	"codex": {
+		"magus-duration": "no codex hook schema under testdata/hosts/codex carries a tool duration, and the " +
+			"recorder writes nothing for an event without one",
+		"magus-session": "SessionStart hands a codex hook no env file and reads back only additionalContext " +
+			"(testdata/hosts/codex/session-start.command.{input,output}.schema.json), so no hook can put the " +
+			"checkout root on PATH for later shell commands",
+		"magus-observe": "Codex has no read tool: a file is read through a shell command, which the command " +
+			"rules already judge, so no PreToolUse matcher exists for the read record to ride",
+	},
+}
+
+func TestShippedHookConfigsWireTheSameJobs(t *testing.T) {
+	wired := map[string]map[string]bool{}
+	paths := map[string]string{}
+	for _, id := range []string{"claude-code", "codex"} {
+		path, d := renderHarnessHookConfig(t, id)
+		paths[id] = path
+		wired[id] = configJobs(t, path, d.Hooks)
+	}
+
+	for host, templates := range wired {
+		for other, otherTemplates := range wired {
+			if other == host {
+				continue
+			}
+			for name := range otherTemplates {
+				if templates[name] {
+					continue
+				}
+				why, exempt := hookConfigExemptions[host][name]
+				assert.True(t, exempt,
+					"%s runs %s and %s does not.\n"+
+						"Wire it there too, or record why that host does without it in hookConfigExemptions.\n"+
+						"A host doing less than another is a decision; a host doing less than another with\n"+
+						"nothing saying so is the gap this gate exists to refuse.",
+					paths[other], name, paths[host])
+				if exempt {
+					t.Logf("%s does not run %s: %s", host, name, why)
+				}
+			}
+		}
+	}
+
+	for host, exemptions := range hookConfigExemptions {
+		for name := range exemptions {
+			assert.False(t, wired[host][name],
+				"hookConfigExemptions says %s does not run %s, but %s invokes it. Drop the exemption.",
+				host, name, paths[host])
+		}
+	}
+
+	// Every input reaches one glue through one entry: both spells wire every tool call
+	// to magus-command.buzz under the catch-all matcher, so no second entry judges it.
+	for host, path := range paths {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
+		var cfg hookSettings
+		require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+		var judging []string
+		for _, entry := range cfg.Hooks["PreToolUse"] {
+			for _, h := range entry.Hooks {
+				assert.NotContains(t, h.Command, "magus-path.buzz",
+					"%s: a write reaches the catch-all entry whole; a path entry judges it twice", host)
+				if strings.Contains(h.Command, "magus-command.buzz") {
+					judging = append(judging, entry.Matcher)
+				}
+			}
+		}
+		assert.Equal(t, []string{"*"}, judging, "%s: one PreToolUse entry runs the command glue, on every tool", host)
+	}
 }
 
 // agentHookCheck runs verify's hook check through VerifyHarness's own entry point: a
@@ -216,14 +355,14 @@ func TestHarnessSpellWithOnlyItsConfigLacksEveryOtherCapability(t *testing.T) {
 // for a host whose hook prompts; an omission used to decode as that same list.
 func TestAHarnessThatOmitsRenderPromptsIsRefused(t *testing.T) {
 	id := register.Spell(t, "no-prompts-test", spells.WithFuncSource(`import "magus/spell";
-export fun mgs_getHarnessConfig() > HarnessConfig { return HarnessConfig{}; }`))
+export fun mgs_getHarness() > Harness { return Harness{config = HarnessConfig{}, guard = ""}; }`))
 	_, _, ok, err := loadHarnessFromSpell(context.Background(), id)
 	require.Error(t, err)
 	assert.False(t, ok)
 	assert.Contains(t, err.Error(), "mgs_renderPrompts")
 }
 
-// A spell that does not export mgs_getHarnessConfig is not a harness, and the loader says
+// A spell that does not export mgs_getHarness is not a harness, and the loader says
 // so with a miss rather than an error.
 func TestASpellWithoutTheConfigIsNoHarness(t *testing.T) {
 	id := register.Spell(t, "not-a-harness-test", spells.WithFuncSource(`export fun mgs_getName() > str { return "x"; }`))
@@ -234,10 +373,10 @@ func TestASpellWithoutTheConfigIsNoHarness(t *testing.T) {
 
 // An answer of the wrong shape is refused strictly, naming the function.
 func TestHarnessFunctionsDecodeStrictly(t *testing.T) {
-	id := register.Spell(t, "malformed-test", spells.WithFuncSource(`export fun mgs_getHarnessConfig() > any { return {"path": 3}; }`))
+	id := register.Spell(t, "malformed-test", spells.WithFuncSource(`export fun mgs_getHarness() > any { return {"path": 3}; }`))
 	_, _, _, err := loadHarnessFromSpell(context.Background(), id)
 	require.ErrorIs(t, err, errMalformedAnswer)
-	assert.Contains(t, err.Error(), "mgs_getHarnessConfig")
+	assert.Contains(t, err.Error(), "mgs_getHarness")
 }
 
 // TestHarnessPromptsAskBeforeAHumanOnlyRun pins that the native prompts of the hosts whose
@@ -291,14 +430,48 @@ func TestHarnessPromptsAskBeforeAHumanOnlyRun(t *testing.T) {
 
 // TestHarnessSpellsDeclareForegroundLimits pins the one host whose shell tool backgrounds a
 // command past its timeout, and whose wiring sets the hook timeout the guard reports
-// against, and that every other shipped harness declares no limits.
+// against, and the reply channels each host declares.
 func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
-	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true},
+	assert.Equal(t, types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true,
+		PayloadFields: []string{"prompt_id", "effort", "scratchpad_dir"}, Channels: []string{"display", "capture", "notice"}},
 		loadShippedHarness(t, "claude-code").Limits)
-	assert.Equal(t, types.Limits{HookTimeoutMs: 10000, ObservesSkillLoads: true}, loadShippedHarness(t, "cursor").Limits)
-	for _, id := range []string{"codex", "opencode"} {
-		assert.Zero(t, loadShippedHarness(t, id).Limits, id)
+	assert.Equal(t, types.Limits{HookTimeoutMs: 10000, ObservesSkillLoads: true,
+		PayloadFields: []string{"cursor_version", "conversation_id", "generation_id", "workspace_roots"}, Channels: []string{"capture", "notice"}},
+		loadShippedHarness(t, "cursor").Limits)
+	assert.Equal(t, types.Limits{PayloadFields: []string{"turn_id"}, Channels: []string{"display", "capture", "notice"}}, loadShippedHarness(t, "codex").Limits)
+	assert.Equal(t, types.Limits{Channels: []string{"display"}}, loadShippedHarness(t, "opencode").Limits)
+}
+
+// TestNoTwoShippedHarnessesClaimOnePayloadField holds the payload fingerprints
+// to their meaning: a field two hosts send names neither.
+func TestNoTwoShippedHarnessesClaimOnePayloadField(t *testing.T) {
+	owner := map[string]string{}
+	for _, id := range shippedHarnessIDs(t) {
+		for _, f := range loadShippedHarness(t, id).Limits.PayloadFields {
+			assert.Empty(t, owner[f], "%s and %s both claim payload field %s", owner[f], id, f)
+			owner[f] = id
+		}
 	}
+}
+
+const channelsHook = "export fun mgs_listHooks() > [HookCommand] { return [HookCommand{event = \"PreToolUse\", script = \"magus-command\"}]; }\n"
+
+// A harness that wires a hook and declares no channels is refused: nothing would say who
+// reads its replies.
+func TestAHookedHarnessWithNoChannelsIsRefused(t *testing.T) {
+	id := harnessSource(t, "no-channels-test", channelsHook)
+	_, _, ok, err := loadHarnessFromSpell(context.Background(), id)
+	require.Error(t, err)
+	assert.False(t, ok)
+	assert.Contains(t, err.Error(), "declares no channels")
+}
+
+func TestAHarnessWithAnUnknownChannelIsRefused(t *testing.T) {
+	id := harnessSource(t, "odd-channel-test", channelsHook+
+		"export fun mgs_getLimits() > Limits { return Limits{channels = [\"capture\", \"pager\"]}; }\n")
+	_, _, _, err := loadHarnessFromSpell(context.Background(), id)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown channel "pager"`)
 }
 
 func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
@@ -403,4 +576,312 @@ func TestCheapestTierModelReadsTheHarnessRows(t *testing.T) {
 	model, err = cheapestTierModel(mapped, "rowed", map[string]string{"small": "m-small-1"})
 	require.NoError(t, err)
 	assert.Equal(t, "tiny", model, "the workspace's own mapping wins over the harness rows")
+}
+
+const (
+	harnessSpellDir = "../../../spells/harness"
+	glueDir         = "../../../docs/guides/integrations/agents"
+	bindingsGuide   = glueDir + "/README.md"
+)
+
+// shippedHarnessIDs reads the harnesses off the spell directory, so a new
+// harness owes its bindings without anyone listing it here.
+func shippedHarnessIDs(t *testing.T) []string {
+	t.Helper()
+	entries, err := os.ReadDir(harnessSpellDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", harnessSpellDir, err)
+	}
+	var ids []string
+	for _, e := range entries {
+		if e.IsDir() {
+			ids = append(ids, e.Name())
+		}
+	}
+	if len(ids) == 0 {
+		t.Fatalf("%s holds no harness spell", harnessSpellDir)
+	}
+	return ids
+}
+
+func readGlue(t *testing.T, name string) string {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join(glueDir, name))
+	if err != nil {
+		t.Fatalf("read %s: %v", name, err)
+	}
+	return string(body)
+}
+
+// The OpenCode adapter is installed from Go/Wasm assets, not a guide template.
+func readOpenCodeRuntime(t *testing.T) string {
+	t.Helper()
+	var source strings.Builder
+	for _, path := range []string{"opencode/plugin_js.go", "opencode/plugin.go", "opencode/runtime.go", "opencode/plugin.buzz"} {
+		body, err := os.ReadFile(path)
+		require.NoError(t, err)
+		source.Write(body)
+	}
+	return source.String()
+}
+
+// HookBindingCompletenessSuite holds every shipped harness to an answer at
+// every hook point. It extends TestShippedHookConfigsWireTheSameJobs from two
+// configs to every harness, keyed by point. A host whose glue is one script
+// or a plugin is held to it too.
+type HookBindingCompletenessSuite struct {
+	suite.Suite
+	tables map[string][]types.HookBinding
+	loaded map[string]agent.HarnessDescriptor
+}
+
+func TestHookBindingCompletenessSuite(t *testing.T) {
+	suite.Run(t, new(HookBindingCompletenessSuite))
+}
+
+func (s *HookBindingCompletenessSuite) SetupSuite() {
+	s.tables = map[string][]types.HookBinding{}
+	s.loaded = map[string]agent.HarnessDescriptor{}
+	for _, id := range shippedHarnessIDs(s.T()) {
+		d := loadShippedHarness(s.T(), id)
+		s.loaded[id] = d
+		table, err := agent.HookBindings(d)
+		s.Require().NoError(err, "%s leaves a hook point unexplained", id)
+		s.tables[id] = table
+	}
+}
+
+func (s *HookBindingCompletenessSuite) TestEveryHarnessAnswersEveryPoint() {
+	for id, table := range s.tables {
+		var points []types.HookPoint
+		for _, b := range table {
+			s.True(b.Status == types.Bound || b.Status == types.Unsupported, "%s %s: %q", id, b.Point, b.Status)
+			points = append(points, b.Point)
+		}
+		s.Equal(types.HookPoints(), points, id)
+	}
+}
+
+func (s *HookBindingCompletenessSuite) TestAStaleUnsupportedRowFails() {
+	d := s.loaded["claude-code"]
+	d.UnsupportedHooks = append(slices.Clone(d.UnsupportedHooks), types.HookBinding{
+		Point: types.HookPointShell, Status: types.Unsupported, Reason: "not verified: anything"})
+	_, err := agent.HookBindings(d)
+	s.ErrorContains(err, "claude-code: mgs_listUnsupportedHooks says shell is unsupported, but magus-command binds it")
+}
+
+func (s *HookBindingCompletenessSuite) TestARemovedRowFails() {
+	d := s.loaded["codex"]
+	d.UnsupportedHooks = nil
+	_, err := agent.HookBindings(d)
+	s.ErrorContains(err, "codex: no hook binds attach")
+}
+
+// Attach stays unsupported until an SVG renders inline (decision 135).
+func (s *HookBindingCompletenessSuite) TestAttachIsUnsupportedEverywhere() {
+	for id, table := range s.tables {
+		attach := table[slices.IndexFunc(table, func(b types.HookBinding) bool { return b.Point == types.HookPointAttach })]
+		s.Equal(types.Unsupported, attach.Status, id)
+	}
+}
+
+// The plugin is not a rendered config, so nothing else holds it to the
+// hooks the opencode spell lists.
+func (s *HookBindingCompletenessSuite) TestTheOpenCodePluginRunsEveryHookItsSpellLists() {
+	plugin := readOpenCodeRuntime(s.T())
+	for _, h := range s.loaded["opencode"].Hooks {
+		s.Contains(plugin, fmt.Sprintf("%q", h.Event), "the plugin handles no %s", h.Event)
+		if h.Script != "opencode-plugin" {
+			s.Contains(plugin, h.Script+".buzz", "the plugin never runs %s", h.Script)
+		}
+	}
+}
+
+func (s *HookBindingCompletenessSuite) TestTheCursorHookAnswersEveryEventItsSpellLists() {
+	glue := readGlue(s.T(), "cursor-hook.buzz")
+	for _, h := range s.loaded["cursor"].Hooks {
+		if h.Script == "cursor-hook" {
+			s.Contains(glue, fmt.Sprintf("eventName == %q", h.Event), "cursor-hook.buzz has no %s arm", h.Event)
+		}
+	}
+}
+
+// guideRow reads one matrix row of the guide: the point, then a cell per
+// harness in the header's order.
+var guideRow = regexp.MustCompile("^\\| `([a-z-]+)` +\\|(.*)\\|$")
+
+func (s *HookBindingCompletenessSuite) TestTheGuideShowsTheTable() {
+	guide := readGuide(s.T())
+	lines := strings.Split(guide, "\n")
+	header := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(l, "| hook point ") })
+	s.Require().NotEqual(-1, header, "%s has no matrix; regenerate it", bindingsGuide)
+	var columns []string
+	for _, cell := range strings.Split(strings.Trim(lines[header], "|"), "|")[1:] {
+		columns = append(columns, strings.TrimSpace(cell))
+	}
+	s.ElementsMatch(shippedHarnessIDs(s.T()), columns)
+
+	seen := 0
+	for _, line := range lines[header+2:] {
+		m := guideRow.FindStringSubmatch(line)
+		if m == nil {
+			break
+		}
+		seen++
+		cells := strings.Split(m[2], "|")
+		s.Require().Len(cells, len(columns), line)
+		for i, id := range columns {
+			want := s.cell(id, types.HookPoint(m[1]))
+			s.Equal(want, strings.TrimSpace(cells[i]), "%s %s; regenerate %s", id, m[1], bindingsGuide)
+		}
+	}
+	s.Equal(len(types.HookPoints()), seen, "one row per hook point")
+	// The page links each URL in a reason; the spell states it bare.
+	bareGuide := strings.NewReplacer("<https://", "https://", ">", "").Replace(guide)
+	for id, table := range s.tables {
+		for _, b := range table {
+			if b.Status == types.Unsupported {
+				s.Contains(bareGuide, b.Reason, "%s %s's reason", id, b.Point)
+			}
+		}
+	}
+}
+
+func (s *HookBindingCompletenessSuite) cell(id string, point types.HookPoint) string {
+	for _, b := range s.tables[id] {
+		if b.Point != point {
+			continue
+		}
+		if b.Status == types.Unsupported {
+			return "unsupported"
+		}
+		return fmt.Sprintf("`%s`", b.Adapter)
+	}
+	return ""
+}
+
+func readGuide(t *testing.T) string {
+	t.Helper()
+	body, err := os.ReadFile(bindingsGuide)
+	if err != nil {
+		t.Fatalf("read %s: %v", bindingsGuide, err)
+	}
+	return string(body)
+}
+
+// AdapterConformanceSuite ties each Bound adapter to the cases that run it.
+// guard_templates.txtar and opencode-plugin.test.ts execute the verdict each
+// host gets for one recorded event. This suite holds each Bound judging point
+// to a declaration those gates read, and pins each host's fail stance.
+type AdapterConformanceSuite struct {
+	suite.Suite
+	loaded map[string]agent.HarnessDescriptor
+}
+
+func TestAdapterConformanceSuite(t *testing.T) {
+	suite.Run(t, new(AdapterConformanceSuite))
+}
+
+func (s *AdapterConformanceSuite) SetupSuite() {
+	s.loaded = map[string]agent.HarnessDescriptor{}
+	for _, id := range shippedHarnessIDs(s.T()) {
+		s.loaded[id] = loadShippedHarness(s.T(), id)
+	}
+}
+
+func (s *AdapterConformanceSuite) TestEveryBoundAdapterIsAShippedGlue() {
+	for id, d := range s.loaded {
+		table, err := agent.HookBindings(d)
+		s.Require().NoError(err, id)
+		for _, b := range table {
+			if b.Status != types.Bound {
+				continue
+			}
+			for _, script := range strings.Split(b.Adapter, ", ") {
+				if script == "opencode-plugin" {
+					s.FileExists("opencode/plugin_js.go", "%s %s", id, b.Point)
+				} else {
+					s.FileExists(filepath.Join(glueDir, script+".buzz"), "%s %s", id, b.Point)
+				}
+			}
+		}
+	}
+}
+
+// judgedInput is the guard input a judging point hands magus, as the
+// magus-guard-coverage markers name it.
+var judgedInput = map[types.HookPoint]string{
+	types.HookPointShell: "command",
+	types.HookPointEdit:  "path",
+	types.HookPointMCP:   "mcp",
+}
+
+var coverageLine = regexp.MustCompile(`magus-guard-coverage: schema=\d+ host=(\S+) input=(\S+) deny=(\S+)`)
+
+func (s *AdapterConformanceSuite) TestEveryBoundJudgingPointDeclaresItsVerdictTransport() {
+	declared := map[string]bool{}
+	entries, err := os.ReadDir(glueDir)
+	s.Require().NoError(err)
+	for _, e := range entries {
+		if ext := filepath.Ext(e.Name()); ext != ".buzz" && ext != ".ts" {
+			continue
+		}
+		for _, m := range coverageLine.FindAllStringSubmatch(readGlue(s.T(), e.Name()), -1) {
+			for _, host := range strings.Split(m[1], ",") {
+				declared[fmt.Sprintf("%s/%s", host, m[2])] = m[3] != "none"
+			}
+		}
+	}
+	canonical, err := os.ReadFile(filepath.Join("..", "..", "..", "spells", "harness", "opencode", "spell.buzz"))
+	s.Require().NoError(err)
+	for _, m := range coverageLine.FindAllStringSubmatch(string(canonical), -1) {
+		declared[fmt.Sprintf("%s/%s", m[1], m[2])] = m[3] != "none"
+	}
+	for id, d := range s.loaded {
+		table, err := agent.HookBindings(d)
+		s.Require().NoError(err, id)
+		for _, b := range table {
+			input, judging := judgedInput[b.Point]
+			if !judging || b.Status != types.Bound {
+				continue
+			}
+			s.True(declared[fmt.Sprintf("%s/%s", id, input)],
+				"%s binds %s, but no glue declares how %s carries a deny on the %s input", id, b.Point, id, input)
+		}
+	}
+}
+
+// failClosed says which hosts' hook config blocks a gated call when the hook
+// itself cannot run. Only Cursor's can say so (failClosed on an entry).
+var failClosed = map[string]bool{"cursor": true}
+
+func (s *AdapterConformanceSuite) TestEachHostsFailStanceIsTheOneDecided() {
+	for id, d := range s.loaded {
+		for _, group := range d.ManagedEntries {
+			for _, entry := range group.Entries {
+				if closed, _ := entry["failClosed"].(bool); closed {
+					s.True(failClosed[id], "%s %v fails closed, which failClosed does not record", id, group.Path)
+				}
+			}
+		}
+	}
+	for _, event := range []string{"preToolUse", "beforeShellExecution", "beforeMCPExecution"} {
+		s.True(entryFailsClosed(s.loaded["cursor"], event), "cursor's %s entry must fail closed", event)
+	}
+	s.Contains(readOpenCodeRuntime(s.T()), `; refused.`,
+		"the plugin refuses a call no magus judged, and says so")
+}
+
+func entryFailsClosed(d agent.HarnessDescriptor, event string) bool {
+	for _, group := range d.ManagedEntries {
+		if group.Path[len(group.Path)-1] != event {
+			continue
+		}
+		for _, entry := range group.Entries {
+			if closed, _ := entry["failClosed"].(bool); closed {
+				return true
+			}
+		}
+	}
+	return false
 }

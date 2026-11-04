@@ -1636,14 +1636,14 @@ func TestCheckPrelude_NamespaceRebuiltWhenItsTypeArrives(t *testing.T) {
 	require.NoError(t, err)
 
 	p := (*checkPrelude)(nil).sync(nil)
-	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, true, nil)
+	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, nil, true, nil)
 	before := p.ns["host"]
 	require.NotNil(t, before)
 	assert.IsType(t, &types.NamedType{}, before.typ.Fields["make"].(*types.FuncType).Ret)
 
 	p = p.sync(late.Stmts)
 	assert.Nil(t, p.ns["host"])
-	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, true, nil)
+	checkWithPrelude(prog, []string{"host"}, p, funcs, nil, nil, nil, nil, true, nil)
 	assert.Same(t, p.types["Late"], p.ns["host"].typ.Fields["make"].(*types.FuncType).Ret)
 }
 
@@ -1792,4 +1792,165 @@ func TestUnimportedNamespace_AmbiguousPathNamesNoLine(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, UnimportedNamespace, d.Code)
 	assert.Equal(t, `undefined: demo\answer: no import binds demo in this module`, d.Msg)
+}
+
+// A builtin method takes a str where upstream declares one (obj.zig typedefs such
+// as `extern fun startsWith(needle: str) > bool`), and a case is not its value.
+func TestCheck_EnumPassedWhereABuiltinTakesStr(t *testing.T) {
+	const decl = "enum<str> E { a = \"a\" }\n"
+	for name, src := range map[string]string{
+		"list append":    `final l = mut ["a"]; l.append(E.a);`,
+		"list insert":    `final l = mut ["a"]; l.insert(0, value: E.a);`,
+		"list join":      `final _s = ["a"].join(E.a);`,
+		"map hasKey":     `final m = {"a": 1}; final _b = m.hasKey(E.a);`,
+		"map remove":     `final m = mut {"a": 1}; final _r = m.remove(E.a);`,
+		"str indexOf":    `final _i = "abc".indexOf(E.a);`,
+		"str startsWith": `final _b = "abc".startsWith(E.a);`,
+		"str endsWith":   `final _b = "abc".endsWith(E.a);`,
+		"str split":      `final _p = "a,b".split(E.a);`,
+		"str replace":    `final _p = "a,b".replace("a", with: E.a);`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			checkError(t, decl+src, "cannot pass E as argument")
+		})
+	}
+	t.Run("its value passes", func(t *testing.T) {
+		checkOK(t, decl+`final _b = "abc".startsWith(E.a.value); final l = mut ["a"]; l.append(E.a.value);`)
+	})
+	t.Run("a str where the enum is expected stays open", func(t *testing.T) {
+		checkOK(t, decl+`final l = mut [E.a]; l.append("b");`)
+	})
+}
+
+// Upstream reads a qualified name in a conformance list, so a module's object can
+// conform to another module's protocol.
+func TestCheck_QualifiedProtocolConformance(t *testing.T) {
+	ctx := context.Background()
+	compile := func(t *testing.T, src string) error {
+		t.Helper()
+		sess := NewSession(ctx, WithEmbedded())
+		t.Cleanup(func() { _ = sess.Close() })
+		sess.SetModuleDecls("shapes", `export protocol Drawable { fun draw() > str; }`)
+		_, err := sess.Compile(src)
+		return err
+	}
+	_, err := ParseEmbedded(`object<a\b\P, Q> X {}`)
+	require.NoError(t, err, "a qualified protocol must parse")
+
+	require.NoError(t, compile(t, `import "shapes";
+object<shapes\Drawable> Box { fun draw() > str { return "box"; } }
+fun show(d: shapes\Drawable) > str { return d.draw(); }
+final _s = show(Box{});`))
+
+	err = compile(t, `import "shapes"; object<shapes\Drawable> Box {}`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `object Box is declared as conforming to protocol shapes\Drawable but does not implement method "draw"`)
+}
+
+// Upstream refuses a literal that leaves a field with no default unset
+// (TypeChecker.zig, property_not_initialized); an optional field defaults to null.
+func TestCheck_ObjectLiteralMissingRequiredField(t *testing.T) {
+	checkError(t, `object O { a: str, b: int } final _o = O{ a = "x" };`, "Property `b` was not initialized and has no default value")
+	checkOK(t, `object O { a: str = "", b: int?, static s: int = 1 } final _o = O{};`)
+	checkOK(t, `object O { a: str } final _o = O{ a = "x" };`)
+
+	t.Run("a module's object", func(t *testing.T) {
+		ctx := context.Background()
+		sess := NewSession(ctx, WithEmbedded())
+		t.Cleanup(func() { _ = sess.Close() })
+		sess.SetModuleDecls("host", `export object Site { file: str }`)
+		_, err := sess.Compile(`import "host"; final _s = host\Site{};`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Property `file` was not initialized and has no default value")
+		assert.Contains(t, err.Error(), string(ArgumentError))
+	})
+}
+
+const resultDecl = `object Failure { message: str = "" }
+object Result::<T> { value: T? = null, err: Failure? = null }
+`
+
+func TestGenericObjectFieldTakesTheInstanceArgument(t *testing.T) {
+	checkOK(t, resultDecl+`
+fun port() > Result::<int> { return Result::<int>{ value = 80 }; }
+final r = port();
+if (r.value -> v) { final _n: int = v + 1; }
+if (r.err -> e) { final _m: str = e.message; }
+final lst: Result::<[int]> = Result::<[int]>{ value = [1, 2] };
+if (lst.value -> l) { final _first: int = l[0]; }
+`)
+	checkError(t, resultDecl+`final r = Result::<int>{ value = 1 }; if (r.value -> v) { final _s: str = v; }`,
+		"cannot assign int to str")
+}
+
+func TestGenericObjectInstancesOfDifferentArgumentsMismatch(t *testing.T) {
+	checkError(t, resultDecl+`fun f() > Result::<int> { return Result::<str>{ value = "nope" }; }`,
+		"return type mismatch: got Result::<str>, want Result::<int>")
+	checkError(t, resultDecl+`final _r: Result::<int> = Result::<str>{};`,
+		"cannot assign Result::<str> to Result::<int>")
+	checkError(t, resultDecl+`final _r = Result::<int>{ value = "nope" };`,
+		"wrong property type: field Result.value is int, got str")
+}
+
+func TestGenericObjectMethodReturnTakesTheInstanceArgument(t *testing.T) {
+	checkError(t, `object Box::<T> {
+    item: T,
+    fun get() > T { return this.item; }
+}
+final b = Box::<int>{ item = 1 };
+final _s: str = b.get();`, "cannot assign int to str")
+}
+
+// A generic function's own parameters stay erased, so Result::<T> matches any instance.
+func TestGenericObjectInsideAGenericFunctionStaysErased(t *testing.T) {
+	checkOK(t, resultDecl+`
+fun wrap::<T>(x: T) > Result::<T> { return Result::<T>{ value = x }; }
+final _r: Result::<int> = wrap(1);
+`)
+}
+
+func TestGenericObjectWithoutArgumentsMatchesAnyInstance(t *testing.T) {
+	checkOK(t, resultDecl+`
+fun f() > Result::<int> { return Result{}; }
+final _raw: Result = Result::<str>{};
+`)
+}
+
+func TestDiscardedValueWarns(t *testing.T) {
+	for _, src := range []string{
+		`fun f() > int { return 1; } f();`,
+		`final x = 1; x + 1;`,
+		`"text";`,
+	} {
+		got := typeWarnings(t, src)
+		require.Len(t, got, 1, src)
+		assert.Equal(t, DiscardedValue, got[0].Code)
+		assert.Equal(t, SeverityWarning, got[0].Severity)
+		assert.Contains(t, got[0].Msg, "discarded value of type `")
+	}
+}
+
+func TestDiscardedValueStaysQuiet(t *testing.T) {
+	for _, src := range []string{
+		`fun f() > void {} f();`,
+		`fun g() {} g();`,
+		`var x = 1; x = 2;`,
+		`fun f() > int { return 1; } _ = f();`,
+		`null;`,
+	} {
+		assert.Empty(t, typeWarnings(t, src), src)
+	}
+}
+
+func TestCheck_ExplicitTypeArgumentsFillTheDeclaredReturn(t *testing.T) {
+	const decls = `object R::<T> { v: T? = null, }
+fun mk::<T>(x: T) > R::<T> { return R::<T>{ v = x }; }
+fun id::<T>(x: T) > T { return x; }
+fun pair::<A, B>(a: A, b: B) > R::<B> { return R::<B>{ v = b }; }
+`
+	checkOK(t, decls+`fun f() > R::<int> { return mk::<int>(1); }`)
+	checkOK(t, decls+`final r: R::<int> = mk::<int>(1); final n: int = id::<int>(2);`)
+	checkOK(t, decls+`final r: R::<str> = pair::<int, str>(1, b: "b");`)
+	checkError(t, decls+`final r: R::<str> = mk::<int>(1);`, "cannot assign")
+	checkError(t, decls+`final r = mk::<int, str>(1);`, "wrong type argument count: got 2, want 1")
 }

@@ -158,7 +158,15 @@ func configMCPConnectorRevoke(args []string) error {
 // tokenList prints every stored token, whatever its grant: the console and connector commands
 // read one store and show all of it, so neither hides a token the other minted.
 func tokenList(cmd string, args []string) error {
-	if err := noFlags(cmd, args); err != nil {
+	rest, err := commandParse(cmd, args, nil)
+	if err != nil {
+		return err
+	}
+	if err := noFlags(cmd, rest); err != nil {
+		return err
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
 		return err
 	}
 	store, err := openTokenStore()
@@ -169,11 +177,42 @@ func tokenList(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
+	if opts.Format != outputText {
+		rec := tokenListOutput{Tokens: make([]tokenListEntry, 0, len(toks))}
+		names := make([]string, 0, len(toks))
+		for _, t := range toks {
+			rec.Tokens = append(rec.Tokens, tokenListEntry{
+				Name: t.Name, ID: t.ID, Class: fmt.Sprint(t.Kind), Grant: fmt.Sprint(t.Grant),
+				Created: t.Created.UTC().Format(time.RFC3339), Expires: t.Expires.UTC().Format(time.RFC3339),
+			})
+			names = append(names, t.Name)
+		}
+		return emitRecord(opts, rec, names)
+	}
 	if len(toks) == 0 {
 		slog.Info(fmt.Sprintf("no stored tokens; mint one with `%s` or `%s`", hint.ConfigConsoleTokenCreate.String(), hint.ConfigMCPConnectorCreate.String()), attr.Notice(""))
 		return nil
 	}
 	return tokenTable(toks)
+}
+
+type tokenListOutput struct {
+	Tokens []tokenListEntry `json:"tokens"`
+}
+
+type tokenListEntry struct {
+	Name    string `json:"name"`
+	ID      string `json:"id"`
+	Class   string `json:"class"`
+	Grant   string `json:"grant"`
+	Created string `json:"created"`
+	Expires string `json:"expires"`
+}
+
+type tokenRevokeOutput struct {
+	Name  string `json:"name"`
+	ID    string `json:"id"`
+	Grant string `json:"grant"`
 }
 
 // tokenRevoke deletes the stored token its one argument names: by exact id when it is 8 hex
@@ -194,6 +233,10 @@ func tokenRevoke(cmd string, args []string) error {
 		fs.Usage()
 		return fmt.Errorf("magus %s: expected exactly one <id|name>", cmd)
 	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
 	store, err := openTokenStore()
 	if err != nil {
 		return err
@@ -201,6 +244,9 @@ func tokenRevoke(cmd string, args []string) error {
 	removed, err := store.Revoke(types.GrantOperator, rest[0])
 	if err != nil {
 		return fmt.Errorf("magus %s: %w", cmd, err)
+	}
+	if opts.Format != outputText {
+		return emitRecord(opts, tokenRevokeOutput{Name: removed.Name, ID: removed.ID, Grant: fmt.Sprint(removed.Grant)}, []string{removed.Name})
 	}
 	slog.Info(fmt.Sprintf("removed %q (id %s, %s)", removed.Name, removed.ID, removed.Grant), attr.Notice(""), attr.Component("magus "+cmd))
 	return nil
@@ -277,7 +323,8 @@ func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
 	}
 	operator := types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}
 	auditMint(action, trail.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator})
-	return secret, rec, nil
+	// Revealed here because every caller prints it to stdout: that is the hand-out.
+	return secret.Reveal(), rec, nil
 }
 
 // auditMint records a CLI mint to the activity trail of the workspace the command runs in, and
@@ -307,7 +354,7 @@ func tokenTable(toks []auth.Token) error {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tID\tCLASS\tGRANT\tCREATED\tEXPIRES")
 	for _, t := range toks {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Kind, t.Grant, t.Created.Format("2006-01-02"), t.Expires.Format("2006-01-02"))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Kind, t.Grant, t.Created.UTC().Format("2006-01-02"), t.Expires.UTC().Format("2006-01-02"))
 	}
 	return tw.Flush()
 }

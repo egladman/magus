@@ -190,7 +190,7 @@ var (
 	// goldenGoPlatformEnv mirrors GO_PLATFORM_ENV in spells/golang/spell.buzz: the ops
 	// whose result depends on the target platform (build, vet, test, golangci-lint's
 	// go compile) key on it.
-	goldenGoPlatformEnv = []string{"GOOS", "GOARCH", "GOARM", "GOAMD64"}
+	goldenGoPlatformEnv = []string{"GOOS", "GOARCH", "GOARM", "GOAMD64", "GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED"}
 
 	goldenDevServerCommand = spells.Command{Bin: "pnpm", Args: []string{"exec"},
 		NeedsArgs: `dev-server runs the command you name; pass it as args: typescript["dev-server"](ctx, {"args": ["vite"]})`}
@@ -229,12 +229,17 @@ var (
 
 var goldenBuiltins = map[string]spells.Descriptor{
 	"bash": {
-		Name:       "bash",
-		Needs:      []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
-		IgnoreDirs: []string{"node_modules", "worktrees"},
+		Name:               "bash",
+		Needs:              []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
+		Language:           "shell",
+		LanguageExtensions: []string{".sh", ".bash"},
+		IgnoreDirs:         []string{"node_modules", "worktrees"},
 		Ops: map[string]spells.Op{
 			"shellcheck": {Command: spells.Command{Bin: "shellcheck", Sources: []string{"**/*.sh", "**/*.bash"}}},
+			// The in-process shell indexer runs no command, so its synthesized op carries none.
+			"shell-index": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Capture: true, Quiet: true}},
 		},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatShellScript, Op: "shell-index"},
 	},
 	"buf": {
 		Name:               "buf",
@@ -256,9 +261,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"buf-format": {Command: spells.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 			}}},
-			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking"}, Charms: map[string]spells.Charm{
-				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
-			}}},
+			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking"}, Capture: true}},
 		},
 	},
 	"buzz": {
@@ -274,17 +277,13 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				{Open: `"`, Close: `"`},
 			},
 		}},
-		// Its one op is the indexer magus synthesizes, under the scip-buzz it declares
-		// rather than the default scip, so it can sit beside a project's Go index. Its
-		// three former ops forked interpreters that know only the Buzz stdlib, so none
-		// could load a magusfile or a spell, which is every Buzz file here.
+		// Its one op is the in-process indexer, under the scip-buzz it declares rather than
+		// the default scip, so it sits beside a project's Go index. Its former ops forked
+		// interpreters that could load no magusfile or spell, which is every Buzz file here.
 		Ops: map[string]spells.Op{
-			"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: goldenScipBuzzOp},
+			"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Capture: true, Quiet: true}},
 		},
-		Tools: map[string]spells.Tool{
-			"scip-buzz": {Observe: spells.Command{Bin: "scip-buzz", Args: []string{"--version"}}},
-		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Op: "scip-buzz", Command: goldenScipBuzz},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatBuzzModule, Op: "scip-buzz"},
 	},
 	"cosign": {
 		Name:  "cosign",
@@ -309,8 +308,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// needs its own probe: upgrading it changes lint verdicts with nothing in any
 			// cache key to notice. It gets no readiness probe: a lint talks to no daemon.
 			"hadolint": {
-				Probe:       spells.Command{Bin: "hadolint", Args: []string{"--version"}},
-				Diagnostics: spells.DiagnosticGNU,
+				Probe: spells.Command{Bin: "hadolint", Args: []string{"--version"}},
 			},
 			// Both probes, because a release and a vulnerability database move on
 			// different clocks: the version keys which build of the scanner ran, the
@@ -337,13 +335,12 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Needs: []string{"**/*.go", "**/*.txtar", "**/*.s", "**/*.S", "**/*.c", "**/*.h", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		Tools: map[string]spells.Tool{
 			"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch},
-				Supported: spells.VersionBounds{Min: "1.21"}, Lifecycle: "go"},
+				Supported: spells.VersionBounds{Min: "1.26"}, Lifecycle: "go"},
 			// Observe only, no Probe: a version probe keys every target in the project,
 			// so the database date `-version` prints, or a linter upgrade, reached targets
 			// that never run the tool. See spells/golang/spell.buzz.
-			"golangci-lint": {Observe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}},
+			"golangci-lint": {Observe: spells.Command{Bin: "golangci-lint", Args: []string{"version", "--debug"}}},
 			"govulncheck":   {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
-			"scip-go":       {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
 		},
 		Language:           "go",
 		LanguageExtensions: []string{".go"},
@@ -367,26 +364,26 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Manifests:  goldenGoManifests,
 		Ops: map[string]spells.Op{
 			"go-mod-download": installOp("go", goldenGoInstallManifests, goldenGoInstall),
-			"go-build":        {Command: spells.Command{Bin: "go", Args: []string{"build"}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv}},
+			"go-build":        {Command: spells.Command{Bin: "go", Args: []string{"build", "-trimpath"}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv}},
 			"go-clean":        {Command: spells.Command{Bin: "go", Args: []string{"clean"}, TrailingArgs: []string{"./..."}}},
 			"go-generate":     {Command: spells.Command{Bin: "go", Args: []string{"generate", "./..."}}},
 			"go-mod-edit": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-print"}, Capture: true, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
-			}}, Capture: true},
-			"go-mod-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true, Quiet: true}, Capture: true},
+			}}},
+			"go-mod-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true, Quiet: true}},
 			"go-run":      {Command: spells.Command{Bin: "go", Args: []string{"run"}, Hints: goldenGoModHints}},
-			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
+			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-d"}, Sources: []string{"**/*.go", "!**/.*/**"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
 			// `go tool golangci-lint` reported "no such tool" and the op could not run.
 			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.
-			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, EnvKeys: goldenGoPlatformEnv, Charms: map[string]spells.Charm{
+			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, EnvKeys: []string{"GOOS", "GOARCH", "GOARM", "GOAMD64", "GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED", "GOROOT", "GOTOOLCHAIN"}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
 			"go-fuzz": {Command: spells.Command{Bin: "go", Args: []string{"test", "-trimpath", "-run", "^$"}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv, External: spells.ExternalReads}},
-			"go-test": {Command: spells.Command{Bin: "go", Args: []string{"test", "-trimpath"}, DefaultArgs: []string{"./..."}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv, Charms: map[string]spells.Charm{
+			"go-test": {Command: spells.Command{TestSelection: "go", Bin: "go", Args: []string{"test", "-trimpath"}, DefaultArgs: []string{"./..."}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"cd": {Ops: []spells.PatchOp{
 					{Op: "add", Path: "/-", Value: "-covermode=atomic"},
@@ -399,15 +396,15 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
 				"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
-			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "-trimpath", "./..."}, EnvKeys: goldenGoPlatformEnv}},
-			"govulncheck": {Command: spells.Command{Bin: "govulncheck", DefaultArgs: []string{"./..."}, Capture: true, External: spells.ExternalReads}, Capture: true},
+			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "-trimpath"}, TrailingArgs: []string{"./..."}, EnvKeys: goldenGoPlatformEnv}},
+			"govulncheck": {Command: spells.Command{Bin: "govulncheck", DefaultArgs: []string{"./..."}, Capture: true, External: spells.ExternalReads}},
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.
-			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
+			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "go", Args: []string{"./..."}, Capture: true, Quiet: true}},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}, Uses: []string{"go"},
-			Envs: []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}}},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages,
+			Command: spells.Command{Bin: "go", Args: []string{"./..."}}, Uses: []string{"go"},
+			Envs: []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}, {"GOOS": "js", "GOARCH": "wasm"}}},
 	},
 	"markdown": {
 		Name:  "markdown",
@@ -456,6 +453,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"python3":     {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}, Lifecycle: "python"},
 			"scip-python": {Observe: spells.Command{Bin: "scip-python", Args: []string{"--version"}}},
 		},
+		SymbolIndexer:      &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenScipPython},
 		Language:           "python",
 		LanguageExtensions: []string{".py"},
 		Syntax: &spells.Syntax{
@@ -491,10 +489,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"ruff-format": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
-			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
+			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipPython)},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 		ScriptRunners: []spells.Command{
 			{Bin: "poe"},
 			{Bin: "hatch", Args: []string{"run"}},
@@ -509,6 +505,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"rustc":         {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}, Lifecycle: "rust"},
 			"rust-analyzer": {Observe: spells.Command{Bin: "rust-analyzer", Args: []string{"--version"}}},
 		},
+		SymbolIndexer:      &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenRustAnalyzer},
 		Language:           "rust",
 		LanguageExtensions: []string{".rs"},
 		Syntax: &spells.Syntax{
@@ -538,10 +535,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
 			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}}},
-			"scip":       {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "rust-analyzer", Args: []string{"scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
+			"scip":       {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenRustAnalyzer)},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "rust-analyzer", Args: []string{"scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 	},
 	"typescript": {
 		Name:  "typescript",
@@ -557,6 +552,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 			"scip-typescript": {Observe: spells.Command{Bin: "scip-typescript", Args: []string{"--version"}}},
 		},
+		SymbolIndexer:      &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenScipTypescript},
 		Language:           "typescript",
 		LanguageExtensions: []string{".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"},
 		Syntax: &spells.Syntax{
@@ -611,10 +607,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"dev-server": {Kind: "service", Command: goldenDevServerCommand, Service: &spells.Service{
 				Command: goldenDevServerCommand,
 			}},
-			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}, Capture: true, Quiet: true}},
+			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipTypescript)},
 		},
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "scip-typescript", Args: []string{"index", "--output", "$MAGUS_SYMBOL_INDEX"}}},
 		ScriptRunners: []spells.Command{
 			{Bin: "npm", Args: []string{"run"}}, {Bin: "npm", Args: []string{"run-script"}},
 			{Bin: "npm", Args: []string{"test"}}, {Bin: "npm", Args: []string{"t"}},
@@ -626,6 +620,19 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			{Bin: "bun", Args: []string{"run"}},
 		},
 	},
+}
+
+// The opt-in external SCIP indexers, each as its spell declares it and as the op magus
+// synthesizes from it.
+var (
+	goldenScipPython     = spells.Command{Bin: "scip-python", Args: []string{"index", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}
+	goldenRustAnalyzer   = spells.Command{Bin: "rust-analyzer", Args: []string{"scip", ".", "--output", "$MAGUS_SYMBOL_INDEX"}}
+	goldenScipTypescript = spells.Command{Bin: "scip-typescript", Args: []string{"index", "--infer-tsconfig", "--output", "$MAGUS_SYMBOL_INDEX"}}
+)
+
+func quiet(c spells.Command) spells.Command {
+	c.Capture, c.Quiet = true, true
+	return c
 }
 
 // installOp is the op Decode synthesizes from a spell's manifest installs: the first
@@ -694,9 +701,6 @@ var (
 			"npm-shrinkwrap.json": goldenNpmInstall,
 		},
 	}}
-	// goldenScipBuzz roots the index's paths at magus's own workspace root.
-	goldenScipBuzz   = spells.Command{Bin: "scip-buzz", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX", "--workspace-root", "$MAGUS_WORKSPACE_ROOT"}}
-	goldenScipBuzzOp = spells.Command{Bin: "scip-buzz", Args: goldenScipBuzz.Args, Capture: true, Quiet: true}
 	// goldenPnpmInstallManifests / goldenNpmCiManifests are the op-scoped manifests
 	// synthesizeInstall builds: pnpm-install and npm-ci each see only their own lock
 	// candidates, not the other's or the lockless yarn/bun ones.

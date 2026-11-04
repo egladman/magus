@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/embedtable"
-	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/libs/embed"
+	"github.com/egladman/magus/libs/oci"
 )
 
 // tableCache points the XDG cache at a fresh directory and returns the path the
@@ -30,11 +30,11 @@ func TestGraphTablePullRefusesALayerOtherThanThePin(t *testing.T) {
 	reg := newSpellRegistry(t)
 	pin, err := embed.Pin()
 	require.NoError(t, err)
-	ref := oci.Reference{Registry: reg.host(), Repository: "egladman/magus-embed", Tag: pin}
-	wrong := oci.Content{ArtifactType: "application/vnd.magus.embed-table.v1", Layers: []oci.Layer{
-		{Name: filepath.Base(path), MediaType: "application/vnd.magus.embed-table.layer.v1", Payload: []byte("other bytes")},
+	repo := oci.Reference{Registry: reg.host(), Repository: "egladman/magus-embed"}
+	wrong := oci.Artifact{ArtifactType: "application/vnd.magus.embed-table.v1", Blobs: []oci.Blob{
+		{Title: filepath.Base(path), MediaType: "application/vnd.magus.embed-table.layer.v1", Data: []byte("other bytes")},
 	}}
-	_, err = (&oci.Client{HTTP: reg.srv.Client()}).Push(t.Context(), ref, wrong)
+	_, err = (&oci.Client{HTTP: reg.srv.Client()}).PushArtifact(t.Context(), repo, wrong, pin)
 	require.NoError(t, err)
 
 	err = graphPull(t.Context(), t.TempDir(), []string{"-table", "--ref", reg.host() + "/egladman/magus-embed"})

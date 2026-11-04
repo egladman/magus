@@ -1,6 +1,10 @@
 // The lens a figure is drawn through (scope, focus, depth): its query string for the server and
 // its round trip through the console's #fragment.
 
+import { MagusError, fail, ok, type Result } from "../../../gen/magus/types";
+
+const lensError = (message: string): Result<never> => fail(new MagusError({ code: "", message }));
+
 export interface Lens {
   readonly scope: readonly string[];
   readonly focus: string;
@@ -20,8 +24,6 @@ export function lensQuery(lens: Lens): string {
   return s ? "?" + s : "";
 }
 
-export type LensParse = { ok: true; lens: Lens } | { ok: false; error: string };
-
 export interface LensFields {
   scope: string;
   focus: string;
@@ -30,7 +32,7 @@ export interface LensFields {
 
 // parseLensFields reads the form; scope is comma or whitespace separated. Depth without a focus
 // is refused here, as the server would refuse it.
-export function parseLensFields(fields: LensFields): LensParse {
+export function parseLensFields(fields: LensFields): Result<Lens> {
   const scope = fields.scope
     .split(/[\s,]+/)
     .map((s) => s.trim())
@@ -39,12 +41,11 @@ export function parseLensFields(fields: LensFields): LensParse {
   const rawDepth = fields.depth.trim();
   let depth: number | null = null;
   if (rawDepth !== "") {
-    if (!/^\d+$/.test(rawDepth))
-      return { ok: false, error: "Depth must be a whole number, 0 or more." };
+    if (!/^\d+$/.test(rawDepth)) return lensError("Depth must be a whole number, 0 or more.");
     depth = Number(rawDepth);
-    if (!focus) return { ok: false, error: "Depth needs a focus." };
+    if (!focus) return lensError("Depth needs a focus.");
   }
-  return { ok: true, lens: { scope, focus, depth } };
+  return ok({ scope, focus, depth });
 }
 
 export function lensIsEmpty(lens: Lens): boolean {
@@ -63,8 +64,6 @@ export interface Declaration {
   readonly edges: readonly (readonly [string, string])[];
 }
 
-export type Cut = { ok: true; decl: Declaration } | { ok: false; error: string };
-
 function cleanScope(s: string): string {
   const parts = s.split("/").filter((p) => p !== "" && p !== ".");
   return parts.length ? parts.join("/") : ".";
@@ -80,15 +79,15 @@ function inScope(anchor: string, scope: readonly string[]): boolean {
 
 // cutDeclaration mirrors the handler's graph.cut: scope first, then the nodes within depth
 // undirected hops of the focus, walking only nodes the scope kept. It never adds an edge.
-export function cutDeclaration(decl: Declaration, lens: Lens): Cut {
+export function cutDeclaration(decl: Declaration, lens: Lens): Result<Declaration> {
   const depth = lens.depth ?? (lens.focus ? 1 : 0);
-  if (!lens.focus && depth > 0) return { ok: false, error: "depth needs a focus" };
+  if (!lens.focus && depth > 0) return lensError("depth needs a focus");
   const keep = new Set(decl.nodes.filter((n) => inScope(n.anchor, lens.scope)).map((n) => n.id));
   if (lens.focus) {
     const f = decl.nodes.find(
       (n) => keep.has(n.id) && (n.id === lens.focus || n.anchor === lens.focus),
     );
-    if (!f) return { ok: false, error: 'focus "' + lens.focus + '" is not in the figure' };
+    if (!f) return lensError('focus "' + lens.focus + '" is not in the figure');
     const adj = new Map<string, string[]>();
     for (const [a, b] of decl.edges) {
       if (!keep.has(a) || !keep.has(b)) continue;
@@ -110,13 +109,10 @@ export function cutDeclaration(decl: Declaration, lens: Lens): Cut {
     keep.clear();
     for (const id of seen) keep.add(id);
   }
-  return {
-    ok: true,
-    decl: {
-      nodes: decl.nodes.filter((n) => keep.has(n.id)),
-      edges: decl.edges.filter(([a, b]) => keep.has(a) && keep.has(b)),
-    },
-  };
+  return ok({
+    nodes: decl.nodes.filter((n) => keep.has(n.id)),
+    edges: decl.edges.filter(([a, b]) => keep.has(a) && keep.has(b)),
+  });
 }
 
 export function lensFields(lens: Lens): LensFields {

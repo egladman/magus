@@ -10,7 +10,8 @@
 //
 //   import "spells/code/search" as search;
 //   final opts = search\Options{ depth = 3 };
-//   final lines = search\render(search\run("parse flags", opts: opts), opts: opts);
+//   final found = search\run("parse flags", opts: opts);
+//   final lines = search\render(found.value!, opts: opts);
 //
 // Every list is capped and counts what it cut, and a thin answer says why: a stale or
 // missing symbol index makes the verdict unknown, never an empty found. It reads the graph
@@ -20,6 +21,7 @@
 
 import "fs";
 import "magus";
+import "result";
 import "std";
 
 import "assert";
@@ -135,10 +137,11 @@ export object Answer {
     staleIndexes: [str] = [<str>],
 }
 
-// Result is one search, shaped as `magus query -o json` is: matchCount counts what
-// both graphs ranked before filters; dropped counts those --file, --grep or a duplicate
-// removed.
-export object Result {
+// Report is one search, shaped as `magus query -o json` is. Named apart from
+// result\Result: the checker resolves generic arguments by name, so the two
+// would collide. matchCount counts what both graphs ranked before filters;
+// dropped counts those --file, --grep or a duplicate removed.
+export object Report {
     schemaVersion: int = 1,
     query: str,
     matchCount: int = 0,
@@ -274,7 +277,7 @@ fun underPath(path: str, scope: str) > bool {
 
 // classify fills each hit's owning project and role (source, output, ...) from one
 // describe.file over every path, so a generated file reads as one before anyone edits it.
-fun classify(hits: [mut Hit]) > void !> any {
+fun classify(hits: [mut Hit]) > result\Result::<bool> {
     final paths = mut [<str>];
     final seen = mut {<str: bool>};
     foreach (h in hits) {
@@ -284,18 +287,31 @@ fun classify(hits: [mut Hit]) > void !> any {
         }
     }
     if (paths.len() == 0) {
-        return;
+        return result\ok::<bool>(true);
     }
-    final report: magus\FileReport = magus\describe.file(paths);
     final byPath = mut {<str: magus\FileEntry>};
-    foreach (f in report.files) {
-        byPath[f.path] = f;
+    try {
+        final report: magus\FileReport = magus\describe.file(paths);
+        foreach (f in report.files) {
+            byPath[f.path] = f;
+        }
+    } catch (err: any) {
+        return result\caught::<bool>(err);
     }
     foreach (h in hits) {
         if (byPath[h.path] -> f) {
             h.project = f.project;
             h.role = f.role;
         }
+    }
+    return result\ok::<bool>(true);
+}
+
+fun graphQuery(q: str, opts: magus\QueryOptions) > result\Result::<magus\QueryResult> {
+    try {
+        return result\ok::<magus\QueryResult>(magus\graph().query(q, opts: opts));
+    } catch (err: any) {
+        return result\caught::<magus\QueryResult>(err);
     }
 }
 
@@ -324,12 +340,16 @@ fun queriesFor(terms: str, opts: Options) > [str] {
     return ["kind=symbol {scoped}", scoped];
 }
 
-fun gather(pool: mut Pool, q: str, alone: bool, fetch: int, wanted: [str]) > void !> any {
-    final res: magus\QueryResult = magus\query(q, opts: {"limit": fetch, "budget": fetch});
+fun gather(pool: mut Pool, q: str, alone: bool, fetch: int, wanted: [str]) > result\Result::<bool> {
+    final asked = graphQuery(q, opts: magus\QueryOptions{limit = fetch, budget = fetch});
+    if (asked.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final res = asked.value!;
     pool.total = pool.total + res.matchCount;
     pool.fetched = pool.fetched + res.matches.len();
-    if (res.answer.verdict == UNKNOWN and (alone or res.answer.reason != DOMAIN_ONLY)) {
-        pool.reason = if (res.answer.reason != "") res.answer.reason else "a declared index was not searched";
+    if (res.answer.verdict.value == UNKNOWN and (alone or res.answer.reason.value != DOMAIN_ONLY)) {
+        pool.reason = if (res.answer.reason != magus\KnowledgeUnknownReason.none) res.answer.reason.value else "a declared index was not searched";
         foreach (s in res.answer.staleIndexes) {
             pool.stale.append(s);
         }
@@ -355,20 +375,24 @@ fun gather(pool: mut Pool, q: str, alone: bool, fetch: int, wanted: [str]) > voi
         pool.seen[key] = pool.hits.len();
         pool.hits.append(h);
     }
+    return result\ok::<bool>(true);
 }
 
 // matches is layer 1: the ranked hits for terms. The name as typed outranks the same name
 // in another case, which outranks a longer name holding it (isTestPath, then
 // TestIsTestPath, after IsTestPath); then the graph's score decides.
-export fun matches(terms: str, opts: Options) > mut Result !> any {
+export fun matches(terms: str, opts: Options) > result\Result::<mut Report> {
     final filtered = opts.file != "" or opts.grep != "";
     final queries = queriesFor(terms, opts: opts);
     final pool = mut Pool{ hits = mut [<mut Hit>], seen = mut {<str: int>}, stale = mut [<str>] };
     foreach (q in queries) {
-        gather(pool, q: q, alone: queries.len() == 1, fetch: if (filtered or opts.limit < RANK_FLOOR) FETCH_CAP else cap(opts.limit), wanted: words(terms));
+        final gathered = gather(pool, q: q, alone: queries.len() == 1, fetch: if (filtered or opts.limit < RANK_FLOOR) FETCH_CAP else cap(opts.limit), wanted: words(terms));
+        if (gathered.error -> err) {
+            return result\Result::<mut Report>{ error = err };
+        }
     }
-    pool.hits.sort(fun (a: Hit, b: Hit) > bool => a.exact > b.exact or (a.exact == b.exact and a.score > b.score));
-    final r = mut Result{ query = terms, matchCount = pool.total, dropped = pool.duplicates,
+    _ = pool.hits.sort(fun (a: Hit, b: Hit) > bool => a.exact > b.exact or (a.exact == b.exact and a.score > b.score));
+    final r = mut Report{ query = terms, matchCount = pool.total, dropped = pool.duplicates,
         answer = mut Answer{ verdict = ABSENT, staleIndexes = pool.stale } };
     final files = newFiles();
     final kept = mut [<mut Hit>];
@@ -382,7 +406,10 @@ export fun matches(terms: str, opts: Options) > mut Result !> any {
         }
         kept.append(h);
     }
-    classify(kept);
+    final classified = classify(kept);
+    if (classified.error -> err) {
+        return result\Result::<mut Report>{ error = err };
+    }
     r.matches = kept;
     r.answer.reason = pool.reason;
     if (kept.len() == 0 and filtered and pool.fetched < pool.total and pool.reason == "") {
@@ -393,7 +420,7 @@ export fun matches(terms: str, opts: Options) > mut Result !> any {
     } else if (r.answer.reason != "") {
         r.answer.verdict = UNKNOWN;
     }
-    return r;
+    return result\ok::<mut Report>(r);
 }
 
 // headingLine finds the line of the Markdown heading whose anchor is anchor, skipping
@@ -539,7 +566,7 @@ export fun site(h: mut Hit, opts: Options, files: Files) > Excerpt {
         return Excerpt{ path = h.path, status = "unreadable: {h.path}" };
     }
     final lines = read!;
-    region(h, files: files);
+    _ = region(h, files: files);
     var center = if (h.line > 0) h.line else 1;
     if (opts.grep != "") {
         final g = grepLine(h, opts: opts, files: files);
@@ -599,8 +626,14 @@ fun position(n: magus\KnowledgeNode?) > str {
 
 // calls reads one neighborhood: callers and callees from the calls edges, with callers in
 // test files listed apart as tests.
-fun calls(h: Hit, opts: Options) > [mut Section] !> any {
-    final hood: magus\NeighborhoodResult = magus\neighborhood(h.id, opts: magus\NeighborhoodOptions{ depth = 1, relations = ["calls"] });
+fun calls(h: Hit, opts: Options) > result\Result::<[mut Section]> {
+    var asked: magus\NeighborhoodResult? = null;
+    try {
+        asked = magus\graph().neighborhood(h.id, opts: magus\NeighborhoodOptions{ depth = 1, relations = [magus\RelationID.calls] });
+    } catch (err: any) {
+        return result\caught::<[mut Section]>(err);
+    }
+    final hood = asked!;
     final nodes = mut {<str: magus\KnowledgeNode>};
     foreach (n in hood.nodes) {
         nodes[n.id] = n;
@@ -611,7 +644,7 @@ fun calls(h: Hit, opts: Options) > [mut Section] !> any {
     final listed = mut {<str: bool>};
     foreach (l in hood.links) {
         final inbound = l.target == hood.focus;
-        if (l.relation != "calls" or (!inbound and l.source != hood.focus)) {
+        if (l.relation != magus\RelationID.calls or (!inbound and l.source != hood.focus)) {
             continue;
         }
         final otherId = if (inbound) l.source else l.target;
@@ -636,19 +669,25 @@ fun calls(h: Hit, opts: Options) > [mut Section] !> any {
         section("callees", all: callees, limit: opts.neighbors),
         section("tests", all: tests, limit: opts.neighbors),
     ];
-    if (hood.answer.verdict == UNKNOWN) {
+    if (hood.answer.verdict.value == UNKNOWN) {
         foreach (s in sections) {
             s.verdict = UNKNOWN;
-            s.note = "unknown: {hood.answer.reason}";
+            s.note = "unknown: {hood.answer.reason.value}";
         }
     }
-    return sections;
+    return result\ok::<[mut Section]>(sections);
 }
 
 // references lists every file that uses the symbol with its first lines, and counts the
 // test files among them.
-fun references(h: Hit, opts: Options) > Section !> any {
-    final refs: magus\RefsResult = magus\refs(h.id, opts: {"limit": 200});
+fun references(h: Hit, opts: Options) > result\Result::<Section> {
+    var asked: magus\RefsResult? = null;
+    try {
+        asked = magus\graph().refs(h.id, opts: magus\RefsOptions{limit = 200});
+    } catch (err: any) {
+        return result\caught::<Section>(err);
+    }
+    final refs = asked!;
     final files = mut [<Neighbor>];
     var testFiles = 0;
     foreach (r in refs.refs) {
@@ -662,16 +701,16 @@ fun references(h: Hit, opts: Options) > Section !> any {
     final s = section("references", all: files, limit: opts.neighbors);
     s.total = refs.fileCount;
     s.note = "{plural(refs.refCount, word: "use")} in {plural(refs.fileCount, word: "file")}, {plural(testFiles, word: "test file")}";
-    if (refs.answer.verdict == UNKNOWN) {
+    if (refs.answer.verdict.value == UNKNOWN) {
         s.verdict = UNKNOWN;
-        s.note = "unknown: {refs.answer.reason}";
+        s.note = "unknown: {refs.answer.reason.value}";
     }
-    return s;
+    return result\ok::<Section>(s);
 }
 
 // nodeAround lists a domain node's edges by relation, the way magus explain does.
-fun nodeAround(h: Hit, opts: Options) > [Section] !> any {
-    final card: magus\ExplainResult? = magus\explain(h.id) catch null;
+fun nodeAround(h: Hit, opts: Options) > [Section] {
+    final card: magus\ExplainResult? = magus\graph().explain(h.id) catch null;
     if (card == null) {
         return [Section{ name = "edges", verdict = UNKNOWN, note = "magus explain could not resolve {h.id}" }];
     }
@@ -691,10 +730,13 @@ fun nodeAround(h: Hit, opts: Options) > [Section] !> any {
 }
 
 // docs are the doc sections a query for the hit's name matches on every word.
-fun docs(h: Hit, opts: Options) > Section !> any {
-    final q: magus\QueryResult = magus\query("kind=docsection {shortLabel(h.label)}", opts: {"limit": cap(opts.neighbors)});
+fun docs(h: Hit, opts: Options) > result\Result::<Section> {
+    final q = graphQuery("kind=docsection {shortLabel(h.label)}", opts: magus\QueryOptions{limit = cap(opts.neighbors)});
+    if (q.error -> err) {
+        return result\Result::<Section>{ error = err };
+    }
     final all = mut [<Neighbor>];
-    foreach (m in q.matches) {
+    foreach (m in q.value!.matches) {
         var whole = true;
         if (m.why -> why) {
             whole = why.matched == why.of;
@@ -703,36 +745,52 @@ fun docs(h: Hit, opts: Options) > Section !> any {
             all.append(Neighbor{ relation = "documented in", id = m.id, label = m.label, at = m.id.replace("docsection:", with: "") });
         }
     }
-    return section("docs", all: all, limit: opts.neighbors);
+    return result\ok::<Section>(section("docs", all: all, limit: opts.neighbors));
 }
 
 // around is layer 4 for one hit.
-export fun around(h: Hit, opts: Options) > Around !> any {
+export fun around(h: Hit, opts: Options) > result\Result::<Around> {
     final a = mut Around{ project = h.project, role = h.role };
     final sections = mut [<Section>];
     if (h.kind == "symbol") {
-        foreach (s in calls(h, opts: opts)) {
+        final called = calls(h, opts: opts);
+        if (called.error -> err) {
+            return result\Result::<Around>{ error = err };
+        }
+        foreach (s in called.value!) {
             sections.append(s);
         }
-        sections.append(references(h, opts: opts));
+        final referenced = references(h, opts: opts);
+        if (referenced.error -> err) {
+            return result\Result::<Around>{ error = err };
+        }
+        sections.append(referenced.value!);
     } else {
         foreach (s in nodeAround(h, opts: opts)) {
             sections.append(s);
         }
     }
     if (h.kind != "docsection") {
-        sections.append(docs(h, opts: opts));
+        final documented = docs(h, opts: opts);
+        if (documented.error -> err) {
+            return result\Result::<Around>{ error = err };
+        }
+        sections.append(documented.value!);
     }
     a.sections = sections;
-    return a;
+    return result\ok::<Around>(a);
 }
 
 // run is every layer opts.depth asks for: matches, then site, block and around for the
 // first opts.expand of them.
-export fun run(terms: str, opts: Options) > Result !> any {
-    final r = matches(terms, opts: opts);
+export fun run(terms: str, opts: Options) > result\Result::<Report> {
+    final matched = matches(terms, opts: opts);
+    if (matched.error -> err) {
+        return result\Result::<Report>{ error = err };
+    }
+    final r = matched.value!;
     if (opts.depth < 2) {
-        return r;
+        return result\ok::<Report>(r);
     }
     final files = newFiles();
     final open = least(r.matches.len(), b: cap(opts.expand));
@@ -743,10 +801,14 @@ export fun run(terms: str, opts: Options) > Result !> any {
             h.block = block(h, opts: opts, files: files);
         }
         if (opts.depth >= 4) {
-            h.around = around(h, opts: opts);
+            final opened = around(h, opts: opts);
+            if (opened.error -> err) {
+                return result\Result::<Report>{ error = err };
+            }
+            h.around = opened.value!;
         }
     }
-    return r;
+    return result\ok::<Report>(r);
 }
 
 final LAYERS = ["matches", "site", "block", "around"];
@@ -789,7 +851,7 @@ fun excerptLines(title: str, ex: Excerpt, flag: str, width: int) > [str] {
 
 // render is the plain-text report: the first line says what ran, each match is one line,
 // each opened layer is indented under it, and the last line names the next layer.
-export fun render(r: Result, opts: Options) > [str] {
+export fun render(r: Report, opts: Options) > [str] {
     final lines = mut [<str>];
     final depth = if (opts.depth < 1) 1 else if (opts.depth > 4) 4 else opts.depth;
     final a = r.answer;
@@ -894,14 +956,14 @@ test "an excerpt over the cap counts what it cut" {
 }
 
 test "matches ranks the exact symbol first" {
-    final r = matches("IsTestPath", opts: Options{ limit = 3 });
+    final r = matches("IsTestPath", opts: Options{ limit = 3 }).value!;
     assert\equal(r.answer.verdict, want: FOUND, message: r.answer.reason);
     assert\equal(r.matches[0].label, want: "IsTestPath", message: r.matches[0].id);
     assert\equal(r.matches[0].path, want: "types/test_path.go", message: "path");
 }
 
 test "the block layer reads the declaration to its recorded end line" {
-    final r = run("IsTestPath", opts: Options{ limit = 1, expand = 1, depth = 3, blockLines = 0 });
+    final r = run("IsTestPath", opts: Options{ limit = 1, expand = 1, depth = 3, blockLines = 0 }).value!;
     final b = r.matches[0].block!;
     assert\equal(b.status, want: "verified", message: b.status);
     assert\equal(b.lines[0].text.startsWith("func IsTestPath"), want: true, message: b.lines[0].text);

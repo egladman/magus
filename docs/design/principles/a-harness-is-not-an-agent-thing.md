@@ -57,4 +57,5 @@ agent reads it and skips it, and nothing checks either of them.
 
 - [Determinism at chosen points](../judgment/determinism-at-chosen-points.md)
 - [Friction that carries meaning](friction-that-carries-meaning.md)
+- [The model proposes, the harness executes](the-model-proposes-the-harness-executes.md)
 - [Glossary: harness](../../glossary/harness.md)

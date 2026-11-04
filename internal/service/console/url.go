@@ -119,8 +119,8 @@ func Root(host string) string {
 // fragment; there is no #live= host directive. The clean /console/<app>/ PATH is the canonical
 // app URL: the server serves the shell for it (SPA fallback) and the console's boot router
 // opens that app from the path. The code rides the fragment (never transmitted on the
-// document GET) and is emitted LAST, after any content directives. It is single use and lives a
-// minute, so a link seen in a process list or a log is spent or dead, never a credential.
+// document GET) and is emitted LAST, after any content directives.
+// It is single use and lives seconds: a link in a process list or log is dead.
 //
 // This is the ONE home for the grammar: url.GraphLink composes it rather than hand-building
 // the "http://"+host+"/console/graph/"+frag string, so both producers share a single escaping
@@ -173,9 +173,9 @@ func LinkTokenExpires() string { return strconv.Itoa(int(LinkTokenLifetime.Hours
 // open "<link>#code=$(magus config console token create --code --expires 12h)", with the
 // platform's opener.
 //
-// The code is a command substitution the reader's own shell expands, so nothing that prints
-// this line ever holds a secret, and what reaches the opener's argv is a one-time code that
-// lives a minute rather than a token. It stands for a console=write token that expires, never
+// The reader's own shell expands the code, so nothing printing this line holds
+// a secret. The opener's argv gets a one-time code that lives seconds.
+// It stands for a console=write token that expires, never
 // the operator token, so the browser never holds a credential that can reach token
 // management. The link must not carry a code already; it is percent-encoded, so it holds
 // nothing a double-quoted shell word would expand.

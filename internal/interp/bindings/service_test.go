@@ -43,7 +43,7 @@ func TestServiceLeasesThroughBuzzScript(t *testing.T) {
 	sess := buzz.NewSession(ctx)
 	t.Cleanup(func() { _ = sess.Close() })
 	RegisterModules(ctx, sess)
-	DeclareMagusTypes(sess)
+	require.NoError(t, DeclareMagusTypes(sess))
 	RegisterMagusNamespace(ctx, sess)
 	require.NoError(t, sess.Exec(ctx, `
 import "magus";

@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/libs/embed"
+	"github.com/egladman/magus/libs/oci"
 )
 
 // registry is enough of the distribution API for a push and a pull. Like GHCR, it
@@ -181,8 +181,8 @@ func TestEmbedTablePullRefusesALayerOtherThanThePin(t *testing.T) {
 	r := newRegistry(t)
 	_, _, pin := testTable(t, t.TempDir())
 	ctx := context.Background()
-	wrong := oci.Content{ArtifactType: artifactType, Layers: []oci.Layer{{Name: fileName, MediaType: layerMediaType, Payload: []byte("other bytes")}}}
-	_, err := r.client().Push(ctx, r.ref(pin), wrong)
+	wrong := oci.Artifact{ArtifactType: artifactType, Blobs: []oci.Blob{{Title: fileName, MediaType: layerMediaType, Data: []byte("other bytes")}}}
+	_, err := r.client().PushArtifact(ctx, r.ref(""), wrong, pin)
 	require.NoError(t, err)
 
 	dst := filepath.Join(t.TempDir(), fileName)
@@ -213,8 +213,8 @@ func TestEmbedTablePublishRefusesATagHoldingAnotherLayer(t *testing.T) {
 	r := newRegistry(t)
 	src, _, pin := testTable(t, t.TempDir())
 	ctx := context.Background()
-	wrong := oci.Content{ArtifactType: artifactType, Layers: []oci.Layer{{Name: fileName, MediaType: layerMediaType, Payload: []byte("other bytes")}}}
-	_, err := r.client().Push(ctx, r.ref(pin), wrong)
+	wrong := oci.Artifact{ArtifactType: artifactType, Blobs: []oci.Blob{{Title: fileName, MediaType: layerMediaType, Data: []byte("other bytes")}}}
+	_, err := r.client().PushArtifact(ctx, r.ref(""), wrong, pin)
 	require.NoError(t, err)
 	uploads := r.uploads
 

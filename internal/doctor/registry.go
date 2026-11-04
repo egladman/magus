@@ -141,11 +141,11 @@ var allChecks = []checkDef{
 		run:      (*runner).checkBriefFormat,
 	},
 	{
-		Name:           "conformance-ratchet",
-		Doc:            "committed conformance thresholds the code now measures tighter than, and known entries that no longer violate",
+		Name:           "conformance-ceiling",
+		Doc:            "configured conformance anchors the code now measures tighter than",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkConformanceRatchet,
+		run:            (*runner).checkConformanceCeiling,
 	},
 	{
 		Name:           "unexplained-hotspots",
@@ -238,6 +238,14 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkDiagnosticDocs() },
 	},
 	{
+		Name:     workspaceDiagnosticDocsCheck,
+		Doc:      "every page diagnostics.docs names is a code under the workspace's prefix and names a next step",
+		Evidence: types.EvidenceMeasured,
+		run: func(r *runner, _ []*types.Project) types.Check {
+			return checkWorkspaceDiagnosticDocs(r.root, r.opts.cfg.Diagnostics)
+		},
+	},
+	{
 		Name:           "dependency-graph",
 		Doc:            "the target dependency graph builds without a cycle",
 		Code:           types.TargetDependencyCycle,
@@ -293,6 +301,13 @@ var allChecks = []checkDef{
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkGuardWiring() },
+	},
+	{
+		Name:           hookBindingsCheck,
+		Doc:            "whether every wired harness binds each hook point, or says why its host cannot",
+		Evidence:       types.EvidenceDeclared,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkHookBindings() },
 	},
 	{
 		Name:           "checkpoint-wiring",
@@ -559,10 +574,10 @@ var allChecks = []checkDef{
 		run:            (*runner).checkToolchainLifecycle,
 	},
 	{
-		Name:     "go-cache-budget",
-		Doc:      "the Go build and lint caches against go.cache_budget_mb, with the command that frees each one that is over",
+		Name:     "disk-trend",
+		Doc:      "the free space the reclaim hook last sampled, how fast it fell over the last day, and its last reclaim chunks, against the disk.* thresholds",
 		Evidence: types.EvidenceMeasured,
-		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkGoCacheBudget() },
+		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkDiskTrend() },
 	},
 	{
 		Name:           "stale-spell-shadow-acknowledgments",

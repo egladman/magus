@@ -14,3 +14,27 @@ func CheckRead(ctx context.Context, path string) error {
 func CheckWrite(ctx context.Context, path string) error {
 	return checkWrite(ctx, resolvePath(ctx, path))
 }
+
+// EditJudge grades an fs write that rewrites an existing file.
+// The content writers consult the one on ctx before they write.
+type EditJudge struct {
+	// Covers reports the absolute paths the judge grades.
+	Covers func(ctx context.Context, path string) bool
+	// Grade refuses the change from before to after with an error.
+	Grade func(ctx context.Context, path string, before, after []byte) error
+}
+
+type editJudgeKey struct{}
+
+// WithEditJudge returns ctx carrying j for the fs writers.
+// A ctx with a sandbox policy and no judge refuses every content write:
+// a door that confines a script grades it too.
+func WithEditJudge(ctx context.Context, j EditJudge) context.Context {
+	return context.WithValue(ctx, editJudgeKey{}, j)
+}
+
+// EditJudgeFromContext is the judge WithEditJudge put on ctx.
+func EditJudgeFromContext(ctx context.Context) (EditJudge, bool) {
+	j, ok := ctx.Value(editJudgeKey{}).(EditJudge)
+	return j, ok
+}

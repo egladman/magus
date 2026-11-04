@@ -4,7 +4,7 @@
 
 Up: [workspace index](../MAGUS.md)
 
-Depends on: [(workspace root)](../MAGUS.md), [docs/guides/integrations/agents](guides/integrations/agents/MAGUS.md), libs/figure, [libs/gopherbuzz](../libs/gopherbuzz/MAGUS.md), [libs/proofread](../libs/proofread/MAGUS.md), [libs/textsearch](../libs/textsearch/MAGUS.md), [proto](../proto/MAGUS.md)
+Depends on: [(workspace root)](../MAGUS.md), [docs/guides/integrations/agents](guides/integrations/agents/MAGUS.md), libs/figure, [libs/gopherbuzz](../libs/gopherbuzz/MAGUS.md), [libs/kustomize](../libs/kustomize/MAGUS.md), [libs/proofread](../libs/proofread/MAGUS.md), [libs/textsearch](../libs/textsearch/MAGUS.md), [proto](../proto/MAGUS.md)
 
 Query: `magus query project=docs`
 
@@ -34,6 +34,7 @@ Query: `magus query project=docs`
 | `proofread-docs-generate`       | Proofread's separately built catalog includes its own generated model and fixtures.                                                                                      |
 | `benchmark-docs-generate`       | Published measurements do not depend on the Go generators or their toolchain.                                                                                            |
 | `changelog-page`                | changelog-page renders the changelog from releases/*.yaml and changes/unreleased/.                                                                                       |
+| `types-generate`                | Writes src/gen/magus/types.ts, the TypeScript forms of the boundary types the registry flags TS.                                                                         |
 | `conventions`                   | conventions holds every doc page to docs/conventions.md and to what it documents.                                                                                        |
 | `buzz-test`                     | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`.                                                                                             |
 | `figure-engine-digest-generate` | figure-engine-digest-generate writes the SHA-256 of the magus/figure source the running binary embeds to gen/figure-engine.sha256.                                       |

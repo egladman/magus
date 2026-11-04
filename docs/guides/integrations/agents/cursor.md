@@ -201,12 +201,24 @@ transforms nothing a host sends, on this host or any other. `beforeShellExecutio
 judged, and allows it; it judges only a command `preToolUse` never saw, which keeps
 it as the fallback.
 
-A push at a commit no passing gate covers gets the verdict `ask`, and
-`preToolUse` answers `permission: "ask"`: Cursor shows you the reason,
-which names the commit and the gate state, and approving publishes it. A push the
-gate covers is allowed without a prompt. A session bound to a job lease is denied,
-because workers do not publish. Any decision the script does not know is denied,
-never allowed.
+A run of a `human_only` target gets the verdict `ask`. Cursor documents `ask` on
+`preToolUse` as accepted by its schema and not enforced, so that event files the
+verdict and allows the line, and `beforeShellExecution` answers `permission: "ask"`
+from the file. Cursor shows you the reason, and approving runs it. `beforeMCPExecution`
+renders an ask the same way. A push at a commit no passing gate covers is denied. A
+session bound to a job lease is denied, because workers do not publish. Any decision
+the script does not know is denied, never allowed.
+
+Any other `ask` on `preToolUse` (a write, a search, another tool) cannot prompt, so
+it is a deny. `user_message` shows you what happened, why Cursor cannot ask, and the
+command to run in your own terminal. `agent_message` tells the agent the same, and to
+relay it verbatim if you did not see it.
+
+Not verified against a client: what Cursor does with `permission: "ask"` under
+`--force`, auto-run or an allowlist, whether the desktop and CLI both show
+`user_message`, and any way to answer from a phone. Cloud agents defer
+`beforeMCPExecution`, so nothing here promises a prompt there. The `ask` end-to-end
+scenarios in `internal/agent/harness` run the first of these.
 
 The `matcher` values are a regex (Cursor's own validator: outside `""` and `"*"`
 the string must compile). One entry per event is enough: the script is the same
@@ -225,8 +237,22 @@ still carries the advise for a search the graph answers better. WebSearch and
 WebFetch ride `postToolUse`: when
 `kind=link` has citations matching the query, the script injects those URLs as
 `additional_context` so the next open-web look prefers package/docs hosts this
-tree already depends on. Cursor Agent tools spell the path field `path`; the
-script also accepts `file_path`.
+tree already depends on. Your reading list ranks ahead of them: the `sources`
+key of your user-level `magus.yaml`, read through `magus config view -o json`.
+An entry the query names shows `follow` first, then `caveat` with its `why`.
+A `skip` entry never shows, and neither does a citation under its URL.
+Cursor Agent tools spell the path field `path`; the script also accepts
+`file_path`.
+
+```yaml
+# $XDG_CONFIG_HOME/magus/magus.yaml, never a repository's
+sources:
+  - url: https://go.dev/ref/mod
+    topic: go modules
+    verdict: follow
+    why: the reference
+    contradicts: ""
+```
 
 ```buzz
 // magus guard for Cursor. One file, every event.
@@ -260,9 +286,15 @@ script also accepts `file_path`.
 // beforeShellExecution then lets the line through unjudged; it judges only a command
 // preToolUse never saw.
 //
+// Only beforeShellExecution and beforeMCPExecution render an ask: Cursor
+// documents it on preToolUse as accepted and not enforced. preToolUse
+// files a shell ask for beforeShellExecution and turns any other ask into
+// a deny, with user_message telling the person why.
+//
 // Grep, Glob, and Read never reach beforeShellExecution. They are restated as
 // the shell commands the guard already judges, and gated on preToolUse, because
-// a deny has to land before the tool runs.
+// a deny has to land before the tool runs. A Read is also recorded as the
+// path it reached, as magus-observe.buzz records one on the other hosts.
 //
 // A Task call reaches preToolUse like any other tool, and is gated there as the spawn it
 // is: the brief and the subagent type go to `magus shell` in the envelope it recognizes a
@@ -287,9 +319,9 @@ script also accepts `file_path`.
 // session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
 // workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
-// magus-guard-template: 34
+// magus-guard-template: 36
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=model
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human
 
 import "std";
@@ -315,7 +347,7 @@ final ALLOW = `{"permission":"allow"}`;
 final SUBMIT_CONTINUE = `{"continue":true}`;
 final EMPTY = `{}`;
 
-final UNAVAILABLE_TEXT = "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard.";
+final UNAVAILABLE_TEXT = "magus guard could not judge this call: no magus binary was found";
 final UNREADABLE = "magus guard is NOT running for this call: the hook event on stdin was not JSON, so its deny and advise rules were not applied. Check the Cursor hook configuration and version.";
 final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what 'magus describe harness' prints into the host's hook configuration; the commands it prints name the host.";
 
@@ -333,6 +365,8 @@ final STATE_MAX_AGE_MS = 86400000.0;
 object Guard {
     bin: str,
     payload: str,
+    // fix says how to get a magus that judges here.
+    fix: str = "",
 }
 
 // Verdict is the part of `magus shell -o json` this file renders.
@@ -348,6 +382,7 @@ object Scope {
     agent: str,
     session: str,
     transcript: str,
+    fix: str = "",
 }
 
 fun firstField(node: any?, keys: [str]) > str {
@@ -387,16 +422,12 @@ object Entry {
 fun readArgs(args: [str]) > Entry {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME]) catch null;
     if (parsed == null) { return Entry{ agent = "" }; }
-    foreach (word in parsed!.unknown) {
+    foreach (word in parsed!.unknown + parsed!.positionals) {
         warn("unsupported argument {word}; this call was judged WITHOUT it");
     }
     return Entry{
         agent = parsed!.values[AGENT_NAME] ?? "",
     };
-}
-
-fun unavailableNotice(text: str) > str {
-    return hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: text);
 }
 
 fun denyBoth(message: str) > str {
@@ -523,27 +554,117 @@ fun linkTerms(event: any?) > str {
     return "";
 }
 
-fun citations(stdout: str) > [str] {
+// Source is one reading-list entry as `magus config view -o json` prints it.
+object Source {
+    url: str,
+    topic: str,
+    verdict: str,
+    why: str,
+}
+
+// Sources is the reading list, or why it could not be read.
+object Sources {
+    value: [Source] = [<Source>],
+    error: str = "",
+}
+
+// readSources reads the person's reading list, the sources key of the
+// user-level magus.yaml, through config view.
+fun readSources(bin: str) > Sources {
+    final result = proc\exec(bin, args: ["config", "view", "-o", "json"], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+    }) catch null;
+    if (result == null) { return Sources{ error = "magus config view did not start" }; }
+    if (result!.code != 0) { return Sources{ error = "magus config view exited {result!.code}" }; }
+    final doc = json\parse(result!.stdout) catch null;
+    if (doc == null) { return Sources{ error = "magus config view printed no JSON" }; }
+    final list = hook\dig(doc, dotPath: "sources");
+    final rows = mut [<Source>];
+    if (list is [any]) {
+        foreach (row in list as [any]) {
+            rows.append(Source{
+                url = hook\field(row, dotPath: "url"),
+                topic = hook\field(row, dotPath: "topic"),
+                verdict = hook\field(row, dotPath: "verdict"),
+                why = hook\field(row, dotPath: "why"),
+            });
+        }
+    }
+    return Sources{ value = rows };
+}
+
+// names reports whether a search names an entry: it is a URL under the
+// entry, or it holds every word of the entry's topic.
+fun names(source: Source, terms: str) > bool {
+    if (source.url != "" and terms.startsWith(source.url)) { return true; }
+    final searched = terms.lower().split(" ");
+    var words = 0;
+    foreach (word in source.topic.lower().split(" ")) {
+        if (word == "") { continue; }
+        if (searched.indexOf(word) == null) { return false; }
+        words = words + 1;
+    }
+    return words > 0;
+}
+
+// rankSources keeps the entries a search names, follow before caveat. A skip
+// entry never shows.
+fun rankSources(sources: [Source], terms: str) > [Source] {
+    final ranked = mut [<Source>];
+    foreach (verdict in ["follow", "caveat"]) {
+        foreach (source in sources) {
+            if (source.verdict == verdict and names(source, terms: terms)) { ranked.append(source); }
+        }
+    }
+    return ranked;
+}
+
+fun skipped(url: str, sources: [Source]) > bool {
+    foreach (source in sources) {
+        if (source.verdict == "skip" and source.url != "" and url.startsWith(source.url)) { return true; }
+    }
+    return false;
+}
+
+fun readingList(sources: Sources, terms: str) > str {
+    if (sources.error != "") {
+        return "Your reading list (sources in the user magus.yaml) was not applied: {sources.error}.";
+    }
+    final ranked = rankSources(sources.value, terms: terms);
+    if (ranked.len() == 0) { return ""; }
+    final rows = mut [<str>];
+    foreach (source in ranked) {
+        if (source.verdict == "caveat" and source.why != "") {
+            rows.append("  - caveat {source.url}: {source.why}");
+        } else {
+            rows.append("  - {source.verdict} {source.url}");
+        }
+    }
+    return "Your reading list (sources in the user magus.yaml) covers this search. Prefer follow; read a caveat with its why in mind:\n"
+        + rows.join("\n");
+}
+
+fun citations(stdout: str, sources: [Source]) > [str] {
     final urls = mut [<str>];
     foreach (line in stdout.split("\n")) {
         if (line == "" or urls.len() >= 8) { continue; }
         var url = line;
         if (url.startsWith("link:")) { url = url.sub(5, len: url.len() - 5); }
-        if (url != "") { urls.append(url); }
+        if (url != "" and !skipped(url, sources: sources)) { urls.append(url); }
     }
     return urls;
 }
 
-// linkBias names kind=link citations this workspace already depends on, so the
-// next open-web look prefers those hosts. Empty when nothing matches.
-fun linkBias(bin: str, terms: str) > str {
-    if (terms == "") { return ""; }
-    final result = proc\exec(bin, args: ["query", "kind=link", terms, "-o", "name"], opts: {
-        "quiet": true,
-        "allow_failure": true,
+// cited names kind=link citations this workspace already depends on, minus
+// any the reading list skips. Empty when nothing matches.
+fun cited(bin: str, terms: str, sources: [Source]) > str {
+    final result = proc\exec(bin, args: ["query", "kind=link", terms, "-o", "name"], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null or result!.code != 0) { return ""; }
-    final urls = citations(result!.stdout);
+    final urls = citations(result!.stdout, sources: sources);
     if (urls.len() == 0) { return ""; }
     final rows = mut [<str>];
     foreach (url in urls) { rows.append("  - {url}"); }
@@ -553,31 +674,51 @@ fun linkBias(bin: str, terms: str) > str {
         + quote(terms) + " -o name";
 }
 
+// linkBias points the next open-web look at the reading list first, then at
+// the hosts this workspace already cites.
+fun linkBias(bin: str, terms: str) > str {
+    if (terms == "") { return ""; }
+    final sources = readSources(bin);
+    final parts = mut [<str>];
+    foreach (part in [readingList(sources, terms: terms), cited(bin, terms: terms, sources: sources.value)]) {
+        if (part != "") { parts.append(part); }
+    }
+    return parts.join("\n\n");
+}
+
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult? {
     final args = mut ["shell"];
     foreach (arg in extra) { args.append(arg); }
-    return proc\exec(guard.bin, args: args, opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": guard.payload,
+    return proc\exec(guard.bin, args: args, opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = guard.payload,
     }) catch null;
 }
 
 fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     var version = "";
-    final probe = proc\exec(guard.bin, args: ["version"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    final probe = proc\exec(guard.bin, args: ["version"], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
     if (probe != null) { version = hook\firstLine(probe!.stdout); }
     if (version == "") { version = "version unreadable"; }
-    var why = "";
+    final lines = mut [<str>];
     if (failed != null) {
         foreach (line in failed!.stderr.split("\n")) {
-            if (why == "" and line != "" and line.indexOf("WARN") == null) { why = line; }
+            if (line != "" and line.indexOf("WARN") == null and lines.len() < 12) { lines.append(line); }
         }
     }
+    var why = lines.join("\n");
     if (why == "") { why = "it printed no error"; }
-    return "magus guard is NOT running: {guard.bin} ({version}) could not judge this call, "
-        + "so its deny and advise rules are unenforced. It said: {why}. "
-        + "Rebuild or update THAT binary to restore the guard.";
+    return "magus guard could not judge this call: {guard.bin} ({version}) said: {why}";
+}
+
+// UNJUDGED is the decision this file gives a call no magus judged. Cursor
+// shows the person a message only with a refusal, so every gating event
+// refuses it, reads included.
+final UNJUDGED = "unjudged";
+
+fun unjudged(why: str, fix: str) > Verdict {
+    return Verdict{ decision = UNJUDGED, reason = "{why}\n{fix}", context = "" };
 }
 
 final UNKNOWN_FLAG = "flag provided but not defined";
@@ -590,22 +731,24 @@ fun rejectedFlag(result: proc\ExecResult?) > bool {
         and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
 }
 
-// judged returns magus's answer, or "" when the binary could not give one. Each attempt
-// drops flags an older binary may reject, newest first, and runs only after the one
-// before it was refused for such a flag.
-fun judged(guard: Guard, attempts: [[str]], family: str, session: str) > str {
+// judged returns magus's verdict, or an unjudged one naming why it gave none.
+// Each attempt drops flags an older binary may reject, newest first, and runs
+// only after the one before it was refused for such a flag.
+fun judged(guard: Guard, attempts: [[str]]) > Verdict {
     var result: proc\ExecResult? = null;
     foreach (extra in attempts) {
         result = judge(guard, extra: extra);
         if (!rejectedFlag(result)) { break; }
     }
+    final fix = "Rebuild or update {guard.bin}. {guard.fix}";
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-        if (hook\noticeOnce(session, family: family, file: "cursor-hook.buzz")) {
-            io\stderr.write(failureNotice(guard, failed: result) + "\n") catch void;
-        }
-        return "";
+        return unjudged(failureNotice(guard, failed: result), fix: fix);
     }
-    return hook\trimTrailingNewlines(result!.stdout);
+    final got = parseVerdict(hook\trimTrailingNewlines(result!.stdout));
+    if (got == null) {
+        return unjudged("magus guard could not judge this call: {guard.bin} answered something that is not a verdict", fix: fix);
+    }
+    return got!;
 }
 
 fun parseVerdict(stdout: str) > Verdict? {
@@ -629,35 +772,67 @@ fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
     return extra;
 }
 
-// verdict asks magus about one call, or returns null when it could not answer. ask is
-// whether the reply can put an ask in front of the person, which only a gating event can.
-fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool, family: str) > Verdict? {
-    final guard = Guard{ bin = scope.bin, payload = payload };
+// verdict asks magus about one call. ask is whether the reply can put an ask
+// in front of the person, which only a gating event can.
+fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool) > Verdict {
+    final guard = Guard{ bin = scope.bin, payload = payload, fix = scope.fix };
     final attributed = shellArgs(scope, asPath: asPath, ask: ask);
     final bare = mut ["-o", "json"];
     if (asPath) { bare.append("--path"); }
-    final answer = judged(guard, attempts: [attributed, bare], family: family, session: scope.session);
-    if (answer == "") { return null; }
-    final got = parseVerdict(answer);
-    if (got == null and hook\noticeOnce(scope.session, family: "unreadable-verdict", file: "cursor-hook.buzz")) {
-        io\stderr.write("magus guard is NOT running for this call: {scope.bin} answered something that is not a verdict, so its deny and advise rules were not applied. Update that binary.\n") catch void;
-    }
-    return got;
+    return judged(guard, attempts: [attributed, bare]);
 }
 
-// gateReply renders a verdict for a gating event. An ask is Cursor's own approval
-// prompt. Pass and advise both allow, because a gating event has no context field; the
-// advice waits for the after-call event. A decision this file does not know is refused,
-// so a copy older than the guard contract cannot read a new verdict as consent.
-fun gateReply(v: Verdict) > str {
-    if (v.decision == "deny" or v.decision == "ask") {
+fun askReply(reason: str) > str {
+    return json\stringify({
+        "permission": "ask",
+        "user_message": reason,
+        "agent_message": reason,
+    }) catch denyBoth(reason);
+}
+
+// blockedAsk is the deny standing in for a prompt preToolUse cannot show.
+fun blockedAsk(reason: str, command: str) > str {
+    final blocker = "Cursor shows its approval prompt only for a shell command or an MCP call";
+    var yours = "Do this one yourself; it has no command line to copy.";
+    var theirs = "Ask them to do it themselves.";
+    if (command != "") {
+        yours = "Run it from your own terminal: {command}";
+        theirs = "Ask them to run it from their own terminal: {command}";
+    }
+    return json\stringify({
+        "permission": "deny",
+        "user_message": "{reason}\n\nmagus stopped this call. It needs your approval, and {blocker}. {yours}",
+        "agent_message": "{reason}\n\nThis call needs the approval of the person you work for, and {blocker}. {theirs} "
+            + "If they saw no such message, relay this one to them verbatim.",
+    }) catch denyBoth(reason);
+}
+
+// gateReply renders a verdict for a gating event. An ask is a prompt where
+// the event shows one, else a deny. Pass and advise allow: advice waits for
+// the after-call event. An unknown decision is refused, never consent.
+// A deny shows the person its first line. A blocked ask keeps its whole text:
+// its last line says what the person must do.
+fun gateReply(v: Verdict, eventName: str, command: str) > str {
+    if (v.decision == "deny") {
         return json\stringify({
-            "permission": v.decision,
-            "user_message": v.reason,
+            "permission": "deny",
+            "user_message": hook\firstLine(v.reason),
+            "agent_message": v.reason,
+        }) catch denyBoth(v.reason);
+    }
+    if (v.decision == "ask") {
+        if (rendersPrompt(eventName)) { return askReply(v.reason); }
+        return blockedAsk(v.reason, command: command);
+    }
+    if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
+    if (v.decision == UNJUDGED and hook\isBootstrap(command)) {
+        return json\stringify({
+            "permission": "allow",
+            "user_message": hook\firstLine(v.reason),
             "agent_message": v.reason,
         }) catch ALLOW;
     }
-    if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
+    if (v.decision == UNJUDGED) { return denyBoth(v.reason); }
     return json\stringify({
         "permission": "deny",
         "user_message": "magus guard returned the decision {v.decision}, which this hook does not know. Update docs/guides/integrations/agents/cursor-hook.buzz from the magus docs.",
@@ -675,36 +850,42 @@ fun fileVerdict(scope: Scope, event: any?, v: Verdict) > void {
     remember("verdict", parts: [scope.session, id, hook\field(event, dotPath: "tool_name")], value: context);
 }
 
-fun gateCall(scope: Scope, event: any?, payload: str, asPath: bool, family: str) > str {
-    final v = verdict(scope, payload: payload, asPath: asPath, ask: true, family: family);
-    if (v == null) { return ALLOW; }
-    fileVerdict(scope, event: event, v: v!);
-    return gateReply(v!);
+fun gateCall(scope: Scope, event: any?, payload: str, asPath: bool) > str {
+    final v = verdict(scope, payload: payload, asPath: asPath, ask: true);
+    fileVerdict(scope, event: event, v: v);
+    final command = firstField(event, keys: ["command", "tool_input.command"]);
+    return gateReply(v, eventName: readEventName(event), command: command);
 }
 
 // gateShell judges a shell command on preToolUse. The line beforeShellExecution will see
-// is marked as judged.
+// is marked as judged. An ask is filed for that event to render as the
+// prompt. A record it cannot write leaves that event to judge the call.
 fun gateShell(scope: Scope, event: any?) > str {
     final command = hook\field(event, dotPath: "tool_input.command");
     if (command == "") { return ALLOW; }
-    final v = verdict(scope, payload: command, asPath: false, ask: true, family: "failed-command");
-    if (v == null) { return ALLOW; }
-    fileVerdict(scope, event: event, v: v!);
-    if (v!.decision == "ask") {
-        // A person who approves it is not asked twice: the approved command reaches
-        // beforeShellExecution as typed.
+    final v = verdict(scope, payload: command, asPath: false, ask: true);
+    fileVerdict(scope, event: event, v: v);
+    if (v.decision == "ask") {
+        remember("ask", parts: [scope.session, command], value: v.reason);
+        return ALLOW;
+    }
+    if (v.decision == "pass" or v.decision == "advise") {
         remember("shell", parts: [scope.session, command], value: "");
     }
-    if (v!.decision == "pass" or v!.decision == "advise") {
-        remember("shell", parts: [scope.session, command], value: "");
-    }
-    return gateReply(v!);
+    return gateReply(v, eventName: "preToolUse", command: command);
 }
 
-fun advice(scope: Scope, payload: str, asPath: bool, family: str) > str {
-    final v = verdict(scope, payload: payload, asPath: asPath, ask: false, family: family);
-    if (v == null or v!.decision != "advise") { return ""; }
-    return v!.context;
+// advice is what the agent is owed after a call. An unjudged call says why,
+// since nothing after a call reaches the person.
+fun advice(scope: Scope, payload: str, asPath: bool) > str {
+    final v = verdict(scope, payload: payload, asPath: asPath, ask: false);
+    if (v.decision == UNJUDGED) { return v.reason; }
+    if (v.decision != "advise") { return ""; }
+    return v.context;
+}
+
+fun rendersPrompt(eventName: str) > bool {
+    return eventName == "beforeShellExecution" or eventName == "beforeMCPExecution";
 }
 
 fun gates(eventName: str) > bool {
@@ -749,12 +930,11 @@ fun gateMcp(scope: Scope, event: any?) > str {
     if (payload == "") {
         return denyBoth("magus guard: beforeMCPExecution missing mcp_server_name or tool_name; refusing rather than guessing");
     }
-    final v = verdict(scope, payload: payload, asPath: false, ask: true, family: "failed-mcp");
-    if (v == null) { return ALLOW; }
+    final v = verdict(scope, payload: payload, asPath: false, ask: true);
     var context = "";
-    if (v!.decision == "advise") { context = v!.context; }
+    if (v.decision == "advise") { context = v.context; }
     remember("mcp", parts: mcpKey(scope, tool: hook\field(event, dotPath: "tool_name"), event: event), value: context);
-    return gateReply(v!);
+    return gateReply(v, eventName: "beforeMCPExecution", command: "");
 }
 
 // brief is the capped `magus session --brief`, or "" when there is none or it is over
@@ -762,9 +942,9 @@ fun gateMcp(scope: Scope, event: any?) > str {
 // answers nothing. Profile a suspect run with MAGUS_PPROF=mem:/tmp/s.mem (and buzz
 // --profile on the outer hook).
 fun brief(bin: str, root: str) > str {
-    final result = proc\exec(bin, args: ["session", "--brief"], opts: {
-        "quiet": true,
-        "allow_failure": true,
+    final result = proc\exec(bin, args: ["session", "--brief"], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch null;
     if (result == null) { return ""; }
     var context = hook\trimTrailingNewlines(result!.stdout);
@@ -820,13 +1000,13 @@ fun afterCall(scope: Scope, event: any?) > str {
         if (held != null) { return held!; }
     }
     final command = hook\field(event, dotPath: "tool_input.command");
-    if (command != "") { return advice(scope, payload: command, asPath: false, family: "failed-command"); }
+    if (command != "") { return advice(scope, payload: command, asPath: false); }
     final search = searchPayload(scope, event: event);
-    if (search != "") { return advice(scope, payload: search, asPath: false, family: "failed-search"); }
+    if (search != "") { return advice(scope, payload: search, asPath: false); }
     final terms = linkTerms(event);
     if (terms != "") { return linkBias(scope.bin, terms: terms); }
     final writePath = toolPath(event);
-    if (writePath != "") { return advice(scope, payload: writePath, asPath: true, family: "failed-path"); }
+    if (writePath != "") { return advice(scope, payload: writePath, asPath: true); }
     return "";
 }
 
@@ -857,9 +1037,9 @@ fun toolPath(event: any?) > str {
 }
 
 fun checkpoint(bin: str, agent: str, session: str, transcript: str) > void {
-    proc\exec(bin, args: ["session", "checkpoint", AGENT_NAME, agent, "--session", session, "--transcript", transcript], opts: {
-        "quiet": true,
-        "allow_failure": true,
+    _ = proc\exec(bin, args: ["session", "checkpoint", AGENT_NAME, agent, "--session", session, "--transcript", transcript], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
     }) catch void;
 }
 
@@ -875,10 +1055,10 @@ fun recordSpawn(bin: str, agent: str, event: any?) > void {
             "subagent_type": hook\field(event, dotPath: "subagent_type"),
         },
     };
-    proc\exec(bin, args: ["shell", AGENT_NAME, agent], opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": json\stringify(body) catch "",
+    _ = proc\exec(bin, args: ["shell", AGENT_NAME, agent], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = json\stringify(body) catch "",
     }) catch void;
 }
 
@@ -887,14 +1067,14 @@ fun recordSpawn(bin: str, agent: str, event: any?) > void {
 fun recordMessage(scope: Scope, event: any?) > void {
     final message = hook\field(event, dotPath: "prompt");
     if (message == "") { return; }
-    proc\exec(scope.bin, args: [
+    _ = proc\exec(scope.bin, args: [
         "shell", "--message", AGENT_NAME, scope.agent, "--transport", "buzz",
         "--session", scope.session, "--transcript", scope.transcript,
         "--event", "beforeSubmitPrompt",
-    ], opts: {
-        "quiet": true,
-        "allow_failure": true,
-        "stdin": message,
+    ], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = message,
     }) catch void;
 }
 
@@ -935,32 +1115,78 @@ fun readSession(event: any?) > str {
     return firstField(event, keys: ["session_id", "conversation_id"]);
 }
 
+// observe records the path a Read reached and reads nothing back. It judges
+// nothing, so a binary too old for --observe costs the record, never the read.
+fun observe(scope: Scope, path: str) > void {
+    _ = proc\exec(scope.bin, args: [
+        "shell", "--observe", AGENT_NAME, scope.agent,
+        "--session", scope.session, "--transcript", scope.transcript,
+        "--event", "preToolUse",
+    ], opts: proc\ExecOptions{
+        quiet = true,
+        allowFailure = true,
+        stdin = path,
+    }) catch void;
+}
+
 fun gateTool(scope: Scope, event: any?) > str {
     final tool = hook\field(event, dotPath: "tool_name");
     if (tool == "Task") {
         final spawn = taskPayload(scope, event: event);
         if (spawn == "") { return ALLOW; }
-        return gateCall(scope, event: event, payload: spawn, asPath: false, family: "failed-spawn");
+        return gateCall(scope, event: event, payload: spawn, asPath: false);
     }
     if (tool == "Shell") { return gateShell(scope, event: event); }
     final path = toolPath(event);
+    if (tool == "Read" and path != "") { observe(scope, path: path); }
     if (tool == "Read" and skillRead(path)) {
         final load = envelope(scope, event: event, tool: "Read", input: {"file_path": path});
-        return gateCall(scope, event: event, payload: load, asPath: false, family: "failed-skill");
+        return gateCall(scope, event: event, payload: load, asPath: false);
     }
     final search = searchPayload(scope, event: event);
-    if (search != "") { return gateCall(scope, event: event, payload: search, asPath: false, family: "failed-search"); }
-    if (path != "") { return gateCall(scope, event: event, payload: path, asPath: true, family: "failed-path"); }
+    if (search != "") { return gateCall(scope, event: event, payload: search, asPath: false); }
+    if (path != "") { return gateCall(scope, event: event, payload: path, asPath: true); }
     // beforeMCPExecution judges an MCP call, with the server name this event lacks.
     if (tool.startsWith(MCP_TOOL_PREFIX)) { return ALLOW; }
     // Every other call goes to magus whole: it passes a tool its table knows touches
     // nothing, and names one no rule can read rather than letting it run unseen.
     final input = hook\dig(event, dotPath: "tool_input") ?? {<str: any>};
     final call = envelope(scope, event: event, tool: tool, input: input);
-    return gateCall(scope, event: event, payload: call, asPath: false, family: "failed-call");
+    return gateCall(scope, event: event, payload: call, asPath: false);
+}
+
+// stopPayload restates a stop in the envelope magus reads a stop by. Cursor
+// counts the follow-ups it already sent in loop_count, so a nonzero one is a
+// stop the guard sent back before.
+fun stopPayload(scope: Scope, event: any?, eventName: str) > str {
+    final body = mut {<str: any>};
+    body["hook_event_name"] = if (eventName == "stop") "Stop" else "SubagentStop";
+    body["session_id"] = scope.session;
+    body["transcript_path"] = scope.transcript;
+    body["stop_hook_active"] = count(event, key: "loop_count") > 0.0;
+    body["cwd"] = firstField(event, keys: ["cwd"]);
+    final child = hook\field(event, dotPath: "agent_transcript_path");
+    if (child != "") { body["agent_transcript_path"] = child; }
+    return json\stringify(body) catch "";
+}
+
+// gateStop answers stop and subagentStop. A deny is the follow-up Cursor sends
+// as the next message. An advise has no field on a stop reply, so it goes to
+// stderr, which Cursor's hook log shows.
+fun gateStop(scope: Scope, event: any?, eventName: str) > str {
+    // Cursor resumes a subagent on a follow-up only when it completed.
+    if (eventName == "subagentStop" and hook\field(event, dotPath: "status") != "completed") { return EMPTY; }
+    final payload = stopPayload(scope, event: event, eventName: eventName);
+    if (payload == "") { return EMPTY; }
+    final v = verdict(scope, payload: payload, asPath: false, ask: false);
+    if (v.decision == UNJUDGED) { warn(v.reason); }
+    if (v.decision == "advise") { warn(v.context); }
+    if (v.decision != "deny") { return EMPTY; }
+    return json\stringify({"followup_message": "[magus guard] {v.reason}"}) catch EMPTY;
 }
 
 fun dispatch(event: any?, eventName: str, scope: Scope) > str {
+    if (eventName == "stop" or eventName == "subagentStop") { return gateStop(scope, event: event, eventName: eventName); }
     if (eventName == "sessionStart") {
         prune();
         return sessionStartReply(scope.bin);
@@ -985,8 +1211,10 @@ fun dispatch(event: any?, eventName: str, scope: Scope) > str {
     if (eventName == "beforeMCPExecution") { return gateMcp(scope, event: event); }
     if (eventName == "beforeShellExecution") {
         final command = hook\field(event, dotPath: "command");
+        final asked = recall("ask", parts: [scope.session, command]);
+        if (asked != null) { return askReply(asked!); }
         if (recall("shell", parts: [scope.session, command]) != null) { return ALLOW; }
-        return gateCall(scope, event: event, payload: command, asPath: false, family: "failed-command");
+        return gateCall(scope, event: event, payload: command, asPath: false);
     }
     if (eventName == "preToolUse") { return gateTool(scope, event: event); }
     if (eventName == "postToolUse" or eventName == "postToolUseFailure") { return afterCallReply(scope, event: event); }
@@ -1010,12 +1238,20 @@ fun main(args: [str]) > void {
         unnamed(eventName);
         return;
     }
-    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: "cwd"), session: readSession(event), file: "cursor-hook.buzz");
+    final cwd = hook\field(event, dotPath: "cwd");
+    final bin = hook\resolveBin(cwd: cwd);
+    final note = hook\fallbackNote(cwd);
+    var fix = hook\magusFix(hook\binRoot(cwd));
+    if (note != "") { fix = note + ". " + fix; }
     if (bin == "" or !hook\isExecutable(bin)) {
-        if (hook\noticeOnce(readSession(event), family: "unavailable", file: "cursor-hook.buzz")) {
-            io\stderr.write(unavailableNotice(text: UNAVAILABLE_TEXT) + "\n") catch void;
+        final text = UNAVAILABLE_TEXT + "\n" + fix;
+        if (gates(eventName)) {
+            io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: denyBoth(text))) catch void;
+            return;
         }
-        if (gates(eventName)) { io\stdout.write(ALLOW) catch void; }
+        if (hook\noticeOnce(readSession(event), family: "unavailable", file: "cursor-hook.buzz")) {
+            io\stderr.write(text + "\n") catch void;
+        }
         if (eventName == "beforeSubmitPrompt") { io\stdout.write(SUBMIT_CONTINUE) catch void; }
         return;
     }
@@ -1024,8 +1260,23 @@ fun main(args: [str]) > void {
         agent = entry.agent,
         session = readSession(event),
         transcript = hook\field(event, dotPath: "transcript_path"),
+        fix = fix,
     };
+    // Cursor shows the person a message only with a refusal, so a judged call's
+    // fallback is said once on stderr.
+    if (note != "" and hook\noticeOnce(scope.session, family: "bin-fallback", file: "cursor-hook.buzz")) {
+        io\stderr.write("cursor-hook.buzz: " + note + "\n") catch void;
+    }
     io\stdout.write(dispatch(event, eventName: eventName, scope: scope)) catch void;
+}
+
+test "a call no magus could judge is refused, and the person reads why" {
+    final v = judged(Guard{ bin = "/nonexistent/magus", payload = "ls" }, attempts: [["-o", "json"]]);
+    std\assert(v.decision == UNJUDGED, message: v.decision);
+    std\assert(v.reason.indexOf("/nonexistent/magus") != null, message: v.reason);
+    final reply: {str: any} = json\parse(gateReply(v, eventName: "preToolUse", command: "")) catch {<str: any>};
+    std\assert(reply["permission"] == "deny", message: "{reply}");
+    std\assert(reply["user_message"] == v.reason, message: "the person reads the whole fix");
 }
 ```
 

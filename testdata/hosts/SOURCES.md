@@ -19,7 +19,7 @@ Two origins, and the difference is the whole point of the table:
 
 | file | origin | url | read | sha256 | license |
 | --- | --- | --- | --- | --- | --- |
-| `claude-code/settings.schema.json` | published | `https://www.schemastore.org/claude-code-settings.json` | 2026-09-10 | `6d4a6e3c7adedffce8079ccaef0a4bab5f5718b054421b4475c788a0ae4bedfe` | Apache-2.0 (SchemaStore) |
+| `claude-code/settings.schema.json` | published | `https://www.schemastore.org/claude-code-settings.json` | 2026-10-29 | `f26f028ad94a1e2a28e9dad1f80832ab196a8e080bd3a7d7a32e6428a15e0611` | Apache-2.0 (SchemaStore) |
 | `claude-code/hook-output.schema.json` | derived | `https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk` | 2026-09-10 | `7b928f72b0f43ba6ac978512791df374cb5f2d7fa9cd69df313c1357fc8e9b9d` | ours |
 | `codex/hooks.schema.json` | published | `https://www.schemastore.org/codex-hooks.json` | 2026-09-10 | `3833ef241453facf45f941caff9e246d74eb8c85d7796d2e099dbebb8fe8ed37` | Apache-2.0 (SchemaStore) |
 | `codex/pre-tool-use.command.output.schema.json` | published | `https://raw.githubusercontent.com/openai/codex/main/codex-rs/hooks/schema/generated/pre-tool-use.command.output.schema.json` | 2026-09-10 | `e684f81c63fbb5972892f6a848b49fec68c8ce137931651093d2dd1da56a1dd6` | Apache-2.0 (openai/codex) |
@@ -135,8 +135,32 @@ The validator rejects an event name it does not know, so this list IS the contra
 `afterAgentThought`, `sessionStart`, `sessionEnd`, `preCompact`, `subagentStart`, `subagentStop`, `preToolUse`,
 `postToolUse`, `postToolUseFailure`, `workspaceOpen`.
 
-Twenty-one, and magus wires five. `preCompact` is the notable absence: magus has a post-compaction brief on the hosts
-that offer the moment, and Cursor offers it.
+Twenty-one, the same twenty-one `https://cursor.com/docs/agent/hooks` lists (read 2026-10-29), and magus wires twelve:
+`spells/harness/cursor/spell.buzz` names them.
+
+## Vendor docs read 2026-10-29
+
+The hook binding table shipped with cells taken from the vendored files above and not from the vendors' own pages, and
+two hosts' cells were wrong: Cursor documents `stop` and `subagentStop`, and OpenCode publishes `session.compacted`. A
+vendored file says what one release sent; it does not say what a host offers. So a binding cell cites the vendor's page,
+and an Unsupported reason that cites no `https://` URL, or a `not verified:` one with no date, fails the harness's load.
+These are the pages the table was settled against, each fetched 2026-10-29.
+
+| host | url | what it settled |
+| --- | --- | --- |
+| Cursor | `https://cursor.com/docs/agent/hooks` | `stop` and `subagentStop` take `followup_message`, sent as the next message (a subagent's only when its `status` is `completed`); `loop_count` counts the follow-ups, capped by `loop_limit`; `preCompact` is observational; no hook carries an image or a file inline |
+| Claude Code | `https://code.claude.com/docs/en/hooks` | every output channel is text or control; no field carries an image or a file |
+| Claude Code | `https://code.claude.com/docs/en/settings` | `extraKnownMarketplaces` and `enabledPlugins`, the two keys `spells/harness/claude-code-mod` writes |
+| Codex | `https://learn.chatgpt.com/docs/hooks` (redirected from `https://developers.openai.com/codex/hooks`) | twelve events; `SessionStart` source `compact` runs after a compaction; outputs are text only |
+| OpenCode | `https://opencode.ai/docs/plugins` | `session.compacted` is a bus event; `experimental.session.compacting` only feeds the summarizer; the page is silent on subagents, the task tool and `parentID` |
+| OpenCode | `https://unpkg.com/@opencode-ai/plugin@1.18.30/dist/index.d.ts` | `tool.execute.after` output is `{title, output, metadata}`; the compacting hook's input is `{sessionID}` |
+| OpenCode | `https://unpkg.com/@opencode-ai/sdk@1.18.30/dist/gen/types.gen.d.ts` | `EventSessionCompacted` carries `sessionID`; `Session.parentID`; a completed tool part may carry `attachments` (`FilePart`) |
+| OpenCode | `https://raw.githubusercontent.com/anomalyco/opencode/v1.18.30/packages/opencode/src/tool/task.ts` | a child session is created with `parentID` set to the caller; the result's metadata names `sessionId`; a foreground task returns when the child finishes, a backgrounded one at once (`background: true`) |
+| OpenCode | `https://raw.githubusercontent.com/anomalyco/opencode/v1.18.30/packages/opencode/src/session/tools.ts` | `tool.execute.after` fires after every tool's `execute` returns, the task tool's included |
+| OpenCode | `https://raw.githubusercontent.com/anomalyco/opencode/v1.18.30/packages/opencode/src/session/compaction.ts` | `experimental.session.compacting` fires before the summary; the compacted event publishes after it |
+
+The `published` rows were re-fetched the same day. Every Codex row matched its digest; the Claude Code settings
+schema had moved, and was re-vendored with its row's date and digest.
 
 ## Upstream artifacts
 

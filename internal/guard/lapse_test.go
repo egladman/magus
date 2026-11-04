@@ -11,9 +11,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -142,4 +144,244 @@ func TestOldSettingsJSONIsNotRead(t *testing.T) {
 	require.ErrorContains(t, err, "preserve it")
 	assert.Nil(t, settings)
 	assert.Nil(t, recalledSettings(dir))
+}
+
+// LapsePersonOnlySuite pins decision 182: what only a person may do never
+// degrades into running on a lapse.
+type LapsePersonOnlySuite struct {
+	suite.Suite
+	ctx context.Context
+}
+
+func TestLapsePersonOnlySuite(t *testing.T) {
+	suite.Run(t, new(LapsePersonOnlySuite))
+}
+
+func (s *LapsePersonOnlySuite) SetupTest() {
+	s.ctx, _ = spawnFixture(s.T())
+}
+
+// lapses judges line past the degrade, once per stage, returning each verdict.
+func (s *LapsePersonOnlySuite) lapses(req Request, setup func(context.Context)) []types.GuardJudgment {
+	var out []types.GuardJudgment
+	for range lapsesBeforeDegrade + 2 {
+		out = append(out, lapseNow(s.ctx, s.T(), Dependencies{}, req, setup))
+	}
+	return out
+}
+
+func (s *LapsePersonOnlySuite) commandRequest(line string) Request {
+	return Request{Input: line, Host: "claude-code", Session: "s1"}
+}
+
+// loaded settles deps holding the bench workspace's record before the stall.
+func loaded(ctx context.Context) {
+	judgmentPhases(ctx).settle(Dependencies{TargetPolicies: func(context.Context, string) (types.TargetPolicyIndex, bool) {
+		return benchRecord(), true
+	}})
+}
+
+func (s *LapsePersonOnlySuite) TestAShellWriteToALedgerIsRefusedByItsRule() {
+	for i, v := range s.lapses(s.commandRequest("echo x >> proto/buf-breaking.deviations.jsonl"), func(context.Context) {}) {
+		s.Equal(verdictWithRule(decisionDeny, string(denyRuleDeviationAuthor)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestAnEditAddingALedgerLineIsRefusedByItsRule() {
+	env := map[string]any{"session_id": "s1", "cwd": s.T().TempDir(), "hook_event_name": "PreToolUse",
+		"tool_name": "Edit", "tool_input": map[string]any{"file_path": "x.deviations.jsonl", "old_string": deviationLine, "new_string": deviationLine + "\nadded"}}
+	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
+	for i, v := range s.lapses(req, func(context.Context) {}) {
+		s.Equal(verdictWithRule(decisionDeny, string(denyRuleDeviationAuthor)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestAnEditDeletingALedgerLineDegrades() {
+	env := map[string]any{"session_id": "s1", "cwd": s.T().TempDir(), "hook_event_name": "PreToolUse",
+		"tool_name": "Edit", "tool_input": map[string]any{"file_path": "x.deviations.jsonl", "old_string": deviationLine + "\n", "new_string": ""}}
+	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
+	got := s.lapses(req, func(context.Context) {})
+	s.Equal(string(advisoryUnfinished), got[len(got)-1].Rule)
+}
+
+func (s *LapsePersonOnlySuite) TestAnAgentGrantIsRefusedByItsRule() {
+	for i, v := range s.lapses(s.commandRequest("magus job grant w --rule lease-write"), func(context.Context) {}) {
+		s.Equal(verdictWithRule(decisionDeny, string(denyRuleGrantIsAPersons)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestAHumanOnlyRunIsNeverDegraded() {
+	for i, v := range s.lapses(s.commandRequest("magus run agent-bench-run ."), loaded) {
+		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestARunReachingAHumanOnlyTargetIsNeverDegraded() {
+	for i, v := range s.lapses(s.commandRequest("magus run bench-all ."), loaded) {
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestARunWithPoliciesUnreadIsNeverDegraded() {
+	for i, v := range s.lapses(s.commandRequest("magus run test ."), func(context.Context) {}) {
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+func (s *LapsePersonOnlySuite) TestARunTheRecordClearsDegrades() {
+	got := s.lapses(s.commandRequest("magus run test ."), loaded)
+	s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(got[0]))
+	s.Equal(decisionAdvise, got[len(got)-1].Decision)
+}
+
+func (s *LapsePersonOnlySuite) TestAnOrdinaryCommandStillDegrades() {
+	got := s.lapses(s.commandRequest("touch notes.txt"), func(context.Context) {})
+	s.Equal(decisionAdvise, got[len(got)-1].Decision)
+}
+
+// LapseDegradeSuite pins decision 127: past lapsesBeforeDegrade a subagent's
+// write or command in a live job's checkout stays denied, and others degrade.
+type LapseDegradeSuite struct {
+	suite.Suite
+	ctx     context.Context
+	session string
+	own     string
+}
+
+func TestLapseDegradeSuite(t *testing.T) {
+	suite.Run(t, new(LapseDegradeSuite))
+}
+
+func (s *LapseDegradeSuite) SetupTest() {
+	s.ctx, s.session = fleetFixture(s.T())
+	s.own = s.T().TempDir()
+	row := types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: types.StateRunning, Registered: 1,
+		CheckoutRoot: s.own, Worktree: &types.JobWorktree{Root: s.own, Source: s.session}}
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+}
+
+// lapsedWrite lapses an editor Write of path by agent, or by the root
+// session when agent is "".
+func (s *LapseDegradeSuite) lapsedWrite(agent, path string) types.GuardJudgment {
+	env := map[string]any{"session_id": "s1", "cwd": s.session, "hook_event_name": "PreToolUse",
+		"tool_name": "Write", "tool_input": map[string]any{"file_path": path, "content": "package std\n"}}
+	if agent != "" {
+		env["agent_id"], env["agent_type"] = agent, "general-purpose"
+	}
+	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
+	return lapseNow(s.ctx, s.T(), Dependencies{}, req, func(context.Context) {})
+}
+
+// lapsedCommand lapses a Bash call running line from cwd, by agent or by the
+// root session when agent is "".
+func (s *LapseDegradeSuite) lapsedCommand(agent, cwd, line string) types.GuardJudgment {
+	env := map[string]any{"session_id": "s1", "cwd": cwd, "hook_event_name": "PreToolUse",
+		"tool_name": "Bash", "tool_input": map[string]any{"command": line}}
+	if agent != "" {
+		env["agent_id"], env["agent_type"] = agent, "general-purpose"
+	}
+	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
+	return lapseNow(s.ctx, s.T(), Dependencies{}, req, func(context.Context) {})
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesACommandInALeasedCheckout() {
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedCommand("a1b2c3", s.own, "make build")
+		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+// A subagent's host cwd stays the session's checkout; its line moves it.
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesALineThatCdsIntoALeasedCheckout() {
+	line := fmt.Sprintf("cd %s && make build", s.own)
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedCommand("a1b2c3", s.session, line)
+		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAnAbsoluteWriteIntoALeasedCheckout() {
+	line := fmt.Sprintf("touch %s", filepath.Join(s.own, "std", "module.go"))
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedCommand("a1b2c3", s.session, line)
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesABoundWorkerFromTheSessionCheckout() {
+	env := map[string]any{"session_id": "s1", "cwd": s.session, "hook_event_name": "PreToolUse",
+		"agent_id": "a1b2c3", "agent_type": "general-purpose",
+		"tool_name": "Bash", "tool_input": map[string]any{"command": "make build"}}
+	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1", Lease: "w"}
+	for i := range lapsesBeforeDegrade + 2 {
+		v := lapseNow(s.ctx, s.T(), Dependencies{}, req, func(context.Context) {})
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+// A checkout `job exec` took is the job's as much as one its fork made.
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAWriteInAnAdoptedCheckout() {
+	adopted := s.T().TempDir()
+	row := types.Job{ID: "a", WritePaths: []string{"std/*.go"}, State: types.StateRunning, Registered: 1, CheckoutRoot: adopted}
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedWrite("a1b2c3", filepath.Join(adopted, "std", "module.go"))
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesACommandInAnAdoptedCheckout() {
+	adopted := s.T().TempDir()
+	row := types.Job{ID: "a", WritePaths: []string{"std/*.go"}, State: types.StateRunning, Registered: 1, CheckoutRoot: adopted}
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedCommand("a1b2c3", adopted, "make build")
+		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapsePassesACheckoutWhoseJobEnded() {
+	row := types.Job{ID: "a", WritePaths: []string{"std/*.go"}, State: types.StatePass, Registered: 1, CheckoutRoot: s.own}
+	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+	for range lapsesBeforeDegrade {
+		s.Equal(decisionDeny, s.lapsedCommand("a1b2c3", s.own, "make build").Decision)
+	}
+	s.Equal(decisionAdvise, s.lapsedCommand("a1b2c3", s.own, "make build").Decision)
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapsePassesACommandOutsideEveryCheckout() {
+	scratch := s.T().TempDir()
+	for range lapsesBeforeDegrade {
+		s.Equal(decisionDeny, s.lapsedCommand("a1b2c3", scratch, "make build").Decision)
+	}
+	s.Equal(decisionAdvise, s.lapsedCommand("a1b2c3", scratch, "make build").Decision)
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapsePassesTheRootSessionsCommandInALeasedCheckout() {
+	for range lapsesBeforeDegrade {
+		s.Equal(decisionDeny, s.lapsedCommand("", s.own, "make build").Decision)
+	}
+	s.Equal(decisionAdvise, s.lapsedCommand("", s.own, "make build").Decision)
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAWriteInALeasedCheckout() {
+	for i := range lapsesBeforeDegrade + 2 {
+		v := s.lapsedWrite("a1b2c3", filepath.Join(s.own, "std", "module.go"))
+		s.Equal(verdictWithRule(decisionDeny, string(advisoryUnfinished)), unworded(v), "lapse %d", i+1)
+	}
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapsePassesAWriteOutsideEveryCheckout() {
+	scratch := s.T().TempDir()
+	for range lapsesBeforeDegrade {
+		s.Equal(decisionDeny, s.lapsedWrite("a1b2c3", filepath.Join(scratch, "notes.txt")).Decision)
+	}
+	s.Equal(decisionAdvise, s.lapsedWrite("a1b2c3", filepath.Join(scratch, "notes.txt")).Decision)
+}
+
+func (s *LapseDegradeSuite) TestDegradedLapsePassesTheRootSessionsWriteInALeasedCheckout() {
+	for range lapsesBeforeDegrade {
+		s.Equal(decisionDeny, s.lapsedWrite("", filepath.Join(s.own, "std", "module.go")).Decision)
+	}
+	s.Equal(decisionAdvise, s.lapsedWrite("", filepath.Join(s.own, "std", "module.go")).Decision)
 }

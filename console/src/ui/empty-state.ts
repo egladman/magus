@@ -33,13 +33,8 @@ export function emptyStateShell(o: EmptyStateOptions): EmptyState {
   const root = h("div", "pf-v6-c-empty-state" + (o.classes ? " " + o.classes : ""));
   const content = h("div", "pf-v6-c-empty-state__content");
   const header = h("div", "pf-v6-c-empty-state__header");
-  let icon: HTMLElement | null = null;
-  if (o.icon) {
-    icon = h("div", "pf-v6-c-empty-state__icon");
-    icon.setAttribute("aria-hidden", "true");
-    icon.append(o.icon);
-    header.append(icon);
-  }
+  const icon = o.icon ? iconBox(o.icon) : null;
+  if (icon) header.append(icon);
   const titleBox = h("div", "pf-v6-c-empty-state__title");
   const title = h(o.heading, "pf-v6-c-empty-state__title-text", o.title);
   titleBox.append(title);
@@ -52,4 +47,23 @@ export function emptyStateShell(o: EmptyStateOptions): EmptyState {
   content.append(header, body, footer);
   root.append(content);
   return { root, header, icon, title, body, footer, actions };
+}
+
+// emptyStateWithIcon is emptyStateShell for a state that always carries a glyph, so the caller gets
+// the __icon box without a null check.
+export function emptyStateWithIcon(
+  o: EmptyStateOptions & { icon: Node },
+): EmptyState & { icon: HTMLElement } {
+  const { icon: glyph, ...rest } = o;
+  const shell = emptyStateShell(rest);
+  const icon = iconBox(glyph);
+  shell.header.prepend(icon);
+  return { ...shell, icon };
+}
+
+function iconBox(glyph: Node): HTMLElement {
+  const icon = h("div", "pf-v6-c-empty-state__icon");
+  icon.setAttribute("aria-hidden", "true");
+  icon.append(glyph);
+  return icon;
 }

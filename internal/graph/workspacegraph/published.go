@@ -10,7 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/libs/oci"
 )
 
 // publishedShards reads shards out of a published OCI artifact: the read-only half of the
@@ -31,7 +31,7 @@ type publishedShards struct {
 	// governs that open, so a cancelled first call leaves this handle permanently missing,
 	// which is the same outcome as an unreachable registry and is handled identically.
 	once sync.Once
-	art  *oci.Artifact
+	art  *oci.ArtifactReader
 }
 
 // PublishedShards returns a read-only knowledge.RemoteShards over the artifact at ref.
@@ -50,7 +50,7 @@ func PublishedShards(c *oci.Client, ref oci.Reference, artifactType string, log 
 
 func (p *publishedShards) GetShard(ctx context.Context, key string) (io.ReadCloser, error) {
 	p.once.Do(func() {
-		art, err := p.client.Artifact(ctx, p.ref, p.artifactType)
+		art, err := p.client.GetArtifact(ctx, p.ref, p.artifactType)
 		if err != nil {
 			p.log.DebugContext(ctx, "published graph unreadable",
 				slog.String("ref", p.ref.String()), attr.Error(err))
@@ -63,7 +63,7 @@ func (p *publishedShards) GetShard(ctx context.Context, key string) (io.ReadClos
 	}
 	b, err := p.art.Layer(ctx, key)
 	if err != nil {
-		if !errors.Is(err, oci.ErrLayerMiss) {
+		if !errors.Is(err, oci.ErrNoBlob) {
 			p.log.DebugContext(ctx, "published shard fetch failed",
 				slog.String("ref", p.ref.String()), slog.String("key", key), attr.Error(err))
 		}

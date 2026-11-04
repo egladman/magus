@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/result"
 	"github.com/egladman/magus/spells"
 )
 
@@ -44,6 +45,10 @@ import (
 //go:generate go run ../../cmd/magus-utils types -type Service -out gen/types/service.buzz
 //go:generate go run ../../cmd/magus-utils types -type SymbolIndexer -out gen/types/symbolindexer.buzz
 //go:generate go run ../../cmd/magus-utils types -type Project -out gen/types/project.buzz
+//go:generate go run ../../cmd/magus-utils types -type DiscoveryFile -out gen/types/discoveryfile.buzz
+//go:generate go run ../../cmd/magus-utils types -type DiscoveryQuery -out gen/types/discoveryquery.buzz
+//go:generate go run ../../cmd/magus-utils types -type DiscoveryGap -out gen/types/discoverygap.buzz
+//go:generate go run ../../cmd/magus-utils types -type DiscoveredProject -out gen/types/discoveredproject.buzz
 //go:generate go run ../../cmd/magus-utils types -type ReleaseCycle -out gen/types/releasecycle.buzz
 //go:generate go run ../../cmd/magus-utils types -type Lifecycle -out gen/types/lifecycle.buzz
 
@@ -98,19 +103,27 @@ func BuiltinOps() map[string][]string {
 
 // shippedSpells is what loading spells.Shipped() found.
 type shippedSpells struct {
-	builtins map[string]spells.Descriptor
-	dirs     map[string]string // built-in name -> its directory
+	builtins   map[string]spells.Descriptor
+	dirs       map[string]string // built-in name -> its directory
+	sourceOnly map[string]string // directory -> why it is not a built-in
 }
+
+// sourceOnlySpells is every top-level shipped spell that is not a built-in, by directory, with
+// the import that kept it out. A spell that drops out of the built-ins by importing a
+// host module lands here instead of vanishing, so an unknown-spell error and a test can
+// name it.
+func sourceOnlySpells() map[string]string { return maps.Clone(shipped().sourceOnly) }
 
 var shipped = sync.OnceValue(loadShipped)
 
 // loadShipped compiles every shipped spell that is a built-in and resolves its mgs_
 // functions into a spells.Descriptor.
 //
-// A built-in is a spell whose source compiles against the spell type modules alone. One
+// A built-in is a spell whose source compiles against the spell type modules and
+// builtinParseModules alone. One
 // that imports a host module (endoflife-date imports http) fails in that session with
 // BZZ2001 and ships as source only: `magus spell pull` copies it into a workspace, which
-// loads it with the host modules. Nothing lists which spell is which.
+// loads it with the host modules. sourceOnlySpells lists each with the import that kept it out.
 //
 // Only a top-level directory is a candidate. A top-level directory with no spell.buzz
 // holds nested spells (harness/cursor), which are providers a workspace wires by import
@@ -129,7 +142,7 @@ func loadShipped() shippedSpells {
 	// provider-carrying ctx ever drive this path.
 	ctx := withBuiltinResolve(context.Background())
 	p := providerFromContext(ctx)
-	out := shippedSpells{builtins: map[string]spells.Descriptor{}, dirs: map[string]string{}}
+	out := shippedSpells{builtins: map[string]spells.Descriptor{}, dirs: map[string]string{}, sourceOnly: map[string]string{}}
 	for _, e := range entries {
 		dir := e.Name()
 		src, err := fs.ReadFile(spells.Shipped(), dir+"/spell.buzz")
@@ -141,7 +154,8 @@ func loadShipped() shippedSpells {
 		}
 		start := time.Now()
 		spec, err := compileBuiltin(ctx, string(src))
-		if errors.As(err, new(hostImportError)) {
+		if hostErr := new(hostImportError); errors.As(err, hostErr) {
+			out.sourceOnly[dir] = fmt.Sprintf("imports %q, a host module a built-in cannot", hostErr.module)
 			continue
 		}
 		if err != nil {
@@ -172,8 +186,34 @@ func (e hostImportError) Error() string {
 
 func (e hostImportError) Unwrap() error { return e.err }
 
-// compileBuiltin runs src in a session offering only the spell type modules, with no
-// file imports, and resolves it. An import of anything else is a hostImportError.
+// builtinParseModules are the host modules a built-in spell may import, by import path to
+// registry name: the ones its discover_projects parses the go.mod, package.json or
+// Cargo.toml it is handed with. Each computes over its arguments alone.
+var builtinParseModules = map[string]string{
+	"path":          "path",
+	"encoding/json": "json",
+	"encoding/yaml": "yaml",
+	"encoding/toml": "toml",
+}
+
+// declareParseModules types builtinParseModules for the checker and binds each as an
+// empty module. Loading a built-in calls only its mgs_ functions, which use none of them;
+// discover_projects runs in a session that binds the real modules. internal/spell cannot
+// bind those itself: the registry imports std, whose tests import this package.
+func declareParseModules(sess *buzz.Session) {
+	for importPath, name := range builtinParseModules {
+		if decls, ok := ModuleDecls(name); ok {
+			sess.SetModuleDecls(importPath, decls)
+		}
+		if _, ok := sess.NativeModule(importPath); !ok {
+			sess.SetNativeModule(importPath, vm.NewMap())
+		}
+	}
+}
+
+// compileBuiltin runs src in a session offering the spell type modules and
+// builtinParseModules, with no file imports, and resolves it. An import of anything else
+// is a hostImportError.
 func compileBuiltin(ctx context.Context, src string) (spells.Descriptor, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithoutFileImports(), buzz.WithParseCache(parsecache.Shared()))
 	defer func() { _ = sess.Close() }()
@@ -181,6 +221,8 @@ func compileBuiltin(ctx context.Context, src string) (spells.Descriptor, error) 
 	sess.SetModuleDecls(CharmModulePath, CharmModuleSource)
 	sess.SetModuleDecls(HarnessModulePath, HarnessModuleSource)
 	sess.SetModuleDecls(LintModulePath, LintModuleSource)
+	sess.SetModuleDecls(result.ModulePath, result.Source)
+	declareParseModules(sess)
 	var unresolved string
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
 		if unresolved == "" {
@@ -234,6 +276,9 @@ export object Context {
     extern fun uses(resource: any, body: fun () > void) > void;
     extern fun hasCharm(name: str) > bool;
     extern fun narrowed() > bool;
+    // A deviation ledger let this target pass with count findings. The run
+    // result reads permitted rather than pass, and it is never cached.
+    extern fun permitted(count: int) > void;
     extern fun withEnv(env: {str: str}) > Exec;
     extern fun withCwd(dir: str) > Exec;
 }
@@ -261,23 +306,56 @@ func MagusDeclSource() string {
 // The declarations are eager rather than collected at `import "magus"`: collection
 // order is precedence order, and mirrors with generic names (Node, Path, Graph) must
 // stay beneath a program's own type of the same name.
-func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) {
+//
+// A record that cannot be defined is an error naming the record and
+// its BZZ code, never a silent fall back to annotate-only records.
+func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) error {
 	decls := MagusDeclSource()
 	if implements != nil {
-		var b strings.Builder
-		for line := range strings.SplitSeq(decls, "\n") {
-			if rest, ok := strings.CutPrefix(line, "export extern fun "); ok {
-				if name, _, _ := strings.Cut(rest, "("); !implements(name) {
-					continue
-				}
-			}
-			b.WriteString(line)
-			b.WriteByte('\n')
-		}
-		decls = b.String()
+		decls = filterMagusDecls(decls, implements)
 	}
+
 	sess.DeclareModuleTypes("magus", decls)
-	defineMagusRecords(sess)
+	return bindMagusRecords(sess, decls)
+}
+
+// filterMagusDecls removes unavailable native forwards and the generated record
+// methods that call them. Generated forwards contain one call and a closing brace
+// on its own indented line; keeping the record's fields still lets pure hosts use it.
+func filterMagusDecls(decls string, implements func(string) bool) string {
+	var out strings.Builder
+	var object string
+	var dropping bool
+	for line := range strings.SplitSeq(decls, "\n") {
+		if rest, ok := strings.CutPrefix(line, "export object "); ok {
+			object, _, _ = strings.Cut(rest, " ")
+		}
+		if dropping {
+			if line == "    }" {
+				dropping = false
+			}
+			continue
+		}
+		if rest, ok := strings.CutPrefix(line, "    fun "); ok {
+			name, _, _ := strings.Cut(rest, "(")
+			if !implements(fmt.Sprintf("magus__%s__%s", object, name)) {
+				dropping = true
+				continue
+			}
+		}
+		rest, extern := strings.CutPrefix(line, "export extern fun ")
+		if !extern {
+			rest, extern = strings.CutPrefix(line, "extern fun ")
+		}
+		if extern {
+			if name, _, _ := strings.Cut(rest, "("); !implements(name) {
+				continue
+			}
+		}
+		out.WriteString(line)
+		out.WriteByte('\n')
+	}
+	return out.String()
 }
 
 // IsMagusEnum reports whether name is an enum the magus declarations define.
@@ -288,39 +366,78 @@ func IsMagusEnum(name string) bool {
 }
 
 type magusRecord struct {
-	name  string
-	value vm.Value
-	enum  bool
+	name   string
+	value  vm.Value
+	enum   bool
+	extern bool   // a private extern an object method calls
+	src    string // the declaration's own text
 }
 
 // magusRecords holds a runtime definition for every plain record and enum the magus
 // declarations define. The module is native, so no import executes its declarations, and
 // `magus\DirsOptions{...}` would otherwise type-check and then fail with "unknown object
-// type". A record has no methods or static state, so every session shares one set.
+// type". Sessions with no magus module share it.
+// Each extern is a dispatchExtern.
 var magusRecords = sync.OnceValues(func() ([]magusRecord, error) {
-	body, out, err := recordDecls(MagusDeclSource())
+	return compileRecords(MagusDeclSource())
+})
+
+func compileRecords(decls string) ([]magusRecord, error) {
+	body, out, err := recordDecls(decls)
 	if err != nil {
 		return nil, err
 	}
 	// Never closed: every later session reads these values, and Close would
 	// release their heap slots out from under it.
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
-	if err := sess.Exec(context.Background(), body); err != nil {
-		return nil, err
-	}
-	for i := range out {
-		out[i].value = sess.GetGlobal(out[i].name)
-		if out[i].value.IsNull() {
-			return nil, fmt.Errorf("magus declaration %s defined no runtime value", out[i].name)
+	for _, r := range out {
+		if r.extern {
+			sess.SetGlobal(r.name, dispatchExtern(r.name))
 		}
 	}
+	if err := sess.Exec(context.Background(), body); err != nil {
+		return nil, failingRecord(out, err)
+	}
+	if err := readRecordValues(sess, out); err != nil {
+		return nil, err
+	}
 	return out, nil
-})
+}
 
-// RecordSource returns the part of a declaration source a session can run: its
-// exported plain records and enums, keeping the first declaration of each name, so
-// several modules' declarations concatenated run as one. An object with methods is a
-// namespace or a host-built value, and an extern method cannot be compiled.
+// readRecordValues fills each record's value from the session that ran it.
+func readRecordValues(sess *buzz.Session, records []magusRecord) error {
+	for i := range records {
+		if records[i].extern {
+			continue
+		}
+		records[i].value = sess.GetGlobal(records[i].name)
+		if records[i].value.IsNull() {
+			return fmt.Errorf("magus declaration %s defined no runtime value", records[i].name)
+		}
+	}
+	return nil
+}
+
+// failingRecord names the first record that does not run, adding one at a
+// time. It costs a session per record, so only a failure pays it.
+func failingRecord(records []magusRecord, whole error) error {
+	var src string
+	for _, r := range records {
+		src += r.src
+		sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+		err := sess.Exec(context.Background(), src)
+		_ = sess.Close()
+		if err != nil {
+			return fmt.Errorf("magus record %s cannot be defined: %w", r.name, err)
+		}
+	}
+	return fmt.Errorf("magus records cannot be defined: %w", whole)
+}
+
+// RecordSource returns the part of a declaration source a session can run.
+// That is its exported records and enums, first declaration of each name only,
+// so several modules' declarations concatenated run as one.
+// It keeps the private externs an object's methods call.
 func RecordSource(decls string) (string, error) {
 	body, _, err := recordDecls(decls)
 	return body, err
@@ -336,22 +453,8 @@ func recordDecls(src string) (string, []magusRecord, error) {
 	var out []magusRecord
 	seen := map[string]bool{}
 	for i, stmt := range prog.Stmts {
-		var r magusRecord
-		switch d := stmt.(type) {
-		case *ast.ObjectDecl:
-			if !d.IsExported || d.IsProtocol || len(d.Methods) > 0 || len(d.StaticFields) > 0 {
-				continue
-			}
-			r.name = d.Name
-		case *ast.EnumDecl:
-			if !d.IsExported {
-				continue
-			}
-			r.name, r.enum = d.Name, true
-		default:
-			continue
-		}
-		if seen[r.name] {
+		r, ok := declRecord(stmt)
+		if !ok || seen[r.name] {
 			continue
 		}
 		seen[r.name] = true
@@ -359,30 +462,119 @@ func recordDecls(src string) (string, []magusRecord, error) {
 		if i+1 < len(prog.Stmts) {
 			end = ast.NodePos(prog.Stmts[i+1]).Line - 1
 		}
-		body.WriteString(strings.Join(lines[ast.NodePos(stmt).Line-1:end], "\n"))
-		body.WriteByte('\n')
+		r.src = strings.Join(lines[ast.NodePos(stmt).Line-1:end], "\n") + "\n"
+		body.WriteString(r.src)
 		out = append(out, r)
 	}
 	return body.String(), out, nil
 }
 
-// defineMagusRecords binds every magus record and enum under its bare name, which is
+// declRecord is the record stmt declares, and false for one no session runs.
+func declRecord(stmt ast.Node) (magusRecord, bool) {
+	switch d := stmt.(type) {
+	case *ast.ObjectDecl:
+		return magusRecord{name: d.Name}, d.IsExported && !d.IsProtocol && len(d.StaticFields) == 0 &&
+			!slices.ContainsFunc(d.Methods, func(m *ast.FunDecl) bool { return m.IsStatic || m.IsExtern })
+	case *ast.EnumDecl:
+		return magusRecord{name: d.Name, enum: true}, d.IsExported
+	case *ast.FunDecl:
+		return magusRecord{name: d.Name, extern: true}, d.IsExtern && !d.IsExported
+	}
+	return magusRecord{}, false
+}
+
+// bindMagusRecords binds every magus record and enum under its bare name, which is
 // what `magus\T{...}` constructs at run time, and sets each enum on the magus module so
 // `magus\E.case` and an inferred `.case` argument resolve. A name the session already
 // binds keeps its binding, as a program's own type outranks a mirror in the checker.
 //
-// Declarations that do not run leave the records annotate-only rather than panic, since
-// the binary that regenerates them loads this code; TestMagusDeclarationsRun fails instead.
-func defineMagusRecords(sess *buzz.Session) {
-	records, err := magusRecords()
-	if err != nil {
-		return
-	}
-	globals := sess.Globals()
+// A declaration that does not run is an error. Annotate-only records
+// surfaced later as "has no definition to construct".
+//
+// The full declarations run once per process. Their methods find the calling
+// session's magus module at call time (dispatchExtern); a filtered set runs
+// again in each session.
+func bindMagusRecords(sess *buzz.Session, decls string) error {
 	mod, hasModule := sess.NativeModule("magus")
+	if decls == MagusDeclSource() {
+		records, err := magusRecords()
+		if err != nil {
+			return err
+		}
+		bindRecords(sess, mod, hasModule, records)
+		return nil
+	}
+	_, records, err := recordDecls(decls)
+	if err != nil {
+		return err
+	}
+	if records, err = sessionRecords(sess, mod, records); err != nil {
+		return err
+	}
+	bindRecords(sess, mod, hasModule, records)
+	return nil
+}
+
+// dispatchExtern is the private extern a shared record method calls. It runs
+// the member of the magus module held by the session making the call.
+func dispatchExtern(name string) vm.Value {
+	return vm.DirectValue(name, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		sess, err := buzz.SessionFromContext(ctx)
+		if err != nil {
+			return vm.Null, fmt.Errorf("magus record method %s: %w", name, err)
+		}
+		mod, ok := sess.NativeModule("magus")
+		if !ok {
+			return vm.Null, fmt.Errorf("magus record method %s: the session has no magus module", name)
+		}
+		member, ok := mod.MapGet(name)
+		if !ok {
+			return vm.Null, fmt.Errorf("magus record method %s: the magus module has no member %q", name, name)
+		}
+		return vm.CallDirect(ctx, member, args)
+	})
+}
+
+// sessionRecords runs the records again in a child of sess, so a method's
+// private extern calls the member of the module sess holds. Enums come from
+// the same run: a field's default case is the one the session compares to.
+func sessionRecords(sess *buzz.Session, mod vm.Value, shared []magusRecord) ([]magusRecord, error) {
+	child := sess.NewChild()
+	// Close only ends its context: sess owns what it defined.
+	defer func() { _ = child.Close() }()
+	var body strings.Builder
+	out := slices.Clone(shared)
+	for _, r := range out {
+		body.WriteString(r.src)
+		if !r.extern {
+			continue
+		}
+		member, ok := mod.MapGet(r.name)
+		if !ok {
+			return nil, fmt.Errorf("magus record methods: the magus module has no member %q", r.name)
+		}
+		child.SetGlobal(r.name, member)
+	}
+	if err := child.Exec(context.Background(), body.String()); err != nil {
+		return nil, fmt.Errorf("magus record methods cannot be defined: %w", err)
+	}
+	if err := readRecordValues(child, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func bindRecords(sess *buzz.Session, mod vm.Value, hasModule bool, records []magusRecord) {
+	globals := sess.Globals()
 	for _, r := range records {
+		if r.extern {
+			continue
+		}
 		if _, bound := globals[r.name]; !bound {
 			sess.SetGlobal(r.name, r.value)
+		}
+		if !r.enum {
+			sess.SetGlobal(buzz.QualifiedTypeKey("magus", r.name), r.value)
 		}
 		if hasModule && r.enum {
 			if _, taken := mod.MapGet(r.name); !taken {

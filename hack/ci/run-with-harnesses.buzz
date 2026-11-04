@@ -1,0 +1,57 @@
+// The gate creates a private checkout: ignored installations from the calling
+// workspace never reach it. Install there before running the requested command.
+import "flags";
+import "magus";
+import "os";
+import "result";
+import "assert";
+
+final USAGE = "usage: magus buzz hack/ci/run-with-harnesses.buzz -- <subcommand> [args...]";
+
+// Queue hooks insert project operands before their first --. Buzz forwards
+// those operands and the following flags together, so gate mode restores run's
+// delimiter before forwarding target arguments.
+export fun commandArgs(args: [str]) > result\Result::<[str]> {
+    try {
+        final parsed = flags\parse(args, switches: [<str>], valued: [<str>]);
+        if (parsed.unknown.len() > 0) {
+            return result\fail::<[str]>("run-with-harnesses: does not take {parsed.unknown.join(" ")}\n{USAGE}");
+        }
+        if (parsed.positionals.len() == 0) { return result\fail::<[str]>(USAGE); }
+        final words = parsed.positionals;
+        if (words[0] != "gate") { return result\ok::<[str]>(words); }
+        final command = mut ["run", "ci:gha", "--no-default-charms"];
+        final forwarded = mut [<str>];
+        foreach (arg in words.sub(1)) {
+            if (arg.startsWith("--")) { forwarded.append(arg); }
+            else { command.append(arg); }
+        }
+        if (forwarded.len() > 0) { command.append("--"); }
+        return result\ok::<[str]>(command + forwarded);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "run-with-harnesses");
+    }
+}
+
+fun main(args: [str]) > void !> any {
+    final command = commandArgs(args);
+    if (command.error != null) { throw command.error!.message; }
+    final words = command.value!;
+    _ = magus\cmd("buzz", args: ["hack/dev/bootstrap-harnesses.buzz"]);
+    final checked = magus\cmd(words[0], args: words.sub(1), opts: magus\CommandOptions{allowFailure = true});
+    if (checked.code != 0) { os\exit(checked.code); }
+}
+
+test "queue projects remain run operands before forwarded target flags" {
+    assert\equal(commandArgs(["gate", "libs/a", "docs", "--inherited=fatal"]).value!,
+        want: ["run", "ci:gha", "--no-default-charms", "libs/a", "docs", "--", "--inherited=fatal"], message: "queue argv");
+}
+
+test "direct commands preserve every argument and delimiter" {
+    final args = ["run", "ci:gha", ".", "--", "--inherited=fatal"];
+    assert\equal(commandArgs(args).value!, want: args, message: "direct argv");
+}
+
+test "no subcommand is a usage failure" {
+    assert\equal(commandArgs([<str>]).error != null, want: true, message: "usage");
+}

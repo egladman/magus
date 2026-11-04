@@ -14,9 +14,18 @@ const (
 	// decode, because guessing which format a command emits is the guess this type
 	// was added to stop.
 	SymbolFormatNone SymbolFormat = ""
-	// SymbolFormatSCIP is SCIP protobuf (Sourcegraph's code-index format), the only
-	// format magus ingests today.
+	// SymbolFormatSCIP is SCIP's symbol and occurrence model. magus stores it in its own
+	// pack layout (internal/symbols) and writes SCIP protobuf only as an export.
 	SymbolFormatSCIP SymbolFormat = "scip"
+	// SymbolFormatGoPackages selects magus's in-process Go indexer (internal/symbols/goindex):
+	// the indexer's command args are the package patterns it loads, and nothing is executed.
+	SymbolFormatGoPackages SymbolFormat = "go-packages"
+	// SymbolFormatBuzzModule selects magus's in-process Buzz indexer
+	// (internal/symbols/buzzindex), one unit per module file. It runs no command.
+	SymbolFormatBuzzModule SymbolFormat = "buzz-module"
+	// SymbolFormatShellScript selects magus's in-process shell indexer
+	// (internal/symbols/shindex), one unit per *.sh or *.bash file. It runs no command.
+	SymbolFormatShellScript SymbolFormat = "shell-script"
 )
 
 // SymbolIndexer is what mgs_getSymbolIndexer declares: a spell's symbol-indexing
@@ -24,13 +33,14 @@ const (
 // name hidden in mgs_listTargets. Exporting it IS the capability; a spell that does
 // not export it is not symbol-capable.
 //
-// Command writes the index to the destination magus injects as MAGUS_SYMBOL_INDEX
-// (see internal/symbols), so the index lands in the cache and the working tree stays
-// clean. The command is straight-line data like any op command: it is charm-patched,
-// rendered by `magus describe`, and keyed into the cache without being executed.
+// Format go-packages selects magus's in-process Go indexer, reading Command's args as the
+// package patterns. Format scip runs Command, which writes SCIP protobuf to the destination
+// magus injects as MAGUS_SYMBOL_INDEX. The command is straight-line data like any op
+// command: it is charm-patched, rendered by `magus describe`, and keyed into the cache
+// without being executed.
 //
-// Uses names the spell's own tools the indexer runs besides its binary: scip-go loads
-// packages through `go`, so a Go index is out of date once the toolchain moves. Each entry
+// Uses names the spell's own tools the indexer runs: the Go indexer loads packages
+// through `go`, so a Go index is out of date once the toolchain moves. Each entry
 // must be a tool mgs_getTools declares with a version probe; that version keys the
 // indexer's op and no other target.
 //
@@ -39,11 +49,10 @@ const (
 // own, so each index runs, keys and fails apart. Two spells on one project that run
 // under the same op share its one index, and the first one bound names its language.
 //
-// Envs lists environment overlays, one per build configuration the index must cover.
-// An indexer sees only the files its toolchain compiles, so a Go index built on a Mac
-// never holds a *_linux.go file. With Envs set, magus runs Command once per entry, each
-// into a destination of its own, and merges the results into the one index consumers
-// read; empty runs Command once in the host's environment.
+// Envs lists build configurations besides the host's, one environment overlay each: a Go
+// index built on a Mac otherwise never holds a *_linux.go file. Only the in-process Go
+// indexer reads them, for the packages with a file a configuration selects and the
+// host's excludes; a command indexer declaring Envs is refused.
 type SymbolIndexer struct {
 	Format  SymbolFormat        `json:"format,omitempty"`
 	Op      string              `json:"op,omitempty"`

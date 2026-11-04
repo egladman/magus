@@ -37,7 +37,7 @@ tool that owns it. The magusfile wires one:
 import "magus";
 import "spells/nx";
 
-magus\workspace.provider(nx);
+magus\workspaceProvider(nx);
 ```
 
 magus invokes the spell's `list_projects` contract once per workspace load and
@@ -53,7 +53,7 @@ This is the third instance of one arrangement magus already uses twice:
 | ------------------------------ | -------------------- | ------------------------------------------ |
 | `magus\cache.remote(github)`   | remote cache         | `get_artifact`, `put_artifact`, ..         |
 | `magus\ci.provider(github)`    | CI job-log structure | `group_start`, `group_end`, `annotate`, .. |
-| `magus\workspace.provider(nx)` | the project set      | `list_projects`                            |
+| `magus\workspaceProvider(nx)` | the project set      | `list_projects`                            |
 
 In all three the magusfile names a spell, the subsystem invokes contract
 functions **by name**, and magus knows nothing about the foreign system. You

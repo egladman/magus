@@ -280,6 +280,16 @@ func JSONEncode(v vm.Value) (string, error) {
 // Scalars still go through json.Marshal, so string escaping and number formatting
 // stay exactly as the standard library does them; only container ordering is ours.
 func encodeJSON(v vm.Value, buf *bytes.Buffer, path []vm.Value) error {
+	// A host record with methods crosses as an instance. Only its fields are
+	// data; retain the instance on the path because MapView allocates a map.
+	if !v.IsMap() {
+		if fields, ok := v.MapView(); ok {
+			if identityPathHas(path, v) {
+				return errCircularReference
+			}
+			return encodeJSON(fields, buf, append(path, v))
+		}
+	}
 	switch {
 	case v.IsList():
 		if identityPathHas(path, v) {
@@ -406,6 +416,10 @@ func buzzToGo(v vm.Value, path []vm.Value) (any, error) {
 		}
 		return out, nil
 	default:
+		// An enum case serializes as its value, as upstream's does.
+		if backing, ok := v.EnumValue(); ok {
+			return buzzToGo(backing, path)
+		}
 		return nil, fmt.Errorf("value of kind %q is not serializable", v.Kind())
 	}
 }

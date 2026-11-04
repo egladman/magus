@@ -9,7 +9,7 @@ import (
 // descriptors, and read one run's captured bytes by ref. Satisfied by *cache.OutputStore, so the
 // handler package never grows its own store logic: it just serves what the store already knows.
 type outputSource interface {
-	ListDescriptors() []cache.OutputDescriptor
+	ListDescriptors() ([]cache.OutputDescriptor, error)
 	ByRef(ref string) ([]byte, cache.OutputDescriptor, error)
 }
 

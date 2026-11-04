@@ -67,7 +67,7 @@ export function graphTarget(): { project: string; target: string } | null {
         targets.set(ev.project + "\u0000" + ev.target, { project: ev.project, target: ev.target });
     }
   }
-  return targets.size === 1 ? [...targets.values()][0] : null;
+  return targets.size === 1 ? ([...targets.values()][0] ?? null) : null;
 }
 
 export function graphAvailable(): boolean {

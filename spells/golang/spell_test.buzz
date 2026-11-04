@@ -1,0 +1,218 @@
+import "std";
+import "magus/spell";
+import "./spell" as go;
+
+fun marker(file: str, content: str) > DiscoveryFile {
+    return DiscoveryFile{path = file, content = content};
+}
+
+fun source(file: str) > DiscoveryFile {
+    return DiscoveryFile{path = file};
+}
+
+fun discover(files: [DiscoveryFile]) > [DiscoveredProject] {
+    return go\discover_projects(Target{}, req: DiscoveryQuery{root = "/repo", files = files});
+}
+
+fun claim(claims: [DiscoveredProject], at: str) > DiscoveredProject {
+    foreach (c in claims) {
+        if (c.path == at) {
+            return c;
+        }
+    }
+    std\panic("no claim at {at}");
+    return claims[0];
+}
+
+fun paths(claims: [DiscoveredProject]) > str {
+    return claims.map(fun (i: int, c: DiscoveredProject) > str => c.path).join(",");
+}
+
+fun hasGap(c: DiscoveredProject, file: str, says: str) > bool {
+    foreach (gap in c.notInferred) {
+        if (gap.file == file and gap.why.indexOf(says) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+test "go.work use is authoritative and its modules depend on what they require" {
+    final claims = discover([
+        marker("go.work", "go 1.22\n\nuse (\n\t./api // the server\n\t./sdk\n)\n"),
+        marker("api/go.mod", "module example.com/api\n\nrequire example.com/sdk v0.0.0\n"),
+        source("api/main.go"),
+        marker("sdk/go.mod", "module example.com/sdk\n"),
+        marker("tools/go.mod", "module example.com/tools\n"),
+    ]);
+    std\assert(paths(claims) == "api,sdk", message: "only the used modules form projects: {paths(claims)}");
+    final api = claim(claims, at: "api");
+    std\assert(api.name == "example.com/api", message: "module path names the project");
+    std\assert(api.role.value == "project", message: "role");
+    std\assert(api.dependsOn.join(",") == "sdk", message: "require of a workspace module: {api.dependsOn.join(",")}");
+    std\assert(hasGap(claim(claims, at: "api"), file: "tools/go.mod", says: "not in go.work's use list"), message: "unused go.mod reported");
+}
+
+test "go.work use naming a dir with no go.mod is a gap" {
+    final claims = discover([
+        marker("go.work", "use ./a\nuse ./missing\n"),
+        marker("a/go.mod", "module example.com/a\n"),
+    ]);
+    std\assert(paths(claims) == "a", message: "one module");
+    std\assert(hasGap(claims[0], file: "go.work", says: "use ./missing names a dir with no go.mod"), message: "missing use reported");
+}
+
+test "without go.work every go.mod forms a project and a local replace draws a dependency" {
+    final claims = discover([
+        marker("go.mod", "module example.com/root\n\nrequire (\n\texample.com/root/libs/x v0.0.0\n)\n\nreplace example.com/root/libs/x => ./libs/x\n"),
+        source("main.go"),
+        marker("libs/x/go.mod", "module example.com/root/libs/x\n"),
+        source("libs/x/x.go"),
+    ]);
+    std\assert(paths(claims) == ".,libs/x", message: "both modules: {paths(claims)}");
+    final root = claim(claims, at: ".");
+    std\assert(root.name == "example.com/root", message: "root name");
+    std\assert(root.dependsOn.join(",") == "libs/x", message: "replace => ./libs/x: {root.dependsOn.join(",")}");
+    std\assert(claim(claims, at: "libs/x").dependsOn.len() == 0, message: "leaf depends on nothing");
+}
+
+test "a require of an in-tree module with no local replace draws no dependency and says why" {
+    final claims = discover([
+        marker("go.mod", "module example.com/root\nrequire example.com/other v1.2.0\n"),
+        marker("other/go.mod", "module example.com/other\n"),
+    ]);
+    final root = claim(claims, at: ".");
+    std\assert(root.dependsOn.len() == 0, message: "published version, no edge");
+    std\assert(hasGap(root, file: "go.mod", says: "requires example.com/other, the module at other, with no local replace"), message: "reported");
+}
+
+test "replace targets outside the workspace or without a project are gaps" {
+    final claims = discover([
+        marker("go.mod", "module example.com/root\nreplace (\n\texample.com/up => ../up\n\texample.com/abs => /src/abs\n\texample.com/none => ./none\n\texample.com/remote => example.com/fork v1.0.0\n)\n"),
+    ]);
+    final root = claims[0];
+    std\assert(root.dependsOn.len() == 0, message: "no edges");
+    std\assert(hasGap(root, file: "go.mod", says: "replace example.com/up => ../up leaves the workspace root"), message: "outside root");
+    std\assert(hasGap(root, file: "go.mod", says: "replace example.com/abs => /src/abs is absolute"), message: "absolute");
+    std\assert(hasGap(root, file: "go.mod", says: "names none, which forms no Go project here"), message: "no project");
+    std\assert(!hasGap(root, file: "go.mod", says: "example.com/remote"), message: "a module replacement is not local");
+}
+
+test "go.mod under dirs ./... skips forms no project and is reported" {
+    final claims = discover([
+        marker("go.mod", "module example.com/root\n"),
+        marker("testdata/mod/go.mod", "module example.com/fixture\n"),
+        marker("_old/go.mod", "module example.com/old\n"),
+        marker(".tools/go.mod", "module example.com/tools\n"),
+    ]);
+    std\assert(paths(claims) == ".", message: "only the root: {paths(claims)}");
+    std\assert(hasGap(claims[0], file: "testdata/mod/go.mod", says: "under testdata"), message: "testdata");
+    std\assert(hasGap(claims[0], file: "_old/go.mod", says: "under _old"), message: "underscore");
+    std\assert(hasGap(claims[0], file: ".tools/go.mod", says: "under .tools"), message: "dot");
+}
+
+test "spans list the dirs a module's ./... compiles, stopping at nested modules and skipped dirs" {
+    final claims = discover([
+        marker("go.mod", "module example.com/root\n"),
+        source("main.go"),
+        source("web/embed.go"),
+        source("cmd/tool/main.go"),
+        source("testdata/fixture.go"),
+        source("_scratch/x.go"),
+        marker("libs/y/go.mod", "module example.com/y\n"),
+        source("libs/y/y.go"),
+        source("libs/y/inner/z.go"),
+    ]);
+    std\assert(claim(claims, at: ".").spans.join(",") == "cmd/tool,web", message: "root spans: {claim(claims, at: ".").spans.join(",")}");
+    std\assert(claim(claims, at: "libs/y").spans.join(",") == "libs/y/inner", message: "nested spans");
+}
+
+test "lifecycle targets are the spell's own ops, build only where the module dir holds a package" {
+    final claims = discover([
+        marker("go.mod", "module example.com/root\n"),
+        source("root.go"),
+        marker("lib/go.mod", "module example.com/lib\n"),
+        source("lib/pkg/p.go"),
+    ]);
+    final root = claim(claims, at: ".");
+    std\assert(root.targets["build"]!.join(",") == "go-build", message: "build");
+    std\assert(root.targets["test"]!.join(",") == "go-test", message: "test");
+    std\assert(root.targets["lint"]!.join(",") == "go-vet", message: "lint");
+    std\assert(root.targets["ci"] == null, message: "core composes ci");
+    final lib = claim(claims, at: "lib");
+    std\assert(lib.targets["build"] == null, message: "no package at lib");
+    std\assert(hasGap(lib, file: "lib/go.mod", says: "build not wired"), message: "build gap");
+}
+
+test "every module reports what .go content would show" {
+    final c = discover([marker("go.mod", "module example.com/root\n")])[0];
+    std\assert(hasGap(c, file: "go.mod", says: "build tags"), message: "tags");
+    std\assert(hasGap(c, file: "go.mod", says: "service"), message: "services");
+    std\assert(hasGap(c, file: "go.mod", says: "go:generate"), message: "generate");
+    std\assert(hasGap(c, file: "go.mod", says: "golangci-lint"), message: "linter");
+}
+
+test "C and .S sources are reported as cgo per directory" {
+    final c = discover([
+        marker("go.mod", "module example.com/root\n"),
+        source("native/a.c"),
+        source("native/b.c"),
+        source("asm/x.S"),
+        source("asm/y.s"),
+    ])[0];
+    std\assert(hasGap(c, file: "native/a.c", says: "cgo"), message: "c file");
+    std\assert(!hasGap(c, file: "native/b.c", says: "cgo"), message: "one gap per dir");
+    std\assert(hasGap(c, file: "asm/x.S", says: "cgo"), message: ".S needs cgo");
+}
+
+test "a go.mod passed without content forms a project and says what it could not read" {
+    final c = discover([source("go.mod")])[0];
+    std\assert(c.path == "." and c.name == "", message: "name derives from the path");
+    std\assert(hasGap(c, file: "go.mod", says: "content not passed"), message: "reported");
+}
+
+test "Go sources with no go.mod ride a root member claim" {
+    final claims = discover([source("cmd/main.go")]);
+    std\assert(claims.len() == 1 and claims[0].role.value == "member", message: "member claim");
+    std\assert(hasGap(claims[0], file: "cmd/main.go", says: "GOPATH"), message: "reported");
+}
+
+test "a quoted module path and an ignore directive are read" {
+    final c = discover([marker("go.mod", "module \"example.com/q\" // quoted\nignore ./node_modules\n")])[0];
+    std\assert(c.name == "example.com/q", message: "unquoted: {c.name}");
+    std\assert(hasGap(c, file: "go.mod", says: "ignore ./node_modules"), message: "ignore reported");
+}
+
+fun command(op: str) > Command {
+    return go\mgs_listTargets()[op]!(Target{});
+}
+
+test "go-build trims paths like the other compiling ops" {
+    foreach (op in ["go-build", "go-test", "go-vet", "go-fuzz"]) {
+        std\assert(command(op).args.indexOf("-trimpath") != null, message: "{op} passes -trimpath");
+    }
+}
+
+test "golangci-lint observes the linter build, not just its version" {
+    final observe = go\mgs_getTools()["golangci-lint"]!.observe;
+    std\assert(observe.bin == "golangci-lint", message: "observes the linter");
+    std\assert(observe.args.join(" ") == "version --debug", message: "build info with checksums");
+}
+
+test "go-vet takes its package from the caller and keys on the compile selectors" {
+    final vet = command("go-vet");
+    std\assert(vet.args.indexOf("./...") == null, message: "fixed ./... would follow the caller's package");
+    std\assert(vet.trailingArgs.join(" ") == "./...", message: "dropped by any forwarded arg");
+    foreach (op in ["go-build", "go-test", "go-vet", "go-fuzz"]) {
+        foreach (name in ["GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED"]) {
+            std\assert(command(op).envKeys.indexOf(name) != null, message: "{name} keys {op}");
+        }
+    }
+}
+
+test "golangci-lint keys on the platform and the Go toolchain selectors" {
+    final keys = command("golangci-lint").envKeys;
+    foreach (name in ["GOOS", "GOARCH", "GOROOT", "GOTOOLCHAIN", "GOEXPERIMENT", "GOFLAGS"]) {
+        std\assert(keys.indexOf(name) != null, message: "{name} keys the lint op");
+    }
+}

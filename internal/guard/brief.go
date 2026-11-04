@@ -259,15 +259,19 @@ func briefHumanOnly(ctx context.Context, deps Dependencies, root string, workspa
 		if r.negated {
 			continue
 		}
-		pairs := humanOnlyReach(ctx, deps, root, workspace, []targetRun{r.run})
+		pairs, note := humanOnlyReach(ctx, deps, root, workspace, []targetRun{r.run})
 		if len(pairs) == 0 {
 			continue
+		}
+		why := fmt.Sprintf(`The workspace declares it human_only: %s
+A leased worker is refused it whoever asks.`, pairs[0].reason)
+		if note != "" {
+			why += "\n" + note
 		}
 		return ShellVerdict{
 			Deny: fmt.Sprintf("this brief tells job %s's worker to run `%s`, which a person runs [%s]: fix the brief.\nThe line: %q",
 				row.ID, pairs[0].ref(), denyRuleHumanOnly, elideCommand(strings.TrimSpace(r.line))),
-			Why: fmt.Sprintf(`The workspace declares it human_only: %s
-A leased worker is refused it whoever asks.`, pairs[0].reason),
+			Why:  why,
 			Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleHumanOnly)},
 		}
 	}
@@ -421,7 +425,7 @@ func briefOffCheck(runs []briefRun, judge rowJudge) (off briefRun, v runVerdict,
 		if r.negated || r.prose || strings.ContainsAny(r.run.target, "<>$") || strings.Contains(r.run.target, "...") {
 			continue
 		}
-		if v := judge.verdict(r.run); v.unchecked != nil || !v.permitted && !readsOwnProjects(v.run, judge.row.WritePaths) || v.op || len(v.outside) > 0 {
+		if v := judge.verdict(r.run); v.unchecked != nil || !v.permitted && !judge.runsOffCheck(v.run) || v.op || len(v.outside) > 0 {
 			return r, v, true
 		}
 	}

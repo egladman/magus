@@ -1,4 +1,3 @@
-import { must } from "../lib/guards";
 // demo-scenario.ts - the ONE fabricated workspace every console app's demo derives from.
 //
 // The console's server-free showcases (logs waterfall, recent-runs tree, activity trail, dashboard,
@@ -378,7 +377,7 @@ export function scenarioInvocations(now: number): ScenarioInvocation[] {
     const ci = r.inv === INV_CI;
     const inv: ScenarioInvocation = {
       inv: r.inv,
-      arguments: ci ? ["affected", "ci"] : ["run", r.target.split(":")[0], r.project],
+      arguments: ci ? ["affected", "ci"] : ["run", r.target.split(":")[0] ?? r.target, r.project],
       trigger: ci ? "ci" : r.trigger === "mcp" ? "direct" : "run",
       startMs: r.startMs,
       endMs: r.endMs,
@@ -430,10 +429,11 @@ export interface ScenarioActivity {
 export function scenarioActivity(now: number): ScenarioActivity[] {
   const runs = scenarioRuns(now);
   // Each MCP-triggered invocation holds a single run, so lookup by invocation id is unambiguous.
-  const run = (inv: string): ScenarioRun => must(runs.find((x) => x.inv === inv));
+  const run = (inv: string): ScenarioRun | undefined => runs.find((x) => x.inv === inv);
   const fresh = run(INV_BUILD_FRESH);
   const fix = run(INV_TEST_FIX);
   const broke = run(INV_TEST_BREAK);
+  if (!fresh || !fix || !broke) return [];
   const at = (min: number): number => now - min * MIN;
   return [
     {
@@ -552,7 +552,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
 
 // ---- dashboard insight (VCS lenses) ----------------------------------------
 
-// ScenarioInsight mirrors the dashboard's InsightView but carries commit/pass instants as epoch
+// ScenarioHistoryMetrics mirrors HistoryMetricsBoard but carries commit/pass instants as epoch
 // ms (lastCommitMs / lastPassMs) rather than pre-formatted date strings, so dashboard/demo.ts
 // renders them relative to `now` instead of hard-coding literal dates.
 //
@@ -560,7 +560,7 @@ export function scenarioActivity(now: number): ScenarioActivity[] {
 // libs/authkit/claims.go is the edit that broke both downstream consumers, so it leads churn AND
 // blast radius; the two files it co-changes with are exactly the two that failed; and
 // services/identity:test leads volatility because it is the target that failed and then passed.
-export interface ScenarioInsight {
+export interface ScenarioHistoryMetrics {
   commits: number;
   hotspots: {
     name: string;
@@ -604,7 +604,7 @@ export interface ScenarioInsight {
   };
 }
 
-export function scenarioInsight(now: number): ScenarioInsight {
+export function scenarioInsight(now: number): ScenarioHistoryMetrics {
   const at = (min: number): number => now - min * MIN;
   return {
     commits: 214,

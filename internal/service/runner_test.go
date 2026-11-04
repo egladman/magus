@@ -195,6 +195,27 @@ func TestStartServiceStartedIsOwnedAndStoppedAtReap(t *testing.T) {
 	assert.Equal(t, 0, r.Held())
 }
 
+// TestStartServiceFailedStartOfARunningServiceIsAdopted pins that a start
+// failing while readiness passes is adopted, as podman's 125 is.
+func TestStartServiceFailedStartOfARunningServiceIsAdopted(t *testing.T) {
+	dir := t.TempDir()
+	marker, log := filepath.Join(dir, "up"), filepath.Join(dir, "log")
+	s := machineService(t, marker, log)
+	s.Start = spells.Command{Bin: "sh", Args: []string{"-c", fmt.Sprintf("touch %s; exit 125", marker)}}
+	h, err := ExecRunner{ReadyInterval: 10 * time.Millisecond}.Start(context.Background(), s)
+	require.NoError(t, err)
+	assert.Equal(t, Adopted, h)
+}
+
+func TestStartServiceFailedStartNamesWhyTheProbeStillFails(t *testing.T) {
+	s := machineService(t, filepath.Join(t.TempDir(), "up"), filepath.Join(t.TempDir(), "log"))
+	s.Start = spells.Command{Bin: "sh", Args: []string{"-c", "exit 125"}}
+	s.Readiness = spells.Command{Bin: "sh", Args: []string{"-c", "echo cannot connect to the socket >&2; exit 1"}}
+	_, err := ExecRunner{ReadyInterval: 10 * time.Millisecond}.Start(context.Background(), s)
+	require.ErrorContains(t, err, `service: start "sh"`)
+	require.ErrorContains(t, err, `readiness "sh" still fails: cannot connect to the socket`)
+}
+
 // TestStartServiceFailingStartIsAnError pins that a start command exiting non-zero
 // fails the acquire, rather than polling readiness for something that never began.
 func TestStartServiceFailingStartIsAnError(t *testing.T) {

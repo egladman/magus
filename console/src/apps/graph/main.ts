@@ -1,4 +1,5 @@
-import { must, errMessage } from "../../lib/guards";
+import { errMessage } from "../../lib/guards";
+import { MagusError, attempt, fail, fromPromise, ok, type Result } from "../../gen/magus/types";
 import { onModeRequest, openApp, takeModeIntent } from "../../desktop/app-navigation";
 import type { AppInstance } from "../../desktop/standalone";
 import { activate as activateFigures } from "./diagrams/main";
@@ -35,6 +36,7 @@ import {
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom";
 import { drag as d3drag } from "d3-drag";
 import { select } from "d3-selection";
+import { timer, type Timer } from "d3-timer";
 // The loopback lock, the shared bearer token, and the fetch-based SSE reader used to
 // be copy-pasted into all three tool pages; they now live in one audited module.
 // (The ConnectRPC transport this module also exports is tree-shaken out here - the
@@ -80,12 +82,17 @@ import { createQueryBuilder, type QueryBuilder } from "./querybuilder.js";
 import { RADIAL_MAX_RINGS, RADIAL_RING_R, layoutRadial } from "./radial.js";
 import { nodeDurationMs, formatDuration } from "./duration.js";
 import {
-  setFlowEdges,
-  setPulses,
+  FLOW_DASH_PX,
+  FLOW_GAP_PX,
+  dashOffset,
+  flowOrigin,
+  flowSpeed,
+  flows,
+  pulseProgress,
   resetMotion,
-  tick as particlesTick,
-  type FlowEdge,
-} from "./particles.js";
+  setFlowLinks,
+  setPulses,
+} from "./flow.js";
 import {
   type Insets,
   NO_INSETS,
@@ -140,7 +147,7 @@ interface LaunchQueue {
 }
 declare global {
   interface Window {
-    _liveAffectedIds?: Set<string>;
+    _liveAffectedIds?: Set<string> | undefined;
     launchQueue?: LaunchQueue;
   }
 }
@@ -277,7 +284,7 @@ let focusDepth = 2; // hops included in the focus graph
 // (#layout=force|layered|waves|radial). The scale guard refuses layered/waves
 // for more than 500 visible nodes; radial requires a selected/focused center.
 type LayoutMode = "force" | "layered" | "waves" | "radial";
-function isLayoutMode(s: string): s is LayoutMode {
+function isLayoutMode(s: string | undefined): s is LayoutMode {
   return s === "force" || s === "layered" || s === "waves" || s === "radial";
 }
 let layoutMode: LayoutMode = "force";
@@ -399,49 +406,53 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
 // The OS preference, or the console's own Motion setting. One predicate rather than the media query
 // tested in five places, which is how a new switch reaches four of them and misses the fifth. The
-// console's CSS kill cannot reach the opening burst, the particles or the camera glides - they are JS.
+// console's CSS kill cannot reach the opening burst, the edge flow or the camera glides - they are JS.
 function motionSuppressed(): boolean {
   return reducedMotion.matches || document.documentElement.dataset.motion === "reduced";
 }
 
-// ---- motion layer (flow particles + live recency pulses) ------------------
-// Motion is OFF outside two states: an active path/subset view (blast, trace,
-// critical) with flow particles running along its edges, or a live refresh
-// that just pulsed some nodes. flowOn mirrors whether particles.ts currently
-// holds a non-null flow-edge list (set by buildFlowEdges, cleared at every
-// view-exit site). pulsesPending is set true whenever liveApplyGraphUpdate
-// calls setPulses, and cleared by draw() once tick() reports nothing left to
-// paint (see the draw() motion block) - that self-clearing, plus
-// motionEligible's reducedMotion/document.hidden checks, is what makes
-// motionLoop below stop itself within a frame of there being nothing to show.
+// ---- motion layer (edge flow + live recency pulses) ------------------------
+// Motion runs in three states: a path/subset view (blast, trace, critical) whose edges flow, a
+// hovered or selected node whose incident edges flow, or a live refresh that just pulsed some
+// nodes. flowOn mirrors flow.ts holding the view's flow set; flowDrawn says the last draw() stroked
+// a flowing edge; pulsesPending clears once pulseProgress() reports none left. The timer re-checks
+// motionEligible() every frame and stops itself, so with the layout settled and nothing flowing the
+// CPU drops to zero.
 let flowOn = false;
+let flowDrawn = false;
 let pulsesPending = false;
-let motionRaf = 0;
+let dragging = false;
+// One shared d3-timer for all of it. It only redraws: the force simulation keeps its own timer and
+// alpha, and this one never touches either.
+let motionTimer: Timer | null = null;
+// Advances only while the timer runs, so a pause (drag, hidden tab, reduced motion) freezes the
+// dashes where they stand instead of jumping on resume.
+let flowPhaseMs = 0;
 
 const flowActive = () =>
   (activeView === "trace" || activeView === "critical" || activeView === "blast") && !!matchSet;
 
-const motionEligible = () => !motionSuppressed() && !document.hidden && (flowOn || pulsesPending);
+const motionEligible = () =>
+  !motionSuppressed() && !document.hidden && !dragging && (flowOn || flowDrawn || pulsesPending);
 
-// motionLoop keeps draw() repainting once per frame while motionEligible();
-// the moment it isn't (view cleared, tab hidden, reduced-motion turned on, or
-// pulses expired), it zeroes motionRaf and stops re-arming itself - and with the layout settled
-// there is no other repaint loop, so CPU drops to zero.
-function motionLoop() {
-  if (!motionEligible()) {
-    motionRaf = 0;
-    return;
-  }
-  draw();
-  motionRaf = requestAnimationFrame(motionLoop);
+// startMotion arms the timer when there is something eligible to animate. Safe to call from any
+// site that turns flow or pulses on, and from draw() itself: a running timer makes it a no-op.
+function startMotion() {
+  if (motionTimer || !motionEligible()) return;
+  const from = flowPhaseMs;
+  motionTimer = timer((elapsed) => {
+    if (!motionEligible()) {
+      stopMotion();
+      return;
+    }
+    flowPhaseMs = from + elapsed;
+    draw();
+  });
 }
 
-// startMotion arms the loop if it isn't already running and there is
-// something eligible to animate; call it from every site that turns flow or
-// pulses on. Guarded by motionRaf so a second call while the loop is already
-// running is a no-op.
-function startMotion() {
-  if (!motionRaf && motionEligible()) motionRaf = requestAnimationFrame(motionLoop);
+function stopMotion() {
+  motionTimer?.stop();
+  motionTimer = null;
 }
 
 // ---- theme / palette -------------------------------------------------------
@@ -490,16 +501,29 @@ function readTheme(): Theme {
 // Decode a `#data=` fragment: base64url -> bytes -> gunzip -> JSON. Uses the
 // browser's DecompressionStream (widely supported); the whole path is local, so
 // nothing is fetched and nothing is sent.
-async function decodeFragment(b64url: string): Promise<GraphPayload> {
-  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+async function decodeFragment(b64url: string): Promise<Result<GraphPayload>> {
+  const bin = attempt(() => atob(b64url.replace(/-/g, "+").replace(/_/g, "/")));
+  if (bin.error) return bin;
+  const bytes = new Uint8Array(bin.value.length);
+  for (let i = 0; i < bin.value.length; i++) bytes[i] = bin.value.charCodeAt(i);
   const body = new Response(bytes).body;
-  if (!body) throw new Error("no response body to decode");
+  if (!body) return fail(new MagusError({ code: "", message: "no response body to decode" }));
   const stream = body.pipeThrough(new DecompressionStream("gzip"));
-  const text = await new Response(stream).text();
-  return JSON.parse(text);
+  const text = await fromPromise(new Response(stream).text());
+  if (text.error) return text;
+  return attempt((): GraphPayload => JSON.parse(text.value));
+}
+
+// fetchGraphJson is the one place a graph address is fetched and decoded: a refused status or an
+// unreadable body comes back as an error, never a throw.
+async function fetchGraphJson(
+  url: string | URL,
+  init?: RequestInit,
+): Promise<Result<GraphPayload>> {
+  const r = await fromPromise(fetch(url, init));
+  if (r.error) return r;
+  if (!r.value.ok) return fail(new MagusError({ code: "", message: "HTTP " + r.value.status }));
+  return fromPromise<GraphPayload>(r.value.json());
 }
 
 // hashParams is lib/server's parseHash. It used to be a second implementation here, and the
@@ -512,12 +536,10 @@ const hashParams = parseHash;
 async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   const params = hashParams();
   if (params.data) {
-    try {
-      setStatus("Decoding local graph...");
-      return { data: await decodeFragment(params.data), source: "local" };
-    } catch (e) {
-      setStatus("Could not decode the graph in the link (" + errMessage(e) + ").", "danger");
-    }
+    setStatus("Decoding local graph...");
+    const decoded = await decodeFragment(params.data);
+    if (!decoded.error) return { data: decoded.value, source: "local" };
+    setStatus("Could not decode the graph in the link (" + decoded.error.message + ").", "danger");
   }
   // #src= fetches the JSON from an address: a loopback server (`magus graph export --open
   // --serve`, 127.0.0.1 - private) or any CORS-enabled URL (e.g. a committed
@@ -531,22 +553,18 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
     // `--serve` problem.
     const loopback = /^https?:\/\/(127\.0\.0\.1|\[::1\])(:|\/)/.test(params.src);
     const localhostHost = /^https?:\/\/localhost(:|\/)/.test(params.src);
-    try {
-      setStatus("Fetching the graph...");
-      const r = await fetch(params.src, { headers: { Accept: "application/json" } });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return { data: await r.json(), source: loopback ? "loopback" : "remote" };
-    } catch (e) {
-      let hint = "";
-      if (loopback) hint = " Is `magus graph export --open --serve` still running?";
-      else if (localhostHost)
-        hint =
-          " The policy allows 127.0.0.1/[::1], not the `localhost` hostname: use `magus graph export --open --serve` or edit the URL to use 127.0.0.1.";
-      setStatus(
-        "Could not fetch the graph from that URL (" + errMessage(e) + ")." + hint,
-        "danger",
-      );
-    }
+    setStatus("Fetching the graph...");
+    const fetched = await fetchGraphJson(params.src, { headers: { Accept: "application/json" } });
+    if (!fetched.error) return { data: fetched.value, source: loopback ? "loopback" : "remote" };
+    let hint = "";
+    if (loopback) hint = " Is `magus graph export --open --serve` still running?";
+    else if (localhostHost)
+      hint =
+        " The policy allows 127.0.0.1/[::1], not the `localhost` hostname: use `magus graph export --open --serve` or edit the URL to use 127.0.0.1.";
+    setStatus(
+      "Could not fetch the graph from that URL (" + fetched.error.message + ")." + hint,
+      "danger",
+    );
   }
   // Fetch the committed demo graph for the demo button (#demo) AND for any content deep link
   // (#view/#q/#node) - those reference graph content, and the only graph available without
@@ -556,26 +574,22 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   // (not an in-place swap) renders through boot's normal pipeline - projection, fit, interactions.
   // The server refuses to serve these files too; this keeps an attached app from asking.
   if (mayLoadBundledDemo(params) && (wantsDemo(params) || params.view || params.q || params.node)) {
-    try {
-      // Two demos ship, both generated from THIS workspace by the root graph-generate
-      // target: the knowledge graph and the target graph. Selected by the same fragment
-      // param the CLI writes (cmd/magus/graph_open.go appends flavor=targets), so
-      // `magus graph export --open` and a hand-typed #demo&flavor=targets land on the same data.
-      const wantsTargets = params.flavor === "targets";
-      setStatus(
-        wantsTargets ? "Loading the magus demo target graph..." : "Loading the magus demo graph...",
-      );
-      // Resolve relative to THIS bundle (gen/console/graph/), not the document: standalone
-      // the two share a directory, but the console mounts this app into a page at a different path,
-      // where a document-relative "./graph.json" would miss. import.meta.url makes both paths work.
-      const r = await fetch(
-        new URL(wantsTargets ? "./target-graph.json" : "./knowledge-graph.json", import.meta.url),
-      );
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return { data: await r.json(), source: "demo" };
-    } catch (e) {
-      setStatus("Could not load the demo graph (" + errMessage(e) + ").", "danger");
-    }
+    // Two demos ship, both generated from THIS workspace by the root graph-generate
+    // target: the knowledge graph and the target graph. Selected by the same fragment
+    // param the CLI writes (cmd/magus/graph_open.go appends flavor=targets), so
+    // `magus graph export --open` and a hand-typed #demo&flavor=targets land on the same data.
+    const wantsTargets = params.flavor === "targets";
+    setStatus(
+      wantsTargets ? "Loading the magus demo target graph..." : "Loading the magus demo graph...",
+    );
+    // Resolve relative to THIS bundle (gen/console/graph/), not the document: standalone
+    // the two share a directory, but the console mounts this app into a page at a different path,
+    // where a document-relative "./graph.json" would miss. import.meta.url makes both paths work.
+    const demo = await fetchGraphJson(
+      new URL(wantsTargets ? "./target-graph.json" : "./knowledge-graph.json", import.meta.url),
+    );
+    if (!demo.error) return { data: demo.value, source: "demo" };
+    setStatus("Could not load the demo graph (" + demo.error.message + ").", "danger");
   }
   // No usable fragment: DON'T auto-fetch the demo (that download is wasted on a cold visit).
   // Return an empty graph so boot runs its full setup (interactions wired, canvas ready); boot
@@ -593,9 +607,9 @@ function setStatus(msg: string, level: StatusLevel = "info", action?: StatusActi
 // (drives node radius) and adjacency (drives the explain card + neighbor
 // highlight). Nodes/links carry id references in the JSON; d3-force's forceLink
 // will replace link.source/target with the node objects in place.
-function prepareGraph(raw: GraphPayload) {
+function prepareGraph(raw: GraphPayload): Result<Graph> {
   const rawNodes = raw.nodes;
-  if (!rawNodes) throw new Error("graph payload has no nodes");
+  if (!rawNodes) return fail(new MagusError({ code: "", message: "graph payload has no nodes" }));
   // x/y/fx/fy land on each node from d3-force (or the layered layout) before any read; the
   // cast asserts that prepared invariant here so the copies satisfy GNode without a per-field seed.
   const nodes: GNode[] = rawNodes.map((n) => ({ ...n }) as GNode);
@@ -619,7 +633,7 @@ function prepareGraph(raw: GraphPayload) {
   // node's relative `source` into a link to the RIGHT repo. Absent -> no link (a
   // hardcoded base would point every workspace's graph at the magus repo).
   const sourceBase = (raw.source_base || "").replace(/\/$/, "");
-  return { nodes, links, byId, sourceBase };
+  return ok({ nodes, links, byId, sourceBase });
 }
 
 // A row in the explain card's incident-edge list: the relation, the other endpoint id,
@@ -638,9 +652,13 @@ function incidentEdges(id: string) {
   for (const e of graph.links) {
     const s = endpointId(e.source);
     const t = endpointId(e.target);
-    const transport = declaredCall(e)?.transport || undefined;
-    if (s === id) out.push({ rel: e.relation, other: t, confidence: e.confidence, transport });
-    if (t === id) inc.push({ rel: e.relation, other: s, confidence: e.confidence, transport });
+    const transport = declaredCall(e)?.transport;
+    const optional = {
+      ...(e.confidence !== undefined ? { confidence: e.confidence } : {}),
+      ...(transport ? { transport } : {}),
+    };
+    if (s === id) out.push({ rel: e.relation, other: t, ...optional });
+    if (t === id) inc.push({ rel: e.relation, other: s, ...optional });
   }
   return { out, inc };
 }
@@ -755,11 +773,17 @@ function setHidden(ids: Iterable<string> | null): void {
   syncSimMembership();
 }
 
+// matchedNodes is the nodes the current query matched, or every node when there is no query.
+function matchedNodes(): GNode[] {
+  const matched = matchSet;
+  return matched ? graph.nodes.filter((n) => matched.has(n.id)) : graph.nodes;
+}
+
 // applyLayoutedMode: switch to layered layout for the visible node/link set.
 // Returns false (with a status message) when the scale guard fires.
 // Stops the force simulation so no ticks disturb the fixed positions.
 function applyLayeredMode() {
-  const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
+  const visNodes = matchedNodes();
   if (visNodes.length > LAYERED_MAX) {
     setStatus(
       "layered layout is capped at 500 nodes: narrow with a query or the local graph",
@@ -790,7 +814,7 @@ function applyLayeredMode() {
 // membership in wavesMeta so draw() can paint column bands/headers and
 // switchLayout can report parallelism.
 function applyWavesMode() {
-  const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
+  const visNodes = matchedNodes();
   if (visNodes.length > LAYERED_MAX) {
     setStatus(
       "waves layout is capped at 500 nodes: narrow with a query or the local graph",
@@ -845,7 +869,7 @@ function enterRadialPick(): void {
 function applyRadialMode(): Set<string> | null {
   const center = selected ?? focusId;
   if (!center) return null; // switchLayout guards via layoutBlockedReason; safe fallback
-  const subsetAll = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
+  const subsetAll = matchedNodes();
   const subset = subsetAll.some((n) => n.id === center) ? subsetAll : graph.nodes;
   sim?.stop();
   // Undirected rather than graph.links: an ego neighborhood spans every edge kind, not just
@@ -960,7 +984,7 @@ function cycleLayout() {
   const start = LAYOUT_ORDER.indexOf(layoutMode);
   for (let i = 1; i <= LAYOUT_ORDER.length; i++) {
     const next = LAYOUT_ORDER[(start + i) % LAYOUT_ORDER.length];
-    if (!layoutBlockedReason(next)) {
+    if (next !== undefined && !layoutBlockedReason(next)) {
       layoutPickedByHand = true;
       switchLayout(next);
       return;
@@ -1304,7 +1328,8 @@ function draw() {
     }
     if (minY <= maxY) {
       wavesMeta.forEach((ids, i) => {
-        const first = graph.byId.get(ids[0]);
+        const firstId = ids[0];
+        const first = firstId === undefined ? undefined : graph.byId.get(firstId);
         if (!first || first.x == null) return;
         const waveX = first.x;
         if (i % 2 === 0) {
@@ -1421,6 +1446,8 @@ function draw() {
   // The projection is its own visibility rule (nodes outside it are absent, not dim), so it
   // stands in for the scope while it is active.
   const scope = matchSet && !projectionActive ? matchSet : null;
+  const highlightDegree = near?.size ?? 0;
+  let flowDrawnNow = false;
   // Painted in the label pass, so node marks never cover them.
   const transportLabels: { x: number; y: number; text: string; incident: boolean }[] = [];
   for (const e of graph.links) {
@@ -1479,9 +1506,10 @@ function draw() {
     // Cycle edges (from the target-graph adapter) get a dashed stroke so they
     // stand out from normal dependency edges. Layout-reversed edges (cycle-break
     // in layered mode) also render dashed, as does a call only a marker claims.
+    // Those dashes carry meaning, so they stay still; only a solid edge flows.
     const call = declaredCall(e);
     const dashed = e.cycle || e.layoutReversed || !!call;
-    if (dashed) ctx.setLineDash([4 / transform.k, 3 / transform.k]);
+    const flowing = !dashed && active && flows(e, highlight || null, highlightDegree);
     // Routed edges (multi-layer spans in a DAG mode) carry world-space bend
     // points ordered ascending-x (dependency end -> dependent end, see
     // types.ts). Assemble the full polyline (both endpoints + bend points)
@@ -1491,18 +1519,37 @@ function draw() {
       isDagMode() && e.points && e.points.length
         ? [{ x: sx, y: sy }, { x: tx, y: ty }, ...e.points].sort((a, b) => a.x - b.x)
         : null;
+    if (dashed) ctx.setLineDash([4 / transform.k, 3 / transform.k]);
+    else if (flowing) {
+      flowDrawnNow = true;
+      // The stroke starts at s, unless the x-sorted route put t first. Reading the start off the
+      // drawn geometry keeps a layoutReversed edge flowing dependency to dependent.
+      const startsAt = routePts && tx < sx ? t.id : s.id;
+      ctx.setLineDash([FLOW_DASH_PX / transform.k, FLOW_GAP_PX / transform.k]);
+      ctx.lineDashOffset = dashOffset(
+        flowPhaseMs,
+        flowSpeed(e.relation),
+        startsAt === flowOrigin(e),
+        transform.k,
+      );
+      ctx.strokeStyle = th.accent;
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = Math.max(ctx.lineWidth, 1.4 / transform.k);
+    }
     ctx.beginPath();
-    if (routePts) {
+    const routeFirst = routePts?.[0];
+    const routeLast = routePts?.[routePts.length - 1];
+    if (routePts && routeFirst && routeLast) {
       // Smooth curve through the bend points via quadratic segments to their
       // midpoints (a cheap Catmull-Rom-ish approximation), ending with a
       // straight segment into the final endpoint.
-      ctx.moveTo(routePts[0].x, routePts[0].y);
-      for (let i = 1; i < routePts.length - 1; i++) {
-        const midX = (routePts[i].x + routePts[i + 1].x) / 2,
-          midY = (routePts[i].y + routePts[i + 1].y) / 2;
-        ctx.quadraticCurveTo(routePts[i].x, routePts[i].y, midX, midY);
+      ctx.moveTo(routeFirst.x, routeFirst.y);
+      for (const [i, p] of routePts.entries()) {
+        const q = routePts[i + 1];
+        if (i === 0 || q === undefined) continue;
+        ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2);
       }
-      ctx.lineTo(routePts[routePts.length - 1].x, routePts[routePts.length - 1].y);
+      ctx.lineTo(routeLast.x, routeLast.y);
     } else if (isDagMode()) {
       // Short edge (single layer span, no bend points): a gentle horizontal-out
       // bezier so the DAG still reads as flow instead of a ruler-straight line.
@@ -1515,11 +1562,12 @@ function draw() {
       ctx.lineTo(t.x, t.y);
     }
     ctx.stroke();
-    if (dashed) ctx.setLineDash([]);
+    if (dashed || flowing) {
+      ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
+    }
     if (call?.transport && active) {
-      const mid = routePts
-        ? routePts[routePts.length >> 1]
-        : { x: (sx + tx) / 2, y: (sy + ty) / 2 };
+      const mid = routePts?.[routePts.length >> 1] ?? { x: (sx + tx) / 2, y: (sy + ty) / 2 };
       transportLabels.push({ x: mid.x, y: mid.y, text: call.transport, incident });
     }
 
@@ -1548,9 +1596,11 @@ function draw() {
       let fromX = fromNode === s ? sx : tx,
         fromY = fromNode === s ? sy : ty;
       if (routePts && routePts.length > 2) {
-        const nearest = routePts[0].x === tipAttachX ? routePts[1] : routePts[routePts.length - 2];
-        fromX = nearest.x;
-        fromY = nearest.y;
+        const nearest = routePts[0]?.x === tipAttachX ? routePts[1] : routePts[routePts.length - 2];
+        if (nearest) {
+          fromX = nearest.x;
+          fromY = nearest.y;
+        }
       }
       const dx = tipAttachX - fromX,
         dy = tipAttachY - fromY;
@@ -1647,46 +1697,29 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  // Motion layer: flow particles along the active view's edges, and
-  // recency-pulse rings from a live refresh. Gated on prefers-reduced-motion
-  // and tab visibility here too (not just in motionEligible/motionLoop) so
-  // nothing paints even when draw() is triggered by something other than the
-  // motion loop (a click, a drag, a theme toggle) while motion should stay
-  // suppressed. Painted after nodes/cards, before labels, so a pulse ring
-  // doesn't clip label text. tick() returning null (no flow, no unexpired
-  // pulses) is what lets pulsesPending self-clear, which is in turn what lets
-  // motionLoop stop re-arming itself once nothing is left to animate.
+  // Recency-pulse rings from a live refresh, after nodes and before labels so a ring never clips
+  // label text. Gated here as well as in motionEligible, since draw() also runs from clicks, drags
+  // and theme toggles. pulseProgress() returning null is what clears pulsesPending.
+  flowDrawn = flowDrawnNow;
   if (!motionSuppressed() && !document.hidden) {
-    const motion = particlesTick(performance.now());
-    if (!motion) {
+    const pulses = pulseProgress(performance.now());
+    if (!pulses) {
       pulsesPending = false;
     } else {
-      if (motion.flowPoints.length) {
-        ctx.fillStyle = th.accent;
-        const flowR = 2.2 / transform.k;
-        for (const p of motion.flowPoints) {
-          ctx.globalAlpha = p.alpha;
+      ctx.strokeStyle = th.accent;
+      ctx.lineWidth = 1.5 / transform.k;
+      for (const [id, progress] of pulses) {
+        const n = graph.byId.get(id);
+        if (!n || n.x == null) continue;
+        ctx.globalAlpha = 0.5 * (1 - progress);
+        if (cardsActive() && n.w) {
+          const grow = (progress * 26) / transform.k;
+          const h = n.h ?? 0;
+          ctx.strokeRect(n.x - n.w / 2 - grow, n.y - h / 2 - grow, n.w + grow * 2, h + grow * 2);
+        } else {
           ctx.beginPath();
-          ctx.arc(p.x, p.y, flowR, 0, 2 * Math.PI);
-          ctx.fill();
-        }
-      }
-      if (motion.pulses.size) {
-        ctx.strokeStyle = th.accent;
-        ctx.lineWidth = 1.5 / transform.k;
-        for (const [id, progress] of motion.pulses) {
-          const n = graph.byId.get(id);
-          if (!n || n.x == null) continue;
-          ctx.globalAlpha = 0.5 * (1 - progress);
-          if (cardsActive() && n.w) {
-            const grow = (progress * 26) / transform.k;
-            const h = n.h ?? 0;
-            ctx.strokeRect(n.x - n.w / 2 - grow, n.y - h / 2 - grow, n.w + grow * 2, h + grow * 2);
-          } else {
-            ctx.beginPath();
-            ctx.arc(n.x, n.y, n.r + (progress * 26) / transform.k, 0, 2 * Math.PI);
-            ctx.stroke();
-          }
+          ctx.arc(n.x, n.y, n.r + (progress * 26) / transform.k, 0, 2 * Math.PI);
+          ctx.stroke();
         }
       }
       ctx.globalAlpha = 1;
@@ -1805,6 +1838,8 @@ function draw() {
     ctx.fillText(l.text, l.x, l.y);
   }
   ctx.restore();
+  // A hover or selection that lit flowing edges arms the timer here; otherwise this is a no-op.
+  startMotion();
 }
 
 // ---- interaction -----------------------------------------------------------
@@ -1823,7 +1858,7 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
     const hitR = (DOT_R_PX + 5) / transform.k;
     for (let i = graph.nodes.length - 1; i >= 0; i--) {
       const n = graph.nodes[i];
-      if (!shown(n)) continue;
+      if (!n || !shown(n)) continue;
       if (dots) {
         if ((px - n.x) ** 2 + (py - n.y) ** 2 <= hitR * hitR) return n;
         continue;
@@ -1887,6 +1922,9 @@ function setupZoomDrag() {
     .subject((event) => nodeAtPointer(event.sourceEvent) ?? undefined)
     .on("start", (event) => {
       if (!event.subject) return;
+      // The flow holds still under the pointer; the sim's own ticks keep the drag drawn.
+      dragging = true;
+      stopMotion();
       if (!isDagMode() && !event.active) sim?.alphaTarget(0.2).restart();
       event.subject.fx = event.subject.x;
       event.subject.fy = event.subject.y;
@@ -1904,6 +1942,8 @@ function setupZoomDrag() {
     })
     .on("end", (event) => {
       if (!event.subject) return;
+      dragging = false;
+      startMotion();
       if (isDagMode()) {
         // Keep the manually dragged position (fx/fy stay set); just redraw.
         draw();
@@ -2543,7 +2583,7 @@ function whenCanvasSized(): Promise<void> {
 // app into a pane that is still display:none for seconds, and every fit in that window - a
 // view's, a focus's, radial's - would otherwise be computed against a zero viewport, clamp to the
 // minimum scale and be silently dropped. Only the LAST one is worth replaying: they supersede.
-let pendingFit: { ids: Set<string> | null; glideMs?: number } | null = null;
+let pendingFit: { ids: Set<string> | null; glideMs?: number | undefined } | null = null;
 let pendingFitArmed = false;
 
 // worldBox is the bounding box of `ids` (or of every placed node when null), in world units.
@@ -2698,7 +2738,7 @@ function clearFocusOrQuery() {
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
       .forEach((b) => setActive(b, false));
     renderViewCommand(null, null, null);
-    setFlowEdges(null);
+    setFlowLinks(null);
     flowOn = false;
   }
   renderList();
@@ -2819,7 +2859,7 @@ function parseQuery(str: string) {
   const terms: QueryTerm[] = [];
   let i = 0;
   while (i < str.length) {
-    while (i < str.length && /\s/.test(str[i])) i++;
+    while (i < str.length && /\s/.test(str.charAt(i))) i++;
     if (i >= str.length) break;
     let negated = false;
     if (str[i] === "-") {
@@ -2828,8 +2868,9 @@ function parseQuery(str: string) {
     }
     let field: string | null = null;
     const fm = /^([a-zA-Z]+):/.exec(str.slice(i));
-    if (fm && QUERY_FIELDS.includes(fm[1].toLowerCase())) {
-      field = fm[1].toLowerCase();
+    const prefix = fm?.[1]?.toLowerCase();
+    if (fm && prefix !== undefined && QUERY_FIELDS.includes(prefix)) {
+      field = prefix;
       i += fm[0].length;
     }
     let value;
@@ -2839,7 +2880,7 @@ function parseQuery(str: string) {
       i = end < 0 ? str.length : end + 1;
     } else {
       let j = i;
-      while (j < str.length && !/\s/.test(str[j])) j++;
+      while (j < str.length && !/\s/.test(str.charAt(j))) j++;
       value = str.slice(i, j);
       i = j;
     }
@@ -3176,7 +3217,7 @@ function applyQuery(q: string) {
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
       .forEach((b) => setActive(b, false));
     renderViewCommand(null, null, null);
-    setFlowEdges(null);
+    setFlowLinks(null);
     flowOn = false;
   }
   query = q.trim();
@@ -3393,13 +3434,12 @@ function setLegendTitle(text: string) {
 function renderGroupLegend(preset: string) {
   const counts = new Array<number>(groups.length).fill(0);
   for (const n of graph.nodes) {
-    for (let i = 0; i < groups.length; i++) {
-      const g = groups[i];
+    for (const [i, g] of groups.entries()) {
       const hit = g.nodeSet
         ? g.nodeSet.has(n.id)
         : g.terms.length > 0 && g.terms.every((t) => termMatches(n, t));
       if (hit) {
-        counts[i]++;
+        counts[i] = (counts[i] ?? 0) + 1;
         break; // first match wins, exactly as matchGroupColor resolves it
       }
     }
@@ -3735,7 +3775,7 @@ function applyDeepLinks() {
 
 // Swap in a graph loaded from a local file (the Open-file button and drag-drop
 // share this). Resets view state and restarts the layout.
-function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string) {
+function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string): Result<void> {
   graphEpoch++; // a different graph; in-flight answers about the old one no longer apply
   // A dropped file IS the provenance now. Without this the overview kept reporting whatever
   // loaded at boot - open the demo, drag your own graph.json onto the canvas, and the panel still
@@ -3767,7 +3807,9 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   } else {
     raw = data;
   }
-  graph = prepareGraph(raw);
+  const prepared = prepareGraph(raw);
+  if (prepared.error) return prepared;
+  graph = prepared.value;
   // Clear any layout-reversed flags (and stale edge routes) from a previous layered pass.
   for (const e of graph.links) {
     delete e.layoutReversed;
@@ -3784,6 +3826,8 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   resetMotion(); // clears flow edges AND any recency pulse mid-flight from the graph being replaced
   flowOn = false;
   pulsesPending = false;
+  flowDrawn = false;
+  dragging = false;
   if (searchEl) searchEl.value = "";
   // Reset view/projection state.
   activeView = null;
@@ -3820,7 +3864,10 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   // flavor default like an invalid layout value would.
   const fragParams = hashParams();
   const radialNodeOk =
-    fragParams.layout === "radial" && !!fragParams.node && graph.byId.has(fragParams.node);
+    fragParams.layout === "radial" &&
+    fragParams.node !== undefined &&
+    fragParams.node !== "" &&
+    graph.byId.has(fragParams.node);
   const requestedLayout: LayoutMode =
     isLayoutMode(fragParams.layout) && (fragParams.layout !== "radial" || radialNodeOk)
       ? fragParams.layout
@@ -3829,7 +3876,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
         : "force";
   layoutMode = requestedLayout;
   layoutPickedByHand = false; // a fresh graph resets to its flavor default; so does the override
-  if (layoutMode === "radial") selected = fragParams.node;
+  if (layoutMode === "radial") selected = fragParams.node ?? null;
   wavesMeta = null;
   syncLayoutToggle();
   if (isDagMode()) {
@@ -3854,6 +3901,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   draw();
   revealWholeGraph();
   syncGraphKindToggle();
+  return ok(undefined);
 }
 
 // syncLayoutToggle updates the layout toggle group's selected state, each mode
@@ -4014,14 +4062,19 @@ async function readGraphFile(file: File | undefined) {
   // A user graph supersedes the empty state: dismiss it if it's still up.
   const empty = el("graph-empty-state");
   if (empty) empty.hidden = true;
+  let data: GraphPayload | TargetGraphOutput;
   try {
-    replaceGraph(
-      JSON.parse(await file.text()),
-      "Loaded " + file.name + " (local file; it stays on your machine).",
-    );
+    data = JSON.parse(await file.text());
   } catch (e) {
     setStatus("Could not read " + file.name + ": " + errMessage(e), "danger");
+    return;
   }
+  const replaced = replaceGraph(
+    data,
+    "Loaded " + file.name + " (local file; it stays on your machine).",
+  );
+  if (replaced.error)
+    setStatus("Could not read " + file.name + ": " + replaced.error.message, "danger");
 }
 
 // ---- default projection ----------------------------------------------------
@@ -4258,7 +4311,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
   projectionUnfolded = true; // a view always shows the full graph context
   projectionSet = null;
   matchSet = null;
-  setFlowEdges(null); // cleared up front; the tail below rebuilds it once matchSet is final
+  setFlowLinks(null); // cleared up front; the tail below rebuilds it once matchSet is final
   flowOn = false;
   if (searchEl) {
     searchEl.value = "";
@@ -4451,7 +4504,7 @@ function clearView() {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   query = "";
-  setFlowEdges(null);
+  setFlowLinks(null);
   flowOn = false;
   renderList();
   // Only the canvas line used to be cleared here, so the status line kept describing a view that
@@ -4521,13 +4574,13 @@ function askQuestion(view: string) {
   if (view === "blast" || view === "trace") {
     // Enter picking mode: status tells user to click a node. Bypasses
     // activateView (no node picked yet), so clear any flow left over from
-    // whatever view was active before this click - otherwise particles from
+    // whatever view was active before this click - otherwise edges from
     // the OLD view's matchSet would keep animating through the picking-mode gap.
     activeView = view;
     viewNode = null;
     viewNodeTo = null;
     pendingRadialPick = false;
-    setFlowEdges(null);
+    setFlowLinks(null);
     flowOn = false;
     document
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
@@ -4562,39 +4615,18 @@ function askQuestion(view: string) {
   }
 }
 
-// buildFlowEdges (re)builds particles.ts's flow-edge list from the CURRENT
-// activeView/matchSet/graph positions: trace/critical flow along the path
-// (consecutive path nodes joined by their depends_on link, in either stored
-// orientation), blast flows along every depends_on link with both endpoints
-// in matchSet. Each polyline runs dependency -> dependent (e.target is the
-// dependency, e.source the dependent - see the edge-direction convention
-// note in draw()'s edge pass), reusing the same routed bend points (e.points)
-// the DAG layouts computed, so particles follow the curve on screen instead
-// of cutting a chord through it. Call after matchSet is final for the view;
-// it no-ops (and clears any prior flow) when the view isn't a flow view, so
-// it's safe to call unconditionally at a view's settle point.
+// buildFlowEdges (re)builds flow.ts's flow set from the CURRENT activeView/matchSet: trace and
+// critical flow along the path (consecutive path nodes joined by their depends_on link, in either
+// stored orientation), blast along every depends_on link with both ends in matchSet. draw() strokes
+// those links with moving dashes. Call after matchSet is final for the view; it clears any prior
+// flow when the view is not a flow view, so it is safe to call at a view's settle point.
 function buildFlowEdges() {
   if (!flowActive()) {
-    setFlowEdges(null);
+    setFlowLinks(null);
     flowOn = false;
     return;
   }
-  const edges: FlowEdge[] = [];
-  const pushLinkPolyline = (link: GLink) => {
-    // s = dependent (e.source), t = dependency (e.target); flow travels t -> s.
-    const s = graph.byId.get(endpointId(link.source));
-    const t = graph.byId.get(endpointId(link.target));
-    if (!s || !t || s.x == null || t.x == null) return;
-    // Match draw()'s routePts assembly: collect both endpoints plus any routed
-    // bend points and sort the whole polyline ascending by x. link.points runs
-    // dependency -> dependent for a normal edge, but a layoutReversed cycle
-    // back-edge stores it descending, which would zigzag the particle path if
-    // just concatenated in source/target order.
-    const pts = [{ x: t.x, y: t.y }, { x: s.x, y: s.y }, ...(link.points ?? [])].sort(
-      (a, b) => a.x - b.x,
-    );
-    edges.push({ pts });
-  };
+  const links: GLink[] = [];
   if (activeView === "trace" || activeView === "critical") {
     const path =
       activeView === "trace"
@@ -4612,17 +4644,16 @@ function buildFlowEdges() {
             ((endpointId(l.source) === a && endpointId(l.target) === b) ||
               (endpointId(l.source) === b && endpointId(l.target) === a)),
         );
-        if (link) pushLinkPolyline(link);
+        if (link) links.push(link);
       }
     }
   } else if (activeView === "blast" && matchSet) {
     for (const l of graph.links) {
       if (l.relation !== "depends_on") continue;
-      if (matchSet.has(endpointId(l.source)) && matchSet.has(endpointId(l.target)))
-        pushLinkPolyline(l);
+      if (matchSet.has(endpointId(l.source)) && matchSet.has(endpointId(l.target))) links.push(l);
     }
   }
-  flowOn = setFlowEdges(edges.length ? edges : null);
+  flowOn = setFlowLinks(links);
   if (flowOn) startMotion();
 }
 
@@ -4695,10 +4726,9 @@ function renderViewCommand(name: string | null, nodeId?: string | null, nodeTo?:
     "</span>" +
     '<button type="button" class="pf-v6-c-button pf-m-plain console-graph-views__copy" title="Copy this command to the clipboard" aria-label="Copy command">' +
     '<span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span></button>';
-  must(wrap.querySelector<HTMLElement>(".console-graph-views__copy")).addEventListener(
-    "click",
-    () => copyCommand(cmd),
-  );
+  wrap
+    .querySelector<HTMLElement>(".console-graph-views__copy")
+    ?.addEventListener("click", () => copyCommand(cmd));
 }
 
 // copyCommand puts a shell command on the clipboard and says so, or says why not: writeText rejects
@@ -4820,7 +4850,7 @@ function renderSuggestions() {
       .join("");
   wrap.querySelectorAll<HTMLElement>(".console-graph-sidebar__suggestion").forEach((b) => {
     b.addEventListener("click", () => {
-      chips[Number(b.dataset.i)].action();
+      chips[Number(b.dataset.i)]?.action();
       wrap.hidden = true; // hide after first use
     });
   });
@@ -4838,6 +4868,14 @@ interface PresetGroup {
   color: string;
   nodeSet?: Set<string>;
 }
+const PRESET_FALLBACK_COLOR = "#8b5cf6";
+
+// paletteColor cycles a preset's palette; the fallback only answers an empty palette, which no
+// preset declares.
+function paletteColor(palette: readonly string[], i: number): string {
+  return palette[i % palette.length] ?? PRESET_FALLBACK_COLOR;
+}
+
 interface ColorPreset {
   id: string;
   label: string;
@@ -4863,7 +4901,7 @@ const COLOR_PRESETS: ColorPreset[] = [
       ];
       return spellIds.map((id, i) => ({
         query: "id:" + id,
-        color: palette[i % palette.length],
+        color: paletteColor(palette, i),
       }));
     },
   },
@@ -4887,7 +4925,7 @@ const COLOR_PRESETS: ColorPreset[] = [
         // matcher prepends "project:" again, producing "project:project:web" which
         // matches nothing. Strip the leading "project:" so the query is "project:web".
         const bare = id.startsWith("project:") ? id.slice("project:".length) : id;
-        return { query: "project:" + bare, color: palette[i % palette.length] };
+        return { query: "project:" + bare, color: paletteColor(palette, i) };
       });
     },
   },
@@ -4946,7 +4984,7 @@ const COLOR_PRESETS: ColorPreset[] = [
         .sort((a, b) => a[0] - b[0])
         .map(([l, ids_]) => {
           const idx = Math.round((l / Math.max(maxLayer, 1)) * (palette.length - 1));
-          return { query: "layer:" + l, color: palette[idx], nodeSet: new Set(ids_) };
+          return { query: "layer:" + l, color: paletteColor(palette, idx), nodeSet: new Set(ids_) };
         });
     },
   },
@@ -4970,10 +5008,14 @@ const COLOR_PRESETS: ColorPreset[] = [
           palette.length - 1,
           Math.floor((i * palette.length) / timed.length),
         );
-        buckets[bucket].add(n.id);
+        buckets[bucket]?.add(n.id);
       });
       return buckets
-        .map((nodeSet, i) => ({ query: "duration q" + (i + 1), color: palette[i], nodeSet }))
+        .map((nodeSet, i) => ({
+          query: "duration q" + (i + 1),
+          color: paletteColor(palette, i),
+          nodeSet,
+        }))
         .filter((g) => g.nodeSet.size > 0);
     },
   },
@@ -5189,7 +5231,12 @@ function liveApplyGraphUpdate(data: GraphPayload) {
     for (const n of graph.nodes) prevDurations.set(n.id, nodeDurationMs(n));
   }
   const prevPos = capturePositions();
-  graph = prepareGraph(raw);
+  const prepared = prepareGraph(raw);
+  if (prepared.error) {
+    setStatus("Could not apply the live graph: " + prepared.error.message, "danger");
+    return;
+  }
+  graph = prepared.value;
 
   // Drop references to nodes the refresh removed rather than carry dangling ids.
   if (selected && !graph.byId.has(selected)) selected = null;
@@ -5382,15 +5429,15 @@ function publishLiveStatus() {
     // the shell's poller answers - claiming the dot to say "not connected" had this app
     // reporting on a server it never asked about.
     const nodes = graph?.nodes.length ?? 0;
-    const count = nodes ? nodes + " nodes" : undefined;
+    const count = nodes ? { count: nodes + " nodes" } : {};
     publishStatus(
       liveHost
         ? {
             connection: liveConnected ? "connected" : "connecting",
             label: liveConnected ? "connected" : "connecting...",
-            count,
+            ...count,
           }
-        : { count },
+        : count,
     );
   }
 }
@@ -5466,7 +5513,7 @@ function computeDefaultProjection(hasFragmentDirective: boolean) {
 // applyLayoutAndSimulation picks the layout mode (fragment override, else the
 // per-flavor default), starts the force simulation, and runs the layered
 // layout with its scale-guard fallback. Shared by boot() and bootLive().
-function applyLayoutAndSimulation(requestedLayout: string, flavor: GraphFlavor) {
+function applyLayoutAndSimulation(requestedLayout: string | undefined, flavor: GraphFlavor) {
   if (
     requestedLayout === "force" ||
     requestedLayout === "layered" ||
@@ -5542,7 +5589,7 @@ function finishInteractiveSetup() {
 
 // renderLoadedGraph runs boot's data-to-view pipeline (detect/prepare/project/status/layout/reveal),
 // excluding the one-time interaction wiring, so the demo button can re-run it in place.
-function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void {
+function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): Result<void> {
   const flavor = detectFlavor(loaded.data);
   graphEpoch++; // see replaceGraph: a different graph retires in-flight answers about the old one
   graphFlavor = flavor;
@@ -5554,7 +5601,9 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
     rawForPrepare = { nodes: nl.nodes, links: nl.links };
     cycleWarnings = nl.cycleWarnings;
   }
-  graph = prepareGraph(rawForPrepare);
+  const prepared = prepareGraph(rawForPrepare);
+  if (prepared.error) return prepared;
+  graph = prepared.value;
 
   // #data=/#src= (and #view/#q/#node) mean a specific graph or view was requested: show its full detail,
   // not the projects-only projection. computeDefaultProjection otherwise keeps the full graph unless it
@@ -5609,6 +5658,7 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
   hideNonProjects();
 
   syncGraphKindToggle();
+  return ok(undefined);
 }
 
 // activate boots the graph explorer against the scaffold already in the document. el() resolves DOM
@@ -5624,14 +5674,15 @@ export async function activate() {
   // that runs last - so revealWholeGraph's canvas-size poll and bootLive's FindAffected both started
   // while it was still null, and both silently opted out of cancellation. Every comment promising
   // "into every RPC" or "torn down takes the poll with it" was false for exactly those two.
-  lifecycleAbort = new AbortController();
+  const lifecycle = new AbortController();
+  lifecycleAbort = lifecycle;
 
   // Collapse the stage tools behind the PF toolbar kebab on narrow viewports (the shared
   // responsive-toolbar pattern the log viewer uses too). Wired before any early return so it
   // works in the live/empty states as well.
   wireToolbarOverflow();
   // Before any early return too: the Figures mode works whether or not a graph loads.
-  wireGraphModes(lifecycleAbort.signal);
+  wireGraphModes(lifecycle.signal);
 
   // Register file-open listeners before any early return so the installed PWA
   // can open a .json file even when the demo graph fails to load (no #data/#src
@@ -5642,7 +5693,7 @@ export async function activate() {
   canvas.addEventListener("dragover", (e) => e.preventDefault());
   canvas.addEventListener("drop", (e) => {
     e.preventDefault();
-    readGraphFile(must(e.dataTransfer).files[0]);
+    readGraphFile(e.dataTransfer?.files[0]);
   });
 
   // File handler: when the installed PWA is launched with "Open with" on a .json file,
@@ -5654,6 +5705,7 @@ export async function activate() {
       if (!launchParams.files || launchParams.files.length === 0) return;
       try {
         const fileHandle = launchParams.files[0];
+        if (!fileHandle) return;
         const f = await fileHandle.getFile();
         readGraphFile(f);
       } catch (e) {
@@ -5664,7 +5716,7 @@ export async function activate() {
 
   // Attempt a live-mode connection on an explicit server attach (#port, or the
   // server-origin/shared console). Returns true if handled; false falls through.
-  if (await bootLive()) return;
+  if (await bootLive(lifecycle.signal)) return;
 
   // Show the load spinner while loadGraph() is in flight (it fetches the ~1.4MB demo graph.json on a
   // #demo / deep-link boot). A cold visit returns instantly, so the spinner never visibly flashes.
@@ -5683,7 +5735,12 @@ export async function activate() {
 
   // Run boot's data-to-view pipeline, then the one-time interaction wiring. Splitting the two lets the
   // demo button re-run just the render (renderLoadedGraph) in place, without re-wiring listeners.
-  renderLoadedGraph(loaded);
+  const rendered = renderLoadedGraph(loaded);
+  if (rendered.error) {
+    setStatus("Could not show the graph: " + rendered.error.message, "danger");
+    document.body.classList.add("graph-empty");
+    return;
+  }
   finishInteractiveSetup();
   // AFTER the wiring: fitView needs the zoom behavior setupZoomDrag installs and returns
   // silently without it, so a reveal from inside renderLoadedGraph never framed anything.
@@ -5694,19 +5751,35 @@ export async function activate() {
   // this, and the demo comes in through boot on #demo rather than being swapped in place.
   if (loaded.source === "empty") {
     const empty = el("graph-empty-state");
-    if (empty) empty.hidden = false;
+    if (empty) {
+      empty.hidden = false;
+      const hint = empty.querySelector<HTMLElement>(
+        "[data-empty-way]:last-child [data-empty-hint]",
+      );
+      const why = demoHint(parseHash());
+      if (hint && why) hint.textContent = why;
+    }
   }
 
-  bootWireEvents();
+  bootWireEvents(lifecycle.signal);
+}
+
+// demoHint replaces the empty state's "add #demo" line when that advice cannot work: the page is
+// attached to a server, which never serves the demo graph (it is this repo's own, notes included),
+// or the address already says #demo and the load failed. Null keeps the scaffold's line.
+function demoHint(params: Record<string, string>): string | null {
+  if (!mayLoadBundledDemo(params))
+    return "A server's console does not serve the demo: it is the magus repo's own graph. Open the hosted console with #demo to see it.";
+  if (wantsDemo(params)) return "The demo graph did not load; the notice above says why.";
+  return null;
 }
 
 // bootWireEvents wires all the event listeners that are the same for both the
 // normal load path and the live-mode load path. Called at the end of boot() and
 // from the live-mode path before it returns.
-function bootWireEvents() {
+function bootWireEvents(lifecycleSignal: AbortSignal) {
   // The controller is activate()'s, not this function's - see the note there. Every
   // addEventListener below routes through its signal, so deactivate() removes them with one abort().
-  const lifecycleSignal = must(lifecycleAbort).signal;
 
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
   // keystroke; the legend/example/deep-link paths call applyQuery directly (no wait).
@@ -5908,7 +5981,7 @@ function bootWireEvents() {
       searchEl.value = q;
       applyQuery(q);
       searchEl.focus();
-      must(document.querySelector<HTMLElement>(".console-graph-app")).scrollIntoView({
+      document.querySelector<HTMLElement>(".console-graph-app")?.scrollIntoView({
         behavior: "smooth",
         block: "nearest",
       });
@@ -6037,9 +6110,8 @@ function bootWireEvents() {
 
   // Keep an unfinished settle from ticking against a canvas nobody can see: stop the sim while
   // the tab is hidden, resume it when the tab returns. In a dag mode the sim is stopped already.
-  // startMotion() re-arms the motion loop on the same two triggers -
-  // it self-checks motionEligible(), so it's a no-op when there's nothing to
-  // animate or the tab/preference still says not to.
+  // The motion timer stops and re-arms on the same two triggers; startMotion() self-checks
+  // motionEligible(), so it is a no-op when there is nothing to animate.
   document.addEventListener(
     "visibilitychange",
     () => {
@@ -6049,15 +6121,17 @@ function bootWireEvents() {
         // mid-burst finishes it and one hidden after it settled ticks once and stops again.
         else if (!isDagMode()) sim.restart();
       }
-      if (!document.hidden) startMotion();
+      if (document.hidden) stopMotion();
+      else startMotion();
     },
     { signal: lifecycleSignal },
   );
   reducedMotion.addEventListener(
     "change",
     () => {
-      // The layout itself is unaffected either way now - only the particle/pulse layer is.
-      startMotion();
+      // Only the flow and pulse layer answers; the layout is unaffected either way.
+      if (motionSuppressed()) stopMotion();
+      else startMotion();
     },
     { signal: lifecycleSignal },
   );
@@ -6088,7 +6162,7 @@ function bootWireEvents() {
 
   // The question builder, behind the kebab beside the filter box. It owns the views and the
   // filter grammar that used to be two columns of chips.
-  queryBuilder = createQueryBuilder({
+  const builder = createQueryBuilder({
     // Offered values come from the LOADED graph, so a picker never suggests a kind that matches
     // nothing here.
     kinds: () => [...new Set(graph?.nodes.map((n) => n.kind) ?? [])].sort(),
@@ -6121,7 +6195,7 @@ function bootWireEvents() {
   });
   // Mounted in the detail column: it takes that column while open, so the canvas beside it stays
   // visible and acts as the preview. setDetailMode owns which of the three the column shows.
-  const builder = must(queryBuilder);
+  queryBuilder = builder;
   el("query-builder-host")?.append(builder.el);
   el("query-builder-btn")?.addEventListener("click", () => {
     if (builder.isOpen()) {
@@ -6149,7 +6223,7 @@ function bootWireEvents() {
 
 // bootLive: live-mode boot path. Fetches skeleton, wires SSE, then returns.
 // Returns true if live mode connected, false to fall through to normal load.
-async function bootLive() {
+async function bootLive(lifecycleSignal: AbortSignal) {
   const params = hashParams();
   // A static graph was explicitly requested (#data/#src): never take over the live path, so those
   // offline links keep working even when a default server is configured.
@@ -6181,6 +6255,14 @@ async function bootLive() {
   }
   liveToken = getLiveToken();
   if (!liveToken) {
+    // A tokenless page on the daemon's own mount adopted its origin only to say it is connected; with
+    // nothing to read it falls through to the empty state, whose first way mints a signed-in link.
+    if (params.port === undefined) {
+      liveHost = null;
+      liveFlavor = null;
+      graphSource = "empty";
+      return false;
+    }
     setStatus(
       "live mode: no token found. Re-run magus graph export --open --follow to get a fresh link.",
       "danger",
@@ -6191,12 +6273,28 @@ async function bootLive() {
 
   // Skeleton-first: fetch ?level=projects first (KBs at any scale).
   setStatus("Connecting to live workspace...");
+  // Same words and the same guide as the connect prompt every server app shows. No Retry:
+  // live mode here is entered from the link magus printed, so reopening that link is the retry.
+  const connectFailed = (detail: string): false => {
+    setStatus(
+      "The console could not reach " +
+        host +
+        " (" +
+        detail +
+        "). Start it with magus server start, then reopen the link magus printed.",
+      "danger",
+      { label: "Setup guide", run: () => window.open(SERVER_GUIDE_URL, "_blank", "noopener") },
+    );
+    liveHost = null;
+    liveToken = null;
+    return false; // fall through to normal load
+  };
   try {
     const skeletonUrl = "http://" + liveHost + "/api/v1/graph?level=projects";
     const skeletonResp = await fetch(skeletonUrl, {
       headers: authHeaders(liveToken),
     });
-    if (!skeletonResp.ok) throw new Error("HTTP " + skeletonResp.status);
+    if (!skeletonResp.ok) return connectFailed("HTTP " + skeletonResp.status);
     liveETag = skeletonResp.headers.get("ETag") || null;
     liveGraphQuery = "?level=projects";
     const skeletonData = await skeletonResp.json();
@@ -6213,7 +6311,9 @@ async function bootLive() {
       const nl = targetGraphToNodeLink(skeletonData);
       rawForPrepare = { nodes: nl.nodes, links: nl.links };
     }
-    graph = prepareGraph(rawForPrepare);
+    const skeleton = prepareGraph(rawForPrepare);
+    if (skeleton.error) return connectFailed(skeleton.error.message);
+    graph = skeleton.value;
 
     // Check node_count: full-fetch when skeleton is small enough to be manageable.
     const nodeCount = skeletonData.node_count || graph.nodes.length;
@@ -6232,7 +6332,9 @@ async function bootLive() {
           const nl = targetGraphToNodeLink(fullData);
           rr = { nodes: nl.nodes, links: nl.links };
         }
-        graph = prepareGraph(rr);
+        const full = prepareGraph(rr);
+        if (full.error) return connectFailed(full.error.message);
+        graph = full.value;
       }
     }
 
@@ -6263,29 +6365,16 @@ async function bootLive() {
     liveConnect();
 
     // Wire all common event listeners.
-    bootWireEvents();
+    bootWireEvents(lifecycleSignal);
     return true;
   } catch (e) {
-    // Same words and the same guide as the connect prompt every server app shows. No Retry:
-    // live mode here is entered from the link magus printed, so reopening that link is the retry.
-    setStatus(
-      "The console could not reach " +
-        liveHost +
-        " (" +
-        errMessage(e) +
-        "). Start it with magus server start, then reopen the link magus printed.",
-      "danger",
-      { label: "Setup guide", run: () => window.open(SERVER_GUIDE_URL, "_blank", "noopener") },
-    );
-    liveHost = null;
-    liveToken = null;
-    return false; // fall through to normal load
+    return connectFailed(errMessage(e));
   }
 }
 
 // deactivate tears down everything with a lifetime when the console unmounts a graph tab or pane: it
 // stops the force simulation, cancels the
-// motion loop and clears its state, aborts a live SSE stream and cancels its reconnect timer,
+// motion timer and clears its state, aborts a live SSE stream and cancels its reconnect timer,
 // disconnects the stage ResizeObserver and the theme MutationObserver, and removes the
 // window/document lifecycle listeners (via the one AbortController). Idempotent. The standalone
 // page never calls it (the graph lives for the page's lifetime); the console's graph PageModule
@@ -6405,10 +6494,7 @@ export function deactivate(): void {
   haloFocus = null;
   haloKeep = new Set();
   if (sim) sim?.stop();
-  if (motionRaf) {
-    cancelAnimationFrame(motionRaf);
-    motionRaf = 0;
-  }
+  stopMotion();
   // The camera's own two kinds of pending work, neither of which this used to stop: the glide is a
   // self-perpetuating rAF chain that would keep calling applyTransform -> draw() on a hidden
   // canvas, and the beats are timeouts queued to fit an app the console has torn down.
@@ -6420,6 +6506,8 @@ export function deactivate(): void {
   resetMotion();
   flowOn = false;
   pulsesPending = false;
+  flowDrawn = false;
+  dragging = false;
   if (liveSseAbort) {
     liveSseAbort.abort();
     liveSseAbort = null;

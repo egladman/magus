@@ -40,7 +40,9 @@ func TestCompletableCommandsCoverTheRealCLI(t *testing.T) {
 // flags: a positional would be a guess at a path this page cannot see.
 func TestCompleteCLIOffersDeclaredFlags(t *testing.T) {
 	got := completeCLI("run", "--no-")
-	require.NotEmpty(t, got, "run declares --no-cache and --no-default-charms")
+	require.NotEmpty(t, got, "run declares cache and default-charms, so it takes their --no- forms")
+	assert.Contains(t, got, "--no-cache")
+	assert.Contains(t, got, "--no-default-charms")
 	for _, f := range got {
 		assert.Contains(t, f, "--no-")
 	}

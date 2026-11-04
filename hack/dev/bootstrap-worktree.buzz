@@ -4,10 +4,14 @@ import "encoding/json";
 import "env";
 import "flags";
 import "fs";
+import "io";
 import "path";
 import "proc";
+import "result";
 import "std";
 import "vcs";
+import "./hack/policy/stale" as stale;
+import "./hack/dev/bootstrap-checkout" as checkout;
 
 import "assert";
 
@@ -17,18 +21,18 @@ final SERVES = ["rule:stale-binary"];
 final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout> | --build-from <checkout>] | --check --from <checkout>)";
 final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this script compiles magus only under --build-from\n{USAGE}\n\n"
     + "Makes a fresh worktree of this repository usable for the worker holding <id>: places the root checkout's ./magus\n"
-    + "(the main checkout, or the one --from names), refreshes the wired harness skills, takes the job's lease, refuses\n"
+    + "(the main checkout, or the one --from names), seeds its symbol index from there, takes the job's lease, refuses\n"
     + "unless the row names this worktree as its checkout and the base it recorded matches the row's checkpoint, and builds\n"
     + "the graph last. The lease comes first so an edit made while the graph builds lands after the base is recorded. A\n"
     + "graph build that fails prints a line naming `./magus graph build` and does not fail the bootstrap. The last line\n"
-    + "printed says the worktree is ready: act on that line, never on partial output. Writes ./magus, harness skills,\n"
-    + "the job row and the graph.\n\n"
+    + "printed says the worktree is ready: act on that line, never on partial output. Writes ./magus, the job row and\n"
+    + "the graph, and never the harness wiring: hack/dev/bootstrap-harnesses.buzz is the person's run for that.\n\n"
     + "The orchestrator builds one ./magus per base commit, in the root, and every worker checkout receives a copy. A copy is\n"
-    + "placed only when it is provably the binary this worktree would build: no Go build input (a file in a package\n"
-    + "`go list -deps ./cmd/magus` names, or the root go.mod, go.sum or go.work) differs between the commit the binary was\n"
-    + "built at and this worktree, and none went into it uncommitted. Docs, console, a package nothing links and a separate\n"
-    + "module such as libs/embed/train do not count, so a base commit later than the binary's usually qualifies. Otherwise the\n"
-    + "script refuses and names what to build in the root.\n"
+    + "placed only when it is provably the binary this worktree would build: go-build stamps it with a digest of its Go\n"
+    + "build inputs (each file `go list -deps ./cmd/magus` compiles or embeds, and the root go.mod, go.sum or go.work), and\n"
+    + "that digest must be this worktree's. Docs, console, tests, a package nothing links and a separate module such as\n"
+    + "libs/embed/train do not count, so a base commit later than the binary's usually qualifies, and so does a binary built\n"
+    + "from uncommitted changes. Otherwise the script refuses and names what to build in the root.\n"
     + "--build-from <checkout> is --from after building: it runs `<checkout>/magus --root <checkout> run go-build .` first, then\n"
     + "judges that binary the same way. A session holding a job lease is refused, since a worker never compiles magus.\n"
     + "--check prints that verdict and writes nothing.";
@@ -44,138 +48,47 @@ export object Row {
     checkoutRoot: str,
 }
 
-export fun parseRow(described: str) > Row !> any {
-    final j = json\parse(described)["job"] ?? {<str: any>};
-    return Row{
-        id = j["id"] ?? "",
-        state = j["state"] ?? "",
-        checkpoint = j["checkpoint"] ?? "",
-        reportedBase = j["reported_base"] ?? "",
-        baseVerdict = j["base_verdict"] ?? "",
-        checkoutRoot = j["checkout_root"] ?? "",
-    };
-}
-
-// BuildFacts is what `magus version -o json` says about how a binary was built: the commit,
-// and whether uncommitted changes went into it.
-export object BuildFacts {
-    commit: str,
-    dirty: bool,
-}
-
-export fun parseBuild(versionJSON: str) > BuildFacts !> any {
-    final j = json\parse(versionJSON);
-    final version: str = j["version"] ?? "";
-    return BuildFacts{ commit = j["commit"] ?? "", dirty = version.endsWith("-dirty") };
-}
-
-// The files that decide the module graph a Go build resolves, at the root.
-final MODULE_FILES = ["go.mod", "go.sum", "go.work", "go.work.sum"];
-
-// ROOT_SCOPE marks the root package among the scopes. It is not a prefix: a "dir/" for root
-// would take in MAGUS.md and every doc.
-final ROOT_SCOPE = "./";
-
-// packageScopes are where a file can reach the binary, root-relative: "dir/" for a package
-// directory below root, ROOT_SCOPE for the root package, a bare path for one file the root
-// package embeds. listed is `go list -deps` output, one package per line as its absolute
-// directory then each go:embed file after a "|". A standard-library or module-cache
-// directory is not under root and drops out.
-export fun packageScopes(listed: str, root: str) > [str] {
-    final scopes = mut [<str>];
-    final base = path\clean(root);
-    foreach (line in listed.split("\n")) {
-        if (line.trim() == "") {
-            continue;
-        }
-        final fields = line.trim().split("|");
-        final dir = path\clean(fields[0]);
-        if (dir == base) {
-            scopes.append(ROOT_SCOPE);
-            foreach (embedded in fields.sub(1)) {
-                scopes.append(embedded);
-            }
-        } else if (dir.startsWith(base + "/")) {
-            scopes.append(dir.sub(base.len() + 1) + "/");
-        }
+export fun parseRow(described: str) > result\Result::<Row> {
+    try {
+        final j = json\parse(described)["job"] ?? {<str: any>};
+        return result\ok::<Row>(Row{
+            id = j["id"] ?? "",
+            state = j["state"] ?? "",
+            checkpoint = j["checkpoint"] ?? "",
+            reportedBase = j["reported_base"] ?? "",
+            baseVerdict = j["base_verdict"] ?? "",
+            checkoutRoot = j["checkout_root"] ?? "",
+        });
+    } catch (err: any) {
+        return result\caught::<Row>(err, doing: "bootstrap-worktree: read the job row");
     }
-    return scopes;
 }
 
-// buildInputs are the changed root-relative paths that can change the compiled binary: a
-// non-test Go file in a linked package, a module file at the root, or a file inside a package
-// directory, which is where go:embed reads from. A package nothing links, a separate module
-// beside it, a test file, docs, console and changelog fragments are not inputs. A linked
-// package deleted since the listing is not missed: whatever imported it changed too.
-export fun buildInputs(changed: [str], scopes: [str]) > [str] {
-    final inputs = mut [<str>];
-    foreach (p in changed) {
-        if (isBuildInput(p, scopes: scopes)) {
-            inputs.append(p);
-        }
-    }
-    return inputs;
-}
-
-fun isBuildInput(p: str, scopes: [str]) > bool {
-    final name = fs\basename(p);
-    final dir = fs\dirname(p);
-    if (MODULE_FILES.indexOf(name) != null and dir == ".") {
-        return true;
-    }
-    if (name.endsWith(".go")) {
-        if (name.endsWith("_test.go")) {
-            return false;
-        }
-        return scopes.indexOf(if (dir == ".") ROOT_SCOPE else dir + "/") != null;
-    }
-    foreach (s in scopes) {
-        if (s == p or (s != ROOT_SCOPE and s.endsWith("/") and p.startsWith(s))) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// raiseAll raises every reason as one error, one per line, and returns when there are none.
-fun raiseAll(reasons: [str]) > void !> str {
+// failAll fails with every reason, one per line, and succeeds when none.
+fun failAll(reasons: [str]) > result\Result::<bool> {
     if (reasons.len() > 0) {
-        throw reasons.join("\n  ");
+        return result\fail::<bool>(reasons.join("\n  "));
     }
+    return result\ok::<bool>(true);
 }
 
-// checkReusable raises with every reason a binary with build is not the one a build in this
-// worktree would produce. sourceRev is the HEAD of the checkout holding the binary; the
-// inputs are the build inputs that differ from build.commit in that checkout and in this
-// worktree. The worktree may sit at any commit: what decides is whether a build input
-// differs, not whether the commits are equal.
-export fun checkReusable(build: BuildFacts, sourceRev: str, sourceInputs: [str], rootInputs: [str]) > void !> str {
-    if (build.commit == "") {
-        throw "it reports no commit, so nothing ties it to a tree";
+// checkReusable fails unless stamped, the Go input digest linked into a
+// binary, is digest, this worktree's.
+// Equal inputs build the same binary at any commit, even from uncommitted
+// changes.
+export fun checkReusable(stamped: str, digest: str) > result\Result::<bool> {
+    if (stamped == "") {
+        return result\fail::<bool>("it carries no Go input digest: a bare `go build` linked it, or a go-build from before the digest");
     }
-    final found = mut [<str>];
-    if (build.dirty and !sourceRev.startsWith(build.commit)) {
-        found.append("it was built from uncommitted changes at {build.commit}, and its checkout has since moved to {sourceRev}, so what went into it is unknown");
+    if (stamped != digest) {
+        return result\fail::<bool>("its Go build inputs (digest {stamped}) differ from this worktree's ({digest})");
     }
-    if (build.dirty and sourceInputs.len() > 0) {
-        found.append("it was built with {sourceInputs.len()} build input(s) changed from {build.commit}, first {sourceInputs[0]}");
-    }
-    if (rootInputs.len() > 0) {
-        found.append("this worktree differs from {build.commit} in {rootInputs.len()} build input(s), first {rootInputs[0]}");
-    }
-    raiseAll(found);
+    return result\ok::<bool>(true);
 }
 
-// mainWorktree is the first stanza of `git worktree list --porcelain`, the checkout every
-// other worktree hangs off.
-export fun mainWorktree(porcelain: str) > str {
-    foreach (line in porcelain.split("\n")) {
-        if (line.startsWith("worktree ")) {
-            return line.sub(9);
-        }
-    }
-    return "";
-}
+// stampProbe prints the build stamp of the magus running it, from which hack/policy/stale.buzz
+// reads the Go input digest the binary was built with.
+final stampProbe = `import "std"; import "magus"; std\print(magus\guard.binary().stamp);`;
 
 // needsDetach is whether the recorded base diverged from the checkpoint on a tree with no
 // tracked edits, where moving onto the checkpoint loses nothing.
@@ -184,12 +97,11 @@ export fun needsDetach(row: Row, trackedClean: bool) > bool {
     return row.checkpoint != "" and !sameTree and trackedClean;
 }
 
-// checkFit raises with every way the taken lease is unfit for a worker in root. A row with no
-// checkpoint cannot be checked for its base, which render reports rather than refuses: there
-// is nothing to compare against. trackedClean is whether root's tracked files match its HEAD:
-// job exec digests a tree holding only untracked files as a dirty patch of nothing,
-// revision-match, which is the checkpoint's tree all the same.
-export fun checkFit(row: Row, root: str, main: str, trackedClean: bool) > void !> str {
+// checkFit fails with every way the taken lease is unfit for a worker in root.
+// A row with no checkpoint has no base to check, which render reports.
+// trackedClean is whether root's tracked files match its HEAD.
+// Untracked files alone read as revision-match, the checkpoint's tree.
+export fun checkFit(row: Row, root: str, main: str, trackedClean: bool) > result\Result::<bool> {
     final found = mut [<str>];
     if (path\clean(row.checkoutRoot) != path\clean(root)) {
         final where = if (row.checkoutRoot == "") "no checkout" else row.checkoutRoot;
@@ -205,32 +117,40 @@ export fun checkFit(row: Row, root: str, main: str, trackedClean: bool) > void !
     if (["declared", "running"].indexOf(row.state) == null) {
         found.append("job {row.id} is {row.state}, so nobody may work it; ask whoever declared it");
     }
-    raiseAll(found);
+    return failAll(found);
 }
 
 // checkRepository refuses anything but a secondary worktree of this repository.
-fun checkRepository(root: str) > str !> any {
-    if (vcs\name() != "git") {
-        throw "bootstrap-worktree: makes git worktrees usable, and this checkout is {vcs\name()}";
+fun checkRepository(root: str) > result\Result::<str> {
+    try {
+        if (vcs\name() != "git") {
+            return result\fail::<str>("bootstrap-worktree: makes git worktrees usable, and this checkout is {vcs\name()}");
+        }
+        final gomod = fs\readFile("{root}/go.mod") catch "";
+        if (!gomod.startsWith(MODULE + "\n")) {
+            return result\fail::<str>("bootstrap-worktree: {root} is not a checkout of magus ({MODULE}); this script places magus's own binary");
+        }
+        final main = checkout\mainWorktree(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
+        if (path\clean(main) == path\clean(root)) {
+            return result\fail::<str>("bootstrap-worktree: {root} is the main checkout; a worker gets its own worktree, and placing here replaces "
+                + "the ./magus every other session in this checkout runs");
+        }
+        return result\ok::<str>(main);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "bootstrap-worktree: find the main checkout");
     }
-    final gomod = fs\readFile("{root}/go.mod") catch "";
-    if (!gomod.startsWith(MODULE + "\n")) {
-        throw "bootstrap-worktree: {root} is not a checkout of magus ({MODULE}); this script places magus's own binary";
-    }
-    final main = mainWorktree(vcs\cmd(["worktree", "list", "--porcelain"], opts: {"dir": root, "quiet": true}).stdout);
-    if (path\clean(main) == path\clean(root)) {
-        throw "bootstrap-worktree: {root} is the main checkout; a worker gets its own worktree, and placing here replaces "
-            + "the ./magus every other session in this checkout runs";
-    }
-    return main;
 }
 
-fun magusAt(bin: str, root: str, args: [str]) > str !> any {
-    final r = proc\exec(bin, args: args, dir: root, opts: {"quiet": true, "allow_failure": true});
-    if (r.code != 0) {
-        throw "bootstrap-worktree: `{bin} {args.join(" ")}` failed: {failureCause(r.code, stdout: r.stdout, stderr: r.stderr)}";
+fun magusAt(bin: str, root: str, args: [str]) > result\Result::<str> {
+    try {
+        final r = proc\exec(bin, args: args, dir: root, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
+        if (r.code != 0) {
+            return result\fail::<str>("bootstrap-worktree: `{bin} {args.join(" ")}` failed: {failureCause(r.code, stdout: r.stdout, stderr: r.stderr)}");
+        }
+        return result\ok::<str>(r.stdout);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "bootstrap-worktree: run `{bin} {args.join(" ")}`");
     }
-    return r.stdout;
 }
 
 // failureCause is what a failed command said, or, when it said nothing, how it ended.
@@ -245,71 +165,46 @@ export fun failureCause(code: int, stdout: str, stderr: str) > str {
     return "exit {code}, and it printed nothing";
 }
 
-fun readHead(dir: str) > str !> any {
-    return vcs\cmd(["rev-parse", "HEAD"], opts: {"dir": dir, "quiet": true}).stdout.trim();
+// Binary is a placeable ./magus and the Go input digest it carries.
+export object Binary {
+    bin: str,
+    digest: str,
 }
 
-// scopesOf asks the Go toolchain which packages under root ./cmd/magus compiles. go list
-// loads packages without compiling any; magus refuses to load without jsonv2.
-fun scopesOf(root: str) > [str] !> any {
-    final listed = proc\exec("env", args: ["GOEXPERIMENT=jsonv2", "go", "list", "-deps", "-f",
-        `{{if not .Standard}}{{.Dir}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`, "./cmd/magus"],
-        dir: root, opts: {"quiet": true, "allow_failure": true});
-    if (listed.code != 0) {
-        throw "bootstrap-worktree: `go list -deps ./cmd/magus` in {root} exited {listed.code}:\n{listed.stderr.trim()}";
-    }
-    return packageScopes(listed.stdout, root: root);
-}
-
-// changedSince is every path in root, root-relative, whose content differs from rev: files
-// committed since, edited in the tree, or untracked and not ignored.
-fun changedSince(root: str, rev: str) > [str] !> any {
-    final paths = mut [<str>];
-    final diffed = vcs\cmd(["-c", "core.quotepath=false", "diff", "--name-only", rev], opts: {"dir": root, "quiet": true}).stdout;
-    final fresh = vcs\cmd(["-c", "core.quotepath=false", "ls-files", "--others", "--exclude-standard"], opts: {"dir": root, "quiet": true}).stdout;
-    foreach (line in (diffed + "\n" + fresh).split("\n")) {
-        if (line.trim() != "") {
-            paths.append(line.trim());
-        }
-    }
-    return paths;
-}
-
-// reusable returns the binary in source and its build when it is provably root's own build,
-// and raises with every reason it is not.
-fun reusable(root: str, source: str) > obj{ bin: str, build: BuildFacts, scopes: int } !> any {
+// reusable is the binary in source and root's Go input digest when the
+// binary's stamp records that digest. Otherwise it fails naming why.
+fun reusable(root: str, source: str) > result\Result::<Binary> {
     final bin = "{source}/magus";
-    if (!fs\isFile(bin)) {
-        throw "bootstrap-worktree: {source} holds no ./magus to place";
-    }
-    final build = parseBuild(magusAt(bin, root: source, args: ["version", "-o", "json"]));
-    if (build.commit == "") {
-        throw "{bin} is not this worktree's build:\n  it reports no commit, so nothing ties it to a tree";
-    }
-    final scopes = scopesOf(root);
-    final sourceInputs = if (build.dirty) buildInputs(changedSince(source, rev: build.commit), scopes: scopes) else [<str>];
-    final rootInputs = buildInputs(changedSince(root, rev: build.commit), scopes: scopes);
+    var present = false;
     try {
-        checkReusable(build, sourceRev: readHead(source), sourceInputs: sourceInputs, rootInputs: rootInputs);
-    } catch (e: str) {
-        throw "{bin} is not this worktree's build:\n  {e}";
+        present = fs\isFile(bin);
+    } catch (err: any) {
+        return result\caught::<Binary>(err, doing: "bootstrap-worktree: look for {bin}");
     }
-    return .{ bin = bin, build = build, scopes = scopes.len() };
+    if (!present) {
+        return result\fail::<Binary>("bootstrap-worktree: {source} holds no ./magus to place");
+    }
+    final printed = magusAt(bin, root: source, args: ["buzz", "-e", stampProbe]);
+    if (printed.error -> e) {
+        return result\fail::<Binary>("{bin} is not this worktree's build:\n  {source} cannot print its build stamp, so it predates go-build stamping one: {e.message}");
+    }
+    final stamped = stale\stampedInputs(printed.value!.trim());
+    var digest = "";
+    try {
+        digest = stale\goInputsDigest(root);
+    } catch (err: any) {
+        return result\caught::<Binary>(err, doing: "bootstrap-worktree: digest the Go build inputs of {root}");
+    }
+    final matched = checkReusable(stamped, digest: digest);
+    if (matched.error -> e) {
+        return result\fail::<Binary>("{bin} is not this worktree's build:\n  {e.message}");
+    }
+    return result\ok::<Binary>(Binary{ bin = bin, digest = digest });
 }
 
 // placed says what bootstrap did with the binary, for stdout.
-export fun placed(bin: str, commit: str, rootRev: str, scopes: int) > str {
-    final where = if (rootRev.startsWith(commit)) "at {commit}, which this worktree is at" else "at {commit}, while this worktree is at {rootRev}";
-    return "{bin} was built {where}; no Go build input under {scopes} package scopes differs";
-}
-
-// syncHarnesses merges the wired harnesses' host config through hack/dev/bootstrap-harnesses.buzz and
-// returns what it printed. A leased session skips it, as it does the skill install.
-export fun syncHarnesses(run: fun (args: [str]) > str !> any, lease: str) > str !> any {
-    if (lease != "") {
-        return "skipped the harness config sync; this session holds the lease `{lease}`";
-    }
-    return run(["buzz", "hack/dev/bootstrap-harnesses.buzz"]).trim();
+export fun placed(bin: str, digest: str) > str {
+    return "{bin} was built from this worktree's Go build inputs (digest {digest})";
 }
 
 // refusal is the error for a source with no placeable binary: what the orchestrator builds, once, in the root.
@@ -336,101 +231,197 @@ export fun buildArgs(source: str) > [str] {
     return ["--root", source, "run", "go-build", "."];
 }
 
-// buildRefusal is what a leased worker is told for --build-from: it never compiles magus.
-export fun buildRefusal(lease: str, source: str) > str {
+// buildRefusal is what a leased worker is told for --build-from: it never compiles magus. It
+// is "" when described, `describe job <lease> -o json`, is a live integration row taken in
+// source, and source is root.
+export fun buildRefusal(lease: str, source: str, root: str = "", described: str = "") > str {
+    var j = {<str: any>};
+    try {
+        j = json\parse(described)["job"] ?? {<str: any>};
+    } catch (e: any) {
+        j = {<str: any>};
+    }
+    final integrates: [any] = j["integrates"] ?? [<any>];
+    final state: str = j["state"] ?? "";
+    final checkout: str = j["checkout_root"] ?? "";
+    final ownCheckout = checkout != "" and path\clean(checkout) == path\clean(source) and path\clean(source) == path\clean(root);
+    // The integrator builds in its own checkout, as the guard's actingIntegrator allows.
+    // Refusing it here sent every rebuild of an integration through the root's context.
+    if (integrates.len() > 0 and ["declared", "running", "exited"].indexOf(state) != null and ownCheckout) {
+        return "";
+    }
     return "bootstrap-worktree: --build-from compiles magus, and this session holds the lease `{lease}`; a worker never compiles magus\n"
         + "Ask the main session to run `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job {lease} --build-from {source}`, "
         + "or to place a built binary with `--from {source}`.";
 }
 
-// buildFrom compiles magus in source with the checkout's own ./magus, so the go-build target stamps it.
-fun buildFrom(source: str) > void !> any {
+// buildFrom compiles magus in source with the checkout's own ./magus, so the go-build target
+// stamps it, for placing in root. A lease that may not build is refused.
+fun buildFrom(source: str, root: str) > result\Result::<bool> {
     final bin = "{source}/magus";
-    if (!fs\isFile(bin)) {
-        throw "bootstrap-worktree: {source} holds no ./magus to build with; `GOEXPERIMENT=jsonv2 go -C {source} run -trimpath ./cmd/magus run go-build --no-cache .` makes the first one";
+    var present = false;
+    try {
+        present = fs\isFile(bin);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "bootstrap-worktree: look for {bin}");
     }
-    proc\exec(bin, args: buildArgs(source));
+    if (!present) {
+        return result\fail::<bool>("bootstrap-worktree: {source} holds no ./magus to build with; `GOEXPERIMENT=jsonv2 go -C {source} run -trimpath ./cmd/magus run go-build --no-cache .` makes the first one");
+    }
+    final lease = leaseOf(env\getOr("BAGGAGE", def: "") catch "");
+    if (lease != "") {
+        final described = magusAt(bin, root: source, args: ["describe", "job", lease, "-o", "json"]);
+        final refused = buildRefusal(lease, source: source, root: root, described: described.value ?? "");
+        if (refused != "") {
+            return result\fail::<bool>(refused);
+        }
+    }
+    try {
+        _ = proc\exec(bin, args: buildArgs(source));
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "bootstrap-worktree: build {source}/magus");
+    }
+    return result\ok::<bool>(true);
 }
 
-// bootstrap places ./magus in root, refreshes harness skills, takes job, checks the row fits, builds the graph, and
-// returns the row as the fresh binary reads it back. ./magus is copied from source, the main checkout when source is "",
-// and only when that binary is provably root's own build; otherwise it raises, since a worker
-// checkout never compiles magus. Raises on any step that fails and on a row unfit for a worker
-// here, so a caller never starts work on a wrong binding. The graph build runs last, after the
-// lease records the base on a clean tree; its failure is printed, not raised.
-export fun bootstrap(root: str, job: str, source: str) > Row !> any {
-    final main = checkRepository(root);
+// bootstrap places ./magus in root, takes job and checks the row fits.
+// It builds the graph and returns the row as the fresh binary reads it.
+// ./magus is copied from source, the main checkout when source is "",
+// and only when that binary is provably root's own build.
+// A failed step fails the call, as does a row unfit for a worker here.
+// The graph build runs last, and its failure is printed, not returned.
+export fun bootstrap(root: str, job: str, source: str) > result\Result::<Row> {
+    final found = checkRepository(root);
+    if (found.error -> err) {
+        return result\Result::<Row>{ error = err };
+    }
+    final main = found.value!;
     final origin = if (source == "") main else source;
     final local = "{root}/magus";
-    var v = .{ bin = "", build = BuildFacts{ commit = "", dirty = false }, scopes = 0 };
-    try {
-        v = reusable(root, source: origin);
-    } catch (e: str) {
-        throw refusal(e, source: origin);
+    final binary = reusable(root, source: origin);
+    if (binary.error -> why) {
+        return result\fail::<Row>(refusal(why.message, source: origin));
     }
+    final v = binary.value!;
     // Copy beside it, then rename over it: a copy truncates ./magus in place, and this script
     // is often running from that file (magus re-execs into a workspace's own ./magus). On
     // darwin every later exec of an executable rewritten in place is SIGKILLed.
-    fs\copyFile(v.bin, dst: "{local}.bootstrap");
-    fs\chmod("{local}.bootstrap", mode: 493);
-    fs\rename("{local}.bootstrap", dst: local);
-    std\print("placed " + placed(v.bin, commit: v.build.commit, rootRev: readHead(root), scopes: v.scopes));
-    final lease = leaseOf(env\getOr("BAGGAGE", def: "") catch "");
-    final runLocal = fun (args: [str]) > str !> any => magusAt(local, root: root, args: args);
-    std\print(refreshSkills(runLocal, lease: lease));
-    std\print(syncHarnesses(runLocal, lease: lease));
+    try {
+        fs\copyFile(v.bin, dst: "{local}.bootstrap");
+        fs\chmod("{local}.bootstrap", mode: 493);
+        fs\rename("{local}.bootstrap", dst: local);
+        std\print("placed " + placed(v.bin, digest: v.digest));
+        std\print(checkout\seedLine([origin, main], dir: root));
+    } catch (err: any) {
+        return result\caught::<Row>(err, doing: "bootstrap-worktree: place ./magus in {root}");
+    }
     return claimThenIndex(
-        fun (args: [str]) > str !> any => magusAt(local, root: root, args: args),
+        fun (args: [str]) > result\Result::<str> => magusAt(local, root: root, args: args),
         root: root,
         job: job,
         main: main,
-        trackedClean: fun () > bool !> any => (vcs\cmd(["diff", "HEAD", "--quiet"], opts: {"dir": root, "quiet": true, "allow_failure": true}).code) == 0,
-        detach: fun (checkpoint: str) > void !> any {
-            vcs\cmd(["switch", "--detach", checkpoint], opts: {"dir": root, "quiet": true});
+        trackedClean: fun () > result\Result::<bool> {
+            try {
+                return result\ok::<bool>((vcs\cmd(["diff", "HEAD", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true, allowFailure = true }).code) == 0);
+            } catch (err: any) {
+                return result\caught::<bool>(err, doing: "bootstrap-worktree: diff the tracked files against HEAD");
+            }
+        },
+        detach: fun (checkpoint: str) > result\Result::<bool> {
+            try {
+                _ = vcs\cmd(["switch", "--detach", checkpoint], opts: vcs\CommandOptions{ dir = root, quiet = true });
+                return result\ok::<bool>(true);
+            } catch (err: any) {
+                return result\caught::<bool>(err, doing: "bootstrap-worktree: switch --detach {checkpoint}");
+            }
         },
     );
 }
 
-// refreshSkills refreshes every wired harness's skills and returns the line to print. A bound job
-// cannot rewrite the skills that steer it ("bound job cannot change a harness skill tree"), so a
-// session already under a lease skips the install.
-export fun refreshSkills(run: fun (args: [str]) > str !> any, lease: str) > str !> any {
-    if (lease != "") {
-        return "skipped the harness skill install; this session holds the lease `{lease}`, and a bound job cannot change a harness skill tree";
+// rowOf reads job's row through run.
+fun rowOf(run: fun (args: [str]) > result\Result::<str>, job: str) > result\Result::<Row> {
+    final described = run(["describe", "job", job, "-o", "json"]);
+    if (described.error -> err) {
+        return result\Result::<Row>{ error = err };
     }
-    run(["agent", "harness", "install"]);
-    return "refreshed the wired harness skills";
+    return parseRow(described.value!);
+}
+
+fun heldElsewhere(run: fun (args: [str]) > result\Result::<str>, job: str, execError: result\Diagnostic) > result\Result::<Row> {
+    final heldRow = rowOf(run, job: job);
+    if (heldRow.error -> err) {
+        return result\Result::<Row>{ error = err };
+    }
+    final held = heldRow.value!;
+    if (held.state != "running") {
+        return result\Result::<Row>{ error = execError };
+    }
+    // ./magus is placed and the lease is where it belongs. Raising here
+    // exited 1 on a success, so callers learned to ignore the exit status.
+    try {
+        io\stderr.write("bootstrap-worktree: placed ./magus; job {job} is running, its lease held by its holder in {held.checkoutRoot}, "
+            + "so this session took no lease and built no graph. The exec said: {execError.message}\n");
+    } catch (err: any) {
+        return result\caught::<Row>(err, doing: "bootstrap-worktree: write to stderr");
+    }
+    return result\ok::<Row>(Row{ id = "", state = held.state, checkpoint = held.checkpoint, reportedBase = held.reportedBase, baseVerdict = held.baseVerdict, checkoutRoot = held.checkoutRoot });
 }
 
 // claimThenIndex takes the job's lease, refuses a row unfit for root, and only then builds the
 // graph: the lease records the base, so an edit made while the graph builds lands after it.
-// run executes a magus subcommand and returns its output.
-export fun claimThenIndex(run: fun (args: [str]) > str !> any, root: str, job: str, main: str, trackedClean: fun () > bool !> any, detach: fun (checkpoint: str) > void !> any) > Row !> any {
+// run executes a magus subcommand and returns its output. When the exec fails on a running
+// job, its holder already holds the lease: that is said on stderr, and the row comes back
+// with no id, taken by nobody here.
+export fun claimThenIndex(run: fun (args: [str]) > result\Result::<str>, root: str, job: str, main: str, trackedClean: fun () > result\Result::<bool>, detach: fun (checkpoint: str) > result\Result::<bool>) > result\Result::<Row> {
     final took = run(["job", "exec", job]);
-    foreach (line in took.split("\n")) {
+    if (took.error -> e) {
+        return heldElsewhere(run, job: job, execError: e);
+    }
+    foreach (line in took.value!.split("\n")) {
         if (line.trim() != "") {
             std\print("  {line.trim()}");
         }
     }
-    var row = parseRow(run(["describe", "job", job, "-o", "json"]));
-    if (needsDetach(row, trackedClean: trackedClean())) {
-        detach(row.checkpoint);
+    final first = rowOf(run, job: job);
+    if (first.error -> err) {
+        return result\Result::<Row>{ error = err };
+    }
+    var row = first.value!;
+    final clean = trackedClean();
+    if (clean.error -> err) {
+        return result\Result::<Row>{ error = err };
+    }
+    if (needsDetach(row, trackedClean: clean.value!)) {
+        final moved = detach(row.checkpoint);
+        if (moved.error -> err) {
+            return result\Result::<Row>{ error = err };
+        }
         std\print("detached onto the checkpoint {row.checkpoint}; the base had diverged and the tracked files were clean");
-        run(["job", "exec", job]);
-        row = parseRow(run(["describe", "job", job, "-o", "json"]));
+        final retaken = run(["job", "exec", job]);
+        if (retaken.error -> err) {
+            return result\Result::<Row>{ error = err };
+        }
+        final second = rowOf(run, job: job);
+        if (second.error -> err) {
+            return result\Result::<Row>{ error = err };
+        }
+        row = second.value!;
     }
-    try {
-        checkFit(row, root: root, main: main, trackedClean: trackedClean());
-    } catch (e: str) {
-        throw "bootstrap-worktree: REFUSED, job {job} is not fit to work here:\n  {e}";
+    final cleanNow = trackedClean();
+    if (cleanNow.error -> err) {
+        return result\Result::<Row>{ error = err };
     }
-    try {
-        run(["graph", "build", "--silent"]);
+    final fit = checkFit(row, root: root, main: main, trackedClean: cleanNow.value!);
+    if (fit.error -> e) {
+        return result\fail::<Row>("bootstrap-worktree: REFUSED, job {job} is not fit to work here:\n  {e.message}");
+    }
+    final graph = run(["graph", "build", "--silent"]);
+    if (graph.error -> e) {
+        std\print(graphBuildFailed(e.message));
+    } else {
         std\print("built the graph");
-    } catch (e: str) {
-        std\print(graphBuildFailed(e));
     }
-    return row;
+    return result\ok::<Row>(row);
 }
 
 // graphBuildFailed is the line printed when the graph build fails after the lease is taken: the
@@ -459,6 +450,25 @@ export fun render(row: Row, root: str) > [str] {
     ];
 }
 
+fun sourceChecked(values: {str: str}, root: str) > result\Result::<str> {
+    final source = values["--from"] ?? "";
+    final built = values["--build-from"] ?? "";
+    if (built == "") {
+        return result\ok::<str>(source);
+    }
+    if (source != "" and source != built) {
+        return result\fail::<str>("bootstrap-worktree: --from and --build-from name different checkouts\n{USAGE}");
+    }
+    if (values["--check"] != null) {
+        return result\fail::<str>("bootstrap-worktree: --check writes nothing, so it cannot build; use --from\n{USAGE}");
+    }
+    final compiled = buildFrom(built, root: root);
+    if (compiled.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    return result\ok::<str>(built);
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--help", "--check"], valued: ["--job", "--from", "--build-from"]);
     if (parsed.values["--help"] != null) {
@@ -469,41 +479,35 @@ export fun main(args: [str]) > void !> any {
         throw "bootstrap-worktree: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final root = vcs\root();
-    var source = parsed.values["--from"] ?? "";
-    final built = parsed.values["--build-from"] ?? "";
-    if (built != "") {
-        if (source != "" and source != built) {
-            throw "bootstrap-worktree: --from and --build-from name different checkouts\n{USAGE}";
-        }
-        final lease = leaseOf(env\getOr("BAGGAGE", def: "") catch "");
-        if (lease != "") {
-            throw buildRefusal(lease, source: built);
-        }
-        source = built;
-        if (parsed.values["--check"] != null) {
-            throw "bootstrap-worktree: --check writes nothing, so it cannot build; use --from\n{USAGE}";
-        }
-        buildFrom(source);
+    final chosen = sourceChecked(parsed.values, root: root);
+    if (chosen.error -> err) {
+        throw err.message;
     }
+    final source = chosen.value!;
     if (parsed.values["--check"] != null) {
         if (source == "") {
             throw "bootstrap-worktree: --check needs --from, the checkout whose ./magus to judge\n{USAGE}";
         }
-        var v = .{ bin = "", build = BuildFacts{ commit = "", dirty = false }, scopes = 0 };
-        try {
-            v = reusable(root, source: source);
-        } catch (e: str) {
-            std\print("not placeable: {e}");
+        final judged = reusable(root, source: source);
+        if (judged.error -> why) {
+            std\print("not placeable: {why.message}");
             return;
         }
-        std\print("placeable: " + placed(v.bin, commit: v.build.commit, rootRev: readHead(root), scopes: v.scopes));
+        std\print("placeable: " + placed(judged.value!.bin, digest: judged.value!.digest));
         return;
     }
     final job = parsed.values["--job"] ?? "";
     if (job == "") {
         throw "bootstrap-worktree: --job is required: the lease is the point of a worker's worktree\n{USAGE}";
     }
-    final row = bootstrap(root, job: job, source: source);
+    final taken = bootstrap(root, job: job, source: source);
+    if (taken.error -> err) {
+        throw err.message;
+    }
+    final row = taken.value!;
+    if (row.id == "") {
+        return;
+    }
     foreach (line in render(row, root: root)) {
         std\print(line);
     }
@@ -513,28 +517,26 @@ export fun main(args: [str]) > void !> any {
 final WT = "/work/magus/.claude/worktrees/w1";
 final MAIN = "/work/magus";
 
-fun fixture(name: str) > Row !> any {
-    return parseRow(fs\readFile("hack/testdata/{name}"));
+fun fixture(name: str) > Row {
+    return parseRow(fs\readFile("hack/testdata/{name}") catch "").value!;
 }
 
-// fitReasons is each reason checkFit raised, empty when the row is fit.
+// fitReasons is each reason checkFit failed with, empty when the row fits.
 fun fitReasons(row: Row, root: str, main: str, trackedClean: bool) > [str] {
-    try {
-        checkFit(row, root: root, main: main, trackedClean: trackedClean);
-    } catch (e: str) {
-        return e.split("\n  ");
+    final fit = checkFit(row, root: root, main: main, trackedClean: trackedClean);
+    if (fit.error -> e) {
+        return e.message.split("\n  ");
     }
     return [<str>];
 }
 
-// reuseReasons is each reason checkReusable raised, empty when the binary is reusable.
-fun reuseReasons(build: BuildFacts, sourceRev: str, sourceInputs: [str], rootInputs: [str]) > [str] {
-    try {
-        checkReusable(build, sourceRev: sourceRev, sourceInputs: sourceInputs, rootInputs: rootInputs);
-    } catch (e: str) {
-        return e.split("\n  ");
+// reuseReason is what checkReusable failed with, "" when reusable.
+fun reuseReason(stamped: str, digest: str) > str {
+    final matched = checkReusable(stamped, digest: digest);
+    if (matched.error -> e) {
+        return e.message;
     }
-    return [<str>];
+    return "";
 }
 
 test "a row taken here at its checkpoint is fit" {
@@ -573,46 +575,24 @@ test "a row with no checkpoint passes and says nothing verified its base" {
     assert\equal(render(row, root: WT)[1], want: "base abc recorded; the row names no checkpoint, so nothing verified it", message: "note");
 }
 
-test "the harness skill install is skipped under a lease and run without one" {
-    final ran = mut [<str>];
-    final run = fun (args: [str]) > str !> any {
-        ran.append(args.join(" "));
-        return "";
-    };
-    refreshSkills(run, lease: "policy-bootstrap");
-    assert\equal(ran.len(), want: 0, message: "no install under a lease");
-    assert\equal(refreshSkills(run, lease: ""), want: "refreshed the wired harness skills", message: "line without a lease");
-    assert\equal(ran.join("|"), want: "agent harness install", message: "install without a lease");
-}
-
-test "the harness config sync is skipped under a lease and run without one" {
-    final ran = mut [<str>];
-    final run = fun (args: [str]) > str !> any {
-        ran.append(args.join(" "));
-        return "no change\n";
-    };
-    assert\equal(syncHarnesses(run, lease: "policy-bootstrap").startsWith("skipped"), want: true, message: "line under a lease");
-    assert\equal(ran.len(), want: 0, message: "no sync under a lease");
-    assert\equal(syncHarnesses(run, lease: ""), want: "no change", message: "sync output");
-    assert\equal(ran.join("|"), want: "buzz hack/dev/bootstrap-harnesses.buzz", message: "sync without a lease");
-}
-
 test "the lease is taken before the graph is built" {
     final described = fs\readFile("hack/testdata/bootstrap-match.json");
     final ran = mut [<str>];
-    claimThenIndex(
-        fun (args: [str]) > str !> any {
+    final taken = claimThenIndex(
+        fun (args: [str]) > result\Result::<str> {
             ran.append(args.join(" "));
-            return if (args[0] == "describe") described else "";
+            return result\ok::<str>(if (args[0] == "describe") described else "");
         },
         root: "/work/magus/.claude/worktrees/w1",
         job: "agent-scripts",
         main: "/work/magus",
-        trackedClean: fun () > bool !> any => true,
-        detach: fun (checkpoint: str) > void !> any {
+        trackedClean: fun () > result\Result::<bool> => result\ok::<bool>(true),
+        detach: fun (checkpoint: str) > result\Result::<bool> {
             ran.append("detach " + checkpoint);
+            return result\ok::<bool>(true);
         },
     );
+    assert\isTrue(taken.error == null, message: "the bootstrap succeeds");
     assert\equal(ran.join("|"), want: "job exec agent-scripts|describe job agent-scripts -o json|graph build --silent", message: "step order");
 }
 
@@ -621,23 +601,25 @@ test "a diverged clean worktree is detached onto the checkpoint and the lease re
     final matched = fs\readFile("hack/testdata/bootstrap-match.json");
     final ran = mut [<str>];
     var described = 0;
-    final row = claimThenIndex(
-        fun (args: [str]) > str !> any {
+    final taken = claimThenIndex(
+        fun (args: [str]) > result\Result::<str> {
             ran.append(args.join(" "));
             if (args[0] == "describe") {
                 described += 1;
-                return if (described == 1) diverged else matched;
+                return result\ok::<str>(if (described == 1) diverged else matched);
             }
-            return "";
+            return result\ok::<str>("");
         },
         root: WT,
         job: "agent-scripts",
         main: MAIN,
-        trackedClean: fun () > bool !> any => true,
-        detach: fun (checkpoint: str) > void !> any {
+        trackedClean: fun () > result\Result::<bool> => result\ok::<bool>(true),
+        detach: fun (checkpoint: str) > result\Result::<bool> {
             ran.append("detach " + checkpoint);
+            return result\ok::<bool>(true);
         },
     );
+    final row = taken.value!;
     assert\equal(row.baseVerdict, want: "match", message: "row read after the retake");
     assert\equal(ran.join("|"), want: "job exec agent-scripts|describe job agent-scripts -o json|detach 7472f16fc709ab3827cd38ff281fecc0a217ca88|job exec agent-scripts|describe job agent-scripts -o json|graph build --silent", message: "step order");
 }
@@ -645,24 +627,21 @@ test "a diverged clean worktree is detached onto the checkpoint and the lease re
 test "a diverged worktree with tracked edits is still refused and not detached" {
     final diverged = fs\readFile("hack/testdata/bootstrap-diverged.json");
     final ran = mut [<str>];
-    var said = "";
-    try {
-        claimThenIndex(
-            fun (args: [str]) > str !> any {
-                ran.append(args.join(" "));
-                return if (args[0] == "describe") diverged else "";
-            },
-            root: WT,
-            job: "agent-scripts",
-            main: MAIN,
-            trackedClean: fun () > bool !> any => false,
-            detach: fun (checkpoint: str) > void !> any {
-                ran.append("detach " + checkpoint);
-            },
-        );
-    } catch (e: str) {
-        said = e;
-    }
+    final refused = claimThenIndex(
+        fun (args: [str]) > result\Result::<str> {
+            ran.append(args.join(" "));
+            return result\ok::<str>(if (args[0] == "describe") diverged else "");
+        },
+        root: WT,
+        job: "agent-scripts",
+        main: MAIN,
+        trackedClean: fun () > result\Result::<bool> => result\ok::<bool>(false),
+        detach: fun (checkpoint: str) > result\Result::<bool> {
+            ran.append("detach " + checkpoint);
+            return result\ok::<bool>(true);
+        },
+    );
+    final said = refused.error!.message;
     assert\equal(said.indexOf("verdict diverged") != null, want: true, message: said);
     assert\equal(ran.indexOf("detach 7472f16fc709ab3827cd38ff281fecc0a217ca88"), want: null, message: "no detach");
 }
@@ -679,51 +658,18 @@ test "revision-match passes only while the tracked files are the checkpoint's" {
     assert\equal(fitReasons(row, root: WT, main: MAIN, trackedClean: false).len(), want: 1, message: "tracked edits");
 }
 
-test "a binary is this worktree's build while no Go build input differs, at any commit" {
-    final clean = BuildFacts{ commit = "166d3dabd", dirty = false };
-    assert\equal(reuseReasons(clean, sourceRev: "166d3dabd7d7", sourceInputs: [<str>], rootInputs: [<str>]), want: [<str>],
-        message: "a worktree at another commit with identical Go sources");
-    assert\equal(reuseReasons(clean, sourceRev: "aaaa", sourceInputs: [<str>], rootInputs: ["run.go", "go.mod"]),
-        want: ["this worktree differs from 166d3dabd in 2 build input(s), first run.go"], message: "worktree changes a Go file");
-    final dirty = BuildFacts{ commit = "166d3dabd", dirty = true };
-    assert\equal(reuseReasons(dirty, sourceRev: "166d3dabd7d7", sourceInputs: [<str>], rootInputs: [<str>]),
-        want: [<str>], message: "dirty only outside the build inputs");
-    assert\equal(reuseReasons(dirty, sourceRev: "166d3dabd7d7", sourceInputs: ["symbol.go"], rootInputs: [<str>]),
-        want: ["it was built with 1 build input(s) changed from 166d3dabd, first symbol.go"], message: "dirty inputs");
-    assert\equal(reuseReasons(dirty, sourceRev: "2222222", sourceInputs: [<str>], rootInputs: [<str>]).len(),
-        want: 1, message: "a dirty build whose checkout moved on is unknown");
-    assert\equal(reuseReasons(BuildFacts{ commit = "", dirty = false }, sourceRev: "x", sourceInputs: [<str>], rootInputs: [<str>]),
-        want: ["it reports no commit, so nothing ties it to a tree"], message: "no commit");
+test "a binary is this worktree's build while its stamped Go input digest is this worktree's" {
+    assert\equal(reuseReason("0123456789abcdef", digest: "0123456789abcdef"), want: "",
+        message: "equal inputs, at any commit and from any dirty tree");
+    assert\equal(reuseReason("fedcba9876543210", digest: "0123456789abcdef"),
+        want: "its Go build inputs (digest fedcba9876543210) differ from this worktree's (0123456789abcdef)", message: "an input moved");
+    assert\equal(reuseReason("", digest: "0123456789abcdef"),
+        want: "it carries no Go input digest: a bare `go build` linked it, or a go-build from before the digest", message: "no digest");
+    assert\equal(placed("/r/magus", digest: "0123456789abcdef"),
+        want: "/r/magus was built from this worktree's Go build inputs (digest 0123456789abcdef)", message: "placed");
 }
 
-test "package scopes are the package directories below the root and the files the root embeds" {
-    final listed = "/work/magus|assets/a.txt\n/work/magus/internal/guard\n/work/magus/libs/figure|figure.buzz\n"
-        + "/home/me/go/pkg/mod/dario.cat/mergo@v1.0.2\n/work/magus-other/x\n\n";
-    assert\equal(packageScopes(listed, root: "/work/magus"), want: ["./", "assets/a.txt", "internal/guard/", "libs/figure/"],
-        message: "module-cache and sibling directories drop out; the root contributes only what it embeds");
-}
-
-test "a build input is a Go file in a linked package, a root module file, or a file in a package scope" {
-    final scopes = ["./", "assets/a.txt", "internal/guard/", "internal/guard/builtin/", "libs/figure/"];
-    assert\equal(buildInputs([
-        "run.go", "run_test.go", "go.mod", "libs/figure/go.sum", "internal/guard/brief.go", "internal/guard/brief_test.go",
-        "internal/guard/builtin/builtin.go", "spells/go/go.buzz", "internal/guard/rules/embedded.txt", "libs/figure/figure.buzz",
-        "assets/a.txt", "assets/b.txt", "docs/guides/jobs.md", "MAGUS.md", "README.md", "console/src/theme.ts",
-        "changes/unreleased/x.md", "hack/dev/bootstrap-worktree.buzz", "internal/guardian/x.txt",
-    ], scopes: scopes), want: [
-        "run.go", "go.mod", "libs/figure/go.sum", "internal/guard/brief.go", "internal/guard/builtin/builtin.go",
-        "internal/guard/rules/embedded.txt", "libs/figure/figure.buzz", "assets/a.txt",
-    ], message: "docs, console, hack, tests and root-level files outside the embeds are not inputs");
-    assert\equal(buildInputs([
-        "internal/unlinked/embed.go", "internal/guard/unlinked/x.go", "libs/embed/train/go.mod", "libs/embed/train/go.sum",
-        "libs/embed/train/teacher/nomicbert.go", "internal/unlinked/go.mod", "internal/guard/new.go",
-    ], scopes: scopes), want: ["internal/guard/new.go"],
-        message: "a Go file in a package nothing links, and a separate module's files, are not inputs; a file in a linked package is");
-    assert\equal(buildInputs(["docs/x.md", "run_test.go"], scopes: scopes), want: [<str>], message: "a docs-and-tests commit changes no input");
-    assert\equal(placed("/r/magus", commit: "166d3dabd", rootRev: "166d3dabd7d7", scopes: 3),
-        want: "/r/magus was built at 166d3dabd, which this worktree is at; no Go build input under 3 package scopes differs", message: "same commit");
-    assert\equal(placed("/r/magus", commit: "166d3dabd", rootRev: "1111111", scopes: 3),
-        want: "/r/magus was built at 166d3dabd, while this worktree is at 1111111; no Go build input under 3 package scopes differs", message: "another commit");
+test "the refusal names who builds" {
     assert\equal(refusal("x", source: "/r"), want: "bootstrap-worktree: REFUSED to place x\nA worker checkout never compiles magus. The orchestrator builds ./magus once for this base, in /r (`/r/magus --root /r run go-build .`), then reruns this with `--from /r`. Or a session holding no lease does both: rerun this with `--build-from /r`; a leased worker asks the main session to.", message: "refusal");
 }
 
@@ -735,16 +681,10 @@ test "--build-from builds in the source checkout and is refused under a lease, n
     final refused = buildRefusal("job-a", source: "/r");
     assert\equal(refused.indexOf("a worker never compiles magus") != null and refused.indexOf("--job job-a --build-from /r`") != null, want: true,
         message: "a leased worker is refused and told who builds: " + refused);
-    assert\equal(parseBuild("\{\"version\":\"v0.4.3-485-g166d3dabd-dirty\",\"commit\":\"166d3dabd\"}"), want: BuildFacts{ commit = "166d3dabd", dirty = true }, message: "dirty build");
 }
 
 test "a command killed by a signal names the signal, not exit -1" {
-    var said = "";
-    try {
-        magusAt("/bin/sh", root: ".", args: ["-c", "kill -9 $$"]);
-    } catch (e: str) {
-        said = e;
-    }
+    final said = magusAt("/bin/sh", root: ".", args: ["-c", "kill -9 $$"]).error!.message;
     assert\equal(said.startsWith("bootstrap-worktree: `/bin/sh -c kill -9 $$` failed: exit -1:\n"), want: true, message: said);
     assert\equal(said.endsWith("signal: killed"), want: true, message: said);
     assert\equal(failureCause(1, stdout: "", stderr: ""), want: "exit 1, and it printed nothing", message: "silent exit");
@@ -752,6 +692,6 @@ test "a command killed by a signal names the signal, not exit -1" {
 }
 
 test "the main worktree is the porcelain's first stanza" {
-    assert\equal(mainWorktree("worktree /work/magus\nHEAD 1\nbranch refs/heads/main\n\nworktree /work/magus/.claude/worktrees/w1\nHEAD 2\ndetached\n"),
+    assert\equal(checkout\mainWorktree("worktree /work/magus\nHEAD 1\nbranch refs/heads/main\n\nworktree /work/magus/.claude/worktrees/w1\nHEAD 2\ndetached\n"),
         want: "/work/magus", message: "main");
 }

@@ -95,10 +95,6 @@ func denyPersonsVerb(command string, d Dialect, noun, verb, why string) denial {
 	return denial{}
 }
 
-// denyRuleWaiverIsAPersons refuses `magus gate waive` to an agent, as grant-is-a-persons
-// refuses `magus job grant`.
-const denyRuleWaiverIsAPersons denyRuleName = "waiver-is-a-persons"
-
 // gateWaiversFileName sits beside the job store, so every checkout of the repository reads
 // one set of waivers.
 const gateWaiversFileName = "gate-waivers.jsonl"
@@ -133,7 +129,7 @@ func RevokeGateWaiver(ctx context.Context, store *job.Store, commit string) (typ
 
 func appendGateWaiver(ctx context.Context, store *job.Store, w types.GateWaiver) (types.GateWaiver, error) {
 	if actor := store.Actor(); actor.Bound() {
-		return types.GateWaiver{}, fmt.Errorf("guard: a waiver is a person's keystroke, and this process acts under lease %q: a person types `%s gate waive` at their own terminal", actor.Lease, hint.BinaryName())
+		return types.GateWaiver{}, fmt.Errorf("guard: a waiver is a person's keystroke, and this process acts under lease %q: a person types `%s job grant --commit` at their own terminal", actor.Lease, hint.BinaryName())
 	}
 	log, err := gateWaivers(store)
 	if err != nil {
@@ -165,12 +161,4 @@ func gateWaiverAt(at location, commit string) (types.GateWaiver, bool) {
 func waiverNote(commit string, w types.GateWaiver) string {
 	return fmt.Sprintf("magus workspace: %s goes out ungated under the waiver %s typed at %s: %s",
 		commit, w.By.Label(), time.Unix(w.At, 0).UTC().Format(time.RFC3339), w.Reason)
-}
-
-// denyAgentWaive refuses `magus gate waive` in any spelling, for the reason denyAgentGrant
-// refuses a grant: a waiver is a person's approval, and every call the hook judges is an
-// agent's.
-func denyAgentWaive(command string, d Dialect) denial {
-	return denyPersonsVerb(command, d, "gate", "waive",
-		"A waiver lets one commit out past push-ungated on a person's say-so. The guard judges only agents' calls, so a waiver reaching it was not a person's, and the waivers store refuses one from a process carrying a lease as well.")
 }

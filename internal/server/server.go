@@ -16,10 +16,6 @@ import (
 	"maps"
 	"net/http"
 	"net/netip"
-	"net/url"
-	"os/exec"
-	"strings"
-	"time"
 
 	"connectrpc.com/connect"
 
@@ -27,7 +23,6 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler"
@@ -36,7 +31,7 @@ import (
 	diagramhandler "github.com/egladman/magus/internal/handler/diagram"
 	diffhandler "github.com/egladman/magus/internal/handler/diff"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
-	insighthandler "github.com/egladman/magus/internal/handler/insight"
+	hmhandler "github.com/egladman/magus/internal/handler/historymetrics"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
 	"github.com/egladman/magus/internal/handler/mcp"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
@@ -53,14 +48,13 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/historymetrics/v1alpha1/historymetricsv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1/metricsv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1/notesv1alpha1connect"
@@ -209,10 +203,6 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 	bridgeLog, shareLog := log.With(attr.Component("bridge")), log.With(attr.Component("share"))
 
-	if opts.Magus != nil {
-		go runGoCacheTrim(ctx, newGoCacheTrimmer(opts.Magus.Root(), opts.Config.Go.CacheBudgetMB), log.With(attr.Component("go-cache")))
-	}
-
 	// ONE job store for the server's own readers, the activity feed and the JobService
 	// below. Two stores over one file each take their own mutex, and the merge Update
 	// performs under a single acquisition then serializes against nothing. The client
@@ -308,7 +298,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// identical read logic.
 			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
-			insightH := insighthandler.NewHandler(svc, log)
+			historyMetricsH := hmhandler.NewHandler(svc, log)
 			patchH := diffhandler.NewPatchHandler(svc, log)
 			contextH := diffhandler.NewContextHandler(opts.Magus.Root(), svc, log)
 			// The server-wide session store, constructed by the caller so the console routes
@@ -366,7 +356,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			diagramsH := diagramhandler.NewHandler(diagramWorkspace{opts.Magus}, log)
 			f.api(diagramhandler.Path, diagramsH)
 			f.api(diagramhandler.Path+"/", diagramsH)
-			f.api("/api/v1/insight", insightH)
+			f.api("/api/v1/history-metrics", historyMetricsH)
 			f.api("/api/v1/diff/patch", patchH)
 			f.api("/api/v1/diff/context", contextH)
 			f.api("/api/v1/diff", diffH)
@@ -383,8 +373,8 @@ func (s *Server) Serve(ctx context.Context) error {
 			// guarded per link by the share token and held to the same Needs as here. It is a
 			// subset of the loopback routes: NO /api/v1/graph, NO /mcp, NO JobService.
 			shareGuarded := map[string]share.Route{
-				"/api/v1/events":  {Handler: eventsH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/events")},
-				"/api/v1/insight": {Handler: insightH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/insight")},
+				"/api/v1/events":          {Handler: eventsH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/events")},
+				"/api/v1/history-metrics": {Handler: historyMetricsH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/history-metrics")},
 			}
 
 			// Derived-metrics Connect service for the /dashboard. Mounted only when the
@@ -460,16 +450,11 @@ func (s *Server) Serve(ctx context.Context) error {
 			f.service(toolPath, toolConnectHandler)
 			bridgeLog.InfoContext(ctx, "tool service mounted", slog.String("path", toolPath))
 
-			// Insight Connect service: the typed twin of the JSON /api/v1/insight route, reading
-			// the SAME cached scan through the same console service. The console dashboard reads
-			// it here; the JSON route stays mounted above for its documented non-console callers.
-			// Same cross-origin guards as the other read services, and read-only, so it joins the
-			// share read routes too: the LAN "share to phone" dashboard renders insight, and it
-			// reaches it over this route now rather than the JSON one.
-			insightPath, insightConnectHandler := insightv1alpha1connect.NewInsightServiceHandler(insighthandler.NewService(svc), connectReadMax)
-			f.service(insightPath, insightConnectHandler)
-			shareGuarded[insightPath] = serviceRoute(insightPath, insightConnectHandler)
-			bridgeLog.InfoContext(ctx, "insight service mounted", slog.String("path", insightPath))
+			// Typed twin of JSON /api/v1/history-metrics; same Board via the console service.
+			hmPath, hmConnectHandler := historymetricsv1alpha1connect.NewHistoryMetricsServiceHandler(hmhandler.NewService(svc), connectReadMax)
+			f.service(hmPath, hmConnectHandler)
+			shareGuarded[hmPath] = serviceRoute(hmPath, hmConnectHandler)
+			bridgeLog.InfoContext(ctx, "history metrics service mounted", slog.String("path", hmPath))
 
 			// Viewer Connect service: the typed twin of the JSON run-browser routes this
 			// replaced (/api/v1/outputs, /output, /runs, /run; retired in 7ce1896d4, see
@@ -556,7 +541,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// RevokeToken today) to the trail, so a browser-reachable mint or revoke is always
 			// audited. The record names the credential the bearer guard verified, never a
 			// caller-supplied field. Reads (ListTokens) are not recorded. See
-			// internal/handler/trailrpc for the pattern and the arch-test ratchet that keeps it
+			// internal/handler/trailrpc for the pattern and the arch test that keeps it
 			// honest.
 			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindTokenLifecycle,
 				trailrpc.WithSubject(tokenhandler.AuditSubject)))
@@ -709,8 +694,9 @@ func (f *frame) guard(pattern string, format rpcerr.Format, needs map[string]typ
 	f.server.Handle(pattern, wrap(g))
 }
 
-// consoleWrap is the wrap every console route takes: rebind first, so a forged Host or an
-// Origin other than loopback and the hosted site is refused, then CORS for those origins.
+// consoleWrap is the wrap every console route takes: rebind, then CORS.
+// Rebind refuses a forged Host and any Origin past loopback and
+// mcp.allowed_origins.
 func (f *frame) consoleWrap(format rpcerr.Format) func(http.Handler) http.Handler {
 	return func(g http.Handler) http.Handler {
 		return httpx.GuardRebind(format, f.siteAllowed, f.cors(g))
@@ -743,7 +729,7 @@ func (f *frame) api(path string, h http.Handler) {
 		f.errs = append(f.errs, err)
 		return
 	}
-	f.guard(path, rpcerr.FormatJSON, needs, f.consoleWrap(rpcerr.FormatJSON), h)
+	f.guard(path, rpcerr.FormatJSON, needs, f.consoleWrap(rpcerr.FormatJSON), h, httpx.WithoutOperator())
 }
 
 // service mounts a Connect service at its path ("/<package>.<Service>/") behind the Need of
@@ -754,7 +740,7 @@ func (f *frame) service(path string, h http.Handler) {
 		f.errs = append(f.errs, err)
 		return
 	}
-	f.guard(path, rpcerr.FormatConnect, needs, f.consoleWrap(rpcerr.FormatConnect), h)
+	f.guard(path, rpcerr.FormatConnect, needs, f.consoleWrap(rpcerr.FormatConnect), h, httpx.WithoutOperator())
 	f.socketRoute(path, rpcerr.FormatConnect, needs, h)
 }
 
@@ -805,27 +791,23 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 	}
 	f.socketRoute("/mcp", rpcerr.FormatJSON, mcpNeeds, cappedMCP)
 
-	// CORS allows the hosted explorer origin plus the two loopback origins derived from
-	// the server port. Built here (not only inside the console block) so /livez and
-	// /readyz get the same allow-list even when the console mount is disabled: a browser
-	// client (the console PWA) needs to read them cross-origin, but they stay otherwise
-	// unguarded (no rebind check, no bearer token), so an orchestrator can still probe them
-	// freely. CORSAllow itself only ever reflects an allow-listed Origin, never "*", so this
-	// widens readability, not who may write.
-	siteOrigin := mcp.SiteOrigin
+	// Built outside the console block so /livez and /readyz stay readable
+	// from a browser with the console mount off. The static shell keeps
+	// f.allowed.
 	port := addr.Port()
-	f.cors = httpx.CORSAllow(
-		siteOrigin,
+	origins := []string{
 		fmt.Sprintf("http://localhost:%d", port),
 		fmt.Sprintf("http://127.0.0.1:%d", port),
-	)
-	// siteAllowed widens the DNS-rebind accept-list for console browser routes so the
-	// hosted PWA Origin (eli.gladman.cc) is not 403'd before CORS can answer. The static
-	// console shell keeps the loopback-only set.
-	f.siteAllowed = f.allowed
-	if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
-		f.siteAllowed = f.allowed.Allow(u.Host)
 	}
+	f.siteAllowed = f.allowed
+	for _, origin := range s.opts.Config.MCP.AllowedOrigins {
+		f.siteAllowed, err = f.siteAllowed.AllowOrigin(origin)
+		if err != nil {
+			return nil, fmt.Errorf("server: mcp.allowed_origins: %w", err)
+		}
+		origins = append(origins, origin)
+	}
+	f.cors = httpx.CORSAllow(origins...)
 	for path, h := range s.opts.HealthRoutes {
 		httpServer.Handle(path, f.cors(h))
 	}
@@ -920,103 +902,4 @@ func (w diagramWorkspace) ImportGraph(ctx context.Context) (types.ImportGraph, e
 		return types.ImportGraph{}, err
 	}
 	return kg.ImportGraph(), nil
-}
-
-const (
-	goCacheTrimInterval    = 10 * time.Minute
-	goCacheTrimWalkEntries = 5_000_000
-	goCacheTrimSource      = "daemon/go-cache"
-)
-
-// goCacheTrimmer decides whether the Go build cache is past go.cache_budget_mb and trims it.
-// Size, clean and record are fields so a test supplies a fake size and a fake cleaner.
-type goCacheTrimmer struct {
-	budgetMB int
-	size     func(ctx context.Context, limit int64) (int64, error)
-	clean    func(ctx context.Context) error
-	record   func(ctx context.Context, message string) error
-}
-
-// trim reports whether it cleaned the cache. A budget of zero or less does nothing.
-// The size is a floor: the measuring walk stops once it passes the budget.
-func (t goCacheTrimmer) trim(ctx context.Context) (bool, error) {
-	if t.budgetMB <= 0 {
-		return false, nil
-	}
-	limit := int64(t.budgetMB) << 20
-	bytes, err := t.size(ctx, limit)
-	if err != nil {
-		return false, fmt.Errorf("server: measure the go build cache: %w", err)
-	}
-	if bytes <= limit {
-		return false, nil
-	}
-	if err := t.clean(ctx); err != nil {
-		return false, fmt.Errorf("server: the go build cache is past its %d MB go.cache_budget_mb (at least %d MB) and `go clean -cache` failed: %w",
-			t.budgetMB, bytes>>20, err)
-	}
-	msg := fmt.Sprintf("the daemon ran `go clean -cache`: the go build cache passed the %d MB go.cache_budget_mb (at least %d MB)", t.budgetMB, bytes>>20)
-	if err := t.record(ctx, msg); err != nil {
-		return true, fmt.Errorf("server: trimmed the go build cache but could not record it: %w", err)
-	}
-	return true, nil
-}
-
-func newGoCacheTrimmer(root string, budgetMB int) goCacheTrimmer {
-	return goCacheTrimmer{
-		budgetMB: budgetMB,
-		size: func(ctx context.Context, limit int64) (int64, error) {
-			dir, err := doctor.GoEnvCache(ctx)
-			if err != nil {
-				return 0, err
-			}
-			size, err := doctor.MeasureCache(ctx, dir, limit, goCacheTrimWalkEntries)
-			return size.Bytes, err
-		},
-		clean: func(ctx context.Context) error {
-			cmd := exec.CommandContext(ctx, "go", "clean", "-cache")
-			cmd.Dir = root
-			if out, err := cmd.CombinedOutput(); err != nil {
-				return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
-			}
-			return nil
-		},
-		record: func(ctx context.Context, message string) error {
-			dir, err := sessions.Dir(root)
-			if err != nil {
-				return err
-			}
-			_, _, err = sessions.OpenRequest(dir, goCacheTrimSource, sessions.AttentionOpen{
-				Outcome:  string(types.OutcomeDiagnostic),
-				Severity: string(types.SeverityWarning),
-				Source:   goCacheTrimSource,
-				Message:  message,
-			}, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: root})
-			return err
-		},
-	}
-}
-
-// runGoCacheTrim trims at start and then every goCacheTrimInterval until ctx ends. A failed
-// pass is logged and the next tick tries again.
-func runGoCacheTrim(ctx context.Context, t goCacheTrimmer, log *slog.Logger) {
-	if t.budgetMB <= 0 {
-		log.InfoContext(ctx, "go.cache_budget_mb is 0: the daemon does not trim the go build cache")
-		return
-	}
-	tick := time.NewTicker(goCacheTrimInterval)
-	defer tick.Stop()
-	for {
-		trimmed, err := t.trim(ctx)
-		if err != nil {
-			log.ErrorContext(ctx, "go build cache trim", attr.Error(err))
-		} else if trimmed {
-			log.WarnContext(ctx, "trimmed the go build cache", slog.Int("budget_mb", t.budgetMB))
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-		}
-	}
 }

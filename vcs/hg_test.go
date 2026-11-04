@@ -16,7 +16,81 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+// hgForwardSuite holds a repository of two commits, checked out at the first.
+type hgForwardSuite struct {
+	suite.Suite
+	dir           string
+	first, second string
+}
+
+func TestHgForward(t *testing.T) { suite.Run(t, new(hgForwardSuite)) }
+
+func (s *hgForwardSuite) SetupTest() {
+	if _, err := exec.LookPath("hg"); err != nil {
+		s.T().Skip("hg is not installed, so its fast-forward cannot run")
+	}
+	s.dir = s.T().TempDir()
+	hgInitRepository(s.T(), s.dir, map[string]string{"a.txt": "one\n"})
+	s.first = s.commitAt(".")
+	writeRepositoryFile(s.T(), s.dir, "a.txt", "two\n")
+	vcsTestRun(s.T(), s.dir, "hg", "commit", "-m", "second", "-u", "test")
+	s.second = s.commitAt(".")
+	vcsTestRun(s.T(), s.dir, "hg", "update", "--rev", s.first)
+}
+
+func (s *hgForwardSuite) commitAt(rev string) string {
+	c, err := hgVCS{}.FindCommit(s.T().Context(), s.dir, rev)
+	s.Require().NoError(err)
+	return c.ID
+}
+
+func (s *hgForwardSuite) TestMovesTheCheckoutForward() {
+	s.Require().NoError(hgVCS{}.FastForward(s.T().Context(), s.dir, s.second))
+
+	s.Equal(s.second, s.commitAt("."))
+}
+
+func (s *hgForwardSuite) TestAnActiveBookmarkMovesWithTheCheckout() {
+	vcsTestRun(s.T(), s.dir, "hg", "bookmark", "work")
+
+	s.Require().NoError(hgVCS{}.FastForward(s.T().Context(), s.dir, s.second))
+
+	s.Equal(s.second, s.commitAt("work"))
+	active, err := vcsOutput(s.T().Context(), s.dir, "hg", "log", "-r", ".", "--template", "{activebookmark}")
+	s.Require().NoError(err)
+	s.Equal("work", active)
+}
+
+func (s *hgForwardSuite) TestARevisionThatDoesNotDescendMovesNothing() {
+	vcsTestRun(s.T(), s.dir, "hg", "update", "--rev", s.second)
+
+	s.Error(hgVCS{}.FastForward(s.T().Context(), s.dir, s.first))
+
+	s.Equal(s.second, s.commitAt("."))
+}
+
+func (s *hgForwardSuite) TestALocalChangeMovesNothing() {
+	writeRepositoryFile(s.T(), s.dir, "a.txt", "local\n")
+
+	s.Error(hgVCS{}.FastForward(s.T().Context(), s.dir, s.second))
+
+	s.Equal(s.first, s.commitAt("."))
+	body, err := os.ReadFile(filepath.Join(s.dir, "a.txt"))
+	s.Require().NoError(err)
+	s.Equal("local\n", string(body))
+}
+
+func (s *hgForwardSuite) TestBranchHeadsListsBranchesAndBookmarks() {
+	vcsTestRun(s.T(), s.dir, "hg", "bookmark", "--inactive", "--rev", s.first, "--", "job")
+
+	got, err := hgVCS{}.BranchHeads(s.T().Context(), s.dir)
+
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"default": s.second, "job": s.first}, got)
+}
 
 // TestParseHgConflicts pins the `hg resolve --list` parse. Only U is a conflict: an R
 // line is a path already settled, and re-resolving one would clobber a resolution the
@@ -321,6 +395,8 @@ func TestHgObjectBatchReadsCommittedFiles(t *testing.T) {
 		assert.Equal(t, want, got, rel)
 	}
 	_, err = batch.Read("no/such.buzz")
+	require.ErrorIs(t, err, ErrObjectMissing)
+	_, err = (hgVCS{}).ReadFileAt(t.Context(), dir, ".", "no/such.buzz")
 	require.ErrorIs(t, err, ErrObjectMissing)
 	got, err := batch.Read("a.buzz")
 	require.NoError(t, err)

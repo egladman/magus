@@ -1,12 +1,16 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/spells"
 )
@@ -166,7 +170,18 @@ func (r ExecRunner) bringUp(ctx context.Context, s spells.Service) (Handle, erro
 	// the run or script that needed the service.
 	c.Stdout, c.Stderr = os.Stderr, os.Stderr
 	if err := c.Run(); err != nil {
-		return nil, fmt.Errorf("service: start %q: %w", s.Start.Bin, err)
+		// One probe: a real failure must not sit out the ready timeout.
+		reprobeCtx, stopReprobe := context.WithTimeout(ctx, r.readyTimeout())
+		var probeStderr bytes.Buffer
+		reprobe := exec.CommandContext(reprobeCtx, s.Readiness.Bin, s.Readiness.Args...)
+		reprobe.Stderr = &probeStderr
+		ready := reprobe.Run() == nil
+		stopReprobe()
+		if ready {
+			slog.InfoContext(ctx, fmt.Sprintf("adopted the service: start %q failed, but it is ready", s.Start.Bin), attr.Error(err), attr.Notice("note"))
+			return Adopted, nil
+		}
+		return nil, fmt.Errorf("service: start %q (readiness %q still fails: %s): %w", s.Start.Bin, s.Readiness.Bin, strings.TrimSpace(probeStderr.String()), err)
 	}
 	h := &startedHandle{stop: s.Stop}
 	if err := r.waitReady(ctx, s.Readiness); err != nil {

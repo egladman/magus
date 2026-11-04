@@ -1,7 +1,10 @@
 package guard
 
 import (
+	"cmp"
+	"context"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -17,9 +20,6 @@ import (
 // what it may run rather than vcsMutation's list of what nobody may: a verb neither list
 // names, a config alias included, is refused instead of slipping through.
 func workerVCSOp(c hint.Invocation) string {
-	if fastForward(c) {
-		return ""
-	}
 	if op := vcsMutation(c); op != "" {
 		return op
 	}
@@ -41,17 +41,21 @@ func workerVCSOp(c hint.Invocation) string {
 	return fmt.Sprintf("%s %s", c.Name, sub)
 }
 
-// fastForward reports `git merge --ff-only <commit>`, the recovery of a worker whose placed
-// ./magus was built ahead of its checkout: it moves the branch the checkout is on forward to
-// a commit named by its id, and git refuses it when the branch has diverged or a change
-// nobody committed is in the way, so it rewrites and loses nothing. A branch name is refused,
-// since following one is how a worker drifts onto commits nobody handed it, and so is a git
-// option ahead of the verb, which can point the merge at another checkout.
+// fastForward reports `git merge --ff-only <commit>` with nothing ahead of the
+// verb. The stale-binary rule reads it and cannot place a call, so a -C that
+// could name another checkout is refused.
 func fastForward(c hint.Invocation) bool {
-	if c.Name != "git" || len(c.Args) != 3 || c.Args[0] != "merge" {
+	return c.Name == "git" && len(c.Args) == 3 && c.Args[0] == "merge" && fastForwardWords(c.Args[1:])
+}
+
+// fastForwardWords reads the words after `git merge` as a fast-forward to a
+// commit id. git refuses a diverged branch, so nothing is rewritten. A branch
+// name is refused: following one drifts onto commits nobody handed the worker.
+func fastForwardWords(words []string) bool {
+	if len(words) != 2 {
 		return false
 	}
-	flag, commit := c.Args[1], c.Args[2]
+	flag, commit := words[0], words[1]
 	if flag != "--ff-only" {
 		flag, commit = commit, flag
 	}
@@ -98,6 +102,10 @@ func workerMerge(inv hint.Invocation) (operand string, ok bool) {
 	if len(rest) == 1 && (rest[0] == "--continue" || rest[0] == "--abort") {
 		return "", true
 	}
+	// A fast-forward adds no history, so mergesBase has no operand to judge.
+	if fastForwardWords(rest) {
+		return "", true
+	}
 	var operands []string
 	for i := 0; i < len(rest); i++ {
 		a := rest[i]
@@ -141,6 +149,15 @@ func mergesBase(operand, base string, row types.Job) bool {
 		return row.Worktree != nil && row.Worktree.Base != "" && strings.HasPrefix(row.Worktree.Base, operand)
 	}
 	return base != "" && (operand == base || operand == "origin/"+path.Base(base))
+}
+
+// pickOperands is the revisions a `git cherry-pick` names; false for any other.
+func pickOperands(inv hint.Invocation) (revs []string, ok bool) {
+	sub, rest := vcsSubcommand(inv)
+	if inv.Name != "git" || sub != "cherry-pick" {
+		return nil, false
+	}
+	return patchFlags(rest, "mX", cherryPickLongValued, func(string, string) {}, func(string) {}), true
 }
 
 // commitID reports a full or abbreviated hexadecimal object name, as `magus version` prints a
@@ -319,6 +336,172 @@ func workerVCSMovesRefs(c hint.Invocation) bool {
 		case "bookmark", "b":
 			return firstWordIs(rest, "create", "c", "set", "s", "move", "m", "rename", "r", "delete", "d", "forget", "f", "track", "t", "untrack")
 		}
+	}
+	return false
+}
+
+// movesNamedPaths reports a git mv, or an hg or sl rename, under no alias.
+// It is judged on the located call, where a literal loop binds its variable.
+func movesNamedPaths(c hint.Invocation) bool {
+	if vcsMutation(c) != "" {
+		return false
+	}
+	sub, _ := vcsSubcommand(c)
+	switch c.Name {
+	case "git":
+		return sub == "mv"
+	case "hg", "sl":
+		return sub == "rename" || sub == "mv"
+	}
+	return false
+}
+
+// moveRefusal is lease-vcs's answer for a call movesNamedPaths reports.
+// A row with no checkout of its own is not placed.
+func moveRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
+	sub, _ := vcsSubcommand(inv)
+	op := fmt.Sprintf("%s %s", inv.Name, sub)
+	root := cmp.Or(row.CheckoutRoot, "<checkout>")
+	if row.Worktree.Standing() {
+		root = row.Worktree.Root
+	}
+	spellOut := fmt.Sprintf(" Name every path, one call each: `%s %s %s %s <old> <new>`.", inv.Name, relocateFlag[inv.Name], root, sub)
+	switch {
+	case unlocated != "":
+		return vcsRefusal{op: op, kind: vcsOpMoves, why: strings.ReplaceAll(unlocated, "commits", "moves") + spellOut}
+	case workerVCSOp(inv) != "":
+		return vcsRefusal{op: op, kind: vcsOpMoves, why: "It names a path the line does not spell out: `.`, `..`, a glob, a pattern or a list read from a file." + spellOut}
+	case !row.Worktree.Standing():
+		return vcsRefusal{}
+	}
+	r := refMoveRefusal(ctx, opts, row.Worktree, inv, site, "")
+	r.kind = vcsOpMoves
+	return r
+}
+
+// nonLiteralWords says why a located call's words cannot be read, "" when
+// they can. A word mixing text with an expansion renders as the text alone,
+// so a name read off it is not the one the shell passes. A `sh -c` payload
+// arrives only as that rendered text.
+func nonLiteralWords(c locatedCall) string {
+	if c.args == nil && c.wrapped == nil {
+		return "It runs through a shell payload, so what it names cannot be read."
+	}
+	for _, w := range slices.Concat(c.args, c.wrapped) {
+		if _, ok := literalArg(w.Parts); !ok {
+			return "A word of it is not one literal string, so what it names cannot be read."
+		}
+	}
+	return ""
+}
+
+// boundPathOperands are the paths the line's version-control removes and moves
+// name once a literal loop binds its variable. Lease-write's own reading leaves
+// such a word unresolved and its path ungraded.
+func boundPathOperands(command string, d Dialect, start string) []placedWord {
+	calls, ok := locateCalls(command, d, start, func(c hint.Invocation) bool {
+		_, names := vcsPathOperands(c.Name, c.Args)
+		return names
+	}, false)
+	if !ok {
+		return nil
+	}
+	var out []placedWord
+	for _, c := range calls {
+		site, unlocated := shellCommitSite(c)
+		if unlocated != "" || nonLiteralWords(c) != "" {
+			continue
+		}
+		ops, _ := vcsPathOperands(c.inv.Name, c.inv.Args)
+		for _, op := range ops {
+			out = append(out, placedWord{op, site.dir})
+		}
+	}
+	return out
+}
+
+// directoryLandings grades each destination a directory move creates. A missing
+// destination holds nothing to walk; it will hold the source's files. It maps
+// the destination's absolute path to the first landing me may not write.
+func directoryLandings(command string, d Dialect, start, home, checkout string, me types.Job) map[string]string {
+	calls, ok := locateCalls(command, d, start, movesNamedPaths, false)
+	if !ok {
+		return nil
+	}
+	landings := map[string]string{}
+	for _, c := range calls {
+		site, unlocated := shellCommitSite(c)
+		ops, _ := vcsPathOperands(c.inv.Name, c.inv.Args)
+		if unlocated != "" || nonLiteralWords(c) != "" || len(ops) != 2 {
+			continue
+		}
+		source, placedSource := placePath(ops[0], site.dir, home)
+		dest, placedDest := placePath(ops[1], site.dir, home)
+		if !placedSource || !placedDest {
+			continue
+		}
+		rel, inside := workspaceRelative(checkout, dest)
+		info, err := os.Lstat(source)
+		if !inside || err != nil || !info.IsDir() || !holdsDeclaredPath(me.WritePaths, rel) {
+			continue
+		}
+		if _, err := os.Lstat(dest); err == nil {
+			continue
+		}
+		landings[dest] = firstUnwritableLanding(source, rel, me)
+	}
+	return landings
+}
+
+// firstUnwritableLanding is the first file of source, named under rel, that me
+// may not write. A walk that cannot finish answers rel, so it stays refused.
+func firstUnwritableLanding(source, rel string, me types.Job) string {
+	outside := ""
+	err := filepath.WalkDir(source, func(p string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		under, err := filepath.Rel(source, p)
+		if err != nil {
+			return err
+		}
+		landing := path.Join(rel, filepath.ToSlash(under))
+		_, denied, errDeny := declarationCovering(me.DenyPaths, landing)
+		_, mine, errMine := declarationCovering(me.WritePaths, landing)
+		if errDeny != nil || errMine != nil || denied || !mine {
+			outside = landing
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return rel
+	}
+	return outside
+}
+
+// reattachesOwnBranch reports `git switch -C <row id> [HEAD]` or `git checkout
+// -B <row id> [HEAD]` for a row with its own checkout. It keeps a detached
+// HEAD's commits. Any other name, start point or flag stays refused.
+func reattachesOwnBranch(c hint.Invocation, row types.Job) bool {
+	if c.Name != "git" || !row.Worktree.Standing() || vcsMutation(c) != "" {
+		return false
+	}
+	g := parseGit(c.Args)
+	if g.configured || len(g.rest) < 2 || len(g.rest) > 3 || g.rest[1] != row.ID {
+		return false
+	}
+	if len(g.rest) == 3 && g.rest[2] != "HEAD" {
+		return false
+	}
+	switch g.sub {
+	case "switch":
+		return g.rest[0] == "-C" || g.rest[0] == "--force-create"
+	case "checkout":
+		return g.rest[0] == "-B"
 	}
 	return false
 }

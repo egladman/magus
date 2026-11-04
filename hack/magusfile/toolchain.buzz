@@ -75,7 +75,7 @@ fun fetchReleaseTags(bin: str) > [str] !> any {
         // quiet: this is a 954-line listing being consumed, not a build step being
         // watched. Capture is unaffected.
         final res = vcs\cmd(["ls-remote", "--tags", "--refs", remote["url"]],
-            opts: {"allow_failure": true, "quiet": true});
+            opts: vcs\CommandOptions{allowFailure = true, quiet = true});
         if (res.code != 0) {
             return; // unreachable remote: reported as unknown, never as up to date
         }
@@ -120,7 +120,7 @@ fun extract(output: str) > str {
 // repo does not install is not out of date.
 fun probe(bin: str, args: [str]) > str {
     try {
-        final res = proc\exec(bin, args: args, dir: ".", opts: {"allow_failure": true, "quiet": true});
+        final res = proc\exec(bin, args: args, dir: ".", opts: proc\ExecOptions{allowFailure = true, quiet = true});
         if (res.code != 0) {
             return "";
         }

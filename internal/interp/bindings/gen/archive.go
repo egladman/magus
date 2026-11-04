@@ -8,9 +8,11 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // RegisterArchive builds the "archive" module map and returns it.
@@ -22,7 +24,14 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("uncompress", vm.DirectValue("archive.uncompress", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		src := ffi.String(bzArgs, 0)
 		dest := ffi.String(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		var opts types.ArchiveOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("archive\\uncompress", "opts", bzArgs, 2, decode.DecodeArchiveOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.ArchiveUncompress(ctx, src, dest, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -32,7 +41,14 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("compress", vm.DirectValue("archive.compress", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		src := ffi.String(bzArgs, 0)
 		dest := ffi.String(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		var opts types.ArchiveOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("archive\\compress", "opts", bzArgs, 2, decode.DecodeArchiveOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.ArchiveCompress(ctx, src, dest, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -41,7 +57,14 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("list", vm.DirectValue("archive.list", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		src := ffi.String(bzArgs, 0)
-		opts := ffi.AnyMap(bzArgs, 1)
+		var opts types.ArchiveOptions
+		if ffi.Present(bzArgs, 1) {
+			x, err := ffi.Object("archive\\list", "opts", bzArgs, 1, decode.DecodeArchiveOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.ArchiveList(ctx, src, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -51,7 +74,14 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("readFile", vm.DirectValue("archive.readFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		src := ffi.String(bzArgs, 0)
 		name := ffi.String(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
+		var opts types.ArchiveOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("archive\\readFile", "opts", bzArgs, 2, decode.DecodeArchiveOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
 		ret0, err := std.ArchiveReadFile(ctx, src, name, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

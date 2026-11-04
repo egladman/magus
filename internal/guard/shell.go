@@ -1,10 +1,12 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -13,12 +15,14 @@ import (
 	"sync"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -136,6 +140,7 @@ const (
 	denyRuleInlineAlias       denyRuleName = "inline-alias"
 	denyRuleStageAll          denyRuleName = "stage-all"
 	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
+	denyRuleCacheClear        denyRuleName = "cache-clear"
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 	denyRuleSearchTranslation denyRuleName = "search-translation"
 	denyRuleReadNavigation    denyRuleName = "read-navigation"
@@ -161,6 +166,9 @@ const (
 	denyRuleBriefCommand denyRuleName = "brief-command"
 	// Any graded call, shell line or write; see internal/guard/architecture.go.
 	denyArchitectureUnbriefed denyRuleName = "architecture-unbriefed"
+	// A graded call that picks magus `ci` or the host's CI/CD while the person's
+	// bare word "ci" is still unresolved; see internal/guard/ambiguous_ci_word.go.
+	denyRuleAmbiguousCIWord denyRuleName = "ambiguous-ci-word"
 	// A write turning vcs off, which removes the guard's approval authority; see
 	// internal/guard/write.go.
 	denyRuleVCSOffSwitch denyRuleName = "vcs-off-switch"
@@ -184,6 +192,9 @@ const (
 	denyRuleFocusRead       denyRuleName = "focus-read"
 	// A row carrying members this build does not declare; see internal/guard/row_unknown.go.
 	denyRuleLeaseRowUnknown denyRuleName = "lease-row-unknown"
+	// A whole-file rewrite a magus verb makes that no lease would grade;
+	// see judgeEdit.
+	denyRuleEditUngraded denyRuleName = "edit-ungraded"
 	// `magus job grant` reaching the hook; see internal/guard/grant.go.
 	denyRuleGrantIsAPersons denyRuleName = "grant-is-a-persons"
 	// The refusing arm of hook-wiring; see internal/guard/wiring.go.
@@ -434,28 +445,26 @@ func pipeBreaks(stages []runStage) string {
 	return ""
 }
 
-// rebuildTargets are the targets of magus's own magusfile that relink ./magus, in their
-// dashed spelling (`go_build` names the same one). The go spell's `go::go-build` op counts
-// too, since `-- -o ./magus ./cmd/magus` relinks through it. Every stage of a pipe starts
-// at once, so a stage after one of these would run the binary it replaces.
-var rebuildTargets = []string{"go-build", "build"}
-
-// rebuildsOwnBinary reports a stage before the last that relinks the magus binary, in a
-// checkout of magus's own source.
-func rebuildsOwnBinary(root string, stages []runStage) bool {
+// relinkingStage is the binary a stage before the last replaces, by its target's declared
+// relinks, "" when none declares one, and the note declaredPolicies gave. Every stage of a
+// pipe starts at once, so a stage after one would run the binary it replaces.
+func relinkingStage(ctx context.Context, deps Dependencies, stages []runStage) (binary, note string) {
+	root := deps.scope.root
 	if root == "" {
-		return false
+		return "", ""
+	}
+	ix, note, ok := declaredPolicies(ctx, deps, root, lazyWorkspace(ctx, deps, root))
+	if !ok {
+		return "", note
 	}
 	for _, s := range stages[:len(stages)-1] {
-		raw := s.target
-		if i := strings.LastIndex(raw, "::"); i >= 0 {
-			raw = raw[i+2:]
-		}
-		if t, err := types.ParseTarget(raw); err == nil && slices.Contains(rebuildTargets, strings.ReplaceAll(t.Name, "_", "-")) {
-			return ownSourceRoot(root)
+		r := targetRun{verb: s.verb, target: s.target, projects: s.projects}
+		if runRelinks(ix, r) {
+			pol, _ := runPolicy(ix, r)
+			return pol.Relinks, note
 		}
 	}
-	return false
+	return "", note
 }
 
 // chainedRunVerdict judges magus runs sequenced with `&&` or `;`. The same target on
@@ -474,8 +483,14 @@ func chainedRunVerdict(deps Dependencies, command string, d Dialect) (ShellVerdi
 		return ShellVerdict{}, false
 	}
 	why := ch.breaks
-	if why == "" && rebuildsOwnBinary(deps.scope.root, ch.stages) {
-		why = "a pipe starts every stage at once, so a stage after one that relinks ./magus would run the binary it replaces"
+	if why == "" {
+		binary, note := relinkingStage(context.Background(), deps, ch.stages)
+		if binary != "" {
+			why = fmt.Sprintf("a pipe starts every stage at once, so a stage after one that relinks %s would run the binary it replaces", binary)
+			if note != "" {
+				why += ". " + strings.TrimSuffix(note, ".")
+			}
+		}
 	}
 	if why != "" {
 		said := advice{Say: adviseChainedRun, Why: adviseChainedRunWhy}
@@ -630,17 +645,97 @@ var graphReadVerbs = map[string]bool{"refs": true, "query": true, "explain": tru
 // renamesSymbol reports `refs --rename` without the global `--dry-run` (or its `-u`
 // short form), the one graph verb that writes.
 func renamesSymbol(args []string) bool {
-	return slices.ContainsFunc(args, func(a string) bool { return a == "--rename" || strings.HasPrefix(a, "--rename=") }) &&
-		!slices.Contains(args, "--dry-run") && !slices.Contains(args, "-u")
+	return namesRename(args) && !magusFlag(args, "dry-run", "u")
 }
 
-// JudgeEdit judges a whole-file rewrite a magus verb makes itself, exactly as the host edit
-// hook judges the same edit. The verb's process knows no host session, so it acts under the
-// lease it resolves on its own: the checkout's binding, else its magus.lease BAGGAGE claim.
-// Resolving none while live leases hold write paths in the checkout at root is a deny: a
-// worker bound only by its session would otherwise be graded by nobody. dryRun judges as
-// [Request.DryRun] does, writing nothing.
-func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) types.GuardJudgment {
+func namesRename(args []string) bool {
+	return magusFlag(args, flaggen.FlagRefsRename)
+}
+
+// buzzGradedWriterRe finds the fs members std/fs.go asks the edit judge about.
+var buzzGradedWriterRe = regexp.MustCompile(`\bfs\\(?:writeFileAtomic|writeFile|writeLines|appendFile|copyFile|copyDir)\s*\(`)
+
+// denyUngradedRewrite refuses a bound caller a rewrite no lease would grade.
+// A hook shares no environment with the process and rewrites no command.
+// So the line names the claim. A person's terminal never reaches this hook.
+func denyUngradedRewrite(ctx context.Context, deps Dependencies, actingLease, command string) denial {
+	// A forking row has no record yet: `job exec` writes its holder's.
+	if actingLease == "" || pendingRowID(ctx) == actingLease {
+		return denial{}
+	}
+	d := effectiveDialect(deps.ShellDialect)
+	f, err := parseFile(command, d)
+	if err != nil {
+		return denial{}
+	}
+	at := hookLocation(ctx, deps)
+	// A checkout record outranks any claim, so it grades the process already.
+	if record, _ := job.ActingLease(at.jobs(), ""); record != "" {
+		return denial{}
+	}
+	if cmp.Or(lineBaggageLease(f), trail.LeaseFromEnv()) == actingLease {
+		return denial{}
+	}
+	var heredoc strings.Builder
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if st, ok := n.(*syntax.Stmt); ok {
+			heredoc.WriteString(heredocText(st))
+		}
+		return true
+	})
+	calls, ok := locateCalls(command, d, cmp.Or(deps.callDir, at.dir, at.workspace), isMagusInvocation, false)
+	if !ok || !slices.ContainsFunc(calls, func(c locatedCall) bool { return rewritesThroughGrader(c, heredoc.String()) }) {
+		return denial{}
+	}
+	if _, live := actingLiveLease(ctx, deps, actingLease); !live {
+		return denial{}
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: lease %s would not grade what `%s` rewrites; start the line with `export %s=%s;`.",
+			actingLease, elideCommand(command), envHookLease, actingLease),
+		Why: "The process cannot see your session. A hook shares no environment with the process it lets run, and the guard rewrites no command, so the line carries the claim. " +
+			"The process then grades each file against the lease's row, a dry run included.",
+	}
+}
+
+// rewritesThroughGrader reports a magus call that reaches judgeEdit itself.
+// A dry-run rename counts, since it grades the same files.
+// An unreadable program or an imported write reads as no rewrite.
+// The bootstrap scripts are recovery lines: they take no assignment.
+func rewritesThroughGrader(c locatedCall, heredoc string) bool {
+	args := withoutRelocation(c.inv.Args)
+	if magusHelpRequest(args) {
+		return false
+	}
+	words := magusSubcommandWords(args)
+	switch {
+	case len(words) == 0:
+		return false
+	case words[0] == "refs":
+		return namesRename(args)
+	case words[0] != "buzz":
+		return false
+	}
+	if script, ok := inlineBuzz(args, heredoc); ok {
+		return buzzGradedWriterRe.MatchString(script)
+	}
+	file, ok := buzzScriptFile(args)
+	if !ok || file == placementScript || strings.HasSuffix(path.Clean("/"+file), "/"+job.CheckoutBootstrapScript) {
+		return false
+	}
+	if dir, placed := magusCallDir(c); placed && !filepath.IsAbs(file) {
+		file = filepath.Join(dir, file)
+	}
+	script, ok := readScript(file)
+	return ok && buzzGradedWriterRe.MatchString(script)
+}
+
+// judgeEdit judges a whole-file rewrite a magus verb makes itself, exactly as the host edit
+// hook judges the same edit. The process has no agent attribution, so it acts
+// under the lease its checkout record or claim names. A lease merely held
+// there is never inferred. An unreadable store is a deny.
+// dryRun judges as [Request.DryRun] does.
+func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) types.GuardJudgment {
 	envelope, _ := json.Marshal(map[string]any{
 		"cwd": root,
 		"tool_input": map[string]any{
@@ -649,30 +744,77 @@ func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 			"new_string": string(after),
 		},
 	})
-	v := Judge(ctx, deps, Request{Input: string(envelope), DryRun: dryRun})
-	if v.Decision == decisionDeny || v.Lease != "" {
-		return v
-	}
 	at := hookLocation(hookContextAt(ctx, deps, root), deps)
-	rows, err := leaseRows(ctx, at)
-	if err != nil {
-		return v // an unreadable plan is the guard's standing fail-open
+	ungraded := func(say, why string) types.GuardJudgment {
+		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny,
+			Rule: string(denyRuleEditUngraded), Reason: denial{Say: say, Why: why}.full()}
 	}
-	var held []string
-	for _, row := range job.HeldIn(rows, at.workspace) {
-		held = append(held, row.ID)
+	if _, err := leaseRows(ctx, at); err != nil {
+		return ungraded(fmt.Sprintf("magus workspace: the lease store did not read (%v), so this edit is refused.", err),
+			"An unread store hides the leases that would grade the edit.")
 	}
-	if len(held) == 0 {
-		return v
+	lease, from := job.RunLease(ctx, at.jobs())
+	v := Judge(ctx, deps, Request{Input: string(envelope), DryRun: dryRun, Lease: lease})
+	if lease != "" && v.Lease == lease {
+		v.LeaseFrom = from
 	}
-	slices.Sort(held)
-	v.Decision, v.Context, v.Rule = decisionDeny, "", ""
-	v.Reason = denial{
-		Say: fmt.Sprintf("magus workspace: lease %s holds write paths in this checkout, and this process names no lease; name yours: `%s=<id> magus ...`.",
-			strings.Join(held, ", "), envHookLease),
-		Why: "Nothing would grade the edit. A magus process cannot see the host session its caller is bound by.",
-	}.full()
 	return v
+}
+
+// EditGrade says how GradeEdit grades one rewrite.
+type EditGrade struct {
+	// DryRun judges as [Request.DryRun] does.
+	DryRun bool
+	// InRun passes a declared output:
+	// a target run is how one gets made.
+	InRun bool
+}
+
+// GradeEdit grades a whole-file rewrite of rel in ws
+// that a magus process makes itself.
+// It refuses a declared output, then asks judgeEdit.
+// rule and reason are empty on a pass;
+// a declared output is refused with no rule.
+func GradeEdit(ctx context.Context, deps Dependencies, ws types.WorkspaceRepository, rel string, before, after []byte, o EditGrade) (rule, reason string) {
+	output, reason := declaredOutput(ctx, ws, rel)
+	switch {
+	case output && o.InRun:
+		return "", ""
+	case reason != "":
+		return "", reason
+	}
+	v := judgeEdit(ctx, deps, ws.Root(), rel, before, after, o.DryRun)
+	switch v.Decision {
+	case decisionDeny, decisionAsk:
+		return v.Rule, strings.TrimSpace(v.Reason)
+	}
+	return "", ""
+}
+
+// declaredOutput reports a path the workspace declares as an output,
+// with the reason a hand edit of it is refused.
+// A failed classification refuses too:
+// an unknown role is no license to hand-edit.
+func declaredOutput(ctx context.Context, ws types.WorkspaceRepository, path string) (bool, string) {
+	const unclassified = "could not classify it against the workspace's declarations"
+	entries, err := ws.ClassifyFiles(ctx, []string{path})
+	switch {
+	case err != nil:
+		return false, fmt.Sprintf("%s: %v", unclassified, err)
+	case len(entries) != 1:
+		return false, fmt.Sprintf("%s: it gave %d answers, not 1", unclassified, len(entries))
+	}
+	e := entries[0]
+	if e.Role != types.DiffRoleOutput {
+		return false, ""
+	}
+	var by []string
+	for _, c := range e.Claims {
+		if c.Role == types.DiffRoleOutput {
+			by = append(by, strings.TrimSuffix(fmt.Sprintf("%s:%s", c.Project, c.Target), ":"))
+		}
+	}
+	return true, fmt.Sprintf("a declared output of %s: change its source and regenerate it", strings.Join(by, ", "))
 }
 
 // graphReadOnly reports a pipeline stage whose every magus invocation is a graph read.
@@ -1189,7 +1331,7 @@ func trimmableMagus(cmds []hint.Invocation) bool {
 		if magusInvokes(one, "query", "output") {
 			continue
 		}
-		if magusInvokes(one, "refs") && slices.ContainsFunc(c.Args, isRefsTextFlag) {
+		if magusInvokes(one, "refs") && magusFlag(c.Args, flaggen.FlagRefsText) {
 			continue
 		}
 		if magusHelpRequest(c.Args) {
@@ -1198,13 +1340,6 @@ func trimmableMagus(cmds []hint.Invocation) bool {
 		return true
 	}
 	return false
-}
-
-// isRefsTextFlag matches refs' --text flag, spelled either --text or -text (Go's
-// flag package treats a single and a double dash the same), bare or with a value
-// (--text=true).
-func isRefsTextFlag(a string) bool {
-	return a == "-text" || a == "--text" || strings.HasPrefix(a, "-text=") || strings.HasPrefix(a, "--text=")
 }
 
 func isTextFilter(cmds []hint.Invocation) bool {
@@ -1313,8 +1448,10 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 	for _, spell := range deps.spells() {
 		for _, operation := range spell.Targets() {
 			op, _ := spell.Op(operation)
-			// Installs are advised, never denied: see installAdvised.
-			if op.Kind == spells.OpKindInstall || !carriesModeArgs(op.ModeArgs, c.Args) {
+			// Installs are advised, never denied: see installAdvised. A symbol index op
+			// is graph build's to run, and its command can be a read: matching the Go
+			// indexer's `go list ./...` would deny every `go list`.
+			if op.Kind == spells.OpKindInstall || op.Kind == spells.OpKindSymbolIndex || !carriesModeArgs(op.ModeArgs, c.Args) {
 				continue
 			}
 			for _, charms := range [][]string{nil, {"rw"}} {
@@ -1955,7 +2092,7 @@ var (
 		"A watcher running the same loop is the same poll; if nothing else records the work, one watcher, armed once, is the most it earns."
 
 	denyProcessPoll    = fmt.Sprintf("`pgrep`, `pidof` and `ps` poll for what the project lock already records; background your call as `%s` and wait for its notice.", boundedRunWait)
-	denyProcessPollWhy = "A run backgrounded that way waits out the lock and is announced when it ends, where the process table invents an unbounded poll."
+	denyProcessPollWhy = "A second run on a held project lock exits 75 and never waits, so retry it after the notice. A run backgrounded that way is announced when it ends, where the process table invents an unbounded poll."
 
 	// Names what the filter cuts, or the reader corrects the spelling instead of the
 	// mistake: the ref two lines under each failure's cause.
@@ -2257,7 +2394,7 @@ func foreignWaitFires(command string, d Dialect) bool {
 	found := false
 	syntax.Walk(f, func(n syntax.Node) bool {
 		loop, ok := n.(*syntax.WhileClause)
-		if found || !ok || !runsIn(loop.Do, d, "sleep") {
+		if found || !ok || !runsSleeper(loop.Do, d) {
 			return !found
 		}
 		for _, cond := range loop.Cond {
@@ -2661,6 +2798,8 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 		wait := ShellVerdict{Deny: denyBusyWait, Why: denyBusyWaitWhy, Rule: denyRule{Name: denyRuleBusyWait}}
 		if foreignWaitFires(command, d) {
 			wait.Deny, wait.Why = denyBusyWaitForeign, denyBusyWaitForeignWhy
+		} else {
+			wait = wait.withRemedy(waitRemedy(deps, denyRuleBusyWait, command, d))
 		}
 		if v, ok := held.ends(deps, wait); ok {
 			return v
@@ -2669,19 +2808,24 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	// Beside busy-wait: both invent a waiter for work magus already tracks. This one is
 	// the process-table form (pgrep/ps/pidof); that one is the sleep-loop form.
 	if parsed && processPollFires(work) {
-		// The one-shot read, not --watch: a watch never exits, and a served command that
-		// holds the caller's tool slot until it times out is the poll again.
-		poll := ShellVerdict{Deny: denyProcessPoll, Why: denyProcessPollWhy, Rule: denyRule{Name: denyRuleProcessPoll}}.withRemedy(
-			"process-table reads and `kill -0` answer what the project lock already records.",
-			hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
-				"status reads the live pool once and exits, where the process table only guesses at it."))
+		poll := ShellVerdict{Deny: denyProcessPoll, Why: denyProcessPollWhy, Rule: denyRule{Name: denyRuleProcessPoll}}
+		if lead, next := waitRemedy(deps, denyRuleProcessPoll, command, d); lead != "" {
+			poll = poll.withRemedy(lead, next)
+		} else {
+			// The one-shot read, not --watch: a watch never exits, and a served command that
+			// holds the caller's tool slot until it times out is the poll again.
+			poll = poll.withRemedy("process-table reads and `kill -0` answer what the project lock already records.",
+				hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
+					"status reads the live pool once and exits, where the process table only guesses at it."))
+		}
 		if v, ok := held.ends(deps, poll); ok {
 			return v
 		}
 	}
 	// The same poll with the loop left to the caller's next call.
 	if parsed && sleepPollFires(work) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: denySleepPoll, Why: denySleepPollWhy, Rule: denyRule{Name: denyRuleSleepPoll}}); ok {
+		poll := ShellVerdict{Deny: denySleepPoll, Why: denySleepPollWhy, Rule: denyRule{Name: denyRuleSleepPoll}}
+		if v, ok := held.ends(deps, poll.withRemedy(waitRemedy(deps, denyRuleSleepPoll, command, d))); ok {
 			return v
 		}
 	}

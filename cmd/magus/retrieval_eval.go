@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/libs/embed/rankeval"
 	"github.com/egladman/magus/types"
 )
@@ -37,6 +38,8 @@ type replayer struct {
 	domain   *knowledge.Graph
 	symbols  *knowledge.Graph
 	known    map[string]string
+	// table loads the embed table a query ranks with; nil ranks without it.
+	table func() (*embed.Table, error)
 }
 
 // replay drops j's gold ids that r.known no longer holds, asks j's verb j's query
@@ -59,7 +62,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 	switch j.Verb {
 	case readQuery:
 		read.Nearest = true
-		res := searchLoaded(ctx, r.loadedGraph(read.Input), read, r.coverage)
+		res := searchLoaded(ctx, r.loadedGraph(read.Input), read, r.table, r.coverage)
 		run.Latency = time.Since(start)
 		for _, n := range res.Out.Nodes {
 			sources[n.ID] = n.Source

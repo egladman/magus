@@ -147,6 +147,15 @@ input, and this file carries no verdict on any input.
 
 <!-- embed: magus-observe.buzz -->
 
+## `magus-duration.buzz`
+
+Carries no verdict either. Wire it to the host's post-call event on every tool, in
+the background where the host has one, and it records how long the tool ran as the
+host reports it. A host whose event carries no duration records nothing. It always
+exits 0.
+
+<!-- embed: magus-duration.buzz -->
+
 ## What a template must not get wrong
 
 Three failure modes are worth naming, because each one looks like a working
@@ -303,6 +312,32 @@ It declares no `magus-guard-coverage` line: it judges a file the agent already w
 not a call.
 
 <!-- embed: magus-buzz-check.buzz -->
+
+## `magus-reclaim-disk.buzz`
+
+Wire it to the event your host raises once a turn (Claude Code's and Codex's
+`UserPromptSubmit`, Cursor's `beforeSubmitPrompt`; the OpenCode plugin runs it when a
+session goes idle) as `magus buzz -s magus-reclaim-disk.buzz -- --agent-name <host>`. The
+harness spells declare it through `magus/harness.reclaimDiskHook`.
+
+It catches a disk filling up before it wedges the machine, and needs no daemon. On most
+turns it costs one stat: the free-space store at `$XDG_STATE_HOME/magus/disk/samples.jsonl`
+was written less than a minute ago. Past that it says what the store holds that nobody was
+told, and starts one `reclaimdisk\tick` detached. `magus job fork` and `magus run` start
+the same tick.
+
+The tick decides. Below `disk.min_free_mb` it trims each cache a spell gives a budget,
+keeping files modified within a day; below `disk.critical_free_mb`, within 6 hours. Below
+`disk.min_free_mb`, or losing space faster than `disk.growth_mb_per_hour`, it removes the
+two removable worktrees untouched longest and the agent branches nothing needs. It never
+removes a worktree holding uncommitted files, a commit no remote has, a live job, a working
+process or a lock. `magus doctor` shows the trend and the last results.
+
+It prints what a tick really did, after the tick did it, and otherwise nothing. `--say
+stderr` sends the lines to stderr, for a host that reads stdout as a verdict. It always
+exits 0, and declares no `magus-guard-coverage` line: it judges no call.
+
+<!-- embed: magus-reclaim-disk.buzz -->
 
 ## Trying a verdict by hand
 

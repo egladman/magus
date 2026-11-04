@@ -10,15 +10,15 @@ import (
 	"strings"
 )
 
-// AvailableBytes reads MemAvailable from /proc/meminfo, or 0 when it cannot.
+// availableBytes reads MemAvailable from /proc/meminfo, or 0 when it cannot.
 //
 // MemAvailable, not MemFree: the kernel's estimate of what a new allocation could
 // get without swapping, which counts reclaimable page cache. MemFree on a runner
 // mid-build sits near zero on every healthy run, so a watchdog wired to it would
 // fire constantly.
 //
-// ctx is unused here; see TotalBytes.
-func AvailableBytes(_ context.Context) int64 {
+// ctx is unused here; see totalBytes.
+func availableBytes(_ context.Context) int64 {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return 0

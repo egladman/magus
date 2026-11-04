@@ -37,7 +37,7 @@ func TestExamplesCompile(t *testing.T) {
 			t.Errorf("%s: read: %v", path, err)
 			return nil
 		}
-		if err := compileExample(string(src), spell.ModuleDecls); err != nil {
+		if err := compileExample(string(src), exampleDecls); err != nil {
 			t.Errorf("%s: %v", path, err)
 		}
 		count++
@@ -59,4 +59,13 @@ func TestCompileExampleRefusesABrokenSnippet(t *testing.T) {
 	if err := compileExample("import \"std\";\nfinal x: int = \"not an int\";\n", spell.ModuleDecls); err == nil {
 		t.Fatal("a snippet that does not type-check must fail")
 	}
+}
+
+// exampleDecls is spell.ModuleDecls with magus\Context and the other shapes a
+// target receives, since the image examples are whole magusfiles.
+func exampleDecls(module string) (string, bool) {
+	if module == "magus" {
+		return spell.MagusDeclSource(), true
+	}
+	return spell.ModuleDecls(module)
 }

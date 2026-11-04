@@ -107,3 +107,34 @@ func TestCompat_FuncTypes(t *testing.T) {
 	assert.True(t, Compat(f1, f2), "Compat(identical FuncTypes)")
 	assert.False(t, Compat(f1, f3), "Compat(different FuncTypes)")
 }
+
+func TestParseAnnot_GenericInstance(t *testing.T) {
+	got, ok := ParseAnnot("Result::<[int],str>?").(*NamedType)
+	require.True(t, ok)
+	assert.Equal(t, "Result", got.Name)
+	assert.Equal(t, "Result::<[int], str>", got.TypeName())
+}
+
+func TestInstantiate_SubstitutesFieldsAndMethods(t *testing.T) {
+	box := &ObjectType{
+		Name:       "Box",
+		TypeParams: []string{"T"},
+		Fields:     map[string]Type{"item": &NamedType{Name: "T"}, "all": &ListType{Elem: &NamedType{Name: "T"}}},
+		Methods:    map[string]*FuncType{"get": {Ret: &NamedType{Name: "T"}}},
+	}
+	inst := Instantiate(box, []Type{Int})
+	assert.Equal(t, "Box::<int>", inst.TypeName())
+	assert.Equal(t, Int, inst.Fields["item"])
+	assert.Equal(t, "[int]", inst.Fields["all"].TypeName())
+	assert.Equal(t, Int, inst.Methods["get"].Ret)
+	assert.Equal(t, "T", box.Fields["item"].TypeName(), "the declaration is left unchanged")
+}
+
+func TestCompat_GenericInstances(t *testing.T) {
+	box := &ObjectType{Name: "Box", TypeParams: []string{"T"}, Fields: map[string]Type{}}
+	ofInt, ofStr := Instantiate(box, []Type{Int}), Instantiate(box, []Type{Str})
+	assert.True(t, Compat(ofInt, Instantiate(box, []Type{Int})))
+	assert.False(t, Compat(ofStr, ofInt))
+	assert.True(t, Compat(box, ofInt), "a raw use matches any instance")
+	assert.True(t, Compat(Instantiate(box, []Type{&NamedType{Name: "T"}}), ofInt), "an erased argument matches")
+}

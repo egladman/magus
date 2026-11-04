@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,62 @@ type hgVCS struct{ declines[hgName] }
 
 func (v hgVCS) Name() string     { return "hg" }
 func (v hgVCS) Claims() []string { return []string{".hg"} }
+
+// FastForward implements types.CheckoutFastForwarder. An update deactivates a
+// bookmark it does not name, so an active bookmark is moved and named again.
+func (v hgVCS) FastForward(ctx context.Context, root, rev string) error {
+	descends, err := hgIsAncestor(ctx, "hg", root, ".", rev)
+	if err != nil {
+		return err
+	}
+	if !descends {
+		return fmt.Errorf("hg: %s does not descend from the head of %s", rev, root)
+	}
+	active, err := vcsOutput(ctx, root, "hg", "log", "-r", ".", "--template", "{activebookmark}")
+	if err != nil {
+		return fmt.Errorf("hg log -r .: %w", err)
+	}
+	if err := runVCS(ctx, "hg", root, []string{"update", "--check", "--rev", rev}); err != nil {
+		return err
+	}
+	if active == "" {
+		return nil
+	}
+	if err := runVCS(ctx, "hg", root, []string{"bookmark", "--force", "--rev", rev, "--", active}); err != nil {
+		return err
+	}
+	return runVCS(ctx, "hg", root, []string{"update", "--rev", active})
+}
+
+// BranchHeads implements types.BranchHeadReporter. A job's branch is a
+// bookmark, which wins over a named branch of the same name, as a revset does.
+func (v hgVCS) BranchHeads(ctx context.Context, root string) (map[string]string, error) {
+	heads, err := hgHeads(ctx, "hg", root, "branches", "--closed", "-T", "{node} {branch}\n")
+	if err != nil {
+		return nil, err
+	}
+	bookmarks, err := hgHeads(ctx, "hg", root, "bookmarks", "-T", "{node} {bookmark}\n")
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(heads, bookmarks)
+	return heads, nil
+}
+
+// hgHeads reads "<id> <name>" lines from a listing hg or Sapling prints.
+func hgHeads(ctx context.Context, prog, root string, args ...string) (map[string]string, error) {
+	listed, err := vcsOutputRaw(ctx, root, prog, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s %s: %w", prog, args[0], err)
+	}
+	heads := map[string]string{}
+	for _, line := range splitLines([]byte(listed)) {
+		if id, name, ok := strings.Cut(line, " "); ok {
+			heads[name] = id
+		}
+	}
+	return heads, nil
+}
 
 // Base is the "default" BRANCH, not "tip".
 //
@@ -92,6 +149,14 @@ func (v hgVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCo
 }
 
 func (v hgVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions) (types.Culprit, error) {
+	return hgBisect{bin: "hg"}.bisect(ctx, dir, opts)
+}
+
+// hgBisect drives `bisect` for the Mercurial family. Sapling shares the command
+// line, so bin names the executable and prefixes its errors.
+type hgBisect struct{ bin string }
+
+func (v hgBisect) bisect(ctx context.Context, dir string, opts types.BisectOptions) (types.Culprit, error) {
 	if err := checkRef(opts.Good); err != nil {
 		return types.Culprit{}, err
 	}
@@ -114,12 +179,12 @@ func (v hgVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions)
 	}
 
 	if err := v.start(ctx, dir, bad, opts.Good); err != nil {
-		return types.Culprit{}, fmt.Errorf("hg bisect start: %w", err)
+		return types.Culprit{}, fmt.Errorf("%s bisect start: %w", v.bin, err)
 	}
 	defer func() { _ = v.reset(context.WithoutCancel(ctx), dir) }()
 
 	if err := v.run(ctx, dir, opts.TestCmd); err != nil {
-		slog.WarnContext(ctx, "hg bisect run exited with error", attr.Error(err))
+		slog.WarnContext(ctx, v.bin+" bisect run exited with error", attr.Error(err))
 	}
 
 	sha, err := v.culprit(ctx, dir)
@@ -401,25 +466,25 @@ func keepUnder(files, paths []string) []string {
 // isAncestor, commitBeforeTime and commitInfo run via `hg -R dir` so they target
 // the repository under bisect, not the process cwd: the dir-scoping the VCSDriver
 // contract requires for correctness under concurrent runs.
-func (v hgVCS) isAncestor(ctx context.Context, dir, sha string) error {
-	out, err := vcsExec(ctx, "hg", "-R", dir, "log",
+func (v hgBisect) isAncestor(ctx context.Context, dir, sha string) error {
+	out, err := vcsExec(ctx, v.bin, "-R", dir, "log",
 		"-r", fmt.Sprintf("(%s) and (ancestors(.) or .)", sha),
 		"--template", "{node}").Output()
 	if err != nil {
-		return fmt.Errorf("hg log: %w", err)
+		return fmt.Errorf("%s log: %w", v.bin, err)
 	}
 	if strings.TrimSpace(string(out)) == "" {
-		return fmt.Errorf("hg: %s is not an ancestor of current revision", sha)
+		return fmt.Errorf("%s: %s is not an ancestor of current revision", v.bin, sha)
 	}
 	return nil
 }
 
-func (v hgVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
-	// hg date() predicate requires a date string, not an epoch integer.
+func (v hgBisect) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
+	// The date() predicate requires a date string, not an epoch integer.
 	revset := fmt.Sprintf("max(date('<%s'))", t.UTC().Format("2006-01-02 15:04:05"))
-	out, err := vcsExec(ctx, "hg", "-R", dir, "log", "-r", revset, "--template", "{node}").Output()
+	out, err := vcsExec(ctx, v.bin, "-R", dir, "log", "-r", revset, "--template", "{node}").Output()
 	if err != nil {
-		return "", fmt.Errorf("hg log: %w", err)
+		return "", fmt.Errorf("%s log: %w", v.bin, err)
 	}
 	sha := strings.TrimSpace(string(out))
 	if sha == "" {
@@ -428,8 +493,8 @@ func (v hgVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (s
 	return sha, nil
 }
 
-func (v hgVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
-	out, err := vcsExec(ctx, "hg", "-R", dir, "log", "-r", sha,
+func (v hgBisect) commitInfo(ctx context.Context, dir, sha string) (string, error) {
+	out, err := vcsExec(ctx, v.bin, "-R", dir, "log", "-r", sha,
 		"--template", "{desc|firstline}  ({author|user}, {date|shortdate})").Output()
 	if err != nil {
 		return "", err
@@ -437,9 +502,9 @@ func (v hgVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) 
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (v hgVCS) start(ctx context.Context, dir, bad, good string) error {
+func (v hgBisect) start(ctx context.Context, dir, bad, good string) error {
 	run := func(args ...string) error {
-		cmd := vcsExec(ctx, "hg", args...)
+		cmd := vcsExec(ctx, v.bin, args...)
 		cmd.Dir = dir
 		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
@@ -454,31 +519,31 @@ func (v hgVCS) start(ctx context.Context, dir, bad, good string) error {
 	return run("bisect", "--good", good)
 }
 
-func (v hgVCS) run(ctx context.Context, dir, shellCommand string) error {
-	cmd := vcsExec(ctx, "hg", "bisect", "--command", shellCommand)
+func (v hgBisect) run(ctx context.Context, dir, shellCommand string) error {
+	cmd := vcsExec(ctx, v.bin, "bisect", "--command", shellCommand)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-func (v hgVCS) reset(ctx context.Context, dir string) error {
-	cmd := vcsExec(ctx, "hg", "bisect", "--reset")
+func (v hgBisect) reset(ctx context.Context, dir string) error {
+	cmd := vcsExec(ctx, v.bin, "bisect", "--reset")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-func (v hgVCS) culprit(ctx context.Context, dir string) (string, error) {
-	out, err := vcsExec(ctx, "hg", "-R", dir, "log",
+func (v hgBisect) culprit(ctx context.Context, dir string) (string, error) {
+	out, err := vcsExec(ctx, v.bin, "-R", dir, "log",
 		"-r", "bisect(bad)", "--template", "{node}\n").Output()
 	if err != nil {
-		return "", fmt.Errorf("hg log bisect(bad): %w", err)
+		return "", fmt.Errorf("%s log bisect(bad): %w", v.bin, err)
 	}
 	sha := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
 	if sha == "" {
-		return "", errors.New("hg bisect(bad) returned no revision")
+		return "", fmt.Errorf("%s bisect(bad) returned no revision", v.bin)
 	}
 	return sha, nil
 }
@@ -804,9 +869,14 @@ func (v hgVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []s
 	return hgRangeFiles(ctx, "hg", dir, base, head, paths)
 }
 
+// MissingCommits implements types.RangeReporter; see missingCommits.
+func (v hgVCS) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+	return missingCommits(ctx, v, dir, branch, head)
+}
+
 // RangeCommits implements types.RangeReporter; see hgRangeCommits.
 func (v hgVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
-	return hgRangeCommits(ctx, v, "hg", dir, base, head, paths)
+	return hgRangeCommits(ctx, "hg", dir, base, head, paths)
 }
 
 // IsAncestor implements types.AncestryReporter; see hgIsAncestor.
@@ -1246,8 +1316,14 @@ func hgRefuseTakenBookmark(ctx context.Context, root, name string) error {
 	return nil
 }
 
-// RemoveCheckout implements types.CheckoutProvisioner. A share owns nothing in its source,
-// so deleting its directory removes it.
+// DiscardCheckout implements types.CheckoutProvisioner. A share is made
+// on no bookmark, so removing it leaves nothing to delete.
+func (v hgVCS) DiscardCheckout(ctx context.Context, root, dir, _ string) error {
+	return v.RemoveCheckout(ctx, root, dir)
+}
+
+// RemoveCheckout implements types.CheckoutProvisioner. A share owns
+// nothing in its source, so deleting its directory removes it.
 func (v hgVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	if !filepath.IsAbs(dir) {
 		return fmt.Errorf("vcs: checkout %q is not an absolute path", dir)

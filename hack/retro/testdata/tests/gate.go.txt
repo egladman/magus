@@ -1,0 +1,15 @@
+package pkg
+
+func Allow(lease string, path string) bool {
+	if lease == "" || path == "" {
+		return true
+	}
+	if err := check(path); err != nil {
+		return false
+	}
+	return Inner(path)
+}
+
+func Inner(path string) bool {
+	return len(path) > 0
+}

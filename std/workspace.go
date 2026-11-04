@@ -9,28 +9,14 @@ package std
 // serialization round trip, and it made a CLI subcommand load-bearing for a module that
 // has nothing to do with the CLI.
 //
-// A STRUCTURAL interface sidesteps the cycle. The workspace is ALREADY on the context
-// (types.WorkspaceFromContext, what magus\projects and magus\affected read); it is carried as
-// the narrow types.WorkspaceRepository, but the concrete value is the real *magus.Magus,
-// which has the lenses. So the capability is named here in terms of types.* and recovered
-// by assertion, with neither package naming the other. internal/handler/mcp reaches the
-// same API the same way and for the same reason.
+// A STRUCTURAL interface sidesteps the cycle: the context holds a *magus.Magus.
+// The capability is named in types.* terms and recovered by assertion.
 
 import (
 	"context"
 
 	"github.com/egladman/magus/types"
 )
-
-// Analyzer is the workspace's codebase-analytics interface: the VCS-history lenses plus the
-// ones that read the knowledge graph. Deliberately the narrow set the report needs rather
-// than the whole of *Magus: a wide interface here would re-couple std to the shape of the
-// package it cannot import.
-//
-// An ALIAS of types.InsightAnalyzer rather than a second declaration of the same method
-// set. The two were hand-kept copies, so a lens added to one compiled against the other
-// until the first caller tried to use it.
-type Analyzer = types.InsightAnalyzer
 
 // AnalyzerFromContext recovers the analytics interface from the workspace on ctx.
 //
@@ -39,11 +25,11 @@ type Analyzer = types.InsightAnalyzer
 // (a test double, or a provider-supplied workspace that models projects without git
 // history). Both report false here; the caller's message names the first, which is the one
 // a reader can act on.
-func AnalyzerFromContext(ctx context.Context) (Analyzer, bool) {
+func AnalyzerFromContext(ctx context.Context) (types.HistoryMetrics, bool) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil, false
 	}
-	a, ok := ws.(Analyzer)
+	a, ok := ws.(types.HistoryMetrics)
 	return a, ok
 }

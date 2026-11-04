@@ -229,11 +229,11 @@ type App struct {
 	ClientID        string `json:"client_id,omitempty"`
 	RegistrationURL string `json:"registration_url,omitempty"`
 	InstallURL      string `json:"install_url,omitempty"`
-	// Environment, Variable and Secret name where the queue job reads the app's
+	// Environment, Variable and SecretName name where the queue job reads the app's
 	// credential from.
 	Environment string `json:"environment,omitempty"`
 	Variable    string `json:"variable,omitempty"`
-	Secret      string `json:"secret,omitempty"`
+	SecretName  string `json:"secret,omitempty" buzz:"secret"`
 }
 
 // SetupRefusedError is Describe declining to describe a setup for the [ListQuery.App] it

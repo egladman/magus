@@ -2,14 +2,65 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/types"
 )
+
+// holdMachineRefresh is a workspace root, and another checkout's refresh
+// holding this machine's refresh lock for the test.
+func holdMachineRefresh(t *testing.T) string {
+	t.Helper()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	lock, _, err := maintenance.AcquireMachineGraphBuild(t.Context(),
+		maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of /other"}, io.Discard, time.Millisecond)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = lock.Release() })
+	return root
+}
+
+func TestStaleReadFindsTheMachinesRefreshAndStartsNothing(t *testing.T) {
+	root := holdMachineRefresh(t)
+	ans := types.KnowledgeAnswer{Verdict: types.VerdictFound, StaleIndexes: []string{"."}}
+
+	cause := refreshInBackground(t.Context(), root, ans, "magus refs Foo --refresh")
+
+	require.NotNil(t, cause)
+	assert.Contains(t, cause.Why, "this read started no refresh")
+	assert.Contains(t, cause.Why, fmt.Sprintf("the symbol refresh of /other (pid %d", os.Getpid()))
+	assert.Contains(t, cause.Fix, "magus refs Foo --refresh")
+}
+
+func TestDetachedRefreshExitsWhenTheMachineLockIsHeld(t *testing.T) {
+	root := holdMachineRefresh(t)
+	t.Setenv(detachedRefreshEnv, "1")
+
+	assert.True(t, refreshIndexesNow(t.Context(), root, "magus refs"), "it must not go on to answer a read")
+	assert.Empty(t, os.Getenv(detachedRefreshEnv), "a run it starts is not the detached process")
+}
+
+func TestForegroundRefreshWaitsOnTheMachineLockThenStillAnswers(t *testing.T) {
+	root := holdMachineRefresh(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	assert.False(t, refreshIndexesNow(ctx, root, "magus refs"), "a reader is waiting on the answer")
+	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded, "it waited for the lock until ctx ended")
+}
 
 // TestStaleIndexNotice: the banner names what is stale and the one command that fixes it,
 // and says nothing at all when nothing is.
@@ -74,13 +125,14 @@ func TestStaleGraphAdviceLeadsWithWhy(t *testing.T) {
 	api := []types.KnowledgeStaleIndex{{Project: "libs/api"}}
 	both := renderStaleGraphAdvice("the index was built at 0123456789ab and the checkout is at fedcba9", api)
 	assert.True(t, strings.HasPrefix(both, "magus workspace: the graph is stale, the index was built at 0123456789ab and the checkout is at fedcba9."), both)
-	assert.Contains(t, both, "One project changed since magus graph build last indexed it: libs/api.")
+	assert.Contains(t, both, "One project changed since it was last indexed: libs/api.")
 
 	projects := renderStaleGraphAdvice("", api)
-	assert.True(t, strings.HasPrefix(projects, "magus workspace: run `magus graph build` first, then ask again."), projects)
+	assert.True(t, strings.HasPrefix(projects, "magus workspace: the answer you are about to get is drawn from an index built before the current sources."), projects)
+	assert.NotContains(t, projects, "graph build` first", "nobody is sent away to rebuild")
 
 	root := renderStaleGraphAdvice("", []types.KnowledgeStaleIndex{{Project: ".", Language: "buzz"}, {Project: ".", Language: "go"}})
-	assert.Contains(t, root, "One project changed since magus graph build last indexed it: . (buzz index), . (go index).", root)
+	assert.Contains(t, root, "One project changed since it was last indexed: . (buzz index), . (go index).", root)
 
 	assert.Empty(t, renderStaleGraphAdvice("", nil))
 }

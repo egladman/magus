@@ -139,7 +139,7 @@ test "an edge with an undeclared stroke or the wrong length is refused" {
     foreach (edges in bad) {
         var refused = false;
         try {
-            figureLink("", title: "t", nodes: [FigureNode{ id = "a", label = "a" }, FigureNode{ id = "b", label = "b" }], edges: edges);
+            _ = figureLink("", title: "t", nodes: [FigureNode{ id = "a", label = "a" }, FigureNode{ id = "b", label = "b" }], edges: edges);
         } catch (e) {
             refused = true;
         }
@@ -179,7 +179,7 @@ test "a graph too large for a comment yields no link" {
 test "a link without a fragment is refused" {
     var refused = false;
     try {
-        decodeFigureLink("https://example.test/console/graph/");
+        _ = decodeFigureLink("https://example.test/console/graph/");
     } catch (e) {
         refused = true;
     }

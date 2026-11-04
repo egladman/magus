@@ -26,8 +26,6 @@ export final CONFIGS = {
     "dprint-base.json": "dprint (dprint.json extends it; the spell declares only dprint.json)",
     "mise.toml": "every op in this project, through the toolchain it pins",
     "magus.yaml": "every run, through the charm/cache/sandbox policy it resolves",
-    "Dockerfile": "image-build's amd64 variant",
-    "Dockerfile.static": "image-build's static multi-arch variant",
 };
 
 export fun reads() > [str] {

@@ -106,9 +106,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **queue**
 : Merge approved changes through a speculative, partitioned merge queue. See [**magus-queue**(1)](magus-queue.md).
 
-**gate**
-: A person's decisions about the local gate. See [**magus-gate**(1)](magus-gate.md).
-
 **watch**
 : Emit changed file paths to stdout. See [**magus-watch**(1)](magus-watch.md).
 
@@ -276,6 +273,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_MCP_INSECURE_BIND**
 : Permits a non-loopback Address. That listener serves bearer tokens over plaintext HTTP, so without it the server refuses to start rather than warn. Config file key: **mcp.insecure_bind**.
 
+**MAGUS_MCP_ALLOWED_ORIGINS**
+: Lists exact scheme://host origins, past loopback, trusted with the console routes and a graph. Empty trusts no hosted page. An inexact entry stops the server. Config file key: **mcp.allowed_origins**.
+
 **MAGUS_CONSOLE_ENABLED**
 : When false, the MCP HTTP server does not mount the console's read-only API and job service (default true when MCP is up). Config file key: **console.enabled**.
 
@@ -381,17 +381,20 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_JOBS_MAX_CLAIM_PROJECTS**
 : How many projects one glob write path may reach before a job record refuses it as too broad (MGS3043). Default 1; zero or negative is an error. Workspace only, like StaleAfter (default: 1). Config file key: **jobs.max_claim_projects**.
 
-**MAGUS_JOBS_INTEGRATE_ADVISE_AT**
-: How many finished branches may wait off the base before a fork of anything but an integration job advises forking one. Default 5; workspace only (default: 5). Config file key: **jobs.integrate_advise_at**.
-
-**MAGUS_JOBS_INTEGRATE_REFUSE_AT**
-: The count past which such a fork is refused until an integration job names the branches; it must exceed IntegrateAdviseAt. Default 10; workspace only (default: 10). Config file key: **jobs.integrate_refuse_at**.
-
 **MAGUS_JOBS_MAX_CLAIMS**
 : The most proved claims any job may be given through its max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an error. Workspace only, like StaleAfter (default: 10). Config file key: **jobs.max_claims**.
 
-**MAGUS_GO_CACHE_BUDGET_MB**
-: The size in MB (binary) past which \`magus doctor\` advises cleaning the Go build cache or the golangci-lint cache. Default 20480; 0 turns the check off (default: 20480). Config file key: **go.cache_budget_mb**.
+**MAGUS_DISK_MIN_FREE_MB**
+: The free space in MB (binary) below which the hook reclaims. Default 51200; 0 turns reclaiming off and leaves the samples (default: 51200). Config file key: **disk.min_free_mb**.
+
+**MAGUS_DISK_CRITICAL_FREE_MB**
+: The free space in MB below which the hook says so on every sample, so an agent puts reclaiming first. Default 10240; 0 turns the line off (default: 10240). Config file key: **disk.critical_free_mb**.
+
+**MAGUS_DISK_GROWTH_MB_PER_HOUR**
+: The rate at which free space may fall, in MB an hour, before the hook reclaims however much is left. Default 20480; 0 turns the growth trigger off (default: 20480). Config file key: **disk.growth_mb_per_hour**.
+
+**MAGUS_DISK_SAMPLE_EVERY**
+: The hook's rate limit: a hook that fires sooner reads one file's mtime and returns. Default 10m; 0 turns the hook off, and anything else takes at least 1m (default: 10m). Config file key: **disk.sample_every**.
 
 **MAGUS_CONCURRENCY**
 : Caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set. Config file key: **concurrency**.
@@ -428,6 +431,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_SANDBOX_ENV_PASSTHROUGH**
 : Adds exact names and prefix patterns such as MISE_\* to the built-in env allowlist. A prefix must be at least three characters and end in "_". Config file key: **sandbox.env.passthrough**.
+
+**MAGUS_SPELLS_SYMBOL_INDEXERS**
+: Names the spells whose external SCIP indexer runs here, such as typescript for scip-typescript. One forks a tool the workspace installs and is slower than magus's in-process indexers, so unlisted, its language has no symbol index. Config file key: **spells.symbol_indexers**.
 
 **MAGUS_CACHE_SIGNING_KEY**
 : Env-only, no magus.yaml equivalent: the Ed25519 seed that signs remote-cache writes (see \`magus config cache-key\`); env-only because a signing secret in a committed file is not a secret
@@ -516,6 +522,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_INTERNAL_ADVICE_BASE_BRANCH**
 : Set by \`magus diff\` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting
 
+**MAGUS_DETACHED_REFRESH**
+: Set by magus on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh; never set it by hand
+
 ## Files
 
 **magus.yaml, .magus.yaml**
@@ -528,5 +537,5 @@ dot-prefixed names are accepted; having both in the same directory is an error.
 
 ## See Also
 
-[**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-gate**(1)](magus-gate.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

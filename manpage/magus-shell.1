@@ -79,11 +79,17 @@ The host's id for the subagent making this call, empty for the main conversation
 \fB\-\-agent\-name\fR \fIstring\fR
 Name of the agent host this invocation came from, required with \-\-transport; magus reads the host's tool rows, foreground limits, resume release and whether it observes skill loads from the harness spell of that name
 .TP
-\fB\-\-call\-background\fR
+\fB\-\-[no\-]call\-background\fR (default: off)
 The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused
 .TP
-\fB\-\-call\-timeout\-ms\fR \fIint\fR
-The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default
+\fB\-\-call\-digest\fR \fIstring\fR
+With \-\-duration, a fingerprint of the call the host ran, so a repeat of it can be counted; never the call's text
+.TP
+\fB\-\-call\-timeout\fR \fIvalue\fR
+The timeout the call gave its shell command (e.g. 10m, 600000ms); 0 or absent means the host's foreground default. Bare numbers are milliseconds.
+.TP
+\fB\-\-duration\fR \fIvalue\fR
+Read the input as a tool's name and record how long the host says it ran (e.g. 420ms), without judging: the verdict is always pass. Bare numbers are milliseconds.
 .TP
 \fB\-\-event\fR \fIstring\fR
 The host's hook event name (e.g. PreToolUse)
@@ -91,17 +97,20 @@ The host's hook event name (e.g. PreToolUse)
 \fB\-\-lease\fR \fIstring\fR
 The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE
 .TP
-\fB\-\-message\fR
+\fB\-\-[no\-]message\fR (default: off)
 Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass
 .TP
-\fB\-\-observe\fR
+\fB\-\-[no\-]observe\fR (default: off)
 Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
 .TP
-\fB\-\-path\fR
+\fB\-\-[no\-]path\fR (default: off)
 Judge the input as a file path an edit is about to write, not as a shell command
 .TP
-\fB\-\-renders\-ask\fR
+\fB\-\-[no\-]renders\-ask\fR (default: off)
 This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
+.TP
+\fB\-\-result\-digest\fR \fIstring\fR
+With \-\-duration, a fingerprint of the call's result, so an equal answer can be told from a changed one; never the result's text. Absent means the host gave none, and the record says so
 .TP
 \fB\-\-session\fR \fIstring\fR
 The host's own session id for this invocation
@@ -155,6 +164,12 @@ printf '%s' 'go build ./...' | magus shell
 printf '%s' 'internal/cache/output.go' | magus shell --observe
 .EE
 .PP
+\fIRecord how long a tool ran\fR
+.PP
+.EX
+printf '%s' 'Bash' | magus shell --duration 420ms
+.EE
+.PP
 \fIGrade a write as a lease\fR
 .PP
 .EX
@@ -187,7 +202,6 @@ magus shell 'git add -A' -o json
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

@@ -499,6 +499,8 @@ jobs:
           TMPDIR: ${{ runner.temp }}
           MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}:/home/runner/.cache/magus/checkouts
           MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
+          # A zone with a DST shift and a half-hour offset, so a test that assumes UTC fails here.
+          TZ: Australia/Lord_Howe
         with:
           # ci:gha, not bare ci. The gha charm swaps a tool's reporter to GitHub's
           # inline annotation format, so a lint or test failure lands on the diff instead
@@ -513,7 +515,7 @@ jobs:
           # cache is the one pull requests read. docs figures stay off this shard (see
           # the figures job): ci:gha delegates them there, since site-generate plus
           # diagrams-generate OOMs 16GB together.
-          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }} ${{ github.event_name != 'pull_request' && '-- --inherited=fatal' || '' }}
+          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz -- run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }} ${{ github.event_name != 'pull_request' && '-- --inherited=fatal' || '' }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
 
@@ -693,8 +695,8 @@ jobs:
       # a signature compared across two different environments moves for reasons the author
       # did not write.
       #
-      # continue-on-error: an index that fails leaves the advisors reporting less, which is
-      # what they do on any workspace with no index, and never fails a pull request.
+      # continue-on-error: an index that fails leaves the advisors reporting less, and never
+      # fails a pull request. The step after it says so on the run.
       - name: Index this tree and the merge base
         id: baseline
         continue-on-error: true
@@ -708,6 +710,13 @@ jobs:
           magus --root "$RUNNER_TEMP/base" graph export --symbols -o json \
             --tee "$RUNNER_TEMP/base-graph.json" -q > /dev/null
           echo "path=$RUNNER_TEMP/base-graph.json" >> "$GITHUB_OUTPUT"
+
+      - name: Report an index that failed
+        if: steps.baseline.outcome == 'failure'
+        run: |
+          msg="the symbol index of this tree or its merge base failed, so the exported-api and other symbol advisors judged nothing; see the step above"
+          echo "::error title=advisors ran without an index::${msg}"
+          echo "**advisors ran without an index:** ${msg}" >> "$GITHUB_STEP_SUMMARY"
 
       # Every advisor, each silent unless it has something to say. They live in the
       # action so other workspaces get them with one `uses:` line; turn one off by name
@@ -747,8 +756,8 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      # scip-go and scip-typescript are pinned in mise.toml. Cache on pull requests only,
-      # as the shards restore it; this job holds no secret and no write token.
+      # External SCIP indexers still pinned in mise.toml (TypeScript). Cache on pull
+      # requests only, as the shards restore it; this job holds no secret and no write token.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
@@ -826,7 +835,7 @@ jobs:
         run: magus init --local --vcs git
 
       - name: Doctor
-        run: magus doctor
+        run: magus buzz hack/ci/run-with-harnesses.buzz -- doctor
 
   # One stable check name a branch rule can require, standing for the whole run.
   #

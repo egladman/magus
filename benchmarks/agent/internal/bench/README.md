@@ -42,8 +42,8 @@ tests in the root module, so `magus run test .` covers them; to run only these,
 `magus run go::go-test . -- -run TestBench`. Both need a magus binary that
 loads this workspace.
 
-`analyze` takes `--seed`; the bootstrap is seeded per metric and task, so the
-same metrics.jsonl and seed produce byte-identical analysis.json.
+`analyze` takes `--seed`; each comparison's randomization is seeded per metric,
+so the same metrics.jsonl and seed produce byte-identical analysis.json.
 
 ## Inputs
 
@@ -109,18 +109,28 @@ One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
 
 ## Statistics
 
-- Paired deltas are taken per task and per metric as `full` rep i minus
-  `rampant` rep i. A rep present in only one arm contributes to no delta and is
-  reported as an unpaired cell. A delta is never a comparison of independent means.
-- The CI is a percentile interval from a 10,000-sample bootstrap of the mean paired
-  delta, seeded from `(seed, metric, task)` so each interval is independent of
-  what else is in the run set.
-- The p value is a two-sided bootstrap p, Holm-adjusted across tasks within a metric.
-- The verdict is `lower under full` or `higher under full` only when the CI
-  excludes zero AND `|delta| >= 10%` of the rampant median. Everything else is
-  `inconclusive`; a statistically clean 2 percent is not a finding.
-- `pass@1` is successes / reps in a cell, with a Wilson score 95% interval.
-  `pass^k` is 1 only when all k reps in the cell passed.
+- A comparison pairs by task: each task's `full` mean against its `rampant`
+  mean, so reps never pair with each other and every task weighs the same.
+- The p value is a two-sided sign-flip test over the task differences
+  (`rankeval.PairedRandomization`), exact while every sign pattern fits in the
+  samples and never 0. Three tasks cannot reach p 0.05 (the floor is 0.25), and
+  the report says so rather than calling the comparison inconclusive for no reason.
+- Each comparison carries a paired t interval, the effect size d_z and the
+  difference its task count can detect. Holm adjusts p across pass@1, tokens,
+  dollars and wall clock, the headline family; every other metric is descriptive
+  and earns no verdict.
+- The verdict is `lower under full` or `higher under full` only when the
+  Holm-adjusted p clears alpha AND the difference is at least 10% of the rampant
+  value. Everything else is `inconclusive`; a statistically clean 2 percent is
+  not a finding.
+- The analysis refuses a comparison whose runs differ in model, effort, caps,
+  magus version or fixture, naming the field: a difference other than the arm
+  would read as the arm's.
+- `pass@1` is the mean of per-task pass rates, each cell with a Wilson score 95%
+  interval. `pass@k` and `pass^k` are the unbiased estimators per task, averaged
+  at a k every task reached.
+- An `answer.json` beside a run gives an interrogation task tp, fp and fn,
+  reported as precision, recall and F1.
 - Cost-of-pass is mean dollars / pass rate, per arm. It is reported as infinite
   when the pass rate is zero and never silently dropped.
 - Efficiency is conditioned on success: each cell also carries

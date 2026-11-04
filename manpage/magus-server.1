@@ -33,13 +33,13 @@ Signals:
 .SS server start options
 .RS
 .TP
-\fB\-\-foreground\fR
+\fB\-\-[no\-]foreground\fR (default: off)
 Run in the foreground and block, instead of auto\-backgrounding
 .RE
 .SS server stop options
 .RS
 .TP
-\fB\-\-pools\fR
+\fB\-\-[no\-]pools\fR (default: off)
 Stop per\-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone
 .TP
 \fB\-\-socket\fR \fIstring\fR
@@ -136,7 +136,6 @@ magus --server-address unix:///tmp/m.sock server start
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-broker\fR(1),

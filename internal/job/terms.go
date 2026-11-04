@@ -64,7 +64,7 @@ type Terms struct {
 	// Grouping is the grouping lens over the groups that wrote in the lease's projects: what
 	// splitting or chaining work there cost before. Facts for the orchestrator, like
 	// Affinity; nil when it was not read.
-	Grouping *types.GroupingOutput `json:"grouping,omitempty" yaml:"grouping,omitempty"`
+	Grouping *types.Grouping `json:"grouping,omitempty" yaml:"grouping,omitempty"`
 	// Stage is where the workspace's releases stand, from its newest tag. The zero stage is
 	// unknown and renders nothing.
 	Stage types.ReleaseStage `json:"stage" yaml:"stage"`
@@ -125,7 +125,7 @@ type TermsFacts struct {
 	RegeneratedOutside   []RegeneratedOutput
 	UnrunGates           []UnrunGate
 	Affinity             []TermsAffinity
-	Grouping             *types.GroupingOutput
+	Grouping             *types.Grouping
 	Stage                types.ReleaseStage
 	DeletionCandidates   []types.UnreferencedEntry
 	ReferencedOutside    []ReferencedFile
@@ -163,6 +163,9 @@ func (b Terms) String() string {
 	fmt.Fprintf(&s, "job: %s\n", b.Lease.ID)
 	if t := b.Lease.ModelTier; t != nil {
 		fmt.Fprintf(&s, "model tier: %s\nskills: %s\n", t, t.Skills)
+	}
+	if b.Lease.Delivery != "" {
+		fmt.Fprintf(&s, "delivery: %s\n", deliveryLine(b.Lease))
 	}
 
 	writeList(&s, "interface", interfaceLines(b.Lease.Goals))
@@ -217,6 +220,15 @@ func (b Terms) String() string {
 	writeBlock(&s, "the only check you run", b.Lease.Validation)
 	writeList(&s, "depends on", b.Lease.DependsOn)
 	return s.String()
+}
+
+// deliveryLine says how row's work is delivered, and onto which branch when
+// it is stacked.
+func deliveryLine(row types.Job) string {
+	if row.Delivery == types.DeliveryStacked {
+		return fmt.Sprintf("%s on %s", row.Delivery, row.ParentHead)
+	}
+	return row.Delivery
 }
 
 // interfaceLines is one entry per symbol goal: what the job must leave behind, as the

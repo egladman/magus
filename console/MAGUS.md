@@ -10,7 +10,7 @@ Query: `magus query project=console`
 
 | Target              | What it does                                                                                                      |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `generate`          | Regenerates MAGUS.md and fails on drift.                                                                          |
+| `generate`          | Regenerates MAGUS.md and the boundary types and fails on drift.                                                   |
 | `test`              | test runs the node:test suite and holds the merged TypeScript line coverage above a floor.                        |
 | `build`             | build bundles the app into gen/ with esbuild, copies the static shell beside it, and stamps the service worker.   |
 | `lint`              | lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.                              |
@@ -18,5 +18,6 @@ Query: `magus query project=console`
 | `security`          | security audits the dependency tree against the npm advisory database.                                            |
 | `ci`                | The anchor `magus affected ci` keys off.                                                                          |
 | `install`           | install installs node_modules through the typescript spell's pnpm-install op.                                     |
+| `types-generate`    | Writes src/gen/magus/types.ts, the TypeScript forms of the boundary types the registry flags TS.                  |
 | `index-generate`    | Renders MAGUS.md, this project's target catalog.                                                                  |
 | `diffdemo-generate` | Renders the Diff showcase's changeset from its .patch with the Go reader; the showcase has no server to parse it. |

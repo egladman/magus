@@ -951,9 +951,9 @@ func TestParityMetadataReportsRevisionAndDirt(t *testing.T) {
 	})
 }
 
-// Ref is Metadata's Ref without the rest, so it must agree with Metadata on the value AND
-// on failing: hack/git-hooks/commit-msg.buzz catches vcs\ref raising on git's unborn
-// branch, and a Ref that answered there would skip that fallback.
+// Ref is Metadata's Ref without the rest, so it must agree with Metadata on the
+// value AND on failing. Callers catch vcs\ref raising on git's unborn branch.
+// A Ref that answered there would skip their fallback.
 func TestParityRefAgreesWithMetadata(t *testing.T) {
 	agree := func(t *testing.T, b parityBackend, dir, state string) string {
 		t.Helper()
@@ -1139,6 +1139,14 @@ func TestParityIgnoreReportersAgree(t *testing.T) {
 		require.NoError(t, err, "IgnoredFiles")
 		paths, err := resolver.IgnoredPaths(t.Context(), dir, []string{"keep.log"})
 		require.NoError(t, err, "IgnoredPaths")
+
+		// jj reads what it tracks, not the rules, so a tracked path
+		// is never ignored there.
+		if b.name == "jj" {
+			assert.False(t, paths["keep.log"], "jj: IgnoredPaths reported a tracked path")
+			assert.Empty(t, files, "jj: IgnoredFiles reported a tracked path")
+			return
+		}
 
 		// Both must say TRUE, not merely agree. Agreement alone is satisfied by
 		// false == false, which is what two reporters BOTH returning nothing looks like,
@@ -2016,12 +2024,14 @@ var capabilityMatrix = map[types.VCSCapability]map[string]bool{
 	types.CapPushStatusReporter:    {"git": true, "hg": true, "sl": true},
 	types.CapRevTimeReporter:       {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapTrackedFileReporter:   {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapIgnoredFileReporter:   {"git": true, "hg": true, "sl": true},
+	types.CapIgnoredFileReporter:   {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapChurnReporter:         {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapBranchChangeReporter:  {"git": true},
 	types.CapRangeReporter:         {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapRegionReporter:        {"git": true},
 	types.CapAncestryReporter:      {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapCheckoutFastForwarder: {"git": true, "hg": true, "jj": true},
+	types.CapBranchHeadReporter:    {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapConflictResolver:      {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapRevisionFileReader:    {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapRevisionExporter:      {"git": true, "hg": true, "sl": true, "jj": true},
@@ -2086,10 +2096,13 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapRangeReporter, "RangeDiff", func(d types.VCSDriver, dir string) error { return errOf(d.RangeDiff(ctx, dir, "-x", "-x", nil)) }},
 		{types.CapRangeReporter, "RangeFiles", func(d types.VCSDriver, dir string) error { return errOf(d.RangeFiles(ctx, dir, "-x", "-x", nil)) }},
 		{types.CapRangeReporter, "RangeCommits", func(d types.VCSDriver, dir string) error { return errOf(d.RangeCommits(ctx, dir, "-x", "-x", nil)) }},
+		{types.CapRangeReporter, "MissingCommits", func(d types.VCSDriver, dir string) error { return errOf(d.MissingCommits(ctx, dir, "-x", "-x")) }},
 		{types.CapRegionReporter, "Regions", func(d types.VCSDriver, dir string) error {
 			return errOf(d.Regions(ctx, dir, "-x", []types.FileChange{{Path: "x"}}))
 		}},
 		{types.CapAncestryReporter, "IsAncestor", func(d types.VCSDriver, dir string) error { return errOf(d.IsAncestor(ctx, dir, "-x", "-x")) }},
+		{types.CapCheckoutFastForwarder, "FastForward", func(d types.VCSDriver, dir string) error { return d.FastForward(ctx, dir, "-x") }},
+		{types.CapBranchHeadReporter, "BranchHeads", func(d types.VCSDriver, dir string) error { return errOf(d.BranchHeads(ctx, dir)) }},
 		{types.CapConflictResolver, "Conflicts", func(d types.VCSDriver, dir string) error { return errOf(d.Conflicts(ctx, dir)) }},
 		{types.CapConflictResolver, "KeepIncoming", func(d types.VCSDriver, dir string) error { return d.KeepIncoming(ctx, dir, nil) }},
 		{types.CapConflictResolver, "MarkResolved", func(d types.VCSDriver, dir string) error { return d.MarkResolved(ctx, dir, nil) }},
@@ -2296,6 +2309,24 @@ func TestParityRangeCommitsNewestFirstWithParents(t *testing.T) {
 		require.NoErrorf(t, err, "%s scoped RangeCommits", b.name)
 		require.Lenf(t, scoped, 1, "%s: paths did not narrow the commits", b.name)
 		assert.Equal(t, "head edits root", scoped[0].Subject)
+	})
+}
+
+func TestParityMissingCommits(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir, root, base, head := forkedRange(t, b)
+		ctx := t.Context()
+
+		missing, err := b.drv.MissingCommits(ctx, dir, base, head)
+		require.NoErrorf(t, err, "%s MissingCommits", b.name)
+		assert.Equalf(t, 2, missing, "%s: head's two commits are off base", b.name)
+
+		missing, err = b.drv.MissingCommits(ctx, dir, head, root)
+		require.NoErrorf(t, err, "%s MissingCommits of an ancestor", b.name)
+		assert.Zerof(t, missing, "%s: head descends from root", b.name)
+
+		_, err = b.drv.MissingCommits(ctx, dir, base, "no-such-revision")
+		assert.Errorf(t, err, "%s: an unknown revision is an error", b.name)
 	})
 }
 

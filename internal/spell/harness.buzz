@@ -78,3 +78,25 @@ export fun buzzCheckHook(host: str) > HookCommand {
         timeoutS = 30,
     };
 }
+
+// reclaimDiskHook is the rate-limited disk hook: one stat on most turns, and
+// past the floor one detached tick. A spell puts it on the event its host
+// raises once a turn. say is "stderr" when that event reads stdout as a
+// verdict.
+export fun reclaimDiskHook(host: str, event: str, say: str) > HookCommand {
+    final flags = mut ["--agent-name", host];
+    if (say != "stdout") {
+        flags.append("--say");
+        flags.append(say);
+    }
+    return HookCommand{ event = event, script = "magus-reclaim-disk", flags = flags, timeoutS = 10 };
+}
+
+// unsupportedHook is the row for a point the host offers no hook for. reason
+// cites the https URL of the host's docs page that says so. Where the page
+// does not settle it, reason opens "not verified: " and names the URL
+// checked, the YYYY-MM-DD it was read and what is unsettled. Anything else
+// fails the harness's load.
+export fun unsupportedHook(point: HookPoint, reason: str) > HookBinding {
+    return HookBinding{point = point, status = BindingStatus.unsupported, reason = reason};
+}

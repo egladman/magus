@@ -212,7 +212,7 @@ export function activate(host: HTMLElement): AppInstance {
         fetchRunLogs(host_, token),
       ]);
       if (nextRuns.length === 0 && nextLogs.length === 0) {
-        nextUnreachable = !(await probeServer(host_)).ok;
+        nextUnreachable = (await probeServer(host_)).error !== undefined;
       }
     }
     // The tab closed, or a newer load (another address, a Retry) owns the page now.
@@ -526,11 +526,12 @@ function renderList(
   if (!items.some((b) => b.tabIndex === 0) && items[0]) items[0].tabIndex = 0;
   if (focused) items.find((b) => b.dataset.inv === focused)?.focus({ preventScroll: true });
   box.onkeydown = (ev: KeyboardEvent) => {
-    const at = items.indexOf(document.activeElement as HTMLElement);
-    if (at < 0) return;
+    const at = items.findIndex((b) => b === document.activeElement);
+    const current = items[at];
+    if (!current) return;
     if (ev.key === "Enter" || ev.key === " ") {
       ev.preventDefault();
-      items[at].click();
+      current.click();
       return;
     }
     let next = at;
@@ -540,9 +541,11 @@ function renderList(
     else if (ev.key === "End") next = items.length - 1;
     else return;
     ev.preventDefault();
+    const target = items[next];
+    if (!target) return;
     for (const b of items) b.tabIndex = -1;
-    items[next].tabIndex = 0;
-    items[next].focus();
+    target.tabIndex = 0;
+    target.focus();
   };
 }
 
@@ -697,7 +700,11 @@ function emptyCard(
   actions: Node[] | HTMLElement = [],
   icon?: Node,
 ): HTMLElement {
-  const state = emptyStateShell({ heading: "h2", classes: "pf-m-sm console-runs__empty", icon });
+  const state = emptyStateShell({
+    heading: "h2",
+    classes: "pf-m-sm console-runs__empty",
+    ...(icon ? { icon } : {}),
+  });
   state.title.replaceWith(title);
   if (body.length > 0) state.body.append(...body);
   else state.body.remove();

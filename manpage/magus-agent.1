@@ -45,19 +45,19 @@ a pattern no graph verb fits.
 \fB\-\-dir\fR \fIstring\fR (default: \&.)
 Repo directory to install into (agent install)
 .TP
-\fB\-\-dry\-run\fR
+\fB\-\-[no\-]dry\-run\fR (default: off)
 Print what would be written and removed without touching the filesystem (agent install)
 .TP
-\fB\-\-force\fR
+\fB\-\-[no\-]force\fR (default: off)
 Overwrite existing installed skill files (agent install)
 .TP
-\fB\-\-global\fR
+\fB\-\-[no\-]global\fR (default: off)
 Allow absolute destination paths in write mode (agent install)
 .TP
 \fB\-\-skill\-form\fR \fIstring\fR (default: both)
 Skill form to install: both (default), short, or full (agent install)
 .TP
-\fB\-\-tar\fR
+\fB\-\-[no\-]tar\fR (default: off)
 Stream a tar archive to stdout instead of writing files (agent install)
 .RE
 .SS agent harness verify options
@@ -72,6 +72,12 @@ Harness ID; omit to verify every magusfile\-wired provider
 \fB\-\-id\fR \fIstring\fR
 Harness ID; omit to install every magusfile\-wired provider
 .RE
+.SS agent harness link options
+.RS
+.TP
+\fB\-\-[no\-]stdin\fR (default: off)
+Read destination\-to\-source links as JSON from stdin (required)
+.RE
 .SS agent adoption options
 .RS
 .TP
@@ -85,7 +91,7 @@ File of shell commands, one per line; without it commands are read from stdin
 Render the embedded skills and write or stream them into named destinations
 .TP
 \fBharness\fR
-Install skills for, or verify, harnesses wired in the magusfile
+Install runtimes and skills, link sources, or verify harnesses
 .TP
 \fBstarter\fR
 Print a starter AGENTS.md to stdout; never writes a file
@@ -163,7 +169,6 @@ magus agent adoption --commands commands.txt -o json
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
-\fBmagus\-gate\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
 \fBmagus\-server\fR(1),

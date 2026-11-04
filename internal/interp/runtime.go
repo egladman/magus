@@ -99,12 +99,13 @@ var removedMagusfileAPI = []struct {
 	{[]string{"project", "register"}, `call magus\project({...}) at the top level`},
 	{[]string{"needs"}, "call ctx.needs(<target>)"},
 	{[]string{"glob"}, `call ctx.glob("<pattern>")`},
-	{[]string{"insightMarkdown"}, `build the document from magus\insight()'s typed report`},
-	{[]string{"ledger", "clear"}, `call magus\job.clear()`},
-	{[]string{"ledger", "list"}, `call magus\job.list()`},
-	{[]string{"ledger", "put"}, `call magus\job.put()`},
-	{[]string{"ledger", "register"}, `call magus\job.register()`},
-	{[]string{"ledger"}, `use magus\job, which replaced it`},
+	{[]string{"insight"}, `call magus\history().hotspots / affinity / ownership / trend, magus\graph().unreferenced / duplication, magus\workspace().volatility / tierOutcomes / grouping`},
+	{[]string{"insightMarkdown"}, `render each history metric yourself; magus\insight() is gone`},
+	{[]string{"ledger", "clear"}, `call magus\workspace().clearJobs()`},
+	{[]string{"ledger", "list"}, `call magus\workspace().jobs()`},
+	{[]string{"ledger", "put"}, `call magus\workspace().putJob()`},
+	{[]string{"ledger", "register"}, `call magus\job(id).register()`},
+	{[]string{"ledger"}, `use magus\workspace() and magus\job(id), which replaced it`},
 }
 
 // RemovedAPINames returns the dotted member path of every removed call, without the
@@ -171,6 +172,9 @@ func RemovedAPICall(src string) (call, replacement string, ok bool) {
 // magusfile predates the backslash spelling entirely.
 func magusRooted(e ast.Node, member []string) bool {
 	for i := len(member) - 1; i >= 0; i-- {
+		if call, ok := e.(*ast.CallExpr); ok {
+			e = call.Callee
+		}
 		me, isMember := e.(*ast.MemberExpr)
 		if !isMember || me.Name != member[i] {
 			return false
@@ -186,7 +190,7 @@ func magusRooted(e ast.Node, member []string) bool {
 // magus (std's runMagus). A rule catalog or a rendered MAGUS.md changes when the binary
 // does, with no source the target could declare.
 func binaryAnswers() [][]string {
-	return [][]string{{"describe"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"impact"}, {"attention"}, {"diff"}}
+	return [][]string{{"describe"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"change", "impact"}, {"workspace", "attention"}, {"change", "diff"}, {"magus__Change__impact"}, {"magus__Workspace__attention"}, {"magus__Change__diff"}}
 }
 
 // BinaryAnswerTargets returns the normalized keys of the exported targets in src whose
@@ -589,7 +593,7 @@ func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore {
 	}
 	sum := sha256.Sum256([]byte(abs))
 	dir = filepath.Join(dir, hex.EncodeToString(sum[:]))
-	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: secret, scope: dir}
+	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: types.NewSecret(string(secret)), scope: dir}
 }
 
 // sealedBytecodeStore prefixes each chunk with an HMAC over the directory it is
@@ -597,7 +601,7 @@ func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore {
 // or compiler fails exactly as a forged one does.
 type sealedBytecodeStore struct {
 	inner  buzz.BytecodeStore
-	secret []byte
+	secret types.Secret
 	scope  string
 }
 
@@ -619,7 +623,7 @@ func (s sealedBytecodeStore) Store(key string, blob []byte) error {
 }
 
 func (s sealedBytecodeStore) seal(key string, blob []byte) []byte {
-	m := hmac.New(sha256.New, s.secret)
+	m := hmac.New(sha256.New, []byte(s.secret.Reveal()))
 	for _, part := range []string{s.scope, key} {
 		_, _ = m.Write([]byte(part))
 		_, _ = m.Write([]byte{0})
@@ -768,7 +772,8 @@ func Parse(ctx context.Context, src *Source) ([]Target, error) {
 // canonical target key to the exported function value itself, so ctx.needs
 // can verify a passed function IS the exported target (nil when the session
 // has no export discovery, e.g. the REPL). parseMode=true collects names only.
-type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool)
+// An error means the magus declarations could not be installed.
+type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) error
 
 var buzzHostBindingsFn BuzzHostBindingsFn
 
@@ -1196,7 +1201,10 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 	// populated registry by the time any target body runs.
 	exportVals := map[string]vm.Value{}
 	if buzzHostBindingsFn != nil {
-		buzzHostBindingsFn(ctx, buzzSess, targetMap, exportVals, parseMode)
+		if err := buzzHostBindingsFn(ctx, buzzSess, targetMap, exportVals, parseMode); err != nil {
+			_ = buzzSess.Close()
+			return nil, err
+		}
 	}
 
 	// Import names across all the project's magusfiles, to catch a target that shadows one.
@@ -1395,7 +1403,10 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 	if buzzHostBindingsFn != nil {
 		// nil exports: the REPL has no export-discovery pass, so ctx.needs
 		// falls back to name-only resolution there.
-		buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), nil, false)
+		if err := buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), nil, false); err != nil {
+			_ = buzzSess.Close()
+			return nil, err
+		}
 	}
 
 	if autoload {

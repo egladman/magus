@@ -83,7 +83,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 			return slices.ContainsFunc(prev.WritePaths, func(held string) bool { return types.PathWithin(p, held) })
 		})
 		addedRow := types.Job{ID: id, WritePaths: added, SoftPaths: merged.SoftPaths, Parent: merged.Parent, DependsOn: merged.DependsOn}
-		ps = append(ps, onRow(addedWritePathProblems(ctx, store, addedRow), addedRow, merged)...)
+		ps = append(ps, onRow(addedWritePathProblems(ctx, store, addedRow, merged.Integrates), addedRow, merged)...)
 		addedDenies := types.Job{ID: id, DenyPaths: slices.DeleteFunc(slices.Clone(merged.DenyPaths), func(p string) bool { return slices.Contains(prev.DenyPaths, p) })}
 		ps = append(ps, onRow(ungradableClaimProblems(ctx, store, addedDenies), addedDenies, merged)...)
 		ps = append(ps, onRow(unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(addedRow)), addedRow, merged)...)
@@ -113,7 +113,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		ps = append(ps, forkLimitProblems(rows, id, merged.Parent, limits)...)
 		ps = append(ps, claimCeilingProblems(merged, limits)...)
 		ps = append(ps, ambiguousSymbolProblems(ctx, merged.Goals, read)...)
-		ps = append(ps, directoryWritePathProblems(store, merged)...)
+		ps = append(ps, mergedDirectoryProblems(ctx, store, merged, merged.Integrates)...)
 		ps = append(ps, ungradableClaimProblems(ctx, store, merged)...)
 		ps = append(ps, wholeFileConfigClaimProblems(ctx, store, merged)...)
 		ps = append(ps, sharedCheckoutProblems(store, rows, merged)...)
@@ -175,22 +175,14 @@ func permitBut(ps types.JobProblems, deviations []types.Deviation) (kept, permit
 	return append(kept, lintKept...), append(permitted, lintPermitted...)
 }
 
-// lintGoals is a lint goal per project whose lint reads Go source the row writes and which
-// nothing runs: a worker checking only go-test leaves lint findings for the integrator.
-// The goal skips default charms so lint reports instead of rewriting the worker's tree.
-//
-// The goal passes the written files after `--`, relative to the goal's project, so lint
-// judges only them: a finding in a file the worker may not write is not the worker's to
-// meet, and full lint belongs to integration. Files rather than the write paths' globs,
-// because a check's args are matched verbatim and a shell expands a glob the worker pastes.
+// lintGoals is a lint goal per project whose lint reads a file the row writes
+// and nothing runs. It only reports, and over the written files alone: a
+// finding elsewhere is not the worker's. See [ranOver] for a soft path.
 func lintGoals(root string, row types.Job, ws Workspace) []types.Goal {
 	if row.ReadOnly || len(row.WritePaths) == 0 || ws.Unavailable != "" {
 		return nil
 	}
-	written := writtenFiles(root, row)
-	if !slices.ContainsFunc(written, func(f string) bool { return path.Ext(f) == ".go" }) {
-		return nil
-	}
+	written := slices.DeleteFunc(writtenFiles(root, row), func(f string) bool { return slices.Contains(row.SoftPaths, f) })
 	slices.Sort(written)
 	var goals []types.Goal
 	for _, g := range UnrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored)) {
@@ -327,12 +319,17 @@ func (s *Store) loadedWorkspace() (Workspace, string) {
 // that no check or goal of merged runs, and a write path broader than it allows. Each check
 // that could not run is named, with why, in the second result.
 func workspaceProblems(ctx context.Context, store *Store, merged, judged types.Job, updates bool, read SymbolReader) (types.JobProblems, []string) {
+	// Soft paths come from the symbol index, so a list judged on them would
+	// change with the index's temperature.
+	judged.WritePaths = slices.DeleteFunc(slices.Clone(judged.WritePaths), func(p string) bool {
+		return slices.Contains(merged.SoftPaths, p)
+	})
 	ws, why := store.loadedWorkspace()
 	writes := !judged.ReadOnly && len(judged.WritePaths) > 0
 	if why != "" {
 		var unchecked []string
 		if slices.ContainsFunc(judged.EffectiveGoals(), func(g types.Goal) bool { return g.Kind == types.GoalKindCheck && g.Check.Target != "" }) {
-			unchecked = append(unchecked, "the check's project and target: "+why)
+			unchecked = append(unchecked, "the check's project, target and test-selection semantics: "+why)
 		}
 		if writes {
 			unchecked = append(unchecked,
@@ -343,6 +340,7 @@ func workspaceProblems(ctx context.Context, store *Store, merged, judged types.J
 		return nil, unchecked
 	}
 	ps, unchecked := checkTargetProblems(ws, judged)
+	unchecked = append(unchecked, uncheckedTestSelection(ws, judged, ps)...)
 	ps = onRow(ps, judged, merged)
 	if !writes {
 		return ps, unchecked
@@ -358,7 +356,9 @@ func workspaceProblems(ctx context.Context, store *Store, merged, judged types.J
 		})
 	}
 	ps = append(ps, regeneratedProblems(regenerated, merged.DenyPaths)...)
-	ps = append(ps, unrunGateProblems(unrunGates(store.root, gated, ws.Projects, regenerated, gradeWith(store.checkGrader(), store.root, merged)))...)
+	gates, undecided := unrunGates(store.root, gated, ws.Projects, regenerated, gradeWith(store.checkGrader(), store.root, merged))
+	ps = append(ps, unrunGateProblems(gates)...)
+	unchecked = append(unchecked, undecided...)
 	ps = append(ps, onRow(broadClaimProblems(ctx, store.root, judged, ws, read), judged, merged)...)
 	return ps, unchecked
 }
@@ -402,7 +402,7 @@ func checkTargetProblems(ws Workspace, row types.Job) (types.JobProblems, []stri
 		if spell == "" && slices.Contains(p.MagusfileTargets, name) {
 			continue
 		}
-		if len(p.ResolvedSpells) == 0 && len(p.Spells) > 0 {
+		if spellsUnresolved(p) {
 			unchecked = append(unchecked, fmt.Sprintf("the target of `%s`: project %q binds spells it carries unresolved, so their ops cannot be listed", g.Check.String(), project))
 			continue
 		}
@@ -515,12 +515,27 @@ func rowDeclaration(row types.Job) types.Declaration {
 		WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, ReadPaths: row.ReadPaths, DependsOn: row.DependsOn,
 		Breaks: row.Breaks, Model: row.Model, Goals: row.Goals, State: row.State, ReadOnly: row.ReadOnly,
 		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Deviations: row.Deviations,
+		Delivery: row.Delivery, ParentHead: row.ParentHead,
 	}
 	// A stored row renders its check into Validation too, and a record carries one spelling.
 	if row.Check != nil {
 		rec.Check = row.Check
 	} else {
 		rec.Validation = row.Validation
+	}
+	return rec
+}
+
+// RetryDeclaration is the spec row was declared with, for forking it again by id alone: every
+// field [types.Declaration.Apply] writes, with no state, so the retry is a new attempt.
+func RetryDeclaration(row types.Job) types.Declaration {
+	rec := rowDeclaration(row)
+	rec.Schema = types.Schema{Version: types.JobSchemaVersion}
+	rec.State = ""
+	rec.SoftPaths, rec.Integrates = row.SoftPaths, row.Integrates
+	rec.BriefFormat, rec.Follows, rec.FreshReason = row.BriefFormat, row.Follows, row.FreshReason
+	if row.Weight != 0 {
+		rec.Weight = &row.Weight
 	}
 	return rec
 }
@@ -598,13 +613,57 @@ func resolveProblem(err error) types.JobProblem {
 // configuration held whole. A rule that held only at creation would depend on which call
 // wrote the path. added is the job's row carrying only the write paths the write adds, so a
 // path the row already held never blocks an unrelated write.
-func addedWritePathProblems(ctx context.Context, store *Store, added types.Job) types.JobProblems {
+func addedWritePathProblems(ctx context.Context, store *Store, added types.Job, integrates []string) types.JobProblems {
 	if len(added.WritePaths) == 0 {
 		return nil
 	}
-	ps := directoryWritePathProblems(store, added)
+	ps := mergedDirectoryProblems(ctx, store, added, integrates)
 	ps = append(ps, ungradableClaimProblems(ctx, store, added)...)
 	return append(ps, wholeFileConfigClaimProblems(ctx, store, added)...)
+}
+
+// mergedDirectoryProblems is [directoryWritePathProblems] for the tree that
+// merging integrates leaves. A directory here that a branch replaces with a
+// file or a symlink names one file. A branch the VCS cannot compare keeps the
+// refusal.
+func mergedDirectoryProblems(ctx context.Context, store *Store, row types.Job, integrates []string) types.JobProblems {
+	ps := directoryWritePathProblems(store, row)
+	if len(ps) == 0 || len(integrates) == 0 {
+		return ps
+	}
+	leaves := branchLeaves(ctx, store.root, integrates)
+	row.WritePaths = slices.Clone(row.WritePaths)
+	for i, decl := range row.WritePaths {
+		if p, _ := types.SplitClaim(decl); leaves[path.Clean(strings.TrimSpace(p))] {
+			// Blank, not removed: a problem's field is the entry's index.
+			row.WritePaths[i] = ""
+		}
+	}
+	return directoryWritePathProblems(store, row)
+}
+
+// branchLeaves is every path integrates change against the current revision.
+// Such a path is no directory there: a diff lists no trees.
+func branchLeaves(ctx context.Context, root string, integrates []string) map[string]bool {
+	driver, _ := resolveDriver(ctx, root)
+	if driver == nil {
+		return nil
+	}
+	head, err := driver.FindCommit(ctx, root, "")
+	if err != nil {
+		return nil
+	}
+	leaves := map[string]bool{}
+	for _, branch := range integrates {
+		changed, err := driver.DiffTrees(ctx, root, head.ID, branch)
+		if err != nil {
+			continue
+		}
+		for _, p := range changed {
+			leaves[p] = true
+		}
+	}
+	return leaves
 }
 
 // ungradedProblems finds a writing job that declares neither a check nor a goal, as

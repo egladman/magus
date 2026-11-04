@@ -1,10 +1,10 @@
 {{if .Full}}# Auditing the instructions an agent was given{{else}}# Auditing agent instructions{{end}}
 
-{{if .Full}}This is a LENS, like `{{buzz "insight"}}`: it observes and ranks; it does not gate.
+{{if .Full}}This is a LENS, like `{{buzz "history.hotspots"}}`: it observes and ranks; it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
 It looks at the text, not code: everything an agent loads as
-authoritative, from sources magus does not own and cannot read in advance.{{else}}Lens, like `{{buzz "insight"}}`: observes, ranks; does not gate.
+authoritative, from sources magus does not own and cannot read in advance.{{else}}Lens, like `{{buzz "history.hotspots"}}`: observes, ranks; does not gate.
 Output: findings list human decides on, never automatic edit.
 Looks at text, not code: everything agent loads as authoritative, from sources magus does not own and cannot read in advance.
 Agent reads all of it in one window; cannot tell which line newer or which file wins.

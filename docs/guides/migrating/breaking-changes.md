@@ -113,9 +113,8 @@ still binds, so the diagnostic cannot start rejecting a call that works.
 
 ## Acceptance model
 
-magus deliberately keeps this lightweight. There is no allowlist file to maintain
-and no `doctor` check that a machine has to interpret. Acceptance is a human reading
-a diff:
+magus deliberately keeps this lightweight. A snapshot has no `doctor` check that a
+machine has to interpret. Acceptance is a human reading a diff:
 
 1. The drift gate fails on any change to a snapshot, breaking or not.
 2. You regenerate, and the `.lock` diff joins the pull request.
@@ -127,3 +126,16 @@ a diff:
 The `CHANGELOG` note is the release story; the `.lock` diff is the proof. Neither
 requires a new subcommand or a config flag, because the compatibility record is the
 same review every other change already goes through.
+
+A comparison gate has no snapshot to regenerate, so a deliberate break would leave it
+red. `proto` `ci` reads `proto/buf-breaking.deviations.jsonl` instead, and a person adds
+one line per finding, in the change that makes the break:
+
+```json
+{"code":"<check_name>","subject":"<path>: <description>","reason":"why this break is worth shipping"}
+```
+
+The failing gate prints each line with a blank reason to fill in. Only a line this
+change added counts, a line that matches no finding fails and names itself, and a
+blank reason is an error. The break still gets its `Breaking:` changelog entry. See
+[A deliberate break never merges red](../../design/principles/a-deliberate-break-never-merges-red.md).

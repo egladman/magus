@@ -374,14 +374,15 @@ State is where a target sits in its lifecycle. Values carry the STATE\_ prefix b
 
 Source: [status.proto](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto).
 
-| Value               | # | Description                        |
-| ------------------- | - | ---------------------------------- |
-| `STATE_UNSPECIFIED` | 0 |                                    |
-| `STATE_QUEUED`      | 1 | scheduled, not yet started         |
-| `STATE_RUNNING`     | 2 | a subprocess is executing          |
-| `STATE_PASSED`      | 3 | finished successfully              |
-| `STATE_FAILED`      | 4 | finished with an error             |
-| `STATE_CACHED`      | 5 | satisfied from cache (no work run) |
+| Value               | # | Description                                                   |
+| ------------------- | - | ------------------------------------------------------------- |
+| `STATE_UNSPECIFIED` | 0 |                                                               |
+| `STATE_QUEUED`      | 1 | scheduled, not yet started                                    |
+| `STATE_RUNNING`     | 2 | a subprocess is executing                                     |
+| `STATE_PASSED`      | 3 | finished successfully                                         |
+| `STATE_FAILED`      | 4 | finished with an error                                        |
+| `STATE_CACHED`      | 5 | satisfied from cache (no work run)                            |
+| `STATE_PERMITTED`   | 6 | passed only because a deviation ledger permitted its findings |
 
 Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](status.md#streamstatus).
 

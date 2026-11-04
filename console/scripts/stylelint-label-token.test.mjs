@@ -14,7 +14,7 @@ function labelWarnings(result) {
   return result.results[0].warnings.filter((warning) => warning.rule === "magus/label-token");
 }
 
-test("label token accepts the label recipe", async () => {
+test("label token accepts the label pattern", async () => {
   const result = await lint(`
     .console-runs__facet-head {
       font-size: var(--console-label-size);
@@ -27,7 +27,7 @@ test("label token accepts the label recipe", async () => {
   assert.equal(result.errored, false);
 });
 
-test("label token accepts the chip recipe", async () => {
+test("label token accepts the chip pattern", async () => {
   const result = await lint(`
     .console-render-badge {
       font-size: var(--console-chip-size);
@@ -57,7 +57,7 @@ test("label token rejects a hand-picked size, weight and tracking", async () => 
   assert.equal(flagged, 3);
 });
 
-// Mixing the two recipes in one rule is not what this catches. The rule pins the VALUES to the
+// Mixing the two patterns in one rule is not what this catches. The rule pins the VALUES to the
 // vocabulary; which of the two a given element belongs to is the author's call.
 test("label token leaves a rule with no uppercase alone", async () => {
   const result = await lint(`

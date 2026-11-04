@@ -8,9 +8,11 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
+	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // RegisterHttp builds the "http" module map and returns it.
@@ -22,8 +24,22 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("get", vm.DirectValue("http.get", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		url := ffi.String(bzArgs, 0)
 		headers := ffi.StringMap(bzArgs, 1)
-		opts := ffi.AnyMap(bzArgs, 2)
-		retry := ffi.AnyMap(bzArgs, 3)
+		var opts types.HTTPOptions
+		if ffi.Present(bzArgs, 2) {
+			x, err := ffi.Object("http\\get", "opts", bzArgs, 2, decode.DecodeHTTPOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		var retry types.HTTPRetry
+		if ffi.Present(bzArgs, 3) {
+			x, err := ffi.Object("http\\get", "retry", bzArgs, 3, decode.DecodeHTTPRetry)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			retry = x
+		}
 		ret0, err := std.HTTPGet(ctx, url, headers, opts, retry)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -34,8 +50,22 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		url := ffi.String(bzArgs, 0)
 		dest := ffi.String(bzArgs, 1)
 		headers := ffi.StringMap(bzArgs, 2)
-		opts := ffi.AnyMap(bzArgs, 3)
-		retry := ffi.AnyMap(bzArgs, 4)
+		var opts types.HTTPOptions
+		if ffi.Present(bzArgs, 3) {
+			x, err := ffi.Object("http\\download", "opts", bzArgs, 3, decode.DecodeHTTPOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		var retry types.HTTPRetry
+		if ffi.Present(bzArgs, 4) {
+			x, err := ffi.Object("http\\download", "retry", bzArgs, 4, decode.DecodeHTTPRetry)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			retry = x
+		}
 		ret0, err := std.HTTPDownload(ctx, url, dest, headers, opts, retry)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -46,8 +76,22 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		url := ffi.String(bzArgs, 0)
 		body := ffi.String(bzArgs, 1)
 		headers := ffi.StringMap(bzArgs, 2)
-		opts := ffi.AnyMap(bzArgs, 3)
-		retry := ffi.AnyMap(bzArgs, 4)
+		var opts types.HTTPOptions
+		if ffi.Present(bzArgs, 3) {
+			x, err := ffi.Object("http\\post", "opts", bzArgs, 3, decode.DecodeHTTPOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		var retry types.HTTPRetry
+		if ffi.Present(bzArgs, 4) {
+			x, err := ffi.Object("http\\post", "retry", bzArgs, 4, decode.DecodeHTTPRetry)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			retry = x
+		}
 		ret0, err := std.HTTPPost(ctx, url, body, headers, opts, retry)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -59,8 +103,22 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		url := ffi.String(bzArgs, 1)
 		body := ffi.String(bzArgs, 2)
 		headers := ffi.StringMap(bzArgs, 3)
-		opts := ffi.AnyMap(bzArgs, 4)
-		retry := ffi.AnyMap(bzArgs, 5)
+		var opts types.HTTPOptions
+		if ffi.Present(bzArgs, 4) {
+			x, err := ffi.Object("http\\request", "opts", bzArgs, 4, decode.DecodeHTTPOptions)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			opts = x
+		}
+		var retry types.HTTPRetry
+		if ffi.Present(bzArgs, 5) {
+			x, err := ffi.Object("http\\request", "retry", bzArgs, 5, decode.DecodeHTTPRetry)
+			if err != nil {
+				return vm.Null, ffi.Error(err)
+			}
+			retry = x
+		}
 		ret0, err := std.HTTPRequest(ctx, method, url, body, headers, opts, retry)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -68,7 +126,10 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectHTTPResponse(ret0), nil
 	}))
 	m.MapSet("server", vm.DirectValue("http.server", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		opts := ffi.AnyMap(bzArgs, 0)
+		opts, err := ffi.Object("http\\server", "opts", bzArgs, 0, decode.DecodeHTTPServerOptions)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
 		ret0, err := std.HTTPServe(ctx, opts)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

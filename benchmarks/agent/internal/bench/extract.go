@@ -518,6 +518,25 @@ func readCheckExit(runDir string) *int64 {
 	return &code
 }
 
+// readAnswer reads answer.json, the counts an interrogation task's grader
+// writes. Absent means the task is not one, never a zero score.
+func readAnswer(runDir string) (counts answerCounts, graded bool, err error) {
+	raw, err := os.ReadFile(filepath.Join(runDir, "answer.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return answerCounts{}, false, nil
+	}
+	if err != nil {
+		return answerCounts{}, false, err
+	}
+	if err := json.Unmarshal(raw, &counts); err != nil {
+		return answerCounts{}, false, fmt.Errorf("%s: answer.json: %w", runDir, err)
+	}
+	if counts.TP < 0 || counts.FP < 0 || counts.FN < 0 {
+		return answerCounts{}, false, fmt.Errorf("%s: answer.json has a negative count", runDir)
+	}
+	return counts, true, nil
+}
+
 type timing struct {
 	WallMs            *float64 `json:"wall_ms"`
 	TimeToFirstEditMs *float64 `json:"time_to_first_edit_ms"`
@@ -597,7 +616,7 @@ func extractRun(runDir string, table pricing.Table) (RunRecord, error) {
 		if control != controlGolden && control != controlNull {
 			return RunRecord{}, fmt.Errorf("%s: meta.json control %q is not golden or null", runDir, control)
 		}
-		c := &ControlRun{}
+		c := &controlRun{}
 		if err := json.Unmarshal(raw, c); err != nil {
 			return RunRecord{}, fmt.Errorf("%s: meta.json: %w", runDir, err)
 		}
@@ -630,6 +649,13 @@ func extractRun(runDir string, table pricing.Table) (RunRecord, error) {
 	times, err := readTiming(runDir)
 	if err != nil {
 		return RunRecord{}, err
+	}
+	answer, answered, err := readAnswer(runDir)
+	if err != nil {
+		return RunRecord{}, err
+	}
+	if answered {
+		run.Answer = &answer
 	}
 	run.Tokens = tr.tokens()
 	// The table is the basis, and the host's total_cost_usd is recorded beside

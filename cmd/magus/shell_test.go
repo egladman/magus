@@ -13,10 +13,12 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"text/template"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
@@ -28,7 +30,9 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -362,6 +366,7 @@ func hookCommandEvent(ctx context.Context, got trail.Event, origin types.Origin,
 		BinaryVersion: got.BinaryVersion,
 		Cwd:           got.Cwd,
 		Phases:        got.Phases,
+		GuardMs:       got.GuardMs,
 	}
 }
 
@@ -376,12 +381,14 @@ func TestHookCmd_RecordsEachPhase(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	phases := events[0].Phases
-	require.Len(t, phases, 2)
+	require.Len(t, phases, 4)
 	assert.Equal(t, "load_rules", phases[0].Name)
 	assert.Positive(t, phases[0].BudgetMs)
 	assert.Less(t, phases[0].BudgetMs, (10 * time.Second).Milliseconds(), "inside the host's kill line")
 	assert.False(t, phases[0].Lapsed)
-	assert.Equal(t, "judge", phases[1].Name)
+	assert.Equal(t, "builtin_rules", phases[1].Name)
+	assert.Equal(t, "notices", phases[2].Name)
+	assert.Equal(t, "judge", phases[3].Name)
 }
 
 // assertJudgedBy pins the judging magus a hook row records, the running binary and its
@@ -395,8 +402,13 @@ func assertJudgedBy(t *testing.T, got *trail.Event) {
 	for i, p := range got.Phases {
 		names[i] = p.Name
 	}
-	assert.Equal(t, []string{"load_rules", "judge"}, names)
-	got.Binary, got.BinaryVersion, got.Phases = "", "", nil
+	// A spawn is judged apart from the shell rules.
+	if got.Kind == trail.KindAgentSpawn {
+		assert.Equal(t, []string{"load_rules", "judge"}, names)
+	} else {
+		assert.Equal(t, []string{"load_rules", "builtin_rules", "notices", "judge"}, names)
+	}
+	got.Binary, got.BinaryVersion, got.Phases, got.GuardMs = "", "", nil, 0
 }
 
 func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
@@ -854,6 +866,16 @@ func TestGuardDenyPrintsItsReasonOnce(t *testing.T) {
 	}), "because", "a structured format renders no prose, so stderr carries it")
 }
 
+// TestGuardDenyStderrIsOneLine pins the person's view of a blocking hook: the verdict line
+// alone, with the next step and the details ref left to stdout.
+func TestGuardDenyStderrIsOneLine(t *testing.T) {
+	deny := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny",
+		Reason: "a text search the graph answers\nnothing ran (2 commands)\ndetails: ./magus query output grd1"}
+	assert.Equal(t, "a text search the graph answers\n", captureStderr(t, func() {
+		_ = enforceVerdict(output.Options{Format: outputJSON}, deny)
+	}))
+}
+
 // TestReadGuardInputRefusesAnOversizePayload: a truncated payload is exactly the "not the
 // command the guard was shown" case, so the overflow is a read failure and hookCmd's
 // deny arm turns it into a block.
@@ -1159,16 +1181,16 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 		toolInput string
 		want      string
 	}{
-		"fork on another row":   {client(`magus\job.put("harness/other", opts: {"write_paths": ["**"]});`), "deny\n"},
-		"fork widening its own": {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"**\"]});", own)), "deny\n"},
-		"clearing the board":    {client(`magus\job.clear();`), "deny\n"},
-		"exec elsewhere":        {client(`magus\job.register("harness/other");`), "deny\n"},
-		"exec its own":          {client(fmt.Sprintf("magus\\job.register(%s);", own)), "pass\n"},
-		"listing the plan":      {client(`magus\job.list();`), "pass\n"},
-		"giving paths back":     {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"cmd/magus/**\"]});", own)), "pass\n"},
+		"fork on another row":   {client(`magus\workspace().putJob("harness/other", opts: {"write_paths": ["**"]});`), "deny\n"},
+		"fork widening its own": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"**\"]});", own)), "deny\n"},
+		"clearing the board":    {client(`magus\workspace().clearJobs();`), "deny\n"},
+		"exec elsewhere":        {client(`magus\job("harness/other").register();`), "deny\n"},
+		"exec its own":          {client(fmt.Sprintf("magus\\job(%s).register();", own)), "pass\n"},
+		"listing the plan":      {client(`magus\workspace().jobs();`), "pass\n"},
+		"giving paths back":     {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"]});", own)), "pass\n"},
 		// A shrink beside a forged checkpoint or rewritten criteria is not a plain shrink.
-		"forging its own base":   {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"checkpoint\": \"deadbeef\"});", own)), "deny\n"},
-		"rewriting its criteria": {client(fmt.Sprintf("magus\\job.put(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"criteria\": \"something else\"});", own)), "deny\n"},
+		"forging its own base":   {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"checkpoint\": \"deadbeef\"});", own)), "deny\n"},
+		"rewriting its criteria": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"criteria\": \"something else\"});", own)), "deny\n"},
 	} {
 		envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"mcp-%s\",\"tool_name\":\"mcp__magus__client\",\"tool_input\":%s}", name, tc.toolInput)
 		var out bytes.Buffer
@@ -1628,7 +1650,49 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	}
 	refused := run("--call-background")
 	assert.Equal(t, []string{"deny", "worker-background-run"}, []string{refused.Decision, refused.Rule})
-	assert.Equal(t, "pass", run("--call-timeout-ms", "600000").Decision)
+	assert.Equal(t, "pass", run("--call-timeout", "10m").Decision)
+}
+
+func TestShellDigestFlagsReachTheToolTimeRow(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{}
+	testkit.Isolate(t)
+	root, cacheDir := t.TempDir(), t.TempDir()
+	ctx := guard.WithLocation(t.Context(), cacheDir, root, "")
+
+	var out bytes.Buffer
+	require.NoError(t, shellStdin(ctx, strings.NewReader("Bash"), &out,
+		[]string{"--duration", "420ms", "--call-digest", "c1", "--result-digest", "r1", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
+
+	calls := trail.ForSession(cacheDir, "s1", 10).Calls
+	require.Len(t, calls, 1)
+	calls[0].At = time.Time{}
+	assert.Equal(t, trail.SessionCall{
+		Action: "Bash", ToolMs: 420,
+		AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown, ThreadFrom: types.ThreadInferred, CallDigest: "c1", ResultDigest: "r1"},
+	}, calls[0])
+}
+
+func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{}
+	testkit.Isolate(t)
+	root, cacheDir := t.TempDir(), t.TempDir()
+	ctx := guard.WithLocation(t.Context(), cacheDir, root, "")
+
+	var out bytes.Buffer
+	require.NoError(t, shellStdin(ctx, strings.NewReader("Bash"), &out,
+		[]string{"--duration", "420ms", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
+	var v types.GuardJudgment
+	require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
+	assert.Equal(t, "pass", v.Decision)
+
+	events, err := trail.ReadRecent(cacheDir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	event := events[0]
+	event.Ts, event.Origin, event.Workspace, event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = 0, types.Origin{}, "", "", "", 0, 0
+	assert.Equal(t, trail.Event{Kind: trail.KindAgentCommand, Action: "Bash", Outcome: trail.OutcomeOK, DurationMs: 420, Preview: "observed"}, event)
 }
 
 // denyRules is a magusfile whose spawn rule denies every spawn and whose command rule
@@ -1731,8 +1795,8 @@ func TestIndexCauseNamesTheLoadedRoot(t *testing.T) {
 		At: time.Now(), Outcome: maintenance.SyncRefused, Detail: "refused in the loaded checkout",
 	}))
 
-	deps := guardDependencies(t.Context(), loaded)
-	assert.Eventually(t, func() bool { return strings.Contains(deps.IndexCause(), "refused in the loaded checkout") },
+	lookups := newGuardLookups(loaded)
+	assert.Eventually(t, func() bool { return strings.Contains(lookups.indexCause(), "refused in the loaded checkout") },
 		5*time.Second, 50*time.Millisecond)
 }
 
@@ -2152,4 +2216,410 @@ func installHostRows(t *testing.T, host string, limits types.Limits, rows ...typ
 		require.NoError(t, os.MkdirAll(filepath.Dir(f.Path), 0o755))
 		require.NoError(t, os.WriteFile(f.Path, []byte(f.Content), 0o644))
 	}
+}
+
+func TestCallDirIsWhereTheCallLands(t *testing.T) {
+	assert.Equal(t, "/w/b/internal", callDir(`{"cwd":"/w/a","tool_input":{"file_path":"/w/b/internal/x.go"}}`), "a write's file")
+	assert.Equal(t, "/w/a/sub", callDir(`{"cwd":"/w/a","tool_input":{"file_path":"sub/x.go"}}`), "relative to the session")
+	assert.Equal(t, "/w/b", callDir(`{"cwd":"/w/a","tool_input":{"command":"ls","workdir":"/w/b"}}`), "a shell tool's workdir")
+	assert.Equal(t, "/w/a", callDir(`{"cwd":"/w/a","tool_input":{"command":"ls"}}`), "the session")
+	assert.Empty(t, callDir("git status"), "a bare command names no place")
+}
+
+// placeStub writes an executable ./magus into root that reports stamp as its commit and
+// answers any other call with say and code.
+func placeStub(t *testing.T, root, stamp, say string, code int) string {
+	t.Helper()
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\ncat >/dev/null\nprintf '%%s' '%s'\nexit %d\n", stamp, say, code)
+	own := filepath.Join(root, "magus")
+	require.NoError(t, os.WriteFile(own, []byte(script), 0o755))
+	return own
+}
+
+func TestCheckoutBinaryIsAnotherBinaryOnly(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	own := placeStub(t, root, "", "", 0)
+	assert.Equal(t, own, checkoutBinary(filepath.Join(root, "new", "dir"), "/usr/local/bin/magus"), "a directory not made yet")
+	assert.Empty(t, checkoutBinary(root, own), "the running binary judges its own checkout")
+	assert.Empty(t, checkoutBinary(t.TempDir(), "/usr/local/bin/magus"), "no workspace")
+}
+
+// DelegateToCheckoutSuite hands hook calls from a session elsewhere to a job checkout's
+// own ./magus, a stub that denies with exit 2.
+type DelegateToCheckoutSuite struct {
+	suite.Suite
+	repo    *testkit.Repo
+	running string
+}
+
+func TestDelegateToCheckoutSuite(t *testing.T) {
+	suite.Run(t, new(DelegateToCheckoutSuite))
+}
+
+func (s *DelegateToCheckoutSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.running = ""
+}
+
+// line is a Bash call from a session in another directory that runs magus in the checkout.
+func (s *DelegateToCheckoutSuite) line() string {
+	return fmt.Sprintf(`{"cwd":%q,"tool_name":"Bash","tool_input":{"command":"cd %s && ./magus run lint ."}}`, s.T().TempDir(), s.repo.Root())
+}
+
+func (s *DelegateToCheckoutSuite) delegate(input string) (handled bool, declined, out string, err error) {
+	var stdout, stderr bytes.Buffer
+	handled, decline, err := delegateToCheckout(context.Background(), s.running, input, &stdout, &stderr)
+	return handled, decline.note, stdout.String(), err
+}
+
+// The lockout: HEAD moved past ./magus, and an older judge cannot read the row.
+func (s *DelegateToCheckoutSuite) TestABuildBehindHeadButNewerThanTheJudgeJudges() {
+	s.running = s.repo.Head()
+	built := s.repo.Commit("the build", nil)
+	s.repo.Commit("moved on", nil)
+	placeStub(s.T(), s.repo.Root(), built, `{"decision":"deny"}`, 2)
+	handled, declined, out, err := s.delegate(s.line())
+	s.True(handled)
+	s.Empty(declined)
+	s.Equal(2, exit.Code(err))
+	s.Equal(`{"decision":"deny"}`, out)
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildBehindHeadAtTheJudgesCommitLeavesTheCallHere() {
+	s.running = s.repo.Head()
+	placeStub(s.T(), s.repo.Root(), s.running, `{"decision":"deny"}`, 2)
+	s.repo.Commit("moved on", nil)
+	handled, declined, _, _ := s.delegate(s.line())
+	s.False(handled)
+	s.Contains(declined, "neither the checkout's HEAD")
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildOlderThanTheJudgeLeavesTheCallHere() {
+	built := s.repo.Head()
+	s.running = s.repo.Commit("the judge", nil)
+	s.repo.Commit("moved on", nil)
+	placeStub(s.T(), s.repo.Root(), built, `{"decision":"deny"}`, 2)
+	handled, _, _, _ := s.delegate(s.line())
+	s.False(handled)
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	input := fmt.Sprintf(`{"cwd":"/elsewhere","tool_input":{"file_path":%q}}`, filepath.Join(s.repo.Root(), "x.go"))
+	handled, declined, out, err := s.delegate(input)
+	s.True(handled)
+	s.Empty(declined)
+	s.Equal(2, exit.Code(err))
+	s.Equal(`{"decision":"deny"}`, out)
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesALineThatCdsIntoTheCheckout() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	handled, declined, out, err := s.delegate(s.line())
+	s.True(handled)
+	s.Empty(declined)
+	s.Equal(2, exit.Code(err))
+	s.Equal(`{"decision":"deny"}`, out)
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildAfterHeadJudges() {
+	base := s.repo.Head()
+	ahead := s.repo.Commit("ahead", nil)
+	s.repo.Git("checkout", "-q", base)
+	placeStub(s.T(), s.repo.Root(), ahead, `{"decision":"deny"}`, 2)
+	handled, declined, _, _ := s.delegate(s.line())
+	s.True(handled)
+	s.Empty(declined)
+}
+
+func (s *DelegateToCheckoutSuite) TestABuildBehindHeadLeavesTheCallHere() {
+	behind := s.repo.Head()
+	head := s.repo.Commit("moved on", nil)
+	placeStub(s.T(), s.repo.Root(), behind, `{"decision":"deny"}`, 2)
+	handled, declined, out, err := s.delegate(s.line())
+	s.False(handled)
+	s.Require().NoError(err)
+	s.Empty(out)
+	s.Contains(declined, fmt.Sprintf("built at %s, which is neither the checkout's HEAD %s nor a commit after it", shortCommit(behind), shortCommit(head)))
+}
+
+func (s *DelegateToCheckoutSuite) TestAnUnstampedBuildLeavesTheCallHere() {
+	placeStub(s.T(), s.repo.Root(), unknownVersion, `{"decision":"deny"}`, 2)
+	handled, declined, _, _ := s.delegate(s.line())
+	s.False(handled)
+	s.Contains(declined, "it carries no commit stamp")
+}
+
+func (s *DelegateToCheckoutSuite) TestACallAlreadyHandedOnIsJudgedHere() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.T().Setenv(delegatedEnv, "/other/magus")
+	handled, declined, _, err := s.delegate(s.line())
+	s.False(handled)
+	s.Empty(declined)
+	s.NoError(err)
+}
+
+func (s *DelegateToCheckoutSuite) TestALineThatStaysInTheSessionIsJudgedHere() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	input := fmt.Sprintf(`{"cwd":%q,"tool_name":"Bash","tool_input":{"command":"./magus run lint ."}}`, s.T().TempDir())
+	handled, declined, _, _ := s.delegate(input)
+	s.False(handled)
+	s.Empty(declined)
+}
+
+func (s *DelegateToCheckoutSuite) TestCallDirIsTheCheckoutALineCdsInto() {
+	s.Equal(s.repo.Root(), callDir(s.line()))
+}
+
+// JudgedBySuite pins what a verdict says about the binary that judged it.
+type JudgedBySuite struct {
+	suite.Suite
+}
+
+func TestJudgedBySuite(t *testing.T) {
+	suite.Run(t, new(JudgedBySuite))
+}
+
+func (s *JudgedBySuite) TestADenyNamesItsJudge() {
+	got := judgedBy(types.GuardJudgment{Decision: "deny", Reason: "no"}, "Judged by /c/magus.")
+	s.Equal("no\nJudged by /c/magus.", got.Reason)
+}
+
+func (s *JudgedBySuite) TestAnAdviseNamesItsJudge() {
+	got := judgedBy(types.GuardJudgment{Decision: "advise", Context: "see"}, "Judged by /c/magus.")
+	s.Equal("see\nJudged by /c/magus.", got.Context)
+}
+
+func (s *JudgedBySuite) TestAPassCarriesNoText() {
+	got := judgedBy(types.GuardJudgment{Decision: "pass"}, "Judged by /c/magus.")
+	s.Equal(types.GuardJudgment{Decision: "pass"}, got)
+}
+
+// hookAudienceSuite pins decision 110 per host: a deny shows the person its first line, and
+// the agent gets the rest through the host's agent-only channel.
+type hookAudienceSuite struct {
+	suite.Suite
+}
+
+func TestHookAudienceSuite(t *testing.T) {
+	suite.Run(t, new(hookAudienceSuite))
+}
+
+const audienceReason = "a text search the graph answers\nnothing ran (2 commands)\ndetails: ./magus query output grd1"
+
+// render runs the Claude Code / Codex glue on event and renders its template on verdict.
+func (s *hookAudienceSuite) render(host, event string, verdict map[string]any) map[string]any {
+	body, _ := runGlue(s.T(), "magus-command.buzz", glueArrangement{label: host, host: host, event: event, codex: host == "codex"})
+	tmpl, err := template.New(host).Funcs(templateFuncs()).Option("missingkey=error").Parse(body)
+	s.Require().NoError(err)
+	var out strings.Builder
+	s.Require().NoError(tmpl.Execute(&out, verdict))
+	reply, ok := glueDecode(s.T(), host, out.String()).(map[string]any)
+	s.Require().True(ok, out.String())
+	return reply
+}
+
+func (s *hookAudienceSuite) TestClaudeCodeDenyShowsOneLineAndHandsTheAgentTheRest() {
+	reply := s.render("claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`,
+		map[string]any{"decision": "deny", "reason": audienceReason})
+	out := reply["hookSpecificOutput"].(map[string]any)
+	s.Equal("a text search the graph answers", out["permissionDecisionReason"])
+	s.Equal("nothing ran (2 commands)\ndetails: ./magus query output grd1", out["additionalContext"])
+}
+
+func (s *hookAudienceSuite) TestCodexDenyShowsOneLineAndHandsTheAgentTheRest() {
+	reply := s.render("codex", `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git stash"}}`,
+		map[string]any{"decision": "deny", "reason": audienceReason})
+	out := reply["hookSpecificOutput"].(map[string]any)
+	s.Equal("a text search the graph answers", out["permissionDecisionReason"])
+	s.Equal("nothing ran (2 commands)\ndetails: ./magus query output grd1", out["additionalContext"])
+	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["codex"]).Validate(reply))
+}
+
+func (s *hookAudienceSuite) TestAOneLineDenyCarriesNoAgentContext() {
+	reply := s.render("claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`,
+		map[string]any{"decision": "deny", "reason": "no"})
+	out := reply["hookSpecificOutput"].(map[string]any)
+	s.Equal("no", out["permissionDecisionReason"])
+	s.NotContains(out, "additionalContext")
+}
+
+func (s *hookAudienceSuite) TestAStopBlockShowsOneLineAndHandsTheAgentTheRest() {
+	reply := s.render("claude-code", `{"hook_event_name":"Stop","session_id":"s","stop_hook_active":false}`,
+		map[string]any{"decision": "deny", "reason": audienceReason})
+	s.Equal("block", reply["decision"])
+	s.Equal("a text search the graph answers", reply["reason"])
+	out := reply["hookSpecificOutput"].(map[string]any)
+	s.Equal("Stop", out["hookEventName"])
+	s.Equal("nothing ran (2 commands)\ndetails: ./magus query output grd1", out["additionalContext"])
+}
+
+func (s *hookAudienceSuite) TestASubagentStopBlockNamesItsOwnEvent() {
+	reply := s.render("claude-code", `{"hook_event_name":"SubagentStop","session_id":"s","agent_id":"a","stop_hook_active":false}`,
+		map[string]any{"decision": "deny", "reason": audienceReason})
+	s.Equal("SubagentStop", reply["hookSpecificOutput"].(map[string]any)["hookEventName"])
+}
+
+func (s *hookAudienceSuite) TestAHostWithNoAgentChannelGetsTheVerdictLineAlone() {
+	deny := types.GuardJudgment{Decision: "deny", Reason: audienceReason}
+	got := routeDeny(s.T().Context(), types.Limits{Channels: []string{"display"}}, true, deny)
+	s.Equal("a text search the graph answers", got.Reason)
+}
+
+func (s *hookAudienceSuite) TestAHostWithAnAgentChannelKeepsTheWholeReason() {
+	deny := types.GuardJudgment{Decision: "deny", Reason: audienceReason}
+	got := routeDeny(s.T().Context(), types.Limits{Channels: []string{"display", "capture", "notice"}}, true, deny)
+	s.Equal(audienceReason, got.Reason)
+}
+
+func (s *hookAudienceSuite) TestLimitsWithNoChannelsLeaveTheReasonWhole() {
+	deny := types.GuardJudgment{Decision: "deny", Reason: audienceReason}
+	s.Equal(audienceReason, routeDeny(s.T().Context(), types.Limits{}, true, deny).Reason)
+}
+
+func (s *hookAudienceSuite) TestAnAdviseIsNeverCut() {
+	advise := types.GuardJudgment{Decision: "advise", Context: audienceReason}
+	s.Equal(advise, routeDeny(s.T().Context(), types.Limits{Channels: []string{"display"}}, true, advise))
+}
+
+func (s *hookAudienceSuite) TestACodexStopBlockKeepsTheWholeReason() {
+	reply := s.render("codex", `{"hook_event_name":"SubagentStop","session_id":"s","agent_id":"a","stop_hook_active":false}`,
+		map[string]any{"decision": "deny", "reason": audienceReason})
+	s.Equal(audienceReason, reply["reason"])
+	s.NotContains(reply, "hookSpecificOutput")
+	s.Require().NoError(glueLoadSchema(s.T(), "codex/stop.command.output.schema.json").Validate(reply))
+}
+
+func (s *hookAudienceSuite) TestCursorDenyShowsThePersonOneLine() {
+	verdict, err := json.Marshal(types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: audienceReason})
+	s.Require().NoError(err)
+	s.T().Setenv("GLUE_VERDICT", string(verdict))
+	body, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{label: "cursor", host: "cursor", stub: glueVerdictEcho,
+		event: `{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":"git stash","cwd":"/tmp"}`})
+	reply, ok := glueDecode(s.T(), "cursor", body).(map[string]any)
+	s.Require().True(ok, body)
+	s.Equal("a text search the graph answers", reply["user_message"])
+	s.Equal(audienceReason, reply["agent_message"])
+}
+
+// unjudgedHookSuite pins decision 114a: a call no magus judged fails closed, and the
+// person is told how to get a magus on every such call.
+type unjudgedHookSuite struct {
+	suite.Suite
+}
+
+func TestUnjudgedHookSuite(t *testing.T) {
+	suite.Run(t, new(unjudgedHookSuite))
+}
+
+// glueBrokenMagus stands in for a magus that runs but cannot judge.
+const glueBrokenMagus = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\necho 'cannot load this tree' >&2\nexit 3\n"
+
+func (s *unjudgedHookSuite) reply(name, host, event string) map[string]any {
+	body, _ := runGlue(s.T(), name, glueArrangement{label: host, host: host, event: event, stub: glueBrokenMagus, codex: host == "codex"})
+	reply, ok := glueDecode(s.T(), host, body).(map[string]any)
+	s.Require().True(ok, body)
+	return reply
+}
+
+func (s *unjudgedHookSuite) TestClaudeCodeRefusesACallThatMayChangeState() {
+	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`)
+	out := reply["hookSpecificOutput"].(map[string]any)
+	s.Equal("deny", out["permissionDecision"])
+	s.Contains(out["permissionDecisionReason"], "cannot load this tree")
+	s.Contains(reply["systemMessage"], "Rebuild or update", "the person reads the fix")
+	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
+}
+
+func (s *unjudgedHookSuite) TestClaudeCodeLetsAReadPassAndStillTellsThePerson() {
+	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`)
+	s.NotContains(reply["hookSpecificOutput"], "permissionDecision")
+	s.Contains(reply["systemMessage"], "could not judge this call")
+}
+
+func (s *unjudgedHookSuite) TestTheSecondCallInASessionIsToldToo() {
+	event := `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"ls"}}`
+	s.reply("magus-command.buzz", "claude-code", event)
+	reply := s.reply("magus-command.buzz", "claude-code", event)
+	s.Contains(reply["systemMessage"], "could not judge this call")
+}
+
+func (s *unjudgedHookSuite) TestCodexRefusalFitsItsSchema() {
+	reply := s.reply("magus-command.buzz", "codex", `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git stash"}}`)
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
+	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["codex"]).Validate(reply))
+}
+
+func (s *unjudgedHookSuite) TestCodexPermissionRequestKeepsThePromptAndTellsThePerson() {
+	reply := s.reply("magus-command.buzz", "codex", `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push"}}`)
+	s.NotContains(reply["hookSpecificOutput"], "decision")
+	s.Contains(reply["systemMessage"], "could not judge this call")
+	s.Require().NoError(glueLoadSchema(s.T(), "codex/permission-request.command.output.schema.json").Validate(reply))
+}
+
+func (s *unjudgedHookSuite) TestAStopTellsThePersonRatherThanStderr() {
+	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"Stop","session_id":"s","stop_hook_active":false}`)
+	s.Contains(reply["systemMessage"], "could not judge this call")
+	s.NotContains(reply, "decision")
+}
+
+func (s *unjudgedHookSuite) TestAPathWriteIsRefused() {
+	reply := s.reply("magus-path.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Write","tool_input":{"file_path":"README.md"}}`)
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
+}
+
+func (s *unjudgedHookSuite) TestCursorRefusesAndShowsThePersonTheFix() {
+	reply := s.reply("cursor-hook.buzz", "cursor", `{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":"git stash","cwd":"/tmp"}`)
+	s.Equal("deny", reply["permission"])
+	s.Contains(reply["user_message"], "Rebuild or update")
+}
+
+const glueBrokenMultiLineMagus = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\necho 'magus.yaml has keys this magus does not know:' >&2\necho '  - guard.newest  (line 4)' >&2\nexit 3\n"
+
+func (s *unjudgedHookSuite) bootstrapEvent(command string) string {
+	encoded, err := json.Marshal(command)
+	s.Require().NoError(err)
+	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":%s}}`, encoded)
+}
+
+func (s *unjudgedHookSuite) TestTheBootstrapLineAloneIsLetThroughAndTheNoticeStays() {
+	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent(ward.BootstrapCommand))
+	s.NotContains(reply["hookSpecificOutput"], "permissionDecision")
+	s.Contains(reply["systemMessage"], "could not judge this call")
+	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
+}
+
+func (s *unjudgedHookSuite) TestTheBootstrapLineWithAnotherCommandAfterItIsRefused() {
+	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent(ward.BootstrapCommand+" && git stash"))
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
+}
+
+func (s *unjudgedHookSuite) TestCursorLetsTheBootstrapLineThrough() {
+	encoded, err := json.Marshal(ward.BootstrapCommand)
+	s.Require().NoError(err)
+	reply := s.reply("cursor-hook.buzz", "cursor", fmt.Sprintf(`{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":%s,"cwd":"/tmp"}`, encoded))
+	s.Equal("allow", reply["permission"])
+	s.Contains(reply["user_message"], "could not judge this call")
+}
+
+func (s *unjudgedHookSuite) TestEveryLineOfTheLoadErrorReachesThePerson() {
+	body, _ := runGlue(s.T(), "magus-command.buzz", glueArrangement{label: "claude-code", host: "claude-code",
+		event: s.bootstrapEvent("git stash"), stub: glueBrokenMultiLineMagus})
+	reply, ok := glueDecode(s.T(), "claude-code", body).(map[string]any)
+	s.Require().True(ok, body)
+	s.Contains(reply["systemMessage"], "guard.newest")
+}
+
+func (s *unjudgedHookSuite) TestTheSessionStartTextPromisesNoGitStatus() {
+	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "magus-session.buzz"))
+	s.Require().NoError(err)
+	s.NotContains(string(body), "`git status` and the fix still run")
+}
+
+// The hook carries a copy of the bootstrap, since with no magus it cannot ask.
+func (s *unjudgedHookSuite) TestTheHookBootstrapIsWardsCommand() {
+	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "lib", "hook.buzz"))
+	s.Require().NoError(err)
+	s.Contains(string(body), fmt.Sprintf("final BOOTSTRAP = %q;", ward.BootstrapCommand))
 }

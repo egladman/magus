@@ -24,12 +24,12 @@
 // a built magus to run it locally; it skips loudly without one.
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { MagusGuard } from "./opencode-plugin.ts";
+import { MagusGuard } from "./opencode-plugin.installed.ts";
 
 /** `bin` is argv[0] as the plugin spreads it; `argv` is everything after it. */
 type SpawnCall = { bin: string; argv: string[]; stdin: string };
@@ -42,12 +42,16 @@ type Canned = { schema_version: number; decision: string; reason?: string; conte
  * Returns the recorded calls. `reply` receiving null means "no such binary",
  * which is how the fail-open path is exercised.
  */
-function stubBun(reply: ((call: SpawnCall) => Canned | null) | null): SpawnCall[] {
+function stubBun(
+  reply: ((call: SpawnCall) => Canned | null) | null,
+  stderrOf: (call: SpawnCall) => string = () => "",
+): SpawnCall[] {
   const calls: SpawnCall[] = [];
   const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
     const stdin = opts.stdin ? new TextDecoder().decode(opts.stdin) : "";
     const call = { bin: spawned[0], argv: spawned.slice(1), stdin };
     calls.push(call);
+    // platform double: Bun.spawn
     if (reply === null) throw new Error("spawn failed: no such file or directory");
     const verdict = reply(call);
     const body = verdict === null ? "" : JSON.stringify(verdict);
@@ -58,10 +62,19 @@ function stubBun(reply: ((call: SpawnCall) => Canned | null) | null): SpawnCall[
           controller.close();
         },
       }),
+      stderr: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(stderrOf(call)));
+          controller.close();
+        },
+      }),
       exited: Promise.resolve(0),
     };
   };
-  (globalThis as unknown as { Bun: unknown }).Bun = { spawn };
+  (globalThis as unknown as { Bun: unknown }).Bun = {
+    spawn,
+    file: (name: string) => ({ exists: async () => existsSync(name) }),
+  };
   return calls;
 }
 
@@ -90,6 +103,8 @@ type Sessions = {
   parents?: Record<string, string>;
   messages?: Record<string, Row[]>;
   prompts?: Array<{ id: string; text: string }>;
+  toasts?: string[];
+  logs?: string[];
 };
 
 /** The slice of OpenCode's PluginInput the plugin reads. */
@@ -97,6 +112,18 @@ function pluginInput(sessions: Sessions = {}) {
   return {
     directory: "/work",
     client: {
+      tui: {
+        showToast: async ({ body }: { body: { message: string } }) => {
+          sessions.toasts?.push(body.message);
+          return {};
+        },
+      },
+      app: {
+        log: async ({ body }: { body: { message: string } }) => {
+          sessions.logs?.push(body.message);
+          return {};
+        },
+      },
       session: {
         get: async ({ path }: { path: { id: string } }) => ({
           data: { id: path.id, parentID: sessions.parents?.[path.id] },
@@ -289,32 +316,28 @@ test("a pass is silent and blocks nothing", async () => {
   assert.deepEqual(warnings, []);
 });
 
-test("an unrunnable magus fails OPEN, loudly", async () => {
+test("an unrunnable magus refuses every call and says how to get one", async () => {
   stubBun(null);
   const h = await hooks();
-  const warnings = await withWarnings(async () => {
-    // Must not throw: throwing is OpenCode's only way to stop a call, so a guard
-    // that threw when magus was missing would make every session unusable.
-    await h["tool.execute.before"](
-      { tool: "bash", callID: "c1" },
-      { args: { command: "git stash" } },
+  for (const [tool, args] of [
+    ["bash", { command: "git stash" }],
+    ["read", { filePath: "/work/README.md" }],
+  ] as const) {
+    await assert.rejects(
+      h["tool.execute.before"]({ tool, callID: "c1" }, { args }),
+      /could not judge this call: .* could not be run; refused\.\nInstall magus/,
+      `${tool} is refused: the thrown error is the only line the person reads`,
     );
-  });
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /UNGUARDED/);
+  }
 });
 
-test("a verdict from an unknown schema is ignored rather than obeyed", async () => {
+test("a verdict from an unknown schema is refused rather than obeyed", async () => {
   stubBun(() => ({ ...deny, schema_version: 99 }));
   const h = await hooks();
-  const warnings = await withWarnings(async () => {
-    await h["tool.execute.before"](
-      { tool: "bash", callID: "c1" },
-      { args: { command: "git stash" } },
-    );
-  });
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /schema 99/);
+  await assert.rejects(
+    h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
+    /verdict schema 99/,
+  );
 });
 
 const ask: Canned = {
@@ -354,7 +377,7 @@ test("an ask with no push prompt configured refuses, naming the person's termina
   await h.config({ permission: { bash: { "git push *": "allow" } } });
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "git push" } }),
-    /own terminal/,
+    /own terminal\. If they saw no such message, relay this one to them verbatim\./,
   );
 });
 
@@ -619,13 +642,115 @@ test("every other tool reaches magus whole, its file path spelled the way magus 
     { tool: "read", callID: "o2" },
     { args: { filePath: "README.md", limit: 40 } },
   );
-  assert.equal(calls.length, 2, "nothing is left unseen");
+  assert.equal(calls.length, 3, "nothing is left unseen, and the read is recorded first");
   assert.equal(sent(calls[0]).tool_name, "todowrite");
-  assert.deepEqual(sent(calls[1]).tool_input, {
+  assert.deepEqual(sent(calls[2]).tool_input, {
     filePath: "README.md",
     limit: 40,
     file_path: "README.md",
   });
+});
+
+const glue = (script: string): string[] => [
+  "buzz",
+  "-C",
+  "/work",
+  "-s",
+  `.opencode/magus/runtime/${script}.buzz`,
+  "--",
+  "--agent-name",
+  "opencode",
+];
+
+test("a read is recorded through magus-observe.buzz before it is judged", async () => {
+  const calls = stubBun(() => pass);
+  const h = await hooks();
+  await h["tool.execute.before"](
+    { tool: "read", callID: "r1", sessionID: "s1" },
+    { args: { filePath: "go.mod" } },
+  );
+  assert.deepEqual(calls[0].argv, glue("magus-observe"));
+  assert.deepEqual(JSON.parse(calls[0].stdin), {
+    session_id: "s1",
+    tool_input: { file_path: "go.mod" },
+    cwd: "/work",
+  });
+  assert.equal(sent(calls[1]).tool_name, "read", "the read is still judged");
+});
+
+test("a written .buzz file that fails its check says why in the tool result", async () => {
+  const blocked = { decision: "block", reason: "`magus buzz --check a.buzz` failed" };
+  const calls = stubBun((call) =>
+    call.argv[0] === "buzz" ? (blocked as unknown as Canned) : null,
+  );
+  const h = await hooks();
+
+  const result = { output: "wrote a.buzz" };
+  await h["tool.execute.after"](
+    { tool: "write", callID: "w1", args: { filePath: "a.buzz" } },
+    result,
+  );
+  assert.deepEqual(calls[0].argv, glue("magus-buzz-check"));
+  assert.deepEqual(JSON.parse(calls[0].stdin), {
+    tool_name: "write",
+    tool_input: { file_path: "a.buzz" },
+    cwd: "/work",
+  });
+  assert.equal(
+    result.output,
+    "wrote a.buzz\n\n[magus buzz check] `magus buzz --check a.buzz` failed",
+  );
+
+  const patch = { output: "patched" };
+  const patchText = "*** Begin Patch\n*** Update File: hack/b.buzz\n*** End Patch";
+  await h["tool.execute.after"]({ tool: "apply_patch", callID: "w2", args: { patchText } }, patch);
+  assert.deepEqual(JSON.parse(calls[1].stdin).tool_input, { patch: patchText });
+
+  await h["tool.execute.after"](
+    { tool: "edit", callID: "w3", args: { filePath: "main.go" } },
+    { output: "edited" },
+  );
+  assert.equal(calls.length, 2, "a write to no .buzz file runs no check");
+});
+
+test("a new root session's brief reaches its first tool result, and a child's gets none", async () => {
+  const brief = "lease: job harness-bindings";
+  const calls: SpawnCall[] = [];
+  const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
+    const call = {
+      bin: spawned[0],
+      argv: spawned.slice(1),
+      stdin: new TextDecoder().decode(opts.stdin),
+    };
+    calls.push(call);
+    const body = call.argv[0] === "session" ? `${brief}\n` : "";
+    return {
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(body));
+          controller.close();
+        },
+      }),
+      exited: Promise.resolve(0),
+    };
+  };
+  (globalThis as unknown as { Bun: unknown }).Bun = { spawn };
+  const h = await hooks();
+
+  await h.event({
+    event: { type: "session.created", properties: { info: { id: "kid", parentID: "root" } } },
+  });
+  assert.equal(calls.length, 0, "a subagent is briefed by its spawn");
+
+  await h.event({ event: { type: "session.created", properties: { info: { id: "root" } } } });
+  assert.deepEqual(calls[0].argv, ["session", "--brief"]);
+
+  const first = { output: "ran" };
+  await h["tool.execute.after"]({ tool: "bash", callID: "c1", sessionID: "root" }, first);
+  assert.equal(first.output, `ran\n\n${brief}`);
+  const second = { output: "ran" };
+  await h["tool.execute.after"]({ tool: "bash", callID: "c2", sessionID: "root" }, second);
+  assert.equal(second.output, "ran", "the brief is said once");
 });
 
 test("a deny on an MCP call throws, and an advise rides in the result's content", async () => {
@@ -681,10 +806,11 @@ test("a spawn is judged by its prompt, and the finished one names the child", as
     { tool: "task", callID: "t1", sessionID: "root", args: spawnArgs },
     { output: "done", metadata: { sessionId: "child", parentSessionId: "root" } },
   );
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.equal(sent(calls[1]).hook_event_name, "PostToolUse");
   assert.deepEqual(sent(calls[1]).tool_response, { agent_id: "child" });
   assert.deepEqual(sent(calls[1]).tool_input, spawnArgs);
+  assert.equal(sent(calls[2]).hook_event_name, "SubagentStop", "the finished child's stop");
 });
 
 test("a spawn with no prompt is not judged, and a denied spawn throws", async () => {
@@ -819,6 +945,53 @@ test("a root session going idle records a checkpoint; a subagent's idle records 
   });
 });
 
+test("a root idle runs the disk hook, and its line reaches the next tool result once", async () => {
+  await withoutReplyScript(async () => {
+    const calls: SpawnCall[] = [];
+    const line = "magus: disk space is critical, 4.0 GiB free";
+    const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
+      const call = {
+        bin: spawned[0],
+        argv: spawned.slice(1),
+        stdin: new TextDecoder().decode(opts.stdin),
+      };
+      calls.push(call);
+      const body = call.argv[0] === "buzz" ? `${line}\n` : "";
+      return {
+        stdout: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(body));
+            controller.close();
+          },
+        }),
+        exited: Promise.resolve(0),
+      };
+    };
+    (globalThis as unknown as { Bun: unknown }).Bun = { spawn };
+    const h = await hooks();
+
+    await h.event(idle("root"));
+    assert.deepEqual(calls[1].argv, [
+      "buzz",
+      "-C",
+      "/work",
+      "-s",
+      ".opencode/magus/runtime/magus-reclaim-disk.buzz",
+      "--",
+      "--agent-name",
+      "opencode",
+    ]);
+    assert.equal(calls[1].stdin, JSON.stringify({ cwd: "/work" }));
+
+    const first = { output: "ran" };
+    await h["tool.execute.after"]({ tool: "bash", callID: "c1", sessionID: "root" }, first);
+    assert.equal(first.output, `ran\n\n[magus disk] ${line}`);
+    const second = { output: "ran" };
+    await h["tool.execute.after"]({ tool: "bash", callID: "c2", sessionID: "root" }, second);
+    assert.equal(second.output, "ran", "the line is said once");
+  });
+});
+
 /** Runs `body` with an empty proofread-reply.buzz where the plugin looks first. */
 async function withReplyScript(body: (script: string) => Promise<void>): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "plugin-reply-"));
@@ -844,12 +1017,15 @@ const turn = (reply: string): Row[] => [
 const followUp = "proofread judged your last reply. Send it again.";
 const findings = { prompt: followUp } as unknown as Canned;
 
+/** The reply check runs `buzz -s <script>`; the disk hook beside it runs `buzz -C <dir>`. */
+const isReplyCheck = (call: SpawnCall): boolean => call.argv[0] === "buzz" && call.argv[1] === "-s";
+
 test("findings on a root session's reply go back as one follow-up prompt per turn", async () => {
   await withReplyScript(async (script) => {
-    const calls = stubBun((call) => (call.argv[0] === "buzz" ? findings : pass));
+    const calls = stubBun((call) => (isReplyCheck(call) ? findings : pass));
     const prompts: Array<{ id: string; text: string }> = [];
     const h = await hooks({ messages: { root: turn("Done. Want me to go on?") }, prompts });
-    const judged = () => calls.filter((call) => call.argv[0] === "buzz");
+    const judged = () => calls.filter((call) => isReplyCheck(call));
 
     await h.event(idle("root"));
     assert.equal(judged().length, 1);
@@ -893,12 +1069,40 @@ test("no findings, no reply, or a subagent means no follow-up", async () => {
   });
 });
 
+test("a reply check that judged nothing reaches the person as a toast and OpenCode's log", async () => {
+  await withReplyScript(async () => {
+    const said = "proofread-reply judges no reply: no proofread is on PATH. Install proofread.";
+    stubBun(
+      () => null,
+      (call) => (isReplyCheck(call) ? `${said}\n` : ""),
+    );
+    const prompts: Array<{ id: string; text: string }> = [];
+    const toasts: string[] = [];
+    const logs: string[] = [];
+    const h = await hooks({ messages: { root: turn("Done.") }, prompts, toasts, logs });
+    await h.event(idle("root"));
+    assert.deepEqual(toasts, [said], "the person reads what the script said");
+    assert.deepEqual(logs, [said], "and OpenCode's own log keeps it");
+    assert.deepEqual(prompts, [], "a notice is not a follow-up the agent answers");
+  });
+});
+
+test("a reply check with nothing on stderr shows no toast", async () => {
+  await withReplyScript(async () => {
+    stubBun(() => findings);
+    const toasts: string[] = [];
+    const h = await hooks({ messages: { root: turn("Done.") }, prompts: [], toasts });
+    await h.event(idle("root"));
+    assert.deepEqual(toasts, []);
+  });
+});
+
 test("with no reply script the idle records its checkpoint and judges no reply", async () => {
   await withoutReplyScript(async () => {
     const calls = stubBun(() => findings);
     const h = await hooks({ messages: { root: turn("Done.") } });
     await h.event(idle("root"));
-    assert.ok(!calls.some((call) => call.argv[0] === "buzz"));
+    assert.ok(!calls.some((call) => isReplyCheck(call)));
   });
 });
 
@@ -913,7 +1117,7 @@ test("the reply check is off by default: with the variable unset or empty nothin
       const h = await hooks({ messages: { root: turn("Done.") }, prompts });
       await h.event(idle("root"));
       assert.ok(
-        !calls.some((call) => call.argv[0] === "buzz"),
+        !calls.some((call) => isReplyCheck(call)),
         `judged with the variable ${value === undefined ? "unset" : "empty"}`,
       );
       assert.deepEqual(prompts, []);
@@ -996,4 +1200,161 @@ test("a tree with no magus.yaml falls back to the nearest magusfile", async () =
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("a deny on a root session's stop goes back as one follow-up prompt", async () => {
+  await withoutReplyScript(async () => {
+    const stop = { schema_version: 1, decision: "deny", reason: "a background task still runs" };
+    const isStop = (call: SpawnCall): boolean => call.stdin.includes('"hook_event_name":"Stop"');
+    const calls = stubBun((call) => (isStop(call) ? stop : pass));
+    const prompts: Array<{ id: string; text: string }> = [];
+    const h = await hooks({ prompts });
+
+    await h.event(idle("root"));
+    const stops = () => calls.filter((call) => isStop(call));
+    assert.deepEqual(stops()[0].argv, [
+      "shell",
+      "--agent-name",
+      "opencode",
+      "--renders-ask",
+      "-o",
+      "json",
+    ]);
+    assert.deepEqual(JSON.parse(stops()[0].stdin), {
+      hook_event_name: "Stop",
+      session_id: "root",
+      stop_hook_active: false,
+      cwd: "/work",
+    });
+    assert.deepEqual(prompts, [{ id: "root", text: "[magus guard] a background task still runs" }]);
+
+    await h.event(idle("root"));
+    assert.equal(
+      JSON.parse(stops()[1].stdin).stop_hook_active,
+      true,
+      "the guard sees its own follow-up",
+    );
+  });
+});
+
+test("an advise on a stop is the person's notice and sends nothing back", async () => {
+  await withoutReplyScript(async () => {
+    stubBun((call) => (call.stdin.includes('"Stop"') ? advise : pass));
+    const prompts: Array<{ id: string; text: string }> = [];
+    const h = await hooks({ prompts });
+    const warnings = await withWarnings(async () => {
+      await h.event(idle("root"));
+    });
+    assert.deepEqual(warnings, ["[magus guard] that file is generated"]);
+    assert.deepEqual(prompts, []);
+  });
+});
+
+const isSubagentStop = (call: SpawnCall): boolean =>
+  call.stdin.includes('"hook_event_name":"SubagentStop"');
+
+test("a foreground task's end is its child's stop, and a deny rides the parent's result", async () => {
+  const stop = { schema_version: 1, decision: "deny", reason: "the child left its job open" };
+  const calls = stubBun((call) => (isSubagentStop(call) ? stop : pass));
+  const h = await hooks();
+  const result = { output: "done", metadata: { sessionId: "child", parentSessionId: "root" } };
+  await h["tool.execute.after"](
+    { tool: "task", callID: "t1", sessionID: "root", args: spawnArgs },
+    result,
+  );
+
+  assert.deepEqual(JSON.parse(calls.filter(isSubagentStop)[0].stdin), {
+    hook_event_name: "SubagentStop",
+    session_id: "root",
+    agent_id: "child",
+    stop_hook_active: false,
+    cwd: "/work",
+  });
+  assert.equal(
+    result.output,
+    "done\n\n[magus guard] the child left its job open\n\nResume the subagent with task_id child.",
+  );
+});
+
+test("a passed child's stop leaves the parent's result alone", async () => {
+  stubBun(() => pass);
+  const h = await hooks();
+  const result = { output: "done", metadata: { sessionId: "child" } };
+  await h["tool.execute.after"](
+    { tool: "task", callID: "t1", sessionID: "root", args: spawnArgs },
+    result,
+  );
+  assert.equal(result.output, "done");
+});
+
+test("a backgrounded child's stop is its idle, and a deny is prompted back to the child", async () => {
+  await withoutReplyScript(async () => {
+    const stop = { schema_version: 1, decision: "deny", reason: "the child left its job open" };
+    const calls = stubBun((call) => {
+      if (!isSubagentStop(call)) return pass;
+      return JSON.parse(call.stdin).stop_hook_active ? pass : stop;
+    });
+    const prompts: Array<{ id: string; text: string }> = [];
+    const h = await hooks({ prompts });
+    const result = { output: "started", metadata: { sessionId: "child", background: true } };
+    await h["tool.execute.after"](
+      { tool: "task", callID: "t1", sessionID: "root", args: spawnArgs },
+      result,
+    );
+    assert.equal(calls.filter(isSubagentStop).length, 0, "a backgrounded task has not finished");
+    assert.equal(result.output, "started");
+
+    await h.event(idle("child"));
+    const first = JSON.parse(calls.filter(isSubagentStop)[0].stdin);
+    assert.deepEqual(
+      [first.session_id, first.agent_id, first.stop_hook_active],
+      ["root", "child", false],
+    );
+    assert.deepEqual(prompts, [{ id: "child", text: "[magus guard] the child left its job open" }]);
+
+    await h.event(idle("child"));
+    assert.equal(
+      JSON.parse(calls.filter(isSubagentStop)[1].stdin).stop_hook_active,
+      true,
+      "the guard sees its own follow-up",
+    );
+    assert.equal(prompts.length, 1, "a pass sends nothing back");
+
+    await h.event(idle("child"));
+    assert.equal(calls.filter(isSubagentStop).length, 2, "a child the guard let go is done");
+  });
+});
+
+test("a compacted root session's brief reaches its next tool result, and a child's gets none", async () => {
+  const brief = "lease: job bindings-correct";
+  const calls: SpawnCall[] = [];
+  const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
+    const call = {
+      bin: spawned[0],
+      argv: spawned.slice(1),
+      stdin: new TextDecoder().decode(opts.stdin),
+    };
+    calls.push(call);
+    const body = call.argv[0] === "session" ? `${brief}\n` : "";
+    return {
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(body));
+          controller.close();
+        },
+      }),
+      exited: Promise.resolve(0),
+    };
+  };
+  (globalThis as unknown as { Bun: unknown }).Bun = { spawn };
+  const h = await hooks({ parents: { kid: "root" } });
+
+  await h.event({ event: { type: "session.compacted", properties: { sessionID: "kid" } } });
+  assert.equal(calls.length, 0, "a subagent is briefed by its spawn");
+
+  await h.event({ event: { type: "session.compacted", properties: { sessionID: "root" } } });
+  assert.deepEqual(calls[0].argv, ["session", "--brief"]);
+  const next = { output: "ran" };
+  await h["tool.execute.after"]({ tool: "bash", callID: "c1", sessionID: "root" }, next);
+  assert.equal(next.output, `ran\n\n${brief}`);
 });

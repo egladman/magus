@@ -46,6 +46,16 @@ func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 			}},
 		},
 		{
+			name: "a permitted result never reads as ok",
+			in: journal.Event{
+				Ts: 155, Inv: "inv1", Kind: journal.KindResult, Project: "proto", Target: "ci",
+				Status: journal.StatusPermitted, Ref: "out_abc", DurationMs: 1200,
+			},
+			want: types.StreamEvent{Ts: 155, Workspace: "/repo", Inv: "inv1", Body: types.StreamTarget{
+				Project: "proto", Target: "ci", Status: "permitted", CacheHit: false, Ref: "out_abc", DurationMs: 1200,
+			}},
+		},
+		{
 			name: "output carries the stream it came from",
 			in: journal.Event{
 				Ts: 160, Inv: "inv1", Kind: journal.KindOutput, Project: "api", Target: "test",

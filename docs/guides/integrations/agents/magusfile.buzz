@@ -2,13 +2,14 @@
 // loads the plugin from source. cmd/magus/testdata/script/guard_templates.txtar runs the templates.
 
 import "magus";
+import "project/../../../.." as workspace;
 import "./lib/embed" as embed;
 import "../../../../hack/magusfile/drift" as drift;
 import "../../../../hack/magusfile/index" as index;
-import "os";
 
 import "proc";
 import "fs";
+import "semver";
 import "magus/spell/typescript";
 // Imported for dprint only. Listing it in spells would claim *.md, which the root lints.
 import "magus/spell/markdown";
@@ -20,10 +21,11 @@ magus\project({
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
                 "dprint.json",
                 // The Claude Code mod. Only Claude Code's engine can test or type-check
-                // it (`claude plugin test`), so no target here runs on it.
+                // it, so only mod-test runs on it, and ci cannot compose that.
                 "claude-code-mod/**"],
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
+        "mod-test": {"skip_cache": "runs on the installed claude, whose version no input glob can key"},
     },
 });
 
@@ -32,7 +34,7 @@ export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["
 
 // The schema directory, not its files: drift\expand walks it, so new schemas are covered.
 fun generatedOutputs() > [str] {
-    return ["guard-templates.md", "../../../../testdata/hosts/cursor/gen"];
+    return ["guard-templates.md", "README.md", "../../../../testdata/hosts/cursor/gen", "../../../../spells/harness/opencode/runtime"];
 }
 
 // Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker
@@ -43,23 +45,64 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     final before = drift\hashes(generatedOutputs());
 
     ctx.needs(cursor_schemas_generate, index_generate);
-    ctx.readsFiles(["guard-templates.md.tmpl", "*.buzz", "lib/*.buzz"]);
-    ctx.writesFiles(["guard-templates.md"]);
+    ctx.readsFiles(["guard-templates.md.tmpl", "*.buzz", "lib/*.buzz",
+                    "../../../../spells/harness/*/spell.buzz", "../../../../internal/spell/harness.buzz", "magus-observe.buzz", "magus-buzz-check.buzz", "magus-reclaim-disk.buzz", "lib/hook.buzz"]);
+    ctx.writesFiles(["guard-templates.md", "README.md"]);
+    final assets = {
+        "../../../../spells/harness/opencode/runtime/magus-observe.buzz": "magus-observe.buzz",
+        "../../../../spells/harness/opencode/runtime/magus-buzz-check.buzz": "magus-buzz-check.buzz",
+        "../../../../spells/harness/opencode/runtime/magus-reclaim-disk.buzz": "magus-reclaim-disk.buzz",
+        "../../../../spells/harness/opencode/runtime/lib/hook.buzz": "lib/hook.buzz",
+    };
+    ctx.writesFiles(["guard-templates.md", "README.md", "../../../../spells/harness/opencode/runtime/magus-observe.buzz", "../../../../spells/harness/opencode/runtime/magus-buzz-check.buzz", "../../../../spells/harness/opencode/runtime/magus-reclaim-disk.buzz", "../../../../spells/harness/opencode/runtime/lib/hook.buzz"]);
+    foreach (dest, source in assets) {
+        final content = fs\readFile(source);
+        if (ctx.hasCharm("rw")) {
+            fs\writeFileAtomic(dest, content: content);
+        } else if ((fs\readFile(dest) catch "") != content) {
+            throw "generate: OpenCode runtime asset " + dest + " is stale; run magus run generate:rw docs/guides/integrations/agents";
+        }
+    }
     final tmpl = fs\readFile("guard-templates.md.tmpl");
     final files = mut {<str: str>};
     foreach (name in embed\embedNames(tmpl)) {
         files[name] = fs\readFile(name);
     }
     final rendered = embed\render(tmpl, files: files);
+    // A spell imported here is a handle, not its functions, so a script
+    // at the root calls each harness spell's lists.
+    final row = fun (alias: str, id: str, hooks: str) > str
+        => "bindings\\HookMatrix\{id = \"{id}\", hooks = {hooks}, "
+            + "unsupported = {alias}\\mgs_listUnsupportedHooks()\}";
+    final listed = fun (alias: str, id: str) > str => row(alias, id: id, hooks: "{alias}\\mgs_listHooks()");
+    final script = "import \"io\"; import \"magus/spell\"; "
+        + "import \"docs/guides/integrations/agents/lib/bindings\" as bindings; "
+        + "import \"spells/harness/claude-code/spell\" as claudeCode; "
+        + "import \"spells/harness/claude-code-mod/spell\" as claudeCodeMod; "
+        + "import \"spells/harness/codex/spell\" as codex; "
+        + "import \"spells/harness/cursor/spell\" as cursor; "
+        + "import \"spells/harness/opencode/spell\" as opencode; "
+        + "fun main(args: [str]) > void !> any \{ io\\stdout.write(bindings\\page(["
+        + [listed("claudeCode", id: "claude-code"), row("claudeCodeMod", id: "claude-code-mod", hooks: "[<HookCommand>]"),
+           listed("codex", id: "codex"), listed("cursor", id: "cursor"), listed("opencode", id: "opencode")].join(", ")
+        + "])); \}";
+    // magus\cmd trims its stdout, and a Markdown file ends on a newline.
+    final matrix = magus\cmd("buzz", args: ["-e", script],
+        opts: magus\CommandOptions{dir = "../../../..", quiet = true}).stdout + "\n";
 
     if (ctx.hasCharm("rw")) {
         fs\writeFile("guard-templates.md", content: rendered);
+        fs\writeFile("README.md", content: matrix);
         return;
     }
 
     // Compared, never written: writing here would edit the tree under judgment (MGS1035).
     if ((fs\readFile("guard-templates.md") catch "") != rendered) {
         throw "[MGS4006] generate: guard-templates.md does not match its template; re-run "
+            + "`magus run generate:rw docs/guides/integrations/agents` and commit it";
+    }
+    if ((fs\readFile("README.md") catch "") != matrix) {
+        throw "[MGS4006] generate: README.md does not match the harness spells' hook bindings; re-run "
             + "`magus run generate:rw docs/guides/integrations/agents` and commit it";
     }
     final changed = drift\changedSince(before, generatedOutputs());
@@ -83,7 +126,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.writesFiles(["../../../../testdata/hosts/cursor/gen/*.schema.json"]);
-    proc\exec("node", ["cursor-schemas.ts"], ".", {});
+    _ = proc\exec("node", ["cursor-schemas.ts"], ".");
 }
 
 
@@ -102,21 +145,34 @@ fun checkBuzz() > void !> any {
     foreach (script in fs\glob("magus-*.buzz")) {
         strict.append(script.value);
     }
-    magus\cmd("buzz", args: strict);
+    _ = magus\cmd("buzz", args: strict);
 
     var embedded = mut ["--check", "--embedded"];
     foreach (script in fs\glob("lib/*.buzz")) {
         embedded.append(script.value);
     }
-    magus\cmd("buzz", args: embedded);
+    _ = magus\cmd("buzz", args: embedded);
 }
 
 // test runs the OpenCode plugin's transport cases under node; the test supplies Bun.spawn.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(install);
+    ctx.needs(install, workspace\opencode_runtime_generate);
+    ctx.readsFiles(["*.ts", "*.json", "../../../../spells/harness/opencode/plugins/*.js", "../../../../spells/harness/opencode/probe.ts", "../../../../spells/harness/opencode/gen/*"]);
     final run = mut ["--test"];
     foreach (t in fs\glob("*.test.ts")) { run.append(t.value); }
-    proc\exec("node", run, ".", {});
+    _ = proc\exec("node", run, ".");
+}
+
+// mod-test runs the Claude Code mod's tests on the engine that loads it.
+// CI has no claude, so ci never composes it.
+// 2.1.308 is the oldest build seen to carry `plugin test`.
+export fun mod_test(ctx: magus\Context, args: [str]) > void !> any {
+    final printed = proc\exec("claude", args: ["--version"], dir: ".", opts: proc\ExecOptions{quiet = true}).stdout;
+    final version = printed.trim().split(" ")[0];
+    if (!semver\isValid(version) or !semver\satisfies(version, constraint: ">= 2.1.308")) {
+        throw "mod-test: `claude plugin test` needs claude 2.1.308 or newer; `claude --version` on PATH printed: " + printed.trim();
+    }
+    _ = proc\exec("claude", args: ["plugin", "test", "claude-code-mod"], dir: ".");
 }
 
 // The anchor `magus affected ci` keys off.

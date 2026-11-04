@@ -86,6 +86,9 @@ JOB          HOLDER  STATE  MODEL     PATHS  PROOF     CHECK
 upgrade/api  ana     pass   standard  1      alone     magus run test api
 upgrade/web  ben     pass   standard  1      disjoint  magus run test web
 
+not merged onto main: 2
+  upgrade/api at 321cadb: ~/src/ana holds 1 uncommitted path(s), first api/deps.txt; commit them in ~/src/ana, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
+  upgrade/web at 321cadb: ~/src/ben holds 1 uncommitted path(s), first web/deps.txt; commit them in ~/src/ben, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -110,6 +113,10 @@ in his, claims the same page for the section he wants:
 
 ```console
 $ magus job fork fr/upgrading --criteria 'upgrading section in French' --write-paths docs/fr/install.md --check 'lint .'
+note: loading the symbol graph; a missing or stale symbol index is rebuilt first, which can take minutes
+note: loaded the symbol graph in 0ms
+note: judging fr/upgrading's goals; a goal naming a symbol loads the symbol graph
+note: judged fr/upgrading's goals in 0ms
 [error] 1 problem:
   1. [MGS3032] write_paths[0]: fr/upgrading declares "docs/fr/install.md", and fr/install (running, updated 0s ago) already holds "docs/fr/install.md". Both are live and neither is the other's parent, child, or depends_on partner, so docs/fr/install.md has one owner unless the rows say otherwise. fr/install has touched none yet in it so far. fr/install has changed nothing under docs/fr/install.md
      fix: Claim `docs/fr/install.md#<declaration>` on both rows, add `--depends-on fr/install` to fr/upgrading, or fold fr/upgrading into fr/install; or the root narrows fr/install to what it has changed with `magus job apply -f <record>`, dropping docs/fr/install.md
@@ -189,6 +196,10 @@ EOF
 exited release-1.3/notes, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait release-1.3/notes`
 ```
 
+The holder stays bound to the item's write paths after exiting, as the note exit
+prints on stderr says. A write outside them is denied until the release owner widens
+the item or a wait ends it.
+
 The board says both items came back, and nothing more:
 
 <!-- golden: job_people_release.txtar ls-exited.out -->
@@ -199,6 +210,10 @@ JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
 release-1.3/changelog  changelog  exited  standard  1      alone     -
 release-1.3/notes      notes      exited  standard  1      disjoint  -
 
+not merged onto main: 1
+  release-1.3/changelog at 5f6b136: ~/src/changelog holds 1 uncommitted path(s), first CHANGELOG.md; commit them in ~/src/changelog, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
+unresolved risks, which stop nothing: 1
+  release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -242,6 +257,10 @@ JOB                    HOLDER     STATE    MODEL     PATHS  PROOF     CHECK
 release-1.3/changelog  changelog  pass     standard  1      alone     -
 release-1.3/notes      notes      running  standard  1      disjoint  -
 
+not merged onto main: 1
+  release-1.3/changelog at 5f6b136: ~/src/changelog holds 1 uncommitted path(s), first CHANGELOG.md; commit them in ~/src/changelog, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
+unresolved risks, which stop nothing: 1
+  release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 

@@ -72,7 +72,8 @@ export function mountRotator(panels: HTMLElement[], opts: RotatorOptions): Rotat
   function nextIndex(from: number): number {
     for (let step = 1; step <= panels.length; step++) {
       const candidate = (from + step) % panels.length;
-      if (hasContent(panels[candidate])) return candidate;
+      const panel = panels[candidate];
+      if (panel && hasContent(panel)) return candidate;
     }
     return from; // every member is empty: hold where we are rather than flicker
   }

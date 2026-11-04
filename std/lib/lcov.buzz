@@ -47,7 +47,7 @@ fun keepsSource(sf: str, keep: str) > bool {
 ///
 /// Raises rather than reporting 0.0 when nothing matched, because a zero and a
 /// mismatched filter look identical to a badge and only one of them is a fact.
-export fun percent(lcov: str, keep: str) > str !> str {
+export fun percent(lcov: str, keep: str) > str !> str { //nolint:no-throw // a std call; its callers catch the raise
     var found = 0;
     var hit = 0;
     var counting = false;
@@ -61,7 +61,7 @@ export fun percent(lcov: str, keep: str) > str !> str {
         if (line.startsWith("LH:")) { hit = hit + std\parseInt(line.sub(3).trim()) ?? 0; }
     }
     if (found == 0) {
-        throw "lcov: report has no lines under \"" + keep + "\"; did the sourcemaps resolve?";
+        throw "lcov: report has no lines under \"" + keep + "\"; did the sourcemaps resolve?"; //nolint:no-throw // a std call; its callers catch the raise
     }
     // Integer math throughout: a rounded tenth rendered by hand avoids depending
     // on float formatting for a string that ends up in a committed SVG.
@@ -84,7 +84,7 @@ export fun percent(lcov: str, keep: str) > str !> str {
 // are then recomputed from the union rather than trusted from the inputs.
 //
 // keep filters by source path exactly as percent does, and for the same reason.
-export fun mergePercent(reports: [str], keep: str) > str !> str {
+export fun mergePercent(reports: [str], keep: str) > str !> str { //nolint:no-throw // a std call; its callers catch the raise
     // "<file>\u{0}<line>" -> was it ever hit. One flat map rather than a map of maps: the key
     // only has to be unique per (file, line), and \0 cannot appear in either half.
     final lines = mut {<str: bool>};
@@ -115,7 +115,7 @@ export fun mergePercent(reports: [str], keep: str) > str !> str {
         if (wasHit) { hit = hit + 1; }
     }
     if (found == 0) {
-        throw "lcov: merged reports have no DA records under \"" + keep + "\"; did the sourcemaps resolve?";
+        throw "lcov: merged reports have no DA records under \"" + keep + "\"; did the sourcemaps resolve?"; //nolint:no-throw // a std call; its callers catch the raise
     }
     final tenths = (hit * 1000 + found / 2) / found;
     return "{tenths / 10}.{tenths % 10}";
@@ -181,6 +181,6 @@ test "percent refuses an empty report rather than reporting zero" {
     // Reporting 0.0% here would look like a real regression; the actual cause is a
     // report with nothing under src, which almost always means sourcemaps did not
     // resolve and every record still points at the bundle.
-    assert\throws(fun () > void !> str { final _ = percent("SF:other/a.js\nLF:2\nLH:1\nend_of_record\n", keep: "src/"); },
+    assert\throws(fun () > void !> str { final _ = percent("SF:other/a.js\nLF:2\nLH:1\nend_of_record\n", keep: "src/"); }, //nolint:no-throw // the test asserts the raise
         message: "empty selection errors");
 }

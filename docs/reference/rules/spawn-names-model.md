@@ -1,20 +1,20 @@
 ---
-title: "spawn-names-model: a main thread spawning a subagent without naming the model it runs on"
-description: "Off by default: once a workspace turns it on, it reports a main thread spawning a subagent without naming the model it runs on."
+title: "spawn-names-model: a spawn omitting its model, or (at deny) using a model outside its row's tier"
+description: "Off by default: once a workspace turns it on, it reports a spawn omitting its model, or (at deny) using a model outside its row's tier."
 tags: [guard, rules, spawn-names-model, off]
 ---
 
 # spawn-names-model
 
-Off by default: once a workspace turns it on, it reports a main thread spawning a subagent without naming the model it runs on.
+Off by default: once a workspace turns it on, it reports a spawn omitting its model, or (at deny) using a model outside its row's tier.
 
 ## What it catches
 
-A main thread spawning a subagent without naming the model it runs on.
+A spawn omitting its model, or (at deny) using a model outside its row's tier.
 
 ## Why
 
-A spawn that names no model runs the child on the session's own, usually the costliest it uses. At standard it advises once; at strict it refuses, and also refuses a spawn whose job row records a model tier when the spawn's model is not at that tier. The model resolves to a tier through the host's aliases in the workspace's model-tier declaration, and the two compare by rank; a host the declaration maps no model for is refused naming the hosts entry to add. The refusal names the row's tier, rank, alias, the source that chose it, its reason and the declaration's site. A spawn bound to no row, or to a row forked with no tiers declared, is judged on the missing model alone.
+Off by default; a workspace may set it to advise, deny or off. With advise, a missing model is advised once. With deny, a reported spawning thread is refused for a missing model, while an inferred caller is advised. At deny, a reported spawn bound to a tiered row is refused when its model does not resolve to that row's rank; an inferred mismatch is advised. A model recorded on the row remains accepted. Other models resolve through the host's alias for that tier or an exact mgs_listModels id or alias; a host without a tier alias is named for configuration. Without a bound tiered row, a named model is not compared.
 
 ## Default and override
 

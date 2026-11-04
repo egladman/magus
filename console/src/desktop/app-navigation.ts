@@ -7,7 +7,11 @@ export type AppNavigation = {
 const eventName = "console:open-app";
 const modeEventName = "console:app-mode";
 
-type ModeWindow = Window & { __magusConsoleModeIntent?: Record<string, string> };
+declare global {
+  interface Window {
+    __magusConsoleModeIntent?: Record<string, string>;
+  }
+}
 
 export function openApp(detail: AppNavigation): void {
   window.dispatchEvent(new CustomEvent<AppNavigation>(eventName, { detail }));
@@ -15,27 +19,31 @@ export function openApp(detail: AppNavigation): void {
 
 export function appNavigation(event: Event): AppNavigation | null {
   if (!(event instanceof CustomEvent)) return null;
-  const detail = event.detail;
-  if (!detail || typeof detail !== "object") return null;
-  const { pageId, mode } = detail as Partial<AppNavigation>;
+  return readNavigation(event.detail);
+}
+
+// readNavigation accepts an event detail only when it has the AppNavigation shape.
+function readNavigation(detail: unknown): AppNavigation | null {
+  if (!detail || typeof detail !== "object" || !("pageId" in detail)) return null;
+  const pageId = detail.pageId;
   if (typeof pageId !== "string") return null;
-  if (mode !== undefined && typeof mode !== "string") return null;
-  return { pageId, mode };
+  if (!("mode" in detail) || detail.mode === undefined) return { pageId };
+  const mode = detail.mode;
+  return typeof mode === "string" ? { pageId, mode } : null;
 }
 
 // requestMode is the shell's half. The intent waits on window because an app's bundle loads lazily
 // and has not mounted yet on the first request; the event reaches one that already has.
 export function requestMode(pageId: string, mode: string): void {
-  const win = window as ModeWindow;
-  win.__magusConsoleModeIntent = { ...win.__magusConsoleModeIntent, [pageId]: mode };
+  window.__magusConsoleModeIntent = { ...window.__magusConsoleModeIntent, [pageId]: mode };
   window.dispatchEvent(new CustomEvent(modeEventName, { detail: { pageId, mode } }));
 }
 
 // takeModeIntent is the app's half on mount: the mode asked for before it loaded, consumed once.
 export function takeModeIntent(pageId: string): string | null {
-  const win = window as ModeWindow;
-  const mode = win.__magusConsoleModeIntent?.[pageId];
-  if (win.__magusConsoleModeIntent) delete win.__magusConsoleModeIntent[pageId];
+  const intents = window.__magusConsoleModeIntent;
+  const mode = intents?.[pageId];
+  if (intents) delete intents[pageId];
   return mode ?? null;
 }
 
@@ -49,12 +57,13 @@ export function onModeRequest(
   window.addEventListener(
     modeEventName,
     (event) => {
-      const detail = (event as CustomEvent<{ pageId?: string; mode?: string }>).detail;
-      if (detail?.pageId !== pageId || typeof detail.mode !== "string") return;
+      if (!(event instanceof CustomEvent)) return;
+      const detail = readNavigation(event.detail);
+      if (detail?.pageId !== pageId || detail.mode === undefined) return;
       takeModeIntent(pageId);
       switchTo(detail.mode);
     },
-    { signal },
+    signal ? { signal } : {},
   );
 }
 

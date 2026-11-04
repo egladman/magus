@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
@@ -153,4 +158,74 @@ func TestJobGraphOpensAnotherCheckoutInItsOwnScope(t *testing.T) {
 	require.NotPanics(t, func() { graph.loadScoped(nil)(t.Context()) })
 	require.NotPanics(t, func() { graph.loadDomain(t.Context(), nil) })
 	assert.Equal(t, openedRoot{override: process, root: process}, magusOpened)
+}
+
+func TestPlanSVGsDrawWithoutARefusalAndRepeatByteForByte(t *testing.T) {
+	rows := []types.Job{{ID: "lead", Created: 1, State: types.StateRunning}}
+	for _, id := range []string{"a", "b"} {
+		rows = append(rows, types.Job{ID: id, Created: 2, State: types.StateExited, Parent: "lead"})
+	}
+	p := job.NewPlan(rows)
+	first, second := t.TempDir(), t.TempDir()
+
+	paths, err := writePlanSVGs(t.Context(), p, p.Figures(), first)
+	require.NoError(t, err)
+	again, err := writePlanSVGs(t.Context(), p, p.Figures(), second)
+	require.NoError(t, err)
+
+	require.Len(t, again, len(paths))
+	assert.Equal(t, filepath.Join(first, "plan.svg"), paths[0])
+	for i := range paths {
+		a, err := os.ReadFile(paths[i])
+		require.NoError(t, err)
+		b, err := os.ReadFile(again[i])
+		require.NoError(t, err)
+		assert.True(t, strings.HasPrefix(string(a), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg"), paths[i])
+		assert.Equal(t, string(a), string(b), paths[i])
+	}
+}
+
+type announcedLoadSuite struct {
+	suite.Suite
+	said     bytes.Buffer
+	previous *slog.Logger
+}
+
+func TestAnnouncedLoadSuite(t *testing.T) { suite.Run(t, new(announcedLoadSuite)) }
+
+func (s *announcedLoadSuite) SetupTest() {
+	s.previous = slog.Default()
+	s.said.Reset()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&s.said, nil)))
+}
+
+func (s *announcedLoadSuite) TearDownTest() { slog.SetDefault(s.previous) }
+
+func (s *announcedLoadSuite) TestSaysItIsLoadingBeforeTheLoadRuns() {
+	var before string
+	load := announcedLoad("the symbol graph", func(context.Context) (*knowledge.Graph, error) {
+		before = s.said.String()
+		return knowledge.NewGraph(), nil
+	})
+	_, err := load(s.T().Context())
+	s.Require().NoError(err)
+	s.Contains(before, "loading the symbol graph")
+	s.Contains(before, "can take minutes")
+	s.Contains(s.said.String(), "loaded the symbol graph in ")
+}
+
+func (s *announcedLoadSuite) TestSaysAFailureTheLazyGraphWouldSwallow() {
+	load := announcedLoad("the symbol graph", func(context.Context) (*knowledge.Graph, error) {
+		return nil, errors.New("index is corrupt")
+	})
+	_, err := load(s.T().Context())
+	s.Require().Error(err)
+	s.Contains(s.said.String(), "could not load the symbol graph after ")
+	s.Contains(s.said.String(), "index is corrupt")
+}
+
+func (s *announcedLoadSuite) TestProgressGoesToStderrUnlessQuiet() {
+	s.Equal(os.Stderr, progressWriter(s.T().Context()))
+	slog.SetDefault(slog.New(slog.NewTextHandler(&s.said, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	s.Equal(io.Discard, progressWriter(s.T().Context()))
 }

@@ -1,0 +1,7 @@
+// @expect: true
+// Comparing to a case, to null, a converted value or .value stays legal.
+enum<str> Decision { allow, deny }
+fun pick(s: str) > Decision? { return Decision(s); }
+final decision = Decision.deny;
+final maybe = pick("deny");
+final __r = decision == Decision.deny and decision.value == "deny" and maybe != null and maybe == Decision.deny and Decision("allow") == Decision.allow;

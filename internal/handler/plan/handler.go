@@ -32,7 +32,7 @@ type Source interface {
 // GET /api/v1/outputs serves, so a node's pass/fail and its ref come from the store the run
 // browser already reads and a deep-link resolves. Satisfied by *cache.OutputStore.
 type planOutputs interface {
-	ListDescriptors() []cache.OutputDescriptor
+	ListDescriptors() ([]cache.OutputDescriptor, error)
 }
 
 // The four states a plan node can be in. There is deliberately no QUEUED state: the pool
@@ -133,7 +133,11 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	index := indexPlanTargets(graph)
 
 	report := h.src.StatusSnapshot(r.Context())
-	descs := h.outputs.ListDescriptors()
+	descs, err := h.outputs.ListDescriptors()
+	if err != nil {
+		h.Fail(w, r, "plan outputs", err)
+		return
+	}
 
 	target, anchor, ok := h.resolveAnchor(r.URL.Query().Get("target"), index, report, descs)
 	if !ok {

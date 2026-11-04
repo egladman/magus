@@ -557,10 +557,10 @@ const file_magus_token_v1alpha1_token_proto_rawDesc = "" +
 	"\vexpire_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\n" +
 	"expireTime\x88\x01\x01\x121\n" +
 	"\x05grant\x18\x04 \x01(\v2\x1b.magus.token.v1alpha1.GrantR\x05grantB\x0e\n" +
-	"\f_expire_timeJ\x04\b\x02\x10\x03R\x05scope\"d\n" +
-	"\x13CreateTokenResponse\x125\n" +
-	"\x05token\x18\x01 \x01(\v2\x1f.magus.token.v1alpha1.TokenInfoR\x05token\x12\x16\n" +
-	"\x06secret\x18\x02 \x01(\tR\x06secret\"1\n" +
+	"\f_expire_timeJ\x04\b\x02\x10\x03R\x05scope\"n\n" +
+	"\x13CreateTokenResponse\x12:\n" +
+	"\x05token\x18\x01 \x01(\v2\x1f.magus.token.v1alpha1.TokenInfoB\x03\x80\x01\x01R\x05token\x12\x1b\n" +
+	"\x06secret\x18\x02 \x01(\tB\x03\x80\x01\x01R\x06secret\"1\n" +
 	"\x12RevokeTokenRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name*?\n" +
 	"\x05Level\x12\x15\n" +

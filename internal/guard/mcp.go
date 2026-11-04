@@ -228,13 +228,20 @@ type clientReader struct {
 // judgedMembers are the magus members whose calls a rule reads. Any of them reached
 // other than by a direct call, stored or passed as a value, could be called with
 // anything, so that use reads as an unread script.
-var judgedMembers = map[string]bool{"run": true, "cmd": true, "job": true}
+var judgedMembers = map[string]bool{"run": true, "cmd": true, "job": true, "workspace": true}
 
 func (r *clientReader) visit(n ast.Node) bool {
 	switch e := n.(type) {
 	case *ast.CallExpr:
 		if member, ok := r.magusMember(e.Callee); ok {
 			r.call(member, e)
+			if method, ok := e.Callee.(*ast.MemberExpr); ok {
+				if recv, ok := method.Object.(*ast.CallExpr); ok {
+					for _, arg := range recv.Args {
+						ast.Inspect(arg, r.visit)
+					}
+				}
+			}
 			for _, a := range e.Args {
 				ast.Inspect(a, r.visit)
 			}
@@ -269,6 +276,9 @@ func (r *clientReader) magusMember(n ast.Node) ([]string, bool) {
 			path = append([]string{e.Name}, path...)
 			n = e.Object
 			continue
+		case *ast.CallExpr:
+			n = e.Callee
+			continue
 		case *ast.IdentExpr:
 			if r.bound[e.Name] {
 				return path, true
@@ -285,6 +295,8 @@ func (r *clientReader) magusMember(n ast.Node) ([]string, bool) {
 // job itself when the module's members are imported unprefixed.
 func (r *clientReader) namesObject(n ast.Node) bool {
 	switch e := n.(type) {
+	case *ast.CallExpr:
+		return r.namesObject(e.Callee)
 	case *ast.MemberExpr:
 		return e.Namespaced
 	case *ast.IdentExpr:
@@ -303,21 +315,34 @@ func (r *clientReader) call(member []string, c *ast.CallExpr) {
 		sub, subOK := literalString(clientArg(c, 0, "sub"))
 		argv, ok := literalStrings(clientArg(c, 1, "args"))
 		r.magusLine(append([]string{sub}, argv...), subOK && ok)
-	case `job\put`:
-		r.jobLine(jobOpPut, c, clientArg(c, 1, "opts"))
+	case `workspace\putJob`:
+		r.jobLine(jobOpPut, clientArg(c, 0, "id"), clientArg(c, 1, "opts"))
 	case `job\register`:
-		r.jobLine(jobOpRegister, c, nil)
-	case `job\clear`:
+		r.jobLine(jobOpRegister, receiverID(c), nil)
+	case `workspace\clearJobs`:
 		r.lines = append(r.lines, fmt.Sprintf("%s op=%s", hint.ToolClient.String(), jobOpClear))
 	case `job\wait`:
-		id, _ := literalString(clientArg(c, 0, "id"))
+		id, _ := literalString(receiverID(c))
 		r.lines = append(r.lines, hint.JobWait.WithAs("magus", quoteValue(orUnread(id))))
 	case `job\exit`:
-		id, _ := literalString(clientArg(c, 0, "id"))
+		id, _ := literalString(receiverID(c))
 		r.lines = append(r.lines, hint.JobExit.WithAs("magus", quoteValue(orUnread(id))))
-	case "job":
+	case "job", "workspace":
 		r.lines = append(r.lines, strings.Split(unreadClientCall(), "\n")...)
 	}
+}
+
+// receiverID is the id in magus\job(id).method(...), rather than a method argument.
+func receiverID(c *ast.CallExpr) ast.Node {
+	method, ok := c.Callee.(*ast.MemberExpr)
+	if !ok {
+		return nil
+	}
+	recv, ok := method.Object.(*ast.CallExpr)
+	if !ok {
+		return nil
+	}
+	return clientArg(recv, 0, "id")
 }
 
 // magusLine renders a nested magus invocation a rule reads: a target run, which the gate
@@ -339,8 +364,8 @@ func (r *clientReader) magusLine(argv []string, literal bool) {
 // jobLine renders a magus\job write as its op, its id and every key opts names.
 // Every key, not a list of the ones a rule reads: a key the rendering drops reaches
 // the row with no rule having seen it.
-func (r *clientReader) jobLine(op string, c *ast.CallExpr, opts ast.Node) {
-	id, _ := literalString(clientArg(c, 0, "id"))
+func (r *clientReader) jobLine(op string, idNode, opts ast.Node) {
+	id, _ := literalString(idNode)
 	out := []string{hint.ToolClient.String(), "op=" + op, "id=" + quoteValue(orUnread(id))}
 	if opts != nil {
 		m, ok := opts.(*ast.MapExpr)

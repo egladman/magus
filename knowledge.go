@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"go/build"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -51,17 +52,17 @@ import (
 // workspacegraph cannot import this package, so the builders are registered from here.
 func init() { //nolint:gochecknoinits // workspacegraph cannot import this package, so the builders register from here
 	workspacegraph.Register(workspacegraph.Builders{
-		BuildGlobal:          buildGlobalKnowledgeGraph,
-		Build:                buildKnowledgeGraph,
-		MergeSymbols:         mergeWorkspaceSymbols,
-		MergeSymbolsForRef:   mergeWorkspaceSymbolsForRef,
-		Query:                queryKnowledgeGraph,
-		SymbolGaps:           workspaceSymbolGaps,
-		SymbolIndexTimes:     workspaceSymbolIndexTimes,
-		SymbolOccurrences:    workspaceSymbolOccurrences,
-		RecordedHumanOnly:    readRecordedHumanOnly,
-		RecordedStaleIndexes: readRecordedStaleIndexes,
-		UsePublishedShards:   usePublishedShards,
+		BuildGlobal:            buildGlobalKnowledgeGraph,
+		Build:                  buildKnowledgeGraph,
+		MergeSymbols:           mergeWorkspaceSymbols,
+		MergeSymbolsForRef:     mergeWorkspaceSymbolsForRef,
+		Query:                  queryKnowledgeGraph,
+		SymbolGaps:             workspaceSymbolGaps,
+		SymbolIndexTimes:       workspaceSymbolIndexTimes,
+		SymbolOccurrences:      workspaceSymbolOccurrences,
+		RecordedTargetPolicies: readRecordedTargetPolicies,
+		RecordedStaleIndexes:   readRecordedStaleIndexes,
+		UsePublishedShards:     usePublishedShards,
 		ReaderContext: func(ctx context.Context, _ types.Inspector, root string) ([]string, error) {
 			paths := map[string]bool{}
 			res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
@@ -109,14 +110,14 @@ func init() { //nolint:gochecknoinits // workspacegraph cannot import this packa
 	})
 }
 
-// readRecordedHumanOnly is recordedHumanOnly for a ws that may be no lazy workspace, which
+// readRecordedTargetPolicies is recordedTargetPolicies for a ws that may be no lazy workspace, which
 // has no record to answer from.
-func readRecordedHumanOnly(ctx context.Context, ws types.Inspector, cfg config.Config) (types.HumanOnlyIndex, bool) {
+func readRecordedTargetPolicies(ctx context.Context, ws types.Inspector, cfg config.Config) (types.TargetPolicyIndex, bool) {
 	lw, ok := ws.(*LazyWorkspace)
 	if !ok {
-		return types.HumanOnlyIndex{}, false
+		return types.TargetPolicyIndex{}, false
 	}
-	return recordedHumanOnly(ctx, lw, cfg)
+	return recordedTargetPolicies(ctx, lw, cfg)
 }
 
 // readRecordedStaleIndexes is recordedStaleIndexes for a ws that may be no lazy workspace.
@@ -330,7 +331,7 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 			}
 			model = knowledgeSources{
 				cfg: cfg, root: root, cacheDir: cacheDir,
-				spells: spells, graph: graph, projects: projects, humanOnly: humanOnlyIndexBehind(ctx, ws),
+				spells: spells, graph: graph, projects: projects, targetPolicies: targetPolicyIndexBehind(ctx, ws),
 				tree: tree, log: log.With(attr.Component("knowledge")),
 			}
 		})
@@ -358,12 +359,12 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 			}
 			return symbolIndexDeclarationRecords(ctx, src.symbolInputs(), indexFreshness(ctx, ws)), nil
 		},
-		HumanOnlyFunc: func(ctx context.Context) (types.HumanOnlyIndex, error) {
+		TargetPoliciesFunc: func(ctx context.Context) (types.TargetPolicyIndex, error) {
 			src, err := resolveModel(ctx)
 			if err != nil {
-				return types.HumanOnlyIndex{}, err
+				return types.TargetPolicyIndex{}, err
 			}
-			return src.humanOnly, nil
+			return src.targetPolicies, nil
 		},
 		ReadsFunc: func(ctx context.Context) (readlog.Reads, error) {
 			if _, err := resolveModel(ctx); err != nil {
@@ -381,7 +382,7 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 		}
 		in := gatherKnowledgeInputs(ctx, src, refresh, stale)
 		in.Indexes = symbolIndexDeclarationRecords(ctx, src.symbolInputs(), indexFreshness(ctx, ws))
-		in.HumanOnly = src.humanOnly
+		in.TargetPolicies = src.targetPolicies
 		if reads, ok := evaluationReads(ctx, ws); ok {
 			in.Reads = &reads
 		}
@@ -463,6 +464,55 @@ func symbolIndexDeclarationRecords(ctx context.Context, in symbolIngestInputs, f
 		}
 		out = append(out, rec)
 	}
+	return append(out, unindexedLanguages(in, decls, dirByPath)...)
+}
+
+// unindexedLanguages records each language a project's bound spells name that none of
+// its symbol indexes covers, with no Path or Op: there is no index to build or read, and
+// a lookup that comes back empty says so instead of reading as absent. A project with a
+// knowledge.symbols entry is left out, since its entries are its whole index set.
+func unindexedLanguages(in symbolIngestInputs, decls []resolvedSymbolIndex, dirByPath map[string]string) []knowledge.SymbolIndexDeclaration {
+	langBySpell := map[string]string{}
+	// The gap of a language whose spell declares an external indexer the workspace has
+	// not opted in names the setting that runs it.
+	hintBySpell := map[string]string{}
+	for _, sp := range in.spells {
+		switch {
+		case sp.SymbolFormat == "":
+			langBySpell[sp.Name] = sp.Language
+		case !in.cfg.Spells.RunsSymbolIndexer(sp.Name, spellIndexer(sp.Name)):
+			langBySpell[sp.Name] = sp.Language
+			if si := spellIndexer(sp.Name); si != nil {
+				hintBySpell[sp.Name] = symbols.OptInHint(sp.Language, sp.Name, si.Command.Bin)
+			}
+		}
+	}
+	type projectLanguage struct{ project, language string }
+	covered := map[projectLanguage]bool{}
+	for _, d := range decls {
+		covered[projectLanguage{d.project, d.language}] = true
+	}
+	overridden := map[string]bool{}
+	for _, decl := range in.cfg.Knowledge.Symbols {
+		if decl.Project != "" && decl.Index != "" {
+			overridden[decl.Project] = true
+		}
+	}
+	var out []knowledge.SymbolIndexDeclaration
+	for _, p := range in.projects.Projects {
+		bound := p.Spells
+		if len(bound) == 0 && p.Spell != "" {
+			bound = []string{p.Spell}
+		}
+		for _, name := range bound {
+			key := projectLanguage{p.Path, langBySpell[name]}
+			if key.language == "" || covered[key] || overridden[p.Path] {
+				continue
+			}
+			covered[key] = true
+			out = append(out, knowledge.SymbolIndexDeclaration{Project: p.Path, Dir: dirByPath[p.Path], Language: key.language, Detail: hintBySpell[name]})
+		}
+	}
 	return out
 }
 
@@ -521,11 +571,11 @@ type knowledgeSources struct {
 	spells   []types.Spell
 	graph    types.TargetGraphOutput
 	projects types.ProjectsOutput
-	// humanOnly is what the evaluation declares human_only. The graph and projects above
+	// targetPolicies is what the evaluation declares as target policy. The graph and projects above
 	// carry no target policy, so the domain stamp folds it on its own.
-	humanOnly types.HumanOnlyIndex
-	tree      *knowledge.TreeWalk // nil when there is no root to walk
-	log       *slog.Logger
+	targetPolicies types.TargetPolicyIndex
+	tree           *knowledge.TreeWalk // nil when there is no root to walk
+	log            *slog.Logger
 }
 
 func (s knowledgeSources) symbolInputs() symbolIngestInputs {
@@ -555,8 +605,10 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 	if needs(knowledge.ClassDomain) {
 		cfg := src.cfg
 		in.Modules = allModuleEntries()
-		in.Diagnostics = types.AllDiagnosticCodes()
+		in.Diagnostics = append(types.AllDiagnosticCodes(), workspaceDiagnosticCodes(src.root, cfg.Diagnostics)...)
+		in.DiagnosticDocs = cfg.Diagnostics.Resolver()
 		in.Packages = loadKnowledgePackages(ctx, src.projects, src.log)
+		in.ManifestFiles = knowledge.ManifestFiles(src.projects)
 		in.VCSAuthorship = cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship
 		in.DeclaredSpells = declaredSpellSet(src.projects)
 		in.NotesPath = cfg.Knowledge.Notes.Shared
@@ -576,11 +628,36 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 	}
 	if needs(knowledge.ClassCoverage) {
 		in.Coverage = loadKnowledgeCoverage(src.root)
+		in.CoverageGaps = rootModuleGaps(src.root, knowledge.CoverageGaps(in.Coverage, in.Symbols))
 	}
 	if needs(knowledge.ClassSession) {
 		in.AgentContacts = loadKnowledgeAgentContacts(src.root)
 	}
 	return in
+}
+
+// workspaceDiagnosticCodes are the codes the pages diagnostics.docs names inside the
+// workspace document, sorted, none when docs is a URL or names no page. A page that is not a
+// code under the prefix is doctor's to report, not a node.
+func workspaceDiagnosticCodes(root string, d config.Diagnostics) []types.DiagnosticCode {
+	if root == "" || d.Prefix == "" || d.Docs == "" || strings.Contains(d.Docs, "://") {
+		return nil
+	}
+	pattern := filepath.Join(root, filepath.FromSlash(strings.ReplaceAll(d.Docs, "{code}", "*")))
+	pages, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil
+	}
+	before, after, _ := strings.Cut(filepath.Base(pattern), "*")
+	var codes []types.DiagnosticCode
+	for _, page := range pages {
+		text := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(page), before), after)
+		if c, err := types.WorkspaceDiagnosticCode(d.Prefix, text); err == nil {
+			codes = append(codes, c)
+		}
+	}
+	slices.Sort(codes)
+	return codes
 }
 
 // symbolSourcesOutside lists the defining files the symbols read that the tree walk did
@@ -639,11 +716,11 @@ func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge
 	if wants(knowledge.ClassDomain) {
 		ignoreSources, ignoreKnown = vcsIgnoreSources(ctx, src.root)
 	}
-	humanOnly, humanOnlyErr := json.Marshal(src.humanOnly)
+	targetPolicies, humanOnlyErr := json.Marshal(src.targetPolicies)
 	if wants(knowledge.ClassDomain) && historyKnown && ignoreKnown && humanOnlyErr == nil {
 		h := knowledge.NewInputHash(string(knowledge.ClassDomain))
 		h.String(base)
-		h.String(string(humanOnly))
+		h.String(string(targetPolicies))
 		h.String(tree)
 		h.String(vcsHead)
 		for _, p := range ignoreSources {
@@ -1062,6 +1139,36 @@ func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
 	return knowledge.ParseCoverage(profile, module)
 }
 
+// rootModuleGaps drops directories a native run cannot profile: nested
+// modules and platform-only packages such as cmd/buzz-playground.
+func rootModuleGaps(root string, dirs []string) []string {
+	var kept []string
+	for _, dir := range dirs {
+		if !inNestedModule(root, dir) && !excludedOnThisPlatform(root, dir) {
+			kept = append(kept, dir)
+		}
+	}
+	return kept
+}
+
+// excludedOnThisPlatform reports a directory whose Go files all fail the
+// build constraints here. An absent directory stays a gap.
+func excludedOnThisPlatform(root, dir string) bool {
+	_, err := build.Default.ImportDir(filepath.Join(root, filepath.FromSlash(dir)), 0)
+	var noGo *build.NoGoError
+	return errors.As(err, &noGo)
+}
+
+// inNestedModule reports a go.mod at dir or between dir and root.
+func inNestedModule(root, dir string) bool {
+	for d := dir; d != "." && d != "/" && d != ""; d = filepath.Dir(d) {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(d), "go.mod")); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // loadKnowledgeAgentContacts reads the per-repo session store for the agent events
 // `magus session load` folded into it, reduced to the path contacts the @session overlay
 // counts. It resolves the store through sessions.Dir, the same repo-identity keying
@@ -1308,13 +1415,14 @@ func newSymbolIndexCache(in symbolIngestInputs, decl resolvedSymbolIndex) symbol
 // that one decode, writing them for the next reader: whichever of the parse or the
 // occurrences a process needs first, it never decodes the index a second time for the other.
 func decodeSymbolIndex(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex, c symbolIndexCache) ([]types.KnowledgeSymbol, map[string]symbols.KeyOccurrences, error) {
-	data, err := os.ReadFile(decl.path)
+	// An index a knowledge.symbols entry names (no op) is the user's own SCIP build output;
+	// an indexer op writes a pack.
+	idx, err := symbols.ReadIndex(decl.path, decl.op != "")
+	if errors.Is(err, symbols.ErrIndexFormat) {
+		return nil, nil, symbolDecodeError{err}
+	}
 	if err != nil {
 		return nil, nil, err
-	}
-	idx, err := symbols.DecodeIndex(data)
-	if err != nil {
-		return nil, nil, symbolDecodeError{err}
 	}
 	syms := symbols.ParseDecoded(ctx, idx, decl.project, decl.language)
 	occ, err := symbols.IndexOccurrences(ctx, idx, decl.project)
@@ -1601,8 +1709,13 @@ func symbolsOccurrences(ctx context.Context, in symbolIngestInputs, keys []strin
 	// one project is referenced from others, and a rewrite that stopped at the definition's
 	// own index would leave every cross-project call site untouched.
 	reads := make(map[string]SymbolOccurrenceRead, len(keys))
-	for _, key := range keys {
-		reads[key] = SymbolOccurrenceRead{}
+	// A platform twin's sites are its base key's: the index names the key, not the file.
+	asked := keys
+	keys = make([]string, 0, len(asked))
+	for _, key := range asked {
+		if base := symbols.TwinBase(key); !slices.Contains(keys, base) {
+			keys = append(keys, base)
+		}
 	}
 	for _, decl := range symbolIndexDeclarations(ctx, in) {
 		if ctx.Err() != nil {
@@ -1676,7 +1789,11 @@ func symbolsOccurrences(ctx context.Context, in symbolIngestInputs, keys []strin
 		read.Unreadable = slices.Clone(unreadable)
 		reads[key] = read
 	}
-	return reads
+	out := make(map[string]SymbolOccurrenceRead, len(asked))
+	for _, key := range asked {
+		out[key] = reads[symbols.TwinBase(key)]
+	}
+	return out
 }
 
 // mergeOccurrenceFiles folds entries sharing a path into one, concatenating and re-sorting
@@ -1727,10 +1844,20 @@ func indexerInstalled(ctx context.Context) func(bin string) bool {
 // probeSymbolIndexes is the probe itself, over declarations however they were resolved: one Stat
 // per declared index, and a gap for each that is not a readable file. installed answers
 // whether a missing index's indexer could have built it, so the gap carries the install
-// as its fix.
+// as its fix. A declaration with no Path is a language nothing indexes, always a gap.
 func probeSymbolIndexes(decls []knowledge.SymbolIndexDeclaration, installed func(bin string) bool) []types.KnowledgeSymbolGap {
 	out := make([]types.KnowledgeSymbolGap, 0, len(decls))
 	for _, decl := range decls {
+		if decl.Path == "" {
+			out = append(out, types.KnowledgeSymbolGap{
+				Project:     types.NewProjectRef(decl.Project, decl.Dir),
+				Language:    decl.Language,
+				State:       types.SymbolIndexNotBuilt,
+				Detail:      cmp.Or(decl.Detail, "has no indexer"),
+				Unindexable: true,
+			})
+			continue
+		}
 		// Detail carries what Stat can actually distinguish: absent, or present but
 		// unreadable. State stays the machine-branchable field and is accurate for both,
 		// since neither yields a usable index.
@@ -1772,6 +1899,31 @@ func (m *Magus) SymbolOccurrences(ctx context.Context, key string) (SymbolOccurr
 // indexes. Every key has an entry in the result, empty when nothing names it.
 func (m *Magus) SymbolsOccurrences(ctx context.Context, keys []string) (map[string]SymbolOccurrenceRead, bool) {
 	return workspaceSymbolsOccurrences(ctx, m, m.Root(), m.cfg, slog.Default(), keys)
+}
+
+// ExportSCIP writes every symbol index the workspace declares to w as one SCIP protobuf
+// index rooted at the workspace, for code-intelligence tools that read SCIP. It reads the
+// indexes as they stand and builds none: an index not built yet fails the export, naming
+// its project, and `magus graph build` builds it. A language nothing indexes has no index
+// to export and is left out.
+func (m *Magus) ExportSCIP(ctx context.Context, w io.Writer) error {
+	spells, err := ListSpells(ctx)
+	if err != nil {
+		return err
+	}
+	projects, err := m.ListProjects(ctx)
+	if err != nil {
+		return err
+	}
+	decls := symbolIndexDeclarations(ctx, symbolIngestInputs{
+		cfg: m.cfg, root: m.Root(), cacheDir: resolveCacheDir(m.Root(), m.cfg),
+		projects: projects, spells: spells, log: slog.Default(),
+	})
+	indexes := make([]symbols.ProjectIndex, 0, len(decls))
+	for _, decl := range decls {
+		indexes = append(indexes, symbols.ProjectIndex{Project: decl.project, Path: decl.path, Pack: decl.op != ""})
+	}
+	return symbols.ExportSCIP(w, m.Root(), indexes)
 }
 
 // resolvedSymbolIndex pairs a project with the absolute path of its SCIP index and the
@@ -1856,7 +2008,7 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 			bound = []string{p.Spell}
 		}
 		for _, name := range bound {
-			if !capable[name] {
+			if !capable[name] || !in.cfg.Spells.RunsSymbolIndexer(name, spellIndexer(name)) {
 				continue
 			}
 			indexer := spellIndexer(name)
@@ -2310,10 +2462,10 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 // refresh) by a cache-first rebuild. It is always fresh, since the warm graph is served
 // only while a watcher can invalidate it.
 //
-// With symbols (magus\query on symbols, magus\refs) it builds cache-first into a FRESH
-// graph and merges the @symbols shards into it, so the warm graph the other MCP tools
-// answer from is never polluted with a workspace's (potentially huge) symbol set. A scope
-// that targets one symbol merges only the shards that mention it.
+// With symbols, as magus\graph().refs asks, it builds a FRESH graph.
+// It merges the @symbols shards into that one.
+// So the warm graph other MCP tools read never holds a huge symbol set.
+// A scope that targets one symbol merges only the shards that mention it.
 func (m *Magus) knowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	if !req.Symbols.Loaded() {
 		return m.warmKnowledgeGraph().Get(ctx, req.Refresh)

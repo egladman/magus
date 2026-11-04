@@ -9,4 +9,5 @@ export object SandboxCache {
     env: str = "",
     stampsUse: bool = false,
     skip: [str] = [],
+    trimMb: int = 0,
 }

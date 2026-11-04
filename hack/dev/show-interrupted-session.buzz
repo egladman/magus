@@ -18,6 +18,7 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
+import "result";
 import "std";
 import "vcs";
 
@@ -53,14 +54,20 @@ export object Checkout {
 
 // pick chooses the session to show from `magus session ls -o json`: the one with id, else
 // the newest of host (any host when ""), whose checkout is one of trees but not here.
-export fun pick(listing: str, trees: [str], here: str, host: str, id: str) > Session? !> any {
+export fun pick(listing: str, trees: [str], here: str, host: str, id: str) > result\Result::<Session> {
     var best: Session? = null;
     var bestAt = "";
-    foreach (c in json\parse(listing)["checkpoints"] ?? []) {
+    var doc: any = null;
+    try {
+        doc = json\parse(listing);
+    } catch (err: any) {
+        return result\caught::<Session>(err, doing: "show-interrupted-session: the session listing is not JSON");
+    }
+    foreach (c in doc["checkpoints"] ?? []) {
         final s = Session{ host = c["host"] ?? "", id = c["host_session"] ?? "", transcript = c["transcript"] ?? "", workspace = c["workspace"] ?? "" };
         if (id != "") {
             if (s.id == id) {
-                return s;
+                return result\ok::<Session>(s);
             }
             continue;
         }
@@ -73,7 +80,15 @@ export fun pick(listing: str, trees: [str], here: str, host: str, id: str) > Ses
             bestAt = at;
         }
     }
-    return best;
+    return result\ok::<Session>(best);
+}
+
+fun parseRecord(line: str) > result\Result::<any> {
+    try {
+        return result\ok::<any>(json\parse(line));
+    } catch (err: any) {
+        return result\caught::<any>(err, doing: "show-interrupted-session: a transcript line is not JSON");
+    }
 }
 
 fun contentText(content: any) > str {
@@ -99,13 +114,17 @@ fun takeLast(items: [str], n: int) > [str] {
 
 // readClaude reads a Claude Code transcript. A usage limit or API failure ends it with a
 // synthetic assistant record carrying isApiErrorMessage and the HTTP status.
-export fun readClaude(lines: [str]) > Transcript !> any {
+export fun readClaude(lines: [str]) > result\Result::<Transcript> {
     var cwd = "";
     final asks = mut [<str>];
     final replies = mut [<str>];
     var ending = "no ending recorded: the transcript stops mid-session";
     foreach (line in lines) {
-        final rec = json\parse(line);
+        final record = parseRecord(line);
+        if (record.error != null) {
+            return result\Result::<Transcript>{ error = record.error };
+        }
+        final rec = record.value!;
         if (cwd == "" and rec["cwd"] != null) {
             cwd = rec["cwd"];
         }
@@ -124,18 +143,22 @@ export fun readClaude(lines: [str]) > Transcript !> any {
             ending = "the last record is the agent's message: it may have been waiting on the person";
         }
     }
-    return Transcript{ cwd = cwd, asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending };
+    return result\ok::<Transcript>(Transcript{ cwd = cwd, asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending });
 }
 
 // readCodex reads a Codex rollout. A task ends with task_complete, whose error says why it
 // stopped early, and an error event can come before it.
-export fun readCodex(lines: [str]) > Transcript !> any {
+export fun readCodex(lines: [str]) > result\Result::<Transcript> {
     var cwd = "";
     final asks = mut [<str>];
     final replies = mut [<str>];
     var ending = "no ending recorded: the rollout stops mid-task";
     foreach (line in lines) {
-        final rec = json\parse(line);
+        final record = parseRecord(line);
+        if (record.error != null) {
+            return result\Result::<Transcript>{ error = record.error };
+        }
+        final rec = record.value!;
         final p = rec["payload"];
         if (p == null) {
             continue;
@@ -164,17 +187,21 @@ export fun readCodex(lines: [str]) > Transcript !> any {
             }
         }
     }
-    return Transcript{ cwd = cwd, asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending };
+    return result\ok::<Transcript>(Transcript{ cwd = cwd, asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending });
 }
 
 // readCursor reads a Cursor agent transcript, which records roles and text but no ending
 // and no working directory: the checkout comes from the session's record.
-export fun readCursor(lines: [str]) > Transcript !> any {
+export fun readCursor(lines: [str]) > result\Result::<Transcript> {
     final asks = mut [<str>];
     final replies = mut [<str>];
     var ending = "no ending recorded";
     foreach (line in lines) {
-        final rec = json\parse(line);
+        final record = parseRecord(line);
+        if (record.error != null) {
+            return result\Result::<Transcript>{ error = record.error };
+        }
+        final rec = record.value!;
         final text = contentText(rec["message"]?["content"]);
         if (text == "") {
             continue;
@@ -187,11 +214,16 @@ export fun readCursor(lines: [str]) > Transcript !> any {
             ending = "the last record is the agent's message";
         }
     }
-    return Transcript{ asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending };
+    return result\ok::<Transcript>(Transcript{ asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending });
 }
 
-export fun readTranscript(host: str, file: str) > Transcript !> any {
-    final lines = fs\readLines(file);
+export fun readTranscript(host: str, file: str) > result\Result::<Transcript> {
+    var lines = [<str>];
+    try {
+        lines = fs\readLines(file);
+    } catch (err: any) {
+        return result\caught::<Transcript>(err, doing: "show-interrupted-session: read {file}");
+    }
     if (host == "codex") {
         return readCodex(lines);
     }
@@ -201,27 +233,44 @@ export fun readTranscript(host: str, file: str) > Transcript !> any {
     return readClaude(lines);
 }
 
-fun git(dir: str, args: [str]) > [str] !> any {
+fun git(dir: str, args: [str]) > result\Result::<[str]> {
     final kept = mut [<str>];
-    foreach (line in vcs\cmd(args, opts: {"dir": dir, "quiet": true}).stdout.split("\n")) {
-        if (line.trim() != "") {
-            kept.append(line);
+    try {
+        foreach (line in vcs\cmd(args, opts: vcs\CommandOptions{ dir = dir, quiet = true }).stdout.split("\n")) {
+            if (line.trim() != "") {
+                kept.append(line);
+            }
         }
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "show-interrupted-session: git {args.join(" ")} in {dir}");
     }
-    return kept;
+    return result\ok::<[str]>(kept);
 }
 
 // checkoutState reads a checkout without writing to it.
-export fun checkoutState(path: str) > Checkout !> any {
-    if (!fs\isDir(path)) {
-        return Checkout{ path = path, dirty = [<str>], unpushed = [<str>], gone = true };
+export fun checkoutState(path: str) > result\Result::<Checkout> {
+    var present = false;
+    try {
+        present = fs\isDir(path);
+    } catch (err: any) {
+        return result\caught::<Checkout>(err, doing: "show-interrupted-session: stat {path}");
     }
-    return Checkout{
-        path = path,
-        branch = git(path, args: ["rev-parse", "--abbrev-ref", "HEAD"]).join(""),
-        dirty = git(path, args: ["--no-optional-locks", "status", "--porcelain"]),
-        unpushed = git(path, args: ["log", "--oneline", "-20", "HEAD", "--not", "--remotes"]),
-    };
+    if (!present) {
+        return result\ok::<Checkout>(Checkout{ path = path, dirty = [<str>], unpushed = [<str>], gone = true });
+    }
+    final branch = git(path, args: ["rev-parse", "--abbrev-ref", "HEAD"]);
+    if (branch.error != null) {
+        return result\Result::<Checkout>{ error = branch.error };
+    }
+    final dirty = git(path, args: ["--no-optional-locks", "status", "--porcelain"]);
+    if (dirty.error != null) {
+        return result\Result::<Checkout>{ error = dirty.error };
+    }
+    final unpushed = git(path, args: ["log", "--oneline", "-20", "HEAD", "--not", "--remotes"]);
+    if (unpushed.error != null) {
+        return result\Result::<Checkout>{ error = unpushed.error };
+    }
+    return result\ok::<Checkout>(Checkout{ path = path, branch = branch.value!.join(""), dirty = dirty.value!, unpushed = unpushed.value! });
 }
 
 // handoff is what a person runs to carry the checkout's work here. It is printed, never
@@ -250,21 +299,43 @@ export object Report {
 }
 
 // show finds the session and reads its transcript and checkout.
-export fun show(host: str, id: str) > Report !> any {
+export fun show(host: str, id: str) > result\Result::<Report> {
     final trees = mut [<str>];
-    foreach (line in git(vcs\root(), args: ["worktree", "list", "--porcelain"])) {
+    var root = "";
+    var listing = "";
+    try {
+        root = vcs\root();
+        listing = magus\cmd("session", args: ["ls", "-o", "json"], opts: magus\CommandOptions{ quiet = true }).stdout;
+    } catch (err: any) {
+        return result\caught::<Report>(err, doing: "show-interrupted-session: list the sessions");
+    }
+    final worktrees = git(root, args: ["worktree", "list", "--porcelain"]);
+    if (worktrees.error != null) {
+        return result\Result::<Report>{ error = worktrees.error };
+    }
+    foreach (line in worktrees.value!) {
         if (line.startsWith("worktree ")) {
             trees.append(line.sub(9));
         }
     }
-    final listing = magus\cmd("session", args: ["ls", "-o", "json"], opts: {"quiet": true}).stdout;
-    final s = pick(listing, trees: trees, here: vcs\root(), host: host, id: id);
+    final picked = pick(listing, trees: trees, here: root, host: host, id: id);
+    if (picked.error != null) {
+        return result\Result::<Report>{ error = picked.error };
+    }
+    final s = picked.value;
     if (s == null) {
-        throw "show-interrupted-session: no recorded session matches; `magus session ls` lists them, and a host is recorded only where its hooks are wired (`magus describe harness`)";
+        return result\fail::<Report>("show-interrupted-session: no recorded session matches; `magus session ls` lists them, and a host is recorded only where its hooks are wired (`magus describe harness`)");
     }
     final t = readTranscript(s!.host, file: s!.transcript);
-    final dir = if (s!.workspace != "") s!.workspace else t.cwd;
-    return Report{ session = s!, transcript = t, checkout = checkoutState(dir) };
+    if (t.error != null) {
+        return result\Result::<Report>{ error = t.error };
+    }
+    final dir = if (s!.workspace != "") s!.workspace else t.value!.cwd;
+    final checkout = checkoutState(dir);
+    if (checkout.error != null) {
+        return result\Result::<Report>{ error = checkout.error };
+    }
+    return result\ok::<Report>(Report{ session = s!, transcript = t.value!, checkout = checkout.value! });
 }
 
 export fun render(r: Report) > [str] {
@@ -303,13 +374,17 @@ export fun main(args: [str]) > void !> any {
     if (host != "" and host != "claude-code" and host != "codex" and host != "cursor") {
         throw "show-interrupted-session: --host takes claude-code, codex or cursor\n{USAGE}";
     }
-    foreach (line in render(show(host, id: parsed.values["--session"] ?? ""))) {
+    final shown = show(host, id: parsed.values["--session"] ?? "");
+    if (shown.error != null) {
+        throw shown.error!.message;
+    }
+    foreach (line in render(shown.value!)) {
         std\print(line);
     }
 }
 
 test "a Claude Code transcript that hit its usage limit ends on the synthetic 429 record" {
-    final t = readTranscript("claude-code", file: "hack/testdata/claude-usage-limit.jsonl");
+    final t = readTranscript("claude-code", file: "hack/testdata/claude-usage-limit.jsonl").value!;
     assert\equal(t.cwd, want: "/work/repo/.claude/worktrees/topic", message: "cwd");
     assert\equal(t.asks, want: ["Add a --dirty flag to the worktree listing.", "Also list clean worktrees."], message: "asks");
     assert\equal(t.replies, want: ["I will add the flag and a test for it.", "Clean ones stay in the list; the flag filters them out."], message: "replies");
@@ -317,7 +392,7 @@ test "a Claude Code transcript that hit its usage limit ends on the synthetic 42
 }
 
 test "a Codex rollout that hit its usage limit ends on task_complete's error" {
-    final t = readTranscript("codex", file: "hack/testdata/codex-usage-limit.jsonl");
+    final t = readTranscript("codex", file: "hack/testdata/codex-usage-limit.jsonl").value!;
     assert\equal(t.cwd, want: "/work/repo/.claude/worktrees/codex-topic", message: "cwd");
     assert\equal(t.asks, want: ["Make the refusal name its rule."], message: "asks leave out the environment context");
     assert\equal(t.replies, want: ["The rule name is already on the verdict; I will append it to the text."], message: "replies");
@@ -325,7 +400,7 @@ test "a Codex rollout that hit its usage limit ends on task_complete's error" {
 }
 
 test "a Cursor transcript records asks and replies but no ending" {
-    final t = readTranscript("cursor", file: "hack/testdata/cursor-session.jsonl");
+    final t = readTranscript("cursor", file: "hack/testdata/cursor-session.jsonl").value!;
     assert\equal(t.asks, want: ["Run the guard tests and fix what fails.", "Only the guard package."], message: "asks");
     assert\equal(t.replies[t.replies.len() - 1], want: "Narrowing to the guard package with -run.", message: "last reply");
     assert\equal(t.ending, want: "the last record is the agent's message", message: "ending");
@@ -340,9 +415,9 @@ test "the default session is the newest in another worktree of this repository" 
     ]\}`;
     final trees = ["/work/repo", "/work/repo/.claude/worktrees/topic", "/work/repo/.claude/worktrees/here"];
     final here = "/work/repo/.claude/worktrees/here";
-    assert\equal(pick(listing, trees: trees, here: here, host: "", id: "")?.id, want: "newer", message: "newest elsewhere");
-    assert\equal(pick(listing, trees: trees, here: here, host: "codex", id: ""), want: null, message: "codex ran in another repository");
-    assert\equal(pick(listing, trees: trees, here: here, host: "", id: "here")?.workspace, want: here, message: "an id picks exactly");
+    assert\equal(pick(listing, trees: trees, here: here, host: "", id: "").value?.id, want: "newer", message: "newest elsewhere");
+    assert\equal(pick(listing, trees: trees, here: here, host: "codex", id: "").value, want: null, message: "codex ran in another repository");
+    assert\equal(pick(listing, trees: trees, here: here, host: "", id: "here").value?.workspace, want: here, message: "an id picks exactly");
 }
 
 test "the handoff is printed for a checkout holding work, and names nothing to run for a clean one" {

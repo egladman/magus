@@ -28,11 +28,17 @@ magus\log.info(magus\insightMarkdown());
 
 In the docs:
 
-- [AffinityOutput](../reference/api/insight/v1alpha1/insight.md#affinityoutput)
+- [Affinity](../reference/api/historymetrics/v1alpha1/historymetrics.md#affinity)
+- [affinity](../reference/buzz/magus.md#affinity)
+
+In the code (`magus refs <name>` lists every site):
+
+- `magus\Affinity` (Buzz host type)
+- `types.Affinity` (Go)
 
 <!-- END GLOSSARY USAGE -->
 
 ## See also
 
-- [Insight](../concepts/knowledge/insight.md)
-- [Insight](insight.md)
+- [History metrics](../concepts/knowledge/historymetrics.md)
+- [History metrics](historymetrics.md)

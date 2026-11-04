@@ -10,7 +10,7 @@ tags: [design, principle, configuration, buzz]
 Game engines face the choice a build tool faces: write a thing as code, or
 declare it as data an engine interprets. Two questions settle it. First, does
 the person who changes it have the code? A game's players usually do not, so
-a recipe ships as data. A build's author always does: the magusfile sits in
+a Spec ships as data. A build's author always does: the magusfile sits in
 the repository it builds, beside the code it compiles, so the usual case for
 data never arises.
 

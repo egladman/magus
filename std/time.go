@@ -24,7 +24,7 @@ var Time = Module{
 		{
 			Name:    "format",
 			Doc:     "Render Unix-millis as a string using a Go reference layout (UTC).",
-			Args:    []Arg{{Name: "layout", Type: TypeString, Enum: "TimeLayout"}, {Name: "unix_millis", Type: TypeFloat}},
+			Args:    []Arg{{Name: "layout", Type: TypeString, Enum: "TimeLayout"}, {Name: "unixMillis", Type: TypeFloat}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    TimeFormat,
 		},
@@ -54,7 +54,7 @@ var Time = Module{
 		{
 			Name:    "add",
 			Doc:     "Add a Go duration string (e.g. \"24h\", \"-1h30m\") to a Unix-millis timestamp; returns the new Unix-millis timestamp.",
-			Args:    []Arg{{Name: "unix_millis", Type: TypeFloat}, {Name: "duration", Type: TypeString}},
+			Args:    []Arg{{Name: "unixMillis", Type: TypeFloat}, {Name: "duration", Type: TypeString}},
 			Returns: []Ret{{Type: TypeFloat}},
 			Raises:  true,
 			Impl:    TimeAdd,

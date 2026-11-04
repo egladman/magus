@@ -279,9 +279,9 @@ func TestReportImportError(t *testing.T) {
 // grant, as the root magusfile's test declares /proc.
 func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	prev := buzzHostBindingsFn
-	buzzHostBindingsFn = func(_ context.Context, sess *buzz.Session, _ map[string]vm.Callable, _ map[string]vm.Value, _ bool) {
+	buzzHostBindingsFn = func(_ context.Context, sess *buzz.Session, _ map[string]vm.Callable, _ map[string]vm.Value, _ bool) error {
 		sess.SetNativeModule("magus", vm.NewMap())
-		spell.DeclareMagusTypes(sess, nil)
+		return spell.DeclareMagusTypes(sess, func(string) bool { return false })
 	}
 	t.Cleanup(func() { buzzHostBindingsFn = prev })
 	w := testkit.NewWorkspace(t)
@@ -615,6 +615,7 @@ func TestBinaryAnswersCoverEveryForkingMember(t *testing.T) {
 		filepath.Join("bindings", "gen", "magus.go"): nil,
 		filepath.Join("bindings", "describe.go"):     {"describe"},
 		filepath.Join("bindings", "job.go"):          {"job"},
+		filepath.Join("bindings", "magus_risk.go"):   {"risk"},
 		filepath.Join("bindings", "magus_trail.go"):  {"trail"},
 		filepath.Join("bindings", "magus_vcs.go"):    {"vcs"},
 	}

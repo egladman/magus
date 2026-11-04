@@ -5,7 +5,28 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 )
+
+// wrapperPrefix starts the id of an invocation that only wraps a command.
+const wrapperPrefix = "wrap-"
+
+// WrapperInvocation marks id as an invocation that only wraps a command, as
+// `magus job exec --timeout` does: it holds slots and runs no step. Admission
+// reads that off the ref: a magus under it can fail no running step.
+func WrapperInvocation(id string) string { return wrapperPrefix + id }
+
+// IsWrapperInvocation reports whether ref came from a [WrapperInvocation] id.
+func IsWrapperInvocation(ref string) bool {
+	_, id, ok := strings.Cut(ref, ":")
+	return ok && strings.HasPrefix(id, wrapperPrefix)
+}
+
+// RunsUnderAStep reports whether ancestors name an invocation that may be
+// running a step blocked on this one: any but a wrapper.
+func RunsUnderAStep(ancestors []string) bool {
+	return slices.ContainsFunc(ancestors, func(ref string) bool { return !IsWrapperInvocation(ref) })
+}
 
 type invocationAncestorsKey struct{}
 

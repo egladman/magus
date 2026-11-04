@@ -55,41 +55,87 @@ object CodexHook {
     status: str,
 }
 
-fun codex_hook(event: str, matcher: str, script: str, flags: [str], status: str) > CodexHook {
-    return CodexHook{hook = HookCommand{event = event, matcher = matcher, script = script, flags = flags}, status = status};
+fun codex_hook(event: str, matcher: str, script: str, flags: [str], status: str, points: [HookPoint]) > CodexHook {
+    return CodexHook{hook = HookCommand{event = event, matcher = matcher, script = script, flags = flags, points = points}, status = status};
+}
+
+// A recorder binds no hook point: it judges and briefs nothing.
+final RECORDS = [<HookPoint>];
+
+// The session starts that are not a compaction.
+final SESSION_START_MATCHER = "startup|resume|clear";
+
+// The disk hook rides UserPromptSubmit, whose plain stdout Codex adds to the turn as context.
+fun codex_reclaim_hook() > CodexHook {
+    final disk = reclaimDiskHook(mgs_getName(), event: "UserPromptSubmit", say: "stdout");
+    return codex_hook(disk.event, matcher: "", script: disk.script, flags: disk.flags, status: "magus: sampling free disk space", points: RECORDS);
 }
 
 fun codex_hooks() > [CodexHook] {
     final check = buzzCheckHook(mgs_getName());
     return [
-        codex_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking the call"),
+        codex_hook("PreToolUse", matcher: EVERY_TOOL, script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking the call",
+            points: [HookPoint.shell, HookPoint.edit, HookPoint.mcp, HookPoint.spawn]),
         // Judges nothing. The finished spawn is how magus learns the child's name: a v2
         // spawn answers with its task_name path, a v1 spawn with the agent id.
-        codex_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent"),
-        codex_hook("PostToolUse", matcher: "apply_patch", script: check.script, flags: check.flags, status: "magus: checking the Buzz it wrote"),
+        codex_hook("PostToolUse", matcher: SPAWN_MATCHER, script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent",
+            points: [HookPoint.spawn]),
+        // PostToolUse input carries no duration, so no tool time is
+        // recorded: a hook would only spend a process per call.
+        codex_hook("PostToolUse", matcher: "apply_patch", script: check.script, flags: check.flags, status: "magus: checking the Buzz it wrote", points: RECORDS),
         // The v2 spawn message is encrypted, so nothing the parent wrote can carry a brief
         // to the child. This hook's context is the child's first instruction. The second
         // entry names the child by the id its own calls carry, which magus joins to the
         // spawn just before it.
-        codex_hook("SubagentStart", matcher: "", script: "magus-rehydrate", flags: codex_rehydrate_flags(), status: "magus: briefing the subagent"),
-        codex_hook("SubagentStart", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: joining the subagent to its spawn"),
+        codex_hook("SubagentStart", matcher: "", script: "magus-rehydrate", flags: codex_rehydrate_flags(), status: "magus: briefing the subagent",
+            points: [HookPoint.spawn]),
+        codex_hook("SubagentStart", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: joining the subagent to its spawn",
+            points: [HookPoint.spawn]),
         // Judges nothing. The payload names the child's transcript, whose last token_count
         // record is the context size a later continuation reads.
-        codex_hook("SubagentStop", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent's context"),
+        codex_hook("SubagentStop", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: recording the subagent's context",
+            points: [HookPoint.subagentStop]),
         // Raised just before Codex's own approval prompt. The shared template answers it
         // from the verdict: allow for a push a gate covers, no decision for an ungated one
         // (the person decides), deny for a leased worker.
-        codex_hook("PermissionRequest", matcher: "Bash", script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking approval"),
-        codex_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: codex_rehydrate_flags(), status: "magus: restating this checkout's rules"),
-        codex_hook("Stop", matcher: "", script: "magus-checkpoint", flags: ["--agent-name", mgs_getName()], status: "magus: recording where the work stands"),
+        codex_hook("PermissionRequest", matcher: "Bash", script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking approval",
+            points: [HookPoint.shell]),
+        // SessionStart replies with additionalContext, so a new session reads
+        // the brief first (testdata/hosts/codex/session-start.*.schema.json).
+        codex_hook("SessionStart", matcher: SESSION_START_MATCHER, script: "magus-rehydrate", flags: codex_rehydrate_flags(),
+            status: "magus: briefing the session", points: [HookPoint.sessionStart]),
+        codex_hook("SessionStart", matcher: "compact", script: "magus-rehydrate", flags: codex_rehydrate_flags(), status: "magus: restating this checkout's rules",
+            points: [HookPoint.compact]),
+        // A Stop reply of decision block sends the agent back to work
+        // (testdata/hosts/codex/stop.command.output.schema.json).
+        codex_hook("Stop", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus guard: checking the stop",
+            points: [HookPoint.stop]),
+        codex_hook("Stop", matcher: "", script: "magus-checkpoint", flags: ["--agent-name", mgs_getName()], status: "magus: recording where the work stands",
+            points: RECORDS),
         // The person's message, which the glue hands to `magus shell --message` and answers
         // with nothing. Codex ignores a matcher on this event.
-        codex_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: noting the request"),
+        codex_hook("UserPromptSubmit", matcher: "", script: "magus-command", flags: codex_guard_flags(), status: "magus: noting the request", points: RECORDS),
+        codex_reclaim_hook(),
     ];
 }
 
 export fun mgs_listHooks() > [HookCommand] {
     return codex_hooks().map(fun (index: int, h: CodexHook) > HookCommand => h.hook);
+}
+
+// Codex declares no wait limits. turn_id rides its tool and stop events, and
+// no other host sends it (https://learn.chatgpt.com/docs/hooks, read 2026-10-29).
+// A PreToolUse reply's additionalContext reaches the agent alone, a systemMessage the person
+// alone, and a deny reason both. A Stop reply takes no hookSpecificOutput.
+export fun mgs_getLimits() > Limits {
+    return Limits{payloadFields = ["turn_id"], channels = ["display", "capture", "notice"]};
+}
+
+export fun mgs_listUnsupportedHooks() > [HookBinding] {
+    return [
+        unsupportedHook(HookPoint.attach, reason: "a hook answers with text only (systemMessage, additionalContext); "
+            + "no output field carries an image or a file (https://learn.chatgpt.com/docs/hooks)"),
+    ];
 }
 
 fun codex_command(hook: HookCommand) > str {
@@ -138,23 +184,26 @@ export fun mgs_listEntries() > [ManagedEntries] {
     return codex_entries();
 }
 
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = ".codex/hooks.json"};
+export fun mgs_getHarness() > Harness {
+    return Harness{config = HarnessConfig{path = ".codex/hooks.json"}, guard = "hooks"};
 }
 
 export fun mgs_getSkills() > HarnessSkills {
     return HarnessSkills{paths = [".agents/skills"], form = SkillForm.both};
 }
 
+// No official page names a Codex discovery tool, so no render may restrict one.
+final DISCOVERY_TOOLS = ["tool_search", "search_tool_bm25"];
+
 // Every Codex tool the guard should know whose input's shape does not say what it does. A
 // shell call carries its command and is judged by it; a tool missing here is one the guard
 // cannot judge (unjudged-tool).
 export fun mgs_listTools() > HarnessTools {
     final rows = mut [HarnessTool{name = "apply_patch", capability = ToolCapability.writes}];
-    foreach (name in ["spawn_agent", "collaborationspawn_agent"]) {
+    foreach (name in ["spawn_agent", "collaborationspawn_agent", "send_input", "resume_agent"]) {
         rows.append(HarnessTool{name = name, capability = ToolCapability.spawns});
     }
-    foreach (name in ["close_agent", "update_plan", "view_image", "web_search"]) {
+    foreach (name in ["wait_agent", "close_agent", "update_plan", "view_image", "web_search"]) {
         rows.append(HarnessTool{name = name, capability = ToolCapability.inert});
     }
     return HarnessTools{dir = TOOLS_DIR, rows = rows};
@@ -244,12 +293,11 @@ export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] {
     return [Prompt{path = codex_rules_path(), content = codex_rules(humanOnly)}];
 }
 
-// codex_agent renders one shipped agent as a Codex custom agent file. It sets no model, so
-// the agent runs on the person's agents.default_subagent_model. A read-only agent runs in
-// Codex's read-only sandbox, which the instructions alone could not enforce.
+// codex_agent renders one shipped agent as a Codex custom agent file.
+// It sets no model, so the agent runs on agents.default_subagent_model.
+// Codex ignores a sandbox here, so read-only is the lease's to enforce.
 fun codex_agent(agent: ShippedAgent) > AgentFile {
     final lines = mut ["name = " + tomlBasic(agent.name), "description = " + tomlBasic(agent.description)];
-    if (agent.readOnly) { lines.append("sandbox_mode = \"read-only\""); }
     lines.append("developer_instructions = " + tomlMultiline(agent.instructions.trim() + "\n"));
     return AgentFile{
         path = ".codex/agents/{agent.name}.toml",
@@ -290,20 +338,29 @@ fun codex_commands(event: str) > [str] {
     return commands;
 }
 
-test "mgs_renderAgents renders name, description, sandbox and instructions with no model" {
+test "mgs_renderAgents renders name, description and instructions with no model" {
     final file = codex_agent(codex_scout_fixture("First line.\n\nUse `a\\b` and \"c\".\n"));
     assert\equal(file.path, ".codex/agents/magus-scout.toml", "Codex reads .codex/agents");
     assert\equal(
         file.content,
-        "name = \"magus-scout\"\ndescription = \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nsandbox_mode = \"read-only\"\ndeveloper_instructions = '''\nFirst line.\n\nUse `a\\b` and \"c\".\n'''\n",
+        "name = \"magus-scout\"\ndescription = \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ndeveloper_instructions = '''\nFirst line.\n\nUse `a\\b` and \"c\".\n'''\n",
         "all three required fields, instructions as a literal",
     );
     assert\isTrue(file.content.indexOf("model") == null, "default_subagent_model applies");
 }
 
-test "mgs_renderAgents leaves the sandbox alone for a writable agent" {
+test "mgs_renderAgents writes no sandbox the host would ignore, read-only or not" {
     final writable = ShippedAgent{name = "magus-worker", description = "Edits files.", instructions = "First line.\n"};
     assert\isTrue(codex_agent(writable).content.indexOf("sandbox_mode") == null, "the person's default sandbox applies");
+    assert\isTrue(codex_agent(codex_scout_fixture("x\n")).content.indexOf("sandbox_mode") == null, "an agent file cannot override the parent");
+}
+
+test "mgs_renderAgents restricts no tool, so discovery stays reachable" {
+    final content = codex_agent(codex_scout_fixture("x\n")).content;
+    foreach (name in DISCOVERY_TOOLS) {
+        assert\isTrue(content.indexOf(name) == null, "{name} is not removed");
+    }
+    assert\isTrue(content.indexOf("features.") == null, "no feature switched off");
 }
 
 test "mgs_renderAgents escapes instructions that carry the literal delimiter" {
@@ -319,8 +376,8 @@ test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "codex", "id must match magus\\harness.provider wiring and --id");
 }
 
-test "mgs_getHarnessConfig names the Codex hooks file and mgs_getSkills .agents/skills" {
-    assert\equal(mgs_getHarnessConfig().path, ".codex/hooks.json", "workspace-relative host config path");
+test "mgs_getHarness names the Codex hooks file and mgs_getSkills .agents/skills" {
+    assert\equal(mgs_getHarness().config.path, ".codex/hooks.json", "workspace-relative host config path");
     assert\equal(mgs_getSkills().form.value, "both", "the short skills and their full twins");
     assert\equal(mgs_getSkills().paths.join(","), ".agents/skills", "Codex reads .agents/skills");
 }
@@ -397,9 +454,13 @@ test "the entries cover the tool, subagent, session, Stop and message events" {
     assert\equal(codex_commands("SubagentStart")[0], codex_rehydrate_command(), "the child is briefed through additionalContext");
     assert\equal(codex_commands("SubagentStart")[1], codex_guard_command(), "the child's id is joined to its spawn");
     assert\equal(codex_commands("PermissionRequest")[0], codex_guard_command(), "same template as PreToolUse");
-    assert\equal("{codex_block("SessionStart")!.entries[0]["matcher"]}", "compact", "only the moment state was lost");
-    assert\equal(codex_commands("Stop").len(), 1, "the checkpoint entry alone: the reply check is opt-in");
-    assert\equal(codex_commands("Stop")[0], codex_checkpoint_command(), "records where the work stands");
+    final start = codex_block("SessionStart")!;
+    assert\equal(start.entries.len(), 2, "the brief, then the restatement after a compaction");
+    assert\equal("{start.entries[0]["matcher"]}", SESSION_START_MATCHER, "every start that is not a compaction");
+    assert\equal("{start.entries[1]["matcher"]}", "compact", "the moment state was lost");
+    assert\equal(codex_commands("Stop").len(), 2, "the guard, then the checkpoint: the reply check is opt-in");
+    assert\equal(codex_commands("Stop")[0], codex_guard_command(), "a block sends the agent back to work");
+    assert\equal(codex_commands("Stop")[1], codex_checkpoint_command(), "records where the work stands");
     final message = codex_block("UserPromptSubmit")!;
     assert\isTrue(message.entries[0]["matcher"] == null, "Codex ignores a matcher on this event");
 }

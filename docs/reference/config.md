@@ -43,6 +43,15 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | ---------- | -------------------- | ------------ | ----------------- |
 | `diff.tui` | `MAGUS_DIFF_TUI`     | _(env only)_ | bool _(env only)_ |
 
+## disk
+
+| Config key                | Environment variable            | Flag                        | Type     |
+| ------------------------- | ------------------------------- | --------------------------- | -------- |
+| `disk.critical_free_mb`   | `MAGUS_DISK_CRITICAL_FREE_MB`   | `--disk-critical-free-mb`   | int      |
+| `disk.growth_mb_per_hour` | `MAGUS_DISK_GROWTH_MB_PER_HOUR` | `--disk-growth-mb-per-hour` | int      |
+| `disk.min_free_mb`        | `MAGUS_DISK_MIN_FREE_MB`        | `--disk-min-free-mb`        | int      |
+| `disk.sample_every`       | `MAGUS_DISK_SAMPLE_EVERY`       | `--disk-sample-every`       | duration |
+
 ## general
 
 | Config key            | Environment variable        | Flag                    | Type                               |
@@ -58,12 +67,6 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `stall_timeout`       | `MAGUS_STALL_TIMEOUT`       | `--stall-timeout`       | duration                           |
 | `target_timeout`      | `MAGUS_TARGET_TIMEOUT`      | `--target-timeout`      | duration                           |
 
-## go
-
-| Config key           | Environment variable       | Flag                   | Type |
-| -------------------- | -------------------------- | ---------------------- | ---- |
-| `go.cache_budget_mb` | `MAGUS_GO_CACHE_BUDGET_MB` | `--go-cache-budget-mb` | int  |
-
 ## hints
 
 | Config key      | Environment variable  | Flag         | Type              |
@@ -72,19 +75,17 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## jobs
 
-| Config key                 | Environment variable             | Flag                         | Type     |
-| -------------------------- | -------------------------------- | ---------------------------- | -------- |
-| `jobs.default_timeout`     | `MAGUS_JOBS_DEFAULT_TIMEOUT`     | `--jobs-default-timeout`     | duration |
-| `jobs.integrate_advise_at` | `MAGUS_JOBS_INTEGRATE_ADVISE_AT` | `--jobs-integrate-advise-at` | int      |
-| `jobs.integrate_refuse_at` | `MAGUS_JOBS_INTEGRATE_REFUSE_AT` | `--jobs-integrate-refuse-at` | int      |
-| `jobs.max_claim_files`     | `MAGUS_JOBS_MAX_CLAIM_FILES`     | `--jobs-max-claim-files`     | int      |
-| `jobs.max_claim_projects`  | `MAGUS_JOBS_MAX_CLAIM_PROJECTS`  | `--jobs-max-claim-projects`  | int      |
-| `jobs.max_claims`          | `MAGUS_JOBS_MAX_CLAIMS`          | `--jobs-max-claims`          | int      |
-| `jobs.max_depth`           | `MAGUS_JOBS_MAX_DEPTH`           | `--jobs-max-depth`           | int      |
-| `jobs.max_live`            | `MAGUS_JOBS_MAX_LIVE`            | `--jobs-max-live`            | int      |
-| `jobs.max_validations`     | `MAGUS_JOBS_MAX_VALIDATIONS`     | `--jobs-max-validations`     | int      |
-| `jobs.retain`              | `MAGUS_JOBS_RETAIN`              | `--jobs-retain`              | duration |
-| `jobs.stale_after`         | `MAGUS_JOBS_STALE_AFTER`         | `--jobs-stale-after`         | duration |
+| Config key                | Environment variable            | Flag                        | Type     |
+| ------------------------- | ------------------------------- | --------------------------- | -------- |
+| `jobs.default_timeout`    | `MAGUS_JOBS_DEFAULT_TIMEOUT`    | `--jobs-default-timeout`    | duration |
+| `jobs.max_claim_files`    | `MAGUS_JOBS_MAX_CLAIM_FILES`    | `--jobs-max-claim-files`    | int      |
+| `jobs.max_claim_projects` | `MAGUS_JOBS_MAX_CLAIM_PROJECTS` | `--jobs-max-claim-projects` | int      |
+| `jobs.max_claims`         | `MAGUS_JOBS_MAX_CLAIMS`         | `--jobs-max-claims`         | int      |
+| `jobs.max_depth`          | `MAGUS_JOBS_MAX_DEPTH`          | `--jobs-max-depth`          | int      |
+| `jobs.max_live`           | `MAGUS_JOBS_MAX_LIVE`           | `--jobs-max-live`           | int      |
+| `jobs.max_validations`    | `MAGUS_JOBS_MAX_VALIDATIONS`    | `--jobs-max-validations`    | int      |
+| `jobs.retain`             | `MAGUS_JOBS_RETAIN`             | `--jobs-retain`             | duration |
+| `jobs.stale_after`        | `MAGUS_JOBS_STALE_AFTER`        | `--jobs-stale-after`        | duration |
 
 ## knowledge
 
@@ -119,12 +120,13 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## mcp
 
-| Config key          | Environment variable      | Flag                  | Type              |
-| ------------------- | ------------------------- | --------------------- | ----------------- |
-| `mcp.address`       | `MAGUS_MCP_ADDRESS`       | `--mcp-address`       | string            |
-| `mcp.enabled`       | `MAGUS_MCP_ENABLED`       | _(env only)_          | bool _(env only)_ |
-| `mcp.http`          | `MAGUS_MCP_HTTP`          | _(env only)_          | bool _(env only)_ |
-| `mcp.insecure_bind` | `MAGUS_MCP_INSECURE_BIND` | `--mcp-insecure-bind` | bool              |
+| Config key            | Environment variable        | Flag                  | Type                               |
+| --------------------- | --------------------------- | --------------------- | ---------------------------------- |
+| `mcp.address`         | `MAGUS_MCP_ADDRESS`         | `--mcp-address`       | string                             |
+| `mcp.allowed_origins` | `MAGUS_MCP_ALLOWED_ORIGINS` | _(env only)_          | list _(comma-separated, env only)_ |
+| `mcp.enabled`         | `MAGUS_MCP_ENABLED`         | _(env only)_          | bool _(env only)_                  |
+| `mcp.http`            | `MAGUS_MCP_HTTP`            | _(env only)_          | bool _(env only)_                  |
+| `mcp.insecure_bind`   | `MAGUS_MCP_INSECURE_BIND`   | `--mcp-insecure-bind` | bool                               |
 
 ## report
 
@@ -159,6 +161,12 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `server.maintenance.rotate_logs`       | `MAGUS_SERVER_MAINTENANCE_ROTATE_LOGS`       | `--server-maintenance-rotate-logs`       | duration                           |
 | `server.maintenance.sync_graph`        | `MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH`        | `--server-maintenance-sync-graph`        | duration                           |
 | `server.workspaces`                    | `MAGUS_SERVER_WORKSPACES`                    | _(env only)_                             | list _(comma-separated, env only)_ |
+
+## spells
+
+| Config key               | Environment variable           | Flag         | Type                               |
+| ------------------------ | ------------------------------ | ------------ | ---------------------------------- |
+| `spells.symbol_indexers` | `MAGUS_SPELLS_SYMBOL_INDEXERS` | _(env only)_ | list _(comma-separated, env only)_ |
 
 ## telemetry
 

@@ -195,7 +195,7 @@ export async function loadAttention(host: string, signal?: AbortSignal): Promise
     res = await fetch("http://" + host + "/api/v1/attention", {
       headers: authHeaders(),
       cache: "no-store",
-      signal,
+      ...(signal ? { signal } : {}),
     });
   } catch (e) {
     reportFetchFailure(host, "the attention queue", e);
@@ -247,7 +247,7 @@ export async function disposeAttention(
       headers: { ...authHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ id, reason }),
       cache: "no-store",
-      signal,
+      ...(signal ? { signal } : {}),
     });
   } catch (e) {
     return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };

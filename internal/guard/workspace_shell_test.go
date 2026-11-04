@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestWorkspaceShellDenyStrengthensAPass(t *testing.T) {
@@ -101,18 +102,38 @@ func TestBuiltInDenyBeatsWorkspaceAdvise(t *testing.T) {
 	assert.NotContains(t, v.Deny, "should never appear")
 }
 
-func TestWorkspaceShellFailsOpenWhenUnparsed(t *testing.T) {
-	t.Parallel()
-	deps := testDependencies()
-	deps.ShellRules = []WorkspaceShellRule{{
-		Name:     "deny-anything",
-		Decision: "deny",
-		Program:  "curl",
-		Reason:   "should not fire on an unparseable line",
-	}}
+type UnparsedWorkspaceShellSuite struct {
+	suite.Suite
+	deps Dependencies
+}
 
-	v := Evaluate(deps, "curl https://x && (")
-	assert.Empty(t, v.Deny, "unparsed lines fail open for workspace rules")
+func TestUnparsedWorkspaceShell(t *testing.T) {
+	suite.Run(t, new(UnparsedWorkspaceShellSuite))
+}
+
+func (s *UnparsedWorkspaceShellSuite) SetupTest() {
+	s.deps = testDependencies()
+	s.deps.ShellRules = []WorkspaceShellRule{
+		{Name: "no-curl", Decision: "deny", Program: "curl", Args: []string{"https://prod"}, Reason: "do not hit prod"},
+		{Name: "advise-jq", Decision: "advise", Program: "jq", Reason: "prefer -o json"},
+	}
+}
+
+func (s *UnparsedWorkspaceShellSuite) TestALineNamingADeniedProgramIsDenied() {
+	v := Evaluate(s.deps, "curl https://x && (")
+	s.Equal(denyRuleName("workspace:no-curl"), v.Rule.Name)
+	s.Contains(v.Deny, "did not parse")
+	s.Contains(v.Deny, "do not hit prod")
+}
+
+func (s *UnparsedWorkspaceShellSuite) TestAProgramInsideASubshellIsSeen() {
+	v := Evaluate(s.deps, "echo ok && (/usr/bin/curl -s")
+	s.Equal(denyRuleName("workspace:no-curl"), v.Rule.Name)
+}
+
+func (s *UnparsedWorkspaceShellSuite) TestALineNamingNoDeniedProgramPasses() {
+	v := Evaluate(s.deps, "jq . && (")
+	s.Empty(v.Deny)
 }
 
 func TestStrengthenWithWorkspaceMerge(t *testing.T) {

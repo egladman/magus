@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -40,19 +41,12 @@ func MirroredBinary(exe, root string) string {
 	return exe
 }
 
-// ForkWorktree makes the checkout a fork of job id names at dir, on a new branch named id, from the revision
-// checkpoint names (the forking checkout's when it names none), and places binary in it when binary is
-// not "". binary is the running magus (see [MirroredBinary]), whose build ctx carries, and it
-// is placed only in a checkout where no build input of ./cmd/magus differs from the commit it
-// was built at (see [ChangedBuildInputs]): anywhere else it would judge another tree, so the
-// checkout is made with no binary and wt.Binary stays "" for [CheckoutBootstrap] to fill.
-// made is false when the job already owns the checkout at dir, which is returned as it stands,
-// and when dir is a linked checkout that already stands, which the job adopts as it is. A job owning another standing checkout, a checkpoint
-// carrying uncommitted changes the new checkout would not hold, a binary whose commit is
-// unrecorded, unknown to the repository or carries uncommitted changes, and a version
-// control that cannot make one are refused.
-//
-// Nothing is written to the store: the caller records the result once the fork lands, and
+// ForkWorktree makes job id's checkout at dir on a branch named id, at checkpoint or the
+// forker's revision, or adopts dir when it already stands as a linked checkout (made false).
+// binary (see [MirroredBinary]) is copied in only where [BuildsItsOwnMagus] is false; a
+// checkout that builds its own is left for [CheckoutBootstrap], so a dirty forker never blocks.
+// A job holding another checkout its fork made is refused; one holding an adopted checkout is
+// bound to dir, since moving it loses nothing. Nothing is stored: the caller records wt, or
 // discards it with [Store.DiscardWorktree] when the fork is refused.
 func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary string) (wt types.JobWorktree, made bool, err error) {
 	dir = filepath.Clean(dir)
@@ -61,17 +55,24 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		return types.JobWorktree{}, false, err
 	}
 	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 && rows[i].Worktree.Standing() {
-		owned := *rows[i].Worktree
-		if samePath(owned.Root, dir) {
-			owned.Kept = ""
-			return owned, false, nil
+		held := *rows[i].Worktree
+		switch {
+		case samePath(held.Root, dir):
+			held.Kept = ""
+			followed, err := s.followCheckpoint(ctx, id, held, checkpoint, false)
+			return followed, false, err
+		case held.Made:
+			return types.JobWorktree{}, false, fmt.Errorf("job: %s already owns the checkout %s, which its fork made and magus removes once the job ends, so fork it with `--checkout %s` or let it end first",
+				id, held.Root, held.Root)
 		}
-		return types.JobWorktree{}, false, fmt.Errorf("job: %s already owns the checkout %s, which magus removes once the job ends, so fork it with `--checkout %s` or let it end first",
-			id, owned.Root, owned.Root)
 	}
 	if _, err := os.Stat(dir); err == nil {
 		wt, err := s.adoptCheckout(ctx, id, dir)
-		return wt, false, err
+		if err != nil {
+			return types.JobWorktree{}, false, err
+		}
+		followed, err := s.followCheckpoint(ctx, id, wt, checkpoint, true)
+		return followed, false, err
 	}
 	revision, digest := types.ParseCheckpointToken(checkpoint)
 	if digest != "" {
@@ -99,41 +100,192 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 	if err != nil {
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout starts at %s, which %s cannot find: %w", id, revision, drv.Name(), err)
 	}
-	if binary != "" {
-		build := types.MagusBuildFromContext(ctx)
-		switch {
-		case build.Commit == "" || build.Commit == "unknown":
-			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would get %s, which records no commit it was built from, so whether it loads the checkout at %s cannot be told: rebuild ./magus with `magus run go-build .`",
-				id, binary, base.ID)
-		case strings.HasSuffix(build.Version, "-dirty"):
-			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would get %s, built from changes to %s nobody committed, which a checkout at %s would not hold: commit them and rebuild ./magus first",
-				id, binary, build.Commit, base.ID)
-		}
-		built, err := drv.FindCommit(ctx, source, build.Commit)
-		if err != nil {
-			return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout would get %s, built at %s, which %s cannot find: %w", id, binary, build.Commit, drv.Name(), err)
-		}
-		// A binary whose build inputs differ from the base judges another tree, and one whose
-		// inputs cannot be compared is not shown to match; CheckoutBootstrap builds one there.
-		if built.ID != base.ID {
-			inputs, err := ChangedBuildInputs(ctx, drv, source, built.ID, base.ID)
-			if err != nil || len(inputs) > 0 {
-				binary = ""
-			}
-		}
-	}
 	if err := drv.CreateCheckout(ctx, source, dir, base.ID, id); err != nil {
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)
 	}
-	wt = types.JobWorktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix()}
-	if binary != "" {
+	wt = types.JobWorktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix(), Made: true}
+	if binary != "" && !BuildsItsOwnMagus(dir) {
 		placed, err := placeBinary(binary, dir)
 		if err != nil {
-			return types.JobWorktree{}, false, errors.Join(fmt.Errorf("placing %s in %s: %w", binary, dir, err), drv.RemoveCheckout(ctx, source, dir))
+			return types.JobWorktree{}, false, errors.Join(fmt.Errorf("placing %s in %s: %w", binary, dir, err), drv.DiscardCheckout(ctx, source, dir, base.ID))
 		}
 		wt.Binary = placed
 	}
 	return wt, true, nil
+}
+
+// followCheckpoint moves wt to the revision a fork names. The job's own base
+// stays put, so a retry keeps its commits. Adopting allows an ancestor of the
+// head, which a child in a shared checkout names.
+func (s *Store) followCheckpoint(ctx context.Context, id string, wt types.JobWorktree, checkpoint string, adopting bool) (types.JobWorktree, error) {
+	revision, digest := types.ParseCheckpointToken(checkpoint)
+	if revision == "" {
+		return wt, nil
+	}
+	drv, why := resolveDriver(ctx, wt.Source)
+	if drv == nil {
+		return wt, fmt.Errorf("job: %s names the checkpoint %s for the checkout %s, and %s", id, revision, wt.Root, why)
+	}
+	target, err := drv.FindCommit(ctx, wt.Source, revision)
+	if err != nil {
+		return wt, fmt.Errorf("job: %s's checkpoint %s is a commit %s cannot find: %w", id, revision, drv.Name(), err)
+	}
+	head, err := drv.FindCommit(ctx, wt.Root, "")
+	if err != nil {
+		return wt, fmt.Errorf("job: the head of %s, the checkout of %s, cannot be read: %w", wt.Root, id, err)
+	}
+	if target.ID == wt.Base {
+		return wt, nil
+	}
+	if target.ID == head.ID {
+		wt.Base = head.ID
+		return wt, nil
+	}
+	if digest != "" {
+		return wt, fmt.Errorf("job: %s's checkpoint %s carries uncommitted changes, which %s cannot move to: commit them, then fork at the commit", id, checkpoint, wt.Root)
+	}
+	if err := refuseUncommitted(ctx, drv, id, wt.Root, head.ID, target.ID); err != nil {
+		return wt, err
+	}
+	contained, err := drv.IsAncestor(ctx, wt.Root, target.ID, head.ID)
+	if err != nil {
+		return wt, fmt.Errorf("job: whether %.12s holds %.12s, the checkpoint of %s, cannot be read: %w", head.ID, target.ID, id, err)
+	}
+	if contained {
+		if adopting {
+			return wt, nil
+		}
+		return wt, fmt.Errorf("job: %s's checkout %s stays at %.12s: its checkpoint %.12s is behind that head, so moving there would leave commits behind: fork at a descendant of the head, or end the job so its next fork makes a new checkout",
+			id, wt.Root, head.ID, target.ID)
+	}
+	// Only the driver knows its head: jj's is usually the parent of an empty @.
+	if err := drv.FastForward(ctx, wt.Root, target.ID); err != nil {
+		return wt, fmt.Errorf("job: %s's checkout %s stays at %.12s, not its checkpoint %.12s, so fork at a descendant of the head, or end the job so its next fork makes a new checkout: %w",
+			id, wt.Root, head.ID, target.ID, err)
+	}
+	wt.Base = target.ID
+	return wt, nil
+}
+
+// refuseUncommitted keeps a checkout holding work at its head. Its own ./magus
+// is not work.
+func refuseUncommitted(ctx context.Context, drv types.VCSDriver, id, root, head, target string) error {
+	dirty, err := drv.DirtyFiles(ctx, root, nil)
+	if err != nil {
+		return fmt.Errorf("job: the status of %s, the checkout of %s, cannot be read: %w", root, id, err)
+	}
+	dirty = slices.DeleteFunc(dirty, func(p string) bool { return p == binaryName })
+	if len(dirty) > 0 {
+		return fmt.Errorf("job: %s's checkout %s stays at %.12s, not its checkpoint %.12s: %d path(s) in it hold uncommitted work (%s), so commit or drop them, then fork again",
+			id, root, head, target, len(dirty), listPaths(dirty))
+	}
+	return nil
+}
+
+// CheckoutHead is the revision the checkout at dir has checked out, "" when dir
+// is no checkout or its head cannot be read.
+func CheckoutHead(ctx context.Context, dir string) string {
+	if _, err := os.Stat(dir); err != nil {
+		return ""
+	}
+	drv, _ := resolveDriver(ctx, dir)
+	if drv == nil {
+		return ""
+	}
+	head, err := drv.FindCommit(ctx, dir, "")
+	if err != nil {
+		return ""
+	}
+	return head.ID
+}
+
+// RowLive reports whether job id has a row that has not ended, which a fork
+// updates rather than declares.
+func (s *Store) RowLive(id string) (bool, error) {
+	rows, err := s.dry().List()
+	if err != nil {
+		return false, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	return i >= 0 && !rows[i].State.Terminal(), nil
+}
+
+// PlaceBuiltBinary copies into dir a ./magus built at base with nothing
+// uncommitted: exe, or the one a standing checkout at base holds. It returns
+// the source, or "" when none is. Each candidate's own version says what it
+// holds, since a checkout's binary can outlive the base its row records.
+func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (string, error) {
+	rows, err := s.List()
+	if err != nil {
+		return "", err
+	}
+	candidates := []string{exe}
+	for _, r := range rows {
+		if r.Worktree.Standing() && r.Worktree.Base == base && r.Worktree.Binary != "" {
+			candidates = append(candidates, r.Worktree.Binary)
+		}
+	}
+	for _, bin := range candidates {
+		if !builtAt(ctx, bin, base) {
+			continue
+		}
+		if _, err := placeBinary(bin, dir); err != nil {
+			return "", fmt.Errorf("placing %s in %s: %w", bin, dir, err)
+		}
+		return bin, nil
+	}
+	return "", nil
+}
+
+// builtAt reports whether the magus at bin says it was built at base, clean.
+// A binary that cannot answer is not one to reuse.
+func builtAt(ctx context.Context, bin, base string) bool {
+	if bin == "" {
+		return false
+	}
+	out, err := exec.CommandContext(ctx, bin, "version", "-o", "json").Output()
+	if err != nil {
+		return false
+	}
+	var v struct {
+		Version string `json:"version"`
+		Commit  string `json:"commit"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil {
+		return false
+	}
+	return v.Commit == base && !strings.HasSuffix(v.Version, "-dirty")
+}
+
+// InstallProjects is the comma-joined projects with an install target that own
+// a file row writes, "none" when no such project does. A project whose spells
+// are unresolved cannot list its targets, so it is left out.
+func InstallProjects(root string, row types.Job, projects []*types.Project) string {
+	if row.ReadOnly {
+		return noInstall
+	}
+	var found []string
+	for _, f := range writtenFiles(root, row) {
+		p := owningProject(projects, f)
+		if p != nil && runsTarget(p, "install") && !slices.Contains(found, p.Path) {
+			found = append(found, p.Path)
+		}
+	}
+	if len(found) == 0 {
+		return noInstall
+	}
+	slices.Sort(found)
+	return strings.Join(found, ",")
+}
+
+// noInstall is what bootstrap-checkout.buzz's --install reads as no project.
+const noInstall = "none"
+
+// BuildsItsOwnMagus reports whether the checkout at dir holds [CheckoutBootstrapScript], and
+// so builds its ./magus from its own sources instead of taking a copy.
+func BuildsItsOwnMagus(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(CheckoutBootstrapScript)))
+	return err == nil && info.Mode().IsRegular()
 }
 
 // adoptCheckout records dir, a standing linked checkout of this repository, as job id's:
@@ -178,6 +330,26 @@ func (s *Store) OwnedCheckout(dir string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// ParentCheckout is the checkout job parent works in when it is not here: the one its fork
+// made or adopted (bound true, so a child inherits it), else the one it was taken in (bound
+// false). It is "" when parent is unknown, works here, or has not been taken.
+func (s *Store) ParentCheckout(here, parent string) (dir string, bound bool, err error) {
+	rows, err := s.List()
+	if err != nil {
+		return "", false, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == parent })
+	if i < 0 {
+		return "", false, nil
+	}
+	bound = rows[i].Worktree.Standing()
+	dir = heldCheckout(rows[i])
+	if dir == "" || samePath(dir, here) {
+		return "", false, nil
+	}
+	return dir, bound, nil
 }
 
 // LinkedCheckout reports whether dir is the top of a linked checkout of this store's
@@ -360,12 +532,13 @@ func (s *Store) LandingBootstrap(ctx context.Context, exe, checkpoint string) (s
 
 // DiscardWorktree removes a checkout [Store.ForkWorktree] just made for a fork that was then
 // refused, before anything ran in it.
+// Its branch goes too while it sits at the base.
 func (s *Store) DiscardWorktree(ctx context.Context, wt types.JobWorktree) error {
 	drv, why := resolveDriver(ctx, wt.Source)
 	if drv == nil {
 		return fmt.Errorf("job: the checkout %s stays, since %s", wt.Root, why)
 	}
-	return drv.RemoveCheckout(ctx, wt.Source, wt.Root)
+	return drv.DiscardCheckout(ctx, wt.Source, wt.Root, wt.Base)
 }
 
 // placeBinary copies bin into dir by temp and rename, never in place: on darwin a later
@@ -419,14 +592,18 @@ func WorkingCheckout(root string, row types.Job) string {
 	return root
 }
 
-// WrongCheckout refuses taking row anywhere but the checkout it owns, nil when it owns
-// none or here is that checkout.
+// WrongCheckout refuses taking row anywhere but the checkout it is bound to, nil when it is
+// bound to none or here is that checkout.
 func WrongCheckout(row types.Job, here string) error {
 	if !row.Worktree.Standing() || samePath(row.Worktree.Root, here) {
 		return nil
 	}
-	return heldError{fmt.Sprintf("job: %s owns the checkout %s, which its fork made for it, and is taken there and nowhere else: run `%s` in %s",
-		row.ID, row.Worktree.Root, hint.JobExec.With(row.ID), row.Worktree.Root)}
+	bound := fmt.Sprintf("owns the checkout %s, which its fork made for it", row.Worktree.Root)
+	if !row.Worktree.Made {
+		bound = fmt.Sprintf("is bound to the checkout %s, which its fork adopted for it", row.Worktree.Root)
+	}
+	return heldError{fmt.Sprintf("job: %s %s, and is taken there and nowhere else: run `%s` in %s",
+		row.ID, bound, hint.JobExec.With(row.ID), row.Worktree.Root)}
 }
 
 // EndWorktrees removes the checkout each ended job owns, once removing it loses nothing,

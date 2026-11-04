@@ -28,9 +28,9 @@ test("parseAnsi splits a line into runs carrying the active SGR state", () => {
     segs.map((s) => s.text),
     ["ok ", "bad", " done"],
   );
-  assert.ok(segs[1].cls.includes("console-render-ansi__fg--red"));
-  assert.deepEqual(segs[0].cls, []);
-  assert.deepEqual(segs[2].cls, []);
+  assert.ok(segs[1]?.cls.includes("console-render-ansi__fg--red"));
+  assert.deepEqual(segs[0]?.cls, []);
+  assert.deepEqual(segs[2]?.cls, []);
 });
 
 // The regression this guards: a cursor-position escape used to fall through the

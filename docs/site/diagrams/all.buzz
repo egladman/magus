@@ -13,6 +13,7 @@ import "site/diagrams/server-share" as _;
 import "site/diagrams/ci-pipeline" as _;
 import "site/diagrams/ci-providers" as _;
 import "site/diagrams/image-build" as _;
+import "site/diagrams/oci-assembly" as _;
 import "site/diagrams/dogfood" as _;
 import "site/diagrams/project-reference" as _;
 import "site/diagrams/volatility" as _;
@@ -33,6 +34,9 @@ import "site/diagrams/bootstrap" as _;
 import "site/diagrams/target-order" as _;
 import "site/diagrams/agent-orchestration" as _;
 import "site/diagrams/harness-layer" as _;
+import "site/diagrams/kustomize-architecture" as _;
+import "site/diagrams/mandate" as _;
+import "site/diagrams/harness-pyramid" as _;
 
 // The committed files, relative to the docs project. The site render inlines their page
 // copies, so rendering a page never needs the symbol index.
@@ -49,6 +53,7 @@ export fun allFigures() > [figure\Figure] !> any {
         ciPipelineFigure(),
         ciProvidersFigure(),
         imageBuildFigure(),
+        ociAssemblyFigure(),
         dogfoodFigure(),
         projectReferenceFigure(),
         volatilityFigure(),
@@ -69,6 +74,11 @@ export fun allFigures() > [figure\Figure] !> any {
         targetOrderFigure(),
         agentOrchestrationFigure(),
         harnessLayerFigure(),
+        kustomizeArchitectureFigure(),
+        mandateRolesFigure(),
+        mandateBarFigure(),
+        harnessPyramidFigure(),
+        harnessStackFigure(),
     ];
 }
 
@@ -118,10 +128,19 @@ fun runFigure(f: figure\Figure) > FigureRun {
 // stamped puts the stamp in the SVG's metadata, so a reader of the file and a later run
 // compare the same fact.
 fun stamped(svg: str, id: str, stamp: str) > str {
-    final open = svg.indexOf(">");
+    final root = svg.indexOf("<svg");
+    if (root == null) { return svg; }
+    final open = svg.sub(root!).indexOf(">");
     if (open == null) { return svg; }
+    final end = root! + open!;
     final meta = "<metadata>\{\"figure\":\"{id}\",\"stamp\":\"{stamp}\"}</metadata>";
-    return svg.sub(0, len: open! + 1) + meta + svg.sub(open! + 1);
+    return svg.sub(0, len: end + 1) + meta + svg.sub(end + 1);
+}
+
+test "the stamp skips an XML declaration" {
+    assert\equal(stamped("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg a=\"1\"><g/></svg>", id: "x", stamp: "s"),
+        want: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg a=\"1\"><metadata>\{\"figure\":\"x\",\"stamp\":\"s\"}</metadata><g/></svg>",
+        message: "after the root tag");
 }
 
 test "the stamp lands inside the svg element" {
@@ -158,8 +177,8 @@ test "a receipt counts the claims and records a finding" {
 // Naming follows the terminal recordings in assets/gen: the unsuffixed file is dark and
 // carries the <img> fallback, `-light` is the prefers-color-scheme: light source.
 export fun writeFigures(dir: str) > [str] !> any {
-    if (magus\symbolIndexDigest().indexed == false) {
-        throw "diagrams-generate needs the symbol index, and magus\\symbolIndexDigest() answered indexed=false; build it with `magus graph build`, then rerun";
+    if (magus\graph().indexed == false) {
+        throw "diagrams-generate needs the symbol index, and magus\\graph() answered indexed=false; build it with `magus graph build`, then rerun";
     }
     fs\mkdirAll(dir);
     final expected: mut {str: bool} = mut {<str: bool>};
@@ -302,7 +321,7 @@ test "a comment marker and a picture are replaced, an unrelated picture is not" 
 fun unknownMarkers(figures: [figure\Figure]) > [str] !> any {
     final known: mut {str: bool} = mut {<str: bool>};
     foreach (f in figures) { known[f.id] = true; }
-    final result: QueryResult = magus\query("kind=marker family=diagram", opts: {"limit": 10000});
+    final result: QueryResult = magus\graph().query("kind=marker family=diagram", opts: magus\QueryOptions{limit = 10000});
     final marked: mut [DiagramMarker] = mut [<DiagramMarker>];
     foreach (n in result.nodes) {
         marked.append(DiagramMarker{ source = n.source, args = n.attrs["args"] ?? "" });

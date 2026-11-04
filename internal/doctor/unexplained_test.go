@@ -20,48 +20,48 @@ type hotWorkspace struct {
 
 func (h hotWorkspace) Root() string { return "" }
 
-func (h hotWorkspace) Hotspots(context.Context, types.InsightOptions) (types.HotspotOutput, error) {
-	return types.HotspotOutput{Files: h.files}, h.err
+func (h hotWorkspace) Hotspots(context.Context, types.HistoryMetricsOptions) (types.Hotspots, error) {
+	return types.Hotspots{Files: h.files}, h.err
 }
 
-func (h hotWorkspace) Affinity(context.Context, types.InsightOptions) (types.AffinityOutput, error) {
-	return types.AffinityOutput{}, nil
+func (h hotWorkspace) Affinity(context.Context, types.HistoryMetricsOptions) (types.Affinity, error) {
+	return types.Affinity{}, nil
 }
 
-func (h hotWorkspace) Ownership(context.Context, types.InsightOptions) (types.OwnershipOutput, error) {
-	return types.OwnershipOutput{}, nil
+func (h hotWorkspace) Ownership(context.Context, types.HistoryMetricsOptions) (types.Ownership, error) {
+	return types.Ownership{}, nil
 }
 
-func (h hotWorkspace) Trend(context.Context, types.InsightOptions) (types.TrendOutput, error) {
-	return types.TrendOutput{}, nil
+func (h hotWorkspace) Trend(context.Context, types.HistoryMetricsOptions) (types.Trend, error) {
+	return types.Trend{}, nil
 }
 
-func (h hotWorkspace) Volatility(context.Context) (types.VolatilityReport, error) {
-	return types.VolatilityReport{}, nil
+func (h hotWorkspace) Volatility(context.Context) (types.Volatility, error) {
+	return types.Volatility{}, nil
 }
 
-func (h hotWorkspace) Unreferenced(context.Context) (types.UnreferencedOutput, error) {
-	return types.UnreferencedOutput{}, nil
+func (h hotWorkspace) Unreferenced(context.Context) (types.Unreferenced, error) {
+	return types.Unreferenced{}, nil
 }
 
 // The check type-asserts the workspace, so a fake that falls behind the interface skips
 // the check instead of failing to compile; this makes it fail to compile.
-var _ types.InsightAnalyzer = hotWorkspace{}
+var _ types.HistoryMetrics = hotWorkspace{}
 
-func (h hotWorkspace) Duplication(context.Context) (types.DuplicationOutput, error) {
-	return types.DuplicationOutput{}, nil
+func (h hotWorkspace) Duplication(context.Context) (types.Duplication, error) {
+	return types.Duplication{}, nil
 }
 
-func (h hotWorkspace) Conformance(context.Context) (types.ConformanceOutput, error) {
-	return types.ConformanceOutput{}, nil
+func (h hotWorkspace) Conformance(context.Context) (types.Conformance, error) {
+	return types.Conformance{}, nil
 }
 
-func (h hotWorkspace) ModelTierLens(context.Context) (types.ModelTierOutput, error) {
-	return types.ModelTierOutput{}, nil
+func (h hotWorkspace) ModelTierLens(context.Context) (types.ModelTiers, error) {
+	return types.ModelTiers{}, nil
 }
 
-func (h hotWorkspace) GroupingLens(context.Context) (types.GroupingOutput, error) {
-	return types.GroupingOutput{}, nil
+func (h hotWorkspace) GroupingLens(context.Context) (types.Grouping, error) {
+	return types.Grouping{}, nil
 }
 
 func hot(paths ...string) []types.FileHotspot {

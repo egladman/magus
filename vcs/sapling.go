@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -114,42 +112,7 @@ func (v saplingVCS) DiffCommands(ctx context.Context, dir, base string) (types.D
 }
 
 func (v saplingVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions) (types.Culprit, error) {
-	if err := checkRef(opts.Good); err != nil {
-		return types.Culprit{}, err
-	}
-	if err := checkRef(opts.Bad); err != nil {
-		return types.Culprit{}, err
-	}
-	if opts.Good == "" {
-		sha, err := v.commitBeforeTime(ctx, dir, opts.GoodBefore)
-		if err != nil {
-			return types.Culprit{}, err
-		}
-		opts.Good = sha
-	}
-	if err := v.isAncestor(ctx, dir, opts.Good); err != nil {
-		return types.Culprit{}, fmt.Errorf("good commit %q is not an ancestor of current revision: %w", opts.Good, err)
-	}
-	bad := opts.Bad
-	if bad == "" {
-		bad = "."
-	}
-
-	if err := v.start(ctx, dir, bad, opts.Good); err != nil {
-		return types.Culprit{}, fmt.Errorf("sl bisect start: %w", err)
-	}
-	defer func() { _ = v.reset(context.WithoutCancel(ctx), dir) }()
-
-	if err := v.run(ctx, dir, opts.TestCmd); err != nil {
-		slog.WarnContext(ctx, "sl bisect run exited with error", attr.Error(err))
-	}
-
-	sha, err := v.culprit(ctx, dir)
-	if err != nil {
-		return types.Culprit{}, err
-	}
-	info, _ := v.commitInfo(ctx, dir, sha)
-	return types.Culprit{ID: sha, Info: info}, nil
+	return hgBisect{bin: "sl"}.bisect(ctx, dir, opts)
 }
 
 // saplingRefTemplate names the movable pointer at a revision. Sapling has no branches, so
@@ -388,9 +351,14 @@ func (v saplingVCS) RangeFiles(ctx context.Context, dir, base, head string, path
 	return hgRangeFiles(ctx, "sl", root, base, head, paths)
 }
 
+// MissingCommits implements types.RangeReporter; see missingCommits.
+func (v saplingVCS) MissingCommits(ctx context.Context, dir, branch, head string) (int, error) {
+	return missingCommits(ctx, v, dir, branch, head)
+}
+
 // RangeCommits implements types.RangeReporter; see hgRangeCommits.
 func (v saplingVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
-	return hgRangeCommits(ctx, v, "sl", dir, base, head, paths)
+	return hgRangeCommits(ctx, "sl", dir, base, head, paths)
 }
 
 // IsAncestor implements types.AncestryReporter; see hgIsAncestor.
@@ -556,91 +524,6 @@ func copyTree(src, dst string) error {
 		}
 		return os.WriteFile(target, data, info.Mode().Perm())
 	})
-}
-
-// isAncestor, commitBeforeTime and commitInfo run via `sl -R dir` so they target the
-// repository under bisect rather than the process cwd, the dir-scoping the VCSDriver
-// contract requires for correctness under concurrent runs.
-func (v saplingVCS) isAncestor(ctx context.Context, dir, sha string) error {
-	out, err := vcsExec(ctx, "sl", "-R", dir, "log",
-		"-r", fmt.Sprintf("(%s) and (ancestors(.) or .)", sha),
-		"--template", "{node}").Output()
-	if err != nil {
-		return fmt.Errorf("sl log: %w", err)
-	}
-	if strings.TrimSpace(string(out)) == "" {
-		return fmt.Errorf("sl: %s is not an ancestor of current revision", sha)
-	}
-	return nil
-}
-
-func (v saplingVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
-	// The date() predicate requires a date string, not an epoch integer.
-	revset := fmt.Sprintf("max(date('<%s'))", t.UTC().Format("2006-01-02 15:04:05"))
-	out, err := vcsExec(ctx, "sl", "-R", dir, "log", "-r", revset, "--template", "{node}").Output()
-	if err != nil {
-		return "", fmt.Errorf("sl log: %w", err)
-	}
-	sha := strings.TrimSpace(string(out))
-	if sha == "" {
-		return "", errors.New("no commit found before the last passing run")
-	}
-	return sha, nil
-}
-
-func (v saplingVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
-	out, err := vcsExec(ctx, "sl", "-R", dir, "log", "-r", sha,
-		"--template", "{desc|firstline}  ({author|user}, {date|shortdate})").Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-func (v saplingVCS) start(ctx context.Context, dir, bad, good string) error {
-	run := func(args ...string) error {
-		cmd := vcsExec(ctx, "sl", args...)
-		cmd.Dir = dir
-		cmd.Stdout = os.Stderr
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
-	}
-	if err := run("bisect", "--reset"); err != nil {
-		return err
-	}
-	if err := run("bisect", "--bad", bad); err != nil {
-		return err
-	}
-	return run("bisect", "--good", good)
-}
-
-func (v saplingVCS) run(ctx context.Context, dir, shellCommand string) error {
-	cmd := vcsExec(ctx, "sl", "bisect", "--command", shellCommand)
-	cmd.Dir = dir
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func (v saplingVCS) reset(ctx context.Context, dir string) error {
-	cmd := vcsExec(ctx, "sl", "bisect", "--reset")
-	cmd.Dir = dir
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func (v saplingVCS) culprit(ctx context.Context, dir string) (string, error) {
-	out, err := vcsExec(ctx, "sl", "-R", dir, "log",
-		"-r", "bisect(bad)", "--template", "{node}\n").Output()
-	if err != nil {
-		return "", fmt.Errorf("sl log bisect(bad): %w", err)
-	}
-	sha := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
-	if sha == "" {
-		return "", errors.New("sl bisect(bad) returned no revision")
-	}
-	return sha, nil
 }
 
 // slConfigPath is Sapling's per-repository config file, the counterpart of .hg/hgrc.
@@ -1115,4 +998,10 @@ func (v saplingVCS) PrunePreserved(context.Context, string, time.Time) ([]string
 // inherits from Mercurial; see hgCommitPushed.
 func (v saplingVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
 	return hgCommitPushed(ctx, "sl", dir, id)
+}
+
+// BranchHeads implements types.BranchHeadReporter over bookmarks, which is what
+// a Sapling branch is.
+func (v saplingVCS) BranchHeads(ctx context.Context, root string) (map[string]string, error) {
+	return hgHeads(ctx, "sl", root, "bookmarks", "-T", "{node} {bookmark}\n")
 }

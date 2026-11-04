@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
@@ -18,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestFsReadWriteLines(t *testing.T) {
@@ -650,6 +652,131 @@ func TestFsWalkPropagatesACallbackFailure(t *testing.T) {
 	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).Return(nil, boom).Once()
 	err := FsWalk(context.Background(), t.TempDir(), cb)
 	assert.ErrorIs(t, err, boom)
+}
+
+// agedFile writes size bytes to dir/name, last modified days before now.
+func agedFile(t *testing.T, dir, name string, size int, now time.Time, days float64) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+	require.NoError(t, os.WriteFile(p, make([]byte, size), 0o644))
+	at := now.Add(-time.Duration(days * float64(24*time.Hour)))
+	require.NoError(t, os.Chtimes(p, at, at))
+	return p
+}
+
+// TrimOldestSuite pins the fence and the budget of a cache trim.
+type TrimOldestSuite struct {
+	suite.Suite
+	dir string
+	now time.Time
+}
+
+func TestTrimOldestSuite(t *testing.T) {
+	suite.Run(t, new(TrimOldestSuite))
+}
+
+func (s *TrimOldestSuite) SetupTest() {
+	s.dir, s.now = s.T().TempDir(), time.Now()
+}
+
+func (s *TrimOldestSuite) aged(name string, size int, hours float64) string {
+	return agedFile(s.T(), s.dir, name, size, s.now, hours/24)
+}
+
+func (s *TrimOldestSuite) TestRemovesWholeHoursOldestFirstUntilItFits() {
+	fresh := s.aged("00/fresh", 100, 0.5)
+	two := s.aged("01/two", 100, 26)
+	five := s.aged("02/five", 100, 120)
+	nine := s.aged("ab/nine", 100, 216)
+
+	got, err := TrimOldest(s.T().Context(), s.dir, 250, 24*time.Hour, 0, s.now)
+	s.Require().NoError(err)
+	s.InDelta(float64(s.now.Add(-120*time.Hour).UnixMilli()), got.CutoffMs, 1)
+	got.CutoffMs = 0
+	s.Equal(types.TrimReport{Dir: s.dir, BeforeBytes: 400, AfterBytes: 200, RemovedFiles: 2, RemovedBytes: 200}, got)
+	s.FileExists(fresh)
+	s.FileExists(two)
+	s.NoFileExists(five)
+	s.NoFileExists(nine)
+	s.DirExists(filepath.Join(s.dir, "ab"), "directories stay")
+}
+
+func (s *TrimOldestSuite) TestWithinBudgetRemovesNothing() {
+	old := s.aged("old", 100, 720)
+	got, err := TrimOldest(s.T().Context(), s.dir, 100, 24*time.Hour, 0, s.now)
+	s.Require().NoError(err)
+	s.Equal(types.TrimReport{Dir: s.dir, BeforeBytes: 100, AfterBytes: 100}, got)
+	s.FileExists(old)
+}
+
+func (s *TrimOldestSuite) TestSixHourFenceTakesWhatADayFenceKeeps() {
+	inside := s.aged("inside", 500, 5.5)
+	outside := s.aged("outside", 100, 7)
+
+	got, err := TrimOldest(s.T().Context(), s.dir, 0, 6*time.Hour, 0, s.now)
+	s.Require().NoError(err)
+	s.FileExists(inside, "a file used within the fence survives a zero budget")
+	s.NoFileExists(outside)
+	s.Equal(int64(500), got.AfterBytes)
+	s.Contains(got.Stopped, "within 6h hold 500 bytes")
+}
+
+func (s *TrimOldestSuite) TestDayFenceKeepsWhatASixHourFenceTakes() {
+	young := s.aged("young", 100, 7)
+	got, err := TrimOldest(s.T().Context(), s.dir, 0, 24*time.Hour, 0, s.now)
+	s.Require().NoError(err)
+	s.FileExists(young)
+	s.Contains(got.Stopped, "within 24h hold 100 bytes")
+}
+
+func (s *TrimOldestSuite) TestRefusesAFenceBelowAnHour() {
+	s.aged("old", 100, 72)
+	_, err := TrimOldest(s.T().Context(), s.dir, 0, 30*time.Minute, 0, s.now)
+	s.ErrorContains(err, "whole number of hours, at least one")
+}
+
+func (s *TrimOldestSuite) TestRefusesAFenceOfPartHours() {
+	_, err := TrimOldest(s.T().Context(), s.dir, 0, 90*time.Minute, 0, s.now)
+	s.ErrorContains(err, "whole number of hours")
+}
+
+func (s *TrimOldestSuite) TestStopsAtItsTimeout() {
+	s.aged("old", 100, 72)
+	ctx, cancel := context.WithDeadline(s.T().Context(), s.now.Add(-time.Second))
+	defer cancel()
+	got, err := TrimOldest(ctx, s.dir, 0, 24*time.Hour, 0, s.now)
+	s.Require().NoError(err, "a timeout is a reason to stop, not a failure")
+	s.Equal("stopped at its timeout", got.Stopped)
+}
+
+func (s *TrimOldestSuite) TestAMissingDirReportsZero() {
+	dir := filepath.Join(s.dir, "absent")
+	got, err := TrimOldest(s.T().Context(), dir, 0, 24*time.Hour, 0, time.Now())
+	s.Require().NoError(err)
+	s.Equal(types.TrimReport{Dir: dir}, got)
+}
+
+func TestFsDiskUsageReadsTheFilesystem(t *testing.T) {
+	got, err := FsDiskUsage(t.Context(), ".")
+	require.NoError(t, err)
+	assert.True(t, filepath.IsAbs(got.Path), "a relative path is named absolute: %s", got.Path)
+	assert.Positive(t, got.TotalBytes)
+	assert.LessOrEqual(t, got.FreeBytes, got.TotalBytes)
+	_, err = FsDiskUsage(t.Context(), filepath.Join(t.TempDir(), "absent"))
+	assert.Error(t, err)
+}
+
+func TestFsStateDirIsOnePrivateDirectoryUnderXDGState(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir, err := FsStateDir(t.Context(), "disk")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(os.Getenv("XDG_STATE_HOME"), "magus", "disk"), dir)
+	assert.DirExists(t, dir)
+	for _, bad := range []string{"", ".", "..", "a/b"} {
+		_, err := FsStateDir(t.Context(), bad)
+		assert.Error(t, err, bad)
+	}
 }
 
 func TestFsWalkOnAMissingRoot(t *testing.T) {

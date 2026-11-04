@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -25,12 +26,36 @@ import (
 type MachineAdmitter interface {
 	// Claim asks the budget to seat c. A claim kept out only by its own process's or run's
 	// claims, or by its job tree's validation seat, is held by the budget until it is
-	// seated or ctx ends, which returns ctx's error; any other refusal answers at once.
+	// seated or ctx ends, which returns ctx's error; so is a claim of the oldest gate's run,
+	// up to a bound past which the error is a types.ExitError. Any other refusal answers
+	// at once.
 	Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error)
 	Release(ctx context.Context, id string)
 	// Overrun says the granted claim id held more than its memory curve predicted, so
 	// the budget charges it its full peak until Release. Best-effort, like Release.
 	Overrun(ctx context.Context, id string)
+	// HoldGroup ties process group pgid to the claim. The broker stops
+	// it on release, or when this process's connection closes.
+	HoldGroup(ctx context.Context, claim string, pgid int, command string) (string, error)
+	// ReleaseHold returns an error when the broker did not answer and may
+	// still hold the group.
+	ReleaseHold(ctx context.Context, id string) error
+}
+
+// KickingAdmitter is admit with kick called once, on the first claim. No claim
+// waits for it: a held step may be the one that would free space.
+func KickingAdmitter(admit MachineAdmitter, kick func()) MachineAdmitter {
+	return &kickingAdmitter{MachineAdmitter: admit, kick: sync.OnceFunc(kick)}
+}
+
+type kickingAdmitter struct {
+	MachineAdmitter
+	kick func()
+}
+
+func (k *kickingAdmitter) Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+	k.kick()
+	return k.MachineAdmitter.Claim(ctx, c)
 }
 
 // machineReleaseTimeout bounds handing a claim back. The release runs in the defer
@@ -40,6 +65,9 @@ type MachineAdmitter interface {
 // A var, not a const, for the same reason as elsewhere in this package: a timing a test
 // cannot shorten is a timing that either costs real wall-clock or goes uncovered.
 var machineReleaseTimeout = 5 * time.Second
+
+// readPressure is a var so a test can stand in for a really full machine.
+var readPressure = mem.ReadPressure
 
 // ExitCodeMachineBusy is the process status a machine-budget refusal asks for: 75,
 // EX_TEMPFAIL. It lives here rather than beside the CLI's other exit codes because the
@@ -97,6 +125,8 @@ type machineGate struct {
 	admit MachineAdmitter
 	log   *slog.Logger
 	lost  sync.Once
+	// unread says once that this host's memory state has no reading.
+	unread sync.Once
 	// required refuses a step the admitter could not answer for, where the default
 	// admits it unarbitrated.
 	required bool
@@ -112,6 +142,7 @@ type machineGate struct {
 //
 // A broker that dies, or a transport that breaks, admits the step and says so once
 // under best-effort; under required it refuses with MGS3022 (exit 69).
+// A machine short of memory refuses with MGS3053 (exit 75) before that.
 func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func(), error) {
 	_, release, err := g.claim(ctx, c)
 	return release, err
@@ -169,6 +200,7 @@ func (h *machineHold) lend() {
 // reclaim takes the claim again once the last lent dispatch returns. It waits on this
 // run's claims and is refused by any other invocation's, so a composer can fail here
 // after its members ran.
+// It reads no memory: this step is running, and running work is never refused.
 func (h *machineHold) reclaim(ctx context.Context) error {
 	h.mu.Lock()
 	h.lent--
@@ -179,7 +211,7 @@ func (h *machineHold) reclaim(ctx context.Context) error {
 	}
 	// Claimed unlocked, so a wait starting meanwhile never blocks behind it; such a wait
 	// gets the claim handed straight back.
-	id, release, err := h.gate.claim(ctx, h.claim)
+	id, release, err := h.gate.seat(ctx, h.claim)
 	if err != nil {
 		return err
 	}
@@ -219,8 +251,47 @@ func LendMachineClaim(ctx context.Context, fn func(context.Context) error) error
 }
 
 // claim is acquire, also returning the id of the claim granted: "" when nothing
-// arbitrates the step.
+// arbitrates the step. broker: off is that case, and reads no memory either.
 func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, func(), error) {
+	if g == nil || g.admit == nil {
+		return "", func() {}, nil
+	}
+	if err := g.refuseUnderPressure(ctx, c); err != nil {
+		return "", nil, err
+	}
+	id, release, err := g.seat(ctx, c)
+	if err != nil {
+		return "", nil, err
+	}
+	// seat can hold a claim 30 minutes, and a healthy machine can fail in that.
+	if err := g.refuseUnderPressure(ctx, c); err != nil {
+		release()
+		return "", nil, err
+	}
+	return id, release, nil
+}
+
+// refuseUnderPressure is the MGS3053 refusal while the kernel says memory is
+// bad. A missing or partial reading is said once. A nested run passes: refusing
+// it would fail the running step above it. A wrapper above it runs no step.
+func (g *machineGate) refuseUnderPressure(ctx context.Context, c types.MachineClaim) error {
+	if types.RunsUnderAStep(c.Ancestors) || spawn.CurrentLevel() > 0 {
+		return nil
+	}
+	reason, err := readPressure(ctx)
+	if err != nil {
+		g.unread.Do(func() {
+			g.log.WarnContext(ctx, "this run's memory reading is missing or partial, so a step may start on a bad machine", attr.Error(err))
+		})
+	}
+	if reason == "" {
+		return nil
+	}
+	return memoryPressureError(c, reason, claimLease(ctx))
+}
+
+// seat asks the budget for c, with no reading of memory.
+func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (string, func(), error) {
 	if g == nil || g.admit == nil {
 		return "", func() {}, nil
 	}
@@ -375,25 +446,14 @@ func watchOverrun(ctx context.Context) {
 	})
 }
 
-// GroupHolder is an admitter that ends a step's process groups with the step's claim:
-// the broker stops a group still running when the claim is released, or when this
-// process's connection to it closes, as it does when the process dies.
-type GroupHolder interface {
-	HoldGroup(ctx context.Context, claim string, pgid int, command string) (string, error)
-	// ReleaseHold returns an error when the broker did not answer and may still hold the
-	// group.
-	ReleaseHold(ctx context.Context, id string) error
-}
-
 // withStepGroups returns ctx under which every process group spawn.Exec starts rides
-// the claim claim names when the group starts, when admit can hold groups.
+// the claim claim names when the group starts.
 //
 // A claim that reads "" while a group starts is handed back (lent, or the step ended),
 // so the group is left unheld without a warning. A broker that refuses a hold warns
 // once per step, not once per child.
 func withStepGroups(ctx context.Context, admit MachineAdmitter, claim func() string) context.Context {
-	holder, ok := admit.(GroupHolder)
-	if !ok || claim() == "" {
+	if claim() == "" {
 		return ctx
 	}
 	var project, target string
@@ -411,7 +471,7 @@ func withStepGroups(ctx context.Context, admit MachineAdmitter, claim func() str
 		if id == "" {
 			return func() {}
 		}
-		return holdStepGroup(ctx, holder, id, pgid, command, unheld)
+		return holdStepGroup(ctx, admit, id, pgid, command, unheld)
 	})
 }
 
@@ -432,7 +492,7 @@ func UnheldGroupWarning(project, target string, pgid int, command string, err er
 // leave a hold the broker recorded that this process never learns the id of, and so
 // never releases. It is bounded the way a release is, so a sick broker cannot stall the
 // step that started the group.
-func holdStepGroup(ctx context.Context, holder GroupHolder, claim string, pgid int, command string, unheld func(pgid int, command string, err error)) (release func()) {
+func holdStepGroup(ctx context.Context, holder MachineAdmitter, claim string, pgid int, command string, unheld func(pgid int, command string, err error)) (release func()) {
 	hctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 	id, err := holder.HoldGroup(hctx, claim, pgid, command)
 	cancel()
@@ -455,6 +515,12 @@ func holdStepGroup(ctx context.Context, holder GroupHolder, claim string, pgid i
 // reader to scroll past the line.
 func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 	g.lost.Do(func() {
+		if errors.Is(err, types.PeerFromAnotherBuild) {
+			g.log.WarnContext(ctx, types.FormatDiagnostic(types.PeerFromAnotherBuild,
+				"host capacity is not arbitrated for this run: a broker from another magus build answered (broker: best-effort)"),
+				attr.Error(err))
+			return
+		}
 		g.log.WarnContext(ctx, "host capacity is not arbitrated for this run: no broker answered (broker: best-effort)",
 			attr.Error(err))
 	})
@@ -463,7 +529,13 @@ func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 
 // brokerUnavailableError is the refusal under `broker: required`: nothing answered for
 // the host's capacity, and the setting says a step must not start unarbitrated.
+// A broker from another build counts as none.
 func brokerUnavailableError(c types.MachineClaim, err error) error {
+	if errors.Is(err, types.PeerFromAnotherBuild) {
+		return types.ExitError{Code: ExitCodeBrokerUnavailable, Err: types.WrapDiagnostic(types.PeerFromAnotherBuild, err,
+			"not starting %s %s: a broker from another magus build answered for this host's capacity (%v), and broker: required refuses to run unarbitrated",
+			displayProject(c.Project), c.Target, err)}
+	}
 	return types.ExitError{Code: ExitCodeBrokerUnavailable, Err: types.WrapDiagnostic(types.BrokerUnavailable, err,
 		"not starting %s %s: no broker answered for this host's capacity (%v), and broker: required refuses to run unarbitrated. `magus broker status` says whether one is up and where it logs",
 		displayProject(c.Project), c.Target, err)}
@@ -532,13 +604,37 @@ func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Tim
 	next := fmt.Sprintf("To run it once the budget can seat it, pipe the budget into the same command: `%s | %s <same args>`",
 		hint.Status.With("--wait"), hint.Run)
 	if lease != "" {
-		next = fmt.Sprintf("Job %s never waits for a seat: file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
-			lease, hint.JobExit.With(lease), types.OwedNoSeat)
+		next = fmt.Sprintf("Job %s never waits for a seat: %s", lease, owedFiling(lease))
 	}
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this machine's build budget is full; %s, and %s. %s. The broker %s. %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
 		describeMachineRemaining(v), describeMachineHolders(v.Holders), describeMachinePacking(c, v, now), next)}
+}
+
+// owedFiling tells a caller under a job lease how to file a refused check.
+func owedFiling(lease string) string {
+	return fmt.Sprintf("file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
+		hint.JobExit.With(lease), types.OwedNoSeat)
+}
+
+// LeasedPressureNext is what a job does after MGS3053. An integration cannot
+// file its own checks as owed, and no seat clears this.
+func LeasedPressureNext(lease string) string {
+	return fmt.Sprintf("Job %s does not wait on memory. An integration owns its checks, so free memory and run this again; any other job should %s",
+		lease, owedFiling(lease))
+}
+
+// memoryPressureError offers no wait pipe: that waits on declared claims and
+// cannot see this.
+func memoryPressureError(c types.MachineClaim, reason, lease string) error {
+	next := fmt.Sprintf("Free memory, then run the same command again: `%s` shows what magus holds, and this reading counts everything on the machine", hint.Status.String())
+	if lease != "" {
+		next = LeasedPressureNext(lease)
+	}
+	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MemoryPressureHigh,
+		"not starting %s %s: this machine is short of memory right now: %s. Running steps keep going. %s",
+		displayProject(c.Project), c.Target, reason, next)}
 }
 
 // claimLease is the job lease the refused run acts under, "" when it acts under none or

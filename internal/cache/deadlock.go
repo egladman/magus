@@ -34,7 +34,7 @@ var slotDeadlockGrace = 3 * time.Second
 // is waiting on while it holds them.
 //
 // The blocked field is the whole point. make's jobserver rule, which this engine adopts on
-// purpose, is that a slot is held only while a recipe RUNS; a holder parked in a wait is
+// purpose, is that a slot is held only while a target RUNS; a holder parked in a wait is
 // the exception that turns a queue into a deadlock, and nothing could see it before.
 // Every field is guarded by the watch's mutex, so a verdict reads one consistent picture
 // rather than a set of per-holder samples.

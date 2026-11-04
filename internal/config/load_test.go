@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/hint"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/testkit"
@@ -35,7 +36,7 @@ func TestLoadFileReadsInlineSpellImports(t *testing.T) {
 	cfg, err := LoadFile(path, true)
 	require.NoError(t, err)
 	assert.Equal(t, SpellsConfig{
-		Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}},
+		Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", PasswordRef: "GITHUB_TOKEN"}},
 		Imports: map[string]SpellImport{
 			"ghcr.io/team/spells/lint": {Tag: "1.4"},
 			"magus/spell/go":           {Path: "spells/go"},
@@ -99,6 +100,77 @@ func TestLoadWithRootLayersOnlyAWorkingDirectoryInsideTheWorkspace(t *testing.T)
 	cfg, err = LoadWithRoot("", ws)
 	require.NoError(t, err)
 	assert.Equal(t, 5, cfg.Concurrency, "a project inside the workspace")
+}
+
+func (s *configSuite) TestLoadReadsSourcesFromTheUserConfig() {
+	home := s.T().TempDir()
+	s.T().Setenv("XDG_CONFIG_HOME", home)
+	s.Require().NoError(os.Mkdir(filepath.Join(home, "magus"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(home, "magus", Filename), []byte(`sources:
+  - url: https://go.dev/doc/
+    topic: go modules
+    verdict: follow
+    why: upstream
+    contradicts: https://blog.example/go
+`), 0o644))
+	cfg, err := LoadWithRoot("", s.T().TempDir())
+	s.Require().NoError(err)
+	s.Equal([]Source{{URL: "https://go.dev/doc/", Topic: "go modules", Verdict: SourceFollow,
+		Why: "upstream", Contradicts: "https://blog.example/go"}}, cfg.Sources)
+}
+
+func (s *configSuite) TestLoadRefusesABadVerdictInTheUserConfig() {
+	home := s.T().TempDir()
+	s.T().Setenv("XDG_CONFIG_HOME", home)
+	s.Require().NoError(os.Mkdir(filepath.Join(home, "magus"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(home, "magus", Filename),
+		[]byte("sources:\n  - url: https://blog.example/go\n    verdict: trust\n"), 0o644))
+	_, err := LoadWithRoot("", s.T().TempDir())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "entry https://blog.example/go must be one of")
+}
+
+func (s *configSuite) repositoryWithSources() string {
+	repo := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(repo, Filename),
+		[]byte("sources:\n  - url: https://go.dev/doc/\n    verdict: follow\n"), 0o644))
+	return repo
+}
+
+func (s *configSuite) TestLoadRefusesSourcesInTheWorkspaceConfig() {
+	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
+	_, err := LoadWithRoot("", s.repositoryWithSources())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "sets sources")
+	s.Contains(err.Error(), "$XDG_CONFIG_HOME/magus")
+}
+
+func (s *configSuite) TestLoadRefusesSourcesInAWorkingDirConfig() {
+	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
+	s.T().Chdir(s.repositoryWithSources())
+	_, err := LoadWithRoot("", "")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "sets sources")
+}
+
+func (s *configSuite) TestLoadWorkspaceOnlyRefusesSources() {
+	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
+	_, err := LoadWorkspaceOnly(s.repositoryWithSources())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "sets sources")
+}
+
+func (s *configSuite) TestLoadAcceptsSourcesWhenTheWorkingDirIsTheUserConfigDir() {
+	home := s.T().TempDir()
+	s.T().Setenv("XDG_CONFIG_HOME", home)
+	dir := filepath.Join(home, "magus")
+	s.Require().NoError(os.Mkdir(dir, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, Filename),
+		[]byte("sources:\n  - url: https://go.dev/doc/\n    verdict: follow\n"), 0o644))
+	s.T().Chdir(dir)
+	cfg, err := LoadWithRoot("", "")
+	s.Require().NoError(err)
+	s.Len(cfg.Sources, 1)
 }
 
 func TestLoadDirIntoDotted(t *testing.T) {
@@ -329,15 +401,15 @@ func TestUnknownKeyMessage(t *testing.T) {
 		strings.Repeat("    - env: X\n      base: y\n      name: spells/a\n      reason: r\n    #\n", 3))
 	const devBuild, release = "v0.4.3-122-g1a2b3c4", "v0.4.3"
 	cases := map[string]struct {
-		doc        string
-		sourceTree bool
-		running    string
-		want       string
+		doc     string
+		served  bool
+		running string
+		want    string
 	}{
 		"the reported sample": {
-			doc:        sample,
-			sourceTree: true,
-			running:    devBuild,
+			doc:     sample,
+			served:  true,
+			running: devBuild,
 			want: "magus.yaml has keys this magus does not know:\n" +
 				"  - spells.allow_shadow.env   (lines 16, 21, 26)\n" +
 				"  - spells.allow_shadow.base  (lines 17, 22, 27; did you mean \"name\"?)\n" +
@@ -345,35 +417,35 @@ func TestUnknownKeyMessage(t *testing.T) {
 				"This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" +
 				"Fix it:\n" +
 				"  - released binary: magus self update\n" +
-				"  - built from this checkout: ./magus run go-build .\n" +
-				"  - if that cannot load the tree either: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
+				"  - this workspace's script for it: {script}\n" +
+				"  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 		},
 		// A release build cannot be the one a checkout outgrew, so it is never told to
-		// bootstrap; the checkout's own build is still a fix.
-		"a release build in a source tree": {
-			doc:        "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
-			sourceTree: true,
-			running:    release,
+		// bootstrap; the workspace's script is still a fix.
+		"a release build with a served script": {
+			doc:     "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
+			served:  true,
+			running: release,
 			want: "magus.yaml has a key this magus does not know:\n" +
 				"  - zzzzzzzz  (line 2)\n" +
 				"\n" +
 				"This magus (v0.4.3) is older than the workspace needs (>= 0.4.4).\n" +
 				"Fix it:\n" +
 				"  - released binary: magus self update\n" +
-				"  - built from this checkout: ./magus run go-build .",
+				"  - this workspace's script for it: {script}",
 		},
-		"a dev build in a source tree": {
-			doc:        "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
-			sourceTree: true,
-			running:    devBuild,
+		"a dev build with a served script": {
+			doc:     "required_version: \">= 0.4.4\"\nzzzzzzzz: 1\n",
+			served:  true,
+			running: devBuild,
 			want: "magus.yaml has a key this magus does not know:\n" +
 				"  - zzzzzzzz  (line 2)\n" +
 				"\n" +
 				"This magus (v0.4.3-122-g1a2b3c4) is older than the workspace needs (>= 0.4.4).\n" +
 				"Fix it:\n" +
 				"  - released binary: magus self update\n" +
-				"  - built from this checkout: ./magus run go-build .\n" +
-				"  - if that cannot load the tree either: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
+				"  - this workspace's script for it: {script}\n" +
+				"  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 		},
 		// The loader is never told the version, and neither side is invented.
 		"a single unknown key with nothing known": {
@@ -387,9 +459,9 @@ func TestUnknownKeyMessage(t *testing.T) {
 		},
 		// A near miss is a typo: no version gap, however old the build is.
 		"a typo only": {
-			doc:        "required_version: \">= 0.4.4\"\nconcurrencyy: 4\n",
-			sourceTree: true,
-			running:    devBuild,
+			doc:     "required_version: \">= 0.4.4\"\nconcurrencyy: 4\n",
+			served:  true,
+			running: devBuild,
 			want: "magus.yaml has a key this magus does not know:\n" +
 				"  - concurrencyy  (line 2; did you mean \"concurrency\"?)",
 		},
@@ -420,28 +492,35 @@ func TestUnknownKeyMessage(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			dir := unknownKeyWorkspace(t, tc.doc, tc.sourceTree)
+			dir := unknownKeyWorkspace(t, tc.doc, tc.served)
 
 			_, err := loadDirInto(Defaults(), dir)
 			if tc.running != "" {
 				err = WithRunningVersion(err, tc.running)
 			}
 			require.ErrorIs(t, err, types.UnknownConfigKey)
-			assert.Equal(t, types.DiagnosticErrorf(types.UnknownConfigKey, "%s", tc.want).Error(), err.Error())
+			want := strings.ReplaceAll(tc.want, "{script}", strings.Join(StaleBinaryScripts(dir, nil), ""))
+			assert.Equal(t, types.DiagnosticErrorf(types.UnknownConfigKey, "%s", want).Error(), err.Error())
 		})
 	}
 }
 
-// unknownKeyWorkspace writes doc as the magus.yaml of a fresh workspace root, with
-// cmd/magus in it when sourceTree. The cwd stays elsewhere: the file's own workspace
-// decides how its path renders and whether it is a source tree.
-func unknownKeyWorkspace(t *testing.T, doc string, sourceTree bool) string {
+// unknownKeyWorkspace writes doc as the magus.yaml of a fresh workspace root, with a
+// script indexed as serving MGS1021 when served. The cwd stays elsewhere: the file's own
+// workspace decides how its path renders and which scripts it serves.
+func unknownKeyWorkspace(t *testing.T, doc string, served bool) string {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
 	w.Write("go.mod", "module tmp\n")
 	w.Write("magus.yaml", doc)
-	if sourceTree {
-		require.NoError(t, os.MkdirAll(w.Path("cmd", "magus"), 0o755))
+	if served {
+		w.Write("hack/relink.buzz", "// relinks\n")
+		require.NoError(t, hint.WriteScriptsIndex(CacheDir(w.Root(), Config{}), hint.ScriptsIndex{
+			Root: w.Root(),
+			Serves: map[string][]hint.ScriptServe{"code:MGS1021": {{
+				Path: "hack/relink.buzz", Effect: hint.ScriptEffectWrite, Summary: "relink",
+			}}},
+		}))
 	}
 	return w.Root()
 }

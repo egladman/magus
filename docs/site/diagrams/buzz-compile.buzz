@@ -5,22 +5,22 @@ import "magus/figure";
 import "site/diagrams/buzz-stages" as _;
 
 export fun buzzCompileFigure() > figure\Figure !> any {
-    final session = magus\dir("libs/gopherbuzz");
-    final lexer = magus\dir("libs/gopherbuzz/token");
-    final tree = magus\dir("libs/gopherbuzz/ast");
-    final typeSystem = magus\dir("libs/gopherbuzz/types");
-    final vm = magus\dir("libs/gopherbuzz/vm");
-    final parseCache = codeStage(session, symbol: "ParseCache#tokenize().", name: "Parse cache",
+    final session = magus\graph().dir("libs/gopherbuzz");
+    final lexer = magus\graph().dir("libs/gopherbuzz/token");
+    final tree = magus\graph().dir("libs/gopherbuzz/ast");
+    final typeSystem = magus\graph().dir("libs/gopherbuzz/types");
+    final vm = magus\graph().dir("libs/gopherbuzz/vm");
+    final parseCache = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/ParseCache#tokenize().", name: "Parse cache",
         sub: "tokens keyed by source", look: figure\Look.store);
-    final parser = codeStage(session, symbol: "parseModedTracked().", name: "Parser",
+    final parser = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/parseModedTracked().", name: "Parser",
         sub: "recursive descent, *ast.Program");
-    final imports = codeStage(session, symbol: "Session#loadFileImports().", name: "Import resolution",
+    final imports = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#loadFileImports().", name: "Import resolution",
         sub: "runs each module first", look: figure\Look.focal);
-    final checker = codeStage(session, symbol: "checkWithPrelude().", name: "Checker",
+    final checker = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/checkWithPrelude().", name: "Checker",
         sub: "types.Type, BZZ codes");
-    final compiler = codeStage(session, symbol: "CompileWith().", name: "Compiler",
+    final compiler = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/CompileWith().", name: "Compiler",
         sub: "AST to *vm.Chunk");
-    final store = codeStage(session, symbol: "Session#loadCachedChunk().", name: "Bytecode store",
+    final store = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#loadCachedChunk().", name: "Bytecode store",
         sub: ".bo plus its import closure", look: figure\Look.store);
     return figure\of("buzz-compile",
             title: "From Buzz source to a chunk",
@@ -39,14 +39,14 @@ export fun buzzCompileFigure() > figure\Figure !> any {
                 + "them still hold the same bytes, hands the saved chunk to the VM without parsing "
                 + "anything.",
             direction: figure\Direction.down)
-        .box(lexer, label: "Lexer", sub: "token.Tokenize", symbol: magus\refs("token`/Tokenize()."))
+        .box(lexer, label: "Lexer", sub: "token.Tokenize", symbol: magus\graph().refs("symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/token`/Tokenize()."))
         .actor(parseCache)
         .actor(parser)
         .actor(imports)
         .actor(checker)
         .actor(compiler)
         .actor(store)
-        .box(vm, label: "Chunk", sub: "FoldConsts, FusePeephole", symbol: magus\refs("FusePeephole()."))
+        .box(vm, label: "Chunk", sub: "FoldConsts, FusePeephole", symbol: magus\graph().refs("symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/FusePeephole()."))
         .edgesFromGraph()
         .flowOut(lexer, dst: parseCache, label: "on a miss")
         .flowAcross(parseCache, dst: parser, label: "[]Token")
@@ -65,7 +65,7 @@ export fun buzzCompileFigure() > figure\Figure !> any {
             why: "its steps are drawn one by one, each checked against the symbol that implements it")
         .except([tree, typeSystem],
             why: "data packages: their types label the connectors")
-        .except([magus\dir("libs/gopherbuzz/std"), magus\dir("libs/gopherbuzz/internal/codec")],
+        .except([magus\graph().dir("libs/gopherbuzz/std"), magus\graph().dir("libs/gopherbuzz/internal/codec")],
             why: "the Buzz stdlib and its JSON codec: modules a program imports, compiled by these same steps")
         .except(gopherbuzzAround(), why: AROUND_WHY);
 }

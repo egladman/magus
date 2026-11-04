@@ -74,14 +74,14 @@ func TestVerifyRoutesByKind(t *testing.T) {
 	op, err := EnsureOperator(t.Context(), slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
 
-	opCred, ok := Verify(op)
+	opCred, ok := Verify(op.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, operatorCredential(op), opCred)
 	assert.Equal(t, types.GrantOperator, opCred.Grant)
 
 	// A record carrying the operator secret's hash, as a viewer.
-	plantRecord(t, "shadow", op, types.GrantViewer)
-	opCred, ok = Verify(op)
+	plantRecord(t, "shadow", op.Reveal(), types.GrantViewer)
+	opCred, ok = Verify(op.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, types.KindOperator, opCred.Kind, "an mgo_ string is never matched against the store")
 
@@ -101,8 +101,8 @@ func TestVerifyRoutesByKind(t *testing.T) {
 	// A share secret with a planted record still fails on loopback.
 	share, _, err := MintShare(types.GrantOperator, time.Hour)
 	require.NoError(t, err)
-	plantRecord(t, "planted-share", share, types.GrantConsole)
-	_, ok = Verify(share)
+	plantRecord(t, "planted-share", share.Reveal(), types.GrantConsole)
+	_, ok = Verify(share.Reveal())
 	assert.False(t, ok, "mgl_ never verifies on loopback")
 
 	// Nor does a console link's code, even with a stored record carrying its hash.
@@ -113,7 +113,7 @@ func TestVerifyRoutesByKind(t *testing.T) {
 	assert.False(t, ok, "mgx_ is never a bearer")
 
 	// Wrong, malformed, and empty.
-	for _, s := range []string{"", "not-a-token", op + "x", strings.Replace(op, "mgo_", "mgs_", 1)} {
+	for _, s := range []string{"", "not-a-token", op.Reveal() + "x", strings.Replace(op.Reveal(), "mgo_", "mgs_", 1)} {
 		_, ok := Verify(s)
 		assert.False(t, ok, s)
 	}
@@ -135,7 +135,7 @@ func TestVerifyAnswersBadTokensFromMemory(t *testing.T) {
 	require.NoError(t, err)
 	good, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "good", Grant: types.GrantConnector, TTL: time.Hour})
 	require.NoError(t, err)
-	_, ok := Verify(good)
+	_, ok := Verify(good.Reveal())
 	require.True(t, ok)
 
 	loads := func() int {
@@ -154,9 +154,9 @@ func TestVerifyAnswersBadTokensFromMemory(t *testing.T) {
 		_, ok := Verify(bad)
 		require.False(t, ok)
 		if i == 500 {
-			_, ok := Verify(good)
+			_, ok := Verify(good.Reveal())
 			require.True(t, ok, "a valid token verifies mid-flood")
-			_, ok = Verify(op)
+			_, ok = Verify(op.Reveal())
 			require.True(t, ok, "and so does the operator")
 		}
 	}
@@ -164,14 +164,14 @@ func TestVerifyAnswersBadTokensFromMemory(t *testing.T) {
 
 	fresh, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "fresh", Grant: types.GrantConnector, TTL: time.Hour})
 	require.NoError(t, err)
-	_, ok = Verify(fresh)
+	_, ok = Verify(fresh.Reveal())
 	assert.True(t, ok, "a mint is seen at once")
 	_, err = store.Revoke(types.GrantOperator, "good")
 	require.NoError(t, err)
-	_, ok = Verify(good)
+	_, ok = Verify(good.Reveal())
 	assert.False(t, ok, "a revoke is seen at once")
 	require.NoError(t, RevokeOperator())
-	_, ok = Verify(op)
+	_, ok = Verify(op.Reveal())
 	assert.False(t, ok, "so is a revoked operator token")
 }
 

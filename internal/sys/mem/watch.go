@@ -19,9 +19,8 @@ const (
 	// LowHeadroomDivisor sets the threshold: the watchdog talks below total/8. Above
 	// it a build is using the machine, which is what a build is for.
 	//
-	// This is the OBSERVED half and it only ever warns. What magus queues or refuses on
-	// is the DECLARED half, cache.MachineBudget, so the same command reaches the same
-	// verdict whatever else the machine happens to be doing.
+	// Low headroom only warns. What magus queues on is the DECLARED budget,
+	// cache.MachineBudget, and what it refuses on besides is ReadPressure.
 	LowHeadroomDivisor = 8
 
 	// reWarnDropBytes is how much further the floor must fall before saying so
@@ -66,7 +65,7 @@ type Reading struct {
 // report takes the whole reading rather than a sentence, so the caller owns the
 // wording and whatever else the warning carries.
 func Watch(ctx context.Context, report func(Reading)) {
-	watch(ctx, UsableBytes(ctx), AvailableBytes, SwapUsedBytes, report, sampleEvery)
+	watch(ctx, UsableBytes(ctx), availableBytes, swapUsedBytes, report, sampleEvery)
 }
 
 // watch is Watch with the host readings and the interval injected, so its tests

@@ -11,9 +11,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache/remotetest"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -24,6 +27,91 @@ type cacheShard struct {
 	root    string
 	emu     *remotetest.GHA
 	trusted string
+	output  string
+}
+
+// ConfigCacheImportRecordSuite reads the -o json record of a remote import.
+type ConfigCacheImportRecordSuite struct {
+	suite.Suite
+	shard *cacheShard
+}
+
+func TestConfigCacheImportRecordSuite(t *testing.T) {
+	suite.Run(t, new(ConfigCacheImportRecordSuite))
+}
+
+func (s *ConfigCacheImportRecordSuite) SetupTest() {
+	s.shard = newCacheShard(s.T())
+	s.shard.sign(s.T())
+}
+
+func (s *ConfigCacheImportRecordSuite) importRecord() configCacheImportOutput {
+	s.shard.output = "json"
+	var err error
+	stdout := captureStdout(s.T(), func() {
+		_, err = s.shard.run(s.T(), "import", "--remote")
+	})
+	s.Require().NoError(err)
+	var rec configCacheImportOutput
+	s.Require().NoError(json.Unmarshal([]byte(stdout), &rec), stdout)
+	return rec
+}
+
+func (s *ConfigCacheImportRecordSuite) TestAMissRestoresNothing() {
+	goCaches(s.T(), nil)
+	rec := s.importRecord()
+	s.False(rec.Restored)
+	s.Require().Len(rec.Spells, 1)
+	s.Equal(spellCacheCold, rec.Spells[0].Outcome)
+}
+
+func (s *ConfigCacheImportRecordSuite) TestAnInactiveBackendRestoresNothing() {
+	row := newSpellCacheRow(magus.SpellCache{Spell: "go", Inactive: true})
+	s.Equal(spellCacheInactive, row.Outcome)
+}
+
+func (s *ConfigCacheImportRecordSuite) TestAFailedImportStillPrintsItsRows() {
+	goCaches(s.T(), nil)
+	s.Require().NoError(os.WriteFile(filepath.Join(s.shard.root, "magusfile.buzz"),
+		[]byte("import \"magus\";\nimport \"magus/spell/go\";\nmagus\\project({\"spells\": [go]});\n"), 0o644))
+	s.shard.output = "json"
+	var err error
+	stdout := captureStdout(s.T(), func() {
+		_, err = s.shard.run(s.T(), "import", "--remote")
+	})
+	s.Require().ErrorContains(err, "no remote backend configured")
+	var rec configCacheImportOutput
+	s.Require().NoError(json.Unmarshal([]byte(stdout), &rec), stdout)
+	s.False(rec.Restored)
+	s.Len(rec.Spells, 1)
+}
+
+func (s *ConfigCacheImportRecordSuite) TestAnUntrustedBundleIsNamed() {
+	goCaches(s.T(), map[string]string{"GOCACHE:0a/0abc-a": "compiled"})
+	out, err := s.shard.run(s.T(), "export", "--remote")
+	s.Require().NoError(err, out)
+	s.shard.sign(s.T())
+	goCaches(s.T(), nil)
+	rec := s.importRecord()
+	s.False(rec.Restored)
+	s.Require().Len(rec.Spells, 1)
+	s.Equal(spellCacheCold, rec.Spells[0].Outcome)
+	s.NotEmpty(rec.Spells[0].Refused)
+}
+
+func (s *ConfigCacheImportRecordSuite) TestARestoreSaysWhatItRestored() {
+	goCaches(s.T(), map[string]string{"GOCACHE:0a/0abc-a": "compiled"})
+	out, err := s.shard.run(s.T(), "export", "--remote")
+	s.Require().NoError(err, out)
+	goCaches(s.T(), nil)
+	rec := s.importRecord()
+	s.True(rec.Restored)
+	s.Require().Len(rec.Spells, 1)
+	row := rec.Spells[0]
+	s.Equal(spellCacheRestored, row.Outcome)
+	s.True(row.Exact)
+	s.NotEmpty(row.Dirs)
+	s.Positive(row.Transferred)
 }
 
 func newCacheShard(t *testing.T) *cacheShard {
@@ -93,6 +181,7 @@ func (s *cacheShard) run(t *testing.T, args ...string) (string, error) {
 	if s.trusted != "" {
 		globalCfg.Cache.Remote.TrustedKeys = []string{s.trusted}
 	}
+	global.output = s.output
 	var err error
 	stderr := notices(t, func() {
 		err = configCacheCommand(context.Background(), s.root, args)

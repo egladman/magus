@@ -419,7 +419,7 @@ tags: [design, <principle or judgment>, <topics>]
 - `order` sorts the page within its group, and `description` is the line the index in
   `docs/design.md` prints beside the title. `design-index-generate` rewrites that index
   from the front matter, so a new page appears there on the next `magus run generate docs`.
-- The argument comes before the first H2 and may carry H3s of its own.
+- The argument comes before Enforced by and may carry H2s of its own, not H3s.
 - The H2 sections are exactly Enforced by, Good, Bad and See also, in that order.
   Enforced by names the test, lint, guard rule or review step that holds the rule; a rule
   with nothing yet says so and is listed in `docs/design/strained.md`.
@@ -666,9 +666,9 @@ reader a step is easy (`condescension`: `easy`, `simple`, `obviously`, `of cours
 `clearly`, `please`, and `just` before a verb).
 
 The `banned-words` lint rule holds hand-written Go, Buzz, Markdown, TypeScript, CSS,
-HTML, YAML, proto and txtar files to three bans: `surface` as a noun, where the verb in
-`surfaces an error` passes, `lane` and `corpus`. Each finding names what to write instead:
-what the thing is, `write paths`, or `the cases`.
+HTML, YAML, proto and txtar files to four bans: `surface` as a noun, where the verb in
+`surfaces an error` passes, `lane`, `corpus`, and `recipe`. Each finding names what to write
+instead: what the thing is, `write paths`, `the cases`, or a Spec, target, or the steps.
 
 Quoted text and code are mentions, not use, so a page can name the words a rule refuses.
 The guard and the check also ask, as advice that fails nothing, why a pull request touches
@@ -685,3 +685,16 @@ two seconds (code is read deliberately, not skimmed), and an image or diagram at
 seconds, so a code-heavy page gets a truer estimate than its word count would suggest.
 Pages under about 45 seconds get no chip at all. The whole calculation is
 [`readingTime` in `docs/engine/meta.buzz`](https://github.com/egladman/magus/blob/main/docs/engine/meta.buzz#L49).
+
+## Recovering a checkout binary
+
+When this repository's binary cannot load its sources or current store schema,
+run `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --recover`.
+Recovery stops the daemon and rebuilds from the current working tree. It permits
+uncommitted changes and labels the result as a recovery build. Commit and
+validate the source and generated outputs before relying on a clean build.
+
+For a guard change spanning Go and Buzz, land the Go implementation first,
+regenerate its outputs through the declared targets, commit them, and rebuild
+the checkout binary. Then change the Buzz policy that calls the new behavior,
+check it, and commit it. Restart the daemon after placing the new binary.

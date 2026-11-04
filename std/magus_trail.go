@@ -24,8 +24,8 @@ type cacheDirer interface {
 	CacheDir() string
 }
 
-// MagusTrailRead backs magus\trail.read: one session's guard record from every checkout's
-// trail.
+// MagusTrailRead backs magus\session().trail().
+// It is one session's guard record from every checkout's trail.
 func MagusTrailRead(ctx context.Context, opts types.TrailReadOptions) (types.Trail, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
@@ -93,7 +93,7 @@ func feedbackWindow(opts types.TrailReadOptions, now time.Time) (trail.FeedbackW
 	return w, nil
 }
 
-// MagusTrailMarks backs magus\trail.marks: this repository's marks, oldest first.
+// MagusTrailMarks backs magus\session().marks(): repo marks, oldest first.
 func MagusTrailMarks(ctx context.Context) ([]types.TrailMark, error) {
 	dir, err := feedbackMarksDir(ctx, "trail.marks")
 	if err != nil {
@@ -102,7 +102,7 @@ func MagusTrailMarks(ctx context.Context) ([]types.TrailMark, error) {
 	return trail.ReadFeedbackMarks(dir)
 }
 
-// MagusTrailMark backs magus\trail.mark: records one mark in this repository's store.
+// MagusTrailMark backs magus\session().mark: one mark in the repo's store.
 func MagusTrailMark(ctx context.Context, mark map[string]any) (types.TrailMark, error) {
 	dir, err := feedbackMarksDir(ctx, "trail.mark")
 	if err != nil {

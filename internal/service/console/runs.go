@@ -194,6 +194,8 @@ func resultState(status string) types.TargetRunState {
 		return types.TargetRunPassed
 	case journal.StatusCached:
 		return types.TargetRunCached
+	case journal.StatusPermitted:
+		return types.TargetRunPermitted
 	case journal.StatusFail:
 		return types.TargetRunFailed
 	default:

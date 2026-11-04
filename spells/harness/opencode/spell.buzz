@@ -1,16 +1,10 @@
-// OpenCode agent-host harness. Skills-only: OpenCode has no shell-command hook config file
-// Magus can merge. The guard rides a TypeScript plugin
-// (docs/guides/integrations/agents/opencode-plugin.ts), not a merged hook config.
-//
-//   import "spells/harness/opencode" as opencode
-//   magus\harness.provider(opencode)
-//
-// To adapt without modifying Magus source: copy this spell into the workspace, change only
-// the import path (keep provider), edit Buzz. `magus describe harness opencode` prints no
-// hook config, since the config path is empty, only the push and human-only run
-// permissions in opencode.json (mgs_renderPrompts); verify does not claim guard coverage
-// from a missing config, and reports the hook drift check skipped. See
-// magus-workspace-rules "Adapting a Buzz harness".
+// magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model pass=none ask=model
+// magus-guard-coverage: schema=2 host=opencode input=mcp deny=model advise=model pass=none ask=model
+// Coverage belongs to the canonical harness; the guide no longer ships a plugin template.
+
+// OpenCode's harness installs the plugin and its complete runtime through the generic
+// harness contract. JSON permissions remain declared separately by mgs_renderPrompts.
 
 import "magus/spell";
 import "magus/harness";
@@ -18,8 +12,22 @@ import "assert";
 
 export fun mgs_getName() > str { return "opencode"; }
 
-export fun mgs_getHarnessConfig() > HarnessConfig {
-    return HarnessConfig{path = ""};
+export fun mgs_getHarness() > Harness {
+    return Harness{
+        config = HarnessConfig{path = ""},
+        guard = "plugin",
+        assets = [
+            HarnessAsset{path = ".opencode/plugins/magus.js", source = "magus:harness/opencode/plugins/magus.js"},
+            HarnessAsset{path = ".opencode/magus/probe.ts", source = "magus:harness/opencode/probe.ts"},
+            HarnessAsset{path = ".opencode/magus/magus-opencode.wasm", source = "magus:harness/opencode/gen/magus-opencode.wasm"},
+            HarnessAsset{path = ".opencode/magus/wasm_exec.js", source = "magus:harness/opencode/gen/wasm_exec.js"},
+            HarnessAsset{path = ".opencode/magus/runtime/magus-observe.buzz", source = "magus:harness/opencode/runtime/magus-observe.buzz"},
+            HarnessAsset{path = ".opencode/magus/runtime/magus-buzz-check.buzz", source = "magus:harness/opencode/runtime/magus-buzz-check.buzz"},
+            HarnessAsset{path = ".opencode/magus/runtime/magus-reclaim-disk.buzz", source = "magus:harness/opencode/runtime/magus-reclaim-disk.buzz"},
+            HarnessAsset{path = ".opencode/magus/runtime/lib/hook.buzz", source = "magus:harness/opencode/runtime/lib/hook.buzz"},
+        ],
+        probe = ["node", ".opencode/magus/probe.ts"],
+    };
 }
 
 export fun mgs_getSkills() > HarnessSkills {
@@ -28,9 +36,52 @@ export fun mgs_getSkills() > HarnessSkills {
 
 // The hooks the guard plugin would run were they wired through a config. With no config
 // path magus has no entries to hold them to, and says the check was skipped.
+//
+// Each event is the plugin's own handler. A script named "opencode-plugin" is
+// work the plugin does itself; any other is glue it runs.
 export fun mgs_listHooks() > [HookCommand] {
-    return [buzzCheckHook(mgs_getName())];
+    final plugin = "opencode-plugin";
+    final named = ["--agent-name", mgs_getName()];
+    final check = buzzCheckHook(mgs_getName());
+    return [
+        HookCommand{event = "tool.execute.before", matcher = "bash|edit|write|apply_patch|task|<server>_<tool>",
+            script = plugin, flags = named, points = [HookPoint.shell, HookPoint.edit, HookPoint.mcp, HookPoint.spawn]},
+        HookCommand{event = "tool.execute.before", matcher = "read", script = "magus-observe", flags = named},
+        // A foreground task returns when its child finishes, so its after-hook
+        // is the child's stop; a backgrounded child's own idle is.
+        HookCommand{event = "tool.execute.after", matcher = "task", script = plugin, flags = named,
+            points = [HookPoint.spawn, HookPoint.subagentStop]},
+        HookCommand{event = "tool.execute.after", matcher = "edit|write|apply_patch", script = check.script,
+            flags = check.flags, timeoutS = check.timeoutS},
+        // tool.execute.after carries no duration, so no tool time is
+        // recorded. The brief rides the session's first tool result.
+        HookCommand{event = "session.created", script = plugin, flags = named, points = [HookPoint.sessionStart]},
+        // A root session's idle is its stop: a deny goes back as a follow-up.
+        HookCommand{event = "session.idle", script = plugin, flags = named, points = [HookPoint.stop]},
+        // Fires once the summary is written. The brief rides the next result.
+        HookCommand{event = "session.compacted", script = plugin, flags = named, points = [HookPoint.compact]},
+        HookCommand{event = "chat.message", script = plugin, flags = named},
+        // The disk hook's line waits for the next tool result, since no
+        // OpenCode event hands text to the model once a turn.
+        reclaimDiskHook(mgs_getName(), event: "session.idle", say: "stdout"),
+    ];
 }
+
+export fun mgs_listUnsupportedHooks() > [HookBinding] {
+    return [
+        unsupportedHook(HookPoint.attach, reason: "not verified: https://unpkg.com/@opencode-ai/sdk@1.18.30/dist/gen/types.gen.d.ts "
+            + "2026-10-29: a completed tool part carries attachments (FilePart), but no page says an SVG one renders inline"),
+    ];
+}
+
+// The plugin throws a deny as the tool's error, which the agent and the person both read,
+// so a deny arrives as its one line.
+export fun mgs_getLimits() > Limits {
+    return Limits{channels = ["display"]};
+}
+
+// The only tool a subagent loads a skill through. A render must not deny it.
+final DISCOVERY_TOOLS = ["skill"];
 
 // Every OpenCode tool the guard should know, written by `magus agent harness install` to
 // a directory beside a host file naming opencode, where `magus shell --agent-name opencode`
@@ -38,10 +89,10 @@ export fun mgs_listHooks() > [HookCommand] {
 // the guard cannot judge (unjudged-tool).
 export fun mgs_listTools() > HarnessTools {
     final rows = mut [HarnessTool{name = "bash", capability = ToolCapability.runs}];
-    foreach (name in ["read", "glob", "grep", "list"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.reads}); }
-    foreach (name in ["write", "edit", "patch"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.writes}); }
+    foreach (name in ["read", "glob", "grep", "lsp"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.reads}); }
+    foreach (name in ["write", "edit", "apply_patch"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.writes}); }
     rows.append(HarnessTool{name = "task", capability = ToolCapability.spawns});
-    foreach (name in ["todowrite", "todoread", "webfetch", "skill"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.inert}); }
+    foreach (name in ["todowrite", "webfetch", "websearch", "question", "skill"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.inert}); }
     return HarnessTools{dir = ".opencode/magus/tools", rows = rows};
 }
 
@@ -73,7 +124,7 @@ export fun mgs_getMcp() > McpServer {
 fun opencode_prompts(humanOnly: [str]) > [Prompt] {
     final verbs = mut ["git push", "hg push", "sl push", "jj git push"];
     final names = humanOnly.cloneMutable();
-    names.sort(fun (left: str, right: str) > bool => left < right);
+    _ = names.sort(fun (left: str, right: str) > bool => left < right);
     foreach (name in names) {
         foreach (bin in ["magus", "./magus"]) {
             verbs.append("{bin} run {name}");
@@ -131,6 +182,14 @@ test "mgs_renderAgents renders a read-only subagent that denies edits and sets n
     assert\isTrue(file.content.indexOf("model") == null, "the invoking session's model applies");
 }
 
+test "mgs_renderAgents denies no discovery tool of a read-only subagent" {
+    final content = opencode_agent(ShippedAgent{name = "magus-scout", description = "Reads.", instructions = "x\n", readOnly = true}).content;
+    assert\isTrue(content.indexOf("\ntools:") == null, "tools is deprecated and an allowlist");
+    foreach (name in DISCOVERY_TOOLS) {
+        assert\isTrue(content.indexOf(name) == null, "{name} stays allowed");
+    }
+}
+
 test "mgs_renderAgents leaves permissions alone for a writable subagent, and renders none for none" {
     final file = opencode_agent(ShippedAgent{name = "magus-worker", description = "Edits files.", instructions = "First line.\n"});
     assert\isTrue(file.content.indexOf("permission") == null, "the session's permissions apply");
@@ -163,8 +222,10 @@ test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "opencode", "id must match magus\\harness.provider wiring and --id");
 }
 
-test "the harness is skills-only, under .opencode/skills" {
-    assert\equal(mgs_getHarnessConfig().path, "", "no host JSON for Magus to merge");
+test "the harness installs its plugin and runtime beside .opencode/skills" {
+    assert\equal(mgs_getHarness().config.path, "", "the plugin loads from its project directory");
+    assert\equal(mgs_getHarness().guard, "plugin", "no config path is not skills-only");
+    assert\equal(mgs_getHarness().assets.len(), 8, "plugin, probe and all runtime helpers");
     assert\equal(mgs_getSkills().paths.join(","), ".opencode/skills", "OpenCode reads .opencode/skills");
     assert\equal(mgs_getSkills().form.value, "both", "the short skills and their full twins");
 }

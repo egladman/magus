@@ -1,13 +1,3 @@
-// Subcommand `moduledecls` emits the Buzz DECLARATION half of every host module:
-// an `export extern fun` per method, carrying the parameter and return types the
-// checker needs. Registered alongside the native implementation under the same
-// import path (SetModuleDecls beside SetNativeModule), it is what turns
-// `magus\impact(base)` from an Unknown-typed call into a checked one.
-//
-// Without it every host call typed as Unknown, so a magusfile could read a field
-// no return carries and only find out at run time, which is the gap Ret.Object was
-// added to close and, until now, only the docs consumed.
-
 package main
 
 import (
@@ -95,6 +85,22 @@ func renderModuleDecls(mod std.Module) (string, error) {
 		}
 		b.WriteString(decl)
 	}
+	for _, p := range sortedProtocols(mod) {
+		if p.Doc != "" {
+			fmt.Fprintf(&b, "// %s\n", p.Doc)
+		}
+		fmt.Fprintf(&b, "export protocol %s {\n", p.Name)
+		methods := slices.Clone(p.Methods)
+		slices.SortFunc(methods, func(a, c std.Method) int { return strings.Compare(a.Name, c.Name) })
+		for _, m := range methods {
+			sig, err := protocolMethodSig(m)
+			if err != nil {
+				return "", fmt.Errorf("protocol %s: %s: %w", p.Name, m.Name, err)
+			}
+			fmt.Fprintf(&b, "    %s\n", sig)
+		}
+		b.WriteString("}\n\n")
+	}
 	// A Namespace renders as an OBJECT whose members are static extern methods:
 	// `magus\cache.remote(...)` is member access on a value, not a nested namespace,
 	// which Buzz does not have. Declaring it this way is what makes an unknown member
@@ -144,12 +150,79 @@ func renderRecordDecls(mod std.Module) (string, error) {
 		b.WriteByte('\n')
 	}
 	for _, name := range mirrors {
-		entry, _ := boundaryTypeNamed(name) // collectMirrors already resolved every name it returns
+		entry, _ := boundaryTypeIn(mod.Name, name) // collectMirrors already resolved every name it returns
 		out, err := renderBuzzMirrorDecl(name, entry.Type)
 		if err != nil {
 			return "", err
 		}
+		if o, ok := mirrorObject(mod, entry.Type); ok {
+			if out, err = withObjectMethods(out, mod, o); err != nil {
+				return "", err
+			}
+		}
 		b.Write(out)
+		b.WriteByte('\n')
+	}
+	externs, err := objectExternDecls(mod)
+	if err != nil {
+		return "", err
+	}
+	b.WriteString(externs)
+	return b.String(), nil
+}
+
+// withObjectMethods inserts o's forwarding methods before the mirror's
+// closing brace.
+func withObjectMethods(mirror []byte, mod std.Module, o std.Object) ([]byte, error) {
+	closing := bytes.LastIndex(mirror, []byte("}"))
+	if closing < 0 {
+		return nil, fmt.Errorf("mirror %s: no closing brace to declare its methods before", o.Name)
+	}
+	var methods bytes.Buffer
+	for _, meth := range o.Methods {
+		src, err := forwardingMethod(mod, o, meth)
+		if err != nil {
+			return nil, fmt.Errorf("object %s: %s: %w", o.Name, meth.Name, err)
+		}
+		methods.WriteString(src)
+	}
+	return slices.Concat(mirror[:closing], methods.Bytes(), mirror[closing:]), nil
+}
+
+// forwardingMethod renders meth as a Buzz method that passes `this` and its
+// arguments, labeled, to the private extern mod.ObjectExtern declares.
+func forwardingMethod(mod std.Module, o std.Object, meth std.Method) (string, error) {
+	decl, err := externDecl(meth)
+	if err != nil {
+		return "", err
+	}
+	sig, isFun := strings.CutPrefix(strings.TrimSuffix(decl, ";\n"), "export extern ")
+	if !isFun {
+		return "", fmt.Errorf("a variadic argument cannot cross as a record method")
+	}
+	call := []string{"this"}
+	for _, a := range meth.Args {
+		call = append(call, fmt.Sprintf("%s: %s", a.Name, a.Name))
+	}
+	stmt := fmt.Sprintf("%s(%s);", mod.ObjectExtern(o, meth).Name, strings.Join(call, ", "))
+	if len(meth.Returns) > 0 {
+		stmt = "return " + stmt
+	}
+	return fmt.Sprintf("\n    %s {\n        %s\n    }\n", sig, stmt), nil
+}
+
+// objectExternDecls declares the private extern behind every object method.
+// It carries no export: only the module's own forwarding methods call it.
+func objectExternDecls(mod std.Module) (string, error) {
+	var b strings.Builder
+	for _, m := range mod.ObjectExterns() {
+		decl, err := externDecl(m)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", m.Name, err)
+		}
+		b.WriteString(strings.TrimPrefix(decl, "export "))
+	}
+	if b.Len() > 0 {
 		b.WriteByte('\n')
 	}
 	return b.String(), nil
@@ -161,6 +234,26 @@ func sortedNamespaceMethods(ns std.Namespace) []std.Method {
 	out := slices.Clone(ns.Methods)
 	slices.SortFunc(out, func(a, b std.Method) int { return strings.Compare(a.Name, b.Name) })
 	return out
+}
+
+// sortedProtocols orders a module's protocols by name for stable generated output.
+func sortedProtocols(mod std.Module) []std.Protocol {
+	out := slices.Clone(mod.Protocols)
+	slices.SortFunc(out, func(a, b std.Protocol) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
+
+// protocolMethodSig renders one protocol method as `fun name(params) > ret[!> any];`.
+// Same shape as externDecl's parameter list, without the export-extern wrapper.
+func protocolMethodSig(m std.Method) (string, error) {
+	decl, err := externDecl(m)
+	if err != nil {
+		return "", err
+	}
+	// externDecl returns "export extern fun …;\n" or a variadic final — protocols
+	// only carry ordinary methods, so strip the wrapper.
+	line := strings.TrimPrefix(strings.TrimSpace(decl), "export extern ")
+	return line, nil
 }
 
 // externDecl renders one method as `export extern fun name(params) > ret;`.
@@ -188,7 +281,7 @@ func externDecl(m std.Method) (string, error) {
 	}
 
 	params := make([]string, 0, len(m.Args))
-	for _, a := range m.Args {
+	for i, a := range m.Args {
 		typ, err := buzzArgType(a.Type)
 		if err != nil {
 			return "", fmt.Errorf("arg %s: %w", a.Name, err)
@@ -217,9 +310,9 @@ func externDecl(m std.Method) (string, error) {
 		if a.Type == std.TypeByteSlice {
 			typ = "any"
 		}
-		p := fmt.Sprintf("%s: %s", a.Name, typ)
+		p := fmt.Sprintf("%s: %s%s", a.Name, typ, nullable(m, i))
 		if a.Optional {
-			def, derr := buzzDefault(a)
+			def, derr := optionalDefault(m, i)
 			if derr != nil {
 				return "", fmt.Errorf("arg %s: %w", a.Name, derr)
 			}
@@ -242,6 +335,32 @@ func externDecl(m std.Method) (string, error) {
 		raises = " !> any"
 	}
 	return fmt.Sprintf("export extern fun %s(%s) > %s%s;\n", name, strings.Join(params, ", "), ret, raises), nil
+}
+
+// optionalRecord reports whether argument i is an optional object, not a list of them.
+// It defaults to null rather than `T{}`: a default is evaluated at the call site, where a
+// bare T can name another module's record of the same name (magus and vcs both export
+// CommandOptions). The trampoline decodes a null as the zero record.
+func optionalRecord(m std.Method, i int) bool {
+	a := m.Args[i]
+	return a.Optional && a.Object != "" && !strings.HasPrefix(a.Object, "[")
+}
+
+func nullable(m std.Method, i int) string {
+	if optionalRecord(m, i) {
+		return "?"
+	}
+	return ""
+}
+
+func optionalDefault(m std.Method, i int) (string, error) {
+	if optionalRecord(m, i) {
+		return "null", nil
+	}
+	if obj := m.Args[i].Object; obj != "" {
+		return fmt.Sprintf("[<%s>]", strings.Trim(obj, "[]")), nil
+	}
+	return buzzDefault(m.Args[i])
 }
 
 // buzzArgType maps a parameter's TypeTag to its Buzz annotation.
@@ -433,7 +552,7 @@ func collectMirrors(mod std.Module) ([]string, error) {
 		if name == "" || seen[name] {
 			return nil
 		}
-		entry, ok := boundaryTypeNamed(name)
+		entry, ok := boundaryTypeIn(mod.Name, name)
 		if !ok {
 			return fmt.Errorf("object %q is not declared in boundaryTypes", name)
 		}
@@ -465,7 +584,7 @@ func collectMirrors(mod std.Module) ([]string, error) {
 		}
 		return nil
 	}
-	for _, m := range sortedMethods(mod) {
+	for _, m := range slices.Concat(sortedMethods(mod), mod.ObjectExterns()) {
 		if err := visitMethod(m); err != nil {
 			return nil, err
 		}
@@ -486,11 +605,23 @@ func collectMirrors(mod std.Module) ([]string, error) {
 			}
 		}
 	}
+	for _, name := range mod.CallbackObjects {
+		if err := visit(name); err != nil {
+			return nil, err
+		}
+	}
+	for _, p := range sortedProtocols(mod) {
+		for _, m := range p.Methods {
+			if err := visitMethod(m); err != nil {
+				return nil, fmt.Errorf("protocol %s: %w", p.Name, err)
+			}
+		}
+	}
 	return order, nil
 }
 
 // collectEnums returns the enum declarations a module's signatures and its mirrors'
-// fields name, in first-use order.
+// fields name, in first-use order, then the ones boundaryEnums scopes to the module.
 //
 // Derived rather than hand-listed, as collectMirrors is: an enum whose declaration does
 // not travel with its use leaves the bundle naming an undefined type, and running the
@@ -510,7 +641,7 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 		order = append(order, e)
 		return nil
 	}
-	for _, m := range sortedMethods(mod) {
+	for _, m := range slices.Concat(sortedMethods(mod), mod.ObjectExterns()) {
 		for _, a := range m.Args {
 			if err := add(a.Enum, m.Name); err != nil {
 				return nil, err
@@ -522,10 +653,31 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 			}
 		}
 	}
+	for _, p := range sortedProtocols(mod) {
+		for _, m := range p.Methods {
+			for _, a := range m.Args {
+				if err := add(a.Enum, fmt.Sprintf("%s.%s", p.Name, m.Name)); err != nil {
+					return nil, err
+				}
+			}
+			for _, r := range m.Returns {
+				if err := add(r.Enum, fmt.Sprintf("%s.%s", p.Name, m.Name)); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 	for _, name := range mirrors {
-		entry, _ := boundaryTypeNamed(name)
+		entry, _ := boundaryTypeIn(mod.Name, name)
 		for _, e := range enumsUsedBy(entry.Type) {
 			if err := add(e.Name, name); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for _, e := range boundaryEnums {
+		if e.Module == mod.Name {
+			if err := add(e.Name, mod.Name); err != nil {
 				return nil, err
 			}
 		}

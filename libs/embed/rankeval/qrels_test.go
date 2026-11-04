@@ -13,7 +13,8 @@ const (
 	validQuery = `{"query_id":"q1","query":"where bm25f scores a field","source":"commit","eval_set":"judged-dev","shape":"prose","date":"2026-10-01"}`
 )
 
-func TestReadQrels(t *testing.T) {
+func (s *rankevalSuite) TestReadQrels() {
+	t := s.T()
 	text := validQrel + "\n\n" + `{"query_id":"q1","file":"a.go","grade":0,"guideline":"v1","judge":"m","batch":"probe-1"}` + "\n"
 	got, err := ReadQrels(strings.NewReader(text))
 	require.NoError(t, err)
@@ -27,7 +28,8 @@ func TestReadQrels(t *testing.T) {
 	assert.JSONEq(t, `{"query_id":"q1","file":"a.go","grade":0,"guideline":"v1","judge":"m","batch":"probe-1"}`, string(line))
 }
 
-func TestReadQrelsRejects(t *testing.T) {
+func (s *rankevalSuite) TestReadQrelsRejects() {
+	t := s.T()
 	cases := map[string]struct {
 		line string
 		want string
@@ -54,7 +56,8 @@ func TestReadQrelsRejects(t *testing.T) {
 	}
 }
 
-func TestReadQrelsQueries(t *testing.T) {
+func (s *rankevalSuite) TestReadQrelsQueries() {
+	t := s.T()
 	got, err := ReadQueries(strings.NewReader(validQuery + "\n"))
 	require.NoError(t, err)
 	assert.Equal(t, []Query{{ID: "q1", Query: "where bm25f scores a field", Source: "commit", Set: SetJudgedDev, Shape: ShapeProse, Date: "2026-10-01"}}, got)
@@ -78,7 +81,8 @@ func TestReadQrelsQueries(t *testing.T) {
 	}
 }
 
-func TestReadQrelsJudgedGold(t *testing.T) {
+func (s *rankevalSuite) TestReadQrelsJudgedGold() {
+	t := s.T()
 	qrels := []Qrel{
 		{QueryID: "q1", File: "a.go", Grade: 1, Guideline: "v1", Judge: "m"},
 		{QueryID: "q1", File: "a.go", Grade: 2, Guideline: "v1", Judge: "m"},
@@ -107,7 +111,8 @@ func TestReadQrelsJudgedGold(t *testing.T) {
 	assert.Empty(t, js[1].Gold, "an unjudged query stays, to count as unscorable")
 }
 
-func TestReadQrelsDigestQueries(t *testing.T) {
+func (s *rankevalSuite) TestReadQrelsDigestQueries() {
+	t := s.T()
 	a := Query{ID: "a", Query: "x", Source: "s", Set: SetJudgedHoldout, Shape: ShapeProse, Date: "2026-10-01"}
 	b := Query{ID: "b", Query: "y", Source: "s", Set: SetJudgedHoldout, Shape: ShapeProse, Date: "2026-10-01"}
 	dev := Query{ID: "c", Query: "z", Source: "s", Set: SetJudgedDev, Shape: ShapeProse, Date: "2026-10-01"}

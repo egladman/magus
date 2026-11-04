@@ -128,31 +128,79 @@ type StaleBuild struct {
 	Running string `json:"running,omitempty"`
 	// Floor is the workspace's required_version, "" when it declares none.
 	Floor string `json:"required_version,omitempty"`
-	// SourceTree is whether cmd/magus exists at the workspace root: the workspace is a
-	// magus checkout, so a binary can be built from it.
-	SourceTree bool `json:"source_tree"`
+	// Scripts are the run lines of the scripts the workspace declares for MGS1021
+	// (SERVES "code:MGS1021"), in index order. magus never guesses a workspace's own
+	// rebuild from its layout; a workspace that has one says so.
+	Scripts []string `json:"scripts,omitempty"`
 }
 
 // Advice states the version gap once and lists the fixes as runnable commands, one per
 // line, without a trailing newline.
 //
-// The go-build line appears only for a [StaleBuild.SourceTree] workspace, and the
-// [BootstrapCommand] only when the running build is also a dev build: that is the
-// binary that may be unable to load the tree it would rebuild itself from. An unknown
-// running version is not a dev build, so it never earns the bootstrap line.
+// Each declared script gets a line, and the [BootstrapCommand] appears only when the
+// running build is a dev build: that is the binary that may be unable to load the tree
+// it would rebuild itself from. An unknown running version is not a dev build, so it
+// never earns the bootstrap line.
 func (b StaleBuild) Advice() string {
-	lines := []string{b.gap(), "Fix it:", "  - released binary: magus self update"}
-	dev := b.Running != "" && types.IsDevMagusVersion(b.Running)
-	switch {
-	case b.SourceTree:
-		lines = append(lines, "  - built from this checkout: ./magus run go-build .")
-		if dev {
-			lines = append(lines, "  - if that cannot load the tree either: "+BootstrapCommand)
-		}
-	case dev:
+	update := "  - released binary: magus self update"
+	if pin := PinnedRelease(b.Floor); pin != "" {
+		update += " --version " + pin
+	}
+	lines := []string{b.gap(), "Fix it:", update}
+	for _, run := range b.Scripts {
+		lines = append(lines, "  - this workspace's script for it: "+run)
+	}
+	if b.Running != "" && types.IsDevMagusVersion(b.Running) {
 		lines = append(lines, "  - built from source, in the checkout it came from: "+BootstrapCommand)
 	}
 	return strings.Join(lines, "\n")
+}
+
+var constraintClause = regexp.MustCompile(`^(==?|>=|<=|<|>|~|\^)?\s*v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$`)
+
+// PinnedRelease is the release, "vX.Y.Z", that `magus self update --version` installs for
+// a workspace requiring constraint, and "" when the newest release is the one to take.
+// self update reads no magus.yaml, so where constraint bounds releases from above the
+// newest may be one the workspace refuses: an exact pin names itself, and a range with
+// an upper bound names its inclusive lower bound. A range with no inclusive lower bound,
+// a union, or a constraint that does not parse names none.
+func PinnedRelease(constraint string) string {
+	if strings.Contains(constraint, "||") {
+		return ""
+	}
+	clauses := strings.Split(constraint, ",")
+	if len(clauses) == 1 {
+		if m := constraintClause.FindStringSubmatch(strings.TrimSpace(clauses[0])); len(m) == 3 && strings.Trim(m[1], "=") == "" {
+			return "v" + m[2]
+		}
+	}
+	var lower string
+	bounded := false
+	for _, clause := range clauses {
+		m := constraintClause.FindStringSubmatch(strings.TrimSpace(clause))
+		if m == nil {
+			return ""
+		}
+		switch m[1] {
+		case "", "=", "==", "~", "^":
+			lower, bounded = m[2], true
+		case ">=":
+			lower = m[2]
+		case "<", "<=":
+			bounded = true
+		}
+	}
+	if !bounded || lower == "" {
+		return ""
+	}
+	c, err := semver.NewConstraint(constraint)
+	if err != nil {
+		return ""
+	}
+	if v, err := semver.NewVersion(lower); err != nil || !c.Check(v) {
+		return ""
+	}
+	return "v" + lower
 }
 
 // gap is the one sentence comparing the build with the floor, naming whichever of the
@@ -284,6 +332,8 @@ func staleShaped(err error) bool {
 		switch d.Code {
 		case types.GuardRuleMisdeclared:
 			return strings.Contains(d.Msg, unknownBuiltinRule) && !strings.Contains(d.Msg, nearNameOffer)
+		case types.UnknownConfigKey:
+			return !strings.Contains(d.Msg, nearNameOffer) && !strings.Contains(d.Msg, renamedKeyOffer)
 		case buzzUndefinedType, buzzUnresolvedImport:
 			return true
 		}
@@ -298,6 +348,7 @@ func staleShaped(err error) bool {
 const (
 	unknownBuiltinRule = "unknown built-in rule"
 	nearNameOffer      = "did you mean"
+	renamedKeyOffer    = "renamed to"
 )
 
 // missingObjectMember matches the checker's complaint that an object lacks a member. It

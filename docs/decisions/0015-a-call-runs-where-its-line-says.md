@@ -45,9 +45,10 @@ started, which is what every rule did before.
 ### `lease-checkout`
 
 The holder of a row with a standing worktree is denied a magus call that resolves outside
-that worktree. The refusal quotes the line to run: `<Root>/magus -C <Root> <args>`, with
-the call's own `-C` dropped. A plan, a dry run, a graph and help pass. The rule is silent
-with no lease, a row with no worktree, the root session, and a line that runs no magus.
+that worktree. The refusal quotes the line to run: `cd <Root> && ./magus <args>`, with
+the call's own `-C` dropped. A describe, a plan, a dry run, a graph and help pass. The rule
+is silent with no lease, a row with no worktree, the root session, and a line that runs no
+magus.
 
 ### The CLI's root rules do not change
 

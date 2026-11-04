@@ -10,9 +10,10 @@ import "fs";
 import "os";
 import "proc";
 import "vcs";
-import "http";
 import "project/../libs/gopherbuzz";
 import "project/../libs/textsearch";
+// Aliased: site/diagrams binds `kustomize` to the library module, and this name would shadow it.
+import "project/../libs/kustomize" as kustomizeproject;
 // Imported for proofread_build: the proofread rule pages render from the linked binary's catalog.
 import "project/../libs/proofread" as proofreadmod;
 import "project/.." as workspace;
@@ -34,9 +35,9 @@ import "magus/spell/markdown";
 magus\project({
     "tools": {"node": policy\node},
     "spells": [typescript, buzz],
-    // API docs read proto's descriptor and the render reads libs/figure;
-    // without these edges the reads are unordered (MGS4004).
-    "depends_on": ["..", "../proto", "../libs/figure"],
+    // API docs read proto's descriptor, the render reads libs/figure and the figures
+    // read libs/kustomize; without these edges the reads are unordered (MGS4004).
+    "depends_on": ["..", "../proto", "../libs/figure", "../libs/kustomize"],
     // Affected tracks this glob, not the import graph, so it names every input,
     // including the Go trees content-generate renders pages from.
     "sources": ["*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
@@ -73,9 +74,9 @@ magus\project({
         "ci": {"skip_cache": "composes other targets and declares no outputs of its own; an empty snapshot match reads as a broken cache entry"},
         "test": {"skip_cache": "composes other targets and declares no outputs of its own; an empty snapshot match reads as a broken cache entry"},
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
-        "content-generate": {"skip_cache": "composes independently cached content families; every invocation must check their inputs"},
+        "content-generate": {"skip_cache": "composes independently cached content families; every invocation must check their inputs", "integrates": "regenerates the docs pages"},
         "render": {"skip_cache": "the dev-loop fast path; every invocation must actually re-render gen/"},
-		"site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe"},
+        "site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe", "integrates": "renders the docs site"},
         "figure-engine-digest-generate": {"skip_cache": "reads the figure engine the running magus binary embeds, which no input glob can key; it runs before any replay of diagrams-generate, so that stays cacheable"},
         // The build-* targets stay cached: esbuild and the npm deps are pinned.
     },
@@ -149,12 +150,12 @@ export fun glossary_usage_generate(ctx: magus\Context, args: [str]) > void !> an
 // capping, so the list depends on the tree alone and never on how a search ranked it.
 fun termUsage(title: str) > str !> any {
     final candidates = mut [<dictionary\UsageDoc>];
-    foreach (m in magus\query("kind=docsection id=~^docsection:docs/ {title}", opts: {"limit": 5000}).matches) {
+    foreach (m in magus\graph().query("kind=docsection id=~^docsection:docs/ {title}", opts: magus\QueryOptions{limit = 5000}).matches) {
         if (dictionary\usefulDoc(m.id, label: m.label) == false) { continue; }
         if (m.label.lower().indexOf(title.lower()) == null) { continue; }
         candidates.append(dictionary\docFromID(m.id, label: m.label));
     }
-    candidates.sort(fun (a: dictionary\UsageDoc, b: dictionary\UsageDoc) > bool => a.file < b.file or (a.file == b.file and a.anchor < b.anchor));
+    _ = candidates.sort(fun (a: dictionary\UsageDoc, b: dictionary\UsageDoc) > bool => a.file < b.file or (a.file == b.file and a.anchor < b.anchor));
     final docs = mut [<dictionary\UsageDoc>];
     final pages = mut {<str: bool>};
     final dirs = mut {<str: int>};
@@ -168,13 +169,22 @@ fun termUsage(title: str) > str !> any {
     }
     final symbols = mut [<dictionary\UsageSymbol>];
     final names = mut {<str: bool>};
-    final found = magus\query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: {"limit": 5000});
-    if (found.answer.verdict == "unknown") {
-        throw "glossary-usage-generate: part of the workspace has no symbol index, so a type named {title} could be missing; run `magus graph build`";
+    final found = magus\graph().query("kind=symbol {title} id=~(?i)/{dictionary\compact(title)}#$", opts: magus\QueryOptions{limit = 5000});
+    if (found.answer.verdict == magus\KnowledgeVerdict.unknown) {
+        var buildable = 0;
+        foreach (gap in found.answer.gaps) {
+            if (gap.unindexable) {
+                continue;
+            }
+            buildable += 1;
+        }
+        if (buildable > 0 or found.answer.staleIndexes.len() > 0) {
+            throw "glossary-usage-generate: part of the workspace has no symbol index, so a type named {title} could be missing; run `magus graph build`";
+        }
     }
     final ids = mut [<str>];
     foreach (m in found.matches) { ids.append(m.id); }
-    ids.sort(fun (a: str, b: str) > bool => a < b);
+    _ = ids.sort(fun (a: str, b: str) > bool => a < b);
     foreach (id in ids) {
         if (symbols.len() >= 5) { break; }
         final s = dictionary\symbolFromID(id, term: title);
@@ -268,7 +278,7 @@ export fun proofread_docs_generate(ctx: magus\Context, args: [str]) > void !> an
         proofreadmod\file("internal/calibrate/cases/*.txtar"), workspace\file("hack/magusfile/ruledocs.buzz")]);
     ctx.writesFiles(["reference/proofread/*.md"]);
     ruledocs\writeProofread("reference/proofread",
-        raw: proc\exec("../libs/proofread/gen/proofread", ["rules"], ".", {}).stdout);
+        raw: proc\exec("../libs/proofread/gen/proofread", ["rules"], ".").stdout);
     pruneGeneratedPageCopies("reference/proofread/*.md");
 }
 
@@ -371,8 +381,16 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("assets/**"), workspace\file("releases/*.yaml")]);
     ctx.writesFiles(["gen/**", "active.urls.lock"]);
     renderer\site_publish(ROOT, DOCS, BLOG, OUT,
-        magus\describe.graph(), magus\projectGraph(),
+        magus\describe.graph(), magus\graph().projectGraph(),
         ctx.hasCharm("rw"));
+}
+
+// Writes src/gen/magus/types.ts, the TypeScript forms of the boundary types the registry
+// flags TS. It runs here because a root target writing into docs is MGS3001.
+export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["../types/*.go", "../cmd/magus-utils/*.go"]);
+    ctx.writesFiles(["src/gen/magus/types.ts"]);
+    _ = proc\exec("go", ["run", "../cmd/magus-utils", "tstypes", "-out", "src/gen/magus/types.ts"]);
 }
 
 // generate regenerates the committed derived files and fails on drift. The ignored gen/
@@ -386,14 +404,15 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // Repeats content-generate's declaration: the write is attributed here too, or MGS4007.
     ctx.writesFiles(["concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "design.md"], editsExistingSource: true);
-    // Tracked paths only. src/gen is gated by proto:generate and assets/gen by
-    // diagrams-generate, which needs a symbol index these shards never build.
-    final GENERATED = ["MAGUS.md", "glossary.md"] + CONTENT;
+    // Tracked paths only. src/gen is gated by proto:generate, all but the types.ts
+    // types_generate writes, and assets/gen by diagrams-generate, which needs a symbol
+    // index these shards never build.
+    final GENERATED = ["MAGUS.md", "glossary.md", "src/gen/magus/types.ts"] + CONTENT;
     // Hashed before and after: a dirty tree or a git worktree must not disarm the gate.
     final before = drift\hashes(GENERATED);
     // The indexes rewrite pages the content families read, so they finish first.
     ctx.needs(glossary_index_generate, design_index_generate);
-    ctx.needs(content_generate, index_generate);
+    ctx.needs(content_generate, index_generate, types_generate);
     if (ctx.hasCharm("rw")) { return; }
     final moved = drift\changedSince(before, GENERATED);
     if (moved.len() > 0) {
@@ -427,13 +446,18 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["**/*.md", "lib/conventions.buzz", "lib/adr.buzz", "lib/design.buzz", "lib/crosscheck.buzz",
         "engine/gates.buzz", workspace\file("README.md"), workspace\file("CONTRIBUTING.md"),
         workspace\file("changes/unreleased/*.md"), workspace\file("internal/selfupdate/release-keys.json"),
-        workspace\file(".claude/settings.json"),
+        workspace\file("spells/harness/claude-code/*.buzz"), workspace\file("spells/harness/opencode/spell.buzz"),
         agents\file("cursor-hook.buzz"), agents\file("magus-*.buzz"), agents\file("codex-hooks.json"),
-        agents\file("opencode-plugin.ts")]);
-    renderer\site_conventions(ROOT, DOCS);
+        workspace\file("spells/harness/opencode/plugins/magus.js")]);
+    renderer\site_conventions(ROOT, docs: DOCS, files: args);
 }
 // lint runs conventions, typos, tsc and Biome, plus the lint of each project the site embeds.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    // Named files are judged alone: the tree's drift is not theirs.
+    if (args.len() > 0) {
+        conventions(ctx, args: args);
+        return;
+    }
     // Before conventions: a page content-generate creates is missing until format finishes.
     ctx.needs(format);
     ctx.needs(conventions);
@@ -442,7 +466,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(workspace\lint_rules);
     markdown.typos(ctx);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
-    proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
+    _ = proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
 }
 // build renders the site cd.yaml publishes. It is uncommitted, so no drift gate applies.
 export fun build(ctx: magus\Context, args: [str]) > void {
@@ -454,16 +478,16 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // --embedded because render is written for the magusfile engine. Each module is then
 // checked alone: a check of render reports only render's own warnings.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
-    magus\cmd("buzz", args: ["-t", "--embedded", "render.buzz"]);
+    _ = magus\cmd("buzz", args: ["-t", "--embedded", "render.buzz"]);
     // The magusfile, not render, imports lib/dictionary, so render's tests never reach it.
-    magus\cmd("buzz", args: ["-t", "--embedded", "lib/dictionary.buzz"]);
+    _ = magus\cmd("buzz", args: ["-t", "--embedded", "lib/dictionary.buzz"]);
     final modules = mut ["--check", "--embedded"];
     foreach (dir in ["lib", "engine", "site"]) {
         foreach (mod in fs\glob(dir + "/*.buzz")) {
             modules.append(mod.value);
         }
     }
-    magus\cmd("buzz", args: modules);
+    _ = magus\cmd("buzz", args: modules);
 }
 
 export fun test(ctx: magus\Context, args: [str]) > void {
@@ -495,12 +519,12 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("gen/playground");
     // From the module root so go finds go.mod; -trimpath keeps the output reproducible.
     os\withEnv({"GOOS": "js", "GOARCH": "wasm"}, fun () > void !> any {
-        proc\exec("go",
+        _ = proc\exec("go",
             ["build", "-trimpath", "-ldflags=-s -w",
              "-o", "docs/gen/playground/buzz.wasm", "./cmd/buzz-playground"],
-            "..", {});
+            "..");
     });
-    final goroot = proc\exec("go", ["env", "GOROOT"], ".", {}).stdout.trim();
+    final goroot = proc\exec("go", ["env", "GOROOT"], ".").stdout.trim();
     fs\copyFile(goroot + "/lib/wasm/wasm_exec.js", "gen/playground/wasm_exec.js");
 }
 
@@ -513,8 +537,11 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     }
     // The index lives outside file hashing; the root's digest of it keys this target.
     ctx.needs(workspace\symbol_digest_generate, figure_engine_digest_generate);
+    // The kustomize figure draws only manifests kubeconform accepts.
+    ctx.needs(kustomizeproject\lint);
     ctx.readsFiles(["site/diagrams/*.buzz", "gen/figure-engine.sha256",
-        workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz")]);
+        workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz"),
+        kustomizeproject\file("*.buzz"), workspace\file("deploy/kustomize/**/*.yaml")]);
     ctx.writesFiles(["assets/gen/diagram-*.svg", "assets/gen/diagram-*.json"]);
     final GENERATED = ["assets/gen"];
     final before = drift\hashes(GENERATED);
@@ -539,7 +566,7 @@ export fun figure_engine_digest_generate(ctx: magus\Context, args: [str]) > void
     ctx.writesFiles(["gen/figure-engine.sha256"]);
     final body = magus\cmd("version",
         args: ["--client", "-o", "template=\{\{.embedded.figure_sha256}}"],
-        opts: {"quiet": true}).stdout.trim() + "\n";
+        opts: magus\CommandOptions{quiet = true}).stdout.trim() + "\n";
     final path = fs\join("gen", "figure-engine.sha256");
     if (fs\exists(path) and fs\readFile(path) == body) { return; }
     fs\mkdirAll("gen");
@@ -570,6 +597,6 @@ export fun render(ctx: magus\Context, args: [str]) > void !> any {
     // The asset integrity gate fails on any bundle a page references, and a fresh checkout
     // has none; the changelog page is uncommitted for the same reason.
     ctx.needs(build_hljs, build_playground_editor, build_playground, changelog_page);
-    renderer\site_render(ROOT, DOCS, BLOG, OUT,
-        magus\describe.graph(), magus\projectGraph());
+    _ = renderer\site_render(ROOT, DOCS, BLOG, OUT,
+        magus\describe.graph(), magus\graph().projectGraph());
 }

@@ -1,0 +1,76 @@
+name: Deliberate break
+
+# Lists what a pull request does to the deviation gates, for the person who merges it:
+# each ledger line it adds and each edit to a file that decides what a gate permits.
+# It reports and always succeeds. The gates themselves stay the check.
+#
+# pull_request_target runs this file from the base branch with a token that can read the
+# repository, so the job never checks out, builds or runs the pull request's code. It
+# reads the changed files through the API, and the only code it runs is the base
+# branch's own pr-deliberate-break target.
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+
+concurrency:
+  group: deliberate-break-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+  CI_PROVIDER: github-actions
+
+jobs:
+  list:
+    name: deliberate breaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # No ref: pull_request_target checks out the base branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      # Values reach the shell through env, never through the script text. A ledger is
+      # marked a symlink when the contents API reports that type at the head commit.
+      - name: Fetch the changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          gh api --paginate --slurp "repos/$BASE_REPO/pulls/$PR_NUMBER/files" | jq 'add // []' > "$RUNNER_TEMP/files.json"
+          jq -r '.[] | select(.filename | test("deviations[.]jsonl")) | .filename' "$RUNNER_TEMP/files.json" > "$RUNNER_TEMP/ledgers.txt"
+          cp "$RUNNER_TEMP/files.json" "$RUNNER_TEMP/marked.json"
+          while IFS= read -r path; do
+            encoded=$(jq -rn --arg p "$path" '$p | @uri')
+            kind=$(gh api "repos/$HEAD_REPO/contents/$encoded?ref=$HEAD_SHA" --jq '.type' 2>/dev/null || echo missing)
+            if [ "$kind" = symlink ]; then
+              jq --arg p "$path" 'map(if .filename == $p then . + {symlink: true} else . end)' "$RUNNER_TEMP/marked.json" > "$RUNNER_TEMP/next.json"
+              mv "$RUNNER_TEMP/next.json" "$RUNNER_TEMP/marked.json"
+            fi
+          done < "$RUNNER_TEMP/ledgers.txt"
+
+      - name: List the deliberate breaks
+        run: magus run pr-deliberate-break . -- "--files=$RUNNER_TEMP/marked.json"

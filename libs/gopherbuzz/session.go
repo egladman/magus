@@ -181,6 +181,11 @@ type Session struct {
 	// collectedDecls names the native modules whose declaration source this
 	// session has collected; see resolveImport.
 	collectedDecls map[string]bool
+	// declImports maps a module's namespace key to its declarations' imports, by
+	// qualifier; declDeps and declLoading track collection. See collectDeclImports.
+	declImports map[string]map[string]string
+	declDeps    map[string]bool
+	declLoading []string
 	// moduleDecls maps an import path to embedded .buzz source. Unlike a
 	// native module (a host Value carrying functions), a declaration module is
 	// real Buzz source, so its exported object/enum *types* are visible to the
@@ -311,10 +316,16 @@ func (s *Session) DeclareModuleTypes(boundName, src string) {
 	// ignore the parse error because the Exec that follows re-parses the source, and
 	// nothing re-parses this.
 	s.syncHostTypes()
-	prog := s.collectImportedModule(boundName, src)
-	if prog == nil {
-		_, err := s.parse(src)
+	prog, err := s.parse(src)
+	if err != nil {
 		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): declarations do not parse: %v", boundName, err))
+	}
+	if err := s.collectDeclImports(boundName, "", prog); err != nil {
+		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): %v", boundName, err))
+	}
+	s.collectProgram(boundName, prog)
+	if err := s.checkDeclTypeNames(boundName, boundName, prog); err != nil {
+		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): %v", boundName, err))
 	}
 	*s.hostTypes = append(*s.hostTypes, hostTypeDecl{boundName: boundName, prog: prog})
 	s.hostTypesSeen = len(*s.hostTypes)
@@ -340,6 +351,8 @@ func (s *Session) syncHostTypes() {
 	decls, funcs, mtypes, vars := s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars
 	s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars = nil, nil, nil, nil
 	for _, d := range unseen {
+		// DeclareModuleTypes already refused a source whose imports fail.
+		_ = s.collectDeclImports(d.boundName, "", d.prog)
 		s.collectProgram(d.boundName, d.prog)
 	}
 	s.importedTypes = append(s.importedTypes, decls...)
@@ -487,7 +500,7 @@ func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vm
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resume a running fiber (recursive resume)")
 	}
 	fibVM := fib.VM()
-	fibVM.SetContext(ctx)
+	fibVM.SetContext(s.within(ctx))
 	fib.SetStatus(vmpackage.FiberRunning)
 	defer s.enter(fibVM)()
 	result, err := fibVM.Exec()
@@ -527,7 +540,7 @@ func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (v
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resolve a running fiber (recursive resolve)")
 	}
 	fibVM := fib.VM()
-	fibVM.SetContext(ctx)
+	fibVM.SetContext(s.within(ctx))
 	fib.SetStatus(vmpackage.FiberRunning)
 	defer s.enter(fibVM)()
 	for {
@@ -774,7 +787,7 @@ func (s *Session) execCached(ctx context.Context, code string) ([]string, error)
 // still registers the closures the source defines.
 func (s *Session) runChunk(ctx context.Context, chunk *vmpackage.Chunk) ([]string, error) {
 	s.noteEntryQualified(chunk)
-	vm := vmpackage.NewVM(ctx)
+	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	if _, err := vm.Run(chunk, s.env); err != nil {
 		return nil, err
@@ -828,6 +841,23 @@ func (s *Session) execImport(ctx context.Context, code string) ([]string, error)
 	s.replaying = false
 	defer func() { s.replaying = prevReplay }()
 	return s.exec(ctx, code)
+}
+
+type sessionKey struct{}
+
+// within returns ctx carrying s, so host callables find their caller.
+func (s *Session) within(ctx context.Context) context.Context {
+	return context.WithValue(ctx, sessionKey{}, s)
+}
+
+// SessionFromContext returns the session running the host callable that
+// received ctx. It is an error when no session ran the call.
+func SessionFromContext(ctx context.Context) (*Session, error) {
+	s, ok := ctx.Value(sessionKey{}).(*Session)
+	if !ok {
+		return nil, errors.New("buzz: no session is running this call")
+	}
+	return s, nil
 }
 
 // enter makes vm the session's current VM (for debugger introspection), charges
@@ -974,7 +1004,7 @@ func (s *Session) Eval(ctx context.Context, code string) (vmpackage.Value, error
 // snippet with side effects never executes twice.
 func (s *Session) EvalChunk(ctx context.Context, chunk *vmpackage.Chunk) (vmpackage.Value, error) {
 	s.noteEntryQualified(chunk)
-	vm := vmpackage.NewVM(ctx)
+	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	v, err := vm.Run(chunk, s.env)
 	return v, err
@@ -1055,7 +1085,8 @@ func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Ch
 			v, ok := s.env.Get(key)
 			return ok && v.IsObjectDef()
 		},
-		SourceFile: s.sourceFile,
+		ModuleTypes: s.importedModuleTypes,
+		SourceFile:  s.sourceFile,
 	})
 	if obs := s.compileObserver; obs != nil {
 		obs.Phase(PhaseCompile, time.Since(compileStart), err)
@@ -1276,7 +1307,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 	checkStart := time.Now()
 	s.syncHostTypes()
 	s.checkPrelude = s.checkPrelude.sync(s.importedTypes)
-	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded, s.resolverBound)
+	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.declImports, s.importPrivateHint(), s.embedded, s.resolverBound)
 	s.adviseImports(errs)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
@@ -1703,9 +1734,16 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 				}
 				s.collectedDecls[resolvePath] = true
 				// A declaration source that does not parse declares nothing.
-				prog := s.collectImportedModule(boundName, src)
-				if prog == nil {
+				prog, err := s.parse(src)
+				if err != nil {
 					prog = &ast.Program{}
+				}
+				if err := s.collectDeclImports(boundName, resolvePath, prog); err != nil {
+					return ImportNative, err
+				}
+				s.collectProgram(boundName, prog)
+				if err := s.checkDeclTypeNames(boundName, resolvePath, prog); err != nil {
+					return ImportNative, err
 				}
 				// An enum the declarations export needs a runtime VALUE on the module,
 				// not only a type for the checker. The compiler lowers an inferred case
@@ -1727,7 +1765,9 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 				// defines its objects and enums and redefines none of the native
 				// methods. The module value in hand is untouched, verified by calling
 				// a native method after this runs.
-				s.declareObjectTypes(src, prog)
+				if err := s.declareObjectTypes(boundName, resolvePath, src, prog, v); err != nil {
+					return ImportNative, err
+				}
 			}
 		}
 		if len(imp.Only) > 0 {
@@ -1769,12 +1809,24 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		key := "source:" + resolvePath
 		if s.loadedPaths[key] {
 			if cached := s.importCache[key]; cached != nil {
+				if prog, err := s.parse(src); err == nil {
+					if err := s.collectDeclImports(boundName, resolvePath, prog); err != nil {
+						return ImportBound, err
+					}
+				}
 				return ImportBound, s.bindCachedFlat(boundName, imp.Path, cached, false)
 			}
 			return ImportBound, nil
 		}
 		s.loadedPaths[key] = true
-		s.collectImportedModule(boundName, src)
+		prog, err := s.parse(src)
+		if err == nil {
+			if err := s.collectDeclImports(boundName, resolvePath, prog); err != nil {
+				delete(s.loadedPaths, key)
+				return ImportDecls, err
+			}
+			s.collectProgram(boundName, prog)
+		}
 		exports, err := s.execImport(ctx, src)
 		if err != nil {
 			// Forget the attempt, so a later import in a long-lived session retries it
@@ -1782,6 +1834,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 			delete(s.loadedPaths, key)
 			return ImportDecls, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 		}
+		s.bindQualifiedTypes(boundName, prog)
 		s.importCache[key] = s.cacheBindings(src, exports)
 		s.bindNamespaceObject(boundName, exports)
 		if ns := s.declaredNamespace(src); ns != nil {
@@ -1975,6 +2028,115 @@ func (s *Session) collectProgram(boundName string, prog *ast.Program) {
 	}
 }
 
+// declDepKey is the namespace key a declaration module is collected under when
+// another declaration source imports it. No identifier spells it, so it never
+// meets a namespace a program binds.
+func declDepKey(importPath string) string { return "import " + importPath }
+
+// collectDeclImports collects the declaration modules prog imports and records under
+// key which one each qualifier names: upstream resolves `fs\Path` through the
+// script's own imports only (Parser.zig resolveGlobal). path is "" for a host
+// declaration. A cycle is refused.
+func (s *Session) collectDeclImports(key, path string, prog *ast.Program) error {
+	if path != "" {
+		s.declLoading = append(s.declLoading, path)
+		defer func() { s.declLoading = s.declLoading[:len(s.declLoading)-1] }()
+	}
+	quals := map[string]string{}
+	for _, stmt := range prog.Stmts {
+		imp, ok := stmt.(*ast.ImportStmt)
+		if !ok {
+			continue
+		}
+		name, binds := importNamespace(imp)
+		dep := strings.TrimPrefix(imp.Path, "buzz:")
+		src, isDecl := s.moduleDecls[dep]
+		if !binds || !isDecl {
+			continue
+		}
+		if i := slices.Index(s.declLoading, dep); i >= 0 {
+			chain := append(slices.Clone(s.declLoading[i:]), dep)
+			return bzz.Errorf(UnresolvedImport, "buzz: import cycle between declaration modules: %s", strings.Join(chain, " -> "))
+		}
+		quals[name] = declDepKey(dep)
+		if s.declDeps[dep] {
+			continue
+		}
+		depProg, err := s.parse(src)
+		if err != nil {
+			return bzz.Errorf(UnresolvedImport, "buzz: import %q: declarations do not parse: %v", imp.Path, err)
+		}
+		if err := s.collectDeclImports(declDepKey(dep), dep, depProg); err != nil {
+			return err
+		}
+		s.collectProgram(declDepKey(dep), depProg)
+		if s.declDeps == nil {
+			s.declDeps = map[string]bool{}
+		}
+		s.declDeps[dep] = true
+	}
+	if len(quals) > 0 {
+		if s.declImports == nil {
+			s.declImports = map[string]map[string]string{}
+		}
+		s.declImports[key] = quals
+	}
+	return nil
+}
+
+// checkDeclTypeNames reports the first qualified type in a declaration source that
+// its own imports do not resolve. A collected source is never compiled, so without
+// this the name would stay unresolved and accept any value. module names the source
+// in the error.
+func (s *Session) checkDeclTypeNames(key, module string, prog *ast.Program) error {
+	imported := map[string]bool{}
+	var annots []string
+	for _, stmt := range prog.Stmts {
+		if imp, ok := stmt.(*ast.ImportStmt); ok {
+			if name, binds := importNamespace(imp); binds {
+				imported[name] = true
+			}
+		}
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			switch v := n.(type) {
+			case *ast.FunDecl:
+				annots = append(append(annots, v.ParamAnnots...), v.RetAnnot, v.YieldAnnot)
+			case *ast.ObjectDecl:
+				for _, f := range slices.Concat(v.Fields, v.StaticFields) {
+					annots = append(annots, f.TypeAnnot)
+				}
+			case *ast.DeclStmt:
+				annots = append(annots, v.TypeAnnot)
+			}
+			return true
+		})
+	}
+	for _, annot := range annots {
+		for name, qual := range qualifiedTypeNames(annot) {
+			if strings.IndexByte(qual, '\\') >= 0 {
+				continue
+			}
+			if !imported[qual] {
+				return bzz.Errorf(UnimportedNamespace, "buzz: module %s: undefined type \"%s\\%s\": no import binds %s in its declarations", module, qual, name, qual)
+			}
+			if !s.declaresType(s.declImports[key][qual], name) {
+				return bzz.Errorf(UndefinedType, "buzz: module %s: undefined type \"%s\\%s\": %s declares no type %s", module, qual, name, qual, name)
+			}
+		}
+	}
+	return nil
+}
+
+// declaresType reports whether the module collected under key exports a type name.
+func (s *Session) declaresType(key, name string) bool {
+	for _, d := range s.importedModuleTypes[key] {
+		if typeDeclName(d) == name {
+			return true
+		}
+	}
+	return false
+}
+
 // declareEnumValues copies every exported enum in a module's declaration source onto
 // the module value as a runtime enum.
 //
@@ -2017,33 +2179,14 @@ func (s *Session) declareEnumValues(mod vmpackage.Value, prog *ast.Program) {
 // of them able to build it: `magus/spell` spells write `Command{...}` freely,
 // while `http\HttpRetry{...}` threw.
 //
-// prog is src as collectImportedModule parsed it. Nothing is emitted for a source
-// with no exported object, which is most of them, so the common import runs nothing.
-func (s *Session) declareObjectTypes(src string, prog *ast.Program) {
-	// Only a source that is PURELY declarations may run. An exported function with
-	// a body is real code, and executing it flat-merges the name into the importing
-	// scope, which for a magusfile means magus reads it as a TARGET. Buzz's own
-	// io.buzz is exactly this shape (an `export object File` beside a real
-	// `export fun runFile`), and running it made every magusfile fail to load with
-	// MGS1008: target "runFile" must receive a magus\Context.
-	//
-	// An `extern` is safe by construction: it emits no code, which is what the
-	// generated declaration files are made of.
-	hasObject := false
-	for _, stmt := range prog.Stmts {
-		switch d := stmt.(type) {
-		case *ast.ObjectDecl:
-			if d.IsExported {
-				hasObject = true
-			}
-		case *ast.FunDecl:
-			if d.IsExported && !d.IsExtern {
-				return
-			}
-		}
+// prog is src as collectImportedModule parsed it; mod is the native value.
+// A source with no exported object runs nothing.
+func (s *Session) declareObjectTypes(boundName, resolvePath, src string, prog *ast.Program, mod vmpackage.Value) error {
+	if !declaresOnlyObjects(prog) {
+		return nil
 	}
-	if !hasObject {
-		return
+	if declaresObjectMethods(prog) {
+		return s.execObjectMethods(boundName, resolvePath, src, prog, mod)
 	}
 	// A FAILURE HERE IS NOT AN ERROR, and that is deliberate rather than lax.
 	//
@@ -2058,7 +2201,93 @@ func (s *Session) declareObjectTypes(src string, prog *ast.Program) {
 	// as it was before this existed: collected, checkable, and with its objects
 	// annotate-only. Returning the error instead would take a working import down
 	// over a capability it never had.
-	_, _ = s.execImport(s.ctx, src)
+	if _, err := s.execImport(s.ctx, src); err == nil {
+		s.bindQualifiedTypes(boundName, prog)
+	}
+	return nil
+}
+
+// declaresOnlyObjects reports whether prog exports an object and no function
+// with a body. Running an exported body flat-merges it into the importer, where
+// a magusfile reads it as a target: io.buzz exports runFile beside File.
+func declaresOnlyObjects(prog *ast.Program) bool {
+	hasObject := false
+	for _, stmt := range prog.Stmts {
+		switch d := stmt.(type) {
+		case *ast.ObjectDecl:
+			hasObject = hasObject || d.IsExported
+		case *ast.FunDecl:
+			if d.IsExported && !d.IsExtern {
+				return false
+			}
+		}
+	}
+	return hasObject
+}
+
+// declaresObjectMethods reports whether an exported object in prog has a
+// method with a body, which only an executed source defines.
+func declaresObjectMethods(prog *ast.Program) bool {
+	for _, stmt := range prog.Stmts {
+		d, ok := stmt.(*ast.ObjectDecl)
+		if !ok || !d.IsExported {
+			continue
+		}
+		if slices.ContainsFunc(d.Methods, func(m *ast.FunDecl) bool { return !m.IsExtern }) {
+			return true
+		}
+	}
+	return false
+}
+
+// execObjectMethods runs a source whose objects carry methods. Its private
+// externs resolve to mod's members, as a module's own externs do upstream.
+// A failure is a load error, since every method would be undefined.
+func (s *Session) execObjectMethods(boundName, resolvePath, src string, prog *ast.Program, mod vmpackage.Value) error {
+	for _, stmt := range prog.Stmts {
+		d, ok := stmt.(*ast.FunDecl)
+		if !ok || !d.IsExtern || d.IsExported {
+			continue
+		}
+		member, has := mod.MapGet(d.Name)
+		if !has {
+			return bzz.Errorf(UnresolvedImport, "buzz: module %s: extern %q has no native member", resolvePath, d.Name)
+		}
+		s.bindPrivateExtern(d.Name, member)
+	}
+	if _, err := s.execImport(s.ctx, src); err != nil {
+		return bzz.Errorf(UnresolvedImport, "buzz: module %s: its object methods cannot load: %v", resolvePath, err)
+	}
+	s.bindQualifiedTypes(boundName, prog)
+	return nil
+}
+
+// bindPrivateExtern binds a module's private extern by its bare name, hidden
+// from the importer's checker like any other import-private name.
+func (s *Session) bindPrivateExtern(name string, member vmpackage.Value) {
+	s.env.Define(name, member)
+	if s.importPrivate == nil {
+		s.importPrivate = map[string]bool{}
+	}
+	s.importPrivate[name] = true
+}
+
+// bindQualifiedTypes binds each object prog exports under QualifiedTypeKey too: two
+// modules may export one name (magus and vcs both export CommandOptions), and the bare
+// binding holds whichever ran last. Call it right after the module's source ran.
+func (s *Session) bindQualifiedTypes(boundName string, prog *ast.Program) {
+	if prog == nil {
+		return
+	}
+	for _, stmt := range prog.Stmts {
+		d, ok := stmt.(*ast.ObjectDecl)
+		if !ok || !d.IsExported {
+			continue
+		}
+		if v, bound := s.env.Get(d.Name); bound && v.IsObjectDef() {
+			s.env.Define(QualifiedTypeKey(boundName, d.Name), v)
+		}
+	}
 }
 
 // bindNamespaceObject binds, under name, a map of the names a flat import just
@@ -2124,10 +2353,14 @@ func (s *Session) bindCachedFlat(boundName, importPath string, c *cachedImport, 
 	for _, n := range c.names {
 		// An export, as if the module had run here; importExportedNames reads it.
 		s.exportedNames[n] = true
+		v, ok := c.values.MapGet(n)
+		if ok && v.IsObjectDef() {
+			s.env.Define(QualifiedTypeKey(boundName, n), v)
+		}
 		if _, bound := s.env.Get(n); bound {
 			continue
 		}
-		if v, ok := c.values.MapGet(n); ok {
+		if ok {
 			s.env.Define(n, v)
 		}
 	}
@@ -2366,6 +2599,8 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	sub.checkPrelude = s.checkPrelude.clone()
 	sub.hostTypes, sub.hostTypesSeen = s.hostTypes, s.hostTypesSeen
 	sub.collectedDecls = maps.Clone(s.collectedDecls)
+	sub.declImports = maps.Clone(s.declImports)
+	sub.declDeps = maps.Clone(s.declDeps)
 
 	// Copy parent's current globals into the sub-session so the imported file
 	// can reference host APIs (print, a host's own globals). The namespaces the
@@ -2448,6 +2683,14 @@ func (s *Session) findIncludeFile(importPath string) string {
 			return p
 		}
 	}
+	// A path spelled ./ or ../ names a place beside the entry file, which a host puts
+	// first in includeDirs; upstream never reads it against the working directory, so
+	// the cwd-relative search paths must not answer it first.
+	if strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") {
+		if p := s.findInIncludeDirs(importPath); p != "" {
+			return p
+		}
+	}
 	for _, tmpl := range s.searchPaths {
 		p := expandSearchPath(tmpl, importPath)
 		if p == "" {
@@ -2457,6 +2700,10 @@ func (s *Session) findIncludeFile(importPath string) string {
 			return p
 		}
 	}
+	return s.findInIncludeDirs(importPath)
+}
+
+func (s *Session) findInIncludeDirs(importPath string) string {
 	for _, dir := range s.includeDirs {
 		if p := filepath.Join(dir, importPath+".buzz"); bzzExists(p) {
 			return p
@@ -2499,7 +2746,7 @@ func (s *Session) Compile(code string) (*vmpackage.Chunk, error) {
 // ExecChunk runs a previously compiled Chunk in the session's environment.
 func (s *Session) ExecChunk(ctx context.Context, chunk *vmpackage.Chunk) error {
 	s.noteEntryQualified(chunk)
-	vm := vmpackage.NewVM(ctx)
+	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	_, err := vm.Run(chunk, s.env)
 	if err == nil {
@@ -2575,7 +2822,7 @@ func (s *Session) release() {
 // args become the session's: a host-built argument is released with the session,
 // so pass a fresh one per call rather than one kept across sessions.
 func (s *Session) CallValue(ctx context.Context, fn vmpackage.Value, args []vmpackage.Value) (vmpackage.Value, error) {
-	vm := vmpackage.NewVM(ctx)
+	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	s.owner.Claim(fn)
 	for _, arg := range args {
@@ -2586,4 +2833,18 @@ func (s *Session) CallValue(ctx context.Context, fn vmpackage.Value, args []vmpa
 	}
 	result, err := vm.Exec()
 	return result, err
+}
+
+// CallMethod runs recv.name(args): how Go calls a method of a Buzz object, such as
+// one conforming to a protocol. A missing method, a non-callable member or the
+// wrong argument count is an error, never Null. recv and args become the session's,
+// as in CallValue.
+func (s *Session) CallMethod(ctx context.Context, recv vmpackage.Value, name string, args []vmpackage.Value) (vmpackage.Value, error) {
+	vm := vmpackage.NewVM(s.within(ctx))
+	defer s.enter(vm)()
+	s.owner.Claim(recv)
+	for _, arg := range args {
+		s.owner.Claim(arg)
+	}
+	return vm.Invoke(recv, name, args)
 }

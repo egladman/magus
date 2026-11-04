@@ -21,7 +21,7 @@ import (
 //
 // A non-nil projects keeps only the groups one of whose jobs wrote in one of them, and
 // then counts no unclassified job, since none can be placed.
-func GroupingRecords(outcomes []types.JobOutcome, projects []string) types.GroupingOutput {
+func GroupingRecords(outcomes []types.JobOutcome, projects []string) types.Grouping {
 	type parentAttempt struct {
 		parent  string
 		attempt int
@@ -41,7 +41,7 @@ func GroupingRecords(outcomes []types.JobOutcome, projects []string) types.Group
 		siblings[k] = append(siblings[k], o)
 	}
 
-	out := types.GroupingOutput{Definition: types.GroupingDefinition, MinSample: types.GroupingMinSample}
+	out := types.Grouping{Definition: types.GroupingDefinition, MinSample: types.GroupingMinSample}
 	shapes := []types.GroupingShape{types.GroupingChained, types.GroupingSplit, types.GroupingSolo}
 	folds := make(map[types.GroupingShape]*groupingFold, len(shapes))
 	for _, shape := range shapes {
@@ -177,7 +177,7 @@ func (f *groupingFold) record() types.GroupingRecord {
 
 // groupingLines renders the lens one shape a line, facts with their sample and never
 // advice; a lens with no job at all is one line saying so.
-func groupingLines(out types.GroupingOutput) []string {
+func groupingLines(out types.Grouping) []string {
 	if !slices.ContainsFunc(out.Rows, func(r types.GroupingRecord) bool { return r.Jobs > 0 }) {
 		return []string{"none recorded for these projects"}
 	}
@@ -223,10 +223,10 @@ func mean(xs []float64) *float64 {
 
 // GroupingLens is [GroupingRecords] over the outcomes the workspace's history file holds.
 // A workspace with no history file configured has no outcome, so every shape is unknown.
-func (s *Store) GroupingLens(ctx context.Context, projects []string) (types.GroupingOutput, error) {
+func (s *Store) GroupingLens(ctx context.Context, projects []string) (types.Grouping, error) {
 	outcomes, err := s.jobHistory(ctx)
 	if err != nil {
-		return types.GroupingOutput{}, err
+		return types.Grouping{}, err
 	}
 	return GroupingRecords(outcomes, projects), nil
 }

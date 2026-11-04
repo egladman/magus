@@ -1,7 +1,6 @@
 package vcs
 
 import (
-	"context"
 	"strings"
 	"time"
 
@@ -81,19 +80,16 @@ func splitMessage(msg string) (subject, body string) {
 	return msg, ""
 }
 
-// resolveEach maps revision ids to commits via v.FindCommit, one spawn per id: the
-// back end of RangeCommits, where ranges are short. History reads hundreds, so each
-// driver's History makes one log call and feeds every record to parseCommit instead.
-func resolveEach(ctx context.Context, dir string, v types.VCSDriver, ids []string) ([]types.Commit, error) {
-	commits := make([]types.Commit, 0, len(ids))
-	for _, id := range ids {
-		c, err := v.FindCommit(ctx, dir, id)
-		if err != nil {
-			return nil, err
-		}
-		commits = append(commits, c)
+// parseCommits reads one log call's records, each ended by its own commitDelim.
+// A range can run to hundreds of commits, too many for a spawn per commit.
+func parseCommits(out string) []types.Commit {
+	fields := strings.Split(out, commitDelim)
+	var commits []types.Commit
+	for i := 0; i+numCommitFields <= len(fields); i += numCommitFields {
+		record := strings.Join(fields[i:i+numCommitFields], commitDelim)
+		commits = append(commits, parseCommit(record))
 	}
-	return commits, nil
+	return commits
 }
 
 // parents splits the space-separated parent field, dropping empties and any

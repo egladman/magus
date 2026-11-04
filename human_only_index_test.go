@@ -73,12 +73,13 @@ func TestRecordedHumanOnlyAnswersOnlyWhileTheSourcesHold(t *testing.T) {
 	cfg := config.Config{}
 	opens := 0
 
-	got, ok := workspacegraph.RecordedHumanOnly(ctx, unopenable(root, &opens), cfg)
+	got, ok := workspacegraph.RecordedTargetPolicies(ctx, unopenable(root, &opens), cfg)
 	require.True(t, ok, "the sync recorded the targets and nothing has moved since")
-	assert.Equal(t, types.HumanOnlyIndex{
+	assert.Equal(t, types.TargetPolicyIndex{
 		Projects: []string{"."},
-		Targets: []types.HumanOnlyTarget{{
+		Targets: []types.TargetPolicy{{
 			TargetRef: types.TargetRef{Project: ".", Target: "bench"},
+			HumanOnly: true,
 			Reason:    "launches paid sessions",
 			SkipCache: true,
 			ReachedBy: []types.TargetRef{{Project: ".", Target: "suite"}},
@@ -86,12 +87,12 @@ func TestRecordedHumanOnlyAnswersOnlyWhileTheSourcesHold(t *testing.T) {
 	}, got, "the record is what the evaluation declares")
 
 	w.Magusfile(humanOnlyMagusfile + "\nexport fun extra(ctx: magus\\Context, args: [str]) > void {}\n")
-	_, ok = workspacegraph.RecordedHumanOnly(ctx, unopenable(root, &opens), cfg)
+	_, ok = workspacegraph.RecordedTargetPolicies(ctx, unopenable(root, &opens), cfg)
 	assert.False(t, ok, "an edited magusfile moves the domain fast stamp: a stale record is never an answer")
 
-	_, ok = workspacegraph.RecordedHumanOnly(ctx, unopenable(t.TempDir(), &opens), cfg)
+	_, ok = workspacegraph.RecordedTargetPolicies(ctx, unopenable(t.TempDir(), &opens), cfg)
 	assert.False(t, ok, "a workspace with no store has nothing recorded")
-	assert.Zero(t, opens, "RecordedHumanOnly never opens; the caller decides")
+	assert.Zero(t, opens, "RecordedTargetPolicies never opens; the caller decides")
 }
 
 // TestRecordedHumanOnlyIgnoresAManifestThatNeverRecordedIt pins the upgrade case: a store a
@@ -104,15 +105,17 @@ func TestRecordedHumanOnlyIgnoresAManifestThatNeverRecordedIt(t *testing.T) {
 	require.NoError(t, err)
 	var man map[string]any
 	require.NoError(t, json.Unmarshal(b, &man))
-	require.Equal(t, true, man["human_only_known"], "the sync recorded it")
-	delete(man, "human_only")
-	delete(man, "human_only_known")
+	require.Equal(t, true, man["target_policies_known"], "the sync recorded it")
+	// What a magus from before the target-policy record wrote: the human_only keys alone.
+	man["human_only"], man["human_only_known"] = man["target_policies"], true
+	delete(man, "target_policies")
+	delete(man, "target_policies_known")
 	b, err = json.Marshal(man)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, b, 0o644))
 
 	opens := 0
-	_, ok := workspacegraph.RecordedHumanOnly(ctx, unopenable(w.Root(), &opens), config.Config{})
+	_, ok := workspacegraph.RecordedTargetPolicies(ctx, unopenable(w.Root(), &opens), config.Config{})
 	assert.False(t, ok)
 	assert.Zero(t, opens)
 }
@@ -126,7 +129,7 @@ func BenchmarkHumanOnlyRead(b *testing.B) {
 	b.Run("recorded", func(b *testing.B) {
 		opens := 0
 		for b.Loop() {
-			if _, ok := workspacegraph.RecordedHumanOnly(ctx, unopenable(root, &opens), config.Config{}); !ok {
+			if _, ok := workspacegraph.RecordedTargetPolicies(ctx, unopenable(root, &opens), config.Config{}); !ok {
 				b.Fatal("the record went stale under the benchmark")
 			}
 		}

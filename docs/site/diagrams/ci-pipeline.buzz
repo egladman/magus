@@ -15,11 +15,11 @@ export fun ciPipelineFigure() > figure\Figure !> any {
         .actor(cmd)
         .unscoped(why: "a magusfile convention, not a package: nothing in the tree to hold it to");
     foreach (step in ["generate", "format", "lint", "build", "test", "security"]) {
-        f.actor(figure\external(step, look: figure\Look.plain));
+        _ = f.actor(figure\external(step, look: figure\Look.plain));
     }
     // An actor is keyed by its name, so these join the boxes declared above.
     foreach (step in ["generate", "build", "format", "test", "lint", "security"]) {
-        f.flowAcross(cmd, dst: figure\external(step, look: figure\Look.plain));
+        _ = f.flowAcross(cmd, dst: figure\external(step, look: figure\Look.plain));
     }
     return f;
 }

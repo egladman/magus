@@ -5,8 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestParseGit pins each global option git reads before its subcommand, in both the
@@ -392,4 +394,31 @@ func TestWrappedPushKeepsArgs(t *testing.T) {
 		require.Len(t, calls, 1, line)
 		assert.Equal(t, []string{"push", "origin", "main"}, literalWords(calls[0].pushArgs()), "the push gate reads the branch off these words: "+line)
 	}
+}
+
+// checkpointAdviceSuite pins which leases the checkpoint advisory reaches.
+type checkpointAdviceSuite struct{ suite.Suite }
+
+func TestCheckpointAdviceSuite(t *testing.T) { suite.Run(t, new(checkpointAdviceSuite)) }
+
+// judgeRevisionRead judges a revision read under the lease row given.
+func (s *checkpointAdviceSuite) judgeRevisionRead(row types.Job) types.GuardJudgment {
+	who := hookAttribution{Host: "claude-code", Session: "5d1e7c20", Agent: "b7a4f9"}
+	ctx, _ := fleetFixture(s.T(), row)
+	bindCaller(s.T(), ctx, who, row.ID)
+	return Judge(ctx, advising(Dependencies{}, string(advisoryCheckpointState)), Request{
+		Input: bashCall(s.T(), who.Session, who.Agent, "git --no-pager describe"),
+		Host:  who.Host,
+	})
+}
+
+// A read-only lease has nothing to park, so the advice does not reach it.
+func (s *checkpointAdviceSuite) TestReadOnlyLeaseIsNotAdvisedToCheckpoint() {
+	scout := types.Job{ID: "scout/read-only", ReadOnly: true, State: types.StateRunning, Registered: 1}
+	s.NotEqual(string(advisoryCheckpointState), s.judgeRevisionRead(scout).Rule)
+}
+
+// A writer lease may park its work, so it still gets the advice.
+func (s *checkpointAdviceSuite) TestWriterLeaseIsAdvisedToCheckpoint() {
+	s.Equal(string(advisoryCheckpointState), s.judgeRevisionRead(narrowLease()).Rule)
 }

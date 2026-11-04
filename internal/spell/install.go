@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/vcs"
 )
@@ -185,7 +184,7 @@ func removeAbandonedSeeds(ctx context.Context, dst string) {
 			continue
 		}
 		if err := os.RemoveAll(m); err != nil {
-			slog.With(attr.Component("spell")).DebugContext(ctx, "could not remove an abandoned seed", "path", m, "err", err)
+			slog.DebugContext(ctx, "could not remove an abandoned spell seed", "path", m, "err", err)
 			continue
 		}
 		_ = os.Remove(m + seedLockSuffix)

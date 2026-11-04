@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
@@ -718,9 +717,9 @@ func claimingRows(rows []types.Job) []types.Job {
 // revision answered. A branch the version control cannot resolve is an error, never an
 // empty set: a merge of nothing would read the same as a merge that changed nothing.
 func IntegrationWritePaths(ctx context.Context, root, checkpoint string, branches []string) (paths []string, base string, err error) {
-	driver, ranges, err := rangeDriver(ctx, root)
-	if err != nil {
-		return nil, "", err
+	driver, why := resolveDriver(ctx, root)
+	if driver == nil {
+		return nil, "", errors.New(why)
 	}
 	if base = checkpointRevision(checkpoint); base == "" {
 		meta, err := driver.Metadata(ctx, root)
@@ -731,12 +730,12 @@ func IntegrationWritePaths(ctx context.Context, root, checkpoint string, branche
 	}
 	seen := map[string]bool{}
 	for _, branch := range branches {
-		changed, err := ranges.RangeFiles(ctx, root, base, branch, nil)
+		changed, err := driver.RangeFiles(ctx, root, base, branch, nil)
 		if err != nil {
 			return nil, "", fmt.Errorf("branch %s: %w", branch, err)
 		}
 		for _, p := range changed {
-			if p = path.Clean(filepath.ToSlash(strings.TrimSpace(p))); p != "." && !seen[p] {
+			if p = cleanPath(p); p != "." && !seen[p] {
 				seen[p] = true
 				paths = append(paths, p)
 			}
@@ -746,18 +745,27 @@ func IntegrationWritePaths(ctx context.Context, root, checkpoint string, branche
 	return paths, base, nil
 }
 
-// rangeDriver is the version control answering at root as the range reader it must be, or
-// why it cannot read one.
-func rangeDriver(ctx context.Context, root string) (types.VCSDriver, types.RangeReporter, error) {
-	driver, why := resolveDriver(ctx, root)
-	if driver == nil {
-		return nil, nil, errors.New(why)
+// IntegrationOutputs is the write set of an integration job over paths, the
+// files its branches changed: those plus every output ws declares, each of
+// them soft. Regenerating them is that job's work, and a soft claim overlaps
+// no sibling.
+func IntegrationOutputs(ws Workspace, paths []string) (write, soft []string) {
+	seen := map[string]bool{}
+	for _, p := range paths {
+		seen[p] = true
 	}
-	ranges, ok := driver.(types.RangeReporter)
-	if !ok {
-		return nil, nil, fmt.Errorf("%s reads no revision range, so no branch can be compared with the checkout", driver.Name())
+	for _, project := range ws.Projects {
+		for _, refs := range project.TargetOutputs {
+			for _, ref := range refs {
+				if g := ref.Rooted(project.Path).Pattern; !seen[g] {
+					seen[g] = true
+					soft = append(soft, g)
+				}
+			}
+		}
 	}
-	return driver, ranges, nil
+	slices.Sort(soft)
+	return slices.Concat(paths, soft), soft
 }
 
 // IntegrationOverlaps names, for an integration row, each live job holding one of its write
@@ -823,8 +831,8 @@ func ownTree(rows []types.Job, root string, row types.Job) bool {
 //   - a branch any integration job names, whatever that job's state: a merge that failed
 //     is retried by another integration job, not by counting the branch again;
 //   - an integration job's own branch once the job passed;
-//   - a branch whose changes are on the base by content (see [changesOnBase]), as a squash
-//     merge leaves them with no commit of the branch an ancestor.
+//   - a branch the checkout holds a copy of ([types.RangeReporter]), as a
+//     squash or replay leaves it with no commit an ancestor.
 //
 // An error means no range could be read at all: a gap read as zero would hide the backlog.
 func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error) {
@@ -832,6 +840,10 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 	if err != nil {
 		return nil, err
 	}
+	return unintegratedBranches(ctx, s.root, rows)
+}
+
+func unintegratedBranches(ctx context.Context, root string, rows []types.Job) ([]Unintegrated, error) {
 	var finished []types.Job
 	integrating := map[string]bool{}
 	for _, row := range rows {
@@ -841,7 +853,7 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 		switch {
 		case row.Integrating() && row.State == types.StatePass:
 		case row.State == types.StatePass || row.State == types.StateExited:
-			if ownTree(rows, s.root, row) {
+			if ownTree(rows, root, row) {
 				finished = append(finished, row)
 			}
 		}
@@ -849,11 +861,11 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 	if len(finished) == 0 {
 		return nil, nil
 	}
-	driver, ranges, err := rangeDriver(ctx, s.root)
-	if err != nil {
-		return nil, err
+	driver, why := resolveDriver(ctx, root)
+	if driver == nil {
+		return nil, errors.New(why)
 	}
-	meta, err := driver.Metadata(ctx, s.root)
+	meta, err := driver.Metadata(ctx, root)
 	if err != nil {
 		return nil, fmt.Errorf("the checkout's revision: %w", err)
 	}
@@ -864,71 +876,88 @@ func (s *Store) UnintegratedBranches(ctx context.Context) ([]Unintegrated, error
 			continue
 		}
 		// One read per job: a branch that does not resolve errs, and nothing says where its work is.
-		commits, err := ranges.RangeCommits(ctx, s.root, meta.ID, branch, nil)
-		if err != nil || len(commits) == 0 || changesOnBase(ctx, driver, ranges, s.root, meta.ID, branch) {
+		missing, err := driver.MissingCommits(ctx, root, meta.ID, branch)
+		if err != nil || missing == 0 {
 			continue
 		}
-		out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: len(commits)})
+		out = append(out, Unintegrated{Job: row.ID, Branch: branch, Commits: missing})
 	}
 	return out, nil
 }
 
-// changesOnBase reports whether every file branch changed since it diverged from base reads
-// the same at branch as at base. Content, not ancestry or patch identity: a squash merge of
-// several branches holds no commit of any of them and no patch equal to one. A file either
-// side cannot read, a deletion among them, leaves it unproven.
-func changesOnBase(ctx context.Context, driver types.VCSDriver, ranges types.RangeReporter, root, base, branch string) bool {
-	tip, err := driver.FindCommit(ctx, root, branch)
-	if err != nil {
-		return false
-	}
-	paths, err := ranges.RangeFiles(ctx, root, base, tip.ID, nil)
-	if err != nil || len(paths) == 0 {
-		return false
-	}
-	for _, changed := range paths {
-		p := path.Clean(filepath.ToSlash(strings.TrimSpace(changed)))
-		ours, err := driver.ReadFileAt(ctx, root, tip.ID, p)
-		if err != nil {
-			return false
-		}
-		if theirs, err := driver.ReadFileAt(ctx, root, base, p); err != nil || theirs != ours {
-			return false
-		}
-	}
-	return true
+// FullTest is the run [ForkFacts] counts commits from. An empty Ref means the
+// checkout's store holds no such run.
+type FullTest struct {
+	Ref      string
+	Revision string
 }
 
-// IntegrationAdvice is what a fork of anything but an integration job says about the
-// finished branches waiting off the base: "" below limits.IntegrateAdviseAt, and from there
-// a line naming each branch and the integration fork that takes them. refuse is true from
-// limits.IntegrateRefuseAt on, until an integration job names the branches. An unset
-// threshold, as in a config nothing loaded, never fires, like every unset jobs limit.
-func (s *Store) IntegrationAdvice(ctx context.Context, limits config.Jobs) (advice string, refuse bool, err error) {
-	if limits.IntegrateAdviseAt <= 0 {
-		return "", false, nil
-	}
-	waiting, err := s.UnintegratedBranches(ctx)
-	if err != nil || len(waiting) < limits.IntegrateAdviseAt {
-		return "", false, err
+// ForkFacts reads what a fork leaves waiting at root, from rows. It refuses
+// nothing, and a side it cannot read says why rather than reading as zero.
+func ForkFacts(ctx context.Context, root string, rows []types.Job, last FullTest) types.JobForkFacts {
+	facts := types.JobForkFacts{LastTestRef: last.Ref, LastTestRevision: last.Revision}
+	waiting, err := unintegratedBranches(ctx, root, rows)
+	if err != nil {
+		facts.BranchesUnknown = err.Error()
 	}
 	branches := make([]string, len(waiting))
-	named := make([]string, len(waiting))
 	for i, w := range waiting {
 		branches[i] = w.Branch
-		named[i] = fmt.Sprintf("%s (job %s, %d commit(s))", w.Branch, w.Job, w.Commits)
+		facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("%s (job %s, %d commit(s))", w.Branch, w.Job, w.Commits))
 	}
-	record, _ := json.Marshal(map[string]any{
-		"schema_version": types.JobSchemaVersion,
-		"id":             fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
-		"criteria":       "merge each finished branch with --no-ff, resolve, regenerate, and pass the check",
-		"integrates":     branches,
-		"check":          map[string]string{"target": "<target>", "project": "<project>"},
-	})
-	advice = fmt.Sprintf("%d finished branch(es) wait off the base (jobs.integrate_advise_at %d, jobs.integrate_refuse_at %d): %s. Integrate them first: echo '%s' | %s",
-		len(waiting), limits.IntegrateAdviseAt, limits.IntegrateRefuseAt, strings.Join(named, ", "), record,
-		hint.JobFork.With("--stdin", "--checkout", "<dir>"))
-	return advice, limits.IntegrateRefuseAt > 0 && len(waiting) >= limits.IntegrateRefuseAt, nil
+	if len(waiting) > 0 {
+		record, _ := json.Marshal(map[string]any{
+			"schema_version": types.JobSchemaVersion,
+			"id":             fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
+			"criteria":       "merge each finished branch with --no-ff, resolve, regenerate, and pass the check",
+			"integrates":     branches,
+			"check":          map[string]string{"target": "<target>", "project": "<project>"},
+		})
+		facts.IntegrateRecord = string(record)
+	}
+	facts.CommitsSinceTest, facts.TestUnknown = commitsSince(ctx, root, last)
+	return facts
+}
+
+func commitsSince(ctx context.Context, root string, last FullTest) (int, string) {
+	if last.Ref == "" {
+		return 0, "this checkout's output store holds no passed full test"
+	}
+	driver, why := resolveDriver(ctx, root)
+	if driver == nil {
+		return 0, why
+	}
+	meta, err := driver.Metadata(ctx, root)
+	if err != nil {
+		return 0, fmt.Sprintf("the checkout's revision: %s", err)
+	}
+	commits, err := driver.MissingCommits(ctx, root, last.Revision, meta.ID)
+	if err != nil {
+		return 0, fmt.Sprintf("the commits since %s: %s", last.Revision, err)
+	}
+	return commits, ""
+}
+
+// ForkFactsLine renders facts as the one line a fork prints.
+func ForkFactsLine(facts types.JobForkFacts) string {
+	var branches string
+	switch {
+	case facts.BranchesUnknown != "":
+		branches = "finished branches off the base: unknown, " + facts.BranchesUnknown
+	case len(facts.FinishedBranches) == 0:
+		branches = "0 finished branches off the base"
+	default:
+		branches = fmt.Sprintf("%d finished branch(es) off the base: %s", len(facts.FinishedBranches), strings.Join(facts.FinishedBranches, ", "))
+	}
+	commits := "commits since the last full test: unknown, " + facts.TestUnknown
+	if facts.TestUnknown == "" {
+		commits = fmt.Sprintf("%d commit(s) since the last full test (%s at %s)", facts.CommitsSinceTest, facts.LastTestRef, facts.LastTestRevision)
+	}
+	line := fmt.Sprintf("%s; %s", branches, commits)
+	if facts.IntegrateRecord != "" {
+		line += fmt.Sprintf(". Integrate them: echo '%s' | %s", facts.IntegrateRecord, hint.JobFork.With("--stdin", "--checkout", "<dir>"))
+	}
+	return line
 }
 
 // jobBranch is the branch row's work is on: the one its standing checkout has checked out,

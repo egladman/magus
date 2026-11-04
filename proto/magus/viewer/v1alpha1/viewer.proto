@@ -55,6 +55,7 @@ enum Status {
   STATUS_PASS = 1;
   STATUS_FAIL = 2;
   STATUS_CACHED = 3;
+  STATUS_PERMITTED = 4;
 }
 
 // Trigger is how an invocation was spawned - the lineage a viewer surfaces ("this

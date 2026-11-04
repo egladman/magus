@@ -1,5 +1,6 @@
 // The model alias each wired harness spawns for a tier of magus/modeltiers. The root
-// magusfile registers these with magus\job.modelTiers. A host left out is refused at
+// magusfile registers these with magus\modelTiers.
+// A host left out is refused at
 // strict when a job row's spawn names a model, and the refusal names the hosts entry
 // to add. Each string is the exact id that host's spawn takes, read from the host's
 // own docs on 2026-10-25, not copied from another host's rows.

@@ -35,6 +35,7 @@ fun main(args: [str]) > void !> any {
 
 In the docs:
 
+- [D. Implement spec assembly in Go only, with no Buzz module](../decisions/0018-magus-assembles-oci-images.md#d-implement-spec-assembly-in-go-only-with-no-buzz-module)
 - [Release one module](../guides/releasing.md#release-one-module)
 - [The assert module](../guides/testing.md#the-assert-module)
 - [Magusfile Module Reference](../reference/buzz/index.md#magusfile-module-reference)

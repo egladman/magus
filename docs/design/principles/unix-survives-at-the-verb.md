@@ -44,8 +44,8 @@ The discipline reaches the code too:
 
 - The [scope test](../../scope.md#the-test), applied in review to every new verb.
 - The `main-logic` conformance metric fails a main-package function that
-  computes without calling another workspace package; the ratchet
-  ([`hack/policy/conformance.jsonl`](https://github.com/egladman/magus/blob/main/hack/policy/conformance.jsonl)) lists the ones that predate it.
+  computes without calling another workspace package; the conformance ceiling
+  keeps a changed file from adding one beside those that predate it.
 - The `file-split` conformance metric fails a concept sibling that would fit in
   its root at 1500 lines or fewer, and moves with the `file-lines` ceiling.
 - The agent guard denies piping magus output and names the `-o` form instead.

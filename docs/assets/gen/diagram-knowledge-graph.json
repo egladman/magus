@@ -1,10 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 5,
-    "imports": 4
+    "flow": 0,
+    "imports": 0
   },
   "figure": "knowledge-graph",
   "findings": [],
-  "stamp": "sha256:f35beeb3836641e7af29b1c5b63a9cb3a4a24c466e03e534f2d1fe978fce899a"
+  "stamp": "sha256:b75774a5d5fb4e08c956775a92387b11ba818c379ceedd2549122c769e63deb0"
 }

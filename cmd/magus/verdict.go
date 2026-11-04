@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
 )
@@ -58,6 +60,13 @@ func measureSymbolCoverage(ctx context.Context, ws graphWorkspace, cfg config.Co
 	return cov
 }
 
+// noteShardErrors says a read's answer lacks a shard that failed to assemble.
+func noteShardErrors(ctx context.Context, root, label string) {
+	for _, msg := range knowledge.ShardErrors(config.CacheDir(root, globalCfg)) {
+		slog.WarnContext(ctx, "this answer lacks "+msg, attr.Notice(label))
+	}
+}
+
 // printVerdict writes the block explaining an answer that reported nothing. It prints
 // nothing for a found verdict: the rows above it already said so.
 //
@@ -86,10 +95,17 @@ func printVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 			// answer that found something, and vanish on the miss it actually accounted for.
 			fmt.Fprintf(w, "  the symbol index predates the sources it covers, so a definition added since it was built is not in it: %s\n",
 				ans.DescribeStale())
-			fmt.Fprintf(w, "  refresh and ask again: %s\n", hint.GraphBuild)
+			if ans.IndexCause == nil {
+				fmt.Fprintf(w, "  refresh and ask again: %s\n", hint.GraphBuild)
+			}
 		}
 		if len(ans.Gaps) > 0 {
 			fmt.Fprintf(w, "  outside coverage: %s\n", types.DescribeGaps(ans.Gaps))
+		}
+		// A cause is what the read did about its index, so no rebuild is owed.
+		if c := ans.IndexCause; c != nil {
+			fmt.Fprintf(w, "  why: %s\n  fix: %s\n", c.Why, c.Fix)
+		} else if slices.ContainsFunc(ans.Gaps, types.KnowledgeSymbolGap.Buildable) {
 			fmt.Fprintf(w, "  build the missing index with: %s\n", hint.GraphBuild)
 		}
 	}
