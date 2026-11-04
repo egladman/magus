@@ -202,7 +202,7 @@ func names(shards [][]types.Unit) [][]string {
 	return out
 }
 
-func needsOf(edges map[string][]string) func(types.Unit) []types.Unit {
+func closures(edges map[string][]string) func(types.Unit) []types.Unit {
 	return func(u types.Unit) []types.Unit {
 		return append([]types.Unit{u}, unitList(edges[u.String()]...)...)
 	}
@@ -243,7 +243,7 @@ func (s *PlanSuite) TestAUnitShorterThanSetupJoinsAShard() {
 
 func (s *PlanSuite) TestASharedPrerequisiteKeepsItsUnitsTogether() {
 	h := measured(10_000, map[string]int64{".:build": 200_000, ".:lint": 50_000, ".:test": 50_000})
-	f := Forecaster{History: h, MemoryBudgetBytes: noBudget, Needs: needsOf(map[string][]string{
+	f := Forecaster{History: h, MemoryBudgetBytes: noBudget, Needs: closures(map[string][]string{
 		".:lint": {".:build"}, ".:test": {".:build"},
 	})}
 	got := f.Plan(unitList(".:lint", ".:test"), 8)
@@ -252,7 +252,7 @@ func (s *PlanSuite) TestASharedPrerequisiteKeepsItsUnitsTogether() {
 
 func (s *PlanSuite) TestDisjointPrerequisitesSplit() {
 	h := measured(10_000, map[string]int64{"a:build": 200_000, "b:build": 200_000, "a:test": 50_000, "b:test": 50_000})
-	f := Forecaster{History: h, MemoryBudgetBytes: noBudget, Needs: needsOf(map[string][]string{
+	f := Forecaster{History: h, MemoryBudgetBytes: noBudget, Needs: closures(map[string][]string{
 		"a:test": {"a:build"}, "b:test": {"b:build"},
 	})}
 	got := f.Plan(unitList("a:test", "b:test"), 8)
@@ -312,7 +312,7 @@ func (s *PlanSuite) TestOverBudgetNamesTheShardThatStillDoesNotFit() {
 
 func (s *PlanSuite) TestUnmeasuredNamesUnitsAndPrerequisites() {
 	h := measured(1, map[string]int64{".:test": 60_000})
-	f := Forecaster{History: h, Needs: needsOf(map[string][]string{".:test": {".:generate"}})}
+	f := Forecaster{History: h, Needs: closures(map[string][]string{".:test": {".:generate"}})}
 	s.Equal(unitList(".:generate", "b:lint"), f.Unmeasured(unitList(".:test", "b:lint")))
 }
 

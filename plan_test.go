@@ -171,7 +171,7 @@ func (s *PlanUnitsSuite) TestAUnitNeedsItsTransitiveSteps() {
 	s.Equal([]types.Unit{{Project: ".", Target: "test"}, {Project: ".", Target: "build"}}, got)
 }
 
-func (s *PlanUnitsSuite) TestThePlanCarriesUnitsAndSaysWhatItFellBackFor() {
+func (s *PlanUnitsSuite) TestThePlanCarriesUnitsAndNamesTheUnmeasured() {
 	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"magusfile.buzz", "api/main.go"}, MaxShards: -1})
 	s.Require().NoError(err)
 	var placed []types.Unit

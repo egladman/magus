@@ -1,5 +1,7 @@
 package types
 
+import "fmt"
+
 // Unit is the smallest piece of work a CI shard plan places: one
 // target a project's anchor (ci) composes directly, run in Project.
 type Unit struct {
@@ -8,7 +10,7 @@ type Unit struct {
 }
 
 // String is the unit as project:target, the key ties break on.
-func (u Unit) String() string { return u.Project + ":" + u.Target }
+func (u Unit) String() string { return fmt.Sprintf("%s:%s", u.Project, u.Target) }
 
 // Shard is one runner's worth of work in a CI shard plan.
 type Shard struct {
