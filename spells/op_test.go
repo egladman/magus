@@ -128,3 +128,43 @@ func (s *commandSelectionSuite) TestDialectSurvivesJSON() {
 	s.Require().NoError(json.Unmarshal(data, &decoded))
 	s.Equal(original, decoded)
 }
+
+type commandTestScopeSuite struct{ suite.Suite }
+
+func TestCommandTestScope(t *testing.T) { suite.Run(t, new(commandTestScopeSuite)) }
+
+func (s *commandTestScopeSuite) TestAcceptsEveryPlaceholder() {
+	s.NoError(Command{TestScope: []string{"./{dir}", "{file}", "{dir}/{stem}_test.buzz"}}.Validate())
+}
+
+func (s *commandTestScopeSuite) TestRefusesAnUnknownPlaceholder() {
+	s.EqualError(Command{TestScope: []string{"./{package}"}}.Validate(),
+		`test_scope "./{package}": placeholder {package}, want {dir}, {file} or {stem}`)
+}
+
+func (s *commandTestScopeSuite) TestRefusesAnEmptyEntry() {
+	s.EqualError(Command{TestScope: []string{""}}.Validate(), "test_scope[0] is empty")
+}
+
+func (s *commandTestScopeSuite) TestExpandsEachPlaceholder() {
+	c := Command{TestScope: []string{"./{dir}", "{file}", "{dir}/{stem}_test.buzz"}}
+	s.Equal([]string{"./std/lib", "std/lib/fmt.buzz", "std/lib/fmt_test.buzz"}, c.ExpandTestScope("std/lib/fmt.buzz"))
+}
+
+func (s *commandTestScopeSuite) TestExpandsAFileAtTheProjectRoot() {
+	s.Equal([]string{"./."}, Command{TestScope: []string{"./{dir}"}}.ExpandTestScope("main.go"))
+}
+
+func (s *commandTestScopeSuite) TestExpandsNothingWhenUndeclared() {
+	s.Empty(Command{}.ExpandTestScope("main.go"))
+}
+
+func (s *commandTestScopeSuite) TestSurvivesJSON() {
+	original := Command{Bin: "go", TestScope: []string{"./{dir}"}}
+	data, err := json.Marshal(original)
+	s.Require().NoError(err)
+	s.Contains(string(data), `"test_scope":["./{dir}"]`)
+	var decoded Command
+	s.Require().NoError(json.Unmarshal(data, &decoded))
+	s.Equal(original, decoded)
+}

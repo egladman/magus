@@ -41,7 +41,7 @@ func (f *precedentFixture) edge(from, to string, rel types.RelationID) {
 // read off the path.
 func (f *precedentFixture) file(file, ns, label, lang string) {
 	f.g.AddNode(types.KnowledgeNode{ID: ns, Kind: types.KindSymbol, Label: label, Source: file + ":1",
-		Attrs: map[string]string{attrNamespace: ns, attrLanguage: lang, attrSymbolKind: "Package"}})
+		Attrs: map[string]string{attrNamespace: ns, AttrLanguage: lang, attrSymbolKind: "Package"}})
 	f.g.AddNode(types.KnowledgeNode{ID: "file:" + file, Kind: types.KindFile, Label: file, Source: file})
 	f.edge("file:"+file, ns, types.RelationDefines)
 }
@@ -76,7 +76,7 @@ func (f *precedentFixture) state(dir, name, typ string) string {
 	ns := precedentNamespace(dir, "go")
 	id := fmt.Sprintf("%s%s.", ns, name)
 	f.g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: name, Source: fmt.Sprintf("%s/f0.go:%d", dir, f.line),
-		Attrs: map[string]string{attrNamespace: ns, attrLanguage: "go", attrSymbolKind: "Variable", AttrSignature: fmt.Sprintf("var %s %s", name, typ)}})
+		Attrs: map[string]string{attrNamespace: ns, AttrLanguage: "go", attrSymbolKind: "Variable", AttrSignature: fmt.Sprintf("var %s %s", name, typ)}})
 	return id
 }
 
@@ -375,7 +375,7 @@ func TestPrecedentsSkipGeneratedAndTestCode(t *testing.T) {
 	f.value("internal/a/gen", "generatedErr", "error")
 	f.g.AddNode(types.KnowledgeNode{ID: precedentNamespace("internal/a", "go") + "testErr.", Kind: types.KindSymbol, Label: "testErr",
 		Source: "internal/a/f_test.go:3", Attrs: map[string]string{
-			attrNamespace: precedentNamespace("internal/a", "go"), attrLanguage: "go", attrSymbolKind: "Variable", AttrSignature: "var testErr error",
+			attrNamespace: precedentNamespace("internal/a", "go"), AttrLanguage: "go", attrSymbolKind: "Variable", AttrSignature: "var testErr error",
 		}})
 	f.file("internal/a/gen/x_test.go", precedentNamespace("internal/a/gen_test", "go"), "gen_test", "go")
 	f.file("internal/a/a_test.go", precedentNamespace("internal/a", "go"), "a", "go")

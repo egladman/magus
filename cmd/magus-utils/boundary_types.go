@@ -41,6 +41,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
 	// Must follow Command: SymbolIndexer.command is one.
 	{Name: "SymbolIndexer", Type: reflect.TypeFor[spells.SymbolIndexer](), RuntimeObject: true},
+	// Must follow Command: Coverage.command is one.
+	{Name: "Coverage", Type: reflect.TypeFor[spells.Coverage]()},
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
@@ -53,13 +55,16 @@ var boundaryTypes = []boundaryType{
 	{Name: "SandboxEnv", Type: reflect.TypeFor[spells.SandboxEnv](), RuntimeObject: true},
 	{Name: "SandboxCache", Type: reflect.TypeFor[spells.SandboxCache](), RuntimeObject: true},
 	{Name: "Sandbox", Type: reflect.TypeFor[spells.Sandbox](), RuntimeObject: true},
-	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote], Syntax
-	// carries a CommentSyntax and a StubSyntax, and Language carries a Syntax.
+	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote],
+	// MutationSyntax carries [Swap], and Language carries a Syntax.
 	// RuntimeObject because magus\describe.spell hands them back inside a Spell.
 	{Name: "CommentBlock", Type: reflect.TypeFor[spells.CommentBlock](), RuntimeObject: true},
 	{Name: "Quote", Type: reflect.TypeFor[spells.Quote](), RuntimeObject: true},
 	{Name: "CommentSyntax", Type: reflect.TypeFor[spells.CommentSyntax](), RuntimeObject: true},
 	{Name: "StubSyntax", Type: reflect.TypeFor[spells.StubSyntax](), RuntimeObject: true},
+	{Name: "DecisionSyntax", Type: reflect.TypeFor[spells.DecisionSyntax](), RuntimeObject: true},
+	{Name: "Swap", Type: reflect.TypeFor[spells.Swap](), RuntimeObject: true},
+	{Name: "MutationSyntax", Type: reflect.TypeFor[spells.MutationSyntax](), RuntimeObject: true},
 	{Name: "Syntax", Type: reflect.TypeFor[spells.Syntax](), RuntimeObject: true},
 	{Name: "Language", Type: reflect.TypeFor[spells.Language]()},
 	// A provider spell WRITES this one, like Project below: resolve_secret constructs it
@@ -345,6 +350,11 @@ var boundaryTypes = []boundaryType{
 	{Name: "ConformanceUnmeasured", Type: reflect.TypeFor[types.ConformanceUnmeasured](), RuntimeObject: true},
 	{Name: "ConformanceRow", Type: reflect.TypeFor[types.ConformanceRow](), RuntimeObject: true},
 	{Name: "Conformance", Type: reflect.TypeFor[types.Conformance](), RuntimeObject: true},
+	{Name: "FunctionGap", Type: reflect.TypeFor[types.FunctionGap](), RuntimeObject: true},
+	{Name: "CrapFunction", Type: reflect.TypeFor[types.CrapFunction](), RuntimeObject: true},
+	{Name: "Crap", Type: reflect.TypeFor[types.Crap](), RuntimeObject: true},
+	{Name: "Mutant", Type: reflect.TypeFor[types.Mutant](), RuntimeObject: true},
+	{Name: "Mutants", Type: reflect.TypeFor[types.Mutants](), RuntimeObject: true},
 	// There is deliberately no ModelTier object: that name is the workspace's own Buzz enum.
 	{Name: "ModelTierRecord", Type: reflect.TypeFor[types.ModelTierRecord](), RuntimeObject: true},
 	{Name: "ModelTiers", Type: reflect.TypeFor[types.ModelTiers](), RuntimeObject: true},
@@ -657,6 +667,11 @@ var boundaryEnums = []boundaryEnum{
 		Cases: []enumCase{{"none", ""}, {"scip", "scip"}, {"goPackages", "go-packages"}, {"buzzModule", "buzz-module"}, {"shellScript", "shell-script"}},
 	},
 	{
+		Name:  "CoverageFormat",
+		Type:  reflect.TypeFor[spells.CoverageFormat](),
+		Cases: []enumCase{{"none", ""}, {"lcov", "lcov"}, {"goProfile", "go-coverprofile"}},
+	},
+	{
 		Name:  "External",
 		Type:  reflect.TypeFor[spells.External](),
 		Cases: []enumCase{{"none", ""}, {"reads", "reads-external"}, {"mutates", "mutates-external"}},
@@ -957,12 +972,17 @@ var boundaryEnums = []boundaryEnum{
 	{
 		Name:  "MarkerFamily",
 		Type:  reflect.TypeFor[types.MarkerFamily](),
-		Cases: []enumCase{{"none", ""}, {"diagram", "diagram"}, {"calls", "calls"}, {"skills", "skills"}, {"observed", "observed"}, {"harness", "harness"}},
+		Cases: []enumCase{{"none", ""}, {"diagram", "diagram"}, {"calls", "calls"}, {"skills", "skills"}, {"observed", "observed"}, {"harness", "harness"}, {"mutant", "mutant"}},
 	},
 	{
 		Name:  "MarkerVerb",
 		Type:  reflect.TypeFor[types.MarkerVerb](),
 		Cases: []enumCase{{"none", ""}, {"point", "point"}, {"block", "block"}},
+	},
+	{
+		Name:  "MutantOutcome",
+		Type:  reflect.TypeFor[types.MutantOutcome](),
+		Cases: []enumCase{{"none", ""}, {"killed", "killed"}, {"survived", "survived"}, {"excepted", "excepted"}},
 	},
 	{
 		Name:  "Orchestration",

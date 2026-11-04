@@ -145,6 +145,21 @@ var CommentSyntaxSource string
 //go:embed gen/types/stubsyntax.buzz
 var StubSyntaxSource string
 
+// These precede SyntaxSource: Syntax carries each, and MutationSyntax
+// carries [Swap].
+//
+//go:generate go run ../../cmd/magus-utils types -type DecisionSyntax -out gen/types/decisionsyntax.buzz
+//go:embed gen/types/decisionsyntax.buzz
+var DecisionSyntaxSource string
+
+//go:generate go run ../../cmd/magus-utils types -type Swap -out gen/types/swap.buzz
+//go:embed gen/types/swap.buzz
+var SwapSource string
+
+//go:generate go run ../../cmd/magus-utils types -type MutationSyntax -out gen/types/mutationsyntax.buzz
+//go:embed gen/types/mutationsyntax.buzz
+var MutationSyntaxSource string
+
 //go:generate go run ../../cmd/magus-utils types -type Syntax -out gen/types/syntax.buzz
 //go:embed gen/types/syntax.buzz
 var SyntaxSource string
@@ -167,6 +182,12 @@ var ServiceSource string
 //
 //go:embed gen/types/symbolindexer.buzz
 var SymbolIndexerSource string
+
+// CoverageSource follows CommandSource: Coverage.command is a Command.
+//
+//go:generate go run ../../cmd/magus-utils types -type Coverage -out gen/types/coverage.buzz
+//go:embed gen/types/coverage.buzz
+var CoverageSource string
 
 // ProjectSource is the generated Buzz `object Project` mirror of spells.Project: one
 // project a workspace-provider spell's list_projects contract returns. It ships in
@@ -367,7 +388,7 @@ var CharmModuleSource string
 // op records have no cross-references so their position is free). Shared by the runtime
 // registration (modules.go) and the built-in loader (builtins.go), so the two can't drift
 // apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, StubSyntaxSource, SyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource,
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, CoverageSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, StubSyntaxSource, DecisionSyntaxSource, SwapSource, MutationSyntaxSource, SyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource,
 	discoveryFileSource, discoveryQuerySource, discoveryGapSource, discoveredProjectSource,
 	emptySource, ackSource, secretRefSource, greenRunSource, stringsSource, ciGroupSource, ciGroupEndSource, ciAnnotationSource,
 	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource,

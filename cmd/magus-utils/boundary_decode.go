@@ -33,6 +33,7 @@ var inboundTypes = []string{
 	"Manifest",
 	"Service",
 	"SymbolIndexer",
+	"Coverage",
 	"Charm",
 	"PatchOp",
 	"VersionKey",
@@ -46,6 +47,9 @@ var inboundTypes = []string{
 	"Quote",
 	"CommentSyntax",
 	"StubSyntax",
+	"DecisionSyntax",
+	"Swap",
+	"MutationSyntax",
 	"Syntax",
 	"Language",
 	// Provider op responses (provider_ops.go), leaf first: Lifecycle.cycles is [ReleaseCycle].

@@ -21,6 +21,7 @@ export fun mgs_getTools() > {str: Tool} {
         // Observed, not probed: only the scip op drives it, so its version keys the index
         // and no other target.
         "rust-analyzer": Tool{observe = Command{bin = "rust-analyzer", args = ["--version"]}},
+        "cargo-llvm-cov": Tool{probe = Command{bin = "cargo", args = ["llvm-cov", "--version"]}, key = VersionKey{upTo = VersionComponent.patch}},
     };
 }
 
@@ -62,6 +63,27 @@ export fun mgs_getLanguage() > Language {
                 bodyStyle = "brace",
                 body = "\{\n    todo!(\"\{\{&Name}} lands in \{\{&Branch}}\")\n\}",
             },
+            operators = ["==", "!=", "<=", ">=", "&&", "||", "=>", "->", "::", "..", "..=", "+=", "-=", "<<=", ">>="],
+            decisions = DecisionSyntax{keywords = ["if", "while", "for"], operators = ["&&", "||", "=>"]},
+            mutations = MutationSyntax{
+                swaps = [
+                    Swap{name = "eq-ne", find = "==", replace = "!="},
+                    Swap{name = "ne-eq", find = "!=", replace = "=="},
+                    Swap{name = "lt-le", find = "<", replace = "<="},
+                    Swap{name = "le-lt", find = "<=", replace = "<"},
+                    Swap{name = "gt-ge", find = ">", replace = ">="},
+                    Swap{name = "ge-gt", find = ">=", replace = ">"},
+                    Swap{name = "and-or", find = "&&", replace = "||"},
+                    Swap{name = "or-and", find = "||", replace = "&&"},
+                    Swap{name = "plus-minus", find = "+", replace = "-"},
+                    Swap{name = "minus-plus", find = "-", replace = "+"},
+                    Swap{name = "true-false", find = "true", replace = "false"},
+                    Swap{name = "false-true", find = "false", replace = "true"},
+                ],
+                bodies = ["\{ Default::default() \}"],
+                // Hugged brackets are generics, not comparisons.
+                arid = ["^\\s*(tracing|log)::(trace|debug|info|warn)!", "[A-Za-z0-9_\\]]<", "[A-Za-z0-9_\\]]>"],
+            },
         },
     };
 }
@@ -88,7 +110,7 @@ export fun mgs_listManifests() > [Manifest] {
     return [Manifest{value = "Cargo.toml", lockCandidates = ["Cargo.lock"], installs = {"Cargo.lock": Install{
         name = "cargo-fetch",
         command = Command{bin = "cargo", args = args, charms = {
-            "update": Charm{ops = set(args, "fetch", "update").ops + drop(args, "--locked").ops},
+            "update": Charm{ops = set(args, anchor: "fetch", val: "update").ops + drop(args, anchor: "--locked").ops},
         }},
     }}}];
 }
@@ -111,10 +133,21 @@ fun cargoFmt(target: Target) > Command {
     // matters — drop --check (the higher index) before -- so the patch applies
     // sequentially without an index shifting out from under it.
     return Command{bin = "cargo", args = args, charms = {
-        "rw": Charm{ ops = drop(args, "--check").ops + drop(args, "--").ops },
+        "rw": Charm{ ops = drop(args, anchor: "--check").ops + drop(args, anchor: "--").ops },
     }};
 }
 fun cargoTest(target: Target) > Command { return Command{bin = "cargo", args = ["test"]}; }
+// The lcov report covers the whole crate; cargo-test keeps no test scope.
+export fun mgs_getCoverage() > Coverage {
+    return Coverage{
+        format = CoverageFormat.lcov,
+        file = "lcov.info",
+        test = "cargo-test",
+        command = Command{bin = "cargo", args = ["llvm-cov", "--lcov", "--output-path", "$MAGUS_COVERAGE_DIR/lcov.info"]},
+        uses = ["cargo-llvm-cov", "rustc"],
+    };
+}
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"cargo-build": cargoBuild, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy, "cargo-fmt": cargoFmt, "cargo-test": cargoTest};
 }

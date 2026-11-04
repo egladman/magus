@@ -1,0 +1,41 @@
+import "std";
+import "magus/spell";
+import "./spell" as buzz;
+
+test "decisions count match arms and every branching word" {
+    final decisions = buzz\mgs_getLanguage().syntax!.decisions!;
+    std\assert(decisions.keywords.join(" ") == "if while for foreach and or catch", message: "keywords");
+    std\assert(decisions.operators.join(" ") == "?? ->", message: "operators");
+}
+
+test "mutations swap words and stub a body with braces" {
+    final syntax = buzz\mgs_getLanguage().syntax!;
+    final mutations = syntax.mutations!;
+    std\assert(mutations.swaps.len() == 12, message: "swaps");
+    foreach (swap in mutations.swaps) {
+        std\assert(swap.find != swap.replace, message: "{swap.name} changes the token");
+    }
+    std\assert(mutations.bodies.join("|") == "\{\}", message: "body");
+    std\assert(syntax.stubs!.bodyStyle == "brace", message: "bodies cut by brace");
+}
+
+test "magus-buzz-test runs magus itself on the file and its sibling test" {
+    final test = buzz\mgs_listTargets()["magus-buzz-test"]!(Target{});
+    std\assert(test.bin == "$MAGUS", message: "bin");
+    std\assert(test.args.join(" ") == "buzz -t --embedded", message: "argv");
+    std\assert(test.testScope.join(" ") == "\{file\} \{dir\}/\{stem\}_test.buzz", message: "scope");
+}
+
+test "coverage is the magus-buzz-test command with an lcov profile" {
+    final coverage = buzz\mgs_getCoverage();
+    std\assert(coverage.format == CoverageFormat.lcov and coverage.file == "lcov.info", message: "report");
+    std\assert(coverage.test == "magus-buzz-test", message: "test op");
+    std\assert(coverage.command.bin == "$MAGUS", message: "bin");
+    std\assert(coverage.command.args.join(" ") == "buzz -t --embedded --coverprofile $MAGUS_COVERAGE_DIR/lcov.info", message: "argv");
+}
+
+test "no op shares its name with a magusfile target" {
+    final targets = buzz\mgs_listTargets();
+    std\assert(!targets.hasKey("buzz-test"), message: "buzz-test is a target in . and docs");
+    std\assert(targets.hasKey(buzz\mgs_getCoverage().test), message: "coverage names a listed op");
+}

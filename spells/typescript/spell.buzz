@@ -118,6 +118,28 @@ export fun mgs_getLanguage() > Language {
                 bodyStyle = "brace",
                 body = "\{\n\tthrow new Error(\"unimplemented: \{\{&Name}} lands in \{\{&Branch}}\");\n\}",
             },
+            operators = ["===", "!==", "==", "!=", "<=", ">=", "&&", "||", "??", "??=", "?.", "=>", "++", "--", "**", "...", "+=", "-="],
+            decisions = DecisionSyntax{keywords = ["if", "for", "while", "case", "catch"], operators = ["&&", "||", "??", "??=", "?"]},
+            mutations = MutationSyntax{
+                swaps = [
+                    Swap{name = "seq-sne", find = "===", replace = "!=="},
+                    Swap{name = "sne-seq", find = "!==", replace = "==="},
+                    Swap{name = "lt-le", find = "<", replace = "<="},
+                    Swap{name = "le-lt", find = "<=", replace = "<"},
+                    Swap{name = "gt-ge", find = ">", replace = ">="},
+                    Swap{name = "ge-gt", find = ">=", replace = ">"},
+                    Swap{name = "and-or", find = "&&", replace = "||"},
+                    Swap{name = "or-and", find = "||", replace = "&&"},
+                    Swap{name = "true-false", find = "true", replace = "false"},
+                    Swap{name = "false-true", find = "false", replace = "true"},
+                    Swap{name = "plus-minus", find = "+", replace = "-"},
+                    Swap{name = "minus-plus", find = "-", replace = "+"},
+                    Swap{name = "inc-dec", find = "++", replace = "--"},
+                ],
+                bodies = ["\{ return undefined as never; \}"],
+                // Hugged brackets are generics, not comparisons.
+                arid = ["^\\s*console\\.", "[A-Za-z0-9_$\\]]<", "[A-Za-z0-9_$\\]]>"],
+            },
         },
     };
 }
@@ -353,6 +375,20 @@ fun devServer(target: Target) > Service {
         needsArgs = "dev-server runs the command you name; pass it as args: typescript[\"dev-server\"](ctx, \{\"args\": [\"vite\"]})",
     }};
 }
+// Without @vitest/coverage-v8 in the project the op fails, naming the package.
+export fun mgs_getCoverage() > Coverage {
+    return Coverage{
+        format = CoverageFormat.lcov,
+        file = "lcov.info",
+        test = "vitest",
+        command = Command{
+            bin = "pnpm",
+            args = ["exec", "vitest", "run", "--coverage.enabled", "--coverage.reporter=lcovonly", "--coverage.reportsDirectory=$MAGUS_COVERAGE_DIR"],
+        },
+        uses = ["pnpm"],
+    };
+}
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"biome-check": biomeCheck, "biome-format": biomeFormat,
             "eslint": eslint, "prettier": prettier, "tsc": tsc,

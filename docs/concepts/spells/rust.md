@@ -11,6 +11,8 @@ The `rust` spell wires Cargo into a magusfile. Each op forks a `cargo` subcomman
 
 **Runtime name:** `rust` (source `spells/rust/`)
 
+**Version probe (cargo-llvm-cov):** `cargo llvm-cov --version`
+
 **Version probe (rustc):** `rustc --version`
 
 ## Passing arguments to ops
@@ -170,6 +172,10 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     rust["cargo-test"](ctx);
 }
 ```
+
+## coverage
+
+**Command:** `cargo llvm-cov --lcov --output-path $MAGUS_COVERAGE_DIR/lcov.info`
 
 ## scip
 

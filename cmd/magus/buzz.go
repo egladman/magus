@@ -296,6 +296,13 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 		return buzzRepl(ctx, !bf.Autoload)
 	}
 
+	if bf.Test {
+		scripts, err := buzzTestSources(bf.E, rest, forwarded)
+		if err != nil {
+			return err
+		}
+		return buzzTestScripts(ctx, root, bf, scripts)
+	}
 	code, name, scriptArgs, err := buzzSource(bf.E, rest)
 	if err != nil {
 		return err
@@ -303,45 +310,156 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	if sep {
 		scriptArgs = append(scriptArgs, forwarded...)
 	}
+	return buzzRunScript(ctx, root, bf, buzzScript{code: code, name: name, args: scriptArgs}, nil)
+}
 
-	ctx, err = buzzRunContext(ctx, root)
+// buzzScript is one program a run executes, with the name its diagnostics carry.
+type buzzScript struct {
+	code, name string
+	args       []string
+}
+
+// buzzTestSources resolves what -t tests: an -e snippet, piped stdin, or every
+// path given. Args after -- go to a single script, never to several.
+func buzzTestSources(eval string, paths, forwarded []string) ([]buzzScript, error) {
+	if len(paths) > 1 && len(forwarded) > 0 {
+		return nil, exit.Usagef("magus buzz: args after -- go to one script, and -%s was given %d", flaggen.FlagBuzzT, len(paths))
+	}
+	if eval != "" {
+		code, name, _, err := buzzSource(eval, paths)
+		return []buzzScript{{code: code, name: name, args: forwarded}}, err
+	}
+	return buzzReadScripts(paths, forwarded)
+}
+
+func buzzReadScripts(paths, forwarded []string) ([]buzzScript, error) {
+	if len(paths) == 0 {
+		return buzzStdinScript(forwarded)
+	}
+	scripts := make([]buzzScript, 0, len(paths))
+	for _, p := range paths {
+		code, name, _, err := buzzSource("", []string{p})
+		if err != nil {
+			return nil, err
+		}
+		scripts = append(scripts, buzzScript{code: code, name: name, args: forwarded})
+	}
+	return scripts, nil
+}
+
+// buzzStdinScript reads the script from stdin only when one is piped. A terminal
+// would block, and /dev/null would pass having tested nothing.
+func buzzStdinScript(forwarded []string) ([]buzzScript, error) {
+	if !stdinIsPiped() {
+		return nil, exit.Usagef("magus buzz: -%s <file>... names the scripts to test; none was given and nothing is piped on stdin", flaggen.FlagBuzzT)
+	}
+	code, name, _, err := buzzSource("", nil)
+	return []buzzScript{{code: code, name: name, args: forwarded}}, err
+}
+
+// stdinIsPiped reports whether stdin is a pipe or a regular file, the two that
+// carry a script. A terminal and /dev/null are character devices.
+func stdinIsPiped() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeNamedPipe != 0 || info.Mode().IsRegular()
+}
+
+// buzzTestScripts tests every script, each in its own session, so a failing one
+// does not hide the next. One coverprofile holds every script's lines.
+func buzzTestScripts(ctx context.Context, root string, bf *flaggen.BuzzFlags, scripts []buzzScript) error {
+	var cov *buzz.LineCoverage
+	if bf.Coverprofile != "" {
+		cov = buzz.NewLineCoverage()
+	}
+	errs := make([]error, 0, len(scripts)+1)
+	for _, s := range scripts {
+		errs = append(errs, buzzRunScript(ctx, root, bf, s, cov))
+	}
+	return errors.Join(append(errs, writeBuzzCoverage(bf.Coverprofile, cov))...)
+}
+
+func writeBuzzCoverage(path string, cov *buzz.LineCoverage) error {
+	if cov == nil {
+		return nil
+	}
+	if err := os.WriteFile(path, []byte(cov.Report()), 0o644); err != nil {
+		return fmt.Errorf("magus buzz: write --%s: %w", flaggen.FlagBuzzCoverprofile, err)
+	}
+	return nil
+}
+
+// buzzRunScript runs one script in a session of its own, recording the run under
+// -t or --record. A non-nil cov collects the script's line coverage.
+func buzzRunScript(ctx context.Context, root string, bf *flaggen.BuzzFlags, src buzzScript, cov *buzz.LineCoverage) (retErr error) {
+	ctx, err := buzzRunContext(ctx, root)
 	if err != nil {
 		return err
 	}
-	// The script's magus\service leases end with it. WithoutCancel: a Ctrl-C'd script
-	// still has to release what it holds.
 	ctx, services := service.WithScope(ctx)
-	defer func() {
-		relCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), service.DefaultShutdownTimeout)
-		defer cancel()
-		services.ReleaseAll(relCtx)
-	}()
-	// A script is a pipe stage: it reads the records a magus stage upstream writes and
-	// emits records downstream. While a magus reads its stdout, stdout carries records
-	// alone and what the script prints goes to stderr, as a run's prose does.
-	scriptOut := io.Writer(os.Stdout)
-	if pipeStageFromContext(ctx).writesRecords() {
-		scriptOut = os.Stderr
-	}
-	records := io.Writer(os.Stdout)
-	var recorded bytes.Buffer
+	defer releaseBuzzServices(ctx, services)
+	scriptOut, records := buzzScriptWriters(ctx)
 	// A test run is always recorded: a passing one is evidence a script check can cite.
 	if bf.Record || bf.Test {
-		scriptOut = io.MultiWriter(scriptOut, &recorded)
-		records = io.MultiWriter(records, &recorded)
+		var recorded bytes.Buffer
+		scriptOut, records = io.MultiWriter(scriptOut, &recorded), io.MultiWriter(records, &recorded)
 		started := time.Now()
 		defer func() {
-			if err := recordBuzzRun(ctx, root, name, code, scriptArgs, bf.Test, recorded.Bytes(), started, retErr); err != nil {
+			if err := recordBuzzRun(ctx, root, src.name, src.code, src.args, bf.Test, recorded.Bytes(), started, retErr); err != nil {
 				retErr = errors.Join(retErr, err)
 			}
 		}()
 	}
 	in, _ := pipeRecordsIn(ctx)
 	ctx = report.WithStage(ctx, report.Stage{In: in, Out: records, Prose: scriptOut})
+	return buzzExecScript(ctx, bf, src, scriptOut, cov)
+}
 
-	// Default is strict (upstream Buzz parity, what the buzz spell's `run` op forks).
-	// --embedded opts into the relaxations the magusfile engine uses, so a magus
-	// module like the docs generator (render) can be run or tested here.
+// releaseBuzzServices ends the script's magus\service leases. WithoutCancel: a
+// Ctrl-C'd script still has to release what it holds.
+func releaseBuzzServices(ctx context.Context, services *service.Scope) {
+	relCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), service.DefaultShutdownTimeout)
+	defer cancel()
+	services.ReleaseAll(relCtx)
+}
+
+// buzzScriptWriters returns where the script's prose and records go. While a
+// magus reads its stdout, stdout carries records alone and prose goes to stderr.
+func buzzScriptWriters(ctx context.Context) (prose, records io.Writer) {
+	if pipeStageFromContext(ctx).writesRecords() {
+		return os.Stderr, os.Stdout
+	}
+	return os.Stdout, os.Stdout
+}
+
+func buzzExecScript(ctx context.Context, bf *flaggen.BuzzFlags, src buzzScript, scriptOut io.Writer, cov *buzz.LineCoverage) error {
+	sess := newBuzzScriptSession(ctx, bf, src.name)
+	defer func() { _ = sess.Close() }()
+	tr := traceFromContext(ctx)
+	addProfileObserver(ctx, sess)
+	lateErr, err := installBuzzHost(ctx, sess, src.code, scriptOut, tr)
+	if err != nil {
+		return fmt.Errorf("%s: %w", src.name, err)
+	}
+	buzzEnableCoverage(sess, src.name, cov)
+	stopExec := tr.phase("buzz.exec")
+	err = sess.Exec(ctx, src.code)
+	stopExec()
+	if err != nil {
+		return buzzExecError(src.name, err, lateErr)
+	}
+	printBuzzWarnings(ctx, sess, src.name)
+	if bf.Test {
+		return runBuzzTests(ctx, sess, src.name, scriptOut)
+	}
+	return buzzCallMain(ctx, sess, src, tr)
+}
+
+// newBuzzScriptSession opens a strict session, upstream Buzz parity. --embedded
+// opts into the magusfile engine's relaxations, so a magus module can run here.
+func newBuzzScriptSession(ctx context.Context, bf *flaggen.BuzzFlags, name string) *buzz.Session {
 	var opts []buzz.Option
 	// -e is the one-off exception: a snippet takes the embedded rules, as python -c
 	// needs no main. Files and stdin stay strict.
@@ -349,7 +467,6 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 		opts = append(opts, buzz.WithEmbedded())
 	}
 	sess := buzz.NewSession(ctx, opts...)
-	defer func() { _ = sess.Close() }()
 	// A file script's imports resolve beside the file, not beside the process's
 	// working directory. A hook runs in the host's session directory, which is
 	// not the directory the script lives in, and `import "lib/hook"` has to
@@ -357,76 +474,71 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	if dir := scriptImportDir(name); dir != "" {
 		sess.SetIncludeDirs(append([]string{dir}, sess.IncludeDirs()...))
 	}
-	tr := traceFromContext(ctx)
-	addProfileObserver(ctx, sess)
-	lateErr, err := installBuzzHost(ctx, sess, code, scriptOut, tr)
+	return sess
+}
+
+func buzzEnableCoverage(sess *buzz.Session, name string, cov *buzz.LineCoverage) {
+	if cov == nil {
+		return
+	}
+	if path := buzzCoverPath(name); path != "" {
+		sess.SetSourceFile(path)
+	}
+	sess.EnableLineCoverage(cov)
+}
+
+func buzzExecError(name string, err error, lateErr func() error) error {
+	if declErr := lateErr(); declErr != nil {
+		return fmt.Errorf("%s: %w", name, declErr)
+	}
+	// Strict mode refuses both a raising call and a try at the top level, so the
+	// fix is the one place a raise may go, which -e can hold as well as a file.
+	if d := (*diagnostics.Error)(nil); errors.As(err, &d) && d.Code == buzz.UnhandledRaise {
+		return fmt.Errorf("%s: a raising call belongs in `fun main(args: [str]) > void !> any { ... }`, which magus buzz calls after the top level, and -e takes that form too: %w", name, err)
+	}
+	return fmt.Errorf("%s: %w", name, err)
+}
+
+// printBuzzWarnings prints warnings such as BZZ3001, which never fail Exec, to
+// stderr: stdout carries structured output only. -q and -s suppress them.
+func printBuzzWarnings(ctx context.Context, sess *buzz.Session, name string) {
+	if global.quiet || global.silent {
+		return
+	}
+	for _, w := range sess.Warnings() {
+		w.File = name
+		slog.WarnContext(ctx, w.String(), attr.Notice(""))
+	}
+}
+
+// buzzCallMain runs an entry script's `main` once its top level has, as upstream
+// does, with the args after the script path as its argv. Strict mode cannot wrap
+// a script's own call to main: a top-level `try` is rejected.
+func buzzCallMain(ctx context.Context, sess *buzz.Session, src buzzScript, tr *startupTracer) error {
+	mainFn := sess.GetGlobal("main")
+	if !mainFn.IsFun() {
+		return nil
+	}
+	stopMain := tr.phase("buzz.main")
+	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{buzzStringList(src.args)})
+	stopMain()
 	if err != nil {
-		return fmt.Errorf("%s: %w", name, err)
+		return fmt.Errorf("%s: %w", src.name, err)
 	}
-	var cov *buzz.LineCoverage
-	if bf.Coverprofile != "" {
-		if path := buzzCoverPath(name); path != "" {
-			sess.SetSourceFile(path)
-		}
-		cov = buzz.NewLineCoverage()
-		sess.EnableLineCoverage(cov)
+	// `fun main() > int` is upstream's exit-status convention, and the checker
+	// permits it; discarding the value made such a script always exit 0.
+	if ret.IsInt() && ret.AsInt() != 0 {
+		return exit.Reported(int(ret.AsInt()))
 	}
-	stopExec := tr.phase("buzz.exec")
-	if err := sess.Exec(ctx, code); err != nil {
-		stopExec()
-		if declErr := lateErr(); declErr != nil {
-			return fmt.Errorf("%s: %w", name, declErr)
-		}
-		// Strict mode refuses both a raising call and a try at the top level, so the
-		// fix is the one place a raise may go, which -e can hold as well as a file.
-		if d := (*diagnostics.Error)(nil); errors.As(err, &d) && d.Code == buzz.UnhandledRaise {
-			return fmt.Errorf("%s: a raising call belongs in `fun main(args: [str]) > void !> any { ... }`, which magus buzz calls after the top level, and -e takes that form too: %w", name, err)
-		}
-		return fmt.Errorf("%s: %w", name, err)
+	return nil
+}
+
+func buzzStringList(items []string) vm.Value {
+	values := make([]vm.Value, 0, len(items))
+	for _, s := range items {
+		values = append(values, vm.StringValue(s))
 	}
-	stopExec()
-	// Warnings (e.g. BZZ3001 unused imports) never fail Exec, so they only reach
-	// the user if something prints them after the fact; print to stderr, matching
-	// how every other magus diagnostic (and the -t failure lines below) stays off
-	// stdout, which carries structured output only. -q/-s suppress them like any
-	// other non-error progress output.
-	if !global.quiet && !global.silent {
-		for _, w := range sess.Warnings() {
-			w.File = name
-			slog.WarnContext(ctx, w.String(), attr.Notice(""))
-		}
-	}
-	var testErr error
-	if bf.Test {
-		testErr = runBuzzTests(ctx, sess, name, scriptOut)
-	} else if mainFn := sess.GetGlobal("main"); mainFn.IsFun() {
-		// Like upstream's Run flavor and cmd/buzz, an entry script's `main` runs once
-		// its top level has. Without it a script had to call its own main, which strict
-		// mode cannot wrap: a top-level `try` is rejected and a bare call is BZZ1006.
-		// Everything after the script path is the script's own argv, the way upstream
-		// and cmd/buzz hand it over, so a caller parameterizes a script with arguments
-		// rather than an environment variable a shell has to set.
-		items := make([]vm.Value, 0, len(scriptArgs))
-		for _, a := range scriptArgs {
-			items = append(items, vm.StringValue(a))
-		}
-		stopMain := tr.phase("buzz.main")
-		ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(items)})
-		stopMain()
-		if err != nil {
-			testErr = fmt.Errorf("%s: %w", name, err)
-		} else if ret.IsInt() && ret.AsInt() != 0 {
-			// `fun main() > int` is upstream's exit-status convention, and the checker
-			// permits it; discarding the value made such a script always exit 0.
-			testErr = exit.Reported(int(ret.AsInt()))
-		}
-	}
-	if cov != nil {
-		if err := os.WriteFile(bf.Coverprofile, []byte(cov.Report()), 0o644); err != nil {
-			return fmt.Errorf("magus buzz: write --%s: %w", flaggen.FlagBuzzCoverprofile, err)
-		}
-	}
-	return testErr
+	return vm.ListValue(values)
 }
 
 // buzzRunKey is the output-store key of a --record run: the script's source and its
@@ -861,7 +973,7 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "       magus buzz <file>       # run a script")
 	fmt.Fprintln(os.Stderr, "       magus buzz -            # run a script from stdin")
 	fmt.Fprintln(os.Stderr, "       magus buzz -e <code>    # run an inline snippet")
-	fmt.Fprintln(os.Stderr, "       magus buzz -t <file>    # run its test \"...\" {} blocks")
+	fmt.Fprintln(os.Stderr, "       magus buzz -t <file>... # run each file's test \"...\" {} blocks")
 	fmt.Fprintln(os.Stderr, "       magus buzz --check <file>...  # type-check without running")
 	fmt.Fprintln(os.Stderr, "       magus buzz lsp          # language server over stdio (LSP)")
 	fmt.Fprintln(os.Stderr, "")
@@ -873,7 +985,7 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  -e <code>   execute code given on the command line; it takes the --embedded rules, so no main")
-	fmt.Fprintln(os.Stderr, "  -t, -test   run the file's test \"...\" {} blocks and report pass/fail; the run is")
+	fmt.Fprintln(os.Stderr, "  -t, -test   run each file's test \"...\" {} blocks and report pass/fail; each run is")
 	fmt.Fprintln(os.Stderr, "              recorded as `buzz -t <file>` and its ref printed, as --record does")
 	fmt.Fprintln(os.Stderr, "  --record    keep what the run printed in the output store and print its ref")
 	fmt.Fprintln(os.Stderr, "  --check     parse and type-check the named files without running them")

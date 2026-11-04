@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -1403,4 +1404,97 @@ func TestBuzzTestRunIsRecordedWithItsTestLines(t *testing.T) {
 			}
 		})
 	}
+}
+
+// BuzzTestManyScriptsSuite pins that every path after -t is a script to test,
+// so a spell's test scope runs a file and its _test.buzz sibling.
+type BuzzTestManyScriptsSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestBuzzTestManyScriptsSuite(t *testing.T) { suite.Run(t, new(BuzzTestManyScriptsSuite)) }
+
+func (s *BuzzTestManyScriptsSuite) SetupTest() { s.dir = s.T().TempDir() }
+
+func (s *BuzzTestManyScriptsSuite) script(name, assertion string) string {
+	path := filepath.Join(s.dir, name)
+	body := fmt.Sprintf(`import "std";
+
+test %q {
+    std\assert(%s, message: %q);
+}
+`, name, assertion, name)
+	s.Require().NoError(os.WriteFile(path, []byte(body), 0o644))
+	return path
+}
+
+func (s *BuzzTestManyScriptsSuite) run(args ...string) (string, error) {
+	var err error
+	out := captureStdout(s.T(), func() { err = buzzCommand(s.T().Context(), s.dir, args) })
+	return out, err
+}
+
+func (s *BuzzTestManyScriptsSuite) TestEveryScriptRunsItsTests() {
+	out, err := s.run("-t", s.script("a.buzz", "true"), s.script("a_test.buzz", "true"))
+	s.Require().NoError(err)
+	s.Contains(out, `ok    test "a.buzz"`)
+	s.Contains(out, `ok    test "a_test.buzz"`)
+}
+
+func (s *BuzzTestManyScriptsSuite) TestAFailingSecondScriptFailsTheRun() {
+	out, err := s.run("-t", s.script("a.buzz", "true"), s.script("a_test.buzz", "false"))
+	s.Require().Error(err)
+	s.Contains(out, `FAIL  test "a_test.buzz"`)
+}
+
+func (s *BuzzTestManyScriptsSuite) TestAFailingFirstScriptStillRunsTheNext() {
+	out, err := s.run("-t", s.script("a.buzz", "false"), s.script("a_test.buzz", "true"))
+	s.Require().Error(err)
+	s.Contains(out, `ok    test "a_test.buzz"`)
+}
+
+func (s *BuzzTestManyScriptsSuite) TestOneCoverprofileCoversEveryScript() {
+	profile := filepath.Join(s.dir, "lcov.info")
+	_, err := s.run("-t", "--coverprofile", profile, s.script("a.buzz", "true"), s.script("b.buzz", "true"))
+	s.Require().NoError(err)
+	data, err := os.ReadFile(profile)
+	s.Require().NoError(err)
+	s.Contains(string(data), "a.buzz")
+	s.Contains(string(data), "b.buzz")
+}
+
+func (s *BuzzTestManyScriptsSuite) TestForwardedArgsNeedASingleScript() {
+	_, err := s.run("-t", s.script("a.buzz", "true"), s.script("b.buzz", "true"), "--", "x")
+	s.Require().Error(err)
+	s.Equal(exit.Usage, exit.Code(err))
+	s.Contains(err.Error(), "--")
+}
+
+func (s *BuzzTestManyScriptsSuite) TestASingleScriptStillTakesForwardedArgs() {
+	_, err := s.run("-t", s.script("a.buzz", "true"), "--", "x")
+	s.Require().NoError(err)
+}
+
+func (s *BuzzTestManyScriptsSuite) TestNoScriptAndNoPipedStdinIsAUsageError() {
+	null, err := os.Open(os.DevNull)
+	s.Require().NoError(err)
+	defer null.Close()
+	prev := os.Stdin
+	os.Stdin = null
+	defer func() { os.Stdin = prev }()
+	_, err = s.run("-t")
+	s.Require().Error(err)
+	s.Equal(exit.Usage, exit.Code(err))
+	s.Contains(err.Error(), "-t <file>")
+}
+
+func (s *BuzzTestManyScriptsSuite) TestPipedStdinStillRunsAsTheScript() {
+	var out string
+	var err error
+	withStdin(s.T(), "import \"std\";\ntest \"piped\" { std\\assert(true, message: \"p\"); }\n", func() {
+		out, err = s.run("-t")
+	})
+	s.Require().NoError(err)
+	s.Contains(out, `ok    test "piped"`)
 }

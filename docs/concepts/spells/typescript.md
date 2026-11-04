@@ -135,6 +135,10 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## coverage
+
+**Command:** `pnpm exec vitest run --coverage.enabled --coverage.reporter=lcovonly --coverage.reportsDirectory=$MAGUS_COVERAGE_DIR`
+
 ## dev-server
 
 dev-server runs the server command the caller names, through pnpm exec so the project's own binary wins: typescript["dev-server"](ctx, {"args": ["vite"]}). The manifest says what the package is and the magusfile how it runs, so the package.json dev script is not read. No readiness probe: the port and startup signal vary by server (see services.md); a magusfile that must block on readiness declares its own service op.

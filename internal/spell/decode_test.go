@@ -906,3 +906,168 @@ func (s *discoveredSuite) TestInProcessIndexerRefusesEnvs() {
 	}})
 	s.EqualError(err, `spell "buzz": symbol indexer: format buzz-module reads one build of the files, drop envs`)
 }
+
+// coverageContract declares a go-test op and the coverage judged by it.
+func coverageContract() Contract {
+	return Contract{
+		Name:  "golang",
+		Tools: map[string]spells.Tool{"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}}},
+		Targets: map[string]spells.Command{
+			"go-test": {Bin: "go", Args: []string{"test"}, TestScope: []string{"./{dir}"}},
+		},
+		Coverage: &spells.Coverage{
+			Format:  spells.CoverageFormatGoProfile,
+			File:    "cover.out",
+			Test:    "go_test",
+			Command: spells.Command{Bin: "go", Args: []string{"test", "-coverprofile=$MAGUS_COVERAGE_DIR/cover.out"}},
+			Uses:    []string{"go"},
+		},
+	}
+}
+
+type coverageOpSuite struct{ suite.Suite }
+
+func TestDecodeCoverageOp(t *testing.T) { suite.Run(t, new(coverageOpSuite)) }
+
+func (s *coverageOpSuite) TestRegistersTheReservedOpByKind() {
+	m, err := describe(coverageContract())
+	s.Require().NoError(err)
+	want := *coverageContract().Coverage
+	want.Test = "go-test"
+	s.Equal(spells.Op{Kind: spells.OpKindCoverage, Command: want.Command, Coverage: &want}, m.Ops[spells.CoverageOp])
+}
+
+func (s *coverageOpSuite) TestAddsNoOpWhenUndeclared() {
+	c := coverageContract()
+	c.Coverage = nil
+	m, err := describe(c)
+	s.Require().NoError(err)
+	s.Equal([]string{"go-test"}, m.OpNames())
+}
+
+func (s *coverageOpSuite) TestRefusesAnAuthoredCoverageOp() {
+	c := coverageContract()
+	c.Coverage = nil
+	c.Targets["coverage"] = spells.Command{Bin: "go"}
+	_, err := describe(c)
+	s.EqualError(err, `spell "golang" declares an op named "coverage", which is magus's own name for a declared coverage, `+
+		"move the command to `export fun mgs_getCoverage() > Coverage` and drop the op")
+}
+
+func (s *coverageOpSuite) TestRefusesNoFormat() {
+	c := coverageContract()
+	c.Coverage.Format = spells.CoverageFormatNone
+	_, err := describe(c)
+	s.EqualError(err, `spell "golang": mgs_getCoverage: format is none, want one of lcov, go-coverprofile`)
+}
+
+func (s *coverageOpSuite) TestRefusesAFileOutsideTheCoverageDir() {
+	c := coverageContract()
+	c.Coverage.File = "../cover.out"
+	_, err := describe(c)
+	s.EqualError(err, `spell "golang": mgs_getCoverage: file "../cover.out" must be a plain file name under MAGUS_COVERAGE_DIR`)
+}
+
+func (s *coverageOpSuite) TestRefusesATestNamingNoOp() {
+	c := coverageContract()
+	c.Coverage.Test = "vitest"
+	_, err := describe(c)
+	s.EqualError(err, `spell "golang": mgs_getCoverage: test "vitest" names no command op in mgs_listTargets`)
+}
+
+func (s *coverageOpSuite) TestRefusesNoBin() {
+	c := coverageContract()
+	c.Coverage.Command.Bin = ""
+	_, err := describe(c)
+	s.EqualError(err, `spell "golang": mgs_getCoverage: command.bin is required`)
+}
+
+func (s *coverageOpSuite) TestRefusesAnUnprobedTool() {
+	c := coverageContract()
+	c.Coverage.Uses = []string{"gotestsum"}
+	_, err := describe(c)
+	s.EqualError(err, `spell "golang": mgs_getCoverage: uses "gotestsum", which mgs_getTools does not declare with a version probe`)
+}
+
+func (s *coverageOpSuite) TestRefusesABadTestScopeOnTheTestOp() {
+	c := coverageContract()
+	c.Targets["go-test"] = spells.Command{Bin: "go", TestScope: []string{"{pkg}"}}
+	_, err := describe(c)
+	s.ErrorContains(err, `test_scope "{pkg}": placeholder {pkg}, want {dir}, {file} or {stem}`)
+}
+
+// lexLanguage declares a whole syntax, which each case below breaks one way.
+func lexLanguage(edit func(*spells.Syntax)) Contract {
+	syn := spells.Syntax{
+		Comments:  &spells.CommentSyntax{LineComments: []string{"//"}},
+		Stubs:     &spells.StubSyntax{Kinds: []string{"Function"}, BodyStyle: spells.StubBodyBrace, Body: "{}"},
+		Decisions: &spells.DecisionSyntax{Keywords: []string{"if"}},
+		Mutations: &spells.MutationSyntax{
+			Swaps:  []spells.Swap{{Name: "lt-le", Find: "<", Replace: "<="}},
+			Bodies: []string{"{}"},
+			Arid:   []string{`^\s*log\.`},
+		},
+	}
+	edit(&syn)
+	return Contract{Name: "lang", Language: &spells.Language{Name: "Lang", Extensions: []string{".l"}, Syntax: &syn}}
+}
+
+type syntaxFactsSuite struct{ suite.Suite }
+
+func TestDecodeSyntaxFacts(t *testing.T) { suite.Run(t, new(syntaxFactsSuite)) }
+
+func (s *syntaxFactsSuite) TestAcceptsAWholeDeclaration() {
+	m, err := describe(lexLanguage(func(*spells.Syntax) {}))
+	s.Require().NoError(err)
+	s.Equal([]string{"if"}, m.Syntax.Decisions.Keywords)
+}
+
+func (s *syntaxFactsSuite) TestRefusesDecisionsWithoutComments() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Comments, syn.Mutations = nil, nil }))
+	s.EqualError(err, `spell "lang": language.syntax: decisions and mutations need comments, `+
+		`or a token in a comment or string counts as code`)
+}
+
+func (s *syntaxFactsSuite) TestRefusesEmptyDecisions() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Decisions = &spells.DecisionSyntax{} }))
+	s.EqualError(err, `spell "lang": language.syntax: decisions declare no keyword or operator, `+
+		`so every function would read complexity 1`)
+}
+
+func (s *syntaxFactsSuite) TestRefusesASwapWithNoName() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Mutations.Swaps[0].Name = "" }))
+	s.EqualError(err, `spell "lang": language.syntax: mutations.swaps[0]: name is required`)
+}
+
+func (s *syntaxFactsSuite) TestRefusesASwapNamedBody() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Mutations.Swaps[0].Name = "body" }))
+	s.EqualError(err, `spell "lang": language.syntax: mutations.swaps[0]: name "body" is magus's own name for a body mutant`)
+}
+
+func (s *syntaxFactsSuite) TestRefusesADuplicateSwapName() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) {
+		syn.Mutations.Swaps = append(syn.Mutations.Swaps, spells.Swap{Name: "lt-le", Find: ">", Replace: ">="})
+	}))
+	s.EqualError(err, `spell "lang": language.syntax: mutations.swaps[1]: name "lt-le" is declared twice`)
+}
+
+func (s *syntaxFactsSuite) TestRefusesASwapWithNoFind() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Mutations.Swaps[0].Find = "" }))
+	s.EqualError(err, `spell "lang": language.syntax: mutations.swaps[0]: find is required`)
+}
+
+func (s *syntaxFactsSuite) TestRefusesASwapThatChangesNothing() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Mutations.Swaps[0].Replace = "<" }))
+	s.EqualError(err, `spell "lang": language.syntax: mutations.swaps[0]: find and replace are both "<", `+
+		`so the mutant is the original`)
+}
+
+func (s *syntaxFactsSuite) TestRefusesBodiesWithoutStubs() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Stubs = nil }))
+	s.EqualError(err, `spell "lang": language.syntax: mutations.bodies need stubs.bodyStyle to find the body they replace`)
+}
+
+func (s *syntaxFactsSuite) TestRefusesAnUnparseableAridPattern() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Mutations.Arid = []string{"("} }))
+	s.ErrorContains(err, `spell "lang": language.syntax: mutations.arid[0]: `)
+}

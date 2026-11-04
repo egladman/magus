@@ -83,6 +83,14 @@ export fun mgs_getSymbolIndexer() > SymbolIndexer
 
 The command that writes the spell's SCIP symbol index. magus runs it as the reserved index op.
 
+## mgs_getCoverage
+
+```buzz
+export fun mgs_getCoverage() > Coverage
+```
+
+How the spell runs its tests with line coverage on, and the op a mutant is judged by. magus runs it as the reserved coverage op.
+
 ## mgs_getSandbox
 
 ```buzz

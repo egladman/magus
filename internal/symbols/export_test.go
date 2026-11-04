@@ -61,13 +61,13 @@ func implemented(si *scip.SymbolInformation) []string {
 // records the other.
 func (s *symbolsSuite) TestPackIndexDerivesImplementationsAcrossShards() {
 	idx := packIndex(methodShards())
-	s.Equal([]string{symIface}, implemented(findInfo(idx, symImpl)))
-	s.Equal([]string{symIfaceRead}, implemented(findInfo(idx, symImplRead)))
+	s.Equal([]string{symIface}, implemented(findInfo(idx.Index, symImpl)))
+	s.Equal([]string{symIfaceRead}, implemented(findInfo(idx.Index, symImplRead)))
 }
 
 func (s *symbolsSuite) TestPackIndexSkipsATypeMissingAMethod() {
 	idx := packIndex(methodShards())
-	s.Empty(implemented(findInfo(idx, symPartial)))
+	s.Empty(implemented(findInfo(idx.Index, symPartial)))
 }
 
 func (s *symbolsSuite) TestPackIndexKeepsDocumentsAndRanges() {
@@ -86,7 +86,7 @@ func (s *symbolsSuite) TestReadIndexAssemblesAPackWhole() {
 	idx, err := ReadIndex(pack, true)
 	s.Require().NoError(err)
 	s.Len(idx.Documents, 2)
-	s.Equal([]string{symIface}, implemented(findInfo(idx, symImpl)))
+	s.Equal([]string{symIface}, implemented(findInfo(idx.Index, symImpl)))
 }
 
 // A SCIP index an external indexer wrote is stored one shard per directory and reads back
@@ -95,7 +95,7 @@ func (s *symbolsSuite) TestPackFromSCIPRoundTrips() {
 	dir := s.T().TempDir()
 	src, pack := filepath.Join(dir, "in.scip"), filepath.Join(dir, "scip-buzz.pack")
 	want := packIndex(methodShards())
-	data, err := proto.Marshal(want)
+	data, err := proto.Marshal(want.Index)
 	s.Require().NoError(err)
 	s.Require().NoError(os.WriteFile(src, data, 0o644))
 

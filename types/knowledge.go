@@ -421,6 +421,7 @@ const (
 	MarkerSkills   MarkerFamily = "skills"   // the AGENTS.md skills block; stamp pairs only
 	MarkerObserved MarkerFamily = "observed" // a generated diagram block; stamp pairs only
 	MarkerHarness  MarkerFamily = "harness"  // a host hook command a harness spell wrote; see HarnessOwnedMarker
+	MarkerMutant   MarkerFamily = "mutant"   // an equivalent mutant excused inline with a reason
 )
 
 // MarkerVerb is a marker node's shape after folding: a point marker is one line, and a
@@ -597,7 +598,10 @@ type KnowledgeSymbol struct {
 	// header [GeneratedSource] reads, from the same read. Its shape is its generator's, so
 	// no conformance check measures it.
 	SourceGenerated bool
-	Defs            []string
+	// Complexity is one plus the decision points an AST-reading
+	// indexer counted, or 0 when it did not count.
+	Complexity int
+	Defs       []string
 	// Definitions holds each defining file's first definition with that file's own doc, in
 	// Defs order, when Defs names more than one file: a function written once per GOOS has
 	// one key and a doc per file. It lists the file Source names too, so a reader walks one

@@ -125,3 +125,41 @@ test "an unreadable manifest is claimed with a gap" {
     std\assert(claims[0].targets.len() == 0, message: "no targets on a manifest it could not read");
     std\assert(hasGap(claims[0], file: "x/Cargo.toml", fragment: "Cargo.toml:"), message: "parse error named");
 }
+
+test "decisions count each match arm, one more than the textbook" {
+    final decisions = rust\mgs_getLanguage().syntax!.decisions!;
+    std\assert(decisions.keywords.join(" ") == "if while for", message: "keywords");
+    std\assert(decisions.operators.join(" ") == "&& || =>", message: "operators");
+}
+
+test "mutations swap operators and replace a body with the default" {
+    final mutations = rust\mgs_getLanguage().syntax!.mutations!;
+    std\assert(mutations.swaps.len() == 12, message: "swaps");
+    foreach (swap in mutations.swaps) {
+        std\assert(swap.find != swap.replace, message: "{swap.name} changes the token");
+    }
+    std\assert(mutations.bodies.join("|") == "\{ Default::default() \}", message: "body");
+}
+
+test "coverage is cargo llvm-cov's lcov judged by cargo-test" {
+    final coverage = rust\mgs_getCoverage();
+    std\assert(coverage.format == CoverageFormat.lcov and coverage.file == "lcov.info", message: "report");
+    std\assert(coverage.test == "cargo-test" and rust\mgs_listTargets()["cargo-test"] != null, message: "test op");
+    std\assert(coverage.command.args.join(" ") == "llvm-cov --lcov --output-path $MAGUS_COVERAGE_DIR/lcov.info", message: "argv");
+    std\assert(rust\mgs_getTools()["cargo-llvm-cov"] != null, message: "tool declared");
+    std\assert(rust\mgs_listTargets()["cargo-test"]!(Target{}).testScope.len() == 0, message: "whole crate");
+}
+
+test "tracing and log macros and hugged generic brackets are arid" {
+    final syntax = rust\mgs_getLanguage().syntax!;
+    final arid = syntax.mutations!.arid;
+    std\assert(arid.len() == 3 and arid[0].indexOf("tracing") != null, message: "tracing arid");
+    std\assert(arid[1] == "[A-Za-z0-9_\\]]<" and arid[2] == "[A-Za-z0-9_\\]]>", message: "Vec<u8> and Vec<T>> brackets are arid");
+    std\assert(syntax.decisions!.operators.indexOf("<") == null and syntax.decisions!.operators.indexOf(">") == null, message: "brackets are no decision");
+}
+
+test "an empty closure || counts as a decision: a declared limit" {
+    // The declared token cannot tell a closure from or.
+    final decisions = rust\mgs_getLanguage().syntax!.decisions!;
+    std\assert(decisions.operators.indexOf("||") != null, message: "|| is a decision for closures and or alike");
+}

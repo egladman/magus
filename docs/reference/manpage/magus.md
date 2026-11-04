@@ -513,6 +513,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_SYMBOL_INDEX**
 : Set by magus for a spell's symbol indexer op: the path the indexer writes its SCIP index to; never set it by hand
 
+**MAGUS_COVERAGE_DIR**
+: Set by magus for a spell's coverage op: the directory the op writes its coverage report into; never set it by hand
+
 **MAGUS_WORKSPACE_ROOT**
 : Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand
 

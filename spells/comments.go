@@ -13,17 +13,14 @@ type Language struct {
 	Syntax     *Syntax  `json:"syntax,omitempty"`
 }
 
-// CommentSyntax declares one language's comment and string lexical facts, the
-// way a spell declares its other toolchain facts: data in the spell's own
-// Buzz (mgs_getLanguage's typed answer), consumed by a generic engine
-// (internal/ci's comment stripper), never per-language Go.
+// CommentSyntax declares one language's comment and string lexical facts as
+// data in the spell's own Buzz. One generic engine reads them (Spans).
 //
-// The shape is seeded from scc's languages.json (github.com/boyter/scc, MIT
-// license); the schema is adopted, not the dataset: a spell declares only
-// what it can declare HONESTLY. The bash spell deliberately declares nothing:
-// heredocs make comment tokens content in a way this shape cannot express,
-// and a false "comment-only" costs trust in every gate refusal after it. A
-// file whose extension no spell claims always classifies as code.
+// The schema is adopted from scc's languages.json (MIT), not its dataset. The
+// bash spell declares nothing: heredocs make comment tokens content in a way
+// this shape cannot express, and a false comment-only costs trust in every
+// gate refusal after it. A file whose extension no spell claims always
+// classifies as code.
 type CommentSyntax struct {
 	// LineComments open a comment that runs to end of line.
 	LineComments []string `json:"lineComments,omitempty"`

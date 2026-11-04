@@ -58,6 +58,26 @@ export fun mgs_getLanguage() > Language {
                 bodyStyle = "indent",
                 body = "raise NotImplementedError(\"\{\{&Name}} lands in \{\{&Branch}}\")",
             },
+            operators = ["==", "!=", "<=", ">=", "**", "//", "->", ":=", "+=", "-="],
+            decisions = DecisionSyntax{keywords = ["if", "elif", "for", "while", "except", "and", "or", "case"]},
+            mutations = MutationSyntax{
+                swaps = [
+                    Swap{name = "eq-ne", find = "==", replace = "!="},
+                    Swap{name = "ne-eq", find = "!=", replace = "=="},
+                    Swap{name = "lt-le", find = "<", replace = "<="},
+                    Swap{name = "le-lt", find = "<=", replace = "<"},
+                    Swap{name = "gt-ge", find = ">", replace = ">="},
+                    Swap{name = "ge-gt", find = ">=", replace = ">"},
+                    Swap{name = "and-or", find = "and", replace = "or"},
+                    Swap{name = "or-and", find = "or", replace = "and"},
+                    Swap{name = "true-false", find = "True", replace = "False"},
+                    Swap{name = "false-true", find = "False", replace = "True"},
+                    Swap{name = "plus-minus", find = "+", replace = "-"},
+                    Swap{name = "minus-plus", find = "-", replace = "+"},
+                ],
+                bodies = ["return None"],
+                arid = ["^\\s*(logging|logger|log)\\."],
+            },
         },
     };
 }
@@ -135,6 +155,17 @@ fun ruffFormat(target: Target) > Command {
         "rw": drop(args, "--check"),
     }};
 }
+// pytest-cov belongs to the project's dependencies; magus ships no Python.
+export fun mgs_getCoverage() > Coverage {
+    return Coverage{
+        format = CoverageFormat.lcov,
+        file = "lcov.info",
+        test = "pytest",
+        command = Command{bin = "uv", args = ["run", "pytest", "--cov", "--cov-report=lcov:$MAGUS_COVERAGE_DIR/lcov.info"]},
+        uses = ["python3"],
+    };
+}
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"uv-build": uvBuild, "uv-clean": uvClean, "pytest": pytest, "ruff-check": ruffCheck, "ruff-format": ruffFormat};
 }

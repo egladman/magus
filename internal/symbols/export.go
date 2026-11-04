@@ -14,14 +14,28 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Index is a decoded SCIP index and the facts a pack records beside it.
+// SCIP has no field for those facts, so they never reach ExportSCIP.
+type Index struct {
+	*scip.Index
+	// facts is keyed by moniker. It is nil for SCIP read from protobuf.
+	facts map[string]symbolFacts
+}
+
+// symbolFacts is what a pack records about a symbol that SCIP cannot hold.
+type symbolFacts struct {
+	complexity int
+}
+
 // packIndex assembles shards into one in-memory SCIP index, adding the implementation
 // relationships their method sets imply. Nothing is protobuf-decoded: the result feeds
 // ParseDecoded and IndexOccurrences directly.
-func packIndex(shards []Shard) *scip.Index {
+func packIndex(shards []Shard) *Index {
 	idx := &scip.Index{Metadata: &scip.Metadata{
 		ToolInfo:             &scip.ToolInfo{Name: "magus"},
 		TextDocumentEncoding: scip.TextEncoding_UTF8,
 	}}
+	facts := map[string]symbolFacts{}
 	infos := map[string]*scip.SymbolInformation{}
 	for _, s := range shards {
 		for _, d := range s.Documents {
@@ -36,24 +50,11 @@ func packIndex(shards []Shard) *scip.Index {
 				doc.Occurrences = append(doc.Occurrences, &scip.Occurrence{Symbol: o.Symbol, Range: o.Range, SymbolRoles: o.Roles, EnclosingRange: o.Enclosing})
 			}
 			for _, si := range d.Symbols {
-				info := &scip.SymbolInformation{
-					Symbol:        si.Symbol,
-					DisplayName:   si.DisplayName,
-					Kind:          scip.SymbolInformation_Kind(si.Kind),
-					Documentation: si.Documentation,
-				}
-				if si.Signature != "" {
-					info.SignatureDocumentation = &scip.Signature{Text: si.Signature, Language: d.Language}
-				}
-				for _, r := range si.Relationships {
-					info.Relationships = append(info.Relationships, &scip.Relationship{
-						Symbol: r.Symbol, IsImplementation: r.Implementation, IsReference: r.Reference,
-						IsTypeDefinition: r.TypeDefinition, IsDefinition: r.Definition,
-					})
-				}
+				info := symbolInformation(si, d.Language)
 				doc.Symbols = append(doc.Symbols, info)
 				if _, seen := infos[si.Symbol]; !seen {
 					infos[si.Symbol] = info
+					noteFacts(facts, si)
 				}
 			}
 			idx.Documents = append(idx.Documents, doc)
@@ -64,7 +65,34 @@ func packIndex(shards []Shard) *scip.Index {
 			info.Relationships = append(info.Relationships, &scip.Relationship{Symbol: rel.to, IsImplementation: true})
 		}
 	}
-	return idx
+	return &Index{Index: idx, facts: facts}
+}
+
+func symbolInformation(si SymbolInfo, language string) *scip.SymbolInformation {
+	info := &scip.SymbolInformation{
+		Symbol:        si.Symbol,
+		DisplayName:   si.DisplayName,
+		Kind:          scip.SymbolInformation_Kind(si.Kind),
+		Documentation: si.Documentation,
+	}
+	if si.Signature != "" {
+		info.SignatureDocumentation = &scip.Signature{Text: si.Signature, Language: language}
+	}
+	for _, r := range si.Relationships {
+		info.Relationships = append(info.Relationships, &scip.Relationship{
+			Symbol: r.Symbol, IsImplementation: r.Implementation, IsReference: r.Reference,
+			IsTypeDefinition: r.TypeDefinition, IsDefinition: r.Definition,
+		})
+	}
+	return info
+}
+
+// noteFacts records si's facts when it has any, so a pack of symbols
+// with none costs no map entry each.
+func noteFacts(facts map[string]symbolFacts, si SymbolInfo) {
+	if si.Complexity > 0 {
+		facts[si.Symbol] = symbolFacts{complexity: si.Complexity}
+	}
 }
 
 type implementation struct{ from, to string }
@@ -134,7 +162,7 @@ func methodImplementations(concrete, iface MethodSet) []implementation {
 
 // ReadIndex reads the index at path whole: a pack, assembled from every shard, or SCIP
 // protobuf when pack is false. A file that does not decode is an ErrIndexFormat error.
-func ReadIndex(path string, pack bool) (*scip.Index, error) {
+func ReadIndex(path string, pack bool) (*Index, error) {
 	if !pack {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -144,7 +172,7 @@ func ReadIndex(path string, pack bool) (*scip.Index, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s: %w", ErrIndexFormat, path, err)
 		}
-		return idx, nil
+		return &Index{Index: idx}, nil
 	}
 	p, err := openPack(path)
 	if err != nil {

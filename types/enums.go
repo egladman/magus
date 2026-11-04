@@ -124,11 +124,17 @@ func (v PrecedentFamily) Values() []string { return precedentFamilies.Strings() 
 func (v PrecedentFamily) Valid() bool      { return precedentFamilies.Valid(v) }
 func (v PrecedentFamily) String() string   { return enum.String(v) }
 
-var markerFamilies = enum.Set[MarkerFamily]{MarkerDiagram, MarkerCalls, MarkerSkills, MarkerObserved, MarkerHarness}
+var markerFamilies = enum.Set[MarkerFamily]{MarkerDiagram, MarkerCalls, MarkerSkills, MarkerObserved, MarkerHarness, MarkerMutant}
 
 func (v MarkerFamily) Values() []string { return markerFamilies.Strings() }
 func (v MarkerFamily) Valid() bool      { return markerFamilies.Valid(v) }
 func (v MarkerFamily) String() string   { return enum.String(v) }
+
+var mutantOutcomes = enum.Set[MutantOutcome]{MutantKilled, MutantSurvived, MutantExcepted}
+
+func (v MutantOutcome) Values() []string { return mutantOutcomes.Strings() }
+func (v MutantOutcome) Valid() bool      { return mutantOutcomes.Valid(v) }
+func (v MutantOutcome) String() string   { return enum.String(v) }
 
 var markerVerbs = enum.Set[MarkerVerb]{MarkerPoint, MarkerBlock}
 

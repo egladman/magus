@@ -2,6 +2,7 @@ package spell
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
 	"path"
@@ -30,27 +31,30 @@ func (r Resolved) Descriptor() (spells.Descriptor, error) {
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
 	}
-	if m.Sandbox != nil {
-		if err := validateSandbox(*m.Sandbox); err != nil {
-			return spells.Descriptor{}, types.DiagnosticErrorf(types.AllowlistUnresolved, "spell %q: mgs_getSandbox: %v", name, err)
+	for _, step := range []func(*spells.Descriptor) error{
+		checkSandbox,
+		r.assembleOps,
+		func(m *spells.Descriptor) error { return applyModeArgs(m, r.Contract.ModeArgs) },
+		addSymbolIndexOp,
+		r.addCoverageOp,
+		synthesizeInstall,
+		func(m *spells.Descriptor) error { return validateTools(*m) },
+	} {
+		if err := step(&m); err != nil {
+			return spells.Descriptor{}, err
 		}
 	}
-	if err := r.assembleOps(&m); err != nil {
-		return spells.Descriptor{}, err
-	}
-	if err := applyModeArgs(&m, r.Contract.ModeArgs); err != nil {
-		return spells.Descriptor{}, err
-	}
-	if err := addSymbolIndexOp(&m); err != nil {
-		return spells.Descriptor{}, err
-	}
-	if err := synthesizeInstall(&m); err != nil {
-		return spells.Descriptor{}, err
-	}
-	if err := validateTools(m); err != nil {
-		return spells.Descriptor{}, err
-	}
 	return m, nil
+}
+
+func checkSandbox(m *spells.Descriptor) error {
+	if m.Sandbox == nil {
+		return nil
+	}
+	if err := validateSandbox(*m.Sandbox); err != nil {
+		return types.DiagnosticErrorf(types.AllowlistUnresolved, "spell %q: mgs_getSandbox: %v", m.Name, err)
+	}
+	return nil
 }
 
 // declared validates the contract's load-time answers other than the ops and the sandbox,
@@ -130,6 +134,82 @@ func addSymbolIndexOp(m *spells.Descriptor) error {
 	command := indexer.Command
 	command.Capture, command.Quiet = true, true
 	m.Ops[indexer.OpName()] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: command}
+	return nil
+}
+
+// addCoverageOp registers mgs_getCoverage's answer as an op under its reserved
+// name, so `magus run coverage` runs and caches it like any op. It runs after
+// assembleOps, since the declaration names its test op.
+func (r Resolved) addCoverageOp(m *spells.Descriptor) error {
+	if _, authored := m.Ops[spells.CoverageOp]; authored {
+		return fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared coverage, "+
+			"move the command to `export fun mgs_getCoverage() > Coverage` and drop the op", m.Name, spells.CoverageOp)
+	}
+	if r.Contract.Coverage == nil {
+		return nil
+	}
+	cov, err := validateCoverage(*r.Contract.Coverage, *m)
+	if err != nil {
+		return fmt.Errorf("spell %q: mgs_getCoverage: %w", m.Name, err)
+	}
+	if m.Ops == nil {
+		m.Ops = map[string]spells.Op{}
+	}
+	m.Ops[spells.CoverageOp] = spells.Op{Kind: spells.OpKindCoverage, Command: cov.Command, Coverage: &cov}
+	return nil
+}
+
+// validateCoverage checks a coverage declaration against the ops and tools m
+// already holds, and returns it with its test op's name normalized.
+func validateCoverage(cov spells.Coverage, m spells.Descriptor) (spells.Coverage, error) {
+	cov.Test = types.Normalize(cov.Test)
+	for _, check := range []func(spells.Coverage, spells.Descriptor) error{
+		checkCoverageReport, checkCoverageCommand, checkCoverageTest, checkCoverageUses,
+	} {
+		if err := check(cov, m); err != nil {
+			return spells.Coverage{}, err
+		}
+	}
+	return cov, nil
+}
+
+// checkCoverageReport refuses a report magus would have to guess how to read
+// or where to find.
+func checkCoverageReport(cov spells.Coverage, _ spells.Descriptor) error {
+	if !cov.Format.Valid() || cov.Format == spells.CoverageFormatNone {
+		return fmt.Errorf("format is %s, want one of %s", cmp.Or(string(cov.Format), "none"), strings.Join(cov.Format.Values(), ", "))
+	}
+	if cov.File == "" || path.Base(cov.File) != cov.File {
+		return fmt.Errorf("file %q must be a plain file name under %s", cov.File, spells.CoverageDirEnvVar)
+	}
+	return nil
+}
+
+func checkCoverageCommand(cov spells.Coverage, m spells.Descriptor) error {
+	if err := validateCommand(m.Name, spells.CoverageOp, cov.Command); err != nil {
+		return err
+	}
+	if cov.Command.Bin == "" {
+		return fmt.Errorf("command.bin is required")
+	}
+	return nil
+}
+
+func checkCoverageTest(cov spells.Coverage, m spells.Descriptor) error {
+	if op, ok := m.Ops[cov.Test]; !ok || op.OpKind() != spells.OpKindCommand {
+		return fmt.Errorf("test %q names no command op in mgs_listTargets", cov.Test)
+	}
+	return nil
+}
+
+// checkCoverageUses refuses a used tool with no version probe, which would
+// key the op on nothing.
+func checkCoverageUses(cov spells.Coverage, m spells.Descriptor) error {
+	for _, tool := range cov.Uses {
+		if m.Tools[tool].Probe.Bin == "" {
+			return fmt.Errorf("uses %q, which mgs_getTools does not declare with a version probe", tool)
+		}
+	}
 	return nil
 }
 
@@ -527,17 +607,105 @@ func validateLanguage(l *spells.Language) (spells.Language, error) {
 	if l.Name == "" {
 		return spells.Language{}, fmt.Errorf("language: name is required")
 	}
-	if syn := l.Syntax; syn != nil {
-		if syn.Comments != nil && len(l.Extensions) == 0 {
-			return spells.Language{}, fmt.Errorf("language: syntax.comments without extensions covers no files, declare the extensions that are this language")
-		}
-		if syn.Stubs != nil {
-			if err := validateStubs(*syn.Stubs); err != nil {
-				return spells.Language{}, fmt.Errorf("language.syntax: %w", err)
-			}
-		}
+	if err := validateSyntax(*l); err != nil {
+		return spells.Language{}, err
 	}
 	return *l, nil
+}
+
+func validateSyntax(l spells.Language) error {
+	syn := l.Syntax
+	if syn == nil {
+		return nil
+	}
+	if syn.Comments != nil && len(l.Extensions) == 0 {
+		return fmt.Errorf("language: syntax.comments without extensions covers no files, declare the extensions that are this language")
+	}
+	for _, check := range []func(spells.Syntax) error{checkSyntaxStubs, checkTokenFacts, checkDecisions, checkSwaps, checkBodies, checkArid} {
+		if err := check(*syn); err != nil {
+			return fmt.Errorf("language.syntax: %w", err)
+		}
+	}
+	return nil
+}
+
+func checkSyntaxStubs(syn spells.Syntax) error {
+	if syn.Stubs == nil {
+		return nil
+	}
+	return validateStubs(*syn.Stubs)
+}
+
+func checkTokenFacts(syn spells.Syntax) error {
+	if syn.Comments == nil && (syn.Decisions != nil || syn.Mutations != nil) {
+		return errors.New("decisions and mutations need comments, or a token in a comment or string counts as code")
+	}
+	return nil
+}
+
+func checkDecisions(syn spells.Syntax) error {
+	if syn.Decisions != nil && len(syn.Decisions.Keywords)+len(syn.Decisions.Operators) == 0 {
+		return errors.New("decisions declare no keyword or operator, so every function would read complexity 1")
+	}
+	return nil
+}
+
+func checkSwaps(syn spells.Syntax) error {
+	if syn.Mutations == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	for i, sw := range syn.Mutations.Swaps {
+		if err := checkSwap(sw, seen); err != nil {
+			return fmt.Errorf("mutations.swaps[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func checkSwap(sw spells.Swap, seen map[string]bool) error {
+	if err := checkSwapName(sw.Name, seen); err != nil {
+		return err
+	}
+	switch sw.Find {
+	case "":
+		return errors.New("find is required")
+	case sw.Replace:
+		return fmt.Errorf("find and replace are both %q, so the mutant is the original", sw.Find)
+	}
+	return nil
+}
+
+// checkSwapName records name in seen once it passes.
+func checkSwapName(name string, seen map[string]bool) error {
+	switch {
+	case name == "":
+		return errors.New("name is required")
+	case name == spells.BodyMutation:
+		return fmt.Errorf("name %q is magus's own name for a body mutant", name)
+	case seen[name]:
+		return fmt.Errorf("name %q is declared twice", name)
+	}
+	seen[name] = true
+	return nil
+}
+
+func checkBodies(syn spells.Syntax) error {
+	if syn.Mutations == nil || len(syn.Mutations.Bodies) == 0 {
+		return nil
+	}
+	if syn.Stubs == nil {
+		return errors.New("mutations.bodies need stubs.bodyStyle to find the body they replace")
+	}
+	return nil
+}
+
+func checkArid(syn spells.Syntax) error {
+	if syn.Mutations == nil {
+		return nil
+	}
+	_, err := syn.Mutations.AridPatterns()
+	return err
 }
 
 // validateStubs requires every field of a stub syntax: a record with no kinds stubs

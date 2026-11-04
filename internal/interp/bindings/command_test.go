@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestExecCommandCollapsesProgressRedrawsOffATerminal(t *testing.T) {
@@ -634,10 +635,8 @@ func TestRunCommandSourcesHonorsIgnoreDirs(t *testing.T) {
 	assert.Contains(t, lines[0], "skip.txt", "without the declared ignore dir the file is walked")
 }
 
-// TestResolveRunnerRefs pins the $NAME token rule directly: a token shaped
-// like a reference resolves against refs or errors naming the op and the
-// reference; anything else (a normal arg, a $ that is not a whole bare
-// identifier) passes through untouched.
+// TestResolveRunnerRefs pins the $NAME rule: a reference resolves or errors
+// naming the op, and anything else passes through untouched.
 func TestResolveRunnerRefs(t *testing.T) {
 	refs := map[string]string{"MAGUS": "/path/to/magus", "MAGUS_LEVEL": "1"}
 
@@ -653,11 +652,27 @@ func TestResolveRunnerRefs(t *testing.T) {
 		assert.Contains(t, err.Error(), `"magus-buzz"`)
 		assert.Contains(t, err.Error(), "$NOT_A_REAL_REF")
 	})
-	t.Run("a token embedding a reference is left alone, not interpolated", func(t *testing.T) {
-		bin, args, err := resolveRunnerRefs("", "shellcheck", []string{"--output=$MAGUS", "${MAGUS}"}, refs)
+	t.Run("a reference inside a token resolves up to the first non-identifier byte", func(t *testing.T) {
+		bin, args, err := resolveRunnerRefs("", "shellcheck", []string{"--output=$MAGUS", "lcov:$MAGUS_LEVEL/x.info"}, refs)
 		require.NoError(t, err)
 		assert.Equal(t, "shellcheck", bin)
-		assert.Equal(t, []string{"--output=$MAGUS", "${MAGUS}"}, args, "only a WHOLE bare $NAME token is a reference")
+		assert.Equal(t, []string{"--output=/path/to/magus", "lcov:1/x.info"}, args)
+	})
+	t.Run("an unknown MAGUS_ name inside a token is a hard error", func(t *testing.T) {
+		_, _, err := resolveRunnerRefs("cov", "go", []string{"-coverprofile=$MAGUS_COVRAGE_DIR/cover.out"}, refs)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `"cov"`)
+		assert.Contains(t, err.Error(), "$MAGUS_COVRAGE_DIR")
+	})
+	t.Run("another name inside a token belongs to the shell", func(t *testing.T) {
+		_, args, err := resolveRunnerRefs("", "sh", []string{"-c", "echo $HOME $MAGUSX"}, refs)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"-c", "echo $HOME $MAGUSX"}, args)
+	})
+	t.Run("a braced or positional dollar is left alone", func(t *testing.T) {
+		_, args, err := resolveRunnerRefs("", "sh", []string{"${MAGUS}", "$1", "$$", "$"}, refs)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"${MAGUS}", "$1", "$$", "$"}, args)
 	})
 	t.Run("an ordinary arg is untouched", func(t *testing.T) {
 		_, args, err := resolveRunnerRefs("", "shellcheck", []string{"-c", "**/*.sh"}, refs)
@@ -702,4 +717,37 @@ func TestRunCommandUnresolvedRefFailsBeforeExec(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"example"`)
 	assert.Contains(t, err.Error(), "$NOT_A_REAL_REF")
+}
+
+type TestScopeArgsSuite struct{ suite.Suite }
+
+func TestTestScopeArgsSuite(t *testing.T) { suite.Run(t, new(TestScopeArgsSuite)) }
+
+func (s *TestScopeArgsSuite) argv(forwarded ...string) []string {
+	dir := s.T().TempDir()
+	logFile := filepath.Join(dir, "calls.log")
+	op := spells.Op{Command: spells.Command{
+		Bin:         "sh",
+		Args:        []string{"-c", `echo "$@" >> "$LOGFILE"`, "sh", "test"},
+		DefaultArgs: []string{"./..."},
+		TestScope:   []string{"./{dir}"},
+	}}
+	opts := commandOpts{args: forwarded, env: map[string]string{"LOGFILE": logFile}}
+	_, err := runCommand(std.WithCurrentWorkingDirectory(context.Background(), dir), op, opts)
+	s.Require().NoError(err)
+	lines := logLines(s.T(), logFile)
+	s.Require().Len(lines, 1)
+	return strings.Fields(lines[0])
+}
+
+func (s *TestScopeArgsSuite) TestAScopeOperandReplacesTheDefaultPackages() {
+	s.Equal([]string{"test", "./calc"}, s.argv("./calc"))
+}
+
+func (s *TestScopeArgsSuite) TestAForwardedFlagStillAppendsToTheDefaults() {
+	s.Equal([]string{"test", "./...", "-run", "X"}, s.argv("-run", "X"))
+}
+
+func (s *TestScopeArgsSuite) TestAScopeOperandBesideAFlagKeepsTheFlag() {
+	s.Equal([]string{"test", "./calc", "-run", "X"}, s.argv("./calc", "-run", "X"))
 }

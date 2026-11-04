@@ -3,6 +3,9 @@ package spells
 import (
 	"errors"
 	"fmt"
+	"path"
+	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -51,9 +54,12 @@ type Command struct {
 	// TestSelection names the dialect of forwarded test-selection arguments.
 	// A wrapper may inherit it only when its dispatch proves those args reach the
 	// op unchanged. Empty declares no selector; currently only "go" is supported.
-	TestSelection string   `json:"test_selection,omitempty"`
-	Bin           string   `json:"bin,omitempty"`
-	Args          []string `json:"args,omitempty"`
+	TestSelection string `json:"test_selection,omitempty"`
+	// TestScope narrows a test op to the tests of one source file, through
+	// ExpandTestScope. Empty runs the whole project.
+	TestScope []string `json:"test_scope,omitempty"`
+	Bin       string   `json:"bin,omitempty"`
+	Args      []string `json:"args,omitempty"`
 	// DefaultArgs are trailing argv tokens the RUNNER appends only when the
 	// invocation passes no explicit args of its own; explicit call-site args
 	// replace them. `magus run <t> -- <extra>` forwarding is not explicit args:
@@ -166,16 +172,62 @@ type Command struct {
 // Validate rejects a Command whose fields contradict each other. Quiet without
 // Capture is an error: the output would stream nowhere and return nowhere.
 func (c Command) Validate() error {
+	for _, check := range []func() error{c.validateSelection, c.validateQuiet, c.validateSourcesEach, c.validateTestScope} {
+		if err := check(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c Command) validateSelection() error {
 	if c.TestSelection != "" && c.TestSelection != "go" {
 		return fmt.Errorf("unsupported test_selection %q: supported dialect is go", c.TestSelection)
 	}
+	return nil
+}
+
+func (c Command) validateQuiet() error {
 	if c.Quiet && !c.Capture {
 		return errors.New("quiet without capture discards the output, set capture = true or drop quiet")
 	}
+	return nil
+}
+
+func (c Command) validateSourcesEach() error {
 	if c.SourcesEach && len(c.Sources) == 0 {
 		return errors.New("sources_each without sources has no files to run per, set sources or drop sources_each")
 	}
 	return nil
+}
+
+var testScopePlaceholder = regexp.MustCompile(`\{[^{}]*\}`)
+
+func (c Command) validateTestScope() error {
+	for i, entry := range c.TestScope {
+		if entry == "" {
+			return fmt.Errorf("test_scope[%d] is empty", i)
+		}
+		for _, p := range testScopePlaceholder.FindAllString(entry, -1) {
+			if !slices.Contains([]string{"{dir}", "{file}", "{stem}"}, p) {
+				return fmt.Errorf("test_scope %q: placeholder %s, want {dir}, {file} or {stem}", entry, p)
+			}
+		}
+	}
+	return nil
+}
+
+// ExpandTestScope returns TestScope for one project-relative source file:
+// {dir} is its directory, {file} its path and {stem} its base name without
+// extension. It checks no path; a caller drops entries naming none.
+func (c Command) ExpandTestScope(file string) []string {
+	r := strings.NewReplacer("{dir}", path.Dir(file), "{file}", file,
+		"{stem}", strings.TrimSuffix(path.Base(file), path.Ext(file)))
+	out := make([]string, 0, len(c.TestScope))
+	for _, entry := range c.TestScope {
+		out = append(out, r.Replace(entry))
+	}
+	return out
 }
 
 // SourcesPlaceholder renders Sources as a single human-readable argv token, for a
@@ -237,6 +289,8 @@ const (
 	// so the runner still resolves the live one from the project's lockfile at run time
 	// within that op's scope.
 	OpKindInstall = "install"
+	// OpKindCoverage tags the op magus synthesizes from mgs_getCoverage.
+	OpKindCoverage = "coverage"
 )
 
 // InstallSpec is what an install op carries so it can run from the op alone, as a
@@ -326,6 +380,9 @@ type Op struct {
 	// Command is the first declared install's, for describe and charm discovery; the
 	// runner resolves the real one against the project's lockfile.
 	Install *InstallSpec `json:"install,omitempty"`
+	// Coverage is set only for a coverage op (Kind == OpKindCoverage): the
+	// declaration the op came from, which names its report and test op.
+	Coverage *Coverage `json:"coverage,omitempty"`
 	// ModeArgs are the args, from the spell's mgs_getModeArgs, that tell this op apart
 	// from the other uses of a program with no subcommand: node runs scripts and evals
 	// too, and only --test is node-test. Nil means every use of the program is this op.

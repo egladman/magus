@@ -64,7 +64,7 @@ func (g *Graph) Unreferenced() []types.UnreferencedEntry {
 			Label:    n.Label,
 			Source:   n.Source,
 			Kind:     n.Attrs[attrSymbolKind],
-			Language: n.Attrs[attrLanguage],
+			Language: n.Attrs[AttrLanguage],
 		})
 	}
 	// Sorted by ID: the lens is a checklist someone works through, and a list that

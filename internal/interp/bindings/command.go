@@ -98,8 +98,9 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 	warnCharmConflicts(ctx, tgt.Args, tgt.Charms)
 	// Explicit call-site args replace the declared defaults; anything else
 	// (including `magus run <t> -- <extra>` forwarding, which arrives with
-	// hasArgs unset) keeps them. See spells.Command.DefaultArgs.
-	if !opts.hasArgs {
+	// hasArgs unset) keeps them. A forwarded test scope operand also replaces
+	// them. See spells.Command.DefaultArgs.
+	if !opts.hasArgs && !namesTestScope(tgt.Command, opts.args) {
 		args = append(args, tgt.DefaultArgs...)
 	}
 	// TrailingArgs is DefaultArgs' opposite: ANY forwarded arg drops it, not just
@@ -229,15 +230,13 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 	return res, err
 }
 
-// runnerRefPattern matches a Bin or Args token that is a REFERENCE to a
-// runner-computed value: a bare $NAME with no other characters, the same
-// $VAR syntax a spell already wrote inside an `sh -c` one-liner, just without
-// the shell to expand it. It deliberately does NOT match ${NAME} or a $NAME
-// embedded inside a longer string ("--output=$NAME"): Buzz's own string
-// interpolation already owns {...}, and a substring match would leave where a
-// reference starts and ends ambiguous. A whole token is unambiguous and is
-// exactly the shape every current use needs ("$MAGUS", "$MAGUS_SYMBOL_INDEX").
+// runnerRefPattern matches a token that is one bare $NAME, whatever the name.
 var runnerRefPattern = regexp.MustCompile(`^\$[A-Za-z_][A-Za-z0-9_]*$`)
+
+// embeddedRefPattern finds $NAME inside a longer token. Only MAGUS and MAGUS_*
+// names are runner refs there; the shell owns the rest. pytest-cov's lcov:PATH
+// has no token of its own.
+var embeddedRefPattern = regexp.MustCompile(`\$[A-Za-z_][A-Za-z0-9_]*`)
 
 // runnerRefs returns the values a static op's Bin/Args may reference via a bare
 // $NAME token (see resolveRunnerRefs): spawn.SelfVars for this invocation (MAGUS,
@@ -262,30 +261,12 @@ func runnerRefs(ctx context.Context, opts commandOpts) map[string]string {
 	return refs
 }
 
-// resolveRunnerRefs replaces every token in bin/args matching runnerRefPattern
-// with its value in refs. A token that is not shaped like a reference passes
-// through unchanged. A token that IS shaped like one but is absent from refs is
-// a hard error naming the op and the reference: this is deliberately not "" on
-// a miss: a silently empty substitution would turn `--output` (its value
-// dropped) into a confusing downstream tool failure instead of a diagnosis
-// naming the actual problem, right where the mistake was made.
-//
-// This is NOT shell expansion: it never reads the process environment, never
-// interpolates inside a larger string, and it is exec-time engine behavior, not
-// a text substitution a spell could observe or a charm could patch around.
+// resolveRunnerRefs replaces each runner ref in bin/args with its value.
+// A ref absent from refs is a hard error naming the op, not "": an empty
+// value would surface later as a confusing tool failure.
 func resolveRunnerRefs(opName, bin string, args []string, refs map[string]string) (string, []string, error) {
 	resolve := func(tok string) (string, error) {
-		if !runnerRefPattern.MatchString(tok) {
-			return tok, nil
-		}
-		if v, ok := refs[tok[1:]]; ok {
-			return v, nil
-		}
-		where := ""
-		if opName != "" {
-			where = fmt.Sprintf("op %q: ", opName)
-		}
-		return "", fmt.Errorf("%s%q is not a value the runner provides", where, tok)
+		return resolveRunnerRefToken(opName, tok, refs)
 	}
 	rbin, err := resolve(bin)
 	if err != nil {
@@ -299,6 +280,43 @@ func resolveRunnerRefs(opName, bin string, args []string, refs map[string]string
 		}
 	}
 	return rbin, rargs, nil
+}
+
+func resolveRunnerRefToken(opName, tok string, refs map[string]string) (string, error) {
+	if runnerRefPattern.MatchString(tok) {
+		if v, ok := refs[tok[1:]]; ok {
+			return v, nil
+		}
+		return "", unknownRunnerRef(opName, tok)
+	}
+	return resolveEmbeddedRefs(opName, tok, refs)
+}
+
+func resolveEmbeddedRefs(opName, tok string, refs map[string]string) (string, error) {
+	var missing string
+	out := embeddedRefPattern.ReplaceAllStringFunc(tok, func(ref string) string {
+		name := ref[1:]
+		if name != "MAGUS" && !strings.HasPrefix(name, "MAGUS_") {
+			return ref
+		}
+		v, ok := refs[name]
+		if !ok && missing == "" {
+			missing = ref
+		}
+		return v
+	})
+	if missing != "" {
+		return "", unknownRunnerRef(opName, missing)
+	}
+	return out, nil
+}
+
+func unknownRunnerRef(opName, ref string) error {
+	where := ""
+	if opName != "" {
+		where = fmt.Sprintf("op %q: ", opName)
+	}
+	return fmt.Errorf("%s%q is not a value the runner provides", where, ref)
 }
 
 // hintTailBytes bounds the output kept per stream for classification. A tool's failure
@@ -642,6 +660,25 @@ func sourceBatches(files []string, each bool) [][]string {
 
 // joinNonEmpty concatenates a and b with a newline separator, skipping either
 // side that is empty rather than leaving a stray blank line.
+var scopePlaceholder = regexp.MustCompile(`\{[^{}]*\}`)
+
+// namesTestScope tells a forwarded scope operand from a forwarded flag: the
+// spell declares the operand's shape in TestScope, so no second declaration is
+// needed. {dir}, {file} and {stem} match any text.
+func namesTestScope(c spells.Command, args []string) bool {
+	for _, entry := range c.TestScope {
+		parts := scopePlaceholder.Split(entry, -1)
+		for i := range parts {
+			parts[i] = regexp.QuoteMeta(parts[i])
+		}
+		re := regexp.MustCompile(fmt.Sprintf("^%s$", strings.Join(parts, ".+")))
+		if slices.ContainsFunc(args, re.MatchString) {
+			return true
+		}
+	}
+	return false
+}
+
 func joinNonEmpty(a, b string) string {
 	switch {
 	case a == "":

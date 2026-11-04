@@ -392,6 +392,12 @@ const (
 	attrBodyTokens = "body_tokens"
 )
 
+// AttrComplexity is one plus the decision points an AST-reading indexer
+// counted in a symbol (types.KnowledgeSymbol.Complexity). CRAP reads it
+// where the spell declares no decision tokens. Absent means the indexer
+// did not count.
+const AttrComplexity = "complexity"
+
 // attrBranchIdents is the comma list of identifiers a symbol's body switches on or tests
 // bare (types.BranchIdents). Absent for a decision table and for a language with no lexer.
 const attrBranchIdents = "branch_idents"
@@ -432,11 +438,11 @@ func fileSizeAttrs(attrs map[string]string, lines, size int) map[string]string {
 	return attrs
 }
 
-// attrLanguage and attrSymbolKind are the attrs a symbol (and, for language, a file) node
+// AttrLanguage and attrSymbolKind are the attrs a symbol (and, for language, a file) node
 // carries from its index. Named because they are read from four places across two files
 // and a mistyped literal would silently match nothing rather than fail.
 const (
-	attrLanguage   = "language"
+	AttrLanguage   = "language"
 	attrSymbolKind = "symbol_kind"
 	// attrMoniker is the symbol's full SCIP moniker, version included, which the node ID
 	// drops.

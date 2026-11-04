@@ -25,7 +25,7 @@ func occAt(line, col, n int) *scip.Occurrence {
 
 func indexKey(t *testing.T, idx *scip.Index, projectPath, key string) KeyOccurrences {
 	t.Helper()
-	all, err := IndexOccurrences(t.Context(), idx, projectPath)
+	all, err := IndexOccurrences(t.Context(), &Index{Index: idx}, projectPath)
 	require.NoError(t, err)
 	return all[key]
 }
@@ -105,7 +105,7 @@ func TestParseOccurrencesSkipsOtherSymbolsAndOutsideDocuments(t *testing.T) {
 	files := indexKey(t, idx, "", "gomod example.com/foo Bar#").Files
 	require.Len(t, files, 1, "the out-of-workspace document is dropped entirely")
 	assert.Equal(t, "pkg/foo/foo.go", files[0].File)
-	all, err := IndexOccurrences(t.Context(), idx, "")
+	all, err := IndexOccurrences(t.Context(), &Index{Index: idx}, "")
 	require.NoError(t, err)
 	assert.NotContains(t, all, "gomod example.com/foo Missing#", "a key the index never names is absent from the map")
 	require.Len(t, files[0].Occurrences, 1, "only the requested symbol, and never a local one")
@@ -392,7 +392,7 @@ func TestOccurrenceReadsObserveCancellation(t *testing.T) {
 	cancel()
 
 	idx := &scip.Index{Documents: []*scip.Document{{RelativePath: "a.go", Occurrences: []*scip.Occurrence{occAt(0, 0, 3)}}}}
-	_, err := IndexOccurrences(ctx, idx, "")
+	_, err := IndexOccurrences(ctx, &Index{Index: idx}, "")
 	assert.ErrorIs(t, err, context.Canceled)
 
 	files := []types.SymbolOccurrenceFile{{File: "a.go", Occurrences: []types.SymbolOccurrence{{Line: 1, Column: 1, EndLine: 1, EndColumn: 4}}}}
