@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/symbols/buzzindex"
 	"github.com/egladman/magus/internal/symbols/goindex"
@@ -31,7 +32,9 @@ const noBaseIndex = "no in-process index; ceiling not applied"
 const projectNewAtHead = "its project is new at head, so the base holds no measure; ceiling not applied"
 
 // baseMeasureVersion keys the kept measures; bump it when measureTree measures differently.
-const baseMeasureVersion = "4"
+// It replaces the magus build in the key: a gate measures under one
+// binary and lint reads under the checkout's own.
+const baseMeasureVersion = "5"
 
 // ConformanceCeilings is head, the lens over the working tree, with c.Base's ceilings: each file
 // changed since c.Base whose count of violations of a metric in c.Checks rose past its count
@@ -57,7 +60,7 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head t
 	if err != nil {
 		return types.Conformance{}, err
 	}
-	entry, err := m.conformanceEntry(ctx, commit, plan)
+	entry, err := m.conformanceEntry(commit, plan)
 	if err != nil {
 		return types.Conformance{}, err
 	}
@@ -89,7 +92,7 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head t
 // MeasureConformanceBase measures the merge base of base and HEAD with magus's in-process
 // indexers under this workspace's configuration. It keeps the measure in the
 // workspace store every checkout shares, keyed by commit, policy, indexer
-// versions and magus build.
+// versions and baseMeasureVersion.
 // The base is exported there too, since a sandboxed gate writes only to the
 // store and the temp dir. It returns the commit, and reuses a kept measure.
 func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string, error) {
@@ -97,7 +100,7 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 	if err != nil {
 		return "", err
 	}
-	tree, err := m.conformanceTree()
+	tree, err := conformanceTree(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -108,7 +111,7 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 	if err != nil {
 		return "", err
 	}
-	entry, err := m.conformanceEntry(ctx, commit, head)
+	entry, err := m.conformanceEntry(commit, head)
 	if err != nil {
 		return "", err
 	}
@@ -181,15 +184,14 @@ func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 }
 
 // conformanceEntry is the cache file of commit's measure under this workspace's policy and
-// plan's indexers, as measured by this magus build.
-func (m *Magus) conformanceEntry(ctx context.Context, commit string, plan baseIndexPlan) (string, error) {
+// plan's indexers, under baseMeasureVersion.
+func (m *Magus) conformanceEntry(commit string, plan baseIndexPlan) (string, error) {
 	policy, err := json.Marshal(m.cfg.Knowledge.Conformance)
 	if err != nil {
 		return "", fmt.Errorf("conformance: digest the policy: %w", err)
 	}
 	h := sha256.New()
-	build := types.MagusBuildFromContext(ctx)
-	fmt.Fprintf(h, "%s\x00%s\x00%s\x00", baseMeasureVersion, build.Version, build.Commit)
+	fmt.Fprintf(h, "%s\x00", baseMeasureVersion)
 	fmt.Fprintf(h, "%s", policy)
 	for _, ix := range plan.indexes {
 		fmt.Fprintf(h, "\x00%s\x00%s\x00%s", ix.project, ix.language, ix.ix.Version())
@@ -294,6 +296,24 @@ func (m *Magus) baseIndexPlan(ctx context.Context, tree string) (baseIndexPlan, 
 	return plan, nil
 }
 
+// trustRoot adds root to MISE_TRUSTED_CONFIG_PATHS in environ. CI trusts
+// only the workspace, and the base tree holds the same config.
+func trustRoot(environ []string, root string) []string {
+	const name = "MISE_TRUSTED_CONFIG_PATHS"
+	paths := []string{root}
+	out := make([]string, 0, len(environ)+1)
+	for _, kv := range environ {
+		if value, ok := strings.CutPrefix(kv, name+"="); ok {
+			if value != "" {
+				paths = []string{value, root}
+			}
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, fmt.Sprintf("%s=%s", name, strings.Join(paths, string(os.PathListSeparator))))
+}
+
 // inProcessIndexer is the in-process indexer si's format names over dir, nil for an external one.
 func inProcessIndexer(si *spells.SymbolIndexer, dir, root string) symbols.UnitIndexer {
 	switch si.Format {
@@ -302,7 +322,7 @@ func inProcessIndexer(si *spells.SymbolIndexer, dir, root string) symbols.UnitIn
 		if len(patterns) == 0 {
 			patterns = []string{"."}
 		}
-		return &goindex.Indexer{Dir: dir, Patterns: patterns, Builds: si.Envs}
+		return &goindex.Indexer{Dir: dir, Patterns: patterns, Env: trustRoot(os.Environ(), root), Builds: si.Envs}
 	case spells.SymbolFormatBuzzModule:
 		return &buzzindex.Indexer{Dir: dir, WorkspaceRoot: root}
 	case spells.SymbolFormatShellScript:
@@ -372,16 +392,10 @@ func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan
 	return out, nil
 }
 
-func (m *Magus) conformanceTree() (string, error) {
-	store, err := config.StoreDir(m.ws.Root, m.cfg)
-	if err != nil {
-		return "", fmt.Errorf("conformance: %w", err)
-	}
-	trees := filepath.Join(store, "conformance-trees")
-	if err := os.MkdirAll(trees, 0o700); err != nil {
-		return "", fmt.Errorf("conformance: %w", err)
-	}
-	tree, err := os.MkdirTemp(trees, "")
+// conformanceTree is outside the workspace on purpose. Mise walks up from
+// it for config, and the Linux sandbox denies the workspace's.
+func conformanceTree(ctx context.Context) (string, error) {
+	tree, err := os.MkdirTemp(sandbox.PolicyFromContext(ctx).TempBase(), "magus-conformance-tree-")
 	if err != nil {
 		return "", fmt.Errorf("conformance: %w", err)
 	}

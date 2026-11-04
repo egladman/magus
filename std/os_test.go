@@ -860,7 +860,7 @@ func TestTypedMagusMembersAreDeclared(t *testing.T) {
 					if root.Name == "job" {
 						ctor = "job(id)"
 					}
-					declared[ctor+"."+BuzzMethodName(method)] = true
+					declared[fmt.Sprintf("%s.%s", ctor, BuzzMethodName(method))] = true
 				}
 			}
 		}

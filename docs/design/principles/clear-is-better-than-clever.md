@@ -23,8 +23,8 @@ here: a language with close to one way to say a thing gets better agent output
 than the most-trained languages on earth, and explicitness is the only variable
 in sight.
 
-This is not YAGNI taken whole. magus is aimed at the largest monorepos that
-exist ([Built for the largest monorepos](built-for-the-largest-monorepos.md)),
+This is not YAGNI taken whole. magus is aimed at large monorepos
+([Built for the largest monorepos](built-for-the-largest-monorepos.md)),
 and some of what that takes is engineering no sane person does for a small
 repository. The rule is not "never optimize". It is: clear by default, and
 clever only where a measurement says the clear version is too slow, with the

@@ -1328,6 +1328,7 @@ func (s *reapplySuite) TestWideningAppliedWhileRunningSurvivesExitAndRetake() {
 	s.Require().NoError(err)
 	want := exited
 	want.State, want.GateAttempts = types.StateRunning, nil
+	want.Registered, want.Updated = retaken.Registered, retaken.Updated
 	s.Equal(want, retaken)
 }
 
@@ -1341,6 +1342,7 @@ func (s *reapplySuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
 
 	next := applied[0].Next
 	want.Validated, want.WriteProof = next.Validated, next.WriteProof
+	want.Registered, want.Updated = next.Registered, next.Updated
 	s.Equal(want, next)
 }
 

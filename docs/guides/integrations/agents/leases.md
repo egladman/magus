@@ -36,15 +36,15 @@ partition by write set rather than by affected project, prove the jobs cannot
 collide, narrow the scope at every level, match a model to each job. This page covers what
 that skill writes to and reads from.
 
-| step                      | what you run                                              |
-| ------------------------- | --------------------------------------------------------- |
-| Record the working state  | `magus vcs checkpoint`, `client` (`magus\change().at`) |
-| Declare the work          | `magus job fork`, `client` (`magus\workspace().putJob`)              |
-| Hand out the jobs         | the host's own spawn, recorded but never judged           |
-| Give the holder its terms | `magus describe job <job>`                                |
-| Take the lease            | `magus job exec <job>`                                    |
-| Watch it                  | `magus ls jobs`, the console Jobs view                    |
-| Return and verify         | `magus job exit`, `magus job wait`                        |
+| step                      | what you run                                            |
+| ------------------------- | ------------------------------------------------------- |
+| Record the working state  | `magus vcs checkpoint`, `client` (`magus\change().at`)  |
+| Declare the work          | `magus job fork`, `client` (`magus\workspace().putJob`) |
+| Hand out the jobs         | the host's own spawn, recorded but never judged         |
+| Give the holder its terms | `magus describe job <job>`                              |
+| Take the lease            | `magus job exec <job>`                                  |
+| Watch it                  | `magus ls jobs`, the console Jobs view                  |
+| Return and verify         | `magus job exit`, `magus job wait`                      |
 
 Only one thing in that table enforces, and it is not the store. The job row is a
 declaration, the checkpoint is a reading, and the console renders both. The

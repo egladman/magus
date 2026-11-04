@@ -25,6 +25,7 @@ import "proc";
 import "sort";
 import "std";
 import "assert";
+import "crypto";
 
 // The lcov half of this file moved to the stdlib as `lcov`: parsing a coverage
 // report is a fact about a FORMAT, not about Go, and nothing here was specific to
@@ -57,9 +58,14 @@ export fun modulePath(gomod: str) > str !> str {
 // narrowed run writes base.<its args>.out, so it cannot overwrite the full one.
 export fun profilePath(base: str, args: [str]) > str {
     if (args.len() == 0) { return base; }
+    final raw = args.join("\n");
     var key = args.join("_");
     foreach (ch in ["/", " ", "'", "\"", "|", "^", "$", "(", ")", "*", "?", "=", ":", "\\"]) {
         key = key.replace(ch, with: "-");
+    }
+    // Past the file name limit: keep a prefix, and a digest of the raw args.
+    if (key.len() > 64) {
+        key = key.sub(0, len: 56) + "-" + crypto\sha256Hex(raw).sub(0, len: 8);
     }
     return base.replace(".out", with: "." + key + ".out");
 }

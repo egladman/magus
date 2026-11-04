@@ -1288,13 +1288,16 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 		// A checkout that already stands is where the merge happens, so its revision is the
 		// one the branches are compared with, not the forker's.
-		at := root
+		at, from := root, row.Checkpoint
 		if info, statErr := os.Stat(row.Checkout); row.Checkout != "" && statErr == nil && info.IsDir() {
 			if at, err = filepath.Abs(row.Checkout); err != nil {
 				return exit.Usagef("magus job fork: checkout %s: %s", row.Checkout, err)
 			}
+			// From an older checkpoint, every commit the checkout
+			// gained since would read as a branch's change.
+			from = ""
 		}
-		paths, base, err := job.IntegrationWritePaths(ctx, at, row.Checkpoint, row.Integrates)
+		paths, base, err := job.IntegrationWritePaths(ctx, at, from, row.Integrates)
 		if err != nil {
 			return exit.Usagef("magus job fork: integrates: %s", err)
 		}
@@ -1307,8 +1310,12 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			}
 			slog.InfoContext(ctx, fmt.Sprintf("%s changes nothing left to merge, and %s's goals are unmet, so it is forked again on the paths it held", strings.Join(row.Integrates, ", "), row.ID), attr.Notice("note"))
 		}
-		if row.Checkpoint == "" {
+		switch {
+		case row.Checkpoint == "":
 			slog.InfoContext(ctx, fmt.Sprintf("the record names no checkpoint, so the branches were compared with the revision %s of %s, and the job starts there", base, at), attr.Notice("note"))
+			row.Checkpoint = base
+		case from == "" && !checkpointNames(row.Checkpoint, base):
+			slog.InfoContext(ctx, fmt.Sprintf("checkout %s stands at %s, so the branches were compared with that revision instead of the checkpoint %s, and the job starts there", at, base, row.Checkpoint), attr.Notice("note"))
 			row.Checkpoint = base
 		}
 		row.WritePaths, row.SoftPaths = job.IntegrationOutputs(jobWS, paths)
@@ -1488,6 +1495,13 @@ var forkSpecFlags = []string{"criteria", "timeout", "parent", "checkpoint", "wri
 // deliveryDoc is --delivery's help, equal to the command registry's.
 const deliveryDoc = "How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)"
 
+// checkpointNames reports whether checkpoint's revision is revision, a full
+// id, or an abbreviation of it.
+func checkpointNames(checkpoint, revision string) bool {
+	rev, _ := types.ParseCheckpointToken(checkpoint)
+	return rev != "" && strings.HasPrefix(revision, rev)
+}
+
 // stackedHead fills a stacked row's parent_head with this checkout's
 // branch. A checkout on no branch has no head to stack on.
 func stackedHead(ctx context.Context, root string, row types.Declaration) (types.Declaration, error) {
@@ -1495,7 +1509,7 @@ func stackedHead(ctx context.Context, root string, row types.Declaration) (types
 		return row, nil
 	}
 	refuse := func(why error) error {
-		return fmt.Errorf("%s is stacked, and %w, so its pull request has no base: name parent_head in the record", row.ID, why)
+		return fmt.Errorf("%s is stacked with no pull request base, so name parent_head in the record: %w", row.ID, why)
 	}
 	if root == "" {
 		return row, refuse(errors.New("no workspace was found"))

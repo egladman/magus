@@ -249,6 +249,33 @@ func (s *FailuresOwedSuite) TestALaterPassOfTheTargetClearsIt() {
 	s.Equal([]types.TargetRef{{Project: "docs", Target: "lint"}}, s.owed(red))
 }
 
+// A standalone run files `lint:rw`; the gate filed `lint`.
+func (s *FailuresOwedSuite) TestAPassUnderACharmClearsTheBareTarget() {
+	s.results("red",
+		TargetResult{Project: ".", Target: "lint", Outcome: OutcomeFail},
+		TargetResult{Project: "docs", Target: "lint", Outcome: OutcomeFail},
+	)
+	red := s.gate("red", OutcomeFail)
+	s.results("narrow", TargetResult{Project: ".", Target: "lint:rw", Outcome: OutcomePass, Replayed: true})
+
+	s.Equal([]types.TargetRef{{Project: "docs", Target: "lint"}}, s.owed(red))
+}
+
+func (s *FailuresOwedSuite) TestAFailUnderACharmOwesTheBareTarget() {
+	s.results("red", TargetResult{Project: ".", Target: "lint:rw", Outcome: OutcomeFail})
+	red := s.gate("red", OutcomeFail)
+
+	s.Equal([]types.TargetRef{{Project: ".", Target: "lint"}}, s.owed(red))
+}
+
+func (s *FailuresOwedSuite) TestAPassOfAnotherTargetUnderACharmClearsNothing() {
+	s.results("red", TargetResult{Project: ".", Target: "lint", Outcome: OutcomeFail})
+	red := s.gate("red", OutcomeFail)
+	s.results("narrow", TargetResult{Project: ".", Target: "generate:rw", Outcome: OutcomePass})
+
+	s.Equal([]types.TargetRef{{Project: ".", Target: "lint"}}, s.owed(red))
+}
+
 func (s *FailuresOwedSuite) TestAPassInAnotherProjectClearsNothing() {
 	s.results("red", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail})
 	red := s.gate("red", OutcomeFail)
@@ -270,4 +297,48 @@ func (s *FailuresOwedSuite) TestAGreenGateOwesNothing() {
 	green := s.gate("green", OutcomePass)
 
 	s.Empty(s.owed(green))
+}
+
+type HarnessWriteSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestHarnessWriteSuite(t *testing.T) { suite.Run(t, new(HarnessWriteSuite)) }
+
+func (s *HarnessWriteSuite) SetupTest() { s.dir = s.T().TempDir() }
+
+func (s *HarnessWriteSuite) record(paths ...string) {
+	s.Require().NoError(RecordHarnessWrite(s.dir, HarnessWrite{Paths: paths}, InvocationStart{Workspace: "/repo"}))
+}
+
+func (s *HarnessWriteSuite) latest() (HarnessWriteRecord, bool) {
+	fold, err := ReadKind(s.dir, KindHarnessWrite)
+	s.Require().NoError(err)
+	return LatestHarnessWrite(fold)
+}
+
+func (s *HarnessWriteSuite) TestAWriteReadsBackSortedAndDeduplicated() {
+	s.record("b", "a", "b")
+	rec, ok := s.latest()
+	s.Require().True(ok)
+	s.Equal([]string{"a", "b"}, rec.Paths)
+}
+
+func (s *HarnessWriteSuite) TestAnEmptyWriteIsRefused() {
+	err := RecordHarnessWrite(s.dir, HarnessWrite{}, InvocationStart{Workspace: "/repo"})
+	s.Error(err)
+	_, ok := s.latest()
+	s.False(ok)
+}
+
+func (s *HarnessWriteSuite) TestARepeatAppendsANewerRecord() {
+	s.record("a")
+	first, _ := s.latest()
+	time.Sleep(2 * time.Millisecond)
+	s.record("a")
+	second, ok := s.latest()
+	s.Require().True(ok)
+	s.True(second.At.After(first.At))
+	s.Equal(first.Paths, second.Paths)
 }

@@ -74,6 +74,38 @@ type Policy struct {
 	// Environment notices share a reporting set across scoped policies and value copies,
 	// so changing a step's spell set does not repeat MGS2003 or MGS2013.
 	withheld *withheldReads
+	// nested is every target's layer as one declaration.
+	// Only ForNestedMagus grants it; nil grants nothing.
+	nested *spells.Sandbox
+}
+
+// WithNestedTargets returns a copy of p whose ForNestedMagus also grants
+// targets, keyed project:target. p's own grants are unchanged.
+// Landlock domains stack: a nested magus grants its targets
+// only what its own domain holds.
+func (p *Policy) WithNestedTargets(targets map[string]spells.Sandbox) *Policy {
+	if p == nil || len(targets) == 0 {
+		return p
+	}
+	merged := &spells.Sandbox{}
+	for _, key := range slices.Sorted(maps.Keys(targets)) {
+		merged.Allow = append(merged.Allow, targets[key].Allow...)
+		merged.Env.Passthrough = append(merged.Env.Passthrough, targets[key].Env.Passthrough...)
+	}
+	q := *p
+	q.nested = merged
+	return &q
+}
+
+// ForNestedMagus is the policy for a nested magus process: every spell,
+// with each target layer WithNestedTargets gave merged on top.
+// The nested magus confines each step it runs to that step's grants.
+// p is returned as it is when it carries no targets.
+func (p *Policy) ForNestedMagus() *Policy {
+	if p == nil || p.nested == nil {
+		return p
+	}
+	return p.derive(nil, p.nested, false)
 }
 
 // Scoped returns the policy for one step: the core and the workspace layer as they are,
@@ -119,7 +151,7 @@ func (p *Policy) derive(names []string, target *spells.Sandbox, withProviders bo
 	if p.lease != nil {
 		q = p.lease.apply(q)
 	}
-	q.opts, q.scoped, q.withheld = p.opts, p.scoped, p.withheld
+	q.opts, q.scoped, q.withheld, q.nested = p.opts, p.scoped, p.withheld, p.nested
 	p.scoped.policies[key] = q
 	return q
 }

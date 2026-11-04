@@ -11,7 +11,7 @@
 
 <a href="https://github.com/egladman/magus/actions/workflows/ci.yaml?query=branch%3Amain"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg?branch=main"></a> <a href="https://github.com/egladman/magus/actions/workflows/cd.yaml?query=branch%3Amain"><img alt="CD" src="https://github.com/egladman/magus/actions/workflows/cd.yaml/badge.svg?branch=main"></a> <img alt="Go coverage" src="https://eli.gladman.cc/magus/assets/go-coverage.svg"> <img alt="Buzz coverage" src="https://eli.gladman.cc/magus/assets/buzz-coverage.svg"> <img alt="TypeScript coverage" src="https://eli.gladman.cc/magus/assets/typescript-coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
 
-A fast, cross-platform task orchestrator for polyglot monorepos. One binary, no second toolchain to install. Targets are programs, not YAML.
+A cross-platform task orchestrator for polyglot monorepos. One binary, no second toolchain to install. Targets are programs, not YAML.
 
 Change a file and magus works out which projects it reaches, rebuilds only those, and caches every result so the same work never runs twice.
 
@@ -251,7 +251,7 @@ protobufs.
 
 Green is the Unix domain socket, the local control plane: it dispatches
 `magus run`/`magus affected` into one shared [concurrency pool](docs/guides/integrations/server.md#concurrency),
-answers `magus status`, and adopts nested `magus` calls. Fast and private
+answers `magus status`, and adopts nested `magus` calls. Private
 (`0700`); the local CLI and the liveness/readiness probes use it.
 
 Orange is the HTTP server on `mcp.address`, for clients that cannot reach a Unix
@@ -357,7 +357,7 @@ The hosted page talks only to `127.0.0.1`/`[::1]`, a loopback lock it enforces b
 
 ## Working with AI agents
 
-A tighter feedback loop does more for an agent working in your code base than a larger model does, and most of that loop already exists: the build, test, lint, format, and cache scripts you wrote so developers could set up an environment. magus is the hookup. Those same scripts become what the agent runs, deterministic and fast.
+A tighter feedback loop helps an agent working in your code base, and most of that loop already exists: the build, test, lint, format, and cache scripts you wrote so developers could set up an environment. magus is the hookup. Those same scripts become what the agent runs, deterministic.
 
 magus treats an AI agent and a new teammate as the same kind of user: someone who cannot yet trust their guesses about the repo. It ships skills, MCP tools and hints built on the knowledge graph, so an agent asks magus instead of grepping and guessing.
 

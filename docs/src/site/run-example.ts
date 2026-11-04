@@ -198,7 +198,8 @@ export function initRunExample(): void {
           const buzz = window.buzz;
           if (load.error || !buzz) {
             pnl.textContent =
-              "Failed to load the Buzz runtime: " + (load.error ? load.error.message : "buzz.evalBuzz not ready");
+              "Failed to load the Buzz runtime: " +
+              (load.error ? load.error.message : "buzz.evalBuzz not ready");
             pnl.classList.add("failed");
             return;
           }

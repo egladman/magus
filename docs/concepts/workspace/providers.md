@@ -49,10 +49,10 @@ and the affected set and the knowledge graph reach them like any other.
 
 This is the third instance of one arrangement magus already uses twice:
 
-| Wiring                         | Subsystem delegated  | The spell exports                          |
-| ------------------------------ | -------------------- | ------------------------------------------ |
-| `magus\cache.remote(github)`   | remote cache         | `get_artifact`, `put_artifact`, ..         |
-| `magus\ci.provider(github)`    | CI job-log structure | `group_start`, `group_end`, `annotate`, .. |
+| Wiring                        | Subsystem delegated  | The spell exports                          |
+| ----------------------------- | -------------------- | ------------------------------------------ |
+| `magus\cache.remote(github)`  | remote cache         | `get_artifact`, `put_artifact`, ..         |
+| `magus\ci.provider(github)`   | CI job-log structure | `group_start`, `group_end`, `annotate`, .. |
 | `magus\workspaceProvider(nx)` | the project set      | `list_projects`                            |
 
 In all three the magusfile names a spell, the subsystem invokes contract

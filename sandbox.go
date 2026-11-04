@@ -76,6 +76,8 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	}
 	lease, from := job.RunLease(ctx, loc)
 	p = sandbox.NarrowToLease(ctx, p, loc, lease, from)
+	// Held back for magus\cmd's nested magus, which runs targets.
+	p = p.WithNestedTargets(m.TargetSandboxes())
 	confines, err := p.KernelConfines()
 	if err != nil {
 		return ctx, err
@@ -90,6 +92,20 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 		recordRules(ctx, prov, p)
 	}
 	return std.WithEditJudge(sandbox.WithPolicy(ctx, p), m.editJudge()), nil
+}
+
+// TargetSandboxes is each target's own sandbox declaration,
+// keyed project:target, for the targets that declare one.
+func (m *Magus) TargetSandboxes() map[string]spells.Sandbox {
+	out := map[string]spells.Sandbox{}
+	for _, p := range m.All() {
+		for name, pol := range p.TargetPolicies {
+			if pol.Sandbox != nil {
+				out[fmt.Sprintf("%s:%s", p.Path, name)] = *pol.Sandbox
+			}
+		}
+	}
+	return out
 }
 
 // serviceSpells names the loaded spells that serve magus rather than a target: the

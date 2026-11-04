@@ -255,8 +255,9 @@ type toolResult struct {
 // file other than the one st last read starts over. Lines a subagent wrote into the main
 // transcript are skipped.
 func (st *costState) readTranscript(transcript string) []toolResult {
-	var results []toolResult
-	for _, line := range st.newTranscriptLines(transcript) {
+	lines := st.newTranscriptLines(transcript)
+	results := make([]toolResult, 0, len(lines))
+	for _, line := range lines {
 		results = append(results, st.readRecord(line)...)
 	}
 	return results

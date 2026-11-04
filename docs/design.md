@@ -52,7 +52,7 @@ automates a decision and when it hands the decision to you.
 
 - [Unix survives at the verb, not the binary](design/principles/unix-survives-at-the-verb.md): Each verb answers one question, deterministically, from declared sources, and stops; the binary is as big as the monorepo problem.
 - [Capability is not a reason](design/principles/capability-is-not-a-reason.md): The default answer to a new capability is no; the burden of proof is a failure removed, never a preference enabled.
-- [Optimize the loop that verifies, never the loop that generates](design/principles/optimize-the-loop-that-verifies.md): Every mechanism makes knowing and trusting a change cheaper; nothing in magus exists to make producing code faster.
+- [Optimize the loop that verifies, never the loop that generates](design/principles/optimize-the-loop-that-verifies.md): Every mechanism aims to make knowing and trusting a change cheaper; nothing in magus exists to make producing code faster.
 - [A cache is an accelerator, never a dependency](design/principles/a-cache-is-an-accelerator.md): A cache may shorten a derivation, never be the only copy of one; switching it off changes a duration, never an answer.
 - [Everything is a file](design/principles/everything-is-a-file.md): Local state is JSON Lines a person reads with cat, grep and diff; one entry per line, the last line per key wins, every rewrite a rename.
 - [Behavior is code, facts are data](design/principles/behavior-is-code-facts-are-data.md): A target is a Buzz function you can read top to bottom; configuration holds only facts with no algorithm in them.
@@ -65,7 +65,7 @@ automates a decision and when it hands the decision to you.
 - [Friction that carries meaning](design/principles/friction-that-carries-meaning.md): Keep resistance where the resistance is the information; friction that tells every caller the same sentence is a toll, and a toll is removed.
 - [Worth cloning](design/principles/worth-cloning.md): Assume magus can be reproduced; build what is better when copied, and publish the judgment a clone cannot recover.
 - [Clear is better than clever](design/principles/clear-is-better-than-clever.md): Write to the need in front of you, one way, the obvious way; clever earns its place only where a measurement says it must, and then it says why.
-- [Built for the largest monorepos](design/principles/built-for-the-largest-monorepos.md): magus is aimed at the largest monorepos that exist; at that scale performance is the feature, and every hot path is measured.
+- [Built for the largest monorepos](design/principles/built-for-the-largest-monorepos.md): magus is aimed at large monorepos; at that scale performance is a feature, and a hot path gets a benchmark.
 - [The Go proverbs, beyond Go](design/principles/the-go-proverbs.md): Rob Pike's Go proverbs hold in every language here; where one has an enforcement point the page names it, and where it has none that is a debt.
 - [Delete before you add](design/principles/delete-before-you-add.md): The best code is still no code; before adding code to keep something working, check whether removing the old path reaches the goal.
 - [Break now, hold still later](design/principles/break-now-hold-still-later.md): Before 1.0 a wrong name or format is fixed without a migration path; after it, the tool that works the way it worked last year is the product.

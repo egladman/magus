@@ -2,7 +2,7 @@
 title: History metrics
 description: How magus reads VCS history to show where a codebase's attention and risk concentrate (hotspots, temporal coupling, ownership, and trend) as a behavioral complement to static structure.
 tags: [history-metrics, vcs, history, hotspots, coupling, ownership, churn, analysis]
-aliases: [guides/insight, concepts/insight, reference/manpage/magus-insight, concepts/knowledge/insight, concepts/knowledge/historymetrics, guides/historymetrics, concepts/historymetrics]
+aliases: [guides/insight, concepts/insight, reference/manpage/magus-insight, concepts/knowledge/insight, guides/historymetrics, concepts/historymetrics]
 ---
 
 # History metrics

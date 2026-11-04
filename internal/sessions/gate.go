@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -220,10 +221,11 @@ func FailuresOwed(gate GateRecord, results Fold) []types.TargetRef {
 			continue
 		}
 		var r TargetResult
-		if json.Unmarshal(rec.Payload, &r) != nil || r.Target == gate.Target {
+		if json.Unmarshal(rec.Payload, &r) != nil || baseTarget(r.Target) == baseTarget(gate.Target) {
 			continue
 		}
-		f := types.TargetRef{Project: r.Project, Target: r.Target}
+		// A standalone run files its target with the charm, `lint:rw`.
+		f := types.TargetRef{Project: r.Project, Target: baseTarget(r.Target)}
 		switch {
 		case rec.Invocation == gate.Inv && r.Outcome == OutcomeFail && !slices.Contains(owed, f):
 			owed = append(owed, f)
@@ -250,4 +252,77 @@ func RecordGate(dir string, g GateResult, start InvocationStart) error {
 		return err
 	}
 	return w.Append(KindGateResult, g)
+}
+
+// KindHarnessWrite records files that `magus agent harness install` or
+// `link` wrote and version control does not list.
+const KindHarnessWrite = "harness_write"
+
+// HarnessWrite is the payload of a [KindHarnessWrite] record.
+type HarnessWrite struct {
+	Paths []string
+}
+
+type harnessWriteWire struct {
+	Paths []string `json:"paths"`
+}
+
+// MarshalJSON refuses an empty write, which would read as a change to
+// nothing. Paths are sorted and deduplicated.
+func (w HarnessWrite) MarshalJSON() ([]byte, error) {
+	if len(w.Paths) == 0 {
+		return nil, errors.New("harness write: no paths")
+	}
+	paths := slices.Clone(w.Paths)
+	slices.Sort(paths)
+	return json.Marshal(harnessWriteWire{Paths: slices.Compact(paths)})
+}
+
+// UnmarshalJSON rejects the empty record MarshalJSON refuses.
+func (w *HarnessWrite) UnmarshalJSON(data []byte) error {
+	var wire harnessWriteWire
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if len(wire.Paths) == 0 {
+		return errors.New("harness write: no paths")
+	}
+	w.Paths = wire.Paths
+	return nil
+}
+
+// HarnessWriteRecord is one harness write with its timestamp resolved.
+type HarnessWriteRecord struct {
+	HarnessWrite
+	At time.Time
+}
+
+// RecordHarnessWrite appends one harness write under dir. A repeat
+// appends a newer record.
+func RecordHarnessWrite(dir string, hw HarnessWrite, start InvocationStart) error {
+	if _, err := hw.MarshalJSON(); err != nil {
+		return err
+	}
+	w, err := Open(dir, NewID(), start)
+	if err != nil {
+		return err
+	}
+	return w.Append(KindHarnessWrite, hw)
+}
+
+// LatestHarnessWrite returns the newest write in a fold of
+// [KindHarnessWrite] records.
+func LatestHarnessWrite(fold Fold) (HarnessWriteRecord, bool) {
+	for i := len(fold.Records) - 1; i >= 0; i-- {
+		rec := fold.Records[i]
+		if rec.Kind != KindHarnessWrite {
+			continue
+		}
+		var hw HarnessWrite
+		if hw.UnmarshalJSON(rec.Payload) != nil {
+			continue
+		}
+		return HarnessWriteRecord{HarnessWrite: hw, At: time.UnixMilli(rec.Ts)}, true
+	}
+	return HarnessWriteRecord{}, false
 }

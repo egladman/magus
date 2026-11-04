@@ -423,3 +423,8 @@ tags/commit/
 # libraries when it is one analyzer whose rule is Pairing. A project page is
 # generated per project, so the rename retires the old URL, now at development/libs-testpairing/.
 development/libs-testlayout/
+# The insight API became historymetrics. Its reference pages are generated per proto
+# package, so the rename retires the old URLs, now under reference/api/historymetrics/.
+reference/api/insight/
+reference/api/insight/v1alpha1/
+reference/api/insight/v1alpha1/insight/

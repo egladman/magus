@@ -28,6 +28,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// errShardMoved marks a shard file holding another fingerprint than the
+// manifest the caller read. A concurrent sync rewrote it, or it is corrupt.
+var errShardMoved = errors.New("shard fingerprint differs from the manifest")
+
 // ErrShardMiss reports that a shard key is not on the remote. GetShard returns it
 // (not a nil reader) for a miss, so the contract is unambiguous: a nil error means
 // a non-nil reader.
@@ -634,7 +638,7 @@ func (s *Store) readVerifiedShard(ctx context.Context, man *manifest, name strin
 		}
 	}
 	if sf.Fingerprint != want {
-		return shardFile{}, fmt.Errorf("knowledge: shard %q holds fingerprint %.12s, the manifest names %.12s", name, sf.Fingerprint, want)
+		return shardFile{}, fmt.Errorf("%w: %q holds %.12s, the manifest names %.12s", errShardMoved, name, sf.Fingerprint, want)
 	}
 	return sf, nil
 }

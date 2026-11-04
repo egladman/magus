@@ -153,7 +153,7 @@ const gateRepeatDenyRuns = 2
 // gateUnchanged is the newest gate verdict this branch recorded, pass or fail, when no file
 // that differs from its commit was written after it. A project-scoped pass is no verdict on
 // the branch (sessions.LatestGate skips it), so `magus run ci <project>` never stands in for
-// the `affected ci` this refuses.
+// the `affected ci` this refuses. A later harness install counts as a change.
 func gateUnchanged(ctx context.Context, deps Dependencies, workspace string) (sessions.GateRecord, bool) {
 	if workspace == "" {
 		return sessions.GateRecord{}, false
@@ -177,6 +177,11 @@ func gateUnchanged(ctx context.Context, deps Dependencies, workspace string) (se
 	last, ok := sessions.LatestGate(fold, ref, string(types.TargetCI))
 	if !ok || last.Commit == "" {
 		return sessions.GateRecord{}, false
+	}
+	if written, err := sessions.ReadKind(dir, sessions.KindHarnessWrite); err == nil {
+		if hw, ok := sessions.LatestHarnessWrite(written); ok && hw.At.After(last.At) {
+			return sessions.GateRecord{}, false
+		}
 	}
 	changed, err := res.VCS.ChangedFiles(ctx, workspace, last.Commit)
 	if err != nil {
@@ -2689,6 +2694,9 @@ func vcsCommandRefusal(ctx context.Context, row types.Job, backend string, args 
 		inOtherRepository(site, row.CheckoutRoot) && workTreeAt(ctx, site.dir, row.CheckoutRoot) {
 		return nil
 	}
+	if unlocated == "" && !relocated && integrationScratchCall(ctx, row, inv, site) {
+		return nil
+	}
 	r := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated)
 	if !r.refused() {
 		return nil
@@ -3594,6 +3602,12 @@ func inFreshRepository(inv hint.Invocation, site vcsSite, unlocated string, fres
 // the base branch that checkout resolves, read only when why is "".
 func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, backend string, site vcsSite) (why, base string) {
 	if row.CheckoutRoot == "" {
+		// A fork records the checkout; job exec binds it and
+		// records the base.
+		if own := row.Worktree; own.Standing() {
+			return fmt.Sprintf("The lease records no checkout_root until its holder takes the job in %s, the checkout its fork made or adopted: run `cd %s && %s`, then commit there.",
+				own.Root, own.Root, hint.JobExec.With(row.ID)), ""
+		}
 		return "The lease records no checkout_root, so no checkout is the worker's own; `magus job exec` stamps one.", ""
 	}
 	root, ok := siteCheckout(ctx, opts, backend, site)

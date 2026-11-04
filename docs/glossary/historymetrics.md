@@ -3,6 +3,7 @@ title: historymetrics
 order: 3
 description: "The metrics magus derives over the graph and history (hotspots, affinity, ownership, trend, volatility, unreferenced)."
 tags: [glossary, insight-and-knowledge, history-metrics]
+aliases: [glossary/insight]
 ---
 
 # historymetrics

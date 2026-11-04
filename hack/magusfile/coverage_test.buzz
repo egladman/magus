@@ -35,3 +35,13 @@ test "two selections never share a path" {
     final b = cov\profilePath(".magus/coverage.out", args: ["-run", "B"]);
     assert\isTrue(a != b, message: "distinct");
 }
+
+test "a long selection stays a bounded, matched, distinct path" {
+    final shared = ["-run", "TestCoverageAlphaBravoCharlie|TestCoverageDeltaEchoFoxtrot"];
+    final a = cov\profilePath(".magus/coverage.out", args: shared + ["|TestOneLongNameAaaaaaaa"]);
+    final b = cov\profilePath(".magus/coverage.out", args: shared + ["|TestOneLongNameBbbbbbbb"]);
+    assert\isTrue(a.len() < 100, message: "bounded: {a}");
+    assert\isTrue(a != b, message: "digest keeps long selections apart");
+    final matched = path\matches(".magus/coverage*.out", path: a) catch false;
+    assert\isTrue(matched, message: a);
+}

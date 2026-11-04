@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/xdg"
@@ -1948,7 +1949,7 @@ func runMagus(ctx context.Context, label string, args []string, opts types.Magus
 	var rec types.ExecResult
 	var cmdErr error
 	runFn := func() error {
-		res, err := spawn.Exec(ctx, self, full, nestedExecOptions(ctx, opts, env))
+		res, err := spawn.Exec(nestedMagusContext(ctx), self, full, nestedExecOptions(ctx, opts, env))
 		rec, cmdErr = nestedResult(label, full, res, err, opts)
 		return nil
 	}
@@ -2000,6 +2001,13 @@ func nestedResult(label string, full []string, res spawn.ExecResult, err error, 
 		}
 	}
 	return rec, cmdErr
+}
+
+// nestedMagusContext confines a nested magus under every target's layer.
+// It runs targets, and a landlock domain grants them nothing it lacks.
+// The caller's own children keep ctx's policy.
+func nestedMagusContext(ctx context.Context) context.Context {
+	return sandbox.WithPolicy(ctx, sandbox.PolicyFromContext(ctx).ForNestedMagus())
 }
 
 // recursiveMagusEnv carries only the invocation facts a nested Magus process needs.

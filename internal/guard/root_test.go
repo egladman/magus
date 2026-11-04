@@ -610,55 +610,49 @@ func TestSpawnNamesModelResolvesAHarnessRowsAlias(t *testing.T) {
 	assert.Contains(t, v.Reason, "this spawn runs opus, model tier principal (rank 2), and job scout was forked at economy (rank 0)")
 }
 
-func TestSpawnNamesModelAppliesToLeasedNestedSpawns(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		model      string
-		off        bool
-		decision   string
-		rule       string
-		reasonPart string
-	}{
-		{
-			name:       "missing model is denied",
-			decision:   decisionDeny,
-			rule:       string(denyRuleSpawnNamesModel),
-			reasonPart: "this spawn names no model",
-		},
-		{
-			name:       "principal model is denied for economy row",
-			model:      "opus",
-			decision:   decisionDeny,
-			rule:       string(denyRuleSpawnNamesModel),
-			reasonPart: "model tier principal (rank 2), and job scout was forked at economy (rank 0)",
-		},
-		{
-			name:     "economy model matches row",
-			model:    "haiku",
-			decision: decisionPass,
-		},
-		{
-			name:     "off keeps model omission allowed",
-			off:      true,
-			decision: decisionPass,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			set := testModelTiers(t, "claude-code")
-			ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
-			deps := strictDeps(t)
-			deps.ModelTiers = func() *types.ModelTierSet { return set }
-			if tc.off {
-				deps.Builtins[string(denyRuleSpawnNamesModel)] = builtin.Setting{Decision: builtin.Off}
-			}
-			v := judgeLeasedNestedSpawn(ctx, t, deps, tc.model)
-			assert.Equal(t, tc.decision, v.Decision)
-			assert.Equal(t, tc.rule, v.Rule)
-			if tc.reasonPart != "" {
-				assert.Contains(t, v.Reason, tc.reasonPart)
-			}
-		})
+type LeasedNestedSpawnSuite struct{ suite.Suite }
+
+func TestLeasedNestedSpawnSuite(t *testing.T) {
+	suite.Run(t, new(LeasedNestedSpawnSuite))
+}
+
+func (s *LeasedNestedSpawnSuite) judge(model string, off bool) types.GuardJudgment {
+	t := s.T()
+	set := testModelTiers(t, "claude-code")
+	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	deps := strictDeps(t)
+	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	if off {
+		deps.Builtins[string(denyRuleSpawnNamesModel)] = builtin.Setting{Decision: builtin.Off}
 	}
+	return judgeLeasedNestedSpawn(ctx, t, deps, model)
+}
+
+func (s *LeasedNestedSpawnSuite) check(v types.GuardJudgment, decision, rule, reasonPart string) {
+	if reasonPart != "" {
+		s.Contains(v.Reason, reasonPart)
+	}
+	want := types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decision, Rule: rule,
+		LeaseFrom: v.LeaseFrom}
+	v.Reason, v.Next = "", nil
+	s.Equal(want, v)
+}
+
+func (s *LeasedNestedSpawnSuite) TestMissingModelIsDenied() {
+	s.check(s.judge("", false), decisionDeny, string(denyRuleSpawnNamesModel), "this spawn names no model")
+}
+
+func (s *LeasedNestedSpawnSuite) TestPrincipalModelIsDeniedForEconomyRow() {
+	s.check(s.judge("opus", false), decisionDeny, string(denyRuleSpawnNamesModel),
+		"model tier principal (rank 2), and job scout was forked at economy (rank 0)")
+}
+
+func (s *LeasedNestedSpawnSuite) TestEconomyModelMatchesRow() {
+	s.check(s.judge("haiku", false), decisionPass, "", "")
+}
+
+func (s *LeasedNestedSpawnSuite) TestOffKeepsModelOmissionAllowed() {
+	s.check(s.judge("", true), decisionPass, "", "")
 }
 
 func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {

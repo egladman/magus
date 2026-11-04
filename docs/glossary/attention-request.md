@@ -25,6 +25,7 @@ magus session attention
 In the code (`magus refs <name>` lists every site):
 
 - `sessions.AttentionRequest` (Go)
+- `types.AttentionRequest` (Go)
 - `AttentionRequest` (TypeScript, magus-console)
 
 <!-- END GLOSSARY USAGE -->

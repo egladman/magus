@@ -220,6 +220,8 @@ The spell layer depends on who starts the process:
 
 The target layer reaches both a target's own processes and its ops' children.
 
+A **nested magus that `magus\cmd` starts**, from a `magus buzz` script or a magusfile body, also gets every target's layer. It runs targets, and landlock domains stack: a script that runs `magus run test` could not give the test target its `/proc` grant unless the nested magus's own domain held it. The nested magus then confines each step it runs to that step's own grants. The script's own `proc\exec` children and file bindings keep the policy above, with no target's layer. A merge queue hook gets every target's layer for its whole command, since the hook itself is usually a nested magus.
+
 A **service spell** is left out of all three. That is the remote cache backend, and any spell that contributes no op a target could compose, such as a CI or secret provider. Its declaration names what it needs to reach its service, and the GitHub Actions spell's names the cache write token, which no target, script or hook should hold. The declaration reaches only the spell's own ops: a remote cache lookup or store runs under the workspace policy plus that spell's layer and no other spell's, with no target layer, and over an environment no target's `env\set` has touched.
 
 ### A lease narrows it further

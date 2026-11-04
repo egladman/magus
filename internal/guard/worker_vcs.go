@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // workerVCSOp names the version-control operation a worker lease may not run, short of a
@@ -214,11 +215,10 @@ func removesOwnCheckout(command, cwd string, row types.Job) bool {
 // the orchestrator reads. A target the line does not spell as a literal path fails, and so
 // does a relative one after a global option, which may move where it resolves from.
 func addsScratchCheckout(command, cwd string) bool {
-	cache, err := xdg.CacheDir()
+	scratch, err := scratchCheckouts()
 	if err != nil {
 		return false
 	}
-	scratch := filepath.Join(cache, "magus", "tmp")
 	calls, ok := locateCalls(command, DialectBash, cwd, addsCheckout, false)
 	if !ok || len(calls) == 0 {
 		return false
@@ -244,6 +244,116 @@ func addsScratchCheckout(command, cwd string) bool {
 		}
 	}
 	return true
+}
+
+// scratchCheckouts is $XDG_CACHE_HOME/magus/tmp, where temp copies of a
+// repository go.
+func scratchCheckouts() (string, error) {
+	cache, err := xdg.CacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cache, "magus", "tmp"), nil
+}
+
+// integrationScratchCall reports a git call an integration holder may run on
+// a detached scratch checkout. It makes or removes one, or stages, commits or
+// merges an integrated branch in it. Every job checkout has a branch.
+func integrationScratchCall(ctx context.Context, row types.Job, inv hint.Invocation, site vcsSite) bool {
+	if !row.Integrating() || inv.Name != "git" || site.gitDir != "" || parseGit(inv.Args).configured {
+		return false
+	}
+	sub, rest := vcsSubcommand(inv)
+	if sub == "worktree" {
+		return sharesRepository(row, site.dir) && scratchWorktreeChange(ctx, row, rest, site.dir)
+	}
+	if !detachedScratch(ctx, row, site.dir) {
+		return false
+	}
+	if operand, merge := workerMerge(inv); merge {
+		if operand == "" {
+			return slices.Contains(rest, "--continue") || slices.Contains(rest, "--abort")
+		}
+		return slices.Contains(row.Integrates, operand)
+	}
+	return recordsCommit(inv) || sub == "add"
+}
+
+// sharesRepository reports dir in a checkout of row's own repository.
+func sharesRepository(row types.Job, dir string) bool {
+	_, mine, ok := gitCheckout(row.CheckoutRoot)
+	if !ok {
+		return false
+	}
+	_, there, ok := gitCheckout(dir)
+	return ok && samePath(mine, there)
+}
+
+// scratchWorktreeChange reports `git worktree add --detach <dir> [<rev>]` of a
+// dir under scratchCheckouts, or `git worktree remove [--force] <dir>` of a
+// detached checkout there. rest is the words after `worktree`. A relative dir
+// resolves from cwd.
+func scratchWorktreeChange(ctx context.Context, row types.Job, rest []string, cwd string) bool {
+	resolve := func(target string) string {
+		if target == "" || strings.ContainsAny(target, "$`~") {
+			return ""
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(cwd, target)
+		}
+		return filepath.Clean(target)
+	}
+	switch {
+	case firstWordIs(rest, "add"):
+		target := resolve(checkoutAddTarget("git", rest))
+		return slices.Contains(rest, "--detach") && !anyFlag(rest[1:], "bB", "--orphan") &&
+			target != "" && inScratch(row, target)
+	case firstWordIs(rest, "remove"):
+		var targets []string
+		for _, a := range rest[1:] {
+			switch {
+			case a == "--force" || a == "-f":
+			case strings.HasPrefix(a, "-"):
+				return false
+			default:
+				targets = append(targets, a)
+			}
+		}
+		return len(targets) == 1 && detachedScratch(ctx, row, resolve(targets[0]))
+	}
+	return false
+}
+
+// inScratch reports dir lying below scratchCheckouts and outside row's own
+// checkout.
+func inScratch(row types.Job, dir string) bool {
+	scratch, err := scratchCheckouts()
+	if err != nil || dir == "" || samePath(dir, scratch) || !within(dir, scratch) {
+		return false
+	}
+	own := []string{row.CheckoutRoot}
+	if row.Worktree != nil {
+		own = append(own, row.Worktree.Root)
+	}
+	return !slices.ContainsFunc(own, func(root string) bool { return root != "" && within(dir, root) })
+}
+
+// detachedScratch reports dir standing in a git checkout under
+// scratchCheckouts, outside row's own, with no branch checked out.
+func detachedScratch(ctx context.Context, row types.Job, dir string) bool {
+	if dir == "" {
+		return false
+	}
+	root, _, ok := gitCheckout(dir)
+	if !ok || !inScratch(row, root) {
+		return false
+	}
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{Name: "git"})
+	if err != nil || res.VCS == nil {
+		return false
+	}
+	ref, err := res.VCS.Ref(ctx, root)
+	return err == nil && ref == ""
 }
 
 // checkoutAddTarget is the directory a checkout add names, "" when its words do not name

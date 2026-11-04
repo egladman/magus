@@ -121,14 +121,14 @@ func envelopeSpawn(input map[string]any) (prompt string, ok bool) {
 		return "", false
 	}
 	_, hasItems := input["items"].([]any)
-	text := cmp.Or(envelopeString(input, "message"), envelopeItemsText(input))
-	if text == "" && !hasItems {
-		return "", false
+	itemsText := envelopeItemsText(input)
+	text := cmp.Or(envelopeString(input, "message"), itemsText)
+	hasShape := slices.ContainsFunc(spawnShapeKeys, func(k string) bool { _, present := input[k]; return present })
+	// A todo list sends `items` too, with no text part.
+	if (hasShape && (text != "" || hasItems)) || itemsText != "" {
+		return text, true
 	}
-	if !hasItems && !slices.ContainsFunc(spawnShapeKeys, func(k string) bool { _, present := input[k]; return present }) {
-		return "", false
-	}
-	return text, true
+	return "", false
 }
 
 // pendingSpawnPrefix starts the kind of a spawn that passed and has not yet been joined to

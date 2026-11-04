@@ -28,7 +28,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun format(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles(["**/*.go", "go.mod", "go.sum"], editsExistingSource: true);
+    ctx.writesFiles(["**/*.go", "go.mod"], editsExistingSource: true);
     ctx.needs(generate);
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);

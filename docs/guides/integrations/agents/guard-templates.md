@@ -2563,10 +2563,12 @@ not a call.
 //
 // Contract: reads the host's event as JSON on stdin and takes the written path from
 // tool_input.file_path, else tool_input.path, else the Add File and Update File lines of an
-// apply_patch input. A path that is not a .buzz file is skipped. An event that names no
-// written file is named on stderr, since the hook is wired after a tool that writes none. A
-// magusfile.buzz, and anything under magusfiles/, spells/ or hack/, is checked with
-// --embedded, the mode the engine loads it in; any other .buzz file is checked strict. A
+// apply_patch input. A path that is not a .buzz file is skipped, and so
+// is a magusfile.buzz: the check cannot bind its magus/spell/* imports.
+// An event that names no written file is named on stderr, since the hook
+// is wired after a tool that writes none. Anything under magusfiles/,
+// spells/ or hack/ is checked with --embedded, the mode the engine loads it
+// in; any other .buzz file is checked strict. A
 // failure prints {"decision":"block","reason":...} on stdout, which the host hands the agent
 // as the reason to fix the file; a pass prints nothing. It always exits 0.
 // A check that could not run blocks too, naming the binary and why.
@@ -2650,10 +2652,9 @@ fun fileWorkspace(path: str, session: str) > str {
     return if (found != "") found else session;
 }
 
-// embedded reports whether the engine loads rel in embedded mode: a magusfile and the
-// spells, magusfiles and hack scripts beside it.
+// embedded reports whether the engine loads rel in embedded mode: the spells,
+// magusfiles and hack scripts.
 fun embedded(rel: str) > bool {
-    if (rel == "magusfile.buzz" or rel.endsWith("/magusfile.buzz")) { return true; }
     foreach (prefix in ["magusfiles/", "spells/", "hack/"]) {
         if (rel.startsWith(prefix)) { return true; }
     }
@@ -2679,8 +2680,9 @@ fun main(args: [str]) > void {
 
 // checkAll checks every written .buzz file and returns each failure. A check
 // that could not run is a failure too, so the agent learns it did not happen.
+// A magusfile.buzz is skipped; the header says why.
 fun checkAll(bin: str, written: [str], root: str) > [str] {
-    final buzz = written.filter(fun (index: int, path: str) > bool => path.endsWith(".buzz"));
+    final buzz = written.filter(fun (index: int, path: str) > bool => path.endsWith(".buzz") and fs\basename(path) != "magusfile.buzz");
     if (buzz.len() == 0) { return [<str>]; }
     if (bin == "" or !hook\isExecutable(bin)) {
         final named = if (bin == "") "magus" else bin;
@@ -2734,7 +2736,6 @@ test "an event that names no written file is answered with a note naming its too
 }
 
 test "the engine's own Buzz is checked embedded and everything else strict" {
-    std\assert(embedded("magusfile.buzz") and embedded("libs/x/magusfile.buzz"), message: "magusfiles");
     std\assert(embedded("spells/harness/codex/spell.buzz") and embedded("hack/dev/a.buzz") and embedded("magusfiles/a.buzz"), message: "spells and scripts");
     std\assert(!embedded("docs/guides/integrations/agents/magus-command.buzz"), message: "a standalone script is strict");
     std\assert(relativeTo("/r/spells/a.buzz", root: "/r") == "spells/a.buzz", message: "under the root");
@@ -2754,6 +2755,12 @@ test "no runnable magus blocks with a reason naming the binary" {
     std\assert(failures[0].indexOf("could not run `/nonexistent/magus`") != null, message: failures[0]);
     std\assert(failures[0].indexOf("a.buzz went unchecked") != null, message: failures[0]);
     std\assert(blockReply(failures).indexOf("\"decision\":\"block\"") != null, message: blockReply(failures));
+}
+
+test "a magusfile is skipped, so it neither runs the check nor needs magus" {
+    std\assert(checkAll("/nonexistent/magus", written: ["magusfile.buzz", "libs/x/magusfile.buzz"], root: "").len() == 0, message: "magusfiles are skipped");
+    final failures = checkAll("/nonexistent/magus", written: ["libs/x/magusfile.buzz", "a.buzz"], root: "");
+    std\assert(failures.len() == 1 and failures[0].indexOf("a.buzz went unchecked") != null, message: failures.join("|"));
 }
 
 test "nothing written in Buzz needs no magus and blocks nothing" {

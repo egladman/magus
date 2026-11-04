@@ -350,6 +350,23 @@ func (s *redGateSuite) TestEachTargetPassingAloneAdmitsTheGate() {
 	s.Empty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
 }
 
+func (s *redGateSuite) TestAHarnessWriteAfterTheRedGateAdmitsIt() {
+	time.Sleep(2 * time.Millisecond)
+	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
+		sessions.InvocationStart{Workspace: s.repo.Root()}))
+	s.Empty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
+}
+
+func (s *redGateSuite) TestAHarnessWriteBeforeTheRedGateStillRefusesIt() {
+	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
+		sessions.InvocationStart{Workspace: s.repo.Root()}))
+	time.Sleep(2 * time.Millisecond)
+	s.Require().NoError(sessions.RecordGate(s.dir, sessions.GateResult{
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.repo.Head(), Outcome: sessions.OutcomeFail, Inv: "inv-green",
+	}, sessions.InvocationStart{Workspace: s.repo.Root()}))
+	s.NotEmpty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
+}
+
 func (s *redGateSuite) TestAFileWrittenAfterTheRedGateAdmitsIt() {
 	s.repo.Write("a.go", "package a\n\nvar fixed = true\n")
 	after := time.Now().Add(time.Minute)
@@ -2057,6 +2074,166 @@ func TestVCSCmdRefusalLetsAWorkerInitAScratchRepository(t *testing.T) {
 	noCheckout := worker
 	noCheckout.CheckoutRoot = ""
 	require.Error(t, vcsCommandRefusal(ctx, noCheckout, "git", []string{"init", "-q"}, fixture, nil), "a lease with no checkout_root cannot show the repository is outside it")
+}
+
+// IntegrationScratchMergeSuite runs vcs\cmd as a merge script does under an
+// integration row: a detached scratch tree, merges and commits in it, then
+// its removal.
+type IntegrationScratchMergeSuite struct {
+	suite.Suite
+	ctx     context.Context
+	repo    worktreeRepo
+	row     types.Job
+	own     string
+	scratch string
+	tree    string
+}
+
+func TestIntegrationScratchMergeSuite(t *testing.T) {
+	suite.Run(t, new(IntegrationScratchMergeSuite))
+}
+
+func (s *IntegrationScratchMergeSuite) SetupTest() {
+	t := s.T()
+	cache, err := filepath.EvalSymlinks(t.TempDir())
+	s.Require().NoError(err)
+	s.scratch = filepath.Join(cache, "magus", "tmp")
+	s.repo = newWorktreeRepository(t)
+	s.own = s.repo.add("integrate")
+	done := s.repo.add("done")
+	s.repo.commit(done)
+	other := s.repo.add("other")
+	s.repo.commit(other)
+	s.row = narrowLease()
+	s.row.ID = "integrate"
+	s.row.Parent = "orchestrator"
+	s.row.CheckoutRoot = s.own
+	s.row.Worktree = &types.JobWorktree{Root: s.own}
+	s.row.Integrates = []string{"done"}
+	s.ctx, _ = fleetFixture(t, s.row)
+	// After the fixture, which points the cache elsewhere.
+	t.Setenv("XDG_CACHE_HOME", cache)
+	s.Require().NoError(os.MkdirAll(s.scratch, 0o755))
+	s.tree = filepath.Join(s.scratch, "merge", "1")
+}
+
+func (s *IntegrationScratchMergeSuite) run(row types.Job, dir string, args ...string) error {
+	return vcsCommandRefusal(s.ctx, row, "git", args, dir, nil)
+}
+
+// addTree makes the scratch tree the way the guard is asked to let through.
+func (s *IntegrationScratchMergeSuite) addTree() {
+	s.repo.git(s.own, "worktree", "add", "--detach", "--quiet", s.tree, "HEAD")
+}
+
+func (s *IntegrationScratchMergeSuite) TestAddingADetachedScratchTreePasses() {
+	s.NoError(s.run(s.row, s.own, "worktree", "add", "--detach", "--quiet", s.tree, "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAPlainWorkerAddingOneIsRefused() {
+	worker := s.row
+	worker.Integrates = nil
+	s.ErrorContains(s.run(worker, s.own, "worktree", "add", "--detach", s.tree, "HEAD"), "stays with the orchestrator")
+}
+
+func (s *IntegrationScratchMergeSuite) TestAddingOneOnABranchIsRefused() {
+	s.Error(s.run(s.row, s.own, "worktree", "add", "-b", "x", s.tree, "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAddingOneOutsideScratchIsRefused() {
+	s.Error(s.run(s.row, s.own, "worktree", "add", "--detach", filepath.Join(s.repo.parent, "x"), "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestMergingAnIntegratedBranchInTheTreePasses() {
+	s.addTree()
+	s.NoError(s.run(s.row, s.tree, "merge", "--no-ff", "--no-commit", "done"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestMergingAnotherBranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "merge", "--no-ff", "--no-commit", "other"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestCommittingInTheTreePasses() {
+	s.addTree()
+	s.NoError(s.run(s.row, s.tree, "commit", "--no-edit", "--no-verify"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAbortingAMergeInTheTreePasses() {
+	s.addTree()
+	s.NoError(s.run(s.row, s.tree, "merge", "--abort"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestStagingInTheTreePasses() {
+	s.addTree()
+	s.NoError(s.run(s.row, s.tree, "add", "--", "a.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestMakingABranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "branch", "stray"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestSwitchingToANewBranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "switch", "-c", "stray"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestCheckingOutANewBranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "checkout", "-b", "stray"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestSwitchingToABranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "switch", "done"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestRestoringInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "restore", "a.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestRemovingAFileInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "rm", "a.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestMovingAFileInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "mv", "a.txt", "b.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestFastForwardingToACommitInTheTreeIsRefused() {
+	s.addTree()
+	sha := s.repo.origin.Git("-C", s.own, "rev-parse", "HEAD")
+	s.Error(s.run(s.row, s.tree, "merge", "--ff-only", sha))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAResetInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "reset", "--hard", "HEAD~1"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestRemovingTheTreePasses() {
+	s.addTree()
+	s.NoError(s.run(s.row, s.own, "worktree", "remove", "--force", s.tree))
+}
+
+// A job's checkout under the scratch dir is on its job's branch, so it is
+// nobody's scratch tree.
+func (s *IntegrationScratchMergeSuite) onBranch() string {
+	onBranch := filepath.Join(s.scratch, "r-sibling")
+	s.repo.git(s.repo.main, "worktree", "add", "-q", "-b", "sibling", onBranch, "origin/main")
+	return onBranch
+}
+
+func (s *IntegrationScratchMergeSuite) TestRemovingATreeOnABranchIsRefused() {
+	s.Error(s.run(s.row, s.own, "worktree", "remove", "--force", s.onBranch()))
+}
+
+func (s *IntegrationScratchMergeSuite) TestCommittingInATreeOnABranchIsRefused() {
+	s.Error(s.run(s.row, s.onBranch(), "commit", "-m", "done"))
 }
 
 // TestDenyLeaseScopedVCSRefusesTheWrongBranch pins the branch half: a worker's own

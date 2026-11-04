@@ -19,11 +19,13 @@ exec git add README.md
 stderr 'a/x.go:3:1: bad name'
 stdout '^failed: 1 target; `magus query output <ref>` prints a whole log$'
 stdout '^  out[0-9a-f]+ \.:ci  ci failed in root: ctx.needs: lint: proc\\exec sh: exit 1$'
+stdout '^run: inv[0-9a-z]+; `magus query invocation inv[0-9a-z]+` prints the whole run$'
 
-# A pass names nothing.
+# A pass names no failure and still names the run.
 cp magusfile.buzz.pass magusfile.buzz
 exec magus affected ci --base=base --no-redundancy-check
 ! stdout '^failed:'
+stdout '^run: inv[0-9a-z]+; `magus query invocation inv[0-9a-z]+` prints the whole run$'
 
 -- .gitignore --
 .magus/

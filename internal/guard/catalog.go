@@ -732,6 +732,8 @@ var ruleDocLeaseVcs = types.RuleDoc{
 		"vcs\\cmd may also run any git operation but a push in a repository standing wholly outside the job's checkout, such as a script's scratch repository: its directory, -C and the work tree a --git-dir implies are outside the checkout, its common git directory is not the job's, git reports that directory as its work tree, and neither -c nor --config-env nor GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR or GIT_INDEX_FILE is set. " +
 		"A worker may create a repository in a directory that neither lies in the lease's checkout nor belongs to a checkout of its repository, with no GIT_DIR, --git-dir or -C pointing back into it, and may run version control inside what it creates on the same line. " +
 		"A scratch repository inside the checkout, under .magus/ say, is refused like a submodule there: it holds the job's files under another git directory. " +
+		"The holder of an integration row may run `git merge --no-ff <branch>` for each branch its `integrates` names, and through vcs\\cmd it may also merge them in a scratch tree: add a detached worktree under $XDG_CACHE_HOME/magus/tmp, stage, commit and merge only those branches there, and remove it. A worktree there on a branch is a job's checkout, never scratch. A plain worker and the root are refused all of it. " +
+		"A commit by a row whose checkout the fork made or adopted, before `magus job exec` stamped checkout_root, is refused naming `cd <checkout> && magus job exec <job>`. " +
 		"proc\\exec and proc\\shell refuse git, hg, sl and jj outright and name the vcs\\cmd call to make instead, so a Buzz script's version control is judged here. " +
 		"A worker is a row with a parent, a lease a subagent holds, or a caller that names no session; only an identified root session holding a parentless row is the root.",
 }
@@ -926,7 +928,7 @@ var ruleDocCaptureFilter = types.RuleDoc{
 		"A filter keeps the one line it matched and drops the rest, so `grep 'cause:'` keeps the symptom and discards the ref that reads the whole log two lines below it. " +
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it. " +
 		"The better route is an output contract up front, `-o jsonl --tee <file>`, queried with `jq`. " +
-		"It denies by default and names `magus query output <ref>`, which reads the whole log the filter was cutting. A workspace whose readers need such searches sets it to advise. " +
+		"It denies by default and names `magus query output <ref>`, which reads the whole log the filter was cutting, and `magus query invocation <inv>`, which reads the whole run. A workspace whose readers need such searches sets it to advise. " +
 		"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture.",
 }
 

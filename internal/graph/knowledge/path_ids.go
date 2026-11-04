@@ -95,6 +95,9 @@ func (s *Store) recordPathIDs(ctx context.Context, shards []Shard, fps map[strin
 
 // storedPathIDs returns the file and dir node IDs of every stored shard whose class is
 // not in skip, from the path ID index where it is current and from the shard file otherwise.
+//
+// A shard rewritten after man was read fails with errShardMoved. Ensure
+// restarts the whole read, since it merges shards it read against man.
 func (s *Store) storedPathIDs(ctx context.Context, man *manifest, skip []ShardClass) (map[string]bool, error) {
 	out := map[string]bool{}
 	if man == nil {

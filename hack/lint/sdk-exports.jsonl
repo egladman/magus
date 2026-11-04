@@ -249,3 +249,4 @@
 {"name":"WorkspaceRegistry.AddProvider","reason":"registration hook for providers and projects of a registry"}
 {"name":"WorkspaceRegistry.RegisterProject","reason":"registration hook for providers and projects of a registry"}
 {"name":"WorkspaceRegistryFromContext","reason":"multi-workspace registry that lets one process serve several roots"}
+{"name":"Magus.TargetSandboxes","reason":"the merge queue hook and a nested magus share one source for every target's sandbox layer"}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/trail"
@@ -283,4 +284,44 @@ func TestScopedPoliciesShareTheWithheldRecord(t *testing.T) {
 	p := BuildPolicy(PolicyOptions{TempDir: t.TempDir()})
 	assert.Same(t, p.withheld, p.Scoped([]string{"go"}, nil).withheld)
 	assert.Same(t, p.withheld, PolicyFromContext(ForProvider(WithPolicy(t.Context(), p), "cache")).withheld)
+}
+
+// A nested magus runs targets; its domain must hold their grants.
+type NestedTargetsSuite struct {
+	suite.Suite
+	granted string
+	p       *Policy
+}
+
+func TestNestedTargetsSuite(t *testing.T) {
+	suite.Run(t, new(NestedTargetsSuite))
+}
+
+func (s *NestedTargetsSuite) SetupTest() {
+	s.granted = s.T().TempDir()
+	s.p = BuildPolicy(PolicyOptions{Workspace: s.T().TempDir()}).WithNestedTargets(map[string]spells.Sandbox{
+		".:test": {Allow: []spells.SandboxAllow{{Path: s.granted, Mode: spells.SandboxAccessRO}}},
+	})
+}
+
+func (s *NestedTargetsSuite) file() string { return filepath.Join(s.granted, "f") }
+
+func (s *NestedTargetsSuite) TestTheNestedMagusReadsWhatATargetDeclares() {
+	s.NoError(s.p.ForNestedMagus().CheckRead(s.T().Context(), s.file()))
+}
+
+func (s *NestedTargetsSuite) TestThePolicyItselfLeavesTheTargetLayerOut() {
+	s.Error(s.p.CheckRead(s.T().Context(), s.file()))
+}
+
+func (s *NestedTargetsSuite) TestAStepKeepsTheLayerForItsNestedMagus() {
+	step := s.p.Scoped(nil, nil)
+	s.Error(step.CheckRead(s.T().Context(), s.file()))
+	s.NoError(step.ForNestedMagus().CheckRead(s.T().Context(), s.file()))
+}
+
+func (s *NestedTargetsSuite) TestNoTargetsLeavesThePolicyAsItIs() {
+	p := BuildPolicy(PolicyOptions{Workspace: s.T().TempDir()})
+	s.Same(p, p.WithNestedTargets(nil))
+	s.Same(p, p.ForNestedMagus())
 }
