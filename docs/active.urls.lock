@@ -104,6 +104,7 @@ concepts/dependencies/
 concepts/engines/
 concepts/generated-files/
 concepts/knowledge/
+concepts/knowledge/historymetrics/
 concepts/knowledge/insight/
 concepts/merge-queue/
 concepts/operations/
@@ -172,6 +173,7 @@ decisions/0018-magus-assembles-oci-images/
 decisions/0019-a-mandate-carries-out-decisions-already-made/
 decisions/0020-the-person-directs-sessions-report/
 decisions/0021-a-change-accepts-the-findings-it-causes/
+decisions/0022-domain-nouns-not-output-result-report/
 dependencies/
 design/
 design/judgment/
@@ -213,6 +215,7 @@ design/principles/no-generated-code-in-the-build-path/
 design/principles/no-news-is-good-news/
 design/principles/one-source-every-door/
 design/principles/optimize-the-loop-that-verifies/
+design/principles/postels-law/
 design/principles/sit-next-to-the-tools/
 design/principles/the-checker-catches-it/
 design/principles/the-go-proverbs/
@@ -301,6 +304,7 @@ glossary/dispose/
 glossary/engine/
 glossary/harness/
 glossary/health/
+glossary/historymetrics/
 glossary/hotspot/
 glossary/inner-harness/
 glossary/insight/
@@ -396,6 +400,7 @@ guides/integrations/nx/
 guides/integrations/pr-advice/
 guides/integrations/server/
 guides/jobs/
+guides/jobs/checks/
 guides/jobs/model-tiers/
 guides/jobs/other-work/
 guides/kustomize-diagram/
@@ -489,6 +494,9 @@ reference/api/activity/v1alpha1/activity/
 reference/api/graph/
 reference/api/graph/v1alpha1/
 reference/api/graph/v1alpha1/graph/
+reference/api/historymetrics/
+reference/api/historymetrics/v1alpha1/
+reference/api/historymetrics/v1alpha1/historymetrics/
 reference/api/insight/
 reference/api/insight/v1alpha1/
 reference/api/insight/v1alpha1/insight/
@@ -553,6 +561,7 @@ reference/buzz/pipe/
 reference/buzz/platform/
 reference/buzz/proc/
 reference/buzz/reclaimdisk/
+reference/buzz/result/
 reference/buzz/semver/
 reference/buzz/sort/
 reference/buzz/strings/
@@ -811,6 +820,7 @@ reference/manpage/magus-watch/
 reference/manpage/magus-where/
 reference/manpage/magus-x/
 reference/manpage/magus/
+reference/output-formats/
 reference/proofread/
 reference/proofread/absolute/
 reference/proofread/agreement-opener/
@@ -924,6 +934,7 @@ reference/proofread/wordy/
 reference/remote-spells/
 reference/rules/
 reference/rules/agent-sign-off/
+reference/rules/ambiguous-ci-word/
 reference/rules/architecture-unbriefed/
 reference/rules/background-left/
 reference/rules/background-silent/
@@ -944,6 +955,7 @@ reference/rules/ci-watch/
 reference/rules/claimed-declaration/
 reference/rules/code-search/
 reference/rules/compat-marker/
+reference/rules/conflict-commit/
 reference/rules/conflict-rewrite/
 reference/rules/credential-verb/
 reference/rules/dependency-install/
@@ -1034,6 +1046,7 @@ reference/rules/spawn-duplicate/
 reference/rules/spawn-names-model/
 reference/rules/spawn-nested-waiter/
 reference/rules/spawn-unbriefed/
+reference/rules/spawn-unisolated-row/
 reference/rules/spawn-unplaced/
 reference/rules/spawn-unvalidated/
 reference/rules/spawn-waiter/
@@ -1283,6 +1296,7 @@ tags/guard/
 tags/guide/
 tags/hang/
 tags/harness/
+tags/history-metrics/
 tags/history/
 tags/hooks/
 tags/host-modules/
@@ -1457,6 +1471,7 @@ tags/scheduling/
 tags/schema/
 tags/scip/
 tags/scope/
+tags/scripting/
 tags/scripts/
 tags/sdk/
 tags/secret-provider/
@@ -1551,6 +1566,7 @@ tags/worktrees/
 tags/write-paths/
 tags/write/
 tags/writes-files/
+tags/yaml/
 tags/zsh/
 targets/
 targets/ci/
