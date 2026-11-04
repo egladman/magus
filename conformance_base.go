@@ -60,7 +60,7 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head t
 	if err != nil {
 		return types.Conformance{}, err
 	}
-	entry, err := m.conformanceEntry(commit,plan)
+	entry, err := m.conformanceEntry(commit, plan)
 	if err != nil {
 		return types.Conformance{}, err
 	}
@@ -111,7 +111,7 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 	if err != nil {
 		return "", err
 	}
-	entry, err := m.conformanceEntry(commit,head)
+	entry, err := m.conformanceEntry(commit, head)
 	if err != nil {
 		return "", err
 	}
