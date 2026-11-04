@@ -23,6 +23,8 @@ mis = "mis"
 nd = "nd"
 # typos splits "ANDed" and flags the "Ded" tail, so the accepted word is that fragment.
 Ded = "Ded"
+# in-toto's attestation files are named *.intoto.json, as the image guide's provenance file is.
+intoto = "intoto"
 # BRE is POSIX's basic regular expression dialect, beside ERE, in the guard's search rules.
 BRE = "BRE"
 # The generated skill docs embed a content hash (docs/reference/skills/*.md's
