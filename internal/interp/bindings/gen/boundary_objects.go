@@ -1850,7 +1850,7 @@ func ObjectLayer(v types.Layer) vm.Value {
 	return out
 }
 
-func ObjectGraphView(v types.GraphView) vm.Value {
+func ObjectProjectGraph(v types.ProjectGraph) vm.Value {
 	out := vm.NewMap()
 	itemsNodes := make([]vm.Value, len(v.Nodes))
 	for indexNodes := range v.Nodes {

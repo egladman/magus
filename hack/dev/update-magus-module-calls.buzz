@@ -48,7 +48,7 @@ export fun rules() > {str: Rule} {
         "dir": graph("dir"), "dirs": graph("dirs"), "layer": graph("layer"),
         "symbols": graph("symbols"), "precedents": graph("precedents"),
         "unreferenced": graph("unreferenced"), "duplication": graph("duplication"),
-        "projectGraph": graph("deps"), "importGraph": graph("imports"),
+        "projectGraph": graph("projectGraph"), "importGraph": graph("imports"),
         "symbolIndexDigest": rename("graph"),
         "diff": change("diff"), "affected": change("affected", moved: 0),
         "impact": change("impact", moved: 0), "conformance": change("conformance", moved: 1),
@@ -76,7 +76,7 @@ export fun rules() > {str: Rule} {
         "RiskTier": rename("Tier"), "RiskReport": rename("TierReport"),
         "RiskOptions": rename("TierOptions"), "RiskEvidence": rename("TierEvidence"),
         "RiskGateStep": rename("TierGateStep"),
-        "Graph": rename("Deps"), "SymbolIndexDigest": rename("Graph"),
+        "Graph": rename("ProjectGraph"), "Deps": rename("ProjectGraph"), "SymbolIndexDigest": rename("Graph"),
     };
 }
 
@@ -505,7 +505,7 @@ test "an escaped reference keeps both backslashes" {
 
 test "a renamed type and a call become a field" {
     final t = rules();
-    assert\equal(rewriteText("magus\\Graph and magus\\SymbolIndexDigest", table: t), want: "magus\\Deps and magus\\Graph", message: "types");
+    assert\equal(rewriteText("magus\\Graph and magus\\SymbolIndexDigest", table: t), want: "magus\\ProjectGraph and magus\\Graph", message: "types");
     assert\equal(rewriteText("magus\\vcs.checkpoint().revision", table: t), want: "magus\\change().at.revision", message: "field");
 }
 

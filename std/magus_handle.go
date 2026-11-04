@@ -367,10 +367,10 @@ func MagusGraphLayer(ctx context.Context, g types.SymbolIndexDigest, name string
 	return graphMethod(ctx, g, "layer", func() (types.Layer, error) { return MagusLayer(ctx, name) })
 }
 
-// MagusGraphDeps answers Graph.deps.
+// MagusGraphProjectGraph answers Graph.projectGraph.
 // It raises once the index g holds moved.
-func MagusGraphDeps(ctx context.Context, g types.SymbolIndexDigest) (types.GraphView, error) {
-	return graphMethod(ctx, g, "deps", func() (types.GraphView, error) { return MagusProjectGraph(ctx) })
+func MagusGraphProjectGraph(ctx context.Context, g types.SymbolIndexDigest) (types.ProjectGraph, error) {
+	return graphMethod(ctx, g, "projectGraph", func() (types.ProjectGraph, error) { return MagusProjectGraph(ctx) })
 }
 
 // MagusGraphImports answers Graph.imports.

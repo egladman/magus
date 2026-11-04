@@ -581,8 +581,8 @@ export object Graph {
         return magus__Graph__layer(this, name: name);
     }
 
-    fun deps() > Deps !> any {
-        return magus__Graph__deps(this);
+    fun projectGraph() > ProjectGraph !> any {
+        return magus__Graph__projectGraph(this);
     }
 
     fun imports() > ImportGraph !> any {
@@ -1551,7 +1551,7 @@ export object Layer {
     dirs: [Dir] = [],
 }
 
-export object Deps {
+export object ProjectGraph {
     nodes: [str] = [],
     dependsOn: {str: [str]} = {},
     blastRadius: {str: int} = {},
@@ -2778,7 +2778,7 @@ extern fun magus__Graph__neighborhood(recv: Graph, focus: str, opts: Neighborhoo
 extern fun magus__Graph__dir(recv: Graph, path: str) > Dir !> any;
 extern fun magus__Graph__dirs(recv: Graph, glob: str, opts: DirsOptions? = null) > [Dir] !> any;
 extern fun magus__Graph__layer(recv: Graph, name: str) > Layer !> any;
-extern fun magus__Graph__deps(recv: Graph) > Deps !> any;
+extern fun magus__Graph__projectGraph(recv: Graph) > ProjectGraph !> any;
 extern fun magus__Graph__imports(recv: Graph) > ImportGraph !> any;
 extern fun magus__Graph__symbols(recv: Graph) > Symbols !> any;
 extern fun magus__Graph__precedents(recv: Graph) > Holds !> any;

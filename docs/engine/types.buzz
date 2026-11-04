@@ -155,9 +155,9 @@ export object Site {
     // file-imported renderer module. null is only this pre-injection placeholder.
     targets: magus\TargetGraph = null,
 
-    // The project DAG, injected the same way from magus\graph().deps().
+    // The project DAG, injected the same way from magus\graph().projectGraph().
     // It says how the projects relate, where targets lists what each one runs.
-    graph: magus\Deps = null,
+    graph: magus\ProjectGraph = null,
 
     // The site-specific config, injected once by site_render() from site/config.buzz.
     // Immutable input kept beside the mutable build state so every engine function that

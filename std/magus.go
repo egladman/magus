@@ -188,7 +188,7 @@ var Magus = Module{
 			Name: "graph",
 			Doc: "The knowledge graph at its current symbol index: {digest, indexed, projects, gaps}, digest a hex SHA-256 " +
 				"over each loaded project's symbol shard fingerprint. Its methods (query, explain, path, refs, stats, " +
-				"neighborhood, dir, dirs, layer, deps, imports, symbols, precedents, unreferenced, duplication) answer from " +
+				"neighborhood, dir, dirs, layer, projectGraph, imports, symbols, precedents, unreferenced, duplication) answer from " +
 				"that index and raise once it moved, naming the projects whose index came or went. A target writes the " +
 				"Graph as a declared output that a reader of the index keys its cache on. indexed is false and digest " +
 				"empty when no index was ingested; gaps are the projects declaring an index magus could not read. Raises " +
@@ -707,7 +707,7 @@ var Magus = Module{
 				},
 				{
 					Name:    "graph",
-					Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. This is the per-project view magus\\graph().deps() does not carry. Read statically from the magusfile source, so it never runs a target body. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not.",
+					Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. This is the per-project view magus\\graph().projectGraph() does not carry. Read statically from the magusfile source, so it never runs a target body. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not.",
 					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
 					Raises:  true,
@@ -1223,14 +1223,14 @@ func buzzCause(v any) (string, error) {
 
 // MagusProjectGraph returns the project dependency graph as a flat object. See
 // MagusDescribeProject for why the read-only verbs are served in-process.
-func MagusProjectGraph(ctx context.Context) (types.GraphView, error) {
+func MagusProjectGraph(ctx context.Context) (types.ProjectGraph, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.GraphView{}, errorNoWorkspace("projectGraph")
+		return types.ProjectGraph{}, errorNoWorkspace("projectGraph")
 	}
 	g, err := ws.Graph()
 	if err != nil {
-		return types.GraphView{}, err
+		return types.ProjectGraph{}, err
 	}
 	return g.View(), nil
 }

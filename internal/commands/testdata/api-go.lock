@@ -562,7 +562,6 @@ github.com/egladman/magus/std.MagusExitJob func(ctx context.Context, id string, 
 github.com/egladman/magus/std.MagusExplain func(ctx context.Context, node string) (github.com/egladman/magus/types.KnowledgeExplainOutput, error)
 github.com/egladman/magus/std.MagusFileDiskAttention func(ctx context.Context, message string) error
 github.com/egladman/magus/std.MagusForkFactsJob func(ctx context.Context, workspace string) (github.com/egladman/magus/types.JobForkFacts, error)
-github.com/egladman/magus/std.MagusGraphDeps func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.GraphView, error)
 github.com/egladman/magus/std.MagusGraphDir func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, path string) (github.com/egladman/magus/types.Dir, error)
 github.com/egladman/magus/std.MagusGraphDirs func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, glob string, opts github.com/egladman/magus/types.DirsOptions) ([]github.com/egladman/magus/types.Dir, error)
 github.com/egladman/magus/std.MagusGraphDuplication func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.Duplication, error)
@@ -573,6 +572,7 @@ github.com/egladman/magus/std.MagusGraphNeighborhood func(ctx context.Context, g
 github.com/egladman/magus/std.MagusGraphOpen func(ctx context.Context) (github.com/egladman/magus/types.SymbolIndexDigest, error)
 github.com/egladman/magus/std.MagusGraphPath func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, node string, to string, opts github.com/egladman/magus/types.KnowledgePathOptions) (github.com/egladman/magus/types.KnowledgePathOutput, error)
 github.com/egladman/magus/std.MagusGraphPrecedents func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.Holds, error)
+github.com/egladman/magus/std.MagusGraphProjectGraph func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.ProjectGraph, error)
 github.com/egladman/magus/std.MagusGraphQuery func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, query string, opts github.com/egladman/magus/types.KnowledgeQueryOptions) (github.com/egladman/magus/types.KnowledgeQueryOutput, error)
 github.com/egladman/magus/std.MagusGraphRefs func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, symbol string, opts github.com/egladman/magus/types.KnowledgeRefsOptions) (github.com/egladman/magus/types.KnowledgeRefsOutput, error)
 github.com/egladman/magus/std.MagusGraphStats func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, kind string) (github.com/egladman/magus/types.KnowledgeStats, error)
@@ -601,7 +601,7 @@ github.com/egladman/magus/std.MagusOutput func(ctx context.Context, ref string) 
 github.com/egladman/magus/std.MagusOwnership func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Ownership, error)
 github.com/egladman/magus/std.MagusPath func(ctx context.Context, node string, to string, opts github.com/egladman/magus/types.KnowledgePathOptions) (github.com/egladman/magus/types.KnowledgePathOutput, error)
 github.com/egladman/magus/std.MagusPrecedents func(ctx context.Context) (github.com/egladman/magus/types.Holds, error)
-github.com/egladman/magus/std.MagusProjectGraph func(ctx context.Context) (github.com/egladman/magus/types.GraphView, error)
+github.com/egladman/magus/std.MagusProjectGraph func(ctx context.Context) (github.com/egladman/magus/types.ProjectGraph, error)
 github.com/egladman/magus/std.MagusPutJob func(ctx context.Context, id string, put github.com/egladman/magus/types.JobPut) (github.com/egladman/magus/types.Job, error)
 github.com/egladman/magus/std.MagusQuery func(ctx context.Context, query string, opts github.com/egladman/magus/types.KnowledgeQueryOptions) (github.com/egladman/magus/types.KnowledgeQueryOutput, error)
 github.com/egladman/magus/std.MagusRaise func(ctx context.Context, code github.com/egladman/magus/types.DiagnosticCodeRef, message string, opts github.com/egladman/magus/types.RaiseOptions) error
@@ -2423,7 +2423,7 @@ github.com/egladman/magus/types.Graph.Project method(ptr) func(path string) *Pro
 github.com/egladman/magus/types.Graph.ReverseClosure method(ptr) func(seeds []string) []string
 github.com/egladman/magus/types.Graph.Successors method(ptr) func(path string) []string
 github.com/egladman/magus/types.Graph.TopoSort method(ptr) func() []string
-github.com/egladman/magus/types.Graph.View method(ptr) func() GraphView
+github.com/egladman/magus/types.Graph.View method(ptr) func() ProjectGraph
 github.com/egladman/magus/types.GraphConfig type struct
 github.com/egladman/magus/types.GraphConfig.Obs field Observer
 github.com/egladman/magus/types.GraphEvent type struct
@@ -2446,10 +2446,6 @@ github.com/egladman/magus/types.GraphOutput.SpellName field string "json:\"spell
 github.com/egladman/magus/types.GraphRequest type struct
 github.com/egladman/magus/types.GraphRequest.Refresh field bool
 github.com/egladman/magus/types.GraphRequest.Symbols field SymbolScope
-github.com/egladman/magus/types.GraphView type struct
-github.com/egladman/magus/types.GraphView.BlastRadius field map[string]int
-github.com/egladman/magus/types.GraphView.DependsOn field map[string][]string
-github.com/egladman/magus/types.GraphView.Nodes field []string
 github.com/egladman/magus/types.GreenRun type struct
 github.com/egladman/magus/types.GreenRun.Commit field string
 github.com/egladman/magus/types.GreenRun.Run field string
@@ -4532,6 +4528,10 @@ github.com/egladman/magus/types.ProjectEntry.Path field string "json:\"path\"   
 github.com/egladman/magus/types.ProjectEntry.Sources field []string "json:\"sources,omitempty\"    yaml:\"sources,omitempty\""
 github.com/egladman/magus/types.ProjectEntry.Spell field string "json:\"spell,omitempty\"     yaml:\"spell,omitempty\""
 github.com/egladman/magus/types.ProjectEntry.Spells field []string "json:\"spells,omitempty\"    yaml:\"spells,omitempty\""
+github.com/egladman/magus/types.ProjectGraph type struct
+github.com/egladman/magus/types.ProjectGraph.BlastRadius field map[string]int
+github.com/egladman/magus/types.ProjectGraph.DependsOn field map[string][]string
+github.com/egladman/magus/types.ProjectGraph.Nodes field []string
 github.com/egladman/magus/types.ProjectLabel func(path string, dir string) string
 github.com/egladman/magus/types.ProjectLockHeldByAncestor const DiagnosticCode = "MGS3007"
 github.com/egladman/magus/types.ProjectOption type struct
