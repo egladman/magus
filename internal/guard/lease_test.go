@@ -2144,6 +2144,55 @@ func (s *IntegrationScratchMergeSuite) TestAddingOneOutsideScratchIsRefused() {
 	s.Error(s.run(s.row, s.own, "worktree", "add", "--detach", filepath.Join(s.repo.parent, "x"), "HEAD"))
 }
 
+func (s *IntegrationScratchMergeSuite) TestAddingOneFromAnotherRepositoryIsRefused() {
+	other := s.T().TempDir()
+	s.repo.git(other, "init", "-q")
+	s.Error(s.run(s.row, s.own, "-C", other, "worktree", "add", "--detach", s.tree, "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAPlainWorkerAddingOneFromAnotherRepositoryIsRefused() {
+	other := s.T().TempDir()
+	s.repo.git(other, "init", "-q")
+	worker := s.row
+	worker.Integrates = nil
+	s.Error(s.run(worker, s.own, "-C", other, "worktree", "add", "--detach", s.tree, "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) withoutWorktree() types.Job {
+	row := s.row
+	row.Worktree = nil
+	return row
+}
+
+func (s *IntegrationScratchMergeSuite) TestWithoutAWorktreeMakingABranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.withoutWorktree(), s.tree, "branch", "stray"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestWithoutAWorktreeSwitchingInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.withoutWorktree(), s.tree, "switch", "done"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestWithoutAWorktreeRestoringInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.withoutWorktree(), s.tree, "restore", "a.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestWithoutAWorktreeRemovingAFileInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.withoutWorktree(), s.tree, "rm", "a.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestWithoutAWorktreeMovingAFileInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.withoutWorktree(), s.tree, "mv", "a.txt", "b.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestWithoutAWorktreeStagingInTheOwnCheckoutPasses() {
+	s.NoError(s.run(s.withoutWorktree(), s.own, "add", "--", "a.txt"))
+}
+
 func (s *IntegrationScratchMergeSuite) TestMergingAnIntegratedBranchInTheTreePasses() {
 	s.addTree()
 	s.NoError(s.run(s.row, s.tree, "merge", "--no-ff", "--no-commit", "done"))

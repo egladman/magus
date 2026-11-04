@@ -2582,7 +2582,7 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 		return ""
 	}
 	placed := workerLands
-	if me.Worktree.Standing() {
+	if refMoveRoot(me) != "" {
 		placed = func(c hint.Invocation) bool { return workerLands(c) || workerVCSMovesRefs(c) && workerVCSOp(c) == "" }
 	}
 	role := workerRole(me, deps.caller)
@@ -2795,10 +2795,11 @@ func inOtherRepository(site vcsSite, checkout string) bool {
 // actsInPlace reports whether a git argv acts only on the repository it runs in, so that
 // standing in another repository is enough to keep it off the job's. A push writes to a
 // remote, which may be the job's repository; inline config can move the work tree
-// (core.worktree) or define an alias that runs anything.
+// (core.worktree) or define an alias that runs anything. A worktree call
+// names a target path anywhere, so the repository it stands in proves nothing.
 func actsInPlace(inv hint.Invocation) bool {
 	g := parseGit(inv.Args)
-	return g.at >= 0 && g.sub != "push" && !g.configured
+	return g.at >= 0 && g.sub != "push" && g.sub != "worktree" && !g.configured
 }
 
 // workTreeAt reports whether git, run in dir, takes dir's own checkout as its work tree
@@ -2921,11 +2922,11 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 		return moveRefusal(ctx, opts, row, inv, site, unlocated)
 	}
 	if reattachesOwnBranch(inv, row) {
-		return refMoveRefusal(ctx, opts, row.Worktree, inv, site, unlocated)
+		return refMoveRefusal(ctx, opts, row.Worktree.Root, inv, site, unlocated)
 	}
 	op := workerVCSOp(inv)
-	if own := row.Worktree; op == "" && own.Standing() && workerVCSMovesRefs(inv) {
-		return refMoveRefusal(ctx, opts, own, inv, site, unlocated)
+	if root := refMoveRoot(row); op == "" && root != "" && workerVCSMovesRefs(inv) {
+		return refMoveRefusal(ctx, opts, root, inv, site, unlocated)
 	}
 	switch {
 	case op == "" || integrationMerge(inv, row):
@@ -3314,26 +3315,26 @@ var stagedListUnread = fmt.Sprintf("The `git add --pathspec-from-file` on this l
 // refMoveRefusal places a call that moves HEAD, a ref or the index like a commit: in another
 // checkout of the repository it moves that checkout's state, and a repository of its own
 // holds none of the job's.
-func refMoveRefusal(ctx context.Context, opts types.VCSOptions, own *types.JobWorktree, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
+func refMoveRefusal(ctx context.Context, opts types.VCSOptions, root string, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
 	sub, rest := vcsSubcommand(inv)
 	moves := fmt.Sprintf("%s %s", inv.Name, sub)
 	if unlocated != "" {
 		return vcsRefusal{op: moves, kind: vcsOpLands, why: unlocated}
 	}
-	if site.gitDir == "" && inOtherRepository(site, own.Root) {
+	if site.gitDir == "" && inOtherRepository(site, root) {
 		return vcsRefusal{}
 	}
-	root, ok := siteCheckout(ctx, opts, inv.Name, site)
-	if ok && samePath(root, own.Root) {
+	checkout, ok := siteCheckout(ctx, opts, inv.Name, site)
+	if ok && samePath(checkout, root) {
 		return vcsRefusal{}
 	}
 	where := "a checkout that cannot be read"
 	if ok {
-		where = root
+		where = checkout
 	}
-	remedy := strings.Join(slices.Concat([]string{inv.Name, relocateFlag[inv.Name], own.Root, sub}, rest), " ")
+	remedy := strings.Join(slices.Concat([]string{inv.Name, relocateFlag[inv.Name], root, sub}, rest), " ")
 	return vcsRefusal{op: moves, kind: vcsOpLands, why: fmt.Sprintf(
-		"It moves a branch, HEAD or the index in %s, outside %s, the checkout the job's fork made; run `%s` instead.", where, own.Root, remedy)}
+		"It moves a branch, HEAD or the index in %s, outside %s, the checkout the job's fork made; run `%s` instead.", where, root, remedy)}
 }
 
 // mergeRefusal is why a worker may not merge operand, naming every revision mergesBase
