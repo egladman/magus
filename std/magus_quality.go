@@ -70,25 +70,22 @@ func heldChangeBase(ctx context.Context, c types.Change, member string) (string,
 // scoreRisk scores the functions touched since base, or every function
 // when base is "".
 func scoreRisk(ctx context.Context, member, base string) (types.ChangeRisk, error) {
-	q, err := qualityFromContext(ctx, member)
-	if err != nil {
-		return types.ChangeRisk{}, err
-	}
-	out, err := q.ChangeRisk(ctx, base)
-	if err != nil {
-		return types.ChangeRisk{}, fmt.Errorf("magus\\%s: %w", member, err)
-	}
-	return out, nil
+	return measure(ctx, member, base, qualityWorkspace.ChangeRisk)
 }
 
 func mutate(ctx context.Context, member, base string) (types.Mutants, error) {
+	return measure(ctx, member, base, qualityWorkspace.Mutants)
+}
+
+func measure[T any](ctx context.Context, member, base string, by func(qualityWorkspace, context.Context, string) (T, error)) (T, error) {
+	var zero T
 	q, err := qualityFromContext(ctx, member)
 	if err != nil {
-		return types.Mutants{}, err
+		return zero, err
 	}
-	out, err := q.Mutants(ctx, base)
+	out, err := by(q, ctx, base)
 	if err != nil {
-		return types.Mutants{}, fmt.Errorf("magus\\%s: %w", member, err)
+		return zero, fmt.Errorf("magus\\%s: %w", member, err)
 	}
 	return out, nil
 }
