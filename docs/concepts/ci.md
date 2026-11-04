@@ -38,22 +38,35 @@ full gate rests on a proof, and the run prints the evidence for every file. See
 
 ## The shards
 
-`magus affected ci --plan` splits the gate across runners. Its unit is one
-target an affected project's `ci` composes directly, such as `.:test` or
-`libs/x:format`, so one large project can fill several runners. Each unit weighs
-what the run history recorded for it. A unit with no history weighs the
-workspace fallback, and the plan lists it under `unmeasured`.
+`magus affected ci:gha --plan` splits the gate across runners. Its unit is one
+target an affected project's `ci` asks for through `ctx.needs`, such as `.:test`
+or `libs/x:format`, so one large project can fill several runners. magus finds
+the units by evaluating each `ci` body the way a dry run does, under the charms
+and the args after `--` the shards will run it with. A step behind
+`if (!ctx.hasCharm("gha"))` is no unit of a `ci:gha` plan. A target the body
+calls as a function is no unit either: the plan names it under `unplanned`, and
+no shard runs it.
+
+Each unit weighs what the run history recorded for it. A unit with no history
+weighs the workspace fallback, and the plan lists it under `unmeasured`. When no
+unit has any history, the plan opens at most 2 shards and says so under
+`fallbacks`.
 
 A shard costs one runner's setup plus every distinct target its units need,
 prerequisites counted once. Units go longest first to the shard they leave
 cheapest. A new shard opens only when it shortens the longest shard by more than
-setup plus the prerequisites it would repeat. The same history and the same
-change give the same plan, at a cap of 3 shards or 12.
+setup plus the prerequisites it would repeat. A shard's predicted peak memory
+must fit the runner class `ci.runner` names (`memory_mb`, `cores`), never the
+machine that plans, and the plan records the class. With no class the plan says
+it checked no memory budget. The same history, change, class and config give the
+same plan on any host.
 
-Each shard in the plan lists its `units`. `magus run ci --stdin --shard <id>`
-reads the saved plan and runs that shard's units as one invocation. It refuses
-args after `--`: `ctx.needs` hands a composed target none, so a target that
-takes them runs by name.
+Each shard lists its `units`, a `label` that digests them, and its `duties`: the
+workspace-wide steps placed on exactly one shard. `cache-export` goes to the
+shard holding the most root units, `notes-verify` to the shard with the fewest
+units. `magus run ci:gha --stdin --shard <id>` reads the saved plan and runs that
+shard's units as one invocation. It refuses a plan evaluated under other charms
+or args, and a shard whose projects or label disagree with its units.
 
 ## The checkout
 

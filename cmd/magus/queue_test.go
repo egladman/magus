@@ -902,7 +902,7 @@ func TestCIShardsCarryTheSpellsCachesTheGateBuildsWith(t *testing.T) {
 	assert.Empty(t, restore.If, "every shard restores: a bundle is verified before a byte of it is placed")
 	assert.NotContains(t, flag(argvs[at["restore"]], "--env"), "MAGUS_CACHE_SIGNING_KEY", "a restore signs nothing")
 	assert.True(t, strings.HasPrefix(save.If, "success() && "), save.If)
-	for _, cond := range []string{"github.event_name != 'pull_request'", "github.ref == 'refs/heads/main'", "contains(format(' {0} ', matrix.projects), ' . ')"} {
+	for _, cond := range []string{"github.event_name != 'pull_request'", "github.ref == 'refs/heads/main'", "contains(format(' {0} ', matrix.duties), ' cache-export ')"} {
 		assert.Contains(t, save.If, cond)
 	}
 	assert.Contains(t, flag(argvs[at["save"]], "--env"), "MAGUS_CACHE_SIGNING_KEY", "the save signs what it stores")
