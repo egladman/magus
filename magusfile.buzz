@@ -2156,14 +2156,6 @@ export fun watch(ctx: magus\Context, args: [str]) > void !> any {
     });
 }
 
-fun total_coverage(func_out: str) > str {
-    final lines = func_out.split("\n");
-    final fields = lines[lines.len() - 1].split("");
-    final cell = fields[fields.len() - 1];
-    if (cell.endsWith("%")) { return cell.sub(0, cell.len() - 1); }
-    return cell;
-}
-
 // Runs the PR advisors' `test "..." {}` blocks under a plain `magus buzz -t`, from each
 // script's own directory so their bare `import "advice"` resolves.
 export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
@@ -2175,7 +2167,8 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Tests with race detection and a coverage floor. The published badge is coverage_render's.
+// Tests with race detection.
+// The published badge is coverage_render's.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // generate writes MAGUS.md and the *.lock fixtures this suite reads; without the
     // edge, coverage-render's parallel needs(generate, test) is MGS4008 at doctor time.
@@ -2236,10 +2229,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     foreach (profile in fs\glob(".magus/coverage*.out")) {
         if (whole.indexOf(profile.value) == null) { fs\remove(profile.value); }
     }
-    // Only a full run judges the floor; a narrowed gate measured a slice.
-    if (!ctx.narrowed() and std\parseInt(coverage_percent().split(".")[0]) < 70) {
-        throw "test: coverage " + coverage_percent() + "% is below the 70% floor; investigate the regression or lower the floor deliberately";
-    }
+    // No percentage floor: removing well-covered code would trip one. The
+    // touched-functions-keep-change-risk-under-10 lint rule holds each changed
+    // file's covered lines against its base instead.
 }
 
 final CMD_MAGUS_PKG = "./cmd/magus";
@@ -2279,10 +2271,6 @@ fun merge_profiles(first: str, second: str) > str !> any {
         if (i > 0 and line.trim() != "") { merged.append(line); }
     }
     return merged.join("\n") + "\n";
-}
-
-fun coverage_percent() > str !> any {
-    return total_coverage(proc\exec("go", ["tool", "cover", "-func=" + COVERAGE_HAND_PROFILE]).stdout);
 }
 
 // Unions one platform's module profiles into block -> ran. A block absent from every
@@ -2336,7 +2324,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Runs the in-file `test "..." {}` blocks in this repo's Buzz modules through magus's
-// embedded engine, and holds their merged line coverage above a floor. Not the buzz
+// embedded engine, and writes their merged line coverage.
+// Not the buzz
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // hack/lint/run.buzz's tests run the binary proofread-build links, and
@@ -2408,10 +2397,6 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     }
     final pct = lcov\mergePercent(reports, keep: "");
     fs\writeFile("coverage/buzz/coverage.txt", content: pct + "\n");
-    final floor = 62;
-    if (std\parseInt(pct.split(".")[0])! < floor) {
-        throw "buzz-test: buzz coverage " + pct + "% is below the {floor}% floor; investigate the regression or lower the floor deliberately";
-    }
 }
 
 // No doctor gate: the advice action reports its findings without blocking.

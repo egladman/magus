@@ -64,6 +64,8 @@ import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
 import "hack/lint/symbol-docs-follow-proofread-rules" as symbolproofread;
 import "hack/lint/testpairing-pairing-has-no-exemptions" as testpairing;
 import "hack/lint/tool-descriptions-follow-proofread-rules" as tooldesc;
+import "hack/lint/touched-functions-keep-change-risk-under-10" as changerisk;
+import "hack/lint/touched-functions-kill-their-mutants" as mutants;
 import "hack/lint/typescript-never-throws" as typescriptthrows;
 import "hack/lint/trusted-jobs-restore-no-actions-cache" as trustedcache;
 import "hack/lint/whole-tree-targets-key-on-the-go-tree" as wholetree;
@@ -119,6 +121,10 @@ export fun rules() > [Rule] {
         Rule{ name = "gate-pages-say-what-they-do-not-measure", reads = gatemeasures\reads(), check = gatemeasures\check },
         Rule{ name = "lint-findings-carry-a-message-and-a-fix", reads = findingshape\reads(), check = findingshape\check },
         Rule{ name = "measured-claims-cite-their-run", reads = measuredclaims\reads(), check = measuredclaims\check },
+        // Both measure in scratch copies of the tree, never by a run on a
+        // project lint-rules holds.
+        Rule{ name = "touched-functions-keep-change-risk-under-10", reads = changerisk\reads(), check = changerisk\check },
+        Rule{ name = "touched-functions-kill-their-mutants", reads = mutants\reads(), check = mutants\check },
     ];
 }
 

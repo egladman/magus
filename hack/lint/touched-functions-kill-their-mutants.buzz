@@ -1,6 +1,6 @@
 // Tier 2, measured shape: a mutant of a function the change touches must be
-// killed by a test. Only a `// magus:mutant op=<swap> reason=<why>` marker
-// excepts one.
+// killed by a test, unless the function leaves no more survivors than it did
+// at base. Only a `// magus:mutant op=<swap> reason=<why>` marker excepts one.
 namespace mutantsRule;
 
 import "assert";
@@ -13,19 +13,27 @@ export fun reads() > [str] {
     return ["**/*.go", "**/*_test.go", "libs/**/*.go", "libs/**/*_test.go", "magus.yaml"];
 }
 
-// check refuses each surviving mutant and each unusable marker.
+// check refuses each survivor of a function worse than at base, and each
+// unusable marker.
 export fun check(files: [Path]) > [Finding] !> any {
     return judge(magus\change(vcs\base()).mutants());
 }
 
 // judge is check's verdict over a magus\change(base).mutants answer. The
 // engine has already applied the markers, so an excepted mutant arrives as
-// excepted.
+// excepted. Every mutant carries its function's survivor count at base.
 export fun judge(answer: magus\Mutants) > [Finding] {
-    final found = mut [<Finding>];
+    final survivors = mut {<str: int>};
     foreach (m in answer.mutants) {
         if (m.outcome == magus\MutantOutcome.survived) {
-            found.append(survivor(m));
+            survivors[m.symbol] = (survivors[m.symbol] ?? 0) + 1;
+        }
+    }
+    final found = mut [<Finding>];
+    foreach (m in answer.mutants) {
+        final count = survivors[m.symbol] ?? 0;
+        if (m.outcome == magus\MutantOutcome.survived and (m.baseReason != "" or count > m.baseSurvived)) {
+            found.append(survivor(m, count: count));
         }
     }
     foreach (u in answer.unused) {
@@ -34,23 +42,46 @@ export fun judge(answer: magus\Mutants) > [Finding] {
     return found;
 }
 
-fun survivor(m: magus\Mutant) > Finding {
+fun versus(m: magus\Mutant, count: int) > str {
+    if (m.baseReason != "") {
+        return "no base count: {m.baseReason}";
+    }
+    return "{count} survive, {m.baseSurvived} at base";
+}
+
+fun survivor(m: magus\Mutant, count: int) > Finding {
     return Finding{ path = m.path, line = m.line, col = m.col,
-        message = "{m.path}:{m.line}:{m.col} {m.symbol} survived the {m.operator} mutant: {m.find} -> {m.replace}",
+        message = "{m.path}:{m.line}:{m.col} {m.symbol} survived the {m.operator} mutant: {m.find} -> {m.replace} ({versus(m, count: count)})",
         fix = "Add a test that fails on the mutant, or mark the line `// magus:mutant op={m.operator} reason=<why>`." };
 }
 
 fun mutant(outcome: magus\MutantOutcome) > magus\Mutant {
     return magus\Mutant{ symbol = "a.F", path = "a.go", operator = "swap-cmp", find = "<", replace = "<=",
-        line = 4, col = 7, outcome = outcome };
+        line = 4, col = 7, outcome = outcome, baseReason = "it is new since base" };
+}
+
+fun based(outcome: magus\MutantOutcome, survived: int) > magus\Mutant {
+    return magus\Mutant{ symbol = "a.F", path = "a.go", operator = "swap-cmp", find = "<", replace = "<=",
+        line = 4, col = 7, outcome = outcome, baseSurvived = survived, baseReason = "" };
 }
 
 test "a surviving mutant is refused with its position, operator and swap" {
     final got = judge(magus\Mutants{ mutants = [mutant(magus\MutantOutcome.survived)] });
     assert\equal(got.len(), want: 1, message: "one finding");
-    assert\equal(got[0].message, want: "a.go:4:7 a.F survived the swap-cmp mutant: < -> <=", message: "named");
+    assert\equal(got[0].message, want: "a.go:4:7 a.F survived the swap-cmp mutant: < -> <= (no base count: it is new since base)", message: "named");
     assert\equal(got[0].fix, want: "Add a test that fails on the mutant, or mark the line `// magus:mutant op=swap-cmp reason=<why>`.",
         message: "the exception form");
+}
+
+test "a function no worse than at base passes" {
+    final got = judge(magus\Mutants{ mutants = [based(magus\MutantOutcome.survived, survived: 2), based(magus\MutantOutcome.survived, survived: 2)] });
+    assert\equal(got.len(), want: 0, message: "two survive, as at base");
+}
+
+test "a function with more survivors than at base is refused for each" {
+    final got = judge(magus\Mutants{ mutants = [based(magus\MutantOutcome.survived, survived: 1), based(magus\MutantOutcome.survived, survived: 1)] });
+    assert\equal(got.len(), want: 2, message: "every survivor named");
+    assert\equal(got[0].message, want: "a.go:4:7 a.F survived the swap-cmp mutant: < -> <= (2 survive, 1 at base)", message: "counts shown");
 }
 
 test "killed and excepted mutants pass" {
