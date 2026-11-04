@@ -298,3 +298,47 @@ func (s *FailuresOwedSuite) TestAGreenGateOwesNothing() {
 
 	s.Empty(s.owed(green))
 }
+
+type HarnessWriteSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestHarnessWriteSuite(t *testing.T) { suite.Run(t, new(HarnessWriteSuite)) }
+
+func (s *HarnessWriteSuite) SetupTest() { s.dir = s.T().TempDir() }
+
+func (s *HarnessWriteSuite) record(paths ...string) {
+	s.Require().NoError(RecordHarnessWrite(s.dir, HarnessWrite{Paths: paths}, InvocationStart{Workspace: "/repo"}))
+}
+
+func (s *HarnessWriteSuite) latest() (HarnessWriteRecord, bool) {
+	fold, err := ReadKind(s.dir, KindHarnessWrite)
+	s.Require().NoError(err)
+	return LatestHarnessWrite(fold)
+}
+
+func (s *HarnessWriteSuite) TestAWriteReadsBackSortedAndDeduplicated() {
+	s.record("b", "a", "b")
+	rec, ok := s.latest()
+	s.Require().True(ok)
+	s.Equal([]string{"a", "b"}, rec.Paths)
+}
+
+func (s *HarnessWriteSuite) TestAnEmptyWriteIsRefused() {
+	err := RecordHarnessWrite(s.dir, HarnessWrite{}, InvocationStart{Workspace: "/repo"})
+	s.Error(err)
+	_, ok := s.latest()
+	s.False(ok)
+}
+
+func (s *HarnessWriteSuite) TestARepeatAppendsANewerRecord() {
+	s.record("a")
+	first, _ := s.latest()
+	time.Sleep(2 * time.Millisecond)
+	s.record("a")
+	second, ok := s.latest()
+	s.Require().True(ok)
+	s.True(second.At.After(first.At))
+	s.Equal(first.Paths, second.Paths)
+}

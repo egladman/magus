@@ -350,6 +350,23 @@ func (s *redGateSuite) TestEachTargetPassingAloneAdmitsTheGate() {
 	s.Empty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
 }
 
+func (s *redGateSuite) TestAHarnessWriteAfterTheRedGateAdmitsIt() {
+	time.Sleep(2 * time.Millisecond)
+	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
+		sessions.InvocationStart{Workspace: s.repo.Root()}))
+	s.Empty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
+}
+
+func (s *redGateSuite) TestAHarnessWriteBeforeTheRedGateStillRefusesIt() {
+	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
+		sessions.InvocationStart{Workspace: s.repo.Root()}))
+	time.Sleep(2 * time.Millisecond)
+	s.Require().NoError(sessions.RecordGate(s.dir, sessions.GateResult{
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.repo.Head(), Outcome: sessions.OutcomeFail, Inv: "inv-green",
+	}, sessions.InvocationStart{Workspace: s.repo.Root()}))
+	s.NotEmpty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
+}
+
 func (s *redGateSuite) TestAFileWrittenAfterTheRedGateAdmitsIt() {
 	s.repo.Write("a.go", "package a\n\nvar fixed = true\n")
 	after := time.Now().Add(time.Minute)

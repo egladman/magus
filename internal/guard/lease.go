@@ -153,7 +153,7 @@ const gateRepeatDenyRuns = 2
 // gateUnchanged is the newest gate verdict this branch recorded, pass or fail, when no file
 // that differs from its commit was written after it. A project-scoped pass is no verdict on
 // the branch (sessions.LatestGate skips it), so `magus run ci <project>` never stands in for
-// the `affected ci` this refuses.
+// the `affected ci` this refuses. A later harness install counts as a change.
 func gateUnchanged(ctx context.Context, deps Dependencies, workspace string) (sessions.GateRecord, bool) {
 	if workspace == "" {
 		return sessions.GateRecord{}, false
@@ -177,6 +177,11 @@ func gateUnchanged(ctx context.Context, deps Dependencies, workspace string) (se
 	last, ok := sessions.LatestGate(fold, ref, string(types.TargetCI))
 	if !ok || last.Commit == "" {
 		return sessions.GateRecord{}, false
+	}
+	if written, err := sessions.ReadKind(dir, sessions.KindHarnessWrite); err == nil {
+		if hw, ok := sessions.LatestHarnessWrite(written); ok && hw.At.After(last.At) {
+			return sessions.GateRecord{}, false
+		}
 	}
 	changed, err := res.VCS.ChangedFiles(ctx, workspace, last.Commit)
 	if err != nil {

@@ -14,6 +14,8 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
@@ -115,7 +117,27 @@ func installHarness(ctx context.Context, root, id string, plan types.HarnessInst
 	}
 	result.Files = nonNil(installed)
 	result.RestartRequired = plan.Guard == "plugin" && len(installed) > 0
+	if !globalCfg.DryRun {
+		paths := slices.Concat(result.Skills, result.Removed, result.Tools, result.Files)
+		recordHarnessWrite(ctx, root, "agent harness install", paths)
+	}
 	return result, nil
+}
+
+// recordHarnessWrite files the paths a harness command wrote. A store error
+// is logged, since the write itself succeeded.
+func recordHarnessWrite(ctx context.Context, root, command string, paths []string) {
+	if len(paths) == 0 {
+		return
+	}
+	dir, err := sessions.Dir(root)
+	if err == nil {
+		err = sessions.RecordHarnessWrite(dir, sessions.HarnessWrite{Paths: paths},
+			sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: root, Command: command, Version: version})
+	}
+	if err != nil {
+		slog.With(attr.Component(command)).WarnContext(ctx, "harness write not recorded", attr.Error(err))
+	}
 }
 
 func installHarnessSkills(ctx context.Context, root string, result *agentHarnessInstallResult, text bool) error {
@@ -261,6 +283,9 @@ func agentHarnessLinksCommand(ctx context.Context, rootOverride string, args []s
 	files, err := agent.InstallHarnessSourceLinks(ctx, root, links, globalCfg.DryRun)
 	if err != nil {
 		return fmt.Errorf("magus agent harness link: %w", err)
+	}
+	if !globalCfg.DryRun {
+		recordHarnessWrite(ctx, root, "agent harness link", files)
 	}
 	if opts.Format != outputText {
 		return emitRecord(opts, harnessLinksOutput{Files: files}, files)
