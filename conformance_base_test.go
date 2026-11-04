@@ -192,7 +192,7 @@ func (s *ConformanceBaseBoxSuite) TestCheckoutsOfOneWorkspaceReadOneMeasure() {
 
 	plan, err := second.baseIndexPlan(s.T().Context(), second.Root())
 	s.Require().NoError(err)
-	entry, err := second.conformanceEntry(s.T().Context(), commit, plan)
+	entry, err := second.conformanceEntry(commit, plan)
 	s.Require().NoError(err)
 	_, kept, err := readConformanceEntry(entry)
 	s.Require().NoError(err)

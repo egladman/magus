@@ -32,7 +32,9 @@ const noBaseIndex = "no in-process index; ceiling not applied"
 const projectNewAtHead = "its project is new at head, so the base holds no measure; ceiling not applied"
 
 // baseMeasureVersion keys the kept measures; bump it when measureTree measures differently.
-const baseMeasureVersion = "4"
+// It replaces the magus build in the key: a gate measures under one
+// binary and lint reads under the checkout's own.
+const baseMeasureVersion = "5"
 
 // ConformanceCeilings is head, the lens over the working tree, with c.Base's ceilings: each file
 // changed since c.Base whose count of violations of a metric in c.Checks rose past its count
@@ -58,7 +60,7 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head t
 	if err != nil {
 		return types.Conformance{}, err
 	}
-	entry, err := m.conformanceEntry(ctx, commit, plan)
+	entry, err := m.conformanceEntry(commit,plan)
 	if err != nil {
 		return types.Conformance{}, err
 	}
@@ -90,7 +92,7 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head t
 // MeasureConformanceBase measures the merge base of base and HEAD with magus's in-process
 // indexers under this workspace's configuration. It keeps the measure in the
 // workspace store every checkout shares, keyed by commit, policy, indexer
-// versions and magus build.
+// versions and baseMeasureVersion.
 // The base is exported there too, since a sandboxed gate writes only to the
 // store and the temp dir. It returns the commit, and reuses a kept measure.
 func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string, error) {
@@ -109,7 +111,7 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 	if err != nil {
 		return "", err
 	}
-	entry, err := m.conformanceEntry(ctx, commit, head)
+	entry, err := m.conformanceEntry(commit,head)
 	if err != nil {
 		return "", err
 	}
@@ -182,15 +184,14 @@ func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 }
 
 // conformanceEntry is the cache file of commit's measure under this workspace's policy and
-// plan's indexers, as measured by this magus build.
-func (m *Magus) conformanceEntry(ctx context.Context, commit string, plan baseIndexPlan) (string, error) {
+// plan's indexers, under baseMeasureVersion.
+func (m *Magus) conformanceEntry(commit string, plan baseIndexPlan) (string, error) {
 	policy, err := json.Marshal(m.cfg.Knowledge.Conformance)
 	if err != nil {
 		return "", fmt.Errorf("conformance: digest the policy: %w", err)
 	}
 	h := sha256.New()
-	build := types.MagusBuildFromContext(ctx)
-	fmt.Fprintf(h, "%s\x00%s\x00%s\x00", baseMeasureVersion, build.Version, build.Commit)
+	fmt.Fprintf(h, "%s\x00", baseMeasureVersion)
 	fmt.Fprintf(h, "%s", policy)
 	for _, ix := range plan.indexes {
 		fmt.Fprintf(h, "\x00%s\x00%s\x00%s", ix.project, ix.language, ix.ix.Version())
