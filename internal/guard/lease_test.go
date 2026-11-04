@@ -2532,9 +2532,9 @@ func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
 		args []string
 		dir  string
 	}{
-		"commit in a scratch repo":          {[]string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh.Root()},
-		"clean in a scratch repo":           {[]string{"clean", "-fdx"}, scratch.Root()},
-		"reset -C a scratch repo":           {[]string{"-C", fresh.Root(), "reset", "--hard"}, wt},
+		"commit in a scratch repo": {[]string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh.Root()},
+		"clean in a scratch repo":  {[]string{"clean", "-fdx"}, scratch.Root()},
+		"reset -C a scratch repo":  {[]string{"-C", fresh.Root(), "reset", "--hard"}, wt},
 	} {
 		require.NoError(t, vcsCommandRefusal(ctx, worker, "git", c.args, c.dir, nil), name)
 	}
