@@ -1,25 +1,33 @@
 // The gate creates a private checkout: ignored installations from the calling
 // workspace never reach it. Install there before running the requested command.
 import "flags";
+import "fs";
 import "magus";
 import "os";
 import "result";
 import "assert";
 
-final USAGE = "usage: magus buzz hack/ci/run-with-harnesses.buzz -- <subcommand> [args...]";
+final USAGE = "usage: magus buzz hack/ci/run-with-harnesses.buzz [--plan <file>] -- <subcommand> [args...]";
+
+// plan is a file the command reads on stdin. A queue gate hands none.
+object Invocation {
+    words: [str],
+    plan: str = "",
+}
 
 // Queue hooks insert project operands before their first --. Buzz forwards
 // those operands and the following flags together, so gate mode restores run's
 // delimiter before forwarding target arguments.
-export fun commandArgs(args: [str]) > result\Result::<[str]> {
+export fun commandArgs(args: [str]) > result\Result::<Invocation> {
     try {
-        final parsed = flags\parse(args, switches: [<str>], valued: [<str>]);
+        final parsed = flags\parse(args, switches: [<str>], valued: ["--plan"]);
         if (parsed.unknown.len() > 0) {
-            return result\fail::<[str]>("run-with-harnesses: does not take {parsed.unknown.join(" ")}\n{USAGE}");
+            return result\fail::<Invocation>("run-with-harnesses: does not take {parsed.unknown.join(" ")}\n{USAGE}");
         }
-        if (parsed.positionals.len() == 0) { return result\fail::<[str]>(USAGE); }
+        if (parsed.positionals.len() == 0) { return result\fail::<Invocation>(USAGE); }
+        final plan = parsed.values["--plan"] ?? "";
         final words = parsed.positionals;
-        if (words[0] != "gate") { return result\ok::<[str]>(words); }
+        if (words[0] != "gate") { return result\ok::<Invocation>(Invocation{words = words, plan = plan}); }
         final command = mut ["run", "ci:gha", "--no-default-charms"];
         final forwarded = mut [<str>];
         foreach (arg in words.sub(1)) {
@@ -27,29 +35,36 @@ export fun commandArgs(args: [str]) > result\Result::<[str]> {
             else { command.append(arg); }
         }
         if (forwarded.len() > 0) { command.append("--"); }
-        return result\ok::<[str]>(command + forwarded);
+        return result\ok::<Invocation>(Invocation{words = command + forwarded, plan = plan});
     } catch (err: any) {
-        return result\caught::<[str]>(err, doing: "run-with-harnesses");
+        return result\caught::<Invocation>(err, doing: "run-with-harnesses");
     }
 }
 
 fun main(args: [str]) > void !> any {
     final command = commandArgs(args);
     if (command.error != null) { throw command.error!.message; }
-    final words = command.value!;
+    final inv = command.value!;
+    final stdin = if (inv.plan != "") fs\readFile(inv.plan) else "";
     _ = magus\cmd("buzz", args: ["hack/dev/bootstrap-harnesses.buzz"]);
-    final checked = magus\cmd(words[0], args: words.sub(1), opts: magus\CommandOptions{allowFailure = true});
+    final checked = magus\cmd(inv.words[0], args: inv.words.sub(1), opts: magus\CommandOptions{allowFailure = true, stdin = stdin});
     if (checked.code != 0) { os\exit(checked.code); }
 }
 
 test "queue projects remain run operands before forwarded target flags" {
-    assert\equal(commandArgs(["gate", "libs/a", "docs", "--inherited=fatal"]).value!,
+    assert\equal(commandArgs(["gate", "libs/a", "docs", "--inherited=fatal"]).value!.words,
         want: ["run", "ci:gha", "--no-default-charms", "libs/a", "docs", "--", "--inherited=fatal"], message: "queue argv");
 }
 
 test "direct commands preserve every argument and delimiter" {
     final args = ["run", "ci:gha", ".", "--", "--inherited=fatal"];
-    assert\equal(commandArgs(args).value!, want: args, message: "direct argv");
+    assert\equal(commandArgs(args).value!.words, want: args, message: "direct argv");
+}
+
+test "a plan file is read off before the command" {
+    final inv = commandArgs(["--plan", "/w/.magus/plan.json", "run", "ci:gha", "--stdin"]).value!;
+    assert\equal(inv.plan, want: "/w/.magus/plan.json", message: "plan path");
+    assert\equal(inv.words, want: ["run", "ci:gha", "--stdin"], message: "command argv");
 }
 
 test "no subcommand is a usage failure" {

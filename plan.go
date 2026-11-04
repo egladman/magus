@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"path"
@@ -80,12 +81,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	}
 	slices.Sort(affected)
 
-	projects := make([]*types.Project, 0, len(targets))
-	for _, t := range targets {
-		if p := m.Get(t.Path); p != nil {
-			projects = append(projects, p)
-		}
-	}
+	units := m.planUnits(targets, target)
 
 	histPath := opts.HistoryPath
 	if histPath == "" {
@@ -96,7 +92,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		return types.ShardPlan{}, fmt.Errorf("affected plan: load history: %w", err)
 	}
 
-	f := forecast.Forecaster{History: hist, Target: target}
+	f := forecast.Forecaster{History: hist, Needs: m.unitNeeds}
 	tags := make(map[string][]string, len(targets))
 	for _, t := range targets {
 		if len(t.Files) > 0 {
@@ -112,7 +108,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		maxShards = m.cfg.CI.MaxShards
 	}
 
-	plan, err := ci.Build(projects, source, ci.WithMaxShards(maxShards), ci.WithForecaster(f))
+	plan, err := ci.Build(units, source, ci.WithMaxShards(maxShards), ci.WithForecaster(f))
 	if err != nil {
 		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
 	}
@@ -124,18 +120,14 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 
 	shards := make([]types.Shard, len(plan.Shards))
 	for i, s := range plan.Shards {
-		paths := make([]string, len(s.Projects))
-		for j, p := range s.Projects {
-			paths[j] = p.Path
-		}
-		shards[i] = types.Shard{ID: s.ID, ProjectPaths: paths}
+		shards[i] = types.Shard{ID: s.ID, ProjectPaths: unitProjects(s.Units), Units: s.Units}
 	}
 	// Both are asked of the concrete forecaster rather than carried out of ci.Build: the
 	// Forecaster interface returns an assignment and nothing about how it was reached, so
 	// a plan built from real history and one built from fallbacks are the same value.
-	assignments := make([][]*types.Project, len(plan.Shards))
+	assignments := make([][]types.Unit, len(plan.Shards))
 	for i, s := range plan.Shards {
-		assignments[i] = s.Projects
+		assignments[i] = s.Units
 	}
 	var overBudget []string
 	for _, i := range f.OverBudget(assignments) {
@@ -145,11 +137,62 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		Shards:      shards,
 		Source:      source,
 		MaxParallel: maxParallel,
-		Sufficient:  f.SufficientShards(projects),
+		Sufficient:  f.SufficientShards(units, len(plan.Shards)),
 		OverBudget:  overBudget,
+		Unmeasured:  f.Unmeasured(units),
 		Affected:    affected,
 		UnboundedBy: unboundedBy,
 	}, nil
+}
+
+// planUnits is one unit per step anchor composes directly in each
+// target's project, local and cross-project alike, deduplicated. A
+// project whose anchor composes nothing is the one unit (path, anchor).
+func (m *Magus) planUnits(targets []types.Target, anchor string) []types.Unit {
+	seen := map[types.Unit]bool{}
+	var units []types.Unit
+	add := func(u types.Unit) {
+		if !seen[u] {
+			seen[u] = true
+			units = append(units, u)
+		}
+	}
+	for _, t := range targets {
+		p := m.Get(t.Path)
+		if p == nil {
+			continue
+		}
+		chain := p.TargetChains[anchor]
+		if len(chain) == 0 {
+			add(types.Unit{Project: p.Path, Target: anchor})
+			continue
+		}
+		for _, step := range chain {
+			add(types.Unit{Project: cmp.Or(step.Project, p.Path), Target: step.Target})
+		}
+	}
+	return units
+}
+
+// unitNeeds is u's transitive needs closure, u included.
+func (m *Magus) unitNeeds(u types.Unit) []types.Unit {
+	var out []types.Unit
+	// The callback returns no error, so the walk returns none.
+	_ = types.WalkChain(m.Get(u.Project), u.Target, m.Get, func(v types.ChainVisit) error {
+		out = append(out, types.Unit{Project: v.Project.Path, Target: v.Target})
+		return nil
+	})
+	return out
+}
+
+// unitProjects is the distinct projects of units, sorted.
+func unitProjects(units []types.Unit) []string {
+	paths := make([]string, 0, len(units))
+	for _, u := range units {
+		paths = append(paths, u.Project)
+	}
+	slices.Sort(paths)
+	return slices.Compact(paths)
 }
 
 // unboundedBy says why the closure computed from res is not a proof, or "" when it is.

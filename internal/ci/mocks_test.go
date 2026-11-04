@@ -37,19 +37,19 @@ func (_m *MockForecaster) EXPECT() *MockForecaster_Expecter {
 }
 
 // Plan provides a mock function for the type MockForecaster
-func (_mock *MockForecaster) Plan(projects []*types.Project, maxShards int) [][]*types.Project {
-	ret := _mock.Called(projects, maxShards)
+func (_mock *MockForecaster) Plan(units []types.Unit, maxShards int) [][]types.Unit {
+	ret := _mock.Called(units, maxShards)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Plan")
 	}
 
-	var r0 [][]*types.Project
-	if returnFunc, ok := ret.Get(0).(func([]*types.Project, int) [][]*types.Project); ok {
-		r0 = returnFunc(projects, maxShards)
+	var r0 [][]types.Unit
+	if returnFunc, ok := ret.Get(0).(func([]types.Unit, int) [][]types.Unit); ok {
+		r0 = returnFunc(units, maxShards)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([][]*types.Project)
+			r0 = ret.Get(0).([][]types.Unit)
 		}
 	}
 	return r0
@@ -61,17 +61,17 @@ type MockForecaster_Plan_Call struct {
 }
 
 // Plan is a helper method to define mock.On call
-//   - projects []*types.Project
+//   - units []types.Unit
 //   - maxShards int
-func (_e *MockForecaster_Expecter) Plan(projects interface{}, maxShards interface{}) *MockForecaster_Plan_Call {
-	return &MockForecaster_Plan_Call{Call: _e.mock.On("Plan", projects, maxShards)}
+func (_e *MockForecaster_Expecter) Plan(units interface{}, maxShards interface{}) *MockForecaster_Plan_Call {
+	return &MockForecaster_Plan_Call{Call: _e.mock.On("Plan", units, maxShards)}
 }
 
-func (_c *MockForecaster_Plan_Call) Run(run func(projects []*types.Project, maxShards int)) *MockForecaster_Plan_Call {
+func (_c *MockForecaster_Plan_Call) Run(run func(units []types.Unit, maxShards int)) *MockForecaster_Plan_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 []*types.Project
+		var arg0 []types.Unit
 		if args[0] != nil {
-			arg0 = args[0].([]*types.Project)
+			arg0 = args[0].([]types.Unit)
 		}
 		var arg1 int
 		if args[1] != nil {
@@ -85,12 +85,12 @@ func (_c *MockForecaster_Plan_Call) Run(run func(projects []*types.Project, maxS
 	return _c
 }
 
-func (_c *MockForecaster_Plan_Call) Return(projectss [][]*types.Project) *MockForecaster_Plan_Call {
-	_c.Call.Return(projectss)
+func (_c *MockForecaster_Plan_Call) Return(unitss [][]types.Unit) *MockForecaster_Plan_Call {
+	_c.Call.Return(unitss)
 	return _c
 }
 
-func (_c *MockForecaster_Plan_Call) RunAndReturn(run func(projects []*types.Project, maxShards int) [][]*types.Project) *MockForecaster_Plan_Call {
+func (_c *MockForecaster_Plan_Call) RunAndReturn(run func(units []types.Unit, maxShards int) [][]types.Unit) *MockForecaster_Plan_Call {
 	_c.Call.Return(run)
 	return _c
 }

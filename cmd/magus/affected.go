@@ -524,6 +524,9 @@ type planOutput struct {
 	// Affected stays the closure even when an inherited verdict empties the matrix.
 	Affected    []string `json:"affected"`
 	UnboundedBy string   `json:"unbounded_by,omitempty"`
+	// Unmeasured are the units and prerequisites the shards were
+	// weighed by the workspace fallback for, having no history.
+	Unmeasured []types.Unit `json:"unmeasured,omitempty"`
 	// Inherit is present only when the plan inherited a green run's verdict;
 	// see planInherit. The matrix beside it is then empty on purpose.
 	Inherit *planInherit `json:"inherit,omitempty"`
@@ -563,6 +566,8 @@ type planShard struct {
 	// provider passes that one to `magus run ci <projects>` and must not receive an
 	// elision.
 	Label string `json:"label" yaml:"label"`
+	// Units are what `magus run --stdin --shard` runs for this shard.
+	Units []types.Unit `json:"units,omitempty" yaml:"units,omitempty"`
 }
 
 // shardLabel names a shard by what is in it. A CI job list is scanned, not studied, so
@@ -644,7 +649,12 @@ func planRiskSummaryMarkdown(r *planRisk) string {
 // the field; the workflow keys that consume these live in .github/workflows/ci.yaml
 // and TestPlanOutputsCoverWorkflowKeys pins the two together.
 func planOutputs(out planOutput) ([]planPublish, error) {
-	matrix, err := json.Marshal(map[string]any{"include": out.Matrix})
+	// Units stay in the plan document: every matrix key is a job dimension.
+	include := slices.Clone(out.Matrix)
+	for i := range include {
+		include[i].Units = nil
+	}
+	matrix, err := json.Marshal(map[string]any{"include": include})
 	if err != nil {
 		return nil, fmt.Errorf("magus affected --plan: encode matrix: %w", err)
 	}
@@ -887,6 +897,11 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			"shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--max-shards` splits them, unless one project exceeds the budget alone)",
 			strings.Join(plan.OverBudget, ", ")))
 	}
+	if len(plan.Unmeasured) > 0 && len(plan.Shards) > 0 {
+		slog.With(attr.Component("magus")).InfoContext(ctx, fmt.Sprintf(
+			"%d of the plan's targets have no recorded duration, so the plan weighed them with the workspace fallback: %s",
+			len(plan.Unmeasured), cappedUnits(plan.Unmeasured)), attr.Notice("note"))
+	}
 
 	out := planOutput{
 		Target:      target,
@@ -896,12 +911,14 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		Matrix:      make([]planShard, len(plan.Shards)),
 		Affected:    plan.Affected,
 		UnboundedBy: plan.UnboundedBy,
+		Unmeasured:  plan.Unmeasured,
 	}
 	for i, s := range plan.Shards {
 		out.Matrix[i] = planShard{
 			Shard:    s.ID,
 			Projects: strings.Join(s.ProjectPaths, " "),
 			Label:    shardLabel(s.ProjectPaths),
+			Units:    s.Units,
 		}
 	}
 	if inherit != nil {
@@ -1128,6 +1145,15 @@ func cappedList(items []string) []string {
 	}
 	return append(items[:undeclaredSeedHintCap:undeclaredSeedHintCap],
 		fmt.Sprintf("and %d more", len(items)-undeclaredSeedHintCap))
+}
+
+// cappedUnits is units as project:target, bounded by cappedList.
+func cappedUnits(units []types.Unit) string {
+	names := make([]string, len(units))
+	for i, u := range units {
+		names[i] = u.String()
+	}
+	return strings.Join(cappedList(names), ", ")
 }
 
 // undeclaredSeedHintCap bounds how many seed projects (and how many of one project's
@@ -1668,6 +1694,7 @@ func filterShardPaths(shards []types.Shard, want map[string]bool) []types.Shard 
 			continue
 		}
 		sh.ProjectPaths = kept
+		sh.Units = slices.DeleteFunc(slices.Clone(sh.Units), func(u types.Unit) bool { return !want[u.Project] })
 		out = append(out, sh)
 	}
 	return out

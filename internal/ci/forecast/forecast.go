@@ -1,11 +1,8 @@
-// Package forecast picks an adaptive CI shard count using a USL model (N* = sqrt(W/α)) and
-// packs projects via LPT bin-packing. History is a pure data structure; Load/Save handle persistence.
 package forecast
 
 import (
 	"cmp"
 	"context"
-	"math"
 	"slices"
 
 	"github.com/egladman/magus/internal/sys/mem"
@@ -16,8 +13,10 @@ import (
 // History is read-only at forecast time; Forecasters are safe to copy.
 type Forecaster struct {
 	History       History
-	Target        string
 	TagsByProject map[string][]string
+	// Needs is the transitive needs closure of a unit, the unit itself
+	// included. nil treats every unit as needing nothing else.
+	Needs func(types.Unit) []types.Unit
 	// MemoryBudgetBytes caps a shard's predicted peak. Leave it zero: the
 	// forecaster then derives a budget from the machine it is planning for, which
 	// is what every caller should want and nobody can pick better by hand.
@@ -56,199 +55,258 @@ func (f Forecaster) memoryBudget() int64 {
 	return 0
 }
 
-// Plan partitions projects into at most maxShards shards using USL-optimal N* = sqrt(W/α) and LPT packing.
-func (f Forecaster) Plan(projects []*types.Project, maxShards int) [][]*types.Project {
-	if len(projects) == 0 {
+// Plan partitions units into at most maxShards shards. A shard costs
+// SetupP50Ms plus each distinct target in its units' needs closures.
+// Units go longest-first, ties by project:target, to the shard they
+// leave cheapest. A shard opens only when it shortens the longest one
+// by more than setup plus the prerequisites it repeats. Equal history
+// and units give an equal plan.
+func (f Forecaster) Plan(units []types.Unit, maxShards int) [][]types.Unit {
+	if len(units) == 0 {
 		return nil
 	}
-
-	durations := make([]int64, len(projects))
-	var totalMs int64
-	for i, p := range projects {
-		ms := f.History.PredictDuration(p.Path, f.Target, f.TagsByProject[p.Path]).Milliseconds()
-		durations[i] = ms
-		totalMs += ms
-	}
-
-	limit := maxShards
-	if limit <= 0 || limit > len(projects) {
-		limit = len(projects)
-	}
-
-	c := f.History.effectiveConstants()
-	n := optimalShardCount(Millis(totalMs), c.SetupP50Ms, c.AlphaMs, limit)
-	return f.fitMemory(projects, durations, n, limit)
+	return f.fitMemory(f.weigh(units), clampShards(maxShards, len(units)))
 }
 
-// fitMemory raises the shard count until no shard is predicted to exceed the
-// memory budget, then packs.
-//
-// It exists because optimalShardCount reasons entirely in milliseconds: it
-// weighs predicted work against runner setup cost and consolidates whenever
-// setup would dominate. That is right for time and blind to the thing that
-// actually ends a CI job: two heavy projects landing on one runner, which the
-// duration model scores as a cheap win because their combined runtime is
-// unremarkable. A runner that runs out of memory does not run slower, it
-// disappears, and the job reports "cancelled" with no diagnostics at all.
-//
-// It can only ever SPLIT. Never dropping below n means this can add runners but
-// never remove the ones the time model asked for, so the worst case of a wrong
-// memory prediction is a job that costs more, not one that regresses.
-//
-// A project with no recorded peak contributes nothing to a shard's predicted
-// total. That is deliberate: unknown is not zero, and pretending otherwise
-// would either force every unmeasured project onto its own runner (if read as
-// infinite) or quietly protect nothing (if read as free). Contributing nothing
-// keeps today's behavior for what has never been measured, and tightens as
-// history accumulates.
-func (f Forecaster) fitMemory(projects []*types.Project, durations []int64, n, limit int) [][]*types.Project {
+func clampShards(maxShards, units int) int {
+	if maxShards <= 0 || maxShards > units {
+		return units
+	}
+	return maxShards
+}
+
+// weights is a unit set prepared for packing: each closure as indexes
+// into nodeMs, and units sorted longest-first.
+type weights struct {
+	units   []types.Unit
+	closure [][]int
+	own     []int // own[i] is units[i]'s index in nodeMs
+	nodeMs  []int64
+	setupMs int64
+}
+
+func (f Forecaster) weigh(units []types.Unit) weights {
+	w := weights{setupMs: int64(f.History.effectiveConstants().SetupP50Ms)}
+	index := map[types.Unit]int{}
+	node := func(u types.Unit) int {
+		if i, ok := index[u]; ok {
+			return i
+		}
+		index[u] = len(w.nodeMs)
+		w.nodeMs = append(w.nodeMs, f.predict(u))
+		return index[u]
+	}
+	type weighed struct {
+		unit    types.Unit
+		own     int
+		closure []int
+		ms      int64
+	}
+	all := make([]weighed, 0, len(units))
+	for _, u := range units {
+		x := weighed{unit: u, own: node(u), closure: []int{node(u)}}
+		if f.Needs != nil {
+			for _, n := range f.Needs(u) {
+				if i := node(n); !slices.Contains(x.closure, i) {
+					x.closure = append(x.closure, i)
+				}
+			}
+		}
+		for _, i := range x.closure {
+			x.ms += w.nodeMs[i]
+		}
+		all = append(all, x)
+	}
+	slices.SortStableFunc(all, func(a, b weighed) int {
+		if a.ms != b.ms {
+			return cmp.Compare(b.ms, a.ms)
+		}
+		return cmp.Compare(a.unit.String(), b.unit.String())
+	})
+	for _, x := range all {
+		w.units = append(w.units, x.unit)
+		w.own = append(w.own, x.own)
+		w.closure = append(w.closure, x.closure)
+	}
+	return w
+}
+
+func (f Forecaster) predict(u types.Unit) int64 {
+	return f.History.PredictDuration(u.Project, u.Target, f.TagsByProject[u.Project]).Milliseconds()
+}
+
+// bin is one shard while packing.
+type bin struct {
+	units []int
+	nodes map[int]bool
+	ms    int64
+}
+
+// with is b's cost once unit i joins it.
+func (w weights) with(b bin, i int) int64 {
+	ms := b.ms
+	for _, n := range w.closure[i] {
+		if !b.nodes[n] {
+			ms += w.nodeMs[n]
+		}
+	}
+	return ms
+}
+
+// pack places every unit. It opens a shard unconditionally while fewer
+// than minShards exist, and never past maxShards.
+func (w weights) pack(minShards, maxShards int) []bin {
+	var bins []bin
+	open := func(i int) {
+		bins = append(bins, w.add(bin{nodes: map[int]bool{}, ms: w.setupMs}, i))
+	}
+	for i := range w.units {
+		if len(bins) == 0 {
+			open(i)
+			continue
+		}
+		best, bestMs := 0, w.with(bins[0], i)
+		for s := 1; s < len(bins); s++ {
+			if ms := w.with(bins[s], i); ms < bestMs {
+				best, bestMs = s, ms
+			}
+		}
+		if len(bins) < maxShards && (len(bins) < minShards || w.opens(bins, i, bestMs)) {
+			open(i)
+			continue
+		}
+		bins[best] = w.add(bins[best], i)
+	}
+	return bins
+}
+
+// opens reports whether unit i on a shard of its own shortens the
+// longest shard by more than setup plus the prerequisites it repeats.
+func (w weights) opens(bins []bin, i int, joinedMs int64) bool {
+	longest := makespan(bins)
+	alone := w.setupMs
+	var repeated int64
+	for _, n := range w.closure[i] {
+		alone += w.nodeMs[n]
+		if n == w.own[i] {
+			continue
+		}
+		for _, b := range bins {
+			if b.nodes[n] {
+				repeated += w.nodeMs[n]
+				break
+			}
+		}
+	}
+	gain := max(longest, joinedMs) - max(longest, alone)
+	return gain > w.setupMs+repeated
+}
+
+func (w weights) add(b bin, i int) bin {
+	b.ms = w.with(b, i)
+	for _, n := range w.closure[i] {
+		b.nodes[n] = true
+	}
+	b.units = append(b.units, i)
+	return b
+}
+
+func (w weights) assignments(bins []bin) [][]types.Unit {
+	out := make([][]types.Unit, len(bins))
+	for s, b := range bins {
+		for _, i := range b.units {
+			out[s] = append(out[s], w.units[i])
+		}
+	}
+	return out
+}
+
+func makespan(bins []bin) int64 {
+	var longest int64
+	for _, b := range bins {
+		longest = max(longest, b.ms)
+	}
+	return longest
+}
+
+// fitMemory adds shards until every shard's peaks fit the budget. A
+// runner out of memory vanishes as "cancelled". It only splits, so a
+// wrong peak costs runners, never a regression.
+func (f Forecaster) fitMemory(w weights, limit int) [][]types.Unit {
 	budget := f.memoryBudget()
-	if budget <= 0 {
-		return lpt(projects, durations, n)
+	bins := w.pack(1, limit)
+	for budget > 0 && len(bins) < limit && !f.fits(w.assignments(bins), budget) {
+		bins = w.pack(len(bins)+1, limit)
 	}
-	peaks := make([]int64, len(projects))
-	for i, p := range projects {
-		if b, ok := f.History.PredictPeakRSS(p.Path, f.Target); ok {
-			peaks[i] = b
-		}
-	}
-	for {
-		assignments := lpt(projects, durations, n)
-		if n >= limit || f.fits(assignments, projects, peaks, budget) {
-			return assignments
-		}
-		n++
-	}
+	return w.assignments(bins)
 }
 
-// fits reports whether every shard's predicted peak is within the budget.
-//
-// A shard's figure is the SUM of its projects, and the contrast with
-// types.PeakRSS (which takes a maximum) is not an inconsistency at this level:
-// this one aggregates the projects within a shard, which magus schedules
-// CONCURRENTLY up to its concurrency budget, so their peaks can coincide and the
-// runner has to hold all of them.
-//
-// The per-project figures being summed are FLOORS, and this is the consumer that
-// pays when one is too low: a shard that fits on paper still takes its runner
-// down, which is the exact failure this packing exists to prevent. They used to be
-// much worse than floors: a target's processes were folded as a maximum on the
-// premise that they run in sequence, so a parallel suite whose real footprint was
-// 3GB recorded 1.2GB (see types/exec_cost.go). That is fixed at the source now by
-// sampling the process tree, but history written before the fix still carries the
-// old figures, so treat a passing fit as necessary rather than sufficient.
-//
-// Summing is also what makes splitting work at all: the maximum of a shard's
-// projects does not fall when the shard is halved, so a max-based test could
-// never be satisfied by adding runners, and the loop above would spin to the
-// limit without ever improving anything.
-func (f Forecaster) fits(assignments [][]*types.Project, projects []*types.Project, peaks []int64, budget int64) bool {
-	index := make(map[string]int, len(projects))
-	for i, p := range projects {
-		index[p.Path] = i
-	}
-	for _, shard := range assignments {
-		var total int64
-		for _, p := range shard {
-			total += peaks[index[p.Path]]
-		}
-		if total > budget {
+// fits reports whether every shard's summed unit peaks fit the budget.
+// A sum, since a shard's units run concurrently. A unit with no recorded
+// peak adds nothing: unknown is neither free nor vast.
+func (f Forecaster) fits(shards [][]types.Unit, budget int64) bool {
+	for _, shard := range shards {
+		if f.peak(shard) > budget {
 			return false
 		}
 	}
 	return true
 }
 
-// optimalShardCount returns the makespan-minimizing shard count N* = sqrt(W/α), clamped to [1, maxN].
-func optimalShardCount(workMs, setupMs, alphaMs Millis, maxN int) int {
-	if maxN < 1 {
-		return 1
+func (f Forecaster) peak(shard []types.Unit) int64 {
+	var total int64
+	for _, u := range shard {
+		if b, ok := f.History.PredictPeakRSS(u.Project, u.Target); ok {
+			total += b
+		}
 	}
-	if workMs <= 0 {
-		return 1
-	}
-	if setupMs > 0 && workMs < 2*setupMs {
-		return 1
-	}
-	if alphaMs <= 0 {
-		return maxN
-	}
-
-	n := int(math.Round(math.Sqrt(float64(workMs) / float64(alphaMs))))
-	if n < 1 {
-		return 1
-	}
-	if n > maxN {
-		return maxN
-	}
-	return n
+	return total
 }
 
-// lpt packs projects into nShards bins (Longest Processing Time first).
-func lpt(projects []*types.Project, durations []int64, nShards int) [][]*types.Project {
-	if nShards < 1 {
-		nShards = 1
-	}
-	if len(projects) == 0 {
-		return nil
-	}
-	if nShards > len(projects) {
-		nShards = len(projects)
-	}
-
-	// Sort indices by descending duration (ties broken by path). Sorting indices avoids mutating callers' slice.
-	idx := make([]int, len(projects))
-	for i := range idx {
-		idx[i] = i
-	}
-	slices.SortStableFunc(idx, func(a, b int) int {
-		if durations[a] != durations[b] {
-			return cmp.Compare(durations[b], durations[a])
-		}
-		return cmp.Compare(projects[a].Path, projects[b].Path)
-	})
-
-	shards := make([][]*types.Project, nShards)
-	totals := make([]int64, nShards)
-
-	for _, i := range idx {
-		minShard := 0 // smallest-total bin; ties go to lowest index for stability
-		for s := 1; s < nShards; s++ {
-			if totals[s] < totals[minShard] {
-				minShard = s
-			}
-		}
-		shards[minShard] = append(shards[minShard], projects[i])
-		totals[minShard] += durations[i]
-	}
-
-	return shards
-}
-
-// SufficientShards is the smallest shard count that reaches the best makespan this
-// forecast can predict, or 0 when nothing is predictable.
-//
-// Makespan is at least max(longest project, total work / n), so once n reaches
-// ceil(total/longest) the longest single project is the bound and another runner lowers
-// nothing while still paying its own setup. Advice, not a cap: the caller decides whether
-// to spend the runners anyway, and fitMemory may still want more of them.
-func (f Forecaster) SufficientShards(projects []*types.Project) int {
-	var total, longest int64
-	for _, p := range projects {
-		ms := f.History.PredictDuration(p.Path, f.Target, f.TagsByProject[p.Path]).Milliseconds()
-		total += ms
-		if ms > longest {
-			longest = ms
-		}
-	}
-	if total <= 0 || longest <= 0 {
+// SufficientShards is the smallest shard count that reaches the makespan
+// Plan predicts within maxShards, or 0 when nothing is predictable.
+// Advice, not a cap: fitMemory may still want more shards.
+func (f Forecaster) SufficientShards(units []types.Unit, maxShards int) int {
+	if len(units) == 0 {
 		return 0
 	}
-	n := int((total + longest - 1) / longest)
-	if n > len(projects) {
-		return len(projects)
+	w := f.weigh(units)
+	best := w.pack(1, clampShards(maxShards, len(units)))
+	if makespan(best) <= w.setupMs {
+		return 0
 	}
-	return n
+	for n := 1; n < len(best); n++ {
+		if makespan(w.pack(1, n)) <= makespan(best) {
+			return n
+		}
+	}
+	return len(best)
+}
+
+// Unmeasured names the units and prerequisites the history holds no
+// duration for, sorted by project:target.
+func (f Forecaster) Unmeasured(units []types.Unit) []types.Unit {
+	seen := map[types.Unit]bool{}
+	var out []types.Unit
+	note := func(u types.Unit) {
+		if seen[u] {
+			return
+		}
+		seen[u] = true
+		if !f.History.Measured(u.Project, u.Target, f.TagsByProject[u.Project]) {
+			out = append(out, u)
+		}
+	}
+	for _, u := range units {
+		note(u)
+		if f.Needs != nil {
+			for _, n := range f.Needs(u) {
+				note(n)
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b types.Unit) int { return cmp.Compare(a.String(), b.String()) })
+	return out
 }
 
 // OverBudget names the shards whose predicted peak memory exceeds one runner's budget,
@@ -259,20 +317,14 @@ func (f Forecaster) SufficientShards(projects []*types.Project) int {
 // whether that plan actually fits is the one thing nobody was told. A runner that
 // exceeds its memory does not run slower, it disappears, and the job reports "cancelled"
 // with no diagnostics, so this is the only warning a reader can get before it happens.
-func (f Forecaster) OverBudget(shards [][]*types.Project) []int {
+func (f Forecaster) OverBudget(shards [][]types.Unit) []int {
 	budget := f.memoryBudget()
 	if budget <= 0 {
 		return nil
 	}
 	var out []int
 	for i, shard := range shards {
-		var total int64
-		for _, p := range shard {
-			if b, ok := f.History.PredictPeakRSS(p.Path, f.Target); ok {
-				total += b
-			}
-		}
-		if total > budget {
+		if f.peak(shard) > budget {
 			out = append(out, i)
 		}
 	}

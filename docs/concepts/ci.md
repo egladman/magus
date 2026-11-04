@@ -20,7 +20,7 @@ same ops against the same declared inputs, and the same cache key decides whethe
 any of it has to run at all. That is the point: a pipeline you cannot reproduce
 locally is a pipeline you debug through the web UI.
 
-Five things do change, and each has a page.
+Six things do change, and each has a page or a section here.
 
 ## The pipeline verb
 
@@ -35,6 +35,25 @@ for prose no target reads, the drift check and lint for a comment edit, tests
 narrowed to the packages that import a changed Go package. Every tier below the
 full gate rests on a proof, and the run prints the evidence for every file. See
 [Gate sizing](ci/risk.md).
+
+## The shards
+
+`magus affected ci --plan` splits the gate across runners. Its unit is one
+target an affected project's `ci` composes directly, such as `.:test` or
+`libs/x:format`, so one large project can fill several runners. Each unit weighs
+what the run history recorded for it. A unit with no history weighs the
+workspace fallback, and the plan lists it under `unmeasured`.
+
+A shard costs one runner's setup plus every distinct target its units need,
+prerequisites counted once. Units go longest first to the shard they leave
+cheapest. A new shard opens only when it shortens the longest shard by more than
+setup plus the prerequisites it would repeat. The same history and the same
+change give the same plan, at a cap of 3 shards or 12.
+
+Each shard in the plan lists its `units`. `magus run ci --stdin --shard <id>`
+reads the saved plan and runs that shard's units as one invocation. It refuses
+args after `--`: `ctx.needs` hands a composed target none, so a target that
+takes them runs by name.
 
 ## The checkout
 

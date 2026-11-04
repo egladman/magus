@@ -1,9 +1,24 @@
 package types
 
+import "fmt"
+
+// Unit is the smallest piece of work a CI shard plan places: one
+// target a project's anchor (ci) composes directly, run in Project.
+type Unit struct {
+	Project string `json:"project"`
+	Target  string `json:"target"`
+}
+
+// String is the unit as project:target, the key ties break on.
+func (u Unit) String() string { return fmt.Sprintf("%s:%s", u.Project, u.Target) }
+
 // Shard is one runner's worth of work in a CI shard plan.
 type Shard struct {
-	ID           string   // zero-padded shard index (e.g. "00", "01")
-	ProjectPaths []string // workspace-relative project paths assigned to this shard
+	ID string // zero-padded shard index (e.g. "00", "01")
+	// ProjectPaths are the distinct projects of Units, sorted.
+	ProjectPaths []string
+	// Units are what the shard runs, in the order the planner placed them.
+	Units []Unit
 }
 
 // ShardPlan is a provider-neutral CI shard plan produced by Magus.Plan.
@@ -18,6 +33,9 @@ type ShardPlan struct {
 	// runner that runs out of memory disappears and reports "cancelled" with no
 	// diagnostics, so this is the only warning there is.
 	OverBudget []string
+	// Unmeasured are the units and prerequisites with no recorded
+	// duration, sorted. The plan weighed each with the fallback.
+	Unmeasured []Unit
 	// Affected is every project the change set reaches, sorted: the closure the shards
 	// were cut from, before any sharding or filtering.
 	Affected []string

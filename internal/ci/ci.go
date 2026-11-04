@@ -21,8 +21,8 @@ var ErrInvalidMaxShards = errors.New("ci: max shards must be -1 (unlimited) or a
 
 // Shard is one runner's worth of work; ID is zero-padded so log entries sort correctly.
 type Shard struct {
-	ID       string
-	Projects []*types.Project
+	ID    string
+	Units []types.Unit
 }
 
 // Plan is the output of Build: shards for a CI matrix plus source label and concurrency cap.
@@ -32,10 +32,11 @@ type Plan struct {
 	MaxParallel int // 0 = no cap (renderers emit max-parallel = len(Shards))
 }
 
-// Forecaster is the optional adaptive partitioner that replaces ceil-division when supplied to Build.
-// Defined by interface to avoid an import cycle with magus/ci/forecast.
+// Forecaster is the optional adaptive partitioner that replaces
+// ceil-division when supplied to Build. Plan returns every unit exactly
+// once, in at most maxShards shards.
 type Forecaster interface {
-	Plan(projects []*types.Project, maxShards int) [][]*types.Project
+	Plan(units []types.Unit, maxShards int) [][]types.Unit
 }
 
 type config struct {
@@ -60,8 +61,10 @@ func WithMaxShards(n int) Option {
 	}
 }
 
-// Build partitions projects into at most maxShards shards via ceil-division (or a forecaster).
-func Build(projects []*types.Project, source string, opts ...Option) (Plan, error) {
+// Build partitions units into at most maxShards shards via ceil-division
+// (or a forecaster). A shard never holds less than one unit, so the
+// limit clamps to len(units).
+func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 	cfg := &config{maxShards: defaultMaxShards}
 	for _, o := range opts {
 		o(cfg)
@@ -70,55 +73,47 @@ func Build(projects []*types.Project, source string, opts ...Option) (Plan, erro
 		return Plan{}, ErrInvalidMaxShards
 	}
 
-	if len(projects) == 0 {
+	if len(units) == 0 {
 		return Plan{Source: source}, nil
 	}
 
 	maxShards := cfg.maxShards
 	if maxShards == -1 {
-		// Unlimited: one shard per project, still subject to hardCeiling.
-		maxShards = len(projects)
+		maxShards = len(units)
 	}
-	if maxShards > hardCeiling {
-		maxShards = hardCeiling
-	}
-	if maxShards > len(projects) {
-		maxShards = len(projects)
-	}
+	maxShards = min(maxShards, hardCeiling, len(units))
 
-	var assignments [][]*types.Project
+	var assignments [][]types.Unit
 	if cfg.forecaster != nil {
-		assignments = cfg.forecaster.Plan(projects, maxShards)
+		assignments = cfg.forecaster.Plan(units, maxShards)
 		if len(assignments) == 0 { // defensive: never drop work
-			assignments = ceilDivide(projects, maxShards)
+			assignments = ceilDivide(units, maxShards)
 		}
 	} else {
-		assignments = ceilDivide(projects, maxShards)
+		assignments = ceilDivide(units, maxShards)
 	}
 
 	idWidth := digits(len(assignments) - 1)
 
 	shards := make([]Shard, len(assignments))
-	for i, ps := range assignments {
+	for i, us := range assignments {
 		shards[i] = Shard{
-			ID:       fmt.Sprintf("%0*d", idWidth, i),
-			Projects: ps,
+			ID:    fmt.Sprintf("%0*d", idWidth, i),
+			Units: us,
 		}
 	}
 
 	return Plan{Shards: shards, Source: source}, nil
 }
 
-// ceilDivide partitions projects into at most maxShards shards via ceil-division.
-func ceilDivide(projects []*types.Project, maxShards int) [][]*types.Project {
-	if len(projects) == 0 || maxShards < 1 {
+// ceilDivide partitions units into at most maxShards shards via ceil-division.
+func ceilDivide(units []types.Unit, maxShards int) [][]types.Unit {
+	if len(units) == 0 || maxShards < 1 {
 		return nil
 	}
-	if maxShards > len(projects) {
-		maxShards = len(projects)
-	}
-	out := make([][]*types.Project, maxShards)
-	n := len(projects)
+	maxShards = min(maxShards, len(units))
+	out := make([][]types.Unit, maxShards)
+	n := len(units)
 	base := n / maxShards
 	extra := n % maxShards
 	idx := 0
@@ -127,7 +122,7 @@ func ceilDivide(projects []*types.Project, maxShards int) [][]*types.Project {
 		if i < extra {
 			count++
 		}
-		out[i] = projects[idx : idx+count]
+		out[i] = units[idx : idx+count]
 		idx += count
 	}
 	return out
