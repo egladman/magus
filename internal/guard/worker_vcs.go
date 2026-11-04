@@ -265,15 +265,28 @@ func integrationScratchCall(ctx context.Context, row types.Job, inv hint.Invocat
 	}
 	sub, rest := vcsSubcommand(inv)
 	if sub == "worktree" {
-		return scratchWorktreeChange(ctx, row, rest, site.dir)
+		return sharesRepository(row, site.dir) && scratchWorktreeChange(ctx, row, rest, site.dir)
 	}
 	if !detachedScratch(ctx, row, site.dir) {
 		return false
 	}
 	if operand, merge := workerMerge(inv); merge {
-		return operand == "" || slices.Contains(row.Integrates, operand)
+		if operand == "" {
+			return slices.Contains(rest, "--continue") || slices.Contains(rest, "--abort")
+		}
+		return slices.Contains(row.Integrates, operand)
 	}
-	return recordsCommit(inv) || workerVCSOp(inv) == "" && workerVCSMovesRefs(inv)
+	return recordsCommit(inv) || sub == "add"
+}
+
+// sharesRepository reports dir in a checkout of row's own repository.
+func sharesRepository(row types.Job, dir string) bool {
+	_, mine, ok := gitCheckout(row.CheckoutRoot)
+	if !ok {
+		return false
+	}
+	_, there, ok := gitCheckout(dir)
+	return ok && samePath(mine, there)
 }
 
 // scratchWorktreeChange reports `git worktree add --detach <dir> [<rev>]` of a

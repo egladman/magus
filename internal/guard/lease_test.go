@@ -2108,6 +2108,7 @@ func (s *IntegrationScratchMergeSuite) SetupTest() {
 	s.row.ID = "integrate"
 	s.row.Parent = "orchestrator"
 	s.row.CheckoutRoot = s.own
+	s.row.Worktree = &types.JobWorktree{Root: s.own}
 	s.row.Integrates = []string{"done"}
 	s.ctx, _ = fleetFixture(t, s.row)
 	// After the fixture, which points the cache elsewhere.
@@ -2153,11 +2154,60 @@ func (s *IntegrationScratchMergeSuite) TestMergingAnotherBranchInTheTreeIsRefuse
 	s.Error(s.run(s.row, s.tree, "merge", "--no-ff", "--no-commit", "other"))
 }
 
-func (s *IntegrationScratchMergeSuite) TestCommittingAndAbortingInTheTreePass() {
+func (s *IntegrationScratchMergeSuite) TestCommittingInTheTreePasses() {
 	s.addTree()
 	s.NoError(s.run(s.row, s.tree, "commit", "--no-edit", "--no-verify"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAbortingAMergeInTheTreePasses() {
+	s.addTree()
 	s.NoError(s.run(s.row, s.tree, "merge", "--abort"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestStagingInTheTreePasses() {
+	s.addTree()
 	s.NoError(s.run(s.row, s.tree, "add", "--", "a.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestMakingABranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "branch", "stray"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestSwitchingToANewBranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "switch", "-c", "stray"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestCheckingOutANewBranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "checkout", "-b", "stray"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestSwitchingToABranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "switch", "done"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestRestoringInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "restore", "a.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestRemovingAFileInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "rm", "a.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestMovingAFileInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "mv", "a.txt", "b.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestFastForwardingToACommitInTheTreeIsRefused() {
+	s.addTree()
+	sha := s.repo.origin.Git("-C", s.own, "rev-parse", "HEAD")
+	s.Error(s.run(s.row, s.tree, "merge", "--ff-only", sha))
 }
 
 func (s *IntegrationScratchMergeSuite) TestAResetInTheTreeIsRefused() {
@@ -2172,11 +2222,18 @@ func (s *IntegrationScratchMergeSuite) TestRemovingTheTreePasses() {
 
 // A job's checkout under the scratch dir is on its job's branch, so it is
 // nobody's scratch tree.
-func (s *IntegrationScratchMergeSuite) TestATreeOnABranchIsNotScratch() {
+func (s *IntegrationScratchMergeSuite) onBranch() string {
 	onBranch := filepath.Join(s.scratch, "r-sibling")
 	s.repo.git(s.repo.main, "worktree", "add", "-q", "-b", "sibling", onBranch, "origin/main")
-	s.Error(s.run(s.row, s.own, "worktree", "remove", "--force", onBranch))
-	s.Error(s.run(s.row, onBranch, "commit", "-m", "done"))
+	return onBranch
+}
+
+func (s *IntegrationScratchMergeSuite) TestRemovingATreeOnABranchIsRefused() {
+	s.Error(s.run(s.row, s.own, "worktree", "remove", "--force", s.onBranch()))
+}
+
+func (s *IntegrationScratchMergeSuite) TestCommittingInATreeOnABranchIsRefused() {
+	s.Error(s.run(s.row, s.onBranch(), "commit", "-m", "done"))
 }
 
 // TestDenyLeaseScopedVCSRefusesTheWrongBranch pins the branch half: a worker's own
