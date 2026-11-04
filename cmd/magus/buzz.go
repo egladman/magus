@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
@@ -297,11 +298,13 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	}
 
 	if bf.Test {
-		scripts, err := buzzTestSources(bf.E, rest, forwarded)
+		scripts, err := coverage.BuzzTestSources(buzzSource, bf.E, rest, forwarded)
 		if err != nil {
 			return err
 		}
-		return buzzTestScripts(ctx, root, bf, scripts)
+		return coverage.BuzzTestScripts(ctx, bf.Coverprofile, scripts, func(ctx context.Context, s coverage.BuzzScript, cov *buzz.LineCoverage) error {
+			return buzzRunScript(ctx, root, bf, s, cov)
+		})
 	}
 	code, name, scriptArgs, err := buzzSource(bf.E, rest)
 	if err != nil {
@@ -310,90 +313,12 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	if sep {
 		scriptArgs = append(scriptArgs, forwarded...)
 	}
-	return buzzRunScript(ctx, root, bf, buzzScript{code: code, name: name, args: scriptArgs}, nil)
-}
-
-// buzzScript is one program a run executes, with the name its diagnostics carry.
-type buzzScript struct {
-	code, name string
-	args       []string
-}
-
-// buzzTestSources resolves what -t tests: an -e snippet, piped stdin, or every
-// path given. Args after -- go to a single script, never to several.
-func buzzTestSources(eval string, paths, forwarded []string) ([]buzzScript, error) {
-	if len(paths) > 1 && len(forwarded) > 0 {
-		return nil, exit.Usagef("magus buzz: args after -- go to one script, and -%s was given %d", flaggen.FlagBuzzT, len(paths))
-	}
-	if eval != "" {
-		code, name, _, err := buzzSource(eval, paths)
-		return []buzzScript{{code: code, name: name, args: forwarded}}, err
-	}
-	return buzzReadScripts(paths, forwarded)
-}
-
-func buzzReadScripts(paths, forwarded []string) ([]buzzScript, error) {
-	if len(paths) == 0 {
-		return buzzStdinScript(forwarded)
-	}
-	scripts := make([]buzzScript, 0, len(paths))
-	for _, p := range paths {
-		code, name, _, err := buzzSource("", []string{p})
-		if err != nil {
-			return nil, err
-		}
-		scripts = append(scripts, buzzScript{code: code, name: name, args: forwarded})
-	}
-	return scripts, nil
-}
-
-// buzzStdinScript reads the script from stdin only when one is piped. A terminal
-// would block, and /dev/null would pass having tested nothing.
-func buzzStdinScript(forwarded []string) ([]buzzScript, error) {
-	if !stdinIsPiped() {
-		return nil, exit.Usagef("magus buzz: -%s <file>... names the scripts to test; none was given and nothing is piped on stdin", flaggen.FlagBuzzT)
-	}
-	code, name, _, err := buzzSource("", nil)
-	return []buzzScript{{code: code, name: name, args: forwarded}}, err
-}
-
-// stdinIsPiped reports whether stdin is a pipe or a regular file, the two that
-// carry a script. A terminal and /dev/null are character devices.
-func stdinIsPiped() bool {
-	info, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeNamedPipe != 0 || info.Mode().IsRegular()
-}
-
-// buzzTestScripts tests every script, each in its own session, so a failing one
-// does not hide the next. One coverprofile holds every script's lines.
-func buzzTestScripts(ctx context.Context, root string, bf *flaggen.BuzzFlags, scripts []buzzScript) error {
-	var cov *buzz.LineCoverage
-	if bf.Coverprofile != "" {
-		cov = buzz.NewLineCoverage()
-	}
-	errs := make([]error, 0, len(scripts)+1)
-	for _, s := range scripts {
-		errs = append(errs, buzzRunScript(ctx, root, bf, s, cov))
-	}
-	return errors.Join(append(errs, writeBuzzCoverage(bf.Coverprofile, cov))...)
-}
-
-func writeBuzzCoverage(path string, cov *buzz.LineCoverage) error {
-	if cov == nil {
-		return nil
-	}
-	if err := os.WriteFile(path, []byte(cov.Report()), 0o644); err != nil {
-		return fmt.Errorf("magus buzz: write --%s: %w", flaggen.FlagBuzzCoverprofile, err)
-	}
-	return nil
+	return buzzRunScript(ctx, root, bf, coverage.BuzzScript{Code: code, Name: name, Args: scriptArgs}, nil)
 }
 
 // buzzRunScript runs one script in a session of its own, recording the run under
 // -t or --record. A non-nil cov collects the script's line coverage.
-func buzzRunScript(ctx context.Context, root string, bf *flaggen.BuzzFlags, src buzzScript, cov *buzz.LineCoverage) (retErr error) {
+func buzzRunScript(ctx context.Context, root string, bf *flaggen.BuzzFlags, src coverage.BuzzScript, cov *buzz.LineCoverage) (retErr error) {
 	ctx, err := buzzRunContext(ctx, root)
 	if err != nil {
 		return err
@@ -407,7 +332,7 @@ func buzzRunScript(ctx context.Context, root string, bf *flaggen.BuzzFlags, src 
 		scriptOut, records = io.MultiWriter(scriptOut, &recorded), io.MultiWriter(records, &recorded)
 		started := time.Now()
 		defer func() {
-			if err := recordBuzzRun(ctx, root, src.name, src.code, src.args, bf.Test, recorded.Bytes(), started, retErr); err != nil {
+			if err := recordBuzzRun(ctx, root, src.Name, src.Code, src.Args, bf.Test, recorded.Bytes(), started, retErr); err != nil {
 				retErr = errors.Join(retErr, err)
 			}
 		}()
@@ -434,27 +359,27 @@ func buzzScriptWriters(ctx context.Context) (prose, records io.Writer) {
 	return os.Stdout, os.Stdout
 }
 
-func buzzExecScript(ctx context.Context, bf *flaggen.BuzzFlags, src buzzScript, scriptOut io.Writer, cov *buzz.LineCoverage) error {
-	sess := newBuzzScriptSession(ctx, bf, src.name)
+func buzzExecScript(ctx context.Context, bf *flaggen.BuzzFlags, src coverage.BuzzScript, scriptOut io.Writer, cov *buzz.LineCoverage) error {
+	sess := newBuzzScriptSession(ctx, bf, src.Name)
 	defer func() { _ = sess.Close() }()
 	tr := traceFromContext(ctx)
 	addProfileObserver(ctx, sess)
-	lateErr, err := installBuzzHost(ctx, sess, src.code, scriptOut, tr)
+	lateErr, err := installBuzzHost(ctx, sess, src.Code, scriptOut, tr)
 	if err != nil {
-		return fmt.Errorf("%s: %w", src.name, err)
+		return fmt.Errorf("%s: %w", src.Name, err)
 	}
-	buzzEnableCoverage(sess, src.name, cov)
+	buzzEnableCoverage(sess, src.Name, cov)
 	stopExec := tr.phase("buzz.exec")
-	err = sess.Exec(ctx, src.code)
+	err = sess.Exec(ctx, src.Code)
 	stopExec()
 	if err != nil {
-		return buzzExecError(src.name, err, lateErr)
+		return buzzExecError(src.Name, err, lateErr)
 	}
-	printBuzzWarnings(ctx, sess, src.name)
+	printBuzzWarnings(ctx, sess, src.Name)
 	if bf.Test {
-		return runBuzzTests(ctx, sess, src.name, scriptOut)
+		return runBuzzTests(ctx, sess, src.Name, scriptOut)
 	}
-	return buzzCallMain(ctx, sess, src, tr)
+	return buzzCallMain(ctx, sess, src.Name, src.Args, tr)
 }
 
 // newBuzzScriptSession opens a strict session, upstream Buzz parity. --embedded
@@ -514,16 +439,16 @@ func printBuzzWarnings(ctx context.Context, sess *buzz.Session, name string) {
 // buzzCallMain runs an entry script's `main` once its top level has, as upstream
 // does, with the args after the script path as its argv. Strict mode cannot wrap
 // a script's own call to main: a top-level `try` is rejected.
-func buzzCallMain(ctx context.Context, sess *buzz.Session, src buzzScript, tr *startupTracer) error {
+func buzzCallMain(ctx context.Context, sess *buzz.Session, name string, args []string, tr *startupTracer) error {
 	mainFn := sess.GetGlobal("main")
 	if !mainFn.IsFun() {
 		return nil
 	}
 	stopMain := tr.phase("buzz.main")
-	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{buzzStringList(src.args)})
+	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{buzzStringList(args)})
 	stopMain()
 	if err != nil {
-		return fmt.Errorf("%s: %w", src.name, err)
+		return fmt.Errorf("%s: %w", name, err)
 	}
 	// `fun main() > int` is upstream's exit-status convention, and the checker
 	// permits it; discarding the value made such a script always exit 0.

@@ -55,16 +55,16 @@ func (s *ReportSuite) TestLCOVCountsEachDALineOnce() {
 			{StartLine: 3, EndLine: 3, Units: 1, Hits: 1},
 		}},
 		{Path: "src/b.ts", Total: 1, Blocks: []Block{{StartLine: 7, EndLine: 7, Units: 1}}},
-	}, ParseLCOV(trace))
+	}, parseLCOV(trace))
 }
 
 func (s *ReportSuite) TestLCOVSkipsADALineOutsideAFile() {
-	s.Nil(ParseLCOV([]byte("DA:1,1\nend_of_record\n")))
+	s.Nil(parseLCOV([]byte("DA:1,1\nend_of_record\n")))
 }
 
 func (s *ReportSuite) TestLCOVSkipsAMalformedDALine() {
 	s.Equal([]File{{Path: "a.py", Total: 1, Blocks: []Block{{StartLine: 2, EndLine: 2, Units: 1}}}},
-		ParseLCOV([]byte("SF:a.py\nDA:x,1\nDA:2,0\nend_of_record\n")))
+		parseLCOV([]byte("SF:a.py\nDA:x,1\nDA:2,0\nend_of_record\n")))
 }
 
 func (s *ReportSuite) TestParseRefusesNoFormat() {

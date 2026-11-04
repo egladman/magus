@@ -67,7 +67,7 @@ func Dir(cacheDir, project string) string {
 func Parse(format spells.CoverageFormat, data []byte, modulePath string) ([]File, error) {
 	switch format {
 	case spells.CoverageFormatLCOV:
-		return parseChecked(format, data, ParseLCOV(data))
+		return parseChecked(format, data, parseLCOV(data))
 	case spells.CoverageFormatGoProfile:
 		return parseChecked(format, data, ParseGoProfile(data, modulePath))
 	case spells.CoverageFormatNone:
@@ -221,10 +221,10 @@ func atois(fields []string) ([]int, bool) {
 	return out, true
 }
 
-// ParseLCOV reads an LCOV tracefile's SF and DA records, each DA line one
+// parseLCOV reads an LCOV tracefile's SF and DA records, each DA line one
 // unit. Paths are as the tracefile spells them; [Rebase] places them. A DA
 // line outside an SF record, or one that does not parse, is skipped.
-func ParseLCOV(trace []byte) []File {
+func parseLCOV(trace []byte) []File {
 	var fs files
 	current := ""
 	for _, raw := range strings.Split(string(trace), "\n") {

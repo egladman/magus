@@ -21,36 +21,36 @@ import (
 // import reads naturally as "the types a spell is built from".
 const SpellModulePath = "magus/spell"
 
-// PathSource is the generated lexical filesystem-reference type used by spell
+// pathSource is the generated lexical filesystem-reference type used by spell
 // metadata. It belongs in magus/spell because declarations such as inputs and
 // manifests are authored by spells before any host module is invoked.
 //
 //go:embed gen/types/path.buzz
-var PathSource string
+var pathSource string
 
-// ManifestSource is the generated mirror of spells.Manifest: the file a project's
+// manifestSource is the generated mirror of spells.Manifest: the file a project's
 // dependencies are declared in, plus the lockfiles its ecosystem resolves them into.
 // It belongs in magus/spell for the same reason Path does (mgs_listManifests is
-// authored before any host module is invoked). It must FOLLOW InstallSource in the
-// bundle (Manifest.installs is {str: Install}), which follows CommandSource.
+// authored before any host module is invoked). It must FOLLOW installSource in the
+// bundle (Manifest.installs is {str: Install}), which follows commandSource.
 //
 //go:embed gen/types/manifest.buzz
-var ManifestSource string
+var manifestSource string
 
-// InstallSource is the generated mirror of spells.Install: how one lockfile's
+// installSource is the generated mirror of spells.Install: how one lockfile's
 // dependencies are materialized.
 //
 //go:embed gen/types/install.buzz
-var InstallSource string
+var installSource string
 
-// TargetModuleSource is the generated Buzz `object Target` mirror of types.Target
+// targetModuleSource is the generated Buzz `object Target` mirror of types.Target
 // (see cmd/magus-utils types), the canonical work-unit value type. It is consumed
 // as part of the magus/spell declarations, by workspace spells and built-ins alike.
 //
 //go:embed gen/types/target.buzz
-var TargetModuleSource string
+var targetModuleSource string
 
-// PatchOpSource / CharmTypeSource / CommandSource are the generated Buzz `object`
+// patchOpSource / charmTypeSource / commandSource are the generated Buzz `object`
 // mirrors of spells.PatchOp, spells.Charm, and types.Run: the {cmd, args, charms}
 // command a command target's handler hands to its cb callback, down to the RFC 6902
 // ops. Unlike the other object mirrors they are inlined into self-contained
@@ -59,153 +59,153 @@ var TargetModuleSource string
 // Charm (Charm.ops is [PatchOp]) precedes Run (Run.charms is {str: Charm}).
 //
 //go:embed gen/types/patchop.buzz
-var PatchOpSource string
+var patchOpSource string
 
 //go:embed gen/types/charm.buzz
-var CharmTypeSource string
+var charmTypeSource string
 
-// HintSource is the generated mirror of spells.Hint: one {match, then} failure
-// classification a command op declares. It must PRECEDE CommandSource in the bundle
+// hintSource is the generated mirror of spells.Hint: one {match, then} failure
+// classification a command op declares. It must PRECEDE commandSource in the bundle
 // (Command.hints is [Hint]), and it references nothing itself.
 //
 //go:embed gen/types/hint.buzz
-var HintSource string
+var hintSource string
 
 //go:embed gen/types/command.buzz
-var CommandSource string
+var commandSource string
 
-// SecretSource is the generated mirror of spells.Secret: what a provider spell's
+// secretSource is the generated mirror of spells.Secret: what a provider spell's
 // resolve_secret op returns. It references nothing, so it has no ordering constraint in
 // the bundle.
 //
 //go:embed gen/types/secret.buzz
-var SecretSource string
+var secretSource string
 
-// VersionKeySource is the generated mirror of spells.VersionKey (what a probed tool
+// versionKeySource is the generated mirror of spells.VersionKey (what a probed tool
 // contributes to the cache key), together with the VersionComponent enum its upTo
 // field is typed as. It ships in the magus/spell bundle so a spell can declare
 // mgs_getVersionKey, and it carries its own enum, so it has no ordering constraint
 // against the others.
 //
 //go:embed gen/types/versionkey.buzz
-var VersionKeySource string
+var versionKeySource string
 
-// VersionBoundsSource is the generated mirror of spells.VersionBounds: the window of
+// versionBoundsSource is the generated mirror of spells.VersionBounds: the window of
 // versions a probed tool is allowed to report, as an inclusive min and an exclusive
 // below. It ships in the magus/spell bundle so a spell can declare what its ops need,
 // and it references nothing, so it has no ordering constraint against the others.
 //
 //go:embed gen/types/versionbounds.buzz
-var VersionBoundsSource string
+var versionBoundsSource string
 
-// ToolSource is the generated mirror of spells.Tool: everything a spell declares about
-// one binary it drives. It must FOLLOW VersionKeySource and VersionBoundsSource in the
+// toolSource is the generated mirror of spells.Tool: everything a spell declares about
+// one binary it drives. It must FOLLOW versionKeySource and versionBoundsSource in the
 // bundle (Tool.key is a VersionKey and Tool.supported is a VersionBounds), and Command
 // is already declared ahead of all three.
 //
 //go:embed gen/types/tool.buzz
-var ToolSource string
+var toolSource string
 
-// SandboxAllowSource, SandboxEnvSource, SandboxCacheSource and SandboxSource are the
-// generated mirrors of what a spell's mgs_getSandbox returns. SandboxSource must follow
+// sandboxAllowSource, sandboxEnvSource, sandboxCacheSource and sandboxSource are the
+// generated mirrors of what a spell's mgs_getSandbox returns. sandboxSource must follow
 // the other three in the bundle: its fields are typed by them.
 //
 //go:embed gen/types/sandboxallow.buzz
-var SandboxAllowSource string
+var sandboxAllowSource string
 
 //go:embed gen/types/sandboxenv.buzz
-var SandboxEnvSource string
+var sandboxEnvSource string
 
 //go:embed gen/types/sandboxcache.buzz
-var SandboxCacheSource string
+var sandboxCacheSource string
 
 //go:embed gen/types/sandbox.buzz
-var SandboxSource string
+var sandboxSource string
 
-// CommentBlockSource / QuoteSource / CommentSyntaxSource are the generated mirrors of
+// commentBlockSource / quoteSource / commentSyntaxSource are the generated mirrors of
 // the comment/string syntax a spell declares in mgs_getLanguage's syntax.comments. The
-// two leaves must PRECEDE CommentSyntaxSource in the bundle (its fields are
+// two leaves must PRECEDE commentSyntaxSource in the bundle (its fields are
 // [CommentBlock] and [Quote]); nothing else references them.
 //
 //go:embed gen/types/commentblock.buzz
-var CommentBlockSource string
+var commentBlockSource string
 
 //go:embed gen/types/quote.buzz
-var QuoteSource string
+var quoteSource string
 
 //go:embed gen/types/commentsyntax.buzz
-var CommentSyntaxSource string
+var commentSyntaxSource string
 
-// StubSyntaxSource and SyntaxSource are the generated mirrors of
+// stubSyntaxSource and syntaxSource are the generated mirrors of
 // spells.StubSyntax and spells.Syntax. Syntax carries a CommentSyntax and a
 // StubSyntax and Language carries a Syntax, so the bundle orders them
 // CommentSyntax, StubSyntax, Syntax, Language.
 //
 //go:generate go run ../../cmd/magus-utils types -type StubSyntax -out gen/types/stubsyntax.buzz
 //go:embed gen/types/stubsyntax.buzz
-var StubSyntaxSource string
+var stubSyntaxSource string
 
-// These precede SyntaxSource: Syntax carries each, and MutationSyntax
+// These precede syntaxSource: Syntax carries each, and MutationSyntax
 // carries [Swap].
 //
 //go:generate go run ../../cmd/magus-utils types -type DecisionSyntax -out gen/types/decisionsyntax.buzz
 //go:embed gen/types/decisionsyntax.buzz
-var DecisionSyntaxSource string
+var decisionSyntaxSource string
 
 //go:generate go run ../../cmd/magus-utils types -type Swap -out gen/types/swap.buzz
 //go:embed gen/types/swap.buzz
-var SwapSource string
+var swapSource string
 
 //go:generate go run ../../cmd/magus-utils types -type MutationSyntax -out gen/types/mutationsyntax.buzz
 //go:embed gen/types/mutationsyntax.buzz
-var MutationSyntaxSource string
+var mutationSyntaxSource string
 
 //go:generate go run ../../cmd/magus-utils types -type Syntax -out gen/types/syntax.buzz
 //go:embed gen/types/syntax.buzz
-var SyntaxSource string
+var syntaxSource string
 
 //go:embed gen/types/language.buzz
-var LanguageSource string
+var languageSource string
 
-// ServiceSource is the generated Buzz `object Service` mirror of spells.Service: the
+// serviceSource is the generated Buzz `object Service` mirror of spells.Service: the
 // {command, readiness, stop} a service op returns, each field a Command (command is the
 // process; readiness/stop are optional). It ships in the magus/spell bundle so a spell
-// can author a service op; it must follow CommandSource there (Service's fields are
+// can author a service op; it must follow commandSource there (Service's fields are
 // typed Command).
 //
 //go:embed gen/types/service.buzz
-var ServiceSource string
+var serviceSource string
 
-// SymbolIndexerSource is the generated Buzz `object SymbolIndexer` mirror of
+// symbolIndexerSource is the generated Buzz `object SymbolIndexer` mirror of
 // spells.SymbolIndexer: the {format, command} a spell's mgs_getSymbolIndexer returns.
-// It must follow CommandSource in the bundle (its command field is typed Command).
+// It must follow commandSource in the bundle (its command field is typed Command).
 //
 //go:embed gen/types/symbolindexer.buzz
-var SymbolIndexerSource string
+var symbolIndexerSource string
 
-// CoverageSource follows CommandSource: Coverage.command is a Command.
+// coverageSource follows commandSource: Coverage.command is a Command.
 //
 //go:generate go run ../../cmd/magus-utils types -type Coverage -out gen/types/coverage.buzz
 //go:embed gen/types/coverage.buzz
-var CoverageSource string
+var coverageSource string
 
-// ProjectSource is the generated Buzz `object Project` mirror of spells.Project: one
+// projectSource is the generated Buzz `object Project` mirror of spells.Project: one
 // project a workspace-provider spell's list_projects contract returns. It ships in
 // the magus/spell bundle beside the other shapes a spell AUTHORS; it references no
 // other mirror, so its position in that bundle is free.
 //
 //go:embed gen/types/project.buzz
-var ProjectSource string
+var projectSource string
 
-// ReleaseCycleSource and LifecycleSource are the generated mirrors of spells.ReleaseCycle
+// releaseCycleSource and lifecycleSource are the generated mirrors of spells.ReleaseCycle
 // and spells.Lifecycle: what a lifecycle provider's list_lifecycles contract returns.
 // ReleaseCycle must precede Lifecycle in the bundle (Lifecycle.cycles is [ReleaseCycle]).
 //
 //go:embed gen/types/releasecycle.buzz
-var ReleaseCycleSource string
+var releaseCycleSource string
 
 //go:embed gen/types/lifecycle.buzz
-var LifecycleSource string
+var lifecycleSource string
 
 // The discover_projects records, leaves first: DiscoveryQuery.files is [DiscoveryFile] and
 // DiscoveredProject.notInferred is [DiscoveryGap].
@@ -388,7 +388,7 @@ var CharmModuleSource string
 // op records have no cross-references so their position is free). Shared by the runtime
 // registration (modules.go) and the built-in loader (builtins.go), so the two can't drift
 // apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, InstallSource, ManifestSource, ServiceSource, SymbolIndexerSource, CoverageSource, VersionKeySource, VersionBoundsSource, ToolSource, SandboxAllowSource, SandboxEnvSource, SandboxCacheSource, SandboxSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, StubSyntaxSource, DecisionSyntaxSource, SwapSource, MutationSyntaxSource, SyntaxSource, LanguageSource, ProjectSource, SecretSource, ReleaseCycleSource, LifecycleSource,
+var SpellModuleSource = strings.Join([]string{pathSource, targetModuleSource, patchOpSource, charmTypeSource, hintSource, commandSource, installSource, manifestSource, serviceSource, symbolIndexerSource, coverageSource, versionKeySource, versionBoundsSource, toolSource, sandboxAllowSource, sandboxEnvSource, sandboxCacheSource, sandboxSource, commentBlockSource, quoteSource, commentSyntaxSource, stubSyntaxSource, decisionSyntaxSource, swapSource, mutationSyntaxSource, syntaxSource, languageSource, projectSource, secretSource, releaseCycleSource, lifecycleSource,
 	discoveryFileSource, discoveryQuerySource, discoveryGapSource, discoveredProjectSource,
 	emptySource, ackSource, secretRefSource, greenRunSource, stringsSource, ciGroupSource, ciGroupEndSource, ciAnnotationSource,
 	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource,
