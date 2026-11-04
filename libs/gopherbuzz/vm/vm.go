@@ -204,7 +204,7 @@ func NewVM(ctx context.Context) *VM {
 	// The VM is reachable from the context every host callable receives, which is
 	// what lets `gc\collect()` ask the interpreter about its own reachability. It is
 	// the only operation that needs this; everything else works from its arguments.
-	vm.ctx = context.WithValue(ctx, vmCtxKey{}, vm)
+	vm.SetContext(ctx)
 	return vm
 }
 
@@ -2714,8 +2714,11 @@ func (vm *VM) buzzCast(v Value, typeName string) (Value, error) {
 
 // --- Exported debug and control methods ---
 
-// SetContext updates the VM's context (used when resuming a fiber).
-func (vm *VM) SetContext(ctx context.Context) { vm.ctx = ctx }
+// SetContext replaces the VM's context, as a fiber resume does. FromContext
+// keeps finding the VM on the new one.
+func (vm *VM) SetContext(ctx context.Context) {
+	vm.ctx = context.WithValue(ctx, vmCtxKey{}, vm)
+}
 
 // SetStepHook installs cb to fire on events matching mask.
 func (vm *VM) SetStepHook(mask StepMask, cb func(StepEvent, DebugFrame)) {
