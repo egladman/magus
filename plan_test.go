@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
@@ -134,6 +135,51 @@ func TestPlanReportsAnUnreadableHistory(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "load history")
+}
+
+type PlanUnitsSuite struct {
+	suite.Suite
+	m *Magus
+}
+
+func TestPlanUnitsSuite(t *testing.T) { suite.Run(t, new(PlanUnitsSuite)) }
+
+func (s *PlanUnitsSuite) SetupTest() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun lint(ctx: magus\Context, args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, test); }
+`,
+		"api/magusfile.buzz": "",
+		"api/main.go":        "package main\n",
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *PlanUnitsSuite) TestEachStepCIComposesIsAUnit() {
+	got := s.m.planUnits([]types.Target{{Path: "."}, {Path: "api"}}, "ci")
+	s.Equal([]types.Unit{{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}, {Project: "api", Target: "ci"}}, got)
+}
+
+func (s *PlanUnitsSuite) TestAUnitNeedsItsTransitiveSteps() {
+	got := s.m.unitNeeds(types.Unit{Project: ".", Target: "test"})
+	s.Equal([]types.Unit{{Project: ".", Target: "test"}, {Project: ".", Target: "build"}}, got)
+}
+
+func (s *PlanUnitsSuite) TestThePlanCarriesUnitsAndSaysWhatItFellBackFor() {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"magusfile.buzz", "api/main.go"}, MaxShards: -1})
+	s.Require().NoError(err)
+	var placed []types.Unit
+	for _, sh := range plan.Shards {
+		placed = append(placed, sh.Units...)
+	}
+	s.ElementsMatch([]types.Unit{{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}, {Project: "api", Target: "ci"}}, placed)
+	s.Contains(plan.Unmeasured, types.Unit{Project: ".", Target: "build"}, "no history: every target fell back")
 }
 
 // Example_runATarget runs a target, reads its result from the run's records, and
