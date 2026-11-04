@@ -152,7 +152,7 @@ fun main() > void !> any {
 
     // Only the reached projects, so the picture is this change's reach and not the whole
     // workspace - the workspace-wide graph is already rendered in MAGUS.md.
-    final g = reachGraph(reached, seeds: seeds, dependsOn: magus\graph().deps().dependsOn);
+    final g = reachGraph(reached, seeds: seeds, dependsOn: magus\graph().projectGraph().dependsOn);
     final link = figurelink\figureLink(advice\input("console-base"), title: g.title, nodes: g.nodes, edges: g.edges);
 
     advice\publish(repo, pr: pr, name: section,

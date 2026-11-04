@@ -535,16 +535,16 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectLayer(ret0), nil
 	}))
-	m.MapSet("magus__Graph__deps", vm.DirectValue("magus.magus__Graph__deps", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		recv, err := ffi.Object("magus\\magus__Graph__deps", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
+	m.MapSet("magus__Graph__projectGraph", vm.DirectValue("magus.magus__Graph__projectGraph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Graph__projectGraph", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		ret0, err := std.MagusGraphDeps(ctx, recv)
+		ret0, err := std.MagusGraphProjectGraph(ctx, recv)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectGraphView(ret0), nil
+		return ObjectProjectGraph(ret0), nil
 	}))
 	m.MapSet("magus__Graph__imports", vm.DirectValue("magus.magus__Graph__imports", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__Graph__imports", "recv", bzArgs, 0, decode.DecodeSymbolIndexDigest)

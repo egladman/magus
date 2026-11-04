@@ -420,7 +420,7 @@ fun collect(base: str) > result\Result::<[Change]> {
 
 fun projectDeps() > result\Result::<{str: [str]}> {
     try {
-        final g = magus\graph().deps();
+        final g = magus\graph().projectGraph();
         final deps = mut {<str: [str]>};
         foreach (n in g.nodes) { deps[n] = g.dependsOn[n] ?? [<str>]; }
         return result\ok::<{str: [str]}>(deps);

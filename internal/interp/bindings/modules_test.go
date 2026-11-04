@@ -1501,7 +1501,7 @@ func TestEveryBoundaryTypeHasAMirror(t *testing.T) {
 		{"ProjectEntry", "ProjectEntry"},
 		{"ProjectsOutput", "Projects"},
 		{"AffectedResult", "Affected"},
-		{"GraphView", "Graph"},
+		{"ProjectGraph", "Graph"},
 		{"TargetGraphOutput", "TargetGraph"},
 		{"ModuleFieldEntry", "ModuleFieldEntry"},
 		{"ModuleMethodEntry", "ModuleMethodEntry"},
@@ -1544,7 +1544,7 @@ func TestMirrorFieldsMatchEncoder(t *testing.T) {
 	}{
 		{"Tag", bindgen.ObjectVCSTag(types.VCSTag{})},
 		{"Affected", bindgen.ObjectAffectedResult(types.AffectedResult{})},
-		{"Deps", bindgen.ObjectGraphView(types.GraphView{})},
+		{"ProjectGraph", bindgen.ObjectProjectGraph(types.ProjectGraph{})},
 		{"Projects", bindgen.ObjectProjectsOutput(types.ProjectsOutput{})},
 		{"ProjectEntry", bindgen.ObjectProjectEntry(types.ProjectEntry{})},
 		{"Module", bindgen.ObjectModuleEntry(types.ModuleEntry{})},
@@ -1597,7 +1597,7 @@ func TestEveryEncodedTypeIsMirrored(t *testing.T) {
 	owners := []any{
 		types.ExecResult{}, types.CommitRecord{}, types.FileInfo{}, types.HTTPResponse{},
 		types.SemverVersion{}, types.URL{}, types.VCSTag{}, types.ProjectEntry{},
-		types.ProjectsOutput{}, types.AffectedResult{}, types.GraphView{}, types.TargetGraphOutput{},
+		types.ProjectsOutput{}, types.AffectedResult{}, types.ProjectGraph{}, types.TargetGraphOutput{},
 		types.ModuleFieldEntry{}, types.ModuleMethodEntry{}, types.ModuleEntry{},
 	}
 	for _, v := range owners {

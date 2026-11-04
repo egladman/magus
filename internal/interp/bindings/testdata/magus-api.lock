@@ -61,7 +61,6 @@ magus__Change__diff
 magus__Change__impact
 magus__Change__mergeBase
 magus__Change__tier
-magus__Graph__deps
 magus__Graph__dir
 magus__Graph__dirs
 magus__Graph__duplication
@@ -71,6 +70,7 @@ magus__Graph__layer
 magus__Graph__neighborhood
 magus__Graph__path
 magus__Graph__precedents
+magus__Graph__projectGraph
 magus__Graph__query
 magus__Graph__refs
 magus__Graph__stats

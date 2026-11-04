@@ -75,7 +75,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow), enums) }},
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential), enums) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
-	{Name: "Deps", Zero: types.GraphView{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGraphView(v.(types.GraphView)) }},
 	{Name: "Descriptor", Zero: types.ImageDescriptor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectImageDescriptor(v.(types.ImageDescriptor), enums)
 	}},
@@ -287,6 +286,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "PrecedentScope", Zero: types.PrecedentScope{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentScope(v.(types.PrecedentScope)) }},
 	{Name: "PriorAttempt", Zero: types.PriorAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPriorAttempt(v.(types.PriorAttempt), enums) }},
 	{Name: "ProjectEntry", Zero: types.ProjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectEntry(v.(types.ProjectEntry)) }},
+	{Name: "ProjectGraph", Zero: types.ProjectGraph{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectGraph(v.(types.ProjectGraph)) }},
 	{Name: "ProjectQuery", Zero: types.ProjectQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectQuery(v.(types.ProjectQuery)) }},
 	{Name: "ProjectRef", Zero: types.ProjectRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectRef(v.(types.ProjectRef)) }},
 	{Name: "Projects", Zero: types.ProjectsOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectsOutput(v.(types.ProjectsOutput)) }},

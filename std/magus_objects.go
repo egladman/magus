@@ -219,11 +219,11 @@ var magusObjects = []Object{
 				Impl:    MagusGraphLayer,
 			},
 			{
-				Name:    "deps",
+				Name:    "projectGraph",
 				Doc:     "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
-				Returns: []Ret{{Type: TypeAnyMap, Object: "Deps"}},
+				Returns: []Ret{{Type: TypeAnyMap, Object: "ProjectGraph"}},
 				Raises:  true,
-				Impl:    MagusGraphDeps,
+				Impl:    MagusGraphProjectGraph,
 			},
 			{
 				Name:    "imports",

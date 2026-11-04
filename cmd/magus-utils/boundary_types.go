@@ -176,7 +176,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "ArtifactVersion", Type: reflect.TypeFor[types.ArtifactVersion](), RuntimeObject: true},
 	{Name: "Tag", Type: reflect.TypeFor[types.VCSTag](), RuntimeObject: true},
 	{Name: "Affected", Type: reflect.TypeFor[types.AffectedResult](), RuntimeObject: true},
-	{Name: "Deps", Type: reflect.TypeFor[types.GraphView](), RuntimeObject: true},
+	{Name: "ProjectGraph", Type: reflect.TypeFor[types.ProjectGraph](), RuntimeObject: true},
 	{Name: "ModuleFieldEntry", Type: reflect.TypeFor[types.ModuleFieldEntry](), RuntimeObject: true},
 	{Name: "ModuleMethodEntry", Type: reflect.TypeFor[types.ModuleMethodEntry](), RuntimeObject: true},
 	{Name: "ModuleObjectEntry", Type: reflect.TypeFor[types.ModuleObjectEntry](), RuntimeObject: true},
