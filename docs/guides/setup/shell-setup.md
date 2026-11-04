@@ -71,7 +71,7 @@ Full reference: [`magus completion`](../../reference/manpage/magus-completion/).
 
 ## `mgs` shorthand
 
-The de facto shorthand for `magus` is `mgs`: three left-hand keys, fast to type, and collision-free.
+The de facto shorthand for `magus` is `mgs`: three left-hand keys.
 
 The [install script](../setup.md#install) creates it for you unless you pass `--no-shorthand`. To add it to an existing install:
 

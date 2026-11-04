@@ -62,7 +62,7 @@ In Nx, caching is a per-target opt-in: a target caches because something set
 you expected to be instant runs in full. magus inverts this. Every target
 caches, keyed by the inputs it declares, with no policy to write. Arriving from
 Nx, the instinct is to hunt for where caching gets switched on. There is no such
-switch, and its absence is the feature: `magus affected ci` is fast because you
+switch, and its absence is the feature: `magus affected ci` reuses results because you
 declared inputs correctly, not because you remembered a flag.
 
 The mirror-image trap matters more. `cache: false` in Nx is an ordinary

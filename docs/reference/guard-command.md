@@ -188,12 +188,11 @@ PATH leaves nothing to answer.
 
 The guard reads its rules from the root magusfile alone, not the whole workspace, and
 the rules that need the workspace open it only when they apply. On a clean tree a rule
-adds one VCS status to a hook call; measured in this repository, a `magus shell` hook
-takes about 120ms with the rules registered, against about 1.6s when every call loaded
-the workspace. Only while a file the root load read is uncommitted does a call load the
+adds one VCS status to a hook call, and a `magus shell` hook call no longer loads the
+workspace. Only while a file the root load read is uncommitted does a call load the
 committed root magusfile as well, reading just the changed files through the VCS and the
-rest from disk: about 100ms more. The three-second limit on resolving the committed side,
-which denies when it runs out, therefore has an order of magnitude to spare.
+rest from disk. The three-second limit on resolving the committed side denies when it
+runs out.
 
 ## File writes: magus\guard.write
 

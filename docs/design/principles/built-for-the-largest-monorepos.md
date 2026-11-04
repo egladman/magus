@@ -1,7 +1,7 @@
 ---
 title: Built for the largest monorepos
 order: 16
-description: magus is aimed at the largest monorepos that exist; at that scale performance is the feature, and every hot path is measured.
+description: magus is aimed at large monorepos; at that scale performance is a feature, and a hot path gets a benchmark.
 tags: [design, principle, performance, scale]
 ---
 
@@ -9,7 +9,7 @@ tags: [design, principle, performance, scale]
 
 The problem magus exists for is hard, and I am not pretending otherwise. A
 monorepo build tool has to know every project, every input, and what a change
-reaches, and answer fast enough that a person or an agent asks it instead of
+reaches, and answer when a person or an agent asks it instead of
 guessing. At the scale of the largest monorepos anyone runs, that takes
 engineering a sane person would not do for a small repository: content-keyed
 caches, an index that answers without loading the tree, allocation counted on

@@ -199,7 +199,7 @@ The [documentation index](../documentation.md) is the map. From here, the core c
 - [spells.md](../concepts/spells.md): spells, their ops, and the built-in spell catalog.
 - [charms.md](../concepts/charms.md): `rw` and other execution modifiers attached with `:`.
 - [workspace.md](../concepts/workspace.md): how magus discovers projects, and multi-project (monorepo) layout.
-- [cache.md](../concepts/cache.md): the content-addressed cache that makes re-runs fast.
+- [cache.md](../concepts/cache.md): the content-addressed cache that skips work whose inputs are unchanged.
 - [config.md](../reference/config.md): every `magus.yaml` key, its `MAGUS_*` env var, and CLI flag.
 - [sandbox.md](../concepts/sandbox.md): how spell subprocesses are confined to the workspace.
 

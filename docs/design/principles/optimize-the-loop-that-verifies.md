@@ -1,7 +1,7 @@
 ---
 title: Optimize the loop that verifies, never the loop that generates
 order: 3
-description: Every mechanism makes knowing and trusting a change cheaper; nothing in magus exists to make producing code faster.
+description: Every mechanism aims to make knowing and trusting a change cheaper; nothing in magus exists to make producing code faster.
 tags: [design, principle, verification]
 ---
 
