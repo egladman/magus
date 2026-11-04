@@ -1343,10 +1343,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if !globalCfg.DryRun {
 		validating = store.Quiet()
 	}
+	slog.InfoContext(ctx, fmt.Sprintf("judging %s's goals; a goal naming a symbol loads the symbol graph", row.ID), attr.Notice("note"))
+	judging := time.Now()
 	validation, err := job.ValidateFork(ctx, validating, row.ID, judgedMerge(row), globalCfg.Jobs, reader)
 	if err != nil {
 		return err
 	}
+	slog.InfoContext(ctx, fmt.Sprintf("judged %s's goals in %s", row.ID, cache.FormatDuration(time.Since(judging))), attr.Notice("note"))
 	judgedLive := noteForkJudgedAsUpdate(ctx, store, row.ID)
 	if row.Parent == "" && len(row.Integrates) == 0 && len(validation.Problems) == 0 {
 		reportForkFacts(ctx, store, root)
@@ -2218,7 +2221,7 @@ func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...st
 	args := append([]string{"buzz", job.CheckoutBootstrapScript, "--", "--checkout", dir}, flags...)
 	cmd := exec.CommandContext(ctx, exe, args...)
 	var output bytes.Buffer
-	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, os.Stderr, io.MultiWriter(os.Stderr, &output)
+	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, progressWriter(ctx), io.MultiWriter(os.Stderr, &output)
 	if err := cmd.Run(); err != nil {
 		if full := cache.DiskFullCause(output.String(), forker, cache.DiskFullFloorBytes); full != "" {
 			return fmt.Errorf("magus job fork: building ./magus in %s failed, so the checkout is removed: %s: %w", dir, full, err)
@@ -2227,6 +2230,15 @@ func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...st
 			dir, job.CheckoutBootstrap(dir), forker, err)
 	}
 	return nil
+}
+
+// progressWriter takes a script's progress lines. -q raises the log level
+// past info, so it gets none.
+func progressWriter(ctx context.Context) io.Writer {
+	if !slog.Default().Enabled(ctx, slog.LevelInfo) {
+		return io.Discard
+	}
+	return os.Stderr
 }
 
 // reclaimOnForkTimeout bounds the reclaim a fork waits for below the floor.

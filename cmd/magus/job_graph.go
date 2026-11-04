@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
@@ -558,7 +560,24 @@ func newTreeJobGraph(tree string, rebuild bool) *jobGraph {
 }
 
 func (r *jobGraph) load(ctx context.Context) *knowledge.Graph {
-	return r.graph.get(ctx, r.mustNotRead, r.build)
+	return r.graph.get(ctx, r.mustNotRead, announcedLoad("the symbol graph", r.build))
+}
+
+// announcedLoad says what a load waits on, then what it took. The load
+// rebuilds a stale index for minutes, and lazyGraph hides its failure.
+func announcedLoad(what string, load func(context.Context) (*knowledge.Graph, error)) func(context.Context) (*knowledge.Graph, error) {
+	return func(ctx context.Context) (*knowledge.Graph, error) {
+		slog.InfoContext(ctx, fmt.Sprintf("loading %s; a missing or stale symbol index is rebuilt first, which can take minutes", what), attr.Notice("note"))
+		began := time.Now()
+		g, err := load(ctx)
+		took := cache.FormatDuration(time.Since(began))
+		if err != nil {
+			slog.InfoContext(ctx, fmt.Sprintf("could not load %s after %s", what, took), attr.Error(err), attr.Notice("note"))
+			return g, err
+		}
+		slog.InfoContext(ctx, fmt.Sprintf("loaded %s in %s", what, took), attr.Notice("note"))
+		return g, nil
+	}
 }
 
 // loadScoped is load for a row writing paths.
@@ -572,7 +591,7 @@ func (r *jobGraph) loadScoped(paths []string) func(context.Context) *knowledge.G
 // loadDomain is loadScoped for the domain graph, under the same rule.
 func (r *jobGraph) loadDomain(ctx context.Context, paths []string) *knowledge.Graph {
 	r.setScope(paths)
-	return r.domainGraph.get(ctx, r.mustNotRead, r.domain)
+	return r.domainGraph.get(ctx, r.mustNotRead, announcedLoad("the domain graph", r.domain))
 }
 
 func (r *jobGraph) setScope(paths []string) {

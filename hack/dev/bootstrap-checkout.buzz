@@ -29,6 +29,7 @@ namespace bootstrapcheckout;
 import "encoding/json";
 import "flags";
 import "fs";
+import "os";
 import "proc";
 import "result";
 import "std";
@@ -200,6 +201,8 @@ export object Host {
     removeDir: fun (path: str) > void !> any,
     exec: fun (dir: str, argv: [str]) > Ran !> any,
     readFile: fun (path: str) > str !> any,
+    say: fun (line: str) > void,
+    clock: fun () > double,
 }
 
 // stampLine is the generated-by line of a skill file's text, "" when it carries none.
@@ -227,6 +230,23 @@ fun must(r: Ran, what: str) > str !> any {
         throw "gate-ready: {what}: exit {r.code}: {r.stderr}{r.stdout}";
     }
     return r.stdout;
+}
+
+// note says a step as it happens, so a long bootstrap never looks hung.
+fun note(h: Host, did: mut [str], line: str) > void {
+    did.append(line);
+    h.say(line);
+}
+
+// timed says what a slow step will do before it runs, and its time after.
+fun timed(h: Host, start: str, run: fun () > str !> any) > str !> any {
+    h.say(start);
+    final began = h.clock();
+    final line = run();
+    final ms = std\toInt(h.clock() - began);
+    final took = if (ms < 1000) "{ms}ms" else "{ms / 1000}s";
+    h.say("{line} ({took})");
+    return line;
 }
 
 // stopDaemon stops the checkout's daemon when one runs, so a project lock it holds cannot fail
@@ -352,20 +372,20 @@ fun binaryAtHead(h: Host, dir: str) > bool !> any {
 export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = "") > [str] !> any {
     final did = mut [<str>];
     if (binaryAtHead(h, dir: dir)) {
-        did.append("kept {dir}/magus, already built at HEAD");
+        note(h, did: did, line: "kept {dir}/magus, already built at HEAD");
     } else {
-        did.append(stopDaemon(h, dir: dir));
-        did.append(h.build(dir));
+        note(h, did: did, line: stopDaemon(h, dir: dir));
+        did.append(timed(h, start: "building {dir}/magus at its HEAD with go; a cold build cache takes a minute or more", run: fun () > str !> any => h.build(dir)));
     }
-    did.append(h.seed(dir));
+    did.append(timed(h, start: "seeding the symbol index of {dir}", run: fun () > str !> any => h.seed(dir)));
     if (install == "") {
-        did.append(installDependencies(h, dir: dir));
+        did.append(timed(h, start: "installing every project's dependencies with {dir}/magus", run: fun () > str !> any => installDependencies(h, dir: dir)));
     } else {
-        did.append(installProjects(h, dir: dir, install: install));
+        did.append(timed(h, start: "installing the dependencies of {install} with {dir}/magus", run: fun () > str !> any => installProjects(h, dir: dir, install: install)));
     }
-    did.append(installHarnesses(h, dir: dir));
+    did.append(timed(h, start: "installing every declared harness", run: fun () > str !> any => installHarnesses(h, dir: dir)));
     if (restart) {
-        did.append(startDaemon(h, dir: dir));
+        note(h, did: did, line: startDaemon(h, dir: dir));
         final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
         final stale = versionMismatch(h.magus(dir, args: ["version", "-o", "json"]).stdout, head: head);
         if (stale != "") {
@@ -389,15 +409,15 @@ export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
     final version = h.magus(dir, args: ["version", "-o", "json"]);
     final built = version.code == 0 and (builtAt(version.stdout, head: head) catch false);
     if (restart or !built) {
-        did.append(stopDaemon(h, dir: dir));
+        note(h, did: did, line: stopDaemon(h, dir: dir));
     }
     if (built) {
-        did.append("./magus is built at HEAD {head}");
+        note(h, did: did, line: "./magus is built at HEAD {head}");
     } else {
-        did.append(h.build(dir));
+        did.append(timed(h, start: "building {dir}/magus at its HEAD with go; a cold build cache takes a minute or more", run: fun () > str !> any => h.build(dir)));
     }
     _ = must(h.magus(dir, args: ["server", "stop", "--pools"]), what: "magus server stop --pools");
-    did.append("stopped the pool parents of other builds");
+    note(h, did: did, line: "stopped the pool parents of other builds");
     final others = lines(must(h.git(dir, args: ["ls-files", "--others", "--"] + SKILL_DIRS), what: "git ls-files --others"));
     var fresh = "";
     foreach (skill in skillInstalls(others)) {
@@ -411,19 +431,25 @@ export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
         }
         if (stamp != h.stampOf(fs\join(fresh, name: "{skill}/SKILL.md"))) {
             h.removeDir(fs\join(dir, name: skill));
-            did.append("removed the stale untracked skill install {skill}");
+            note(h, did: did, line: "removed the stale untracked skill install {skill}");
         }
     }
-    did.append(installDependencies(h, dir: dir));
-    did.append(installHarnesses(h, dir: dir));
-    _ = must(h.magus(dir, args: ["graph", "build"]), what: "magus graph build");
-    did.append("built the graph");
-    _ = must(h.magus(dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
-    did.append("generated the symbol digest");
-    _ = must(h.magus(dir, args: ["run", "proofread-build", "libs/proofread"]), what: "magus run proofread-build libs/proofread");
-    did.append("built the proofread binary");
+    did.append(timed(h, start: "installing every project's dependencies with {dir}/magus", run: fun () > str !> any => installDependencies(h, dir: dir)));
+    did.append(timed(h, start: "installing every declared harness", run: fun () > str !> any => installHarnesses(h, dir: dir)));
+    did.append(timed(h, start: "building the graph", run: fun () > str !> any {
+        _ = must(h.magus(dir, args: ["graph", "build"]), what: "magus graph build");
+        return "built the graph";
+    }));
+    did.append(timed(h, start: "generating the symbol digest", run: fun () > str !> any {
+        _ = must(h.magus(dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
+        return "generated the symbol digest";
+    }));
+    did.append(timed(h, start: "building the proofread binary", run: fun () > str !> any {
+        _ = must(h.magus(dir, args: ["run", "proofread-build", "libs/proofread"]), what: "magus run proofread-build libs/proofread");
+        return "built the proofread binary";
+    }));
     if (restart) {
-        did.append(startDaemon(h, dir: dir));
+        note(h, did: did, line: startDaemon(h, dir: dir));
     }
     return did;
 }
@@ -522,7 +548,7 @@ export fun endMergedRows(h: Host, dir: str, onto: str, did: mut [str]) > result\
         if (ended.error -> err) {
             return result\Result::<[str]>{ error = err };
         }
-        did.append("ended running row {row.id}: its head {sha.sub(0, len: 12)} is already in {onto}");
+        note(h, did: did, line: "ended running row {row.id}: its head {sha.sub(0, len: 12)} is already in {onto}");
     }
     return result\ok::<[str]>(kept);
 }
@@ -554,13 +580,13 @@ export fun settleRows(h: Host, dir: str, onto: str, did: mut [str]) > result\Res
     }
     final said = lines(pruned.value!.stdout);
     if (said.len() == 0) {
-        did.append("job prune: no row to end");
+        note(h, did: did, line: "job prune: no row to end");
     }
     foreach (line in said) {
-        did.append("job prune: {line}");
+        note(h, did: did, line: "job prune: {line}");
     }
     foreach (why in kept.value!) {
-        did.append("left running: {why}");
+        note(h, did: did, line: "left running: {why}");
     }
     return result\ok::<bool>(true);
 }
@@ -595,7 +621,7 @@ export fun adopt(h: Host, dir: str, onto: str, did: mut [str], restart: bool = f
     if (moved.error -> err) {
         return result\Result::<bool>{ error = err };
     }
-    did.append(moved.value!);
+    note(h, did: did, line: moved.value!);
     try {
         foreach (line in placeBinary(h, dir: dir, restart: restart, install: install)) {
             did.append(line);
@@ -673,6 +699,12 @@ export fun liveHost() > Host {
         },
         readFile = fun (path: str) > str !> any {
             return fs\readFile(path);
+        },
+        say = fun (line: str) > void {
+            std\print(line);
+        },
+        clock = fun () > double {
+            return os\time();
         },
     };
 }
@@ -785,9 +817,6 @@ export fun main(args: [str]) > void !> any {
         }
         final did = mut [<str>];
         final adopted = adopt(h, dir: dir, onto: onto, did: did, restart: restart, install: parsed.values["--install"] ?? "");
-        foreach (line in did) {
-            std\print(line);
-        }
         if (adopted.error -> err) {
             throw err.message;
         }
@@ -797,19 +826,15 @@ export fun main(args: [str]) > void !> any {
         if (restart or parsed.values["--gate-ready"] != null or parsed.values["--install"] != null) {
             throw "bootstrap-checkout: --recover cannot combine with --restart, --gate-ready or --install";
         }
-        std\print(stopDaemon(h, dir: dir));
-        std\print(build(dir, recovery: true));
+        h.say(stopDaemon(h, dir: dir));
+        _ = timed(h, start: "building {dir}/magus from the working tree; a cold build cache takes a minute or more", run: fun () > str !> any => build(dir, recovery: true));
         return;
     }
     if (parsed.values["--gate-ready"] != null) {
-        foreach (line in gateReady(h, dir: dir, restart: restart)) {
-            std\print(line);
-        }
+        _ = gateReady(h, dir: dir, restart: restart);
         return;
     }
-    foreach (line in placeBinary(h, dir: dir, restart: restart, install: parsed.values["--install"] ?? "")) {
-        std\print(line);
-    }
+    _ = placeBinary(h, dir: dir, restart: restart, install: parsed.values["--install"] ?? "");
 }
 
 // stubHost answers gateReady from a table keyed by the command line and records each call;
@@ -817,7 +842,18 @@ export fun main(args: [str]) > void !> any {
 // says `server status` fails. An exec line's nth run is answered by "<line> #n" first.
 // stamps maps a SKILL.md path to its generated-by line, and any other path to its text.
 fun stubHost(answers: {str: Ran}, stamps: {str: str}, calls: mut [str]) > Host {
+    return stubHostSaying(answers, stamps: stamps, calls: calls, said: mut [<str>]);
+}
+
+// stubHostSaying is stubHost that records each line the bootstrap says in said.
+fun stubHostSaying(answers: {str: Ran}, stamps: {str: str}, calls: mut [str], said: mut [str]) > Host {
     return Host{
+        say = fun (line: str) > void {
+            said.append(line);
+        },
+        clock = fun () > double {
+            return 0.0;
+        },
         git = fun (dir: str, args: [str]) > Ran !> any {
             final line = "git {args.join(" ")}";
             calls.append(line);
@@ -1003,6 +1039,23 @@ test "the build path stops the daemon, places the binary, seeds the index, then 
         "installed every declared harness",
     ], message: "did");
     assert\equal(calls, want: ["git rev-parse HEAD", "magus version -o json", "magus server status", "magus server stop", "build /c", "seed /c", "magus run install /", "magus buzz hack/dev/bootstrap-harnesses.buzz"], message: "order");
+}
+
+test "each slow step says what it does before it runs, and its result with the time after" {
+    final said = mut [<str>];
+    final h = stubHostSaying({}, stamps: {}, calls: mut [<str>], said: said);
+    _ = placeBinary(h, dir: "/c", install: "docs");
+    assert\equal(said, want: [
+        "stopped the daemon",
+        "building /c/magus at its HEAD with go; a cold build cache takes a minute or more",
+        "placed /c/magus (0ms)",
+        "seeding the symbol index of /c",
+        "seeded /c (0ms)",
+        "installing the dependencies of docs with /c/magus",
+        "installed the dependencies of docs (0ms)",
+        "installing every declared harness",
+        "installed every declared harness (0ms)",
+    ], message: "said");
 }
 
 test "the build path keeps a clean binary at HEAD and leaves the daemon alone" {
