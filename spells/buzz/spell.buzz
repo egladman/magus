@@ -82,7 +82,7 @@ export fun mgs_getCoverage() > Coverage {
         format = CoverageFormat.lcov,
         file = "lcov.info",
         test = "magus-buzz-test",
-        command = Command{bin = "$MAGUS", args = ["buzz", "-t", "--embedded", "--coverprofile", "$MAGUS_COVERAGE_DIR/lcov.info"]},
+        command = Command{bin = "$MAGUS", args = ["buzz", "-t", "--embedded", "--coverprofile", "$MAGUS_COVERAGE_DIR/lcov.info"], sources = ["**/*.buzz"]},
     };
 }
 

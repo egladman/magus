@@ -237,7 +237,7 @@ func (s Syntax) MutationSites(body string) ([]MutationSite, error) {
 		return nil, err
 	}
 	code, lines := s.code(body), newLineIndex(body)
-	sites := s.swapSites(code, lines, aridLines(body, arid))
+	sites := s.swapSites(code, lines, aridLines(body, arid), s.bodyStart(code))
 	return append(sites, s.bodySites(body, code, lines)...), nil
 }
 
@@ -395,10 +395,13 @@ func (m MutationSyntax) swapsByToken() map[string][]Swap {
 	return out
 }
 
-func (s Syntax) swapSites(code string, lines lineIndex, arid map[int]bool) []MutationSite {
+func (s Syntax) swapSites(code string, lines lineIndex, arid map[int]bool, from int) []MutationSite {
 	bySwap := s.Mutations.swapsByToken()
 	var out []MutationSite
 	for _, t := range s.tokens(code) {
+		if t.offset < from {
+			continue
+		}
 		line, col := lines.position(t.offset)
 		if arid[line] {
 			continue
@@ -416,6 +419,17 @@ func aridLines(body string, patterns []*regexp.Regexp) map[int]bool {
 		arid[n+1] = slices.ContainsFunc(patterns, func(re *regexp.Regexp) bool { return re.MatchString(line) })
 	}
 	return arid
+}
+
+// bodyStart is where the body begins, or 0 when the style cuts none. A swap
+// before it would land in the signature, where a return-type arrow reads as a
+// comparison and the mutant does not parse.
+func (s Syntax) bodyStart(code string) int {
+	start, _, ok := s.bodyRange(code)
+	if !ok {
+		return 0
+	}
+	return start
 }
 
 func (s Syntax) bodySites(body, code string, lines lineIndex) []MutationSite {

@@ -150,6 +150,12 @@ func (s *mutationSiteSuite) TestReadsATwoCharacterOperatorWhole() {
 	s.Equal([]MutationSite{{Operator: "le-lt", Offset: 12, Line: 2, Col: 11, Find: "<=", Replace: "<"}}, sites)
 }
 
+func (s *mutationSiteSuite) TestLeavesTheSignatureUnswapped() {
+	sites, err := swapsOnly().MutationSites("func f(a <-chan int) bool {\n\treturn a < b\n}")
+	s.Require().NoError(err)
+	s.Equal([]MutationSite{{Operator: "lt-le", Offset: 39, Line: 2, Col: 12, Find: "<", Replace: "<="}}, sites)
+}
+
 func (s *mutationSiteSuite) TestSwapsAWordOnlyAsAWholeWord() {
 	sites, err := swapsOnly().MutationSites("{ return trueish || true }")
 	s.Require().NoError(err)

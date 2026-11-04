@@ -32,6 +32,7 @@ test "coverage is the magus-buzz-test command with an lcov profile" {
     std\assert(coverage.test == "magus-buzz-test", message: "test op");
     std\assert(coverage.command.bin == "$MAGUS", message: "bin");
     std\assert(coverage.command.args.join(" ") == "buzz -t --embedded --coverprofile $MAGUS_COVERAGE_DIR/lcov.info", message: "argv");
+    std\assert(coverage.command.sources.join(" ") == "**/*.buzz", message: "names the files it measures");
 }
 
 test "no op shares its name with a magusfile target" {

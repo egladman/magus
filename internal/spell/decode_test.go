@@ -699,6 +699,10 @@ func TestBuiltinStubSyntax(t *testing.T) {
 			Kinds: []string{"Function", "Method"}, BodyStyle: "brace",
 			Body: "{\n    todo!(\"{{&Name}} lands in {{&Branch}}\")\n}",
 		},
+		"buzz": {
+			Kinds: []string{"Function", "Method"}, BodyStyle: "brace",
+			Body: "{\n    std\\panic(\"unimplemented: {{&Name}} lands in {{&Branch}}\");\n}",
+		},
 		"python": {
 			Kinds: []string{"Function", "Method"}, BodyStyle: "indent",
 			Body: "raise NotImplementedError(\"{{&Name}} lands in {{&Branch}}\")",
@@ -710,8 +714,6 @@ func TestBuiltinStubSyntax(t *testing.T) {
 		assert.Equal(t, w, *m[name].Syntax.Stubs, name)
 	}
 	assert.Nil(t, m["bash"].Syntax, "a spell that cannot declare a body honestly declares none")
-	require.NotNil(t, m["buzz"].Syntax)
-	assert.Nil(t, m["buzz"].Syntax.Stubs, "buzz declares comments only")
 }
 
 type discoveredSuite struct {

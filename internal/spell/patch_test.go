@@ -172,6 +172,11 @@ func applyWithEvanphx(argv []string, ops []spells.PatchOp) ([]string, error) {
 	return res, nil
 }
 
+// goldenCoverageOp is the op magus registers for a declared Coverage.
+func goldenCoverageOp(cov spells.Coverage) spells.Op {
+	return spells.Op{Kind: spells.OpKindCoverage, Command: cov.Command, Coverage: &cov}
+}
+
 // goldenBuiltins is the original hand-maintained built-in table, frozen here as
 // a golden, keyed by runtime spell name (e.g. "go", not source dir "golang"). The
 // built-in registry is produced by compiling each spells/<dir>/spell.buzz to bytecode
@@ -269,19 +274,52 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Needs:              []string{"**/*.buzz"},
 		Language:           "buzz",
 		LanguageExtensions: []string{".buzz"},
-		Syntax: &spells.Syntax{Comments: &spells.CommentSyntax{
-			LineComments:  []string{"//"},
-			BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
-			Quotes: []spells.Quote{
-				{Open: "`", Close: "`", IgnoreEscape: true},
-				{Open: `"`, Close: `"`},
+		Syntax: &spells.Syntax{
+			Comments: &spells.CommentSyntax{
+				LineComments:  []string{"//"},
+				BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+				Quotes: []spells.Quote{
+					{Open: "`", Close: "`", IgnoreEscape: true},
+					{Open: `"`, Close: `"`},
+				},
 			},
-		}},
-		// Its one op is the in-process indexer, under the scip-buzz it declares rather than
-		// the default scip, so it sits beside a project's Go index. Its former ops forked
-		// interpreters that could load no magusfile or spell, which is every Buzz file here.
+			Stubs: &spells.StubSyntax{
+				Kinds: []string{"Function", "Method"}, BodyStyle: spells.StubBodyBrace,
+				Body: "{\n    std\\panic(\"unimplemented: {{&Name}} lands in {{&Branch}}\");\n}",
+			},
+			Operators: []string{"==", "!=", "<=", ">=", "??", "->", "!>", "=>", "...", "+=", "-="},
+			Decisions: &spells.DecisionSyntax{
+				Keywords:  []string{"if", "while", "for", "foreach", "and", "or", "catch"},
+				Operators: []string{"??", "->"},
+			},
+			Mutations: &spells.MutationSyntax{
+				Swaps: []spells.Swap{
+					{Name: "eq-ne", Find: "==", Replace: "!="},
+					{Name: "ne-eq", Find: "!=", Replace: "=="},
+					{Name: "lt-le", Find: "<", Replace: "<="},
+					{Name: "le-lt", Find: "<=", Replace: "<"},
+					{Name: "gt-ge", Find: ">", Replace: ">="},
+					{Name: "ge-gt", Find: ">=", Replace: ">"},
+					{Name: "and-or", Find: "and", Replace: "or"},
+					{Name: "or-and", Find: "or", Replace: "and"},
+					{Name: "true-false", Find: "true", Replace: "false"},
+					{Name: "false-true", Find: "false", Replace: "true"},
+					{Name: "plus-minus", Find: "+", Replace: "-"},
+					{Name: "minus-plus", Find: "-", Replace: "+"},
+				},
+				Bodies: []string{"{}"},
+			},
+		},
+		// The indexer sits beside a project's Go index under its own scip-buzz.
 		Ops: map[string]spells.Op{
 			"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Capture: true, Quiet: true}},
+			"magus-buzz-test": {Command: spells.Command{Bin: "$MAGUS", Args: []string{"buzz", "-t", "--embedded"},
+				TestScope: []string{"{file}", "{dir}/{stem}_test.buzz"}}},
+			"coverage": goldenCoverageOp(spells.Coverage{
+				Format: spells.CoverageFormatLCOV, File: "lcov.info", Test: "magus-buzz-test",
+				Command: spells.Command{Bin: "$MAGUS", Args: []string{"buzz", "-t", "--embedded", "--coverprofile", "$MAGUS_COVERAGE_DIR/lcov.info"},
+					Sources: []string{"**/*.buzz"}},
+			}),
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatBuzzModule, Op: "scip-buzz"},
 	},
@@ -401,6 +439,11 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "go", Args: []string{"./..."}, Capture: true, Quiet: true}},
+			"coverage": goldenCoverageOp(spells.Coverage{
+				Format: spells.CoverageFormatGoProfile, File: "cover.out", Test: "go-test", Uses: []string{"go"},
+				Command: spells.Command{Bin: "go", Args: []string{"test", "-trimpath", "-covermode=set", "-coverprofile=$MAGUS_COVERAGE_DIR/cover.out"},
+					DefaultArgs: []string{"./..."}},
+			}),
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages,
 			Command: spells.Command{Bin: "go", Args: []string{"./..."}}, Uses: []string{"go"},
@@ -490,6 +533,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipPython)},
+			"coverage": goldenCoverageOp(spells.Coverage{
+				Format: spells.CoverageFormatLCOV, File: "lcov.info", Test: "pytest", Uses: []string{"python3"},
+				Command: spells.Command{Bin: "uv", Args: []string{"run", "pytest", "--cov", "--cov-report=lcov:$MAGUS_COVERAGE_DIR/lcov.info"}},
+			}),
 		},
 		ScriptRunners: []spells.Command{
 			{Bin: "poe"},
@@ -536,6 +583,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			}}},
 			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}}},
 			"scip":       {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenRustAnalyzer)},
+			"coverage": goldenCoverageOp(spells.Coverage{
+				Format: spells.CoverageFormatLCOV, File: "lcov.info", Test: "cargo-test", Uses: []string{"cargo-llvm-cov", "rustc"},
+				Command: spells.Command{Bin: "cargo", Args: []string{"llvm-cov", "--lcov", "--output-path", "$MAGUS_COVERAGE_DIR/lcov.info"}},
+			}),
 		},
 	},
 	"typescript": {
@@ -608,6 +659,11 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Command: goldenDevServerCommand,
 			}},
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipTypescript)},
+			"coverage": goldenCoverageOp(spells.Coverage{
+				Format: spells.CoverageFormatLCOV, File: "lcov.info", Test: "vitest", Uses: []string{"pnpm"},
+				Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run", "--coverage.enabled",
+					"--coverage.reporter=lcovonly", "--coverage.reportsDirectory=$MAGUS_COVERAGE_DIR"}},
+			}),
 		},
 		ScriptRunners: []spells.Command{
 			{Bin: "npm", Args: []string{"run"}}, {Bin: "npm", Args: []string{"run-script"}},
