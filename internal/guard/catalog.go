@@ -380,6 +380,7 @@ var ruleDocPushUngated = types.RuleDoc{
 		"A full local `affected ci` takes the machine's whole build budget while the pull request's CI runs the same gate, so narrow runs count as evidence too. " +
 		"With no green gate at the commit, and none there that failed, the push passes when every file it changed since the newest ancestor with a passing `ci` (with none, since the merge base with the base ref) is covered: " +
 		"a passing run, recorded in this checkout's output store, of a target whose declared inputs hold the file, that read the file as the pushed commit holds it. A narrow `go-test -- -run ...` counts, and a file-scoped `lint -- <files>` covers the files it names. " +
+		"A generated output no target reads is covered by the run that wrote it: a passing run of a target whose declared outputs hold the file, with the file as the pushed commit holds it. " +
 		"A Go file this host does not build, by file name or build constraint, can never be covered here: it passes, and the verdict names it as built only on its platforms and left to CI. " +
 		"Any other file no passing run covers refuses the push, and the refusal names each one with the narrow run that would cover it. " +
 		"A session no job lease binds is the orchestrator. It used to be asked, and two pull requests went out with no local gate because the rule only asked, so it is now refused with the narrow runs and the gate named: `magus status --wait`, then `magus affected ci`. Opening a pull request with `gh pr create` meets the same gate at the head commit. " +
