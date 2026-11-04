@@ -310,7 +310,7 @@ func trustRoot(environ []string, root string) []string {
 		}
 		out = append(out, kv)
 	}
-	return append(out, name+"="+strings.Join(paths, string(os.PathListSeparator)))
+	return append(out, fmt.Sprintf("%s=%s", name, strings.Join(paths, string(os.PathListSeparator))))
 }
 
 // inProcessIndexer is the in-process indexer si's format names over dir, nil for an external one.
