@@ -16,8 +16,7 @@ adopting it:
 
 1. **Cheaper than what it replaces.** Total cost: install, learning, upkeep.
    One binary, no account, nothing to upsell, no toolchain underneath it to
-   break. The honest half: the learning cost is charged up front, and the
-   claim is cheaper over a year, not cheaper in week one.
+   break. The honest half: the learning cost is charged up front.
 2. **At least as small in scale.** The tool may not outgrow what one
    person can hold. Enforced today by judgment alone; the ledger that would
    measure it is a debt, in [Where this is strained](strained.md).

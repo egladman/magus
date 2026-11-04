@@ -138,7 +138,7 @@ where a failure is a signal instead of a row everyone has learned to scroll past
 
 Reach for `source` when the workspace under test needs a magus that has not been released
 yet (a magusfile using a feature from this commit). Reach for `prebuilt` with an explicit
-`git-ref` everywhere else: it is faster, and it pins what ran.
+`git-ref` everywhere else: it pins what ran.
 
 A run with several jobs needs only one source build. The first job builds with
 `publish-artifact: <name>` and passes the action's `artifact` and `sha256` outputs on as
