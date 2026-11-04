@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -778,6 +779,54 @@ func TestJobForkIntegrationIntoAStandingCheckoutRecordsTheCheckoutsRevision(t *t
 	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == "merge" })
 	require.GreaterOrEqual(t, i, 0)
 	assert.Equal(t, []string{checkoutHead, "pricing.txt"}, []string{rows[i].Checkpoint, strings.Join(rows[i].WritePaths, ",")})
+}
+
+// IntegrationStandingCheckoutSuite forks an integration row into a checkout
+// that stands ahead of the checkpoint the record names.
+type IntegrationStandingCheckoutSuite struct {
+	suite.Suite
+	root, standing, checkoutHead string
+	store                        *job.Store
+}
+
+func TestIntegrationStandingCheckoutSuite(t *testing.T) {
+	suite.Run(t, new(IntegrationStandingCheckoutSuite))
+}
+
+func (s *IntegrationStandingCheckoutSuite) SetupTest() {
+	t := s.T()
+	resetWorkspaceMemo(t)
+	repo, cacheDir := execRepositoryFixture(t)
+	s.root = repo.Root()
+	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: s.root})
+	old := repo.Head()
+	repo.Commit("land the earlier work", map[string]string{"landed.txt": "landed\n"})
+	s.standing = filepath.Join(t.TempDir(), "integrator")
+	repo.Git("worktree", "add", "-q", "-b", "integrator", s.standing)
+	s.checkoutHead = repo.Head()
+	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
+	repo.Git("branch", "done")
+	repo.Git("reset", "-q", "--hard", "HEAD~1")
+	writeStdin(t, fmt.Sprintf(`{"schema_version": %d, "id": "merge", "integrates": ["done"], "checkpoint": %q, "check": {"target": "test", "project": "."}}`, types.JobSchemaVersion, old))
+	captureStdout(t, func() {
+		s.Require().NoError(jobFork(t.Context(), s.root, []string{"--stdin", "--checkout", s.standing}))
+	})
+}
+
+func (s *IntegrationStandingCheckoutSuite) row() types.Job {
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == "merge" })
+	s.Require().GreaterOrEqual(i, 0)
+	return rows[i]
+}
+
+func (s *IntegrationStandingCheckoutSuite) TestWritePathsAreWhatTheBranchChangedSinceTheCheckout() {
+	s.Equal([]string{"pricing.txt"}, s.row().WritePaths)
+}
+
+func (s *IntegrationStandingCheckoutSuite) TestTheCheckpointIsTheCheckoutsRevision() {
+	s.Equal(s.checkoutHead, s.row().Checkpoint)
 }
 
 // An integration row that exited red was refused a same-id re-fork once its branch was
@@ -2695,4 +2744,93 @@ func (s *jobApplyContractSuite) TestAMalformedRecordExitsUsage() {
 	err := jobApply(s.T().Context(), root, []string{"-f", path})
 	s.Require().ErrorContains(err, "magus job apply:")
 	s.Equal(exit.Usage, exit.Code(err))
+}
+
+type forkErrorsSuite struct{ suite.Suite }
+
+func TestForkErrors(t *testing.T) { suite.Run(t, new(forkErrorsSuite)) }
+
+func (s *forkErrorsSuite) TestUsageFormattingPreservesTheCauseAndStatus() {
+	cause := errors.New("cannot read the plan")
+	format := "magus job fork: %w"
+	err := exit.Usagef(format, cause)
+
+	s.ErrorIs(err, cause)
+	s.EqualError(err, "magus job fork: cannot read the plan")
+	s.Equal(exit.Usage, exit.Code(err))
+}
+
+func (s *forkErrorsSuite) TestUsageFormattingPreservesTypedCauses() {
+	cause := &os.PathError{Op: "read", Path: "jobs.jsonl", Err: fs.ErrPermission}
+	format := "magus job fork: %w"
+	err := exit.Usagef(format, cause)
+
+	var got *os.PathError
+	s.Require().ErrorAs(err, &got)
+	s.Same(cause, got)
+	s.ErrorIs(err, fs.ErrPermission)
+	s.Equal(exit.Usage, exit.Code(err))
+}
+
+func (s *forkErrorsSuite) TestStackedHeadPreservesResolutionFailures() {
+	repo, _ := execRepositoryFixture(s.T())
+	globalCfg.VCS.Name = "not-a-vcs"
+	row := types.Declaration{ID: "child", Delivery: types.DeliveryStacked}
+
+	got, err := stackedHead(s.T().Context(), repo.Root(), row)
+
+	s.ErrorIs(err, types.ErrVCSUnknown)
+	s.ErrorContains(err, "child is stacked with no pull request base")
+	s.ErrorContains(err, "name parent_head in the record")
+	s.Equal(row, got)
+}
+
+func (s *forkErrorsSuite) TestStackedHeadPreservesMetadataFailures() {
+	s.T().Cleanup(snapshotGlobals())
+	globalCfg.VCS.Name = "git"
+	row := types.Declaration{ID: "child", Delivery: types.DeliveryStacked}
+
+	got, err := stackedHead(s.T().Context(), s.T().TempDir(), row)
+
+	var cause *exec.ExitError
+	s.ErrorAs(err, &cause)
+	s.ErrorContains(err, "child is stacked with no pull request base")
+	s.Equal(row, got)
+}
+
+func (s *forkErrorsSuite) TestForkPreservesTheStackedHeadCancellation() {
+	resetWorkspaceMemo(s.T())
+	repo, _ := execRepositoryFixture(s.T())
+	ctx, cancel := context.WithCancel(s.T().Context())
+	cancel()
+
+	err := jobFork(ctx, repo.Root(), []string{"child", "--read-only", "--criteria", "inspect", "--delivery", "stacked"})
+
+	s.ErrorIs(err, context.Canceled)
+	s.ErrorContains(err, "magus job fork: child is stacked with no pull request base")
+	s.Equal(exit.Usage, exit.Code(err))
+}
+
+func (s *forkErrorsSuite) TestForkPreservesThePlanWriteFailure() {
+	resetWorkspaceMemo(s.T())
+	repo, _ := execRepositoryFixture(s.T())
+	store, err := openJobs(s.T().Context(), repo.Root(), jobOpen{})
+	s.Require().NoError(err)
+	path, err := store.Path()
+	s.Require().NoError(err)
+	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o700))
+	// Readers can inspect the absent plan; its writer cannot open the dangling lock link.
+	s.Require().NoError(os.Symlink(filepath.Join(s.T().TempDir(), "missing", "lock"), path+".lock"))
+
+	err = jobFork(s.T().Context(), repo.Root(), []string{"child", "--read-only", "--criteria", "inspect"})
+
+	var cause *os.PathError
+	s.Require().ErrorAs(err, &cause)
+	s.Equal(path+".lock", cause.Path)
+	s.ErrorIs(err, fs.ErrNotExist)
+	s.ErrorContains(err, "magus job fork:")
+	s.Equal(exit.Usage, exit.Code(err))
+	rows, err := store.List()
+	s.Require().NoError(err)
+	s.Empty(rows)
 }
