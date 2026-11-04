@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -703,6 +704,27 @@ func (s *WorkerReattachSuite) TestADetachedCommitNamesTheLineThatKeepsIt() {
 	reason := s.from(s.own, "git commit -m done")
 	s.Contains(reason, "has no branch checked out")
 	s.Contains(reason, fmt.Sprintf("`git switch -C %s`", s.worker.ID))
+}
+
+// UnboundCommitSuite is a worker whose row has a checkout from its fork, before
+// job exec stamped checkout_root there.
+type UnboundCommitSuite struct{ standingWorker }
+
+func TestWorkerVCSUnboundCommitSuite(t *testing.T) { suite.Run(t, new(UnboundCommitSuite)) }
+
+func (s *UnboundCommitSuite) commit() string {
+	row := s.worker
+	row.CheckoutRoot = ""
+	ctx := job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+	return denyLeaseScopedVCS(ctx, Dependencies{callDir: s.own}, row.ID, "git commit -m done")
+}
+
+func (s *UnboundCommitSuite) TestTheRefusalNamesJobExecInTheForkedCheckout() {
+	s.Contains(s.commit(), fmt.Sprintf("run `cd %s && %s`, then commit there.", s.own, hint.JobExec.With(s.worker.ID)))
+}
+
+func (s *UnboundCommitSuite) TestAnUnboundCommitIsStillRefused() {
+	s.Contains(s.commit(), "a worker commits only on its own branch")
 }
 
 // LeaseWriteMoveSuite grades what a move writes against a row's write paths.

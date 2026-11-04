@@ -3594,6 +3594,12 @@ func inFreshRepository(inv hint.Invocation, site vcsSite, unlocated string, fres
 // the base branch that checkout resolves, read only when why is "".
 func commitRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, backend string, site vcsSite) (why, base string) {
 	if row.CheckoutRoot == "" {
+		// A fork records the checkout; job exec binds it and
+		// records the base.
+		if own := row.Worktree; own.Standing() {
+			return fmt.Sprintf("The lease records no checkout_root until its holder takes the job in %s, the checkout its fork made or adopted: run `cd %s && %s`, then commit there.",
+				own.Root, own.Root, hint.JobExec.With(row.ID)), ""
+		}
 		return "The lease records no checkout_root, so no checkout is the worker's own; `magus job exec` stamps one.", ""
 	}
 	root, ok := siteCheckout(ctx, opts, backend, site)
