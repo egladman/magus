@@ -194,7 +194,7 @@ var Magus = Module{
 				"Graph as a declared output that a reader of the index keys its cache on. indexed is false and digest " +
 				"empty when no index was ingested; gaps are the projects declaring an index magus could not read. Raises " +
 				"MGS1022 outside a workspace, and when the gap probe cannot run. languages names the languages whose " +
-					"symbol indexes to freshen; empty is every index.",
+				"symbol indexes to freshen; empty is every index.",
 			Args:    []Arg{{Name: "languages", Type: TypeStringSlice, Optional: true}},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Graph"}},
 			Raises:  true,

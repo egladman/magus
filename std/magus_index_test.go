@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // rebuildingWorkspace builds its knowledge store from in on every KnowledgeGraph call, as
@@ -58,23 +59,6 @@ func TestMagusSymbolIndexDigest(t *testing.T) {
 		_, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), ws), nil)
 		require.NoError(t, err)
 		assert.Equal(t, 1, ws.calls)
-	})
-
-	t.Run("freshens only the named languages and keeps them on the digest", func(t *testing.T) {
-		ws := indexWorkspace(t)
-		got, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), ws), []string{"go"})
-		require.NoError(t, err)
-		assert.Equal(t, [][]string{{"go"}}, ws.scopes)
-		assert.Equal(t, []string{"go"}, got.Languages)
-	})
-
-	t.Run("a graph method holds the index with the languages it was opened for", func(t *testing.T) {
-		ws := indexWorkspace(t)
-		ctx := types.WithWorkspace(t.Context(), ws)
-		g, err := MagusGraphOpen(ctx, []string{"go", "typescript"})
-		require.NoError(t, err)
-		require.NoError(t, heldGraph(ctx, g, "precedents"))
-		assert.Equal(t, [][]string{{"go", "typescript"}, {"go", "typescript"}}, ws.scopes)
 	})
 
 	t.Run("does not read a digest when indexes cannot be freshened", func(t *testing.T) {
@@ -125,4 +109,29 @@ func TestMagusSymbolIndexDigest(t *testing.T) {
 		_, err := MagusSymbolIndexDigest(t.Context(), nil)
 		require.ErrorContains(t, err, "magus\\graph: no workspace on the context")
 	})
+}
+
+type symbolIndexLanguageSuite struct {
+	suite.Suite
+}
+
+func TestSymbolIndexLanguageSuite(t *testing.T) {
+	suite.Run(t, new(symbolIndexLanguageSuite))
+}
+
+func (s *symbolIndexLanguageSuite) TestDigestFreshensOnlyTheNamedLanguagesAndKeepsThem() {
+	ws := indexWorkspace(s.T())
+	got, err := MagusSymbolIndexDigest(types.WithWorkspace(s.T().Context(), ws), []string{"go"})
+	s.Require().NoError(err)
+	s.Equal([][]string{{"go"}}, ws.scopes)
+	s.Equal([]string{"go"}, got.Languages)
+}
+
+func (s *symbolIndexLanguageSuite) TestGraphMethodHoldsTheIndexWithTheLanguagesItWasOpenedFor() {
+	ws := indexWorkspace(s.T())
+	ctx := types.WithWorkspace(s.T().Context(), ws)
+	g, err := MagusGraphOpen(ctx, []string{"go", "typescript"})
+	s.Require().NoError(err)
+	s.Require().NoError(heldGraph(ctx, g, "precedents"))
+	s.Equal([][]string{{"go", "typescript"}, {"go", "typescript"}}, ws.scopes)
 }
