@@ -35,16 +35,19 @@ import "hack/lint/code-stays-within-the-conformance-ceiling" as conformanceceili
 import "hack/lint/diagnostic-codes-have-docs-pages" as codepages;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
+import "hack/lint/gate-pages-say-what-they-do-not-measure" as gatemeasures;
 import "hack/lint/generated-go-packages-name-their-owner" as generatedpackages;
 import "hack/lint/hack-scripts-parse-argv-with-flags" as scriptflags;
 import "hack/lint/hack-scripts-start-with-a-verb" as hackverbs;
 import "hack/lint/landing-rotator-slots-match-headline-count" as landing;
+import "hack/lint/lint-findings-carry-a-message-and-a-fix" as findingshape;
 import "hack/lint/local-skills-reach-every-host" as localskills;
 import "hack/lint/lockfiles-are-sorted" as lockfiles;
 import "hack/lint/magusfile-modules-have-no-main" as magusfilemodules;
 import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
 import "hack/lint/markdown-carries-no-mermaid" as nomermaid;
 import "hack/lint/markdown-proofread" as markdownproofread;
+import "hack/lint/measured-claims-cite-their-run" as measuredclaims;
 import "hack/lint/no-throw" as nothrow;
 import "hack/lint/package-install-targets-never-replay" as installs;
 import "hack/lint/package-manifests-carry-no-scripts" as manifestscripts;
@@ -113,6 +116,9 @@ export fun rules() > [Rule] {
         Rule{ name = "rules-name-their-tier", reads = ruletiers\reads(), check = ruletiers\check },
         Rule{ name = "sdk-exports", reads = sdkexports\reads(), check = sdkexports\check },
         Rule{ name = "typescript-never-throws", reads = typescriptthrows\reads(), check = typescriptthrows\check },
+        Rule{ name = "gate-pages-say-what-they-do-not-measure", reads = gatemeasures\reads(), check = gatemeasures\check },
+        Rule{ name = "lint-findings-carry-a-message-and-a-fix", reads = findingshape\reads(), check = findingshape\check },
+        Rule{ name = "measured-claims-cite-their-run", reads = measuredclaims\reads(), check = measuredclaims\check },
     ];
 }
 
