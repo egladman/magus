@@ -51,7 +51,7 @@ func MagusChangeMutants(ctx context.Context, c types.Change) (types.Mutants, err
 	if err != nil {
 		return types.Mutants{}, err
 	}
-	return mutate(ctx, "Change.mutants", base)
+	return mutate(ctx, base)
 }
 
 // heldChangeBase is c's base once heldChange vouches for its tree.
@@ -73,8 +73,8 @@ func scoreRisk(ctx context.Context, member, base string) (types.ChangeRisk, erro
 	return measure(ctx, member, base, qualityWorkspace.ChangeRisk)
 }
 
-func mutate(ctx context.Context, member, base string) (types.Mutants, error) {
-	return measure(ctx, member, base, qualityWorkspace.Mutants)
+func mutate(ctx context.Context, base string) (types.Mutants, error) {
+	return measure(ctx, "Change.mutants", base, qualityWorkspace.Mutants)
 }
 
 func measure[T any](ctx context.Context, member, base string, by func(qualityWorkspace, context.Context, string) (T, error)) (T, error) {

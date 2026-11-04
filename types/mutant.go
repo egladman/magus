@@ -50,28 +50,23 @@ type Mutants struct {
 type MutantRun struct {
 	// Key is sha256(ID | the scoped test op's cache key), so a changed test
 	// or tool misses.
-	Key string
-	ID  string
+	Key string `json:"key"`
+	ID  string `json:"id"`
 	// Outcome is killed or survived; an exception is read from markers and
 	// never stored.
-	Outcome MutantOutcome
-	Seconds float64
+	Outcome MutantOutcome `json:"outcome"`
+	Seconds float64       `json:"seconds"`
 	// Checkout names the checkout that produced the entry.
-	Checkout string
+	Checkout string `json:"checkout"`
 }
 
-type mutantRunJSON struct {
-	Key      string        `json:"key"`
-	ID       string        `json:"id"`
-	Outcome  MutantOutcome `json:"outcome"`
-	Seconds  float64       `json:"seconds"`
-	Checkout string        `json:"checkout"`
-}
+// mutantRunJSON drops MutantRun's methods so encoding it does not recurse.
+type mutantRunJSON MutantRun
 
 func (r mutantRunJSON) check() error {
 	switch {
 	case r.Key == "" || r.ID == "" || r.Checkout == "":
-		return fmt.Errorf("a mutant run names its key, id and checkout; got key %q, id %q, checkout %q", r.Key, r.ID, r.Checkout)
+		return fmt.Errorf("a mutant run lacks a key, id or checkout: key %q, id %q, checkout %q", r.Key, r.ID, r.Checkout)
 	case r.Outcome != MutantKilled && r.Outcome != MutantSurvived:
 		return fmt.Errorf("a mutant run records killed or survived, not %q", r.Outcome)
 	}
@@ -81,7 +76,7 @@ func (r mutantRunJSON) check() error {
 // MarshalJSON writes one JSON object and refuses an entry UnmarshalJSON
 // would refuse.
 func (r MutantRun) MarshalJSON() ([]byte, error) {
-	raw := mutantRunJSON{Key: r.Key, ID: r.ID, Outcome: r.Outcome, Seconds: r.Seconds, Checkout: r.Checkout}
+	raw := mutantRunJSON(r)
 	if err := raw.check(); err != nil {
 		return nil, err
 	}
@@ -98,6 +93,6 @@ func (r *MutantRun) UnmarshalJSON(b []byte) error {
 	if err := raw.check(); err != nil {
 		return err
 	}
-	*r = MutantRun{Key: raw.Key, ID: raw.ID, Outcome: raw.Outcome, Seconds: raw.Seconds, Checkout: raw.Checkout}
+	*r = MutantRun(raw)
 	return nil
 }

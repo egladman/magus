@@ -34,7 +34,7 @@ func (s *MutantRunSuite) TestWritingAnEntryWithoutAKeyIsRefused() {
 	r := killed()
 	r.Key = ""
 	_, err := json.Marshal(r)
-	s.ErrorContains(err, "names its key, id and checkout")
+	s.ErrorContains(err, "lacks a key, id or checkout")
 }
 
 func (s *MutantRunSuite) TestWritingAnExceptedOutcomeIsRefused() {
@@ -47,7 +47,7 @@ func (s *MutantRunSuite) TestWritingAnExceptedOutcomeIsRefused() {
 func (s *MutantRunSuite) TestReadingAnEntryWithoutACheckoutIsRefused() {
 	var got MutantRun
 	err := json.Unmarshal([]byte(`{"key":"k","id":"m","outcome":"survived","seconds":1}`), &got)
-	s.ErrorContains(err, "names its key, id and checkout")
+	s.ErrorContains(err, "lacks a key, id or checkout")
 }
 
 func (s *MutantRunSuite) TestReadingAnUnknownOutcomeIsRefused() {

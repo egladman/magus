@@ -116,7 +116,7 @@ func (s *MagusChangeMutantsSuite) TestReturnsTheTypedRecordForTheBase() {
 	}
 	ws := &fakeQualityWorkspace{mutants: want}
 
-	got, err := mutate(types.WithWorkspace(s.T().Context(), ws), "Change.mutants", "origin/main")
+	got, err := mutate(types.WithWorkspace(s.T().Context(), ws), "origin/main")
 
 	s.Require().NoError(err)
 	s.Equal(want, got)
@@ -141,7 +141,7 @@ func (s *MagusChangeMutantsSuite) TestRaisesOutsideAWorkspace() {
 func (s *MagusChangeMutantsSuite) TestRaisesWhenTheWorkspaceCannotMutate() {
 	ws := &fakeWorkspaceWithoutQuality{}
 
-	_, err := mutate(types.WithWorkspace(s.T().Context(), ws), "Change.mutants", "origin/main")
+	_, err := mutate(types.WithWorkspace(s.T().Context(), ws), "origin/main")
 
 	s.ErrorContains(err, "magus\\Change.mutants: this workspace cannot score functions")
 }
@@ -149,7 +149,7 @@ func (s *MagusChangeMutantsSuite) TestRaisesWhenTheWorkspaceCannotMutate() {
 func (s *MagusChangeMutantsSuite) TestRaisesWhatTheEngineRaises() {
 	ws := &fakeQualityWorkspace{err: errors.New("baseline red")}
 
-	_, err := mutate(types.WithWorkspace(s.T().Context(), ws), "Change.mutants", "origin/main")
+	_, err := mutate(types.WithWorkspace(s.T().Context(), ws), "origin/main")
 
 	s.ErrorContains(err, "magus\\Change.mutants: baseline red")
 }
