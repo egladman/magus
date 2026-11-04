@@ -127,7 +127,7 @@ func (s *symbolIndexLanguageSuite) TestDigestFreshensOnlyTheNamedLanguagesAndKee
 	s.Equal([]string{"go"}, got.Languages)
 }
 
-func (s *symbolIndexLanguageSuite) TestGraphMethodHoldsTheIndexWithTheLanguagesItWasOpenedFor() {
+func (s *symbolIndexLanguageSuite) TestGraphMethodHoldsTheIndexWithItsOpeningLanguages() {
 	ws := indexWorkspace(s.T())
 	ctx := types.WithWorkspace(s.T().Context(), ws)
 	g, err := MagusGraphOpen(ctx, []string{"go", "typescript"})
