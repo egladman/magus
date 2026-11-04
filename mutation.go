@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -55,17 +56,125 @@ func (m *Magus) Mutants(ctx context.Context, base string) (types.Mutants, error)
 	if base == "" {
 		return types.Mutants{}, errors.New("mutants: name a base, since mutating every function of a workspace is not offered")
 	}
-	_, fns, err := m.touchedSince(ctx, base)
+	set, err := m.touchedSince(ctx, base)
 	if err != nil {
 		return types.Mutants{}, err
 	}
-	subjects, gaps := m.mutationSubjects(fns)
+	subjects, gaps := m.mutationSubjects(set.fns)
 	out, err := m.mutateSubjects(ctx, subjects)
 	if err != nil {
 		return types.Mutants{}, err
 	}
+	if err := m.mutateBase(ctx, base, set.since, subjects, &out); err != nil {
+		return types.Mutants{}, err
+	}
 	out.Definition, out.Base, out.Gaps = mutantsDefinition, base, append(gaps, out.Gaps...)
 	return out, nil
+}
+
+// mutateBase writes onto each mutant the survivor count of its function at
+// base. Only a function with a survivor at head is mutated there.
+func (m *Magus) mutateBase(ctx context.Context, base string, since sinceBase, subjects []mutationSubject, out *types.Mutants) error {
+	subjects = slices.DeleteFunc(slices.Clone(subjects), func(s mutationSubject) bool { return !survived(out.Mutants, s.fn.Symbol) })
+	if len(subjects) == 0 {
+		return nil
+	}
+	_, commit, err := m.conformanceBaseCommit(ctx, base)
+	if err != nil {
+		return fmt.Errorf("mutants: %w", err)
+	}
+	sc, err := m.newScratch(ctx)
+	if err != nil {
+		return fmt.Errorf("mutants: %w", err)
+	}
+	tree, err := sc.copy(ctx, commit, subjectLinks(subjects))
+	if tree != "" {
+		defer os.RemoveAll(tree)
+	}
+	if err != nil {
+		return fmt.Errorf("mutants: export base %s: %w", commit, err)
+	}
+	counts, err := sc.baseEngine(tree, commit).countBase(ctx, since, subjects)
+	if err != nil {
+		return err
+	}
+	for i := range out.Mutants {
+		c := counts[out.Mutants[i].Symbol]
+		out.Mutants[i].BaseSurvived, out.Mutants[i].BaseReason = c.survived, c.reason
+	}
+	return nil
+}
+
+func survived(mutants []types.Mutant, symbol string) bool {
+	return slices.ContainsFunc(mutants, func(mu types.Mutant) bool {
+		return mu.Symbol == symbol && mu.Outcome == types.MutantSurvived
+	})
+}
+
+// baseCount is a function's survivors at base, or why they were not counted.
+type baseCount struct {
+	survived int
+	reason   string
+}
+
+// newSinceBase is the base reason of a function the base does not hold.
+const newSinceBase = "it is new since base"
+
+// countBase mutates each subject's function as the base held it, in e's
+// tree, and counts its survivors once markers there except theirs.
+func (e mutationEngine) countBase(ctx context.Context, since sinceBase, subjects []mutationSubject) (map[string]baseCount, error) {
+	out := map[string]baseCount{}
+	var based []mutationSubject
+	for _, s := range subjects {
+		bs, reason := e.atBase(since, s)
+		if reason != "" {
+			out[s.fn.Symbol] = baseCount{reason: reason}
+			continue
+		}
+		based = append(based, bs)
+	}
+	if len(based) == 0 {
+		return out, nil
+	}
+	got, err := e.mutate(ctx, based)
+	if err != nil {
+		return nil, fmt.Errorf("mutants at base: %w", err)
+	}
+	for _, g := range got.Gaps {
+		out[g.Symbol] = baseCount{reason: "its base is unmeasured: " + g.Reason}
+	}
+	for _, s := range based {
+		if _, gap := out[s.fn.Symbol]; !gap {
+			out[s.fn.Symbol] = baseCount{survived: countSurvivors(got.Mutants, s.fn.Symbol)}
+		}
+	}
+	return out, nil
+}
+
+func countSurvivors(mutants []types.Mutant, symbol string) int {
+	n := 0
+	for _, mu := range mutants {
+		if mu.Symbol == symbol && mu.Outcome == types.MutantSurvived {
+			n++
+		}
+	}
+	return n
+}
+
+// atBase is s with its function's span and digest as e's tree holds them.
+func (e mutationEngine) atBase(since sinceBase, s mutationSubject) (mutationSubject, string) {
+	lo, hi, ok := since.baseSpan(s.fn)
+	if !ok {
+		return mutationSubject{}, newSinceBase
+	}
+	src, err := os.ReadFile(filepath.Join(e.root, filepath.FromSlash(s.fn.Path)))
+	body, inRange := bodyLines(string(src), lo, hi)
+	if err != nil || !inRange {
+		return mutationSubject{}, fmt.Sprintf("its base lines %d-%d of %s could not be read", lo, hi, s.fn.Path)
+	}
+	sum := sha256.Sum256([]byte(body))
+	s.fn.Line, s.fn.EndLine, s.fn.Digest = lo, hi, hex.EncodeToString(sum[:])
+	return s, ""
 }
 
 func (m *Magus) mutateSubjects(ctx context.Context, subjects []mutationSubject) (types.Mutants, error) {
@@ -80,22 +189,15 @@ func (m *Magus) mutateSubjects(ctx context.Context, subjects []mutationSubject) 
 }
 
 // mutationSubject is one touched function and how to test it. A mutant is
-// judged by spell::test over scope. The baseline is spell::coverage over the
-// same scope, so a covered line is one the mutant's tests reach.
+// judged by the coverage's test op over scope. The baseline is the coverage
+// op over the same scope, so a covered line is one the mutant's tests reach.
 type mutationSubject struct {
-	fn       touchedFunction
-	syntax   spells.Syntax
-	project  string
-	spell    string
-	test     string
-	coverage spells.Coverage
-	scope    []string
-	links    []string
+	coverageScope
+	fn     touchedFunction
+	syntax spells.Syntax
 }
 
-// target names op through its spell, so no magusfile target of the same
-// name stands in for it.
-func (s mutationSubject) target(op string) string { return fmt.Sprintf("%s::%s", s.spell, op) }
+func (s mutationSubject) test() string { return s.coverage.Test }
 
 // mutationSubjects resolves each function's spell, test op and scope. One
 // that cannot be mutated is a gap, never a pass.
@@ -118,32 +220,15 @@ func newMutationSubject(root string, fn touchedFunction, project string, sp *spe
 	if sp == nil {
 		return mutationSubject{}, fmt.Sprintf("no spell bound to %s claims %s files", project, path.Ext(fn.Path))
 	}
-	s, test, reason := spellSubject(sp)
+	syn, reason := mutationSyntax(sp)
 	if reason != "" {
 		return mutationSubject{}, reason
 	}
-	s.fn, s.project, s.links = fn, project, projectLinks(project, sp.IgnoreDirs())
-	s.scope, reason = subjectScope(root, project, fn.Path, test)
-	return s, reason
-}
-
-// spellSubject is what sp declares to mutate a function: its syntax, its
-// coverage, and the test op that coverage names.
-func spellSubject(sp *spells.Spell) (mutationSubject, spells.Command, string) {
-	syn, reason := mutationSyntax(sp)
+	c, reason := scopeOf(root, project, fn.Path, sp, false)
 	if reason != "" {
-		return mutationSubject{}, spells.Command{}, reason
+		return mutationSubject{}, reason
 	}
-	cov, ok := sp.Op(spells.CoverageOp)
-	if !ok || cov.Coverage == nil {
-		return mutationSubject{}, spells.Command{}, fmt.Sprintf("spell %s declares no coverage (mgs_getCoverage)", sp.Name())
-	}
-	test, ok := sp.Op(cov.Coverage.Test)
-	if !ok {
-		return mutationSubject{}, spells.Command{}, fmt.Sprintf("spell %s's coverage names test op %s, which it does not declare", sp.Name(), cov.Coverage.Test)
-	}
-	s := mutationSubject{syntax: syn, spell: sp.Name(), test: cov.Coverage.Test, coverage: *cov.Coverage}
-	return s, test.Command, ""
+	return mutationSubject{coverageScope: c, fn: fn, syntax: syn}, ""
 }
 
 func mutationSyntax(sp *spells.Spell) (spells.Syntax, string) {
@@ -229,8 +314,7 @@ func (r testRun) replayed(target string) error {
 type mutationEngine struct {
 	root  string
 	seats int
-	// run runs target over s's scope in dir, a scratch copy.
-	run func(ctx context.Context, dir, target string, s mutationSubject) (testRun, error)
+	run scopedRun
 	// covered is the lines of s's file that the baseline in dir hit.
 	covered func(dir string, s mutationSubject) (map[int]bool, error)
 	// copy makes a scratch copy of the working tree, edits included, and
@@ -243,33 +327,79 @@ type mutationEngine struct {
 // newMutationEngine runs the workspace's own magus in each scratch copy, so a
 // mutant meets the command path, charms, env and sandbox a target does.
 func (m *Magus) newMutationEngine(ctx context.Context, links []string) (mutationEngine, error) {
+	sc, err := m.newScratch(ctx)
+	if err != nil {
+		return mutationEngine{}, fmt.Errorf("mutants: %w", err)
+	}
+	copier := sc.copier("", links)
+	return mutationEngine{
+		root: m.ws.Root, seats: max(1, cache.SlotsHeld(ctx)),
+		run: magusRunner{bin: sc.bin}.run, covered: copyCoverage, copy: copier.copy,
+		store: newMutantStore(sc.store), testKey: m.scopedTestKey,
+	}, nil
+}
+
+// baseEngine mutates in tree, an export of commit, with one seat that takes
+// tree itself: the base is read before any seat runs.
+func (sc scratch) baseEngine(tree, commit string) mutationEngine {
+	return mutationEngine{
+		root: tree, seats: 1, run: magusRunner{bin: sc.bin}.run, covered: copyCoverage,
+		copy:    func(context.Context) (string, error) { return tree, nil },
+		store:   newMutantStore(sc.store),
+		testKey: baseTestKey(commit),
+	}
+}
+
+// baseTestKey keys a base mutant's run by commit and the scoped target. The
+// base tree never changes, so its commit stands in for its files.
+func baseTestKey(commit string) func(context.Context, mutationSubject) (string, error) {
+	return func(_ context.Context, s mutationSubject) (string, error) {
+		sum := sha256.Sum256(fmt.Appendf(nil, "base|%s|%s|%s|%s", commit, s.project, s.target(s.test()), strings.Join(s.scope, "\x00")))
+		return hex.EncodeToString(sum[:]), nil
+	}
+}
+
+// scratch runs targets in copies of the tree: this magus, the store holding
+// the copies, and the version control exporting them.
+type scratch struct {
+	root  string
+	vcs   types.VCSDriver
+	store string
+	bin   string
+}
+
+func (m *Magus) newScratch(ctx context.Context) (scratch, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
-		return mutationEngine{}, types.DiagnosticErrorf(types.VCSCapabilityMissing,
-			"version control is disabled, so magus cannot copy the tree to mutate")
+		return scratch{}, types.DiagnosticErrorf(types.VCSCapabilityMissing,
+			"version control is disabled, so magus cannot copy the tree to measure it")
 	}
 	store, err := config.StoreDir(m.ws.Root, m.cfg)
 	if err != nil {
-		return mutationEngine{}, fmt.Errorf("mutants: %w", err)
+		return scratch{}, err
 	}
 	bin, err := os.Executable()
 	if err != nil {
-		return mutationEngine{}, fmt.Errorf("mutants: %w", err)
+		return scratch{}, err
 	}
-	copier := treeCopier{root: m.ws.Root, trees: filepath.Join(store, mutantTreesDir), vcs: res.VCS, links: links}
-	return mutationEngine{
-		root: m.ws.Root, seats: max(1, cache.SlotsHeld(ctx)),
-		run: magusRunner{bin: bin}.run, covered: copyCoverage, copy: copier.copy,
-		store: newMutantStore(store), testKey: m.scopedTestKey,
-	}, nil
+	return scratch{root: m.ws.Root, vcs: res.VCS, store: store, bin: bin}, nil
+}
+
+// copier exports rev, or HEAD with the working tree's edits when rev is "".
+func (sc scratch) copier(rev string, links []string) treeCopier {
+	return treeCopier{root: sc.root, trees: filepath.Join(sc.store, mutantTreesDir), vcs: sc.vcs, links: links, rev: rev}
+}
+
+func (sc scratch) copy(ctx context.Context, rev string, links []string) (string, error) {
+	return sc.copier(rev, links).copy(ctx)
 }
 
 // scopedTestKey is the cache key `magus run <test> <project> -- <scope>`
 // has at the unmutated tree.
 func (m *Magus) scopedTestKey(ctx context.Context, s mutationSubject) (string, error) {
-	key, _, err := m.ComputeTargetKey(project.WithExtraArgs(ctx, s.scope), s.project, s.target(s.test), nil)
+	key, _, err := m.ComputeTargetKey(project.WithExtraArgs(ctx, s.scope), s.project, s.target(s.test()), nil)
 	if err != nil {
-		return "", fmt.Errorf("mutants: key %s %s: %w", s.target(s.test), s.project, err)
+		return "", fmt.Errorf("mutants: key %s %s: %w", s.target(s.test()), s.project, err)
 	}
 	return key, nil
 }
@@ -475,7 +605,7 @@ func (e mutationEngine) runSubject(ctx context.Context, dir string, p *subjectPl
 func (e mutationEngine) baseline(ctx context.Context, dir string, p *subjectPlan) (time.Duration, error) {
 	target := p.subject.target(spells.CoverageOp)
 	start := time.Now()
-	res, err := e.run(ctx, dir, target, p.subject)
+	res, err := e.run(ctx, dir, target, p.subject.coverageScope)
 	if err == nil {
 		err = cmp.Or(ctx.Err(), res.replayed(target))
 	}
@@ -538,18 +668,20 @@ func swapFile(path, mutated, original string, fn func() error) error {
 }
 
 // judge sets mu's outcome: survived when the scoped tests pass, killed when
-// they fail or outrun timeout. A run that reached no test is an error.
+// they fail or outrun timeout. The baseline passed in this copy, so a run
+// that recorded no result did not compile or load: killed. Any other run that
+// reached no test is an error.
 func (e mutationEngine) judge(ctx context.Context, dir string, s mutationSubject, timeout time.Duration, mu *plannedMutant) error {
 	run, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	target := s.target(s.test)
+	target := s.target(s.test())
 	start := time.Now()
-	res, err := e.run(run, dir, target, s)
+	res, err := e.run(run, dir, target, s.coverageScope)
 	mu.Seconds = time.Since(start).Seconds()
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if run.Err() != nil {
+	if run.Err() != nil || errors.Is(err, errNoResult) {
 		mu.Outcome = types.MutantKilled
 		return nil
 	}
@@ -644,7 +776,15 @@ func exceptOne(p *subjectPlan, mk knowledge.MutantMarker) (types.Finding, bool) 
 // a failed test from a run that never reached one.
 type magusRunner struct{ bin string }
 
-func (r magusRunner) run(ctx context.Context, dir, target string, s mutationSubject) (testRun, error) {
+// scopedRun runs target over c's scope in c's project, inside dir, a scratch
+// copy.
+type scopedRun func(ctx context.Context, dir, target string, c coverageScope) (testRun, error)
+
+// errNoResult marks a run that recorded no result for its target: the tree
+// did not compile or load, or the run stopped before any step.
+var errNoResult = errors.New("so no test ran")
+
+func (r magusRunner) run(ctx context.Context, dir, target string, s coverageScope) (testRun, error) {
 	args := slices.Concat([]string{"run", target, "--no-cache", "--no-volatility-retry", "-o", "jsonl", s.project, "--"}, s.scope)
 	opts := spawn.ExecOptions{Dir: dir, Env: []string{copyCacheEnv(dir)}, Capture: true, Quiet: true}
 	res, err := spawn.Exec(ctx, r.bin, args, opts)
@@ -657,7 +797,7 @@ func (r magusRunner) run(ctx context.Context, dir, target string, s mutationSubj
 	}
 	result, ok := recordedResult(res.Stdout, s.project, target)
 	if !ok {
-		return testRun{}, fmt.Errorf("%s exited %d with no result for %s, so no test ran: %s", line, res.Code, target, lastLine(res.Stderr))
+		return testRun{}, fmt.Errorf("%s exited %d with no result for %s, %w: %s", line, res.Code, target, errNoResult, lastLine(res.Stderr))
 	}
 	return testRun{passed: result.Status != targetFailed, cached: result.CacheHit}, nil
 }
@@ -702,36 +842,43 @@ func copyCacheEnv(dir string) string {
 }
 
 // copyCoverage is the lines of s's file that the coverage baseline in dir
-// hit. The copy is read as a workspace of its own, as ChangeRisk reads a report.
+// hit.
 func copyCoverage(dir string, s mutationSubject) (map[int]bool, error) {
-	reportPath := filepath.Join(coverage.Dir(copyCacheDir(dir), s.project), s.coverage.File)
-	data, err := os.ReadFile(reportPath)
+	files, err := scratchReport(dir, s.coverageScope)
 	if err != nil {
-		return nil, fmt.Errorf("its coverage baseline left no report: %w", err)
-	}
-	scratch := &Magus{ws: &types.Workspace{Root: dir}}
-	files, err := scratch.parseReport(s.project, s.coverage, data)
-	if err != nil {
-		return nil, fmt.Errorf("its coverage baseline's report: %w", err)
+		return nil, err
 	}
 	return hitLines(files, s.fn.Path), nil
 }
 
+// scratchReport is the report c's coverage run left in dir. The copy is read
+// as a workspace of its own, as ChangeRisk reads a kept report.
+func scratchReport(dir string, c coverageScope) ([]coverage.File, error) {
+	data, err := os.ReadFile(filepath.Join(coverage.Dir(copyCacheDir(dir), c.project), c.coverage.File))
+	if err != nil {
+		return nil, fmt.Errorf("its coverage run left no report: %w", err)
+	}
+	scratch := &Magus{ws: &types.Workspace{Root: dir}}
+	files, err := scratch.parseReport(c.project, c.coverage, data)
+	if err != nil {
+		return nil, fmt.Errorf("its coverage run's report: %w", err)
+	}
+	return files, nil
+}
+
 func hitLines(files []coverage.File, name string) map[int]bool {
-	hit := map[int]bool{}
+	hit := fileNamed(files, name).Lines()
+	maps.DeleteFunc(hit, func(_ int, ran bool) bool { return !ran })
+	return hit
+}
+
+// fileNamed is the report's file at name, or an empty one.
+func fileNamed(files []coverage.File, name string) coverage.File {
 	i := slices.IndexFunc(files, func(f coverage.File) bool { return f.Path == name })
 	if i < 0 {
-		return hit
+		return coverage.File{Path: name}
 	}
-	for _, b := range files[i].Blocks {
-		if b.Hits == 0 {
-			continue
-		}
-		for line := b.StartLine; line <= b.EndLine; line++ {
-			hit[line] = true
-		}
-	}
-	return hit
+	return files[i]
 }
 
 // mutantTreesDir holds the scratch copies inside the workspace store. A
@@ -739,14 +886,15 @@ func hitLines(files []coverage.File, name string) map[int]bool {
 const mutantTreesDir = "mutant-trees"
 
 // treeCopier exports HEAD into a new dir under trees and lays the working
-// tree's uncommitted edits over it. links are workspace-relative dirs, such
-// as node_modules, linked rather than copied; a dir the tests write is not
-// one.
+// tree's uncommitted edits over it. A set rev is exported alone. links are
+// workspace-relative dirs, such as node_modules, linked rather than copied; a
+// dir the tests write is not one.
 type treeCopier struct {
 	root  string
 	trees string
 	vcs   types.VCSDriver
 	links []string
+	rev   string
 }
 
 func (c treeCopier) copy(ctx context.Context) (string, error) {
@@ -760,18 +908,24 @@ func (c treeCopier) copy(ctx context.Context) (string, error) {
 	if err := c.export(ctx, dir); err != nil {
 		return dir, err
 	}
-	if err := c.overlay(ctx, dir); err != nil {
-		return dir, err
+	if c.rev == "" {
+		if err := c.overlay(ctx, dir); err != nil {
+			return dir, err
+		}
 	}
 	return dir, linkDirs(c.root, dir, c.links)
 }
 
 func (c treeCopier) export(ctx context.Context, dir string) error {
-	head, err := c.vcs.FindCommit(ctx, c.root, "")
-	if err != nil {
-		return err
+	rev := c.rev
+	if rev == "" {
+		head, err := c.vcs.FindCommit(ctx, c.root, "")
+		if err != nil {
+			return err
+		}
+		rev = head.ID
 	}
-	return c.vcs.ExportRevision(ctx, c.root, head.ID, dir)
+	return c.vcs.ExportRevision(ctx, c.root, rev, dir)
 }
 
 // overlay copies each uncommitted path into dir, removing one the tree

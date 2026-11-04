@@ -45,6 +45,13 @@ type ChangeRiskFunction struct {
 	Covered    int
 	Coverable  int
 	Score      float64
+	// The Base fields measure the same function in the tree base forked from.
+	// BaseReason is "" exactly when they hold a measure.
+	BaseScore      float64
+	BaseComplexity int
+	BaseCovered    int
+	BaseCoverable  int
+	BaseReason     string
 }
 
 // Coverage is Covered over Coverable, or 0 when no line is coverable. Such a
@@ -61,6 +68,13 @@ func (f ChangeRiskFunction) Past(threshold int) bool {
 	return f.Score > float64(threshold)
 }
 
+// Charged reports whether the function is past threshold and worse than at
+// base. One with no base measure is judged by threshold alone, so a shrunk
+// function never costs and a new one meets the threshold as before.
+func (f ChangeRiskFunction) Charged(threshold int) bool {
+	return f.Past(threshold) && (f.BaseReason != "" || f.Score > f.BaseScore)
+}
+
 // ChangeRisk is the change risk answer for a change: what it scored and what
 // it could not.
 type ChangeRisk struct {
@@ -71,4 +85,7 @@ type ChangeRisk struct {
 	Base      string
 	Functions []ChangeRiskFunction
 	Gaps      []FunctionGap
+	// Lines are coverage findings in the changed files: a kept line that lost
+	// coverage, an added line no test covers, or a file not compared.
+	Lines []Finding
 }

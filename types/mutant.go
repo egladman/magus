@@ -32,6 +32,10 @@ type Mutant struct {
 	Seconds  float64
 	// Reason is the marker's reason when the mutant is excepted.
 	Reason string
+	// BaseSurvived counts the same function's survivors at base. BaseReason
+	// is "" exactly when it holds a count; a survivor-free function skips base.
+	BaseSurvived int
+	BaseReason   string
 }
 
 // Mutants is the mutation answer for a change.

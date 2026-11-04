@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/libs/testkit"
@@ -50,13 +51,14 @@ type stubRunner struct {
 	mu      sync.Mutex
 	verdict func(src string) bool
 	hang    func(src string) bool
+	broken  func(src string) bool
 	cached  func(target string) bool
 	err     error
 	seen    []string
 	targets []string
 }
 
-func (r *stubRunner) run(ctx context.Context, dir, target string, _ mutationSubject) (testRun, error) {
+func (r *stubRunner) run(ctx context.Context, dir, target string, _ coverageScope) (testRun, error) {
 	b, err := os.ReadFile(filepath.Join(dir, mutantFile))
 	if err != nil {
 		return testRun{}, err
@@ -68,6 +70,9 @@ func (r *stubRunner) run(ctx context.Context, dir, target string, _ mutationSubj
 	if string(b) == mutantSource {
 		// A slow baseline keeps a fast mutant inside its timeout.
 		time.Sleep(20 * time.Millisecond)
+	}
+	if r.broken != nil && r.broken(string(b)) {
+		return testRun{}, fmt.Errorf("no result for %s, %w", target, errNoResult)
 	}
 	if r.hang != nil && r.hang(string(b)) {
 		<-ctx.Done()
@@ -137,7 +142,8 @@ func toySubject(label string, line, end int) mutationSubject {
 			Symbol: "sym-" + label, Label: label, Path: mutantFile, Language: "toy",
 			Digest: "d-" + label, Change: types.DiffChangeBody, Line: line, EndLine: end,
 		},
-		syntax: toySyntax, project: ".", spell: "toy", test: "test", scope: []string{"./calc"},
+		syntax:        toySyntax,
+		coverageScope: coverageScope{project: ".", spell: "toy", coverage: spells.Coverage{Test: "test"}, scope: []string{"./calc"}},
 	}
 }
 
@@ -200,6 +206,55 @@ func (s *MutantEngineSuite) TestARunThatReachedNoTestJudgesNothing() {
 	s.runner.err = errors.New("no result for toy::test, so no test ran")
 	_, err := s.engine.mutate(context.Background(), []mutationSubject{toySmall()})
 	s.ErrorContains(err, "Small baseline: no result for toy::test")
+}
+
+func (s *MutantEngineSuite) TestAMutantThatRecordsNoResultAfterAGreenBaselineIsKilled() {
+	s.runner.broken = func(src string) bool { return strings.Contains(src, "n <= 9") }
+	got := s.mutate(toySmall())
+	s.Equal([]types.Mutant{smallMutant(0, 11, types.MutantKilled), smallMutant(1, 18, types.MutantKilled)}, got.Mutants)
+}
+
+func (s *MutantEngineSuite) TestABaselineThatRecordsNoResultIsAnError() {
+	s.runner.broken = func(src string) bool { return src == mutantSource }
+	_, err := s.engine.mutate(context.Background(), []mutationSubject{toySmall()})
+	s.ErrorIs(err, errNoResult)
+}
+
+func (s *MutantEngineSuite) TestBaseSurvivorsAreCountedOverTheBaseSpan() {
+	// The base held Small one line lower; its second bound survives there too.
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, mutantFile), []byte("\n"+mutantSource), 0o644))
+	s.covered = map[string][]int{"Small": {5}}
+	since := sinceBase{working: map[string][]changeset.Hunk{
+		mutantFile: {{OldStart: 1, OldCount: 1, NewStart: 0, NewCount: 0, Rows: []changeset.Row{delRow(1)}}},
+	}}
+
+	got, err := s.engine.countBase(context.Background(), since, []mutationSubject{toySmall()})
+
+	s.Require().NoError(err)
+	s.Equal(map[string]baseCount{"sym-Small": {survived: 1}}, got)
+}
+
+func (s *MutantEngineSuite) TestANewFunctionHasNoBaseCount() {
+	added := toySmall()
+	added.fn.Change = types.DiffChangeAdded
+	got, err := s.engine.countBase(context.Background(), sinceBase{}, []mutationSubject{added})
+	s.Require().NoError(err)
+	s.Equal(map[string]baseCount{"sym-Small": {reason: newSinceBase}}, got)
+	s.Empty(s.runner.seen, "nothing ran")
+}
+
+func (s *MutantEngineSuite) TestBaseTestKeysMoveWithTheCommit() {
+	a, err := baseTestKey("c1")(context.Background(), toySmall())
+	s.Require().NoError(err)
+	b, err := baseTestKey("c2")(context.Background(), toySmall())
+	s.Require().NoError(err)
+	s.NotEqual(a, b)
+}
+
+func (s *MutantEngineSuite) TestSurvivedNamesAFunctionWithASurvivor() {
+	mutants := []types.Mutant{smallMutant(0, 11, types.MutantKilled), smallMutant(1, 18, types.MutantSurvived)}
+	s.Equal([2]bool{true, false}, [2]bool{survived(mutants, "sym-Small"), survived(mutants, "sym-Both")})
+	s.Equal(1, countSurvivors(mutants, "sym-Small"))
 }
 
 func (s *MutantEngineSuite) TestAMarkerExceptsTheSurvivorOnTheNextLine() {
@@ -419,8 +474,8 @@ func (s *MutantSubjectScopeSuite) TestNoSpellIsAReason() {
 }
 
 func (s *MutantSubjectScopeSuite) TestLinksAreTheSpellsIgnoreDirsInEachProject() {
-	a := mutationSubject{links: projectLinks("web", []string{"node_modules"})}
-	b := mutationSubject{links: projectLinks(".", []string{"node_modules", "vendor"})}
+	a := mutationSubject{coverageScope: coverageScope{links: projectLinks("web", []string{"node_modules"})}}
+	b := mutationSubject{coverageScope: coverageScope{links: projectLinks(".", []string{"node_modules", "vendor"})}}
 	s.Equal([]string{"node_modules", "vendor", "web/node_modules"}, subjectLinks([]mutationSubject{a, b, a}))
 }
 
@@ -446,7 +501,7 @@ func (s *MutantCoverageSuite) TestNoReportIsAnError() {
 	sub := toySmall()
 	sub.coverage = spells.Coverage{Format: spells.CoverageFormatLCOV, File: "lcov.info"}
 	_, err := copyCoverage(s.T().TempDir(), sub)
-	s.ErrorContains(err, "its coverage baseline left no report")
+	s.ErrorContains(err, "its coverage run left no report")
 }
 
 func (s *MutantCoverageSuite) TestTheCopysCacheDirIsPinnedInItsEnv() {
@@ -466,7 +521,7 @@ func (s *MutantRunnerSuite) SetupTest() { s.dir = s.T().TempDir() }
 func (s *MutantRunnerSuite) runWith(lines ...string) (testRun, error) {
 	script := []byte(strings.Join(lines, "\n"))
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, "run"), script, 0o644))
-	return magusRunner{bin: "/bin/sh"}.run(context.Background(), s.dir, "toy::test", toySmall())
+	return magusRunner{bin: "/bin/sh"}.run(context.Background(), s.dir, "toy::test", toySmall().coverageScope)
 }
 
 func resultRecord(project, target, status string, hit bool) string {
@@ -498,6 +553,7 @@ func (s *MutantRunnerSuite) TestACachedResultSaysSo() {
 func (s *MutantRunnerSuite) TestAFailedRunThatReportsNoResultJudgesNothing() {
 	_, err := s.runWith("echo 'workspace did not load' >&2", "exit 1")
 	s.ErrorContains(err, "exited 1 with no result for toy::test, so no test ran: workspace did not load")
+	s.ErrorIs(err, errNoResult)
 }
 
 func (s *MutantRunnerSuite) TestAnotherTargetsResultIsNotThisOnes() {
@@ -594,6 +650,22 @@ func (s *MutantTreeCopySuite) TestACopyIsHeadWithTheWorkingTreesEdits() {
 	b, err := os.ReadFile(filepath.Join(dir, "edited.toy"))
 	s.Require().NoError(err)
 	s.Equal("edit", string(b))
+}
+
+func (s *MutantTreeCopySuite) TestACopyOfARevisionTakesNoEdits() {
+	repo := s.T().TempDir()
+	root := filepath.Join(repo, "ws")
+	s.Require().NoError(os.MkdirAll(root, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "edited.toy"), []byte("edit"), 0o644))
+	c := treeCopier{root: root, trees: s.T().TempDir(), rev: "c0ffee", vcs: copyVCS{
+		repo: repo, dirty: []string{"ws/edited.toy"}, head: map[string]string{"edited.toy": "base"},
+	}}
+	dir, err := c.copy(context.Background())
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = os.RemoveAll(dir) })
+	b, err := os.ReadFile(filepath.Join(dir, "edited.toy"))
+	s.Require().NoError(err)
+	s.Equal("base", string(b))
 }
 
 func (s *MutantTreeCopySuite) TestAnEditedFileIsCopiedAndADeletedOneRemoved() {
@@ -698,7 +770,7 @@ func (s *ScopedTestKeySuite) TestSameNamedOpsOfTwoSpellsKeyApart() {
 	s.T().Cleanup(func() { _ = m.Close() })
 
 	keyOf := func(spell string) string {
-		key, err := m.scopedTestKey(context.Background(), mutationSubject{project: ".", spell: spell, test: "build", scope: []string{"./calc"}})
+		key, err := m.scopedTestKey(context.Background(), mutationSubject{coverageScope: coverageScope{project: ".", spell: spell, coverage: spells.Coverage{Test: "build"}, scope: []string{"./calc"}}})
 		s.Require().NoError(err)
 		return key
 	}

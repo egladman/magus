@@ -50,3 +50,20 @@ func (s *ChangeRiskSuite) TestPastIsStrictlyAboveTheThreshold() {
 	s.False(ChangeRiskFunction{Score: 10}.Past(10))
 	s.True(ChangeRiskFunction{Score: 10.5}.Past(10))
 }
+
+func (s *ChangeRiskSuite) TestAShrunkFunctionNoWorseThanAtBaseIsNotCharged() {
+	s.False(ChangeRiskFunction{Score: 20, BaseScore: 30}.Charged(10))
+	s.False(ChangeRiskFunction{Score: 20, BaseScore: 20}.Charged(10))
+}
+
+func (s *ChangeRiskSuite) TestAFunctionWorseThanAtBaseAndPastTheThresholdIsCharged() {
+	s.True(ChangeRiskFunction{Score: 20, BaseScore: 15}.Charged(10))
+}
+
+func (s *ChangeRiskSuite) TestAFunctionWithinTheThresholdIsNeverCharged() {
+	s.False(ChangeRiskFunction{Score: 9, BaseScore: 1}.Charged(10))
+}
+
+func (s *ChangeRiskSuite) TestAFunctionWithNoBaseMeasureMeetsTheThresholdAlone() {
+	s.True(ChangeRiskFunction{Score: 11, BaseReason: "it is new since base"}.Charged(10))
+}

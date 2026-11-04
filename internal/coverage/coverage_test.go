@@ -45,6 +45,11 @@ func (s *ReportSuite) TestGoProfileWithNoModuleReadsNothing() {
 	s.Nil(ParseGoProfile([]byte("mode: atomic\ngithub.com/egladman/magus/x.go:1.1,2.2 1 1\n"), ""))
 }
 
+func (s *ReportSuite) TestLinesMarkEachSpannedLineRanWhenAnyBlockOverItRan() {
+	f := File{Blocks: []Block{{StartLine: 2, EndLine: 3, Units: 1}, {StartLine: 3, EndLine: 4, Units: 1, Hits: 2}}}
+	s.Equal(map[int]bool{2: false, 3: true, 4: true}, f.Lines())
+}
+
 func (s *ReportSuite) TestLCOVCountsEachDALineOnce() {
 	trace := []byte("TN:\nSF:src/a.ts\nFN:1,a\nDA:1,4\nDA:2,0\nDA:3,1,abc\nend_of_record\nSF:src/b.ts\nDA:7,0\nend_of_record\n")
 

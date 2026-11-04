@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -34,8 +35,8 @@ type riskScorer struct {
 	// indexed is the complexity an AST-reading indexer counted for a symbol,
 	// and whether it counted.
 	indexed func(symbol string) (int, bool)
-	// report is the project's kept coverage report, or why there is none.
-	report func(project string, cov spells.Coverage) (keptReport, string)
+	// report is the coverage report that measures fn, or why there is none.
+	report func(fn touchedFunction, cov spells.Coverage) (keptReport, string)
 }
 
 // keptReport is a coverage op's report as the last run left it.
@@ -55,17 +56,25 @@ func (s riskScorer) scoreAll(fns []touchedFunction) types.ChangeRisk {
 }
 
 func (s riskScorer) score(out *types.ChangeRisk, fn touchedFunction) {
+	f, gap, ok := s.scoreOne(fn)
+	if !ok {
+		out.Gaps = append(out.Gaps, gap)
+		return
+	}
+	out.Functions = append(out.Functions, f)
+}
+
+// scoreOne is fn's score, or false and the gap that says why it has none.
+func (s riskScorer) scoreOne(fn touchedFunction) (types.ChangeRiskFunction, types.FunctionGap, bool) {
 	c, reason := s.complexity(fn)
 	if reason != "" {
-		out.Gaps = append(out.Gaps, functionGap(fn, 0, reason))
-		return
+		return types.ChangeRiskFunction{}, functionGap(fn, 0, reason), false
 	}
 	covered, coverable, reason := s.coverage(fn)
 	if reason != "" {
-		out.Gaps = append(out.Gaps, functionGap(fn, c, reason))
-		return
+		return types.ChangeRiskFunction{}, functionGap(fn, c, reason), false
 	}
-	out.Functions = append(out.Functions, riskFunction(fn, c, covered, coverable))
+	return riskFunction(fn, c, covered, coverable), types.FunctionGap{}, true
 }
 
 func (s riskScorer) complexity(fn touchedFunction) (int, string) {
@@ -111,7 +120,7 @@ func (s riskScorer) coverage(fn touchedFunction) (covered, coverable int, reason
 	if !ok || op.Coverage == nil {
 		return 0, 0, fmt.Sprintf("spell %s declares no coverage (mgs_getCoverage)", sp.Name())
 	}
-	report, reason := s.report(s.owner(fn.Path), *op.Coverage)
+	report, reason := s.report(fn, *op.Coverage)
 	if reason != "" {
 		return 0, 0, reason
 	}
@@ -157,53 +166,366 @@ func functionGap(fn touchedFunction, complexity int, reason string) types.Functi
 }
 
 // ChangeRisk scores the functions touched since base: what HEAD added since
-// it forked from base, and the working tree's edits on top. base "" scores
-// every function in the workspace.
+// it forked from base, and the working tree's edits on top. Each is measured
+// again as the merge base held it, and the changed files' covered lines are
+// compared. base "" scores every function in the workspace, against no base.
+// Coverage runs in scratch copies of the tree, scoped to the touched files'
+// tests, so a caller inside a run holding the workspace's projects never waits
+// on itself.
 func (m *Magus) ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, error) {
-	defs, fns, err := m.touchedSince(ctx, base)
+	set, err := m.touchedSince(ctx, base)
 	if err != nil {
 		return types.ChangeRisk{}, err
 	}
-	scorer := m.riskScorer(defs)
-	if err := m.runCoverage(ctx, scorer, fns); err != nil {
+	meter, err := m.newRiskMeter(ctx, set, base)
+	if err != nil {
 		return types.ChangeRisk{}, err
 	}
-	out := scorer.scoreAll(fns)
+	out, err := meter.measure(ctx, set.fns)
+	if err != nil {
+		return types.ChangeRisk{}, err
+	}
 	out.Base = base
 	return out, nil
 }
 
-// runCoverage runs each owning project's coverage op through the cache.
-// A hit replays the report.
-func (m *Magus) runCoverage(ctx context.Context, s riskScorer, fns []touchedFunction) error {
-	projects := coverageProjects(s, fns)
-	targets := make([]types.Target, 0, len(projects))
-	for _, p := range projects {
-		targets = append(targets, types.Target{Path: p, Name: spells.CoverageOp})
-	}
-	if len(targets) == 0 {
-		return nil
-	}
-	if err := m.Run(ctx, targets); err != nil {
-		return fmt.Errorf("change risk: %w", err)
-	}
-	return nil
+// coverageScope is one run of a spell's coverage op over a test scope. A nil
+// scope runs the whole project.
+type coverageScope struct {
+	project  string
+	spell    string
+	coverage spells.Coverage
+	scope    []string
+	links    []string
 }
 
-// coverageProjects is the sorted projects whose spell has a coverage op.
-func coverageProjects(s riskScorer, fns []touchedFunction) []string {
-	var out []string
-	for _, fn := range fns {
-		sp := s.claimant(fn.Path)
-		if sp == nil {
-			continue
-		}
-		if _, ok := sp.Op(spells.CoverageOp); ok {
-			out = append(out, s.owner(fn.Path))
+func (c coverageScope) key() string {
+	return strings.Join(slices.Concat([]string{c.project, c.spell}, c.scope), "\x00")
+}
+
+// target names op through its spell, so no magusfile target of the same
+// name stands in for it.
+func (c coverageScope) target(op string) string { return fmt.Sprintf("%s::%s", c.spell, op) }
+
+func (c coverageScope) command() string {
+	return strings.Join(slices.Concat([]string{"magus run", c.target(spells.CoverageOp), c.project, "--"}, c.scope), " ")
+}
+
+// scopeOf is the coverage run that measures name, a file of project that sp
+// claims. whole runs the whole project instead of name's test scope.
+func scopeOf(root, project, name string, sp *spells.Spell, whole bool) (coverageScope, string) {
+	if sp == nil {
+		return coverageScope{}, fmt.Sprintf("no spell bound to %s claims %s files", project, path.Ext(name))
+	}
+	cov, ok := sp.Op(spells.CoverageOp)
+	if !ok || cov.Coverage == nil {
+		return coverageScope{}, fmt.Sprintf("spell %s declares no coverage (mgs_getCoverage)", sp.Name())
+	}
+	test, ok := sp.Op(cov.Coverage.Test)
+	if !ok {
+		return coverageScope{}, fmt.Sprintf("spell %s's coverage names test op %s, which it does not declare", sp.Name(), cov.Coverage.Test)
+	}
+	c := coverageScope{project: project, spell: sp.Name(), coverage: *cov.Coverage, links: projectLinks(project, sp.IgnoreDirs())}
+	if whole {
+		return c, ""
+	}
+	scope, reason := subjectScope(root, project, name, test.Command)
+	c.scope = scope
+	return c, reason
+}
+
+// scopeRun is what one coverage scope's run left: its report's files, or why
+// there are none.
+type scopeRun struct {
+	files  []coverage.File
+	reason string
+}
+
+// riskMeter measures change risk in scratch copies. Each func field is a
+// lookup or a run the workspace answers, so a test can answer it instead.
+type riskMeter struct {
+	// scorer answers complexity at head; measure sets its report.
+	scorer riskScorer
+	// scopeOf is the coverage run that measures a file, or why there is none.
+	scopeOf func(path string) (coverageScope, string)
+	// covers reports whether a changed file's spell declares coverage at all.
+	covers func(path string) bool
+	// copy makes a scratch copy of rev, or of the working tree when rev is "".
+	copy   func(ctx context.Context, rev string, links []string) (string, error)
+	run    scopedRun
+	report func(dir string, c coverageScope) ([]coverage.File, error)
+	// commit is the merge base the change is judged against, "" for none.
+	commit  string
+	since   sinceBase
+	changed []string
+}
+
+func (m *Magus) newRiskMeter(ctx context.Context, set touchedSet, base string) (riskMeter, error) {
+	sc, err := m.newScratch(ctx)
+	if err != nil {
+		return riskMeter{}, fmt.Errorf("change risk: %w", err)
+	}
+	claimant, owner := m.spellClaiming(), m.projectOwner()
+	r := riskMeter{
+		scorer: m.riskScorer(set.defs),
+		scopeOf: func(p string) (coverageScope, string) {
+			return scopeOf(m.ws.Root, owner(p), p, claimant(p), base == "")
+		},
+		covers: func(p string) bool {
+			sp := claimant(p)
+			if sp == nil {
+				return false
+			}
+			_, ok := sp.Op(spells.CoverageOp)
+			return ok
+		},
+		copy: sc.copy, run: magusRunner{bin: sc.bin}.run, report: scratchReport,
+		since: set.since, changed: set.changed,
+	}
+	if base != "" {
+		if _, r.commit, err = m.conformanceBaseCommit(ctx, base); err != nil {
+			return riskMeter{}, fmt.Errorf("change risk: %w", err)
 		}
 	}
-	slices.Sort(out)
-	return slices.Compact(out)
+	return r, nil
+}
+
+// noBase is the base reason of every function when no base was named.
+const noBase = "no base was named"
+
+// measure scores fns at head and, with a commit, at base, then compares the
+// changed files' lines.
+func (r riskMeter) measure(ctx context.Context, fns []touchedFunction) (types.ChangeRisk, error) {
+	plan := r.plan(fns)
+	headDir, head, err := r.runAll(ctx, "", plan.runs)
+	defer removeScratch(headDir)
+	if err != nil {
+		return types.ChangeRisk{}, err
+	}
+	scorer := r.scorer
+	scorer.report = plan.lookup(head)
+	out := scorer.scoreAll(fns)
+	if r.commit == "" {
+		for i := range out.Functions {
+			out.Functions[i].BaseReason = noBase
+		}
+		return out, nil
+	}
+	baseDir, base, err := r.runAll(ctx, r.commit, plan.runs)
+	defer removeScratch(baseDir)
+	if err != nil {
+		return types.ChangeRisk{}, err
+	}
+	based := r.scorer
+	based.read, based.indexed = readUnder(baseDir), noIndex
+	based.report = plan.lookup(base)
+	r.judgeBase(out.Functions, fns, based)
+	out.Lines = r.lines(plan, head, base)
+	return out, nil
+}
+
+func removeScratch(dir string) {
+	if dir != "" {
+		_ = os.RemoveAll(dir)
+	}
+}
+
+func readUnder(dir string) func(string) (string, bool) {
+	return func(p string) (string, bool) {
+		b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(p)))
+		return string(b), err == nil
+	}
+}
+
+// noIndex stands in for the base's indexer, which magus never ran.
+func noIndex(string) (int, bool) { return 0, false }
+
+// judgeBase measures each scored function again over its span at base.
+func (r riskMeter) judgeBase(scored []types.ChangeRiskFunction, fns []touchedFunction, based riskScorer) {
+	byID := map[string]touchedFunction{}
+	for _, fn := range fns {
+		byID[fn.Symbol] = fn
+	}
+	for i := range scored {
+		f := &scored[i]
+		fn := byID[f.Symbol]
+		lo, hi, ok := r.since.baseSpan(fn)
+		if !ok {
+			f.BaseReason = newSinceBase
+			continue
+		}
+		fn.Line, fn.EndLine = lo, hi
+		b, gap, ok := based.scoreOne(fn)
+		if !ok {
+			f.BaseReason = "its base is unmeasured: " + gap.Reason
+			continue
+		}
+		f.BaseScore, f.BaseComplexity, f.BaseCovered, f.BaseCoverable = b.Score, b.Complexity, b.Covered, b.Coverable
+	}
+}
+
+// scopePlan is the coverage runs a measure makes: one per distinct scope of
+// the touched functions and the changed files a coverage spell claims.
+type scopePlan struct {
+	byPath map[string]coverageScope
+	reason map[string]string
+	runs   []coverageScope
+}
+
+func (r riskMeter) plan(fns []touchedFunction) scopePlan {
+	p := scopePlan{byPath: map[string]coverageScope{}, reason: map[string]string{}}
+	seen := map[string]bool{}
+	add := func(name string) {
+		if _, done := p.byPath[name]; done || p.reason[name] != "" {
+			return
+		}
+		c, reason := r.scopeOf(name)
+		if reason != "" {
+			p.reason[name] = reason
+			return
+		}
+		p.byPath[name] = c
+		if !seen[c.key()] {
+			seen[c.key()] = true
+			p.runs = append(p.runs, c)
+		}
+	}
+	for _, fn := range fns {
+		add(fn.Path)
+	}
+	for _, name := range r.changed {
+		if r.covers(name) {
+			add(name)
+		}
+	}
+	return p
+}
+
+// lookup answers a scorer's report from runs.
+func (p scopePlan) lookup(runs map[string]scopeRun) func(touchedFunction, spells.Coverage) (keptReport, string) {
+	return func(fn touchedFunction, _ spells.Coverage) (keptReport, string) {
+		if reason := p.reason[fn.Path]; reason != "" {
+			return keptReport{}, reason
+		}
+		c := p.byPath[fn.Path]
+		run := runs[c.key()]
+		if run.reason != "" {
+			return keptReport{}, run.reason
+		}
+		return keptReport{project: c.project, files: run.files}, ""
+	}
+}
+
+// runAll runs each scope's coverage in one scratch copy of rev. The caller
+// removes the copy, which it returns even on an error.
+func (r riskMeter) runAll(ctx context.Context, rev string, runs []coverageScope) (string, map[string]scopeRun, error) {
+	if len(runs) == 0 {
+		return "", nil, nil
+	}
+	var links []string
+	for _, c := range runs {
+		links = append(links, c.links...)
+	}
+	slices.Sort(links)
+	dir, err := r.copy(ctx, rev, slices.Compact(links))
+	if err != nil {
+		return dir, nil, fmt.Errorf("change risk: scratch copy: %w", err)
+	}
+	out := make(map[string]scopeRun, len(runs))
+	for _, c := range runs {
+		run, err := r.runOne(ctx, dir, c)
+		if err != nil {
+			return dir, nil, err
+		}
+		out[c.key()] = run
+	}
+	return dir, out, nil
+}
+
+// runOne runs c in dir. A red or unreadable run is a reason that makes its
+// functions gaps; only a cancelled one is an error.
+func (r riskMeter) runOne(ctx context.Context, dir string, c coverageScope) (scopeRun, error) {
+	res, err := r.run(ctx, dir, c.target(spells.CoverageOp), c)
+	if ctx.Err() != nil {
+		return scopeRun{}, fmt.Errorf("change risk: %w", ctx.Err())
+	}
+	if err != nil {
+		return scopeRun{reason: err.Error()}, nil
+	}
+	if !res.passed {
+		return scopeRun{reason: fmt.Sprintf("a test in its scope fails: `%s`", c.command())}, nil
+	}
+	files, err := r.report(dir, c)
+	if err != nil {
+		return scopeRun{reason: err.Error()}, nil
+	}
+	return scopeRun{files: files}, nil
+}
+
+// lines compares each changed file's covered lines at head with those at
+// base. A line removed since base is never compared.
+func (r riskMeter) lines(plan scopePlan, head, base map[string]scopeRun) []types.Finding {
+	var out []types.Finding
+	for _, name := range r.changed {
+		c, ok := plan.byPath[name]
+		if !ok {
+			continue
+		}
+		out = append(out, r.fileLines(name, head[c.key()], base[c.key()])...)
+	}
+	return out
+}
+
+func (r riskMeter) fileLines(name string, head, base scopeRun) []types.Finding {
+	for _, run := range []struct{ side, reason string }{{"", head.reason}, {"at base ", base.reason}} {
+		if run.reason != "" {
+			return []types.Finding{{Path: name, Line: 1,
+				Message: fmt.Sprintf("the coverage of %s %swas not measured: %s", name, run.side, run.reason),
+				Fix:     "Make the tests in its scope pass, so its covered lines can be compared."}}
+		}
+	}
+	now := fileNamed(head.files, name).Lines()
+	var lost, bare []int
+	for line, ran := range fileNamed(base.files, name).Lines() {
+		at, kept := r.since.headLine(name, line)
+		if ran && kept && uncovered(now, at) {
+			lost = append(lost, at)
+		}
+	}
+	for _, line := range r.since.lines[name] {
+		if uncovered(now, line) {
+			bare = append(bare, line)
+		}
+	}
+	out := lineFindings(name, lost, "was covered at base and no test in its scope covers it now",
+		"Restore the test that covered it, or delete the code no test needs.")
+	return append(out, lineFindings(name, bare, "was added and no test in its scope covers it",
+		"Cover the added lines with a test.")...)
+}
+
+func uncovered(lines map[int]bool, line int) bool {
+	ran, coverable := lines[line]
+	return coverable && !ran
+}
+
+// lineFindings is one finding per run of consecutive lines.
+func lineFindings(name string, lines []int, what, fix string) []types.Finding {
+	slices.Sort(lines)
+	lines = slices.Compact(lines)
+	var out []types.Finding
+	for i := 0; i < len(lines); {
+		j := i
+		for j+1 < len(lines) && lines[j+1] == lines[j]+1 {
+			j++
+		}
+		span := strconv.Itoa(lines[i])
+		if j > i {
+			span = fmt.Sprintf("%d-%d", lines[i], lines[j])
+		}
+		out = append(out, types.Finding{Path: name, Line: lines[i], Message: fmt.Sprintf("%s:%s %s", name, span, what), Fix: fix})
+		i = j + 1
+	}
+	return out
 }
 
 // riskGraph is the head graph with every symbol. Its indexes are brought
@@ -219,27 +541,58 @@ func (m *Magus) riskGraph(ctx context.Context) (*knowledge.Graph, error) {
 	return m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 }
 
-// touchedSince is the head graph's definitions and the functions touched
-// since base: the one entry point ChangeRisk and Mutants share.
-func (m *Magus) touchedSince(ctx context.Context, base string) (map[string]symbolDef, []touchedFunction, error) {
-	graph, err := m.riskGraph(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	defs := definedSymbols(graph.Nodes())
-	fns, err := m.riskSubjects(ctx, defs, base)
-	return defs, fns, err
+// touchedSet is what a change touched since base. since and changed, the
+// hand-written files it changed, are empty when no base was named.
+type touchedSet struct {
+	defs    map[string]symbolDef
+	fns     []touchedFunction
+	since   sinceBase
+	changed []string
 }
 
-func (m *Magus) riskSubjects(ctx context.Context, defs map[string]symbolDef, base string) ([]touchedFunction, error) {
-	if base == "" {
-		return m.touchedIn(ctx, defs, everySymbol(defs))
+// touchedSince is the one entry point ChangeRisk and Mutants share.
+func (m *Magus) touchedSince(ctx context.Context, base string) (touchedSet, error) {
+	graph, err := m.riskGraph(ctx)
+	if err != nil {
+		return touchedSet{}, err
 	}
-	since, err := m.linesSince(ctx, base)
+	set := touchedSet{defs: definedSymbols(graph.Nodes())}
+	if base == "" {
+		set.fns, err = m.touchedIn(ctx, set.defs, everySymbol(set.defs))
+		return set, err
+	}
+	if set.since, err = m.linesSince(ctx, base); err != nil {
+		return touchedSet{}, err
+	}
+	if set.fns, err = m.touchedIn(ctx, set.defs, spansTouched(set.defs, set.since, m.readWorkspaceFile)); err != nil {
+		return touchedSet{}, err
+	}
+	set.changed, err = m.handWritten(ctx, slices.Sorted(maps.Keys(set.since.lines)))
+	return set, err
+}
+
+// handWritten is paths less the generated ones, in order.
+func (m *Magus) handWritten(ctx context.Context, paths []string) ([]string, error) {
+	byPath, err := m.classified(ctx, paths)
 	if err != nil {
 		return nil, err
 	}
-	return m.touchedIn(ctx, defs, spansTouched(defs, since, m.readWorkspaceFile))
+	return slices.DeleteFunc(slices.Clone(paths), func(p string) bool {
+		f, ok := byPath[p]
+		return !ok || f.Generated()
+	}), nil
+}
+
+func (m *Magus) classified(ctx context.Context, paths []string) (map[string]*types.DiffFile, error) {
+	entries, err := m.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return nil, fmt.Errorf("change risk: %w", err)
+	}
+	byPath := make(map[string]*types.DiffFile, len(entries))
+	for _, e := range entries {
+		byPath[e.Path] = &types.DiffFile{Path: e.Path, Project: e.Project, Role: e.Role}
+	}
+	return byPath, nil
 }
 
 func everySymbol(defs map[string]symbolDef) map[string]string {
@@ -257,22 +610,51 @@ func (m *Magus) touchedIn(ctx context.Context, defs map[string]symbolDef, change
 		paths = append(paths, defs[id].path)
 	}
 	slices.Sort(paths)
-	entries, err := m.ClassifyFiles(ctx, slices.Compact(paths))
+	byPath, err := m.classified(ctx, slices.Compact(paths))
 	if err != nil {
-		return nil, fmt.Errorf("change risk: %w", err)
-	}
-	byPath := make(map[string]*types.DiffFile, len(entries))
-	for _, e := range entries {
-		byPath[e.Path] = &types.DiffFile{Path: e.Path, Project: e.Project, Role: e.Role}
+		return nil, err
 	}
 	return touchedFunctions(defs, byPath, conformanceInput{changes: changes}), nil
 }
 
 // sinceBase is what the tree changed since a base: each file's working-tree
-// lines, and the text of every line the changes removed.
+// lines, and the text of every line the changes removed. committed holds the
+// hunks from base to HEAD, working those from HEAD to the working tree.
 type sinceBase struct {
-	lines   map[string][]int
-	removed string
+	lines     map[string][]int
+	removed   string
+	committed map[string][]changeset.Hunk
+	working   map[string][]changeset.Hunk
+}
+
+// baseSpan is fn's lines as the base held them, false when it is new since.
+func (s sinceBase) baseSpan(fn touchedFunction) (int, int, bool) {
+	if fn.Change == types.DiffChangeAdded || fn.EndLine == 0 {
+		return 0, 0, false
+	}
+	lo, hi, ok := oldSpan(fn.Line, fn.EndLine, s.working[fn.Path])
+	if !ok {
+		return 0, 0, false
+	}
+	return oldSpan(lo, hi, s.committed[fn.Path])
+}
+
+// headLine maps a base line of path to the working tree, false when the
+// change removed or rewrote it.
+func (s sinceBase) headLine(path string, line int) (int, bool) {
+	at, ok := forwardLine(line, s.committed[path])
+	if !ok {
+		return 0, false
+	}
+	return forwardLine(at, s.working[path])
+}
+
+func fileHunks(patch string) map[string][]changeset.Hunk {
+	out := map[string][]changeset.Hunk{}
+	for _, f := range changeset.Parse(patch) {
+		out[f.Path] = f.Hunks
+	}
+	return out
 }
 
 func (m *Magus) linesSince(ctx context.Context, base string) (sinceBase, error) {
@@ -285,7 +667,10 @@ func (m *Magus) linesSince(ctx context.Context, base string) (sinceBase, error) 
 		return sinceBase{}, fmt.Errorf("change risk: the working tree's changes: %w", err)
 	}
 	removed := readPatchFacts(committed).removedText + readPatchFacts(working).removedText
-	return sinceBase{lines: changedLines(committed, working), removed: removed}, nil
+	return sinceBase{
+		lines: changedLines(committed, working), removed: removed,
+		committed: fileHunks(committed), working: fileHunks(working),
+	}, nil
 }
 
 // changedLines is the working patch's changed lines, plus the committed
@@ -293,10 +678,7 @@ func (m *Magus) linesSince(ctx context.Context, base string) (sinceBase, error) 
 // working tree rewrote is already among the working patch's lines.
 func changedLines(committed, working string) map[string][]int {
 	out := newSideLines(working)
-	hunks := map[string][]changeset.Hunk{}
-	for _, f := range changeset.Parse(working) {
-		hunks[f.Path] = f.Hunks
-	}
+	hunks := fileHunks(working)
 	for p, lines := range newSideLines(committed) {
 		out[p] = append(out[p], forwardLines(lines, hunks[p])...)
 	}
@@ -328,28 +710,98 @@ func forwardLines(lines []int, hunks []changeset.Hunk) []int {
 }
 
 // forwardLine maps an old-side line to the new side, false when a hunk
-// rewrote it.
+// rewrote it. A hunk's context row keeps its line.
 func forwardLine(line int, hunks []changeset.Hunk) (int, bool) {
 	shift := 0
 	for _, h := range hunks {
-		if line < firstShifted(h) {
+		if line < firstShifted(h.OldStart, h.OldCount) {
 			break
 		}
 		if line < h.OldStart+h.OldCount {
-			return 0, false
+			return contextPair(h.Rows, line, false)
 		}
 		shift += h.NewCount - h.OldCount
 	}
 	return line + shift, true
 }
 
-// firstShifted is the first old line a hunk moves. One with no old lines
-// inserts after OldStart.
-func firstShifted(h changeset.Hunk) int {
-	if h.OldCount == 0 {
-		return h.OldStart + 1
+// backLine is forwardLine from the new side to the old.
+func backLine(line int, hunks []changeset.Hunk) (int, bool) {
+	shift := 0
+	for _, h := range hunks {
+		if line < firstShifted(h.NewStart, h.NewCount) {
+			break
+		}
+		if line < h.NewStart+h.NewCount {
+			return contextPair(h.Rows, line, true)
+		}
+		shift += h.NewCount - h.OldCount
 	}
-	return h.OldStart
+	return line - shift, true
+}
+
+// firstShifted is the first line of a side a hunk moves. One with no lines
+// on that side inserts after start.
+func firstShifted(start, count int) int {
+	if count == 0 {
+		return start + 1
+	}
+	return start
+}
+
+// contextPair is the other side's line of the context row at line, read
+// from the new side when fromNew.
+func contextPair(rows []changeset.Row, line int, fromNew bool) (int, bool) {
+	for _, r := range rows {
+		if r.Kind != changeset.KindContext || r.OldLine == nil || r.NewLine == nil {
+			continue
+		}
+		if fromNew && *r.NewLine == line {
+			return *r.OldLine, true
+		}
+		if !fromNew && *r.OldLine == line {
+			return *r.NewLine, true
+		}
+	}
+	return 0, false
+}
+
+// oldSpan is the old side of new lines start..end, false when none of them
+// is old. A removed run inside the span belongs to it, and so does one a
+// rewritten first line replaced.
+func oldSpan(start, end int, hunks []changeset.Hunk) (int, int, bool) {
+	var old []int
+	for line := start; line <= end; line++ {
+		if at, ok := backLine(line, hunks); ok {
+			old = append(old, at)
+		}
+	}
+	for _, h := range hunks {
+		old = append(old, removedInSpan(h.Rows, start, end)...)
+	}
+	if len(old) == 0 {
+		return 0, 0, false
+	}
+	return slices.Min(old), slices.Max(old), true
+}
+
+// removedInSpan is the old lines of the removed runs that precede a row of
+// start..end. A run before an unchanged first row belongs to a neighbor.
+func removedInSpan(rows []changeset.Row, start, end int) []int {
+	var out, pending []int
+	for _, r := range rows {
+		switch {
+		case r.Kind == changeset.KindDel && r.OldLine != nil:
+			pending = append(pending, *r.OldLine)
+		case r.NewLine != nil:
+			n := *r.NewLine
+			if n >= start && n <= end && (n > start || r.Kind == changeset.KindAdd) {
+				out = append(out, pending...)
+			}
+			pending = pending[:0]
+		}
+	}
+	return out
 }
 
 // spansTouched marks each defined symbol whose lines a change touched. A
@@ -388,12 +840,15 @@ func inSpan(start, end int) func(int) bool {
 
 // riskScorer answers the scorer's lookups from the workspace.
 func (m *Magus) riskScorer(defs map[string]symbolDef) riskScorer {
+	owner, kept := m.projectOwner(), oncePerProject(m.readCoverageReport)
 	return riskScorer{
 		read:     m.readWorkspaceFile,
 		claimant: m.spellClaiming(),
-		owner:    m.projectOwner(),
+		owner:    owner,
 		indexed:  indexedComplexity(defs),
-		report:   oncePerProject(m.readCoverageReport),
+		report: func(fn touchedFunction, cov spells.Coverage) (keptReport, string) {
+			return kept(owner(fn.Path), cov)
+		},
 	}
 }
 

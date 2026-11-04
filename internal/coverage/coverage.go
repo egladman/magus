@@ -44,6 +44,17 @@ func (f File) Span(start, end int) (covered, coverable int) {
 	return covered, coverable
 }
 
+// Lines is each line a block spans, true when a block over it ran.
+func (f File) Lines() map[int]bool {
+	out := map[int]bool{}
+	for _, b := range f.Blocks {
+		for line := b.StartLine; line <= b.EndLine; line++ {
+			out[line] = out[line] || b.Hits > 0
+		}
+	}
+	return out
+}
+
 func (b Block) covered() int {
 	if b.Hits > 0 {
 		return b.Units
