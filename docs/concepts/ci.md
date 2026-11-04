@@ -42,7 +42,7 @@ full gate rests on a proof, and the run prints the evidence for every file. See
 target an affected project's `ci` asks for through `ctx.needs`, such as `.:test`
 or `libs/x:format`, so one large project can fill several runners. magus finds
 the units by evaluating each `ci` body the way a dry run does, under the charms
-and the args after `--` the shards will run it with. A step behind
+and the args after `--` the shards run it with. A step behind
 `if (!ctx.hasCharm("gha"))` is no unit of a `ci:gha` plan. A target the body
 calls as a function is no unit either: the plan names it under `unplanned`, and
 no shard runs it.
