@@ -759,6 +759,7 @@ func (s *NarrowPushSuite) SetupTest() {
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.at.cacheDir, cache.RunsDir), 0o755))
 	project := &types.Project{
 		Path: ".", Sources: []types.Glob{{Pattern: "**/*.go"}}, MagusfileTargets: []string{"test", "generate"},
+		Outputs:       []types.Glob{{Pattern: "gen/*.jsonl"}},
 		TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/*.jsonl"}}},
 	}
 	ws := typestest.NewMockWorkspaceRepository(s.T())
@@ -874,6 +875,14 @@ func (s *NarrowPushSuite) TestAGeneratedOutputIsCoveredByTheRunThatWroteIt() {
 	s.producedRun(strings.Repeat("d", 64), "generate", head, false, time.Now())
 
 	s.Equal(gateNarrow, s.push(head).cover)
+}
+
+func (s *NarrowPushSuite) TestACleanRunOfATargetWithoutDeclaredOutputsCoversNoOutput() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("regenerate", map[string]string{"gen/out.jsonl": "{}\n"})
+	s.producedRun(strings.Repeat("8", 64), "test", head, false, time.Now())
+
+	s.Equal(gateAbsent, s.push(head).cover)
 }
 
 func (s *NarrowPushSuite) TestAGeneratedOutputIsUncoveredWithoutAProducingRun() {

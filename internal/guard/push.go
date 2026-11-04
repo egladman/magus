@@ -1323,13 +1323,10 @@ func footprintHolds(p *types.Project, target, rel string) bool {
 	return slices.ContainsFunc(p.Sources, func(g types.Glob) bool { return g.Root(p.Path).Match(rel) })
 }
 
-// outputsHold reports whether target's declared outputs in p hold rel: the
-// target's own refs when it declares any, else the project's outputs.
+// outputsHold reports whether target's own declared outputs in p hold rel.
+// Project outputs do not count: any clean run would then cover them.
 func outputsHold(p *types.Project, target, rel string) bool {
-	if refs := p.TargetOutputs[target]; len(refs) > 0 {
-		return slices.ContainsFunc(refs, func(r types.OutputRef) bool { return r.Rooted(p.Path).Match(rel) })
-	}
-	return slices.ContainsFunc(p.Outputs, func(g types.Glob) bool { return g.Root(p.Path).Match(rel) })
+	return slices.ContainsFunc(p.TargetOutputs[target], func(r types.OutputRef) bool { return r.Rooted(p.Path).Match(rel) })
 }
 
 // bareTarget strips the charms a stored run's target carries (`lint:rw`).
