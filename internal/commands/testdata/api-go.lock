@@ -3866,6 +3866,10 @@ github.com/egladman/magus/types.MCPToolReport type struct
 github.com/egladman/magus/types.MCPToolReport.Count field int "json:\"count\"      yaml:\"count\""
 github.com/egladman/magus/types.MCPToolReport.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.MCPToolReport.MCPTools field []MCPTool "json:\"mcp_tools\"  yaml:\"mcp_tools\""
+github.com/egladman/magus/types.Machine type struct
+github.com/egladman/magus/types.Machine.Cores field int "json:\"cores\""
+github.com/egladman/magus/types.Machine.MemoryMB field int "json:\"memory_mb\""
+github.com/egladman/magus/types.Machine.Name field string "json:\"name\""
 github.com/egladman/magus/types.MachineBudgetExhausted const DiagnosticCode = "MGS3009"
 github.com/egladman/magus/types.MachineClaim type struct
 github.com/egladman/magus/types.MachineClaim.Ancestors field []string "json:\"ancestors,omitempty\" yaml:\"ancestors,omitempty\""
@@ -4216,7 +4220,7 @@ github.com/egladman/magus/types.NewJobList func(jobs []Job) JobList
 github.com/egladman/magus/types.NewModelTierSet func(decl ModelTierDeclaration) (*ModelTierSet, error)
 github.com/egladman/magus/types.NewProjectRef func(path string, dir string) ProjectRef
 github.com/egladman/magus/types.NewSecret func(s string) Secret
-github.com/egladman/magus/types.NewStepRecorder func() *StepRecorder
+github.com/egladman/magus/types.NewStepLog func() *StepLog
 github.com/egladman/magus/types.NewestReleaseStage func(tags []VCSTag) ReleaseStage
 github.com/egladman/magus/types.NextStep type struct
 github.com/egladman/magus/types.NextStep.Argv field []string "json:\"argv,omitempty\"  yaml:\"argv,omitempty\""
@@ -4805,10 +4809,6 @@ github.com/egladman/magus/types.RuleDoc.Name field string "json:\"name\""
 github.com/egladman/magus/types.RuleDoc.Verdicts field []GuardDecision "json:\"verdicts\""
 github.com/egladman/magus/types.RuleDoc.Why field string "json:\"why,omitempty\""
 github.com/egladman/magus/types.RuleDoc.Workspace field string "json:\"workspace,omitempty\""
-github.com/egladman/magus/types.RunnerClass type struct
-github.com/egladman/magus/types.RunnerClass.Cores field int "json:\"cores\""
-github.com/egladman/magus/types.RunnerClass.MemoryMB field int "json:\"memory_mb\""
-github.com/egladman/magus/types.RunnerClass.Name field string "json:\"name\""
 github.com/egladman/magus/types.RunsUnderAStep func(ancestors []string) bool
 github.com/egladman/magus/types.SameLeaseCheck func(a *LeaseCheck, b *LeaseCheck) bool
 github.com/egladman/magus/types.SandboxMode type string
@@ -4919,9 +4919,9 @@ github.com/egladman/magus/types.ShardPlan.Affected field []string
 github.com/egladman/magus/types.ShardPlan.Args field []string
 github.com/egladman/magus/types.ShardPlan.Charms field []string
 github.com/egladman/magus/types.ShardPlan.Fallbacks field []string
+github.com/egladman/magus/types.ShardPlan.Machine field *Machine
 github.com/egladman/magus/types.ShardPlan.MaxParallel field int
 github.com/egladman/magus/types.ShardPlan.OverBudget field []string
-github.com/egladman/magus/types.ShardPlan.Runner field *RunnerClass
 github.com/egladman/magus/types.ShardPlan.Shards field []Shard
 github.com/egladman/magus/types.ShardPlan.Source field string
 github.com/egladman/magus/types.ShardPlan.Sufficient field int
@@ -5224,10 +5224,10 @@ github.com/egladman/magus/types.StatusWorkspace.LoadedAt field time.Time "json:\
 github.com/egladman/magus/types.StatusWorkspace.Root field string "json:\"root\" yaml:\"root\""
 github.com/egladman/magus/types.StatusWorkspace.SecretProvider field string "json:\"secret_provider,omitempty\" yaml:\"secret_provider,omitempty\""
 github.com/egladman/magus/types.StatusWorkspace.State field WorkspaceState "json:\"state,omitempty\" yaml:\"state,omitempty\""
-github.com/egladman/magus/types.StepRecorder type struct
-github.com/egladman/magus/types.StepRecorder.Record method(ptr) func(u Unit)
-github.com/egladman/magus/types.StepRecorder.Units method(ptr) func() []Unit
-github.com/egladman/magus/types.StepRecorderFromContext func(ctx context.Context) *StepRecorder
+github.com/egladman/magus/types.StepLog type struct
+github.com/egladman/magus/types.StepLog.Record method(ptr) func(u Unit)
+github.com/egladman/magus/types.StepLog.Units method(ptr) func() []Unit
+github.com/egladman/magus/types.StepLogFromContext func(ctx context.Context) *StepLog
 github.com/egladman/magus/types.StopRequest type struct
 github.com/egladman/magus/types.StopRequest.Agent field string
 github.com/egladman/magus/types.StopRequest.Checkout field *CheckoutState
@@ -5929,7 +5929,7 @@ github.com/egladman/magus/types.WithMagusBuild func(ctx context.Context, b Magus
 github.com/egladman/magus/types.WithMagusVersion func(ctx context.Context, version string) context.Context
 github.com/egladman/magus/types.WithOutputCacheDir func(ctx context.Context, cacheDir string) context.Context
 github.com/egladman/magus/types.WithReturnCapture func(ctx context.Context) (context.Context, func(target string) Returns)
-github.com/egladman/magus/types.WithStepRecorder func(ctx context.Context, r *StepRecorder) context.Context
+github.com/egladman/magus/types.WithStepLog func(ctx context.Context, r *StepLog) context.Context
 github.com/egladman/magus/types.WithTrace func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithWorkspace func(ctx context.Context, ws WorkspaceRepository) context.Context
 github.com/egladman/magus/types.Workspace type struct

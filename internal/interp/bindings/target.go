@@ -447,7 +447,7 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 // raises rather than succeeding having run nothing.
 func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value, ext *externalHandles) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
-		if rec := types.StepRecorderFromContext(callCtx); rec != nil {
+		if rec := types.StepLogFromContext(callCtx); rec != nil {
 			return vm.Null, recordBuzzNeeds(callCtx, rec, targets, exports, ext, args)
 		}
 		var names []string

@@ -74,11 +74,11 @@ env:
   # one runner. It lives here rather than in magus.yaml because it sizes a runner pool, and
   # a local plan spawns no runners.
   MAGUS_CI_MAX_SHARDS: '-1'
-  # The runner class every shard runs on, which the plan packs memory against and
+  # The machine every shard runs on, which the plan packs memory against and
   # records. ubuntu-latest for a public repository: 4 cores, 16 GiB.
-  MAGUS_CI_RUNNER_NAME: ubuntu-latest
-  MAGUS_CI_RUNNER_MEMORY_MB: '16384'
-  MAGUS_CI_RUNNER_CORES: '4'
+  MAGUS_CI_MACHINE_NAME: ubuntu-latest
+  MAGUS_CI_MACHINE_MEMORY_MB: '16384'
+  MAGUS_CI_MACHINE_CORES: '4'
   # Stream every target's output live instead of withholding it until something
   # fails. magus collapses on success by default, which is right on a terminal you
   # are sitting at and wrong in a log nobody reads until it goes red: a green run

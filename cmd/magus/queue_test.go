@@ -746,7 +746,7 @@ const harnessRunner = "buzz hack/ci/run-with-harnesses.buzz "
 
 // harnessCall is the runner with its own options, which ci.yaml's
 // shard passes the saved plan through.
-var harnessCall = regexp.MustCompile(` -- magus ` + regexp.QuoteMeta(harnessRunner) + `-- (?:--plan (?:\$\{\{[^}]*\}\})?\S* )?`)
+var harnessCall = regexp.MustCompile(fmt.Sprintf(` -- magus %s-- (?:--plan (?:\$\{\{[^}]*\}\})?\S* )?`, regexp.QuoteMeta(harnessRunner)))
 
 // workflowJob reads job's steps from the workflow file at path under the repository root.
 func workflowJob(t *testing.T, path, job string) []workflowStep {

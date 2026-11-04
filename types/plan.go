@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -18,7 +19,7 @@ type Unit struct {
 }
 
 // String is the unit as project:target, the key ties break on.
-func (u Unit) String() string { return u.Project + ":" + u.Target }
+func (u Unit) String() string { return fmt.Sprintf("%s:%s", u.Project, u.Target) }
 
 // DirectCall is a target an anchor's body calls as a function instead of
 // through ctx.needs. The recorder cannot see it, so no unit runs it.
@@ -79,10 +80,10 @@ func UnitProjects(units []Unit) []string {
 	return slices.Compact(paths)
 }
 
-// RunnerClass is the machine every shard runs on. The plan packs against it
-// rather than against the machine that planned, so one change plans the same on
-// a laptop and on a runner.
-type RunnerClass struct {
+// Machine is the size of the machine every shard runs on. The plan packs
+// against it rather than against the host that planned, so one change plans
+// the same on a laptop and on CI.
+type Machine struct {
 	Name     string `json:"name"`
 	MemoryMB int    `json:"memory_mb"`
 	Cores    int    `json:"cores"`
@@ -97,9 +98,9 @@ type ShardPlan struct {
 	// runs the plan under others runs something else.
 	Charms []string
 	Args   []string
-	// Runner is the class the shards were packed for. Nil when none is
+	// Machine is what the shards were packed for. Nil when none is
 	// configured, and Fallbacks then says no memory budget was checked.
-	Runner *RunnerClass
+	Machine *Machine
 	// Fallbacks says each default the plan fell back to, one sentence each.
 	// Empty when every input was given.
 	Fallbacks []string
@@ -127,23 +128,23 @@ type ShardPlan struct {
 	UnboundedBy string
 }
 
-// StepRecorder collects the units a composed target's body asks for, in place
+// StepLog collects the units a composed target's body asks for, in place
 // of running them. A planner evaluates the anchor (ci) under a tracing context
 // carrying one. The units are then the steps that body takes under the shard's
 // charms and args. Safe for concurrent use.
-type StepRecorder struct {
+type StepLog struct {
 	mu    sync.Mutex
 	units []Unit
 	seen  map[Unit]bool
 }
 
-// NewStepRecorder returns an empty recorder.
-func NewStepRecorder() *StepRecorder {
-	return &StepRecorder{seen: map[Unit]bool{}}
+// NewStepLog returns an empty log.
+func NewStepLog() *StepLog {
+	return &StepLog{seen: map[Unit]bool{}}
 }
 
 // Record adds u once; a repeat is dropped.
-func (r *StepRecorder) Record(u Unit) {
+func (r *StepLog) Record(u Unit) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.seen[u] {
@@ -153,22 +154,22 @@ func (r *StepRecorder) Record(u Unit) {
 }
 
 // Units are the recorded units in the order the body asked for them.
-func (r *StepRecorder) Units() []Unit {
+func (r *StepLog) Units() []Unit {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.units)
 }
 
-type stepRecorderKey struct{}
+type stepLogKey struct{}
 
-// WithStepRecorder returns ctx carrying r. ctx.needs under it records and runs
+// WithStepLog returns ctx carrying r. ctx.needs under it records and runs
 // nothing.
-func WithStepRecorder(ctx context.Context, r *StepRecorder) context.Context {
-	return context.WithValue(ctx, stepRecorderKey{}, r)
+func WithStepLog(ctx context.Context, r *StepLog) context.Context {
+	return context.WithValue(ctx, stepLogKey{}, r)
 }
 
-// StepRecorderFromContext returns the recorder WithStepRecorder stored, or nil.
-func StepRecorderFromContext(ctx context.Context) *StepRecorder {
-	r, _ := ctx.Value(stepRecorderKey{}).(*StepRecorder)
+// StepLogFromContext returns the log WithStepLog stored, or nil.
+func StepLogFromContext(ctx context.Context) *StepLog {
+	r, _ := ctx.Value(stepLogKey{}).(*StepLog)
 	return r
 }

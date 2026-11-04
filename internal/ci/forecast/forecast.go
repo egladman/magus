@@ -17,7 +17,7 @@ type Forecaster struct {
 	// included. nil treats every unit as needing nothing else.
 	Needs func(types.Unit) []types.Unit
 	// MemoryBudgetBytes caps a shard's predicted peak; zero checks none. The
-	// caller derives it from the configured runner class, never the planner.
+	// caller derives it from the configured machine, never the planner.
 	MemoryBudgetBytes int64
 }
 

@@ -582,7 +582,7 @@ func TestDecodeSavedPlan(t *testing.T) {
 		{"no target", `{"count":0,"matrix":[]}`, "names no target"},
 		{"count disagrees", `{"target":"ci","count":2,"matrix":[{"shard":"1","projects":"."}]}`, "states 2 shard(s) but lists 1"},
 		{"shard without id", `{"target":"ci","count":1,"matrix":[{"projects":"."}]}`, "a shard with no id"},
-		{"duplicate id", `{"target":"ci","count":2,"matrix":[{"shard":"1","projects":".","label":"` + types.UnitsDigest([]types.Unit{{Project: ".", Target: "test"}}) + `","units":[{"project":".","target":"test"}]},{"shard":"1","projects":"docs"}]}`, "lists shard 1 twice"},
+		{"duplicate id", fmt.Sprintf(`{"target":"ci","count":2,"matrix":[{"shard":"1","projects":".","label":"%s","units":[{"project":".","target":"test"}]},{"shard":"1","projects":"docs"}]}`, types.UnitsDigest([]types.Unit{{Project: ".", Target: "test"}})), "lists shard 1 twice"},
 		{"no projects", `{"target":"ci","count":1,"matrix":[{"shard":"1","projects":"  "}]}`, "shard 1 has no projects"},
 		{"no units", `{"target":"ci","count":1,"matrix":[{"shard":"1","projects":"."}]}`, "shard 1 lists no units"},
 	}

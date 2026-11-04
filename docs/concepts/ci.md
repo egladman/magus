@@ -56,10 +56,10 @@ A shard costs one runner's setup plus every distinct target its units need,
 prerequisites counted once. Units go longest first to the shard they leave
 cheapest. A new shard opens only when it shortens the longest shard by more than
 setup plus the prerequisites it would repeat. A shard's predicted peak memory
-must fit the runner class `ci.runner` names (`memory_mb`, `cores`), never the
-machine that plans, and the plan records the class. With no class the plan says
-it checked no memory budget. The same history, change, class and config give the
-same plan on any host.
+must fit the machine `ci.machine` names (`memory_mb`, `cores`), never the
+host that plans, and the plan records it. With none set the plan says it checked
+no memory budget. The same history, change, machine and config give the same plan
+on any host.
 
 Each shard lists its `units`, a `label` that digests them, and its `duties`: the
 workspace-wide steps placed on exactly one shard. `cache-export` goes to the

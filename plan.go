@@ -3,6 +3,7 @@ package magus
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -95,13 +96,13 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	if err != nil {
 		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
 	}
-	runner, err := runnerClass(m.cfg.CI.Runner)
-	if err != nil {
+	machine, err := configuredMachine(m.cfg.CI.Machine)
+	if err != nil && !errors.Is(err, errNoMachine) {
 		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
 	}
 	var fallbacks []string
-	if runner == nil {
-		fallbacks = append(fallbacks, "no ci.runner is configured, so the plan checks no shard against a memory budget")
+	if machine == nil {
+		fallbacks = append(fallbacks, "no ci.machine is configured, so the plan checks no shard against a memory budget")
 	}
 
 	histPath := opts.HistoryPath
@@ -114,8 +115,8 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	}
 
 	f := forecast.Forecaster{History: hist, Needs: m.unitNeeds}
-	if runner != nil {
-		f.MemoryBudgetBytes = forecast.BudgetBytes(runner.MemoryMB)
+	if machine != nil {
+		f.MemoryBudgetBytes = forecast.BudgetBytes(machine.MemoryMB)
 	}
 	tags := make(map[string][]string, len(targets))
 	for _, t := range targets {
@@ -172,7 +173,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		MaxParallel: maxParallel,
 		Charms:      opts.Charms,
 		Args:        opts.Args,
-		Runner:      runner,
+		Machine:     machine,
 		Fallbacks:   fallbacks,
 		Unplanned:   unplanned,
 		Sufficient:  f.SufficientShards(units, len(plan.Shards)),
@@ -226,8 +227,8 @@ func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string
 	if !slices.Contains(p.MagusfileTargets, types.Normalize(anchor)) {
 		return nil, nil
 	}
-	rec := types.NewStepRecorder()
-	ctx = types.WithStepRecorder(ctx, rec)
+	rec := types.NewStepLog()
+	ctx = types.WithStepLog(ctx, rec)
 	ctx = types.WithTrace(types.WithCharms(ctx, charms))
 	ctx = project.WithExtraArgs(installWorkspaceRegistry(ctx, m.wsReg), args)
 	ctx = types.WithWorkspace(ctx, m.internals())
@@ -291,17 +292,20 @@ func directCalls(p *types.Project, anchor string) []string {
 	return slices.Compact(calls)
 }
 
-// runnerClass is the configured runner class, nil when none is set. A class
-// with only some of its sizes set is an error, not a partial budget.
-func runnerClass(c config.CIRunner) (*types.RunnerClass, error) {
-	if c == (config.CIRunner{}) {
-		return nil, nil
+// errNoMachine is configuredMachine's answer when ci.machine is unset.
+var errNoMachine = errors.New("no ci.machine is configured")
+
+// configuredMachine is the machine ci.machine describes. One with only some of
+// its sizes set is an error, not a partial budget.
+func configuredMachine(c config.CIMachine) (*types.Machine, error) {
+	if c == (config.CIMachine{}) {
+		return nil, errNoMachine
 	}
 	if c.MemoryMB <= 0 || c.Cores <= 0 {
-		return nil, fmt.Errorf("ci.runner %q needs both memory_mb and cores above zero (memory_mb=%d cores=%d)",
+		return nil, fmt.Errorf("ci.machine %q needs both memory_mb and cores above zero (memory_mb=%d cores=%d)",
 			c.Name, c.MemoryMB, c.Cores)
 	}
-	return &types.RunnerClass{Name: c.Name, MemoryMB: c.MemoryMB, Cores: c.Cores}, nil
+	return &types.Machine{Name: c.Name, MemoryMB: c.MemoryMB, Cores: c.Cores}, nil
 }
 
 // placeDuties puts each workspace-wide duty on one shard. The cache export
@@ -311,7 +315,6 @@ func placeDuties(shards []types.Shard) {
 	if len(shards) == 0 {
 		return
 	}
-	root, fewest := 0, 0
 	rootUnits := func(s types.Shard) int {
 		n := 0
 		for _, u := range s.Units {
@@ -321,12 +324,14 @@ func placeDuties(shards []types.Shard) {
 		}
 		return n
 	}
+	root, fewest := 0, 0
+	mostRoot, leastUnits := rootUnits(shards[0]), len(shards[0].Units)
 	for i, s := range shards {
-		if rootUnits(s) > rootUnits(shards[root]) {
-			root = i
+		if n := rootUnits(s); n > mostRoot {
+			root, mostRoot = i, n
 		}
-		if len(s.Units) < len(shards[fewest].Units) {
-			fewest = i
+		if n := len(s.Units); n < leastUnits {
+			fewest, leastUnits = i, n
 		}
 	}
 	shards[root].Duties = append(shards[root].Duties, types.DutyCacheExport)

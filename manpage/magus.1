@@ -184,14 +184,14 @@ GHA matrix\-level concurrency cap; 0 = no cap. Config file key: \fBci.runner_poo
 \fBMAGUS_CI_RECORD_RUNS\fR
 Keeps the per\-branch run log (forecast.Run) in the history file: which commit a branch passed or failed a target at, and when. On by default, because `\-\-base last\-passed` reads it and a CI run that cannot find its base gates less than it appears to (default: true). Config file key: \fBci.record_runs\fR.
 .TP
-\fBMAGUS_CI_RUNNER_NAME\fR
-The provider's label, e.g. ubuntu\-latest. Config file key: \fBci.runner.name\fR.
+\fBMAGUS_CI_MACHINE_NAME\fR
+The provider's label, e.g. ubuntu\-latest. Config file key: \fBci.machine.name\fR.
 .TP
-\fBMAGUS_CI_RUNNER_MEMORY_MB\fR
-One runner's memory in megabytes. Config file key: \fBci.runner.memory_mb\fR.
+\fBMAGUS_CI_MACHINE_MEMORY_MB\fR
+One runner's memory in megabytes. Config file key: \fBci.machine.memory_mb\fR.
 .TP
-\fBMAGUS_CI_RUNNER_CORES\fR
-One runner's CPU cores. Config file key: \fBci.runner.cores\fR.
+\fBMAGUS_CI_MACHINE_CORES\fR
+One runner's CPU cores. Config file key: \fBci.machine.cores\fR.
 .TP
 \fBMAGUS_VOLATILITY_ENABLED\fR
 The master switch for volatility detection and auto\-retry; false disables all retry logic (default: true). Config file key: \fBvolatility.enabled\fR.

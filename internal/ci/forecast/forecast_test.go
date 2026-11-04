@@ -110,7 +110,7 @@ func (s *BudgetSuite) TestTheBudgetIsTheGivenSetting() {
 	s.Equal(int64(7<<30), Forecaster{MemoryBudgetBytes: 7 << 30}.memoryBudget())
 }
 
-func (s *BudgetSuite) TestARunnerClassBudgetLeavesHeadroom() {
+func (s *BudgetSuite) TestAMachineBudgetLeavesHeadroom() {
 	got := BudgetBytes(16384)
 	s.Positive(got)
 	s.Less(got, int64(16384)<<20)

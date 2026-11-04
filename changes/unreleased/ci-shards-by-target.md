@@ -11,10 +11,10 @@
   shard runs it. A target the body calls as a function is listed under
   `unplanned`. `magus run --stdin` refuses a plan evaluated under other charms or
   args.
-- **Breaking: shards pack against a configured runner class.** `ci.runner`
+- **Breaking: shards pack against a configured machine.** `ci.machine`
   (`name`, `memory_mb`, `cores`) replaces the planning host's memory as the shard
-  memory budget, and the plan records it under `runner`. A class with one size
-  set is an error; no class is a stated fallback under `fallbacks`.
+  memory budget, and the plan records it under `machine`. A machine with one size
+  set is an error; none is a stated fallback under `fallbacks`.
 - With no recorded history the plan opens at most 2 shards, and says so under
   `fallbacks`.
 - **Breaking: a shard's `label` is a digest of its units**, and the shortened

@@ -15,7 +15,7 @@ import (
 // recordBuzzNeeds answers ctx.needs under a step recorder: it records each
 // target args names and runs none of them. A same-project step records an
 // empty Project, as ChainStep does; the recorder's owner knows the project.
-func recordBuzzNeeds(ctx context.Context, rec *types.StepRecorder, targets map[string]vm.Callable, exports map[string]vm.Value, ext *externalHandles, args []vm.Value) error {
+func recordBuzzNeeds(ctx context.Context, rec *types.StepLog, targets map[string]vm.Callable, exports map[string]vm.Value, ext *externalHandles, args []vm.Value) error {
 	var collect func(arg vm.Value) error
 	collect = func(arg vm.Value) error {
 		if arg.IsList() {

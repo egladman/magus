@@ -226,24 +226,24 @@ func (s *PlanUnitsSuite) TestColdHistoryOpensFewShardsAndSaysSo() {
 	s.Contains(plan.Fallbacks, "the history holds no duration for any unit, so the plan opens at most 2 shards")
 }
 
-func (s *PlanUnitsSuite) TestNoRunnerClassChecksNoBudgetAndSaysSo() {
+func (s *PlanUnitsSuite) TestNoMachineChecksNoBudgetAndSaysSo() {
 	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
 	s.Require().NoError(err)
-	s.Nil(plan.Runner)
-	s.Contains(plan.Fallbacks, "no ci.runner is configured, so the plan checks no shard against a memory budget")
+	s.Nil(plan.Machine)
+	s.Contains(plan.Fallbacks, "no ci.machine is configured, so the plan checks no shard against a memory budget")
 }
 
-func (s *PlanUnitsSuite) TestTheConfiguredRunnerClassIsRecorded() {
-	s.m.cfg.CI.Runner = config.CIRunner{Name: "ubuntu-latest", MemoryMB: 16384, Cores: 4}
+func (s *PlanUnitsSuite) TestTheConfiguredMachineIsRecorded() {
+	s.m.cfg.CI.Machine = config.CIMachine{Name: "ubuntu-latest", MemoryMB: 16384, Cores: 4}
 	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
 	s.Require().NoError(err)
-	s.Equal(&types.RunnerClass{Name: "ubuntu-latest", MemoryMB: 16384, Cores: 4}, plan.Runner)
+	s.Equal(&types.Machine{Name: "ubuntu-latest", MemoryMB: 16384, Cores: 4}, plan.Machine)
 }
 
-func (s *PlanUnitsSuite) TestAHalfConfiguredRunnerClassIsAnError() {
-	s.m.cfg.CI.Runner = config.CIRunner{Name: "ubuntu-latest", MemoryMB: 16384}
+func (s *PlanUnitsSuite) TestAHalfConfiguredMachineIsAnError() {
+	s.m.cfg.CI.Machine = config.CIMachine{Name: "ubuntu-latest", MemoryMB: 16384}
 	_, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
-	s.ErrorContains(err, `ci.runner "ubuntu-latest" needs both memory_mb and cores above zero`)
+	s.ErrorContains(err, `ci.machine "ubuntu-latest" needs both memory_mb and cores above zero`)
 }
 
 func (s *PlanUnitsSuite) TestEveryShardIsLabeledByItsUnitsDigest() {

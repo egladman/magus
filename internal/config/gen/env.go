@@ -98,21 +98,21 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.CI.RecordRuns = b
 		}
 	}
-	if v := getenv("MAGUS_CI_RUNNER_NAME"); v != "" {
-		cfg.CI.Runner.Name = v
+	if v := getenv("MAGUS_CI_MACHINE_NAME"); v != "" {
+		cfg.CI.Machine.Name = v
 	}
-	if v := getenv("MAGUS_CI_RUNNER_MEMORY_MB"); v != "" {
+	if v := getenv("MAGUS_CI_MACHINE_MEMORY_MB"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_CI_RUNNER_MEMORY_MB: %w", err))
+			errs = append(errs, fmt.Errorf("MAGUS_CI_MACHINE_MEMORY_MB: %w", err))
 		} else {
-			cfg.CI.Runner.MemoryMB = n
+			cfg.CI.Machine.MemoryMB = n
 		}
 	}
-	if v := getenv("MAGUS_CI_RUNNER_CORES"); v != "" {
+	if v := getenv("MAGUS_CI_MACHINE_CORES"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_CI_RUNNER_CORES: %w", err))
+			errs = append(errs, fmt.Errorf("MAGUS_CI_MACHINE_CORES: %w", err))
 		} else {
-			cfg.CI.Runner.Cores = n
+			cfg.CI.Machine.Cores = n
 		}
 	}
 	if v := getenv("MAGUS_VOLATILITY_ENABLED"); v != "" {

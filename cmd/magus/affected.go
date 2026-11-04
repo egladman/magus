@@ -520,14 +520,14 @@ type planOutput struct {
 	Args   []string `json:"args,omitempty"`
 	// Runner is the class the shards were packed for; Fallbacks says each
 	// default the plan fell back to.
-	Runner    *types.RunnerClass `json:"runner,omitempty"`
-	Fallbacks []string           `json:"fallbacks,omitempty"`
+	Machine   *types.Machine `json:"machine,omitempty"`
+	Fallbacks []string       `json:"fallbacks,omitempty"`
 	// Unplanned are targets an anchor calls directly, which no shard runs.
 	Unplanned   []types.DirectCall `json:"unplanned,omitempty"`
 	Count       int                `json:"count"`
-	MaxParallel int         `json:"max_parallel"`
-	Source      string      `json:"source"`
-	Matrix      []planShard `json:"matrix"`
+	MaxParallel int                `json:"max_parallel"`
+	Source      string             `json:"source"`
+	Matrix      []planShard        `json:"matrix"`
 	// Affected is the whole closure the matrix was cut from, sorted, and UnboundedBy says
 	// why it is not a proof when it is not. Together they are the answer a merge queue's
 	// affected hook expects, so `affected <target> --plan --stdin` feeds one as it stands.
@@ -953,7 +953,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		Target:      target,
 		Charms:      plan.Charms,
 		Args:        plan.Args,
-		Runner:      plan.Runner,
+		Machine:     plan.Machine,
 		Fallbacks:   plan.Fallbacks,
 		Unplanned:   plan.Unplanned,
 		Count:       len(plan.Shards),

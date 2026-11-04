@@ -707,7 +707,7 @@ func savedTargetRef(p planOutput) string {
 	if len(p.Charms) == 0 {
 		return p.Target
 	}
-	return p.Target + ":" + strings.Join(p.Charms, ",")
+	return fmt.Sprintf("%s:%s", p.Target, strings.Join(p.Charms, ","))
 }
 
 // selectPlanShards returns the shards a `run --stdin` invocation runs: the one named by
