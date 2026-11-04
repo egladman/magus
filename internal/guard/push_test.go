@@ -757,7 +757,11 @@ func (s *NarrowPushSuite) SetupTest() {
 	s.gated = s.repo.Head()
 	s.at = location{cacheDir: filepath.Join(s.repo.Root(), ".magus"), workspace: s.repo.Root()}
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.at.cacheDir, cache.RunsDir), 0o755))
-	project := &types.Project{Path: ".", Sources: []types.Glob{{Pattern: "**/*.go"}}, MagusfileTargets: []string{"test"}}
+	project := &types.Project{
+		Path: ".", Sources: []types.Glob{{Pattern: "**/*.go"}}, MagusfileTargets: []string{"test", "generate"},
+		Outputs:       []types.Glob{{Pattern: "gen/*.jsonl"}},
+		TargetOutputs: map[string][]types.OutputRef{"generate": {{Glob: "gen/*.jsonl"}}},
+	}
 	ws := typestest.NewMockWorkspaceRepository(s.T())
 	ws.EXPECT().All().Return([]*types.Project{project}).Maybe()
 	ws.EXPECT().Get(".").Return(project).Maybe()
@@ -856,6 +860,70 @@ func (s *NarrowPushSuite) TestAFileThisHostBuildsStillNeedsARun() {
 	_, reason := gradePushWithoutGate(ev, "")
 	s.Contains(reason, "  a.go: run `")
 	s.Contains(reason, "  pressure_plan9_test.go: built only on plan9; left to CI")
+}
+
+func (s *NarrowPushSuite) producedRun(key, target, revision string, dirty bool, finished time.Time) {
+	_, err := cache.NewOutputStore(s.at.cacheDir).Persist(s.T().Context(), key, []byte("ok\n"), cache.OutputDescriptor{
+		Project: ".", Target: target, Revision: revision, Dirty: dirty, TimestampMs: finished.UnixMilli(),
+	})
+	s.Require().NoError(err)
+}
+
+func (s *NarrowPushSuite) TestAGeneratedOutputIsCoveredByTheRunThatWroteIt() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("regenerate", map[string]string{"gen/out.jsonl": "{}\n"})
+	s.producedRun(strings.Repeat("d", 64), "generate", head, false, time.Now())
+
+	s.Equal(gateNarrow, s.push(head).cover)
+}
+
+func (s *NarrowPushSuite) TestACleanRunOfATargetWithoutDeclaredOutputsCoversNoOutput() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("regenerate", map[string]string{"gen/out.jsonl": "{}\n"})
+	s.producedRun(strings.Repeat("8", 64), "test", head, false, time.Now())
+
+	s.Equal(gateAbsent, s.push(head).cover)
+}
+
+func (s *NarrowPushSuite) TestAGeneratedOutputIsUncoveredWithoutAProducingRun() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("regenerate", map[string]string{"gen/out.jsonl": "{}\n"})
+
+	s.Equal(gateAbsent, s.push(head).cover)
+}
+
+func (s *NarrowPushSuite) TestAProducingRunOfAnOlderOutputCoversNothing() {
+	s.gateAtFirstCommit()
+	first := s.repo.Commit("regenerate", map[string]string{"gen/out.jsonl": "{}\n"})
+	s.producedRun(strings.Repeat("e", 64), "generate", first, false, time.Now())
+	head := s.repo.Commit("regenerate again", map[string]string{"gen/out.jsonl": "{\"a\":1}\n"})
+
+	s.Equal(gateAbsent, s.push(head).cover)
+}
+
+func (s *NarrowPushSuite) TestADirtyProducingRunCoversAnOutputNotModifiedAfterIt() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("regenerate", map[string]string{"gen/out.jsonl": "{}\n"})
+	s.producedRun(strings.Repeat("f", 64), "generate", head, true, time.Now().Add(time.Minute))
+
+	s.Equal(gateNarrow, s.push(head).cover)
+}
+
+func (s *NarrowPushSuite) TestADirtyProducingRunBeforeTheOutputChangedCoversNothing() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("regenerate", map[string]string{"gen/out.jsonl": "{}\n"})
+	s.producedRun(strings.Repeat("9", 64), "generate", head, true, time.Now().Add(-time.Minute))
+
+	s.Equal(gateAbsent, s.push(head).cover)
+}
+
+func (s *NarrowPushSuite) TestARefusalNamesTheProducingTargetForAnOutput() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("regenerate", map[string]string{"gen/out.jsonl": "{}\n"})
+
+	_, reason := gradePushWithoutGate(s.push(head), "")
+	s.Contains(reason, "  gen/out.jsonl: run `")
+	s.Contains(reason, "run generate .`")
 }
 
 func (s *NarrowPushSuite) TestTheWaiverStillAdmits() {
