@@ -395,7 +395,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("where", function("magus.where", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.StringValue(""), nil
 	}))
-	m.MapSet("magus__Graph__deps", function("magus.projectGraph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("magus__Graph__projectGraph", function("magus.projectGraph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("nodes", vm.ListValue(nil))
 		res.MapSet("dependsOn", vm.NewMap())
