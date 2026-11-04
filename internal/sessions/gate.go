@@ -220,10 +220,11 @@ func FailuresOwed(gate GateRecord, results Fold) []types.TargetRef {
 			continue
 		}
 		var r TargetResult
-		if json.Unmarshal(rec.Payload, &r) != nil || r.Target == gate.Target {
+		if json.Unmarshal(rec.Payload, &r) != nil || baseTarget(r.Target) == baseTarget(gate.Target) {
 			continue
 		}
-		f := types.TargetRef{Project: r.Project, Target: r.Target}
+		// A standalone run files its target with the charm, `lint:rw`.
+		f := types.TargetRef{Project: r.Project, Target: baseTarget(r.Target)}
 		switch {
 		case rec.Invocation == gate.Inv && r.Outcome == OutcomeFail && !slices.Contains(owed, f):
 			owed = append(owed, f)

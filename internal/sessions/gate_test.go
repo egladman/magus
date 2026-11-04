@@ -249,6 +249,33 @@ func (s *FailuresOwedSuite) TestALaterPassOfTheTargetClearsIt() {
 	s.Equal([]types.TargetRef{{Project: "docs", Target: "lint"}}, s.owed(red))
 }
 
+// A standalone run files `lint:rw`; the gate filed `lint`.
+func (s *FailuresOwedSuite) TestAPassUnderACharmClearsTheBareTarget() {
+	s.results("red",
+		TargetResult{Project: ".", Target: "lint", Outcome: OutcomeFail},
+		TargetResult{Project: "docs", Target: "lint", Outcome: OutcomeFail},
+	)
+	red := s.gate("red", OutcomeFail)
+	s.results("narrow", TargetResult{Project: ".", Target: "lint:rw", Outcome: OutcomePass, Replayed: true})
+
+	s.Equal([]types.TargetRef{{Project: "docs", Target: "lint"}}, s.owed(red))
+}
+
+func (s *FailuresOwedSuite) TestAFailUnderACharmOwesTheBareTarget() {
+	s.results("red", TargetResult{Project: ".", Target: "lint:rw", Outcome: OutcomeFail})
+	red := s.gate("red", OutcomeFail)
+
+	s.Equal([]types.TargetRef{{Project: ".", Target: "lint"}}, s.owed(red))
+}
+
+func (s *FailuresOwedSuite) TestAPassOfAnotherTargetUnderACharmClearsNothing() {
+	s.results("red", TargetResult{Project: ".", Target: "lint", Outcome: OutcomeFail})
+	red := s.gate("red", OutcomeFail)
+	s.results("narrow", TargetResult{Project: ".", Target: "generate:rw", Outcome: OutcomePass})
+
+	s.Equal([]types.TargetRef{{Project: ".", Target: "lint"}}, s.owed(red))
+}
+
 func (s *FailuresOwedSuite) TestAPassInAnotherProjectClearsNothing() {
 	s.results("red", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail})
 	red := s.gate("red", OutcomeFail)
