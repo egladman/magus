@@ -2059,6 +2059,109 @@ func TestVCSCmdRefusalLetsAWorkerInitAScratchRepository(t *testing.T) {
 	require.Error(t, vcsCommandRefusal(ctx, noCheckout, "git", []string{"init", "-q"}, fixture, nil), "a lease with no checkout_root cannot show the repository is outside it")
 }
 
+// IntegrationScratchMergeSuite runs vcs\cmd as a merge script does under an
+// integration row: a detached scratch tree, merges and commits in it, then
+// its removal.
+type IntegrationScratchMergeSuite struct {
+	suite.Suite
+	ctx     context.Context
+	repo    worktreeRepo
+	row     types.Job
+	own     string
+	scratch string
+	tree    string
+}
+
+func TestIntegrationScratchMergeSuite(t *testing.T) {
+	suite.Run(t, new(IntegrationScratchMergeSuite))
+}
+
+func (s *IntegrationScratchMergeSuite) SetupTest() {
+	t := s.T()
+	cache, err := filepath.EvalSymlinks(t.TempDir())
+	s.Require().NoError(err)
+	s.scratch = filepath.Join(cache, "magus", "tmp")
+	s.repo = newWorktreeRepository(t)
+	s.own = s.repo.add("integrate")
+	done := s.repo.add("done")
+	s.repo.commit(done)
+	other := s.repo.add("other")
+	s.repo.commit(other)
+	s.row = narrowLease()
+	s.row.ID = "integrate"
+	s.row.Parent = "orchestrator"
+	s.row.CheckoutRoot = s.own
+	s.row.Integrates = []string{"done"}
+	s.ctx, _ = fleetFixture(t, s.row)
+	// After the fixture, which points the cache elsewhere.
+	t.Setenv("XDG_CACHE_HOME", cache)
+	s.Require().NoError(os.MkdirAll(s.scratch, 0o755))
+	s.tree = filepath.Join(s.scratch, "merge", "1")
+}
+
+func (s *IntegrationScratchMergeSuite) run(row types.Job, dir string, args ...string) error {
+	return vcsCommandRefusal(s.ctx, row, "git", args, dir, nil)
+}
+
+// addTree makes the scratch tree the way the guard is asked to let through.
+func (s *IntegrationScratchMergeSuite) addTree() {
+	s.repo.git(s.own, "worktree", "add", "--detach", "--quiet", s.tree, "HEAD")
+}
+
+func (s *IntegrationScratchMergeSuite) TestAddingADetachedScratchTreePasses() {
+	s.NoError(s.run(s.row, s.own, "worktree", "add", "--detach", "--quiet", s.tree, "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAPlainWorkerAddingOneIsRefused() {
+	worker := s.row
+	worker.Integrates = nil
+	s.ErrorContains(s.run(worker, s.own, "worktree", "add", "--detach", s.tree, "HEAD"), "stays with the orchestrator")
+}
+
+func (s *IntegrationScratchMergeSuite) TestAddingOneOnABranchIsRefused() {
+	s.Error(s.run(s.row, s.own, "worktree", "add", "-b", "x", s.tree, "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAddingOneOutsideScratchIsRefused() {
+	s.Error(s.run(s.row, s.own, "worktree", "add", "--detach", filepath.Join(s.repo.parent, "x"), "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestMergingAnIntegratedBranchInTheTreePasses() {
+	s.addTree()
+	s.NoError(s.run(s.row, s.tree, "merge", "--no-ff", "--no-commit", "done"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestMergingAnotherBranchInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "merge", "--no-ff", "--no-commit", "other"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestCommittingAndAbortingInTheTreePass() {
+	s.addTree()
+	s.NoError(s.run(s.row, s.tree, "commit", "--no-edit", "--no-verify"))
+	s.NoError(s.run(s.row, s.tree, "merge", "--abort"))
+	s.NoError(s.run(s.row, s.tree, "add", "--", "a.txt"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAResetInTheTreeIsRefused() {
+	s.addTree()
+	s.Error(s.run(s.row, s.tree, "reset", "--hard", "HEAD~1"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestRemovingTheTreePasses() {
+	s.addTree()
+	s.NoError(s.run(s.row, s.own, "worktree", "remove", "--force", s.tree))
+}
+
+// A job's checkout under the scratch dir is on its job's branch, so it is
+// nobody's scratch tree.
+func (s *IntegrationScratchMergeSuite) TestATreeOnABranchIsNotScratch() {
+	onBranch := filepath.Join(s.scratch, "r-sibling")
+	s.repo.git(s.repo.main, "worktree", "add", "-q", "-b", "sibling", onBranch, "origin/main")
+	s.Error(s.run(s.row, s.own, "worktree", "remove", "--force", onBranch))
+	s.Error(s.run(s.row, onBranch, "commit", "-m", "done"))
+}
+
 // TestDenyLeaseScopedVCSRefusesTheWrongBranch pins the branch half: a worker's own
 // checkout on the base branch, with no branch, or the primary checkout is not its own branch.
 func TestDenyLeaseScopedVCSRefusesTheWrongBranch(t *testing.T) {

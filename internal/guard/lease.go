@@ -2689,6 +2689,9 @@ func vcsCommandRefusal(ctx context.Context, row types.Job, backend string, args 
 		inOtherRepository(site, row.CheckoutRoot) && workTreeAt(ctx, site.dir, row.CheckoutRoot) {
 		return nil
 	}
+	if unlocated == "" && !relocated && integrationScratchCall(ctx, row, inv, site) {
+		return nil
+	}
 	r := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated)
 	if !r.refused() {
 		return nil
