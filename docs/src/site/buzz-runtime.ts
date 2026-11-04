@@ -93,7 +93,9 @@ export function ensureBuzz(): Promise<Result<null>> {
           })();
         };
         if (WebAssembly.instantiateStreaming) {
-          WebAssembly.instantiateStreaming(loader, go.importObject).then(startWith).catch((e) => resolve(loadFailed(e)));
+          WebAssembly.instantiateStreaming(loader, go.importObject)
+            .then(startWith)
+            .catch((e) => resolve(loadFailed(e)));
         } else {
           loader
             .then(function (r) {
