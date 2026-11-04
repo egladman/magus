@@ -530,7 +530,7 @@ jobs:
           # composes, run as one invocation; --shard comes from MAGUS_SHARD. docs
           # figures stay off this shard (see the figures job): ci:gha delegates them
           # there, since site-generate plus diagrams-generate OOMs 16GB together.
-          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz --plan ${{ github.workspace }}/.magus/plan.json -- run ci:gha --no-default-charms --concurrency-profile aggressive --stdin
+          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz -- --plan ${{ github.workspace }}/.magus/plan.json run ci:gha --no-default-charms --concurrency-profile aggressive --stdin
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
 
