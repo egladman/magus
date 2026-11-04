@@ -77,6 +77,7 @@ func (m *Magus) Mutants(ctx context.Context, base string) (types.Mutants, error)
 func (m *Magus) mutateBase(ctx context.Context, base string, since sinceBase, subjects []mutationSubject, out *types.Mutants) error {
 	subjects = slices.DeleteFunc(slices.Clone(subjects), func(s mutationSubject) bool { return !survived(out.Mutants, s.fn.Symbol) })
 	if len(subjects) == 0 {
+		setBaseCounts(out.Mutants, nil)
 		return nil
 	}
 	_, commit, err := m.conformanceBaseCommit(ctx, base)
@@ -98,11 +99,23 @@ func (m *Magus) mutateBase(ctx context.Context, base string, since sinceBase, su
 	if err != nil {
 		return err
 	}
-	for i := range out.Mutants {
-		c := counts[out.Mutants[i].Symbol]
-		out.Mutants[i].BaseSurvived, out.Mutants[i].BaseReason = c.survived, c.reason
-	}
+	setBaseCounts(out.Mutants, counts)
 	return nil
+}
+
+// noSurvivorAtHead is the base reason of a function with no survivor at head.
+const noSurvivorAtHead = "it has no survivor at head, so base was not mutated"
+
+// setBaseCounts writes each function's base count onto its mutants. One
+// never mutated at base says why it has none.
+func setBaseCounts(mutants []types.Mutant, counts map[string]baseCount) {
+	for i := range mutants {
+		c, counted := counts[mutants[i].Symbol]
+		if !counted {
+			c.reason = noSurvivorAtHead
+		}
+		mutants[i].BaseSurvived, mutants[i].BaseReason = c.survived, c.reason
+	}
 }
 
 func survived(mutants []types.Mutant, symbol string) bool {
@@ -167,14 +180,38 @@ func (e mutationEngine) atBase(since sinceBase, s mutationSubject) (mutationSubj
 	if !ok {
 		return mutationSubject{}, newSinceBase
 	}
+	s.fn.Path = since.basePath(s.fn.Path)
 	src, err := os.ReadFile(filepath.Join(e.root, filepath.FromSlash(s.fn.Path)))
 	body, inRange := bodyLines(string(src), lo, hi)
 	if err != nil || !inRange {
 		return mutationSubject{}, fmt.Sprintf("its base lines %d-%d of %s could not be read", lo, hi, s.fn.Path)
 	}
+	scope, reason := scopeAtBase(e.root, s.project, s.scope)
+	if reason != "" {
+		return mutationSubject{}, "its base is unmeasured: " + reason
+	}
 	sum := sha256.Sum256([]byte(body))
+	s.scope = scope
 	s.fn.Line, s.fn.EndLine, s.fn.Digest = lo, hi, hex.EncodeToString(sum[:])
 	return s, ""
+}
+
+// scopeAtBase is scope less the entries tree does not hold, as head's scope
+// may name a test file the change added. A scope left with none is a reason.
+func scopeAtBase(tree, project string, scope []string) ([]string, string) {
+	kept := existingEntries(filepath.Join(tree, filepath.FromSlash(project)), scope)
+	if len(scope) > 0 && len(kept) == 0 {
+		return nil, "no test_scope entry names a file at base"
+	}
+	return kept, ""
+}
+
+// existingEntries is the entries naming a file or dir under dir.
+func existingEntries(dir string, entries []string) []string {
+	return slices.DeleteFunc(slices.Clone(entries), func(entry string) bool {
+		_, err := os.Stat(filepath.Join(dir, filepath.FromSlash(entry)))
+		return err != nil
+	})
 }
 
 func (m *Magus) mutateSubjects(ctx context.Context, subjects []mutationSubject) (types.Mutants, error) {
@@ -244,10 +281,7 @@ func mutationSyntax(sp *spells.Spell) (spells.Syntax, string) {
 // reason: running the whole project instead would hide it.
 func subjectScope(root, project, name string, test spells.Command) ([]string, string) {
 	dir := filepath.Join(root, filepath.FromSlash(project))
-	scope := slices.DeleteFunc(test.ExpandTestScope(projectRelative(project, name)), func(entry string) bool {
-		_, err := os.Stat(filepath.Join(dir, filepath.FromSlash(entry)))
-		return err != nil
-	})
+	scope := existingEntries(dir, test.ExpandTestScope(projectRelative(project, name)))
 	if len(test.TestScope) > 0 && len(scope) == 0 {
 		return nil, fmt.Sprintf("no test_scope entry names a file for %s", name)
 	}
@@ -292,7 +326,6 @@ type subjectPlan struct {
 	src     string
 	mutants []plannedMutant
 	gap     string
-	fresh   []types.MutantRun
 }
 
 // testRun is what one scoped run did. A cached run replayed an answer and
@@ -314,7 +347,10 @@ func (r testRun) replayed(target string) error {
 type mutationEngine struct {
 	root  string
 	seats int
-	run scopedRun
+	// isBase gaps a subject whose baseline records no result. The base tree
+	// may not build, and the head's answer stands.
+	isBase bool
+	run    scopedRun
 	// covered is the lines of s's file that the baseline in dir hit.
 	covered func(dir string, s mutationSubject) (map[int]bool, error)
 	// copy makes a scratch copy of the working tree, edits included, and
@@ -343,7 +379,7 @@ func (m *Magus) newMutationEngine(ctx context.Context, links []string) (mutation
 // tree itself: the base is read before any seat runs.
 func (sc scratch) baseEngine(tree, commit string) mutationEngine {
 	return mutationEngine{
-		root: tree, seats: 1, run: magusRunner{bin: sc.bin}.run, covered: copyCoverage,
+		root: tree, seats: 1, isBase: true, run: magusRunner{bin: sc.bin}.run, covered: copyCoverage,
 		copy:    func(context.Context) (string, error) { return tree, nil },
 		store:   newMutantStore(sc.store),
 		testKey: baseTestKey(commit),
@@ -416,9 +452,6 @@ func (e mutationEngine) mutate(ctx context.Context, subjects []mutationSubject) 
 		return types.Mutants{}, err
 	}
 	if err := e.runPending(ctx, plans); err != nil {
-		return types.Mutants{}, err
-	}
-	if err := e.store.record(ctx, freshRuns(plans)); err != nil {
 		return types.Mutants{}, err
 	}
 	return answerMutants(plans), nil
@@ -523,7 +556,8 @@ func lineOffset(src string, line int) int {
 	return off
 }
 
-// replay judges each mutant a kept run answers.
+// replay judges each mutant a kept run answers, and drops one kept as
+// uncovered so a full hit needs no baseline.
 func (e mutationEngine) replay(plans []subjectPlan) error {
 	kept, err := e.store.runs()
 	if err != nil {
@@ -536,6 +570,9 @@ func (e mutationEngine) replay(plans []subjectPlan) error {
 				mu.Outcome, mu.Seconds = r.Outcome, r.Seconds
 			}
 		}
+		plans[i].mutants = slices.DeleteFunc(plans[i].mutants, func(mu plannedMutant) bool {
+			return mu.Outcome == types.MutantUncovered
+		})
 	}
 	return nil
 }
@@ -609,6 +646,10 @@ func (e mutationEngine) baseline(ctx context.Context, dir string, p *subjectPlan
 	if err == nil {
 		err = cmp.Or(ctx.Err(), res.replayed(target))
 	}
+	if e.isBase && errors.Is(err, errNoResult) {
+		p.gap = err.Error()
+		return 0, nil
+	}
 	if err != nil {
 		return 0, fmt.Errorf("mutants: %s baseline: %w", p.subject.fn.Label, err)
 	}
@@ -617,19 +658,30 @@ func (e mutationEngine) baseline(ctx context.Context, dir string, p *subjectPlan
 		p.gap = failingBaseline
 		return took, nil
 	}
-	e.keepCovered(dir, p)
-	return took, nil
+	return took, e.keepCovered(ctx, dir, p)
 }
 
 // keepCovered drops p's mutants on lines the baseline did not hit: no test
-// can kill a mutant it never runs. A baseline that left no report is p's gap.
-func (e mutationEngine) keepCovered(dir string, p *subjectPlan) {
+// can kill a mutant it never runs. Each is kept as uncovered, so the next
+// run drops it before it needs a baseline. A baseline that left no report is
+// p's gap.
+func (e mutationEngine) keepCovered(ctx context.Context, dir string, p *subjectPlan) error {
 	covered, err := e.covered(dir, p.subject)
 	if err != nil {
 		p.gap = err.Error()
-		return
+		return nil
 	}
-	p.mutants = slices.DeleteFunc(p.mutants, func(mu plannedMutant) bool { return !covered[mu.Line] })
+	var dropped []types.MutantRun
+	p.mutants = slices.DeleteFunc(p.mutants, func(mu plannedMutant) bool {
+		if covered[mu.Line] {
+			return false
+		}
+		if mu.Outcome == "" {
+			dropped = append(dropped, types.MutantRun{Key: mu.key, ID: mu.ID, Outcome: types.MutantUncovered, Checkout: e.root})
+		}
+		return true
+	})
+	return e.store.record(context.WithoutCancel(ctx), dropped)
 }
 
 // runMutant writes mutant j into dir's copy of its file, runs the scoped
@@ -647,8 +699,8 @@ func (e mutationEngine) runMutant(ctx context.Context, dir string, p *subjectPla
 	if err := swapFile(target, mutated, p.src, func() error { return e.judge(ctx, dir, p.subject, timeout, mu) }); err != nil {
 		return err
 	}
-	p.fresh = append(p.fresh, types.MutantRun{Key: mu.key, ID: mu.ID, Outcome: mu.Outcome, Seconds: mu.Seconds, Checkout: e.root})
-	return nil
+	run := types.MutantRun{Key: mu.key, ID: mu.ID, Outcome: mu.Outcome, Seconds: mu.Seconds, Checkout: e.root}
+	return e.store.record(context.WithoutCancel(ctx), []types.MutantRun{run})
 }
 
 // swapFile holds mutated at path while fn runs, then puts original back.
@@ -669,8 +721,8 @@ func swapFile(path, mutated, original string, fn func() error) error {
 
 // judge sets mu's outcome: survived when the scoped tests pass, killed when
 // they fail or outrun timeout. The baseline passed in this copy, so a run
-// that recorded no result did not compile or load: killed. Any other run that
-// reached no test is an error.
+// that exited with no result did not compile or load: killed. A run a signal
+// ended, or that found no seat, reached no test and is an error.
 func (e mutationEngine) judge(ctx context.Context, dir string, s mutationSubject, timeout time.Duration, mu *plannedMutant) error {
 	run, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -700,14 +752,6 @@ func testOutcome(passed bool) types.MutantOutcome {
 		return types.MutantSurvived
 	}
 	return types.MutantKilled
-}
-
-func freshRuns(plans []subjectPlan) []types.MutantRun {
-	var out []types.MutantRun
-	for _, p := range plans {
-		out = append(out, p.fresh...)
-	}
-	return out
 }
 
 // answerMutants is plans as a types.Mutants, each subject's markers applied.
@@ -784,6 +828,10 @@ type scopedRun func(ctx context.Context, dir, target string, c coverageScope) (t
 // did not compile or load, or the run stopped before any step.
 var errNoResult = errors.New("so no test ran")
 
+// errNoSeat marks a run the scheduler could not seat. It measured nothing,
+// and is an error for a caller to see, not a gap to report.
+var errNoSeat = errors.New("no seat")
+
 func (r magusRunner) run(ctx context.Context, dir, target string, s coverageScope) (testRun, error) {
 	args := slices.Concat([]string{"run", target, "--no-cache", "--no-volatility-retry", "-o", "jsonl", s.project, "--"}, s.scope)
 	opts := spawn.ExecOptions{Dir: dir, Env: []string{copyCacheEnv(dir)}, Capture: true, Quiet: true}
@@ -793,9 +841,12 @@ func (r magusRunner) run(ctx context.Context, dir, target string, s coverageScop
 		return testRun{}, fmt.Errorf("%s did not start: %w", line, err)
 	}
 	if res.Code == exit.TempFail {
-		return testRun{}, fmt.Errorf("%s exited %d: the run found no seat or its project held, so it ran no test", line, res.Code)
+		return testRun{}, fmt.Errorf("%s exited %d: the run found no seat or its project held, so it ran no test: %w", line, res.Code, errNoSeat)
 	}
 	result, ok := recordedResult(res.Stdout, s.project, target)
+	if !ok && res.Code < 0 {
+		return testRun{}, fmt.Errorf("%s was signaled with no result for %s: %s", line, target, lastLine(res.Stderr))
+	}
 	if !ok {
 		return testRun{}, fmt.Errorf("%s exited %d with no result for %s, %w: %s", line, res.Code, target, errNoResult, lastLine(res.Stderr))
 	}

@@ -16,6 +16,9 @@ const (
 	MutantSurvived MutantOutcome = "survived"
 	// MutantExcepted is a survivor a `magus:mutant` marker excuses.
 	MutantExcepted MutantOutcome = "excepted"
+	// MutantUncovered is a mutant on a line the unmutated tests never ran. It
+	// is kept so a later run drops it unasked, and is never part of an answer.
+	MutantUncovered MutantOutcome = "uncovered"
 )
 
 // Mutant is one token swap in a touched function and what the tests made of it.
@@ -33,7 +36,8 @@ type Mutant struct {
 	// Reason is the marker's reason when the mutant is excepted.
 	Reason string
 	// BaseSurvived counts the same function's survivors at base. BaseReason
-	// is "" exactly when it holds a count; a survivor-free function skips base.
+	// is "" exactly when it holds a count. A function with no survivor at head
+	// is not mutated at base and says so in BaseReason.
 	BaseSurvived int
 	BaseReason   string
 }
@@ -56,8 +60,8 @@ type MutantRun struct {
 	// or tool misses.
 	Key string `json:"key"`
 	ID  string `json:"id"`
-	// Outcome is killed or survived; an exception is read from markers and
-	// never stored.
+	// Outcome is killed, survived or uncovered; an exception is read from
+	// markers and never stored.
 	Outcome MutantOutcome `json:"outcome"`
 	Seconds float64       `json:"seconds"`
 	// Checkout names the checkout that produced the entry.
@@ -71,8 +75,8 @@ func (r mutantRunJSON) check() error {
 	switch {
 	case r.Key == "" || r.ID == "" || r.Checkout == "":
 		return fmt.Errorf("a mutant run lacks a key, id or checkout: key %q, id %q, checkout %q", r.Key, r.ID, r.Checkout)
-	case r.Outcome != MutantKilled && r.Outcome != MutantSurvived:
-		return fmt.Errorf("a mutant run records killed or survived, not %q", r.Outcome)
+	case r.Outcome != MutantKilled && r.Outcome != MutantSurvived && r.Outcome != MutantUncovered:
+		return fmt.Errorf("a mutant run records killed, survived or uncovered, not %q", r.Outcome)
 	}
 	return nil
 }
@@ -88,7 +92,7 @@ func (r MutantRun) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON reads an entry MarshalJSON wrote. It refuses one with no key,
-// id or checkout, or an outcome other than killed or survived.
+// id or checkout, or an outcome other than killed, survived or uncovered.
 func (r *MutantRun) UnmarshalJSON(b []byte) error {
 	var raw mutantRunJSON
 	if err := json.Unmarshal(b, &raw); err != nil {

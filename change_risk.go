@@ -1,7 +1,9 @@
 package magus
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -317,8 +319,8 @@ func (r riskMeter) measure(ctx context.Context, fns []touchedFunction) (types.Ch
 		return types.ChangeRisk{}, err
 	}
 	based := r.scorer
-	based.read, based.indexed = readUnder(baseDir), noIndex
-	based.report = plan.lookup(base)
+	based.read, based.indexed = r.readAtBase(baseDir), noIndex
+	based.report = r.since.atHeadPath(plan.lookup(base))
 	r.judgeBase(out.Functions, fns, based)
 	out.Lines = r.lines(plan, head, base)
 	return out, nil
@@ -334,6 +336,33 @@ func readUnder(dir string) func(string) (string, bool) {
 	return func(p string) (string, bool) {
 		b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(p)))
 		return string(b), err == nil
+	}
+}
+
+// readAtBase reads a head path from dir, the base tree, where the base held it.
+func (r riskMeter) readAtBase(dir string) func(string) (string, bool) {
+	read := readUnder(dir)
+	return func(p string) (string, bool) { return read(r.since.basePath(p)) }
+}
+
+type reportLookup func(touchedFunction, spells.Coverage) (keptReport, string)
+
+// atHeadPath answers a base report under head paths. A renamed file is
+// entered there by its old path, and a span looks it up by its new one.
+func (s sinceBase) atHeadPath(lookup reportLookup) reportLookup {
+	return func(fn touchedFunction, cov spells.Coverage) (keptReport, string) {
+		kept, reason := lookup(fn, cov)
+		old := s.basePath(fn.Path)
+		if reason != "" || old == fn.Path {
+			return kept, reason
+		}
+		kept.files = slices.Clone(kept.files)
+		for i := range kept.files {
+			if kept.files[i].Path == old {
+				kept.files[i].Path = fn.Path
+			}
+		}
+		return kept, ""
 	}
 }
 
@@ -433,7 +462,7 @@ func (r riskMeter) runAll(ctx context.Context, rev string, runs []coverageScope)
 	}
 	out := make(map[string]scopeRun, len(runs))
 	for _, c := range runs {
-		run, err := r.runOne(ctx, dir, c)
+		run, err := r.runScope(ctx, dir, rev, c)
 		if err != nil {
 			return dir, nil, err
 		}
@@ -442,12 +471,29 @@ func (r riskMeter) runAll(ctx context.Context, rev string, runs []coverageScope)
 	return dir, out, nil
 }
 
+// runScope runs c in dir. At a rev, a scope entry the tree lacks is dropped,
+// as the change may have added the test file.
+func (r riskMeter) runScope(ctx context.Context, dir, rev string, c coverageScope) (scopeRun, error) {
+	if rev != "" {
+		scope, reason := scopeAtBase(dir, c.project, c.scope)
+		if reason != "" {
+			return scopeRun{reason: reason}, nil
+		}
+		c.scope = scope
+	}
+	return r.runOne(ctx, dir, c)
+}
+
 // runOne runs c in dir. A red or unreadable run is a reason that makes its
-// functions gaps; only a cancelled one is an error.
+// functions gaps. A cancelled run, or one the scheduler could not seat, is
+// an error.
 func (r riskMeter) runOne(ctx context.Context, dir string, c coverageScope) (scopeRun, error) {
 	res, err := r.run(ctx, dir, c.target(spells.CoverageOp), c)
 	if ctx.Err() != nil {
 		return scopeRun{}, fmt.Errorf("change risk: %w", ctx.Err())
+	}
+	if errors.Is(err, errNoSeat) {
+		return scopeRun{}, fmt.Errorf("change risk: %w", err)
 	}
 	if err != nil {
 		return scopeRun{reason: err.Error()}, nil
@@ -469,11 +515,23 @@ func (r riskMeter) lines(plan scopePlan, head, base map[string]scopeRun) []types
 	for _, name := range r.changed {
 		c, ok := plan.byPath[name]
 		if !ok {
+			out = append(out, uncomparedLines(name, plan.reason[name])...)
 			continue
 		}
 		out = append(out, r.fileLines(name, head[c.key()], base[c.key()])...)
 	}
 	return out
+}
+
+// uncomparedLines is the finding for a changed file with no coverage scope to
+// run, or none when the plan never looked at the file.
+func uncomparedLines(name, reason string) []types.Finding {
+	if reason == "" {
+		return nil
+	}
+	return []types.Finding{{Path: name, Line: 1,
+		Message: fmt.Sprintf("the coverage of %s was not compared: %s", name, reason),
+		Fix:     "Give its spell a test scope that names a test, so its covered lines can be compared."}}
 }
 
 func (r riskMeter) fileLines(name string, head, base scopeRun) []types.Finding {
@@ -486,7 +544,7 @@ func (r riskMeter) fileLines(name string, head, base scopeRun) []types.Finding {
 	}
 	now := fileNamed(head.files, name).Lines()
 	var lost, bare []int
-	for line, ran := range fileNamed(base.files, name).Lines() {
+	for line, ran := range fileNamed(base.files, r.since.basePath(name)).Lines() {
 		at, kept := r.since.headLine(name, line)
 		if ran && kept && uncovered(now, at) {
 			lost = append(lost, at)
@@ -625,6 +683,19 @@ type sinceBase struct {
 	removed   string
 	committed map[string][]changeset.Hunk
 	working   map[string][]changeset.Hunk
+	// workingOld and committedOld map a renamed file's new path to its old one
+	// in the working patch and the committed patch.
+	workingOld   map[string]string
+	committedOld map[string]string
+}
+
+// headPath is where path was at HEAD, before the working tree renamed it.
+func (s sinceBase) headPath(path string) string { return cmp.Or(s.workingOld[path], path) }
+
+// basePath is where the base held the file path is now.
+func (s sinceBase) basePath(path string) string {
+	at := s.headPath(path)
+	return cmp.Or(s.committedOld[at], at)
 }
 
 // baseSpan is fn's lines as the base held them, false when it is new since.
@@ -636,13 +707,13 @@ func (s sinceBase) baseSpan(fn touchedFunction) (int, int, bool) {
 	if !ok {
 		return 0, 0, false
 	}
-	return oldSpan(lo, hi, s.committed[fn.Path])
+	return oldSpan(lo, hi, s.committed[s.headPath(fn.Path)])
 }
 
 // headLine maps a base line of path to the working tree, false when the
 // change removed or rewrote it.
 func (s sinceBase) headLine(path string, line int) (int, bool) {
-	at, ok := forwardLine(line, s.committed[path])
+	at, ok := forwardLine(line, s.committed[s.headPath(path)])
 	if !ok {
 		return 0, false
 	}
@@ -653,6 +724,17 @@ func fileHunks(patch string) map[string][]changeset.Hunk {
 	out := map[string][]changeset.Hunk{}
 	for _, f := range changeset.Parse(patch) {
 		out[f.Path] = f.Hunks
+	}
+	return out
+}
+
+// renamedFrom maps the new path of each renamed file in patch to its old one.
+func renamedFrom(patch string) map[string]string {
+	out := map[string]string{}
+	for _, f := range changeset.Parse(patch) {
+		if f.Status == changeset.StatusRenamed && f.OldPath != f.Path {
+			out[f.Path] = f.OldPath
+		}
 	}
 	return out
 }
@@ -670,6 +752,7 @@ func (m *Magus) linesSince(ctx context.Context, base string) (sinceBase, error) 
 	return sinceBase{
 		lines: changedLines(committed, working), removed: removed,
 		committed: fileHunks(committed), working: fileHunks(working),
+		committedOld: renamedFrom(committed), workingOld: renamedFrom(working),
 	}, nil
 }
 

@@ -48,14 +48,15 @@ var toySyntax = spells.Syntax{
 
 // stubRunner judges the copy's file with verdict and records what it ran.
 type stubRunner struct {
-	mu      sync.Mutex
-	verdict func(src string) bool
-	hang    func(src string) bool
-	broken  func(src string) bool
-	cached  func(target string) bool
-	err     error
-	seen    []string
-	targets []string
+	mu       sync.Mutex
+	verdict  func(src string) bool
+	hang     func(src string) bool
+	broken   func(src string) bool
+	signaled func(src string) bool
+	cached   func(target string) bool
+	err      error
+	seen     []string
+	targets  []string
 }
 
 func (r *stubRunner) run(ctx context.Context, dir, target string, _ coverageScope) (testRun, error) {
@@ -73,6 +74,9 @@ func (r *stubRunner) run(ctx context.Context, dir, target string, _ coverageScop
 	}
 	if r.broken != nil && r.broken(string(b)) {
 		return testRun{}, fmt.Errorf("no result for %s, %w", target, errNoResult)
+	}
+	if r.signaled != nil && r.signaled(string(b)) {
+		return testRun{}, fmt.Errorf("%s was signaled with no result", target)
 	}
 	if r.hang != nil && r.hang(string(b)) {
 		<-ctx.Done()
@@ -212,6 +216,82 @@ func (s *MutantEngineSuite) TestAMutantThatRecordsNoResultAfterAGreenBaselineIsK
 	s.runner.broken = func(src string) bool { return strings.Contains(src, "n <= 9") }
 	got := s.mutate(toySmall())
 	s.Equal([]types.Mutant{smallMutant(0, 11, types.MutantKilled), smallMutant(1, 18, types.MutantKilled)}, got.Mutants)
+}
+
+func (s *MutantEngineSuite) TestAMutantRunASignalEndedIsAnErrorNotAKill() {
+	s.runner.signaled = func(src string) bool { return strings.Contains(src, "n <= 9") }
+	_, err := s.engine.mutate(context.Background(), []mutationSubject{toySmall()})
+	s.ErrorContains(err, "was signaled")
+}
+
+func (s *MutantEngineSuite) TestEachOutcomeIsKeptAsItLandsEvenWhenALaterMutantFails() {
+	s.runner.signaled = func(src string) bool { return strings.Contains(src, "n <= 9") }
+	_, err := s.engine.mutate(context.Background(), []mutationSubject{toySmall()})
+	s.Require().Error(err)
+	runs, err := s.engine.store.runs()
+	s.Require().NoError(err)
+	first := mutantKey(mutantID("d-Small", "lt-le", 0), "tk-Small")
+	second := mutantKey(mutantID("d-Small", "lt-le", 1), "tk-Small")
+	s.Equal(types.MutantKilled, runs[first].Outcome, "the judged mutant is kept")
+	s.NotContains(runs, second, "the failed one is not")
+}
+
+func (s *MutantEngineSuite) TestAFullHitRunsNoBaselineWhenAMutantSitsOnAnUncoveredLine() {
+	s.covered["Both"] = nil
+	first := s.mutate(toySmall(), toyBoth())
+	s.NotEmpty(s.runner.seen)
+
+	s.runner.seen, s.copier.copies = nil, 0
+	s.Equal(first, s.mutate(toySmall(), toyBoth()))
+	s.Empty(s.runner.seen, "no baseline and no mutant ran")
+	s.Zero(s.copier.copies)
+}
+
+func (s *MutantEngineSuite) TestAFunctionWithNoSurvivorAtHeadSaysBaseWasNotMutated() {
+	out := types.Mutants{Mutants: []types.Mutant{smallMutant(0, 11, types.MutantKilled)}}
+	s.Require().NoError((&Magus{}).mutateBase(context.Background(), "base", sinceBase{}, []mutationSubject{toySmall()}, &out))
+	s.Equal([2]any{0, noSurvivorAtHead}, [2]any{out.Mutants[0].BaseSurvived, out.Mutants[0].BaseReason})
+}
+
+func (s *MutantEngineSuite) TestACountedFunctionKeepsAnEmptyBaseReason() {
+	mutants := []types.Mutant{smallMutant(0, 11, types.MutantSurvived)}
+	setBaseCounts(mutants, map[string]baseCount{"sym-Small": {survived: 2}})
+	s.Equal([2]any{2, ""}, [2]any{mutants[0].BaseSurvived, mutants[0].BaseReason})
+}
+
+func (s *MutantEngineSuite) TestABaseBaselineThatRecordsNoResultGapsOnlyThatFunction() {
+	s.engine.isBase = true
+	s.runner.broken = func(src string) bool { return src == mutantSource }
+	got, err := s.engine.countBase(context.Background(), sinceBase{}, []mutationSubject{toySmall()})
+	s.Require().NoError(err)
+	s.Contains(got["sym-Small"].reason, "its base is unmeasured")
+	s.Contains(got["sym-Small"].reason, "so no test ran")
+}
+
+func (s *MutantEngineSuite) TestAScopeFileMissingAtBaseMakesThatBaseUnmeasured() {
+	subject := toySmall()
+	subject.scope = []string{"./calc", "./calc/added_test.toy"}
+	got, err := s.engine.countBase(context.Background(), sinceBase{}, []mutationSubject{subject})
+	s.Require().NoError(err)
+	s.Equal(baseCount{survived: 1}, got["sym-Small"], "the entry base lacks is dropped, the rest runs")
+
+	subject.scope = []string{"./calc/added_test.toy"}
+	got, err = s.engine.countBase(context.Background(), sinceBase{}, []mutationSubject{subject})
+	s.Require().NoError(err)
+	s.Equal(baseCount{reason: "its base is unmeasured: no test_scope entry names a file at base"}, got["sym-Small"])
+}
+
+func (s *MutantEngineSuite) TestARenamedFileIsReadAtItsOldPathAtBase() {
+	old := "calc/old.toy"
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, old), []byte("\n"+mutantSource), 0o644))
+	since := sinceBase{committedOld: map[string]string{mutantFile: old}, committed: map[string][]changeset.Hunk{
+		mutantFile: {{OldStart: 1, OldCount: 1, NewStart: 0, NewCount: 0, Rows: []changeset.Row{delRow(1)}}},
+	}}
+
+	got, reason := s.engine.atBase(since, toySmall())
+
+	s.Empty(reason)
+	s.Equal([3]any{old, 4, 6}, [3]any{got.fn.Path, got.fn.Line, got.fn.EndLine})
 }
 
 func (s *MutantEngineSuite) TestABaselineThatRecordsNoResultIsAnError() {
@@ -564,6 +644,13 @@ func (s *MutantRunnerSuite) TestAnotherTargetsResultIsNotThisOnes() {
 func (s *MutantRunnerSuite) TestARunMagusCouldNotSeatJudgesNothing() {
 	_, err := s.runWith("exit 75")
 	s.ErrorContains(err, "exited 75")
+	s.ErrorIs(err, errNoSeat)
+}
+
+func (s *MutantRunnerSuite) TestARunASignalEndedIsNotARunThatDidNotLoad() {
+	_, err := s.runWith("kill -9 $$")
+	s.ErrorContains(err, "was signaled")
+	s.NotErrorIs(err, errNoResult)
 }
 
 type MutantTreeCopySuite struct{ suite.Suite }

@@ -546,6 +546,9 @@ type RiskMeterSuite struct {
 	files  map[string][]coverage.File
 	failed map[string]bool
 	ran    []string
+	// baseFile is where the base copy holds the file, when it was renamed.
+	baseFile string
+	runErr   error
 }
 
 func TestRiskMeterSuite(t *testing.T) { suite.Run(t, new(RiskMeterSuite)) }
@@ -553,7 +556,7 @@ func TestRiskMeterSuite(t *testing.T) { suite.Run(t, new(RiskMeterSuite)) }
 func (s *RiskMeterSuite) SetupTest() {
 	s.scorer.SetT(s.T())
 	s.scorer.SetupTest()
-	s.revs, s.failed, s.ran = map[string]string{}, map[string]bool{}, nil
+	s.revs, s.failed, s.ran, s.baseFile, s.runErr = map[string]string{}, map[string]bool{}, nil, "", nil
 	s.files = map[string][]coverage.File{
 		"": {{Path: "lib/a.go", Blocks: []coverage.Block{
 			{StartLine: 3, EndLine: 4, Units: 1, Hits: 1}, {StartLine: 5, EndLine: 5, Units: 1}, {StartLine: 7, EndLine: 7, Units: 2, Hits: 1},
@@ -570,7 +573,7 @@ func (s *RiskMeterSuite) SetupTest() {
 		copy:    s.copy,
 		run: func(_ context.Context, dir, target string, c coverageScope) (testRun, error) {
 			s.ran = append(s.ran, fmt.Sprintf("%s@%s %s", target, s.revs[dir], strings.Join(c.scope, " ")))
-			return testRun{passed: !s.failed[s.revs[dir]]}, nil
+			return testRun{passed: !s.failed[s.revs[dir]]}, s.runErr
 		},
 		report: func(dir string, _ coverageScope) ([]coverage.File, error) { return s.files[s.revs[dir]], nil },
 		commit: "base",
@@ -589,8 +592,12 @@ func (s *RiskMeterSuite) copy(_ context.Context, rev string, _ []string) (string
 	if rev != "" {
 		body = riskBaseBody
 	}
-	s.Require().NoError(os.MkdirAll(filepath.Join(dir, "lib"), 0o755))
-	return dir, os.WriteFile(filepath.Join(dir, "lib", "a.go"), []byte(body), 0o644)
+	file := "lib/a.go"
+	if rev != "" && s.baseFile != "" {
+		file = s.baseFile
+	}
+	s.Require().NoError(os.MkdirAll(filepath.Join(dir, "lib", "lib"), 0o755))
+	return dir, os.WriteFile(filepath.Join(dir, filepath.FromSlash(file)), []byte(body), 0o644)
 }
 
 func (s *RiskMeterSuite) measure() types.ChangeRisk {
@@ -679,6 +686,75 @@ func (s *RiskMeterSuite) TestLineFindingsJoinConsecutiveLines() {
 		{Path: "a.go", Line: 3, Message: "a.go:3-5 x", Fix: "f"},
 		{Path: "a.go", Line: 9, Message: "a.go:9 x", Fix: "f"},
 	}, got)
+}
+
+func (s *RiskMeterSuite) TestARunTheSchedulerCouldNotSeatIsAnErrorNotAGap() {
+	s.runErr = fmt.Errorf("exited 75: %w", errNoSeat)
+	_, err := s.meter.measure(context.Background(), []touchedFunction{scoredFunction()})
+	s.ErrorIs(err, errNoSeat)
+}
+
+func (s *RiskMeterSuite) TestARunThatRecordedNoResultStaysAGap() {
+	s.runErr = fmt.Errorf("exited 1: %w", errNoResult)
+	got := s.measure()
+	s.Len(got.Gaps, 1)
+}
+
+func (s *RiskMeterSuite) scopedTo(scope ...string) {
+	s.meter.scopeOf = func(string) (coverageScope, string) {
+		return coverageScope{project: "lib", spell: "go", coverage: spells.Coverage{File: "cover.out", Test: "go-test"}, scope: scope}, ""
+	}
+}
+
+func (s *RiskMeterSuite) TestAChangedFileWhoseScopeHasNoTestIsReported() {
+	scoped := s.meter.scopeOf
+	s.meter.scopeOf = func(p string) (coverageScope, string) {
+		if p == "lib/b.go" {
+			return coverageScope{}, "no test_scope entry names a file for lib/b.go"
+		}
+		return scoped(p)
+	}
+	s.meter.changed = []string{"lib/b.go"}
+	got := s.measure()
+	s.Equal([]types.Finding{{Path: "lib/b.go", Line: 1,
+		Message: "the coverage of lib/b.go was not compared: no test_scope entry names a file for lib/b.go",
+		Fix:     "Give its spell a test scope that names a test, so its covered lines can be compared."}}, got.Lines)
+}
+
+func (s *RiskMeterSuite) TestATestFileTheChangeAddedIsNotRunAtBase() {
+	s.scopedTo("./lib", "./added_test.go")
+	f := s.measure().Functions[0]
+	s.Equal([]string{"go::coverage@ ./lib ./added_test.go", "go::coverage@base ./lib"}, s.ran)
+	s.Empty(f.BaseReason)
+}
+
+func (s *RiskMeterSuite) TestABaseHoldingNoScopeFileMakesTheBaseUnmeasured() {
+	s.scopedTo("./added_test.go")
+	got := s.measure()
+	s.Equal([]string{"go::coverage@ ./added_test.go"}, s.ran, "nothing ran at base")
+	s.Equal("no test_scope entry names a file at base", got.Functions[0].BaseReason[len("its base is unmeasured: "):])
+}
+
+func (s *RiskMeterSuite) TestARenamedFileIsReadAndComparedAtItsOldPath() {
+	s.baseFile = "lib/old.go"
+	s.files["base"] = []coverage.File{{Path: "lib/old.go", Blocks: s.files["base"][0].Blocks}}
+	s.meter.since.committedOld = map[string]string{"lib/a.go": "lib/old.go"}
+
+	got := s.measure()
+
+	f := got.Functions[0]
+	s.Equal([5]any{"", 4, 0, 3, 20.0}, [5]any{f.BaseReason, f.BaseComplexity, f.BaseCovered, f.BaseCoverable, f.BaseScore})
+	for _, line := range got.Lines {
+		s.NotContains(line.Message, "not measured")
+	}
+}
+
+func (s *RiskMeterSuite) TestABasePathFollowsRenamesThroughBothPatches() {
+	rename := func(from, to string) string {
+		return "diff --git a/" + from + " b/" + to + "\nsimilarity index 90%\nrename from " + from + "\nrename to " + to + "\n"
+	}
+	since := sinceBase{committedOld: renamedFrom(rename("one.go", "two.go")), workingOld: renamedFrom(rename("two.go", "three.go"))}
+	s.Equal([3]string{"one.go", "two.go", "plain.go"}, [3]string{since.basePath("three.go"), since.headPath("three.go"), since.basePath("plain.go")})
 }
 
 func (s *RiskMeterSuite) TestScopeOfNamesWhatTheSpellLacks() {
