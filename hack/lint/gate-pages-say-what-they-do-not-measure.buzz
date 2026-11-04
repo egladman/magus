@@ -1,0 +1,127 @@
+// gate-pages-say-what-they-do-not-measure refuses a docs section on a gate's
+// number that never says what the number misses. Its heading names a score,
+// ceiling, floor or threshold, and its body says it measures, computes or
+// counts. A green gate is not good code.
+//
+// Tier 1, mechanical: the fix is a sentence on what the gate does not measure.
+namespace gatemeasures;
+
+import "assert";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final NAMED = {"score": true, "scores": true, "ceiling": true, "ceilings": true, "floor": true,
+    "floors": true, "threshold": true, "thresholds": true};
+final VERBS = {"measures": true, "computes": true, "counts": true};
+final NEGATIONS = ["does not measure", "cannot measure", "do not measure"];
+final WORD = std\pattern("[a-z]+");
+
+export fun reads() > [str] {
+    return ["docs/**/*.md"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (!f.value.startsWith("docs/") or !f.value.endsWith(".md")) {
+            continue;
+        }
+        foreach (finding in judge(f.value, src: support\read(f))) {
+            found.append(finding);
+        }
+    }
+    return found;
+}
+
+object Section {
+    line: int,
+    level: int,
+    heading: str,
+    body: str,
+}
+
+// judge is each finding for the markdown page at path whose text is src.
+export fun judge(path: str, src: str) > [Finding] {
+    final found = mut [<Finding>];
+    foreach (s in sections(src)) {
+        if (!hasWord(s.heading, words: NAMED) or !hasWord(s.body, words: VERBS)) {
+            continue;
+        }
+        final body = s.body.lower();
+        if (NEGATIONS.filter(fun (i: int, n: str) > bool => body.indexOf(n) != null).len() > 0) {
+            continue;
+        }
+        found.append(Finding{ path = path, line = s.line,
+            message = "\"{s.heading}\" says what the gate measures but not what it does not",
+            fix = "Add a sentence saying what it does not measure, as in docs/design/principles/a-measure-is-not-the-goal.md." });
+    }
+    return found;
+}
+
+fun hasWord(text: str, words: {str: bool}) > bool {
+    foreach (m in WORD.matchAll(text.lower()) ?? [<[str]>]) {
+        if (words[m[0]] != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// sections is each heading outside a code fence with the body under it, down to
+// the next heading at its level or above.
+fun sections(src: str) > [Section] {
+    final heads = mut [<Section>];
+    final lines = src.split("\n");
+    var fenced = false;
+    foreach (i, line in lines) {
+        final t = line.trim();
+        if (t.startsWith("```") or t.startsWith("~~~")) {
+            fenced = !fenced;
+            continue;
+        }
+        if (fenced or !line.startsWith("#")) {
+            continue;
+        }
+        var level = 0;
+        while (level < line.len() and line.sub(level, len: 1) == "#") {
+            level = level + 1;
+        }
+        heads.append(Section{ line = i + 1, level = level, heading = line.sub(level, len: line.len() - level).trim(), body = "" });
+    }
+    final all = mut [<Section>];
+    foreach (k, h in heads) {
+        var last = lines.len();
+        foreach (j, next in heads) {
+            if (j > k and next.level <= h.level) {
+                last = next.line - 1;
+                break;
+            }
+        }
+        all.append(Section{ line = h.line, level = h.level, heading = h.heading,
+            body = lines.sub(h.line, len: last - h.line).join("\n") });
+    }
+    return all;
+}
+
+test "a gate section that names what it does not measure passes" {
+    final src = "# Gate\n\n## The ceiling\n\nThe ceiling counts complexity per function. It does not measure whether the design is right.\n";
+    assert\equal(judge("docs/a.md", src: src).len(), want: 0, message: support\messages(judge("docs/a.md", src: src)).join("; "));
+}
+
+test "a gate section that only says what it measures fails at its heading" {
+    final src = "# Gate\n\nIntro.\n\n## Score\n\nThe score measures lines run.\n\n## Next\n\nIt does not measure intent.\n";
+    final got = judge("docs/a.md", src: src);
+    assert\equal(got.len(), want: 1, message: support\messages(got).join("; "));
+    assert\equal(got[0].line, want: 5, message: "the heading line");
+}
+
+test "a subsection counts toward its parent, and a fence is not a heading" {
+    final src = "## Thresholds\n\nEach threshold computes a ratio.\n\n### Limits\n\nIt cannot measure taste.\n\n```sh\n# floor counts\n```\n";
+    assert\equal(judge("docs/a.md", src: src).len(), want: 0, message: support\messages(judge("docs/a.md", src: src)).join("; "));
+}
+
+test "a heading without a gate word, or a body that measures nothing, passes" {
+    assert\equal(judge("docs/a.md", src: "## The scoreboard\n\nIt counts runs.\n").len(), want: 0, message: "scoreboard is not score");
+    assert\equal(judge("docs/a.md", src: "## The version floor\n\nmagus refuses an older binary.\n").len(), want: 0, message: "no measuring verb");
+}

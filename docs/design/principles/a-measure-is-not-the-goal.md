@@ -35,9 +35,13 @@ turns into four risks, and each has a stated answer.
 
 - The mutation and change-risk gates run together, and an exception marker
   without a reason is itself a finding.
-- A gate's reference page carries a "measures / does not measure" pair.
-- A refusal with no reason or no fix fails the refusal-shape check.
-- A claim of improvement links the precision and recall run behind it.
+- A docs section on a gate's score, ceiling, floor or threshold that says what
+  it measures also says what it does not
+  (`hack/lint/gate-pages-say-what-they-do-not-measure.buzz`).
+- A lint finding with no message or no fix is itself a finding
+  (`hack/lint/lint-findings-carry-a-message-and-a-fix.buzz`).
+- An unreleased change note that claims a measured gain links the run behind it
+  (`hack/lint/measured-claims-cite-their-run.buzz`).
 
 ## Good
 

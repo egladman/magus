@@ -1,0 +1,151 @@
+// lint-findings-carry-a-message-and-a-fix refuses a Finding literal in a
+// hack/lint rule whose message or fix is unset or empty. The message is the
+// reason, and the fix is the next step. Test blocks build findings to compare
+// against, so they are skipped.
+//
+// Tier 1, mechanical: the fix is a field on the literal.
+namespace findingshape;
+
+import "assert";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final OPEN = "Finding\{";
+final FIELD_MESSAGE = std\pattern("[\{,]\\s*message\\s*=\\s*(\"\"|``)?");
+final FIELD_FIX = std\pattern("[\{,]\\s*fix\\s*=\\s*(\"\"|``)?");
+
+export fun reads() > [str] {
+    return ["hack/lint/*.buzz"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (!f.value.startsWith("hack/lint/") or !f.value.endsWith(".buzz")) {
+            continue;
+        }
+        foreach (finding in judge(f.value, src: support\read(f))) {
+            found.append(finding);
+        }
+    }
+    return found;
+}
+
+// judge is each finding for the literals in src, a rule at path.
+export fun judge(path: str, src: str) > [Finding] {
+    final skipped = testBlocks(src);
+    final found = mut [<Finding>];
+    var at = src.indexOf(OPEN);
+    while (at != null) {
+        final start = at!;
+        final open = start + OPEN.len() - 1;
+        final end = closing(src, open: open);
+        if (!within(skipped, off: start)) {
+            final literal = src.sub(open, len: end - open + 1);
+            final missing = mut [<str>];
+            if (!set(FIELD_MESSAGE, literal: literal)) {
+                missing.append("message");
+            }
+            if (!set(FIELD_FIX, literal: literal)) {
+                missing.append("fix");
+            }
+            if (missing.len() > 0) {
+                found.append(Finding{ path = path, line = support\lineAt(src, off: start),
+                    message = "a finding with no {missing.join(" and no ")}: a refusal names its reason and its next step",
+                    fix = "Set message to why the file breaks the rule and fix to what to change, both non-empty." });
+            }
+        }
+        at = src.indexOf(OPEN, from: end + 1);
+    }
+    return found;
+}
+
+// set reports whether literal assigns field a value other than an empty string.
+fun set(field: pat, literal: str) > bool {
+    final m = field.match(literal);
+    return m != null and m![1] == "";
+}
+
+// testBlocks is the [start, end] byte range of each test block in src.
+fun testBlocks(src: str) > [[int]] {
+    final ranges = mut [<[int]>];
+    var start = 0;
+    var end = -1;
+    foreach (line in src.split("\n")) {
+        if (start > end and line.startsWith("test \"")) {
+            end = closing(src, open: src.indexOf("\{", from: start) ?? src.len() - 1);
+            ranges.append([start, end]);
+        }
+        start = start + line.len() + 1;
+    }
+    return ranges;
+}
+
+fun within(ranges: [[int]], off: int) > bool {
+    foreach (r in ranges) {
+        if (off >= r[0] and off <= r[1]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// closing is the offset of the brace closing the one at open. Braces inside
+// strings do not count, and an unclosed brace runs to the end of src.
+fun closing(src: str, open: int) > int {
+    var depth = 0;
+    var quote = 0;
+    var i = open;
+    while (i < src.len()) {
+        final c = src.byte(i);
+        if (quote != 0) {
+            if (c == 92) {
+                i = i + 1;
+            } else if (c == quote) {
+                quote = 0;
+            }
+        } else if (c == 34 or c == 96) {
+            quote = c;
+        } else if (c == 123) {
+            depth = depth + 1;
+        } else if (c == 125) {
+            depth = depth - 1;
+            if (depth == 0) {
+                return i;
+            }
+        }
+        i = i + 1;
+    }
+    return src.len() - 1;
+}
+
+test "a literal with a message and a fix passes, over several lines and with interpolation" {
+    final src = "fun f() > void \{\n    _ = Finding\{ path = p,\n        message = \"bad \{x[\"k\"]}\",\n        fix = FIX };\n}\n";
+    assert\equal(judge("a.buzz", src: src).len(), want: 0, message: support\messages(judge("a.buzz", src: src)).join("; "));
+}
+
+test "a literal missing its fix, or with an empty one, fails at its line" {
+    final got = judge("a.buzz", src: "fun f() > void \{\n    _ = Finding\{ path = p, message = \"m\" };\n    _ = Finding\{ message = \"m\", fix = \"\" };\n}\n");
+    assert\equal(got.len(), want: 2, message: support\messages(got).join("; "));
+    assert\equal(got[0].line, want: 2, message: "first literal");
+    assert\equal(got[1].line, want: 3, message: "second literal");
+}
+
+test "a literal with neither names both" {
+    final got = judge("a.buzz", src: "final x = Finding\{ path = \"p\" };\n");
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].message.indexOf("no message and no fix") != null, want: true, message: got[0].message);
+}
+
+test "a literal inside a test block is skipped" {
+    final src = "test \"t\" \{\n    final want = [Finding\{ path = \"a\" }];\n    if (true) \{ _ = want; }\n}\nfinal y = Finding\{ path = \"b\" };\n";
+    final got = judge("a.buzz", src: src);
+    assert\equal(got.len(), want: 1, message: support\messages(got).join("; "));
+    assert\equal(got[0].line, want: 5, message: "only the literal after the test");
+}
+
+test "a field name inside a string does not count as the field" {
+    final got = judge("a.buzz", src: "final z = Finding\{ path = \"fix = x\", message = \"m\" };\n");
+    assert\equal(got.len(), want: 1, message: "fix appears only inside the path string");
+}

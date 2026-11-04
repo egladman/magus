@@ -103,7 +103,8 @@ export fun check(files: [Path]) > [Finding] !> any {
     final slot = delay[2] ?? 0;
     if (slot == 0) {
         found.append(Finding{ path = STYLES, line = firstRule,
-            message = "span 2 has no animation-delay; cannot derive the slot length" });
+            message = "span 2 has no animation-delay; cannot derive the slot length",
+            fix = "Give .landing-rotate:nth-child(2) an animation-delay of minus one slot." });
         return found;
     }
     foreach (i in 2..headlines + 1) {
@@ -115,7 +116,8 @@ export fun check(files: [Path]) > [Finding] !> any {
         }
     }
     if (durationSeconds == null) {
-        found.append(Finding{ path = STYLES, message = "no landing-rotate animation duration" });
+        found.append(Finding{ path = STYLES, message = "no landing-rotate animation duration",
+            fix = "Declare `animation: landing-rotate <headlines * slot>s` on the rotator spans." });
     } else if (durationSeconds! != headlines * slot) {
         found.append(Finding{ path = STYLES, line = durationLine,
             message = "landing-rotate runs {durationSeconds!}s for {headlines} headlines at {slot}s a slot",

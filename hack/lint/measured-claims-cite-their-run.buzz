@@ -1,0 +1,83 @@
+// measured-claims-cite-their-run refuses an unreleased change note that claims
+// a measured gain without linking the run behind it. A claim is a paragraph
+// with a figure and a comparison such as "down from" or "faster".
+//
+// Tier 1, mechanical: the fix is an output ref or a link, or no figure.
+namespace measuredclaims;
+
+import "assert";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final FIGURE = std\pattern("\\d+(\\.\\d+)?\\s?(ms|us|ns|s|min|h|x|KiB|MiB|GiB|KB|MB|GB)\\b|\\d+(\\.\\d+)?%");
+final COMPARISON = std\pattern("(?i)\\b(down from|up from|before and|faster|slower|fewer|\\d+x)\\b");
+final CITATION = std\pattern("\\bout[0-9a-f]\{12}\\b|\\]\\(|https?://");
+
+export fun reads() > [str] {
+    return ["changes/unreleased/*.md"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (!f.value.startsWith("changes/unreleased/") or !f.value.endsWith(".md")) {
+            continue;
+        }
+        foreach (finding in judge(f.value, src: support\read(f))) {
+            found.append(finding);
+        }
+    }
+    return found;
+}
+
+// judge is each finding for the change note at path whose text is src. A blank
+// line, a heading or a list item starts a paragraph.
+export fun judge(path: str, src: str) > [Finding] {
+    final found = mut [<Finding>];
+    final lines = src.split("\n");
+    var start = 0;
+    var paragraph = mut [<str>];
+    foreach (i, line in lines + [""]) {
+        if (line.trim() == "" or line.startsWith("- ") or line.startsWith("#")) {
+            final text = paragraph.join(" ").trim();
+            if (claims(text)) {
+                found.append(Finding{ path = path, line = start + 1,
+                    message = "a measured claim with no run behind it: {text}",
+                    fix = "Link the run's output ref (out<hash>) or the measurement, or drop the figure." });
+            }
+            start = i;
+            paragraph = mut [<str>];
+        }
+        paragraph.append(line.trim());
+    }
+    return found;
+}
+
+fun claims(text: str) > bool {
+    return FIGURE.match(text) != null and COMPARISON.match(text) != null and CITATION.match(text) == null;
+}
+
+test "a figure compared to its old value with no ref fails at its item" {
+    final src = "### Changed\n\n- **Faster.** The hook answers in about 120ms per call,\n  down from about 1.6s.\n";
+    final got = judge("changes/unreleased/a.md", src: src);
+    assert\equal(got.len(), want: 1, message: support\messages(got).join("; "));
+    assert\equal(got[0].line, want: 3, message: "the item line");
+}
+
+test "a cited claim passes, by output ref or by link" {
+    final ref = "- `magus ls` took 1.45s before and 0.11s after (out0123456789ab).\n";
+    final link = "- Builds are 3x faster ([benchmark](../../docs/bench.md)).\n";
+    assert\equal(judge("a.md", src: ref).len(), want: 0, message: "output ref");
+    assert\equal(judge("a.md", src: link).len(), want: 0, message: "link");
+}
+
+test "a figure that is a setting, not a claimed gain, passes" {
+    final src = "- **A guard check answers within 7s.** The blob download gets a 300s bound instead of 30s.\n";
+    assert\equal(judge("a.md", src: src).len(), want: 0, message: support\messages(judge("a.md", src: src)).join("; "));
+}
+
+test "each list item is judged on its own" {
+    final src = "- Runs are faster now.\n- The cap is 512 MiB.\n";
+    assert\equal(judge("a.md", src: src).len(), want: 0, message: "the comparison and the figure sit in different items");
+}
