@@ -297,7 +297,7 @@ func TestGradeLeasedWriteCorruptLedger(t *testing.T) {
 	assert.NotEqual(t, "deny", got.Decision, "a job store magus cannot read must never block an edit")
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "could not be read")
-	assert.Contains(t, got.Context, `magus\job`, "the advisory must name the tool that re-declares the plan")
+	assert.Contains(t, got.Context, `magus\workspace().putJob`, "the advisory must name the tool that re-declares the plan")
 }
 
 func TestGradeLeasedWriteSaysAnUnresolvedCache(t *testing.T) {
