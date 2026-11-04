@@ -186,7 +186,7 @@ A check the machine would not seat has no ref: set "output_ref": "" and "owed": 
 
 The other half's file is listed as somebody else's, and the check is unmet because
 no run has been filed. The `net lines` line and the two under it measure her diff so far,
-which is empty: they report, and never decide whether the job passes. She edits `total.sh` and runs the check:
+which is empty: they report, and never decide whether the job passes. She edits `total.sh`, commits it in her worktree before filing, and runs the check:
 
 ```sh
 magus run test .
@@ -265,7 +265,7 @@ refactor/pricing  shop-pricing  pass       standard  1      alone     magus run 
 refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
 not merged onto main: 1
-  refactor/pricing at 58d5e2c: ~/src/shop-pricing holds 1 uncommitted path(s), first pricing/total.sh; commit them in ~/src/shop-pricing, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
+  refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
