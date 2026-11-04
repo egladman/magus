@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -77,25 +78,44 @@ func Build(ctx context.Context, cacheDir string, opts BuildOptions, in Inputs, l
 // Ensure brings every class in want up to date and returns the default graph: the
 // non-lazy shards merged in shard-name order. A class whose stored stamp matches
 // opts.Stamps is answered from the store without assembly; the rest are reassembled from
-// the Inputs gather returns. gather is called at most once, with the stale classes, so a
+// the Inputs gather returns. gather is called at most once per pass, with the stale classes, so a
 // caller gathers only what those classes read; it is not called at all when every class
 // is current, which is the steady state of a read.
 //
 // The graph is the same whichever path produced each class: stored shards are checked
 // against the manifest's fingerprints, and assembled ones are merged in the order Load
 // reads the store in.
+//
+// A shard rewritten under the manifest restarts the read once from a fresh
+// manifest, and gather is called again. A store still moving on the second
+// pass fails.
 func Ensure(ctx context.Context, cacheDir string, opts BuildOptions, want []ShardClass, gather func(stale []ShardClass) (Inputs, error), log *slog.Logger) (*Graph, error) {
 	e := &ensureRun{
 		store: NewStore(cacheDir, opts.Immutable, opts.MaxBytes, opts.Remote, log),
 		opts:  opts,
 	}
-	e.man = e.store.readManifestOrNil()
-	if opts.FastStampsFunc != nil {
-		// Over the reads the last evaluation recorded: the environment and files its top
-		// levels consulted are inputs of the declarations the shards hold, so a stamp
-		// that stands for "that evaluation still holds" folds their current values.
-		e.opts.FastStamps = opts.FastStampsFunc(ctx, e.man.reads(), e.man.readsKnown())
+	e.readManifest(ctx)
+	g, err := e.pass(ctx, want, gather)
+	if errors.Is(err, errShardMoved) {
+		e.readManifest(ctx)
+		g, err = e.pass(ctx, want, gather)
 	}
+	return g, err
+}
+
+func (e *ensureRun) readManifest(ctx context.Context) {
+	e.man = e.store.readManifestOrNil()
+	if e.opts.FastStampsFunc != nil {
+		// The last evaluation recorded reads. The environment and files its
+		// top levels consulted are inputs of the shards' declarations, so
+		// the stamp folds their current values.
+		e.opts.FastStamps = e.opts.FastStampsFunc(ctx, e.man.reads(), e.man.readsKnown())
+	}
+}
+
+// pass is one read of the store against e.man.
+func (e *ensureRun) pass(ctx context.Context, want []ShardClass, gather func(stale []ShardClass) (Inputs, error)) (*Graph, error) {
+	opts := e.opts
 
 	// The fast stamps settle what they can first, so a read whose tree, binary,
 	// configuration and recorded reads are as they were at the last sync never pays for

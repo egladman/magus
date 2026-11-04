@@ -2,7 +2,6 @@ package knowledge
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -97,21 +96,9 @@ func (s *Store) recordPathIDs(ctx context.Context, shards []Shard, fps map[strin
 // storedPathIDs returns the file and dir node IDs of every stored shard whose class is
 // not in skip, from the path ID index where it is current and from the shard file otherwise.
 //
-// A shard rewritten after man was read restarts the walk once from a fresh
-// manifest. A store still moving on the second pass fails.
+// A shard rewritten after man was read fails with errShardMoved. Ensure
+// restarts the whole read, since it merges shards it read against man.
 func (s *Store) storedPathIDs(ctx context.Context, man *manifest, skip []ShardClass) (map[string]bool, error) {
-	out, err := s.walkStoredPathIDs(ctx, man, skip)
-	if !errors.Is(err, errShardMoved) {
-		return out, err
-	}
-	fresh := s.readManifestOrNil()
-	if fresh == nil {
-		return nil, err
-	}
-	return s.walkStoredPathIDs(ctx, fresh, skip)
-}
-
-func (s *Store) walkStoredPathIDs(ctx context.Context, man *manifest, skip []ShardClass) (map[string]bool, error) {
 	out := map[string]bool{}
 	if man == nil {
 		return out, nil
