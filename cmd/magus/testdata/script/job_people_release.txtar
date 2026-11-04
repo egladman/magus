@@ -25,6 +25,7 @@ exec git worktree add -q ../notes
 cd ../changelog
 exec magus job exec release-1.3/changelog
 cp $WORK/CHANGELOG.md CHANGELOG.md
+exec git commit -q -am 'add 1.3 changelog entry'
 stdin $WORK/changelog.json
 exec magus job exit release-1.3/changelog --stdin
 
@@ -86,7 +87,7 @@ release-1.3/changelog  changelog  exited  standard  1      alone     -
 release-1.3/notes      notes      exited  standard  1      disjoint  -
 
 not merged onto main: 1
-  release-1.3/changelog at 5f6b136: ~/src/changelog holds 1 uncommitted path(s), first CHANGELOG.md; commit them in ~/src/changelog, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
+  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
 unresolved risks, which stop nothing: 1
   release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
@@ -111,7 +112,7 @@ release-1.3/changelog  changelog  pass     standard  1      alone     -
 release-1.3/notes      notes      running  standard  1      disjoint  -
 
 not merged onto main: 1
-  release-1.3/changelog at 5f6b136: ~/src/changelog holds 1 uncommitted path(s), first CHANGELOG.md; commit them in ~/src/changelog, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
+  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
 unresolved risks, which stop nothing: 1
   release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

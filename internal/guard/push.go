@@ -4,18 +4,25 @@ import (
 	"bufio"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"go/build"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -70,6 +77,9 @@ const (
 	// their scope, and no branch verdict. It reads as project scope.
 	// compat: see sessions.GateScope.Unscoped.
 	gateUnscoped
+	// gateNarrow is no passing gate at this commit, and passing narrow runs
+	// covering every file changed since the last one (narrowCoverageAt).
+	gateNarrow
 )
 
 // gateCoverageAt reads the run log for gate invocations built from commit.
@@ -272,17 +282,17 @@ func askUnrenderedDeny(subject string) string {
 	return fmt.Sprintf("this hook predates approval prompts and cannot ask about %s; merge what `magus describe harness` prints.", subject)
 }
 
-// gradePushWithoutGate is the verdict for a push at commit when no green gate covers it:
-// "deny" for every session and "" when a gate covers the commit or the question could not
-// be asked. The root is refused too: asking it let two pull requests out with no local
-// gate. A leased worker's text also sends the commit to the orchestrator.
-func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, reason string) {
+// gradePushWithoutGate is "deny" for a push nothing covers, whoever pushes, and
+// "" otherwise. Asking the root let two pull requests out ungated. A worker's
+// refusal also sends the commit to the orchestrator.
+func gradePushWithoutGate(ev pushEvidence, lease string) (decision, reason string) {
+	cover, commit := ev.cover, ev.commit
 	var state string
 	switch cover {
 	// Unknown passes. This rule refuses on evidence or not at all: no run log, no VCS, or a
 	// host magus cannot read the revision from all mean the question was never asked, and
 	// a refusal there is one nobody can clear.
-	case gateUnknown, gatePassed, gateWaived:
+	case gateUnknown, gatePassed, gateWaived, gateNarrow:
 		return "", ""
 	case gateAbsent:
 		state = "no `" + string(types.TargetCI) + "` run is recorded at this commit"
@@ -299,7 +309,8 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 	if cover == gateIncomplete {
 		head += "That run is still going or it was killed.\n"
 	}
-	gate := fmt.Sprintf("Run `%s`, then `%s`, commit what it regenerates, and push again. CI runs the identical command on the identical tree, so a red push pays twice for one answer.",
+	head += ev.narrow.shortfall()
+	gate := fmt.Sprintf("Or run `%s`, then `%s`, commit what it regenerates, and push again. CI runs the identical command on the identical tree, so a red push pays twice for one answer.",
 		hint.Status.With("--wait"), hint.Affected.With(string(types.TargetCI)))
 	if lease != "" {
 		return decisionDeny, fmt.Sprintf("%sThis session is bound to job %s, and workers do not publish: report the commit to the orchestrator that holds the branch.\n%s", head, lease, gate)
@@ -315,43 +326,80 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 const movedPushReason = "this line pushes after a command that changes what is pushed: run that command on its own, then push in a separate call.\n" +
 	"A commit, merge, rebase, reset or the like moves the revision after the gate is matched to it; the separate push is graded at the real HEAD."
 
-// pushCoverage is what the gate record says about the revision the push on command
-// publishes, read in the checkout that push runs in, and that revision. gateUnknown when
-// the line relocates the push somewhere this cannot name, so the push keeps its advisory:
-// refusing it would grade a tree nobody proved it publishes. moved reports a push whose
-// line moves the revision first (movedPushReason), and then commit is "". waiver is the
-// person's waiver when cover is gateWaived.
-func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) (cover gateCoverage, commit string, moved bool, replay sessions.GateRecord, waiver types.GateWaiver) {
+// pushEvidence is what the stores say about the revision a push publishes.
+type pushEvidence struct {
+	cover  gateCoverage
+	commit string
+	// moved is a line that moves the revision before it pushes; commit is
+	// then "".
+	moved bool
+	// replay is the gate on the identical tree that covers a replayed commit.
+	replay sessions.GateRecord
+	waiver types.GateWaiver
+	// narrow is weighed only when nothing else covers the commit and no
+	// gate failed there.
+	narrow narrowCoverage
+}
+
+// admitted says why a passing push went out with no `ci` verdict at its
+// commit, "" when one covers it or the push is refused.
+func (ev pushEvidence) admitted() string {
+	if ev.moved {
+		return ""
+	}
+	switch {
+	case ev.replay.Inv != "":
+		return fmt.Sprintf("magus workspace: %s is covered by `%s` at %s on the identical tree (%s).", ev.commit, types.TargetCI, ev.replay.Commit, gateRunRef(ev.replay))
+	case ev.cover == gateWaived:
+		return waiverNote(ev.commit, ev.waiver)
+	case ev.cover == gateNarrow:
+		return ev.narrow.admission(ev.commit)
+	}
+	return ""
+}
+
+// pushCoverage is what the stores say about the revision the push on command
+// publishes, read in the checkout it runs in. It is gateUnknown when the line
+// relocates the push somewhere this cannot name.
+func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) pushEvidence {
 	push, located := locatePush(command, d, cwd)
 	if !located {
-		return gateUnknown, "", false, replay, waiver
+		return pushEvidence{}
 	}
 	at := hook
 	if push.relocated {
 		at = hookLocationAt(deps, push.dir)
 	}
-	commit = deps.revision(ctx, push.dir, push.rev)
-	cover = gateVerdictAt(at.workspace, commit)
-	if cover == gateUnknown {
-		cover = gateCoverageAt(workspaceRunsDir(at.cacheDir), commit)
+	ev := pushEvidence{commit: deps.revision(ctx, push.dir, push.rev)}
+	ev.cover = gateVerdictAt(at.workspace, ev.commit)
+	if ev.cover == gateUnknown {
+		ev.cover = gateCoverageAt(workspaceRunsDir(at.cacheDir), ev.commit)
 	}
 	// A replay (cherry-pick, rebase) mints new commits over a tree a gate already passed.
-	if cover != gatePassed {
-		if rec, replayed := gateReplayAt(ctx, at.workspace, cmp.Or(push.dir, at.workspace), commit); replayed {
-			cover, replay = gatePassed, rec
+	if ev.cover != gatePassed {
+		if rec, replayed := gateReplayAt(ctx, at.workspace, cmp.Or(push.dir, at.workspace), ev.commit); replayed {
+			ev.cover, ev.replay = gatePassed, rec
 		}
 	}
-	if cover != gatePassed && cover != gateUnknown {
-		if w, waived := gateWaiverAt(at, commit); waived {
-			cover, waiver = gateWaived, w
+	if ev.cover != gatePassed && ev.cover != gateUnknown {
+		if w, waived := gateWaiverAt(at, ev.commit); waived {
+			ev.cover, ev.waiver = gateWaived, w
+		}
+	}
+	// A failed gate here is a red verdict that no narrow pass outweighs.
+	switch ev.cover {
+	case gateAbsent, gateIncomplete, gateProjectScoped, gateUnscoped:
+		ev.narrow = narrowCoverageAt(ctx, deps, at, cmp.Or(push.dir, at.workspace), ev.commit)
+		if ev.narrow.covers() {
+			ev.cover = gateNarrow
 		}
 	}
 	// Only a question that could be asked becomes a refusal: a fresh clone or a host with
 	// no run log still has nothing to prove.
-	if cover != gateUnknown && revisionMovesBeforePush(command, d, cwd) {
-		return cover, "", true, replay, waiver
+	if ev.cover != gateUnknown && revisionMovesBeforePush(command, d, cwd) {
+		ev.commit, ev.moved = "", true
 	}
-	return cover, commit, false, replay, waiver
+	return ev
 }
 
 // revisionMovesBeforePush reports a push on command that runs after a command that changes
@@ -934,4 +982,370 @@ func pushedRev(args []*syntax.Word) string {
 		return ""
 	}
 	return src
+}
+
+// narrowCoverage is what passing runs short of the gate say about the files a
+// push changes since its newest gated ancestor.
+type narrowCoverage struct {
+	// weighed is set once the changed files were read against the runs, and
+	// unread says why they could not be.
+	weighed bool
+	unread  string
+	// since is the newest ancestor with a passing `ci` when gated, else the
+	// base ref the merge base is taken with.
+	since     string
+	gated     bool
+	changed   []string
+	hostless  []hostlessFile
+	uncovered []uncoveredFile
+}
+
+// hostlessFile is a changed Go file this host does not build.
+type hostlessFile struct{ path, builtOn string }
+
+// uncoveredFile is a changed file no passing run covers, and runs that would.
+type uncoveredFile struct {
+	path string
+	runs []string
+}
+
+func (n narrowCoverage) covers() bool {
+	return n.weighed && n.unread == "" && len(n.uncovered) == 0
+}
+
+func (n narrowCoverage) from() string {
+	if n.gated {
+		return fmt.Sprintf("%s, the newest ancestor a passing `%s` covers", n.since, types.TargetCI)
+	}
+	return fmt.Sprintf("the merge base with %s, since no ancestor has a passing `%s`", n.since, types.TargetCI)
+}
+
+func (n narrowCoverage) admission(commit string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "magus workspace: %s goes out on narrow runs: a passing run of a target that reads it covers each of the %d files this host builds that changed since %s.",
+		commit, len(n.changed)-len(n.hostless), n.from())
+	for _, h := range n.hostless {
+		fmt.Fprintf(&b, "\n%s: built only on %s; left to CI.", h.path, h.builtOn)
+	}
+	return b.String()
+}
+
+// shortfall is the refusal's account of the narrow runs, "" when none were
+// weighed.
+func (n narrowCoverage) shortfall() string {
+	switch {
+	case n.unread != "":
+		return fmt.Sprintf("Narrow runs were not weighed: %s.\n", n.unread)
+	case !n.weighed:
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "No passing run covers %d of the %d files changed since %s:\n", len(n.uncovered), len(n.changed), n.from())
+	for _, u := range n.uncovered {
+		if len(u.runs) == 0 {
+			fmt.Fprintf(&b, "  %s: no target this workspace has run or names reads it, so only `%s` covers it\n", u.path, hint.Affected.With(string(types.TargetCI)))
+			continue
+		}
+		fmt.Fprintf(&b, "  %s: run `%s`\n", u.path, strings.Join(u.runs, "` or `"))
+	}
+	for _, h := range n.hostless {
+		fmt.Fprintf(&b, "  %s: built only on %s; left to CI\n", h.path, h.builtOn)
+	}
+	b.WriteString("Run those and push again.\n")
+	return b.String()
+}
+
+// narrowCoverageAt weighs the passing runs the checkout's output store holds
+// against each file commit changed since its newest gated ancestor, else since
+// the merge base. dir is the checkout the push runs in.
+func narrowCoverageAt(ctx context.Context, deps Dependencies, at location, dir, commit string) narrowCoverage {
+	if deps.Inspect == nil || at.workspace == "" || at.cacheDir == "" || !matchableRevision(commit) {
+		return narrowCoverage{unread: "this caller cannot open the workspace or its output store"}
+	}
+	res, err := vcs.Resolve(ctx, dir, "", deps.VCS)
+	if err != nil || res.VCS == nil {
+		return narrowCoverage{unread: "no version control answers what the push changes"}
+	}
+	root, err := res.VCS.Root(ctx, dir)
+	if err != nil {
+		return narrowCoverage{unread: fmt.Sprintf("the checkout root is unread: %v", err)}
+	}
+	n := narrowCoverage{since: res.Base}
+	if gated, ok := lastGatedAncestor(ctx, res.VCS, at.workspace, dir, commit); ok {
+		n.since, n.gated = gated, true
+	}
+	changed, err := res.VCS.RangeFiles(ctx, dir, n.since, commit, nil)
+	if err != nil {
+		return narrowCoverage{unread: fmt.Sprintf("the files changed since %s are unread: %v", n.since, err)}
+	}
+	ws, err := deps.inspect(ctx, at.workspace)
+	if err != nil {
+		return narrowCoverage{unread: fmt.Sprintf("the workspace did not open, so no target's inputs are known: %v", err)}
+	}
+	runs, err := cache.NewOutputStore(at.cacheDir).ListDescriptors()
+	if err != nil {
+		return narrowCoverage{unread: fmt.Sprintf("the output store is unread: %v", err)}
+	}
+	ev := runEvidence{
+		driver: res.VCS, root: realPath(root), workspace: realPath(at.workspace), ws: ws, runs: runs, commit: commit,
+		files: map[string]fileAt{}, revisions: map[string]bool{},
+	}
+	n.weighed, n.changed = true, changed
+	for _, file := range changed {
+		if on, ok := hostlessGo(filepath.Join(ev.root, filepath.FromSlash(file))); ok {
+			n.hostless = append(n.hostless, hostlessFile{path: file, builtOn: on})
+			continue
+		}
+		if !ev.covered(ctx, file) {
+			n.uncovered = append(n.uncovered, uncoveredFile{path: file, runs: ev.wouldCover(file)})
+		}
+	}
+	return n
+}
+
+// lastGatedAncestor is the newest recorded commit with a passing branch `ci`
+// that commit descends from.
+func lastGatedAncestor(ctx context.Context, driver types.VCSDriver, workspace, dir, commit string) (string, bool) {
+	store, err := sessions.Dir(workspace)
+	if err != nil {
+		return "", false
+	}
+	fold, err := sessions.ReadGateResults(store)
+	if err != nil {
+		return "", false
+	}
+	seen := map[string]bool{}
+	for i := len(fold.Records) - 1; i >= 0 && len(seen) < gateReplayScanLimit; i-- {
+		rec := fold.Records[i]
+		var g sessions.GateResult
+		if rec.Kind != sessions.KindGateResult || json.Unmarshal(rec.Payload, &g) != nil {
+			continue
+		}
+		if g.Target != string(types.TargetCI) || g.Outcome != sessions.OutcomePass || !g.Scope.CoversBranch() || g.Commit == "" || seen[g.Commit] {
+			continue
+		}
+		seen[g.Commit] = true
+		if ok, err := driver.IsAncestor(ctx, dir, g.Commit, commit); err == nil && ok {
+			return g.Commit, true
+		}
+	}
+	return "", false
+}
+
+// runEvidence matches the checkout's recorded runs to the files a push changes.
+type runEvidence struct {
+	driver types.VCSDriver
+	// root is the checkout's top level and workspace the workspace inside it,
+	// both with symlinks resolved.
+	root, workspace string
+	ws              types.WorkspaceRepository
+	runs            []cache.OutputDescriptor
+	commit          string
+	files           map[string]fileAt
+	revisions       map[string]bool
+}
+
+// fileAt is one file at one revision; known is false when the revision is not
+// in the repository.
+type fileAt struct {
+	body           string
+	present, known bool
+}
+
+// covered reports a passing run of a target whose inputs hold file that read
+// it as commit holds it. file is repository-relative.
+func (ev *runEvidence) covered(ctx context.Context, file string) bool {
+	rel, inside := ev.workspacePath(file)
+	if !inside {
+		return false
+	}
+	for _, d := range ev.runs {
+		if !d.Failed && ev.reads(d, rel, true) && ev.readAsCommit(ctx, file, d) {
+			return true
+		}
+	}
+	return false
+}
+
+// wouldCover names at most three runs that would cover file: targets this
+// store ran over it, else magusfile targets whose inputs hold it.
+func (ev *runEvidence) wouldCover(file string) []string {
+	rel, inside := ev.workspacePath(file)
+	if !inside {
+		return nil
+	}
+	var out []string
+	add := func(command string) {
+		if len(out) < 3 && !slices.Contains(out, command) {
+			out = append(out, command)
+		}
+	}
+	for _, d := range ev.runs {
+		if !ev.reads(d, rel, false) {
+			continue
+		}
+		target := bareTarget(d.Target)
+		if len(ev.namedPaths(d)) > 0 {
+			add(hint.Run.With(target, d.Project, "--", projectRelative(d.Project, rel)))
+		} else {
+			add(hint.Run.With(target, d.Project))
+		}
+	}
+	for _, p := range ev.ws.All() {
+		for _, target := range p.MagusfileTargets {
+			if target != string(types.TargetCI) && footprintHolds(p, target, rel) {
+				add(hint.Run.With(target, p.Path))
+			}
+		}
+	}
+	return out
+}
+
+// workspacePath is file, repository-relative, relative to the workspace.
+func (ev *runEvidence) workspacePath(file string) (string, bool) {
+	prefix, err := filepath.Rel(ev.root, ev.workspace)
+	if err != nil {
+		return "", false
+	}
+	if prefix = filepath.ToSlash(prefix); prefix == "." {
+		return file, true
+	}
+	return strings.CutPrefix(file, prefix+"/")
+}
+
+// reads reports whether run d's target declares rel among its inputs. scoped
+// also holds a file-scoped run to the paths it named.
+func (ev *runEvidence) reads(d cache.OutputDescriptor, rel string, scoped bool) bool {
+	p := ev.ws.Get(d.Project)
+	if p == nil || d.Target == "" || !footprintHolds(p, types.Normalize(bareTarget(d.Target)), rel) {
+		return false
+	}
+	named := ev.namedPaths(d)
+	if !scoped || len(named) == 0 {
+		return true
+	}
+	return slices.ContainsFunc(named, func(n string) bool { return n == rel || strings.HasPrefix(rel, n+"/") })
+}
+
+// namedPaths are the workspace paths run d's forwarded args name, read
+// against its project and then the workspace. None means the run is not
+// file-scoped: `-run Push` names no path.
+func (ev *runEvidence) namedPaths(d cache.OutputDescriptor) []string {
+	var out []string
+	for _, arg := range d.ExtraArgs {
+		if arg == "" || strings.HasPrefix(arg, "-") {
+			continue
+		}
+		for _, c := range []string{path.Join(d.Project, arg), path.Clean(arg)} {
+			if !filepath.IsLocal(filepath.FromSlash(c)) {
+				continue
+			}
+			if _, err := os.Lstat(filepath.Join(ev.workspace, filepath.FromSlash(c))); err == nil {
+				out = append(out, c)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// readAsCommit reports whether run d read file as commit holds it. A clean
+// run is compared at its revision. A dirty run needs the tree to hold commit's
+// file, unwritten since the run started.
+func (ev *runEvidence) readAsCommit(ctx context.Context, file string, d cache.OutputDescriptor) bool {
+	want := ev.at(ctx, ev.commit, file)
+	if !want.known {
+		return false
+	}
+	if d.Revision != "" && !d.Dirty {
+		return ev.at(ctx, d.Revision, file) == want
+	}
+	started := time.UnixMilli(d.TimestampMs - d.DurationMs)
+	full := filepath.Join(ev.root, filepath.FromSlash(file))
+	info, err := os.Lstat(full)
+	if errors.Is(err, fs.ErrNotExist) {
+		// A deletion dates only its directory.
+		dir, err := os.Lstat(filepath.Dir(full))
+		return !want.present && err == nil && !dir.ModTime().After(started)
+	}
+	if err != nil || !want.present || info.ModTime().After(started) {
+		return false
+	}
+	body, err := os.ReadFile(full)
+	return err == nil && string(body) == want.body
+}
+
+func (ev *runEvidence) at(ctx context.Context, rev, file string) fileAt {
+	key := fmt.Sprintf("%s\x00%s", rev, file)
+	if got, ok := ev.files[key]; ok {
+		return got
+	}
+	known, asked := ev.revisions[rev]
+	if !asked {
+		_, err := ev.driver.FindCommit(ctx, ev.root, rev)
+		known = err == nil
+		ev.revisions[rev] = known
+	}
+	got := fileAt{}
+	if known {
+		// ReadFileAt errs on a path the revision lacks.
+		body, err := ev.driver.ReadFileAt(ctx, ev.root, rev, file)
+		got = fileAt{body: body, present: err == nil, known: true}
+	}
+	ev.files[key] = got
+	return got
+}
+
+// footprintHolds reports whether target's source footprint in p holds rel. It
+// copies job.targetSources, which internal/job keeps unexported.
+func footprintHolds(p *types.Project, target, rel string) bool {
+	if refs := p.TargetInputs[target]; len(refs) > 0 {
+		return slices.ContainsFunc(refs, func(r types.InputRef) bool { return r.Rooted(p.Path).Match(rel) })
+	}
+	return slices.ContainsFunc(p.Sources, func(g types.Glob) bool { return g.Root(p.Path).Match(rel) })
+}
+
+// bareTarget strips the charms a stored run's target carries (`lint:rw`).
+func bareTarget(stored string) string {
+	name, _, _ := strings.Cut(stored, ":")
+	return name
+}
+
+// projectRelative is rel, workspace-relative, as project's args read it.
+func projectRelative(project, rel string) string {
+	if project == "." {
+		return rel
+	}
+	return strings.TrimPrefix(rel, project+"/")
+}
+
+// hostlessGo reports a Go file this host's toolchain leaves out, by file name
+// or build constraint, and the platforms that build it.
+func hostlessGo(full string) (string, bool) {
+	if !strings.HasSuffix(full, ".go") {
+		return "", false
+	}
+	dir, name := filepath.Split(full)
+	if built, err := build.Default.MatchFile(dir, name); err != nil || built {
+		return "", false
+	}
+	var on []string
+	for _, goos := range knownGOOS {
+		c := build.Default
+		c.GOOS = goos
+		if built, err := c.MatchFile(dir, name); err == nil && built {
+			on = append(on, goos)
+		}
+	}
+	if len(on) == 0 {
+		return fmt.Sprintf("a platform other than %s/%s", runtime.GOOS, runtime.GOARCH), true
+	}
+	return strings.Join(on, ", "), true
+}
+
+// knownGOOS are the operating systems hostlessGo names; go/build keeps its
+// own list unexported.
+var knownGOOS = []string{
+	"aix", "android", "darwin", "dragonfly", "freebsd", "illumos", "ios", "js",
+	"linux", "netbsd", "openbsd", "plan9", "solaris", "wasip1", "windows",
 }

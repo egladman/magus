@@ -40,6 +40,7 @@ exec magus describe job refactor/pricing
 cmp stdout $WORK/describe.out
 
 cp $WORK/total.sh pricing/total.sh
+exec git commit -q -am 'compute totals in cents'
 exec magus run test .
 stderr '^ref  out[0-9a-f]{12}$'
 exec sh -c 'ref=$(magus run test . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" "$WORK/result.in.json" > "$WORK/result.json"'
@@ -180,5 +181,5 @@ refactor/pricing  shop-pricing  pass       standard  1      alone     magus run 
 refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
 not merged onto main: 1
-  refactor/pricing at 58d5e2c: ~/src/shop-pricing holds 1 uncommitted path(s), first pricing/total.sh; commit them in ~/src/shop-pricing, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
+  refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

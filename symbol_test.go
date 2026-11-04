@@ -412,7 +412,7 @@ func TestFreshenInsideATargetReindexesThroughTheOuterRun(t *testing.T) {
 			if req.Target != "lint" {
 				return nil, nil
 			}
-			freshenErr = m.freshenSymbolIndexes(ctx, []string{"."})
+			freshenErr = m.freshenSymbolIndexes(ctx, []string{"."}, nil)
 			seen = freshness(t, m)
 			return nil, nil
 		}),
@@ -434,8 +434,21 @@ func TestFreshenOutsideARunReindexesThroughItsOwnRun(t *testing.T) {
 	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Added() {}\n"), 0o644))
 	require.Equal(t, types.SymbolIndexStale, freshness(t, m))
 
-	require.NoError(t, m.freshenSymbolIndexes(context.Background(), []string{"."}))
+	require.NoError(t, m.freshenSymbolIndexes(context.Background(), []string{"."}, nil))
 	assert.Equal(t, types.SymbolIndexFresh, freshness(t, m))
+}
+
+func TestFreshenLeavesIndexesOfOtherLanguagesAlone(t *testing.T) {
+	indexerOnPath(t)
+	m, src := newIndexedWorkspace(t)
+	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Added() {}\n"), 0o644))
+	require.Equal(t, types.SymbolIndexStale, freshness(t, m))
+
+	require.NoError(t, m.freshenSymbolIndexes(context.Background(), []string{"."}, []string{"typescript"}))
+	assert.Equal(t, types.SymbolIndexStale, freshness(t, m), "a Go index is not built for a reader of TypeScript")
+
+	require.NoError(t, m.freshenSymbolIndexes(context.Background(), []string{"."}, []string{"go"}))
+	assert.Equal(t, types.SymbolIndexFresh, freshness(t, m), "the named language is built")
 }
 
 func TestSymbolIndexerExecuteYieldNoBackoff(t *testing.T) {
@@ -482,6 +495,7 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 	version := "1.0.0"
 	spellName := register.Spell(t, "zzz-scip-freshness-test-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
+		spells.WithLanguage("go"),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: indexerBin}}),
 		spells.WithOps(map[string]spells.Op{
 			spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: indexerBin}},
@@ -790,7 +804,7 @@ func (s *magusSuite) TestRefreshBringsAStaleIndexCurrentAndNamesIt() {
 
 	got := m.RefreshSymbolIndexes(s.T().Context())
 
-	s.Equal([]string{"."}, got.Refreshed, "the fixture spell declares no language")
+	s.Equal([]string{". (go index)"}, got.Refreshed, "the fixture spell declares go")
 	s.Empty(got.Problems)
 	s.Positive(got.Took)
 	s.Equal(types.SymbolIndexFresh, freshness(s.T(), m))

@@ -85,7 +85,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [policy-unloaded](policy-unloaded.md)                 | a call that changes state while the guard policy that judges it does not load                       |
 | [process-poll](process-poll.md)                       | a process table inspected to wait on magus work the lock already reports                            |
 | [process-signal](process-signal.md)                   | kill, pkill or killall used to signal a process identified only by PID or name                      |
-| [push-ungated](push-ungated.md)                       | a push or `gh pr create` at a commit with no green gate; refused for every session                  |
+| [push-ungated](push-ungated.md)                       | a push or `gh pr create` at a commit no green gate or passing narrow run covers                     |
 | [raw-tool](raw-tool.md)                               | a toolchain command a spell already wraps, run outside the cache                                    |
 | [read-navigation](read-navigation.md)                 | a whole read of a Go, Buzz or Markdown file past the workspace's line limit                         |
 | [read-paging](read-paging.md)                         | a mapped file read window by window, past two windows of it                                         |

@@ -1242,12 +1242,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if defaulted {
 			slog.InfoContext(ctx, fmt.Sprintf("the record names no schema_version, so it was read as version %d", types.JobSchemaVersion), attr.Notice("note"))
 		}
-		// --checkout says where the job runs, so it rides beside a record that names none.
-		switch {
-		case row.Checkout == "":
-			row.Checkout = declared.Checkout
-		case declared.Checkout != "" && filepath.Clean(row.Checkout) != declared.Checkout:
-			return exit.Usagef("magus job fork: --checkout %s and the record's checkout %s name two checkouts: give one", declared.Checkout, row.Checkout)
+		if row.Checkout, err = recordCheckout(row.Checkout, declared.Checkout); err != nil {
+			return err
 		}
 	case len(pos) != 1:
 		return exit.Usagef("magus job fork: requires exactly one job id, or --stdin with a job on it")
@@ -1380,7 +1376,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		followed := !made && priorHead != "" && priorHead != worktree.Base
-		if mirrored != "" && (followed || made && worktree.Binary == "") && job.BuildsItsOwnMagus(worktree.Root) {
+		// An adopted checkout may hold a ./magus built at another commit.
+		stale := !made && !job.BuiltAt(ctx, worktree.Binary, worktree.Base)
+		if mirrored != "" && (followed || stale || made && worktree.Binary == "") && job.BuildsItsOwnMagus(worktree.Root) {
 			reused, err := provisionCheckout(ctx, store, jobWS, mirrored, root, row, worktree)
 			if err != nil {
 				if !made {
@@ -2206,6 +2204,22 @@ func noteForkRowEnded(ctx context.Context, store *job.Store, id string, wasLive 
 	if live, err := store.RowLive(id); err == nil && !live {
 		slog.InfoContext(ctx, fmt.Sprintf("%s ended while this fork ran, so it is judged whole as a new job, not as an update", id), attr.Notice("note"))
 	}
+}
+
+// recordCheckout is the checkout a --stdin record runs in, made absolute.
+// The --checkout flag fills in when the record names none.
+func recordCheckout(fromRecord, fromFlag string) (string, error) {
+	if fromRecord == "" {
+		return fromFlag, nil
+	}
+	abs, err := filepath.Abs(fromRecord)
+	if err != nil {
+		return "", exit.Usagef("magus job fork: the record's checkout: %s", err)
+	}
+	if fromFlag != "" && abs != fromFlag {
+		return "", exit.Usagef("magus job fork: --checkout %s and the record's checkout %s name two checkouts: give one", fromFlag, fromRecord)
+	}
+	return abs, nil
 }
 
 // provisionCheckout readies a checkout the fork made or moved: it reuses a

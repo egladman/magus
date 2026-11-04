@@ -10,10 +10,13 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -44,7 +47,7 @@ func TestGateCoverageReadsTheRunLog(t *testing.T) {
 		dir := t.TempDir()
 		runLog(t, dir, "a.jsonl", "v0.4.3-97-gabc1234-dirty", "pass", "affected", "ci")
 		assert.Equal(t, gatePassed, gateCoverageAt(dir, "abc1234"))
-		decision, _ := gradePushWithoutGate(gateCoverageAt(dir, "abc1234"), "abc1234", "")
+		decision, _ := gradePushWithoutGate(pushEvidence{cover: gateCoverageAt(dir, "abc1234"), commit: "abc1234"}, "")
 		assert.Empty(t, decision)
 	})
 
@@ -60,7 +63,7 @@ func TestGateCoverageReadsTheRunLog(t *testing.T) {
 		dir := t.TempDir()
 		runLog(t, dir, "a.jsonl", "v0.4.3-97-gabc1234", "", "affected", "ci")
 		assert.Equal(t, gateIncomplete, gateCoverageAt(dir, "abc1234"))
-		_, reason := gradePushWithoutGate(gateCoverageAt(dir, "abc1234"), "abc1234", "")
+		_, reason := gradePushWithoutGate(pushEvidence{cover: gateCoverageAt(dir, "abc1234"), commit: "abc1234"}, "")
 		assert.NotContains(t, reason, "RED")
 	})
 
@@ -70,7 +73,7 @@ func TestGateCoverageReadsTheRunLog(t *testing.T) {
 		dir := t.TempDir()
 		runLog(t, dir, "a.jsonl", "v0.4.3-97-gdeadbee", "pass", "affected", "ci")
 		assert.Equal(t, gateAbsent, gateCoverageAt(dir, "abc1234"))
-		decision, _ := gradePushWithoutGate(gateCoverageAt(dir, "abc1234"), "abc1234", "")
+		decision, _ := gradePushWithoutGate(pushEvidence{cover: gateCoverageAt(dir, "abc1234"), commit: "abc1234"}, "")
 		assert.Equal(t, decisionDeny, decision)
 	})
 
@@ -105,7 +108,7 @@ func TestPushGateStandsDownWithNothingToProve(t *testing.T) {
 	} {
 		assert.Equal(t, gateUnknown, cover, name)
 		for _, lease := range []string{"", "harness/worker"} {
-			decision, reason := gradePushWithoutGate(cover, "abc1234", lease)
+			decision, reason := gradePushWithoutGate(pushEvidence{cover: cover, commit: "abc1234"}, lease)
 			assert.Empty(t, decision, "%s must neither ask nor deny (lease %q)", name, lease)
 			assert.Empty(t, reason, name)
 		}
@@ -254,7 +257,7 @@ func TestUngatedPushDeniesTheOrchestrator(t *testing.T) {
 	assert.Contains(t, v.Reason, "no `ci` run is recorded")
 	assert.NotContains(t, v.Reason, "Approving")
 
-	_, full := gradePushWithoutGate(gateAbsent, "abc1234", "")
+	_, full := gradePushWithoutGate(pushEvidence{cover: gateAbsent, commit: "abc1234"}, "")
 	assert.Contains(t, full, "status --wait")
 	assert.Contains(t, full, "affected ci")
 
@@ -319,7 +322,7 @@ func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 	assert.Contains(t, full, "every other version-control verb stays with the orchestrator")
 	assert.NotContains(t, strings.ToLower(full), "say so")
 
-	decision, reason := gradePushWithoutGate(gateAbsent, "abc1234", lease.ID)
+	decision, reason := gradePushWithoutGate(pushEvidence{cover: gateAbsent, commit: "abc1234"}, lease.ID)
 	assert.Equal(t, decisionDeny, decision)
 	assert.Contains(t, reason, lease.ID)
 	assert.Contains(t, reason, "workers do not publish")
@@ -618,8 +621,7 @@ func replayedBranch(t *testing.T) (ctx context.Context, repo *testkit.Repo, gate
 
 func coverageAtPush(ctx context.Context, repo *testkit.Repo, commit string) gateCoverage {
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return commit[:12] }}
-	cover, _, _, _, _ := pushCoverage(ctx, deps, location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}, "git push", DialectBash, repo.Root())
-	return cover
+	return pushCoverage(ctx, deps, location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}, "git push", DialectBash, repo.Root()).cover
 }
 
 func TestPushGateAcceptsAPassingGateOnTheIdenticalTree(t *testing.T) {
@@ -640,9 +642,9 @@ func TestPushCoverageNamesTheReplayedRun(t *testing.T) {
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return replayed[:12] }}
 	at := location{cacheDir: filepath.Join(repo.Root(), ".magus"), workspace: repo.Root()}
 
-	cover, _, _, replay, _ := pushCoverage(ctx, deps, at, "git push", DialectBash, repo.Root())
-	assert.Equal(t, gatePassed, cover)
-	assert.Equal(t, "inv-green", replay.Inv)
+	ev := pushCoverage(ctx, deps, at, "git push", DialectBash, repo.Root())
+	assert.Equal(t, gatePassed, ev.cover)
+	assert.Equal(t, "inv-green", ev.replay.Inv)
 
 	v := Judge(ctx, deps, Request{Input: "git push", RendersAsk: true})
 	assert.Contains(t, v.Context, "run inv-green")
@@ -695,7 +697,7 @@ func (s *GateScopeSuite) TestAProjectPassAloneCoversNoPush() {
 	s.recordAt(repo.Root(), s.projectPass(other))
 
 	s.Equal(gateProjectScoped, coverageAtPush(ctx, repo, other))
-	decision, reason := gradePushWithoutGate(gateProjectScoped, other[:12], "")
+	decision, reason := gradePushWithoutGate(pushEvidence{cover: gateProjectScoped, commit: other[:12]}, "")
 	s.Equal(decisionDeny, decision)
 	s.Contains(reason, "covered named projects, not every project the branch affects")
 }
@@ -722,7 +724,7 @@ func (s *GateScopeSuite) TestAPreScopeVerdictSaysItReadsAsProjectScope() {
 	s.Require().NoError(w.Append(sessions.KindGateResult, map[string]string{"target": "ci", "commit": commit, "outcome": sessions.OutcomePass}))
 
 	s.Equal(gateUnscoped, gateVerdictAt(root, commit[:12]))
-	decision, reason := gradePushWithoutGate(gateUnscoped, commit[:12], "")
+	decision, reason := gradePushWithoutGate(pushEvidence{cover: gateUnscoped, commit: commit[:12]}, "")
 	s.Equal(decisionDeny, decision)
 	s.Contains(reason, "recorded before gate records named their scope, so it reads as project scope")
 }
@@ -735,4 +737,133 @@ func (s *GateScopeSuite) TestARunLogOfAProjectGateCoversNoPush() {
 
 	runLog(s.T(), runs, "b.jsonl", version, "pass", "affected", "ci")
 	s.Equal(gatePassed, gateCoverageAt(runs, "42a1c0cc84b2"))
+}
+
+// NarrowPushSuite pins the push gate admitting narrow runs in place of a
+// local `affected ci`: a branch gated at its first commit, then changed.
+type NarrowPushSuite struct {
+	suite.Suite
+	repo  *testkit.Repo
+	at    location
+	gated string
+	deps  Dependencies
+}
+
+func TestNarrowPushSuite(t *testing.T) { suite.Run(t, new(NarrowPushSuite)) }
+
+func (s *NarrowPushSuite) SetupTest() {
+	testkit.Isolate(s.T())
+	s.repo = testkit.NewRepository(s.T(), map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n"})
+	s.gated = s.repo.Head()
+	s.at = location{cacheDir: filepath.Join(s.repo.Root(), ".magus"), workspace: s.repo.Root()}
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.at.cacheDir, cache.RunsDir), 0o755))
+	project := &types.Project{Path: ".", Sources: []types.Glob{{Pattern: "**/*.go"}}, MagusfileTargets: []string{"test"}}
+	ws := typestest.NewMockWorkspaceRepository(s.T())
+	ws.EXPECT().All().Return([]*types.Project{project}).Maybe()
+	ws.EXPECT().Get(".").Return(project).Maybe()
+	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
+	s.deps = Dependencies{
+		Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil },
+		VCS:     types.VCSOptions{BaseRef: s.gated},
+	}
+}
+
+func (s *NarrowPushSuite) gateAtFirstCommit() {
+	dir, err := sessions.Dir(s.repo.Root())
+	s.Require().NoError(err)
+	s.Require().NoError(sessions.RecordGate(dir, sessions.GateResult{
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.gated, Outcome: sessions.OutcomePass, Inv: "inv-green",
+	}, sessions.InvocationStart{Workspace: s.repo.Root()}))
+}
+
+// passed records a passing run of target at revision, clean, with args.
+func (s *NarrowPushSuite) passed(key, target, revision string, args ...string) {
+	_, err := cache.NewOutputStore(s.at.cacheDir).Persist(s.T().Context(), key, []byte("ok\n"), cache.OutputDescriptor{
+		Project: ".", Target: target, Revision: revision, ExtraArgs: args, TimestampMs: time.Now().UnixMilli(),
+	})
+	s.Require().NoError(err)
+}
+
+func (s *NarrowPushSuite) push(commit string) pushEvidence {
+	s.deps.Revision = func(context.Context, string, string) string { return commit[:12] }
+	return pushCoverage(s.T().Context(), s.deps, s.at, "git push", DialectBash, s.repo.Root())
+}
+
+func (s *NarrowPushSuite) TestNarrowRunsCoveringEveryChangedFileAdmitThePush() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n", "b.go": "package a\n"})
+	s.passed(strings.Repeat("a", 64), "go-test", head, "-run", "Push")
+
+	ev := s.push(head)
+	s.Equal(gateNarrow, ev.cover)
+	decision, _ := gradePushWithoutGate(ev, "")
+	s.Empty(decision)
+	s.Contains(ev.admitted(), "goes out on narrow runs")
+	s.Contains(ev.admitted(), "each of the 2 files this host builds that changed since "+s.gated[:12])
+}
+
+func (s *NarrowPushSuite) TestAnUncoveredFileIsRefusedByName() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n", "b.go": "package a\n"})
+	s.passed(strings.Repeat("b", 64), "lint", head, "a.go")
+
+	ev := s.push(head)
+	s.Equal(gateAbsent, ev.cover)
+	decision, reason := gradePushWithoutGate(ev, "")
+	s.Equal(decisionDeny, decision)
+	s.Contains(reason, "No passing run covers 1 of the 2 files changed since "+s.gated[:12])
+	s.Contains(reason, "  b.go: run `")
+	s.Contains(reason, "lint . -- b.go`")
+	s.NotContains(reason, "  a.go:")
+}
+
+func (s *NarrowPushSuite) TestNoGateAndNoRunsIsRefused() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+
+	ev := s.push(head)
+	s.Equal(gateAbsent, ev.cover)
+	decision, reason := gradePushWithoutGate(ev, "")
+	s.Equal(decisionDeny, decision)
+	s.Contains(reason, fmt.Sprintf("the merge base with %s, since no ancestor has a passing `ci`", s.gated))
+	s.Contains(reason, "  a.go: run `")
+	s.Contains(reason, "run test .`")
+}
+
+func (s *NarrowPushSuite) TestARunOfAnOlderFileCoversNothing() {
+	s.gateAtFirstCommit()
+	first := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	s.passed(strings.Repeat("c", 64), "go-test", first)
+	head := s.repo.Commit("again", map[string]string{"a.go": "package a\n\nvar A = 2\n"})
+
+	s.Equal(gateAbsent, s.push(head).cover)
+}
+
+func (s *NarrowPushSuite) TestAFileThisHostDoesNotBuildIsLeftToCI() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("change", map[string]string{"pressure_plan9_test.go": "package a\n"})
+
+	ev := s.push(head)
+	s.Equal(gateNarrow, ev.cover)
+	s.Contains(ev.admitted(), "pressure_plan9_test.go: built only on plan9; left to CI.")
+}
+
+func (s *NarrowPushSuite) TestAFileThisHostBuildsStillNeedsARun() {
+	s.gateAtFirstCommit()
+	head := s.repo.Commit("change", map[string]string{"pressure_plan9_test.go": "package a\n", "a.go": "package a\n\nvar A = 1\n"})
+
+	ev := s.push(head)
+	s.Equal(gateAbsent, ev.cover)
+	_, reason := gradePushWithoutGate(ev, "")
+	s.Contains(reason, "  a.go: run `")
+	s.Contains(reason, "  pressure_plan9_test.go: built only on plan9; left to CI")
+}
+
+func (s *NarrowPushSuite) TestTheWaiverStillAdmits() {
+	const waived = "abc1234def567890abc1234def567890abc12345"
+	v := waivedPush(s.T(), "abc1234", func(ctx context.Context, store *job.Store) {
+		_, err := WaiveGate(ctx, store, waived, "CI gates the release branch")
+		s.Require().NoError(err)
+	})
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+	s.Contains(v.Context, "abc1234 goes out ungated under the waiver")
 }

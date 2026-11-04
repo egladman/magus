@@ -268,7 +268,7 @@ func TestPrecedentsAreJudgedByTheWorkspacesConformance(t *testing.T) {
 	raised.Gates.MinCohort = 7
 	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()}, conformance: &raised}
 
-	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws), nil)
 	require.NoError(t, err)
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
@@ -278,11 +278,11 @@ func TestPrecedentsAreJudgedByTheWorkspacesConformance(t *testing.T) {
 	assert.False(t, report.Holds[0].Established, "six cases are under the workspace's cohort gate of seven")
 
 	ws.conformanceErr = errors.New("conformance.json: line 1: schema 2: want 1")
-	_, err = MagusPrecedents(types.WithWorkspace(t.Context(), ws))
+	_, err = MagusPrecedents(types.WithWorkspace(t.Context(), ws), nil)
 	assert.ErrorContains(t, err, "schema 2", "a record that cannot be read is an error, never the shipped gates")
 }
 
-func (p *precedentGraphs) FreshenSymbolIndexes(context.Context) error {
+func (p *precedentGraphs) FreshenSymbolIndexes(context.Context, []string) error {
 	p.freshened = true
 	return p.freshenErr
 }
@@ -337,7 +337,7 @@ func TestPrecedentsReportRowsBesideIndexFreshness(t *testing.T) {
 		outputs:             map[string]bool{"internal/a/gen.go": true},
 	}
 
-	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws), nil)
 	require.NoError(t, err)
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
@@ -352,7 +352,7 @@ func TestPrecedentsReportRowsBesideIndexFreshness(t *testing.T) {
 		Indexes: []types.SymbolIndexStatus{stale},
 	}, report, "a declared output's departure is not counted, and the index verdict rides beside the rows")
 
-	_, err = MagusPrecedents(graphContext(t))
+	_, err = MagusPrecedents(graphContext(t), nil)
 	assert.ErrorContains(t, err, "cannot judge its symbol indexes", "a workspace that cannot say whether its index is current gets no rows")
 }
 
@@ -367,7 +367,7 @@ func TestPrecedentsFreshenEveryIndexBeforeJudgingIt(t *testing.T) {
 		freshenErr:          errors.New("scip-buzz is not on PATH"),
 	}
 
-	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws), nil)
 	require.NoError(t, err, "a failed freshen is a verdict on its index, not an error")
 	assert.True(t, ws.readAfter, "freshness is read after the freshen, so it judges the rebuilt index")
 	b, err := json.Marshal(got)
@@ -402,7 +402,7 @@ func TestSymbolsBesideIndexFreshness(t *testing.T) {
 		outputs:             map[string]bool{"internal/a/gen.go": true},
 	}
 
-	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws), nil)
 	require.NoError(t, err)
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
@@ -416,7 +416,7 @@ func TestSymbolsBesideIndexFreshness(t *testing.T) {
 		Indexes: []types.SymbolIndexStatus{stale},
 	}, report, "a declared output is not listed, and the index verdict rides beside the symbols")
 
-	_, err = MagusSymbols(graphContext(t))
+	_, err = MagusSymbols(graphContext(t), nil)
 	assert.ErrorContains(t, err, "magus\\Graph.symbols: this workspace cannot judge its symbol indexes")
 }
 
@@ -424,7 +424,7 @@ func TestSymbolsReportsNoSymbolsAsAnEmptyList(t *testing.T) {
 	t.Parallel()
 	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()}}
 
-	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws), nil)
 	require.NoError(t, err)
 	assert.Equal(t, []types.SymbolDecl{}, got.Symbols, "an empty workspace reads as an empty list, never null")
 }

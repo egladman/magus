@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // rebuildingWorkspace builds its knowledge store from in on every KnowledgeGraph call, as
@@ -23,10 +24,12 @@ type rebuildingWorkspace struct {
 	probed   bool
 	freshen  error
 	calls    int
+	scopes   [][]string
 }
 
-func (f *rebuildingWorkspace) FreshenSymbolIndexes(context.Context) error {
+func (f *rebuildingWorkspace) FreshenSymbolIndexes(_ context.Context, languages []string) error {
 	f.calls++
+	f.scopes = append(f.scopes, languages)
 	return f.freshen
 }
 
@@ -53,7 +56,7 @@ func indexWorkspace(t *testing.T) *rebuildingWorkspace {
 func TestMagusSymbolIndexDigest(t *testing.T) {
 	t.Run("freshens indexes before reading the digest", func(t *testing.T) {
 		ws := indexWorkspace(t)
-		_, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), ws))
+		_, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), ws), nil)
 		require.NoError(t, err)
 		assert.Equal(t, 1, ws.calls)
 	})
@@ -61,13 +64,13 @@ func TestMagusSymbolIndexDigest(t *testing.T) {
 	t.Run("does not read a digest when indexes cannot be freshened", func(t *testing.T) {
 		ws := indexWorkspace(t)
 		ws.freshen = assert.AnError
-		_, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), ws))
+		_, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), ws), nil)
 		require.ErrorIs(t, err, assert.AnError)
 		assert.Equal(t, 1, ws.calls)
 	})
 
 	t.Run("no index is not indexed", func(t *testing.T) {
-		got, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), indexWorkspace(t)))
+		got, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), indexWorkspace(t)), nil)
 		require.NoError(t, err)
 		assert.Equal(t, types.SymbolIndexDigest{Projects: []string{}}, got)
 	})
@@ -80,7 +83,7 @@ func TestMagusSymbolIndexDigest(t *testing.T) {
 		ws.gaps = []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("console", ""), State: types.SymbolIndexNotBuilt}}
 		ctx := types.WithWorkspace(t.Context(), ws)
 
-		got, err := MagusSymbolIndexDigest(ctx)
+		got, err := MagusSymbolIndexDigest(ctx, nil)
 		require.NoError(t, err)
 		want, err := knowledge.NewStore(ws.cacheDir, true, 0, nil, nil).SymbolIndexDigest()
 		require.NoError(t, err)
@@ -90,7 +93,7 @@ func TestMagusSymbolIndexDigest(t *testing.T) {
 		assert.Equal(t, []string{"pkg/a"}, got.Projects)
 
 		ws.in.Symbols["pkg/a"][0].Label = "Renamed"
-		moved, err := MagusSymbolIndexDigest(ctx)
+		moved, err := MagusSymbolIndexDigest(ctx, nil)
 		require.NoError(t, err)
 		assert.NotEqual(t, got.Digest, moved.Digest, "an index change reaches the digest without a separate graph build")
 	})
@@ -98,12 +101,37 @@ func TestMagusSymbolIndexDigest(t *testing.T) {
 	t.Run("an unrunnable gap probe raises", func(t *testing.T) {
 		ws := indexWorkspace(t)
 		ws.probed = false
-		_, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), ws))
+		_, err := MagusSymbolIndexDigest(types.WithWorkspace(t.Context(), ws), nil)
 		require.ErrorContains(t, err, "could not probe which declared symbol indexes are missing")
 	})
 
 	t.Run("outside a workspace raises", func(t *testing.T) {
-		_, err := MagusSymbolIndexDigest(t.Context())
+		_, err := MagusSymbolIndexDigest(t.Context(), nil)
 		require.ErrorContains(t, err, "magus\\graph: no workspace on the context")
 	})
+}
+
+type symbolIndexLanguageSuite struct {
+	suite.Suite
+}
+
+func TestSymbolIndexLanguageSuite(t *testing.T) {
+	suite.Run(t, new(symbolIndexLanguageSuite))
+}
+
+func (s *symbolIndexLanguageSuite) TestDigestFreshensOnlyTheNamedLanguagesAndKeepsThem() {
+	ws := indexWorkspace(s.T())
+	got, err := MagusSymbolIndexDigest(types.WithWorkspace(s.T().Context(), ws), []string{"go"})
+	s.Require().NoError(err)
+	s.Equal([][]string{{"go"}}, ws.scopes)
+	s.Equal([]string{"go"}, got.Languages)
+}
+
+func (s *symbolIndexLanguageSuite) TestGraphMethodHoldsTheIndexWithItsOpeningLanguages() {
+	ws := indexWorkspace(s.T())
+	ctx := types.WithWorkspace(s.T().Context(), ws)
+	g, err := MagusGraphOpen(ctx, []string{"go", "typescript"})
+	s.Require().NoError(err)
+	s.Require().NoError(heldGraph(ctx, g, "precedents"))
+	s.Equal([][]string{{"go", "typescript"}, {"go", "typescript"}}, ws.scopes)
 }

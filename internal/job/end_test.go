@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // endRequests are the open requests an end filed for the repository at root.
@@ -410,4 +411,49 @@ func TestExitWithoutAResultRecordsNoReturn(t *testing.T) {
 	assert.Equal(t, types.StateNoReturn, stored.State)
 	assert.Nil(t, stored.Result)
 	assert.Nil(t, stored.Attempt)
+}
+
+type exitCommittedSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	row  types.Job
+	loc  Location
+}
+
+func TestExitCommitted(t *testing.T) { suite.Run(t, new(exitCommittedSuite)) }
+
+func (s *exitCommittedSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"internal/ledger/a.go": "package ledger\n"})
+	s.row = acceptRow()
+	s.row.CheckoutRoot = s.repo.Root()
+	s.loc = declared(s.T(), s.row)
+	s.Require().NoError(os.WriteFile(filepath.Join(s.repo.Root(), "internal/ledger/a.go"), []byte("package ledger // edited\n"), 0o644))
+}
+
+func (s *exitCommittedSuite) exit() (types.Job, error) {
+	result := passingResult()
+	return Exit(s.T().Context(), boundStore(s.loc, s.row.ID), s.row.ID, &result, func(context.Context, string) (types.JobAttempt, error) {
+		attempt := passingRun
+		attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
+		return attempt, nil
+	})
+}
+
+func (s *exitCommittedSuite) TestUncommittedEditIsRefusedNamingThePath() {
+	_, err := s.exit()
+
+	s.ErrorContains(err, "hold uncommitted work")
+	s.ErrorContains(err, "internal/ledger/a.go")
+	rows, listErr := NewStore(s.loc).List()
+	s.Require().NoError(listErr)
+	s.Equal(types.StateRunning, rows[0].State)
+}
+
+func (s *exitCommittedSuite) TestCommittedEditIsAccepted() {
+	s.repo.Commit("edit", map[string]string{"internal/ledger/a.go": "package ledger // edited\n"})
+
+	exited, err := s.exit()
+
+	s.Require().NoError(err)
+	s.NotEqual(types.StateRunning, exited.State)
 }

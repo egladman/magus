@@ -386,8 +386,13 @@ func TestMirroredBinaryIsOnlyTheForkingCheckoutsOwnMagus(t *testing.T) {
 func forkersBinary(t *testing.T, build types.MagusBuild) (string, context.Context) {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "magus")
-	require.NoError(t, os.WriteFile(bin, []byte("build 1\n"), 0o755))
+	require.NoError(t, os.WriteFile(bin, []byte(versionScript("build 1", build)), 0o755))
 	return bin, types.WithMagusBuild(t.Context(), build)
+}
+
+// versionScript answers `version -o json` as a magus built as build.
+func versionScript(marker string, build types.MagusBuild) string {
+	return fmt.Sprintf("#!/bin/sh\n# %s\necho '{\"version\":%q,\"commit\":%q}'\n", marker, build.Version, build.Commit)
 }
 
 func TestForkWorktreePlacesTheForkersBinary(t *testing.T) {
@@ -401,15 +406,60 @@ func TestForkWorktreePlacesTheForkersBinary(t *testing.T) {
 	assert.Equal(t, filepath.Join(wt.Root, "magus"), wt.Binary)
 	body, err := os.ReadFile(wt.Binary)
 	require.NoError(t, err)
-	assert.Equal(t, "build 1\n", string(body))
+	assert.Contains(t, string(body), "# build 1\n")
 	info, err := os.Stat(wt.Binary)
 	require.NoError(t, err)
 	assert.NotZero(t, info.Mode()&0o111, "the placed binary runs")
 }
 
+func TestForkWorktreeSkipsAForkersBinaryBuiltElsewhere(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	bin, ctx := forkersBinary(t, types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: "0123456789abcdef0123456789abcdef01234567"})
+
+	wt, made, err := s.ForkWorktree(ctx, "stale", filepath.Join(t.TempDir(), "stale"), repo.Head(), bin)
+	require.NoError(t, err)
+	require.True(t, made)
+	assert.Empty(t, wt.Binary, "a binary built at another commit is left for provisioning")
+	assert.NoFileExists(t, filepath.Join(wt.Root, "magus"))
+}
+
+func TestBuiltAtJudgesABinaryByItsOwnVersion(t *testing.T) {
+	t.Parallel()
+	_, ctx := forkersBinary(t, types.MagusBuild{})
+	at := "0123456789abcdef0123456789abcdef01234567"
+	clean, _ := forkersBinary(t, types.MagusBuild{Version: "v0.5.0", Commit: at})
+	dirty, _ := forkersBinary(t, types.MagusBuild{Version: "v0.5.0-dirty", Commit: at})
+	other, _ := forkersBinary(t, types.MagusBuild{Version: "v0.5.0", Commit: "fedcba9876543210fedcba9876543210fedcba98"})
+
+	assert.True(t, BuiltAt(ctx, clean, at))
+	assert.False(t, BuiltAt(ctx, dirty, at), "uncommitted changes")
+	assert.False(t, BuiltAt(ctx, other, at), "another commit")
+	assert.False(t, BuiltAt(ctx, filepath.Join(t.TempDir(), "absent"), at), "no binary")
+	assert.False(t, BuiltAt(ctx, "", at), "no path")
+}
+
+func TestAdoptedCheckoutWithAStaleBinaryIsNotBuiltAtItsBase(t *testing.T) {
+	t.Parallel()
+	s, _, repo := worktreeStore(t)
+	dir := filepath.Join(t.TempDir(), "adopted")
+	first, ctx := forkersBinary(t, types.MagusBuild{Version: "v0.5.0", Commit: repo.Head()})
+	made, _, err := s.ForkWorktree(ctx, "maker", dir, "", first)
+	require.NoError(t, err)
+	stale := types.MagusBuild{Version: "v0.5.0", Commit: "0123456789abcdef0123456789abcdef01234567"}
+	require.NoError(t, os.WriteFile(made.Binary, []byte(versionScript("stale", stale)), 0o755))
+
+	wt, madeNow, err := s.ForkWorktree(ctx, "adopter", dir, "", first)
+	require.NoError(t, err)
+	assert.False(t, madeNow)
+	assert.NotEmpty(t, wt.Binary, "the adopted checkout holds a ./magus")
+	assert.False(t, BuiltAt(ctx, wt.Binary, wt.Base), "which the fork must replace")
+}
+
 // A checkout holding the bootstrap script builds its own ./magus, so the forker's is never
 // copied into it, whatever it was built from: a dirty or older forker never blocks the fork.
-// A workspace without the script takes the forker's binary as a tool, at any checkpoint.
+// A workspace without the script takes the forker's binary as a tool
+// when it is a clean build at the fork's base.
 func TestForkWorktreeCopiesNoBinaryIntoACheckoutThatBuildsItsOwn(t *testing.T) {
 	t.Parallel()
 	s, _, repo := worktreeStore(t)
@@ -432,7 +482,7 @@ func TestForkWorktreeCopiesNoBinaryIntoACheckoutThatBuildsItsOwn(t *testing.T) {
 		})
 	}
 
-	bin, ctx := forkersBinary(t, types.MagusBuild{Version: "v0.5.0-1-gabc-dirty", Commit: builds})
+	bin, ctx := forkersBinary(t, types.MagusBuild{Version: "v0.5.0", Commit: built})
 	wt, made, err := s.ForkWorktree(ctx, "tool", filepath.Join(t.TempDir(), "tool"), built, bin)
 	require.NoError(t, err)
 	require.True(t, made)

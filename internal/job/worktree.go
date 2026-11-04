@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path"
@@ -17,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -104,7 +106,9 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)
 	}
 	wt = types.JobWorktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix(), Made: true}
-	if binary != "" && !BuildsItsOwnMagus(dir) {
+	if binary != "" && !BuildsItsOwnMagus(dir) && !BuiltAt(ctx, binary, base.ID) {
+		slog.InfoContext(ctx, fmt.Sprintf("not placing %s in %s: it is not a clean build at %.12s", binary, dir, base.ID), attr.Notice("note"))
+	} else if binary != "" && !BuildsItsOwnMagus(dir) {
 		placed, err := placeBinary(binary, dir)
 		if err != nil {
 			return types.JobWorktree{}, false, errors.Join(fmt.Errorf("placing %s in %s: %w", binary, dir, err), drv.DiscardCheckout(ctx, source, dir, base.ID))
@@ -226,7 +230,7 @@ func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (st
 		}
 	}
 	for _, bin := range candidates {
-		if !builtAt(ctx, bin, base) {
+		if !BuiltAt(ctx, bin, base) {
 			continue
 		}
 		if _, err := placeBinary(bin, dir); err != nil {
@@ -237,9 +241,9 @@ func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (st
 	return "", nil
 }
 
-// builtAt reports whether the magus at bin says it was built at base, clean.
+// BuiltAt reports whether the magus at bin says it was built at base, clean.
 // A binary that cannot answer is not one to reuse.
-func builtAt(ctx context.Context, bin, base string) bool {
+func BuiltAt(ctx context.Context, bin, base string) bool {
 	if bin == "" {
 		return false
 	}

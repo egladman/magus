@@ -65,7 +65,7 @@ advises.
 **It cannot be undone.** The destructive whole-tree VCS operations, a bare
 `git stash` push or pop on a stack every worktree shares, removing a worktree
 magus cannot prove holds nothing that would be lost, a checkout of one merge
-side over a conflicted file, a push at a commit the run log shows no green gate
+side over a conflicted file, a push at a commit the run log shows no green gate or covering narrow runs
 for, and a backtick substitution, which can pair with a stray backtick and run
 a command nobody wrote.
 
@@ -174,7 +174,9 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   pattern or a message carrying a literal backtick can run everything between
   them. A literal backtick belongs in single quotes; a substitution is
   `$(...)`.
-- A push at a commit with no green gate is judged from the run log, which names
+- A push at a commit with no green gate passes when passing narrow runs cover
+  every file changed since the last one; a file the host cannot build is left to
+  CI and named. The rest is judged from the run log, which names
   which invocations ran the gate and at which commit. A session no lease binds is asked; a leased
   worker is refused, since workers do not publish.
 - **Writing into the workspace's magus cache dir** (`.magus/` by default), on

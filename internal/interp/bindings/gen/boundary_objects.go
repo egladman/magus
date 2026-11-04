@@ -432,7 +432,11 @@ func ObjectSymbolIndexDigest(v types.SymbolIndexDigest, enums ffi.EnumCases) vm.
 	for indexGaps := range v.Gaps {
 		itemsGaps[indexGaps] = ObjectKnowledgeSymbolGap(v.Gaps[indexGaps], enums)
 	}
-	return enums.Instance("Graph", []string{"digest", "indexed", "projects", "gaps"}, []vm.Value{vm.StringValue(v.Digest), vm.BoolValue(v.Indexed), vm.ListValue(itemsProjects), vm.ListValue(itemsGaps)})
+	itemsLanguages := make([]vm.Value, len(v.Languages))
+	for indexLanguages := range v.Languages {
+		itemsLanguages[indexLanguages] = vm.StringValue(v.Languages[indexLanguages])
+	}
+	return enums.Instance("Graph", []string{"digest", "indexed", "projects", "gaps", "languages"}, []vm.Value{vm.StringValue(v.Digest), vm.BoolValue(v.Indexed), vm.ListValue(itemsProjects), vm.ListValue(itemsGaps), vm.ListValue(itemsLanguages)})
 }
 
 func ObjectVCSCheckpoint(v types.VCSCheckpoint) vm.Value {

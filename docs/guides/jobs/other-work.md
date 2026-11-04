@@ -55,8 +55,8 @@ upgrade/api  ~/src/ana
 upgrade/web  ~/src/ben
 ```
 
-Each bumps the pin, runs `magus run test api` or `magus run test web`, and exits the
-job with the run's ref, as on the first page. Whoever keeps the list checks each
+Each bumps the pin and commits it before filing, runs `magus run test api` or
+`magus run test web`, and exits the job with the run's ref, as on the first page. Whoever keeps the list checks each
 piece:
 
 <!-- golden: job_people_upgrade.txtar wait-api.out -->
@@ -87,8 +87,8 @@ upgrade/api  ana     pass   standard  1      alone     magus run test api
 upgrade/web  ben     pass   standard  1      disjoint  magus run test web
 
 not merged onto main: 2
-  upgrade/api at 321cadb: ~/src/ana holds 1 uncommitted path(s), first api/deps.txt; commit them in ~/src/ana, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
-  upgrade/web at 321cadb: ~/src/ben holds 1 uncommitted path(s), first web/deps.txt; commit them in ~/src/ben, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
+  upgrade/api at 4482968: 1 commit(s) at 4482968 are not on main; merge 4482968 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
+  upgrade/web at c2385b8: 1 commit(s) at c2385b8 are not on main; merge c2385b8 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -183,8 +183,8 @@ created release-1.3/notes, declared, with 1 write path(s)
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
-Two people take an item each in their own worktree. The changelog gets written. The
-notes are blocked on numbers that do not exist yet, so their holder says so on the
+Two people take an item each in their own worktree. The changelog gets written and committed
+before its holder exits. The notes are blocked on numbers that do not exist yet, so their holder says so on the
 way out instead of pretending:
 
 <!-- golden: job_people_release.txtar exit-notes.out -->
@@ -211,7 +211,7 @@ release-1.3/changelog  changelog  exited  standard  1      alone     -
 release-1.3/notes      notes      exited  standard  1      disjoint  -
 
 not merged onto main: 1
-  release-1.3/changelog at 5f6b136: ~/src/changelog holds 1 uncommitted path(s), first CHANGELOG.md; commit them in ~/src/changelog, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
+  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
 unresolved risks, which stop nothing: 1
   release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
@@ -258,7 +258,7 @@ release-1.3/changelog  changelog  pass     standard  1      alone     -
 release-1.3/notes      notes      running  standard  1      disjoint  -
 
 not merged onto main: 1
-  release-1.3/changelog at 5f6b136: ~/src/changelog holds 1 uncommitted path(s), first CHANGELOG.md; commit them in ~/src/changelog, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
+  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
 unresolved risks, which stop nothing: 1
   release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

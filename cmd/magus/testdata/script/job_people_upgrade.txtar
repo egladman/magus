@@ -32,11 +32,13 @@ cmp stdout $WORK/holders.out
 
 cd ../ana
 cp $WORK/deps-1.3.txt api/deps.txt
+exec git commit -q -am 'bump left-pad to 1.3 in api'
 exec sh -c 'ref=$(magus run test api -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed -e "s/out<hex>/$ref/" "$WORK/api.json" > "$WORK/filed.json"'
 stdin $WORK/filed.json
 exec magus job exit upgrade/api --stdin
 cd ../ben
 cp $WORK/deps-1.3.txt web/deps.txt
+exec git commit -q -am 'bump left-pad to 1.3 in web'
 exec sh -c 'ref=$(magus run test web -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed -e "s/out<hex>/$ref/" "$WORK/web.json" > "$WORK/filed.json"'
 stdin $WORK/filed.json
 exec magus job exit upgrade/web --stdin
@@ -107,6 +109,6 @@ upgrade/api  ana     pass   standard  1      alone     magus run test api
 upgrade/web  ben     pass   standard  1      disjoint  magus run test web
 
 not merged onto main: 2
-  upgrade/api at 321cadb: ~/src/ana holds 1 uncommitted path(s), first api/deps.txt; commit them in ~/src/ana, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
-  upgrade/web at 321cadb: ~/src/ben holds 1 uncommitted path(s), first web/deps.txt; commit them in ~/src/ben, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
+  upgrade/api at 4482968: 1 commit(s) at 4482968 are not on main; merge 4482968 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
+  upgrade/web at c2385b8: 1 commit(s) at c2385b8 are not on main; merge c2385b8 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

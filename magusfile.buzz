@@ -263,7 +263,7 @@ magus\project({
         // Members reached through ctx.needs run inline and never cache; see MGS1009.
         "ci": {
             "skip_cache": "composes the gates and reads nothing itself; its key is the whole tree, so it can never replay",
-            "timeout": "45m",
+            "timeout": "60m",
         },
         "pr-title": {"skip_cache": "judges the pull request event, which no file input carries"},
         "pr-changelog": {"skip_cache": "judges the pull request event and the base ref, which no file input carries"},
@@ -2532,9 +2532,8 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "proto/**/*.yaml",
                     "**/*.yml", "libs/testpairing/**/*.yml",
                     "proto/**/*.proto", "**/*.txtar"]);
-    // Two lint rules fail on a stale symbol index.
-    // magus\graph().precedents() freshens every index under this run's lock.
-    // From the rules' child process a rebuild is refused the lock (MGS3007).
+    // Rules reading magus\graph() unscoped freshen every index.
+    // Freshen them all under this lock: the child is refused it (MGS3007).
     _ = magus\graph().precedents();
     _ = magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }

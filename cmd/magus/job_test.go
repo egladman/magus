@@ -2834,3 +2834,34 @@ func (s *forkErrorsSuite) TestForkPreservesThePlanWriteFailure() {
 	s.Require().NoError(err)
 	s.Empty(rows)
 }
+
+type RecordCheckoutSuite struct{ suite.Suite }
+
+func TestRecordCheckoutSuite(t *testing.T) { suite.Run(t, new(RecordCheckoutSuite)) }
+
+func (s *RecordCheckoutSuite) TestMakesARelativeRecordCheckoutAbsolute() {
+	got, err := recordCheckout("../w", "")
+	s.Require().NoError(err)
+	want, err := filepath.Abs("../w")
+	s.Require().NoError(err)
+	s.Equal(want, got)
+}
+
+func (s *RecordCheckoutSuite) TestTakesTheFlagWhenTheRecordNamesNone() {
+	got, err := recordCheckout("", "/work/w")
+	s.Require().NoError(err)
+	s.Equal("/work/w", got)
+}
+
+func (s *RecordCheckoutSuite) TestAcceptsARelativeRecordCheckoutThatMatchesTheFlag() {
+	abs, err := filepath.Abs("w")
+	s.Require().NoError(err)
+	got, err := recordCheckout("w", abs)
+	s.Require().NoError(err)
+	s.Equal(abs, got)
+}
+
+func (s *RecordCheckoutSuite) TestRefusesTwoCheckouts() {
+	_, err := recordCheckout("/work/a", "/work/b")
+	s.ErrorContains(err, "name two checkouts")
+}
