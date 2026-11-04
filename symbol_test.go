@@ -804,7 +804,7 @@ func (s *magusSuite) TestRefreshBringsAStaleIndexCurrentAndNamesIt() {
 
 	got := m.RefreshSymbolIndexes(s.T().Context())
 
-	s.Equal([]string{"."}, got.Refreshed, "the fixture spell declares no language")
+	s.Equal([]string{". (go index)"}, got.Refreshed, "the fixture spell declares go")
 	s.Empty(got.Problems)
 	s.Positive(got.Took)
 	s.Equal(types.SymbolIndexFresh, freshness(s.T(), m))
