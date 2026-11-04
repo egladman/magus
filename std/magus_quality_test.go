@@ -1,3 +1,5 @@
+//go:build !wasm
+
 package std
 
 import (
@@ -11,16 +13,16 @@ import (
 
 type fakeQualityWorkspace struct {
 	types.WorkspaceRepository
-	crap       types.Crap
+	risk       types.ChangeRisk
 	mutants    types.Mutants
 	err        error
-	crapBase   string
+	riskBase   string
 	mutantBase string
 }
 
-func (f *fakeQualityWorkspace) Crap(_ context.Context, base string) (types.Crap, error) {
-	f.crapBase = base
-	return f.crap, f.err
+func (f *fakeQualityWorkspace) ChangeRisk(_ context.Context, base string) (types.ChangeRisk, error) {
+	f.riskBase = base
+	return f.risk, f.err
 }
 
 func (f *fakeQualityWorkspace) Mutants(_ context.Context, base string) (types.Mutants, error) {
@@ -28,74 +30,83 @@ func (f *fakeQualityWorkspace) Mutants(_ context.Context, base string) (types.Mu
 	return f.mutants, f.err
 }
 
-type MagusCrapSuite struct {
-	suite.Suite
-}
-
-func TestMagusCrapSuite(t *testing.T) {
-	suite.Run(t, new(MagusCrapSuite))
-}
-
-func (s *MagusCrapSuite) TestReturnsTheTypedRecordForTheBase() {
-	want := types.Crap{
-		Definition: "d",
-		Base:       "origin/main",
-		Functions:  []types.CrapFunction{{Label: "f", Complexity: 3, Covered: 2, Coverable: 4, Score: 4.5}},
-		Gaps:       []types.FunctionGap{{Label: "g", Reason: "spell bash declares no coverage"}},
-	}
-	ws := &fakeQualityWorkspace{crap: want}
-
-	got, err := MagusCrap(types.WithWorkspace(s.T().Context(), ws), "origin/main")
-
-	s.Require().NoError(err)
-	s.Equal(want, got)
-	s.Equal("origin/main", ws.crapBase)
-}
-
-func (s *MagusCrapSuite) TestEmptyBaseScoresTheWholeWorkspace() {
-	ws := &fakeQualityWorkspace{}
-
-	_, err := MagusCrap(types.WithWorkspace(s.T().Context(), ws), "")
-
-	s.Require().NoError(err)
-	s.Empty(ws.crapBase)
-}
-
-func (s *MagusCrapSuite) TestRaisesOutsideAWorkspace() {
-	_, err := MagusCrap(s.T().Context(), "origin/main")
-
-	s.ErrorContains(err, "magus\\crap: no workspace on the context")
-}
-
-func (s *MagusCrapSuite) TestRaisesWhenTheWorkspaceCannotScore() {
-	ws := &fakeWorkspaceWithoutQuality{}
-
-	_, err := MagusCrap(types.WithWorkspace(s.T().Context(), ws), "origin/main")
-
-	s.ErrorContains(err, "magus\\crap: this workspace cannot score functions")
-}
-
-func (s *MagusCrapSuite) TestRaisesWhatTheEngineRaises() {
-	ws := &fakeQualityWorkspace{err: errors.New("no coverage report")}
-
-	_, err := MagusCrap(types.WithWorkspace(s.T().Context(), ws), "origin/main")
-
-	s.ErrorContains(err, "magus\\crap: no coverage report")
-}
-
 type fakeWorkspaceWithoutQuality struct {
 	types.WorkspaceRepository
 }
 
-type MagusMutantsSuite struct {
+type MagusChangeRiskSuite struct {
 	suite.Suite
 }
 
-func TestMagusMutantsSuite(t *testing.T) {
-	suite.Run(t, new(MagusMutantsSuite))
+func TestMagusChangeRiskSuite(t *testing.T) {
+	suite.Run(t, new(MagusChangeRiskSuite))
 }
 
-func (s *MagusMutantsSuite) TestReturnsTheTypedRecordForTheBase() {
+func (s *MagusChangeRiskSuite) TestReturnsTheTypedRecordForTheBase() {
+	want := types.ChangeRisk{
+		Definition: "d",
+		Base:       "origin/main",
+		Functions:  []types.ChangeRiskFunction{{Label: "f", Complexity: 3, Covered: 2, Coverable: 4, Score: 4.5}},
+		Gaps:       []types.FunctionGap{{Label: "g", Reason: "spell bash declares no coverage"}},
+	}
+	ws := &fakeQualityWorkspace{risk: want}
+
+	got, err := scoreRisk(types.WithWorkspace(s.T().Context(), ws), "Change.risk", "origin/main")
+
+	s.Require().NoError(err)
+	s.Equal(want, got)
+	s.Equal("origin/main", ws.riskBase)
+}
+
+func (s *MagusChangeRiskSuite) TestWorkspaceRiskScoresEveryFunction() {
+	ws := &fakeQualityWorkspace{riskBase: "unset"}
+
+	_, err := MagusWorkspaceRisk(types.WithWorkspace(s.T().Context(), ws), types.MagusWorkspace{})
+
+	s.Require().NoError(err)
+	s.Empty(ws.riskBase)
+}
+
+func (s *MagusChangeRiskSuite) TestChangeRiskRefusesAChangeWithNoTree() {
+	ws := &fakeQualityWorkspace{}
+
+	_, err := MagusChangeRisk(types.WithWorkspace(s.T().Context(), ws), types.Change{Base: "origin/main"})
+
+	s.ErrorContains(err, "magus\\Change.risk: this Change records no tree")
+	s.Empty(ws.riskBase)
+}
+
+func (s *MagusChangeRiskSuite) TestRaisesOutsideAWorkspace() {
+	_, err := MagusWorkspaceRisk(s.T().Context(), types.MagusWorkspace{})
+
+	s.ErrorContains(err, "magus\\Workspace.risk: no workspace on the context")
+}
+
+func (s *MagusChangeRiskSuite) TestRaisesWhenTheWorkspaceCannotScore() {
+	ws := &fakeWorkspaceWithoutQuality{}
+
+	_, err := MagusWorkspaceRisk(types.WithWorkspace(s.T().Context(), ws), types.MagusWorkspace{})
+
+	s.ErrorContains(err, "magus\\Workspace.risk: this workspace cannot score functions")
+}
+
+func (s *MagusChangeRiskSuite) TestRaisesWhatTheEngineRaises() {
+	ws := &fakeQualityWorkspace{err: errors.New("no coverage report")}
+
+	_, err := scoreRisk(types.WithWorkspace(s.T().Context(), ws), "Change.risk", "origin/main")
+
+	s.ErrorContains(err, "magus\\Change.risk: no coverage report")
+}
+
+type MagusChangeMutantsSuite struct {
+	suite.Suite
+}
+
+func TestMagusChangeMutantsSuite(t *testing.T) {
+	suite.Run(t, new(MagusChangeMutantsSuite))
+}
+
+func (s *MagusChangeMutantsSuite) TestReturnsTheTypedRecordForTheBase() {
 	want := types.Mutants{
 		Definition: "d",
 		Base:       "origin/main",
@@ -105,40 +116,40 @@ func (s *MagusMutantsSuite) TestReturnsTheTypedRecordForTheBase() {
 	}
 	ws := &fakeQualityWorkspace{mutants: want}
 
-	got, err := MagusMutants(types.WithWorkspace(s.T().Context(), ws), "origin/main")
+	got, err := mutate(types.WithWorkspace(s.T().Context(), ws), "Change.mutants", "origin/main")
 
 	s.Require().NoError(err)
 	s.Equal(want, got)
 	s.Equal("origin/main", ws.mutantBase)
 }
 
-func (s *MagusMutantsSuite) TestRefusesAnEmptyBaseBeforeTouchingTheWorkspace() {
+func (s *MagusChangeMutantsSuite) TestRefusesAChangeWithNoTree() {
 	ws := &fakeQualityWorkspace{}
 
-	_, err := MagusMutants(types.WithWorkspace(s.T().Context(), ws), "")
+	_, err := MagusChangeMutants(types.WithWorkspace(s.T().Context(), ws), types.Change{Base: "origin/main"})
 
-	s.ErrorContains(err, "name a base")
+	s.ErrorContains(err, "magus\\Change.mutants: this Change records no tree")
 	s.Empty(ws.mutantBase)
 }
 
-func (s *MagusMutantsSuite) TestRaisesOutsideAWorkspace() {
-	_, err := MagusMutants(s.T().Context(), "origin/main")
+func (s *MagusChangeMutantsSuite) TestRaisesOutsideAWorkspace() {
+	_, err := MagusChangeMutants(s.T().Context(), types.Change{})
 
-	s.ErrorContains(err, "magus\\mutants: no workspace on the context")
+	s.ErrorContains(err, "magus\\Change.mutants: no workspace on the context")
 }
 
-func (s *MagusMutantsSuite) TestRaisesWhenTheWorkspaceCannotMutate() {
+func (s *MagusChangeMutantsSuite) TestRaisesWhenTheWorkspaceCannotMutate() {
 	ws := &fakeWorkspaceWithoutQuality{}
 
-	_, err := MagusMutants(types.WithWorkspace(s.T().Context(), ws), "origin/main")
+	_, err := mutate(types.WithWorkspace(s.T().Context(), ws), "Change.mutants", "origin/main")
 
-	s.ErrorContains(err, "magus\\mutants: this workspace cannot score functions")
+	s.ErrorContains(err, "magus\\Change.mutants: this workspace cannot score functions")
 }
 
-func (s *MagusMutantsSuite) TestRaisesWhatTheEngineRaises() {
+func (s *MagusChangeMutantsSuite) TestRaisesWhatTheEngineRaises() {
 	ws := &fakeQualityWorkspace{err: errors.New("baseline red")}
 
-	_, err := MagusMutants(types.WithWorkspace(s.T().Context(), ws), "origin/main")
+	_, err := mutate(types.WithWorkspace(s.T().Context(), ws), "Change.mutants", "origin/main")
 
-	s.ErrorContains(err, "magus\\mutants: baseline red")
+	s.ErrorContains(err, "magus\\Change.mutants: baseline red")
 }

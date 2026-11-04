@@ -18,13 +18,13 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// crapDefinition names the formula, so a reader of the answer need not know it.
-const crapDefinition = "complexity^2 * (1 - coverage)^3 + complexity, " +
+// riskDefinition names the formula, so a reader of the answer need not know it.
+const riskDefinition = "complexity^2 * (1 - coverage)^3 + complexity, " +
 	"coverage being the covered share of the coverable units in the function's lines"
 
-// crapScorer scores touched functions. Each field is a lookup the workspace
+// riskScorer scores touched functions. Each field is a lookup the workspace
 // answers, so a test can answer it instead.
-type crapScorer struct {
+type riskScorer struct {
 	// read is a workspace-relative file's text.
 	read func(path string) (string, bool)
 	// claimant is the spell bound to path's project that claims its
@@ -46,15 +46,15 @@ type keptReport struct {
 
 // scoreAll scores each function, or reports it as a gap. A gap is never a
 // pass and never a score of 0.
-func (s crapScorer) scoreAll(fns []touchedFunction) types.Crap {
-	out := types.Crap{Definition: crapDefinition}
+func (s riskScorer) scoreAll(fns []touchedFunction) types.ChangeRisk {
+	out := types.ChangeRisk{Definition: riskDefinition}
 	for _, fn := range fns {
 		s.score(&out, fn)
 	}
 	return out
 }
 
-func (s crapScorer) score(out *types.Crap, fn touchedFunction) {
+func (s riskScorer) score(out *types.ChangeRisk, fn touchedFunction) {
 	c, reason := s.complexity(fn)
 	if reason != "" {
 		out.Gaps = append(out.Gaps, functionGap(fn, 0, reason))
@@ -65,10 +65,10 @@ func (s crapScorer) score(out *types.Crap, fn touchedFunction) {
 		out.Gaps = append(out.Gaps, functionGap(fn, c, reason))
 		return
 	}
-	out.Functions = append(out.Functions, crapFunction(fn, c, covered, coverable))
+	out.Functions = append(out.Functions, riskFunction(fn, c, covered, coverable))
 }
 
-func (s crapScorer) complexity(fn touchedFunction) (int, string) {
+func (s riskScorer) complexity(fn touchedFunction) (int, string) {
 	if fn.EndLine == 0 {
 		return 0, fmt.Sprintf("the %s indexer records no body extent", fn.Language)
 	}
@@ -82,7 +82,7 @@ func (s crapScorer) complexity(fn touchedFunction) (int, string) {
 	return s.indexerDecisions(fn, sp.Name())
 }
 
-func (s crapScorer) countTokens(fn touchedFunction, spellName string, syn spells.Syntax) (int, string) {
+func (s riskScorer) countTokens(fn touchedFunction, spellName string, syn spells.Syntax) (int, string) {
 	src, ok := s.read(fn.Path)
 	body, inRange := bodyLines(src, fn.Line, fn.EndLine)
 	if !ok || !inRange {
@@ -97,7 +97,7 @@ func (s crapScorer) countTokens(fn touchedFunction, spellName string, syn spells
 
 // indexerDecisions stands in for a spell whose syntax declares no decisions,
 // such as bash, whose indexer counts them from the AST.
-func (s crapScorer) indexerDecisions(fn touchedFunction, spellName string) (int, string) {
+func (s riskScorer) indexerDecisions(fn touchedFunction, spellName string) (int, string) {
 	n, counted := s.indexed(fn.Symbol)
 	if !counted {
 		return 0, fmt.Sprintf("spell %s declares no decisions and its indexer counted none", spellName)
@@ -105,7 +105,7 @@ func (s crapScorer) indexerDecisions(fn touchedFunction, spellName string) (int,
 	return n, ""
 }
 
-func (s crapScorer) coverage(fn touchedFunction) (covered, coverable int, reason string) {
+func (s riskScorer) coverage(fn touchedFunction) (covered, coverable int, reason string) {
 	sp := s.claimant(fn.Path)
 	op, ok := sp.Op(spells.CoverageOp)
 	if !ok || op.Coverage == nil {
@@ -140,12 +140,12 @@ func bodyLines(src string, start, end int) (string, bool) {
 	return strings.Join(lines[start-1:end], "\n"), true
 }
 
-func crapFunction(fn touchedFunction, complexity, covered, coverable int) types.CrapFunction {
-	f := types.CrapFunction{
+func riskFunction(fn touchedFunction, complexity, covered, coverable int) types.ChangeRiskFunction {
+	f := types.ChangeRiskFunction{
 		Symbol: fn.Symbol, Label: fn.Label, Path: fn.Path, Language: fn.Language, Digest: fn.Digest,
 		Line: fn.Line, EndLine: fn.EndLine, Complexity: complexity, Covered: covered, Coverable: coverable,
 	}
-	f.Score = types.CrapScore(complexity, f.Coverage())
+	f.Score = types.ChangeRiskScore(complexity, f.Coverage())
 	return f
 }
 
@@ -156,17 +156,17 @@ func functionGap(fn touchedFunction, complexity int, reason string) types.Functi
 	}
 }
 
-// Crap scores the functions touched since base: what HEAD added since it
-// forked from base, and the working tree's edits on top. base "" scores every
-// function in the workspace.
-func (m *Magus) Crap(ctx context.Context, base string) (types.Crap, error) {
+// ChangeRisk scores the functions touched since base: what HEAD added since
+// it forked from base, and the working tree's edits on top. base "" scores
+// every function in the workspace.
+func (m *Magus) ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, error) {
 	defs, fns, err := m.touchedSince(ctx, base)
 	if err != nil {
-		return types.Crap{}, err
+		return types.ChangeRisk{}, err
 	}
-	scorer := m.crapScorer(defs)
+	scorer := m.riskScorer(defs)
 	if err := m.runCoverage(ctx, scorer, fns); err != nil {
-		return types.Crap{}, err
+		return types.ChangeRisk{}, err
 	}
 	out := scorer.scoreAll(fns)
 	out.Base = base
@@ -175,7 +175,7 @@ func (m *Magus) Crap(ctx context.Context, base string) (types.Crap, error) {
 
 // runCoverage runs each owning project's coverage op through the cache.
 // A hit replays the report.
-func (m *Magus) runCoverage(ctx context.Context, s crapScorer, fns []touchedFunction) error {
+func (m *Magus) runCoverage(ctx context.Context, s riskScorer, fns []touchedFunction) error {
 	projects := coverageProjects(s, fns)
 	targets := make([]types.Target, 0, len(projects))
 	for _, p := range projects {
@@ -185,13 +185,13 @@ func (m *Magus) runCoverage(ctx context.Context, s crapScorer, fns []touchedFunc
 		return nil
 	}
 	if err := m.Run(ctx, targets); err != nil {
-		return fmt.Errorf("crap: %w", err)
+		return fmt.Errorf("change risk: %w", err)
 	}
 	return nil
 }
 
 // coverageProjects is the sorted projects whose spell has a coverage op.
-func coverageProjects(s crapScorer, fns []touchedFunction) []string {
+func coverageProjects(s riskScorer, fns []touchedFunction) []string {
 	var out []string
 	for _, fn := range fns {
 		sp := s.claimant(fn.Path)
@@ -206,32 +206,32 @@ func coverageProjects(s crapScorer, fns []touchedFunction) []string {
 	return slices.Compact(out)
 }
 
-// crapGraph is the head graph with every symbol. Its indexes are brought
+// riskGraph is the head graph with every symbol. Its indexes are brought
 // current first, so each span describes the tree being scored.
-func (m *Magus) crapGraph(ctx context.Context) (*knowledge.Graph, error) {
+func (m *Magus) riskGraph(ctx context.Context) (*knowledge.Graph, error) {
 	projects := make([]string, 0, len(m.ws.All()))
 	for _, p := range m.ws.All() {
 		projects = append(projects, p.Path)
 	}
 	if err := m.freshenSymbolIndexes(ctx, projects); err != nil {
-		return nil, fmt.Errorf("crap: %w", err)
+		return nil, fmt.Errorf("change risk: %w", err)
 	}
 	return m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 }
 
 // touchedSince is the head graph's definitions and the functions touched
-// since base: the one entry point Crap and Mutants share.
+// since base: the one entry point ChangeRisk and Mutants share.
 func (m *Magus) touchedSince(ctx context.Context, base string) (map[string]symbolDef, []touchedFunction, error) {
-	graph, err := m.crapGraph(ctx)
+	graph, err := m.riskGraph(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 	defs := definedSymbols(graph.Nodes())
-	fns, err := m.crapSubjects(ctx, defs, base)
+	fns, err := m.riskSubjects(ctx, defs, base)
 	return defs, fns, err
 }
 
-func (m *Magus) crapSubjects(ctx context.Context, defs map[string]symbolDef, base string) ([]touchedFunction, error) {
+func (m *Magus) riskSubjects(ctx context.Context, defs map[string]symbolDef, base string) ([]touchedFunction, error) {
 	if base == "" {
 		return m.touchedIn(ctx, defs, everySymbol(defs))
 	}
@@ -259,7 +259,7 @@ func (m *Magus) touchedIn(ctx context.Context, defs map[string]symbolDef, change
 	slices.Sort(paths)
 	entries, err := m.ClassifyFiles(ctx, slices.Compact(paths))
 	if err != nil {
-		return nil, fmt.Errorf("crap: %w", err)
+		return nil, fmt.Errorf("change risk: %w", err)
 	}
 	byPath := make(map[string]*types.DiffFile, len(entries))
 	for _, e := range entries {
@@ -278,11 +278,11 @@ type sinceBase struct {
 func (m *Magus) linesSince(ctx context.Context, base string) (sinceBase, error) {
 	committed, err := m.RangeDiff(ctx, base, "HEAD", nil)
 	if err != nil {
-		return sinceBase{}, fmt.Errorf("crap: what HEAD changed since %s: %w", base, err)
+		return sinceBase{}, fmt.Errorf("change risk: what HEAD changed since %s: %w", base, err)
 	}
 	working, err := m.WorkingDiff(ctx, nil)
 	if err != nil {
-		return sinceBase{}, fmt.Errorf("crap: the working tree's changes: %w", err)
+		return sinceBase{}, fmt.Errorf("change risk: the working tree's changes: %w", err)
 	}
 	removed := readPatchFacts(committed).removedText + readPatchFacts(working).removedText
 	return sinceBase{lines: changedLines(committed, working), removed: removed}, nil
@@ -386,9 +386,9 @@ func inSpan(start, end int) func(int) bool {
 	return func(line int) bool { return line >= start && line <= end }
 }
 
-// crapScorer answers the scorer's lookups from the workspace.
-func (m *Magus) crapScorer(defs map[string]symbolDef) crapScorer {
-	return crapScorer{
+// riskScorer answers the scorer's lookups from the workspace.
+func (m *Magus) riskScorer(defs map[string]symbolDef) riskScorer {
+	return riskScorer{
 		read:     m.readWorkspaceFile,
 		claimant: m.spellClaiming(),
 		owner:    m.projectOwner(),
@@ -483,12 +483,10 @@ func (m *Magus) parseReport(project string, cov spells.Coverage, data []byte) ([
 	return coverage.Rebase(files, m.ws.Root, project), nil
 }
 
-// attachCrap adds a crap check to each symbol the review says changed. It
-// is advice: the threshold that refuses is repo policy, not magus's.
-//
-// changes is what the review classified, or nil to read it off the files'
-// symbols.
-func (m *Magus) attachCrap(out *types.Diff, byPath map[string]*types.DiffFile, graph *knowledge.Graph, changes map[string]string) {
+// attachChangeRisk adds advice to each symbol the review says changed: the
+// threshold that refuses is repo policy. changes is what the review
+// classified, or nil to read it off the files' symbols.
+func (m *Magus) attachChangeRisk(out *types.Diff, byPath map[string]*types.DiffFile, graph *knowledge.Graph, changes map[string]string) {
 	if changes == nil {
 		changes = symbolChanges(out.Files)
 	}
@@ -497,7 +495,7 @@ func (m *Magus) attachCrap(out *types.Diff, byPath map[string]*types.DiffFile, g
 	}
 	defs := definedSymbols(graph.Nodes())
 	fns := touchedFunctions(defs, byPath, conformanceInput{changes: changes})
-	attachCrapChecks(out.Files, m.crapScorer(defs).scoreAll(fns))
+	attachChangeRiskChecks(out.Files, m.riskScorer(defs).scoreAll(fns))
 }
 
 func symbolChanges(files []types.DiffFile) map[string]string {
@@ -512,8 +510,8 @@ func symbolChanges(files []types.DiffFile) map[string]string {
 	return out
 }
 
-func attachCrapChecks(files []types.DiffFile, crap types.Crap) {
-	checks := crapChecks(crap)
+func attachChangeRiskChecks(files []types.DiffFile, risk types.ChangeRisk) {
+	checks := riskChecks(risk)
 	for _, f := range files {
 		for j := range f.Symbols {
 			addCheck(&f.Symbols[j], checks)
@@ -527,22 +525,22 @@ func addCheck(sym *types.DiffSymbol, checks map[string]types.Check) {
 	}
 }
 
-// crapCheck names the check on a DiffSymbol.
-const crapCheck = "crap"
+// riskCheck names the check on a DiffSymbol.
+const riskCheck = "change-risk"
 
-func crapChecks(crap types.Crap) map[string]types.Check {
+func riskChecks(risk types.ChangeRisk) map[string]types.Check {
 	out := map[string]types.Check{}
-	for _, f := range crap.Functions {
+	for _, f := range risk.Functions {
 		out[f.Symbol] = types.Check{
-			Name: crapCheck, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
-			Message: fmt.Sprintf("CRAP %.1f: complexity %d, %d of %d coverable units covered",
+			Name: riskCheck, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
+			Message: fmt.Sprintf("change risk %.1f: complexity %d, %d of %d coverable units covered",
 				f.Score, f.Complexity, f.Covered, f.Coverable),
 		}
 	}
-	for _, g := range crap.Gaps {
+	for _, g := range risk.Gaps {
 		out[g.Symbol] = types.Check{
-			Name: crapCheck, Status: types.CheckAdvice, Evidence: types.EvidenceUnknown,
-			Message: "CRAP unmeasured: " + g.Reason,
+			Name: riskCheck, Status: types.CheckAdvice, Evidence: types.EvidenceUnknown,
+			Message: "change risk unmeasured: " + g.Reason,
 		}
 	}
 	return out

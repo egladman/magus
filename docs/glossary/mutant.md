@@ -33,5 +33,5 @@ The knowledge graph holds no docs section or code type by this name outside the 
 
 ## See also
 
-- [ADR 0023](../decisions/0023-touched-functions-meet-crap-and-their-mutants.md)
-- [CRAP](crap.md)
+- [ADR 0023](../decisions/0023-touched-functions-meet-change-risk-and-their-mutants.md)
+- [Change risk](change-risk.md)

@@ -1,8 +1,8 @@
 package types
 
-// CrapScore is complexity^2 * (1-coverage)^3 + complexity, with coverage a
-// ratio in [0,1]. A fully covered function scores its complexity.
-func CrapScore(complexity int, coverage float64) float64 {
+// ChangeRiskScore is complexity^2 * (1-coverage)^3 + complexity, with
+// coverage a ratio in [0,1]. A fully covered function scores its complexity.
+func ChangeRiskScore(complexity int, coverage float64) float64 {
 	c := float64(complexity)
 	miss := 1 - coverage
 	return c*c*miss*miss*miss + c
@@ -31,8 +31,8 @@ func (f FunctionGap) Decided(threshold int) bool {
 	return c > 0 && c*c+c <= threshold
 }
 
-// CrapFunction is one function's measured score.
-type CrapFunction struct {
+// ChangeRiskFunction is one function's measured score.
+type ChangeRiskFunction struct {
 	Symbol   string
 	Label    string
 	Path     string
@@ -49,7 +49,7 @@ type CrapFunction struct {
 
 // Coverage is Covered over Coverable, or 0 when no line is coverable. Such a
 // function has nothing a test could reach; the caller reports it as a gap.
-func (f CrapFunction) Coverage() float64 {
+func (f ChangeRiskFunction) Coverage() float64 {
 	if f.Coverable == 0 {
 		return 0
 	}
@@ -57,17 +57,18 @@ func (f CrapFunction) Coverage() float64 {
 }
 
 // Past reports whether the function scores above threshold.
-func (f CrapFunction) Past(threshold int) bool {
+func (f ChangeRiskFunction) Past(threshold int) bool {
 	return f.Score > float64(threshold)
 }
 
-// Crap is the CRAP answer for a change: what it scored and what it could not.
-type Crap struct {
+// ChangeRisk is the change risk answer for a change: what it scored and what
+// it could not.
+type ChangeRisk struct {
 	// Definition names the formula so a reader need not know it.
 	Definition string
 	// Base is the revision the touched set was taken against, or "" when
 	// every function in the workspace was scored.
 	Base      string
-	Functions []CrapFunction
+	Functions []ChangeRiskFunction
 	Gaps      []FunctionGap
 }

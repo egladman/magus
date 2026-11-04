@@ -351,8 +351,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "ConformanceRow", Type: reflect.TypeFor[types.ConformanceRow](), RuntimeObject: true},
 	{Name: "Conformance", Type: reflect.TypeFor[types.Conformance](), RuntimeObject: true},
 	{Name: "FunctionGap", Type: reflect.TypeFor[types.FunctionGap](), RuntimeObject: true},
-	{Name: "CrapFunction", Type: reflect.TypeFor[types.CrapFunction](), RuntimeObject: true},
-	{Name: "Crap", Type: reflect.TypeFor[types.Crap](), RuntimeObject: true},
+	{Name: "ChangeRiskFunction", Type: reflect.TypeFor[types.ChangeRiskFunction](), RuntimeObject: true},
+	{Name: "ChangeRisk", Type: reflect.TypeFor[types.ChangeRisk](), RuntimeObject: true},
 	{Name: "Mutant", Type: reflect.TypeFor[types.Mutant](), RuntimeObject: true},
 	{Name: "Mutants", Type: reflect.TypeFor[types.Mutants](), RuntimeObject: true},
 	// There is deliberately no ModelTier object: that name is the workspace's own Buzz enum.

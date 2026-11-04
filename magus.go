@@ -1429,7 +1429,7 @@ func statusLinePath(line string) string {
 // whether it is generated, which project owns it, how widely its changed symbols are
 // referenced, and what coverage was observed on it.
 //
-// Each changed function also carries a crap check.
+// Each changed function also carries a change risk check.
 //
 // It is a JOIN, not a computation. Every input already exists: ClassifyFiles reads the same
 // declared globs `magus describe file` reads, and impact.Compute/Enrich are what `magus
@@ -1657,7 +1657,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		m.conformance(ctx, &out, byPath, graph, cfg, in, patchErr)
 	}
 	if indexed {
-		m.attachCrap(&out, byPath, graph, in.changes)
+		m.attachChangeRisk(&out, byPath, graph, in.changes)
 		attachPublicThrough(out.Files, newCallGraph(graph, m.projectOwner()))
 	}
 	if patchErr == nil {

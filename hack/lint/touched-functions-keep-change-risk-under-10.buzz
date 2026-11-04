@@ -1,6 +1,6 @@
 // Tier 2, measured shape: a function the change touches may not score
-// above CRAP 10. A function it leaves alone is never refused.
-namespace crapRule;
+// a change risk above 10. A function it leaves alone is never refused.
+namespace changeRiskRule;
 
 import "assert";
 import "std";
@@ -18,18 +18,19 @@ export fun reads() > [str] {
 // check refuses each touched function past THRESHOLD and each gap that the
 // worst case cannot decide.
 export fun check(files: [Path]) > [Finding] !> any {
-    return judge(magus\crap(vcs\base()));
+    return judge(magus\change(vcs\base()).risk());
 }
 
-// judge is check's verdict over a magus\crap answer. CRAP has no exception.
-export fun judge(crap: magus\Crap) > [Finding] {
+// judge is check's verdict over a magus\change(base).risk answer. Change
+// risk has no exception.
+export fun judge(risk: magus\ChangeRisk) > [Finding] {
     final found = mut [<Finding>];
-    foreach (f in crap.functions) {
+    foreach (f in risk.functions) {
         if (f.score > 10.0) {
             found.append(refuse(f));
         }
     }
-    foreach (g in crap.gaps) {
+    foreach (g in risk.gaps) {
         if (!decided(g.complexity)) {
             found.append(unscored(g));
         }
@@ -43,19 +44,19 @@ export fun decided(complexity: int) > bool {
     return complexity > 0 and complexity * complexity + complexity <= THRESHOLD;
 }
 
-fun refuse(f: magus\CrapFunction) > Finding {
+fun refuse(f: magus\ChangeRiskFunction) > Finding {
     return Finding{ path = f.path, line = f.line,
-        message = "{f.label} scores CRAP {hundredths(f.score)} (complexity {f.complexity}, coverage {coverage(f)}), past {THRESHOLD}",
+        message = "{f.label} has change risk {hundredths(f.score)} (complexity {f.complexity}, coverage {coverage(f)}), past {THRESHOLD}",
         fix = "Cover it with tests, or split it into functions that each score {THRESHOLD} or less." };
 }
 
 fun unscored(g: magus\FunctionGap) > Finding {
     return Finding{ path = g.path, line = g.line,
-        message = "{g.label} has no CRAP score ({g.reason}) and complexity {g.complexity} does not decide it within {THRESHOLD}",
+        message = "{g.label} has no change risk score ({g.reason}) and complexity {g.complexity} does not decide it within {THRESHOLD}",
         fix = "Give its language a coverage measure, or split it until complexity squared plus complexity is {THRESHOLD} or less." };
 }
 
-fun coverage(f: magus\CrapFunction) > str {
+fun coverage(f: magus\ChangeRiskFunction) > str {
     if (f.coverable == 0) {
         return "no coverable lines";
     }
@@ -69,8 +70,8 @@ fun hundredths(score: double) > str {
     return "{(h - frac) / 100}.{pad}{frac}";
 }
 
-fun fn(label: str, complexity: int, covered: int, coverable: int, score: double) > magus\CrapFunction {
-    return magus\CrapFunction{ label = label, path = "a.go", line = 3, complexity = complexity,
+fun fn(label: str, complexity: int, covered: int, coverable: int, score: double) > magus\ChangeRiskFunction {
+    return magus\ChangeRiskFunction{ label = label, path = "a.go", line = 3, complexity = complexity,
         covered = covered, coverable = coverable, score = score };
 }
 
@@ -79,21 +80,21 @@ fun gap(complexity: int) > magus\FunctionGap {
 }
 
 test "a touched function past ten is refused with its score, complexity and coverage" {
-    final got = judge(magus\Crap{ functions = [fn("a.Long", complexity: 12, covered: 1, coverable: 4, score: 31.5)] });
+    final got = judge(magus\ChangeRisk{ functions = [fn("a.Long", complexity: 12, covered: 1, coverable: 4, score: 31.5)] });
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].line, want: 3, message: "at the function");
-    assert\equal(got[0].message, want: "a.Long scores CRAP 31.50 (complexity 12, coverage 25%), past 10", message: "figures");
+    assert\equal(got[0].message, want: "a.Long has change risk 31.50 (complexity 12, coverage 25%), past 10", message: "figures");
 }
 
 test "a function at ten passes" {
-    assert\equal(judge(magus\Crap{ functions = [fn("a.Ok", complexity: 3, covered: 4, coverable: 4, score: 10.0)] }).len(), want: 0,
+    assert\equal(judge(magus\ChangeRisk{ functions = [fn("a.Ok", complexity: 3, covered: 4, coverable: 4, score: 10.0)] }).len(), want: 0,
         message: "ten is within");
 }
 
 test "a gap is decided by its worst case, and refused otherwise with its reason" {
-    final got = judge(magus\Crap{ gaps = [gap(2), gap(3), gap(0)] });
+    final got = judge(magus\ChangeRisk{ gaps = [gap(2), gap(3), gap(0)] });
     assert\equal(got.len(), want: 2, message: "2 decides (6), 3 does not (12), 0 decides nothing");
-    assert\equal(got[0].message, want: "a.F has no CRAP score (spell bash declares no coverage) and complexity 3 does not decide it within 10",
+    assert\equal(got[0].message, want: "a.F has no change risk score (spell bash declares no coverage) and complexity 3 does not decide it within 10",
         message: "reason shown");
 }
 

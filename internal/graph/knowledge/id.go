@@ -393,7 +393,7 @@ const (
 )
 
 // AttrComplexity is one plus the decision points an AST-reading indexer
-// counted in a symbol (types.KnowledgeSymbol.Complexity). CRAP reads it
+// counted in a symbol (types.KnowledgeSymbol.Complexity). Change risk reads it
 // where the spell declares no decision tokens. Absent means the indexer
 // did not count.
 const AttrComplexity = "complexity"

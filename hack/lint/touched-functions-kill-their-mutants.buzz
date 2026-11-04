@@ -15,11 +15,12 @@ export fun reads() > [str] {
 
 // check refuses each surviving mutant and each unusable marker.
 export fun check(files: [Path]) > [Finding] !> any {
-    return judge(magus\mutants(vcs\base()));
+    return judge(magus\change(vcs\base()).mutants());
 }
 
-// judge is check's verdict over a magus\mutants answer. The engine has already
-// applied the markers, so an excepted mutant arrives as excepted.
+// judge is check's verdict over a magus\change(base).mutants answer. The
+// engine has already applied the markers, so an excepted mutant arrives as
+// excepted.
 export fun judge(answer: magus\Mutants) > [Finding] {
     final found = mut [<Finding>];
     foreach (m in answer.mutants) {

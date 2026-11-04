@@ -106,7 +106,7 @@ type touchedFunction struct {
 	EndLine  int
 }
 
-// functionKinds are the SCIP kinds with a body CRAP can score.
+// functionKinds are the SCIP kinds with a body change risk can score.
 var functionKinds = map[string]bool{"Function": true, "Method": true, "Constructor": true}
 
 // touchedFunctions names the functions the change touches, in symbol ID

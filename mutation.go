@@ -702,7 +702,7 @@ func copyCacheEnv(dir string) string {
 }
 
 // copyCoverage is the lines of s's file that the coverage baseline in dir
-// hit. The copy is read as a workspace of its own, as Crap reads a report.
+// hit. The copy is read as a workspace of its own, as ChangeRisk reads a report.
 func copyCoverage(dir string, s mutationSubject) (map[int]bool, error) {
 	reportPath := filepath.Join(coverage.Dir(copyCacheDir(dir), s.project), s.coverage.File)
 	data, err := os.ReadFile(reportPath)

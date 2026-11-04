@@ -69,7 +69,7 @@
 {"name":"Magus.MeasureConformanceBase","reason":"the base measure magus\\conformanceBase runs through the std workspace interface"}
 {"name":"Magus.Context","reason":"workspace accessor a Go program uses to call the graph doors in std without running a target"}
 {"name":"Magus.ContextWithSecrets","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
-{"name":"Magus.Crap","reason":"graph, plan and statistics query behind a CLI verb"}
+{"name":"Magus.ChangeRisk","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.Mutants","reason":"graph, plan and statistics query behind a CLI verb"}
 {"name":"Magus.CurrentRevision","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}
 {"name":"Magus.Diff","reason":"version-control and change reading behind diff, describe file and the job checkpoint"}

@@ -1,8 +1,9 @@
+//go:build !wasm
+
 package std
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/egladman/magus/types"
@@ -10,7 +11,7 @@ import (
 
 // qualityWorkspace is the part of *magus.Magus that scores and mutates.
 type qualityWorkspace interface {
-	Crap(ctx context.Context, base string) (types.Crap, error)
+	ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, error)
 	Mutants(ctx context.Context, base string) (types.Mutants, error)
 }
 
@@ -27,33 +28,67 @@ func qualityFromContext(ctx context.Context, member string) (qualityWorkspace, e
 	return q, nil
 }
 
-// MagusCrap backs magus\crap: the CRAP score of each function touched since
-// base. base "" scores every function in the workspace.
-func MagusCrap(ctx context.Context, base string) (types.Crap, error) {
-	q, err := qualityFromContext(ctx, "crap")
+// MagusChangeRisk is Change.risk(): the change risk of each function
+// touched since c's base.
+func MagusChangeRisk(ctx context.Context, c types.Change) (types.ChangeRisk, error) {
+	base, err := heldChangeBase(ctx, c, "risk")
 	if err != nil {
-		return types.Crap{}, err
+		return types.ChangeRisk{}, err
 	}
-	out, err := q.Crap(ctx, base)
+	return scoreRisk(ctx, "Change.risk", base)
+}
+
+// MagusWorkspaceRisk is Workspace.risk(): the change risk of every function
+// in the workspace.
+func MagusWorkspaceRisk(ctx context.Context, _ types.MagusWorkspace) (types.ChangeRisk, error) {
+	return scoreRisk(ctx, "Workspace.risk", "")
+}
+
+// MagusChangeMutants is Change.mutants(): the mutants of the functions
+// touched since c's base.
+func MagusChangeMutants(ctx context.Context, c types.Change) (types.Mutants, error) {
+	base, err := heldChangeBase(ctx, c, "mutants")
 	if err != nil {
-		return types.Crap{}, fmt.Errorf("magus\\crap: %w", err)
+		return types.Mutants{}, err
+	}
+	return mutate(ctx, "Change.mutants", base)
+}
+
+// heldChangeBase is c's base once heldChange vouches for its tree.
+func heldChangeBase(ctx context.Context, c types.Change, member string) (string, error) {
+	ws, err := heldChange(ctx, c, member)
+	if err != nil {
+		return "", err
+	}
+	base, err := changeBase(ctx, ws, c)
+	if err != nil {
+		return "", fmt.Errorf("magus\\Change.%s: %w", member, err)
+	}
+	return base, nil
+}
+
+// scoreRisk scores the functions touched since base, or every function
+// when base is "".
+func scoreRisk(ctx context.Context, member, base string) (types.ChangeRisk, error) {
+	q, err := qualityFromContext(ctx, member)
+	if err != nil {
+		return types.ChangeRisk{}, err
+	}
+	out, err := q.ChangeRisk(ctx, base)
+	if err != nil {
+		return types.ChangeRisk{}, fmt.Errorf("magus\\%s: %w", member, err)
 	}
 	return out, nil
 }
 
-// MagusMutants backs magus\mutants: the mutants of the functions touched
-// since base. base "" is refused.
-func MagusMutants(ctx context.Context, base string) (types.Mutants, error) {
-	if base == "" {
-		return types.Mutants{}, errors.New("magus\\mutants: name a base, since mutating a whole workspace is not offered")
-	}
-	q, err := qualityFromContext(ctx, "mutants")
+func mutate(ctx context.Context, member, base string) (types.Mutants, error) {
+	q, err := qualityFromContext(ctx, member)
 	if err != nil {
 		return types.Mutants{}, err
 	}
 	out, err := q.Mutants(ctx, base)
 	if err != nil {
-		return types.Mutants{}, fmt.Errorf("magus\\mutants: %w", err)
+		return types.Mutants{}, fmt.Errorf("magus\\%s: %w", member, err)
 	}
 	return out, nil
 }

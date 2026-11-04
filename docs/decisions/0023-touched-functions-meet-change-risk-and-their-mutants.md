@@ -1,13 +1,13 @@
 ---
-title: "ADR 0023: touched functions meet CRAP 10 and kill their mutants"
+title: "ADR 0023: touched functions keep change risk at 10 and kill their mutants"
 order: 23
-description: A function a change touches is refused when its CRAP score passes 10 or a mutant of it survives. Spells declare decision tokens, token swaps and a coverage command as data, and one engine in core scores and mutates every language. An equivalent mutant is excepted inline with a reason. CRAP has no exception. The engine, the spell declarations, the host functions and the two lint rules are built; the lint runner does not name the rules yet.
+description: A function a change touches is refused when its change risk passes 10 or a mutant of it survives. Spells declare decision tokens, token swaps and a coverage command as data, and one engine in core scores and mutates every language. An equivalent mutant is excepted inline with a reason. Change risk has no exception. The engine, the spell declarations, the host functions and the two lint rules are built; the lint runner does not name the rules yet.
 tags: [adr, decision, lint, coverage, mutation, spells, gates]
 status: accepted (partly implemented)
 date: 2026-11-03
 ---
 
-# ADR 0023: touched functions meet CRAP 10 and kill their mutants
+# ADR 0023: touched functions keep change risk at 10 and kill their mutants
 
 ## Context
 
@@ -27,7 +27,7 @@ What already existed and was reused:
   gets a reserved op.
 
 The first wave of the build was reviewed on 2026-11-03 (architecture review of
-`65d6322fa..d3b69f1f7` on branch `crap-mutation`). The review found, among others, that
+`65d6322fa..d3b69f1f7`, the branch that built it). The review found, among others, that
 every spell's coverage command was broken because `$MAGUS_COVERAGE_DIR` sat inside a
 token and the runner resolved whole tokens only, that a mutant's timeout came from a
 baseline the action cache could replay, and that `Magus.Mutants` did not exist. Each fix
@@ -41,7 +41,8 @@ function the change does not edit is never charged.
 
 ### Score
 
-`CRAP = c^2 (1 - cov)^3 + c`, with c the function's complexity.
+`change risk = c^2 (1 - cov)^3 + c`, with c the function's complexity. The formula
+is the CRAP score of Savoia and Evans (2007); magus calls it change risk.
 
 - **Complexity is decisions plus one** (`Complexity = decisions + 1`). A spell declares
   its decision tokens as data (`Syntax.Decisions`); the engine counts them inside the
@@ -92,7 +93,7 @@ Buzz.
 
 `// magus:mutant op=<swap> reason=<why>` beside a site excepts that one surviving mutant.
 It is the only exception form. A marker that matches no survivor, or carries no reason, is
-a finding. CRAP has no exception form: a score past 10 is fixed by a test or a smaller
+a finding. Change risk has no exception form: a score past 10 is fixed by a test or a smaller
 function.
 
 ### Where the threshold lives
@@ -108,22 +109,22 @@ number; it reports scores and mutants, and a lint rule decides.
 | `Op.Coverage` and the synthesized `coverage` op                               | done                                            |
 | complexity carried in the pack beside SCIP (`SymbolInfo.Complexity`)          | done                                            |
 | runner refs resolve inside a token for `MAGUS` and `MAGUS_` names             | done                                            |
-| `Magus.Crap` and the crap check on each touched function in `magus diff`      | done                                            |
+| `Magus.ChangeRisk` and the change-risk check in `magus diff`                  | done                                            |
 | `Magus.Mutants`, the scoped baseline, `mutants.jsonl` and the marker reader   | done                                            |
 | the `magus:mutant` marker syntax and its unused-marker findings               | done                                            |
-| Buzz host functions the two rules call (`magus\crap`, `magus\mutants`)        | done                                            |
-| lint rule `touched-functions-stay-within-crap-10`                             | done (`hack/lint/run.buzz` does not name it)    |
+| Buzz methods `Change.risk`, `Change.mutants` and `Workspace.risk`             | done                                            |
+| lint rule `touched-functions-keep-change-risk-under-10`                       | done (`hack/lint/run.buzz` does not name it)    |
 | lint rule `touched-functions-kill-their-mutants`                              | done (`hack/lint/run.buzz` does not name it)    |
-| `magus\crap` scoring this repository's own change                             | in progress (the root `coverage` op is red)     |
-| `magus\mutants` over this repository's own change                             | in progress (a Buzz mutant breaks its parse)    |
+| `Change.risk` scoring this repository's own change                            | in progress (the root `coverage` op is red)     |
+| `Change.mutants` over this repository's own change                            | in progress (a Buzz mutant breaks its parse)    |
 | coverage for bash                                                             | not built                                       |
 | Measured section (refusals and wall time over the last 20 merges)             | not built                                       |
 
 Until `hack/lint/run.buzz` names the two rules, nothing refuses a touched function:
-`magus diff` prints the crap check as advice and `Magus.Mutants` answers only when called.
-On this branch `magus\crap` against `origin/main` ran the root `coverage` op for 12m47s
+`magus diff` prints the change-risk check as advice and `Magus.Mutants` answers only when
+called. On the building branch, change risk against `origin/main` ran the root `coverage` op for 12m47s
 and failed, because that op runs the whole Go suite, which is red, and its buzz spell
-calls `magus buzz -t` with no file. `magus\mutants` stopped within five minutes: its first
+calls `magus buzz -t` with no file. Mutation stopped within five minutes: its first
 Buzz subject swapped the `>` of a return type for `>=`, the docs magusfile no longer
 parsed, and that one unparsable mutant ended the whole run.
 
@@ -154,7 +155,7 @@ parsed, and that one unparsable mutant ended the whole run.
   and the definitions of complexity differ. Reopen if the token tables disagree with a
   native tool on more than a measured share of functions; none is measured.
 - **A conformance metric.** Lost: conformance judges file counts against the base from the
-  index, while CRAP needs a test run and is a property of one function.
+  index, while change risk needs a test run and is a property of one function.
 - **A ledger or baseline of known survivors
   ([ADR 0021](0021-a-change-accepts-the-findings-it-causes.md)).** Lost: a survivor is a
   property of the tree and outlives the merge, and the tool-native suppression is the
@@ -189,3 +190,9 @@ parsed, and that one unparsable mutant ended the whole run.
   one only with a measured false kill.
 
 ## Amendments
+
+### 2026-11-04: the score is called change risk
+
+Eli renamed the score to change risk. The Buzz members moved onto objects: `Change.risk()`
+and `Change.mutants()` measure from the Change's base, and `Workspace.risk()` scores every
+function. The first lint rule became `touched-functions-keep-change-risk-under-10`.
