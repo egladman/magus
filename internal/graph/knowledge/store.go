@@ -29,8 +29,8 @@ import (
 )
 
 // errShardMoved marks a shard file holding another fingerprint than the
-// manifest the caller read. A concurrent sync rewrote the store in between.
-var errShardMoved = errors.New("knowledge: shard moved under the manifest")
+// manifest the caller read. A concurrent sync rewrote it, or it is corrupt.
+var errShardMoved = errors.New("shard fingerprint differs from the manifest")
 
 // ErrShardMiss reports that a shard key is not on the remote. GetShard returns it
 // (not a nil reader) for a miss, so the contract is unambiguous: a nil error means
@@ -638,7 +638,7 @@ func (s *Store) readVerifiedShard(ctx context.Context, man *manifest, name strin
 		}
 	}
 	if sf.Fingerprint != want {
-		return shardFile{}, fmt.Errorf("%w: shard %q holds fingerprint %.12s, the manifest names %.12s", errShardMoved, name, sf.Fingerprint, want)
+		return shardFile{}, fmt.Errorf("%w: %q holds %.12s, the manifest names %.12s", errShardMoved, name, sf.Fingerprint, want)
 	}
 	return sf, nil
 }
