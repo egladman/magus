@@ -202,7 +202,8 @@ func TestSpawnBoundToAnUnreadableRowIsDeniedWithTheRootsRemedy(t *testing.T) {
 
 	assert.Contains(t, got.Reason, "widens_paths")
 	assert.Contains(t, got.Reason, ward.BootstrapCommand)
-	assert.Contains(t, got.Reason, "./magus server stop && ./magus server start")
+	assert.Contains(t, got.Reason, "restart the daemon")
+	assert.Contains(t, unknownRowSpawnDenial(deps, row).Why, "`./magus server stop`, then `./magus server start`")
 	got.Reason = ""
 	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseRowUnknown)}, got)
 }
