@@ -86,14 +86,42 @@ func (s *BuildSuite) TestAForecasterReplacesCeilDivision() {
 	s.Equal([]int{4}, shardSizes(plan.Shards))
 }
 
-func (s *BuildSuite) TestAnEmptyForecastFallsBackToCeilDivision() {
-	us := units(2)
+func (s *BuildSuite) forecast(us []types.Unit, max int, assignments [][]types.Unit) error {
 	f := NewMockForecaster(s.T())
-	f.EXPECT().Plan(us, 2).Return(nil).Once()
+	f.EXPECT().Plan(us, max).Return(assignments).Once()
+	_, err := Build(us, "test", WithMaxShards(8), WithForecaster(f))
+	return err
+}
 
-	plan, err := Build(us, "test", WithMaxShards(8), WithForecaster(f))
-	s.Require().NoError(err)
-	s.Equal([]int{1, 1}, shardSizes(plan.Shards))
+func (s *BuildSuite) TestAnEmptyForecastIsAnError() {
+	us := units(2)
+	s.ErrorContains(s.forecast(us, 2, nil), "dropped p000:test")
+}
+
+func (s *BuildSuite) TestAForecastThatDropsAUnitIsAnError() {
+	us := units(2)
+	s.ErrorContains(s.forecast(us, 2, [][]types.Unit{us[:1]}), "dropped p001:test")
+}
+
+func (s *BuildSuite) TestAForecastThatRepeatsAUnitIsAnError() {
+	us := units(2)
+	s.ErrorContains(s.forecast(us, 2, [][]types.Unit{us, us[:1]}), "placed p000:test on shards 0 and 1")
+}
+
+func (s *BuildSuite) TestAForecastThatInventsAUnitIsAnError() {
+	us := units(1)
+	stray := types.Unit{Project: "x", Target: "lint"}
+	s.ErrorContains(s.forecast(us, 1, [][]types.Unit{{us[0], stray}}), "placed x:lint, which is not a unit")
+}
+
+func (s *BuildSuite) TestAForecastWithAnEmptyShardIsAnError() {
+	us := units(2)
+	s.ErrorContains(s.forecast(us, 2, [][]types.Unit{us, {}}), "left shard 1 empty")
+}
+
+func (s *BuildSuite) TestAForecastOverTheLimitIsAnError() {
+	us := units(2)
+	s.ErrorContains(s.forecast(us, 2, [][]types.Unit{us[:1], us[1:], us[:0]}), "opened 3 shards, over the limit of 2")
 }
 
 func (s *BuildSuite) TestSourcePassesThrough() {

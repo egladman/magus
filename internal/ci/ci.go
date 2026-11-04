@@ -86,11 +86,11 @@ func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 	var assignments [][]types.Unit
 	if cfg.forecaster != nil {
 		assignments = cfg.forecaster.Plan(units, maxShards)
-		if len(assignments) == 0 { // defensive: never drop work
-			assignments = ceilDivide(units, maxShards)
-		}
 	} else {
 		assignments = ceilDivide(units, maxShards)
+	}
+	if err := placedOnce(units, assignments, maxShards); err != nil {
+		return Plan{}, err
 	}
 
 	idWidth := digits(len(assignments) - 1)
@@ -104,6 +104,41 @@ func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 	}
 
 	return Plan{Shards: shards, Source: source}, nil
+}
+
+// placedOnce checks that assignments hold every unit exactly once, in at most
+// maxShards non-empty shards. A partitioner that drops or repeats a unit
+// would gate less, or run twice, with nothing to show it.
+func placedOnce(units []types.Unit, assignments [][]types.Unit, maxShards int) error {
+	if len(assignments) > maxShards {
+		return fmt.Errorf("ci: the partitioner opened %d shards, over the limit of %d", len(assignments), maxShards)
+	}
+	want := make(map[string]bool, len(units))
+	for _, u := range units {
+		want[u.String()] = true
+	}
+	placed := make(map[string]int, len(units))
+	for i, shard := range assignments {
+		if len(shard) == 0 {
+			return fmt.Errorf("ci: the partitioner left shard %d empty", i)
+		}
+		for _, u := range shard {
+			k := u.String()
+			switch {
+			case !want[k]:
+				return fmt.Errorf("ci: the partitioner placed %s, which is not a unit of the plan", k)
+			case placed[k] > 0:
+				return fmt.Errorf("ci: the partitioner placed %s on shards %d and %d", k, placed[k]-1, i)
+			}
+			placed[k] = i + 1
+		}
+	}
+	for _, u := range units {
+		if placed[u.String()] == 0 {
+			return fmt.Errorf("ci: the partitioner dropped %s", u)
+		}
+	}
+	return nil
 }
 
 // ceilDivide partitions units into at most maxShards shards via ceil-division.
