@@ -25,11 +25,14 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## ci
 
-| Config key              | Environment variable          | Flag                      | Type |
-| ----------------------- | ----------------------------- | ------------------------- | ---- |
-| `ci.max_shards`         | `MAGUS_CI_MAX_SHARDS`         | `--ci-max-shards`         | int  |
-| `ci.record_runs`        | `MAGUS_CI_RECORD_RUNS`        | `--ci-record-runs`        | bool |
-| `ci.runner_pool_budget` | `MAGUS_CI_RUNNER_POOL_BUDGET` | `--ci-runner-pool-budget` | int  |
+| Config key              | Environment variable          | Flag                      | Type   |
+| ----------------------- | ----------------------------- | ------------------------- | ------ |
+| `ci.max_shards`         | `MAGUS_CI_MAX_SHARDS`         | `--ci-max-shards`         | int    |
+| `ci.record_runs`        | `MAGUS_CI_RECORD_RUNS`        | `--ci-record-runs`        | bool   |
+| `ci.runner.cores`       | `MAGUS_CI_RUNNER_CORES`       | `--ci-runner-cores`       | int    |
+| `ci.runner.memory_mb`   | `MAGUS_CI_RUNNER_MEMORY_MB`   | `--ci-runner-memory-mb`   | int    |
+| `ci.runner.name`        | `MAGUS_CI_RUNNER_NAME`        | `--ci-runner-name`        | string |
+| `ci.runner_pool_budget` | `MAGUS_CI_RUNNER_POOL_BUDGET` | `--ci-runner-pool-budget` | int    |
 
 ## console
 

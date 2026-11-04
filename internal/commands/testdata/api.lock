@@ -14,6 +14,9 @@ config cache.size_mb
 config cache.write.enabled
 config ci.max_shards
 config ci.record_runs
+config ci.runner.cores
+config ci.runner.memory_mb
+config ci.runner.name
 config ci.runner_pool_budget
 config concurrency
 config concurrency_profile
