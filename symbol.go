@@ -1105,10 +1105,15 @@ func (m *Magus) buildSymbolIndex(ctx context.Context, idx projectIndex, step cac
 // review still fails naming the indexer to install rather than reading as checked. Installed
 // means the binary resolves on the PATH a run started from ctx hands its children, which is
 // where the run that builds the index looks for it.
+// An in-process indexer names no binary, so it is always kept.
 func installedIndexes(ctx context.Context, idxs []projectIndex) []projectIndex {
 	installed := make([]bool, len(idxs))
 	present := map[string]bool{}
 	for i, idx := range idxs {
+		if idx.bin == "" {
+			installed[i] = true
+			continue
+		}
 		_, err := spawn.LookPath(ctx, idx.bin)
 		installed[i] = err == nil
 		if installed[i] {

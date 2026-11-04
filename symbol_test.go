@@ -1438,9 +1438,9 @@ func TestBinaryTreeSkew(t *testing.T) {
 		binaryTreeSkew(ownGoMod, "abc", "def", unread), "inputs that cannot be listed are never read as unchanged")
 }
 
-// A missing scip-buzz must not cost the root project its review: while the Go index's
-// indexer is installed the Buzz index is left out, and a project with no indexer installed
-// keeps every index, so its review still fails naming what to install.
+// A missing external indexer is left out while another of the project's is
+// installed. A project with none installed keeps every index, so its review
+// still fails naming what to install.
 func TestInstalledIndexesDropsAMissingSecondIndexer(t *testing.T) {
 	bin := testkit.NewWorkspace(t)
 	bin.WriteExecutable("zzz-scip-go", "#!/bin/sh\n")
@@ -1448,13 +1448,28 @@ func TestInstalledIndexesDropsAMissingSecondIndexer(t *testing.T) {
 	root, docs := &types.Project{Path: "."}, &types.Project{Path: "docs"}
 	idxs := []projectIndex{
 		{project: root, op: "scip", language: "go", bin: "zzz-scip-go"},
-		{project: root, op: "scip-buzz", language: "buzz", bin: "zzz-scip-buzz"},
-		{project: docs, op: "scip-buzz", language: "buzz", bin: "zzz-scip-buzz"},
+		{project: root, op: "scip-ts", language: "typescript", bin: "zzz-scip-typescript"},
+		{project: docs, op: "scip-ts", language: "typescript", bin: "zzz-scip-typescript"},
 	}
 
 	got := installedIndexes(t.Context(), idxs)
 
 	assert.Equal(t, []projectIndex{idxs[0], idxs[2]}, got)
+}
+
+// In-process indexers name no binary, so a PATH lookup cannot vouch for them.
+func TestInstalledIndexesKeepsInProcessIndexers(t *testing.T) {
+	bin := testkit.NewWorkspace(t)
+	bin.WriteExecutable("zzz-scip-go", "#!/bin/sh\n")
+	t.Setenv("PATH", bin.Root())
+	root := &types.Project{Path: "."}
+	idxs := []projectIndex{
+		{project: root, op: "scip", language: "go", bin: "zzz-scip-go"},
+		{project: root, op: "scip-buzz", language: "buzz"},
+		{project: root, op: "shell-index", language: "shell"},
+	}
+
+	assert.Equal(t, idxs, installedIndexes(t.Context(), idxs))
 }
 
 // A touched project with no indexer is named, so "found nothing" is only ever said about
