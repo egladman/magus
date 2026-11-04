@@ -295,6 +295,24 @@ func (m *Magus) baseIndexPlan(ctx context.Context, tree string) (baseIndexPlan, 
 	return plan, nil
 }
 
+// trustRoot adds root to MISE_TRUSTED_CONFIG_PATHS in environ. CI trusts
+// only the workspace, and the base tree holds the same config.
+func trustRoot(environ []string, root string) []string {
+	const name = "MISE_TRUSTED_CONFIG_PATHS"
+	paths := []string{root}
+	out := make([]string, 0, len(environ)+1)
+	for _, kv := range environ {
+		if value, ok := strings.CutPrefix(kv, name+"="); ok {
+			if value != "" {
+				paths = []string{value, root}
+			}
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, name+"="+strings.Join(paths, string(os.PathListSeparator)))
+}
+
 // inProcessIndexer is the in-process indexer si's format names over dir, nil for an external one.
 func inProcessIndexer(si *spells.SymbolIndexer, dir, root string) symbols.UnitIndexer {
 	switch si.Format {
@@ -303,7 +321,7 @@ func inProcessIndexer(si *spells.SymbolIndexer, dir, root string) symbols.UnitIn
 		if len(patterns) == 0 {
 			patterns = []string{"."}
 		}
-		return &goindex.Indexer{Dir: dir, Patterns: patterns, Builds: si.Envs}
+		return &goindex.Indexer{Dir: dir, Patterns: patterns, Env: trustRoot(os.Environ(), root), Builds: si.Envs}
 	case spells.SymbolFormatBuzzModule:
 		return &buzzindex.Indexer{Dir: dir, WorkspaceRoot: root}
 	case spells.SymbolFormatShellScript:

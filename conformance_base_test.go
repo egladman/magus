@@ -3,6 +3,7 @@ package magus
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -86,7 +87,33 @@ func (s *ConformanceBaseSuite) TestAFileBesideAnAbsentProjectIsJudged() {
 
 func (s *ConformanceBaseSuite) TestGoRunsInProcessWithItsPatterns() {
 	ix := inProcessIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages}, "/t/p", "/t")
-	s.Equal(&goindex.Indexer{Dir: "/t/p", Patterns: []string{"."}}, ix)
+	got, ok := ix.(*goindex.Indexer)
+	s.Require().True(ok)
+	s.Equal("/t/p", got.Dir)
+	s.Equal([]string{"."}, got.Patterns)
+}
+
+func (s *ConformanceBaseSuite) TestGoIsHandedTheTreeAsATrustedMiseConfig() {
+	env := trustRoot([]string{"A=1", "MISE_TRUSTED_CONFIG_PATHS=/ws"}, "/t")
+
+	s.Equal([]string{"A=1", "MISE_TRUSTED_CONFIG_PATHS=/ws" + string(os.PathListSeparator) + "/t"}, env)
+}
+
+func (s *ConformanceBaseSuite) TestGoIndexerEnvTrustsTheTree() {
+	ix := inProcessIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages}, "/t/p", "/t")
+
+	var trusted []string
+	for _, kv := range ix.(*goindex.Indexer).Env {
+		if strings.HasPrefix(kv, "MISE_TRUSTED_CONFIG_PATHS=") {
+			trusted = append(trusted, kv)
+		}
+	}
+	s.Require().Len(trusted, 1)
+	s.True(strings.HasSuffix(trusted[0], "/t"))
+}
+
+func (s *ConformanceBaseSuite) TestTheTreeIsTrustedAloneWhenNothingIsInherited() {
+	s.Equal([]string{"A=1", "MISE_TRUSTED_CONFIG_PATHS=/t"}, trustRoot([]string{"A=1"}, "/t"))
 }
 
 func (s *ConformanceBaseSuite) TestBuzzAndShellRunInProcessUnderTheBaseRoot() {
