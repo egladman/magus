@@ -255,6 +255,15 @@ type toolResult struct {
 // file other than the one st last read starts over. Lines a subagent wrote into the main
 // transcript are skipped.
 func (st *costState) readTranscript(transcript string) []toolResult {
+	var results []toolResult
+	for _, line := range st.newTranscriptLines(transcript) {
+		results = append(results, st.readRecord(line)...)
+	}
+	return results
+}
+
+// newTranscriptLines is the whole lines transcript gained since the last read.
+func (st *costState) newTranscriptLines(transcript string) [][]byte {
 	if !filepath.IsAbs(transcript) {
 		return nil
 	}
@@ -290,33 +299,35 @@ func (st *costState) readTranscript(transcript string) []toolResult {
 	if cut {
 		lines = lines[1:]
 	}
-	var results []toolResult
-	for _, line := range lines {
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
+	return lines
+}
+
+// readRecord folds one transcript line into st and returns its tool results.
+func (st *costState) readRecord(line []byte) []toolResult {
+	line = bytes.TrimSpace(line)
+	if len(line) == 0 {
+		return nil
+	}
+	var rec transcriptUsage
+	if json.Unmarshal(line, &rec) != nil || rec.IsSidechain {
+		return nil
+	}
+	if tokens, window, ok := rec.contextSize(); ok {
+		st.Tokens, st.Window = tokens, window
+		if rec.Message.Model != "" {
+			st.Model = rec.Message.Model
 		}
-		var rec transcriptUsage
-		if json.Unmarshal(line, &rec) != nil || rec.IsSidechain {
-			continue
-		}
-		if tokens, window, ok := rec.contextSize(); ok {
-			st.Tokens, st.Window = tokens, window
-			if rec.Message.Model != "" {
-				st.Model = rec.Message.Model
-			}
-		}
-		results = append(results, st.toolCalls(rec)...)
-		if rec.Type == "response_item" && rec.Payload.Type == "function_call_output" {
-			st.noteRefs(rec.Payload.Output)
-			continue
-		}
-		var blocks []contentBlock
-		if len(rec.Message.Content) > 0 && rec.Message.Content[0] == '[' && json.Unmarshal(rec.Message.Content, &blocks) == nil {
-			for _, b := range blocks {
-				if b.Type == "tool_result" {
-					st.noteRefs(b.Content)
-				}
+	}
+	results := st.toolCalls(rec)
+	if rec.Type == "response_item" && rec.Payload.Type == "function_call_output" {
+		st.noteRefs(rec.Payload.Output)
+		return results
+	}
+	var blocks []contentBlock
+	if len(rec.Message.Content) > 0 && rec.Message.Content[0] == '[' && json.Unmarshal(rec.Message.Content, &blocks) == nil {
+		for _, b := range blocks {
+			if b.Type == "tool_result" {
+				st.noteRefs(b.Content)
 			}
 		}
 	}
@@ -695,40 +706,8 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 	ran := verdict.Decision == decisionPass || verdict.Decision == decisionAdvise
 	var results []toolResult
 	if thread == types.AgentThreadMain && lease == "" {
-		now := time.Now()
-		st := sessionCostState(at, who, liveRowLookup(ctx, at), now)
-		out.Orchestration = orchestration(st, from)
-		call := mainCall{from: from, billing: out.Billing, window: contextWindow(st, at), class: out.DelegableClass, free: free, line: input, orchestration: out.Orchestration}
-		switch {
-		case out.Orchestration == "":
-		case tool == hookToolCommand:
-			call.work = mainWork(ctx, at, st, input)
-		case tool == hookToolWrite && !notesPath(input, at):
-			call.work = types.DelegableEdit
-		}
-		out.Shadow = shadowVerdicts(st, call)
-		results = st.readTranscript(who.Transcript)
-		if ran && tool == hookToolCommand {
-			noteFork(&st, input, now)
-		}
-		switch {
-		case ran && tool == hookToolCommand && out.DelegableClass != "":
-			st.Streak++
-			if st.Repeats == nil {
-				st.Repeats = map[string]int{}
-			}
-			st.Repeats[lineDigest(input)]++
-		case ran && tool == hookToolWrite:
-			st.Repeats = nil
-		}
-		for _, r := range results {
-			if r.chars > st.Results[r.tool] {
-				if st.Results == nil {
-					st.Results = map[string]int{}
-				}
-				st.Results[r.tool] = r.chars
-			}
-		}
+		var st costState
+		st, results = observeMainThread(ctx, at, who, input, tool, from, ran, free, &out)
 		writeCostState(facts, st)
 	}
 	setContext(&out, callerContext(at, who, thread, facts))
@@ -737,6 +716,57 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 	}
 	recordAgentCalls(ctx, out, results)
 	return out
+}
+
+// observeMainThread judges a main-thread call against the session's cost
+// state. It returns the state to store and the results the transcript gained.
+func observeMainThread(ctx context.Context, at location, who hookAttribution, input, tool string, from types.ThreadSource, ran, free bool, out *types.AgentFacts) (costState, []toolResult) {
+	now := time.Now()
+	st := sessionCostState(at, who, liveRowLookup(ctx, at), now)
+	out.Orchestration = orchestration(st, from)
+	call := mainCall{from: from, billing: out.Billing, window: contextWindow(st, at), class: out.DelegableClass, free: free, line: input, orchestration: out.Orchestration}
+	switch {
+	case out.Orchestration == "":
+	case tool == hookToolCommand:
+		call.work = mainWork(ctx, at, st, input)
+	case tool == hookToolWrite && !notesPath(input, at):
+		call.work = types.DelegableEdit
+	}
+	out.Shadow = shadowVerdicts(st, call)
+	results := st.readTranscript(who.Transcript)
+	if ran && tool == hookToolCommand {
+		noteFork(&st, input, now)
+	}
+	noteStreak(&st, input, tool, ran, out.DelegableClass)
+	noteResultSizes(&st, results)
+	return st, results
+}
+
+// noteStreak extends the delegable streak and the repeat count, and clears
+// the repeats when a write breaks the run.
+func noteStreak(st *costState, input, tool string, ran bool, class types.DelegableClass) {
+	switch {
+	case ran && tool == hookToolCommand && class != "":
+		st.Streak++
+		if st.Repeats == nil {
+			st.Repeats = map[string]int{}
+		}
+		st.Repeats[lineDigest(input)]++
+	case ran && tool == hookToolWrite:
+		st.Repeats = nil
+	}
+}
+
+// noteResultSizes keeps the largest result each tool has returned.
+func noteResultSizes(st *costState, results []toolResult) {
+	for _, r := range results {
+		if r.chars > st.Results[r.tool] {
+			if st.Results == nil {
+				st.Results = map[string]int{}
+			}
+			st.Results[r.tool] = r.chars
+		}
+	}
 }
 
 // setContext files w's size and model on f; a nil w leaves both unset.
@@ -969,20 +999,30 @@ func invocationWork(c hint.Invocation, stdin string, at location) types.Delegabl
 		return ""
 	}
 	if !isMagusInvocation(c) {
-		if v := vcsInvocation(c); v != nil && integratesVCS(v.Subcommand, v.Args) {
-			return delegableIntegrate
-		}
-		class := invocationClass(c)
-		// A search with no path searches the directory it runs in.
-		paths := invocationPaths(c)
-		if len(paths) == 0 {
-			paths = []string{"."}
-		}
-		if class == types.DelegableSearch && !slices.ContainsFunc(paths, func(p string) bool { return !notesPath(p, at) }) {
-			return ""
-		}
-		return class
+		return foreignInvocationWork(c, at)
 	}
+	return magusInvocationWork(c, stdin, at)
+}
+
+// foreignInvocationWork classes a command that is not magus.
+func foreignInvocationWork(c hint.Invocation, at location) types.DelegableClass {
+	if v := vcsInvocation(c); v != nil && integratesVCS(v.Subcommand, v.Args) {
+		return delegableIntegrate
+	}
+	class := invocationClass(c)
+	// A search with no path searches the directory it runs in.
+	paths := invocationPaths(c)
+	if len(paths) == 0 {
+		paths = []string{"."}
+	}
+	if class == types.DelegableSearch && !slices.ContainsFunc(paths, func(p string) bool { return !notesPath(p, at) }) {
+		return ""
+	}
+	return class
+}
+
+// magusInvocationWork classes a magus command by its subcommand.
+func magusInvocationWork(c hint.Invocation, stdin string, at location) types.DelegableClass {
 	words := magusSubcommandWords(c.Args)
 	if len(words) == 0 {
 		return ""
@@ -1055,26 +1095,9 @@ func drivesOnlyJobs(script string) bool {
 	if err != nil || prog == nil {
 		return false
 	}
-	bound := map[string]bool{}
-	imported := map[string]bool{}
-	for _, stmt := range prog.Stmts {
-		imp, ok := stmt.(*ast.ImportStmt)
-		if !ok {
-			continue
-		}
-		switch {
-		case imp.Path != "magus" || imp.Alias == "_":
-			return false
-		case len(imp.Only) > 0:
-			for _, name := range imp.Only {
-				imported[name] = true
-			}
-			if slices.ContainsFunc(imp.Only, func(n string) bool { return n != "job" && n != "workspace" }) {
-				return false
-			}
-		default:
-			bound[cmp.Or(imp.Alias, "magus")] = true
-		}
+	bound, imported, ok := magusOnlyImports(prog)
+	if !ok {
+		return false
 	}
 	reader := clientReader{bound: bound, only: imported}
 	only := true
@@ -1115,6 +1138,32 @@ func drivesOnlyJobs(script string) bool {
 	}
 
 	return only
+}
+
+// magusOnlyImports is the names prog binds from magus and the members it
+// imports by name. It reports false for any other import or member.
+func magusOnlyImports(prog *ast.Program) (bound, imported map[string]bool, ok bool) {
+	bound, imported = map[string]bool{}, map[string]bool{}
+	for _, stmt := range prog.Stmts {
+		imp, isImport := stmt.(*ast.ImportStmt)
+		if !isImport {
+			continue
+		}
+		switch {
+		case imp.Path != "magus" || imp.Alias == "_":
+			return nil, nil, false
+		case len(imp.Only) > 0:
+			for _, name := range imp.Only {
+				imported[name] = true
+			}
+			if slices.ContainsFunc(imp.Only, func(n string) bool { return n != "job" && n != "workspace" }) {
+				return nil, nil, false
+			}
+		default:
+			bound[cmp.Or(imp.Alias, "magus")] = true
+		}
+	}
+	return bound, imported, true
 }
 
 // mainWork is rootWorkClass for line, less what an orchestrator owes the rows it forked:
