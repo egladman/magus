@@ -3,8 +3,8 @@ package job
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -952,12 +952,14 @@ func TestUnscopedProblemsHoldANewRowToABoundary(t *testing.T) {
 
 // appliedRow seeds w as a job a worker took, holding write and checked by forkCheck, in a
 // root holding each path, the way `magus job apply` finds a live job.
+// Each path is committed, so an exit finds no uncommitted work.
 func appliedRow(t *testing.T, write ...string) (*Store, Location) {
 	t.Helper()
-	root := loadableRepository(t)
+	files := maps.Clone(loadableFiles)
 	for _, p := range write {
-		require.NoError(t, os.WriteFile(filepath.Join(root, p), []byte(p+"\n"), 0o644))
+		files[p] = p + "\n"
 	}
+	root := testkit.NewRepository(t, files).Root()
 	loc := tempLocation(t, root)
 	s := NewStore(loc)
 	_, err := s.Update(t.Context(), "w", Declare(spec(write...), 0))
