@@ -3,6 +3,7 @@
 package mem
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -18,8 +19,9 @@ func TestPSIPressureSuite(t *testing.T) {
 }
 
 func psiFile(someAvg10, fullAvg10 string) string {
-	return "some avg10=" + someAvg10 + " avg60=0.00 avg300=0.00 total=1\n" +
-		"full avg10=" + fullAvg10 + " avg60=0.00 avg300=0.00 total=1\n"
+	return fmt.Sprintf(`some avg10=%s avg60=0.00 avg300=0.00 total=1
+full avg10=%s avg60=0.00 avg300=0.00 total=1
+`, someAvg10, fullAvg10)
 }
 
 func (s *PSIPressureSuite) TestFullStallAtTheThresholdRefuses() {
