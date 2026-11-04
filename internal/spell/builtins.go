@@ -501,9 +501,6 @@ func bindMagusRecords(sess *buzz.Session, decls string) error {
 		if err != nil {
 			return err
 		}
-		if hasModule {
-			sess.SetGlobal(magusModuleKey, mod)
-		}
 		bindRecords(sess, mod, hasModule, records)
 		return nil
 	}
@@ -518,19 +515,15 @@ func bindMagusRecords(sess *buzz.Session, decls string) error {
 	return nil
 }
 
-// magusModuleKey is the global that holds a session's magus module. The
-// shared record methods read it; no identifier can spell it.
-var magusModuleKey = buzz.QualifiedTypeKey("magus", "")
-
 // dispatchExtern is the private extern a shared record method calls. It runs
 // the member of the magus module held by the session making the call.
 func dispatchExtern(name string) vm.Value {
 	return vm.DirectValue(name, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		home := vm.HomeFromContext(ctx)
-		if home == nil {
-			return vm.Null, fmt.Errorf("magus record method %s: no session is running it", name)
+		sess, err := buzz.SessionFromContext(ctx)
+		if err != nil {
+			return vm.Null, fmt.Errorf("magus record method %s: %w", name, err)
 		}
-		mod, ok := home.Get(magusModuleKey)
+		mod, ok := sess.NativeModule("magus")
 		if !ok {
 			return vm.Null, fmt.Errorf("magus record method %s: the session has no magus module", name)
 		}

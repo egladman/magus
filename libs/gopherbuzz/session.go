@@ -787,7 +787,7 @@ func (s *Session) execCached(ctx context.Context, code string) ([]string, error)
 // still registers the closures the source defines.
 func (s *Session) runChunk(ctx context.Context, chunk *vmpackage.Chunk) ([]string, error) {
 	s.noteEntryQualified(chunk)
-	vm := vmpackage.NewVM(ctx)
+	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	if _, err := vm.Run(chunk, s.env); err != nil {
 		return nil, err
@@ -841,6 +841,23 @@ func (s *Session) execImport(ctx context.Context, code string) ([]string, error)
 	s.replaying = false
 	defer func() { s.replaying = prevReplay }()
 	return s.exec(ctx, code)
+}
+
+type sessionKey struct{}
+
+// within returns ctx carrying s, so host callables find their caller.
+func (s *Session) within(ctx context.Context) context.Context {
+	return context.WithValue(ctx, sessionKey{}, s)
+}
+
+// SessionFromContext returns the session running the host callable that
+// received ctx. It is an error when no session ran the call.
+func SessionFromContext(ctx context.Context) (*Session, error) {
+	s, ok := ctx.Value(sessionKey{}).(*Session)
+	if !ok {
+		return nil, errors.New("buzz: no session is running this call")
+	}
+	return s, nil
 }
 
 // enter makes vm the session's current VM (for debugger introspection), charges
@@ -987,7 +1004,7 @@ func (s *Session) Eval(ctx context.Context, code string) (vmpackage.Value, error
 // snippet with side effects never executes twice.
 func (s *Session) EvalChunk(ctx context.Context, chunk *vmpackage.Chunk) (vmpackage.Value, error) {
 	s.noteEntryQualified(chunk)
-	vm := vmpackage.NewVM(ctx)
+	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	v, err := vm.Run(chunk, s.env)
 	return v, err
@@ -2729,7 +2746,7 @@ func (s *Session) Compile(code string) (*vmpackage.Chunk, error) {
 // ExecChunk runs a previously compiled Chunk in the session's environment.
 func (s *Session) ExecChunk(ctx context.Context, chunk *vmpackage.Chunk) error {
 	s.noteEntryQualified(chunk)
-	vm := vmpackage.NewVM(ctx)
+	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	_, err := vm.Run(chunk, s.env)
 	if err == nil {
@@ -2805,7 +2822,7 @@ func (s *Session) release() {
 // args become the session's: a host-built argument is released with the session,
 // so pass a fresh one per call rather than one kept across sessions.
 func (s *Session) CallValue(ctx context.Context, fn vmpackage.Value, args []vmpackage.Value) (vmpackage.Value, error) {
-	vm := vmpackage.NewVM(ctx)
+	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	s.owner.Claim(fn)
 	for _, arg := range args {
@@ -2823,7 +2840,7 @@ func (s *Session) CallValue(ctx context.Context, fn vmpackage.Value, args []vmpa
 // wrong argument count is an error, never Null. recv and args become the session's,
 // as in CallValue.
 func (s *Session) CallMethod(ctx context.Context, recv vmpackage.Value, name string, args []vmpackage.Value) (vmpackage.Value, error) {
-	vm := vmpackage.NewVM(ctx)
+	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	s.owner.Claim(recv)
 	for _, arg := range args {

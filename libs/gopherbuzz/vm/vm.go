@@ -98,8 +98,6 @@ type VM struct {
 	// owner holds every heap slot this VM allocates or adopts; nil means the
 	// slots belong to nobody and live for the process. See Owner.
 	owner *Owner
-	// home is the scope the session ran this VM in. Callbacks inherit it.
-	home *Env
 	// collectables are instances whose type declares a `collect()` method, tracked
 	// so CollectUnreachable can call it when the program can no longer reach them.
 	// One registry per fiber tree, held on the root VM (see gcParent, gcRoot), and
@@ -202,22 +200,12 @@ func NewVM(ctx context.Context) *VM {
 	// for the same session as the VM on that context, so it charges the same owner.
 	if parent := FromContext(ctx); parent != nil {
 		vm.owner = parent.owner
-		vm.home = parent.home
 	}
 	// The VM is reachable from the context every host callable receives, which is
 	// what lets `gc\collect()` ask the interpreter about its own reachability. It is
 	// the only operation that needs this; everything else works from its arguments.
 	vm.ctx = context.WithValue(ctx, vmCtxKey{}, vm)
 	return vm
-}
-
-// HomeFromContext returns the scope of the session running this call, or nil.
-// Code shared by many sessions reads the calling session's bindings from it.
-func HomeFromContext(ctx context.Context) *Env {
-	if vm := FromContext(ctx); vm != nil {
-		return vm.home
-	}
-	return nil
 }
 
 // CallDirect calls a host function value from inside a host callable.
@@ -292,7 +280,6 @@ func (vm *VM) icacheLearn(ip int, e icacheEntry) {
 
 // run executes chunk inside env and returns the program's result.
 func (vm *VM) Run(chunk *Chunk, env *Env) (Value, error) {
-	vm.home = env
 	vm.stack = vm.stack[:0]
 	vm.frames = vm.frames[:0]
 	// Reserve the top-level register window for slot-based locals (chunks
@@ -2305,9 +2292,6 @@ func (vm *VM) Call(callee Value, args []Value) error {
 		}
 		if len(vm.frames) >= maxFrames {
 			return fmt.Errorf("buzz: call stack overflow (limit %d)", maxFrames)
-		}
-		if vm.home == nil {
-			vm.home = fn.Env
 		}
 		base := len(vm.stack)
 		// Push args into slot positions 0..argCount-1

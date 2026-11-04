@@ -3086,3 +3086,44 @@ final b = shape\Box{};
 	s.Require().Error(err)
 	s.Contains(err.Error(), "demo/shape")
 }
+
+type callingSessionSuite struct{ suite.Suite }
+
+func TestCallingSessionSuite(t *testing.T) { suite.Run(t, new(callingSessionSuite)) }
+
+func (s *callingSessionSuite) TestAHostCallableFindsTheSessionThatRanIt() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	defer func() { _ = sess.Close() }()
+	var found *Session
+	sess.SetGlobal("probe", vm.DirectValue("probe", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+		var err error
+		found, err = SessionFromContext(ctx)
+		return vm.Null, err
+	}))
+	s.Require().NoError(sess.Exec(context.Background(), "probe();"))
+	s.Same(sess, found)
+}
+
+func (s *callingSessionSuite) TestEachSessionSeesItselfNotAnother() {
+	first := NewSession(context.Background(), WithEmbedded())
+	defer func() { _ = first.Close() }()
+	second := NewSession(context.Background(), WithEmbedded())
+	defer func() { _ = second.Close() }()
+	var found []*Session
+	probe := func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+		got, err := SessionFromContext(ctx)
+		found = append(found, got)
+		return vm.Null, err
+	}
+	first.SetGlobal("probe", vm.DirectValue("probe", probe))
+	second.SetGlobal("probe", vm.DirectValue("probe", probe))
+	s.Require().NoError(first.Exec(context.Background(), "probe();"))
+	s.Require().NoError(second.Exec(context.Background(), "probe();"))
+	s.Equal([]*Session{first, second}, found)
+}
+
+func (s *callingSessionSuite) TestAContextWithoutASessionIsRefused() {
+	got, err := SessionFromContext(context.Background())
+	s.Nil(got)
+	s.ErrorContains(err, "no session is running this call")
+}
