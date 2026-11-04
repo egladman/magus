@@ -126,7 +126,13 @@ func buildFromConfig(root string, cfg config.SandboxConfig, spellGrants map[stri
 // another account could have planted it.
 func privateTempDir(base, root string) (string, error) {
 	sum := sha256.Sum256([]byte(root))
-	dir := filepath.Join(base, fmt.Sprintf("magus-sandbox-%d-%x", os.Getuid(), sum[:6]))
+	name := fmt.Sprintf("magus-sandbox-%d-%x", os.Getuid(), sum[:6])
+	dir := filepath.Join(base, name)
+	// A nested magus for root already runs in this dir.
+	// Another level only lengthens every path under it.
+	if filepath.Base(base) == name {
+		dir = base
+	}
 	if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
 		return "", fmt.Errorf("sandbox: create the private temp dir: %w", err)
 	}

@@ -260,7 +260,7 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 // That is an index freshen, `magus status`'s verdict and the declared outputs.
 // knowledge.conformance's gates and ceilings judge the precedents.
 type precedentWorkspace interface {
-	FreshenSymbolIndexes(ctx context.Context) error
+	FreshenSymbolIndexes(ctx context.Context, languages []string) error
 	SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus
 	ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error)
 	ConformanceOptions() (types.ConformanceOptions, error)
@@ -275,10 +275,10 @@ type indexedGraph struct {
 	generated map[string]bool
 }
 
-// judgedGraph freshens every index, as magus\change().diff does.
+// judgedGraph freshens the indexes of languages, every index when empty.
 // An index it cannot make current reads as stale, with the freshen's error.
 // Freshness is judged first, so it covers the index the answer came from.
-func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
+func judgedGraph(ctx context.Context, member string, languages []string) (indexedGraph, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return indexedGraph{}, errorNoWorkspace(member)
@@ -291,7 +291,7 @@ func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 	if err != nil {
 		return indexedGraph{}, err
 	}
-	freshErr := pw.FreshenSymbolIndexes(ctx)
+	freshErr := pw.FreshenSymbolIndexes(ctx, languages)
 	indexes := pw.SymbolIndexStatusByStamp(ctx)
 	if freshErr != nil {
 		for i := range indexes {
@@ -328,8 +328,8 @@ func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 // MagusPrecedents backs magus\graph().precedents from the symbol indexes.
 // knowledge.conformance's gates and ceilings apply.
 // Each index's freshness is judged as judgedGraph describes.
-func MagusPrecedents(ctx context.Context) (types.Holds, error) {
-	ig, err := judgedGraph(ctx, "Graph.precedents")
+func MagusPrecedents(ctx context.Context, languages []string) (types.Holds, error) {
+	ig, err := judgedGraph(ctx, "Graph.precedents", languages)
 	if err != nil {
 		return types.Holds{}, err
 	}
@@ -383,7 +383,7 @@ func MagusConformance(ctx context.Context, checks []string, base string) (types.
 	if err := c.Validate(); err != nil {
 		return types.ConformanceReport{}, fmt.Errorf("magus\\Change.conformance: %w", err)
 	}
-	ig, err := judgedGraph(ctx, "Change.conformance")
+	ig, err := judgedGraph(ctx, "Change.conformance", nil)
 	if err != nil {
 		return types.ConformanceReport{}, err
 	}
@@ -419,8 +419,8 @@ func withCeilings(ctx context.Context, ws any, c types.Ceiling, out types.Confor
 // MagusSymbols backs magus\graph().symbols: every declaration with its doc.
 // Each index's freshness is judged as judgedGraph describes. Test and
 // generated files are never listed. The answer is a Symbols as a map.
-func MagusSymbols(ctx context.Context) (types.Symbols, error) {
-	ig, err := judgedGraph(ctx, "Graph.symbols")
+func MagusSymbols(ctx context.Context, languages []string) (types.Symbols, error) {
+	ig, err := judgedGraph(ctx, "Graph.symbols", languages)
 	if err != nil {
 		return types.Symbols{}, err
 	}

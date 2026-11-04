@@ -466,6 +466,18 @@ func movesNamedPaths(c hint.Invocation) bool {
 	return false
 }
 
+// refMoveRoot is the checkout row may move refs in: its own worktree, else
+// an integration job's fork checkout. "" when it has neither.
+func refMoveRoot(row types.Job) string {
+	switch {
+	case row.Worktree.Standing():
+		return row.Worktree.Root
+	case row.Integrating():
+		return row.CheckoutRoot
+	}
+	return ""
+}
+
 // moveRefusal is lease-vcs's answer for a call movesNamedPaths reports.
 // A row with no checkout of its own is not placed.
 func moveRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
@@ -481,10 +493,10 @@ func moveRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv 
 		return vcsRefusal{op: op, kind: vcsOpMoves, why: strings.ReplaceAll(unlocated, "commits", "moves") + spellOut}
 	case workerVCSOp(inv) != "":
 		return vcsRefusal{op: op, kind: vcsOpMoves, why: "It names a path the line does not spell out: `.`, `..`, a glob, a pattern or a list read from a file." + spellOut}
-	case !row.Worktree.Standing():
+	case refMoveRoot(row) == "":
 		return vcsRefusal{}
 	}
-	r := refMoveRefusal(ctx, opts, row.Worktree, inv, site, "")
+	r := refMoveRefusal(ctx, opts, refMoveRoot(row), inv, site, "")
 	r.kind = vcsOpMoves
 	return r
 }

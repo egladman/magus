@@ -43,7 +43,7 @@ export fun reads() > [str] {
 // libs/proofread/cmd/proofread judges them, linked by proofread-build.
 // A stale index, a silent language or a failed runner is a finding.
 export fun check(files: [Path]) > [Finding] !> any {
-    final data = magus\graph().symbols();
+    final data = magus\graph(languages: LANGUAGES).symbols();
     final symbols = ofLanguages(data.symbols);
     final indexes = data.indexes.map(fun (i: int, idx: magus\SymbolIndexStatus) > any => indexRow(idx));
     final bin = "{proofread\home}/{proofread\binary}";

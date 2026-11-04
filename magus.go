@@ -1486,7 +1486,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			touched = append(touched, f.Project)
 		}
 	}
-	freshErr := m.freshenSymbolIndexes(ctx, touched)
+	freshErr := m.freshenSymbolIndexes(ctx, touched, nil)
 	out.Uncovered = uncoveredProjects(out.Files, m.symbolCapableIn(touched))
 	graph, gerr := m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with

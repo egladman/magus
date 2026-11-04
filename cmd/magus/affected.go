@@ -76,7 +76,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 
 	// Find the target even if global flags precede it (`magus affected --dry-run ci`);
 	// mirrors `magus run`. rest carries the hoisted flags for commandParse below.
-	rawTarget, rest, ok := splitTargetFromArgs(args, nil)
+	rawTarget, rest, ok := splitTargetFromArgs(args, func(fs *flag.FlagSet) { flaggen.BindAffected(fs) })
 	if !ok {
 		affectedUsage()
 		return flag.ErrHelp
@@ -473,7 +473,7 @@ func affectedMissingTargetUsage() {
 }
 
 func affectedUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus affected <target> [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: magus affected <target> [--base <ref>] [flags]")
 	fmt.Fprintln(os.Stderr, "       magus affected --explain <project> [--base <ref>]")
 	fmt.Fprintln(os.Stderr, "       magus affected --impact [--base <ref>]")
 	fmt.Fprintln(os.Stderr, "       magus affected <target> --plan [--max-shards N]")

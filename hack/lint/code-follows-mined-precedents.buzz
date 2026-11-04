@@ -43,7 +43,7 @@ export fun reads() > [str] {
 // magus\graph().precedents() mines them from the live symbol index.
 // A missing or stale index is a finding: a rule reading nothing finds nothing.
 export fun check(files: [Path]) > [Finding] !> any {
-    return judge(magus\graph().precedents(), sanctioned: SANCTIONED);
+    return judge(magus\graph(languages: LANGUAGES).precedents(), sanctioned: SANCTIONED);
 }
 
 // judge is check over a magus\graph().precedents() report.

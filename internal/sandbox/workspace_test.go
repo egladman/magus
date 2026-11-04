@@ -245,6 +245,19 @@ func TestPrivateTempDirRefusesAPlantedDirectory(t *testing.T) {
 	assert.ErrorContains(t, err, "not a private directory")
 }
 
+// A nested magus starts with TMPDIR at its parent's dir for the same workspace.
+func TestPrivateTempDirReusesTheDirItRunsIn(t *testing.T) {
+	outer, err := privateTempDir(t.TempDir(), "/ws")
+	require.NoError(t, err)
+	inner, err := privateTempDir(outer, "/ws")
+	require.NoError(t, err)
+	assert.Equal(t, outer, inner)
+
+	other, err := privateTempDir(outer, "/other")
+	require.NoError(t, err)
+	assert.Equal(t, outer, filepath.Dir(other), "another workspace still gets its own")
+}
+
 // A linked worktree keeps its git directories outside the checkout, and a subdirectory
 // workspace has its .git above it.
 func TestGitDirs(t *testing.T) {

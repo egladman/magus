@@ -145,9 +145,13 @@ The workspace this call reads, as a Workspace whose methods are the job store, t
 
 ### graph
 
-The knowledge graph at its current symbol index: {digest, indexed, projects, gaps}, digest a hex SHA-256 over each loaded project's symbol shard fingerprint. Its methods (query, explain, path, refs, stats, neighborhood, dir, dirs, layer, projectGraph, imports, symbols, precedents, unreferenced, duplication) answer from that index and raise once it moved, naming the projects whose index came or went. A target writes the Graph as a declared output that a reader of the index keys its cache on. indexed is false and digest empty when no index was ingested; gaps are the projects declaring an index magus could not read. Raises MGS1022 outside a workspace, and when the gap probe cannot run.
+The knowledge graph at its current symbol index: {digest, indexed, projects, gaps}, digest a hex SHA-256 over each loaded project's symbol shard fingerprint. Its methods (query, explain, path, refs, stats, neighborhood, dir, dirs, layer, projectGraph, imports, symbols, precedents, unreferenced, duplication) answer from that index and raise once it moved, naming the projects whose index came or went. A target writes the Graph as a declared output that a reader of the index keys its cache on. indexed is false and digest empty when no index was ingested; gaps are the projects declaring an index magus could not read. Raises MGS1022 outside a workspace, and when the gap probe cannot run. languages names the languages whose symbol indexes to freshen; empty is every index.
 
-**Signature:** `magus\graph() -> Graph` - [source](https://github.com/egladman/magus/blob/main/std/magus_handle.go)
+**Signature:** `magus\graph([languages]) -> Graph` - [source](https://github.com/egladman/magus/blob/main/std/magus_handle.go)
+
+| Parameter   | Type       | Optional | Description |
+| ----------- | ---------- | -------- | ----------- |
+| `languages` | `[]string` | yes      |             |
 
 **Returns:** map[string]any
 

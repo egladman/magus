@@ -12,6 +12,9 @@
 //
 // A word in backticks on its own (`lane`) is a mention, not a use, and passes.
 //
+// "acts in place" is refused in prose and as an identifier (actsInPlace).
+// It names no operation; say what the code touches.
+//
 // Tier 1, mechanical: the fix is a word, and SANCTIONED names a finding kept on purpose
 // with why.
 namespace bannedwords;
@@ -92,6 +95,8 @@ final LANE_FIX = "Say \"write paths\", or what it means here.";
 final CORPUS_FIX = "Say \"the cases\" or \"the inputs\".";
 final RECIPE_FIX = "Say what it is: a Spec, a target, the steps, or the make rule.";
 final RATCHET_FIX = "Say what it holds: a ceiling, a count that may only fall, or the allow list.";
+final ACTS_IN_PLACE = std\pattern(`(?i)\bact(?:s|ed|ing)?[ _-]?in[ _-]?place`);
+final ACTS_IN_PLACE_FIX = "Say what it touches: the repository it runs in, the file it rewrites.";
 
 export fun check(files: [Path]) > [Finding] !> any {
     return sanction(findings(files), sanctioned: SANCTIONED);
@@ -142,7 +147,8 @@ fun isGeneratedGo(rel: str, src: str) > bool {
 export fun fileFindings(rel: str, src: str) > [Finding] !> any {
     final lower = src.lower();
     if (lower.indexOf("surface") == null and lower.indexOf("lane") == null
-        and lower.indexOf("corp") == null and lower.indexOf("recipe") == null and lower.indexOf("ratchet") == null) {
+        and lower.indexOf("corp") == null and lower.indexOf("recipe") == null and lower.indexOf("ratchet") == null
+        and lower.indexOf("place") == null) {
         return [<Finding>];
     }
     final lanesAllowed = path\matchesAny(LANES_ARE_ROUTING, path: rel);
@@ -161,6 +167,15 @@ export fun fileFindings(rel: str, src: str) > [Finding] !> any {
         if (low.indexOf("surface") != null or low.indexOf("lane") != null
             or low.indexOf("corp") != null or low.indexOf("recipe") != null or low.indexOf("ratchet") != null) {
             foreach (finding in tokenFindings(rel, line: line, n: n, lanesAllowed: lanesAllowed)) { found.append(finding); }
+        }
+        if (low.indexOf("place") != null) {
+            var next = 0;
+            foreach (m in ACTS_IN_PLACE.matchAll(line) ?? [<[str]>]) {
+                final at = line.indexOf(m[0], from: next) ?? 0;
+                next = at + m[0].len();
+                found.append(Finding{ path = rel, line = n, col = at + 1,
+                    message = "\"{m[0]}\" says acts in place", fix = ACTS_IN_PLACE_FIX });
+            }
         }
     }
     return found;
@@ -312,6 +327,12 @@ test "lane, corpus and recipe are refused as any word, in prose or an identifier
     assert\equal(lines("b.go", src: "// a build recipe\nvar imageRecipes, RECIPE_DIR = 1, 2\n"),
         want: ["1:12 \"recipe\" says recipe", "2:5 \"imageRecipes\" says recipes", "2:19 \"RECIPE_DIR\" says recipe"],
         message: "recipe");
+}
+
+test "acts in place is refused in prose and as an identifier; in place alone passes" {
+    assert\equal(lines("a.go", src: "// it acts in place\nfunc actsInPlace() \{}\n// sort in place; factsInPlace\n"),
+        want: ["1:7 \"acts in place\" says acts in place", "2:6 \"actsInPlace\" says acts in place"],
+        message: "phrase");
 }
 
 test "ratchet is refused as any word, in prose or an identifier" {

@@ -23,8 +23,8 @@ follows.
 - **Time delay.** A pause sits in front of an act that cannot be taken back,
   never inside the loop that verifies. The first Ctrl+C only arms a
   three-second window (`confirmWindow`, [`cmd/magus/interrupt.go`](https://github.com/egladman/magus/blob/main/cmd/magus/interrupt.go)). The
-  `push-ungated` guard rule stops a push at a commit no green gate has run
-  on.
+  `push-ungated` guard rule stops a push at a commit that neither a green
+  gate nor passing narrow runs over its changed files cover.
 - **Engage the body.** The verb names the physical act, and the person does it
   with their own hands. Registry transfers are `graph pull` and `spell pull`,
   never a side effect of another verb. The acts in
@@ -86,7 +86,7 @@ The `push-ungated` rule fires only on the act that leaves the machine, and only
 when the evidence is missing. Its catalog entry ([`internal/guard/catalog.go`](https://github.com/egladman/magus/blob/main/internal/guard/catalog.go)):
 
 ```text
-push-ungated: a push or `gh pr create` at a commit with no green gate; refused for every session
+push-ungated: a push or `gh pr create` at a commit no green gate or passing narrow run covers
 ```
 
 ## Bad

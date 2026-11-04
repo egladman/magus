@@ -107,6 +107,17 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.Job{}, fmt.Errorf("job: %s writes, and its result names no changed path, evidence or risk, so it records nothing: File this shape: %s",
 			id, resultShape(rows[i]))
 	}
+	if !rows[i].ReadOnly {
+		tree := WorkTree(store.root, rows[i])
+		dirty, unread := uncommitted(ctx, tree, rows[i])
+		if unread != "" {
+			return types.Job{}, fmt.Errorf("job: %s's result is refused: %s", id, unread)
+		}
+		if len(dirty) > 0 {
+			return types.Job{}, fmt.Errorf("job: %s's checkout %s: %d path(s) in it hold uncommitted work (%s), so commit them, then file the result again",
+				id, tree, len(dirty), listPaths(dirty))
+		}
+	}
 	resolve, where := store.acrossCheckouts(rows, id, resolve)
 	attempt, gateAttempts, err := resolveResultAttempts(ctx, *result, resolve, where)
 	if err != nil {

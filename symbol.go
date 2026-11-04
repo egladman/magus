@@ -986,14 +986,15 @@ func (m *Magus) symbolCapableIn(paths []string) []string {
 // reader mines it. Inside a target the rebuild runs through that target's run, under the lock
 // it holds; outside a run it is a run of its own. The error is freshenSymbolIndexes's MGS7003,
 // naming each index that could not be made current; the others are current regardless.
-func (m *Magus) FreshenSymbolIndexes(ctx context.Context) error {
+// Naming languages leaves the other languages' indexes alone.
+func (m *Magus) FreshenSymbolIndexes(ctx context.Context, languages []string) error {
 	var paths []string
 	for _, idx := range m.workspaceIndexes() {
 		if !slices.Contains(paths, idx.project.Path) {
 			paths = append(paths, idx.project.Path)
 		}
 	}
-	return m.freshenSymbolIndexes(ctx, paths)
+	return m.freshenSymbolIndexes(ctx, paths, languages)
 }
 
 // freshenSymbolIndexes brings every symbol index of the symbol-capable projects among paths up
@@ -1005,10 +1006,10 @@ func (m *Magus) FreshenSymbolIndexes(ctx context.Context) error {
 // never reads a stale index as if it were current. One exception keeps a second index from
 // costing the first its review: an index whose indexer is not installed is left out while
 // another index of the same project has its indexer (see installedIndexes).
-func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error {
+func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths, languages []string) error {
 	var touched []projectIndex
 	for _, idx := range m.workspaceIndexes() {
-		if slices.Contains(paths, idx.project.Path) {
+		if slices.Contains(paths, idx.project.Path) && (len(languages) == 0 || slices.Contains(languages, idx.language)) {
 			touched = append(touched, idx)
 		}
 	}
