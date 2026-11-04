@@ -458,7 +458,8 @@ func TestAdoptedCheckoutWithAStaleBinaryIsNotBuiltAtItsBase(t *testing.T) {
 
 // A checkout holding the bootstrap script builds its own ./magus, so the forker's is never
 // copied into it, whatever it was built from: a dirty or older forker never blocks the fork.
-// A workspace without the script takes the forker's binary as a tool, at any checkpoint.
+// A workspace without the script takes the forker's binary as a tool
+// when it is a clean build at the fork's base.
 func TestForkWorktreeCopiesNoBinaryIntoACheckoutThatBuildsItsOwn(t *testing.T) {
 	t.Parallel()
 	s, _, repo := worktreeStore(t)
@@ -481,7 +482,7 @@ func TestForkWorktreeCopiesNoBinaryIntoACheckoutThatBuildsItsOwn(t *testing.T) {
 		})
 	}
 
-	bin, ctx := forkersBinary(t, types.MagusBuild{Version: "v0.5.0-1-gabc-dirty", Commit: builds})
+	bin, ctx := forkersBinary(t, types.MagusBuild{Version: "v0.5.0", Commit: built})
 	wt, made, err := s.ForkWorktree(ctx, "tool", filepath.Join(t.TempDir(), "tool"), built, bin)
 	require.NoError(t, err)
 	require.True(t, made)

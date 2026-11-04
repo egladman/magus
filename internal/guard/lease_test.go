@@ -2490,6 +2490,7 @@ func mustRel(t *testing.T, base, target string) string {
 // nested repository inside the checkout is the job's files under another git directory;
 // core.worktree, in the scratch's config or inline, moves the work tree onto the job's; and
 // a push writes to a remote that may be the job's repository.
+// A worktree call names its target path anywhere.
 func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
 	ctx, r, worker, wt := leaseVCSRepository(t)
 	scratch := testkit.NewRepository(t, nil)
@@ -2501,6 +2502,9 @@ func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
 	sub := filepath.Join(wt, "sub")
 	moved := testkit.NewRepository(t, nil)
 	moved.Git("config", "core.worktree", wt)
+	fresh := testkit.NewRepository(t, nil)
+	linked := filepath.Join(t.TempDir(), "linked")
+	fresh.Git("worktree", "add", "-q", linked)
 
 	for name, c := range map[string]struct {
 		args []string
@@ -2519,20 +2523,17 @@ func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
 		"clean with core.worktree inline":     {[]string{"-c", "core.worktree=" + wt, "clean", "-fdx"}, scratch.Root(), nil},
 		"clean with core.worktree configured": {[]string{"clean", "-fdx"}, moved.Root(), nil},
 		"push from a scratch repo":            {[]string{"push", r.main, "HEAD:main"}, scratch.Root(), nil},
+		"worktree remove in a scratch repo":   {[]string{"worktree", "remove", "--force", linked}, fresh.Root(), nil},
 	} {
 		require.Error(t, vcsCommandRefusal(ctx, worker, "git", c.args, c.dir, c.env), name)
 	}
 
-	fresh := testkit.NewRepository(t, nil)
-	linked := filepath.Join(t.TempDir(), "linked")
-	fresh.Git("worktree", "add", "-q", linked)
 	for name, c := range map[string]struct {
 		args []string
 		dir  string
 	}{
 		"commit in a scratch repo":          {[]string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh.Root()},
 		"clean in a scratch repo":           {[]string{"clean", "-fdx"}, scratch.Root()},
-		"worktree remove in a scratch repo": {[]string{"worktree", "remove", "--force", linked}, fresh.Root()},
 		"reset -C a scratch repo":           {[]string{"-C", fresh.Root(), "reset", "--hard"}, wt},
 	} {
 		require.NoError(t, vcsCommandRefusal(ctx, worker, "git", c.args, c.dir, nil), name)
