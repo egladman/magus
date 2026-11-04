@@ -48,7 +48,7 @@ func MagusHistoryOpen(ctx context.Context, opts types.HistoryMetricsOptions) (ty
 	if types.WorkspaceFromContext(ctx) == nil {
 		return types.History{}, errorNoWorkspace("history")
 	}
-	return types.History{Dir: opts.Dir, Commits: opts.Commits, Since: opts.Since, Files: opts.Files}, nil
+	return types.History(opts), nil
 }
 
 // MagusSessionOpen backs magus\session(opts): which session's trail a read
@@ -57,7 +57,7 @@ func MagusSessionOpen(ctx context.Context, opts types.TrailReadOptions) (types.S
 	if types.WorkspaceFromContext(ctx) == nil {
 		return types.Session{}, errorNoWorkspace("session")
 	}
-	return types.Session{Session: opts.Session, Since: opts.Since, Until: opts.Until}, nil
+	return types.Session(opts), nil
 }
 
 // MagusJobOpen backs magus\job(id): the stored row. An id no row carries
@@ -69,7 +69,7 @@ func MagusJobOpen(ctx context.Context, id string) (types.Job, error) {
 	}
 	i := slices.IndexFunc(list.Jobs, func(j types.Job) bool { return j.ID == id })
 	if i < 0 {
-		return types.Job{}, fmt.Errorf("magus\\job: no row has id %q; `magus job ls` lists the ids", id)
+		return types.Job{}, fmt.Errorf("magus\\job: no row has id %q, and `magus job ls` lists the ids", id)
 	}
 	return list.Jobs[i], nil
 }
@@ -129,14 +129,14 @@ func heldChange(ctx context.Context, c types.Change, member string) (types.Works
 		return nil, errorNoWorkspace("Change." + member)
 	}
 	if c.At.Revision == "" {
-		return nil, fmt.Errorf("magus\\Change.%s: this Change records no tree; build it with magus\\change(...)", member)
+		return nil, fmt.Errorf("magus\\Change.%s: this Change records no tree, so build it with magus\\change(...)", member)
 	}
 	at, files, err := changeTree(ctx, ws)
 	if err != nil {
 		return nil, fmt.Errorf("magus\\Change.%s: %w", member, err)
 	}
 	if moved := movedPaths(c, at, files); len(moved) > 0 {
-		return nil, fmt.Errorf("magus\\Change.%s: the tree moved since magus\\change(...) built this Change: %s; build a new one",
+		return nil, fmt.Errorf("magus\\Change.%s: the tree moved since magus\\change(...) built this Change: %s, so build a new one",
 			member, strings.Join(moved, ", "))
 	}
 	return ws, nil
@@ -285,7 +285,7 @@ func heldGraph(ctx context.Context, g types.SymbolIndexDigest, member string) er
 	if len(moved) == 0 {
 		moved = now.Projects
 	}
-	return fmt.Errorf("magus\\Graph.%s: the symbol index moved since magus\\graph() built this Graph, in %s; build a new one",
+	return fmt.Errorf("magus\\Graph.%s: the symbol index moved since magus\\graph() built this Graph, in %s, so build a new one",
 		member, strings.Join(moved, ", "))
 }
 

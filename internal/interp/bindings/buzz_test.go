@@ -864,3 +864,242 @@ func auditSearchPaths(dirs []string, magusfiles bool) []string {
 	}
 	return out
 }
+
+// jobNamespaceWorkspace is the smallest workspace the job namespace needs: job rows
+// are repository-scoped, while the cache directory is only retained for the legacy
+// adoption path and resolving a returned attempt.
+type jobNamespaceWorkspace struct {
+	types.WorkspaceRepository
+	cacheDir string
+	root     string
+}
+
+func (w *jobNamespaceWorkspace) CacheDir() string { return w.cacheDir }
+func (w *jobNamespaceWorkspace) Root() string     { return w.root }
+
+// TestJobExitWithoutResultThroughBuzzScript exercises the actual parser -> VM ->
+// direct-binding path. Buzz materializes an omitted optional map as {}, so testing the
+// Go callable directly would miss the only call shape that matters to a script author.
+func TestJobExitWithoutResultThroughBuzzScript(t *testing.T) {
+	testkit.Isolate(t)
+	workspace := &jobNamespaceWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
+	ctx := types.WithWorkspace(t.Context(), workspace)
+	sess := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = sess.Close() })
+	RegisterModules(ctx, sess)
+	RegisterMagusNamespace(ctx, sess)
+	DeclareMagusTypes(sess)
+
+	require.NoError(t, sess.Exec(ctx, `
+import "magus";
+
+export fun abandon() > str !> any {
+    magus\workspace().putJob("optional-exit", opts: {"criteria": "exercise omitted result", "read_only": true});
+    final row = magus\job("optional-exit").exit();
+    return row.state.value;
+}
+
+export fun waitOnNoReturn() > void !> any {
+    magus\job("optional-exit").wait();
+}
+`))
+	fn, ok := sess.Exports()["abandon"]
+	require.True(t, ok, "exported Buzz entrypoint is missing")
+
+	got, err := sess.CallValue(ctx, fn, nil)
+	require.NoError(t, err)
+	assert.Equal(t, string(types.StateNoReturn), got.AsString())
+
+	wait, ok := sess.Exports()["waitOnNoReturn"]
+	require.True(t, ok, "exported Buzz wait entrypoint is missing")
+	_, err = sess.CallValue(ctx, wait, nil)
+	require.ErrorContains(t, err, "has filed no result")
+}
+
+// session options and workspace.putJob take maps, decoded at the binding: an unknown key or a
+// value of the wrong type raises there, and a put's mistakes come back joined in one raise.
+func TestOptionMapsStayStrictThroughBuzzScript(t *testing.T) {
+	testkit.Isolate(t)
+	workspace := &jobNamespaceWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
+	ctx := types.WithWorkspace(t.Context(), workspace)
+	sess := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = sess.Close() })
+	RegisterModules(ctx, sess)
+	RegisterMagusNamespace(ctx, sess)
+	DeclareMagusTypes(sess)
+	require.NoError(t, sess.Exec(ctx, `
+import "magus";
+
+// any keeps invalid options at the runtime decoder boundary this test exercises.
+export fun trailTypo() > void !> any {
+    final opts: any = {"sinse": "6h"};
+    magus\session(opts).trail();
+}
+export fun trailNumber() > void !> any {
+    final opts: any = {"session": 3};
+    magus\session(opts).trail();
+}
+export fun putMistakes() > void !> any { magus\workspace().putJob("w", opts: {"passsed": true, "state": "passed"}); }
+`))
+	for name, want := range map[string][]string{
+		"trailTypo":   {`sessionOptions: SessionOptions has no member "sinse"`},
+		"trailNumber": {`sessionOptions.session: want str, got int`},
+		"putMistakes": {"no field of a job row is named passsed", "state must be one of"},
+	} {
+		fn, ok := sess.Exports()[name]
+		require.True(t, ok, "exported Buzz entrypoint %s is missing", name)
+		_, err := sess.CallValue(ctx, fn, nil)
+		for _, w := range want {
+			require.ErrorContains(t, err, w, name)
+		}
+	}
+}
+
+// magus\workspace().putJob writes a checkpoint, so it resolves one first.
+// A made-up revision raises, a real abbreviated one is stored in full.
+func TestJobPutResolvesItsCheckpointThroughBuzzScript(t *testing.T) {
+	testkit.Isolate(t)
+	repo := testkit.NewRepository(t, nil)
+	root, head := repo.Root(), repo.Head()
+
+	workspace := &jobNamespaceWorkspace{cacheDir: t.TempDir(), root: root}
+	ctx := types.WithWorkspace(t.Context(), workspace)
+	sess := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = sess.Close() })
+	RegisterModules(ctx, sess)
+	RegisterMagusNamespace(ctx, sess)
+	DeclareMagusTypes(sess)
+	require.NoError(t, sess.Exec(ctx, `
+import "magus";
+
+export fun put(id: str, checkpoint: str) > str !> any {
+    final row = magus\workspace().putJob(id, opts: {"criteria": "hold a checkpoint", "checkpoint": checkpoint, "read_only": true});
+    return row.checkpoint;
+}
+`))
+	put, ok := sess.Exports()["put"]
+	require.True(t, ok, "exported Buzz entrypoint is missing")
+
+	const madeUp = "34b41fd546ba8fa9c71a6a64e4ea0f3e93d5a7bc"
+	_, err := sess.CallValue(ctx, put, []vm.Value{vm.StringValue("made-up"), vm.StringValue(madeUp)})
+	require.ErrorContains(t, err, madeUp)
+	require.ErrorContains(t, err, "`magus vcs checkpoint -o name`")
+
+	got, err := sess.CallValue(ctx, put, []vm.Value{vm.StringValue("real"), vm.StringValue(head[:9])})
+	require.NoError(t, err)
+	assert.Equal(t, head, got.AsString())
+}
+
+// checkoutWorkspace is rooted at a real checkout, so a Change has a tree
+// to record.
+type checkoutWorkspace struct {
+	jobNamespaceWorkspace
+}
+
+func (checkoutWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+
+// execMagusScript loads src over ws and returns a caller for its exports.
+// The call carries ws too: host members read the call-time ctx.
+func execMagusScript(t *testing.T, ws types.WorkspaceRepository, src string) func(export string, args ...vm.Value) (vm.Value, error) {
+	t.Helper()
+	ctx := types.WithWorkspace(t.Context(), ws)
+	sess := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = sess.Close() })
+	RegisterModules(ctx, sess)
+	RegisterMagusNamespace(ctx, sess)
+	if err := DeclareMagusTypes(sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Exec(ctx, src); err != nil {
+		t.Fatal(err)
+	}
+	return func(export string, args ...vm.Value) (vm.Value, error) {
+		fn, ok := sess.Exports()[export]
+		if !ok {
+			t.Fatalf("export %q is missing", export)
+		}
+		return sess.CallValue(ctx, fn, args)
+	}
+}
+
+const changeScript = `
+import "magus";
+
+export fun build() > magus\Change !> any {
+    return magus\change();
+}
+
+export fun revision(c: magus\Change) > str !> any {
+    return c.at.revision;
+}
+
+export fun mergeBase(c: magus\Change) > str !> any {
+    return c.mergeBase();
+}
+
+export fun literal() > str !> any {
+    return magus\Change{}.mergeBase();
+}
+`
+
+type changeHandleSuite struct {
+	suite.Suite
+	root string
+	call func(export string, args ...vm.Value) (vm.Value, error)
+}
+
+func TestChangeHandle(t *testing.T) { suite.Run(t, new(changeHandleSuite)) }
+
+func (s *changeHandleSuite) SetupTest() {
+	testkit.Isolate(s.T())
+	repo := testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"})
+	s.root = repo.Root()
+	ws := &checkoutWorkspace{jobNamespaceWorkspace{cacheDir: s.T().TempDir(), root: s.root}}
+	s.call = execMagusScript(s.T(), ws, changeScript)
+}
+
+func (s *changeHandleSuite) build() vm.Value {
+	c, err := s.call("build")
+	s.Require().NoError(err)
+	return c
+}
+
+func (s *changeHandleSuite) TestRecordsTheTreeItWasBuiltOn() {
+	got, err := s.call("revision", s.build())
+	s.Require().NoError(err)
+	s.NotEmpty(got.AsString())
+}
+
+func (s *changeHandleSuite) TestRefusesOnceAPathMoved() {
+	c := s.build()
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "a.txt"), []byte("moved\n"), 0o600))
+
+	_, err := s.call("mergeBase", c)
+	s.Require().ErrorContains(err, "the tree moved since magus\\change(...) built this Change: a.txt")
+}
+
+func (s *changeHandleSuite) TestRefusesALiteralWithNoTree() {
+	_, err := s.call("literal")
+	s.Require().ErrorContains(err, "records no tree, so build it with magus\\change(...)")
+}
+
+func TestTrailNamespaceShapesACommand(t *testing.T) {
+	call := execMagusScript(t, &checkoutWorkspace{jobNamespaceWorkspace{root: "."}}, `
+import "magus";
+
+export fun shape() > str {
+    return magus\guard.shape("grep -rn foo src");
+}
+
+export fun shapes() > int {
+    return magus\guard.shapes("cd x && grep -rn foo src | head -5").len();
+}
+`)
+	got, err := call("shape")
+	require.NoError(t, err)
+	assert.Equal(t, "grep -rn <arg>", got.AsString())
+
+	n, err := call("shapes")
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), n.AsInt())
+}

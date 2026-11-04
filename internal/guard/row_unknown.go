@@ -50,7 +50,7 @@ func unknownRowSpawnDenial(deps Dependencies, row types.Job) denial {
 	}
 	members := slices.Sorted(maps.Keys(row.Unknown))
 	return denial{
-		Say: fmt.Sprintf("magus workspace: %s (%s) cannot read %s on job %s's row; rebuild the ./magus the host hook runs (`%s`), restart the daemon (`./magus server stop && ./magus server start`), and spawn again.",
+		Say: fmt.Sprintf("magus workspace: %s (%s) cannot read %s on job %s's row; rebuild ./magus with `%s`, restart the daemon, and spawn again.",
 			cmp.Or(deps.Binary, "this magus"), cmp.Or(deps.BinaryVersion, "an unknown version"), strings.Join(members, ", "), row.ID, ward.BootstrapCommand),
 		Why: "A worker spawned on this row would have every call denied. " +
 			"Restart the daemon with `./magus server stop`, then `./magus server start`.",
