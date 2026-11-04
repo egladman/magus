@@ -567,6 +567,14 @@ func (s *SpawnShapeSuite) TestTextItemsAreASpawn() {
 	s.Equal("Run the tests.", prompt)
 }
 
+func (s *SpawnShapeSuite) TestMessageWithTextlessItemsAndNoShapeKeyIsNotASpawn() {
+	_, ok := envelopeSpawn(map[string]any{
+		"message": "Run the tests.",
+		"items":   []any{map[string]any{"content": "Read the code", "status": "pending"}},
+	})
+	s.False(ok)
+}
+
 func (s *SpawnShapeSuite) TestTextlessItemsWithASpawnKeyAreASpawn() {
 	_, ok := envelopeSpawn(map[string]any{
 		"items":      []any{map[string]any{"type": "skill", "name": "magus-run"}},

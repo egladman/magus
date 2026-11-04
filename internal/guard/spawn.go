@@ -125,7 +125,7 @@ func envelopeSpawn(input map[string]any) (prompt string, ok bool) {
 	text := cmp.Or(envelopeString(input, "message"), itemsText)
 	hasShape := slices.ContainsFunc(spawnShapeKeys, func(k string) bool { _, present := input[k]; return present })
 	// A todo list sends `items` too, with no text part.
-	if hasShape && (text != "" || hasItems) || itemsText != "" {
+	if (hasShape && (text != "" || hasItems)) || itemsText != "" {
 		return text, true
 	}
 	return "", false
