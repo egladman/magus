@@ -2533,9 +2533,10 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                     "**/*.yml", "libs/testpairing/**/*.yml",
                     "proto/**/*.proto", "**/*.txtar"]);
     // Two lint rules fail on a stale symbol index.
-    // magus\graph().precedents() freshens every index under this run's lock.
+    // magus\graph() freshens the Go and TypeScript indexes under this lock.
     // From the rules' child process a rebuild is refused the lock (MGS3007).
-    _ = magus\graph().precedents();
+    // A language a rule starts judging must join this list.
+    _ = magus\graph(languages: ["go", "typescript"]).precedents();
     _ = magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 

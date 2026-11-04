@@ -39,8 +39,8 @@ func MagusWorkspaceOpen(ctx context.Context, dir string) (types.MagusWorkspace, 
 
 // MagusGraphOpen backs magus\graph(): the symbol index the graph's answers
 // come from, which every Graph method holds the index to.
-func MagusGraphOpen(ctx context.Context) (types.SymbolIndexDigest, error) {
-	return MagusSymbolIndexDigest(ctx)
+func MagusGraphOpen(ctx context.Context, languages []string) (types.SymbolIndexDigest, error) {
+	return MagusSymbolIndexDigest(ctx, languages)
 }
 
 // MagusHistoryOpen backs magus\history(opts): the window its metrics read.
@@ -274,7 +274,7 @@ func MagusChangeMergeBase(ctx context.Context, c types.Change) (string, error) {
 // heldGraph refuses a Graph whose symbol index moved since magus\graph()
 // built it, naming the projects whose index came or went.
 func heldGraph(ctx context.Context, g types.SymbolIndexDigest, member string) error {
-	now, err := MagusSymbolIndexDigest(ctx)
+	now, err := MagusSymbolIndexDigest(ctx, g.Languages)
 	if err != nil {
 		return err
 	}
@@ -382,13 +382,13 @@ func MagusGraphImports(ctx context.Context, g types.SymbolIndexDigest) (types.Im
 // MagusGraphSymbols answers Graph.symbols.
 // It raises once the index g holds moved.
 func MagusGraphSymbols(ctx context.Context, g types.SymbolIndexDigest) (types.Symbols, error) {
-	return graphMethod(ctx, g, "symbols", func() (types.Symbols, error) { return MagusSymbols(ctx) })
+	return graphMethod(ctx, g, "symbols", func() (types.Symbols, error) { return MagusSymbols(ctx, g.Languages) })
 }
 
 // MagusGraphPrecedents answers Graph.precedents.
 // It raises once the index g holds moved.
 func MagusGraphPrecedents(ctx context.Context, g types.SymbolIndexDigest) (types.Holds, error) {
-	return graphMethod(ctx, g, "precedents", func() (types.Holds, error) { return MagusPrecedents(ctx) })
+	return graphMethod(ctx, g, "precedents", func() (types.Holds, error) { return MagusPrecedents(ctx, g.Languages) })
 }
 
 // MagusGraphUnreferenced answers Graph.unreferenced.

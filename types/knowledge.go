@@ -1801,6 +1801,8 @@ type SymbolIndexDigest struct {
 	// Gaps are the projects that declare an index magus could not read. A digest with
 	// gaps is stable but partial.
 	Gaps []KnowledgeSymbolGap `json:"gaps,omitempty" yaml:"gaps,omitempty"`
+	// Languages limits the freshen to those indexes; empty is all.
+	Languages []string `json:"languages,omitempty" yaml:"languages,omitempty"`
 }
 
 // KnowledgeStats is the knowledge-graph analytics behind `magus graph stats`:

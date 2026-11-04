@@ -151,7 +151,8 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectMagusWorkspace(ret0, enums), nil
 	}))
 	m.MapSet("graph", vm.DirectValue("magus.graph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.MagusGraphOpen(ctx)
+		languages := ffi.StringSlice(bzArgs, 0)
+		ret0, err := std.MagusGraphOpen(ctx, languages)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
