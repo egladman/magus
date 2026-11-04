@@ -330,6 +330,13 @@ export enum<str> ConformancePopulation {
     test = "test",
 }
 
+export enum<str> MutantOutcome {
+    none = "",
+    killed = "killed",
+    survived = "survived",
+    excepted = "excepted",
+}
+
 export enum<str> ChangeStatus {
     none = "",
     added = "added",
@@ -474,6 +481,14 @@ export object Change {
     fun mergeBase() > str !> any {
         return magus__Change__mergeBase(this);
     }
+
+    fun risk() > ChangeRisk !> any {
+        return magus__Change__risk(this);
+    }
+
+    fun mutants() > Mutants !> any {
+        return magus__Change__mutants(this);
+    }
 }
 
 export object CommandOptions {
@@ -544,7 +559,6 @@ export object Graph {
     indexed: bool = false,
     projects: [str] = [],
     gaps: [KnowledgeSymbolGap] = [],
-    languages: [str] = [],
 
     fun query(query: str, opts: QueryOptions? = null) > QueryResult !> any {
         return magus__Graph__query(this, query: query, opts: opts);
@@ -1020,6 +1034,10 @@ export object Workspace {
         return magus__Workspace__volatility(this);
     }
 
+    fun risk() > ChangeRisk !> any {
+        return magus__Workspace__risk(this);
+    }
+
     fun skills(opts: SkillsOptions? = null) > [Skill] !> any {
         return magus__Workspace__skills(this, opts: opts);
     }
@@ -1215,6 +1233,53 @@ export object VolatilityTarget {
 export object Volatility {
     threshold: double = 0.0,
     targets: [VolatilityTarget] = [],
+}
+
+export object ChangeRiskFunction {
+    symbol: str = "",
+    label: str = "",
+    path: str = "",
+    language: str = "",
+    digest: str = "",
+    line: int = 0,
+    endLine: int = 0,
+    complexity: int = 0,
+    covered: int = 0,
+    coverable: int = 0,
+    score: double = 0.0,
+    baseScore: double = 0.0,
+    baseComplexity: int = 0,
+    baseCovered: int = 0,
+    baseCoverable: int = 0,
+    baseReason: str = "",
+}
+
+export object FunctionGap {
+    symbol: str = "",
+    label: str = "",
+    path: str = "",
+    language: str = "",
+    line: int = 0,
+    complexity: int = 0,
+    reason: str = "",
+}
+
+export object Finding {
+    path: str = "",
+    line: int = 0,
+    col: int = 0,
+    rule: str = "",
+    message: str = "",
+    fix: str = "",
+    url: str = "",
+}
+
+export object ChangeRisk {
+    definition: str = "",
+    base: str = "",
+    functions: [ChangeRiskFunction] = [],
+    gaps: [FunctionGap] = [],
+    lines: [Finding] = [],
 }
 
 export object SkillsOptions {
@@ -2002,6 +2067,30 @@ export object ConformanceReport {
     indexes: [SymbolIndexStatus] = [],
 }
 
+export object Mutant {
+    id: str = "",
+    symbol: str = "",
+    path: str = "",
+    operator: str = "",
+    find: str = "",
+    replace: str = "",
+    line: int = 0,
+    col: int = 0,
+    outcome: MutantOutcome = MutantOutcome.none,
+    seconds: double = 0.0,
+    reason: str = "",
+    baseSurvived: int = 0,
+    baseReason: str = "",
+}
+
+export object Mutants {
+    definition: str = "",
+    base: str = "",
+    mutants: [Mutant] = [],
+    gaps: [FunctionGap] = [],
+    unused: [Finding] = [],
+}
+
 export object Node {
     path: str = "",
     name: str = "",
@@ -2641,9 +2730,29 @@ export object StubSyntax {
     body: str = "",
 }
 
+export object DecisionSyntax {
+    keywords: [str] = [],
+    operators: [str] = [],
+}
+
+export object Swap {
+    name: str = "",
+    find: str = "",
+    replace: str = "",
+}
+
+export object MutationSyntax {
+    swaps: [Swap] = [],
+    bodies: [str] = [],
+    arid: [str] = [],
+}
+
 export object Syntax {
     comments: CommentSyntax? = null,
     stubs: StubSyntax? = null,
+    operators: [str] = [],
+    decisions: DecisionSyntax? = null,
+    mutations: MutationSyntax? = null,
 }
 
 export object SpellVersion {
@@ -2764,6 +2873,7 @@ extern fun magus__Workspace__unmerged(recv: Workspace) > JobUnmergedReport !> an
 extern fun magus__Workspace__tierOutcomes(recv: Workspace) > ModelTiers !> any;
 extern fun magus__Workspace__grouping(recv: Workspace) > Grouping !> any;
 extern fun magus__Workspace__volatility(recv: Workspace) > Volatility !> any;
+extern fun magus__Workspace__risk(recv: Workspace) > ChangeRisk !> any;
 extern fun magus__Workspace__skills(recv: Workspace, opts: SkillsOptions? = null) > [Skill] !> any;
 extern fun magus__Workspace__attention(recv: Workspace, args: [str], opts: CommandOptions? = null) > AttentionList !> any;
 extern fun magus__Workspace__fileDiskAttention(recv: Workspace, message: str) > void !> any;
@@ -2791,6 +2901,8 @@ extern fun magus__Change__impact(recv: Change, opts: CommandOptions? = null) > I
 extern fun magus__Change__affected(recv: Change) > Affected !> any;
 extern fun magus__Change__conformance(recv: Change, checks: [str] = [<str>]) > ConformanceReport !> any;
 extern fun magus__Change__mergeBase(recv: Change) > str !> any;
+extern fun magus__Change__risk(recv: Change) > ChangeRisk !> any;
+extern fun magus__Change__mutants(recv: Change) > Mutants !> any;
 extern fun magus__History__hotspots(recv: History) > Hotspots !> any;
 extern fun magus__History__affinity(recv: History) > Affinity !> any;
 extern fun magus__History__ownership(recv: History) > Ownership !> any;
@@ -2809,7 +2921,7 @@ export extern fun cmd(sub: str, args: [str], opts: CommandOptions? = null) > Exe
 export extern fun diagnosticCode(text: str) > DiagnosticCode !> any;
 export extern fun doctor(args: [str], opts: CommandOptions? = null) > DoctorReport !> any;
 export extern fun fatal(msg: str = "") > void;
-export extern fun graph(languages: [str] = [<str>]) > Graph !> any;
+export extern fun graph() > Graph !> any;
 export extern fun hasCharm(name: str) > bool;
 export extern fun history(opts: HistoryMetricsOptions? = null) > History !> any;
 export extern fun job(id: str) > Job !> any;
