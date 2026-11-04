@@ -693,8 +693,8 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 
 // The merge queue replays main's signed cache only for a step main's CI keyed the same
 // way, and charms are key lines: a gate running `ci` against shards that ran `ci:gha`
-// missed every entry main stored for an unchanged base. Forwarded args are key lines too,
-// and main's shards forward what a pull request's do not. The queue's box moves HOME,
+// missed every entry main stored for an unchanged base.
+// The queue's box moves HOME,
 // TMPDIR and the XDG directories (see boxEnv in internal/queue), none of which may key a
 // step either.
 func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
@@ -723,8 +723,8 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	for _, s := range workflow.Jobs["ci"].Steps {
 		command := s.With["command"]
 		// A shard gated in the queue's box names the command it runs after `-- magus`.
-		if _, inner, boxed := strings.Cut(command, " -- magus "); boxed && strings.HasPrefix(command, "queue gate ") {
-			command = strings.TrimPrefix(inner, harnessRunner+"-- ")
+		if _, inner, boxed := strings.Cut(harnessCall.ReplaceAllLiteralString(command, " -- magus "), " -- magus "); boxed && strings.HasPrefix(command, "queue gate ") {
+			command = inner
 		}
 		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(command, "run ci") {
 			// Rendered as main's run renders it: main's shards are the ones whose entries
@@ -767,8 +767,10 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 		return magus.CharmsForCI(withDefaultCharms(target.Charms, cfg.DefaultCharms, slices.Contains(argv, "--no-default-charms"))), forwarded
 	}
 	shardCharms, shardArgs := charms(shard)
-	gateCharms, gateArgs := charms(gate)
-	assert.Equal(t, shardArgs, gateArgs, "the queue gate %q forwards other args than main's ci.yaml shards %q", gate, shard)
+	gateCharms, _ := charms(gate)
+	// The shards name ci's members, and the gate reaches them by
+	// ctx.needs, which hands a member no args. Neither keys one.
+	assert.Empty(t, shardArgs, "main's ci.yaml shards %q forward args to the members of ci", shard)
 
 	// test is one of ci's stages there, keyed with the invocation's charms, and keys GOOS.
 	const project = "libs/diagnostics"
