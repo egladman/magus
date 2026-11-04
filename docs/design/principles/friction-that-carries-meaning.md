@@ -86,7 +86,7 @@ The `push-ungated` rule fires only on the act that leaves the machine, and only
 when the evidence is missing. Its catalog entry ([`internal/guard/catalog.go`](https://github.com/egladman/magus/blob/main/internal/guard/catalog.go)):
 
 ```text
-push-ungated: a push or `gh pr create` at a commit neither a green gate nor passing narrow runs cover; refused for every session
+push-ungated: a push or `gh pr create` at a commit no green gate or passing narrow run covers
 ```
 
 ## Bad

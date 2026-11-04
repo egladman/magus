@@ -1,16 +1,16 @@
 ---
-title: "push-ungated: a push or `gh pr create` at a commit neither a green gate nor passing narrow runs cover; refused for every session"
-description: "A deny rule by default: it refuses a push or `gh pr create` at a commit neither a green gate nor passing narrow runs cover; refused for every session, and names what to run instead."
+title: "push-ungated: a push or `gh pr create` at a commit no green gate or passing narrow run covers"
+description: "A deny rule by default: it refuses a push or `gh pr create` at a commit no green gate or passing narrow run covers, and names what to run instead."
 tags: [guard, rules, push-ungated, deny]
 ---
 
 # push-ungated
 
-A deny rule by default: it refuses a push or `gh pr create` at a commit neither a green gate nor passing narrow runs cover; refused for every session, and names what to run instead.
+A deny rule by default: it refuses a push or `gh pr create` at a commit no green gate or passing narrow run covers, and names what to run instead.
 
 ## What it catches
 
-A push or `gh pr create` at a commit neither a green gate nor passing narrow runs cover; refused for every session.
+A push or `gh pr create` at a commit no green gate or passing narrow run covers.
 
 ## Why
 

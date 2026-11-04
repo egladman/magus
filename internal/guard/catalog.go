@@ -373,7 +373,7 @@ var ruleDocAmbiguousCiWord = types.RuleDoc{
 
 var ruleDocPushUngated = types.RuleDoc{
 	Name:    string(denyRulePushUngated),
-	Catches: "a push or `gh pr create` at a commit neither a green gate nor passing narrow runs cover; refused for every session",
+	Catches: "a push or `gh pr create` at a commit no green gate or passing narrow run covers",
 	Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +
 		"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes stopping the call legitimate here where the rest of this tier only advises. " +
 		"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
