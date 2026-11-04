@@ -103,22 +103,22 @@ number; it reports scores and mutants, and a lint rule decides.
 
 ### State
 
-| item                                                                          | State                                           |
-| ----------------------------------------------------------------------------- | ----------------------------------------------- |
-| decision tokens, token swaps and coverage declared by spells as data          | done                                            |
-| `Op.Coverage` and the synthesized `coverage` op                               | done                                            |
-| complexity carried in the pack beside SCIP (`SymbolInfo.Complexity`)          | done                                            |
-| runner refs resolve inside a token for `MAGUS` and `MAGUS_` names             | done                                            |
-| `Magus.ChangeRisk` and the change-risk check in `magus diff`                  | done                                            |
-| `Magus.Mutants`, the scoped baseline, `mutants.jsonl` and the marker reader   | done                                            |
-| the `magus:mutant` marker syntax and its unused-marker findings               | done                                            |
-| Buzz methods `Change.risk`, `Change.mutants` and `Workspace.risk`             | done                                            |
-| lint rule `touched-functions-keep-change-risk-under-10`                       | done (`hack/lint/run.buzz` does not name it)    |
-| lint rule `touched-functions-kill-their-mutants`                              | done (`hack/lint/run.buzz` does not name it)    |
-| `Change.risk` scoring this repository's own change                            | in progress (the root `coverage` op is red)     |
-| `Change.mutants` over this repository's own change                            | in progress (a Buzz mutant breaks its parse)    |
-| coverage for bash                                                             | not built                                       |
-| Measured section (refusals and wall time over the last 20 merges)             | not built                                       |
+| item                                                                        | State                                        |
+| --------------------------------------------------------------------------- | -------------------------------------------- |
+| decision tokens, token swaps and coverage declared by spells as data        | done                                         |
+| `Op.Coverage` and the synthesized `coverage` op                             | done                                         |
+| complexity carried in the pack beside SCIP (`SymbolInfo.Complexity`)        | done                                         |
+| runner refs resolve inside a token for `MAGUS` and `MAGUS_` names           | done                                         |
+| `Magus.ChangeRisk` and the change-risk check in `magus diff`                | done                                         |
+| `Magus.Mutants`, the scoped baseline, `mutants.jsonl` and the marker reader | done                                         |
+| the `magus:mutant` marker syntax and its unused-marker findings             | done                                         |
+| Buzz methods `Change.risk`, `Change.mutants` and `Workspace.risk`           | done                                         |
+| lint rule `touched-functions-keep-change-risk-under-10`                     | done (`hack/lint/run.buzz` does not name it) |
+| lint rule `touched-functions-kill-their-mutants`                            | done (`hack/lint/run.buzz` does not name it) |
+| `Change.risk` scoring this repository's own change                          | in progress (the root `coverage` op is red)  |
+| `Change.mutants` over this repository's own change                          | in progress (a Buzz mutant breaks its parse) |
+| coverage for bash                                                           | not built                                    |
+| Measured section (refusals and wall time over the last 20 merges)           | not built                                    |
 
 Until `hack/lint/run.buzz` names the two rules, nothing refuses a touched function:
 `magus diff` prints the change-risk check as advice and `Magus.Mutants` answers only when
