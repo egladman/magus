@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 )
 
@@ -150,7 +152,17 @@ func (s *PlanUnitsSuite) SetupTest() {
 export fun build(ctx: magus\Context, args: [str]) > void {}
 export fun lint(ctx: magus\Context, args: [str]) > void {}
 export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
-export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, test); }
+export fun figures(ctx: magus\Context, args: [str]) > void {}
+export fun security(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, test);
+    if (!ctx.hasCharm("gha")) { ctx.needs(figures); }
+    if (args.len() > 0) {
+        security(ctx, args: args);
+        return;
+    }
+    ctx.needs(security);
+}
 `,
 		"api/magusfile.buzz": "",
 		"api/main.go":        "package main\n",
@@ -161,9 +173,31 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, test); }
 	s.m = m
 }
 
-func (s *PlanUnitsSuite) TestEachStepCIComposesIsAUnit() {
-	got := s.m.planUnits([]types.Target{{Path: "."}, {Path: "api"}}, "ci")
-	s.Equal([]types.Unit{{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}, {Project: "api", Target: "ci"}}, got)
+func (s *PlanUnitsSuite) plan(charms, args []string) ([]types.Unit, []types.DirectCall) {
+	units, unplanned, err := s.m.planUnits(context.Background(), []types.Target{{Path: "."}, {Path: "api"}}, "ci", charms, args)
+	s.Require().NoError(err)
+	return units, unplanned
+}
+
+func (s *PlanUnitsSuite) TestEachStepCIAsksForIsAUnit() {
+	got, unplanned := s.plan(nil, nil)
+	s.Equal([]types.Unit{
+		{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}, {Project: ".", Target: "figures"},
+		{Project: ".", Target: "security"}, {Project: "api", Target: "ci"},
+	}, got)
+	s.Empty(unplanned)
+}
+
+func (s *PlanUnitsSuite) TestAStepTheCharmSkipsIsNoUnit() {
+	got, _ := s.plan([]string{"gha"}, nil)
+	s.NotContains(got, types.Unit{Project: ".", Target: "figures"})
+	s.Contains(got, types.Unit{Project: ".", Target: "lint"})
+}
+
+func (s *PlanUnitsSuite) TestADirectCallUnderArgsIsNamedUnplanned() {
+	got, unplanned := s.plan([]string{"gha"}, []string{"--strict"})
+	s.NotContains(got, types.Unit{Project: ".", Target: "security"})
+	s.Equal([]types.DirectCall{{Project: ".", Anchor: "ci", Target: "security"}}, unplanned)
 }
 
 func (s *PlanUnitsSuite) TestAUnitNeedsItsTransitiveSteps() {
@@ -178,8 +212,88 @@ func (s *PlanUnitsSuite) TestThePlanCarriesUnitsAndNamesTheUnmeasured() {
 	for _, sh := range plan.Shards {
 		placed = append(placed, sh.Units...)
 	}
-	s.ElementsMatch([]types.Unit{{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}, {Project: "api", Target: "ci"}}, placed)
+	s.ElementsMatch([]types.Unit{
+		{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}, {Project: ".", Target: "figures"},
+		{Project: ".", Target: "security"}, {Project: "api", Target: "ci"},
+	}, placed)
 	s.Contains(plan.Unmeasured, types.Unit{Project: ".", Target: "build"}, "no history: every target fell back")
+}
+
+func (s *PlanUnitsSuite) TestColdHistoryOpensFewShardsAndSaysSo() {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"magusfile.buzz", "api/main.go"}, MaxShards: -1})
+	s.Require().NoError(err)
+	s.LessOrEqual(len(plan.Shards), forecast.ColdShards)
+	s.Contains(plan.Fallbacks, "the history holds no duration for any unit, so the plan opens at most 2 shards")
+}
+
+func (s *PlanUnitsSuite) TestNoRunnerClassChecksNoBudgetAndSaysSo() {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
+	s.Require().NoError(err)
+	s.Nil(plan.Runner)
+	s.Contains(plan.Fallbacks, "no ci.runner is configured, so the plan checks no shard against a memory budget")
+}
+
+func (s *PlanUnitsSuite) TestTheConfiguredRunnerClassIsRecorded() {
+	s.m.cfg.CI.Runner = config.CIRunner{Name: "ubuntu-latest", MemoryMB: 16384, Cores: 4}
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
+	s.Require().NoError(err)
+	s.Equal(&types.RunnerClass{Name: "ubuntu-latest", MemoryMB: 16384, Cores: 4}, plan.Runner)
+}
+
+func (s *PlanUnitsSuite) TestAHalfConfiguredRunnerClassIsAnError() {
+	s.m.cfg.CI.Runner = config.CIRunner{Name: "ubuntu-latest", MemoryMB: 16384}
+	_, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
+	s.ErrorContains(err, `ci.runner "ubuntu-latest" needs both memory_mb and cores above zero`)
+}
+
+func (s *PlanUnitsSuite) TestEveryShardIsLabeledByItsUnitsDigest() {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"magusfile.buzz", "api/main.go"}, MaxShards: -1})
+	s.Require().NoError(err)
+	for _, sh := range plan.Shards {
+		s.Equal(types.UnitsDigest(sh.Units), sh.Label)
+	}
+}
+
+type PlaceDutiesSuite struct{ suite.Suite }
+
+func TestPlaceDutiesSuite(t *testing.T) { suite.Run(t, new(PlaceDutiesSuite)) }
+
+func (s *PlaceDutiesSuite) TestTheCacheExportGoesWhereTheRootsUnitsAre() {
+	shards := []types.Shard{
+		{Units: []types.Unit{{Project: "docs", Target: "lint"}}},
+		{Units: []types.Unit{{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}}},
+	}
+	placeDuties(shards)
+	s.Equal([]types.Duty{types.DutyCacheExport}, shards[1].Duties)
+}
+
+func (s *PlaceDutiesSuite) TestNotesVerifyGoesToTheLightestShard() {
+	shards := []types.Shard{
+		{Units: []types.Unit{{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}}},
+		{Units: []types.Unit{{Project: "docs", Target: "lint"}}},
+	}
+	placeDuties(shards)
+	s.Equal([]types.Duty{types.DutyNotesVerify}, shards[1].Duties)
+}
+
+func (s *PlaceDutiesSuite) TestEachDutyLandsOnExactlyOneShard() {
+	shards := []types.Shard{
+		{Units: []types.Unit{{Project: "a", Target: "lint"}}},
+		{Units: []types.Unit{{Project: "b", Target: "lint"}}},
+		{Units: []types.Unit{{Project: "c", Target: "lint"}}},
+	}
+	placeDuties(shards)
+	count := map[types.Duty]int{}
+	for _, sh := range shards {
+		for _, d := range sh.Duties {
+			count[d]++
+		}
+	}
+	s.Equal(map[types.Duty]int{types.DutyCacheExport: 1, types.DutyNotesVerify: 1}, count)
+}
+
+func (s *PlaceDutiesSuite) TestNoShardsTakeNoDuties() {
+	s.NotPanics(func() { placeDuties(nil) })
 }
 
 // Example_runATarget runs a target, reads its result from the run's records, and

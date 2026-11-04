@@ -513,8 +513,18 @@ func hasModeFlag(args []string, name string) bool {
 type planOutput struct {
 	// Target is what every shard runs, so `magus run --stdin` needs nothing beside the
 	// document to know what to run.
-	Target      string      `json:"target"`
-	Count       int         `json:"count"`
+	Target string `json:"target"`
+	// Charms and Args are what the target's body was evaluated under. A shard
+	// run under others is refused, since its steps would differ.
+	Charms []string `json:"charms,omitempty"`
+	Args   []string `json:"args,omitempty"`
+	// Runner is the class the shards were packed for; Fallbacks says each
+	// default the plan fell back to.
+	Runner    *types.RunnerClass `json:"runner,omitempty"`
+	Fallbacks []string           `json:"fallbacks,omitempty"`
+	// Unplanned are targets an anchor calls directly, which no shard runs.
+	Unplanned   []types.DirectCall `json:"unplanned,omitempty"`
+	Count       int                `json:"count"`
 	MaxParallel int         `json:"max_parallel"`
 	Source      string      `json:"source"`
 	Matrix      []planShard `json:"matrix"`
@@ -562,18 +572,28 @@ type planOutput struct {
 type planShard struct {
 	Shard    string `json:"shard"    yaml:"shard"`
 	Projects string `json:"projects" yaml:"projects"`
-	// Label is Projects shortened for a CI job name. Separate from Projects because a
-	// provider passes that one to `magus run ci <projects>` and must not receive an
-	// elision.
+	// Name is Projects shortened for a CI job name.
+	Name string `json:"name" yaml:"name"`
+	// Label is a digest of Units, the same for the same units on any plan, so a
+	// provider keys a per-shard cache by it.
 	Label string `json:"label" yaml:"label"`
+	// Duties are the workspace-wide steps this shard runs, space-separated.
+	Duties string `json:"duties" yaml:"duties"`
 	// Units are what `magus run --stdin --shard` runs for this shard.
 	Units []types.Unit `json:"units,omitempty" yaml:"units,omitempty"`
 }
 
-// shardLabel names a shard by what is in it. A CI job list is scanned, not studied, so
-// this shows the first few paths and counts the rest; a bare shard number says nothing
-// about what is red.
-func shardLabel(paths []string) string {
+func joinDuties(duties []types.Duty) string {
+	names := make([]string, len(duties))
+	for i, d := range duties {
+		names[i] = string(d)
+	}
+	return strings.Join(names, " ")
+}
+
+// shardName names a shard by what is in it. A CI job list is scanned, not
+// studied, so this shows the first few paths and counts the rest.
+func shardName(paths []string) string {
 	const shown = 3
 	switch {
 	case len(paths) == 0:
@@ -704,6 +724,15 @@ func planSummaryMarkdown(out planOutput) string {
 		"To inspect why a project was selected, run `magus affected ci --explain` locally. " +
 		"[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) - " +
 		"[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n")
+	for _, f := range out.Fallbacks {
+		fmt.Fprintf(&b, "\n- Fell back: %s.", f)
+	}
+	for _, c := range out.Unplanned {
+		fmt.Fprintf(&b, "\n- Unplanned: `%s`'s %s calls `%s` directly, so no shard runs it.", c.Project, c.Anchor, c.Target)
+	}
+	if len(out.Fallbacks)+len(out.Unplanned) > 0 {
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 
@@ -767,6 +796,10 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// Leading positionals after the target are project filters, the same grammar
 	// `magus run <target> <projects>` already uses, so there is nothing new to learn, and
 	// no flag invented for something the CLI already spells one way.
+	var anchorArgs []string
+	if i := slices.Index(planless, "--"); i >= 0 {
+		planless, anchorArgs = planless[:i], planless[i+1:]
+	}
 	var target string
 	var only []string
 	flagArgs := planless
@@ -782,7 +815,11 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`), run `%s` to list available targets",
 			hint.Affected.With("ci", "--plan"), hint.DescribeTargets)
 	}
-	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
+	parsed, err := types.ParseTarget(canonicalTarget(target)) // expand short aliases at the CLI edge, mirroring `magus run`
+	if err != nil {
+		return exit.Usagef("magus affected --plan: %v", err)
+	}
+	target = parsed.Name
 
 	var pf *flaggen.AffectedPlanFlags
 	if _, err := commandParse(fmt.Sprintf("affected %s --plan", target), flagArgs, func(fs *flag.FlagSet) {
@@ -821,6 +858,8 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		MaxShards:        pf.MaxShards,
 		RunnerPoolBudget: pf.MaxParallelBudget,
 		BaseRef:          pf.Base,
+		Charms:           parsed.Charms,
+		Args:             anchorArgs,
 	}
 	if pf.Stdin {
 		planOpts.ChangedPaths, err = readAffectedPlanPaths(os.Stdin, pf.Null)
@@ -903,8 +942,20 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			len(plan.Unmeasured), cappedUnits(plan.Unmeasured)), attr.Notice("note"))
 	}
 
+	if len(plan.Fallbacks) > 0 {
+		slog.With(attr.Component("magus")).WarnContext(ctx, "the plan fell back: "+strings.Join(plan.Fallbacks, "; "))
+	}
+	for _, c := range plan.Unplanned {
+		slog.With(attr.Component("magus")).WarnContext(ctx, fmt.Sprintf(
+			"%s's %s calls %s directly rather than through ctx.needs, so no shard runs it", c.Project, c.Anchor, c.Target))
+	}
 	out := planOutput{
 		Target:      target,
+		Charms:      plan.Charms,
+		Args:        plan.Args,
+		Runner:      plan.Runner,
+		Fallbacks:   plan.Fallbacks,
+		Unplanned:   plan.Unplanned,
 		Count:       len(plan.Shards),
 		MaxParallel: plan.MaxParallel,
 		Source:      plan.Source,
@@ -917,7 +968,9 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		out.Matrix[i] = planShard{
 			Shard:    s.ID,
 			Projects: strings.Join(s.ProjectPaths, " "),
-			Label:    shardLabel(s.ProjectPaths),
+			Name:     shardName(s.ProjectPaths),
+			Label:    s.Label,
+			Duties:   joinDuties(s.Duties),
 			Units:    s.Units,
 		}
 	}
@@ -1695,6 +1748,7 @@ func filterShardPaths(shards []types.Shard, want map[string]bool) []types.Shard 
 		}
 		sh.ProjectPaths = kept
 		sh.Units = slices.DeleteFunc(slices.Clone(sh.Units), func(u types.Unit) bool { return !want[u.Project] })
+		sh.Label = types.UnitsDigest(sh.Units)
 		out = append(out, sh)
 	}
 	return out

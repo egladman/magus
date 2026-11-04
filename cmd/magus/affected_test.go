@@ -124,8 +124,8 @@ func TestFilterShardsIntersectsRatherThanReplaces(t *testing.T) {
 	// shared. IDs are preserved, not renumbered, so a filtered plan reads against the one
 	// it came from: shard 1 is absent rather than shard 2 being renamed to 1.
 	assert.Equal(t, []types.Shard{
-		{ID: "0", ProjectPaths: []string{"docs"}},
-		{ID: "2", ProjectPaths: []string{"proto"}},
+		{ID: "0", Label: types.UnitsDigest(nil), ProjectPaths: []string{"docs"}},
+		{ID: "2", Label: types.UnitsDigest(nil), ProjectPaths: []string{"proto"}},
 	}, got)
 }
 
@@ -139,14 +139,15 @@ func (s *FilterShardUnitsSuite) TestDropsTheUnitsOfUnselectedProjects() {
 		ProjectPaths: []string{".", "docs"},
 		Units:        []types.Unit{{Project: ".", Target: "test"}, {Project: "docs", Target: "lint"}},
 	}}, map[string]bool{"docs": true})
-	s.Equal([]types.Shard{{ID: "0", ProjectPaths: []string{"docs"}, Units: []types.Unit{{Project: "docs", Target: "lint"}}}}, got)
+	kept := []types.Unit{{Project: "docs", Target: "lint"}}
+	s.Equal([]types.Shard{{ID: "0", Label: types.UnitsDigest(kept), ProjectPaths: []string{"docs"}, Units: kept}}, got)
 }
 
 func (s *FilterShardUnitsSuite) TestKeepsTheMatrixFreeOfUnits() {
-	out := planOutput{Count: 1, Matrix: []planShard{{Shard: "0", Projects: ".", Label: ".", Units: []types.Unit{{Project: ".", Target: "test"}}}}}
+	out := planOutput{Count: 1, Matrix: []planShard{{Shard: "0", Projects: ".", Name: ".", Label: "d", Duties: "cache-export", Units: []types.Unit{{Project: ".", Target: "test"}}}}}
 	published, err := planOutputs(out)
 	s.Require().NoError(err)
-	s.JSONEq(`{"include":[{"shard":"0","projects":".","label":"."}]}`, published[0].Value)
+	s.JSONEq(`{"include":[{"shard":"0","projects":".","name":".","label":"d","duties":"cache-export"}]}`, published[0].Value)
 	s.Len(out.Matrix[0].Units, 1, "the plan document keeps its units")
 }
 
@@ -249,7 +250,7 @@ func TestPlanOutputsCoverWorkflowKeys(t *testing.T) {
 func TestPlanOutputsStaySingleLineAndReportInheritance(t *testing.T) {
 	t.Parallel()
 
-	out := planOutput{Count: 1, MaxParallel: 1, Matrix: []planShard{{Shard: "1", Projects: ". docs", Label: ". docs"}}}
+	out := planOutput{Count: 1, MaxParallel: 1, Matrix: []planShard{{Shard: "1", Projects: ". docs", Name: ". docs", Label: "d"}}}
 	got, err := planOutputs(out)
 	require.NoError(t, err)
 
@@ -260,7 +261,7 @@ func TestPlanOutputsStaySingleLineAndReportInheritance(t *testing.T) {
 		assert.NotContains(t, o.Value, "\n", "output %q spans lines", o.Name)
 		byName[o.Name] = o.Value
 	}
-	assert.JSONEq(t, `{"include":[{"shard":"1","projects":". docs","label":". docs"}]}`, byName["matrix"])
+	assert.JSONEq(t, `{"include":[{"shard":"1","projects":". docs","name":". docs","label":"d","duties":""}]}`, byName["matrix"])
 	assert.Equal(t, "false", byName["inherit"])
 
 	out.Inherit = &planInherit{Run: "42", Commit: "abc123"}
@@ -497,14 +498,14 @@ func TestRunOutputCarriesUndeclaredSeedsAsAField(t *testing.T) {
 	assert.NotContains(t, string(b), "undeclared_seeds")
 }
 
-// TestShardLabelElidesWithoutTouchingTheProjectList pins the split between the two
-// fields: a provider passes Projects to `magus run ci`, so an elision there would run
-// the wrong work, while Label is only ever read by a person scanning a job list.
-func TestShardLabelElidesWithoutTouchingTheProjectList(t *testing.T) {
+// TestShardNameElidesWithoutTouchingTheProjectList pins the split between the
+// two fields: Projects is checked against the units, Name is only read by a
+// person scanning a job list.
+func TestShardNameElidesWithoutTouchingTheProjectList(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "no projects", shardLabel(nil))
-	assert.Equal(t, ". docs", shardLabel([]string{".", "docs"}))
-	assert.Equal(t, ". docs proto", shardLabel([]string{".", "docs", "proto"}))
-	assert.Equal(t, ". docs proto +2", shardLabel([]string{".", "docs", "proto", "console", "libs/textsearch"}))
+	assert.Equal(t, "no projects", shardName(nil))
+	assert.Equal(t, ". docs", shardName([]string{".", "docs"}))
+	assert.Equal(t, ". docs proto", shardName([]string{".", "docs", "proto"}))
+	assert.Equal(t, ". docs proto +2", shardName([]string{".", "docs", "proto", "console", "libs/textsearch"}))
 }
