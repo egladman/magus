@@ -45,6 +45,7 @@
 {"group":"file:changes/unreleased/audit-rewalk.md","path":"changes/unreleased/audit-rewalk.md"}
 {"group":"file:changes/unreleased/bench-container-steps.md","path":"changes/unreleased/bench-container-steps.md"}
 {"group":"file:changes/unreleased/bench-task-loaders-swebench-scripts.md","path":"changes/unreleased/bench-task-loaders-swebench-scripts.md"}
+{"group":"file:changes/unreleased/bootstrap-checkout-adopts-the-work.md","path":"changes/unreleased/bootstrap-checkout-adopts-the-work.md"}
 {"group":"file:changes/unreleased/bootstrap-names-the-outputs-it-regenerated.md","path":"changes/unreleased/bootstrap-names-the-outputs-it-regenerated.md"}
 {"group":"file:changes/unreleased/bootstrap-takes-lease-first.md","path":"changes/unreleased/bootstrap-takes-lease-first.md"}
 {"group":"file:changes/unreleased/bootstrap-worktree-detaches.md","path":"changes/unreleased/bootstrap-worktree-detaches.md"}
@@ -73,6 +74,7 @@
 {"group":"file:changes/unreleased/cache-keys-the-binary.md","path":"changes/unreleased/cache-keys-the-binary.md"}
 {"group":"file:changes/unreleased/cache-skips-sibling-outputs.md","path":"changes/unreleased/cache-skips-sibling-outputs.md"}
 {"group":"file:changes/unreleased/ceilings-in-refs-query-job.md","path":"changes/unreleased/ceilings-in-refs-query-job.md"}
+{"group":"file:changes/unreleased/change-risk-and-mutants.md","path":"changes/unreleased/change-risk-and-mutants.md"}
 {"group":"file:changes/unreleased/checkout-reporter.md","path":"changes/unreleased/checkout-reporter.md"}
 {"group":"file:changes/unreleased/ci-asks-for-whole-machine-explicitly.md","path":"changes/unreleased/ci-asks-for-whole-machine-explicitly.md"}
 {"group":"file:changes/unreleased/ci-gates-in-the-queue-box.md","path":"changes/unreleased/ci-gates-in-the-queue-box.md"}
@@ -82,6 +84,7 @@
 {"group":"file:changes/unreleased/compact-worker-records.md","path":"changes/unreleased/compact-worker-records.md"}
 {"group":"file:changes/unreleased/conformance-alias-metrics.md","path":"changes/unreleased/conformance-alias-metrics.md"}
 {"group":"file:changes/unreleased/conformance-alias.md","path":"changes/unreleased/conformance-alias.md"}
+{"group":"file:changes/unreleased/conformance-ceilings-rest.md","path":"changes/unreleased/conformance-ceilings-rest.md"}
 {"group":"file:changes/unreleased/conformance-sibling-sprawl.md","path":"changes/unreleased/conformance-sibling-sprawl.md"}
 {"group":"file:changes/unreleased/console-failures-always-shown.md","path":"changes/unreleased/console-failures-always-shown.md"}
 {"group":"file:changes/unreleased/console-figure-edges.md","path":"changes/unreleased/console-figure-edges.md"}
@@ -135,6 +138,7 @@
 {"group":"file:changes/unreleased/guard-leased-path-once-per-lease.md","path":"changes/unreleased/guard-leased-path-once-per-lease.md"}
 {"group":"file:changes/unreleased/guard-load-failure-denies-gated-verbs.md","path":"changes/unreleased/guard-load-failure-denies-gated-verbs.md"}
 {"group":"file:changes/unreleased/guard-load-recovery.md","path":"changes/unreleased/guard-load-recovery.md"}
+{"group":"file:changes/unreleased/guard-locates-script-calls.md","path":"changes/unreleased/guard-locates-script-calls.md"}
 {"group":"file:changes/unreleased/guard-mandate.md","path":"changes/unreleased/guard-mandate.md"}
 {"group":"file:changes/unreleased/guard-open-risks-a-real-deny-stays.md","path":"changes/unreleased/guard-open-risks-a-real-deny-stays.md"}
 {"group":"file:changes/unreleased/guard-process-signals.md","path":"changes/unreleased/guard-process-signals.md"}
@@ -165,6 +169,7 @@
 {"group":"file:changes/unreleased/job-fork-checkout-removal.md","path":"changes/unreleased/job-fork-checkout-removal.md"}
 {"group":"file:changes/unreleased/job-fork-fix.md","path":"changes/unreleased/job-fork-fix.md"}
 {"group":"file:changes/unreleased/job-fork-notes-foreground-limit.md","path":"changes/unreleased/job-fork-notes-foreground-limit.md"}
+{"group":"file:changes/unreleased/job-ls-jobs-name-skips-unmerged-read.md","path":"changes/unreleased/job-ls-jobs-name-skips-unmerged-read.md"}
 {"group":"file:changes/unreleased/job-proof-counts-declared.md","path":"changes/unreleased/job-proof-counts-declared.md"}
 {"group":"file:changes/unreleased/job-prune.md","path":"changes/unreleased/job-prune.md"}
 {"group":"file:changes/unreleased/job-record-waivers.md","path":"changes/unreleased/job-record-waivers.md"}
@@ -204,6 +209,7 @@
 {"group":"file:changes/unreleased/mgs1037-tool-observation-keyed-as-version.md","path":"changes/unreleased/mgs1037-tool-observation-keyed-as-version.md"}
 {"group":"file:changes/unreleased/mgs1038-removed-magus-project-option-stops.md","path":"changes/unreleased/mgs1038-removed-magus-project-option-stops.md"}
 {"group":"file:changes/unreleased/mgs3014-newer-gate-supersedes-older-one.md","path":"changes/unreleased/mgs3014-newer-gate-supersedes-older-one.md"}
+{"group":"file:changes/unreleased/mod-attention-removes-settings.md","path":"changes/unreleased/mod-attention-removes-settings.md"}
 {"group":"file:changes/unreleased/mod-plugin-validates.md","path":"changes/unreleased/mod-plugin-validates.md"}
 {"group":"file:changes/unreleased/mod-shows-build-budget.md","path":"changes/unreleased/mod-shows-build-budget.md"}
 {"group":"file:changes/unreleased/model-table-in-spells.md","path":"changes/unreleased/model-table-in-spells.md"}
@@ -215,8 +221,11 @@
 {"group":"file:changes/unreleased/needs-at-width-one.md","path":"changes/unreleased/needs-at-width-one.md"}
 {"group":"file:changes/unreleased/needs-failure-is-catchable.md","path":"changes/unreleased/needs-failure-is-catchable.md"}
 {"group":"file:changes/unreleased/no-throw-rest-of-hack-dev.md","path":"changes/unreleased/no-throw-rest-of-hack-dev.md"}
+{"group":"file:changes/unreleased/no-throw-spell-helpers.md","path":"changes/unreleased/no-throw-spell-helpers.md"}
 {"group":"file:changes/unreleased/oci-base-name-matches-digest.md","path":"changes/unreleased/oci-base-name-matches-digest.md"}
 {"group":"file:changes/unreleased/on-linux.md","path":"changes/unreleased/on-linux.md"}
+{"group":"file:changes/unreleased/opencode-wasm-deterministic.md","path":"changes/unreleased/opencode-wasm-deterministic.md"}
+{"group":"file:changes/unreleased/output-format-contract-test-dispatch.md","path":"changes/unreleased/output-format-contract-test-dispatch.md"}
 {"group":"file:changes/unreleased/output-lookups-take-a-context.md","path":"changes/unreleased/output-lookups-take-a-context.md"}
 {"group":"file:changes/unreleased/own-symbol-index.md","path":"changes/unreleased/own-symbol-index.md"}
 {"group":"file:changes/unreleased/parity-guard-claude-code-mod-install.md","path":"changes/unreleased/parity-guard-claude-code-mod-install.md"}
@@ -232,6 +241,7 @@
 {"group":"file:changes/unreleased/proofread-round-gates.md","path":"changes/unreleased/proofread-round-gates.md"}
 {"group":"file:changes/unreleased/proofread-tells.md","path":"changes/unreleased/proofread-tells.md"}
 {"group":"file:changes/unreleased/proofread-train.md","path":"changes/unreleased/proofread-train.md"}
+{"group":"file:changes/unreleased/push-gate-accepts-narrow-evidence.md","path":"changes/unreleased/push-gate-accepts-narrow-evidence.md"}
 {"group":"file:changes/unreleased/query-invocation-shows-refs.md","path":"changes/unreleased/query-invocation-shows-refs.md"}
 {"group":"file:changes/unreleased/queue-cache-read.md","path":"changes/unreleased/queue-cache-read.md"}
 {"group":"file:changes/unreleased/queue-dismisses-stale-approvals.md","path":"changes/unreleased/queue-dismisses-stale-approvals.md"}
@@ -281,6 +291,7 @@
 {"group":"file:changes/unreleased/self-update-remedies.md","path":"changes/unreleased/self-update-remedies.md"}
 {"group":"file:changes/unreleased/served-next-through-judge.md","path":"changes/unreleased/served-next-through-judge.md"}
 {"group":"file:changes/unreleased/session-brief-attention.md","path":"changes/unreleased/session-brief-attention.md"}
+{"group":"file:changes/unreleased/shell-duration-not-tool-ms.md","path":"changes/unreleased/shell-duration-not-tool-ms.md"}
 {"group":"file:changes/unreleased/silent-skips-hooks-magus-buzz-check-buzz.md","path":"changes/unreleased/silent-skips-hooks-magus-buzz-check-buzz.md"}
 {"group":"file:changes/unreleased/silent-skips-hooks-proofread-reply-buzz-says.md","path":"changes/unreleased/silent-skips-hooks-proofread-reply-buzz-says.md"}
 {"group":"file:changes/unreleased/silent-skips-hooks-recorder-hooks-say-when.md","path":"changes/unreleased/silent-skips-hooks-recorder-hooks-say-when.md"}
@@ -409,12 +420,10 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/interrupt.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/interrupt_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/job_apply_add_write_path_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_claim.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_claim_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_delta.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_delta_test.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/job_fork_checkout_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_grant.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_grant_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_graph.go"}
@@ -554,7 +563,7 @@
 {"group":"dir:console/src/apps/dashboard/tiles","path":"console/src/apps/dashboard/tiles/density.ts"}
 {"group":"dir:console/src/apps/dashboard/tiles","path":"console/src/apps/dashboard/tiles/gantt-dom.test.ts"}
 {"group":"dir:console/src/apps/dashboard/tiles","path":"console/src/apps/dashboard/tiles/gantt.ts"}
-{"group":"dir:console/src/apps/dashboard/tiles","path":"console/src/apps/dashboard/tiles/insight.ts"}
+{"group":"dir:console/src/apps/dashboard/tiles","path":"console/src/apps/dashboard/tiles/historymetrics.ts"}
 {"group":"dir:console/src/apps/dashboard/tiles","path":"console/src/apps/dashboard/tiles/jobs-dom.test.ts"}
 {"group":"dir:console/src/apps/dashboard/tiles","path":"console/src/apps/dashboard/tiles/jobs.ts"}
 {"group":"dir:console/src/apps/dashboard/tiles","path":"console/src/apps/dashboard/tiles/latency.ts"}
@@ -699,6 +708,7 @@
 {"group":"dir:docs/glossary","path":"docs/glossary/buzz.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/cache.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/cantrip.md"}
+{"group":"dir:docs/glossary","path":"docs/glossary/change-risk.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/charm.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/chord.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/ci.md"}
@@ -712,9 +722,9 @@
 {"group":"dir:docs/glossary","path":"docs/glossary/engine.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/harness.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/health.md"}
+{"group":"dir:docs/glossary","path":"docs/glossary/historymetrics.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/hotspot.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/inner-harness.md"}
-{"group":"dir:docs/glossary","path":"docs/glossary/insight.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/invocation.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/job.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/knowledge-graph.md"}
@@ -726,6 +736,7 @@
 {"group":"dir:docs/glossary","path":"docs/glossary/magusmd.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/manifest.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/module.md"}
+{"group":"dir:docs/glossary","path":"docs/glossary/mutant.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/one-off.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/one-vocabulary-rule.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/op.md"}
@@ -973,6 +984,7 @@
 {"group":"dir:hack/dev","path":"hack/dev/split-into-branches.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/summarize-root-cost.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/summarize-transcript.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/update-magus-module-calls.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/banned-words.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/buzz-glue-is-wired-as-plain-argv.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/buzz-sources-pass-the-static-check.buzz"}
@@ -1011,6 +1023,8 @@
 {"group":"dir:hack/lint","path":"hack/lint/symbol-docs-follow-proofread-rules.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/testpairing-pairing-has-no-exemptions.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/tool-descriptions-follow-proofread-rules.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/touched-functions-keep-change-risk-under-10.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/touched-functions-kill-their-mutants.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/trusted-jobs-restore-no-actions-cache.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/typescript-never-throws.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/whole-tree-targets-key-on-the-go-tree.buzz"}
@@ -1038,6 +1052,10 @@
 {"group":"dir:hack/remote","path":"hack/remote/on-actions.buzz"}
 {"group":"dir:hack/remote","path":"hack/remote/on-linux.buzz"}
 {"group":"dir:internal/agent/skills/magus-sdk","path":"internal/agent/skills/magus-sdk/SKILL.md"}
+{"group":"dir:internal/coverage","path":"internal/coverage/buzz.go"}
+{"group":"dir:internal/coverage","path":"internal/coverage/buzz_test.go"}
+{"group":"dir:internal/coverage","path":"internal/coverage/coverage.go"}
+{"group":"dir:internal/coverage","path":"internal/coverage/coverage_test.go"}
 {"group":"dir:internal/edit","path":"internal/edit/edit.go"}
 {"group":"dir:internal/edit","path":"internal/edit/edit_test.go"}
 {"group":"dir:internal/edit","path":"internal/edit/rename.go"}
@@ -1064,6 +1082,8 @@
 {"group":"dir:internal/gcpolicy","path":"internal/gcpolicy/policy_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/advisory.go"}
 {"group":"dir:internal/guard","path":"internal/guard/advisory_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/ambiguous_ci_word.go"}
+{"group":"dir:internal/guard","path":"internal/guard/ambiguous_ci_word_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/apply_patch.go"}
 {"group":"dir:internal/guard","path":"internal/guard/apply_patch_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/architecture.go"}
@@ -1085,8 +1105,6 @@
 {"group":"dir:internal/guard","path":"internal/guard/buzz_read_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/buzz_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/cache.go"}
-{"group":"dir:internal/guard","path":"internal/guard/cache_clear.go"}
-{"group":"dir:internal/guard","path":"internal/guard/cache_clear_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/cache_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/catalog.go"}
 {"group":"dir:internal/guard","path":"internal/guard/catalog_test.go"}
@@ -1096,6 +1114,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/claim_auto.go"}
 {"group":"dir:internal/guard","path":"internal/guard/claim_auto_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/claim_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/clear_cache.go"}
+{"group":"dir:internal/guard","path":"internal/guard/clear_cache_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/command_rule.go"}
 {"group":"dir:internal/guard","path":"internal/guard/command_rule_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/commit_load.go"}
@@ -1112,6 +1132,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/deadline_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/denial.go"}
 {"group":"dir:internal/guard","path":"internal/guard/denial_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/deviation.go"}
+{"group":"dir:internal/guard","path":"internal/guard/deviation_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/dialect.go"}
 {"group":"dir:internal/guard","path":"internal/guard/dialect_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/dir.go"}
@@ -1167,9 +1189,9 @@
 {"group":"dir:internal/guard","path":"internal/guard/paging_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/parse.go"}
 {"group":"dir:internal/guard","path":"internal/guard/parse_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/patch_writes.go"}
 {"group":"dir:internal/guard","path":"internal/guard/pause.go"}
 {"group":"dir:internal/guard","path":"internal/guard/pause_test.go"}
-{"group":"dir:internal/guard","path":"internal/guard/person_lease_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/pipe.go"}
 {"group":"dir:internal/guard","path":"internal/guard/pipe_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/policy.go"}
@@ -1469,6 +1491,8 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/commentsyntax.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/commit.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/commitauthor.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/coverage.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/decisionsyntax.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/discoveredproject.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/discoveryfile.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/discoverygap.buzz"}
@@ -1479,6 +1503,8 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/finding.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/findreviewrequest.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/greenrun.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/harness.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/harnessasset.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/harnessconfig.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/harnessskills.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/harnesstool.buzz"}
@@ -1496,6 +1522,7 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/manifest.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/mcpserver.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/modelrow.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/mutationsyntax.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/patchop.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/path.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/price.buzz"}
@@ -1528,6 +1555,7 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/status.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/strings.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/stubsyntax.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/swap.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/symbolindexer.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/syntax.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/target.buzz"}

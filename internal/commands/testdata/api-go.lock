@@ -118,7 +118,7 @@ github.com/egladman/magus.Magus.ExportSCIP method(ptr) func(ctx context.Context,
 github.com/egladman/magus.Magus.FileAt method(ptr) func(ctx context.Context, rev string, path string) (string, error)
 github.com/egladman/magus.Magus.FileDiskAttention method(ptr) func(ctx context.Context, message string) error
 github.com/egladman/magus.Magus.FindOutputProducer method(ptr) func(absPath string) *github.com/egladman/magus/types.Project
-github.com/egladman/magus.Magus.FreshenSymbolIndexes method(ptr) func(ctx context.Context) error
+github.com/egladman/magus.Magus.FreshenSymbolIndexes method(ptr) func(ctx context.Context, languages []string) error
 github.com/egladman/magus.Magus.Get method(ptr) func(path string) *github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.Graph method(ptr) func() (*github.com/egladman/magus/types.Graph, error)
 github.com/egladman/magus.Magus.GroupingLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.Grouping, error)
@@ -574,7 +574,7 @@ github.com/egladman/magus/std.MagusGraphExplain func(ctx context.Context, g gith
 github.com/egladman/magus/std.MagusGraphImports func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.ImportGraph, error)
 github.com/egladman/magus/std.MagusGraphLayer func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, name string) (github.com/egladman/magus/types.Layer, error)
 github.com/egladman/magus/std.MagusGraphNeighborhood func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, focus string, opts github.com/egladman/magus/types.KnowledgeNeighborhoodOptions) (github.com/egladman/magus/types.KnowledgeNeighborhoodOutput, error)
-github.com/egladman/magus/std.MagusGraphOpen func(ctx context.Context) (github.com/egladman/magus/types.SymbolIndexDigest, error)
+github.com/egladman/magus/std.MagusGraphOpen func(ctx context.Context, languages []string) (github.com/egladman/magus/types.SymbolIndexDigest, error)
 github.com/egladman/magus/std.MagusGraphPath func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest, node string, to string, opts github.com/egladman/magus/types.KnowledgePathOptions) (github.com/egladman/magus/types.KnowledgePathOutput, error)
 github.com/egladman/magus/std.MagusGraphPrecedents func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.Holds, error)
 github.com/egladman/magus/std.MagusGraphProjectGraph func(ctx context.Context, g github.com/egladman/magus/types.SymbolIndexDigest) (github.com/egladman/magus/types.ProjectGraph, error)
@@ -605,7 +605,7 @@ github.com/egladman/magus/std.MagusNeighborhood func(ctx context.Context, focus 
 github.com/egladman/magus/std.MagusOutput func(ctx context.Context, ref string) (github.com/egladman/magus/types.OutputRecord, error)
 github.com/egladman/magus/std.MagusOwnership func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Ownership, error)
 github.com/egladman/magus/std.MagusPath func(ctx context.Context, node string, to string, opts github.com/egladman/magus/types.KnowledgePathOptions) (github.com/egladman/magus/types.KnowledgePathOutput, error)
-github.com/egladman/magus/std.MagusPrecedents func(ctx context.Context) (github.com/egladman/magus/types.Holds, error)
+github.com/egladman/magus/std.MagusPrecedents func(ctx context.Context, languages []string) (github.com/egladman/magus/types.Holds, error)
 github.com/egladman/magus/std.MagusProjectGraph func(ctx context.Context) (github.com/egladman/magus/types.ProjectGraph, error)
 github.com/egladman/magus/std.MagusPutJob func(ctx context.Context, id string, put github.com/egladman/magus/types.JobPut) (github.com/egladman/magus/types.Job, error)
 github.com/egladman/magus/std.MagusQuery func(ctx context.Context, query string, opts github.com/egladman/magus/types.KnowledgeQueryOptions) (github.com/egladman/magus/types.KnowledgeQueryOutput, error)
@@ -619,8 +619,8 @@ github.com/egladman/magus/std.MagusSessionMarks func(ctx context.Context, _ gith
 github.com/egladman/magus/std.MagusSessionOpen func(ctx context.Context, opts github.com/egladman/magus/types.TrailReadOptions) (github.com/egladman/magus/types.Session, error)
 github.com/egladman/magus/std.MagusSessionTrail func(ctx context.Context, s github.com/egladman/magus/types.Session) (github.com/egladman/magus/types.Trail, error)
 github.com/egladman/magus/std.MagusStats func(ctx context.Context, kind string) (github.com/egladman/magus/types.KnowledgeStats, error)
-github.com/egladman/magus/std.MagusSymbolIndexDigest func(ctx context.Context) (github.com/egladman/magus/types.SymbolIndexDigest, error)
-github.com/egladman/magus/std.MagusSymbols func(ctx context.Context) (github.com/egladman/magus/types.Symbols, error)
+github.com/egladman/magus/std.MagusSymbolIndexDigest func(ctx context.Context, languages []string) (github.com/egladman/magus/types.SymbolIndexDigest, error)
+github.com/egladman/magus/std.MagusSymbols func(ctx context.Context, languages []string) (github.com/egladman/magus/types.Symbols, error)
 github.com/egladman/magus/std.MagusTrailMark func(ctx context.Context, mark map[string]any) (github.com/egladman/magus/types.TrailMark, error)
 github.com/egladman/magus/std.MagusTrailMarks func(ctx context.Context) ([]github.com/egladman/magus/types.TrailMark, error)
 github.com/egladman/magus/std.MagusTrailRead func(ctx context.Context, opts github.com/egladman/magus/types.TrailReadOptions) (github.com/egladman/magus/types.Trail, error)
@@ -5369,6 +5369,7 @@ github.com/egladman/magus/types.SymbolIndexDigest type struct
 github.com/egladman/magus/types.SymbolIndexDigest.Digest field string "json:\"digest\"  yaml:\"digest\""
 github.com/egladman/magus/types.SymbolIndexDigest.Gaps field []KnowledgeSymbolGap "json:\"gaps,omitempty\" yaml:\"gaps,omitempty\""
 github.com/egladman/magus/types.SymbolIndexDigest.Indexed field bool "json:\"indexed\" yaml:\"indexed\""
+github.com/egladman/magus/types.SymbolIndexDigest.Languages field []string "json:\"languages,omitempty\" yaml:\"languages,omitempty\""
 github.com/egladman/magus/types.SymbolIndexDigest.Projects field []string "json:\"projects\" yaml:\"projects\""
 github.com/egladman/magus/types.SymbolIndexFresh const SymbolIndexFreshness = "up-to-date"
 github.com/egladman/magus/types.SymbolIndexFreshness type string

@@ -559,6 +559,7 @@ export object Graph {
     indexed: bool = false,
     projects: [str] = [],
     gaps: [KnowledgeSymbolGap] = [],
+    languages: [str] = [],
 
     fun query(query: str, opts: QueryOptions? = null) > QueryResult !> any {
         return magus__Graph__query(this, query: query, opts: opts);
@@ -2921,7 +2922,7 @@ export extern fun cmd(sub: str, args: [str], opts: CommandOptions? = null) > Exe
 export extern fun diagnosticCode(text: str) > DiagnosticCode !> any;
 export extern fun doctor(args: [str], opts: CommandOptions? = null) > DoctorReport !> any;
 export extern fun fatal(msg: str = "") > void;
-export extern fun graph() > Graph !> any;
+export extern fun graph(languages: [str] = [<str>]) > Graph !> any;
 export extern fun hasCharm(name: str) > bool;
 export extern fun history(opts: HistoryMetricsOptions? = null) > History !> any;
 export extern fun job(id: str) > Job !> any;

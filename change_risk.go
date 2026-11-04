@@ -593,7 +593,7 @@ func (m *Magus) riskGraph(ctx context.Context) (*knowledge.Graph, error) {
 	for _, p := range m.ws.All() {
 		projects = append(projects, p.Path)
 	}
-	if err := m.freshenSymbolIndexes(ctx, projects); err != nil {
+	if err := m.freshenSymbolIndexes(ctx, projects, nil); err != nil {
 		return nil, fmt.Errorf("change risk: %w", err)
 	}
 	return m.knowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})

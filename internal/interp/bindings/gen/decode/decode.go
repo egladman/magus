@@ -7669,6 +7669,12 @@ func decodeSymbolIndexDigest(v vm.Value, path string) (types.SymbolIndexDigest, 
 				}
 				out.Gaps = itemsGaps
 			}
+		case "languages":
+			strsLanguages, err := decodeStringList(item, path+".languages")
+			if err != nil {
+				return out, err
+			}
+			out.Languages = strsLanguages
 		default:
 			return out, unknownMember(path, "Graph", key)
 		}
