@@ -27,22 +27,23 @@ type AssessOptions struct {
 
 var _ types.RiskAssessor = (*Magus)(nil)
 
-// AssessRisk is AssessChange over types.RiskOptions, the types.RiskAssessor a Buzz script
-// reaches through the workspace on its context. A Checkout other than m's root is loaded
-// read-only for the one assessment, under m's spawn rule, and closed after it, so a job's
-// standing checkout is measured against its own tree.
-func (m *Magus) AssessRisk(ctx context.Context, target string, o types.RiskOptions) (types.RiskReport, error) {
+// AssessRisk is AssessChange over types.TierOptions, the types.RiskAssessor a
+// Buzz script reaches through the workspace on its context. A Checkout other
+// than m's root is loaded read-only for the one assessment, under m's spawn
+// rule, and closed after it. A job's standing checkout is measured against its
+// own tree.
+func (m *Magus) AssessRisk(ctx context.Context, target string, o types.TierOptions) (types.TierReport, error) {
 	opts := AssessOptions{Base: o.Base, ChangedPaths: o.Paths}
 	if o.Checkout == "" || filepath.Clean(o.Checkout) == filepath.Clean(m.Root()) {
 		return m.AssessChange(ctx, target, opts)
 	}
 	other, err := inspect(ctx, o.Checkout, WithSpawnRule(m.spawnRule))
 	if err != nil {
-		return types.RiskReport{}, fmt.Errorf("assess %s: %w", o.Checkout, err)
+		return types.TierReport{}, fmt.Errorf("assess %s: %w", o.Checkout, err)
 	}
 	defer func() { _ = other.Close() }()
 	if err := other.load(ctx); err != nil {
-		return types.RiskReport{}, other.explainStale(err)
+		return types.TierReport{}, other.explainStale(err)
 	}
 	return other.AssessChange(ctx, target, opts)
 }
@@ -51,7 +52,7 @@ func (m *Magus) AssessRisk(ctx context.Context, target string, o types.RiskOptio
 // returns the gate that suffices (internal/risk). It is read-only: nothing runs but
 // `go list` in the Go modules the change touches, and only when the go spell resolves.
 // An error means the change could not be read at all, which callers treat as full.
-func (m *Magus) AssessChange(ctx context.Context, target string, o AssessOptions) (types.RiskReport, error) {
+func (m *Magus) AssessChange(ctx context.Context, target string, o AssessOptions) (types.TierReport, error) {
 	var (
 		res *types.AffectedResult
 		err error
@@ -59,18 +60,18 @@ func (m *Magus) AssessChange(ctx context.Context, target string, o AssessOptions
 	)
 	if o.ChangedPaths != nil {
 		if res, err = m.AffectedFromPaths(ctx, o.ChangedPaths); err != nil {
-			return types.RiskReport{}, err
+			return types.TierReport{}, err
 		}
 		res.Changed = o.ChangedPaths
 	} else {
 		if res, err = m.Affected(ctx, o.Base); err != nil {
-			return types.RiskReport{}, err
+			return types.TierReport{}, err
 		}
 		rev = res.Base
 	}
 	entries, err := m.ClassifyFiles(ctx, res.Changed)
 	if err != nil {
-		return types.RiskReport{}, err
+		return types.TierReport{}, err
 	}
 
 	var at func(ctx context.Context, rev, p string) (string, error)
@@ -128,7 +129,7 @@ func (m *Magus) AssessChange(ctx context.Context, target string, o AssessOptions
 // The first failure stops the gate.
 //
 // It is judged as Run is, once, as `magus affected ci`, the verb that sizes a gate.
-func (m *Magus) RunGate(ctx context.Context, rep types.RiskReport, opts ...RunOption) error {
+func (m *Magus) RunGate(ctx context.Context, rep types.TierReport, opts ...RunOption) error {
 	ctx = applyRunOptions(opts).observed(ctx)
 	lines, err := affectedLine(types.TargetCI, "")
 	if err != nil {
@@ -158,7 +159,7 @@ type sizedRun struct {
 
 // sizedRuns splits a sized gate into runs: every plain step together, then each
 // narrowed step on its own, since a narrowing applies to the whole run it is on.
-func sizedRuns(rep types.RiskReport) []sizedRun {
+func sizedRuns(rep types.TierReport) []sizedRun {
 	var plain sizedRun
 	var out []sizedRun
 	for _, s := range rep.Gate {

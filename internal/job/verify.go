@@ -129,7 +129,7 @@ type GreenGate struct {
 	// Projects are the projects the gate covered.
 	Projects []string
 	// Tier is the tier of the change from Commit to the tree now.
-	Tier types.RiskTier
+	Tier types.Tier
 }
 
 // covers reports whether the gate vouches for a check that runs ci: the gate covered

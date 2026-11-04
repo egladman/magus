@@ -313,7 +313,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		// lease whose boundary silently stopped being checked looks exactly like one
 		// nobody declared.
 		return writeGrade{Decision: decisionAdvise,
-			Context: fmt.Sprintf("magus workspace: no lease boundary was checked, as the job store could not be read (%v); re-declare the plan with magus\\job if leased work is running.", err),
+			Context: fmt.Sprintf("magus workspace: no lease boundary was checked, as the job store could not be read (%v); re-declare the plan with magus\\workspace().putJob if leased work is running.", err),
 			Why:     "The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff."}
 	}
 	// An id magus cannot parse is one it cannot look up either, so it is graded as absent.

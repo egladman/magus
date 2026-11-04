@@ -124,8 +124,8 @@ func fixtureInputs(provers map[string]Prover, delta ...Classified) Inputs {
 	}
 }
 
-func tiers(rep types.RiskReport) map[string]types.RiskTier {
-	out := map[string]types.RiskTier{}
+func tiers(rep types.TierReport) map[string]types.Tier {
+	out := map[string]types.Tier{}
 	for _, e := range rep.Evidence {
 		if e.Path != "" {
 			out[e.Path] = e.Tier
@@ -155,19 +155,19 @@ func TestAssessTierRules(t *testing.T) {
 		name  string
 		path  string
 		class Class
-		want  map[string]types.RiskTier
+		want  map[string]types.Tier
 	}{
-		{"generated", "e/zz_generated.go", ClassGenerated, map[string]types.RiskTier{"no prover": types.RiskTrivial,
+		{"generated", "e/zz_generated.go", ClassGenerated, map[string]types.Tier{"no prover": types.RiskTrivial,
 			"equivalent": types.RiskTrivial, "placed": types.RiskTrivial, "unplaced": types.RiskTrivial, "prover fails": types.RiskTrivial}},
-		{"prose", "README.md", ClassProse, map[string]types.RiskTier{"no prover": types.RiskTrivial,
+		{"prose", "README.md", ClassProse, map[string]types.Tier{"no prover": types.RiskTrivial,
 			"equivalent": types.RiskTrivial, "placed": types.RiskScoped, "unplaced": types.RiskFull, "prover fails": types.RiskFull}},
-		{"prose the chain reads", "docs/guide.md", ClassProse, map[string]types.RiskTier{"no prover": types.RiskScoped,
+		{"prose the chain reads", "docs/guide.md", ClassProse, map[string]types.Tier{"no prover": types.RiskScoped,
 			"equivalent": types.RiskScoped, "placed": types.RiskScoped, "unplaced": types.RiskFull, "prover fails": types.RiskFull}},
-		{"comment-only", "c/c.go", ClassCommentOnly, map[string]types.RiskTier{"no prover": types.RiskMechanical,
+		{"comment-only", "c/c.go", ClassCommentOnly, map[string]types.Tier{"no prover": types.RiskMechanical,
 			"equivalent": types.RiskMechanical, "placed": types.RiskMechanical, "unplaced": types.RiskMechanical, "prover fails": types.RiskMechanical}},
-		{"comment-only the chain reads", "a/a.go", ClassCommentOnly, map[string]types.RiskTier{"no prover": types.RiskScoped,
+		{"comment-only the chain reads", "a/a.go", ClassCommentOnly, map[string]types.Tier{"no prover": types.RiskScoped,
 			"equivalent": types.RiskScoped, "placed": types.RiskScoped, "unplaced": types.RiskScoped, "prover fails": types.RiskScoped}},
-		{"code", "a/a.go", ClassCode, map[string]types.RiskTier{"no prover": types.RiskFull,
+		{"code", "a/a.go", ClassCode, map[string]types.Tier{"no prover": types.RiskFull,
 			"equivalent": types.RiskMechanical, "placed": types.RiskScoped, "unplaced": types.RiskFull, "prover fails": types.RiskFull}},
 	}
 	const graphMoves = "magusfile.buzz can change the dependency graph or every project's build, which the affected set cannot see"
@@ -191,7 +191,7 @@ func TestAssessTierRules(t *testing.T) {
 					}
 					rep := Assess(context.Background(), in)
 					assert.Equal(t, tier, rep.Tier)
-					assert.Equal(t, map[string]types.RiskTier{tc.path: tier}, tiers(rep))
+					assert.Equal(t, map[string]types.Tier{tc.path: tier}, tiers(rep))
 					if want != "" {
 						assert.Equal(t, want, rep.Evidence[0].Why, "the reason is the unbounded one")
 					}
@@ -297,7 +297,7 @@ func TestAssessUnboundedPathAlone(t *testing.T) {
 }
 
 // gateLines is Commands with each narrowed step's op and packages beside it.
-func gateLines(rep types.RiskReport) []string {
+func gateLines(rep types.TierReport) []string {
 	out := rep.Commands()
 	for i, g := range rep.Gate {
 		if g.Op != "" {
@@ -315,15 +315,15 @@ func TestAssessEmbeddedProse(t *testing.T) {
 		closure: map[string][]string{"fx/skills": {"fx/agent"}}}
 	rep := Assess(context.Background(), fixtureInputs(map[string]Prover{".go": prover},
 		Classified{Path: skill, Class: ClassProse, Why: `matches "**/*.md" (built-in default)`}))
-	assert.Equal(t, types.RiskReport{
+	assert.Equal(t, types.TierReport{
 		Base:     "base",
 		Target:   "ci",
 		Tier:     types.RiskScoped,
 		Affected: []string{"."},
-		Evidence: []types.RiskEvidence{
+		Evidence: []types.TierEvidence{
 			{Path: skill, Project: ".", Class: "prose", Tier: types.RiskScoped, Why: "embedded by Go package fx/skills (go:embed)", Packages: []string{"fx/agent", "fx/skills"}},
 		},
-		Gate: []types.RiskGateStep{
+		Gate: []types.TierGateStep{
 			{Target: "lint", Projects: []string{"."}, Argv: []string{"magus", "run", "lint", ".", "--no-default-charms"}},
 			{Target: "build", Projects: []string{"."}, Argv: []string{"magus", "run", "build", ".", "--no-default-charms"}},
 			// The step runs the project's own test target.
@@ -343,23 +343,23 @@ func TestAssessEmbeddedProse(t *testing.T) {
 func TestAssessGeneratedOutput(t *testing.T) {
 	alone := Assess(context.Background(), fixtureInputs(nil,
 		Classified{Path: "e/zz_generated.go", Class: ClassGenerated, Why: "a declared output glob claims it"}))
-	assert.Equal(t, types.RiskReport{
+	assert.Equal(t, types.TierReport{
 		Base: "base", Target: "ci", Tier: types.RiskTrivial, Affected: []string{"."},
 		Evidence: alone.Evidence, // asserted as lines below
-		Gate:     []types.RiskGateStep{},
+		Gate:     []types.TierGateStep{},
 	}, alone, "a trivial change runs nothing")
 	assert.Equal(t, []string{"e/zz_generated.go: trivial (generated: generated by .:x-generate, and nothing it reads changed)"}, alone.Lines())
 
 	unrelated := Assess(context.Background(), fixtureInputs(nil,
 		Classified{Path: "e/zz_generated.go", Class: ClassGenerated, Why: "a declared output glob claims it"},
 		Classified{Path: "c/c.go", Class: ClassCommentOnly, Why: "only comments differ"}))
-	assert.Equal(t, map[string]types.RiskTier{"e/zz_generated.go": types.RiskTrivial, "c/c.go": types.RiskMechanical}, tiers(unrelated),
+	assert.Equal(t, map[string]types.Tier{"e/zz_generated.go": types.RiskTrivial, "c/c.go": types.RiskMechanical}, tiers(unrelated),
 		"a file its generator does not declare leaves the output trusted")
 
 	withInput := Assess(context.Background(), fixtureInputs(nil,
 		Classified{Path: "e/zz_generated.go", Class: ClassGenerated, Why: "a declared output glob claims it"},
 		Classified{Path: "tools/gen.yaml", Class: ClassCode, Why: "no comment syntax"}))
-	assert.Equal(t, map[string]types.RiskTier{"e/zz_generated.go": types.RiskMechanical, "tools/gen.yaml": types.RiskFull}, tiers(withInput))
+	assert.Equal(t, map[string]types.Tier{"e/zz_generated.go": types.RiskMechanical, "tools/gen.yaml": types.RiskFull}, tiers(withInput))
 	assert.Contains(t, withInput.Lines()[0], "tools/gen.yaml, which it reads, changed too")
 }
 
@@ -375,8 +375,8 @@ func TestAssessCodeEquivalenceNeedsBothSides(t *testing.T) {
 
 func TestAssessEmptyDeltaIsTrivial(t *testing.T) {
 	rep := Assess(context.Background(), fixtureInputs(nil))
-	assert.Equal(t, types.RiskReport{Base: "base", Target: "ci", Tier: types.RiskTrivial, Affected: []string{"."},
-		Evidence: []types.RiskEvidence{}, Gate: []types.RiskGateStep{}}, rep)
+	assert.Equal(t, types.TierReport{Base: "base", Target: "ci", Tier: types.RiskTrivial, Affected: []string{"."},
+		Evidence: []types.TierEvidence{}, Gate: []types.TierGateStep{}}, rep)
 }
 
 // TestAssessGates pins the gate each tier builds.
@@ -394,7 +394,7 @@ func TestAssessGates(t *testing.T) {
 	tests := []struct {
 		name string
 		in   Inputs
-		tier types.RiskTier
+		tier types.Tier
 		gate []string
 	}{
 		{
@@ -461,7 +461,7 @@ func TestAssessScopedWithoutANarrowableTest(t *testing.T) {
 }
 
 func TestHigher(t *testing.T) {
-	order := []types.RiskTier{types.RiskTrivial, types.RiskMechanical, types.RiskScoped, types.RiskFull}
+	order := []types.Tier{types.RiskTrivial, types.RiskMechanical, types.RiskScoped, types.RiskFull}
 	for i, a := range order {
 		for j, b := range order {
 			assert.Equal(t, i > j, Higher(a, b), "%s over %s", a, b)

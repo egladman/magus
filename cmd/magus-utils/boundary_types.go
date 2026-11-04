@@ -475,10 +475,10 @@ var boundaryTypes = []boundaryType{
 	{Name: "GuardVerdict", Type: reflect.TypeFor[types.GuardVerdict](), RuntimeObject: true},
 	{Name: "GuardBinary", Type: reflect.TypeFor[types.GuardBinary](), RuntimeObject: true},
 	// Change.tier takes TierOptions and returns TierReport, leaf first.
-	{Name: "TierOptions", Type: reflect.TypeFor[types.RiskOptions]()},
-	{Name: "TierEvidence", Type: reflect.TypeFor[types.RiskEvidence](), RuntimeObject: true},
-	{Name: "TierGateStep", Type: reflect.TypeFor[types.RiskGateStep](), RuntimeObject: true},
-	{Name: "TierReport", Type: reflect.TypeFor[types.RiskReport](), RuntimeObject: true},
+	{Name: "TierOptions", Type: reflect.TypeFor[types.TierOptions]()},
+	{Name: "TierEvidence", Type: reflect.TypeFor[types.TierEvidence](), RuntimeObject: true},
+	{Name: "TierGateStep", Type: reflect.TypeFor[types.TierGateStep](), RuntimeObject: true},
+	{Name: "TierReport", Type: reflect.TypeFor[types.TierReport](), RuntimeObject: true},
 	{Name: "Skill", Type: reflect.TypeFor[types.Skill](), RuntimeObject: true},
 	// magus\service.acquire returns it and magus\service.release takes it back.
 	{Name: "ServiceLease", Type: reflect.TypeFor[types.ServiceLease](), RuntimeObject: true},
@@ -1001,7 +1001,7 @@ var boundaryEnums = []boundaryEnum{
 	},
 	{
 		Name:  "Tier",
-		Type:  reflect.TypeFor[types.RiskTier](),
+		Type:  reflect.TypeFor[types.Tier](),
 		Cases: []enumCase{{"none", ""}, {"trivial", "trivial"}, {"mechanical", "mechanical"}, {"scoped", "scoped"}, {"full", "full"}},
 	},
 	{

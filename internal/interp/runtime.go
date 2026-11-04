@@ -99,13 +99,13 @@ var removedMagusfileAPI = []struct {
 	{[]string{"project", "register"}, `call magus\project({...}) at the top level`},
 	{[]string{"needs"}, "call ctx.needs(<target>)"},
 	{[]string{"glob"}, `call ctx.glob("<pattern>")`},
-	{[]string{"insight"}, `call magus\\hotspots / magus\\affinity / magus\\ownership / magus\\trend / magus\\volatility / magus\\unreferenced / magus\\duplication / magus\\modelTiers / magus\\grouping`},
-	{[]string{"insightMarkdown"}, `render each history metric yourself; magus\\insight() is gone`},
-	{[]string{"ledger", "clear"}, `call magus\job.clear()`},
-	{[]string{"ledger", "list"}, `call magus\job.list()`},
-	{[]string{"ledger", "put"}, `call magus\job.put()`},
-	{[]string{"ledger", "register"}, `call magus\job.register()`},
-	{[]string{"ledger"}, `use magus\job, which replaced it`},
+	{[]string{"insight"}, `call magus\history().hotspots / affinity / ownership / trend, magus\graph().unreferenced / duplication, magus\workspace().volatility / tierOutcomes / grouping`},
+	{[]string{"insightMarkdown"}, `render each history metric yourself; magus\insight() is gone`},
+	{[]string{"ledger", "clear"}, `call magus\workspace().clearJobs()`},
+	{[]string{"ledger", "list"}, `call magus\workspace().jobs()`},
+	{[]string{"ledger", "put"}, `call magus\workspace().putJob()`},
+	{[]string{"ledger", "register"}, `call magus\job(id).register()`},
+	{[]string{"ledger"}, `use magus\workspace() and magus\job(id), which replaced it`},
 }
 
 // RemovedAPINames returns the dotted member path of every removed call, without the

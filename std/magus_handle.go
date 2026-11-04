@@ -194,16 +194,16 @@ func changeBase(ctx context.Context, ws types.WorkspaceRepository, c types.Chang
 
 // MagusChangeTier is Change.tier(target, opts): the tier magus proves for
 // the change against target's gate, measured from c's base.
-func MagusChangeTier(ctx context.Context, c types.Change, target string, opts types.RiskOptions) (types.RiskReport, error) {
+func MagusChangeTier(ctx context.Context, c types.Change, target string, opts types.TierOptions) (types.TierReport, error) {
 	if _, err := heldChange(ctx, c, "tier"); err != nil {
-		return types.RiskReport{}, err
+		return types.TierReport{}, err
 	}
 	return MagusRiskAssess(ctx, target, tierOptions(c, opts))
 }
 
 // tierOptions is opts measured from c's base. A TierOptions record always
 // carries paths, so an empty list named none: the VCS diff, not no change.
-func tierOptions(c types.Change, opts types.RiskOptions) types.RiskOptions {
+func tierOptions(c types.Change, opts types.TierOptions) types.TierOptions {
 	opts.Base = c.Base
 	if len(opts.Paths) == 0 {
 		opts.Paths = nil

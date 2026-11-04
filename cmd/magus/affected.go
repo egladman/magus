@@ -598,12 +598,12 @@ type planInheritPath struct {
 // no gate step can observe it, so the matrix is empty, and every changed path rides
 // along with its tier and what decided it.
 type planRisk struct {
-	Tier  types.RiskTier       `json:"tier"`
+	Tier  types.Tier       `json:"tier"`
 	Base  string               `json:"base"`
-	Paths []types.RiskEvidence `json:"paths"`
+	Paths []types.TierEvidence `json:"paths"`
 }
 
-func newPlanRisk(rep types.RiskReport) *planRisk {
+func newPlanRisk(rep types.TierReport) *planRisk {
 	return &planRisk{Tier: rep.Tier, Base: rep.Base, Paths: rep.Evidence}
 }
 
@@ -653,13 +653,13 @@ func planOutputs(out planOutput) ([]planPublish, error) {
 // for the delta.
 func planSummaryMarkdown(out planOutput) string {
 	if out.Inherit != nil {
-		evidence := make([]types.RiskEvidence, 0, len(out.Inherit.Paths))
+		evidence := make([]types.TierEvidence, 0, len(out.Inherit.Paths))
 		for _, p := range out.Inherit.Paths {
-			evidence = append(evidence, types.RiskEvidence{Path: p.Path, Tier: types.RiskTier(p.Tier), Class: p.Class, Why: p.Why})
+			evidence = append(evidence, types.TierEvidence{Path: p.Path, Tier: types.Tier(p.Tier), Class: p.Class, Why: p.Why})
 		}
 		return (internalci.InheritFinding{
 			Run: out.Inherit.Run, Commit: out.Inherit.Commit,
-			Report: types.RiskReport{Evidence: evidence},
+			Report: types.TierReport{Evidence: evidence},
 		}).SummaryMarkdown()
 	}
 	if out.Risk != nil {

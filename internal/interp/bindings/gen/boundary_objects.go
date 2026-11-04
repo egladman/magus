@@ -2103,7 +2103,7 @@ func ObjectDuplication(v types.Duplication, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectRiskEvidence(v types.RiskEvidence, enums ffi.EnumCases) vm.Value {
+func ObjectTierEvidence(v types.TierEvidence, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("project", vm.StringValue(v.Project))
@@ -2119,7 +2119,7 @@ func ObjectRiskEvidence(v types.RiskEvidence, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectRiskGateStep(v types.RiskGateStep) vm.Value {
+func ObjectTierGateStep(v types.TierGateStep) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("target", vm.StringValue(v.Target))
 	itemsProjects := make([]vm.Value, len(v.Projects))
@@ -2141,7 +2141,7 @@ func ObjectRiskGateStep(v types.RiskGateStep) vm.Value {
 	return out
 }
 
-func ObjectRiskReport(v types.RiskReport, enums ffi.EnumCases) vm.Value {
+func ObjectTierReport(v types.TierReport, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StringValue(v.Base))
 	out.MapSet("target", vm.StringValue(v.Target))
@@ -2153,12 +2153,12 @@ func ObjectRiskReport(v types.RiskReport, enums ffi.EnumCases) vm.Value {
 	out.MapSet("affected", vm.ListValue(itemsAffected))
 	itemsEvidence := make([]vm.Value, len(v.Evidence))
 	for indexEvidence := range v.Evidence {
-		itemsEvidence[indexEvidence] = ObjectRiskEvidence(v.Evidence[indexEvidence], enums)
+		itemsEvidence[indexEvidence] = ObjectTierEvidence(v.Evidence[indexEvidence], enums)
 	}
 	out.MapSet("evidence", vm.ListValue(itemsEvidence))
 	itemsGate := make([]vm.Value, len(v.Gate))
 	for indexGate := range v.Gate {
-		itemsGate[indexGate] = ObjectRiskGateStep(v.Gate[indexGate])
+		itemsGate[indexGate] = ObjectTierGateStep(v.Gate[indexGate])
 	}
 	out.MapSet("gate", vm.ListValue(itemsGate))
 	return out
@@ -6237,7 +6237,7 @@ func ObjectTrailReadOptions(v types.TrailReadOptions) vm.Value {
 	return out
 }
 
-func ObjectRiskOptions(v types.RiskOptions) vm.Value {
+func ObjectTierOptions(v types.TierOptions) vm.Value {
 	out := vm.NewMap()
 	itemsPaths := make([]vm.Value, len(v.Paths))
 	for indexPaths := range v.Paths {
