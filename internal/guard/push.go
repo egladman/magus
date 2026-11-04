@@ -1152,15 +1152,19 @@ type fileAt struct {
 	present, known bool
 }
 
-// covered reports a passing run of a target whose inputs hold file that read
-// it as commit holds it. file is repository-relative.
+// covered reports a passing run that read file as commit holds it. A run
+// whose target outputs hold file and wrote it so covers it too. file is
+// repository-relative.
 func (ev *runEvidence) covered(ctx context.Context, file string) bool {
 	rel, inside := ev.workspacePath(file)
 	if !inside {
 		return false
 	}
 	for _, d := range ev.runs {
-		if !d.Failed && ev.reads(d, rel, true) && ev.readAsCommit(ctx, file, d) {
+		if d.Failed {
+			continue
+		}
+		if ev.reads(d, rel, true) && ev.heldAsCommit(ctx, file, d, false) || ev.writes(d, rel) && ev.heldAsCommit(ctx, file, d, true) {
 			return true
 		}
 	}
@@ -1181,6 +1185,10 @@ func (ev *runEvidence) wouldCover(file string) []string {
 		}
 	}
 	for _, d := range ev.runs {
+		if ev.writes(d, rel) {
+			add(hint.Run.With(bareTarget(d.Target), d.Project))
+			continue
+		}
 		if !ev.reads(d, rel, false) {
 			continue
 		}
@@ -1193,7 +1201,7 @@ func (ev *runEvidence) wouldCover(file string) []string {
 	}
 	for _, p := range ev.ws.All() {
 		for _, target := range p.MagusfileTargets {
-			if target != string(types.TargetCI) && footprintHolds(p, target, rel) {
+			if target != string(types.TargetCI) && (footprintHolds(p, target, rel) || outputsHold(p, target, rel)) {
 				add(hint.Run.With(target, p.Path))
 			}
 		}
@@ -1249,10 +1257,17 @@ func (ev *runEvidence) namedPaths(d cache.OutputDescriptor) []string {
 	return out
 }
 
-// readAsCommit reports whether run d read file as commit holds it. A clean
-// run is compared at its revision. A dirty run needs the tree to hold commit's
-// file, unwritten since the run started.
-func (ev *runEvidence) readAsCommit(ctx context.Context, file string, d cache.OutputDescriptor) bool {
+// writes reports whether run d's target declares rel among its outputs.
+func (ev *runEvidence) writes(d cache.OutputDescriptor, rel string) bool {
+	p := ev.ws.Get(d.Project)
+	return p != nil && d.Target != "" && outputsHold(p, types.Normalize(bareTarget(d.Target)), rel)
+}
+
+// heldAsCommit reports whether run d read file (wrote it, when wrote is set)
+// as commit holds it. A clean run is compared at its revision. A dirty run
+// needs the tree to hold commit's file, unwritten since the run started, or
+// for a writer since it finished.
+func (ev *runEvidence) heldAsCommit(ctx context.Context, file string, d cache.OutputDescriptor, wrote bool) bool {
 	want := ev.at(ctx, ev.commit, file)
 	if !want.known {
 		return false
@@ -1261,6 +1276,9 @@ func (ev *runEvidence) readAsCommit(ctx context.Context, file string, d cache.Ou
 		return ev.at(ctx, d.Revision, file) == want
 	}
 	started := time.UnixMilli(d.TimestampMs - d.DurationMs)
+	if wrote {
+		started = time.UnixMilli(d.TimestampMs)
+	}
 	full := filepath.Join(ev.root, filepath.FromSlash(file))
 	info, err := os.Lstat(full)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -1303,6 +1321,15 @@ func footprintHolds(p *types.Project, target, rel string) bool {
 		return slices.ContainsFunc(refs, func(r types.InputRef) bool { return r.Rooted(p.Path).Match(rel) })
 	}
 	return slices.ContainsFunc(p.Sources, func(g types.Glob) bool { return g.Root(p.Path).Match(rel) })
+}
+
+// outputsHold reports whether target's declared outputs in p hold rel: the
+// target's own refs when it declares any, else the project's outputs.
+func outputsHold(p *types.Project, target, rel string) bool {
+	if refs := p.TargetOutputs[target]; len(refs) > 0 {
+		return slices.ContainsFunc(refs, func(r types.OutputRef) bool { return r.Rooted(p.Path).Match(rel) })
+	}
+	return slices.ContainsFunc(p.Outputs, func(g types.Glob) bool { return g.Root(p.Path).Match(rel) })
 }
 
 // bareTarget strips the charms a stored run's target carries (`lint:rw`).
