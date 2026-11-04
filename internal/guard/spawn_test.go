@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestSpawnRequiresTheMultiAgentBrief pins the one thing this rule may read. It asks
@@ -541,4 +542,35 @@ func (f foregroundFleet) write(t *testing.T, agentID, job string) types.GuardJud
 	t.Helper()
 	return f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": agentID, "agent_type": "general-purpose",
 		"tool_input": map[string]any{"file_path": f.target(job), "content": "package x // y\n"}})
+}
+
+type SpawnShapeSuite struct{ suite.Suite }
+
+func TestSpawnShapeSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(SpawnShapeSuite))
+}
+
+func (s *SpawnShapeSuite) TestUpdatePlanItemsAreNotASpawn() {
+	_, ok := envelopeSpawn(map[string]any{"items": []any{
+		map[string]any{"content": "Read the code", "status": "in_progress"},
+		map[string]any{"content": "Fix it", "status": "pending"},
+	}})
+	s.False(ok)
+}
+
+func (s *SpawnShapeSuite) TestTextItemsAreASpawn() {
+	prompt, ok := envelopeSpawn(map[string]any{"items": []any{
+		map[string]any{"type": "text", "text": "Run the tests."},
+	}})
+	s.True(ok)
+	s.Equal("Run the tests.", prompt)
+}
+
+func (s *SpawnShapeSuite) TestTextlessItemsWithASpawnKeyAreASpawn() {
+	_, ok := envelopeSpawn(map[string]any{
+		"items":      []any{map[string]any{"type": "skill", "name": "magus-run"}},
+		"agent_type": "worker",
+	})
+	s.True(ok)
 }
