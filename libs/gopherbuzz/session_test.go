@@ -3127,3 +3127,21 @@ func (s *callingSessionSuite) TestAContextWithoutASessionIsRefused() {
 	s.Nil(got)
 	s.ErrorContains(err, "no session is running this call")
 }
+
+func (s *callingSessionSuite) TestAHostCallInAHostBuiltFiberFindsTheSession() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	defer func() { _ = sess.Close() }()
+	var found *Session
+	sess.SetGlobal("probe", vm.DirectValue("probe", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+		var err error
+		found, err = SessionFromContext(ctx)
+		return vm.Null, err
+	}))
+	fn, err := sess.Eval(context.Background(), "return fun () > void { probe(); };")
+	s.Require().NoError(err)
+	fiber, err := sess.NewFiber(context.Background(), fn, nil)
+	s.Require().NoError(err)
+	_, err = sess.ResumeFiber(context.Background(), fiber)
+	s.Require().NoError(err)
+	s.Same(sess, found)
+}

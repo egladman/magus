@@ -500,7 +500,7 @@ func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vm
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resume a running fiber (recursive resume)")
 	}
 	fibVM := fib.VM()
-	fibVM.SetContext(ctx)
+	fibVM.SetContext(s.within(ctx))
 	fib.SetStatus(vmpackage.FiberRunning)
 	defer s.enter(fibVM)()
 	result, err := fibVM.Exec()
@@ -540,7 +540,7 @@ func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (v
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resolve a running fiber (recursive resolve)")
 	}
 	fibVM := fib.VM()
-	fibVM.SetContext(ctx)
+	fibVM.SetContext(s.within(ctx))
 	fib.SetStatus(vmpackage.FiberRunning)
 	defer s.enter(fibVM)()
 	for {
