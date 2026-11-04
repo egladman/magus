@@ -183,6 +183,7 @@ github.com/egladman/magus.Magus.SymbolOccurrences method(ptr) func(ctx context.C
 github.com/egladman/magus.Magus.SymbolsOccurrences method(ptr) func(ctx context.Context, keys []string) (map[string]SymbolOccurrenceRead, bool)
 github.com/egladman/magus.Magus.TailLog method(ptr) func(projectPath string, target string) (logPath string, err error)
 github.com/egladman/magus.Magus.TargetGraph method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.TargetGraphOutput, error)
+github.com/egladman/magus.Magus.TargetSandboxes method(ptr) func() map[string]github.com/egladman/magus/spells.Sandbox
 github.com/egladman/magus.Magus.Tools method(ptr) func(ctx context.Context, projects ...string) (github.com/egladman/magus/types.ToolReport, error)
 github.com/egladman/magus.Magus.Trend method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Trend, error)
 github.com/egladman/magus.Magus.Unreferenced method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.Unreferenced, error)

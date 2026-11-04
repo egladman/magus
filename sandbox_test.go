@@ -5,12 +5,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
@@ -111,4 +113,51 @@ func TestWarnKernelUnavailableOncePerTopLevelInvocation(t *testing.T) {
 	warnKernelUnavailable(ctx)
 	assert.Contains(t, buf.String(), string(types.SandboxUnsupported))
 	assert.Equal(t, 1, strings.Count(buf.String(), "kernel landlock unavailable"), "once per process")
+}
+
+// A nested magus can grant a target nothing its script's domain lacks.
+type ScriptSandboxSuite struct {
+	suite.Suite
+	m       *Magus
+	granted string
+}
+
+func TestScriptSandboxSuite(t *testing.T) {
+	suite.Run(t, new(ScriptSandboxSuite))
+}
+
+func (s *ScriptSandboxSuite) SetupTest() {
+	s.granted = s.T().TempDir()
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": fmt.Sprintf(`import "magus";
+
+magus\project({"targets": {"test": {"sandbox": {"allow": [{"path": %q, "mode": "ro"}]}}}});
+
+export fun test(ctx: magus\Context, args: [str]) > void {}
+`, s.granted),
+		"magus.yaml": "sandbox:\n  mode: best-effort\n",
+	})
+	m, err := Open(s.T().Context(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *ScriptSandboxSuite) TestTargetSandboxesKeysEachByProjectAndTarget() {
+	got := s.m.TargetSandboxes()
+	s.Require().Len(got, 1)
+	s.Contains(got, ".:test")
+}
+
+func (s *ScriptSandboxSuite) TestANestedMagusReadsWhatATargetDeclares() {
+	ctx, err := s.m.ApplySandbox(s.T().Context())
+	s.Require().NoError(err)
+	nested := sandbox.PolicyFromContext(ctx).ForNestedMagus()
+	s.NoError(nested.CheckRead(ctx, filepath.Join(s.granted, "f")))
+}
+
+func (s *ScriptSandboxSuite) TestAScriptsOwnExecLeavesTargetsToTheirSteps() {
+	ctx, err := s.m.ApplySandbox(s.T().Context())
+	s.Require().NoError(err)
+	s.Error(sandbox.PolicyFromContext(ctx).CheckRead(ctx, filepath.Join(s.granted, "f")))
 }

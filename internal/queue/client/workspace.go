@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"sync"
@@ -93,13 +94,7 @@ func (w *Workspace) Sandboxes() map[string]spells.Sandbox {
 		resolved = append(resolved, p.ResolvedSpells...)
 	}
 	out := spells.Sandboxes(resolved)
-	for _, p := range w.m.All() {
-		for name, pol := range p.TargetPolicies {
-			if pol.Sandbox != nil {
-				out[regenerationKey(p.Path, name)] = *pol.Sandbox
-			}
-		}
-	}
+	maps.Copy(out, w.m.TargetSandboxes())
 	return out
 }
 

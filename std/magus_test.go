@@ -17,9 +17,11 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -1023,4 +1025,17 @@ func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 	tier := *got.ModelTier
 	tier.Reason = ""
 	assert.Equal(t, types.JobModelTier{Name: "principal", Rank: 2, Model: "opus", Skills: tier.Skills, Source: tier.Source, Site: tier.Site}, tier)
+}
+
+// magus\cmd's nested magus gets the target layer; its caller's exec does not.
+func (s *stdSuite) TestNestedMagusCarriesTheTargetLayerItsCallerDoesNot() {
+	granted := filepath.Join(s.T().TempDir(), "f")
+	p := sandbox.BuildPolicy(sandbox.PolicyOptions{Workspace: s.T().TempDir()}).WithNestedTargets(map[string]spells.Sandbox{
+		".:test": {Allow: []spells.SandboxAllow{{Path: filepath.Dir(granted), Mode: spells.SandboxAccessRO}}},
+	})
+	ctx := sandbox.WithPolicy(s.T().Context(), p)
+
+	nested := nestedMagusContext(ctx)
+	s.Require().NoError(sandbox.PolicyFromContext(nested).CheckRead(nested, granted), "the nested magus")
+	s.Error(sandbox.PolicyFromContext(ctx).CheckRead(ctx, granted), "the script's own exec")
 }
