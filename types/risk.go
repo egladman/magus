@@ -29,12 +29,12 @@ const (
 // its class and the tier it earned; without a Path, Project and Target name
 // the gate step the reason is about.
 type TierEvidence struct {
-	Path    string   `json:"path,omitempty"    yaml:"path,omitempty"`
-	Project string   `json:"project,omitempty" yaml:"project,omitempty"`
-	Target  string   `json:"target,omitempty"  yaml:"target,omitempty"`
-	Class   string   `json:"class,omitempty"   yaml:"class,omitempty"`
-	Tier    Tier `json:"tier"              yaml:"tier"`
-	Why     string   `json:"why"               yaml:"why"`
+	Path    string `json:"path,omitempty"    yaml:"path,omitempty"`
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Target  string `json:"target,omitempty"  yaml:"target,omitempty"`
+	Class   string `json:"class,omitempty"   yaml:"class,omitempty"`
+	Tier    Tier   `json:"tier"              yaml:"tier"`
+	Why     string `json:"why"               yaml:"why"`
 	// Packages are the packages a scoped path put under test.
 	Packages []string `json:"packages,omitempty" yaml:"packages,omitempty"`
 }
@@ -76,7 +76,7 @@ type TierReport struct {
 	// Base is the revision the change was measured from.
 	Base     string         `json:"base"     yaml:"base"`
 	Target   string         `json:"target"   yaml:"target"`
-	Tier     Tier       `json:"tier"     yaml:"tier"`
+	Tier     Tier           `json:"tier"     yaml:"tier"`
 	Affected []string       `json:"affected" yaml:"affected"`
 	Evidence []TierEvidence `json:"evidence" yaml:"evidence"`
 	Gate     []TierGateStep `json:"gate"     yaml:"gate"`

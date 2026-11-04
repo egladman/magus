@@ -598,7 +598,7 @@ type planInheritPath struct {
 // no gate step can observe it, so the matrix is empty, and every changed path rides
 // along with its tier and what decided it.
 type planRisk struct {
-	Tier  types.Tier       `json:"tier"`
+	Tier  types.Tier           `json:"tier"`
 	Base  string               `json:"base"`
 	Paths []types.TierEvidence `json:"paths"`
 }
