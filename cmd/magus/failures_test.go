@@ -313,7 +313,7 @@ func TestPreviewFollowsTheSelection(t *testing.T) {
 
 func TestLoadPreviewNamesAnUnreadableLog(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "gone.log")
-	rows := loadPreview(cache.Failure{LogPath: missing}, 200)
+	rows := loadPreview(cache.Failure{LogPath: missing}, len(missing)+200)
 	require.Len(t, rows, 1)
 	assert.Contains(t, rows[0], "could not read the log")
 	assert.Contains(t, rows[0], missing)
