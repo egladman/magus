@@ -263,7 +263,7 @@ magus\project({
         // Members reached through ctx.needs run inline and never cache; see MGS1009.
         "ci": {
             "skip_cache": "composes the gates and reads nothing itself; its key is the whole tree, so it can never replay",
-            "timeout": "45m",
+            "timeout": "60m",
         },
         "pr-title": {"skip_cache": "judges the pull request event, which no file input carries"},
         "pr-changelog": {"skip_cache": "judges the pull request event and the base ref, which no file input carries"},
