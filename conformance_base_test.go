@@ -3,11 +3,13 @@ package magus
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/symbols/buzzindex"
 	"github.com/egladman/magus/internal/symbols/goindex"
 	"github.com/egladman/magus/internal/symbols/shindex"
@@ -85,7 +87,33 @@ func (s *ConformanceBaseSuite) TestAFileBesideAnAbsentProjectIsJudged() {
 
 func (s *ConformanceBaseSuite) TestGoRunsInProcessWithItsPatterns() {
 	ix := inProcessIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages}, "/t/p", "/t")
-	s.Equal(&goindex.Indexer{Dir: "/t/p", Patterns: []string{"."}}, ix)
+	got, ok := ix.(*goindex.Indexer)
+	s.Require().True(ok)
+	s.Equal("/t/p", got.Dir)
+	s.Equal([]string{"."}, got.Patterns)
+}
+
+func (s *ConformanceBaseSuite) TestGoIsHandedTheTreeAsATrustedMiseConfig() {
+	env := trustRoot([]string{"A=1", "MISE_TRUSTED_CONFIG_PATHS=/ws"}, "/t")
+
+	s.Equal([]string{"A=1", "MISE_TRUSTED_CONFIG_PATHS=/ws" + string(os.PathListSeparator) + "/t"}, env)
+}
+
+func (s *ConformanceBaseSuite) TestGoIndexerEnvTrustsTheTree() {
+	ix := inProcessIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages}, "/t/p", "/t")
+
+	var trusted []string
+	for _, kv := range ix.(*goindex.Indexer).Env {
+		if strings.HasPrefix(kv, "MISE_TRUSTED_CONFIG_PATHS=") {
+			trusted = append(trusted, kv)
+		}
+	}
+	s.Require().Len(trusted, 1)
+	s.True(strings.HasSuffix(trusted[0], "/t"))
+}
+
+func (s *ConformanceBaseSuite) TestTheTreeIsTrustedAloneWhenNothingIsInherited() {
+	s.Equal([]string{"A=1", "MISE_TRUSTED_CONFIG_PATHS=/t"}, trustRoot([]string{"A=1"}, "/t"))
 }
 
 func (s *ConformanceBaseSuite) TestBuzzAndShellRunInProcessUnderTheBaseRoot() {
@@ -97,6 +125,17 @@ func (s *ConformanceBaseSuite) TestBuzzAndShellRunInProcessUnderTheBaseRoot() {
 
 func (s *ConformanceBaseSuite) TestAnExternalFormatHasNoInProcessIndexer() {
 	s.Nil(inProcessIndexer(&spells.SymbolIndexer{Format: "scip"}, "/t/p", "/t"))
+}
+
+func (s *ConformanceBaseSuite) TestTheBaseTreeIsMadeInThePoliciesPrivateTempDir() {
+	private := s.T().TempDir()
+	ctx := sandbox.WithPolicy(s.T().Context(), &sandbox.Policy{TempDir: private})
+
+	tree, err := conformanceTree(ctx)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = os.RemoveAll(tree) })
+
+	s.Equal(private, filepath.Dir(tree))
 }
 
 type ConformanceBaseBoxSuite struct {
