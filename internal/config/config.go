@@ -1222,7 +1222,7 @@ func Defaults() Config {
 			StaleAfter: 72 * time.Hour,
 		}},
 		ShutdownGrace: defaultShutdownGrace,
-		Disk:         Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
+		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
