@@ -461,10 +461,11 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 // cache and job store, and that the scrubbed BaseEnv drops: a different cache dir is a
 // different cache and lease marker, and the state dir holds the job store the lease
 // narrowing reads. A value the caller set wins; these locate, they do not confine.
+// The history path keeps a nested run's timings in the file the parent uploads.
 //
 // Not in the sandbox's env allowlist, which testkit also isolates tests with: a stray
 // MAGUS_CACHE_DIR reaching a test is the failure that list exists to stop.
-var nestedMagusVars = []string{"MAGUS_CACHE_DIR", "MAGUS_CACHE_WRITE_ENABLED", "XDG_STATE_HOME"}
+var nestedMagusVars = []string{"MAGUS_CACHE_DIR", "MAGUS_CACHE_WRITE_ENABLED", "MAGUS_HISTORY_PATH", "XDG_STATE_HOME"}
 
 // WithEnvOverlay gives ctx an environment overlay of its own; see environ.With. It is
 // here so an entry point that already starts runs through this package need not import
