@@ -8,17 +8,6 @@ test "decisions count match arms and every branching word" {
     std\assert(decisions.operators.join(" ") == "?? ->", message: "operators");
 }
 
-test "mutations swap words and stub a body with braces" {
-    final syntax = buzz\mgs_getLanguage().syntax!;
-    final mutations = syntax.mutations!;
-    std\assert(mutations.swaps.len() == 12, message: "swaps");
-    foreach (swap in mutations.swaps) {
-        std\assert(swap.find != swap.replace, message: "{swap.name} changes the token");
-    }
-    std\assert(mutations.bodies.join("|") == "\{\}", message: "body");
-    std\assert(syntax.stubs!.bodyStyle == "brace", message: "bodies cut by brace");
-}
-
 test "magus-buzz-test runs magus itself on the file and its sibling test" {
     final test = buzz\mgs_listTargets()["magus-buzz-test"]!(Target{});
     std\assert(test.bin == "$MAGUS", message: "bin");

@@ -221,22 +221,10 @@ test "decisions count optional parameters but not optional chaining" {
     std\assert(syntax.operators.indexOf("?.") != null, message: "?. is read whole, so it is no decision");
 }
 
-test "mutations swap strict equality, stub a body and spare console calls" {
-    final mutations = typescript\mgs_getLanguage().syntax!.mutations!;
-    final names = mutations.swaps.map(fun (i: int, s: Swap) > str => s.name);
-    std\assert(names.len() == 13, message: "swaps: {names.join(",")}");
-    foreach (swap in mutations.swaps) {
-        std\assert(swap.find != swap.replace, message: "{swap.name} changes the token");
-    }
-    std\assert(mutations.bodies.join("|") == "\{ return undefined as never; \}", message: "body");
-    std\assert(mutations.arid.join("|") == "^\\s*console\\.|[A-Za-z0-9_$\\]]<|[A-Za-z0-9_$\\]]>", message: "arid");
-}
-
-test "hugged generic brackets are arid and no decision" {
+test "generic brackets are no decision" {
     final syntax = typescript\mgs_getLanguage().syntax!;
     final operators = syntax.decisions!.operators;
     std\assert(operators.indexOf("<") == null and operators.indexOf(">") == null, message: "brackets are no decision");
-    std\assert(syntax.mutations!.arid.len() == 3, message: "console plus two generic patterns");
 }
 
 test "coverage is vitest's lcov and vitest keeps no test scope" {

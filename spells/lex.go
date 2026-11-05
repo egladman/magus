@@ -3,8 +3,6 @@ package spells
 import (
 	"cmp"
 	"errors"
-	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -17,7 +15,7 @@ const (
 	LexComment LexKind = iota + 1
 	LexString
 	// LexDirective is a comment a tool reads, such as //nolint. Editing one
-	// is never comment-only, yet it holds no decision and no mutant.
+	// is never comment-only, yet it holds no decision.
 	LexDirective
 )
 
@@ -215,79 +213,11 @@ func (s Syntax) Complexity(body string) (int, error) {
 	return n, nil
 }
 
-// MutationSite is one mutant of a body: the Find token at Offset replaced
-// by Replace. Offset is a byte offset into the body MutationSites read.
-// Line and Col are 1-based, Col in bytes.
-type MutationSite struct {
-	Operator          string
-	Offset, Line, Col int
-	Find, Replace     string
-}
-
-// MutationSites lists body's mutants: each declared swap at each token it
-// finds outside comments, strings and arid lines, then each declared body
-// replacement. A function with no body the style can cut yields no body
-// mutant.
-func (s Syntax) MutationSites(body string) ([]MutationSite, error) {
-	if err := s.requireMutations(); err != nil {
-		return nil, err
-	}
-	arid, err := s.Mutations.AridPatterns()
-	if err != nil {
-		return nil, err
-	}
-	code, lines := s.code(body), newLineIndex(body)
-	sites := s.swapSites(code, lines, aridLines(body, arid), s.bodyStart(code))
-	return append(sites, s.bodySites(body, code, lines)...), nil
-}
-
-// Apply returns src with the site's mutation made. It refuses a src that
-// does not hold Find at Offset, so a stale site never mutates the wrong text.
-func (m MutationSite) Apply(src string) (string, error) {
-	if m.Offset > len(src) || !strings.HasPrefix(src[m.Offset:], m.Find) {
-		return "", fmt.Errorf("the source holds no %q at offset %d", m.Find, m.Offset)
-	}
-	return fmt.Sprintf("%s%s%s", src[:m.Offset], m.Replace, src[m.Offset+len(m.Find):]), nil
-}
-
-// AridPatterns compiles Arid, naming the first pattern that does not parse.
-func (m MutationSyntax) AridPatterns() ([]*regexp.Regexp, error) {
-	out := make([]*regexp.Regexp, 0, len(m.Arid))
-	for i, p := range m.Arid {
-		re, err := regexp.Compile(p)
-		if err != nil {
-			return nil, fmt.Errorf("mutations.arid[%d]: %w", i, err)
-		}
-		out = append(out, re)
-	}
-	return out, nil
-}
-
 func (s Syntax) requireComments() error {
 	if s.Comments == nil {
 		return errors.New("the syntax declares no comments, so a token in a comment or string would count as code")
 	}
 	return nil
-}
-
-func (s Syntax) requireMutations() error {
-	if err := s.requireComments(); err != nil {
-		return err
-	}
-	if s.Mutations == nil {
-		return errors.New("the syntax declares no mutations, so a function yields no mutants")
-	}
-	if len(s.Mutations.Bodies) > 0 && s.bodyStyle() == "" {
-		return errors.New("mutations.bodies need stubs.bodyStyle to find the body they replace")
-	}
-	return nil
-}
-
-func (s Syntax) bodyStyle() string {
-	if s.Stubs == nil {
-		return ""
-	}
-	return s.Stubs.BodyStyle
 }
 
 // code blanks every comment and string byte of body but its newlines, so
@@ -351,15 +281,12 @@ func isWordByte(c byte) bool {
 
 func isSpace(c byte) bool { return strings.IndexByte(" \t\r\n\v\f", c) >= 0 }
 
-// namedTokens is every token the syntax names, so a declared swap or
-// decision operator is read whole even when Operators leaves it out.
+// namedTokens is every token the syntax names, so a declared decision
+// operator is read whole even when Operators leaves it out.
 func (s Syntax) namedTokens() []string {
 	out := slices.Clone(s.Operators)
 	if s.Decisions != nil {
 		out = append(out, s.Decisions.Operators...)
-	}
-	if s.Mutations != nil {
-		out = append(out, s.Mutations.swapTokens()...)
 	}
 	return out
 }
@@ -377,173 +304,4 @@ func (d DecisionSyntax) set() map[string]bool {
 		set[t] = true
 	}
 	return set
-}
-
-func (m MutationSyntax) swapTokens() []string {
-	out := make([]string, 0, 2*len(m.Swaps))
-	for _, sw := range m.Swaps {
-		out = append(out, sw.Find, sw.Replace)
-	}
-	return out
-}
-
-func (m MutationSyntax) swapsByToken() map[string][]Swap {
-	out := map[string][]Swap{}
-	for _, sw := range m.Swaps {
-		out[sw.Find] = append(out[sw.Find], sw)
-	}
-	return out
-}
-
-func (s Syntax) swapSites(code string, lines lineIndex, arid map[int]bool, from int) []MutationSite {
-	bySwap := s.Mutations.swapsByToken()
-	var out []MutationSite
-	for _, t := range s.tokens(code) {
-		if t.offset < from {
-			continue
-		}
-		line, col := lines.position(t.offset)
-		if arid[line] {
-			continue
-		}
-		for _, sw := range bySwap[t.text] {
-			out = append(out, MutationSite{Operator: sw.Name, Offset: t.offset, Line: line, Col: col, Find: sw.Find, Replace: sw.Replace})
-		}
-	}
-	return out
-}
-
-func aridLines(body string, patterns []*regexp.Regexp) map[int]bool {
-	arid := map[int]bool{}
-	for n, line := range strings.Split(body, "\n") {
-		arid[n+1] = slices.ContainsFunc(patterns, func(re *regexp.Regexp) bool { return re.MatchString(line) })
-	}
-	return arid
-}
-
-// bodyStart is where the body begins, or 0 when the style cuts none. A swap
-// before it would land in the signature, where a return-type arrow reads as a
-// comparison and the mutant does not parse.
-func (s Syntax) bodyStart(code string) int {
-	start, _, ok := s.bodyRange(code)
-	if !ok {
-		return 0
-	}
-	return start
-}
-
-func (s Syntax) bodySites(body, code string, lines lineIndex) []MutationSite {
-	start, end, ok := s.bodyRange(code)
-	if !ok {
-		return nil
-	}
-	line, col := lines.position(start)
-	out := make([]MutationSite, 0, len(s.Mutations.Bodies))
-	for _, b := range s.Mutations.Bodies {
-		out = append(out, MutationSite{Operator: BodyMutation, Offset: start, Line: line, Col: col,
-			Find: body[start:end], Replace: s.bodyReplacement(body[start:], b)})
-	}
-	return out
-}
-
-func (s Syntax) bodyRange(code string) (start, end int, ok bool) {
-	switch s.bodyStyle() {
-	case StubBodyBrace:
-		return braceBody(code)
-	case StubBodyIndent:
-		return indentBody(code)
-	}
-	return 0, 0, false
-}
-
-// braceBody is the final {...} of code.
-func braceBody(code string) (start, end int, ok bool) {
-	closer := strings.LastIndexByte(code, '}')
-	if closer < 0 {
-		return 0, 0, false
-	}
-	open := matchingOpen(code, closer)
-	return open, closer + 1, open >= 0
-}
-
-func matchingOpen(code string, closer int) int {
-	depth := 0
-	for i := closer; i >= 0; i-- {
-		depth -= nestingDelta(code[i])
-		if depth == 0 {
-			return i
-		}
-	}
-	return -1
-}
-
-// indentBody is what follows the header's first top-level colon, trailing
-// whitespace cut.
-func indentBody(code string) (start, end int, ok bool) {
-	colon := headerColon(code)
-	if colon < 0 {
-		return 0, 0, false
-	}
-	return colon + 1, len(strings.TrimRight(code, " \t\r\n")), true
-}
-
-func headerColon(code string) int {
-	depth := 0
-	for i := range len(code) {
-		depth += nestingDelta(code[i])
-		if code[i] == ':' && depth == 0 {
-			return i
-		}
-	}
-	return -1
-}
-
-func nestingDelta(c byte) int {
-	switch c {
-	case '(', '[', '{':
-		return 1
-	case ')', ']', '}':
-		return -1
-	}
-	return 0
-}
-
-// bodyReplacement places an indent-style body where the cut one sat: on the
-// header's line, or on the next line at the old body's indentation.
-func (s Syntax) bodyReplacement(rest, tmpl string) string {
-	if s.bodyStyle() != StubBodyIndent {
-		return tmpl
-	}
-	nl := strings.IndexByte(rest, '\n')
-	if nl < 0 || strings.TrimSpace(rest[:nl]) != "" {
-		return " " + tmpl
-	}
-	return fmt.Sprintf("\n%s%s", bodyIndent(rest[nl+1:]), tmpl)
-}
-
-func bodyIndent(lines string) string {
-	for _, line := range strings.Split(lines, "\n") {
-		if code := strings.TrimLeft(line, " \t"); code != "" {
-			return line[:len(line)-len(code)]
-		}
-	}
-	return ""
-}
-
-// lineIndex holds the offset each line of a source starts at.
-type lineIndex []int
-
-func newLineIndex(src string) lineIndex {
-	starts := lineIndex{0}
-	for i := range len(src) {
-		if src[i] == '\n' {
-			starts = append(starts, i+1)
-		}
-	}
-	return starts
-}
-
-func (l lineIndex) position(offset int) (line, col int) {
-	line, _ = slices.BinarySearch(l, offset+1)
-	return line, offset - l[line-1] + 1
 }

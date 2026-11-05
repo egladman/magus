@@ -413,7 +413,7 @@ func TestImportAlias(t *testing.T) {
 }
 
 func TestMarkerFamilyIsClosed(t *testing.T) {
-	assert.Equal(t, []string{"diagram", "calls", "skills", "observed", "harness", "mutant"}, MarkerFamily("").Values())
+	assert.Equal(t, []string{"diagram", "calls", "skills", "observed", "harness"}, MarkerFamily("").Values())
 	assert.True(t, MarkerCalls.Valid())
 	assert.False(t, MarkerFamily("bogus").Valid())
 	assert.Equal(t, []string{"point", "block"}, MarkerVerb("").Values())

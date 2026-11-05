@@ -201,8 +201,8 @@ func (m *Magus) ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, 
 	return out, nil
 }
 
-// measureBudget bounds one Change.risk or Change.mutants. lint-rules runs
-// both in one target, and the pair must end inside its kill.
+// measureBudget bounds one Change.risk. lint-rules runs it, and it must
+// end inside the target's kill.
 const measureBudget = 7 * time.Minute
 
 // withBudget is ctx bounded by measureBudget, its cause naming the budget.
@@ -700,7 +700,8 @@ type touchedSet struct {
 	changed []string
 }
 
-// touchedSince is the one entry point ChangeRisk and Mutants share.
+// touchedSince is the functions a change touched since base, as ChangeRisk
+// scores them.
 func (m *Magus) touchedSince(ctx context.Context, base string) (touchedSet, error) {
 	graph, err := m.riskGraph(ctx)
 	if err != nil {
@@ -1175,3 +1176,6 @@ func riskChecks(risk types.ChangeRisk) map[string]types.Check {
 	}
 	return out
 }
+
+// newSinceBase is the base reason of a function the base does not hold.
+const newSinceBase = "it is new since base"

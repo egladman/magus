@@ -8,7 +8,6 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 func TestScanMarkersGrammar(t *testing.T) {
@@ -178,25 +177,4 @@ func TestAssembleMarkersUnknownFamily(t *testing.T) {
 	for _, f := range types.MarkerFamily("").Values() {
 		assert.ErrorContains(t, err, f)
 	}
-}
-
-type MutantMarkersSuite struct{ suite.Suite }
-
-func TestMutantMarkersSuite(t *testing.T) { suite.Run(t, new(MutantMarkersSuite)) }
-
-func (s *MutantMarkersSuite) TestReadsTheOpAndAReasonOfManyWords() {
-	src := "func f() {\n\t// magus:mutant op=lt-le reason=the caller clamps n first\n\treturn n < 3\n}\n"
-	s.Equal([]MutantMarker{{Line: 2, Op: "lt-le", Reason: "the caller clamps n first"}}, MutantMarkers("f.go", []byte(src)))
-}
-
-func (s *MutantMarkersSuite) TestKeepsAMarkerWithNoReason() {
-	s.Equal([]MutantMarker{{Line: 1, Op: "and-or"}}, MutantMarkers("f.go", []byte("// magus:mutant op=and-or\n")))
-}
-
-func (s *MutantMarkersSuite) TestKeepsAMarkerWithNoOp() {
-	s.Equal([]MutantMarker{{Line: 1, Reason: "equivalent"}}, MutantMarkers("f.py", []byte("# magus:mutant reason=equivalent\n")))
-}
-
-func (s *MutantMarkersSuite) TestSkipsEveryOtherFamily() {
-	s.Empty(MutantMarkers("f.go", []byte("// magus:calls internal/x http\n// magus:diagram box\n")))
 }

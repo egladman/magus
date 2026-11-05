@@ -60,24 +60,6 @@ export fun mgs_getLanguage() > Language {
             },
             operators = ["==", "!=", "<=", ">=", "**", "//", "->", ":=", "+=", "-="],
             decisions = DecisionSyntax{keywords = ["if", "elif", "for", "while", "except", "and", "or", "case"]},
-            mutations = MutationSyntax{
-                swaps = [
-                    Swap{name = "eq-ne", find = "==", replace = "!="},
-                    Swap{name = "ne-eq", find = "!=", replace = "=="},
-                    Swap{name = "lt-le", find = "<", replace = "<="},
-                    Swap{name = "le-lt", find = "<=", replace = "<"},
-                    Swap{name = "gt-ge", find = ">", replace = ">="},
-                    Swap{name = "ge-gt", find = ">=", replace = ">"},
-                    Swap{name = "and-or", find = "and", replace = "or"},
-                    Swap{name = "or-and", find = "or", replace = "and"},
-                    Swap{name = "true-false", find = "True", replace = "False"},
-                    Swap{name = "false-true", find = "False", replace = "True"},
-                    Swap{name = "plus-minus", find = "+", replace = "-"},
-                    Swap{name = "minus-plus", find = "-", replace = "+"},
-                ],
-                bodies = ["return None"],
-                arid = ["^\\s*(logging|logger|log)\\."],
-            },
         },
     };
 }

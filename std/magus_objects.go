@@ -333,13 +333,6 @@ var magusObjects = []Object{
 				Raises:  true,
 				Impl:    MagusChangeRisk,
 			},
-			{
-				Name:    "mutants",
-				Doc:     "The mutants of the functions touched since the Change's base: {definition, base, mutants, gaps, unused}. Annotate `> Mutants`. Each mutant is one token swap, killed when a test fails on it, survived when every test passes, and excepted when a `// magus:mutant op=<swap> reason=<why>` marker excuses the survivor; unused lists each marker that matches no survivor or carries no reason. A function magus cannot mutate is a gap. Read in-process from the workspace on the context; raises MGS1022 outside one.",
-				Returns: []Ret{{Type: TypeAnyMap, Object: "Mutants"}},
-				Raises:  true,
-				Impl:    MagusChangeMutants,
-			},
 		},
 	},
 	{

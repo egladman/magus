@@ -22,16 +22,16 @@ const CoverageOp = "coverage"
 const CoverageDirEnvVar = "MAGUS_COVERAGE_DIR"
 
 // Coverage is what mgs_getCoverage declares: how the spell runs its tests
-// with line coverage on, and the op a mutant is judged by. Exporting it IS
+// with line coverage on, and the op whose scope narrows it. Exporting it IS
 // the capability; a spell that does not export it cannot be scored.
 type Coverage struct {
 	Format CoverageFormat `json:"format"`
 	// File is the report's name under MAGUS_COVERAGE_DIR, a plain file name.
 	File string `json:"file"`
-	// Command writes the report. As a mutant's baseline it gets the scope
-	// the mutant runs under, so coverage and mutants meet the same tests.
+	// Command writes the report. It gets the scope a change's touched files
+	// narrow Test to, so coverage meets the tests that reach them.
 	Command Command `json:"command"`
-	// Test is an op in mgs_listTargets. A mutant survives when it passes.
+	// Test is an op in mgs_listTargets whose test_scope narrows the report.
 	Test string `json:"test"`
 	// Uses names tools from mgs_getTools whose version keys the op.
 	Uses []string `json:"uses,omitempty"`

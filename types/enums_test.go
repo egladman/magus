@@ -21,21 +21,6 @@ func TestEnumPrecedentFamilyClosesItsSet(t *testing.T) {
 	assert.Equal(t, "unset", PrecedentFamily("").String())
 }
 
-func TestEnumMutantOutcomeClosesItsSet(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, []string{"killed", "survived", "excepted"}, MutantOutcome("").Values())
-	assert.False(t, MutantOutcome("lost").Valid())
-	assert.Equal(t, "unset", MutantOutcome("").String())
-}
-
-func TestEnumMarkerFamilyIncludesMutant(t *testing.T) {
-	t.Parallel()
-
-	assert.Contains(t, MarkerFamily("").Values(), "mutant")
-	assert.True(t, MarkerMutant.Valid())
-}
-
 func TestEnumConformanceSetsClose(t *testing.T) {
 	t.Parallel()
 

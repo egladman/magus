@@ -145,20 +145,11 @@ var commentSyntaxSource string
 //go:embed gen/types/stubsyntax.buzz
 var stubSyntaxSource string
 
-// These precede syntaxSource: Syntax carries each, and MutationSyntax
-// carries [Swap].
+// This precedes syntaxSource: Syntax carries it.
 //
 //go:generate go run ../../cmd/magus-utils types -type DecisionSyntax -out gen/types/decisionsyntax.buzz
 //go:embed gen/types/decisionsyntax.buzz
 var decisionSyntaxSource string
-
-//go:generate go run ../../cmd/magus-utils types -type Swap -out gen/types/swap.buzz
-//go:embed gen/types/swap.buzz
-var swapSource string
-
-//go:generate go run ../../cmd/magus-utils types -type MutationSyntax -out gen/types/mutationsyntax.buzz
-//go:embed gen/types/mutationsyntax.buzz
-var mutationSyntaxSource string
 
 //go:generate go run ../../cmd/magus-utils types -type Syntax -out gen/types/syntax.buzz
 //go:embed gen/types/syntax.buzz
@@ -388,7 +379,7 @@ var CharmModuleSource string
 // op records have no cross-references so their position is free). Shared by the runtime
 // registration (modules.go) and the built-in loader (builtins.go), so the two can't drift
 // apart.
-var SpellModuleSource = strings.Join([]string{pathSource, targetModuleSource, patchOpSource, charmTypeSource, hintSource, commandSource, installSource, manifestSource, serviceSource, symbolIndexerSource, coverageSource, versionKeySource, versionBoundsSource, toolSource, sandboxAllowSource, sandboxEnvSource, sandboxCacheSource, sandboxSource, commentBlockSource, quoteSource, commentSyntaxSource, stubSyntaxSource, decisionSyntaxSource, swapSource, mutationSyntaxSource, syntaxSource, languageSource, projectSource, secretSource, releaseCycleSource, lifecycleSource,
+var SpellModuleSource = strings.Join([]string{pathSource, targetModuleSource, patchOpSource, charmTypeSource, hintSource, commandSource, installSource, manifestSource, serviceSource, symbolIndexerSource, coverageSource, versionKeySource, versionBoundsSource, toolSource, sandboxAllowSource, sandboxEnvSource, sandboxCacheSource, sandboxSource, commentBlockSource, quoteSource, commentSyntaxSource, stubSyntaxSource, decisionSyntaxSource, syntaxSource, languageSource, projectSource, secretSource, releaseCycleSource, lifecycleSource,
 	discoveryFileSource, discoveryQuerySource, discoveryGapSource, discoveredProjectSource,
 	emptySource, ackSource, secretRefSource, greenRunSource, stringsSource, ciGroupSource, ciGroupEndSource, ciAnnotationSource,
 	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource,

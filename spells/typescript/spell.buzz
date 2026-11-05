@@ -120,26 +120,6 @@ export fun mgs_getLanguage() > Language {
             },
             operators = ["===", "!==", "==", "!=", "<=", ">=", "&&", "||", "??", "??=", "?.", "=>", "++", "--", "**", "...", "+=", "-="],
             decisions = DecisionSyntax{keywords = ["if", "for", "while", "case", "catch"], operators = ["&&", "||", "??", "??=", "?"]},
-            mutations = MutationSyntax{
-                swaps = [
-                    Swap{name = "seq-sne", find = "===", replace = "!=="},
-                    Swap{name = "sne-seq", find = "!==", replace = "==="},
-                    Swap{name = "lt-le", find = "<", replace = "<="},
-                    Swap{name = "le-lt", find = "<=", replace = "<"},
-                    Swap{name = "gt-ge", find = ">", replace = ">="},
-                    Swap{name = "ge-gt", find = ">=", replace = ">"},
-                    Swap{name = "and-or", find = "&&", replace = "||"},
-                    Swap{name = "or-and", find = "||", replace = "&&"},
-                    Swap{name = "true-false", find = "true", replace = "false"},
-                    Swap{name = "false-true", find = "false", replace = "true"},
-                    Swap{name = "plus-minus", find = "+", replace = "-"},
-                    Swap{name = "minus-plus", find = "-", replace = "+"},
-                    Swap{name = "inc-dec", find = "++", replace = "--"},
-                ],
-                bodies = ["\{ return undefined as never; \}"],
-                // Hugged brackets are generics, not comparisons.
-                arid = ["^\\s*console\\.", "[A-Za-z0-9_$\\]]<", "[A-Za-z0-9_$\\]]>"],
-            },
         },
     };
 }

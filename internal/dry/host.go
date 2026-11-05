@@ -493,9 +493,6 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	}
 	m.MapSet("magus__Change__risk", shaped("magus.risk", risk))
 	m.MapSet("magus__Workspace__risk", shaped("magus.risk", risk))
-	m.MapSet("magus__Change__mutants", shaped("magus.mutants", map[string]vm.Value{
-		"definition": vm.StringValue(""), "base": vm.StringValue(""), "mutants": empty, "gaps": empty, "unused": empty,
-	}))
 	// The typed records come from the generated encoders, so a dry run exposes exactly the
 	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or
 	// a layer against, so importsIndexed stays false and a neighborhood's verdict unknown.

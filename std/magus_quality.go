@@ -9,10 +9,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// qualityWorkspace is the part of *magus.Magus that scores and mutates.
+// qualityWorkspace is the part of *magus.Magus that scores functions.
 type qualityWorkspace interface {
 	ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, error)
-	Mutants(ctx context.Context, base string) (types.Mutants, error)
 }
 
 // qualityFromContext raises when no workspace can judge, never an empty record.
@@ -44,16 +43,6 @@ func MagusWorkspaceRisk(ctx context.Context, _ types.MagusWorkspace) (types.Chan
 	return scoreRisk(ctx, "Workspace.risk", "")
 }
 
-// MagusChangeMutants is Change.mutants(): the mutants of the functions
-// touched since c's base.
-func MagusChangeMutants(ctx context.Context, c types.Change) (types.Mutants, error) {
-	base, err := heldChangeBase(ctx, c, "mutants")
-	if err != nil {
-		return types.Mutants{}, err
-	}
-	return mutate(ctx, base)
-}
-
 // heldChangeBase is c's base once heldChange vouches for its tree.
 func heldChangeBase(ctx context.Context, c types.Change, member string) (string, error) {
 	ws, err := heldChange(ctx, c, member)
@@ -70,22 +59,13 @@ func heldChangeBase(ctx context.Context, c types.Change, member string) (string,
 // scoreRisk scores the functions touched since base, or every function
 // when base is "".
 func scoreRisk(ctx context.Context, member, base string) (types.ChangeRisk, error) {
-	return measure(ctx, member, base, qualityWorkspace.ChangeRisk)
-}
-
-func mutate(ctx context.Context, base string) (types.Mutants, error) {
-	return measure(ctx, "Change.mutants", base, qualityWorkspace.Mutants)
-}
-
-func measure[T any](ctx context.Context, member, base string, by func(qualityWorkspace, context.Context, string) (T, error)) (T, error) {
-	var zero T
 	q, err := qualityFromContext(ctx, member)
 	if err != nil {
-		return zero, err
+		return types.ChangeRisk{}, err
 	}
-	out, err := by(q, ctx, base)
+	out, err := q.ChangeRisk(ctx, base)
 	if err != nil {
-		return zero, fmt.Errorf("magus\\%s: %w", member, err)
+		return types.ChangeRisk{}, fmt.Errorf("magus\\%s: %w", member, err)
 	}
 	return out, nil
 }

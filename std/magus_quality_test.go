@@ -13,21 +13,14 @@ import (
 
 type fakeQualityWorkspace struct {
 	types.WorkspaceRepository
-	risk       types.ChangeRisk
-	mutants    types.Mutants
-	err        error
-	riskBase   string
-	mutantBase string
+	risk     types.ChangeRisk
+	err      error
+	riskBase string
 }
 
 func (f *fakeQualityWorkspace) ChangeRisk(_ context.Context, base string) (types.ChangeRisk, error) {
 	f.riskBase = base
 	return f.risk, f.err
-}
-
-func (f *fakeQualityWorkspace) Mutants(_ context.Context, base string) (types.Mutants, error) {
-	f.mutantBase = base
-	return f.mutants, f.err
 }
 
 type fakeWorkspaceWithoutQuality struct {
@@ -96,60 +89,4 @@ func (s *MagusChangeRiskSuite) TestRaisesWhatTheEngineRaises() {
 	_, err := scoreRisk(types.WithWorkspace(s.T().Context(), ws), "Change.risk", "origin/main")
 
 	s.ErrorContains(err, "magus\\Change.risk: no coverage report")
-}
-
-type MagusChangeMutantsSuite struct {
-	suite.Suite
-}
-
-func TestMagusChangeMutantsSuite(t *testing.T) {
-	suite.Run(t, new(MagusChangeMutantsSuite))
-}
-
-func (s *MagusChangeMutantsSuite) TestReturnsTheTypedRecordForTheBase() {
-	want := types.Mutants{
-		Definition: "d",
-		Base:       "origin/main",
-		Mutants:    []types.Mutant{{ID: "a1", Outcome: types.MutantSurvived, Line: 4, Col: 9}},
-		Gaps:       []types.FunctionGap{{Label: "g", Reason: "tests fail without a mutant"}},
-		Unused:     []types.Finding{{Path: "a.go", Line: 3, Message: "marker matches no survivor"}},
-	}
-	ws := &fakeQualityWorkspace{mutants: want}
-
-	got, err := mutate(types.WithWorkspace(s.T().Context(), ws), "origin/main")
-
-	s.Require().NoError(err)
-	s.Equal(want, got)
-	s.Equal("origin/main", ws.mutantBase)
-}
-
-func (s *MagusChangeMutantsSuite) TestRefusesAChangeWithNoTree() {
-	ws := &fakeQualityWorkspace{}
-
-	_, err := MagusChangeMutants(types.WithWorkspace(s.T().Context(), ws), types.Change{Base: "origin/main"})
-
-	s.ErrorContains(err, "magus\\Change.mutants: this Change records no tree")
-	s.Empty(ws.mutantBase)
-}
-
-func (s *MagusChangeMutantsSuite) TestRaisesOutsideAWorkspace() {
-	_, err := MagusChangeMutants(s.T().Context(), types.Change{})
-
-	s.ErrorContains(err, "magus\\Change.mutants: no workspace on the context")
-}
-
-func (s *MagusChangeMutantsSuite) TestRaisesWhenTheWorkspaceCannotMutate() {
-	ws := &fakeWorkspaceWithoutQuality{}
-
-	_, err := mutate(types.WithWorkspace(s.T().Context(), ws), "origin/main")
-
-	s.ErrorContains(err, "magus\\Change.mutants: this workspace cannot score functions")
-}
-
-func (s *MagusChangeMutantsSuite) TestRaisesWhatTheEngineRaises() {
-	ws := &fakeQualityWorkspace{err: errors.New("baseline red")}
-
-	_, err := mutate(types.WithWorkspace(s.T().Context(), ws), "origin/main")
-
-	s.ErrorContains(err, "magus\\Change.mutants: baseline red")
 }

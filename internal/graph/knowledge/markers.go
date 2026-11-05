@@ -381,38 +381,6 @@ func assembleMarkers(w *TreeWalk, projects []types.TargetGraphProject, docPages 
 	return s
 }
 
-// MutantMarker is one `magus:mutant op=<swap> reason=<why>` declaration. Op or
-// Reason is "" when the marker leaves it out; the caller judges that.
-type MutantMarker struct {
-	Line   int
-	Op     string
-	Reason string
-}
-
-// mutantArgsRe reads a mutant marker's args. The reason is free text to the
-// end of the line, so it is read whole rather than as a stamp word.
-var mutantArgsRe = regexp.MustCompile(`^(?:op=(\S+))?\s*(?:reason=(.*))?$`)
-
-// MutantMarkers returns the `magus:mutant` markers in src, in line order. rel
-// is src's path, which decides whether it is markdown.
-func MutantMarkers(rel string, src []byte) []MutantMarker {
-	var out []MutantMarker
-	for _, h := range scanMarkers(rel, src) {
-		if types.MarkerFamily(h.family) == types.MarkerMutant {
-			out = append(out, mutantMarker(h))
-		}
-	}
-	return out
-}
-
-func mutantMarker(h markerHit) MutantMarker {
-	m := mutantArgsRe.FindStringSubmatch(h.args)
-	if m == nil {
-		return MutantMarker{Line: h.line}
-	}
-	return MutantMarker{Line: h.line, Op: m[1], Reason: strings.TrimSpace(m[2])}
-}
-
 // resolveCall reads a calls marker's `<dst dir> <transport>`. The destination must be a
 // directory this workspace holds; anything else is a reason, not an edge.
 func resolveCall(root string, positional []string) (dst, transport, reason string) {

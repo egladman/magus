@@ -48,8 +48,6 @@ var inboundTypes = []string{
 	"CommentSyntax",
 	"StubSyntax",
 	"DecisionSyntax",
-	"Swap",
-	"MutationSyntax",
 	"Syntax",
 	"Language",
 	// Provider op responses (provider_ops.go), leaf first: Lifecycle.cycles is [ReleaseCycle].

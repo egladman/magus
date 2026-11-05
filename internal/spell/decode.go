@@ -626,7 +626,7 @@ func validateSyntax(l spells.Language) error {
 	if syn.Comments != nil && len(l.Extensions) == 0 {
 		return fmt.Errorf("language: syntax.comments without extensions covers no files, declare the extensions that are this language")
 	}
-	for _, check := range []func(spells.Syntax) error{checkSyntaxStubs, checkTokenFacts, checkDecisions, checkSwaps, checkBodies, checkArid} {
+	for _, check := range []func(spells.Syntax) error{checkSyntaxStubs, checkTokenFacts, checkDecisions} {
 		if err := check(*syn); err != nil {
 			return fmt.Errorf("language.syntax: %w", err)
 		}
@@ -642,8 +642,8 @@ func checkSyntaxStubs(syn spells.Syntax) error {
 }
 
 func checkTokenFacts(syn spells.Syntax) error {
-	if syn.Comments == nil && (syn.Decisions != nil || syn.Mutations != nil) {
-		return errors.New("decisions and mutations need comments, or a token in a comment or string counts as code")
+	if syn.Comments == nil && syn.Decisions != nil {
+		return errors.New("decisions need comments, or a token in a comment or string counts as code")
 	}
 	return nil
 }
@@ -653,64 +653,6 @@ func checkDecisions(syn spells.Syntax) error {
 		return errors.New("decisions declare no keyword or operator, so every function would read complexity 1")
 	}
 	return nil
-}
-
-func checkSwaps(syn spells.Syntax) error {
-	if syn.Mutations == nil {
-		return nil
-	}
-	seen := map[string]bool{}
-	for i, sw := range syn.Mutations.Swaps {
-		if err := checkSwap(sw, seen); err != nil {
-			return fmt.Errorf("mutations.swaps[%d]: %w", i, err)
-		}
-	}
-	return nil
-}
-
-func checkSwap(sw spells.Swap, seen map[string]bool) error {
-	if err := checkSwapName(sw.Name, seen); err != nil {
-		return err
-	}
-	switch sw.Find {
-	case "":
-		return errors.New("find is required")
-	case sw.Replace:
-		return fmt.Errorf("find and replace are both %q, so the mutant is the original", sw.Find)
-	}
-	return nil
-}
-
-// checkSwapName records name in seen once it passes.
-func checkSwapName(name string, seen map[string]bool) error {
-	switch {
-	case name == "":
-		return errors.New("name is required")
-	case name == spells.BodyMutation:
-		return fmt.Errorf("name %q is magus's own name for a body mutant", name)
-	case seen[name]:
-		return fmt.Errorf("name %q is declared twice", name)
-	}
-	seen[name] = true
-	return nil
-}
-
-func checkBodies(syn spells.Syntax) error {
-	if syn.Mutations == nil || len(syn.Mutations.Bodies) == 0 {
-		return nil
-	}
-	if syn.Stubs == nil {
-		return errors.New("mutations.bodies need stubs.bodyStyle to find the body they replace")
-	}
-	return nil
-}
-
-func checkArid(syn spells.Syntax) error {
-	if syn.Mutations == nil {
-		return nil
-	}
-	_, err := syn.Mutations.AridPatterns()
-	return err
 }
 
 // validateStubs requires every field of a stub syntax: a record with no kinds stubs

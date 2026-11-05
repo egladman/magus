@@ -223,19 +223,7 @@ test "decisions are gocyclo's: if, for, case, && and ||" {
     std\assert(decisions.operators.join(" ") == "&& ||", message: "operators");
 }
 
-test "mutations swap in pairs, stub a void return and spare logging" {
-    final mutations = go\mgs_getLanguage().syntax!.mutations!;
-    final names = mutations.swaps.map(fun (i: int, s: Swap) > str => s.name);
-    std\assert(names.len() == 13, message: "swaps: {names.join(",")}");
-    std\assert(names.indexOf("eq-ne") != null and names.indexOf("inc-dec") != null, message: "named");
-    foreach (swap in mutations.swaps) {
-        std\assert(swap.find != swap.replace, message: "{swap.name} changes the token");
-    }
-    std\assert(mutations.bodies.join("|") == "\{ return \}", message: "body");
-    std\assert(mutations.arid.len() == 3, message: "arid");
-}
-
-test "coverage writes a go profile under the coverage dir and is judged by go-test" {
+test "coverage writes a go profile under the coverage dir and is scoped by go-test" {
     final coverage = go\mgs_getCoverage();
     std\assert(coverage.format == CoverageFormat.goProfile, message: "format");
     std\assert(coverage.file == "cover.out" and coverage.test == "go-test", message: "file and test");

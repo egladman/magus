@@ -1013,11 +1013,6 @@ func lexLanguage(edit func(*spells.Syntax)) Contract {
 		Comments:  &spells.CommentSyntax{LineComments: []string{"//"}},
 		Stubs:     &spells.StubSyntax{Kinds: []string{"Function"}, BodyStyle: spells.StubBodyBrace, Body: "{}"},
 		Decisions: &spells.DecisionSyntax{Keywords: []string{"if"}},
-		Mutations: &spells.MutationSyntax{
-			Swaps:  []spells.Swap{{Name: "lt-le", Find: "<", Replace: "<="}},
-			Bodies: []string{"{}"},
-			Arid:   []string{`^\s*log\.`},
-		},
 	}
 	edit(&syn)
 	return Contract{Name: "lang", Language: &spells.Language{Name: "Lang", Extensions: []string{".l"}, Syntax: &syn}}
@@ -1034,8 +1029,8 @@ func (s *syntaxFactsSuite) TestAcceptsAWholeDeclaration() {
 }
 
 func (s *syntaxFactsSuite) TestRefusesDecisionsWithoutComments() {
-	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Comments, syn.Mutations = nil, nil }))
-	s.EqualError(err, `spell "lang": language.syntax: decisions and mutations need comments, `+
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Comments = nil }))
+	s.EqualError(err, `spell "lang": language.syntax: decisions need comments, `+
 		`or a token in a comment or string counts as code`)
 }
 
@@ -1043,42 +1038,4 @@ func (s *syntaxFactsSuite) TestRefusesEmptyDecisions() {
 	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Decisions = &spells.DecisionSyntax{} }))
 	s.EqualError(err, `spell "lang": language.syntax: decisions declare no keyword or operator, `+
 		`so every function would read complexity 1`)
-}
-
-func (s *syntaxFactsSuite) TestRefusesASwapWithNoName() {
-	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Mutations.Swaps[0].Name = "" }))
-	s.EqualError(err, `spell "lang": language.syntax: mutations.swaps[0]: name is required`)
-}
-
-func (s *syntaxFactsSuite) TestRefusesASwapNamedBody() {
-	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Mutations.Swaps[0].Name = "body" }))
-	s.EqualError(err, `spell "lang": language.syntax: mutations.swaps[0]: name "body" is magus's own name for a body mutant`)
-}
-
-func (s *syntaxFactsSuite) TestRefusesADuplicateSwapName() {
-	_, err := describe(lexLanguage(func(syn *spells.Syntax) {
-		syn.Mutations.Swaps = append(syn.Mutations.Swaps, spells.Swap{Name: "lt-le", Find: ">", Replace: ">="})
-	}))
-	s.EqualError(err, `spell "lang": language.syntax: mutations.swaps[1]: name "lt-le" is declared twice`)
-}
-
-func (s *syntaxFactsSuite) TestRefusesASwapWithNoFind() {
-	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Mutations.Swaps[0].Find = "" }))
-	s.EqualError(err, `spell "lang": language.syntax: mutations.swaps[0]: find is required`)
-}
-
-func (s *syntaxFactsSuite) TestRefusesASwapThatChangesNothing() {
-	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Mutations.Swaps[0].Replace = "<" }))
-	s.EqualError(err, `spell "lang": language.syntax: mutations.swaps[0]: find and replace are both "<", `+
-		`so the mutant is the original`)
-}
-
-func (s *syntaxFactsSuite) TestRefusesBodiesWithoutStubs() {
-	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Stubs = nil }))
-	s.EqualError(err, `spell "lang": language.syntax: mutations.bodies need stubs.bodyStyle to find the body they replace`)
-}
-
-func (s *syntaxFactsSuite) TestRefusesAnUnparseableAridPattern() {
-	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Mutations.Arid = []string{"("} }))
-	s.ErrorContains(err, `spell "lang": language.syntax: mutations.arid[0]: `)
 }
