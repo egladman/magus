@@ -257,6 +257,14 @@ func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string
 // directCalls are the exported targets anchor's body in p calls as functions,
 // read from the magusfile. ctx.needs is the only call the recorder sees.
 func directCalls(p *types.Project, anchor string) ([]string, error) {
+	funcs, err := projectFuncDecls(p)
+	if err != nil {
+		return nil, err
+	}
+	return exportedCallees(funcs, anchor), nil
+}
+
+func projectFuncDecls(p *types.Project) (map[string]*ast.FunDecl, error) {
 	srcs, err := interp.FindAll(p.Dir)
 	if err != nil {
 		return nil, fmt.Errorf("find %s's magusfile for direct calls: %w", p.Path, err)
@@ -279,6 +287,10 @@ func directCalls(p *types.Project, anchor string) ([]string, error) {
 			}
 		}
 	}
+	return funcs, nil
+}
+
+func exportedCallees(funcs map[string]*ast.FunDecl, anchor string) []string {
 	var calls []string
 	visited := map[string]bool{}
 	var walk func(fn *ast.FunDecl)
@@ -312,7 +324,7 @@ func directCalls(p *types.Project, anchor string) ([]string, error) {
 		}
 	}
 	slices.Sort(calls)
-	return slices.Compact(calls), nil
+	return slices.Compact(calls)
 }
 
 // errNoMachine is configuredMachine's answer when ci.machine is unset.
