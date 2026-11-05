@@ -83,7 +83,8 @@ export fun check(files: [Path]) > [Finding] !> any {
 // names, each installed with its twin, and against HAND_AUTHORED.
 export fun findings(outputs: [str], shipped: [str], twinSuffix: str, magusfile: str) > [Finding] !> any {
     if (outputs.len() == 0) {
-        return [Finding{ path = "magusfile.buzz", message = "declares no installed-skill outputs" }];
+        return [Finding{ path = "magusfile.buzz", message = "declares no installed-skill outputs",
+            fix = "Declare each installed SKILL.md path in skills_generate's writesFiles." }];
     }
     final line = support\findLine(magusfile, needle: "export fun skills_generate(");
     final found = mut [<Finding>];

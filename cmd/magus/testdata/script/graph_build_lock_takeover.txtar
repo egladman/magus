@@ -16,6 +16,8 @@ stderr 'knowledge graph rebuilt'
 
 -- magus.yaml --
 concurrency: 2
+spells:
+  symbol_indexers: [slow]
 -- magusfile.buzz --
 import "magus";
 import "spells/slow";
