@@ -543,20 +543,26 @@ func emptyPlan(t *testing.T, f *queueFixture) string {
 	return string(plan)
 }
 
-func TestQueueValidateTakesEnvLikeGate(t *testing.T) {
+type queueValidateEnvSuite struct{ suite.Suite }
+
+func TestQueueValidateEnvSuite(t *testing.T) { suite.Run(t, new(queueValidateEnvSuite)) }
+
+func (s *queueValidateEnvSuite) TestTakesEnvLikeGate() {
+	t := s.T()
 	f := newQueueFixture(t, "", "")
 	plan := emptyPlan(t, f)
 	t.Setenv("TZ", "Australia/Lord_Howe")
 	_, err := f.run(t, plan, "validate", "--stdin", "--verdicts", "verdicts", "--gate", "true", "--facts", "true", "--env", "TZ,MAGUS_LOG_STREAM")
-	require.NoError(t, err)
+	s.Require().NoError(err)
 }
 
-func TestQueueValidateEnvRefusesWhatWouldMoveTheBox(t *testing.T) {
+func (s *queueValidateEnvSuite) TestRefusesWhatWouldMoveTheBox() {
+	t := s.T()
 	f := newQueueFixture(t, "", "")
 	plan := emptyPlan(t, f)
 	_, err := f.run(t, plan, "validate", "--stdin", "--verdicts", "verdicts", "--gate", "true", "--facts", "true", "--env", "HOME")
-	require.Equal(t, exit.Usage, exit.Code(err))
-	assert.ErrorContains(t, err, "magus queue validate: --env")
+	s.Require().Equal(exit.Usage, exit.Code(err))
+	s.ErrorContains(err, "magus queue validate: --env")
 }
 
 // validated writes a plan of one change and its green verdict into dir, the way

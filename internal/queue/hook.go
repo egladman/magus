@@ -475,7 +475,7 @@ func runHook(ctx context.Context, c hookCommand) (spawn.ExecResult, error) {
 		case code != ExitTempFail:
 			return res, changeFailure{why: fmt.Sprintf("exited %d", code), code: code}
 		case attempt == attempts:
-			return res, changeFailure{why: fmt.Sprintf("exited %d (temporary failure) %d times", ExitTempFail, attempts), code: code, fault: types.FaultMemory}
+			return res, changeFailure{why: fmt.Sprintf("exited %d (temporary failure) %d times", ExitTempFail, attempts), code: code, fault: types.FaultTempFail}
 		}
 		select {
 		case <-ctx.Done():

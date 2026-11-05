@@ -522,8 +522,8 @@ func faultName(f types.Fault) string {
 	switch f {
 	case types.FaultDisk:
 		return "the disk is full, MGS3052"
-	case types.FaultMemory:
-		return "the machine is short of memory, MGS3053"
+	case types.FaultTempFail:
+		return "the gate kept exiting 75, a temporary failure: no memory seat or a held lock"
 	}
 	return "the gate was killed by a signal or timeout"
 }

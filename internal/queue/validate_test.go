@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/queue/types"
 	magustypes "github.com/egladman/magus/types"
@@ -344,44 +345,49 @@ func machineFaultVerdict(t *testing.T, candidate, base types.Fault) types.Verdic
 	return recorded(t, dir)["1"]
 }
 
-func TestAFullDiskOnBothGatesWaitsAsAMachineFault(t *testing.T) {
-	got := machineFaultVerdict(t, types.FaultDisk, types.FaultDisk)
+type machineFaultSuite struct{ suite.Suite }
+
+func TestQueueMachineFaultSuite(t *testing.T) { suite.Run(t, new(machineFaultSuite)) }
+
+func (s *machineFaultSuite) TestFullDiskOnBothGatesWaits() {
+	got := machineFaultVerdict(s.T(), types.FaultDisk, types.FaultDisk)
 	one := change("1", "a")
-	assert.Equal(t, recordedAs(types.Verdict{
+	s.Equal(recordedAs(types.Verdict{
 		Change: one, Onto: base, CandidateCommit: candidateID(base, one.Head), Method: one.Method, Depth: got.Depth,
 		Decision: types.DecisionWait, Code: types.CodeWaitMachineFault,
 		Reason: fmt.Sprintf("the gate failed on it and on `main` at `%s` without it, and the machine was at fault (the disk is full, MGS3052); run it again", short(base)),
 	}, got), got)
 }
 
-func TestAMemoryRefusalOnBothGatesWaitsAsAMachineFault(t *testing.T) {
-	got := machineFaultVerdict(t, types.FaultMemory, types.FaultMemory)
-	assert.Equal(t, types.CodeWaitMachineFault, got.Code)
-	assert.Contains(t, got.Reason, "MGS3053")
+func (s *machineFaultSuite) TestTemporaryFailureOnBothGatesWaits() {
+	got := machineFaultVerdict(s.T(), types.FaultTempFail, types.FaultTempFail)
+	s.Equal(types.CodeWaitMachineFault, got.Code)
+	s.Contains(got.Reason, "a temporary failure")
 }
 
-func TestAKilledGateOnBothGatesWaitsAsAMachineFault(t *testing.T) {
-	got := machineFaultVerdict(t, types.FaultKilled, types.FaultKilled)
-	assert.Equal(t, types.CodeWaitMachineFault, got.Code)
-	assert.Contains(t, got.Reason, "killed by a signal or timeout")
+func (s *machineFaultSuite) TestKilledGateOnBothGatesWaits() {
+	got := machineFaultVerdict(s.T(), types.FaultKilled, types.FaultKilled)
+	s.Equal(types.CodeWaitMachineFault, got.Code)
+	s.Contains(got.Reason, "killed by a signal or timeout")
 }
 
-func TestAFaultOnTheBaseGateAloneWaitsAsAMachineFault(t *testing.T) {
-	got := machineFaultVerdict(t, types.FaultNone, types.FaultDisk)
-	assert.Equal(t, types.CodeWaitMachineFault, got.Code)
+func (s *machineFaultSuite) TestFaultOnTheBaseGateAloneWaits() {
+	got := machineFaultVerdict(s.T(), types.FaultNone, types.FaultDisk)
+	s.Equal(types.CodeWaitMachineFault, got.Code)
 }
 
-func TestAFaultOnTheCandidateGateAloneWaitsAsAMachineFault(t *testing.T) {
-	got := machineFaultVerdict(t, types.FaultKilled, types.FaultNone)
-	assert.Equal(t, types.CodeWaitMachineFault, got.Code)
+func (s *machineFaultSuite) TestFaultOnTheCandidateGateAloneWaits() {
+	got := machineFaultVerdict(s.T(), types.FaultKilled, types.FaultNone)
+	s.Equal(types.CodeWaitMachineFault, got.Code)
 }
 
-func TestARedOnBothGatesWithoutAFaultStillWaitsOnTheBase(t *testing.T) {
-	got := machineFaultVerdict(t, types.FaultNone, types.FaultNone)
-	assert.Equal(t, types.CodeWaitBaseRed, got.Code)
+func (s *machineFaultSuite) TestRedOnBothGatesWithoutAFaultWaitsOnTheBase() {
+	got := machineFaultVerdict(s.T(), types.FaultNone, types.FaultNone)
+	s.Equal(types.CodeWaitBaseRed, got.Code)
 }
 
-func TestAFaultOnTheCandidateWithAGreenBaseIsKickedBack(t *testing.T) {
+func (s *machineFaultSuite) TestFaultOnTheCandidateWithAGreenBaseIsKickedBack() {
+	t := s.T()
 	d := newDoubles(t)
 	one := change("1", "a")
 	d.builds(building{touched: []string{"a/x.go"}})
@@ -393,8 +399,8 @@ func TestAFaultOnTheCandidateWithAGreenBaseIsKickedBack(t *testing.T) {
 	})
 	plan := newPlan([]types.Change{one})
 	v, dir := validating(t, d, plan)
-	require.NoError(t, v.Run(t.Context(), plan))
-	assert.Equal(t, types.CodeKickRed, recorded(t, dir)["1"].Code)
+	s.Require().NoError(v.Run(t.Context(), plan))
+	s.Equal(types.CodeKickRed, recorded(t, dir)["1"].Code)
 }
 
 // A set that is no proof, unknown or unbounded, reaches every hook as the build tool

@@ -68,10 +68,10 @@ type GateResult struct {
 type Fault string
 
 const (
-	FaultNone   Fault = ""
-	FaultDisk   Fault = "disk"   // filesystem below the critical floor (MGS3052)
-	FaultMemory Fault = "memory" // exit 75 outlasted its retries (MGS3053)
-	FaultKilled Fault = "killed" // a signal or timeout ended the hook
+	FaultNone     Fault = ""
+	FaultDisk     Fault = "disk"     // filesystem below the critical floor (MGS3052)
+	FaultTempFail Fault = "tempfail" // EX_TEMPFAIL outlasted its retries: a memory seat or a held lock
+	FaultKilled   Fault = "killed"   // a signal or timeout ended the hook
 )
 
 // Gate validates units, never empty, in a checkout: a candidate, or the commit a red

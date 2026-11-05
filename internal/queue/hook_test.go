@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/proc/spawn"
@@ -709,22 +710,30 @@ func runGateFault(t *testing.T, body string) types.Fault {
 	return res.Fault
 }
 
-func TestAGateKilledBySignalCarriesTheKilledFault(t *testing.T) {
-	assert.Equal(t, types.FaultKilled, runGateFault(t, `kill -KILL $$`))
+type gateFaultSuite struct{ suite.Suite }
+
+func TestQueueGateFaultSuite(t *testing.T) { suite.Run(t, new(gateFaultSuite)) }
+
+func (s *gateFaultSuite) TestKilledBySignal() {
+	s.Equal(types.FaultKilled, runGateFault(s.T(), `kill -KILL $$`))
 }
 
-func TestAGateExiting75CarriesTheMemoryFault(t *testing.T) {
-	assert.Equal(t, types.FaultMemory, runGateFault(t, `exit 75`))
+func (s *gateFaultSuite) TestExit75IsATemporaryFailure() {
+	s.Equal(types.FaultTempFail, runGateFault(s.T(), `exit 75`))
 }
 
-func TestAGateExitingOneCarriesNoFault(t *testing.T) {
-	assert.Equal(t, types.FaultNone, runGateFault(t, `exit 1`))
+func (s *gateFaultSuite) TestExitOneCarriesNoFault() {
+	s.Equal(types.FaultNone, runGateFault(s.T(), `exit 1`))
 }
 
-func TestAGateRedOnAFullDiskCarriesTheDiskFault(t *testing.T) {
+func (s *gateFaultSuite) TestRedBelowTheDiskFloorIsADiskFault() {
 	failed := changeFailure{why: "exited 1", code: 1}
-	assert.Equal(t, types.FaultDisk, gateFault(failed, t.TempDir(), math.MaxInt64))
-	assert.Equal(t, types.FaultNone, gateFault(failed, t.TempDir(), 1))
+	s.Equal(types.FaultDisk, gateFault(failed, s.T().TempDir(), math.MaxInt64))
+}
+
+func (s *gateFaultSuite) TestRedAboveTheDiskFloorCarriesNoFault() {
+	failed := changeFailure{why: "exited 1", code: 1}
+	s.Equal(types.FaultNone, gateFault(failed, s.T().TempDir(), 1))
 }
 
 // Nothing a hook started outlives it: before, a background process kept running after
