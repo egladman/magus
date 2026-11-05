@@ -111,6 +111,8 @@ saying it, delete it here.
   something you can observe ("no store still serves ed25519 envelopes"), never a
   date. Secondary sites say `compat: see <primary site>`. An approved exported API
   gets `// Deprecated:` instead.
+- A shim that exists only while a break lands takes `compat(until: the next release)`;
+  `magus-utils dev-shims` makes the release refuse while one remains.
 - Before proposing a design, a feature or a reversal, check it against the
   [design principles](docs/design.md). Query the principles with
   `magus query "kind=docsection id=~design/ <terms>"` and the ADRs with

@@ -40,6 +40,7 @@ var scribes = map[string]func(args []string) error{
 	"api":             runAPI,
 	"goapi":           runGoAPI,
 	"cut":             runCut,
+	"dev-shims":       runDevShims,
 	"release-index":   runReleaseIndex,
 }
 
