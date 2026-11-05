@@ -220,7 +220,6 @@ var vocabulary = []concept{
 	{Flag: "verdicts"},
 	{Flag: "versions"},
 	{Flag: "viewer"},
-	{Flag: "wait"},
 	{Flag: "watch"},
 	{Flag: "workflow"},
 	{Flag: "workspace"},
