@@ -347,6 +347,18 @@ jobs:
           installation-strategy: source
           source-path: .
 
+      # Before the wait, which can last as long as validation: a missing app found
+      # only once a verdict lands strands that verdict.
+      - name: Require the queue app
+        env:
+          CLIENT_ID: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
+          KEY_SET: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ "$KEY_SET" != true ]; then
+            echo "::error::the merge queue needs its GitHub App: set the MAGUS_QUEUE_APP_CLIENT_ID variable and the magus-queue environment's MAGUS_QUEUE_APP_PRIVATE_KEY secret" >&2
+            exit 1
+          fi
+
       # The app's token expires an hour after it is minted, and a validation can run
       # longer. The wait is on the job's own token, which lasts as long as the job.
       - name: Wait for validation's first verdict
@@ -377,12 +389,6 @@ jobs:
       # not the one setup-magus's source build prepended.
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
-
-      - name: Require the queue app
-        if: steps.magus.outputs.queue-token == ''
-        run: |
-          echo "::error::the merge queue needs its GitHub App: set the MAGUS_QUEUE_APP_CLIENT_ID variable and the magus-queue environment's MAGUS_QUEUE_APP_PRIVATE_KEY secret" >&2
-          exit 1
 
       # Following the run lists and downloads on the job's token, so it never expires
       # mid-validation. Every write stays the app's.

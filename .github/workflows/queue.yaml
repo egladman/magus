@@ -60,25 +60,52 @@ jobs:
   # Runs where a pull request event carries merge intent. queue-apply.yaml reads whether
   # it ran and dispatches a run on main; it is a hint, never a verdict. The provider lists
   # forks too and the plan refuses them by name; skipping them here only saves a run
-  # nobody's change can use. The name carries the action and the label added, which
-  # the run's record lacks. dispatch decides intent from them: the queue's own marks
-  # fire labeled too.
+  # nobody's change can use. Each action counts only for what it adds: a label only for
+  # a method's (the queue's own marks fire labeled too), a review only once it
+  # approves, auto-merge only where no method label already queued the pull request.
+  # A synchronize counts wherever intent stands.
   intent:
-    name: queue intent on ${{ github.event.action }} ${{ github.event.label.name }}
+    name: queue intent
     if: >-
       github.event_name != 'push' && github.event_name != 'workflow_dispatch' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      ((github.event.pull_request.auto_merge != null && github.event.pull_request.base.ref == 'main') ||
-       contains(fromJSON('["merge-queue: squash", "merge-queue: rebase", "merge-queue: merge"]'), github.event.label.name) ||
-       contains(github.event.pull_request.labels.*.name, 'merge-queue: squash') ||
-       contains(github.event.pull_request.labels.*.name, 'merge-queue: rebase') ||
-       contains(github.event.pull_request.labels.*.name, 'merge-queue: merge'))
+      github.event.pull_request.head.repo.full_name == github.repository && (
+        (github.event.action == 'labeled' &&
+         contains(fromJSON('["merge-queue: squash", "merge-queue: rebase", "merge-queue: merge"]'), github.event.label.name)) ||
+        (github.event.action == 'auto_merge_enabled' && github.event.pull_request.base.ref == 'main' &&
+         !contains(github.event.pull_request.labels.*.name, 'merge-queue: squash') &&
+         !contains(github.event.pull_request.labels.*.name, 'merge-queue: rebase') &&
+         !contains(github.event.pull_request.labels.*.name, 'merge-queue: merge')) ||
+        ((github.event.action == 'synchronize' ||
+          (github.event.action == 'submitted' && github.event.review.state == 'approved')) &&
+         ((github.event.pull_request.auto_merge != null && github.event.pull_request.base.ref == 'main') ||
+          contains(github.event.pull_request.labels.*.name, 'merge-queue: squash') ||
+          contains(github.event.pull_request.labels.*.name, 'merge-queue: rebase') ||
+          contains(github.event.pull_request.labels.*.name, 'merge-queue: merge'))))
     runs-on: ubuntu-latest
     timeout-minutes: 1
     permissions: {}
     steps:
       - name: Merge intent; queue-apply.yaml starts the run on main that validates it
         run: 'true'
+
+  # intent's if: weighs exactly the actions on.types names. An action added there and
+  # not weighed in intent's if: fails here rather than queueing nothing.
+  intent-action:
+    name: queue intent action
+    if: >-
+      github.event_name != 'push' && github.event_name != 'workflow_dispatch' &&
+      !contains(fromJSON('["auto_merge_enabled", "labeled", "synchronize", "submitted"]'), github.event.action)
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - name: Refuse an action intent does not weigh
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+        run: |
+          echo "::error::queue.yaml: intent's if: does not weigh $EVENT action \"$ACTION\"; name it there" >&2
+          exit 1
 
   plan:
     name: queue plan

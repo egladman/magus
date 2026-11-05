@@ -27,8 +27,8 @@
 //
 // # Credentials
 //
-// Two environment variables. The reads (describe, list_changes, approval_at,
-// list_artifacts, reviews) use MERGEQUEUE_TOKEN when the environment carries it, else
+// Three environment variables. Most reads use MERGEQUEUE_TOKEN when the
+// environment carries it, else
 // GITHUB_TOKEN: the validation side runs pull-request code and holds only a read-only
 // Actions token. The writes use MERGEQUEUE_TOKEN and nothing else, so a job that does
 // not hold the write credential cannot write by accident. That credential is the queue's
@@ -36,7 +36,8 @@
 // a merge the job's Actions token makes starts no workflow, so a queue writing with it
 // would validate changes and never merge one. The app needs contents, pull requests,
 // commit statuses, actions and workflows write, and no bypass of any rule.
-// list_artifacts reads with MERGEQUEUE_ARTIFACTS_TOKEN when it is set.
+// list_artifacts reads with MERGEQUEUE_ARTIFACTS_TOKEN alone, the apply
+// job's own token, which outlives the app's hour.
 //
 // # Who merges
 //
@@ -2248,29 +2249,16 @@ fun originFrom(body: str, repo: str) > {str: any} !> any {
     };
 }
 
-// listingRef names the credential list_artifacts and its downloads use.
-// ARTIFACTS_REF comes first: the app's token expires after an hour,
-// and apply follows validations that run longer.
-fun listingRef(set: fun (name: str) > bool) > str {
-    foreach (ref in [ARTIFACTS_REF, WRITE_REF]) {
-        if (set(ref)) {
-            return ref;
-        }
-    }
-    return READ_REF;
-}
-
 // list_artifacts reads the run's status BEFORE listing its artifacts, so a listing that
 // says complete holds every artifact the run uploaded. The same read says what started
 // the run and what it ran, which the queue checks before it downloads anything. The
 // headers carry the read credential for the downloads; the queue drops them on a
 // redirect to the storage host.
 export fun list_artifacts(req: QueueListArtifactsRequest) > any !> any {
-    final ref = listingRef(fun (name: str) > bool => getenv(name) != "");
-    if (getenv(ref) == "") {
-        throw "github: list_artifacts needs {ARTIFACTS_REF}, {WRITE_REF} or {READ_REF}, and none is set";
+    if (getenv(ARTIFACTS_REF) == "") {
+        throw "github: list_artifacts reads with {ARTIFACTS_REF}, the apply job's own token; it is not set";
     }
-    final hdrs = headers(ref);
+    final hdrs = headers(ARTIFACTS_REF);
     final run = parseRunSpec(req.source);
     final base = apiBase();
     final prefix = base + "/repos/" + (run["repo"] ?? "") + "/actions/runs/" + (run["id"] ?? "");
@@ -3007,14 +2995,6 @@ fun runJSON(event: str, branch: str, headRepo: str) > str {
         "repository": {"full_name": "acme/widgets"}, "head_repository": {"full_name": headRepo}});
 }
 
-test "artifacts are listed with the job's own token when it is set, else as every read is" {
-    final among = fun (names: [str]) > str {
-        return listingRef(fun (name: str) > bool => names.indexOf(name) != null);
-    };
-    assert\equal(among([ARTIFACTS_REF, WRITE_REF, READ_REF]), want: ARTIFACTS_REF, message: "apply: the job token outlives the app's");
-    assert\equal(among([WRITE_REF, READ_REF]), want: WRITE_REF, message: "no job token: the write credential reads");
-    assert\equal(among([READ_REF]), want: READ_REF, message: "the read credential alone");
-}
 
 test "a run says what started it and what it ran" {
     final push = serialize\Boxed.init(originFrom(runJSON("push", branch: "main", headRepo: "acme/widgets"), repo: "acme/widgets"));
