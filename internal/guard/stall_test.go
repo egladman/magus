@@ -36,7 +36,7 @@ func TestHookRowAppendSuite(t *testing.T) {
 func (s *HookRowAppendSuite) SetupTest() {
 	testkit.Isolate(s.T())
 	s.layers, s.root = fleetLayers(s.T(), fixture.FleetLeases()...)
-	s.at = hookLocation(s.ctx(), Dependencies{})
+	s.at = hookLocation(s.testContext(), Dependencies{})
 }
 
 func (s *HookRowAppendSuite) assertTwoOpensOneRow() {
@@ -52,15 +52,15 @@ func (s *HookRowAppendSuite) assertTwoOpensOneRow() {
 func (s *HookRowAppendSuite) TestAStallRowAppends() {
 	who := hookAttribution{Host: "test-host", Session: "s"}
 	verdict := types.GuardJudgment{Rule: string(denyRuleLeaseWrite), Reason: "outside"}
-	fileStallRow(s.ctx(), s.at, who, "lease-b", verdict, stallRecord{Refusals: 1})
-	fileStallRow(s.ctx(), s.at, who, "lease-b", verdict, stallRecord{Refusals: 1})
+	fileStallRow(s.testContext(), s.at, who, "lease-b", verdict, stallRecord{Refusals: 1})
+	fileStallRow(s.testContext(), s.at, who, "lease-b", verdict, stallRecord{Refusals: 1})
 	s.assertTwoOpensOneRow()
 }
 
 func (s *HookRowAppendSuite) TestACompatRowAppends() {
 	who := hookAttribution{Host: "test-host", Session: "s"}
-	fileCompatRow(s.ctx(), s.at, who, "lease-b", "cmd/magus/old.go", []string{"legacy:"})
-	fileCompatRow(s.ctx(), s.at, who, "lease-b", "cmd/magus/old.go", []string{"legacy:"})
+	fileCompatRow(s.testContext(), s.at, who, "lease-b", "cmd/magus/old.go", []string{"legacy:"})
+	fileCompatRow(s.testContext(), s.at, who, "lease-b", "cmd/magus/old.go", []string{"legacy:"})
 	s.assertTwoOpensOneRow()
 }
 
@@ -127,4 +127,4 @@ func TestStallRoutesAnUnclearableBlockToTheRoot(t *testing.T) {
 	assert.Equal(t, stallRecord{Refusals: 2, Run: 2, Last: string(denyRuleLeaseWrite), Level: 3}, rec)
 }
 
-func (s *HookRowAppendSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *HookRowAppendSuite) testContext() context.Context { return s.layers.of(s.T()) }

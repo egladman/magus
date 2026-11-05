@@ -165,7 +165,7 @@ func (s *LapsePersonOnlySuite) SetupTest() {
 func (s *LapsePersonOnlySuite) lapses(req Request, setup func(context.Context)) []types.GuardJudgment {
 	var out []types.GuardJudgment
 	for range lapsesBeforeDegrade + 2 {
-		out = append(out, lapseNow(s.ctx(), s.T(), Dependencies{}, req, setup))
+		out = append(out, lapseNow(s.testContext(), s.T(), Dependencies{}, req, setup))
 	}
 	return out
 }
@@ -269,7 +269,7 @@ func (s *LapseDegradeSuite) lapsedWrite(agent, path string) types.GuardJudgment 
 		env["agent_id"], env["agent_type"] = agent, "general-purpose"
 	}
 	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
-	return lapseNow(s.ctx(), s.T(), Dependencies{}, req, func(context.Context) {})
+	return lapseNow(s.testContext(), s.T(), Dependencies{}, req, func(context.Context) {})
 }
 
 // lapsedCommand lapses a Bash call running line from cwd, by agent or by the
@@ -281,7 +281,7 @@ func (s *LapseDegradeSuite) lapsedCommand(agent, cwd, line string) types.GuardJu
 		env["agent_id"], env["agent_type"] = agent, "general-purpose"
 	}
 	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1"}
-	return lapseNow(s.ctx(), s.T(), Dependencies{}, req, func(context.Context) {})
+	return lapseNow(s.testContext(), s.T(), Dependencies{}, req, func(context.Context) {})
 }
 
 func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesACommandInALeasedCheckout() {
@@ -314,7 +314,7 @@ func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesABoundWorkerFromTheSessi
 		"tool_name": "Bash", "tool_input": map[string]any{"command": "make build"}}
 	req := Request{Input: hookJSON(s.T(), env), Host: "claude-code", Session: "s1", Lease: "w"}
 	for i := range lapsesBeforeDegrade + 2 {
-		v := lapseNow(s.ctx(), s.T(), Dependencies{}, req, func(context.Context) {})
+		v := lapseNow(s.testContext(), s.T(), Dependencies{}, req, func(context.Context) {})
 		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
 	}
 }
@@ -386,6 +386,6 @@ func (s *LapseDegradeSuite) TestDegradedLapsePassesTheRootSessionsWriteInALeased
 	s.Equal(decisionAdvise, s.lapsedWrite("", filepath.Join(s.own, "std", "module.go")).Decision)
 }
 
-func (s *LapsePersonOnlySuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *LapsePersonOnlySuite) testContext() context.Context { return s.layers.of(s.T()) }
 
-func (s *LapseDegradeSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *LapseDegradeSuite) testContext() context.Context { return s.layers.of(s.T()) }

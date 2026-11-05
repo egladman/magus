@@ -40,7 +40,7 @@ func (s *commitGradeRoutesSuite) TestAPickOutsideTheWritePathsIsRefusedAndNamesT
 
 func (s *commitGradeRoutesSuite) TestAPickThroughTheVCSCommandIsGraded() {
 	picked := s.repo.commitFiles(s.repo.main, map[string]string{"gen.json": "x\n"})
-	err := vcsCommandRefusal(s.ctx(), s.worker, "git", []string{"cherry-pick", picked}, s.dir, nil)
+	err := vcsCommandRefusal(s.testContext(), s.worker, "git", []string{"cherry-pick", picked}, s.dir, nil)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "It picks commits writing gen.json")
 }
@@ -52,7 +52,7 @@ func (s *commitGradeRoutesSuite) TestAPickInsideTheWritePathsPasses() {
 }
 
 func (s *commitGradeRoutesSuite) TestAPickFromStandardInputIsRefusedThroughTheVCSCommand() {
-	err := vcsCommandRefusal(s.ctx(), s.worker, "git", []string{"cherry-pick", "--stdin"}, s.dir, nil)
+	err := vcsCommandRefusal(s.testContext(), s.worker, "git", []string{"cherry-pick", "--stdin"}, s.dir, nil)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "Name each commit in the call")
 }
@@ -137,7 +137,7 @@ func (s *commitGradeRoutesSuite) TestTwoScriptsCallingEachOtherAreRefusedAtTheBo
 func (s *commitGradeRoutesSuite) TestAScriptCallingItselfTwiceUnderADeadLeasePasses() {
 	script := filepath.Join(s.dir, "self.sh")
 	s.script("self.sh", fmt.Sprintf("sh %s\nsh %s\n", script, script))
-	s.Empty(denyLeaseScopedVCS(s.ctx(), Dependencies{callDir: s.dir}, "no-such-lease", "sh "+script))
+	s.Empty(denyLeaseScopedVCS(s.testContext(), Dependencies{callDir: s.dir}, "no-such-lease", "sh "+script))
 }
 
 func (s *commitGradeRoutesSuite) TestAVerbInANestedScriptIsRefused() {
@@ -578,7 +578,7 @@ func (s *standingWorker) SetupTest() {
 }
 
 func (s *standingWorker) from(dir, line string) string {
-	return denyLeaseScopedVCS(s.ctx(), Dependencies{callDir: dir}, s.worker.ID, line)
+	return denyLeaseScopedVCS(s.testContext(), Dependencies{callDir: dir}, s.worker.ID, line)
 }
 
 type WorkerMoveSuite struct{ standingWorker }
@@ -695,7 +695,7 @@ func (s *WorkerReattachSuite) TestFromAnotherCheckoutItNamesItsOwn() {
 func (s *WorkerReattachSuite) TestARowWithNoCheckoutOfItsOwnIsRefused() {
 	row := s.worker
 	row.Worktree = nil
-	ctx := job.WithSnapshot(s.ctx(), job.Snapshot{Rows: []types.Job{row}})
+	ctx := job.WithSnapshot(s.testContext(), job.Snapshot{Rows: []types.Job{row}})
 	s.Contains(denyLeaseScopedVCS(ctx, Dependencies{callDir: s.own}, row.ID, "git switch -C "+row.ID), "`git switch`")
 }
 
@@ -715,7 +715,7 @@ func TestWorkerVCSUnboundCommitSuite(t *testing.T) { suite.Run(t, new(UnboundCom
 func (s *UnboundCommitSuite) commit() string {
 	row := s.worker
 	row.CheckoutRoot = ""
-	ctx := job.WithSnapshot(s.ctx(), job.Snapshot{Rows: []types.Job{row}})
+	ctx := job.WithSnapshot(s.testContext(), job.Snapshot{Rows: []types.Job{row}})
 	return denyLeaseScopedVCS(ctx, Dependencies{callDir: s.own}, row.ID, "git commit -m done")
 }
 
@@ -745,7 +745,7 @@ func (s *LeaseWriteMoveSuite) hold(writes []string, denies ...string) {
 }
 
 func (s *LeaseWriteMoveSuite) deny(line string) string {
-	return denyWriteOutsideLease(s.ctx(), Dependencies{}, "mover", line)
+	return denyWriteOutsideLease(s.testContext(), Dependencies{}, "mover", line)
 }
 
 func (s *LeaseWriteMoveSuite) TestEveryFileOnTheRowUnderBothNamesPasses() {
@@ -809,6 +809,6 @@ func (s *LeaseWriteMoveSuite) TestAClaimOnOneDeclarationCoversAMoveOfItsFile() {
 	s.Empty(s.deny("git mv libs/old/a.go libs/new/a.go"))
 }
 
-func (s *LeaseWriteMoveSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *LeaseWriteMoveSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
-func (s *standingWorker) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *standingWorker) testContext() context.Context { return s.layers.of(s.T()) }

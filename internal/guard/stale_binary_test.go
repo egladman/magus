@@ -883,7 +883,7 @@ func (s *LoadRecoverySuite) SetupTest() {
 	ctx = WithLocation(ctx, cacheDir, repo.Root(), repo.Root())
 	ownCheckout(s.T(), ctx, true)
 	declareGuardRule(s.T(), repo.Root())
-	s.layers = append(layersOf(ctx), s.pin(s.checkpoint))
+	s.layers = append(layersFrom(ctx), s.pin(s.checkpoint))
 	s.deps = unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 }
 
@@ -894,7 +894,7 @@ func (s *LoadRecoverySuite) pin(checkpoint string) func(context.Context) context
 }
 
 func (s *LoadRecoverySuite) judge(line string) types.GuardJudgment {
-	return Judge(s.ctx(), s.deps, Request{Input: line, Host: "claude-code", Session: line})
+	return Judge(s.testContext(), s.deps, Request{Input: line, Host: "claude-code", Session: line})
 }
 
 func (s *LoadRecoverySuite) TestAnAbortPasses() {
@@ -946,4 +946,4 @@ func (s *LoadRecoverySuite) TestAWriteOutsideByAProgramThatWritesIsDenied() {
 	s.Equal(decisionDeny, s.judge("touch "+shellQuoted(memory)).Decision)
 }
 
-func (s *LoadRecoverySuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *LoadRecoverySuite) testContext() context.Context { return s.layers.of(s.T()) }

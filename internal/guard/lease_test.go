@@ -308,7 +308,7 @@ const redGate = "./magus affected ci"
 // and docs' lint. No gate ran before it in the window.
 func (s *redGateSuite) SetupTest() {
 	ctx, repo := gateRepeatRepository(s.T(), 0, sessions.OutcomeFail)
-	s.layers, s.repo = layersOf(ctx), repo
+	s.layers, s.repo = layersFrom(ctx), repo
 	dir, err := sessions.Dir(repo.Root())
 	s.Require().NoError(err)
 	s.dir = dir
@@ -328,7 +328,7 @@ func (s *redGateSuite) results(inv string, results ...sessions.TargetResult) {
 }
 
 func (s *redGateSuite) TestTheFirstRepeatIsRefusedNamingEachTargetAndItsNarrowRun() {
-	d := denyRepeatGate(s.ctx(), Dependencies{}, "", redGate)
+	d := denyRepeatGate(s.testContext(), Dependencies{}, "", redGate)
 	s.Require().NotEmpty(d)
 	s.Contains(d.Say, "`ci` failed on this branch")
 	s.Contains(d.Say, "run inv-green")
@@ -342,19 +342,19 @@ func (s *redGateSuite) TestTheFirstRepeatIsRefusedNamingEachTargetAndItsNarrowRu
 func (s *redGateSuite) TestEachTargetPassingAloneAdmitsTheGate() {
 	time.Sleep(2 * time.Millisecond)
 	s.results("narrow-test", sessions.TargetResult{Project: ".", Target: "go-test", Outcome: sessions.OutcomePass})
-	d := denyRepeatGate(s.ctx(), Dependencies{}, "", redGate)
+	d := denyRepeatGate(s.testContext(), Dependencies{}, "", redGate)
 	s.Require().NotEmpty(d, "docs' lint is still owed")
 	s.NotContains(d.Say, "go-test")
 
 	s.results("narrow-lint", sessions.TargetResult{Project: "docs", Target: "lint", Outcome: sessions.OutcomePass})
-	s.Empty(denyRepeatGate(s.ctx(), Dependencies{}, "", redGate))
+	s.Empty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAHarnessWriteAfterTheRedGateAdmitsIt() {
 	time.Sleep(2 * time.Millisecond)
 	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
 		sessions.InvocationStart{Workspace: s.repo.Root()}))
-	s.Empty(denyRepeatGate(s.ctx(), Dependencies{}, "", redGate))
+	s.Empty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAHarnessWriteBeforeTheRedGateStillRefusesIt() {
@@ -364,14 +364,14 @@ func (s *redGateSuite) TestAHarnessWriteBeforeTheRedGateStillRefusesIt() {
 	s.Require().NoError(sessions.RecordGate(s.dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.repo.Head(), Outcome: sessions.OutcomeFail, Inv: "inv-green",
 	}, sessions.InvocationStart{Workspace: s.repo.Root()}))
-	s.NotEmpty(denyRepeatGate(s.ctx(), Dependencies{}, "", redGate))
+	s.NotEmpty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAFileWrittenAfterTheRedGateAdmitsIt() {
 	s.repo.Write("a.go", "package a\n\nvar fixed = true\n")
 	after := time.Now().Add(time.Minute)
 	s.Require().NoError(os.Chtimes(s.repo.Path("a.go"), after, after))
-	s.Empty(denyRepeatGate(s.ctx(), Dependencies{}, "", redGate))
+	s.Empty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {
@@ -1627,7 +1627,7 @@ func TestCommitPaths(t *testing.T) { suite.Run(t, new(commitPathsSuite)) }
 
 func (s *commitPathsSuite) SetupTest() {
 	fixtureCtx, repo, worker, dir := leaseVCSRepository(s.T())
-	s.layers, s.repo, s.worker, s.dir = layersOf(fixtureCtx), repo, worker, dir
+	s.layers, s.repo, s.worker, s.dir = layersFrom(fixtureCtx), repo, worker, dir
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.dir, "cmd/magus"), 0o755))
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.dir, "docs"), 0o755))
 }
@@ -1640,7 +1640,7 @@ func (s *commitPathsSuite) deny(command string) string {
 	ws := typestest.NewMockWorkspaceRepository(s.T())
 	ws.EXPECT().All().Return(nil).Maybe()
 	deps := Dependencies{callDir: s.dir, Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
-	return denyLeaseScopedVCS(s.ctx(), deps, s.worker.ID, command)
+	return denyLeaseScopedVCS(s.testContext(), deps, s.worker.ID, command)
 }
 
 func (s *commitPathsSuite) TestAStagedPathInsideTheLeasePasses() {
@@ -1672,7 +1672,7 @@ func (s *commitPathsSuite) TestAnIntegratingRowCommitsWhatItRegenerates() {
 	s.write("docs/index.md")
 	s.repo.git(s.dir, "add", "docs/gen.json", "docs/index.md")
 
-	s.Contains(denyLeaseScopedVCS(s.ctx(), deps, s.worker.ID, "git commit -m done"), "It commits docs/gen.json docs/index.md",
+	s.Contains(denyLeaseScopedVCS(s.testContext(), deps, s.worker.ID, "git commit -m done"), "It commits docs/gen.json docs/index.md",
 		"a worker's row holds no output")
 
 	integrating := s.worker
@@ -1705,13 +1705,13 @@ func (s *commitPathsSuite) stage(paths ...string) {
 func (s *commitPathsSuite) TestAWorkerCommitsTheDeclaredOutputOfASourceItWrote() {
 	deps := s.regeneratingDeps("cmd/magus/*.go")
 	s.stage("cmd/magus/x.go", "docs/gen.json")
-	s.Empty(denyLeaseScopedVCS(s.ctx(), deps, s.worker.ID, "git commit -m done"))
+	s.Empty(denyLeaseScopedVCS(s.testContext(), deps, s.worker.ID, "git commit -m done"))
 }
 
 func (s *commitPathsSuite) TestAWorkerStillCommitsNoUndeclaredPath() {
 	deps := s.regeneratingDeps("cmd/magus/*.go")
 	s.stage("cmd/magus/x.go", "docs/gen.json", "docs/hand.md")
-	got := denyLeaseScopedVCS(s.ctx(), deps, s.worker.ID, "git commit -m done")
+	got := denyLeaseScopedVCS(s.testContext(), deps, s.worker.ID, "git commit -m done")
 	s.Contains(got, "It commits docs/hand.md,")
 	s.NotContains(got, "docs/gen.json,")
 }
@@ -1719,7 +1719,7 @@ func (s *commitPathsSuite) TestAWorkerStillCommitsNoUndeclaredPath() {
 func (s *commitPathsSuite) TestAWorkerCommitsNoOutputOfASourceOutsideItsRow() {
 	deps := s.regeneratingDeps("internal/other/*.go")
 	s.stage("cmd/magus/x.go", "docs/gen.json")
-	s.Contains(denyLeaseScopedVCS(s.ctx(), deps, s.worker.ID, "git commit -m done"), "It commits docs/gen.json")
+	s.Contains(denyLeaseScopedVCS(s.testContext(), deps, s.worker.ID, "git commit -m done"), "It commits docs/gen.json")
 }
 
 func (s *commitPathsSuite) TestAnAddOnTheSameLineIsGraded() {
@@ -2119,7 +2119,7 @@ func (s *IntegrationScratchMergeSuite) SetupTest() {
 }
 
 func (s *IntegrationScratchMergeSuite) run(row types.Job, dir string, args ...string) error {
-	return vcsCommandRefusal(s.ctx(), row, "git", args, dir, nil)
+	return vcsCommandRefusal(s.testContext(), row, "git", args, dir, nil)
 }
 
 // addTree makes the scratch tree the way the guard is asked to let through.
@@ -3504,7 +3504,7 @@ func gitDiffTouching(file string) string {
 }
 
 func (s *PatchWriteSuite) deny(command string) string {
-	return denyWriteOutsideLease(s.ctx(), s.deps, "lease-b", command)
+	return denyWriteOutsideLease(s.testContext(), s.deps, "lease-b", command)
 }
 
 func (s *PatchWriteSuite) TestGitApplyOfARevokedPathIsRefused() {
@@ -3630,7 +3630,7 @@ func (s *PatchWriteSuite) TestPatchDryRunOnlyReads() {
 
 func (s *PatchWriteSuite) TestAnUnleasedSessionIsNotGraded() {
 	p := s.patchFile(gitDiffTouching("docs/notes.md"))
-	s.Empty(denyWriteOutsideLease(s.ctx(), s.deps, "", "git apply "+p))
+	s.Empty(denyWriteOutsideLease(s.testContext(), s.deps, "", "git apply "+p))
 }
 
 // CherryPickWriteSuite pins lease-write on git cherry-pick: only the commit
@@ -3672,7 +3672,7 @@ func (s *CherryPickWriteSuite) commit(file string) string {
 }
 
 func (s *CherryPickWriteSuite) deny(command string) string {
-	return denyWriteOutsideLease(s.ctx(), s.deps, "lease-b", command)
+	return denyWriteOutsideLease(s.testContext(), s.deps, "lease-b", command)
 }
 
 func (s *CherryPickWriteSuite) TestAPickOfAnUndeclaredPathIsRefused() {
@@ -3752,7 +3752,7 @@ func (s *CherryPickWriteSuite) TestContinuingAPickNamesNothing() {
 }
 
 func (s *CherryPickWriteSuite) TestAnUnleasedSessionIsNotGraded() {
-	s.Empty(denyWriteOutsideLease(s.ctx(), s.deps, "", "git cherry-pick "+s.commit("docs/notes.md")))
+	s.Empty(denyWriteOutsideLease(s.testContext(), s.deps, "", "git cherry-pick "+s.commit("docs/notes.md")))
 }
 
 func regeneratingLease(id string) types.Job {
@@ -4015,7 +4015,7 @@ func (s *ScratchWorkspaceSuite) SetupTest() {
 	s.held = markedWorkspace(s.T())
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.held, ".git"), 0o755))
 	fixtureCtx, deps, row := heldRowFixture(s.T(), s.held, s.held, "feat")
-	s.layers, s.deps, s.row = layersOf(fixtureCtx), deps, row
+	s.layers, s.deps, s.row = layersFrom(fixtureCtx), deps, row
 	cache := s.T().TempDir()
 	s.T().Setenv("XDG_CACHE_HOME", cache)
 	s.scratch = filepath.Join(cache, "magus", "tmp")
@@ -4034,7 +4034,7 @@ func (s *ScratchWorkspaceSuite) linkSibling(dir, name string) {
 }
 
 func (s *ScratchWorkspaceSuite) runIn(dir string) denial {
-	return denyLeaseCheckout(s.ctx(), s.deps, s.row.ID, fmt.Sprintf("./magus -C %s run go-test .", dir))
+	return denyLeaseCheckout(s.testContext(), s.deps, s.row.ID, fmt.Sprintf("./magus -C %s run go-test .", dir))
 }
 
 func (s *ScratchWorkspaceSuite) TestAnotherRepositoryUnderTheMagusTempDirPasses() {
@@ -4295,14 +4295,14 @@ func (s *scriptRunDirsSuite) TestAWrappedCallKeepsTheNameMatch() {
 	s.Equal([]string{"/w", "/w/b"}, s.dirs("./x.sh && cd b && env c/x.sh"))
 }
 
-func (s *redGateSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *redGateSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
-func (s *commitPathsSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *commitPathsSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
-func (s *IntegrationScratchMergeSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *IntegrationScratchMergeSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
-func (s *PatchWriteSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *PatchWriteSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
-func (s *CherryPickWriteSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *CherryPickWriteSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
-func (s *ScratchWorkspaceSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *ScratchWorkspaceSuite) testContext() context.Context { return s.layers.of(s.T()) }

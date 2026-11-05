@@ -35,7 +35,7 @@ func TestStopRuleSuite(t *testing.T) { suite.Run(t, new(StopRuleSuite)) }
 
 func (s *StopRuleSuite) SetupTest() {
 	writeCtx, root, _ := writeFixture(s.T())
-	s.layers, s.root = layersOf(writeCtx), root
+	s.layers, s.root = layersFrom(writeCtx), root
 }
 
 // stop is a host stop envelope in the fixture's workspace.
@@ -50,7 +50,7 @@ func (s *StopRuleSuite) stop(event string, fields map[string]any) string {
 // judge is the stop's judgment with the fields the lease and the guard's version decide
 // cleared, so a case compares the rest whole.
 func (s *StopRuleSuite) judge(deps Dependencies, input string) types.GuardJudgment {
-	v := Judge(s.ctx(), deps, Request{Host: "claude-code", Input: input})
+	v := Judge(s.testContext(), deps, Request{Host: "claude-code", Input: input})
 	v.SchemaVersion, v.Lease, v.LeaseFrom, v.Next = 0, "", "", nil
 	return v
 }
@@ -123,4 +123,4 @@ func (s *StopRuleSuite) TestAFailingRuleLetsTheStopThroughAndSaysSo() {
 	s.Contains(v.Context, "index out of range")
 }
 
-func (s *StopRuleSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *StopRuleSuite) testContext() context.Context { return s.layers.of(s.T()) }

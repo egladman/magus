@@ -35,7 +35,7 @@ func (s *UnloadableCommitSuite) SetupTest() {
 }
 
 func (s *UnloadableCommitSuite) judge(line string) types.GuardJudgment {
-	return Judge(s.ctx(), s.deps, Request{Input: line, Host: "claude-code", Session: line})
+	return Judge(s.testContext(), s.deps, Request{Input: line, Host: "claude-code", Session: line})
 }
 
 // commitSay is the verdict a commit spelled verb opens with.
@@ -94,4 +94,4 @@ func (s *UnloadableCommitSuite) TestACommitInAnotherCheckoutPasses() {
 	s.NotEqual(decisionDeny, v.Decision, v.Reason)
 }
 
-func (s *UnloadableCommitSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *UnloadableCommitSuite) testContext() context.Context { return s.layers.of(s.T()) }

@@ -107,11 +107,11 @@ func TestRowUnknownVCSLinesSuite(t *testing.T) {
 func (s *RowUnknownVCSLinesSuite) SetupTest() {
 	s.row = narrowLease()
 	s.layers, _ = fleetLayers(s.T(), s.row)
-	plantUnknownMember(s.T(), s.ctx(), s.row.ID, "narrows_paths")
+	plantUnknownMember(s.T(), s.testContext(), s.row.ID, "narrows_paths")
 }
 
 func (s *RowUnknownVCSLinesSuite) refused(line string) bool {
-	return denyUnknownRowMembers(s.ctx(), Dependencies{}, s.row.ID, line).refused()
+	return denyUnknownRowMembers(s.testContext(), Dependencies{}, s.row.ID, line).refused()
 }
 
 func (s *RowUnknownVCSLinesSuite) TestAPickIsRefused() {
@@ -162,12 +162,12 @@ func TestRowUnknownReadOnlyCallerSuite(t *testing.T) {
 func (s *RowUnknownReadOnlyCallerSuite) SetupTest() {
 	s.row = types.Job{ID: "scout", ReadOnly: true, State: types.StateRunning, Registered: 1}
 	s.layers, _ = fleetLayers(s.T(), s.row)
-	plantUnknownMember(s.T(), s.ctx(), s.row.ID, "widens_paths")
+	plantUnknownMember(s.T(), s.testContext(), s.row.ID, "widens_paths")
 	s.deps = Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
 }
 
 func (s *RowUnknownReadOnlyCallerSuite) TestItTellsTheCallerToStopAndReportTheRisk() {
-	got := denyUnknownRowMembers(s.ctx(), s.deps, s.row.ID, "magus describe job scout")
+	got := denyUnknownRowMembers(s.testContext(), s.deps, s.row.ID, "magus describe job scout")
 	s.Require().True(got.refused())
 	s.Contains(got.Say, "widens_paths")
 	s.Contains(got.Say, "stop")
@@ -176,7 +176,7 @@ func (s *RowUnknownReadOnlyCallerSuite) TestItTellsTheCallerToStopAndReportTheRi
 }
 
 func (s *RowUnknownReadOnlyCallerSuite) TestItNamesNoCheckoutPlaceholder() {
-	got := denyUnknownRowMembers(s.ctx(), s.deps, s.row.ID, "magus describe job scout")
+	got := denyUnknownRowMembers(s.testContext(), s.deps, s.row.ID, "magus describe job scout")
 	s.NotContains(got.Say, "<checkout>")
 	s.NotContains(got.Why, "<checkout>")
 	s.NotContains(got.Say, "build this checkout")
@@ -224,6 +224,6 @@ func withUnknown(row types.Job, member string) types.Job {
 	return row
 }
 
-func (s *RowUnknownVCSLinesSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *RowUnknownVCSLinesSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
-func (s *RowUnknownReadOnlyCallerSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *RowUnknownReadOnlyCallerSuite) testContext() context.Context { return s.layers.of(s.T()) }

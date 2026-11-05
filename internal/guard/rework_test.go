@@ -37,7 +37,7 @@ func newReworkFixture(t *testing.T) reworkFixture {
 func (f reworkFixture) putJob(t *testing.T, state types.JobState) {
 	t.Helper()
 	row := types.Job{ID: "guard-facts", Criteria: "prove it", WritePaths: []string{"a.go"}, Validation: "magus run test", State: state}
-	_, err := f.store.Update(f.ctx(t), row.ID, func(cur *types.Job) { *cur = row })
+	_, err := f.store.Update(f.testContext(t), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 }
 
@@ -67,7 +67,7 @@ func TestRecordReworkCountsAContinuationSentAfterTheWorkerHandedBack(t *testing.
 			f.putJob(t, tc.state)
 			writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{Description: reworkTitle, Name: "brisk-heron"})
 
-			recordRework(f.ctx(t), f.at, f.facts, "a1b2c3")
+			recordRework(f.testContext(t), f.at, f.facts, "a1b2c3")
 
 			assert.Equal(t, tc.want, f.rounds(t))
 		})
@@ -78,19 +78,19 @@ func TestRecordReworkAttributesOnlyWhatTheSpawnRecordNames(t *testing.T) {
 	f := newReworkFixture(t)
 	f.putJob(t, types.StateExited)
 
-	recordRework(f.ctx(t), f.at, f.facts, "ghost")
+	recordRework(f.testContext(t), f.at, f.facts, "ghost")
 	assert.Zero(t, f.rounds(t), "an agent magus never saw names no job")
 
 	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{Description: reworkTitle, UntrustedJob: "guard-facts"})
-	recordRework(f.ctx(t), f.at, f.facts, "a1b2c3")
+	recordRework(f.testContext(t), f.at, f.facts, "a1b2c3")
 	assert.Zero(t, f.rounds(t), "a title its spawner could not hand out attributes nothing")
 
 	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{Description: "orchestrator/integrator another-job"})
-	recordRework(f.ctx(t), f.at, f.facts, "a1b2c3")
+	recordRework(f.testContext(t), f.at, f.facts, "a1b2c3")
 	assert.Zero(t, f.rounds(t), "a title naming a job that does not exist")
 
-	recordRework(f.ctx(t), location{}, f.facts, "a1b2c3")
-	recordRework(f.ctx(t), f.at, f.facts, "")
+	recordRework(f.testContext(t), location{}, f.facts, "a1b2c3")
+	recordRework(f.testContext(t), f.at, f.facts, "")
 	assert.Zero(t, f.rounds(t), "no cache or no address is no record")
 }
 
@@ -100,7 +100,7 @@ func TestRecordReworkResolvesAnAgentByItsName(t *testing.T) {
 	writeAgentMarker(f.facts, agentAliasKind("brisk-heron"), []byte("a1b2c3"))
 	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{Description: reworkTitle, Name: "brisk-heron"})
 
-	recordRework(f.ctx(t), f.at, f.facts, "brisk-heron")
+	recordRework(f.testContext(t), f.at, f.facts, "brisk-heron")
 
 	assert.Equal(t, 1, f.rounds(t))
 }
@@ -109,7 +109,7 @@ func TestRecordReworkWritesNothingInADryRun(t *testing.T) {
 	f := newReworkFixture(t)
 	f.putJob(t, types.StateExited)
 	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{Description: reworkTitle})
-	dry, cancel := withDryRunDeadline(f.ctx(t))
+	dry, cancel := withDryRunDeadline(f.testContext(t))
 	defer cancel()
 
 	recordRework(dry, f.at, f.facts, "a1b2c3")
@@ -121,12 +121,12 @@ func TestAContinueJudgedByTheGuardCountsAsReworkOnce(t *testing.T) {
 	f := newReworkFixture(t)
 	f.putJob(t, types.StateExited)
 	deps := Dependencies{}
-	Judge(f.ctx(t), deps, Request{Input: finishedSpawn(t, reworkTitle, "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
+	Judge(f.testContext(t), deps, Request{Input: finishedSpawn(t, reworkTitle, "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
 	require.Zero(t, f.rounds(t), "the spawn is not a continuation")
 
 	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
 		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Now fix the review comments."},"tool_use_id":"toolu_02"}`
-	Judge(f.ctx(t), deps, Request{Input: continueTo, Host: "claude-code"})
+	Judge(f.testContext(t), deps, Request{Input: continueTo, Host: "claude-code"})
 
 	assert.Equal(t, 1, f.rounds(t))
 }
@@ -145,14 +145,14 @@ func TestContinueToExitedWorkerSuite(t *testing.T) {
 func (s *ContinueToExitedWorkerSuite) SetupTest() {
 	s.f = newReworkFixture(s.T())
 	s.f.putJob(s.T(), types.StateRunning)
-	Judge(s.f.ctx(s.T()), Dependencies{}, Request{Input: finishedSpawn(s.T(), reworkTitle, "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
+	Judge(s.f.testContext(s.T()), Dependencies{}, Request{Input: finishedSpawn(s.T(), reworkTitle, "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
 }
 
 func (s *ContinueToExitedWorkerSuite) continueWorker(state types.JobState) types.GuardJudgment {
 	s.f.putJob(s.T(), state)
 	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
 		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Widen with job apply and fix the review comments."},"tool_use_id":"toolu_02"}`
-	return Judge(s.f.ctx(s.T()), Dependencies{}, Request{Input: continueTo, Host: "claude-code"})
+	return Judge(s.f.testContext(s.T()), Dependencies{}, Request{Input: continueTo, Host: "claude-code"})
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnExitedWorkerAdvisesTheRoot() {
@@ -192,6 +192,6 @@ func (s *ContinueToExitedWorkerSuite) TestContinueToAnExitedWorkerNeverDenies() 
 	s.NotEqual(decisionDeny, v.Decision, v.Reason)
 }
 
-func (f reworkFixture) ctx(t *testing.T) context.Context {
+func (f reworkFixture) testContext(t *testing.T) context.Context {
 	return WithLocation(t.Context(), f.at.cacheDir, f.at.workspace, f.at.dir)
 }

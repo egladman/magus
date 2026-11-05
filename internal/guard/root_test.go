@@ -879,12 +879,12 @@ func TestRootGroundworkSuite(t *testing.T) { suite.Run(t, new(RootGroundworkSuit
 func (s *RootGroundworkSuite) SetupTest() {
 	s.layers, _ = fleetLayers(s.T(), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
 	s.deps = levelDeps(s.T(), types.GuardProfileLight)
-	hostGate(hookLocation(s.ctx(), s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
-	s.Require().NotEqual(decisionDeny, judgeSpawn(s.ctx(), s.T(), s.deps, "haiku").Decision)
+	hostGate(hookLocation(s.testContext(), s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	s.Require().NotEqual(decisionDeny, judgeSpawn(s.testContext(), s.T(), s.deps, "haiku").Decision)
 }
 
 func (s *RootGroundworkSuite) judge(line string) types.GuardJudgment {
-	return Judge(s.ctx(), s.deps, Request{Input: line, Host: "claude-code", Session: "s"})
+	return Judge(s.testContext(), s.deps, Request{Input: line, Host: "claude-code", Session: "s"})
 }
 
 // The root must reopen the acceptance evidence a worker names by ref.
@@ -910,4 +910,4 @@ func (s *RootGroundworkSuite) TestRootOutputRefThatWritesAFileIsStillGroundwork(
 	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleOrchestratorGroundwork)}, judgedAs(v))
 }
 
-func (s *RootGroundworkSuite) ctx() context.Context { return s.layers.of(s.T()) }
+func (s *RootGroundworkSuite) testContext() context.Context { return s.layers.of(s.T()) }
