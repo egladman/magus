@@ -768,22 +768,16 @@ export object Verdict {
     lines: [str],
 }
 
-// runCheck runs one check through the status --wait pipe in dir, returning its output ref
-// and whether it passed.
+// runCheck runs one check in dir, returning its output ref and whether it
+// passed. The run waits for the build budget itself.
 fun runCheck(dir: str, g: stack\CheckGoal) > result\Result::<[str]> {
-    var wait = "";
-    try {
-        wait = magus\cmd("status", args: ["--wait"], opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true }).stdout;
-    } catch (err: any) {
-        return result\caught::<[str]>(err, doing: "magus status --wait in {dir}");
-    }
     final args = mut [g.target, g.project, "--concurrency", "1"];
     if (g.args.len() > 0) {
         args.append("--");
         foreach (a in g.args) { args.append(a); }
     }
     try {
-        final res = magus\run(args, opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true, stdin = wait });
+        final res = magus\run(args, opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true });
         return result\ok::<[str]>(["pass", refIn(res.stdout + " " + res.stderr)]);
     } catch (err: any) {
         return result\ok::<[str]>(["fail", refIn(result\caught::<[str]>(err).error!.message)]);
