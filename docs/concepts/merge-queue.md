@@ -863,7 +863,7 @@ checked, and hands the verdict's `reason` on as a claim, shown only as text.
 | `WAIT_UNQUEUED_BELOW`   | it carries the commits of an open change nobody queued                                                                  |
 | `WAIT_NO_COMMITTER`     | it needs an update commit, and nothing names who commits it                                                             |
 | `WAIT_BASE_RED`         | the gate was red on its candidate and on what that was built onto                                                       |
-| `WAIT_MACHINE_FAULT`    | the gate was red and a full disk, a temporary failure or a SIGKILL caused it, on the candidate or the base            |
+| `WAIT_MACHINE_FAULT`    | the gate was red and a full disk, a temporary failure or a SIGKILL caused it, on the candidate or the base              |
 | `WAIT_CHECKS`           | main's required checks are running on its head, or run again on main                                                    |
 | `KICK_CONFLICT`         | a real conflict with the base in files that are not generated                                                           |
 | `KICK_RED`              | the gate was red on its candidate, green on what it was built onto, or a required check was red on a head carrying main |
