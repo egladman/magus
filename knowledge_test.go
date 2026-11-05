@@ -1112,7 +1112,7 @@ func TestParseSymbolIndexCachedReparsesOnlyAMovedIndex(t *testing.T) {
 
 // indexedWorkspace is a one-project workspace whose SCIP index is declared in config, so
 // its symbols are ingested without a symbol-capable spell bound.
-func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.Config) {
+func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.Config) { //nolint:ireturn // the workspace backing is chosen at runtime
 	t.Helper()
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("import \"magus\";\n\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")

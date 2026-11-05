@@ -174,7 +174,7 @@ func (s *Sink) Close() error { return s.enc.close() }
 
 // GraphObserver returns the observer that records graph-traversal events on this sink,
 // for [WithObserver]. It observes nothing for a format that writes no records.
-func (s *Sink) GraphObserver() types.Observer { return report.GraphObserver(s.records) }
+func (s *Sink) GraphObserver() types.Observer { return report.GraphObserver(s.records) } //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 
 // EmitScope emits the run's project selection, the "projects: ..." header. It starts a
 // run: a terminal's live band forgets the previous one here. projects are the selected
@@ -267,7 +267,7 @@ type jsonlEncoder struct {
 	notices *report.LineEncoder // nil when stdout and stderr are one writer
 }
 
-func newJSONLEncoder(env sinkEnv) encoder { return newJSONL(env) }
+func newJSONLEncoder(env sinkEnv) encoder { return newJSONL(env) } //nolint:ireturn // the implementation is chosen at runtime among several
 
 func newJSONL(env sinkEnv) *jsonlEncoder {
 	opts := []report.Option{report.WithBlockOnFull()}
@@ -320,7 +320,7 @@ type terminal interface {
 
 // pickTerminal draws through the process's display handler when w is standard error and
 // one paints there: writing past it would scroll lines through its band.
-func pickTerminal(w io.Writer) terminal {
+func pickTerminal(w io.Writer) terminal { //nolint:ireturn // the implementation is chosen at runtime among several
 	if w == os.Stderr {
 		if h := cache.StderrHandler(); h != nil {
 			return h
@@ -369,7 +369,7 @@ type textEncoder struct {
 	level slog.Level // the least severe progress printed
 }
 
-func newTextEncoder(env sinkEnv) encoder {
+func newTextEncoder(env sinkEnv) encoder { //nolint:ireturn // the implementation is chosen at runtime among several
 	return textEncoder{term: pickTerminal(env.stderr), level: env.level}
 }
 

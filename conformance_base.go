@@ -146,7 +146,7 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 
 // conformanceBaseCommit is the commit base and HEAD fork from, the one ChangedFiles diffs
 // against, so work merged upstream since is neither counted nor touched.
-func (m *Magus) conformanceBaseCommit(ctx context.Context, base string) (types.VCSDriver, string, error) {
+func (m *Magus) conformanceBaseCommit(ctx context.Context, base string) (types.VCSDriver, string, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
 		return nil, "", types.DiagnosticErrorf(types.VCSCapabilityMissing,
@@ -315,7 +315,7 @@ func trustRoot(environ []string, root string) []string {
 }
 
 // inProcessIndexer is the in-process indexer si's format names over dir, nil for an external one.
-func inProcessIndexer(si *spells.SymbolIndexer, dir, root string) symbols.UnitIndexer {
+func inProcessIndexer(si *spells.SymbolIndexer, dir, root string) symbols.UnitIndexer { //nolint:ireturn // the implementation is chosen at runtime among several
 	switch si.Format {
 	case spells.SymbolFormatGoPackages:
 		patterns := slices.Clone(si.Command.Args)

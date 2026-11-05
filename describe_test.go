@@ -85,7 +85,7 @@ func TestAnyProjectDeclaresCI(t *testing.T) {
 
 // newWorkspaceCustom creates a single-project workspace at a temp dir and
 // returns it after applying opts. The root project has an empty magusfile.buzz.
-func newWorkspaceCustom(t *testing.T, opts ...Option) types.WorkspaceRepository {
+func newWorkspaceCustom(t *testing.T, opts ...Option) types.WorkspaceRepository { //nolint:ireturn // the workspace backing is chosen at runtime
 	t.Helper()
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
@@ -718,7 +718,7 @@ func TestClassifyFiles_Classification(t *testing.T) {
 // classifyExistsWorkspace builds a one-project workspace declaring **/*.go, with
 // present.go on disk and absent.go deliberately not. The three tests below all need
 // the same fixture and each asks a different question of it.
-func classifyExistsWorkspace(t *testing.T) (types.WorkspaceRepository, string) {
+func classifyExistsWorkspace(t *testing.T) (types.WorkspaceRepository, string) { //nolint:ireturn // the workspace backing is chosen at runtime
 	t.Helper()
 	// Not parallel: mutates the global spell registry.
 	spellName := register.Spell(t, "zzz-df-exists", spells.WithSources("**/*.go"))
