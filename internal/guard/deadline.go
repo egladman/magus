@@ -60,7 +60,7 @@ func WithHookDeadline(ctx context.Context) (context.Context, context.CancelFunc)
 
 // HookDeadlineEnv hands a delegating magus's hook deadline to its delegate,
 // in unix milliseconds.
-const HookDeadlineEnv = "MAGUS_HOOK_DEADLINE"
+const HookDeadlineEnv = "__MAGUS_HOOK_DEADLINE"
 
 // delegateGrace is how long a delegating magus outlives its own deadline
 // before it kills the delegate. The delegate's unjudged answer is due
