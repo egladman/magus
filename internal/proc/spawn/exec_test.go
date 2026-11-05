@@ -404,6 +404,7 @@ func TestExecResolvesAgainstTheRunsPATH(t *testing.T) {
 func TestChildEnvHoldsTheSandboxFloor(t *testing.T) {
 	t.Setenv("MAGUS_CACHE_DIR", "/parent/cache")
 	t.Setenv("XDG_STATE_HOME", "/parent/state")
+	t.Setenv("MAGUS_HISTORY_PATH", "/parent/run-history.jsonl")
 	p := &sandbox.Policy{BaseEnv: []string{"PATH=/usr/bin"}, Mode: types.SandboxModeRequired}
 	env, _ := childEnv(sandbox.WithPolicy(t.Context(), p), p,
 		[]string{SandboxEnvVar + "=off", "XDG_STATE_HOME=/target/state"})
@@ -417,6 +418,10 @@ func TestChildEnvHoldsTheSandboxFloor(t *testing.T) {
 	assert.Equal(t, []string{"required"}, got)
 	assert.Equal(t, "/parent/cache", envValue(env, "MAGUS_CACHE_DIR"))
 	assert.Equal(t, "/target/state", envValue(env, "XDG_STATE_HOME"), "a location the target set wins")
+	assert.Equal(t, "/parent/run-history.jsonl", envValue(env, "MAGUS_HISTORY_PATH"), "a nested run records history where the parent does")
+
+	env, _ = childEnv(sandbox.WithPolicy(t.Context(), p), p, []string{"MAGUS_HISTORY_PATH=/target/history.jsonl"})
+	assert.Equal(t, "/target/history.jsonl", envValue(env, "MAGUS_HISTORY_PATH"), "a history path the target set wins")
 
 	t.Setenv(SandboxEnvVar, "")
 	env, _ = childEnv(t.Context(), nil, nil)
