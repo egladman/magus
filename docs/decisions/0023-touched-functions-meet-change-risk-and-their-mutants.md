@@ -116,13 +116,11 @@ number; it reports scores and mutants, and a lint rule decides.
 | item                                                                        | State                                                   |
 | --------------------------------------------------------------------------- | ------------------------------------------------------- |
 | decision tokens and the coverage profile declared by spells as data         | done                                                    |
-| `Op.Coverage` and the synthesized `coverage` op                             | removed (the profile the tests write replaced it)       |
 | complexity carried in the pack beside SCIP (`SymbolInfo.Complexity`)        | done                                                    |
 | runner refs resolve inside a token for `MAGUS` and `MAGUS_` names           | done                                                    |
 | `Magus.ChangeRisk` and the change-risk check in `magus diff`                | done                                                    |
 | Buzz methods `Change.risk` and `Workspace.risk`                             | done                                                    |
 | lint rule `touched-functions-keep-change-risk-under-10`                     | done (`hack/lint/run.buzz` names it, under lint-rules)  |
-| coverage run in scratch copies, scoped to the touched files' tests          | removed (read from the tests' own profile)              |
 | head profile freshened through the cache; base profile kept per commit      | done                                                    |
 | each touched function judged against itself at base                         | done                                                    |
 | covered lines kept, in place of the 70% Go and 62% Buzz totals              | done                                                    |
