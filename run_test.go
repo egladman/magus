@@ -26,7 +26,6 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
@@ -2857,55 +2856,3 @@ export fun image(ctx: magus\Context, args: [str]) > void !> any {
 	assert.NotEqual(t, first, third)
 }
 
-type CoverageOutputSuite struct {
-	suite.Suite
-	m     *Magus
-	runs  atomic.Int32
-	dir   string
-	cover string
-}
-
-func TestCoverageOutputSuite(t *testing.T) { suite.Run(t, new(CoverageOutputSuite)) }
-
-func (s *CoverageOutputSuite) SetupTest() {
-	t := s.T()
-	s.runs.Store(0)
-	name := register.Spell(t, "zzz-coverage-output-spell",
-		spells.WithTargets(spells.CoverageOp),
-		spells.WithOps(map[string]spells.Op{spells.CoverageOp: {
-			Kind:     spells.OpKindCoverage,
-			Coverage: &spells.Coverage{Format: spells.CoverageFormatLCOV, File: "lcov.info", Test: "test"},
-		}}),
-		spells.WithSources("**/*.go"),
-		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
-			s.runs.Add(1)
-			return nil, os.WriteFile(s.cover, []byte("SF:a.go\nDA:1,1\nend_of_record\n"), 0o644)
-		}),
-	)
-	w := testkit.NewWorkspace(t)
-	w.Magusfile("")
-	w.Write("main.go", "package main\n")
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell(name))
-	m, err := Open(context.Background(), w.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
-	s.Require().NoError(err)
-	t.Cleanup(func() { _ = m.Close() })
-	s.m = m
-	s.dir = coverage.Dir(m.CacheDir(), ".")
-	s.cover = filepath.Join(s.dir, "lcov.info")
-	s.Require().NoError(os.MkdirAll(s.dir, 0o755))
-}
-
-func (s *CoverageOutputSuite) runCoverage() {
-	s.Require().NoError(s.m.Run(context.Background(), []types.Target{{Path: ".", Name: spells.CoverageOp}}))
-}
-
-func (s *CoverageOutputSuite) TestACacheHitReplaysTheKeptReport() {
-	s.runCoverage()
-	s.Require().NoError(os.RemoveAll(s.dir))
-
-	s.runCoverage()
-
-	s.Equal(int32(1), s.runs.Load(), "the second run is a cache hit")
-	s.FileExists(s.cover, "the hit replays the report the first run kept")
-}

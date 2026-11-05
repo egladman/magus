@@ -60,13 +60,10 @@ fun magusBuzzTest(target: Target) > Command {
     return Command{bin = "$MAGUS", args = ["buzz", "-t", "--embedded"], testScope = ["\{file\}", "\{dir\}/\{stem\}_test.buzz"]};
 }
 
+// `magus buzz -t --coverprofile` records only the module under test, so a
+// tracefile joined from one run per module credits each line to its own tests.
 export fun mgs_getCoverage() > Coverage {
-    return Coverage{
-        format = CoverageFormat.lcov,
-        file = "lcov.info",
-        test = "magus-buzz-test",
-        command = Command{bin = "$MAGUS", args = ["buzz", "-t", "--embedded", "--coverprofile", "$MAGUS_COVERAGE_DIR/lcov.info"], sources = ["**/*.buzz"]},
-    };
+    return Coverage{format = CoverageFormat.lcov, profile = "coverage/buzz/lcov.info"};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

@@ -3,7 +3,6 @@ package bindings
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
@@ -1242,98 +1240,33 @@ export fun mgs_getSymbolIndexer() > SymbolIndexer {
 	assert.Equal(t, spells.DefaultSymbolIndexOp, sp.SymbolIndexOp())
 }
 
-// coverageSpec is what mgs_getCoverage produces: a coverage op that
-// carries its declaration and writes lcov.info.
-func coverageSpec(cmd spells.Command) spells.Descriptor {
-	cov := &spells.Coverage{Format: spells.CoverageFormatLCOV, File: "lcov.info", Command: cmd, Test: "t"}
-	return spells.Descriptor{
-		Name: "fake",
-		Ops:  map[string]spells.Op{spells.CoverageOp: {Kind: spells.OpKindCoverage, Command: cmd, Coverage: cov}},
-	}
+type spellCoverageSuite struct{ suite.Suite }
+
+func TestSpellCoverageSuite(t *testing.T) { suite.Run(t, new(spellCoverageSuite)) }
+
+// A workspace-local spell reaches the registry with its coverage declaration
+// whole, since change risk finds a spell's profile through Coverage.
+func (s *spellCoverageSuite) TestALocalSpellKeepsItsCoverage() {
+	const name = "local-spell-coverage"
+	dir := s.T().TempDir()
+	path := filepath.Join(dir, "spell.buzz")
+	s.Require().NoError(os.WriteFile(path, []byte(`import "magus/spell";
+export fun mgs_getName() > str { return "`+name+`"; }
+export fun mgs_getCoverage() > Coverage {
+    return Coverage{format = CoverageFormat.lcov, profile = "out/lcov.info"};
+}
+`), 0o644))
+	_, sp, err := loadBuzzSpell(interp.WithSource(context.Background(), &interp.Source{Dir: dir}), path)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
+
+	s.Equal(&spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "out/lcov.info"}, sp.Coverage())
+	s.Empty(sp.Targets(), "a coverage declaration synthesizes no op")
 }
 
-type coverageOpSuite struct{ suite.Suite }
-
-func TestCoverageOpSuite(t *testing.T) { suite.Run(t, new(coverageOpSuite)) }
-
-// world is a cache and a one-project workspace to dispatch in.
-func (s *coverageOpSuite) world() (context.Context, *cache.Cache, string) {
-	c, err := cache.Open(s.T().Context(), s.T().TempDir(), cache.WithLocalWrite(true))
-	s.Require().NoError(err)
-	projDir := s.T().TempDir()
-	return types.WithWorkspace(cache.NewContext(s.T().Context(), c), rootOnlyWS{root: projDir}), c, projDir
-}
-
-func (s *coverageOpSuite) TestCoverageOpWritesItsReportWhereMagusSays() {
-	ctx, c, projDir := s.world()
-	spec := coverageSpec(spells.Command{Bin: "sh", Args: []string{"-c", `echo SF:a > "$1/lcov.info"`, "sh", "$MAGUS_COVERAGE_DIR"}})
-
-	_, err := dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.CoverageOp, Dir: projDir})
-	s.Require().NoError(err)
-
-	got, err := os.ReadFile(filepath.Join(coverage.Dir(c.Dir(), "."), "lcov.info"))
-	s.Require().NoError(err)
-	s.Equal("SF:a\n", string(got))
-}
-
-func (s *coverageOpSuite) TestCoverageOpSeesTheDirInItsEnvironment() {
-	ctx, c, projDir := s.world()
-	spec := coverageSpec(spells.Command{Bin: "sh", Args: []string{"-c", `echo "$MAGUS_COVERAGE_DIR" > "$MAGUS_COVERAGE_DIR/lcov.info"`}})
-
-	_, err := dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.CoverageOp, Dir: projDir})
+func (s *spellCoverageSuite) TestTheShippedGoSpellDeclaresItsProfile() {
+	spec, _, err := loadBuzzSpell(context.Background(), filepath.Join("..", "..", "..", "spells", "golang", "spell.buzz"))
 	s.Require().NoError(err)
 
-	dir := coverage.Dir(c.Dir(), ".")
-	got, err := os.ReadFile(filepath.Join(dir, "lcov.info"))
-	s.Require().NoError(err)
-	s.Equal(dir+"\n", string(got))
-}
-
-func (s *coverageOpSuite) TestCoverageOpStartsFromAnEmptyDir() {
-	ctx, c, projDir := s.world()
-	dir := coverage.Dir(c.Dir(), ".")
-	s.Require().NoError(os.MkdirAll(dir, 0o755))
-	s.Require().NoError(os.WriteFile(filepath.Join(dir, "lcov.info"), []byte("stale"), 0o644))
-	spec := coverageSpec(spells.Command{Bin: "true"})
-
-	_, err := dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.CoverageOp, Dir: projDir})
-
-	s.EqualError(err, fmt.Sprintf(`spell "fake" declares coverage, but "true" exited 0 and wrote no lcov.info to %s, it must write it under the directory magus passes in MAGUS_COVERAGE_DIR`, dir))
-}
-
-func (s *coverageOpSuite) TestCoverageOpOutsideACachedTargetIsRefused() {
-	projDir := s.T().TempDir()
-	ctx := types.WithWorkspace(s.T().Context(), rootOnlyWS{root: projDir})
-	spec := coverageSpec(spells.Command{Bin: "true"})
-
-	_, err := dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.CoverageOp, Dir: projDir})
-
-	s.EqualError(err, "a coverage op must run as a magus target so its report lands in the cache")
-}
-
-type shippedCoverageSuite struct{ suite.Suite }
-
-func TestShippedCoverageSuite(t *testing.T) { suite.Run(t, new(shippedCoverageSuite)) }
-
-func (s *shippedCoverageSuite) resolved(name string) (string, []string) {
-	spec, _, err := loadBuzzSpell(context.Background(), filepath.Join("..", "..", "..", "spells", name, "spell.buzz"))
-	s.Require().NoError(err)
-	cmd := spec.Ops[spells.CoverageOp].Coverage.Command
-	bin, args, err := resolveRunnerRefs(spells.CoverageOp, cmd.Bin, cmd.Args, map[string]string{"MAGUS_COVERAGE_DIR": "/cov"})
-	s.Require().NoError(err)
-	return bin, args
-}
-
-func (s *shippedCoverageSuite) TestGoWritesItsProfileUnderTheCoverageDir() {
-	bin, args := s.resolved("golang")
-
-	s.Equal("go", bin)
-	s.Equal([]string{"test", "-trimpath", "-covermode=set", "-coverprofile=/cov/cover.out"}, args)
-}
-
-func (s *shippedCoverageSuite) TestPythonWritesItsLcovUnderTheCoverageDir() {
-	bin, args := s.resolved("python")
-
-	s.Equal("uv", bin)
-	s.Equal([]string{"run", "pytest", "--cov", "--cov-report=lcov:/cov/lcov.info"}, args)
+	s.Equal(&spells.Coverage{Format: spells.CoverageFormatGoProfile, Profile: ".magus/coverage.out"}, spec.Coverage)
 }

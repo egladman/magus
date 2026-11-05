@@ -174,10 +174,8 @@ test "decisions are mccabe's keywords and no operator" {
     std\assert(decisions.operators.len() == 0, message: "no operators");
 }
 
-test "coverage is pytest-cov's lcov scoped by pytest" {
+test "coverage is pytest-cov's lcov and pytest keeps no test scope" {
     final coverage = python\mgs_getCoverage();
-    std\assert(coverage.format == CoverageFormat.lcov and coverage.file == "lcov.info", message: "report");
-    std\assert(coverage.test == "pytest" and python\mgs_listTargets()["pytest"] != null, message: "test op");
-    std\assert(coverage.command.args.indexOf("--cov-report=lcov:$MAGUS_COVERAGE_DIR/lcov.info") != null, message: "report path");
+    std\assert(coverage.format == CoverageFormat.lcov and coverage.profile == "coverage.lcov", message: "report");
     std\assert(python\mgs_listTargets()["pytest"]!(Target{}).testScope.len() == 0, message: "whole project");
 }

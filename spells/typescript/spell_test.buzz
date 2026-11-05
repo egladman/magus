@@ -227,10 +227,8 @@ test "generic brackets are no decision" {
     std\assert(operators.indexOf("<") == null and operators.indexOf(">") == null, message: "brackets are no decision");
 }
 
-test "coverage is vitest's lcov and vitest keeps no test scope" {
+test "coverage is node-test's lcov and vitest keeps no test scope" {
     final coverage = typescript\mgs_getCoverage();
-    std\assert(coverage.format == CoverageFormat.lcov and coverage.file == "lcov.info", message: "report");
-    std\assert(coverage.test == "vitest", message: "test op");
-    std\assert(coverage.command.args.indexOf("--coverage.reportsDirectory=$MAGUS_COVERAGE_DIR") != null, message: "dir");
+    std\assert(coverage.format == CoverageFormat.lcov and coverage.profile == "coverage.lcov", message: "report");
     std\assert(typescript\mgs_listTargets()["vitest"]!(Target{}).testScope.len() == 0, message: "whole project");
 }

@@ -27,10 +27,6 @@ Working directory and environment are NOT options: they ride the context, as `py
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
-## coverage
-
-**Command:** `uv run pytest --cov --cov-report=lcov:$MAGUS_COVERAGE_DIR/lcov.info`
-
 ## pytest
 
 **Command:** `uv run pytest`

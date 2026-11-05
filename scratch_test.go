@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 
@@ -20,81 +21,21 @@ import (
 
 const scratchFile = "calc/calc.toy"
 
-func toyScope() coverageScope {
-	return coverageScope{project: ".", spell: "toy", coverage: spells.Coverage{Test: "test"}, scope: []string{"./calc"}}
+func toySource() coverageSource {
+	return coverageSource{project: ".", spell: "toy", target: "test",
+		coverage: spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "out/lcov.info"}}
 }
 
-type SubjectScopeSuite struct {
-	suite.Suite
-	root string
-}
+type ScratchLinksSuite struct{ suite.Suite }
 
-func TestSubjectScopeSuite(t *testing.T) { suite.Run(t, new(SubjectScopeSuite)) }
+func TestScratchLinksSuite(t *testing.T) { suite.Run(t, new(ScratchLinksSuite)) }
 
-func (s *SubjectScopeSuite) SetupTest() {
-	s.root = s.T().TempDir()
-	s.Require().NoError(os.MkdirAll(filepath.Join(s.root, "web", "calc"), 0o755))
-	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "web", "calc", "calc.toy"), nil, 0o644))
-}
-
-func (s *SubjectScopeSuite) TestAnEntryNamingNoFileIsDropped() {
-	test := spells.Command{TestScope: []string{"./{dir}", "{dir}/{stem}_test.toy", "{file}"}}
-	scope, reason := subjectScope(s.root, "web", "web/calc/calc.toy", test)
-	s.Empty(reason)
-	s.Equal([]string{"./calc", "calc/calc.toy"}, scope)
-}
-
-func (s *SubjectScopeSuite) TestADeclaredScopeNamingNothingIsAReason() {
-	test := spells.Command{TestScope: []string{"{dir}/{stem}_test.toy"}}
-	scope, reason := subjectScope(s.root, "web", "web/calc/calc.toy", test)
-	s.Nil(scope)
-	s.Equal("no test_scope entry names a file for web/calc/calc.toy", reason)
-}
-
-func (s *SubjectScopeSuite) TestNoDeclaredScopeRunsTheProject() {
-	scope, reason := subjectScope(s.root, "web", "web/calc/calc.toy", spells.Command{})
-	s.Empty(reason)
-	s.Empty(scope)
-}
-
-func (s *SubjectScopeSuite) TestTheRootProjectScopesByWorkspacePath() {
-	test := spells.Command{TestScope: []string{"./{dir}"}}
-	scope, reason := subjectScope(s.root, ".", "web/calc/calc.toy", test)
-	s.Empty(reason)
-	s.Equal([]string{"./web/calc"}, scope)
-}
-
-func (s *SubjectScopeSuite) TestLinksAreEveryProjectsIgnoreDirs() {
+func (s *ScratchLinksSuite) TestLinksAreEveryProjectsIgnoreDirs() {
 	got := ignoreLinks(map[string][]string{"web": {"node_modules", "node_modules"}, ".": {"node_modules", "vendor"}})
 	s.Equal([]string{"node_modules", "vendor", "web/node_modules"}, got)
 }
 
-// ScratchReportSuite reads the report a coverage run left in a scratch copy.
-type ScratchReportSuite struct{ suite.Suite }
-
-func TestScratchReportSuite(t *testing.T) { suite.Run(t, new(ScratchReportSuite)) }
-
-func (s *ScratchReportSuite) TestTheRunsHitLinesAreCovered() {
-	dir := s.T().TempDir()
-	reports := coverage.Dir(copyCacheDir(dir), ".")
-	s.Require().NoError(os.MkdirAll(reports, 0o755))
-	lcov := "SF:" + scratchFile + "\nDA:4,2\nDA:9,0\nend_of_record\n"
-	s.Require().NoError(os.WriteFile(filepath.Join(reports, "lcov.info"), []byte(lcov), 0o644))
-	c := toyScope()
-	c.coverage = spells.Coverage{Format: spells.CoverageFormatLCOV, File: "lcov.info"}
-	files, err := scratchReport(dir, c)
-	s.Require().NoError(err)
-	s.Equal(map[int]bool{4: true}, hitLines(files, scratchFile))
-}
-
-func (s *ScratchReportSuite) TestNoReportIsAnError() {
-	c := toyScope()
-	c.coverage = spells.Coverage{Format: spells.CoverageFormatLCOV, File: "lcov.info"}
-	_, err := scratchReport(s.T().TempDir(), c)
-	s.ErrorContains(err, "its coverage run left no report")
-}
-
-func (s *ScratchReportSuite) TestTheCopysCacheDirIsPinnedInItsEnv() {
+func (s *ScratchLinksSuite) TestTheCopysCacheDirIsPinnedInItsEnv() {
 	s.Equal("MAGUS_CACHE_DIR="+filepath.Join("/copy", ".magus"), copyCacheEnv("/copy"))
 }
 
@@ -111,7 +52,7 @@ func (s *ScratchRunnerSuite) SetupTest() { s.dir = s.T().TempDir() }
 func (s *ScratchRunnerSuite) runWith(lines ...string) (testRun, error) {
 	script := []byte(strings.Join(lines, "\n"))
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, "run"), script, 0o644))
-	return magusRunner{bin: "/bin/sh"}.run(context.Background(), s.dir, "toy::test", toyScope())
+	return magusRunner{bin: "/bin/sh"}.run(context.Background(), s.dir, toySource())
 }
 
 func resultRecord(project, target, status string, hit bool) string {
@@ -119,9 +60,9 @@ func resultRecord(project, target, status string, hit bool) string {
 		project, target, status, hit)
 }
 
-func (s *ScratchRunnerSuite) TestARunBypassesTheCacheAndNamesTheSpell() {
+func (s *ScratchRunnerSuite) TestARunIsCachedInTheCopysOwnCache() {
 	got, err := s.runWith(
-		`[ "$*" = "toy::test --no-cache --no-volatility-retry -o jsonl . -- ./calc" ] || exit 2`,
+		`[ "$*" = "test --no-volatility-retry -o jsonl ." ] || exit 2`,
 		`case "$MAGUS_CACHE_DIR" in */.magus) ;; *) exit 2 ;; esac`,
 		resultRecord(".", "test", "ok", false))
 	s.Require().NoError(err)
@@ -142,7 +83,7 @@ func (s *ScratchRunnerSuite) TestACachedResultSaysSo() {
 
 func (s *ScratchRunnerSuite) TestAFailedRunThatReportsNoResultJudgesNothing() {
 	_, err := s.runWith("echo 'workspace did not load' >&2", "exit 1")
-	s.ErrorContains(err, "exited 1 with no result for toy::test (workspace did not load): so no test ran")
+	s.ErrorContains(err, "exited 1 with no result for test (workspace did not load): so no test ran")
 	s.ErrorIs(err, errNoResult)
 }
 
@@ -163,20 +104,26 @@ func (s *ScratchRunnerSuite) TestARunASignalEndedIsNotARunThatDidNotLoad() {
 	s.NotErrorIs(err, errNoResult)
 }
 
+func (s *ScratchRunnerSuite) TestASpellQualifiedTargetMatchesItsOp() {
+	r, ok := recordedResult(`{"schema":5,"type":"run.target.result","project":".","target":"go-test","status":"ok"}`, ".", "go::go-test")
+	s.True(ok)
+	s.Equal("go-test", r.Target)
+}
+
+func (s *ScratchRunnerSuite) TestAPlainTargetMatchesItself() {
+	r, ok := recordedResult(`{"schema":5,"type":"run.target.result","project":".","target":"test","status":"ok"}`, ".", "test")
+	s.True(ok)
+	s.Equal("test", r.Target)
+}
+
 type TreeCopySuite struct{ suite.Suite }
 
 func TestTreeCopySuite(t *testing.T) { suite.Run(t, new(TreeCopySuite)) }
 
-// copyVCS answers the four calls treeCopier makes; any other call panics.
+// copyVCS answers the export treeCopier makes; any other call panics.
 type copyVCS struct {
 	types.VCSDriver
-	repo  string
-	head  map[string]string
-	dirty []string
-}
-
-func (v copyVCS) FindCommit(context.Context, string, string) (types.Commit, error) {
-	return types.Commit{ID: "c0ffee"}, nil
+	head map[string]string
 }
 
 func (v copyVCS) ExportRevision(_ context.Context, _, rev, dst string) error {
@@ -189,12 +136,6 @@ func (v copyVCS) ExportRevision(_ context.Context, _, rev, dst string) error {
 		}
 	}
 	return nil
-}
-
-func (v copyVCS) Root(context.Context, string) (string, error) { return v.repo, nil }
-
-func (v copyVCS) DirtyFiles(context.Context, string, []string) ([]string, error) {
-	return v.dirty, nil
 }
 
 func (s *TreeCopySuite) TestACopyLandsInTheStoreWhenTheUserCacheIsDenied() {
@@ -210,7 +151,7 @@ func (s *TreeCopySuite) TestACopyLandsInTheStoreWhenTheUserCacheIsDenied() {
 
 	sc, err := m.newScratch(context.Background())
 	s.Require().NoError(err)
-	dir, err := sc.copy(context.Background(), "", nil)
+	dir, err := sc.copy(context.Background(), "HEAD", nil)
 	if dir != "" {
 		s.T().Cleanup(func() { _ = os.RemoveAll(dir) })
 	}
@@ -221,19 +162,15 @@ func (s *TreeCopySuite) TestACopyLandsInTheStoreWhenTheUserCacheIsDenied() {
 	s.Equal(filepath.Join(store, scratchTreesDir), filepath.Dir(dir))
 	b, err := os.ReadFile(filepath.Join(dir, "calc.toy"))
 	s.Require().NoError(err)
-	s.Equal("edit", string(b))
+	s.Equal("head", string(b), "a revision is exported without the working tree's edits")
 	s.NoDirExists(filepath.Join(denied, "magus"))
 }
 
-func (s *TreeCopySuite) TestACopyIsHeadWithTheWorkingTreesEdits() {
-	repo := s.T().TempDir()
-	root := filepath.Join(repo, "ws")
+func (s *TreeCopySuite) TestACopyOfARevisionLinksTheIgnoreDirs() {
+	root := s.T().TempDir()
 	s.Require().NoError(os.MkdirAll(filepath.Join(root, "node_modules"), 0o755))
-	s.Require().NoError(os.WriteFile(filepath.Join(root, "edited.toy"), []byte("edit"), 0o644))
-	c := treeCopier{root: root, trees: s.T().TempDir(), links: []string{"node_modules"}, vcs: copyVCS{
-		repo: repo, dirty: []string{"ws/edited.toy", "ws/deleted.toy"},
-		head: map[string]string{"edited.toy": "head", "deleted.toy": "head", "kept.toy": "head"},
-	}}
+	c := treeCopier{root: root, trees: s.T().TempDir(), rev: "c0ffee", links: []string{"node_modules"},
+		vcs: copyVCS{head: map[string]string{"kept.toy": "base"}}}
 	dir, err := c.copy(context.Background())
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = os.RemoveAll(dir) })
@@ -243,49 +180,7 @@ func (s *TreeCopySuite) TestACopyIsHeadWithTheWorkingTreesEdits() {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	s.Equal([]string{"edited.toy", "kept.toy", "node_modules"}, names)
-	b, err := os.ReadFile(filepath.Join(dir, "edited.toy"))
-	s.Require().NoError(err)
-	s.Equal("edit", string(b))
-}
-
-func (s *TreeCopySuite) TestACopyOfARevisionTakesNoEdits() {
-	repo := s.T().TempDir()
-	root := filepath.Join(repo, "ws")
-	s.Require().NoError(os.MkdirAll(root, 0o755))
-	s.Require().NoError(os.WriteFile(filepath.Join(root, "edited.toy"), []byte("edit"), 0o644))
-	c := treeCopier{root: root, trees: s.T().TempDir(), rev: "c0ffee", vcs: copyVCS{
-		repo: repo, dirty: []string{"ws/edited.toy"}, head: map[string]string{"edited.toy": "base"},
-	}}
-	dir, err := c.copy(context.Background())
-	s.Require().NoError(err)
-	s.T().Cleanup(func() { _ = os.RemoveAll(dir) })
-	b, err := os.ReadFile(filepath.Join(dir, "edited.toy"))
-	s.Require().NoError(err)
-	s.Equal("base", string(b))
-}
-
-func (s *TreeCopySuite) TestAnEditedFileIsCopiedAndADeletedOneRemoved() {
-	root, dir := s.T().TempDir(), s.T().TempDir()
-	s.Require().NoError(os.WriteFile(filepath.Join(root, "edited.toy"), []byte("new"), 0o640))
-	s.Require().NoError(os.WriteFile(filepath.Join(dir, "gone.toy"), []byte("old"), 0o644))
-	s.Require().NoError(overlayFile(root, dir, filepath.Join(root, "edited.toy")))
-	s.Require().NoError(overlayFile(root, dir, filepath.Join(root, "gone.toy")))
-	b, err := os.ReadFile(filepath.Join(dir, "edited.toy"))
-	s.Require().NoError(err)
-	s.Equal("new", string(b))
-	_, err = os.Stat(filepath.Join(dir, "gone.toy"))
-	s.ErrorIs(err, os.ErrNotExist)
-}
-
-func (s *TreeCopySuite) TestAPathOutsideTheWorkspaceIsSkipped() {
-	parent := s.T().TempDir()
-	root, dir := filepath.Join(parent, "ws"), s.T().TempDir()
-	s.Require().NoError(os.WriteFile(filepath.Join(parent, "outside.toy"), []byte("x"), 0o644))
-	s.Require().NoError(overlayFile(root, dir, filepath.Join(parent, "outside.toy")))
-	entries, err := os.ReadDir(dir)
-	s.Require().NoError(err)
-	s.Empty(entries)
+	s.Equal([]string{"kept.toy", "node_modules"}, names)
 }
 
 func (s *TreeCopySuite) TestALinkedDirPointsAtTheWorkspace() {
@@ -307,4 +202,110 @@ func (s *TreeCopySuite) TestATrackedDirIsKeptNotLinked() {
 	info, err := os.Lstat(filepath.Join(dir, "vendor"))
 	s.Require().NoError(err)
 	s.True(info.IsDir())
+}
+
+// BaseProfilesSuite reads base profiles with a stub copy and run.
+type BaseProfilesSuite struct {
+	suite.Suite
+	profiles *baseProfiles
+	copies   int
+	runs     int
+	passed   bool
+	runErr   error
+	// wrote is what the stub run leaves at the profile, "" for nothing.
+	wrote string
+}
+
+func TestBaseProfilesSuite(t *testing.T) { suite.Run(t, new(BaseProfilesSuite)) }
+
+const toyLCOV = "SF:" + scratchFile + "\nDA:4,2\nDA:9,0\nend_of_record\n"
+
+func (s *BaseProfilesSuite) SetupTest() {
+	s.copies, s.runs, s.passed, s.runErr, s.wrote = 0, 0, true, nil, toyLCOV
+	s.profiles = &baseProfiles{
+		commit: "c0ffee", kept: filepath.Join(s.T().TempDir(), keptProfilesDir), start: time.Now(),
+		parse: func(c coverageSource, data []byte) ([]coverage.File, error) {
+			return coverage.Parse(c.coverage.Format, data, "")
+		},
+		copy: func(context.Context) (string, error) {
+			s.copies++
+			return s.T().TempDir(), nil
+		},
+		run: func(_ context.Context, dir string, c coverageSource) (testRun, error) {
+			s.runs++
+			if s.wrote != "" {
+				file := filepath.Join(dir, filepath.FromSlash(c.coverage.Profile))
+				s.Require().NoError(os.MkdirAll(filepath.Dir(file), 0o755))
+				s.Require().NoError(os.WriteFile(file, []byte(s.wrote), 0o644))
+			}
+			return testRun{passed: s.passed}, s.runErr
+		},
+	}
+}
+
+func (s *BaseProfilesSuite) read() profileRead {
+	got, err := s.profiles.read(context.Background(), toySource())
+	s.Require().NoError(err)
+	return got
+}
+
+func (s *BaseProfilesSuite) TestAMissRunsTheTargetOnceAndKeepsItsProfile() {
+	first := s.read()
+	second := s.read()
+
+	s.Equal([2]int{1, 1}, [2]int{s.copies, s.runs}, "the second read is the kept profile")
+	s.Empty(first.reason)
+	s.Equal(first, second)
+	s.Equal(map[int]bool{4: true, 9: false}, fileNamed(first.files, scratchFile).Lines())
+}
+
+func (s *BaseProfilesSuite) TestEachBaseCommitKeepsItsOwnProfile() {
+	s.read()
+	s.profiles.commit = "decaf"
+	s.read()
+
+	s.Equal(2, s.runs)
+}
+
+func (s *BaseProfilesSuite) TestARedRunIsAReasonAndKeepsNothing() {
+	s.passed = false
+	got := s.read()
+	s.read()
+
+	s.Equal("a test fails at base c0ffee: `magus run test .`", got.reason)
+	s.Equal(2, s.runs, "a red run is never kept")
+}
+
+func (s *BaseProfilesSuite) TestARunThatLeftNoProfileIsAReason() {
+	s.wrote = ""
+	s.Equal("`magus run test .` at base c0ffee left no out/lcov.info", s.read().reason)
+}
+
+func (s *BaseProfilesSuite) TestARunWithNoSeatIsAnError() {
+	s.runErr = fmt.Errorf("exited 75: %w", errNoSeat)
+	_, err := s.profiles.read(context.Background(), toySource())
+	s.ErrorIs(err, errNoSeat)
+}
+
+func (s *BaseProfilesSuite) TestARunThatRecordedNoResultIsAReason() {
+	s.runErr = fmt.Errorf("exited 1: %w", errNoResult)
+	s.Contains(s.read().reason, "so no test ran")
+}
+
+func (s *BaseProfilesSuite) TestAStoppedRunNamesItsCommandAndBase() {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	s.profiles.run = func(context.Context, string, coverageSource) (testRun, error) {
+		cancel(errors.New("the gate ended"))
+		return testRun{}, context.Canceled
+	}
+	_, err := s.profiles.read(ctx, toySource())
+	s.ErrorContains(err, "change risk: stopped running `magus run test .` at base c0ffee after ")
+	s.ErrorContains(err, ": the gate ended")
+}
+
+func (s *BaseProfilesSuite) TestRemoveDeletesTheCopy() {
+	s.read()
+	dir := s.profiles.dir
+	s.profiles.remove()
+	s.NoDirExists(dir)
 }

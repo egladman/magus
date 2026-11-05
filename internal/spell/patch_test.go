@@ -172,11 +172,6 @@ func applyWithEvanphx(argv []string, ops []spells.PatchOp) ([]string, error) {
 	return res, nil
 }
 
-// goldenCoverageOp is the op magus registers for a declared Coverage.
-func goldenCoverageOp(cov spells.Coverage) spells.Op {
-	return spells.Op{Kind: spells.OpKindCoverage, Command: cov.Command, Coverage: &cov}
-}
-
 // goldenBuiltins is the original hand-maintained built-in table, frozen here as
 // a golden, keyed by runtime spell name (e.g. "go", not source dir "golang"). The
 // built-in registry is produced by compiling each spells/<dir>/spell.buzz to bytecode
@@ -298,13 +293,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Capture: true, Quiet: true}},
 			"magus-buzz-test": {Command: spells.Command{Bin: "$MAGUS", Args: []string{"buzz", "-t", "--embedded"},
 				TestScope: []string{"{file}", "{dir}/{stem}_test.buzz"}}},
-			"coverage": goldenCoverageOp(spells.Coverage{
-				Format: spells.CoverageFormatLCOV, File: "lcov.info", Test: "magus-buzz-test",
-				Command: spells.Command{Bin: "$MAGUS", Args: []string{"buzz", "-t", "--embedded", "--coverprofile", "$MAGUS_COVERAGE_DIR/lcov.info"},
-					Sources: []string{"**/*.buzz"}, TestScope: []string{"{file}", "{dir}/{stem}_test.buzz"}},
-			}),
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatBuzzModule, Op: "scip-buzz"},
+		Coverage:      &spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "coverage/buzz/lcov.info"},
 	},
 	"cosign": {
 		Name:  "cosign",
@@ -427,15 +418,11 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "go", Args: []string{"./..."}, Capture: true, Quiet: true}},
-			"coverage": goldenCoverageOp(spells.Coverage{
-				Format: spells.CoverageFormatGoProfile, File: "cover.out", Test: "go-test", Uses: []string{"go"},
-				Command: spells.Command{Bin: "go", Args: []string{"test", "-trimpath", "-covermode=set", "-coverprofile=$MAGUS_COVERAGE_DIR/cover.out"},
-					DefaultArgs: []string{"./..."}, TestScope: []string{"./{dir}"}},
-			}),
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages,
 			Command: spells.Command{Bin: "go", Args: []string{"./..."}}, Uses: []string{"go"},
 			Envs: []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}, {"GOOS": "js", "GOARCH": "wasm"}}},
+		Coverage: &spells.Coverage{Format: spells.CoverageFormatGoProfile, Profile: ".magus/coverage.out"},
 	},
 	"markdown": {
 		Name:  "markdown",
@@ -525,11 +512,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipPython)},
-			"coverage": goldenCoverageOp(spells.Coverage{
-				Format: spells.CoverageFormatLCOV, File: "lcov.info", Test: "pytest", Uses: []string{"python3"},
-				Command: spells.Command{Bin: "uv", Args: []string{"run", "pytest", "--cov", "--cov-report=lcov:$MAGUS_COVERAGE_DIR/lcov.info"}},
-			}),
 		},
+		Coverage: &spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "coverage.lcov"},
 		ScriptRunners: []spells.Command{
 			{Bin: "poe"},
 			{Bin: "hatch", Args: []string{"run"}},
@@ -543,10 +527,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Tools: map[string]spells.Tool{
 			"rustc":         {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}, Lifecycle: "rust"},
 			"rust-analyzer": {Observe: spells.Command{Bin: "rust-analyzer", Args: []string{"--version"}}},
-			"cargo-llvm-cov": {Probe: spells.Command{Bin: "cargo", Args: []string{"llvm-cov", "--version"}},
-				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 		},
 		SymbolIndexer:      &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenRustAnalyzer},
+		Coverage:           &spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "lcov.info"},
 		Language:           "rust",
 		LanguageExtensions: []string{".rs"},
 		Syntax: &spells.Syntax{
@@ -582,10 +565,6 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			}}},
 			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}}},
 			"scip":       {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenRustAnalyzer)},
-			"coverage": goldenCoverageOp(spells.Coverage{
-				Format: spells.CoverageFormatLCOV, File: "lcov.info", Test: "cargo-test", Uses: []string{"cargo-llvm-cov", "rustc"},
-				Command: spells.Command{Bin: "cargo", Args: []string{"llvm-cov", "--lcov", "--output-path", "$MAGUS_COVERAGE_DIR/lcov.info"}},
-			}),
 		},
 	},
 	"typescript": {
@@ -663,12 +642,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Command: goldenDevServerCommand,
 			}},
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipTypescript)},
-			"coverage": goldenCoverageOp(spells.Coverage{
-				Format: spells.CoverageFormatLCOV, File: "lcov.info", Test: "vitest", Uses: []string{"pnpm"},
-				Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run", "--coverage.enabled",
-					"--coverage.reporter=lcovonly", "--coverage.reportsDirectory=$MAGUS_COVERAGE_DIR"}},
-			}),
 		},
+		Coverage: &spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "coverage.lcov"},
 		ScriptRunners: []spells.Command{
 			{Bin: "npm", Args: []string{"run"}}, {Bin: "npm", Args: []string{"run-script"}},
 			{Bin: "npm", Args: []string{"test"}}, {Bin: "npm", Args: []string{"t"}},

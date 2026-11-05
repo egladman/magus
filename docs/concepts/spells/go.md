@@ -27,10 +27,6 @@ Working directory and environment are NOT options: they ride the context, as `go
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
-## coverage
-
-**Command:** `go test -trimpath -covermode=set -coverprofile=$MAGUS_COVERAGE_DIR/cover.out ./...`
-
 ## go-build
 
 -trimpath is a default: without it each checkout's absolute path is baked into the build ID, so checkouts of one source never share cache entries.

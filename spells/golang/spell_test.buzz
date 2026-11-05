@@ -223,12 +223,10 @@ test "decisions are gocyclo's: if, for, case, && and ||" {
     std\assert(decisions.operators.join(" ") == "&& ||", message: "operators");
 }
 
-test "coverage writes a go profile under the coverage dir and is scoped by go-test" {
+test "coverage is a go profile the project's tests leave in .magus" {
     final coverage = go\mgs_getCoverage();
     std\assert(coverage.format == CoverageFormat.goProfile, message: "format");
-    std\assert(coverage.file == "cover.out" and coverage.test == "go-test", message: "file and test");
-    std\assert(coverage.command.args.indexOf("-coverprofile=$MAGUS_COVERAGE_DIR/cover.out") != null, message: "profile");
-    std\assert(coverage.command.defaultArgs.join(" ") == "./...", message: "default scope");
+    std\assert(coverage.profile == ".magus/coverage.out", message: "profile");
 }
 
 test "go-test scopes to one package directory" {

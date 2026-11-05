@@ -22,7 +22,6 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -589,36 +588,10 @@ func (m *Magus) foreignOutputs(p *types.Project, target string, outputs []types.
 	return types.CompactGlobs(out)
 }
 
-// reservedOutput is a reserved op's product. globSuffix widens a directory
-// to its contents; stamp vouches for it outside the workspace.
-type reservedOutput struct {
-	path, globSuffix, stamp string
-}
-
-// reservedOpOutput is the symbol index or the coverage report directory
-// when target is the op that writes it.
-func (m *Magus) reservedOpOutput(p *types.Project, target string) (reservedOutput, bool) {
+// reservedOpOutput is the symbol index when target is the op that writes it.
+func (m *Magus) reservedOpOutput(p *types.Project, target string) (string, bool) {
 	if indexesSymbols(p, target, m.cfg.Spells) {
-		index := symbols.IndexPath(m.CacheDir(), p.Path, target)
-		return reservedOutput{path: index, stamp: index}, true
-	}
-	file, ok := coverageReportFile(p, target)
-	if !ok {
-		return reservedOutput{}, false
-	}
-	dir := coverage.Dir(m.CacheDir(), p.Path)
-	return reservedOutput{path: dir, globSuffix: "/**", stamp: filepath.Join(dir, file)}, true
-}
-
-// coverageReportFile is the report name of p's coverage op, if target runs it.
-func coverageReportFile(p *types.Project, target string) (string, bool) {
-	if target != spells.CoverageOp {
-		return "", false
-	}
-	for _, s := range p.ResolvedSpells {
-		if op, ok := s.Op(target); ok && op.Kind == spells.OpKindCoverage && op.Coverage != nil {
-			return op.Coverage.File, true
-		}
+		return symbols.IndexPath(m.CacheDir(), p.Path, target), true
 	}
 	return "", false
 }
@@ -691,11 +664,11 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// replays it. Outside the workspace it is a stamp instead.
 	if out, ok := m.reservedOpOutput(p, target); ok {
 		step.Outputs, step.RequiredOutputs, step.ForeignOutputs = nil, nil, nil
-		if rel, err := filepath.Rel(step.WorkspaceRoot, out.path); err == nil && filepath.IsLocal(rel) {
-			step.Outputs = []types.Glob{{Pattern: filepath.ToSlash(rel) + out.globSuffix}}
+		if rel, err := filepath.Rel(step.WorkspaceRoot, out); err == nil && filepath.IsLocal(rel) {
+			step.Outputs = []types.Glob{{Pattern: filepath.ToSlash(rel)}}
 			step.OutputsDeclared = true
 		} else {
-			step.Stamps = append(step.Stamps, out.stamp)
+			step.Stamps = append(step.Stamps, out)
 		}
 	}
 	sources := slices.Clone(step.Sources)
@@ -976,15 +949,28 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	if p == nil {
 		return "", nil, fmt.Errorf("magus: compute target key: unknown project %q", projectPath)
 	}
+	step, err := m.targetStep(ctx, p, target, charms, reuse)
+	if err != nil {
+		return "", nil, err
+	}
 	var memo *cache.SourceMemo
-	var toolVersions map[string][]string
 	if reuse != nil {
 		memo = reuse.memo
+	}
+	return m.cache.StepKeyMemo(ctx, &step, memo)
+}
+
+// targetStep is the step a run of target on p with charms mints, keyed as the
+// run scheduler keys it. reuse, when set, supplies the tool versions.
+func (m *Magus) targetStep(ctx context.Context, p *types.Project, target string, charms []string, reuse *sweepReuse) (cache.Step, error) {
+	var toolVersions map[string][]string
+	if reuse != nil {
 		toolVersions = reuse.toolVersions
 	}
 	if toolVersions == nil && keysTools(p, target) {
+		var err error
 		if toolVersions, err = m.toolVersionsByProject(ctx, []*types.Project{p}); err != nil {
-			return "", nil, err
+			return cache.Step{}, err
 		}
 	}
 	// Not part of sweepReuse: an observation probe runs only for a project whose
@@ -999,7 +985,7 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 		keyTools = toolVersions[p.Path]
 	}
 	applyRunKeying(&step, p, m.cfg.Spells, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
-	return m.cache.StepKeyMemo(ctx, &step, memo)
+	return step, nil
 }
 
 // keysTools reports whether target's step on p keys on tool versions. A step that always

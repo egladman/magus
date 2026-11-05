@@ -137,15 +137,10 @@ fun ruffFormat(target: Target) > Command {
         "rw": drop(args, "--check"),
     }};
 }
+// The project's test target writes it: `pytest --cov --cov-report=lcov`.
 // pytest-cov belongs to the project's dependencies; magus ships no Python.
 export fun mgs_getCoverage() > Coverage {
-    return Coverage{
-        format = CoverageFormat.lcov,
-        file = "lcov.info",
-        test = "pytest",
-        command = Command{bin = "uv", args = ["run", "pytest", "--cov", "--cov-report=lcov:$MAGUS_COVERAGE_DIR/lcov.info"]},
-        uses = ["python3"],
-    };
+    return Coverage{format = CoverageFormat.lcov, profile = "coverage.lcov"};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

@@ -25,6 +25,6 @@ func (s *coverageSuite) TestLCOVIsAValidCase() {
 
 func (s *coverageSuite) TestDecodesFromItsJSON() {
 	var c Coverage
-	s.Require().NoError(json.Unmarshal([]byte(`{"format":"go-coverprofile","file":"cover.out","test":"go-test","command":{"bin":"go"},"uses":["go"]}`), &c))
-	s.Equal(Coverage{Format: CoverageFormatGoProfile, File: "cover.out", Test: "go-test", Command: Command{Bin: "go"}, Uses: []string{"go"}}, c)
+	s.Require().NoError(json.Unmarshal([]byte(`{"format":"go-coverprofile","profile":".magus/coverage.out"}`), &c))
+	s.Equal(Coverage{Format: CoverageFormatGoProfile, Profile: ".magus/coverage.out"}, c)
 }

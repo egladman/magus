@@ -45,6 +45,7 @@ type Spell struct {
 	languageExtensions  []string        // file extensions that ARE the language, from the Language record
 	syntax              *Syntax         // declared comment and stub syntax; nil when the spell declares neither
 	symbolIndexer       *SymbolIndexer  // declared symbol-indexing capability; nil when the spell declares none
+	coverage            *Coverage       // declared coverage profile; nil when the spell declares none
 	sandbox             *Sandbox        // declared host grants for its tools; nil when the spell declares none
 	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
 	opaque              bool
@@ -136,6 +137,10 @@ func (s *Spell) Syntax() *Syntax { return s.syntax }
 // it declares none. A non-nil result is what makes a project bound to this spell
 // symbol-capable; nothing else answers that question.
 func (s *Spell) SymbolIndexer() *SymbolIndexer { return s.symbolIndexer }
+
+// Coverage returns where the spell's projects leave a coverage profile,
+// or nil when it declares none, so its functions cannot be scored.
+func (s *Spell) Coverage() *Coverage { return s.coverage }
 
 // Sandbox returns what the spell's tools need from the host under the sandbox, or nil
 // when it declares nothing.
@@ -380,6 +385,11 @@ func WithLanguageExtensions(exts []string) Option {
 // registered without it is not symbol-capable.
 func WithSymbolIndexer(si *SymbolIndexer) Option {
 	return func(s *Spell) { s.symbolIndexer = si }
+}
+
+// WithCoverage sets where the spell's projects leave a coverage profile.
+func WithCoverage(c *Coverage) Option {
+	return func(s *Spell) { s.coverage = c }
 }
 
 // WithSandbox sets the host grants the spell's tools need under the sandbox.

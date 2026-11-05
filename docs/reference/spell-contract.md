@@ -89,7 +89,7 @@ The command that writes the spell's SCIP symbol index. magus runs it as the rese
 export fun mgs_getCoverage() > Coverage
 ```
 
-How the spell runs its tests with line coverage on. magus runs it as the reserved coverage op.
+Where a project's tests leave their line coverage profile. The project target that declares the profile as an output writes it.
 
 ## mgs_getSandbox
 

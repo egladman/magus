@@ -15,17 +15,12 @@ test "magus-buzz-test runs magus itself on the file and its sibling test" {
     std\assert(test.testScope.join(" ") == "\{file\} \{dir\}/\{stem\}_test.buzz", message: "scope");
 }
 
-test "coverage is the magus-buzz-test command with an lcov profile" {
+test "coverage is an lcov tracefile under coverage/buzz" {
     final coverage = buzz\mgs_getCoverage();
-    std\assert(coverage.format == CoverageFormat.lcov and coverage.file == "lcov.info", message: "report");
-    std\assert(coverage.test == "magus-buzz-test", message: "test op");
-    std\assert(coverage.command.bin == "$MAGUS", message: "bin");
-    std\assert(coverage.command.args.join(" ") == "buzz -t --embedded --coverprofile $MAGUS_COVERAGE_DIR/lcov.info", message: "argv");
-    std\assert(coverage.command.sources.join(" ") == "**/*.buzz", message: "names the files it measures");
+    std\assert(coverage.format == CoverageFormat.lcov, message: "format");
+    std\assert(coverage.profile == "coverage/buzz/lcov.info", message: "profile");
 }
 
 test "no op shares its name with a magusfile target" {
-    final targets = buzz\mgs_listTargets();
-    std\assert(!targets.hasKey("buzz-test"), message: "buzz-test is a target in . and docs");
-    std\assert(targets.hasKey(buzz\mgs_getCoverage().test), message: "coverage names a listed op");
+    std\assert(!buzz\mgs_listTargets().hasKey("buzz-test"), message: "buzz-test is a target in . and docs");
 }

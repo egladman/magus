@@ -13,8 +13,5 @@ export enum<str> CoverageFormat {
 
 export object Coverage {
     format: CoverageFormat = CoverageFormat.none,
-    file: str = "",
-    command: Command = Command{},
-    test: str = "",
-    uses: [str] = [],
+    profile: str = "",
 }

@@ -355,18 +355,9 @@ fun devServer(target: Target) > Service {
         needsArgs = "dev-server runs the command you name; pass it as args: typescript[\"dev-server\"](ctx, \{\"args\": [\"vite\"]})",
     }};
 }
-// Without @vitest/coverage-v8 in the project the op fails, naming the package.
+// node-test's lcov reporter writes it by default.
 export fun mgs_getCoverage() > Coverage {
-    return Coverage{
-        format = CoverageFormat.lcov,
-        file = "lcov.info",
-        test = "vitest",
-        command = Command{
-            bin = "pnpm",
-            args = ["exec", "vitest", "run", "--coverage.enabled", "--coverage.reporter=lcovonly", "--coverage.reportsDirectory=$MAGUS_COVERAGE_DIR"],
-        },
-        uses = ["pnpm"],
-    };
+    return Coverage{format = CoverageFormat.lcov, profile = "coverage.lcov"};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

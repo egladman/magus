@@ -27,10 +27,6 @@ Working directory and environment are NOT options: they ride the context, as `bu
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
-## coverage
-
-**Command:** `$MAGUS buzz -t --embedded --coverprofile $MAGUS_COVERAGE_DIR/lcov.info`
-
 ## magus-buzz-test
 
 `magus buzz -t` tests every path it is given, so a file's own test blocks and its _test.buzz sibling both run. The op is not named buzz-test, which this repo's magusfiles already declare as targets.

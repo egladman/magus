@@ -132,12 +132,9 @@ test "decisions count each match arm, one more than the textbook" {
     std\assert(decisions.operators.join(" ") == "&& || =>", message: "operators");
 }
 
-test "coverage is cargo llvm-cov's lcov scoped by cargo-test" {
+test "coverage is cargo llvm-cov's lcov and cargo-test keeps no test scope" {
     final coverage = rust\mgs_getCoverage();
-    std\assert(coverage.format == CoverageFormat.lcov and coverage.file == "lcov.info", message: "report");
-    std\assert(coverage.test == "cargo-test" and rust\mgs_listTargets()["cargo-test"] != null, message: "test op");
-    std\assert(coverage.command.args.join(" ") == "llvm-cov --lcov --output-path $MAGUS_COVERAGE_DIR/lcov.info", message: "argv");
-    std\assert(rust\mgs_getTools()["cargo-llvm-cov"] != null, message: "tool declared");
+    std\assert(coverage.format == CoverageFormat.lcov and coverage.profile == "lcov.info", message: "report");
     std\assert(rust\mgs_listTargets()["cargo-test"]!(Target{}).testScope.len() == 0, message: "whole crate");
 }
 

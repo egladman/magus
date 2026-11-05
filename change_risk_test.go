@@ -1,11 +1,10 @@
 package magus
 
 import (
+	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -49,15 +49,15 @@ func riskSyntax() *spells.Syntax {
 	}
 }
 
-func riskCoverageOp() map[string]spells.Op {
-	cov := &spells.Coverage{Format: spells.CoverageFormatGoProfile, File: "cover.out", Test: "go-test"}
-	return map[string]spells.Op{spells.CoverageOp: {Kind: spells.OpKindCoverage, Coverage: cov}}
+func riskCoverage() spells.Coverage {
+	return spells.Coverage{Format: spells.CoverageFormatGoProfile, Profile: ".magus/coverage.out"}
 }
 
 func (s *ChangeRiskSuite) SetupTest() {
 	s.files = map[string]string{"lib/a.go": riskBody}
+	cov := riskCoverage()
 	s.spell = spells.NewSpell("go", spells.WithLanguageExtensions([]string{".go"}),
-		spells.WithSyntax(riskSyntax()), spells.WithOps(riskCoverageOp()))
+		spells.WithSyntax(riskSyntax()), spells.WithCoverage(&cov))
 	s.report = keptReport{project: "lib", files: []coverage.File{{Path: "lib/a.go", Blocks: []coverage.Block{
 		{StartLine: 3, EndLine: 4, Units: 1, Hits: 1},
 		{StartLine: 5, EndLine: 5, Units: 1},
@@ -139,7 +139,8 @@ func (s *ChangeRiskSuite) TestASyntaxThatCannotCountIsAGap() {
 }
 
 func (s *ChangeRiskSuite) TestIndexerComplexityStandsInForADeclaredSyntax() {
-	s.spell = spells.NewSpell("go", spells.WithLanguageExtensions([]string{".go"}), spells.WithOps(riskCoverageOp()))
+	cov := riskCoverage()
+	s.spell = spells.NewSpell("go", spells.WithLanguageExtensions([]string{".go"}), spells.WithCoverage(&cov))
 	s.decided["sym F"] = 5
 
 	got := s.scorer().scoreAll([]touchedFunction{scoredFunction()})
@@ -162,7 +163,7 @@ func (s *ChangeRiskSuite) TestASpellWithNoCoverageIsAGapThatKeepsItsComplexity()
 }
 
 func (s *ChangeRiskSuite) TestNoKeptReportIsAGap() {
-	s.reason = "no coverage report is kept for lib: run `./magus run coverage lib`"
+	s.reason = "lib holds no coverage profile at .magus/coverage.out: run the target that writes it"
 
 	s.Equal(s.gap(3, s.reason), s.scorer().scoreAll([]touchedFunction{scoredFunction()}))
 }
@@ -329,8 +330,8 @@ func (s *ChangeRiskSuite) TestKeepReportsReadsEachReportOnce() {
 		return keptReport{project: project}, ""
 	})
 
-	read("lib", spells.Coverage{File: "cover.out"})
-	got, reason := read("lib", spells.Coverage{File: "cover.out"})
+	read("lib", riskCoverage())
+	got, reason := read("lib", riskCoverage())
 
 	s.Equal([3]any{1, "lib", ""}, [3]any{reads, got.project, reason})
 }
@@ -372,9 +373,30 @@ type ChangeRiskWorkspaceSuite struct {
 
 func TestChangeRiskWorkspaceSuite(t *testing.T) { suite.Run(t, new(ChangeRiskWorkspaceSuite)) }
 
+// riskMagusfile's test target declares the Go spell's profile, and cover
+// writes outProfile.
+const riskMagusfile = `import "magus";
+import "fs";
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles([".magus/coverage*.out"]);
+}
+export fun cover(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["cover.out"]);
+    fs\writeFile("cover.out", "mode: set\nexample.com/m/a.go:3.20,4.10 1 1\n");
+}
+export fun red(ctx: magus\Context, args: [str]) > void !> any {
+    throw "a test failed";
+}
+`
+
+func outSource() coverageSource {
+	return coverageSource{project: ".", spell: "go", target: "cover",
+		coverage: spells.Coverage{Format: spells.CoverageFormatGoProfile, Profile: "cover.out"}}
+}
+
 func (s *ChangeRiskWorkspaceSuite) SetupTest() {
 	root := writeWorkspace(s.T(), map[string]string{
-		"magusfile.buzz": "",
+		"magusfile.buzz": riskMagusfile,
 		"go.mod":         "module example.com/m\n\ngo 1.25\n",
 		"a.go":           riskBody,
 		"a_test.go":      "package a\n\nimport \"testing\"\n\nfunc TestF(t *testing.T) { F(1) }\n",
@@ -388,42 +410,54 @@ func (s *ChangeRiskWorkspaceSuite) SetupTest() {
 }
 
 func (s *ChangeRiskWorkspaceSuite) keep(name, report string) {
-	dir := coverage.Dir(s.m.CacheDir(), ".")
-	s.Require().NoError(os.MkdirAll(dir, 0o755))
-	s.Require().NoError(os.WriteFile(filepath.Join(dir, name), []byte(report), 0o644))
+	file := filepath.Join(s.m.Root(), filepath.FromSlash(name))
+	s.Require().NoError(os.MkdirAll(filepath.Dir(file), 0o755))
+	s.Require().NoError(os.WriteFile(file, []byte(report), 0o644))
 }
 
-func (s *ChangeRiskWorkspaceSuite) TestReadsAKeptGoProfile() {
-	s.keep("cover.out", "mode: set\nexample.com/m/a.go:3.20,4.10 1 1\n")
+func goProfile() spells.Coverage {
+	return spells.Coverage{Format: spells.CoverageFormatGoProfile, Profile: ".magus/coverage.out"}
+}
 
-	got, reason := s.m.readCoverageReport(".", spells.Coverage{Format: spells.CoverageFormatGoProfile, File: "cover.out"})
+func (s *ChangeRiskWorkspaceSuite) TestReadsTheGoProfileInTheTree() {
+	s.keep(".magus/coverage.out", "mode: set\nexample.com/m/a.go:3.20,4.10 1 1\n")
+
+	got, reason := s.m.readCoverageReport(".", goProfile())
 
 	s.Empty(reason)
 	s.Equal([]coverage.File{{Path: "a.go", Covered: 1, Total: 1, Blocks: []coverage.Block{{StartLine: 3, EndLine: 4, Units: 1, Hits: 1}}}}, got.files)
 }
 
-func (s *ChangeRiskWorkspaceSuite) TestReadsAKeptLCOVTracefile() {
-	s.keep("lcov.info", "SF:a.go\nDA:5,0\nend_of_record\n")
+func (s *ChangeRiskWorkspaceSuite) TestReadsAnLCOVTracefileInTheTree() {
+	s.keep("cov/lcov.info", "SF:a.go\nDA:5,0\nend_of_record\n")
 
-	got, reason := s.m.readCoverageReport(".", spells.Coverage{Format: spells.CoverageFormatLCOV, File: "lcov.info"})
+	got, reason := s.m.readCoverageReport(".", spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "cov/lcov.info"})
 
 	s.Empty(reason)
 	s.Equal([]coverage.File{{Path: "a.go", Total: 1, Blocks: []coverage.Block{{StartLine: 5, EndLine: 5, Units: 1}}}}, got.files)
 }
 
-func (s *ChangeRiskWorkspaceSuite) TestNoKeptReportNamesTheCommand() {
-	_, reason := s.m.readCoverageReport(".", spells.Coverage{Format: spells.CoverageFormatLCOV, File: "lcov.info"})
+func (s *ChangeRiskWorkspaceSuite) TestNoProfileNamesWhatIsMissing() {
+	_, reason := s.m.readCoverageReport(".", goProfile())
 
-	s.Equal("no coverage report is kept for .: run `./magus run coverage .`", reason)
+	s.Equal(". holds no coverage profile at .magus/coverage.out: run the target that writes it", reason)
 }
 
 func (s *ChangeRiskWorkspaceSuite) TestAGoProfileOutsideAnyModuleIsRefused() {
 	s.Require().NoError(os.Remove(filepath.Join(s.m.Root(), "go.mod")))
-	s.keep("cover.out", "mode: set\n")
+	s.keep(".magus/coverage.out", "mode: set\n")
 
-	_, reason := s.m.readCoverageReport(".", spells.Coverage{Format: spells.CoverageFormatGoProfile, File: "cover.out"})
+	_, reason := s.m.readCoverageReport(".", goProfile())
 
-	s.Equal("the coverage report for .: no go.mod at or above . names the module its profile's paths are in", reason)
+	s.Equal("the coverage profile of .: no go.mod at or above . names the module its profile's paths are in", reason)
+}
+
+func (s *ChangeRiskWorkspaceSuite) TestAProfileThatDoesNotParseNamesItsPath() {
+	s.keep(".magus/coverage.out", "not a profile\n")
+
+	_, reason := s.m.readCoverageReport(".", goProfile())
+
+	s.Contains(reason, "the coverage profile of .: .magus/coverage.out: ")
 }
 
 func (s *ChangeRiskWorkspaceSuite) TestReadWorkspaceFileReadsFromTheRoot() {
@@ -435,6 +469,13 @@ func (s *ChangeRiskWorkspaceSuite) TestSpellClaimingFindsTheBoundGoSpell() {
 	sp := s.m.spellClaiming()("a.go")
 	s.Require().NotNil(sp)
 	s.Equal("go", sp.Name())
+}
+
+func (s *ChangeRiskWorkspaceSuite) TestTheSourceIsTheTargetDeclaringTheProfile() {
+	c, reason := s.m.coverageSource(".", "a.go", s.m.spellClaiming()("a.go"))
+
+	s.Empty(reason)
+	s.Equal(coverageSource{project: ".", spell: "go", target: "test", coverage: goProfile()}, c)
 }
 
 func (s *ChangeRiskWorkspaceSuite) touchedLabels(base string) []string {
@@ -449,23 +490,6 @@ func (s *ChangeRiskWorkspaceSuite) touchedLabels(base string) []string {
 
 func (s *ChangeRiskWorkspaceSuite) TestNoBaseTouchesEveryFunction() {
 	s.Equal([]string{"F"}, s.touchedLabels(""))
-}
-
-func (s *ChangeRiskWorkspaceSuite) TestEveryFunctionsScopeIsItsWholeProject() {
-	m, err := s.m.newRiskMeter(s.T().Context(), touchedSet{}, "")
-	if err != nil {
-		s.T().Skipf("no version control to copy with: %v", err)
-	}
-	c, reason := m.measuringScope("a.go")
-	s.Equal([4]any{"", ".", "go", []string(nil)}, [4]any{reason, c.project, c.spell, c.scope})
-}
-
-func (s *ChangeRiskWorkspaceSuite) TestAReportThatDoesNotParseNamesItsFile() {
-	s.keep("cover.out", "not a profile\n")
-
-	_, reason := s.m.readCoverageReport(".", spells.Coverage{Format: spells.CoverageFormatGoProfile, File: "cover.out"})
-
-	s.Contains(reason, "the coverage report for .: cover.out: ")
 }
 
 func (s *ChangeRiskWorkspaceSuite) TestABaseScoresOnlyWhatChangedSinceIt() {
@@ -524,6 +548,89 @@ func (s *ChangeRiskWorkspaceSuite) TestAttachChangeRiskChecksTheFunctionADiffCha
 	s.Equal([]string{"F:change-risk"}, checks)
 }
 
+// ProfileFreshenSuite runs a magusfile target that writes a profile, in a
+// workspace whose projects magus discovers.
+type ProfileFreshenSuite struct {
+	suite.Suite
+	m *Magus
+}
+
+func TestProfileFreshenSuite(t *testing.T) { suite.Run(t, new(ProfileFreshenSuite)) }
+
+func (s *ProfileFreshenSuite) SetupTest() {
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile(riskMagusfile)
+	w.Write("go.mod", "module example.com/m\n\ngo 1.25\n")
+	w.Write("a.go", riskBody)
+	m, err := Open(s.T().Context(), w.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *ProfileFreshenSuite) TestTheHeadProfileIsWhatItsTargetWrote() {
+	got, err := s.m.headProfile(s.T().Context(), outSource())
+
+	s.Require().NoError(err)
+	s.Equal(profileRead{files: []coverage.File{{Path: "a.go", Covered: 1, Total: 1,
+		Blocks: []coverage.Block{{StartLine: 3, EndLine: 4, Units: 1, Hits: 1}}}}}, got)
+}
+
+func (s *ProfileFreshenSuite) TestAnEditedProfileIsNotCurrentAndRunsTheTargetAgain() {
+	_, err := s.m.headProfile(s.T().Context(), outSource())
+	s.Require().NoError(err)
+	file := filepath.Join(s.m.Root(), "cover.out")
+	s.Require().NoError(os.WriteFile(file, []byte("mode: set\n"), 0o644))
+
+	got, err := s.m.headProfile(s.T().Context(), outSource())
+
+	s.Require().NoError(err)
+	s.Len(got.files, 1, "the target ran again and wrote its profile back")
+}
+
+func (s *ProfileFreshenSuite) TestAFailingTargetIsAReason() {
+	c := outSource()
+	c.target = "red"
+	got, err := s.m.headProfile(s.T().Context(), c)
+
+	s.Require().NoError(err)
+	s.Contains(got.reason, "`magus run red .` left no current profile: ")
+}
+
+type ProfileTargetSuite struct{ suite.Suite }
+
+func TestProfileTargetSuite(t *testing.T) { suite.Run(t, new(ProfileTargetSuite)) }
+
+func outputsOf(targets map[string]string) *types.Project {
+	p := &types.Project{Path: "lib", TargetOutputs: map[string][]types.OutputRef{}}
+	for name, glob := range targets {
+		p.TargetOutputs[name] = []types.OutputRef{{Glob: glob}}
+	}
+	return p
+}
+
+func (s *ProfileTargetSuite) TestTheOneTargetDeclaringTheProfileWritesIt() {
+	target, reason := profileTarget(outputsOf(map[string]string{"test": "out/*.lcov", "build": "dist/**"}), "out/a.lcov")
+	s.Equal([2]string{"test", ""}, [2]string{target, reason})
+}
+
+func (s *ProfileTargetSuite) TestNoTargetDeclaringTheProfileIsAReason() {
+	_, reason := profileTarget(outputsOf(map[string]string{"build": "dist/**"}), "out/a.lcov")
+	s.Equal("no target of lib declares its coverage profile out/a.lcov as an output", reason)
+}
+
+func (s *ProfileTargetSuite) TestTwoTargetsDeclaringTheProfileIsAReason() {
+	_, reason := profileTarget(outputsOf(map[string]string{"test": "out/**", "cover": "out/a.lcov"}), "out/a.lcov")
+	s.Equal("targets cover, test of lib each declare its coverage profile out/a.lcov, so which run wrote it is unknown", reason)
+}
+
+func (s *ProfileTargetSuite) TestASourceNamesWhatTheSpellLacks() {
+	m := &Magus{}
+	_, none := m.coverageSource("lib", "lib/a.go", nil)
+	_, noCoverage := m.coverageSource("lib", "lib/a.go", spells.NewSpell("go"))
+	s.Equal([2]string{"no spell bound to lib claims .go files", "spell go declares no coverage (mgs_getCoverage)"}, [2]string{none, noCoverage})
+}
+
 // riskBaseBody is F as the base held it, on lines 3 to 11: one if more, so
 // complexity 4.
 const riskBaseBody = "package a\n\n" +
@@ -540,51 +647,53 @@ const riskBaseBody = "package a\n\n" +
 // riskShrink removes the second if, base to HEAD.
 const riskShrink = "@@ -6,6 +6,3 @@\n \t}\n-\tif x == 5 {\n-\t\treturn 5\n-\t}\n \treturn 0\n }\n"
 
-// RiskMeterSuite measures with stub copies, runs and reports.
+// RiskMeterSuite measures with stub profile reads.
 type RiskMeterSuite struct {
 	suite.Suite
 	scorer ChangeRiskSuite
 	meter  riskMeter
-	// mu guards revs and ran: head and base run at once.
+	// mu guards read: head and base read at once.
 	mu sync.Mutex
-	// revs is each copy's revision by its dir.
-	revs   map[string]string
+	// files and failed are each side's profile, keyed "head" and "base".
 	files  map[string][]coverage.File
 	failed map[string]bool
-	ran    []string
-	// baseFile is where the base copy holds the file, when it was renamed.
+	read   []string
+	// baseFile is where the base holds the file, when it was renamed.
 	baseFile string
-	runErr   error
+	readErr  error
 }
 
 func TestRiskMeterSuite(t *testing.T) { suite.Run(t, new(RiskMeterSuite)) }
 
+func riskSource() coverageSource {
+	return coverageSource{project: "lib", spell: "go", target: "test", coverage: riskCoverage()}
+}
+
 func (s *RiskMeterSuite) SetupTest() {
 	s.scorer.SetT(s.T())
 	s.scorer.SetupTest()
-	s.revs, s.failed, s.ran, s.baseFile, s.runErr = map[string]string{}, map[string]bool{}, nil, "", nil
+	s.failed, s.read, s.baseFile, s.readErr = map[string]bool{}, nil, "", nil
 	s.files = map[string][]coverage.File{
-		"": {{Path: "lib/a.go", Blocks: []coverage.Block{
+		"head": {{Path: "lib/a.go", Blocks: []coverage.Block{
 			{StartLine: 3, EndLine: 4, Units: 1, Hits: 1}, {StartLine: 5, EndLine: 5, Units: 1}, {StartLine: 7, EndLine: 7, Units: 2, Hits: 1},
 		}}},
 		"base": {{Path: "lib/a.go", Blocks: []coverage.Block{
 			{StartLine: 3, EndLine: 4, Units: 1}, {StartLine: 8, EndLine: 8, Units: 1}, {StartLine: 10, EndLine: 10, Units: 1},
 		}}},
 	}
-	scope := coverageScope{project: "lib", spell: "go", coverage: spells.Coverage{File: "cover.out", Test: "go-test"}, scope: []string{"./lib"}}
 	s.meter = riskMeter{
-		scorer:  s.scorer.scorer(),
-		measuringScope: func(string) (coverageScope, string) { return scope, "" },
-		covers:  func(string) bool { return true },
-		copy:    s.copy,
-		run: func(_ context.Context, dir, target string, c coverageScope) (testRun, error) {
-			rev := s.copyRevision(dir)
-			s.mu.Lock()
-			s.ran = append(s.ran, fmt.Sprintf("%s@%s %s", target, rev, strings.Join(c.scope, " ")))
-			s.mu.Unlock()
-			return testRun{passed: !s.failed[rev]}, s.runErr
+		scorer: s.scorer.scorer(),
+		source: func(string) (coverageSource, string) { return riskSource(), "" },
+		covers: func(string) bool { return true },
+		head:   s.side("head"),
+		atBase: s.side("base"),
+		readAt: func(p string) (string, bool) {
+			if p != cmp.Or(s.baseFile, "lib/a.go") {
+				return "", false
+			}
+			return riskBaseBody, true
 		},
-		report: func(dir string, _ coverageScope) ([]coverage.File, error) { return s.files[s.copyRevision(dir)], nil },
+		done:   func() {},
 		commit: "base",
 		since: sinceBase{
 			lines:     map[string][]int{"lib/a.go": {5}},
@@ -594,34 +703,26 @@ func (s *RiskMeterSuite) SetupTest() {
 	}
 }
 
-func (s *RiskMeterSuite) copyRevision(dir string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.revs[dir]
+func (s *RiskMeterSuite) side(name string) func(context.Context, coverageSource) (profileRead, error) {
+	return func(_ context.Context, c coverageSource) (profileRead, error) {
+		s.mu.Lock()
+		s.read = append(s.read, fmt.Sprintf("%s %s", name, c.command()))
+		s.mu.Unlock()
+		if s.readErr != nil {
+			return profileRead{}, s.readErr
+		}
+		if s.failed[name] {
+			return profileRead{reason: fmt.Sprintf("a test fails at %s: `%s`", name, c.command())}, nil
+		}
+		return profileRead{files: s.files[name]}, nil
+	}
 }
 
-// ranSorted is what ran, in order: head and base run at once.
-func (s *RiskMeterSuite) ranSorted() []string {
+// readSorted is what was read, in order: head and base read at once.
+func (s *RiskMeterSuite) readSorted() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return slices.Sorted(slices.Values(s.ran))
-}
-
-func (s *RiskMeterSuite) copy(_ context.Context, rev string, _ []string) (string, error) {
-	dir := s.T().TempDir()
-	s.mu.Lock()
-	s.revs[dir] = rev
-	s.mu.Unlock()
-	body := riskBody
-	if rev != "" {
-		body = riskBaseBody
-	}
-	file := "lib/a.go"
-	if rev != "" && s.baseFile != "" {
-		file = s.baseFile
-	}
-	s.Require().NoError(os.MkdirAll(filepath.Join(dir, "lib", "lib"), 0o755))
-	return dir, os.WriteFile(filepath.Join(dir, filepath.FromSlash(file)), []byte(body), 0o644)
+	return slices.Sorted(slices.Values(s.read))
 }
 
 func (s *RiskMeterSuite) measure() types.ChangeRisk {
@@ -637,14 +738,14 @@ func (s *RiskMeterSuite) TestAShrunkFunctionIsScoredAgainstItselfAtBase() {
 	f := got.Functions[0]
 	s.Equal([5]any{"", 4, 0, 3, 20.0}, [5]any{f.BaseReason, f.BaseComplexity, f.BaseCovered, f.BaseCoverable, f.BaseScore})
 	s.False(f.Charged(3), "past 3 at head, but better than at base")
-	s.Equal([]string{"go::coverage@ ./lib", "go::coverage@base ./lib"}, s.ranSorted())
+	s.Equal([]string{"base magus run test lib", "head magus run test lib"}, s.readSorted())
 }
 
 func (s *RiskMeterSuite) TestAFunctionWorseThanAtBaseIsCharged() {
 	s.files["base"] = []coverage.File{{Path: "lib/a.go", Blocks: []coverage.Block{
 		{StartLine: 3, EndLine: 11, Units: 1, Hits: 1},
 	}}}
-	s.files[""] = []coverage.File{{Path: "lib/a.go", Blocks: []coverage.Block{{StartLine: 3, EndLine: 8, Units: 2}}}}
+	s.files["head"] = []coverage.File{{Path: "lib/a.go", Blocks: []coverage.Block{{StartLine: 3, EndLine: 8, Units: 2}}}}
 	f := s.measure().Functions[0]
 	s.Equal([2]float64{12, 4}, [2]float64{f.Score, f.BaseScore})
 	s.True(f.Charged(3))
@@ -661,26 +762,26 @@ func (s *RiskMeterSuite) TestANewFunctionHasNoBase() {
 func (s *RiskMeterSuite) TestNoCommitJudgesNoBase() {
 	s.meter.commit = ""
 	got := s.measure()
-	s.Equal([3]any{noBase, []types.Finding(nil), []string{"go::coverage@ ./lib"}}, [3]any{got.Functions[0].BaseReason, got.Lines, s.ran})
+	s.Equal([3]any{noBase, []types.Finding(nil), []string{"head magus run test lib"}}, [3]any{got.Functions[0].BaseReason, got.Lines, s.read})
 }
 
-func (s *RiskMeterSuite) TestARedTestInScopeIsAGapWithTheReason() {
-	s.failed[""] = true
+func (s *RiskMeterSuite) TestARedHeadIsAGapWithTheReason() {
+	s.failed["head"] = true
 	got := s.measure()
-	reason := "a test in its scope fails: `magus run go::coverage lib -- ./lib`"
+	reason := "a test fails at head: `magus run test lib`"
 	s.Equal(types.ChangeRisk{
 		Definition: riskDefinition,
 		Gaps:       []types.FunctionGap{{Symbol: "sym F", Label: "F", Path: "lib/a.go", Language: "go", Line: 3, Complexity: 3, Reason: reason}},
 		Lines: []types.Finding{{Path: "lib/a.go", Line: 1,
 			Message: "the coverage of lib/a.go was not measured: " + reason,
-			Fix:     "Make the tests in its scope pass, so its covered lines can be compared."}},
+			Fix:     "Make its project's tests pass, so its covered lines can be compared."}},
 	}, got)
 }
 
 func (s *RiskMeterSuite) TestARedBaseLeavesTheHeadScoreAndSaysWhy() {
 	s.failed["base"] = true
 	f := s.measure().Functions[0]
-	s.Equal("its base is unmeasured: a test in its scope fails: `magus run go::coverage lib -- ./lib`", f.BaseReason)
+	s.Equal("its base is unmeasured: a test fails at base: `magus run test lib`", f.BaseReason)
 	s.True(f.Charged(3), "no base measure: the threshold alone judges")
 }
 
@@ -689,14 +790,14 @@ func (s *RiskMeterSuite) TestAKeptLineThatLostCoverageAndAnUncoveredAddedLineAre
 	s.files["base"] = []coverage.File{{Path: "lib/a.go", Blocks: []coverage.Block{
 		{StartLine: 4, EndLine: 4, Units: 1, Hits: 1}, {StartLine: 8, EndLine: 8, Units: 1, Hits: 1},
 	}}}
-	s.files[""] = []coverage.File{{Path: "lib/a.go", Blocks: []coverage.Block{
+	s.files["head"] = []coverage.File{{Path: "lib/a.go", Blocks: []coverage.Block{
 		{StartLine: 4, EndLine: 5, Units: 1},
 	}}}
 	got := s.measure()
 	s.Equal([]types.Finding{
-		{Path: "lib/a.go", Line: 4, Message: "lib/a.go:4 was covered at base and no test in its scope covers it now",
+		{Path: "lib/a.go", Line: 4, Message: "lib/a.go:4 was covered at base and no test of its package covers it now",
 			Fix: "Restore the test that covered it, or delete the code no test needs."},
-		{Path: "lib/a.go", Line: 5, Message: "lib/a.go:5 was added and no test in its scope covers it",
+		{Path: "lib/a.go", Line: 5, Message: "lib/a.go:5 was added and no test of its package covers it",
 			Fix: "Cover the added lines with a test."},
 	}, got.Lines)
 }
@@ -715,79 +816,30 @@ func (s *RiskMeterSuite) TestLineFindingsJoinConsecutiveLines() {
 	}, got)
 }
 
-func (s *RiskMeterSuite) TestARunTheSchedulerCouldNotSeatIsAnErrorNotAGap() {
-	s.runErr = fmt.Errorf("exited 75: %w", errNoSeat)
+func (s *RiskMeterSuite) TestAReadThatFailsIsAnErrorNotAGap() {
+	s.readErr = fmt.Errorf("change risk: %w", errNoSeat)
 	_, err := s.meter.measure(context.Background(), []touchedFunction{scoredFunction()})
 	s.ErrorIs(err, errNoSeat)
 }
 
-func (s *RiskMeterSuite) TestARunThatRecordedNoResultStaysAGap() {
-	s.runErr = fmt.Errorf("exited 1: %w", errNoResult)
-	got := s.measure()
-	s.Len(got.Gaps, 1)
-}
-
-func (s *RiskMeterSuite) withScope(scope ...string) {
-	s.meter.measuringScope = func(string) (coverageScope, string) {
-		return coverageScope{project: "lib", spell: "go", coverage: spells.Coverage{File: "cover.out", Test: "go-test"}, scope: scope}, ""
-	}
-}
-
-func (s *RiskMeterSuite) TestAChangedFileWhoseScopeHasNoTestIsReported() {
-	scoped := s.meter.measuringScope
-	s.meter.measuringScope = func(p string) (coverageScope, string) {
+func (s *RiskMeterSuite) TestAChangedFileWithNoSourceIsReported() {
+	s.meter.source = func(p string) (coverageSource, string) {
 		if p == "lib/b.go" {
-			return coverageScope{}, "no test_scope entry names a file for lib/b.go"
+			return coverageSource{}, "no target of lib declares its coverage profile .magus/coverage.out as an output"
 		}
-		return scoped(p)
+		return riskSource(), ""
 	}
 	s.meter.changed = []string{"lib/b.go"}
 	got := s.measure()
 	s.Equal([]types.Finding{{Path: "lib/b.go", Line: 1,
-		Message: "the coverage of lib/b.go was not compared: no test_scope entry names a file for lib/b.go",
-		Fix:     "Give its spell a test scope that names a test, so its covered lines can be compared."}}, got.Lines)
+		Message: "the coverage of lib/b.go was not compared: no target of lib declares its coverage profile .magus/coverage.out as an output",
+		Fix:     "Declare the coverage profile its spell names as an output of the target that writes it."}}, got.Lines)
 }
 
-func (s *RiskMeterSuite) TestATestFileTheChangeAddedIsNotRunAtBase() {
-	s.withScope("./lib", "./added_test.go")
-	f := s.measure().Functions[0]
-	s.Equal([]string{"go::coverage@ ./lib ./added_test.go", "go::coverage@base ./lib"}, s.ranSorted())
-	s.Empty(f.BaseReason)
-}
-
-func (s *RiskMeterSuite) TestFilesOfOneProjectShareOneRunOverTheirUnion() {
-	s.meter.measuringScope = func(p string) (coverageScope, string) {
-		return coverageScope{project: "lib", spell: "go", coverage: spells.Coverage{File: "cover.out", Test: "go-test"},
-			scope: []string{"./" + path.Dir(p)}}, ""
-	}
-	s.meter.changed = []string{"lib/a.go", "lib/b/b.go", "lib/c/c.go", "lib/b/d.go"}
+func (s *RiskMeterSuite) TestFilesOfOneProjectShareOneRead() {
+	s.meter.changed = []string{"lib/a.go", "lib/b/b.go", "lib/c/c.go"}
 	s.measure()
-	s.Equal([]string{"go::coverage@ ./lib ./lib/b ./lib/c", "go::coverage@base ./lib"}, s.ranSorted(),
-		"base drops the dirs its tree lacks")
-}
-
-func (s *RiskMeterSuite) TestAWholeProjectScopeAbsorbsTheOthers() {
-	s.Nil(unionScope([]string{"./a"}, nil))
-	s.Equal([]string{"./a", "./b"}, unionScope([]string{"./a"}, []string{"./b", "./a"}))
-}
-
-func (s *RiskMeterSuite) TestAStoppedRunNamesItsCommandSideAndElapsedTime() {
-	ctx, cancel := context.WithCancelCause(context.Background())
-	s.meter.commit = ""
-	s.meter.run = func(context.Context, string, string, coverageScope) (testRun, error) {
-		cancel(errors.New("the gate ended"))
-		return testRun{}, context.Canceled
-	}
-	_, err := s.meter.measure(ctx, []touchedFunction{scoredFunction()})
-	s.ErrorContains(err, "change risk: stopped running `magus run go::coverage lib -- ./lib` at head after ")
-	s.ErrorContains(err, ": the gate ended")
-}
-
-func (s *RiskMeterSuite) TestABaseHoldingNoScopeFileMakesTheBaseUnmeasured() {
-	s.withScope("./added_test.go")
-	got := s.measure()
-	s.Equal([]string{"go::coverage@ ./added_test.go"}, s.ranSorted(), "nothing ran at base")
-	s.Equal("no test_scope entry names a file at base", got.Functions[0].BaseReason[len("its base is unmeasured: "):])
+	s.Equal([]string{"base magus run test lib", "head magus run test lib"}, s.readSorted())
 }
 
 func (s *RiskMeterSuite) TestARenamedFileIsReadAndComparedAtItsOldPath() {
@@ -810,10 +862,4 @@ func (s *RiskMeterSuite) TestABasePathFollowsRenamesThroughBothPatches() {
 	}
 	since := sinceBase{committedOld: renamedPaths(rename("one.go", "two.go")), workingOld: renamedPaths(rename("two.go", "three.go"))}
 	s.Equal([3]string{"one.go", "two.go", "plain.go"}, [3]string{since.basePath("three.go"), since.headPath("three.go"), since.basePath("plain.go")})
-}
-
-func (s *RiskMeterSuite) TestScopeOfNamesWhatTheSpellLacks() {
-	_, none := measuringScope("/r", "lib", "lib/a.go", nil, false)
-	_, noCoverage := measuringScope("/r", "lib", "lib/a.go", spells.NewSpell("go"), false)
-	s.Equal([2]string{"no spell bound to lib claims .go files", "spell go declares no coverage (mgs_getCoverage)"}, [2]string{none, noCoverage})
 }

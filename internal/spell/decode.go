@@ -36,7 +36,6 @@ func (r Resolved) Descriptor() (spells.Descriptor, error) {
 		r.assembleOps,
 		func(m *spells.Descriptor) error { return applyModeArgs(m, r.Contract.ModeArgs) },
 		addSymbolIndexOp,
-		r.addCoverageOp,
 		synthesizeInstall,
 		func(m *spells.Descriptor) error { return validateTools(*m) },
 	} {
@@ -93,6 +92,11 @@ func (r Resolved) declared() (spells.Descriptor, error) {
 		}
 		indexer = &si
 	}
+	if c.Coverage != nil {
+		if err := validateCoverage(*c.Coverage); err != nil {
+			return spells.Descriptor{}, fmt.Errorf("mgs_getCoverage: %w", err)
+		}
+	}
 	return spells.Descriptor{
 		Name:               c.Name,
 		Needs:              globValues(c.RequiredGlobs),
@@ -105,6 +109,7 @@ func (r Resolved) declared() (spells.Descriptor, error) {
 		LanguageExtensions: lang.Extensions,
 		Syntax:             lang.Syntax,
 		SymbolIndexer:      indexer,
+		Coverage:           c.Coverage,
 		Sandbox:            c.Sandbox,
 		Opaque:             c.Opaque,
 	}, nil
@@ -137,85 +142,16 @@ func addSymbolIndexOp(m *spells.Descriptor) error {
 	return nil
 }
 
-// addCoverageOp registers mgs_getCoverage's answer as an op under its reserved
-// name, so `magus run coverage` runs and caches it like any op. It runs after
-// assembleOps, since the declaration names its test op.
-func (r Resolved) addCoverageOp(m *spells.Descriptor) error {
-	if _, authored := m.Ops[spells.CoverageOp]; authored {
-		return fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared coverage, "+
-			"move the command to `export fun mgs_getCoverage() > Coverage` and drop the op", m.Name, spells.CoverageOp)
-	}
-	if r.Contract.Coverage == nil {
-		return nil
-	}
-	cov, err := validateCoverage(*r.Contract.Coverage, *m)
-	if err != nil {
-		return fmt.Errorf("spell %q: mgs_getCoverage: %w", m.Name, err)
-	}
-	// A forwarded scope narrows coverage as it narrows the test op. Otherwise
-	// the default args and sources ride along, and it runs everything.
-	if len(cov.Command.TestScope) == 0 {
-		cov.Command.TestScope = m.Ops[cov.Test].TestScope
-	}
-	if m.Ops == nil {
-		m.Ops = map[string]spells.Op{}
-	}
-	m.Ops[spells.CoverageOp] = spells.Op{Kind: spells.OpKindCoverage, Command: cov.Command, Coverage: &cov}
-	return nil
-}
-
-// validateCoverage checks a coverage declaration against the ops and tools m
-// already holds, and returns it with its test op's name normalized.
-func validateCoverage(cov spells.Coverage, m spells.Descriptor) (spells.Coverage, error) {
-	cov.Test = types.Normalize(cov.Test)
-	for _, check := range []func(spells.Coverage, spells.Descriptor) error{
-		checkCoverageReport, checkCoverageCommand, checkCoverageTest, checkCoverageUses,
-	} {
-		if err := check(cov, m); err != nil {
-			return spells.Coverage{}, err
-		}
-	}
-	return cov, nil
-}
-
-// checkCoverageReport refuses a report magus would have to guess how to read
-// or where to find.
-func checkCoverageReport(cov spells.Coverage, _ spells.Descriptor) error {
+// validateCoverage refuses a report magus would have to guess how to read or
+// where to find.
+func validateCoverage(cov spells.Coverage) error {
 	if !cov.Format.Valid() || cov.Format == spells.CoverageFormatNone {
 		return fmt.Errorf("format is %s, want one of %s", cmp.Or(string(cov.Format), "none"), strings.Join(cov.Format.Values(), ", "))
 	}
-	if cov.File == "" || path.Base(cov.File) != cov.File {
-		return fmt.Errorf("file %q must be a plain file name under %s", cov.File, spells.CoverageDirEnvVar)
+	if !path.IsAbs(cov.Profile) && path.Clean(cov.Profile) == cov.Profile && filepath.IsLocal(cov.Profile) {
+		return nil
 	}
-	return nil
-}
-
-func checkCoverageCommand(cov spells.Coverage, m spells.Descriptor) error {
-	if err := validateCommand(m.Name, spells.CoverageOp, cov.Command); err != nil {
-		return err
-	}
-	if cov.Command.Bin == "" {
-		return fmt.Errorf("command.bin is required")
-	}
-	return nil
-}
-
-func checkCoverageTest(cov spells.Coverage, m spells.Descriptor) error {
-	if op, ok := m.Ops[cov.Test]; !ok || op.OpKind() != spells.OpKindCommand {
-		return fmt.Errorf("test %q names no command op in mgs_listTargets", cov.Test)
-	}
-	return nil
-}
-
-// checkCoverageUses refuses a used tool with no version probe, which would
-// key the op on nothing.
-func checkCoverageUses(cov spells.Coverage, m spells.Descriptor) error {
-	for _, tool := range cov.Uses {
-		if m.Tools[tool].Probe.Bin == "" {
-			return fmt.Errorf("uses %q, which mgs_getTools does not declare with a version probe", tool)
-		}
-	}
-	return nil
+	return fmt.Errorf("profile %q must be a clean slash path inside the project directory", cov.Profile)
 }
 
 // assembleOps turns the spell's target and service handlers into m.Ops and m.DocOps.

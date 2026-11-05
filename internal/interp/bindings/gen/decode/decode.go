@@ -514,30 +514,12 @@ func decodeCoverage(v vm.Value, path string) (spells.Coverage, error) {
 				return out, err
 			}
 			out.Format = spells.CoverageFormat(sFormat)
-		case "file":
-			sFile, err := decodeString(item, path+".file")
+		case "profile":
+			sProfile, err := decodeString(item, path+".profile")
 			if err != nil {
 				return out, err
 			}
-			out.File = sFile
-		case "command":
-			xCommand, err := decodeCommand(item, path+".command")
-			if err != nil {
-				return out, err
-			}
-			out.Command = xCommand
-		case "test":
-			sTest, err := decodeString(item, path+".test")
-			if err != nil {
-				return out, err
-			}
-			out.Test = sTest
-		case "uses":
-			strsUses, err := decodeStringList(item, path+".uses")
-			if err != nil {
-				return out, err
-			}
-			out.Uses = strsUses
+			out.Profile = sProfile
 		default:
 			return out, unknownMember(path, "Coverage", key)
 		}

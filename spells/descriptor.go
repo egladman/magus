@@ -346,6 +346,9 @@ type Descriptor struct {
 	// decode so the run, cache and freshness machinery reach it the way they reach any
 	// other command op. Both views come from this one declaration.
 	SymbolIndexer *SymbolIndexer `json:"symbol_indexer,omitempty"`
+	// Coverage is where the spell's projects leave a coverage profile, from
+	// mgs_getCoverage; nil when it declares none. It synthesizes no op.
+	Coverage *Coverage `json:"coverage,omitempty"`
 	// DocOps names the ops authored as function handlers (sorted) — as opposed to
 	// plain {cmd,args} record ops. `magus doctor` requires a doc comment on each of
 	// these for a workspace-local Buzz spell. Not serialized: it is a resolution-path

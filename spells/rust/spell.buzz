@@ -21,7 +21,6 @@ export fun mgs_getTools() > {str: Tool} {
         // Observed, not probed: only the scip op drives it, so its version keys the index
         // and no other target.
         "rust-analyzer": Tool{observe = Command{bin = "rust-analyzer", args = ["--version"]}},
-        "cargo-llvm-cov": Tool{probe = Command{bin = "cargo", args = ["llvm-cov", "--version"]}, key = VersionKey{upTo = VersionComponent.patch}},
     };
 }
 
@@ -118,15 +117,10 @@ fun cargoFmt(target: Target) > Command {
     }};
 }
 fun cargoTest(target: Target) > Command { return Command{bin = "cargo", args = ["test"]}; }
-// The lcov report covers the whole crate; cargo-test keeps no test scope.
+// The project's test target writes it with
+// `cargo llvm-cov --lcov --output-path lcov.info`.
 export fun mgs_getCoverage() > Coverage {
-    return Coverage{
-        format = CoverageFormat.lcov,
-        file = "lcov.info",
-        test = "cargo-test",
-        command = Command{bin = "cargo", args = ["llvm-cov", "--lcov", "--output-path", "$MAGUS_COVERAGE_DIR/lcov.info"]},
-        uses = ["cargo-llvm-cov", "rustc"],
-    };
+    return Coverage{format = CoverageFormat.lcov, profile = "lcov.info"};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

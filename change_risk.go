@@ -3,7 +3,6 @@ package magus
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -19,6 +18,8 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -44,7 +45,7 @@ type riskScorer struct {
 	report func(fn touchedFunction, cov spells.Coverage) (keptReport, string)
 }
 
-// keptReport is a coverage op's report as the last run left it.
+// keptReport is a project's coverage profile as its last test run left it.
 type keptReport struct {
 	project string
 	files   []coverage.File
@@ -121,11 +122,11 @@ func (s riskScorer) indexerDecisions(fn touchedFunction, spellName string) (int,
 
 func (s riskScorer) coverage(fn touchedFunction) (covered, coverable int, reason string) {
 	sp := s.claimant(fn.Path)
-	op, ok := sp.Op(spells.CoverageOp)
-	if !ok || op.Coverage == nil {
+	cov := sp.Coverage()
+	if cov == nil {
 		return 0, 0, fmt.Sprintf("spell %s declares no coverage (mgs_getCoverage)", sp.Name())
 	}
-	report, reason := s.report(fn, *op.Coverage)
+	report, reason := s.report(fn, *cov)
 	if reason != "" {
 		return 0, 0, reason
 	}
@@ -174,40 +175,26 @@ func functionGap(fn touchedFunction, complexity int, reason string) types.Functi
 // it forked from base, and the working tree's edits on top. Each is measured
 // again as the merge base held it, and the changed files' covered lines are
 // compared. base "" scores every function in the workspace, against no base.
-// Coverage runs in scratch copies of the tree, scoped to the touched files'
-// tests, so a caller inside a run holding the workspace's projects never waits
-// on itself. A named base bounds the measure by measureBudget.
+// Coverage is the profile each owning spell declares. At head the target
+// writing it is freshened through the cache; at base the profile is read as
+// kept for the merge base, or that target runs once in a copy of it.
 func (m *Magus) ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, error) {
-	if base != "" {
-		var cancel context.CancelFunc
-		ctx, cancel = withBudget(ctx, "change risk")
-		defer cancel()
-	}
 	start := time.Now()
 	set, err := m.touchedSince(ctx, base)
 	if err != nil {
 		return types.ChangeRisk{}, stopped(ctx, "change risk", start, "finding the touched functions", err)
 	}
-	meter, err := m.newRiskMeter(ctx, set, base)
+	meter, err := m.newRiskMeter(ctx, set, base, start)
 	if err != nil {
 		return types.ChangeRisk{}, stopped(ctx, "change risk", start, "resolving the base", err)
 	}
-	meter.start = start
+	defer meter.done()
 	out, err := meter.measure(ctx, set.fns)
 	if err != nil {
 		return types.ChangeRisk{}, err
 	}
 	out.Base = base
 	return out, nil
-}
-
-// measureBudget bounds one Change.risk. lint-rules runs it, and it must
-// end inside the target's kill.
-const measureBudget = 7 * time.Minute
-
-// withBudget is ctx bounded by measureBudget, its cause naming the budget.
-func withBudget(ctx context.Context, measure string) (context.Context, context.CancelFunc) {
-	return context.WithTimeoutCause(ctx, measureBudget, fmt.Errorf("%s ran past its %s budget", measure, measureBudget))
 }
 
 // stopped names what a measure was doing when ctx ended, and how long it ran.
@@ -220,111 +207,156 @@ func stopped(ctx context.Context, measure string, start time.Time, doing string,
 	return fmt.Errorf("%s: stopped %s after %s: %w", measure, doing, time.Since(start).Round(time.Second), context.Cause(ctx))
 }
 
-// coverageScope is one run of a spell's coverage op over a test scope. A nil
-// scope runs the whole project.
-type coverageScope struct {
+// coverageSource is where one project's coverage profile comes from: the
+// spell that declares it and the project target that writes it.
+type coverageSource struct {
 	project  string
 	spell    string
+	target   string
 	coverage spells.Coverage
-	scope    []string
 }
 
-func (c coverageScope) key() string {
-	return strings.Join(slices.Concat([]string{c.project, c.spell}, c.scope), "\x00")
-}
+func (c coverageSource) key() string { return c.project + "\x00" + c.coverage.Profile }
 
-// runKey names the one coverage run of c's project and spell.
-func (c coverageScope) runKey() string { return fmt.Sprintf("%s\x00%s", c.project, c.spell) }
+func (c coverageSource) command() string { return fmt.Sprintf("magus run %s %s", c.target, c.project) }
 
-// target names op through its spell, so no magusfile target of the same
-// name stands in for it.
-func (c coverageScope) target(op string) string { return fmt.Sprintf("%s::%s", c.spell, op) }
-
-func (c coverageScope) command() string {
-	return strings.Join(slices.Concat([]string{"magus run", c.target(spells.CoverageOp), c.project, "--"}, c.scope), " ")
-}
-
-// measuringScope is the coverage run that measures name, a file of project that sp
-// claims. whole runs the whole project instead of name's test scope.
-func measuringScope(root, project, name string, sp *spells.Spell, whole bool) (coverageScope, string) {
-	if sp == nil {
-		return coverageScope{}, fmt.Sprintf("no spell bound to %s claims %s files", project, path.Ext(name))
-	}
-	cov, ok := sp.Op(spells.CoverageOp)
-	if !ok || cov.Coverage == nil {
-		return coverageScope{}, fmt.Sprintf("spell %s declares no coverage (mgs_getCoverage)", sp.Name())
-	}
-	test, ok := sp.Op(cov.Coverage.Test)
-	if !ok {
-		return coverageScope{}, fmt.Sprintf("spell %s's coverage names test op %s, which it does not declare", sp.Name(), cov.Coverage.Test)
-	}
-	c := coverageScope{project: project, spell: sp.Name(), coverage: *cov.Coverage}
-	if whole {
-		return c, ""
-	}
-	scope, reason := subjectScope(root, project, name, test.Command)
-	c.scope = scope
-	return c, reason
-}
-
-// scopeRun is what one coverage scope's run left: its report's files, or why
-// there are none.
-type scopeRun struct {
+// profileRead is what one source's profile held, or why there is none.
+type profileRead struct {
 	files  []coverage.File
 	reason string
 }
 
-// riskMeter measures change risk in scratch copies. Each func field is a
-// lookup or a run the workspace answers, so a test can answer it instead.
+// riskMeter measures change risk. Each func field is a lookup or a run the
+// workspace answers, so a test can answer it instead.
 type riskMeter struct {
 	// scorer answers complexity at head; measure sets its report.
 	scorer riskScorer
-	// measuringScope is the coverage run that measures a file, or why there is none.
-	measuringScope func(path string) (coverageScope, string)
+	// source is where a file's coverage comes from, or why it has none.
+	source func(path string) (coverageSource, string)
 	// covers reports whether a changed file's spell declares coverage at all.
 	covers func(path string) bool
-	// copy makes a scratch copy of rev, or of the working tree when rev is "".
-	copy   func(ctx context.Context, rev string, links []string) (string, error)
-	run    scopedRun
-	report func(dir string, c coverageScope) ([]coverage.File, error)
+	// head freshens a source's target and reads its profile in the tree.
+	head func(ctx context.Context, c coverageSource) (profileRead, error)
+	// atBase reads a source's profile at commit.
+	atBase func(ctx context.Context, c coverageSource) (profileRead, error)
+	// readAt is a workspace file's text at commit.
+	readAt func(path string) (string, bool)
+	// done removes what atBase left behind.
+	done func()
 	// commit is the merge base the change is judged against, "" for none.
 	commit  string
 	since   sinceBase
 	changed []string
-	// links are the dirs each copy links rather than copies.
-	links []string
-	// start is when the measure began, for the elapsed time a stop names.
-	start time.Time
 }
 
-func (m *Magus) newRiskMeter(ctx context.Context, set touchedSet, base string) (riskMeter, error) {
-	sc, err := m.newScratch(ctx)
-	if err != nil {
-		return riskMeter{}, fmt.Errorf("change risk: %w", err)
-	}
+func (m *Magus) newRiskMeter(ctx context.Context, set touchedSet, base string, start time.Time) (riskMeter, error) {
 	claimant, owner := m.spellClaiming(), m.projectOwner()
 	r := riskMeter{
 		scorer: m.riskScorer(set.defs),
-		measuringScope: func(p string) (coverageScope, string) {
-			return measuringScope(m.ws.Root, owner(p), p, claimant(p), base == "")
-		},
+		source: func(p string) (coverageSource, string) { return m.coverageSource(owner(p), p, claimant(p)) },
 		covers: func(p string) bool {
 			sp := claimant(p)
-			if sp == nil {
-				return false
-			}
-			_, ok := sp.Op(spells.CoverageOp)
-			return ok
+			return sp != nil && sp.Coverage() != nil
 		},
-		copy: sc.copy, run: magusRunner{bin: sc.bin}.run, report: scratchReport,
-		since: set.since, changed: set.changed, links: m.workspaceLinks(),
+		head:  m.headProfile,
+		done:  func() {},
+		since: set.since, changed: set.changed,
 	}
-	if base != "" {
-		if _, r.commit, err = m.conformanceBaseCommit(ctx, base); err != nil {
-			return riskMeter{}, fmt.Errorf("change risk: %w", err)
-		}
+	if base == "" {
+		return r, nil
+	}
+	v, commit, err := m.conformanceBaseCommit(ctx, base)
+	if err != nil {
+		return riskMeter{}, fmt.Errorf("change risk: %w", err)
+	}
+	profiles, err := m.newBaseProfiles(ctx, commit, start)
+	if err != nil {
+		return riskMeter{}, fmt.Errorf("change risk: %w", err)
+	}
+	r.commit, r.atBase, r.done = commit, profiles.read, profiles.remove
+	r.readAt = func(p string) (string, bool) {
+		text, err := v.ReadFileAt(ctx, m.ws.Root, commit, p)
+		return text, err == nil
 	}
 	return r, nil
+}
+
+// coverageSource is where name, a file of project that sp claims, gets its
+// coverage: the profile sp declares and the target declaring it an output.
+func (m *Magus) coverageSource(project, name string, sp *spells.Spell) (coverageSource, string) {
+	if sp == nil {
+		return coverageSource{}, fmt.Sprintf("no spell bound to %s claims %s files", project, path.Ext(name))
+	}
+	cov := sp.Coverage()
+	if cov == nil {
+		return coverageSource{}, fmt.Sprintf("spell %s declares no coverage (mgs_getCoverage)", sp.Name())
+	}
+	p := m.Get(project)
+	if p == nil {
+		return coverageSource{}, fmt.Sprintf("project %s does not resolve, so no target writes its coverage", project)
+	}
+	target, reason := profileTarget(p, cov.Profile)
+	if reason != "" {
+		return coverageSource{}, reason
+	}
+	return coverageSource{project: project, spell: sp.Name(), target: target, coverage: *cov}, ""
+}
+
+// profileTarget is the target of p declaring profile among its outputs. None,
+// or several, is a reason: magus never guesses which run wrote it.
+func profileTarget(p *types.Project, profile string) (string, string) {
+	rooted := path.Join(p.Path, profile)
+	var found []string
+	for _, name := range slices.Sorted(maps.Keys(p.TargetOutputs)) {
+		if slices.ContainsFunc(targetOutputGlobs(p, name), func(g types.Glob) bool { return g.Match(rooted) }) {
+			found = append(found, name)
+		}
+	}
+	switch len(found) {
+	case 1:
+		return found[0], ""
+	case 0:
+		return "", fmt.Sprintf("no target of %s declares its coverage profile %s as an output", p.Path, profile)
+	}
+	return "", fmt.Sprintf("targets %s of %s each declare its coverage profile %s, so which run wrote it is unknown",
+		strings.Join(found, ", "), p.Path, profile)
+}
+
+// headProfile freshens c's target and reads the profile it left. A target
+// that fails or cannot run is a reason; a cancelled one is an error.
+func (m *Magus) headProfile(ctx context.Context, c coverageSource) (profileRead, error) {
+	if err := m.freshenProfile(ctx, c); err != nil {
+		if ctx.Err() != nil {
+			return profileRead{}, fmt.Errorf("change risk: freshening `%s`: %w", c.command(), context.Cause(ctx))
+		}
+		return profileRead{reason: fmt.Sprintf("`%s` left no current profile: %s", c.command(), err)}, nil
+	}
+	kept, reason := m.readCoverageReport(c.project, c.coverage)
+	return profileRead{files: kept.files, reason: reason}, nil
+}
+
+// freshenProfile leaves c's profile as a current run of c's target wrote it.
+// Inside a target body it runs through that run's scheduler, as
+// buildSymbolIndex does, since a nested run is refused MGS3007.
+func (m *Magus) freshenProfile(ctx context.Context, c coverageSource) error {
+	p := m.Get(c.project)
+	cc := m.freshnessCache(ctx)
+	if p == nil || cc == nil {
+		return fmt.Errorf("the cache would not open, so nothing vouches for %s", c.coverage.Profile)
+	}
+	step, err := m.targetStep(project.WithExtraArgs(ctx, nil), p, c.target, nil, nil)
+	if err != nil {
+		return err
+	}
+	probe := step
+	probe.VerifyOutputs = true
+	if current, err := cc.IsCached(ctx, probe); err == nil && current {
+		return nil
+	}
+	if ran, err := interp.CrossDispatchFromContext(ctx).DispatchStep(ctx, p, step); ran {
+		return err
+	}
+	return m.runTargets(ctx, []types.Target{{Path: p.Path, Name: c.target}}, run{})
 }
 
 // noBase is the base reason of every function when no base was named.
@@ -334,14 +366,12 @@ const noBase = "no base was named"
 // changed files' lines.
 func (r riskMeter) measure(ctx context.Context, fns []touchedFunction) (types.ChangeRisk, error) {
 	plan := r.plan(fns)
-	head, base, err := r.runSides(ctx, plan.runs)
-	defer removeScratch(head.dir)
-	defer removeScratch(base.dir)
+	head, base, err := r.readSides(ctx, plan.sources)
 	if err != nil {
 		return types.ChangeRisk{}, err
 	}
 	scorer := r.scorer
-	scorer.report = plan.lookup(head.runs)
+	scorer.report = plan.lookup(head)
 	out := scorer.scoreAll(fns)
 	if r.commit == "" {
 		for i := range out.Functions {
@@ -350,55 +380,43 @@ func (r riskMeter) measure(ctx context.Context, fns []touchedFunction) (types.Ch
 		return out, nil
 	}
 	based := r.scorer
-	based.read, based.indexed = r.readAtBase(base.dir), noIndex
-	based.report = r.since.atHeadPath(plan.lookup(base.runs))
+	based.read = func(p string) (string, bool) { return r.readAt(r.since.basePath(p)) }
+	based.indexed = noIndex
+	based.report = r.since.atHeadPath(plan.lookup(base))
 	r.judgeBase(out.Functions, fns, based)
-	out.Lines = r.lines(plan, head.runs, base.runs)
+	out.Lines = r.lines(plan, head, base)
 	return out, nil
 }
 
-// side is one tree's coverage runs: the copy they ran in and what each left.
-type side struct {
-	dir  string
-	runs map[string]scopeRun
-}
-
-// runSides runs runs at head and, with a commit, at base, each side in its own
-// copy and both at once. The caller removes both copies, even on an error.
-func (r riskMeter) runSides(ctx context.Context, runs []coverageScope) (head, base side, err error) {
+// readSides reads each source's profile at head and, with a commit, at
+// base, both sides at once.
+func (r riskMeter) readSides(ctx context.Context, sources []coverageSource) (head, base map[string]profileRead, err error) {
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		var err error
-		head.dir, head.runs, err = r.runAll(gctx, "", runs)
+		head, err = readEach(gctx, sources, r.head)
 		return err
 	})
 	if r.commit != "" {
 		g.Go(func() error {
 			var err error
-			base.dir, base.runs, err = r.runAll(gctx, r.commit, runs)
+			base, err = readEach(gctx, sources, r.atBase)
 			return err
 		})
 	}
 	return head, base, g.Wait()
 }
 
-func removeScratch(dir string) {
-	if dir != "" {
-		_ = os.RemoveAll(dir)
+func readEach(ctx context.Context, sources []coverageSource, read func(context.Context, coverageSource) (profileRead, error)) (map[string]profileRead, error) {
+	out := make(map[string]profileRead, len(sources))
+	for _, c := range sources {
+		got, err := read(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		out[c.key()] = got
 	}
-}
-
-func readUnder(dir string) func(string) (string, bool) {
-	return func(p string) (string, bool) {
-		b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(p)))
-		return string(b), err == nil
-	}
-}
-
-// readAtBase reads a head path from dir, the base tree, where the base held it.
-func (r riskMeter) readAtBase(dir string) func(string) (string, bool) {
-	read := readUnder(dir)
-	return func(p string) (string, bool) { return read(r.since.basePath(p)) }
+	return out, nil
 }
 
 type reportLookup func(touchedFunction, spells.Coverage) (keptReport, string)
@@ -449,35 +467,30 @@ func (r riskMeter) judgeBase(scored []types.ChangeRiskFunction, fns []touchedFun
 	}
 }
 
-// scopePlan is the coverage runs a measure makes: one per project and spell.
-// Each runs the union of its touched functions' and changed files' scopes.
-type scopePlan struct {
-	byPath map[string]coverageScope
-	reason map[string]string
-	runs   []coverageScope
+// sourcePlan is the profiles a measure reads: one per project and profile.
+type sourcePlan struct {
+	byPath  map[string]coverageSource
+	reason  map[string]string
+	sources []coverageSource
 }
 
-func (r riskMeter) plan(fns []touchedFunction) scopePlan {
-	p := scopePlan{byPath: map[string]coverageScope{}, reason: map[string]string{}}
-	runOf := map[string]string{}
-	merged := map[string]*coverageScope{}
-	var order []string
+func (r riskMeter) plan(fns []touchedFunction) sourcePlan {
+	p := sourcePlan{byPath: map[string]coverageSource{}, reason: map[string]string{}}
+	seen := map[string]bool{}
 	add := func(name string) {
-		if _, done := runOf[name]; done || p.reason[name] != "" {
+		if _, done := p.byPath[name]; done || p.reason[name] != "" {
 			return
 		}
-		c, reason := r.measuringScope(name)
+		c, reason := r.source(name)
 		if reason != "" {
 			p.reason[name] = reason
 			return
 		}
-		k := c.runKey()
-		runOf[name] = k
-		if m, ok := merged[k]; ok {
-			m.scope = unionScope(m.scope, c.scope)
-			return
+		p.byPath[name] = c
+		if !seen[c.key()] {
+			seen[c.key()] = true
+			p.sources = append(p.sources, c)
 		}
-		merged[k], order = &c, append(order, k)
 	}
 	for _, fn := range fns {
 		add(fn.Path)
@@ -487,122 +500,27 @@ func (r riskMeter) plan(fns []touchedFunction) scopePlan {
 			add(name)
 		}
 	}
-	for _, k := range order {
-		p.runs = append(p.runs, *merged[k])
-	}
-	for name, k := range runOf {
-		p.byPath[name] = *merged[k]
-	}
 	return p
 }
 
-// unionScope is a, then b's entries a lacks. An empty scope runs the whole
-// project, so it absorbs any other.
-func unionScope(a, b []string) []string {
-	if len(a) == 0 || len(b) == 0 {
-		return nil
-	}
-	out := slices.Clone(a)
-	for _, entry := range b {
-		if !slices.Contains(out, entry) {
-			out = append(out, entry)
-		}
-	}
-	return out
-}
-
-// lookup answers a scorer's report from runs.
-func (p scopePlan) lookup(runs map[string]scopeRun) func(touchedFunction, spells.Coverage) (keptReport, string) {
+// lookup answers a scorer's report from reads.
+func (p sourcePlan) lookup(reads map[string]profileRead) reportLookup {
 	return func(fn touchedFunction, _ spells.Coverage) (keptReport, string) {
 		if reason := p.reason[fn.Path]; reason != "" {
 			return keptReport{}, reason
 		}
 		c := p.byPath[fn.Path]
-		run := runs[c.key()]
-		if run.reason != "" {
-			return keptReport{}, run.reason
+		got := reads[c.key()]
+		if got.reason != "" {
+			return keptReport{}, got.reason
 		}
-		return keptReport{project: c.project, files: run.files}, ""
+		return keptReport{project: c.project, files: got.files}, ""
 	}
-}
-
-// runAll runs each scope's coverage in one scratch copy of rev. The caller
-// removes the copy, which it returns even on an error.
-func (r riskMeter) runAll(ctx context.Context, rev string, runs []coverageScope) (string, map[string]scopeRun, error) {
-	if len(runs) == 0 {
-		return "", nil, nil
-	}
-	dir, err := r.copy(ctx, rev, r.links)
-	if err != nil {
-		err = fmt.Errorf("change risk: scratch copy: %w", err)
-		return dir, nil, stopped(ctx, "change risk", r.start, "copying the tree at "+sideName(rev), err)
-	}
-	out := make(map[string]scopeRun, len(runs))
-	for _, c := range runs {
-		run, err := r.runScope(ctx, dir, rev, c)
-		if err != nil {
-			return dir, nil, err
-		}
-		out[c.key()] = run
-	}
-	return dir, out, nil
-}
-
-// runScope runs c in dir. At a rev, a scope entry the tree lacks is dropped,
-// as the change may have added the test file.
-func (r riskMeter) runScope(ctx context.Context, dir, rev string, c coverageScope) (scopeRun, error) {
-	if rev != "" {
-		scope, reason := scopeAtBase(dir, c.project, c.scope)
-		if reason != "" {
-			return scopeRun{reason: reason}, nil
-		}
-		c.scope = scope
-	}
-	return r.runOne(ctx, dir, rev, c)
-}
-
-// sideName names the tree rev is, for an error.
-func sideName(rev string) string {
-	if rev == "" {
-		return "head"
-	}
-	return "base " + rev
-}
-
-// runOne runs c in dir, a copy of rev. A red or unreadable run is a reason
-// that makes its functions gaps. A cancelled run, or one the scheduler could
-// not seat, is an error.
-func (r riskMeter) runOne(ctx context.Context, dir, rev string, c coverageScope) (scopeRun, error) {
-	res, err := r.run(ctx, dir, c.target(spells.CoverageOp), c)
-	if ctx.Err() != nil {
-		doing := fmt.Sprintf("running `%s` at %s", c.command(), sideName(rev))
-		return scopeRun{}, stopped(ctx, "change risk", r.start, doing, ctx.Err())
-	}
-	if errors.Is(err, errNoSeat) {
-		return scopeRun{}, fmt.Errorf("change risk: %w", err)
-	}
-	return r.left(dir, c, res, err), nil
-}
-
-// left is what a finished run of c in dir left: its report's files, or the
-// reason it has none.
-func (r riskMeter) left(dir string, c coverageScope, res testRun, runErr error) scopeRun {
-	if runErr != nil {
-		return scopeRun{reason: runErr.Error()}
-	}
-	if !res.passed {
-		return scopeRun{reason: fmt.Sprintf("a test in its scope fails: `%s`", c.command())}
-	}
-	files, err := r.report(dir, c)
-	if err != nil {
-		return scopeRun{reason: err.Error()}
-	}
-	return scopeRun{files: files}
 }
 
 // lines compares each changed file's covered lines at head with those at
 // base. A line removed since base is never compared.
-func (r riskMeter) lines(plan scopePlan, head, base map[string]scopeRun) []types.Finding {
+func (r riskMeter) lines(plan sourcePlan, head, base map[string]profileRead) []types.Finding {
 	var out []types.Finding
 	for _, name := range r.changed {
 		c, ok := plan.byPath[name]
@@ -615,23 +533,23 @@ func (r riskMeter) lines(plan scopePlan, head, base map[string]scopeRun) []types
 	return out
 }
 
-// uncomparedLines is the finding for a changed file with no coverage scope to
-// run, or none when the plan never looked at the file.
+// uncomparedLines is the finding for a changed file with no coverage source,
+// or none when the plan never looked at the file.
 func uncomparedLines(name, reason string) []types.Finding {
 	if reason == "" {
 		return nil
 	}
 	return []types.Finding{{Path: name, Line: 1,
 		Message: fmt.Sprintf("the coverage of %s was not compared: %s", name, reason),
-		Fix:     "Give its spell a test scope that names a test, so its covered lines can be compared."}}
+		Fix:     "Declare the coverage profile its spell names as an output of the target that writes it."}}
 }
 
-func (r riskMeter) fileLines(name string, head, base scopeRun) []types.Finding {
+func (r riskMeter) fileLines(name string, head, base profileRead) []types.Finding {
 	for _, run := range []struct{ side, reason string }{{"", head.reason}, {"at base ", base.reason}} {
 		if run.reason != "" {
 			return []types.Finding{{Path: name, Line: 1,
 				Message: fmt.Sprintf("the coverage of %s %swas not measured: %s", name, run.side, run.reason),
-				Fix:     "Make the tests in its scope pass, so its covered lines can be compared."}}
+				Fix:     "Make its project's tests pass, so its covered lines can be compared."}}
 		}
 	}
 	now := fileNamed(head.files, name).Lines()
@@ -647,9 +565,9 @@ func (r riskMeter) fileLines(name string, head, base scopeRun) []types.Finding {
 			bare = append(bare, line)
 		}
 	}
-	out := lineFindings(name, lost, "was covered at base and no test in its scope covers it now",
+	out := lineFindings(name, lost, "was covered at base and no test of its package covers it now",
 		"Restore the test that covered it, or delete the code no test needs.")
-	return append(out, lineFindings(name, bare, "was added and no test in its scope covers it",
+	return append(out, lineFindings(name, bare, "was added and no test of its package covers it",
 		"Cover the added lines with a test.")...)
 }
 
@@ -1072,7 +990,7 @@ func oncePerProject(read func(string, spells.Coverage) (keptReport, string)) fun
 	}
 	seen := map[string]kept{}
 	return func(project string, cov spells.Coverage) (keptReport, string) {
-		key := fmt.Sprintf("%s\x00%s", project, cov.File)
+		key := fmt.Sprintf("%s\x00%s", project, cov.Profile)
 		k, ok := seen[key]
 		if !ok {
 			k.report, k.reason = read(project, cov)
@@ -1082,16 +1000,16 @@ func oncePerProject(read func(string, spells.Coverage) (keptReport, string)) fun
 	}
 }
 
-// readCoverageReport is the report the project's coverage op last wrote.
+// readCoverageReport is the profile the project's tests last left in the
+// working tree.
 func (m *Magus) readCoverageReport(project string, cov spells.Coverage) (keptReport, string) {
-	file := filepath.Join(coverage.Dir(m.CacheDir(), project), cov.File)
-	data, err := os.ReadFile(file)
+	data, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(project), filepath.FromSlash(cov.Profile)))
 	if err != nil {
-		return keptReport{}, fmt.Sprintf("no coverage report is kept for %s: run `./magus run coverage %s`", project, project)
+		return keptReport{}, fmt.Sprintf("%s holds no coverage profile at %s: run the target that writes it", project, cov.Profile)
 	}
 	files, err := m.parseReport(project, cov, data)
 	if err != nil {
-		return keptReport{}, fmt.Sprintf("the coverage report for %s: %s", project, err)
+		return keptReport{}, fmt.Sprintf("the coverage profile of %s: %s", project, err)
 	}
 	return keptReport{project: project, files: files}, ""
 }
@@ -1109,7 +1027,7 @@ func (m *Magus) parseReport(project string, cov spells.Coverage, data []byte) ([
 	}
 	files, err := coverage.Parse(cov.Format, data, importPath)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", cov.File, err)
+		return nil, fmt.Errorf("%s: %w", cov.Profile, err)
 	}
 	return coverage.Rebase(files, m.ws.Root, project), nil
 }

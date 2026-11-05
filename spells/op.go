@@ -289,8 +289,6 @@ const (
 	// so the runner still resolves the live one from the project's lockfile at run time
 	// within that op's scope.
 	OpKindInstall = "install"
-	// OpKindCoverage tags the op magus synthesizes from mgs_getCoverage.
-	OpKindCoverage = "coverage"
 )
 
 // InstallSpec is what an install op carries so it can run from the op alone, as a
@@ -380,9 +378,6 @@ type Op struct {
 	// Command is the first declared install's, for describe and charm discovery; the
 	// runner resolves the real one against the project's lockfile.
 	Install *InstallSpec `json:"install,omitempty"`
-	// Coverage is set only for a coverage op (Kind == OpKindCoverage): the
-	// declaration the op came from, which names its report and test op.
-	Coverage *Coverage `json:"coverage,omitempty"`
 	// ModeArgs are the args, from the spell's mgs_getModeArgs, that tell this op apart
 	// from the other uses of a program with no subcommand: node runs scripts and evals
 	// too, and only --test is node-test. Nil means every use of the program is this op.

@@ -344,19 +344,11 @@ export fun mgs_getSymbolIndexer() > SymbolIndexer {
     };
 }
 
-// Shares go-test's testScope, so a scoped report covers what go-test runs.
+// The project's test target writes the profile with -coverprofile. Without
+// -coverpkg, go test instruments only the package being tested, so a line is
+// credited only by its own package's tests.
 export fun mgs_getCoverage() > Coverage {
-    return Coverage{
-        format = CoverageFormat.goProfile,
-        file = "cover.out",
-        test = "go-test",
-        command = Command{
-            bin = "go",
-            args = ["test", "-trimpath", "-covermode=set", "-coverprofile=$MAGUS_COVERAGE_DIR/cover.out"],
-            defaultArgs = ["./..."],
-        },
-        uses = ["go"],
-    };
+    return Coverage{format = CoverageFormat.goProfile, profile = ".magus/coverage.out"};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

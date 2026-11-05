@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
@@ -78,6 +77,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		}
 		if spec.SymbolIndexer != nil {
 			opts = append(opts, spells.WithSymbolIndexer(spec.SymbolIndexer))
+		}
+		if spec.Coverage != nil {
+			opts = append(opts, spells.WithCoverage(spec.Coverage))
 		}
 		if spec.Sandbox != nil {
 			opts = append(opts, spells.WithSandbox(spec.Sandbox))
@@ -505,8 +507,6 @@ func runOp(ctx context.Context, spec spells.Descriptor, op spells.Op, opts comma
 	switch op.Kind {
 	case spells.OpKindInstall:
 		return runInstall(ctx, op, opts)
-	case spells.OpKindCoverage:
-		return runCoverage(ctx, spec.Name, op, opts)
 	case spells.OpKindSymbolIndex:
 		return runSymbolIndex(ctx, spec, op, opts)
 	}
@@ -575,56 +575,6 @@ func runSCIPIndex(ctx context.Context, spellName string, op spells.Op, opts comm
 	}
 	if err := symbols.PackFromSCIP(scipPath, indexPath, "scip "+op.Bin); err != nil {
 		return fmt.Errorf("spell %q symbol indexer: storing the index %q wrote: %w", spellName, op.Bin, err)
-	}
-	return nil
-}
-
-// runCoverage runs a coverage op with MAGUS_COVERAGE_DIR set to its report
-// dir, in its refs and its environment. The dir is emptied first, so a report
-// an earlier run left never reads as this run's.
-func runCoverage(ctx context.Context, spellName string, op spells.Op, opts commandOpts) error {
-	dir, err := coverageDir(ctx, opts.cwd)
-	if err != nil {
-		return err
-	}
-	refs := map[string]string{spells.CoverageDirEnvVar: dir}
-	opts.env, opts.refs = maps.Clone(refs), refs
-	if _, err := runCommand(ctx, op, opts); err != nil {
-		return err
-	}
-	return checkCoverageReport(spellName, op, dir)
-}
-
-// coverageDir is the project's report dir, emptied. It needs the active cache,
-// since the report is read from there.
-func coverageDir(ctx context.Context, projectDir string) (string, error) {
-	c := cache.FromContext(ctx)
-	if c == nil {
-		return "", errors.New("a coverage op must run as a magus target so its report lands in the cache")
-	}
-	_, project, err := projectUnderWorkspace(ctx, projectDir)
-	if err != nil {
-		return "", err
-	}
-	dir := coverage.Dir(c.Dir(), project)
-	if err := os.RemoveAll(dir); err != nil {
-		return "", fmt.Errorf("empty the coverage dir: %w", err)
-	}
-	return dir, os.MkdirAll(dir, 0o755)
-}
-
-// checkCoverageReport refuses an op that exited 0 without writing the report
-// it declares. Unchecked, the project would read as never covered.
-func checkCoverageReport(spellName string, op spells.Op, dir string) error {
-	if op.Coverage == nil {
-		return fmt.Errorf("spell %q: the coverage op carries no mgs_getCoverage declaration", spellName)
-	}
-	switch _, err := os.Stat(filepath.Join(dir, op.Coverage.File)); {
-	case errors.Is(err, fs.ErrNotExist):
-		return fmt.Errorf("spell %q declares coverage, but %q exited 0 and wrote no %s to %s, it must write it under the directory magus passes in %s",
-			spellName, op.Bin, op.Coverage.File, dir, spells.CoverageDirEnvVar)
-	case err != nil:
-		return fmt.Errorf("spell %q coverage: reading the report %q wrote: %w", spellName, op.Bin, err)
 	}
 	return nil
 }
@@ -901,6 +851,9 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	}
 	if m.SymbolIndexer != nil {
 		opts = append(opts, spells.WithSymbolIndexer(m.SymbolIndexer))
+	}
+	if m.Coverage != nil {
+		opts = append(opts, spells.WithCoverage(m.Coverage))
 	}
 	if m.Sandbox != nil {
 		opts = append(opts, spells.WithSandbox(m.Sandbox))

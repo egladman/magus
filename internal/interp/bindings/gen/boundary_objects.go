@@ -5287,14 +5287,7 @@ func ObjectService(v spells.Service, enums ffi.EnumCases) vm.Value {
 func ObjectCoverage(v spells.Coverage, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("format", enums.Case("CoverageFormat", string(v.Format)))
-	out.MapSet("file", vm.StringValue(v.File))
-	out.MapSet("command", ObjectCommand(v.Command, enums))
-	out.MapSet("test", vm.StringValue(v.Test))
-	itemsUses := make([]vm.Value, len(v.Uses))
-	for indexUses := range v.Uses {
-		itemsUses[indexUses] = vm.StringValue(v.Uses[indexUses])
-	}
-	out.MapSet("uses", vm.ListValue(itemsUses))
+	out.MapSet("profile", vm.StringValue(v.Profile))
 	return out
 }
 

@@ -909,102 +909,66 @@ func (s *discoveredSuite) TestInProcessIndexerRefusesEnvs() {
 	s.EqualError(err, `spell "buzz": symbol indexer: format buzz-module reads one build of the files, drop envs`)
 }
 
-// coverageContract declares a go-test op and the coverage judged by it.
+// coverageContract declares a Go profile the project's tests leave in .magus.
 func coverageContract() Contract {
 	return Contract{
-		Name:  "golang",
-		Tools: map[string]spells.Tool{"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}}},
-		Targets: map[string]spells.Command{
-			"go-test": {Bin: "go", Args: []string{"test"}, TestScope: []string{"./{dir}"}},
-		},
-		Coverage: &spells.Coverage{
-			Format:  spells.CoverageFormatGoProfile,
-			File:    "cover.out",
-			Test:    "go_test",
-			Command: spells.Command{Bin: "go", Args: []string{"test", "-coverprofile=$MAGUS_COVERAGE_DIR/cover.out"}},
-			Uses:    []string{"go"},
-		},
+		Name:     "golang",
+		Coverage: &spells.Coverage{Format: spells.CoverageFormatGoProfile, Profile: ".magus/coverage.out"},
 	}
 }
 
-type coverageOpSuite struct{ suite.Suite }
+type coverageSuite struct{ suite.Suite }
 
-func TestDecodeCoverageOp(t *testing.T) { suite.Run(t, new(coverageOpSuite)) }
+func TestDecodeCoverage(t *testing.T) { suite.Run(t, new(coverageSuite)) }
 
-func (s *coverageOpSuite) TestRegistersTheReservedOpByKind() {
+func (s *coverageSuite) TestCarriesTheDeclarationAndSynthesizesNoOp() {
 	m, err := describe(coverageContract())
 	s.Require().NoError(err)
-	want := *coverageContract().Coverage
-	want.Test = "go-test"
-	want.Command.TestScope = []string{"./{dir}"}
-	s.Equal(spells.Op{Kind: spells.OpKindCoverage, Command: want.Command, Coverage: &want}, m.Ops[spells.CoverageOp])
+	s.Equal(coverageContract().Coverage, m.Coverage)
+	s.Empty(m.OpNames())
 }
 
-func (s *coverageOpSuite) TestTheCoverageCommandKeepsItsOwnTestScope() {
-	c := coverageContract()
-	c.Coverage.Command.TestScope = []string{"{file}"}
-	m, err := describe(c)
-	s.Require().NoError(err)
-	s.Equal([]string{"{file}"}, m.Ops[spells.CoverageOp].TestScope)
-}
-
-func (s *coverageOpSuite) TestAddsNoOpWhenUndeclared() {
+func (s *coverageSuite) TestAnUndeclaredCoverageIsNil() {
 	c := coverageContract()
 	c.Coverage = nil
 	m, err := describe(c)
 	s.Require().NoError(err)
-	s.Equal([]string{"go-test"}, m.OpNames())
+	s.Nil(m.Coverage)
 }
 
-func (s *coverageOpSuite) TestRefusesAnAuthoredCoverageOp() {
-	c := coverageContract()
-	c.Coverage = nil
-	c.Targets["coverage"] = spells.Command{Bin: "go"}
-	_, err := describe(c)
-	s.EqualError(err, `spell "golang" declares an op named "coverage", which is magus's own name for a declared coverage, `+
-		"move the command to `export fun mgs_getCoverage() > Coverage` and drop the op")
-}
-
-func (s *coverageOpSuite) TestRefusesNoFormat() {
+func (s *coverageSuite) TestRefusesNoFormat() {
 	c := coverageContract()
 	c.Coverage.Format = spells.CoverageFormatNone
 	_, err := describe(c)
 	s.EqualError(err, `spell "golang": mgs_getCoverage: format is none, want one of lcov, go-coverprofile`)
 }
 
-func (s *coverageOpSuite) TestRefusesAFileOutsideTheCoverageDir() {
+func (s *coverageSuite) TestRefusesAProfileOutsideTheProject() {
 	c := coverageContract()
-	c.Coverage.File = "../cover.out"
+	c.Coverage.Profile = "../coverage.out"
 	_, err := describe(c)
-	s.EqualError(err, `spell "golang": mgs_getCoverage: file "../cover.out" must be a plain file name under MAGUS_COVERAGE_DIR`)
+	s.EqualError(err, `spell "golang": mgs_getCoverage: profile "../coverage.out" must be a clean slash path inside the project directory`)
 }
 
-func (s *coverageOpSuite) TestRefusesATestNamingNoOp() {
+func (s *coverageSuite) TestRefusesAnAbsoluteProfile() {
 	c := coverageContract()
-	c.Coverage.Test = "vitest"
+	c.Coverage.Profile = "/tmp/coverage.out"
 	_, err := describe(c)
-	s.EqualError(err, `spell "golang": mgs_getCoverage: test "vitest" names no command op in mgs_listTargets`)
+	s.ErrorContains(err, `profile "/tmp/coverage.out" must be a clean slash path`)
 }
 
-func (s *coverageOpSuite) TestRefusesNoBin() {
+func (s *coverageSuite) TestRefusesNoProfile() {
 	c := coverageContract()
-	c.Coverage.Command.Bin = ""
+	c.Coverage.Profile = ""
 	_, err := describe(c)
-	s.EqualError(err, `spell "golang": mgs_getCoverage: command.bin is required`)
+	s.ErrorContains(err, `profile "" must be a clean slash path`)
 }
 
-func (s *coverageOpSuite) TestRefusesAnUnprobedTool() {
+func (s *coverageSuite) TestRefusesAnUncleanProfile() {
 	c := coverageContract()
-	c.Coverage.Uses = []string{"gotestsum"}
+	c.Coverage.Profile = ".magus//coverage.out"
 	_, err := describe(c)
-	s.EqualError(err, `spell "golang": mgs_getCoverage: uses "gotestsum", which mgs_getTools does not declare with a version probe`)
-}
-
-func (s *coverageOpSuite) TestRefusesABadTestScopeOnTheTestOp() {
-	c := coverageContract()
-	c.Targets["go-test"] = spells.Command{Bin: "go", TestScope: []string{"{pkg}"}}
-	_, err := describe(c)
-	s.ErrorContains(err, `test_scope "{pkg}": placeholder {pkg}, want {dir}, {file} or {stem}`)
+	s.ErrorContains(err, `profile ".magus//coverage.out" must be a clean slash path`)
 }
 
 // lexLanguage declares a whole syntax, which each case below breaks one way.

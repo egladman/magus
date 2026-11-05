@@ -41,7 +41,6 @@ var boundaryTypes = []boundaryType{
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
 	// Must follow Command: SymbolIndexer.command is one.
 	{Name: "SymbolIndexer", Type: reflect.TypeFor[spells.SymbolIndexer](), RuntimeObject: true},
-	// Must follow Command: Coverage.command is one.
 	{Name: "Coverage", Type: reflect.TypeFor[spells.Coverage]()},
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},

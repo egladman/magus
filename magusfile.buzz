@@ -2336,7 +2336,8 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/retro/*.buzz", "hack/retro/testdata/**", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/lint/*.mjs", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml", "hack/policy/gen/proofread-decisions.json", ".github/workflows/pr.yaml"]);
-    ctx.writesFiles(["coverage/buzz/*.lcov", "coverage/buzz/coverage.txt"]);
+    // lcov.info is the profile the buzz spell declares for change risk.
+    ctx.writesFiles(["coverage/buzz/*.lcov", "coverage/buzz/coverage.txt", "coverage/buzz/lcov.info"]);
     // proofread_build above links the binary that hack/lint/run.buzz invokes.
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
@@ -2397,6 +2398,9 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     }
     final pct = lcov\mergePercent(reports, keep: "");
     fs\writeFile("coverage/buzz/coverage.txt", content: pct + "\n");
+    // Each fragment records only its own module, so joined they credit each
+    // line to its own tests alone.
+    fs\writeFile("coverage/buzz/lcov.info", content: reports.join(""));
 }
 
 // No doctor gate: the advice action reports its findings without blocking.
@@ -2520,6 +2524,8 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
     // Rules reading magus\graph() unscoped freshen every index.
     // Freshen them all under this lock: the child is refused it (MGS3007).
     _ = magus\graph().precedents();
+    // So too the targets writing the change-risk rule's coverage profiles.
+    _ = magus\change(vcs\base()).risk();
     _ = magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 
