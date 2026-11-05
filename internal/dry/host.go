@@ -487,7 +487,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("magus__Change__mergeBase", function("magus.conformanceBase", func(context.Context, []vm.Value) (vm.Value, error) {
 		return vm.StringValue(""), nil
 	}))
-	// A preview runs no coverage op and no test, so nothing is scored.
+	// A preview freshens no coverage profile, so nothing is scored.
 	risk := map[string]vm.Value{
 		"definition": vm.StringValue(""), "base": vm.StringValue(""), "functions": empty, "gaps": empty,
 	}
