@@ -734,7 +734,7 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 // inspectForRead is inspectWorkspace for a graph read: the handle startup already opened
 // when there is one, else a lazy workspace that inspects on the first call needing the
 // model, so a read the stored graph answers never evaluates a magusfile (see openForRead).
-func inspectForRead(_ context.Context, root string) (graphWorkspace, error) {
+func inspectForRead(_ context.Context, root string) (graphWorkspace, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	if m, ok := loadedMagus(); ok {
 		return m, nil
 	}
