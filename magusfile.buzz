@@ -2367,7 +2367,10 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
             cover_module(mod.value, [], magus\CommandOptions{});
         }
     }
-    cover_module("hack/lint/run.buzz", [], magus\CommandOptions{});
+    // One run per rule, so a helper is credited only by its own tests.
+    foreach (mod in fs\glob("hack/lint/*.buzz")) {
+        cover_module(mod.value, [], magus\CommandOptions{});
+    }
     foreach (dir in ["hack/magusfile", "hack/policy"]) {
         foreach (mod in fs\glob(dir + "/*.buzz")) {
             cover_module(mod.value, ["--embedded"], magus\CommandOptions{});
