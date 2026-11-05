@@ -372,7 +372,8 @@ export fun changelog_page(ctx: magus\Context, args: [str]) > void !> any {
 // site-generate renders and publishes the site into gen/.
 export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
     // The render hashes gen/ into the precache manifest, so the bundles must exist first.
-    ctx.needs(build_hljs, build_playground_editor, build_playground, changelog_page);
+    // It bundles src/ too, and a cached build-* target runs no install.
+    ctx.needs(install, build_hljs, build_playground_editor, build_playground, changelog_page);
     ctx.readsFiles(["render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
         "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "tour/*.buzz",
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
@@ -463,7 +464,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(conventions);
     ctx.needs(textsearch\lint);
     ctx.needs(agents\lint);
-    ctx.needs(workspace\lint_rules);
+    ctx.needs(workspace\conventions);
     markdown.typos(ctx);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     _ = proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
@@ -596,7 +597,8 @@ export fun render(ctx: magus\Context, args: [str]) > void !> any {
 	magus\log.hint("docs render updates the site only; run `magus run generate:rw docs` before committing generated docs or changing generator inputs");
     // The asset integrity gate fails on any bundle a page references, and a fresh checkout
     // has none; the changelog page is uncommitted for the same reason.
-    ctx.needs(build_hljs, build_playground_editor, build_playground, changelog_page);
+    // It bundles src/ too, and a cached build-* target runs no install.
+    ctx.needs(install, build_hljs, build_playground_editor, build_playground, changelog_page);
     _ = renderer\site_render(ROOT, DOCS, BLOG, OUT,
         magus\describe.graph(), magus\graph().projectGraph());
 }

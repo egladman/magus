@@ -88,13 +88,14 @@ final example = "    fix(cache): sort the key's inputs before hashing\n"
     + "    - [ ] Not verified: a cold cache on Windows.";
 final fixLine = "Rewrite it in this shape: a conventional title; a lead of one to three sentences saying "
     + "what you set out to do and why; one present-tense bullet per change; then a Considerations "
-    + "section for what a reviewer should weigh: the alternative set aside, where to start reading, "
-    + "and each unfinished item as a task opening Not verified: or Not done:. Keep it short and in your own words, within the budget the change earns, in plain "
+    + "section for the implementation considerations: the trade-off taken, a constraint the code works "
+    + "under, the alternative set aside, a risk, and the one file that matters most with the reason it "
+    + "does. Never a reading order. Each unfinished item is a task opening Not verified: or Not done:. Keep it short and in your own words, within the budget the change earns, in plain "
     + "ASCII. Skip \"This PR\", lists of exactly three and credit to a tool or an agent. For example:\n"
     + example;
 final shapeLine = "The shape: what you set out to do and why in one to three sentences, one bullet per "
-    + "change, then a Considerations section with what a reviewer should weigh and each unfinished "
-    + "item as a task. Short, in your own words. This is said once per pull request. For example:\n" + example;
+    + "change, then a Considerations section with trade-offs, constraints, alternatives set aside and "
+    + "risks (a file may be named only with why it matters), and each unfinished item as a task. Short, in your own words. This is said once per pull request. For example:\n" + example;
 final replyLine = "Rewrite the reply: say whether you made the change, and if not, why, in a sentence or "
     + "two. For example: \"Done, the retry is in the client now.\" or \"Kept it here, since the client "
     + "never sees the backoff state. Happy to move it if you see a cleaner seam.\"";
@@ -143,6 +144,8 @@ final sentenceEnd = $"[.!?]+(\s|$)";
 final considerationsHeading = $"^#{1,6}\s+considerations\s*$";
 // unfinishedOpener is a Considerations item that names work not done or not checked.
 final unfinishedOpener = $"^(\[ \]\s+)?(not verified|not tested|not done|not measured|untested)\b";
+// readingOpener is a Considerations item that says where to begin reading.
+final readingOpener = $"^(\[ \]\s+)?(start (with|at)|begin (with|at)|(read|look at|review)\b.*\bfirst\b)";
 final uncheckedTask = $"^\[ \]\s+\S";
 final sourceLine = $":([0-9]+)$";
 final outputRef = $"\bout[0-9a-f]{6,}\b";
@@ -1162,6 +1165,28 @@ fun unfinishedChecklistProblems(body: str) > [str] {
     return problems;
 }
 
+// readingOrderProblems flags a Considerations item that opens with a reading
+// instruction. A file belongs there only with the reason it matters.
+fun readingOrderProblems(body: str) > [str] {
+    final problems = mut [<str>];
+    var considerations = false;
+    foreach (b in splitBlocks(body)) {
+        if (b.kind == "heading") {
+            considerations = considerationsHeading.match(b.lines[0].trim().lower()) != null;
+            continue;
+        }
+        if (!considerations or b.kind != "list") {
+            continue;
+        }
+        foreach (item in listItems(b)) {
+            if (readingOpener.match(item.lower()) != null) {
+                problems.append("a Considerations item tells the reader where to start: `{item}`. Considerations holds implementation notes: a trade-off, a constraint, an alternative set aside, a risk, or unfinished work. Name a file only with why it matters, for example: `broker/budget.go` holds the queue every claim parks in.");
+            }
+        }
+    }
+    return problems;
+}
+
 // sentencesIn counts sentence ends outside code spans, so `v0.4.3` or `a.b` is not one.
 fun sentencesIn(text: str) > int {
     final n = (sentenceEnd.matchAll(codeSpan.replaceAll(text, with: "")) ?? [<[str]>]).len();
@@ -1321,6 +1346,9 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
             advice.append(question);
         }
         foreach (problem in unfinishedChecklistProblems(t.body!)) {
+            problems.append(problem);
+        }
+        foreach (problem in readingOrderProblems(t.body!)) {
             problems.append(problem);
         }
     }
@@ -2684,13 +2712,34 @@ test "no message sends the reader to a skill" {
 
 test "unfinished work under Considerations is an unchecked GitHub task" {
     final plain = judgeText(Text{ kind = descriptionKind, title = goodTitle,
-        body = "The fix is ready for review.\n\n## Considerations\n- Start with the cache key.\n- Not verified: the full CI gate." },
+        body = "The fix is ready for review.\n\n## Considerations\n- The key trades a longer digest for fewer misses.\n- Not verified: the full CI gate." },
         facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
     std\assert(plain.denies.len() == 1 and plain.denies[0].indexOf("unchecked GitHub task") != null, message: "{plain.denies}");
     final tasks = judgeText(Text{ kind = descriptionKind, title = goodTitle,
-        body = "The fix is ready for review.\n\n## Considerations\n- Start with the cache key.\n- [ ] Not verified: the full CI gate." },
+        body = "The fix is ready for review.\n\n## Considerations\n- The key trades a longer digest for fewer misses.\n- [ ] Not verified: the full CI gate." },
         facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
     std\assert(tasks.denies.len() == 0, message: "{tasks.denies}");
+}
+
+test "a Considerations item that tells the reader where to start is flagged" {
+    final v = judgeText(Text{ kind = descriptionKind, title = goodTitle,
+        body = "The fix is ready for review.\n\n## Considerations\n- Start with the cache key." },
+        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
+    std\assert(v.denies.len() == 1 and v.denies[0].indexOf("where to start") != null, message: "{v.denies}");
+}
+
+test "a Considerations item naming a file with why it matters passes" {
+    final v = judgeText(Text{ kind = descriptionKind, title = goodTitle,
+        body = "The fix is ready for review.\n\n## Considerations\n- `broker/budget.go` holds the queue every claim parks in." },
+        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
+    std\assert(v.denies.len() == 0, message: "{v.denies}");
+}
+
+test "a Considerations trade-off passes" {
+    final v = judgeText(Text{ kind = descriptionKind, title = goodTitle,
+        body = "The fix is ready for review.\n\n## Considerations\n- A per-process cache suited one worker. It stops holding at eight." },
+        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
+    std\assert(v.denies.len() == 0, message: "{v.denies}");
 }
 
 test "the example a denial teaches passes proofread and this rule" {

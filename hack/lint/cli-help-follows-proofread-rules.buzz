@@ -43,7 +43,8 @@ final KEY = 60;
 // pages and the flag bindings regenerate from it.
 export final BASELINE: [str] = [];
 
-// reads keys lint-rules on the registry and on everything the judge is linked from.
+// reads keys conventions on the registry and on everything the judge is linked
+// from.
 export fun reads() > [str] {
     return [REGISTRY, "hack/policy/proofread.buzz", "libs/proofread/go.mod", "libs/proofread/go.sum",
         "libs/proofread/**/*.go", "libs/proofread/proofread.buzz"];
