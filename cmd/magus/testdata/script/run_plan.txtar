@@ -139,8 +139,8 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
   "max_parallel": 2,
   "source": "fixture",
   "matrix": [
-    {"shard": "1", "projects": "a b", "label": "a b"},
-    {"shard": "2", "projects": "c", "label": "c"}
+    {"shard": "1", "projects": "a b", "label": "7b1164227735", "units": [{"project": "a", "target": "build"}, {"project": "b", "target": "build"}]},
+    {"shard": "2", "projects": "c", "label": "0a26bc127b01", "units": [{"project": "c", "target": "build"}]}
   ],
   "affected": ["a", "b", "c"],
   "outputs": [
@@ -156,6 +156,6 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 -- miscount.json --
 {"target": "build", "count": 3, "matrix": [{"shard": "1", "projects": "a"}, {"shard": "2", "projects": "b"}]}
 -- dup.json --
-{"target": "build", "count": 2, "matrix": [{"shard": "1", "projects": "a"}, {"shard": "1", "projects": "b"}]}
+{"target": "build", "count": 2, "matrix": [{"shard": "1", "projects": "a", "label": "ca277e40a192", "units": [{"project": "a", "target": "build"}]}, {"shard": "1", "projects": "b"}]}
 -- bad.json --
 this is not json
