@@ -464,7 +464,7 @@ func slogErrorLog(ctx context.Context, msg string) *log.Logger {
 }
 
 type slogWriter struct {
-	ctx context.Context //nolint:containedctx // io.Writer has no ctx parameter
+	ctx context.Context //nolint:containedctx // class b: io.Writer has no ctx parameter; no benchmark or optimization: comment (6b3c7db4d)
 	msg string
 }
 

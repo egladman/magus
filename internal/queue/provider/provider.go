@@ -118,7 +118,7 @@ func newSession(ctx context.Context) (*buzz.Session, error) {
 // printRecords carries what a provider script prints onto the log display, one record
 // per print, so the verbosity flags and redaction reach it.
 type printRecords struct {
-	ctx context.Context //nolint:containedctx // io.Writer has no ctx parameter
+	ctx context.Context //nolint:containedctx // class b: io.Writer has no ctx parameter; no benchmark or optimization: comment (3269ac7f2)
 }
 
 func (w printRecords) Write(p []byte) (int, error) {

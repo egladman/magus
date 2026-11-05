@@ -676,13 +676,13 @@ func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, 
 }
 
 // loadFile reads and executes path in sess via DoString.
-func loadFile(_ context.Context, sess engine.Session, path string, stderr io.Writer) {
+func loadFile(ctx context.Context, sess engine.Session, path string, stderr io.Writer) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return
 	}
-	if err := sess.DoString(string(data)); err != nil {
+	if err := sess.DoString(ctx, string(data)); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 	}
 }

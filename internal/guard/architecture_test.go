@@ -66,7 +66,7 @@ func TestAsksArchitectureIgnoresCPUsAndDiagrams(t *testing.T) {
 // skill loads, each from the root (agent "") or a subagent.
 type archSession struct {
 	t        *testing.T
-	ctx      context.Context //nolint:containedctx // test fixture scoped to one test
+	at       location
 	deps     Dependencies
 	session  string
 	observes bool
@@ -78,7 +78,7 @@ func newArchSession(t *testing.T, deps Dependencies, observes bool) archSession 
 	root := inWorkspace(t)
 	return archSession{
 		t:        t,
-		ctx:      WithLocation(t.Context(), t.TempDir(), root, root),
+		at:       location{cacheDir: t.TempDir(), workspace: root, dir: root},
 		deps:     deps,
 		session:  "8f2c6a1e-3b7d-4c55-9e0a-5d1f2b9c7e41",
 		observes: observes,
@@ -86,11 +86,11 @@ func newArchSession(t *testing.T, deps Dependencies, observes bool) archSession 
 }
 
 func (s archSession) judge(event string) types.GuardJudgment {
-	return Judge(s.ctx, s.deps, Request{Input: event, Host: "claude-code", Form: "buzz", ObservesSkillLoads: s.observes})
+	return Judge(s.ctx(), s.deps, Request{Input: event, Host: "claude-code", Form: "buzz", ObservesSkillLoads: s.observes})
 }
 
 func (s archSession) message(text string) types.GuardJudgment {
-	return Judge(s.ctx, s.deps, Request{Input: text, Message: true, Host: "claude-code", Form: "buzz", Session: s.session})
+	return Judge(s.ctx(), s.deps, Request{Input: text, Message: true, Host: "claude-code", Form: "buzz", Session: s.session})
 }
 
 func (s archSession) head(agentID string) string {
@@ -223,7 +223,7 @@ func TestArchitectureUnbriefedAdvisesOnceWhenSetToAdvise(t *testing.T) {
 
 func TestAMessageIsNeverRecordedOnADryRun(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
-	v := Judge(s.ctx, s.deps, Request{Input: "check the blast radius", Message: true, DryRun: true,
+	v := Judge(s.ctx(), s.deps, Request{Input: "check the blast radius", Message: true, DryRun: true,
 		Host: "claude-code", Form: "buzz", Session: s.session})
 	assert.Equal(t, "pass", v.Decision)
 	assert.NotEqual(t, "deny", s.bash("", "ls").Decision)
@@ -313,4 +313,8 @@ func (s *ArchitectureJobReadSuite) TestDescribeJobBesideASourceListingStillIs() 
 
 func (s *ArchitectureJobReadSuite) TestASearchOfTheWorkspaceStillIs() {
 	requireArchitectureAdvice(s.T(), s.session.bash("", "grep -rn handler ."))
+}
+
+func (s archSession) ctx() context.Context {
+	return WithLocation(s.t.Context(), s.at.cacheDir, s.at.workspace, s.at.dir)
 }

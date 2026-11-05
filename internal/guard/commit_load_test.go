@@ -16,7 +16,7 @@ import (
 // magusfile does not load and the approved one still does.
 type UnloadableCommitSuite struct {
 	suite.Suite
-	ctx      context.Context //nolint:containedctx // test fixture scoped to one test
+	layers   ctxLayers
 	cacheDir string
 	deps     Dependencies
 }
@@ -26,7 +26,7 @@ func TestUnloadableCommitSuite(t *testing.T) {
 }
 
 func (s *UnloadableCommitSuite) SetupTest() {
-	s.ctx, s.cacheDir = spawnFixture(s.T())
+	s.layers, s.cacheDir = spawnLayers(s.T())
 	approved := (&commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAllow}}).rule()
 	s.deps = Dependencies{
 		LoadFailure:         errMissingMember,
@@ -35,7 +35,7 @@ func (s *UnloadableCommitSuite) SetupTest() {
 }
 
 func (s *UnloadableCommitSuite) judge(line string) types.GuardJudgment {
-	return Judge(s.ctx, s.deps, Request{Input: line, Host: "claude-code", Session: line})
+	return Judge(s.ctx(), s.deps, Request{Input: line, Host: "claude-code", Session: line})
 }
 
 // commitSay is the verdict a commit spelled verb opens with.
@@ -93,3 +93,5 @@ func (s *UnloadableCommitSuite) TestACommitInAnotherCheckoutPasses() {
 	v := s.judge(fmt.Sprintf("git -C %s commit -m x", shellQuoted(s.T().TempDir())))
 	s.NotEqual(decisionDeny, v.Decision, v.Reason)
 }
+
+func (s *UnloadableCommitSuite) ctx() context.Context { return s.layers.of(s.T()) }

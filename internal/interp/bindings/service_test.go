@@ -69,24 +69,27 @@ export fun hold() > str !> any {
 
 func TestServiceAcquireRefusals(t *testing.T) {
 	ws := &serviceWorkspace{root: t.TempDir()}
-	scoped, _ := service.WithScope(types.WithWorkspace(context.Background(), ws))
+	scoped := func(ctx context.Context) context.Context {
+		c, _ := service.WithScope(types.WithWorkspace(ctx, ws))
+		return c
+	}
 	tests := []struct {
 		name    string
-		ctx     context.Context //nolint:containedctx // test fixture scoped to one test
+		with    func(context.Context) context.Context
 		spell   string
 		op      string
 		wantErr string
 	}{
-		{"a magusfile has no scope", types.WithWorkspace(context.Background(), ws), "podman", "machine",
+		{"a magusfile has no scope", func(ctx context.Context) context.Context { return types.WithWorkspace(ctx, ws) }, "podman", "machine",
 			"only a `magus buzz` script holds a service this way; a magusfile target holds one through ctx.needs"},
-		{"no workspace", func() context.Context { c, _ := service.WithScope(context.Background()); return c }(), "podman", "machine",
+		{"no workspace", func(ctx context.Context) context.Context { c, _ := service.WithScope(ctx); return c }, "podman", "machine",
 			"no workspace on the context"},
 		{"unknown spell", scoped, "nope", "machine", `there is no built-in spell "nope"`},
 		{"a command op", scoped, "podman", "podman-build", `spell "podman" has no service op "podman-build" (its service ops: [machine])`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := acquireService(tt.ctx, tt.spell, tt.op)
+			_, err := acquireService(tt.with(t.Context()), tt.spell, tt.op)
 			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}

@@ -72,7 +72,7 @@ type dispatchResult struct {
 	MCP     bool   `json:"mcp"`
 }
 type request struct {
-	ctx   context.Context //nolint:containedctx // the request crosses a channel to the handler goroutine, which runs under it
+	ctx   context.Context //nolint:containedctx // a request message crossing a channel to the handler goroutine that runs under it; not a performance choice
 	event hookEvent
 	reply chan response
 }

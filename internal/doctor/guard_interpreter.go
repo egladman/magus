@@ -87,18 +87,18 @@ func nearestDirWith(dir, name string) string {
 // project directory. The root's answer stands unless it already fails; a worktree with no
 // ./magus fails before the PATH fallback can call it healthy; and any project directory
 // whose hook would run a different build, or none, fails the check too.
-func (r *runner) checkGuardBinaryEverywhere(projects []*types.Project) types.Check {
+func (r *runner) checkGuardBinaryEverywhere(ctx context.Context, projects []*types.Project) types.Check {
 	root := r.ws.Root()
 	if info, err := os.Stat(filepath.Join(root, "magus")); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
 		if wt, ok := worktreeWithoutBinary(root, r.cacheDir()); ok {
 			return wt
 		}
 	}
-	got := r.checkGuardBinary()
+	got := r.checkGuardBinary(ctx)
 	if got.Status == types.CheckFail {
 		return got
 	}
-	if skew, ok := projectBinarySkew(r.runContext(), root, projects, r.ownVersion()); ok {
+	if skew, ok := projectBinarySkew(ctx, root, projects, r.ownVersion()); ok {
 		return skew
 	}
 	return got

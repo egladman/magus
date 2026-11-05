@@ -85,7 +85,7 @@ func NewLineNotices(ctx context.Context, h slog.Handler, stream string) io.Write
 const maxNoticeLine = 64 << 10
 
 type lineNotices struct {
-	ctx    context.Context //nolint:containedctx // io.Writer has no ctx parameter
+	ctx    context.Context //nolint:containedctx // class b: io.Writer has no ctx parameter; no benchmark or optimization: comment (3269ac7f2)
 	h      slog.Handler
 	stream string
 

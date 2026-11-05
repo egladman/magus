@@ -870,21 +870,21 @@ func judgeLeasedNestedSpawn(ctx context.Context, t *testing.T, deps Dependencies
 // RootGroundworkSuite judges a root whose bound spawn proves it hands out a live row.
 type RootGroundworkSuite struct {
 	suite.Suite
-	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
-	deps Dependencies
+	layers ctxLayers
+	deps   Dependencies
 }
 
 func TestRootGroundworkSuite(t *testing.T) { suite.Run(t, new(RootGroundworkSuite)) }
 
 func (s *RootGroundworkSuite) SetupTest() {
-	s.ctx, _ = fleetFixture(s.T(), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	s.layers, _ = fleetLayers(s.T(), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
 	s.deps = levelDeps(s.T(), types.GuardProfileLight)
-	hostGate(hookLocation(s.ctx, s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
-	s.Require().NotEqual(decisionDeny, judgeSpawn(s.ctx, s.T(), s.deps, "haiku").Decision)
+	hostGate(hookLocation(s.ctx(), s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	s.Require().NotEqual(decisionDeny, judgeSpawn(s.ctx(), s.T(), s.deps, "haiku").Decision)
 }
 
 func (s *RootGroundworkSuite) judge(line string) types.GuardJudgment {
-	return Judge(s.ctx, s.deps, Request{Input: line, Host: "claude-code", Session: "s"})
+	return Judge(s.ctx(), s.deps, Request{Input: line, Host: "claude-code", Session: "s"})
 }
 
 // The root must reopen the acceptance evidence a worker names by ref.
@@ -909,3 +909,5 @@ func (s *RootGroundworkSuite) TestRootOutputRefThatWritesAFileIsStillGroundwork(
 	v := s.judge("./magus --tee out.log query output r1a2b3c4")
 	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleOrchestratorGroundwork)}, judgedAs(v))
 }
+
+func (s *RootGroundworkSuite) ctx() context.Context { return s.layers.of(s.T()) }

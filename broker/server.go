@@ -119,12 +119,11 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 		watches:    map[*os.File]struct{}{},
 		stop:       make(chan struct{}),
 		released:   make(chan struct{}, 1),
-		ctx:        ctx,
 	}
 	s.touch()
 
 	acceptErr := make(chan error, 1)
-	go func() { acceptErr <- s.accept(ln) }()
+	go func() { acceptErr <- s.accept(ctx, ln) }()
 
 	var tick <-chan time.Time
 	if o.idleExit > 0 {
@@ -191,7 +190,6 @@ type server struct {
 	handshake  string
 	executable string
 	started    time.Time
-	ctx        context.Context //nolint:containedctx // the broker lifetime: hosted services outlive the request that asked for them, and crash.go and owner.go (outside this job) read it
 
 	mu    sync.Mutex
 	conns map[net.Conn]*session
@@ -241,7 +239,7 @@ type session struct {
 	files func() []*os.File
 }
 
-func (s *server) accept(ln net.Listener) error {
+func (s *server) accept(ctx context.Context, ln net.Listener) error {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -259,7 +257,7 @@ func (s *server) accept(ln net.Listener) error {
 		s.conns[conn] = nil
 		s.wg.Add(1)
 		s.mu.Unlock()
-		go s.handle(conn)
+		go s.handle(ctx, conn)
 	}
 }
 
@@ -345,7 +343,7 @@ func (s *server) drainingError() errorReply {
 		os.Getpid())}
 }
 
-func (s *server) handle(conn net.Conn) {
+func (s *server) handle(ctx context.Context, conn net.Conn) {
 	defer s.wg.Done()
 	defer func() { _ = conn.Close() }()
 
@@ -359,27 +357,27 @@ func (s *server) handle(conn net.Conn) {
 	r := newFrameReader(rd)
 	w := &frameWriter{w: conn}
 	if w.write(typeHandshake, 0, nil) != nil {
-		s.forget(conn, nil)
+		s.forget(ctx, conn, nil)
 		return
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(helloTimeout))
 	first, err := r.read()
 	if err != nil {
-		s.forget(conn, nil)
+		s.forget(ctx, conn, nil)
 		return
 	}
 	var h hello
 	if first.Type != typeHello || decodeBody(first, &h) != nil || h.Magic != helloMagic || h.Protocol != ProtocolVersion {
 		_ = w.write(typeError, first.ID, errorReply{Code: CodeProtocol,
 			Message: fmt.Sprintf("broker: expected a hello speaking protocol %d", ProtocolVersion)})
-		s.forget(conn, nil)
+		s.forget(ctx, conn, nil)
 		return
 	}
 	if h.Handshake != s.handshake {
 		_ = w.write(typeError, first.ID, errorReply{Code: CodeHandshake, Message: fmt.Sprintf(
 			"broker: the hello carried handshake %q, not the one this broker (pid %d) wrote to %s; a client reads that file after the broker's handshake frame",
 			h.Handshake, os.Getpid(), handshakePath(strings.TrimPrefix(s.socket, "unix://")))})
-		s.forget(conn, nil)
+		s.forget(ctx, conn, nil)
 		return
 	}
 	_ = conn.SetReadDeadline(time.Time{})
@@ -394,7 +392,7 @@ func (s *server) handle(conn net.Conn) {
 		f, err := r.read()
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-				s.opts.log.DebugContext(s.ctx, "connection ended", slog.Int("pid", h.PID), attr.Error(err))
+				s.opts.log.DebugContext(ctx, "connection ended", slog.Int("pid", h.PID), attr.Error(err))
 			}
 			break
 		}
@@ -412,17 +410,17 @@ func (s *server) handle(conn net.Conn) {
 				s.inflight--
 				s.mu.Unlock()
 			}()
-			s.dispatch(sess, w, f)
+			s.dispatch(ctx, sess, w, f)
 		}()
 	}
 	// A request still running may add to the session (a service still starting), so
 	// release only once every one has answered.
 	reqs.Wait()
-	s.forget(conn, sess)
+	s.forget(ctx, conn, sess)
 }
 
 // forget drops conn and releases everything its session holds.
-func (s *server) forget(conn net.Conn, sess *session) {
+func (s *server) forget(ctx context.Context, conn net.Conn, sess *session) {
 	s.mu.Lock()
 	delete(s.conns, conn)
 	var claims []string
@@ -450,7 +448,7 @@ func (s *server) forget(conn net.Conn, sess *session) {
 			}
 			continue
 		}
-		s.reapOrphan(h)
+		s.reapOrphan(ctx, h)
 	}
 	for _, id := range claims {
 		s.budget.Release(id)
@@ -462,13 +460,13 @@ func (s *server) forget(conn net.Conn, sess *session) {
 	}
 	if len(claims) > 0 || len(services) > 0 || len(holds) > 0 {
 		s.noteRelease()
-		s.opts.log.InfoContext(s.ctx, "released a closed connection's hold",
+		s.opts.log.InfoContext(ctx, "released a closed connection's hold",
 			slog.Int("pid", sess.hello.PID), slog.Int("claims", len(claims)), slog.Int("services", len(services)),
 			slog.Int("commands", len(holds)))
 	}
 }
 
-func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
+func (s *server) dispatch(ctx context.Context, sess *session, w *frameWriter, f frame) {
 	fail := func(code ErrorCode, format string, args ...any) {
 		_ = w.write(typeError, f.ID, errorReply{Code: code, Message: fmt.Sprintf(format, args...)})
 	}
@@ -487,7 +485,7 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 			}
 			return
 		}
-		s.watchCrash(sess.hello, req.Hint, passed[0], passed[1])
+		s.watchCrash(ctx, sess.hello, req.Hint, passed[0], passed[1])
 		_ = w.write(typeCrashReply, f.ID, nil)
 
 	case typeClaim:
@@ -570,7 +568,7 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		delete(sess.claims, req.ClaimID)
 		s.mu.Unlock()
 		if mine {
-			s.stopRiders(sess, req.ClaimID)
+			s.stopRiders(ctx, sess, req.ClaimID)
 			s.budget.Release(req.ClaimID)
 			s.noteRelease()
 		}
@@ -608,7 +606,7 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 			_ = w.write(typeError, f.ID, s.drainingError())
 			return
 		}
-		id := s.holdLocked(sess, req.Hold)
+		id := s.holdLocked(ctx, sess, req.Hold)
 		s.mu.Unlock()
 		_ = w.write(typeHoldReply, f.ID, holdReply{ID: id})
 
@@ -640,7 +638,7 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		}
 		// The broker's own context, not the request's: the service outlives the run
 		// that asked for it.
-		owned, err := s.opts.services.Acquire(s.ctx, req.Key, req.Service.spec())
+		owned, err := s.opts.services.Acquire(ctx, req.Key, req.Service.spec())
 		if err != nil {
 			fail(CodeService, "%v", err)
 			return

@@ -501,8 +501,8 @@ func TestHostSpawnTitleReadsOnlyAPlainChildID(t *testing.T) {
 
 // foregroundFleet is a session whose orchestrator spawns foreground workers, one job row each.
 type foregroundFleet struct {
-	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
-	root string
+	layers ctxLayers
+	root   string
 }
 
 func newForegroundFleet(t *testing.T, jobs ...string) foregroundFleet {
@@ -511,8 +511,8 @@ func newForegroundFleet(t *testing.T, jobs ...string) foregroundFleet {
 	for i, id := range jobs {
 		rows[i] = types.Job{ID: id, State: types.StateDeclared, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}}
 	}
-	ctx, root := fleetFixture(t, rows...)
-	f := foregroundFleet{ctx: ctx, root: root}
+	layers, root := fleetLayers(t, rows...)
+	f := foregroundFleet{layers: layers, root: root}
 	for _, id := range jobs {
 		require.NoError(t, os.MkdirAll(filepath.Dir(f.target(id)), 0o755))
 		require.NoError(t, os.WriteFile(f.target(id), []byte("package x\n"), 0o644))
@@ -527,7 +527,7 @@ func (f foregroundFleet) target(job string) string {
 func (f foregroundFleet) call(t *testing.T, env map[string]any) types.GuardJudgment {
 	t.Helper()
 	env["session_id"], env["cwd"] = "claude-s", f.root
-	return Judge(f.ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "claude-code"})
+	return Judge(f.layers.of(t), Dependencies{}, Request{Input: hookJSON(t, env), Host: "claude-code"})
 }
 
 func (f foregroundFleet) spawn(t *testing.T, job string) {

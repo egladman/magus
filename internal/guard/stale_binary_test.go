@@ -866,7 +866,7 @@ func (s *LineWorkspaceSuite) TestARelativeSessionPlacesNone() {
 // a checkout that is a git repository with two commits.
 type LoadRecoverySuite struct {
 	suite.Suite
-	ctx        context.Context //nolint:containedctx // test fixture scoped to one test
+	layers     ctxLayers
 	deps       Dependencies
 	checkpoint string
 }
@@ -883,18 +883,18 @@ func (s *LoadRecoverySuite) SetupTest() {
 	ctx = WithLocation(ctx, cacheDir, repo.Root(), repo.Root())
 	ownCheckout(s.T(), ctx, true)
 	declareGuardRule(s.T(), repo.Root())
-	s.ctx = s.pin(ctx, s.checkpoint)
+	s.layers = append(layersOf(ctx), s.pin(s.checkpoint))
 	s.deps = unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 }
 
 // pin answers the job store with one row recording checkpoint.
-func (s *LoadRecoverySuite) pin(ctx context.Context, checkpoint string) context.Context {
+func (s *LoadRecoverySuite) pin(checkpoint string) func(context.Context) context.Context {
 	row := types.Job{ID: "base", State: types.StateRunning, Registered: 1, Checkpoint: checkpoint}
-	return job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
+	return snapshotLayer(job.Snapshot{Rows: []types.Job{row}})
 }
 
 func (s *LoadRecoverySuite) judge(line string) types.GuardJudgment {
-	return Judge(s.ctx, s.deps, Request{Input: line, Host: "claude-code", Session: line})
+	return Judge(s.ctx(), s.deps, Request{Input: line, Host: "claude-code", Session: line})
 }
 
 func (s *LoadRecoverySuite) TestAnAbortPasses() {
@@ -919,7 +919,7 @@ func (s *LoadRecoverySuite) TestAResetToARevisionNoRowRecordsIsDenied() {
 }
 
 func (s *LoadRecoverySuite) TestAResetToADirtyCheckpointIsDenied() {
-	s.ctx = s.pin(s.ctx, s.checkpoint+"+0123abcd")
+	s.layers = append(s.layers, s.pin(s.checkpoint+"+0123abcd"))
 	s.Equal(decisionDeny, s.judge("git reset --keep "+s.checkpoint).Decision)
 }
 
@@ -945,3 +945,5 @@ func (s *LoadRecoverySuite) TestAWriteOutsideByAProgramThatWritesIsDenied() {
 	memory := filepath.Join(s.T().TempDir(), "memory.md")
 	s.Equal(decisionDeny, s.judge("touch "+shellQuoted(memory)).Decision)
 }
+
+func (s *LoadRecoverySuite) ctx() context.Context { return s.layers.of(s.T()) }

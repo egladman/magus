@@ -74,16 +74,16 @@ func TestGateFitsSizesCiAndItsSameProjectSteps(t *testing.T) {
 		asked = targets
 		return []types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 19_000}}, nil
 	}
-	r := &runner{ctx: WithGateClaims(t.Context(), sizer, entry94BudgetMB, entry94Slots)}
+	r := &runner{}
 
-	got := r.checkGateFits([]*types.Project{p, {Path: "libs/x"}})
+	got := r.checkGateFits(WithGateClaims(t.Context(), sizer, entry94BudgetMB, entry94Slots), []*types.Project{p, {Path: "libs/x"}})
 	assert.Equal(t, types.CheckFail, got.Status)
 	assert.Equal(t, []types.Target{
 		{Path: ".", Name: "ci"}, {Path: ".", Name: "format"}, {Path: ".", Name: "lint"},
 		{Path: ".", Name: "test"}, {Path: ".", Name: "generate"},
 	}, asked, "cross-project members are inside ci's claim; libs/x composes no ci")
 
-	skipped := (&runner{}).checkGateFits([]*types.Project{p})
+	skipped := (&runner{}).checkGateFits(t.Context(), []*types.Project{p})
 	assert.Equal(t, types.Check{
 		Name: gateFitsCheck, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
 		Message: "no admission sizer supplied; skipped",

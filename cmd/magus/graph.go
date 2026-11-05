@@ -328,7 +328,7 @@ func awaitGraphBuildSeat(ctx context.Context, seats budgetSeats, c types.Machine
 // helper takes a writer but is also handed stdout or a buffer, so the helper keeps its
 // signature. A prefix names the label to move out of the text.
 type noticeLines struct {
-	ctx    context.Context //nolint:containedctx // io.Writer has no ctx parameter
+	ctx    context.Context //nolint:containedctx // class b: io.Writer has no ctx parameter; no optimization: comment or benchmark in its history (3269ac7f2)
 	level  slog.Level
 	label  string
 	prefix string

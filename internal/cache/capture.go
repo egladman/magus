@@ -22,7 +22,7 @@ import (
 // and it applies to both plus the events, because all three descend from the single
 // Write below.
 type lineEmitter struct {
-	ctx     context.Context //nolint:containedctx // lineTap is an io.Writer, so the run context cannot arrive as a parameter
+	ctx     context.Context //nolint:containedctx // class b: shared by the lineTap io.Writers, which have no ctx parameter; no optimization: comment or benchmark (72d465910)
 	project string
 	target  string
 }

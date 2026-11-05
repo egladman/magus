@@ -1005,21 +1005,20 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		// loaded workspace regardless, so a leaf still has its concurrency pool.
 		leaf := parentLive
 		if m, err := loadMagus(withBootstrapLimiter(rootCtx, lim), root); err == nil && !leaf {
-			srv, err := proc.New(proc.Options{
+			srv, err := proc.New(rootCtx, proc.Options{
 				Handler: poolHandler(m.Root(), func(ctx context.Context, args []string) error {
 					return dispatchAdopted(ctx, root, rc, args)
 				}),
 				// No Address: server.address is where the SERVER listens, and a per-process
 				// pool bound there would answer as the server for as long as this
 				// command ran.
-				Context: rootCtx,
 				Limiter: lim,
 				Version: version,
 			})
 			if err == nil {
 				_ = os.Setenv(proc.SocketEnv, srv.Addr())
 				_ = os.Setenv(proc.TokenEnv, srv.Token())
-				err = srv.Start()
+				err = srv.Start(rootCtx)
 			}
 			if err == nil {
 				adoptCloser = func() { srv.Close() }

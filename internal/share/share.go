@@ -140,8 +140,8 @@ type TokenInfo struct {
 // (superseding any current one); Close tears the current one down. It is safe
 // for concurrent use.
 type Manager struct {
-	parent context.Context //nolint:containedctx // bounds every listener the Manager opens, past any one Start call
-	log    *slog.Logger
+	stopped <-chan struct{}
+	log     *slog.Logger
 
 	// selectAddr picks the bind IP. Production uses SelectLANIPv4; tests swap in
 	// a loopback selector so the listener lifecycle can be exercised off a LAN.
@@ -189,7 +189,7 @@ func NewManager(parent context.Context, log *slog.Logger, opts ...option) *Manag
 	if log == nil {
 		log = slog.Default()
 	}
-	m := &Manager{parent: parent, log: log, selectAddr: SelectLANIPv4, mint: auth.MintShare, grace: shutdownGrace}
+	m := &Manager{stopped: parent.Done(), log: log, selectAddr: SelectLANIPv4, mint: auth.MintShare, grace: shutdownGrace}
 	for _, opt := range opts {
 		opt(m)
 	}
@@ -224,7 +224,7 @@ type Route struct {
 // No ctx parameter on purpose: a share OUTLIVES the request that opened it, so accepting
 // the caller's context invites the wrong wiring: the HTTP handler passes r.Context(),
 // which would tear the share down the instant that POST returned.
-func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[string]Route, ttl time.Duration) (Link, error) {
+func (m *Manager) Start(callCtx context.Context, minter types.Grant, consoleDir string, guarded map[string]Route, ttl time.Duration) (Link, error) {
 	if ttl <= 0 {
 		ttl = auth.DefaultShareTTL
 	}
@@ -303,7 +303,14 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	// //nolint:gosec for G118; gosec no longer flags it, so nolintlint reported the
 	// directive as unused and it is gone. The reasoning stays: it is why the pattern
 	// is safe, not merely why a linter was quiet.
-	ctx, cancel := context.WithDeadline(m.parent, tok.Expires)
+	ctx, cancel := context.WithDeadline(context.WithoutCancel(callCtx), tok.Expires)
+	go func() {
+		select {
+		case <-m.stopped:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 	srv := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,

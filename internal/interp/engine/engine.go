@@ -31,9 +31,8 @@ type Session interface {
 	GetGlobal(name string) Value
 
 	NewTable() Table
-	LoadString(code string) (Value, error)
-	DoString(code string) error
-	Call(p CallParams) error
+	LoadString(ctx context.Context, code string) (Value, error)
+	DoString(ctx context.Context, code string) error
 }
 
 // Value is a script-side value handle. Engine implementations choose their
@@ -57,13 +56,6 @@ type Table interface {
 	RawGetInt(key int) Value
 	ForEach(fn func(k, v Value))
 	Len() int
-}
-
-// CallParams configures a Session.Call invocation. Fn is the compiled value to
-// run; the buzz engine ignores arguments and return-value counts (callers that
-// need them use the concrete Session.CallValue), so only Fn is carried here.
-type CallParams struct {
-	Fn Value
 }
 
 // StringValue wraps s as a string Value.

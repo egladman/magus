@@ -59,7 +59,7 @@ func (enumBacking) Instance(_ string, names []string, fields []vm.Value) vm.Valu
 }
 
 type sessionEnums struct {
-	ctx    context.Context //nolint:containedctx // EnumCases methods carry no ctx and must read through the session
+	ctx    context.Context //nolint:containedctx // class b: EnumCases is called by 420 generated encoder sites with no ctx; no benchmark or optimization: comment (29d8b3deb)
 	sess   *buzz.Session
 	module string
 
