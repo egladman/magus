@@ -405,6 +405,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_BROKER**
 : Decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself). Config file key: **broker**.
 
+**MAGUS_BUDGET_WAIT**
+: Bounds a step's wait for budget other runs hold. Past it, MGS3009 names them. Zero refuses at once. A sooner run deadline bounds it instead (default: 30m). Config file key: **budget_wait**.
+
 **MAGUS_SHUTDOWN_GRACE**
 : Bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error (default: 5m). Config file key: **shutdown_grace**.
 

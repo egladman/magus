@@ -122,7 +122,8 @@ The integration job, the one that merges the workers' branches, owns the full
 `go-test` and `lint` at the root. `magus job wait` grades it on both, and on every
 check a merged worker filed as owed.
 
-A worker never waits for the build budget. When its check finds no seat it
+A worker's check waits for the build budget like any run, up to `budget_wait`.
+When it waits out that bound it
 commits and files the check as owed in its result, a normal result:
 
 ```json
@@ -131,8 +132,8 @@ commits and files the check as owed in its result, a normal result:
 
 `magus job wait` passes it with the goal marked `[owed] check (no seat)`, and the
 integration runs the check. An integration may not owe its own checks: it waits
-for a seat, explicitly (`magus status --wait | magus run ...`), and a wait given a
-deadline is refused past it with the runs holding the budget named.
+for a seat as any run does, bounded by `budget_wait` and its own deadline, and a refusal
+at the bound names the runs holding the budget.
 A gate graded on a scoped run says so beside its mark:
 
 ```text

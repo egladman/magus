@@ -311,3 +311,34 @@ above no longer exists and `weight` was written and never read. It now orders pa
 requests: gates first, then the heavier job, in asking order within a weight. A request
 that goes ahead counts as overtaking, so `maxOvertakes` bounds how long a light job waits.
 Weight still decides no verdict, and a refused claim still holds no place in the queue.
+
+### 2026-11-05: every claim waits for its seat, bounded
+
+The last clause above changes: a claim that can fit holds a place in the queue whoever
+holds the room. Until now another invocation's claim was refused at once (MGS3009), except
+the oldest `ci` gate's, which waited up to 30 minutes. The evidence of 2026-11-04 and 05 is
+that every caller then typed the same wait by hand. Workers piped `magus status --wait`
+into their checks because the guard told them to, and the guard grew a parser for the pipe.
+The checkout bootstrap wrapped every nested run in that pipe with its own 30-minute bound
+(#635, closed unmerged). `graph build` looped on the reservation in Go. A job fork on a
+full machine failed, removed its checkout and forked again. Core held three waiters for one
+queue: the gate, `graph build` and `status --wait`.
+
+So the broker parks every claim that can fit, and only one larger than the whole budget is
+refused at once. The bound lives in the client: `budget_wait`, default 30 minutes, or the
+run's own deadline when that is sooner, and `0` refuses at once. A wait on the run's own
+claims has no bound, as before. The client says when it parks and whenever the holders
+change, and nothing on a timer. At the bound it asks once more without parking, then
+refuses with MGS3009 (exit 75) naming the holders and what set the bound. A leased worker
+files its check owed only after that. Broker protocol goes to 5, since a protocol 4 client
+would wait with no bound.
+
+This adds no hold-and-wait the Decision ruled out. A holder is a running step, and a running
+step waits only on its descendants, which its run's own claims excuse and its stalled
+ancestor's free seat lets in, or on a retake that holds nothing while it waits. So no holder
+waits on a stranger's waiter, and the bound ends any cycle this reasoning missed, naming the
+holders. Gates keep queuing first in asking order, and the oldest-gate rule goes: two gates
+waiting in order do not deadlock. `status --wait`, reservations, awaits and the gate-only
+bound are deleted, and so is the second, peak-based fit rule they used. MGS3053 stays a
+refusal: the broker hears no event when the kernel's reading changes, and waiting on it
+would need a poll.

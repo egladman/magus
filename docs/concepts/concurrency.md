@@ -199,11 +199,6 @@ of this run in a pipe, to finish with the projects this run needs before taking 
 
 `magus status` lists such a run under "waiting on a pipe upstream".
 
-`magus status --wait | magus run ...` reserves the seat it sized for the run reading it:
-the broker holds it until that run's first claim takes it, the run exits, or 30 seconds
-pass without a claim. Without a magus reader, `--wait` holds nothing. A bare run still
-refuses at once with [MGS3009](../reference/codes/sandbox/MGS3009.md).
-
 Stages on different projects run at once and stream. A downstream run waits only until
 the upstream has taken its locks, then starts as soon as it sees they do not overlap
 with its own. A read-only upstream, like `magus ls` or `magus status --watch`, never
@@ -329,37 +324,39 @@ Key properties:
   `GOMAXPROCS` and `-p` equal to its slots, one included, since `go` reads no jobserver
   and would otherwise take every core the budget counted as free. So a Go target's
   measured width never exceeds its claim, and saturation above is how it widens.
-- **It does not queue behind another invocation.** A step kept out by another magus
-  invocation is refused immediately, exiting **75**
-  ([MGS3009](../reference/codes/sandbox/MGS3009.md)), the same transient-failure code
-  a contended lock uses above, and for the same reason. The refusal names who holds
-  the budget (pid, project, target, and directory), so a caller can go see why and
-  retry once it frees. A step kept out only by its own process or its own run waits
-  for them, on the same terms as the lock. `magus status --wait` is the wait a caller
-  asks for: it reserves the seat it sized for the run it pipes into, so that run is not
-  refused, while a bare run still refuses at once.
+- **It waits for its seat, bounded.** A step kept out by another magus invocation waits
+  in the broker's queue up to `budget_wait` (default 30 minutes; `--budget-wait`,
+  `MAGUS_BUDGET_WAIT` or `budget_wait` in `magus.yaml`), or the run's own deadline when
+  that is sooner. It says on stderr when it parks and whenever the holders change, with
+  the time waited and the time left, and nothing on a timer. At the bound it asks once
+  more, then is refused, exiting **75**
+  ([MGS3009](../reference/codes/sandbox/MGS3009.md)) and naming who holds the budget
+  (pid, project, target, and directory) and what set the bound. `budget_wait: 0` refuses
+  at once. A step kept out only by its own process or its own run waits for them with no
+  bound, on the same terms as the lock. A nested magus that waits prints those lines to
+  its parent's step, and they count as that step's progress for `stall_timeout`, quiet
+  or not.
 - **A gate goes first.** A gate is `magus affected ci` or `magus run ci`, and every magus
-  it runs. While a gate's claim waits, no other run is seated in the room it waits for:
-  that run is refused as if the gate already held it. The oldest gate on the machine,
-  counted from its first claim, waits for seats other invocations hold instead of
-  failing part-way, says what it waits for and who holds it, and gives up after 30
-  minutes with a refusal naming the bound. Every other gate still refuses at once, so two
-  gates never wait on each other. This covers the claims a gate makes after
-  `magus status --wait` reserved its first.
+  it runs. Gates queue ahead of every other request, in the order they asked, and while a
+  gate's claim waits no other run is seated in the room it waits for. Two gates on
+  different roots both finish: each waits in order, every wait is bounded, and a gate's
+  nested children take their stalled root's free seat.
 - **A person can get one job out of a bind.** `magus job pause <job>...` refuses that
   job's holder its next magus run, through `magus job exec` and the guard, until
   `magus job resume <job>...`; a run already holding the budget finishes, since nothing
   is preempted. A run is charged to the lease its checkout's `magus job exec` binds, else
   to the one `BAGGAGE` names, and `magus status` names it, or says `unleased`. A job's
-  `weight`, in (0,1] on its record and 0.5 when omitted, orders the requests the broker
-  holds: a run's own waits and `status --wait`. A gate still goes first, then the heavier
-  job, and equal weights go in the order they asked. A run bound to no job weighs 0.5. A
-  heavier request passes one already waiting at most four times, so a light job is never
-  starved. Weight decides no verdict: a request nobody holds is still refused at once.
+  `weight`, in (0,1] on its record and 0.5 when omitted, orders the claims the broker
+  holds. A gate still goes first, then the heavier job, and equal weights go in the order
+  they asked. A run bound to no job weighs 0.5. A heavier request passes one already
+  waiting at most four times, so a light job is never starved, and once the head of the
+  queue has been passed four times nothing behind it takes its room. Weight decides no
+  verdict.
 - **`magus job exec --timeout` shares its slots and nothing else.** A magus under the
   command runs in the slots the wrapper holds, so it never competes with them. The
-  wrapper runs no step, so a machine strangers fill refuses that magus as it would the
-  same command without the wrapper, and so does bad memory.
+  wrapper runs no step, so a machine strangers fill makes that magus wait as it would
+  without the wrapper, bounded by the sooner of `budget_wait` and the wrapper's timeout,
+  and bad memory refuses it.
 - **What a missing broker means is a setting.** `broker: best-effort` (the default)
   leaves a run whose broker does not start, or dies mid-run, unarbitrated and
   finishing, having said once that it is. `broker: required` refuses the step instead
@@ -372,8 +369,9 @@ Key properties:
   none of them starts a broker. `magus session --brief` is the exception among
   non-run verbs: it Inspects the workspace for classification and harness wiring, so
   it starts the broker and claims a declared `session-brief` seat (slots + memory)
-  for the duration of that load. A full budget refuses it (exit 75) rather than
-  letting parallel agent hooks stack Inspects past what the machine can hold. The
+  for the duration of that load. A full budget makes it wait, bounded by `budget_wait`
+  and the hook's own deadline, rather than letting parallel agent hooks stack Inspects
+  past what the machine can hold. The
   broker exits by itself ten minutes after it last held a claim or a service with a
   dependent.
 
@@ -403,4 +401,4 @@ three compose: ordering inside a run, exclusion per project, capacity per machin
 - [Targets](targets.md): per-target `slots` and `exclusive` policy.
 - [The broker and the daemon](../guides/integrations/server.md): the process that owns the machine budget, and the one a person starts.
 - [Cache](cache.md): what a run writes, and why concurrent writers are serialized.
-- [MGS3009](../reference/codes/sandbox/MGS3009.md): the machine budget, and the two ways it refuses.
+- [MGS3009](../reference/codes/sandbox/MGS3009.md): the machine budget, its bounded wait, and the ways it refuses.
