@@ -11,8 +11,8 @@ import "std";
 import "vcs";
 import "hack/magusfile/branch-stack" as stack;
 import "hack/dev/bootstrap-checkout" as bootstrap;
-import "hack/dev/recompose" as rc;
-import "hack/dev/load-contract" as lc;
+import "hack/magusfile/recompose" as rc;
+import "hack/magusfile/load-contract" as lc;
 
 import "assert";
 
