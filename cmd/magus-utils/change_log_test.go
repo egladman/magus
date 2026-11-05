@@ -102,8 +102,11 @@ func TestManyEntriesSuite(t *testing.T) {
 func (s *ManyEntriesSuite) TestParseFragmentKeepsEveryEntryInOrder() {
 	got, err := parseFragment("f.md", []byte("### Changed\n\n- **One.** It\n  wraps.\n\n- **Two.**\n"))
 	s.Require().NoError(err)
-	s.Equal("Changed", got.section)
-	s.Equal("- **One.** It\n  wraps.\n- **Two.**", got.entry)
+	s.Equal(fragment{
+		path:    "f.md",
+		section: "Changed",
+		entry:   "- **One.** It\n  wraps.\n- **Two.**",
+	}, got)
 }
 
 func (s *ManyEntriesSuite) TestParseFragmentRefusesTwoHeadings() {
