@@ -97,6 +97,8 @@ if (os\env("CI_PROVIDER") == "github-actions") {
 }
 import "spells/endoflife-date" as eol;
 magus\lifecycle.provider(eol);
+import "spells/github/review" as ghReview;
+magus\review.provider(ghReview);
 
 import "magus/modeltiers";
 import "./hack/magusfile/model-tiers" as tierhost;
